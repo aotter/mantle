@@ -74,6 +74,7 @@ Documentation:
   Start:         node_modules/@aotter/mantle/docs/handbook/start/overview.md
   Features:      node_modules/@aotter/mantle/docs/handbook/reference/features.md
   Admin UI:      node_modules/@aotter/mantle/docs/handbook/guides/admin-ui.md
+  Cloud build:   node_modules/@aotter/mantle/docs/handbook/guides/cloud-project-build.md
   Online:        https://mantle.tools/
   Install skill: npx skills add aotter/mantle
 `;

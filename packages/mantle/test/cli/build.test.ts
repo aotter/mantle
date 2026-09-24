@@ -10,7 +10,7 @@ it('builds a pinned project into one plan + module + assets artifact', () => {
   const cli = fileURLToPath(new URL('../../dist/cli/main.js', import.meta.url));
   try {
     mkdirSync(join(root, 'manifests'));
-    writeFileSync(join(root, 'manifests/site.yaml'), readFileSync(fileURLToPath(new URL('../../../../docs/examples/host-minimal-worker/manifests/site.yaml', import.meta.url))));
+    writeFileSync(join(root, 'manifests/site.yaml'), readFileSync(fileURLToPath(new URL('../../../../docs/examples/host-minimal-worker/manifests/site.yaml', import.meta.url)), 'utf8') + `\n---\napiVersion: cms.mantle.aotter.net/v1\nkind: Procedure\nmetadata: { name: ping }\nspec:\n  input: { type: object, properties: {} }\n  output: { type: object, properties: { ok: { type: boolean } } }\n  handler: { kind: ref, ref: ping }\n`);
     writeFileSync(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n');
     writeFileSync(join(root, 'package.json'), JSON.stringify({
       name: 'example', version: '1.0.0', private: true, packageManager: 'pnpm@9.15.0',
@@ -18,12 +18,13 @@ it('builds a pinned project into one plan + module + assets artifact', () => {
       mantleCloud: { version: 1, manifests: 'manifests', module: 'dist/app.mjs', assets: 'dist/public' },
       scripts: { 'build:mantle': 'node build.mjs' },
     }));
-    writeFileSync(join(root, 'build.mjs'), `import { mkdirSync, writeFileSync } from 'node:fs'; mkdirSync('dist/public', {recursive:true}); writeFileSync('dist/app.mjs', 'export default {fetch(){return new Response("ok")}}'); writeFileSync('dist/public/index.html', '<h1>Hello</h1>');`);
+    writeFileSync(join(root, 'build.mjs'), `import { mkdirSync, writeFileSync } from 'node:fs'; mkdirSync('dist/public', {recursive:true}); writeFileSync('dist/app.mjs', 'export const handlers = {ping(){return {ok:true}}}; export default {fetch(){return new Response("ok")}}'); writeFileSync('dist/public/index.html', '<h1>Hello</h1>');`);
     execFileSync(process.execPath, [cli, 'build'], { cwd: root, encoding: 'utf8' });
     const artifact = JSON.parse(readFileSync(join(root, '.mantle/cloud-artifact.json'), 'utf8'));
     expect(artifact.version).toBe(1);
     expect(artifact.sdkVersion).toBe('0.1.4');
     expect(artifact.plan.semanticFingerprint).toMatch(/^fnv1a64:[a-f0-9]{16}$/);
+    expect(artifact.plan.procedures.ping.manifest.spec.handler.ref).toBe('ping');
     expect(artifact.module).toContain('export default');
     expect(Buffer.from(artifact.assets['/index.html'].base64, 'base64').toString()).toBe('<h1>Hello</h1>');
     const first = readFileSync(join(root, '.mantle/cloud-artifact.json'));
