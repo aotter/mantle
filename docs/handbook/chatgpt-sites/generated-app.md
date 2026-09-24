@@ -10,7 +10,8 @@ demo content. Edit `src/home.ts` and add your own manifests and handlers as need
 ```sh
 mkdir my-site && cd my-site
 npm init -y
-npm install @aotter/mantle
+npm pkg set type=module
+npm install --save-exact @aotter/mantle
 npx mantle generate --host chatgpt-sites
 npm install
 npx mantle generate

@@ -177,6 +177,21 @@ it("refuses to adopt unrelated Sites migrations and resumes its own first write"
   expect(await readFile("drizzle/meta/mantle-state.json", "utf8")).toContain('"lastIndex": 0');
 });
 
+it("requires adopted Sites Admin Workers to remain behind Sites identity", async () => {
+  await project();
+  await mkdir("src");
+  await writeFile("src/index.ts", 'export { default } from "../.mantle/generated/worker.js";\n');
+  const config = { main: "dist/server/index.js", assets: { binding: "ASSETS" },
+    d1_databases: [{ binding: "DB", database_name: "local", migrations_dir: "drizzle" }], workers_dev: true };
+  await writeFile("wrangler.jsonc", JSON.stringify(config));
+  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites"], coreOnly)).toBe(2);
+  expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("workers_dev=false"));
+  await writeFile("wrangler.jsonc", JSON.stringify({ ...config, workers_dev: false, routes: ["example.com/*"] }));
+  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites"], coreOnly)).toBe(2);
+  await writeFile("wrangler.jsonc", JSON.stringify({ ...config, workers_dev: false }, null, 2));
+  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites"], coreOnly)).toBe(1);
+});
+
 it("keeps a reduced Sites composition free of Admin and media bindings", async () => {
   await project();
   expect(await runGenerate(["--host", "chatgpt-sites", "--features", "spec,api"], coreOnly)).toBe(1);

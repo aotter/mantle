@@ -226,6 +226,8 @@ async function smokeGeneratedSites(temp, tarballs, version) {
   } catch { remoteRejected = true; }
   if (!remoteRejected) throw new Error("Sites identity simulator accepted a remote origin");
   const initial = readFileSync(join(directory, "drizzle/0000_mantle.sql"), "utf8");
+  const initialState = readFileSync(join(directory, "drizzle/meta/mantle-state.json"), "utf8");
+  const initialFingerprint = readFileSync(join(directory, "src/storage-fingerprint.json"), "utf8");
   const hosting = JSON.parse(readFileSync(join(directory, ".openai/hosting.json"), "utf8"));
   if (hosting.d1 !== "DB" || hosting.r2 || hosting.project_id) throw new Error("Generated Sites hosting metadata is invalid");
   run("pnpm", ["run", "build"], directory);
@@ -242,6 +244,9 @@ async function smokeGeneratedSites(temp, tarballs, version) {
   writeFileSync(join(directory, "src/handlers.ts"), `import type { AnyHandler } from '@aotter/mantle/runtime';\nexport const handlers: Record<string, AnyHandler> = { echo: input => input };\n`);
   run("pnpm", ["exec", "mantle", "generate"], directory);
   run("pnpm", ["exec", "wrangler", "d1", "migrations", "apply", "generated-sites", "--local"], directory);
+  writeFileSync(join(directory, "drizzle/meta/mantle-state.json"), initialState);
+  writeFileSync(join(directory, "src/storage-fingerprint.json"), initialFingerprint);
+  run("pnpm", ["exec", "mantle", "generate"], directory);
   run("pnpm", ["run", "build"], directory);
   let entryId;
   await withSitesWorker(directory, async origin => {

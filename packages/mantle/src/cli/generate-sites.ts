@@ -56,6 +56,10 @@ export async function prepareSites(root: string, output: string, selection: Proj
     if (!configuredName || !/\bmigrations_dir["']?\s*[:=]\s*["']drizzle["']/.test(config.content!)) {
       throw new Error(`Existing ${config.path} must name its D1 database and use migrations_dir=drizzle.`);
     }
+    if (has("admin") && (!/(?:^|[{,])\s*["']?workers_dev["']?\s*[:=]\s*false\b/m.test(config.content!) ||
+      /(?:^|[{,])\s*["']?routes?["']?\s*[:=]|^\s*\[\[?routes?\]\]?/m.test(config.content!))) {
+      throw new Error(`Existing ${config.path} must set workers_dev=false and have no direct Worker route before Sites identity can be trusted.`);
+    }
     dbName = configuredName;
   } else {
     files.push({ path: "wrangler.jsonc", content: `${JSON.stringify({
@@ -148,7 +152,7 @@ async function prepareMigration(root: string, dbName: string, schemas: readonly 
     stale: true,
     commit: async () => {
       if (check) return;
-      if (state) await verifyLocalD1(root, dbName, state);
+      if (state) await verifyLocalD1(root, dbName, state, existingSql === sql ? nextState : undefined);
       await mkdir(dirname(sqlPath), { recursive: true });
       await mkdir(dirname(journalPath), { recursive: true });
       await mkdir(dirname(fingerprintPath), { recursive: true });
@@ -160,7 +164,7 @@ async function prepareMigration(root: string, dbName: string, schemas: readonly 
   };
 }
 
-async function verifyLocalD1(root: string, dbName: string, state: State): Promise<void> {
+async function verifyLocalD1(root: string, dbName: string, state: State, appliedNext?: State): Promise<void> {
   const wrangler = join(root, "node_modules/wrangler/bin/wrangler.js");
   await access(wrangler).catch(() => { throw new Error("Install the generated project dependencies before verifying local D1 migrations."); });
   const query = (sql: string): unknown[] => {
@@ -168,10 +172,12 @@ async function verifyLocalD1(root: string, dbName: string, state: State): Promis
     return (JSON.parse(output) as Array<{ results: unknown[] }>)[0]?.results ?? [];
   };
   const active = query("SELECT fingerprint FROM _mantle_storage_state WHERE id=1")[0] as { fingerprint?: string } | undefined;
-  if (active?.fingerprint !== state.fingerprint) throw new Error("Local D1 has a pending migration. Apply it before generating another migration.");
+  const expected = active?.fingerprint === state.fingerprint ? state :
+    active?.fingerprint === appliedNext?.fingerprint ? appliedNext : null;
+  if (!expected) throw new Error("Local D1 has a pending migration. Apply it before generating another migration.");
   const table = query("SELECT name FROM sqlite_schema WHERE type='table' AND name='_mantle_managed_runtime_state'")[0];
   const version = table ? (query("SELECT canonical_version FROM _mantle_managed_runtime_state WHERE id=1")[0] as { canonical_version?: string } | undefined)?.canonical_version : undefined;
-  if (version !== state.canonicalVersion) throw new Error("Local D1 runtime version does not match the applied migration state.");
+  if (version !== expected.canonicalVersion) throw new Error("Local D1 runtime version does not match the applied migration state.");
 }
 
 async function optional(path: string): Promise<string | null> {

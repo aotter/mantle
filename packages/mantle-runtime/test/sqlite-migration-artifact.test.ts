@@ -113,6 +113,8 @@ describe("SQLite migration artifacts", () => {
       .rejects.toThrow("reserved SQLite table");
     await expect(buildSqliteMigrationArtifact([], [{ ...schema({ title: { type: "string" } }), metadata: { name: "sites_users" } }]))
       .rejects.toThrow("reserved SQLite table");
+    await expect(buildSqliteMigrationArtifact([], [{ ...schema({ title: { type: "string" } }), metadata: { name: "d1_migrations" } }]))
+      .rejects.toThrow("reserved SQLite table");
     await expect(buildSqliteMigrationArtifact([], [schema({ _mantle_id: { type: "string" } })]))
       .rejects.toThrow("reserved SQLite namespace");
     await expect(buildSqliteMigrationArtifact([], [schema({ Title: { type: "string" }, title: { type: "string" } })]))

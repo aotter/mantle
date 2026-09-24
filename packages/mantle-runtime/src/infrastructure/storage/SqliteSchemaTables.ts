@@ -10,7 +10,7 @@ export { isNullableJsonSchema };
 
 const SYSTEM_COLUMNS = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at"] as const;
 const RESERVED_TABLES = new Set([
-  "entries", "_migrations", "_mantle_boot_state", "_mantle_schema_tables", "_mantle_storage_state", "_mantle_managed_runtime_state",
+  "entries", "_migrations", "d1_migrations", "_mantle_boot_state", "_mantle_schema_tables", "_mantle_storage_state", "_mantle_managed_runtime_state",
   "site_config", "sites_users", "user", "session", "account", "verification", "jwks", "oauthclient",
   "oauthresource", "oauthclientresource", "oauthrefreshtoken", "oauthaccesstoken", "oauthconsent",
   "oauthclientassertion", "media_assets", "pending_media_uploads",
