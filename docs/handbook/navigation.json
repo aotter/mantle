@@ -16,6 +16,7 @@
       "items": [
         { "text": "Agent installation and handoff", "link": "/guides/agent-setup" },
         { "text": "Typed queries and internal Views", "link": "/guides/typed-queries" },
+        { "text": "Build a Cloud project", "link": "/guides/cloud-project-build" },
         { "text": "Customize Admin from manifests", "link": "/guides/admin-ui" }
       ]
     },

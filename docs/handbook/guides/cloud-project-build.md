@@ -1,3 +1,6 @@
+---
+description: Build a versioned Mantle Cloud application artifact from manifests, tenant code and frontend assets.
+---
 # Build a Mantle Cloud project
 
 `mantle build` is the local form of the version 1 Cloud build contract. It
@@ -50,3 +53,9 @@ to render published pages and generate canonical metadata, sitemap, llms.txt
 and Markdown representations from the same entries. Do not index private or
 draft entries. See `docs/examples/host-chatgpt-sites/src/web.ts` for a working
 SSR example; an interactive SPA can coexist with these public routes.
+
+## Source
+
+- [Cloud build command](../../../packages/mantle/src/cli/build.ts)
+- [Manifest compiler](../../../packages/mantle-runtime/src/domain/service/RuntimePlanCompiler.ts)
+- [Public web reference](../../examples/host-chatgpt-sites/src/web.ts)
