@@ -37,6 +37,18 @@ describe("manifest graph trace", () => {
     expect([...slice.relationIds]).toEqual(["reference", "schema", "trigger"]);
   });
 
+  it("keeps UI action placement out of execution paths", () => {
+    const placed = { ...graph, relations: [
+      ...graph.relations.filter(({ id }) => id !== "schema"),
+      { id: "placement", kind: "collection-action" as const, sourceId: "Procedure:place-order", targetId: "Schema:orders", pointer: "/spec/uiSchema/collectionAction", value: "orders" },
+    ] };
+    expect([...focusSlice(placed, "Trigger:place-order-http").nodeIds]).toEqual([
+      "Trigger:place-order-http", "Procedure:place-order",
+    ]);
+    expect([...focusSlice(placed, "Procedure:place-order").relationIds]).toEqual(["trigger"]);
+    expect([...focusSlice(placed, "Schema:orders").relationIds]).not.toContain("placement");
+  });
+
   it("keeps graph and model selection in shareable URLs", () => {
     expect(developerSelectionHref("/admin/dev", "View:my requisitions")).toBe("/admin/dev?selected=View%3Amy+requisitions");
     expect(developerSelectionHref("/admin/dev/model", "Schema:orders", { tab: "manifest", pointer: "/spec/schema" })).toBe("/admin/dev/model?selected=Schema%3Aorders&tab=manifest&pointer=%2Fspec%2Fschema");

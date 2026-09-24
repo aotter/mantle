@@ -263,6 +263,12 @@ export function AtomGraph({
       onNodeClick={(_, node) => {
         if (atomsById.has(node.id)) selectAtom(node.id);
       }}
+      onKeyDownCapture={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const node = (event.target as HTMLElement).closest(".react-flow__node[data-id]");
+        const id = node?.getAttribute("data-id");
+        if (id && atomsById.has(id)) { event.preventDefault(); selectAtom(id); }
+      }}
       onPaneClick={clearSelection}
     >
       <GraphControls onRelayout={relayout} />
@@ -431,14 +437,14 @@ export function focusSlice(graph: DeveloperConsoleSnapshot["graph"], selectedId:
     const targets = graph.relations.filter(({ sourceId, kind }) => sourceId === selectedId && kind === "trigger-target");
     targets.forEach((relation) => add(relation));
     const procedureIds = new Set(targets.map(({ targetId }) => targetId));
-    graph.relations.filter(({ sourceId, kind }) => procedureIds.has(sourceId) && ["procedure-schema", "collection-action"].includes(kind)).forEach((relation) => add(relation));
+    graph.relations.filter(({ sourceId, kind }) => procedureIds.has(sourceId) && kind === "procedure-schema").forEach((relation) => add(relation));
   } else if (selectedKind === "Procedure") {
-    direct.filter(({ kind }) => ["trigger-target", "procedure-schema", "collection-action"].includes(kind)).forEach((relation) => add(relation));
+    direct.filter(({ kind }) => ["trigger-target", "procedure-schema"].includes(kind)).forEach((relation) => add(relation));
   } else if (selectedKind === "View") {
     direct.filter(({ kind }) => kind === "view-source").forEach((relation) => add(relation));
   } else if (selectedKind === "Schema") {
     direct.filter(({ sourceId, kind }) => sourceId === selectedId && ["schema-reference", "translation-parent"].includes(kind)).forEach((relation) => add(relation));
-    const upstream = direct.filter(({ targetId, kind }) => targetId === selectedId && ["procedure-schema", "collection-action", "input-reference", "lifecycle-source"].includes(kind));
+    const upstream = direct.filter(({ targetId, kind }) => targetId === selectedId && ["procedure-schema", "input-reference", "lifecycle-source"].includes(kind));
     upstream.forEach((relation) => add(relation));
     const procedureIds = new Set(upstream.filter(({ sourceId }) => sourceId.startsWith("Procedure:")).map(({ sourceId }) => sourceId));
     graph.relations.filter(({ targetId, kind }) => procedureIds.has(targetId) && kind === "trigger-target").forEach((relation) => add(relation));
@@ -498,6 +504,7 @@ function GraphHud({ atom, graph, atomsById, traceAtoms, onClose, onSelect, onOpe
       </header>
       <div className="space-y-5 p-4">
         <p className="text-sm leading-6 text-popover-foreground">{description || hudSummary(language, atom, outgoing, incoming, atomsById)}</p>
+        {atom.handler?.kind === "ref" ? <p className="text-xs text-muted-foreground">{t(language, "developer.unknownEffects")}</p> : null}
         {facts.length ? (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border bg-muted/35 p-3">
             {facts.map(({ label, value }) => <div key={label} className="min-w-0"><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</dt><dd className="mt-1 break-words font-mono text-xs font-semibold">{value}</dd></div>)}

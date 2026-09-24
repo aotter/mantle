@@ -53,11 +53,13 @@ export function InterfaceDocsView(): React.ReactElement {
       ) : null}
       {page === "mcp" ? (
           <DocSection intro={t(language, "docs.mcpIntro")} search={search} onSearch={setSearch} endpoints={<>{site.data?.mcpEndpoints?.public ? <Endpoint label={t(language, "docs.publicEndpoint")} value={site.data.mcpEndpoints.public} /> : null}{site.data?.mcpEndpoints?.staff ? <Endpoint label={t(language, "docs.staffEndpoint")} value={site.data.mcpEndpoints.staff} /> : null}</>}>
+            {site.isLoading ? <Skeleton className="h-24 w-full" /> : null}
+            {site.isError ? <ErrorBox error={site.error} /> : null}
             {(["public", "staff"] as const).map((surface) => {
               const entries = filteredCallable.filter((capability) => capability.surface === surface);
               return entries.length ? <section key={surface} className="space-y-3"><h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{surface}</h2><OperationList>{entries.map((capability) => <CapabilityOperation key={`${surface}:${capability.name}`} capability={capability} />)}</OperationList></section> : null;
             })}
-            {!filteredCallable.length ? <EmptyDocs /> : null}
+            {!site.isLoading && !site.isError && !filteredCallable.length ? <EmptyDocs /> : null}
           </DocSection>
       ) : null}
       {page === "webmcp" ? (
@@ -123,7 +125,7 @@ function CapabilityOperation({ capability, webMcp = false }: { capability: Devel
     <Operation summary={<><Badge variant="secondary">{atomKindLabel(language, capability.kind === "view" ? "View" : "Procedure")}</Badge><code className="font-semibold">{capability.name}</code><Badge variant="outline">{audienceLabel(language, capability.surface)}</Badge>{webMcp ? <Badge variant="outline">{t(language, "docs.readOnly")}</Badge> : null}</>} description={capability.description}>
       <div className="space-y-3">
         <a href={developerDetailHref(`${capability.kind === "view" ? "View" : "Procedure"}:${capability.target}`)} className="inline-block font-mono text-sm font-semibold hover:underline">{capability.target}</a>
-        <div className="flex flex-wrap gap-2"><Badge variant="outline">{t(language, "docs.target")}: {capability.target}</Badge>{capability.trigger ? <Badge variant="outline">{atomKindLabel(language, "Trigger")}: {capability.trigger}</Badge> : null}</div>
+        <div className="flex flex-wrap gap-2"><Badge variant="outline">{t(language, "docs.target")}: {capability.target}</Badge>{capability.trigger ? <Badge variant="outline"><a className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={developerDetailHref(`Trigger:${capability.trigger}`)}>{atomKindLabel(language, "Trigger")}: {capability.trigger}</a></Badge> : null}</div>
         <SchemaDetails label={t(language, "docs.inputSchema")} schema={capability.input} />
         {capability.output ? <SchemaDetails label={t(language, "docs.outputSchema")} schema={capability.output} /> : null}
       </div>

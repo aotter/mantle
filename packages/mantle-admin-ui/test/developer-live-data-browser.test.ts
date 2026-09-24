@@ -113,6 +113,12 @@ it("loads live model data only on demand through the existing guarded paths", as
     await page.getByLabel("sku").fill("denied");
     await page.getByRole("button", { name: "Query" }).click();
     await page.getByText("View access denied").waitFor();
+
+    await page.goto(`${origin}/admin/dev/overview/flow`);
+    const node = page.locator('.react-flow__node[data-id="Schema:articles"]');
+    await node.focus();
+    await node.press("Enter");
+    await page.getByRole("button", { name: "Open in data model" }).waitFor();
   } finally {
     await browser.close();
     await new Promise<void>((done) => server.close(() => done()));

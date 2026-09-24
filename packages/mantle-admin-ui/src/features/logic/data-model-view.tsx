@@ -286,7 +286,7 @@ function ViewDefinition({ model, tab, manifestFocus, onTabChange }: { model: Dev
             [t(language, "model.dialect"), query.dialect],
             [t(language, "model.limit"), query.limit?.toString() ?? "—"],
           ]} />
-          {query.kind === "native" ? <CodeBlock value={query.statement} /> : null}
+          {query.kind === "native" ? <><p className="text-sm text-muted-foreground">{t(language, "developer.unknownEffects")}</p><CodeBlock value={query.statement} /></> : null}
           {query.kind === "declarative" && query.filter ? <RawSection label={t(language, "model.filter")} value={query.filter} /> : null}
           {query.params ? <RawSection label={t(language, "model.params")} value={query.params} /> : null}
         </div>
