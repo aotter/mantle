@@ -34,8 +34,8 @@ go in the configured directory with URL paths matching their relative paths.
 The script may use a frontend framework, but server-side Node APIs and imports
 unsupported by Cloudflare Workers are outside this recipe. `mantle build`
 generates `.mantle/generated/mantle.ts` before the script runs, so the module
-can import its typed binding. Include the generated Admin UI assets in the
-output directory if the project uses them.
+can import its typed binding. Cloud supplies the Admin UI; the app asset
+directory cannot claim Cloud-owned `/admin`, `/api`, or `/_mantle` paths.
 
 Cloud will check out an exact Git commit, run Node 22 and pnpm 9.15.0 with a
 frozen lockfile, execute this same command in an isolated build environment,

@@ -20,6 +20,11 @@ it('builds a pinned project into one plan + module + assets artifact', () => {
     }));
     const buildScript = `import { mkdirSync, writeFileSync } from 'node:fs'; mkdirSync('dist/public', {recursive:true}); writeFileSync('dist/app.mjs', 'export const handlers = {ping(){return {ok:true}}}; export default {fetch(){return new Response("ok")}}'); writeFileSync('dist/public/index.html', '<h1>Hello</h1>');`;
     writeFileSync(join(root, 'build.mjs'), buildScript);
+    writeFileSync(join(root, 'build.mjs'), `${buildScript}\nmkdirSync('dist/public/admin', {recursive:true}); writeFileSync('dist/public/admin/index.html', '<h1>shadow</h1>');`);
+    expect(spawnSync(process.execPath, [cli, 'build'], { cwd: root, encoding: 'utf8' }).stderr).toContain('asset path is reserved');
+    expect(existsSync(join(root, '.mantle/cloud-artifact.json'))).toBe(false);
+    writeFileSync(join(root, 'build.mjs'), buildScript);
+    rmSync(join(root, 'dist/public/admin'), { recursive: true });
     execFileSync(process.execPath, [cli, 'build'], { cwd: root, encoding: 'utf8' });
     const artifact = JSON.parse(readFileSync(join(root, '.mantle/cloud-artifact.json'), 'utf8'));
     expect(artifact.version).toBe(1);

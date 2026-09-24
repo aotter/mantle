@@ -17,6 +17,12 @@ const types: Record<string, string> = {
   '.xml': 'application/xml', '.woff': 'font/woff', '.woff2': 'font/woff2',
 };
 const sha256 = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+// Version 1 Cloud recipe paths; the Cloud host validates them again on ingest.
+const cloudOwnedPaths = ['/admin', '/_mantle', '/api', '/oauth', '/mcp', '/__cloud', '/_app'];
+const validCloudAssetPath = (path: string) => !/[?#%\\\u0000-\u0020]/.test(path)
+  && new URL(path, 'https://tenant.test').pathname === path
+  && !cloudOwnedPaths.some(owned => path === owned || path.startsWith(`${owned}/`))
+  && !path.startsWith('/.well-known/oauth') && path !== '/terms' && path !== '/privacy';
 const manifestDigest = async (root: string) => sha256(JSON.stringify(await Promise.all(
   (await readdir(root)).filter(name => /\.ya?ml$/i.test(name)).sort().map(async name =>
     [name, (await readFile(join(root, name))).toString('base64')],
@@ -86,6 +92,7 @@ export async function runBuild(rawArgs: readonly string[]): Promise<number> {
         if (entry.isDirectory()) await collect(path);
         else if (entry.isFile()) {
           const key = '/' + relative(assetsPath, path).split(sep).join('/');
+          if (!validCloudAssetPath(key)) throw new Error(`${path}: asset path is reserved or invalid for Cloud`);
           const type = types[extname(path).toLowerCase()];
           if (!type) throw new Error(`${path}: unsupported asset type`);
           const bytes = await readFile(path);
