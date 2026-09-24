@@ -42,6 +42,8 @@ import {
 import { storageFingerprint } from "./SqliteMigrationArtifact.js";
 
 export interface SqliteMantleStorageAdapterOptions {
+  /** One time source for TTL reads and cleanup. */
+  readonly now?: () => number;
   /**
    * Decorate only the site-config repository used by preparation and the
    * prepared runtime. Platform adapters may attach platform-owned write
@@ -58,6 +60,7 @@ export interface SqliteMantleStorageAdapterOptions {
 /** Existing SQLite/D1 implementation behind the semantic preparation seam. */
 export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
   readonly nativeViewDialects = ["sqlite"] as const;
+  readonly supportsTtl = true;
   readonly siteConfig: SiteConfigRepository;
   private readonly canonicalSiteConfig: DatabaseSiteConfigRepository;
 
@@ -71,7 +74,7 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
   }
 
   async prepare(plan: RuntimePlan): Promise<PreparedMantleStorage> {
-    const prepared = sqliteStoragePorts(this.db, plan, this.siteConfig);
+    const prepared = sqliteStoragePorts(this.db, plan, this.siteConfig, this.options.now ?? Date.now);
     const schemas = [...validateSqliteSchemaTables(Object.values(plan.schemas).map((schema) => schema.manifest))];
     await assertNoLegacyStorage(this.db);
     if (this.options.managedStorageFingerprint) {
@@ -183,12 +186,13 @@ export class SqliteViewQueryExecutor implements ViewQueryExecutor {
   constructor(
     private readonly db: DatabaseDriver,
     plan: RuntimePlan,
+    now: () => number = Date.now,
   ) {
     for (const view of Object.values(plan.views)) {
       const schema = view.query.kind === "declarative"
         ? plan.schemas[view.query.from]?.manifest
         : undefined;
-      this.prepared.set(view.name, prepareSqliteView(view.query, view.name, schema));
+      this.prepared.set(view.name, prepareSqliteView(view.query, view.name, schema, now));
     }
   }
 
@@ -221,15 +225,17 @@ function sqliteStoragePorts(
   db: DatabaseDriver,
   plan: RuntimePlan,
   localePolicy: SiteConfigRepository,
+  now: () => number,
 ): PreparedMantleStorage {
   const schemas = new Map<string, SchemaManifest>(
     Object.values(plan.schemas).map((schema) => [schema.name, schema.manifest]),
   );
-  const entries = new DatabaseEntryRepository(db, schemas);
+  const entries = new DatabaseEntryRepository(db, schemas, now);
   return {
     entries,
     atomicEntries: db.supportsAtomicEntryWrites ? entries : undefined,
-    views: new SqliteViewQueryExecutor(db, plan),
+    expiry: entries,
+    views: new SqliteViewQueryExecutor(db, plan, now),
     localePolicy,
     siteConfig: localePolicy,
     mediaAssets: new DatabaseMediaAssetRepository(db),

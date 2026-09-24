@@ -25,14 +25,16 @@ import {
  * with stale semantics. v2: public Views over publishing Schemas carry the
  * published-only predicate and native column names are reserved (#1007,
  * #1008); a v1 artifact has neither. v3 adds scheduled Trigger descriptors;
- * a v2 artifact has no schedule capability marker.
+ * a v2 artifact has no schedule capability marker. v4 adds Schema TTL read
+ * semantics; older plans must not expose expired entries.
  */
-export const RUNTIME_PLAN_VERSION = 3 as const;
+export const RUNTIME_PLAN_VERSION = 4 as const;
 
 export interface RuntimeSchemaPlan {
   readonly name: string;
   readonly manifest: SchemaManifest;
   readonly translationParent?: string;
+  readonly ttl?: { readonly field: string; readonly expireAfterSeconds: number };
 }
 
 export interface AuthorizationPlan {
@@ -146,6 +148,7 @@ export function compileRuntimePlan(
     return {
       name: copy.metadata.name,
       manifest: copy,
+      ...(copy.spec.ttl ? { ttl: copy.spec.ttl } : {}),
       ...(translationParent
         ? { translationParent: translationParent.manifest.metadata.name }
         : {}),

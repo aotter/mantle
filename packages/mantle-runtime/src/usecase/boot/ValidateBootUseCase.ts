@@ -39,8 +39,22 @@ export async function prepareDeployment(
     ...options,
     nativeViewDialects: storage.nativeViewDialects ?? [],
   });
+  if (!storage.supportsTtl) {
+    for (const schema of Object.values(plan.schemas)) {
+      if (!schema.ttl) continue;
+      diagnostics.push(bootDiagnostic({
+        code: "RESOURCE_UNAVAILABLE", severity: "error",
+        path: `manifest:Schema/${schema.name}#/spec/ttl`,
+        message: `Storage adapter cannot enforce TTL reads for Schema '${schema.name}'.`,
+        expected: "an adapter with logical TTL filtering and bounded sweep support",
+      }));
+    }
+  }
   if (diagnostics.length > 0) throw new BootValidationError(diagnostics);
   const prepared = await storage.prepare(plan);
+  if (Object.values(plan.schemas).some((schema) => schema.ttl) && !prepared.expiry) {
+    throw new Error("Storage adapter declared TTL support but did not prepare an expiry sweeper.");
+  }
   return sealPreparedMantleRevision(plan, prepared, options.handlerNames);
 }
 

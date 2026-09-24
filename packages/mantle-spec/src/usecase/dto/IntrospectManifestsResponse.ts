@@ -15,6 +15,7 @@ export interface IntrospectedSchema {
   readonly title: LocalizedText;
   readonly localized: boolean;
   readonly lifecycle: string;
+  readonly ttl: { readonly field: string; readonly expireAfterSeconds: number } | null;
   readonly translates: { readonly parent: string; readonly on: string } | null;
   readonly uniqueIndexes: ReadonlyArray<ReadonlyArray<string>>;
   readonly indexes: ReadonlyArray<ReadonlyArray<string>>;

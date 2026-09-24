@@ -26,7 +26,7 @@ function auth(role: string | null): Auth {
   };
 }
 
-function manifests(): Manifest[] {
+function manifests(ttl = false): Manifest[] {
   return [{
     apiVersion: "cms.mantle.aotter.net/v1",
     kind: "Schema",
@@ -39,6 +39,7 @@ function manifests(): Manifest[] {
           slug: { type: "string" },
           locale: { type: "string" },
           title: { type: "string" },
+          expiresAt: { type: "string", format: "date-time" },
           body: { type: "string" },
           sections: { type: "array", items: { type: "object" } },
         },
@@ -46,6 +47,7 @@ function manifests(): Manifest[] {
       },
       localized: true,
       lifecycle: "publishing",
+      ...(ttl ? { ttl: { field: "expiresAt", expireAfterSeconds: 0 } } : {}),
     },
   }];
 }
@@ -53,6 +55,7 @@ function manifests(): Manifest[] {
 function harness(
   locales: readonly string[] = ["en"],
   sessionAuth: Auth = stubAuth,
+  ttl = false,
 ) {
   const db = new InMemoryDatabase();
   const templates = new TemplateRegistry();
@@ -65,7 +68,7 @@ function harness(
     ({ entries, site, seo, nextPageUrl }) => `<html><head>${seo ? renderSeoTagsHtml(seo) : ""}</head><body><section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section>${nextPageUrl ? html`<nav aria-label="分頁"><a rel="next" href="${nextPageUrl}">更多文章</a></nav>` : ""}</body></html>`,
   );
   const ref = createMantleRuntimeRef({
-    plan: compileTestPlan(manifests()),
+    plan: compileTestPlan(manifests(ttl)),
     templates,
     siteDefaults: {
       title: "Blog",
@@ -105,6 +108,17 @@ function seedPublishedPost(db: InMemoryDatabase, locale = "en"): void {
 }
 
 describe("mountPublicRoutes response-cache contract", () => {
+  it("never shares a page that can change at a TTL boundary", async () => {
+    const h = harness(["en"], stubAuth, true);
+    seedPublishedPost(h.db);
+    for (const path of ["/en", "/en.md", "/en/posts", "/en/posts.md", "/en/posts/hello",
+      "/en/posts/hello.md", "/en/llms.txt", "/llms.txt", "/sitemap.xml"]) {
+      const response = await h.app.request(path);
+      expect(response.headers.get("cache-control"), path).toBe("private, no-store");
+      expect(response.headers.get("cache-tag"), path).toBeNull();
+    }
+  });
+
   it("renders list, entry, and markdown from canonical D1 state", async () => {
     const h = harness();
     seedPublishedPost(h.db);

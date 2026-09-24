@@ -205,7 +205,13 @@ function checkViewRefs(
   schemasByName: ReadonlyMap<string, SchemaManifest>,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
-  if (v.spec.sql) return [];
+  if (v.spec.sql) return [...schemasByName.values()].some((schema) => schema.spec.ttl)
+    ? [validateDiagnostic({
+        code: "VIEW_TTL_NATIVE_UNSAFE", severity: "error",
+        path: manifestPath("View", v.metadata.name, "/spec/sql", filePaths),
+        message: `Native SQL View '${v.metadata.name}' cannot guarantee logical TTL filtering while a Schema has a TTL policy.`,
+        expected: "a declarative View or no Schema TTL policies",
+      })] : [];
   const out: Diagnostic[] = [];
   const fromName = v.spec.from;
   if (!fromName) return out;
@@ -234,6 +240,15 @@ function checkViewRefs(
       value: fromName,
       expected: "a View over a publishing Schema",
       message: `View '${v.metadata.name}' cannot cache operational Schema '${fromName}'.`,
+    }));
+  }
+  if (v.spec.cache && schema.spec.ttl) {
+    out.push(validateDiagnostic({
+      code: "VIEW_CACHE_INVALID", severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
+      value: fromName,
+      expected: "no shared cache for a View over a TTL Schema",
+      message: `View '${v.metadata.name}' cannot cache TTL Schema '${fromName}' past its expiry boundary.`,
     }));
   }
   const publicPublishing = v.spec.surface === "public"

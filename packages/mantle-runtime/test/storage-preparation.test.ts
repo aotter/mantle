@@ -27,6 +27,23 @@ import { InMemoryDatabase } from "./fakes/database.js";
 import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
 
 describe("prepareDeployment", () => {
+  it("rejects TTL on an adapter that cannot filter expired reads", async () => {
+    const plan = compilePlan(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: events }
+spec:
+  title: Events
+  ttl: { field: expiresAt, expireAfterSeconds: 0 }
+  schema:
+    type: object
+    properties:
+      expiresAt: { type: string, format: date-time }
+`);
+    const prepare = vi.fn();
+    await expect(prepareDeployment(plan, { prepare })).rejects.toThrow("RESOURCE_UNAVAILABLE");
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
   it("prepares an official adapter over an existing database handle once", async () => {
     const db = new InMemoryDatabase();
     const plan = compilePlan(declarativeManifest);

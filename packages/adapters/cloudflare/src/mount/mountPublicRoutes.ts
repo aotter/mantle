@@ -44,8 +44,8 @@ import { PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
  * standard renderer.
  *
  * Public responses are rendered from canonical D1 state and carry
- * `s-maxage` for Cloudflare's version-local Workers Cache. `liveDev`
- * switches entry/list responses to `private, no-store`.
+ * `s-maxage` for Cloudflare's version-local Workers Cache. TTL collections
+ * and `liveDev` use `private, no-store`.
  */
 export interface CollectionRouteConfig {
   /** Schema name (e.g. `"post-translations"`). */
@@ -118,6 +118,10 @@ const MD_PUBLIC = {
   "cache-control": PUBLIC_CACHE_CONTROL,
   "cache-tag": PUBLIC_CACHE_TAG,
 } as const;
+const MD_NO_STORE = {
+  "content-type": "text/markdown; charset=utf-8",
+  "cache-control": PRIVATE_CACHE_CONTROL,
+} as const;
 
 const TEXT_PUBLIC = {
   "content-type": "text/plain; charset=utf-8",
@@ -151,7 +155,7 @@ export function mountPublicRoutes(
     const runtime = await ref.get();
     const web = ref.web(runtime);
     const page = await composeLlmsPage(runtime, web, await runtime.siteConfig.load(), options, undefined, c.req.query("cursor"));
-    return pagedTextResponse(c, page, TEXT_PUBLIC);
+    return pagedTextResponse(c, page, hasTtlRoutes(runtime, options.collectionRoutes) ? TEXT_NO_STORE : TEXT_PUBLIC);
   });
 
   app.get("/robots.txt", async () => {
@@ -202,7 +206,8 @@ export function mountPublicRoutes(
           if (cursor) query.set("cursor", cursor);
           return `/sitemap.xml?${query}`;
         });
-    return new Response(xml, { status: 200, headers: SITEMAP_HEADERS });
+    return applyPublicHeaders(new Response(xml, { status: 200, headers: SITEMAP_HEADERS }),
+      hasTtlRoutes(runtime, options.collectionRoutes));
   });
 
   if (options.homeRenderer) {
@@ -222,7 +227,8 @@ export function mountPublicRoutes(
       const body = options.homeMarkdown
         ? await options.homeMarkdown(ctx)
         : await readHomeMarkdown(runtime, options.collectionRoutes, locale);
-      return body ? new Response(body, { status: 200, headers: MD_PUBLIC }) : textNotFound();
+      return body ? new Response(body, { status: 200,
+        headers: hasTtlRoutes(runtime, options.collectionRoutes) ? MD_NO_STORE : MD_PUBLIC }) : textNotFound();
     });
     app.get("/:locale", async (c) => {
       const runtime = await ref.get();
@@ -239,7 +245,7 @@ export function mountPublicRoutes(
       const response = await options.homeRenderer!(
         buildCtx(c, runtime, site, locale, homeSeo(site, locale, markdown !== null)),
       );
-      return applyPublicHeaders(response, liveDev);
+      return applyPublicHeaders(response, liveDev || hasTtlRoutes(runtime, options.collectionRoutes));
     });
   }
 
@@ -253,7 +259,7 @@ export function mountPublicRoutes(
     if (locale === null) return textNotFound();
     const site = await runtime.siteConfig.load();
     const page = await composeLlmsPage(runtime, web, site, options, locale, c.req.query("cursor"));
-    return pagedTextResponse(c, page, TEXT_PUBLIC);
+    return pagedTextResponse(c, page, hasTtlRoutes(runtime, options.collectionRoutes) ? TEXT_NO_STORE : TEXT_PUBLIC);
   });
 
   for (const route of options.collectionRoutes) {
@@ -296,7 +302,7 @@ function mountCollection(
           cursor: c.req.query("cursor"),
           pathFor: (entry) => entryPathForLocale(web, options.collectionRoutes, entry, locale),
         });
-        return pagedTextResponse(c, page, MD_PUBLIC);
+        return pagedTextResponse(c, page, hasTtlCollection(runtime, route.collection) ? MD_NO_STORE : MD_PUBLIC);
       });
     }
     app.get(`/:locale${segPath}`, async (c) => {
@@ -331,7 +337,7 @@ function mountCollection(
         seo,
       });
       if (page === null) return notFound();
-      const headers = new Headers(liveDev ? HTML_NO_STORE : HTML_PUBLIC);
+      const headers = new Headers(liveDev || hasTtlCollection(runtime, route.collection) ? HTML_NO_STORE : HTML_PUBLIC);
       const next = continuationPath(c, page.nextCursor);
       if (next) headers.set("link", `<${next}>; rel="next"`);
       return new Response(page.html, { status: 200, headers });
@@ -366,7 +372,7 @@ function mountCollection(
       if (!markdown) return notFound();
       return new Response(markdown, {
         status: 200,
-        headers: MD_PUBLIC,
+        headers: hasTtlCollection(runtime, route.collection) ? MD_NO_STORE : MD_PUBLIC,
       });
     });
   }
@@ -399,7 +405,7 @@ function mountCollection(
       const site = await loadSite();
       return applyPublicHeaders(
         await override.render(buildCtx(c, runtime, site, locale, homeSeo(site, locale, false))),
-        liveDev,
+        liveDev || hasTtlCollection(runtime, route.collection),
       );
     }
 
@@ -444,7 +450,7 @@ function mountCollection(
     if (html === null) return notFound();
     return new Response(html, {
       status: 200,
-      headers: liveDev ? HTML_NO_STORE : HTML_PUBLIC,
+      headers: liveDev || hasTtlCollection(runtime, route.collection) ? HTML_NO_STORE : HTML_PUBLIC,
     });
   });
 
@@ -591,6 +597,14 @@ function entrySeoRoute(
 
 function contentLocale(runtime: CloudflareMantleRuntime, collection: string, locale: string): string | null {
   return runtime.schemas.get(collection)?.spec.localized ? locale : null;
+}
+
+function hasTtlCollection(runtime: CloudflareMantleRuntime, collection: string): boolean {
+  return !!runtime.schemas.get(collection)?.spec.ttl;
+}
+
+function hasTtlRoutes(runtime: CloudflareMantleRuntime, routes: ReadonlyArray<CollectionRouteConfig>): boolean {
+  return routes.some((route) => hasTtlCollection(runtime, route.collection));
 }
 
 function entryPathForLocale(

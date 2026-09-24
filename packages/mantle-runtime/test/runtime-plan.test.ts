@@ -55,7 +55,7 @@ spec:
     const { semanticFingerprint: _declared, ...semantics } = { ...current, version: 1 };
     const stale = { ...semantics, semanticFingerprint: semanticFingerprint(semantics) };
     expect(() => sealRuntimePlan(stale as unknown as Parameters<typeof sealRuntimePlan>[0]))
-      .toThrow(/version 1 but this runtime requires version 3; run `mantle generate` again/);
+      .toThrow(/version 1 but this runtime requires version 4; run `mantle generate` again/);
     expect(() => sealRuntimePlan(current)).not.toThrow();
   });
 

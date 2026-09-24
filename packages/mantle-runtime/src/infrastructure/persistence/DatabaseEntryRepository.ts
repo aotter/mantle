@@ -8,6 +8,7 @@ import {
 } from "@aotter/mantle-spec";
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
 import type { AtomicEntryWrite, AtomicEntryWriter } from "../../domain/port/AtomicEntryWriter.js";
+import type { ExpirySweeper, SweepExpiredRequest, SweepExpiredResult } from "../../domain/port/ExpirySweeper.js";
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
@@ -56,14 +57,16 @@ import {
   fieldSql,
   isNullableJsonSchema,
   sqliteSchemaTable,
+  ttlCutoff,
   type SqliteSchemaTable,
 } from "../storage/SqliteSchemaTables.js";
 
 /** SQLite/D1 repository where each Schema is one physical table. */
-export class DatabaseEntryRepository implements EntryRepository, EntryReader, AtomicEntryWriter {
+export class DatabaseEntryRepository implements EntryRepository, EntryReader, AtomicEntryWriter, ExpirySweeper {
   constructor(
     private readonly db: DatabaseDriver,
     private readonly schemasByName: ReadonlyMap<string, SchemaManifest> = new Map(),
+    private readonly now: () => number = Date.now,
   ) {}
 
   async readCreationStatistics(args: CreationStatisticsArgs): Promise<CreationStatistics> {
@@ -74,16 +77,19 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     }
     const table = this.table(args.collection);
     const filter = checkSchemaAdminUi(table.schema).filter;
+    const live: string[] = [];
+    const liveBinds: unknown[] = [];
+    this.addLiveCondition(table, live, liveBinds);
     const subtypeField = filter ? requiredFieldSql(table.schema, filter.field) : null;
     const subtype = filter && subtypeField
       ? `CASE WHEN ${subtypeField} IN (${filter.values.map(() => "?").join(", ")}) THEN ${subtypeField} ELSE NULL END`
       : "NULL";
-    const total = await this.db.prepare(`SELECT COUNT(*) AS count FROM ${table.table}`)
-      .first<{ count: number }>();
+    const total = await this.db.prepare(`SELECT COUNT(*) AS count FROM ${table.table}${live.length ? ` WHERE ${live.join(" AND ")}` : ""}`)
+      .bind(...liveBinds).first<{ count: number }>();
     const rows = await this.db.prepare(`SELECT CAST(("_mantle_created_at" - ?) / ? AS INTEGER) AS bucket,
       ${subtype} AS subtype, COUNT(*) AS count FROM ${table.table}
-      WHERE "_mantle_created_at" >= ? AND "_mantle_created_at" < ? GROUP BY bucket, subtype`)
-      .bind(from, bucketMs, ...(filter ? filter.values : []), from, to)
+      WHERE "_mantle_created_at" >= ? AND "_mantle_created_at" < ?${live.length ? ` AND ${live.join(" AND ")}` : ""} GROUP BY bucket, subtype`)
+      .bind(from, bucketMs, ...(filter ? filter.values : []), from, to, ...liveBinds)
       .all<{ bucket: number; subtype: string | null; count: number }>();
     return { total: total?.count ?? 0, buckets: rows };
   }
@@ -174,9 +180,38 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
 
   async get(args: EntryKey): Promise<EntryRow | null> {
     const table = this.table(args.collection);
-    const row = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE "_mantle_id" = ?`)
-      .bind(args.id).first<NativeEntryRow>();
+    const conditions = ['"_mantle_id" = ?'];
+    const binds: unknown[] = [args.id];
+    this.addLiveCondition(table, conditions, binds);
+    const row = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")}`)
+      .bind(...binds).first<NativeEntryRow>();
     return row ? rowFromDb(table, row) : null;
+  }
+
+  async sweepExpired(request: SweepExpiredRequest & { readonly limit: number }): Promise<SweepExpiredResult> {
+    const table = this.table(request.collection);
+    const ttl = table.schema.spec.ttl;
+    if (!ttl) throw new Error(`Schema '${request.collection}' has no TTL policy.`);
+    const field = requiredFieldSql(table.schema, ttl.field);
+    const cutoff = ttlCutoff(this.now(), ttl.expireAfterSeconds);
+    if (cutoff === null) return { scanned: 0, removed: 0 };
+    const cursor = request.cursor ?? "";
+    const rows = await this.db.prepare(`SELECT "_mantle_id" AS id FROM ${table.table}
+      WHERE "_mantle_id" > ? AND ${field} IS NOT NULL AND julianday(${field}) <= julianday(?)
+      ORDER BY "_mantle_id" LIMIT ?`)
+      .bind(cursor, cutoff, request.limit + 1).all<{ id: string }>();
+    const page = rows.slice(0, request.limit);
+    let removed = 0;
+    if (request.delete && page.length) {
+      const result = await this.db.prepare(`DELETE FROM ${table.table} WHERE "_mantle_id" IN (
+        SELECT "_mantle_id" FROM ${table.table}
+        WHERE "_mantle_id" > ? AND ${field} IS NOT NULL AND julianday(${field}) <= julianday(?)
+        ORDER BY "_mantle_id" LIMIT ?)`)
+        .bind(cursor, cutoff, request.limit).run();
+      removed = result.meta.changes;
+    }
+    return { scanned: page.length, removed,
+      ...(rows.length > request.limit ? { nextCursor: page.at(-1)!.id } : {}) };
   }
 
   async update(args: UpdateEntryArgs): Promise<EntryRow> {
@@ -238,6 +273,7 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     const direction = backward ? (sort.direction === "asc" ? "DESC" : "ASC") : sort.direction.toUpperCase();
     const conditions: string[] = [];
     const binds: unknown[] = [];
+    this.addLiveCondition(table, conditions, binds);
     if (args.status) { conditions.push('"_mantle_status" = ?'); binds.push(args.status); }
     if (args.search) {
       const term = escapeLikeTerm(args.search);
@@ -320,6 +356,7 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     const table = this.table(args.collection);
     const conditions = ['"_mantle_status" = \'published\''];
     const binds: unknown[] = [];
+    this.addLiveCondition(table, conditions, binds);
     this.addLocaleCondition(table, conditions, binds, args.locale);
     const limit = typeof args.limit === "number" && Number.isFinite(args.limit) && args.limit > 0 ? ` LIMIT ${Math.floor(args.limit)}` : "";
     const rows = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")} ORDER BY "_mantle_updated_at" DESC${limit}`)
@@ -336,6 +373,7 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     const columns = ['"_mantle_id"', '"_mantle_status"', '"_mantle_version"', '"_mantle_author_id"', '"_mantle_created_at"', '"_mantle_updated_at"', ...fields.map(quote)];
     const conditions = ['"_mantle_status" = \'published\''];
     const binds: unknown[] = [];
+    this.addLiveCondition(table, conditions, binds);
     if (args.includeUnlocalized && typeof args.locale === "string") {
       const locale = requiredFieldSql(table.schema, "locale");
       conditions.push(`(${locale} = ? OR ${locale} IS NULL)`);
@@ -370,8 +408,11 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     const table = this.table(args.collection);
     const field = requiredFieldSql(table.schema, args.field);
     const limit = Number.isFinite(args.limit) && args.limit > 0 ? Math.floor(args.limit) : 1;
-    const rows = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${field} = ? ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC LIMIT ${limit}`)
-      .bind(encodeScalar(table.schema, args.field, args.value)).all<NativeEntryRow>();
+    const conditions = [`${field} = ?`];
+    const binds: unknown[] = [encodeScalar(table.schema, args.field, args.value)];
+    this.addLiveCondition(table, conditions, binds);
+    const rows = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")} ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC LIMIT ${limit}`)
+      .bind(...binds).all<NativeEntryRow>();
     return rows.map((row) => projectPublicEntry(rowFromDb(table, row)));
   }
 
@@ -406,6 +447,7 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     if (args.status) { conditions.push('"_mantle_status" = ?'); binds.push(args.status); }
     this.addLocaleCondition(table, conditions, binds, args.locale);
     if (args.excludeId) { conditions.push('"_mantle_id" <> ?'); binds.push(args.excludeId); }
+    this.addLiveCondition(table, conditions, binds);
     const row = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")} ORDER BY "_mantle_updated_at" DESC LIMIT 1`)
       .bind(...binds).first<NativeEntryRow>();
     return row ? rowFromDb(table, row) : null;
@@ -419,6 +461,17 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
   ): void {
     if (args.status) { conditions.push('"_mantle_status" = ?'); binds.push(args.status); }
     this.addLocaleCondition(table, conditions, binds, args.locale);
+    this.addLiveCondition(table, conditions, binds);
+  }
+
+  private addLiveCondition(table: SqliteSchemaTable, conditions: string[], binds: unknown[]): void {
+    const ttl = table.schema.spec.ttl;
+    if (!ttl) return;
+    const cutoff = ttlCutoff(this.now(), ttl.expireAfterSeconds);
+    if (cutoff === null) return;
+    const field = requiredFieldSql(table.schema, ttl.field);
+    conditions.push(`(${field} IS NULL OR julianday(${field}) IS NULL OR julianday(${field}) > julianday(?))`);
+    binds.push(cutoff);
   }
 
   private addLocaleCondition(table: SqliteSchemaTable, conditions: string[], binds: unknown[], locale: string | null | undefined): void {

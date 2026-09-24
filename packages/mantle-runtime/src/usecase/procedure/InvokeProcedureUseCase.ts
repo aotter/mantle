@@ -70,6 +70,7 @@ export class InvokeProcedureUseCase {
     private readonly builtin?: InvokeBuiltinUseCase,
     private readonly proceduresByName: ReadonlyMap<string, ProcedureManifest> = new Map(),
     private readonly atomicWrites?: HandlerContext["writeAtomically"],
+    private readonly expirySweep?: HandlerContext["sweepExpired"],
   ) {}
 
   async execute<O = unknown>(request: InvokeProcedureRequest): Promise<InvokeProcedureResponse<O>> {
@@ -221,9 +222,11 @@ export class InvokeProcedureUseCase {
             }),
           };
         }
-        result = await handler(inputResult.data, this.atomicWrites && allowGuard
-          ? { ...ctx, writeAtomically: this.atomicWrites }
-          : { ...ctx, writeAtomically: undefined });
+        result = await handler(inputResult.data, {
+          ...ctx,
+          writeAtomically: allowGuard ? this.atomicWrites : undefined,
+          sweepExpired: allowGuard ? this.expirySweep : undefined,
+        });
       }
     } catch (err) {
       if (err instanceof InvokeFailure) {

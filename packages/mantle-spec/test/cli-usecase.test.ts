@@ -66,6 +66,22 @@ function fixture() {
 }
 
 describe("IntrospectManifestsUseCase", () => {
+  it("exposes a Schema TTL policy", () => {
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: events }
+spec:
+  title: Events
+  ttl: { field: expiresAt, expireAfterSeconds: 60 }
+  schema:
+    type: object
+    properties:
+      expiresAt: { type: string, format: date-time }
+`).parsed;
+    expect(IntrospectManifestsUseCase.run({ parsed, parseErrors: [] }).schemas[0]?.ttl)
+      .toEqual({ field: "expiresAt", expireAfterSeconds: 60 });
+  });
+
   it("partitions and surfaces derived shape", () => {
     const parsed = parseManifests(FIXTURE).parsed;
     const out = IntrospectManifestsUseCase.run({ parsed, parseErrors: [] });

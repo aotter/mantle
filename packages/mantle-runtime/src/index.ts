@@ -41,6 +41,7 @@ export {
   type LogicalViewPlan,
   type LifecycleHookPlan,
   type HttpRoutePlan,
+  type SchedulePlan,
   type McpToolPlan,
 } from "./domain/service/RuntimePlanCompiler.js";
 export {
@@ -74,6 +75,7 @@ export type {
   FindEntryByDataFieldsArgs,
 } from "./domain/port/EntryRepository.js";
 export type { AtomicEntryWrite, AtomicEntryWriter } from "./domain/port/AtomicEntryWriter.js";
+export type { ExpirySweeper, SweepExpiredRequest, SweepExpiredResult } from "./domain/port/ExpirySweeper.js";
 export { AtomicEntryWriteUseCase, type AtomicDraftOperation } from "./usecase/content/AtomicEntryWriteUseCase.js";
 export type {
   EntryReader,

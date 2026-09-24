@@ -81,6 +81,9 @@ Raised by the parser, the graph validator and the code generator. `mantle valida
 | `UNIQUE_INDEX_FIELD_UNKNOWN` | A `uniqueIndexes` field is not a top-level Schema property. | — |
 | `SCHEMA_SEARCH_INVALID` | `searchableFields` repeats an entry or names a non-string property. | — |
 | `SCHEMA_SEARCH_FIELD_UNKNOWN` | A `searchableFields` entry is not a Schema property. | — |
+| `SCHEMA_TTL_INVALID` | TTL must name a top-level date-time field and a finite nonnegative duration. | — |
+| `SCHEMA_TTL_TRANSLATION_UNSUPPORTED` | TTL on either side of a translation join cannot guarantee the joined content's expiry. | — |
+| `VIEW_TTL_NATIVE_UNSAFE` | A native SQL View cannot guarantee logical expiry while a Schema has TTL. | — |
 | `SCHEMA_UI_INVALID` | A Schema or Procedure `uiSchema` rule is broken, including unknown roots, invalid `nav.standalone`, or a Schema declaring `uiSchema.collectionAction`. | — |
 | `HANDLER_BUILTIN_NOT_IN_V010` | A builtin Procedure was invoked on a runtime assembled without the builtin collaborator. | — |
 | `MANIFEST_ROOT_NOT_FOUND` | The manifests directory is missing, unreadable, or contains no `.yaml` or `.yml` file. | — |
