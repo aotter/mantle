@@ -9,6 +9,7 @@ import { parseManifestSources, ValidateManifestsUseCase, type Diagnostic } from 
 import { loadManifestsFromRoot } from "@aotter/mantle-spec/cli";
 import { assertMantleNamespace, emitMantleModule } from "../codegen/emitMantleModule.js";
 import { prepareProject } from "./generate-project.js";
+import { prepareSites } from "./generate-sites.js";
 
 interface GenerateOptions {
   readonly manifests: string;
@@ -118,6 +119,17 @@ export async function runGenerate(
     return 1;
   }
 
+  let sites: Awaited<ReturnType<typeof prepareSites>> | null = null;
+  if (project.mode === "project" && project.selection?.host === "chatgpt-sites") {
+    try {
+      sites = await prepareSites(root, project.selection.output ?? options.output, project.selection,
+        loaded.parsed!.entries.filter((entry) => entry.manifest.kind === "Schema").map((entry) => entry.manifest as import("@aotter/mantle-spec").SchemaManifest), options.check);
+    } catch (error) {
+      stderr.write(`${message(error)}\n`);
+      return 2;
+    }
+  }
+
   const adminIndex = project.mode === "legacy" || project.selection?.features.includes("admin")
     ? (deps.resolveAdminUiIndexHtml ?? (project.mode === "legacy" ? resolveAdminUiIndexHtml : () => resolveProjectAdminUiIndexHtml(root)))()
     : null;
@@ -127,13 +139,13 @@ export async function runGenerate(
     if (!options.check && !project.incomplete) return 1;
   }
   if (!options.check && project.commit) {
-    try { await project.commit(); }
+    try { await project.commit(); await sites?.commit(); }
     catch (error) { stderr.write(`${message(error)}\n`); return 2; }
   }
   if (project.incomplete && !options.check) return 1;
   const output = resolve(cwd(), project.selection?.output ?? options.output);
   const generatedCurrent = await syncText(join(output, "mantle.ts"), emitted.source, options.check);
-  let stale = project.incomplete || adminUnavailable || !generatedCurrent;
+  let stale = project.incomplete || adminUnavailable || !generatedCurrent || Boolean(sites?.stale);
   if (adminIndex !== null) {
     const adminSource = dirname(adminIndex);
     const adminTarget = resolve(cwd(), "public/_mantle/admin");
@@ -144,14 +156,12 @@ export async function runGenerate(
     stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
     return 1;
   }
-  if (project.mode === "project" && project.selection?.host === "chatgpt-sites") {
-    stderr.write(`Host composition for ${project.selection.host} is not generated yet; project setup is incomplete.\n`);
-    return 1;
-  }
   if (project.mode === "project") {
     if (!options.check) stdout.write(project.selection?.host === "cf"
       ? "Generated Cloudflare Worker composition and typed bindings.\n"
-      : "Generated host-free Spec bindings.\n");
+      : project.selection?.host === "chatgpt-sites"
+        ? "Generated ChatGPT Sites composition and typed bindings. Apply reviewed local D1 migrations before serving.\n"
+        : "Generated host-free Spec bindings.\n");
     return 0;
   }
   if (!options.check) printGenerateNextSteps(adminIndex !== null);

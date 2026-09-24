@@ -1,0 +1,14 @@
+import { build } from 'esbuild';
+import { cp, mkdir, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+
+execFileSync('node', ['node_modules/@aotter/mantle/dist/cli/main.js', 'generate', '--check'], { stdio: 'inherit' });
+execFileSync('node', ['node_modules/typescript/bin/tsc', '--noEmit'], { stdio: 'inherit' });
+await rm('dist', { recursive: true, force: true });
+await mkdir('dist/server', { recursive: true });
+await build({ entryPoints: ['src/index.ts'], outfile: 'dist/server/index.js', bundle: true, format: 'esm', platform: 'browser', conditions: ['workerd'], target: 'es2022', external: ['cloudflare:*', 'node:*'] });
+await mkdir('dist/client', { recursive: true });
+await cp('public', 'dist/client', { recursive: true, force: true }).catch(error => { if (error.code !== 'ENOENT') throw error; });
+await mkdir('dist/.openai', { recursive: true });
+await cp('.openai/hosting.json', 'dist/.openai/hosting.json');
+await cp('drizzle', 'dist/.openai/drizzle', { recursive: true });

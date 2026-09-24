@@ -50,6 +50,7 @@
       "text": "ChatGPT Sites",
       "items": [
         { "text": "Get started", "link": "/chatgpt-sites/index" },
+        { "text": "Generate a blank app", "link": "/chatgpt-sites/generated-app" },
         { "text": "Host reference", "link": "/chatgpt-sites/host-reference" },
         { "text": "Equipment checkout and external APIs", "link": "/chatgpt-sites/equipment-checkout" },
         { "text": "Earlier guide URL", "link": "/cloudflare/chatgpt-sites" }

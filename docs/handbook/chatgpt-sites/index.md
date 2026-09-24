@@ -16,6 +16,10 @@ repository. Sites owns hosting, visitor access, and ChatGPT sign-in; Mantle owns
 the content model, staff roles, and publishing workflow. For platform access and
 sharing options, see [OpenAI's Sites documentation](https://learn.chatgpt.com/docs/sites).
 
+For a new project, start with the [blank generated app](./generated-app.md).
+The article reference below demonstrates a complete editorial Site with R2
+media after you choose that content model.
+
 ## What you get
 
 | Capability | In the Mantle Sites reference |
@@ -112,6 +116,7 @@ evidence from the equipment and Slack work still required in your application.
 ## Integration details
 
 - [Host reference](./host-reference.md): identity, migrations, R2 routes, MCP, and deployment checks.
+- [Generated blank app](./generated-app.md): local composition, D1 migration, Admin, and MCP.
 - [Equipment checkout](./equipment-checkout.md): custom business rules and external API delivery without payments.
 - [Runnable application](../../examples/host-chatgpt-sites/README.md): installation, build artifacts, and smoke tests.
 - [Conventional Cloudflare Worker](../cloudflare/conventional-worker.md): the separate path for a Worker you deploy directly.

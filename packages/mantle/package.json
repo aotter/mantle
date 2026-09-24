@@ -80,6 +80,7 @@
     "dist",
     "docs",
     "skills",
+    "templates",
     "README.md"
   ],
   "dependencies": {

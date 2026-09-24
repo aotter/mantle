@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+
+const origin=process.env.MANTLE_TEST_ORIGIN??'http://127.0.0.1:4174';
+const url=new URL(origin);
+assert.equal(url.protocol,'http:','Identity simulation requires loopback HTTP');
+assert.ok(['localhost','127.0.0.1','[::1]'].includes(url.hostname),'Identity simulation is loopback-only');
+const email=process.env.MANTLE_TEST_OWNER_EMAIL;
+assert.ok(email,'Set MANTLE_TEST_OWNER_EMAIL to the locally configured owner');
+const owner={'oai-authenticated-user-id':'mantle-local-owner','oai-authenticated-user-email':email};
+const stranger={'oai-authenticated-user-id':'mantle-local-stranger','oai-authenticated-user-email':'stranger@example.test'};
+const call=(path,headers={})=>fetch(new URL(path,url),{headers,redirect:'manual'});
+assert.equal((await call('/')).status,200);
+assert.equal((await call('/admin/api/me')).status,401);
+assert.equal((await call('/admin/api/me',stranger)).status,403);
+assert.equal((await call('/admin/api/me',owner)).status,200);
+const mcp=(path,headers={})=>fetch(new URL(path,url),{method:'POST',headers:{...headers,'content-type':'application/json','mcp-protocol-version':'2025-11-25'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize'})});
+assert.equal((await mcp('/api/mcp')).status,200);
+assert.equal((await mcp('/api/mcp/staff')).status,401);
+assert.equal((await mcp('/api/mcp/staff',owner)).status,200);
+console.log('Local Sites identity simulation passed; this does not verify deployed ChatGPT sign-in.');

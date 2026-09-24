@@ -1,6 +1,6 @@
 import type { AdminAuth, AdminStaffUser, StaffRole } from '@aotter/mantle/admin';
 
-export interface Env { DB: D1Database; MEDIA_BUCKET: R2Bucket; ASSETS: Fetcher; PUBLIC_ORIGIN: string; OWNER_EMAIL: string }
+export interface Env { DB: D1Database; ASSETS?: Fetcher; PUBLIC_ORIGIN: string; OWNER_EMAIL?: string }
 type UserRow = { id: string; email: string; name: string; role: StaffRole | null; created_at: string; signed_in: number };
 const project = (row: UserRow): AdminStaffUser => ({ id:row.id,email:row.email,name:row.name,role:row.role,githubLogin:null,emailVerified:!!row.signed_in,createdAt:new Date(row.created_at) });
 

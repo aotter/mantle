@@ -140,6 +140,7 @@ export {
 } from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
 export {
   buildSqliteMigrationArtifact,
+  renderSqliteManagedMigration,
   storageFingerprint,
   verifySqliteMigrationArtifact,
   type SqliteMigrationArtifact,
