@@ -6,7 +6,7 @@ import { cwd, stderr, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { ValidateManifestsUseCase } from "@aotter/mantle-spec";
-import { loadManifestsFromRoot } from "@aotter/mantle-spec/cli";
+import { loadManifestsFromRoot, runValidate } from "@aotter/mantle-spec/cli";
 import { compileRuntimePlan } from "@aotter/mantle-runtime";
 import { runGenerate } from "./generate.js";
 
@@ -53,6 +53,7 @@ export async function runBuild(rawArgs: readonly string[]): Promise<number> {
     const modulePath = inProject(root, fields.module);
     const assetsPath = inProject(root, fields.assets);
     await assertRealPath(root, manifests);
+    if (await runValidate(['--manifests', manifests, '--no-source', '--phase', 'deploy']) !== 0) return 1;
     if (await runGenerate(['--manifests', manifests]) !== 0) return 1;
     execFileSync('pnpm', ['run', 'build:mantle'], { cwd: root, stdio: 'inherit' });
     await assertRealPath(root, modulePath);
