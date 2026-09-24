@@ -72,3 +72,6 @@ jobs:
 
       - name: Test packed Core in the reference Worker
         run: pnpm check:worker-consumer
+
+      - name: Test packed agent-built Cloud artifact
+        run: node scripts/check-packed-consumer.mjs --project docs/examples/host-cloud-project -- pnpm test
