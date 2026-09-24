@@ -1,6 +1,6 @@
 # ADR-0021: Author applications directly; retire Starter scaffolding
 
-Status: Accepted by owner, 2026-09-08 (#786). Supersedes ADR-0018 for the 0.1.2 line.
+Status: Accepted by owner, 2026-09-08 (#786). Supersedes ADR-0018 for the 0.1.2 line. Its no-initialization clause is superseded by [ADR-0026](0026-progressive-generate.md) for 0.1.5.
 
 Core is an embeddable manifest engine. Applications own package manifests,
 Worker entries, provider configuration, business manifests and visitor UI.

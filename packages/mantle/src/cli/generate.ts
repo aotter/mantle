@@ -1,18 +1,24 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { cwd, stderr, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { ValidateManifestsUseCase, type Diagnostic } from "@aotter/mantle-spec";
+import { parseManifestSources, ValidateManifestsUseCase, type Diagnostic } from "@aotter/mantle-spec";
 import { loadManifestsFromRoot } from "@aotter/mantle-spec/cli";
 import { assertMantleNamespace, emitMantleModule } from "../codegen/emitMantleModule.js";
+import { prepareProject } from "./generate-project.js";
 
 interface GenerateOptions {
   readonly manifests: string;
   readonly output: string;
   readonly namespace: string;
   readonly check: boolean;
+  readonly host?: string;
+  readonly features?: string;
+  readonly adopt: boolean;
+  readonly manifestsExplicit: boolean;
 }
 
 /** Test seam for Core-only vs Admin-present installs. */
@@ -33,6 +39,13 @@ export function resolveAdminUiIndexHtml(): string | null {
   }
 }
 
+function resolveProjectAdminUiIndexHtml(root: string): string | null {
+  try {
+    const path = createRequire(join(root, "package.json")).resolve("@aotter/mantle-admin-ui/index.html");
+    return existsSync(path) ? path : null;
+  } catch { return null; }
+}
+
 export async function runGenerate(
   rawArgs: readonly string[],
   deps: GenerateDeps = {},
@@ -50,7 +63,42 @@ export async function runGenerate(
     return 2;
   }
 
-  const loaded = await loadManifestsFromRoot(options.manifests);
+  const root = cwd();
+  let loaded = await loadManifestsFromRoot(options.manifests);
+  if (loaded.parseErrors.some((diagnostic) => diagnostic.code !== "MANIFEST_ROOT_NOT_FOUND") ||
+      (options.manifestsExplicit && loaded.parseErrors.length > 0)) {
+    printDiagnostics(loaded.parseErrors);
+    return 1;
+  }
+  let project;
+  try {
+    project = await prepareProject({
+      root, host: options.host, features: options.features, adopt: options.adopt, check: options.check, output: options.output,
+      adminAssetsCurrent: async () => {
+        const index = (deps.resolveAdminUiIndexHtml ?? (() => resolveProjectAdminUiIndexHtml(root)))();
+        return index !== null && syncAdminAssets(dirname(index), resolve(root, "public/_mantle/admin"), true);
+      },
+    });
+  } catch (error) {
+    stderr.write(`${message(error)}\n`);
+    return 2;
+  }
+  if (project.mode === "project" && !options.manifestsExplicit && loaded.parseErrors.length === 1 &&
+      loaded.parseErrors[0]?.code === "MANIFEST_ROOT_NOT_FOUND") {
+    let names: string[];
+    try { names = await readdir(resolve(root, options.manifests)); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        printDiagnostics(loaded.parseErrors);
+        return 1;
+      }
+      names = [];
+    }
+    if (!names.some((name) => /\.ya?ml$/i.test(name))) {
+      const empty = parseManifestSources({ sources: [] });
+      if (empty.ok) loaded = { parsed: empty.value, parseErrors: [], root: loaded.root };
+    }
+  }
   const validation = loaded.parsed
     ? ValidateManifestsUseCase.run({ parsed: loaded.parsed })
     : { diagnostics: [], errorCount: 0, warningCount: 0 };
@@ -70,9 +118,22 @@ export async function runGenerate(
     return 1;
   }
 
+  const adminIndex = project.mode === "legacy" || project.selection?.features.includes("admin")
+    ? (deps.resolveAdminUiIndexHtml ?? (project.mode === "legacy" ? resolveAdminUiIndexHtml : () => resolveProjectAdminUiIndexHtml(root)))()
+    : null;
+  const adminUnavailable = project.selection?.features.includes("admin") && adminIndex === null;
+  if (adminUnavailable) {
+    stderr.write("Selected Admin UI is not installed or its assets are missing. Install declared packages and rerun mantle generate.\n");
+    if (!options.check && !project.incomplete) return 1;
+  }
+  if (!options.check && project.commit) {
+    try { await project.commit(); }
+    catch (error) { stderr.write(`${message(error)}\n`); return 2; }
+  }
+  if (project.incomplete && !options.check) return 1;
   const output = resolve(cwd(), options.output);
-  let stale = !(await syncText(join(output, "mantle.ts"), emitted.source, options.check));
-  const adminIndex = (deps.resolveAdminUiIndexHtml ?? resolveAdminUiIndexHtml)();
+  const generatedCurrent = await syncText(join(output, "mantle.ts"), emitted.source, options.check);
+  let stale = project.incomplete || adminUnavailable || !generatedCurrent;
   if (adminIndex !== null) {
     const adminSource = dirname(adminIndex);
     const adminTarget = resolve(cwd(), "public/_mantle/admin");
@@ -82,6 +143,14 @@ export async function runGenerate(
   if (stale && options.check) {
     stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
     return 1;
+  }
+  if (project.mode === "project" && project.selection?.host) {
+    stderr.write(`Host composition for ${project.selection.host} is not generated yet; project setup is incomplete.\n`);
+    return 1;
+  }
+  if (project.mode === "project") {
+    if (!options.check) stdout.write("Generated host-free Spec bindings.\n");
+    return 0;
   }
   if (!options.check) printGenerateNextSteps(adminIndex !== null);
   return 0;
@@ -94,6 +163,9 @@ function parseGenerateArgs(rawArgs: readonly string[]): GenerateOptions | null {
       manifests: { type: "string" },
       output: { type: "string", short: "o" },
       namespace: { type: "string" },
+      host: { type: "string" },
+      features: { type: "string" },
+      adopt: { type: "boolean" },
       check: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
@@ -106,23 +178,31 @@ function parseGenerateArgs(rawArgs: readonly string[]): GenerateOptions | null {
     output: values.output ?? ".mantle/generated",
     namespace,
     check: values.check === true,
+    host: values.host,
+    features: values.features,
+    adopt: values.adopt === true,
+    manifestsExplicit: values.manifests !== undefined,
   };
 }
 
 function printHelp(): void {
-  stdout.write(`mantle generate — compile manifests into a typed runtime binding
+  stdout.write(`mantle generate — compile manifests and assemble selected application features
 
 Usage: mantle generate [options]
 
-This is the Minimal compile path (Spec + generate). It writes .mantle/generated/mantle.ts.
-Admin is opt-in: when @aotter/mantle-admin-ui is installed, generate also syncs
-the prebuilt Admin SPA. See \`mantle --help\` for optional surfaces.
+For a new application, the default selects Spec, Runtime, API, MCP, Admin and Web.
+Select a host with --host cf or --host chatgpt-sites. --features replaces the
+default with a positive list; required feature dependencies are added.
+Existing authored applications retain compile-only mode until --adopt.
 
 Options:
   --manifests <dir>   Manifest directory (default: ./manifests)
   -o, --output <dir>  Generated root (default: .mantle/generated)
   --namespace <name>  Generated type namespace (default: Mantle)
-  --check             Fail without writing when generated code or Admin assets are stale
+  --host <name>       cf or chatgpt-sites (required for host-dependent features)
+  --features <list>   Comma-separated: spec,runtime,api,mcp,admin,web
+  --adopt             Adopt an existing authored application into saved selection
+  --check             Check selection, dependencies and output without writing
   -h, --help          This help
 
 Documentation:

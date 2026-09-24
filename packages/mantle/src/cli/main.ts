@@ -30,15 +30,16 @@ async function main(): Promise<number> {
   }
 }
 
-export const MANTLE_OVERVIEW = `mantle — compile manifests into a RuntimePlan and typed binding
+export const MANTLE_OVERVIEW = `mantle — compile manifests and assemble selected application features
 
 Overview
-  Optional surfaces — take only what you need. Admin is opt-in. You can ship a
-  complete service with no Dev UI, no visitor frontend, and no extra packages.
+  New applications default to Spec, Runtime, API, MCP, Admin, and a blank Web
+  home. Pass --host cf or --host chatgpt-sites, or use --features for a smaller
+  positive selection. Existing authored applications keep compile-only mode.
 
-  Minimal — Spec + generate
-    validate + generate compile manifests into a sealed plan and typed binding.
-    Embed that binding in an existing host. No Admin, no visitor UI.
+  Host-free — Spec only
+    mantle generate --features spec compiles a sealed plan and typed binding
+    without Runtime, Admin, visitor UI, or a host.
 
   Runtime / adapter
     Bind Runtime through an adapter (Cloudflare Worker, Bun, Vercel, or yours).
@@ -46,10 +47,9 @@ Overview
     See docs/examples/host-minimal-worker or
     node_modules/@aotter/mantle/docs/examples/host-minimal-worker.
 
-  Opt-in — Admin / Dev UI
-    Add @aotter/mantle-admin and @aotter/mantle-admin-ui only when humans need
-    a console. Then re-run generate, bind wrangler ASSETS, and open
-    /admin/sign-in (local email OTP via ConsoleEmailSender).
+  Selected Admin / Dev UI
+    New full applications include the prebuilt UI. Reduced applications can
+    omit it; selected packages must be installed before generation completes.
     See docs/examples/host-local-admin-otp or
     node_modules/@aotter/mantle/docs/examples/host-local-admin-otp.
 
