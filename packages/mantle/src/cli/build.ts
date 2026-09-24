@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, readdir, mkdir, realpath, writeFile } from "node:fs/promises";
+import { readFile, readdir, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -36,6 +36,7 @@ export async function runBuild(rawArgs: readonly string[]): Promise<number> {
       return 0;
     }
     const root = cwd();
+    await rm(join(root, '.mantle/cloud-artifact.json'), { force: true });
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as Record<string, unknown>;
     const config = pkg.mantleCloud;
     if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('package.json: mantleCloud configuration is required');

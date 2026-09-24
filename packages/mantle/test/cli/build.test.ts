@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +34,7 @@ it('builds a pinned project into one plan + module + assets artifact', () => {
     invalid.mantleCloud.assets = '../outside';
     writeFileSync(join(root, 'package.json'), JSON.stringify(invalid));
     expect(spawnSync(process.execPath, [cli, 'build'], { cwd: root, encoding: 'utf8' }).stderr).toContain('path must stay inside the project');
+    expect(existsSync(join(root, '.mantle/cloud-artifact.json'))).toBe(false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
