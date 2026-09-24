@@ -12,36 +12,47 @@ export interface SqliteMigrationArtifact {
   readonly version: 2;
   readonly sourceFingerprint: string;
   readonly targetFingerprint: string;
+  readonly targetCanonicalVersion: string;
   readonly destructive: boolean;
   readonly migrations: readonly Migration[];
   readonly projections: readonly { readonly name: string; readonly projection: string }[];
   readonly checksum: string;
 }
 
+export interface SqliteMigrationSource {
+  /** IDs in the source state; callers must verify that state against their migration ledger. */
+  readonly appliedMigrationIds?: Iterable<string>;
+}
+
 /** Build the immutable SQLite artifact reviewed and replayed by deployment. */
 export async function buildSqliteMigrationArtifact(
   sourceSchemas: Iterable<SchemaManifest>,
   targetSchemas: Iterable<SchemaManifest>,
+  sourceState: SqliteMigrationSource = {},
 ): Promise<SqliteMigrationArtifact> {
   const source = [...validateSqliteSchemaTables(sourceSchemas)];
   const target = [...validateSqliteSchemaTables(targetSchemas)];
   const sourceByName = new Map(source.map((schema) => [schema.metadata.name.toLowerCase(), schema]));
-  const destructive = target.some((schema) => {
+  const targetNames = new Set(target.map((schema) => schema.metadata.name.toLowerCase()));
+  const destructive = source.some((schema) => !targetNames.has(schema.metadata.name.toLowerCase())) || target.some((schema) => {
     const previous = sourceByName.get(schema.metadata.name.toLowerCase());
     return previous !== undefined && (previous.metadata.name !== schema.metadata.name ||
+      Object.keys(previous.spec.schema.properties ?? {}).some((field) => !Object.hasOwn(schema.spec.schema.properties ?? {}, field)) ||
       !isAdditiveSchemaTableChange(schemaTableProjection(previous), schemaTableProjection(schema)));
   });
   const sourceFingerprint = await storageFingerprint(source);
   const targetFingerprint = await storageFingerprint(target);
   const sourceMigrationIds = new Set(schemaTableMigrations(source).map(({ id }) => id));
+  const appliedMigrationIds = new Set(sourceState.appliedMigrationIds ?? []);
   const content = {
     version: 2 as const,
     sourceFingerprint,
     targetFingerprint,
+    targetCanonicalVersion: CANONICAL_MIGRATIONS.at(-1)!.id,
     destructive,
     migrations: [
-      ...CANONICAL_MIGRATIONS,
-      ...schemaTableMigrations(target).filter(({ id }) => !sourceMigrationIds.has(id)),
+      ...CANONICAL_MIGRATIONS.filter(({ id }) => !appliedMigrationIds.has(id)),
+      ...schemaTableMigrations(target).filter(({ id }) => !sourceMigrationIds.has(id) && !appliedMigrationIds.has(id)),
     ],
     projections: target.map((schema) => ({ name: schema.metadata.name, projection: schemaTableProjection(schema) })),
   };

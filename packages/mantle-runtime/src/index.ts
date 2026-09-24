@@ -143,6 +143,7 @@ export {
   storageFingerprint,
   verifySqliteMigrationArtifact,
   type SqliteMigrationArtifact,
+  type SqliteMigrationSource,
 } from "./infrastructure/storage/SqliteMigrationArtifact.js";
 export {
   isAdditiveSchemaTableChange,

@@ -6,6 +6,7 @@ import {
   verifySqliteMigrationArtifact,
 } from "../src/infrastructure/storage/SqliteMigrationArtifact.js";
 import { splitSqlStatements } from "../src/infrastructure/boot/SqliteMigrationRunner.js";
+import { CANONICAL_MIGRATIONS } from "../src/infrastructure/boot/canonicalMigrations.js";
 
 describe("SQLite migration artifacts", () => {
   it("emits deterministic initial and additive artifacts", async () => {
@@ -18,8 +19,11 @@ describe("SQLite migration artifacts", () => {
     const additive = await buildSqliteMigrationArtifact(
       [schema({ title: { type: "string" } })],
       [schema({ title: { type: "string" }, rank: { type: "integer" } })],
+      { appliedMigrationIds: CANONICAL_MIGRATIONS.map(({ id }) => id) },
     );
     expect(additive.sourceFingerprint).not.toBe(additive.targetFingerprint);
+    expect(additive.migrations.some(({ id }) => id.startsWith("000"))).toBe(false);
+    expect(additive.migrations.some(({ sql }) => sql.includes('ADD COLUMN "title"'))).toBe(false);
     await expect(verifySqliteMigrationArtifact(additive)).resolves.toBeUndefined();
 
     const db = new DatabaseSync(":memory:");
@@ -47,11 +51,27 @@ describe("SQLite migration artifacts", () => {
     db.close();
   });
 
+  it("does not replay canonical migrations already applied through 0004", async () => {
+    const db = new DatabaseSync(":memory:");
+    const applied = CANONICAL_MIGRATIONS.slice(0, -2);
+    for (const migration of applied) db.exec(migration.sql);
+    const upgrade = await buildSqliteMigrationArtifact([], [], {
+      appliedMigrationIds: applied.map(({ id }) => id),
+    });
+    expect(upgrade.migrations.map(({ id }) => id)).toEqual(["0005-store-instance-id", "0006-managed-runtime-version"]);
+    db.exec(upgrade.migrations[0]!.sql);
+    expect(db.prepare("PRAGMA table_info('_mantle_boot_state')").all().map((row) => row.name))
+      .toContain("store_instance_id");
+    db.close();
+  });
+
   it("marks unsupported conversions for rebuild and detects mutation", async () => {
     const before = schema({ title: { type: "string" } });
     const after = schema({ title: { type: "integer" } });
     const artifact = await buildSqliteMigrationArtifact([before], [after]);
     expect(artifact.destructive).toBe(true);
+    expect((await buildSqliteMigrationArtifact([before], [])).destructive).toBe(true);
+    expect((await buildSqliteMigrationArtifact([before], [schema({})])).destructive).toBe(true);
     await expect(verifySqliteMigrationArtifact({ ...artifact, migrations: [{ ...artifact.migrations[0]!, sql: "SELECT 1" }] }))
       .rejects.toThrow("checksum mismatch");
   });

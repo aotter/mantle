@@ -32,6 +32,7 @@ import { DatabaseMediaAssetRepository } from "../persistence/DatabaseMediaAssetR
 import { DatabasePendingUploadRepository } from "../persistence/DatabasePendingUploadRepository.js";
 import { DatabaseSiteConfigRepository } from "../persistence/DatabaseSiteConfigRepository.js";
 import {
+  coversSchemaTableProjection,
   isAdditiveSchemaTableChange,
   mergeSchemaTableProjections,
   schemaTableMigrations,
@@ -50,8 +51,7 @@ export interface SqliteMantleStorageAdapterOptions {
   readonly decorateSiteConfigRepository?: (
     canonical: SiteConfigRepository,
   ) => SiteConfigRepository;
-  /** Managed deployments apply reviewed DDL before boot. This pins the
-   *  Worker's plan; the physical marker may be a compatible newer superset. */
+  /** Managed deployments apply reviewed DDL before boot. */
   readonly managedStorageFingerprint?: string;
 }
 
@@ -77,15 +77,39 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
     if (this.options.managedStorageFingerprint) {
       const planned = await storageFingerprint(schemas);
       if (planned !== this.options.managedStorageFingerprint) throw new Error("Managed storage fingerprint does not match the RuntimePlan.");
-      await this.siteConfig.seed(this.siteDefaults);
-      assertDeploymentPlan(plan, { siteLocales: await this.siteConfig.readLocales() });
-      await assertSchemaTableOwnership(this.db, schemas);
+      const stateTable = await this.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = '_mantle_storage_state'")
+        .first<{ name: string }>();
+      if (!stateTable) throw new Error("Managed storage is not initialized.");
       const active = await this.db.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id = 1").first<{ fingerprint: string }>();
       if (!active?.fingerprint) throw new Error("Managed storage is not initialized.");
-      await markBootCurrent(this.db, active.fingerprint);
+      const versionTable = await this.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = '_mantle_managed_runtime_state'")
+        .first<{ name: string }>();
+      const version = versionTable
+        ? await this.db.prepare("SELECT canonical_version FROM _mantle_managed_runtime_state WHERE id = 1").first<{ canonical_version: string }>()
+        : null;
+      if (version?.canonical_version !== CANONICAL_MIGRATIONS.at(-1)!.id) {
+        throw new Error("Managed storage has a pending runtime migration: apply the reviewed SQLite migration before boot.");
+      }
+      const newerSchema = await assertSchemaTableOwnership(this.db, schemas, true);
+      if (active.fingerprint !== planned && !newerSchema) {
+        throw new Error("Managed storage has a pending migration: apply the reviewed SQLite migration before boot.");
+      }
+      await this.siteConfig.seed(this.siteDefaults);
+      assertDeploymentPlan(plan, { siteLocales: await this.siteConfig.readLocales() });
+      await markBootCurrent(this.db, planned);
       this.canonicalSiteConfig.usePreparedLocales();
       return prepared;
     }
+    const storageTables = new Set((await this.db.prepare(
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state')",
+    ).all<{ name: string }>()).map(({ name }) => name));
+    if (storageTables.has("_mantle_storage_state") && !storageTables.has("_migrations")) {
+      throw new Error("Managed SQLite database cannot use runtime-managed migrations.");
+    }
+    const managed = storageTables.has("_mantle_managed_runtime_state")
+      ? await this.db.prepare("SELECT canonical_version FROM _mantle_managed_runtime_state WHERE id = 1").first<{ canonical_version: string }>()
+      : null;
+    if (managed) throw new Error("Managed SQLite database cannot use runtime-managed migrations.");
     const schemaMigrations = schemaTableMigrations(schemas);
     const fingerprint = await bootFingerprint({
       semanticFingerprint: plan.semanticFingerprint,
@@ -119,9 +143,11 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
 async function assertSchemaTableOwnership(
   db: DatabaseDriver,
   schemas: readonly SchemaManifest[],
-): Promise<void> {
+  managed = false,
+): Promise<boolean> {
   const tracked = new Map((await db.prepare("SELECT name, projection FROM _mantle_schema_tables")
     .all<{ name: string; projection: string }>()).map(({ name, projection }) => [name.toLowerCase(), projection]));
+  let extra = tracked.size > schemas.length;
   for (const schema of schemas) {
     const object = await db.prepare("SELECT type FROM sqlite_schema WHERE lower(name) = lower(?) LIMIT 1")
       .bind(schema.metadata.name).first<{ type: string }>();
@@ -129,13 +155,18 @@ async function assertSchemaTableOwnership(
     if (object && previous === undefined) {
       throw new Error(`Schema '${schema.metadata.name}' collides with an existing SQLite ${object.type}.`);
     }
-    if (!object && previous !== undefined) {
+    if (!object && (previous !== undefined || managed)) {
       throw new Error(`Mantle-owned Schema table '${schema.metadata.name}' is missing.`);
     }
-    if (previous !== undefined && !isAdditiveSchemaTableChange(previous, schemaTableProjection(schema))) {
+    const expected = schemaTableProjection(schema);
+    if (previous !== undefined && !(managed
+      ? coversSchemaTableProjection(expected, previous)
+      : isAdditiveSchemaTableChange(previous, expected))) {
       throw new Error(`Schema table '${schema.metadata.name}' requires an explicit destructive migration.`);
     }
+    if (managed && previous !== expected) extra = true;
   }
+  return extra;
 }
 
 async function assertNoLegacyStorage(db: DatabaseDriver): Promise<void> {
