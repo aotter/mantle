@@ -20,7 +20,7 @@ const sha256 = (value: string | Uint8Array) => createHash('sha256').update(value
 const inProject = (root: string, path: string) => {
   const absolute = resolve(root, path);
   const rel = relative(root, absolute);
-  if (rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith(sep)) throw new Error(`${path}: path must stay inside the project`);
+  if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith(sep)) throw new Error(`${path}: path must stay inside the project`);
   return absolute;
 };
 const assertRealPath = async (root: string, path: string) => {
@@ -66,7 +66,7 @@ export async function runBuild(rawArgs: readonly string[]): Promise<number> {
     if (!module || Buffer.byteLength(module) > 1_000_000) throw new Error(`${fields.module}: module must be 1–1,000,000 bytes`);
     const assets: Record<string, { base64: string; type: string }> = {};
     async function collect(dir: string): Promise<void> {
-      for (const entry of (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
+      for (const entry of (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
         const path = join(dir, entry.name);
         if (entry.isDirectory()) await collect(path);
         else if (entry.isFile()) {
