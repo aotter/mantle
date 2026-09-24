@@ -33,6 +33,46 @@ describe("createMantleWorker", () => {
     expect(() => createMantleWorker({ plan: compileTestPlan([]), surfaces: { admin: true, mcp: false } }))
       .toThrow("Admin requires the MCP/Auth surface");
   });
+  it("dispatches scheduled Procedures with stable identity and no inherited staff authority", async () => {
+    const calls: unknown[] = [];
+    const atoms = [
+      { apiVersion: "cms.mantle.aotter.net/v1", kind: "Procedure", metadata: { name: "public-task" },
+        spec: { input: { type: "object" }, output: { type: "object" }, handler: { kind: "ref", ref: "task" } } },
+      { apiVersion: "cms.mantle.aotter.net/v1", kind: "Trigger", metadata: { name: "daily-public" },
+        spec: { source: { kind: "schedule", cron: "0 2 * * *" }, target: { procedure: "public-task" } } },
+      { apiVersion: "cms.mantle.aotter.net/v1", kind: "Trigger", metadata: { name: "disabled" },
+        spec: { source: { kind: "schedule", cron: "0 3 * * *", enabled: false }, target: { procedure: "public-task" } } },
+    ];
+    const worker = createMantleWorker<TestEnv>({
+      plan: compileTestPlan(atoms), auth: () => stubAuth, bindings: testBindings,
+      handlers: { task: (_input, ctx) => { calls.push(ctx); return {}; } },
+    });
+    const env = testEnv();
+    const execution = { waitUntil() {} } as unknown as ExecutionContext;
+    const event = (cron: string) => ({ cron, scheduledTime: 1_700_000_000_000, noRetry() {} }) as ScheduledController;
+    const scheduled = worker.scheduled; // matches `export default { scheduled: worker.scheduled }`
+    await scheduled(event("0 2 * * *"), env, execution);
+    await scheduled(event("0 2 * * *"), env, execution);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({ user: null, staff: null, schedule: {
+      id: "daily-public:1700000000000", trigger: "daily-public", cron: "0 2 * * *",
+    } });
+    await expect(scheduled(event("0 3 * * *"), env, execution)).resolves.toBeUndefined();
+    await expect(scheduled(event("0 4 * * *"), env, execution)).rejects.toThrow("No Mantle schedule");
+    expect(calls).toHaveLength(2);
+    const withFailure = createMantleWorker<TestEnv>({
+      plan: compileTestPlan([
+        ...atoms,
+        { apiVersion: "cms.mantle.aotter.net/v1", kind: "Procedure", metadata: { name: "failing-task" },
+          spec: { input: { type: "object" }, output: { type: "object" }, handler: { kind: "ref", ref: "fail" } } },
+        { apiVersion: "cms.mantle.aotter.net/v1", kind: "Trigger", metadata: { name: "a-fail" },
+          spec: { source: { kind: "schedule", cron: "0 2 * * *" }, target: { procedure: "failing-task" } } },
+      ]), auth: () => stubAuth, bindings: testBindings,
+      handlers: { task: (_input, ctx) => { calls.push(ctx); return {}; }, fail: () => { throw new Error("fail"); } },
+    });
+    await expect(withFailure.scheduled(event("0 2 * * *"), env, execution)).rejects.toThrow("Scheduled Procedures failed");
+    expect(calls).toHaveLength(3); // the second Trigger still ran after the first failed
+  });
   it("omits unselected API, MCP and Admin routes", async () => {
     const worker = createMantleWorker<TestEnv>({
       plan: compileTestPlan([]), auth: () => createSetupIncompleteAuth({ message: "not configured" }), bindings: testBindings,

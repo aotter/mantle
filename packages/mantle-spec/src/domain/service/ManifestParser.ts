@@ -179,6 +179,7 @@ const V01_TRIGGER_SOURCE_KINDS: ReadonlySet<string> = new Set([
   "http",
   "lifecycle",
   "mcp",
+  "schedule",
 ]);
 
 const V01_HTTP_METHODS: ReadonlySet<HttpMethod> = new Set([
@@ -1654,6 +1655,33 @@ function validateMcpSource(source: Record<string, unknown>, idx: number): void {
   }
 }
 
+function validateScheduleSource(source: Record<string, unknown>, idx: number): void {
+  rejectUnknownKeys(source, ["kind", "cron", "enabled"], idx, "/spec/source");
+  const cron = source["cron"];
+  // The Cloudflare five-field subset. Its weekday numbers are 1=Sunday
+  // through 7=Saturday, unlike Unix cron's 0=Sunday.
+  const bounds = [[0, 59], [0, 23], [1, 31], [1, 12], [1, 7]] as const;
+  const fields = typeof cron === "string" ? cron.split(" ") : [];
+  const valid = fields.length === 5 && fields.every((field, index) => {
+    const [min, max] = bounds[index]!;
+    return field.split(",").every((part) => {
+      const match = /^(\*|\d+)(?:-(\d+))?(?:\/(\d+))?$/.exec(part);
+      if (!match) return false;
+      const start: number = match[1] === "*" ? min : Number(match[1]);
+      const end: number = match[2] === undefined ? (match[1] === "*" ? max : start) : Number(match[2]);
+      const step = match[3] === undefined ? 1 : Number(match[3]);
+      return start >= min && end <= max && start <= end && step >= 1 && (match[3] === undefined || match[1] === "*" || match[2] !== undefined);
+    });
+  });
+  if (!valid) throw new ManifestParseError(
+    "Trigger.spec.source.cron must be a five-field Cloudflare UTC cron expression (minute hour day month weekday, 1=Sunday)",
+    idx, "/spec/source/cron",
+  );
+  if (source["enabled"] !== undefined && typeof source["enabled"] !== "boolean") {
+    throw new ManifestParseError("Trigger.spec.source.enabled must be boolean", idx, "/spec/source/enabled");
+  }
+}
+
 function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(s, ["source", "target"], idx, "/spec");
@@ -1679,6 +1707,7 @@ function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
   if (sourceKind === "http") validateHttpSource(source, idx);
   else if (sourceKind === "lifecycle") validateLifecycleSource(source, idx);
   else if (sourceKind === "mcp") validateMcpSource(source, idx);
+  else if (sourceKind === "schedule") validateScheduleSource(source, idx);
   const target = s["target"] as Record<string, unknown> | undefined;
   if (!target || typeof target["procedure"] !== "string") {
     throw new ManifestParseError("Trigger.spec.target.procedure is required (string)", idx, "/spec/target/procedure");

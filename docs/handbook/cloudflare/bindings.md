@@ -186,25 +186,18 @@ the interface is one `record(event)` method.
 "triggers": { "crons": ["*/5 * * * *"] }
 ```
 
-A `scheduled()` handler reuses the fetch path's runtime and invokes a Procedure that has no Trigger of its own:
+A `schedule` Trigger declares the Procedure, and the Worker export reuses the same runtime as `fetch`:
 
 ```ts
-import { bindMantle } from "../.mantle/generated/mantle.js";
-
 const worker = createMantleWorker<Env>({ plan, handlers });
 
 export default {
   fetch: worker.fetch,
-  async scheduled(_controller, env, ctx) {
-    const mantle = bindMantle(await worker.getRuntime(env));
-    const result = await mantle.procedures.sweepExpiredOrders(
-      { now: Date.now() },
-      { user: null, staff: null, env, waitUntil: (p) => ctx.waitUntil(p) },
-    );
-    if (!result.ok) throw new Error(`sweep failed: ${result.diagnostic.code}`);
-  },
+  scheduled: worker.scheduled,
 } satisfies ExportedHandler<Env>;
 ```
+
+Register the exact enabled `cron` expression in `wrangler.jsonc`; Mantle does not create provider triggers. The Procedure takes `{}` input and sees `ctx.schedule.id` for retry-safe idempotency. See [Trigger](../reference/trigger.md#schedule-source).
 
 ## Durable Objects (application-owned)
 

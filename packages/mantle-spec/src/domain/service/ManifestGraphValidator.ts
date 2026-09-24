@@ -20,6 +20,7 @@ import {
   type ViewManifest,
 } from "../model/ManifestGrammar.js";
 import { partitionManifests } from "./ManifestPartition.js";
+import { jsonSchemaToZod } from "./JsonSchemaToZod.js";
 import { checkTranslatesReferences } from "./CrossSchemaChecker.js";
 import { checkSchemaNavTargets, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
 import {
@@ -909,6 +910,30 @@ function checkTriggerRefs(
           message: `Trigger '${t.metadata.name}' targets unknown Procedure '${procName}'.`,
         }),
       );
+    }
+
+    if (t.spec.source.kind === "schedule") {
+      const target = proceduresByName.get(procName);
+      if (target && (target.spec.requires?.auth?.all.length ?? 0) > 0) {
+        out.push(validateDiagnostic({
+          code: "SCHEDULE_AUTH_INVALID",
+          severity: "error",
+          path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
+          value: procName,
+          expected: "a Procedure without user or staff authorization requirements",
+          message: `Scheduled Trigger '${t.metadata.name}' cannot satisfy '${procName}' authorization with a system caller.`,
+        }));
+      }
+      if (target && !jsonSchemaToZod(target.spec.input).safeParse({}).success) {
+        out.push(validateDiagnostic({
+          code: "SCHEDULE_INPUT_INVALID",
+          severity: "error",
+          path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
+          value: procName,
+          expected: "a Procedure whose input accepts an empty object",
+          message: `Scheduled Trigger '${t.metadata.name}' cannot supply required Procedure input to '${procName}'.`,
+        }));
+      }
     }
 
     if (t.spec.source.kind === "http") {

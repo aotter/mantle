@@ -308,7 +308,7 @@ export interface DeveloperViewModel {
 
 export type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
 export type DeveloperAudience = "public" | "members" | "staff" | "system" | "api-clients";
-export type DeveloperTransport = "http" | "mcp" | "lifecycle";
+export type DeveloperTransport = "http" | "mcp" | "lifecycle" | "schedule";
 
 export type DeveloperProcedureHandler =
   | { kind: "builtin"; op: "create" | "update" | "upsert" | "delete" | "archive"; schema: string; match?: readonly string[] }
@@ -330,7 +330,8 @@ export interface DeveloperProcedureModel {
 export type DeveloperTriggerSource =
   | { kind: "http"; method: string; path: string }
   | { kind: "mcp"; surface: "public" | "staff" }
-  | { kind: "lifecycle"; schema: string; on: string[]; errorPolicy?: string };
+  | { kind: "lifecycle"; schema: string; on: string[]; errorPolicy?: string }
+  | { kind: "schedule"; cron: string; enabled?: boolean };
 
 export interface DeveloperTriggerModel {
   name: string;

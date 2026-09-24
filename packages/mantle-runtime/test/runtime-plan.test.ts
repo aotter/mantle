@@ -13,8 +13,27 @@ import {
   type RuntimePlan,
 } from "../src/domain/service/RuntimePlanCompiler.js";
 import { projectCallableCapabilities } from "../src/domain/service/CallableCapabilityProjector.js";
+import { bootMantleRuntime } from "../src/MantleRuntime.js";
 
 describe("compileRuntimePlan", () => {
+  it("rejects enabled schedules when the host has no scheduled entrypoint", async () => {
+    const plan = compile(parse(`apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: tick }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: tick }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: daily-tick }
+spec:
+  source: { kind: schedule, cron: "0 2 * * *" }
+  target: { procedure: tick }
+`));
+    await expect(bootMantleRuntime({ plan, storage: {} as never })).rejects.toThrow("RESOURCE_UNAVAILABLE");
+  });
   it("snapshots the #662 characterization corpus", () => {
     const source = readFileSync(
       new URL("../../mantle-spec/test/fixtures/pipeline-v0.1/valid.yaml", import.meta.url),
@@ -36,7 +55,7 @@ describe("compileRuntimePlan", () => {
     const { semanticFingerprint: _declared, ...semantics } = { ...current, version: 1 };
     const stale = { ...semantics, semanticFingerprint: semanticFingerprint(semantics) };
     expect(() => sealRuntimePlan(stale as unknown as Parameters<typeof sealRuntimePlan>[0]))
-      .toThrow(/version 1 but this runtime requires version 2; run `mantle generate` again/);
+      .toThrow(/version 1 but this runtime requires version 3; run `mantle generate` again/);
     expect(() => sealRuntimePlan(current)).not.toThrow();
   });
 

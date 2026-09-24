@@ -661,6 +661,29 @@ spec:
     expect(trig.spec.source.kind).toBe("lifecycle");
   });
 
+  it("accepts Cloudflare schedules and rejects malformed cron, required input, and user authorization", () => {
+    const procedure = {
+      apiVersion, kind: "Procedure", metadata: { name: "sweep" },
+      spec: { input: { type: "object", properties: {} }, output: { type: "object" }, handler: { kind: "ref", ref: "sweep" } },
+    } as ProcedureManifest;
+    const trigger = {
+      apiVersion, kind: "Trigger", metadata: { name: "daily-sweep" },
+      spec: { source: { kind: "schedule", cron: "0 2 * * *", enabled: true }, target: { procedure: "sweep" } },
+    } as TriggerManifest;
+    expect(validateManifests({ manifests: [procedure, trigger] }).diagnostics.map((d) => d.code)).not.toContain("SCHEDULE_INPUT_INVALID");
+    expect(validateManifests({ manifests: [{ ...procedure, spec: { ...procedure.spec,
+      input: { type: "object", required: ["token"], properties: { token: { type: "string" } } },
+    } }, trigger] }).diagnostics.map((d) => d.code)).toContain("SCHEDULE_INPUT_INVALID");
+    expect(validateManifests({ manifests: [{ ...procedure, spec: { ...procedure.spec,
+      requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
+    } }, trigger] }).diagnostics.map((d) => d.code)).toContain("SCHEDULE_AUTH_INVALID");
+    for (const cron of ["* * * *", "*/0 * * * *", "60 * * * *", "0 2 31-1 * *", "0  2 * * *", "0 2 * * 0"]) {
+      expect(parseManifests(JSON.stringify({ ...trigger, spec: { ...trigger.spec,
+        source: { kind: "schedule", cron },
+      } })).diagnostics.map((d) => d.code)).toContain("INVALID_MANIFEST_ENVELOPE");
+    }
+  });
+
   it("rejects errorPolicy: 'abort' on after_* hooks", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: Trigger

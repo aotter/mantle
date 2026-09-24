@@ -2189,7 +2189,7 @@ function mediaFieldsForSchema(schema: SchemaManifest): Array<{ name: string; hin
 
 type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
 type DeveloperAudience = "public" | "members" | "staff" | "system" | "api-clients";
-type DeveloperTransport = "http" | "mcp" | "lifecycle";
+type DeveloperTransport = "http" | "mcp" | "lifecycle" | "schedule";
 
 interface DeveloperAtom {
   readonly id: string;
@@ -2314,7 +2314,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
     return {
       name,
       target,
-      audience: source.kind === "lifecycle" ? "system" as const : source.kind === "mcp" && source.surface === "staff" ? "staff" as const : targetAudience ?? "public" as const,
+      audience: source.kind === "lifecycle" || source.kind === "schedule" ? "system" as const : source.kind === "mcp" && source.surface === "staff" ? "staff" as const : targetAudience ?? "public" as const,
       source,
       manifest,
     };

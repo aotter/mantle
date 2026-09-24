@@ -110,6 +110,14 @@ export async function runGenerate(
     printDiagnostics(validationErrors);
     return 1;
   }
+  if (project.mode === "project" && project.selection?.host !== "cf") {
+    const schedule = loaded.parsed!.entries.find((entry) =>
+      entry.manifest.kind === "Trigger" && entry.manifest.spec.source.kind === "schedule");
+    if (schedule) {
+      stderr.write(`RESOURCE_UNAVAILABLE: Trigger '${schedule.manifest.metadata.name}' requires host 'cf'; '${project.selection?.host ?? "none"}' does not register Cron Triggers.\n`);
+      return 1;
+    }
+  }
 
   const emitted = emitMantleModule({
     linked: validation.linked,

@@ -85,6 +85,7 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
         booted = bootWithD1Retry(async () => {
           const runtime = await bootMantleRuntime({
             plan: config.plan,
+            supportsScheduledTriggers: true,
             storage,
             handlers: config.handlers,
             deployment: {

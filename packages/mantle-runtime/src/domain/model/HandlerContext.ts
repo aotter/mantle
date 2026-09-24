@@ -37,6 +37,8 @@ export interface HandlerContext<Env = unknown> {
    *  target. Undefined on standard Procedure invocations (HTTP Trigger,
    *  MCP, admin endpoints). */
   readonly event?: HandlerLifecycleEvent;
+  /** One Cloudflare scheduled delivery; retries retain the same id. */
+  readonly schedule?: { readonly id: string; readonly trigger: string; readonly cron: string; readonly scheduledTime: number };
   /** Runtime-bound semantic atomic entry writer, available in ref Procedures. */
   readonly writeAtomically?: (operations: readonly AtomicDraftOperation[]) => Promise<readonly (EntryRow | null)[]>;
 }

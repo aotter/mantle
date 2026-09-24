@@ -1,5 +1,5 @@
 ---
-description: Trigger field reference — http, mcp and lifecycle sources, path and tool-name rules, the eight lifecycle hooks and their timing and error policy.
+description: Trigger field reference — http, mcp, lifecycle and schedule sources, routing rules, and delivery semantics.
 ---
 # Trigger
 
@@ -19,8 +19,26 @@ A Trigger binds one source to one [Procedure](./procedure.md). Every external su
 | `http` | `method`, `path` | One REST endpoint under `/api/`. |
 | `mcp` | `surface` | One tool on `/mcp` or `/mcp/staff`. |
 | `lifecycle` | `schema`, `on`, `errorPolicy` | Entry-writer hooks on one Schema. |
+| `schedule` | `cron`, optional `enabled` | A Cloudflare Cron Trigger calling one Procedure. |
 
 An unknown `kind`, a missing `kind`, or a key that does not belong to the chosen kind is `INVALID_MANIFEST_ENVELOPE`. One Procedure may carry several Triggers — that is how the same handler becomes an HTTP endpoint and an MCP tool without duplicating logic.
+
+## `schedule` source
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: nightly-cleanup }
+spec:
+  source: { kind: schedule, cron: "0 2 * * *" }
+  target: { procedure: clean-expired-records }
+```
+
+`cron` is a five-field Cloudflare UTC expression (minute, hour, day, month, weekday). Each field accepts `*`, a number, a range, comma-separated values, or `*/step` / `start-end/step`. Weekdays are **1 = Sunday through 7 = Saturday**; use `2-6` for Monday–Friday. Month and weekday names and provider-specific extensions are outside this subset. `enabled` defaults to `true`; a disabled schedule remains in the compiled plan but never invokes its Procedure. The target Procedure must accept `{}` as input (`SCHEDULE_INPUT_INVALID`) and have no user/staff authorization requirements (`SCHEDULE_AUTH_INVALID`). The schedule creates no public HTTP or MCP route.
+
+On Cloudflare, add each enabled expression to `wrangler.jsonc` under `triggers.crons` and export the `scheduled` method returned by `createMantleWorker`. Mantle does not provision the provider trigger. A disabled expression still registered in Wrangler is ignored; an expression absent from the Mantle plan fails visibly. If the Worker also owns unrelated cron tasks, route those expressions in the application's `scheduled` export. Multiple Mantle Triggers may share one expression and run in Trigger-name order; all run even if an earlier one fails, then the event reports failure.
+
+Handlers receive `ctx.schedule` with `id`, `trigger`, `cron`, and `scheduledTime` (Unix milliseconds). The stable ID is `${trigger}:${scheduledTime}`. The caller is always `user: null`, `staff: null`, with no credential metadata; normal Procedure guards still apply. Cloudflare executes cron events in UTC, but its Cron Trigger documentation does not promise automatic retries. Duplicate/manual replay is still possible, so use `ctx.schedule.id` as an idempotency key for writes. A failure rejects the scheduled event; exactly-once execution is not promised. Bun, Vercel, and ChatGPT Sites do not register schedules and reject enabled schedules at boot or generation.
 
 ## `http` source
 

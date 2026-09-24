@@ -86,6 +86,8 @@ Raised by the parser, the graph validator and the code generator. `mantle valida
 | `MANIFEST_ROOT_NOT_FOUND` | The manifests directory is missing, unreadable, or contains no `.yaml` or `.yml` file. | — |
 | `MANIFEST_READ_FAILED` | A manifest source could not be read. | — |
 | `CODEGEN_IDENTIFIER_COLLISION` | Two names in one group collapse to the same generated lower-camel identifier. | — |
+| `SCHEDULE_INPUT_INVALID` | A scheduled Procedure cannot accept the empty object supplied by its system Trigger. | — |
+| `SCHEDULE_AUTH_INVALID` | A scheduled Procedure requires user or staff authority that the system caller never has. | — |
 | `FIXTURE_SCHEMA_VIOLATION` | Reserved for consumer-authored test diagnostics on the `test` phase. Core emits purpose-shaped harness reports instead. | — |
 
 ## Cross-phase

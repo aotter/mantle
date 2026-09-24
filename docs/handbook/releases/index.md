@@ -46,6 +46,12 @@ Schemas with `ctx.writeAtomically`. D1 and Bun commit the group or roll it
 back, including when the last conditional write finds a stale version. Other
 adapters must explicitly implement the optional capability before using it.
 
+Cloudflare Cron Triggers now target ordinary Procedures through `source.kind:
+schedule`. The generated runtime plan records each schedule, while Wrangler
+registration remains application-owned. Scheduled calls have no user or staff
+authority, carry a stable retry key, and pass through Procedure validation and
+authorization. Other hosts do not register schedules.
+
 Agents installed through `npx skills add aotter/mantle` must still inspect the
 target project's actual SDK version. Published 0.1.4 packages do **not**
 support the new project flags; use their installed docs until deliberately
