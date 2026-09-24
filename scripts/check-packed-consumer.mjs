@@ -297,6 +297,15 @@ async function smokeGeneratedSites(temp, tarballs, version) {
   d1("UPDATE posts SET rank=2 WHERE _mantle_id='unique-b'");
   run("pnpm", ["exec", "mantle", "generate", "--review-unique-indexes"], directory);
   if (!existsSync(join(directory, "drizzle/meta/0004_mantle.review.json"))) throw new Error("Reviewed unique-index report missing");
+  const review = JSON.parse(readFileSync(join(directory, "drizzle/meta/0004_mantle.review.json"), "utf8"));
+  const marker = () => JSON.parse(execFileSync("pnpm", ["exec", "wrangler", "d1", "execute", "generated-sites", "--local", "--command",
+    "SELECT fingerprint FROM _mantle_storage_state WHERE id=1", "--json"], { cwd: directory, encoding: "utf8" }))[0].results[0].fingerprint;
+  d1(row("unique-late", "Late", 2));
+  let applyRejected = false;
+  try { run("pnpm", ["exec", "wrangler", "d1", "migrations", "apply", "generated-sites", "--local"], directory, true); }
+  catch { applyRejected = true; }
+  if (!applyRejected || marker() !== review.sourceFingerprint) throw new Error("Failed D1 unique migration did not roll back to its source fingerprint");
+  d1("DELETE FROM posts WHERE _mantle_id='unique-late'");
   run("pnpm", ["exec", "wrangler", "d1", "migrations", "apply", "generated-sites", "--local"], directory);
   d1(row("unique-c", "A", 3));
   let duplicateRejected = false;

@@ -64,9 +64,10 @@ migration. With the old local D1 migration applied, edit the Manifest and run
 source/target fingerprints, affected tuples and checksum without writing. Then
 run `npx mantle generate --review-unique-indexes`, review the new
 `drizzle/meta/000N_mantle.review.json` and matching SQL, and apply that SQL
-through the normal Sites D1 migration path. The CLI checks local rows for
-duplicate target tuples and reports a count and sample before writing. SQLite
-also refuses to create the new unique index if production has conflicts; do
+through the normal Sites D1 migration path. The CLI checks **local D1 only**
+for duplicate target tuples and reports a count and sample before writing;
+inspect production data separately before applying there. SQLite also refuses
+to create the new unique index if production has conflicts; do
 not deploy the target Worker until the migration has succeeded. Old Workers
 cannot safely reactivate after the old uniqueness guarantee is removed.
 This option is limited to managed Sites SQLite and unique tuple changes;

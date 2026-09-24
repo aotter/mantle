@@ -50,7 +50,8 @@ export async function buildSqliteMigrationArtifact(
   const structuralDestructive = source.some((schema) => !targetNames.has(schema.metadata.name.toLowerCase())) || target.some((schema) => {
     const previous = sourceByName.get(schema.metadata.name.toLowerCase());
     if (!previous) return false;
-    const sameUnique = { ...schema, spec: { ...schema.spec, uniqueIndexes: previous.spec.uniqueIndexes } };
+    const sameUnique = { ...schema, spec: { ...schema.spec,
+      uniqueIndexes: previous.spec.uniqueIndexes, indexes: previous.spec.indexes } };
     return previous.metadata.name !== schema.metadata.name ||
       Object.keys(previous.spec.schema.properties ?? {}).some((field) => !Object.hasOwn(schema.spec.schema.properties ?? {}, field)) ||
       !isAdditiveSchemaTableChange(schemaTableProjection(previous), schemaTableProjection(sameUnique));

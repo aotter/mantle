@@ -181,7 +181,7 @@ async function prepareMigration(root: string, dbName: string, schemas: readonly 
   }] };
   return {
     stale: true,
-    report: artifact.reviewedUniqueIndexes?.length ? `Reviewed unique-index plan: ${JSON.stringify({ source: artifact.sourceFingerprint, target: artifact.targetFingerprint, checksum: artifact.checksum, changes: artifact.reviewedUniqueIndexes, sql: relative(root, sqlPath) })}` : undefined,
+    report: artifact.reviewedUniqueIndexes?.length ? `Reviewed unique-index plan: ${JSON.stringify({ source: artifact.sourceFingerprint, target: artifact.targetFingerprint, checksum: artifact.checksum, changes: artifact.reviewedUniqueIndexes, sql: relative(root, sqlPath), rollback: "Old Worker activation is unsupported after this uniqueness change." })}` : undefined,
     commit: async () => {
       if (check) return;
       if (state) await verifyLocalD1(root, dbName, state, existingSql === sql ? nextState : undefined);

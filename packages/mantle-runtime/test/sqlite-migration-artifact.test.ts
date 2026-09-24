@@ -109,6 +109,10 @@ describe("SQLite migration artifacts", () => {
     });
     expect(reviewed.destructive).toBe(false);
     expect(reviewed.reviewedUniqueIndexes).toEqual([{ schema: "posts", removed: [["userId"]], added: [["providerSubscriptionId"]] }]);
+    const downgraded = { ...schema(fields), spec: { ...schema(fields).spec, indexes: [["userId"]] } } as SchemaManifest;
+    const downgrade = await buildSqliteMigrationArtifact([before], [downgraded], { reviewUniqueIndexes: true });
+    expect(downgrade.destructive).toBe(false);
+    expect(downgrade.reviewedUniqueIndexes).toEqual([{ schema: "posts", removed: [["userId"]], added: [] }]);
     await expect(verifySqliteMigrationArtifact(reviewed)).resolves.toBeUndefined();
     const makeDb = () => {
       const db = new DatabaseSync(":memory:");
