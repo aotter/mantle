@@ -101,8 +101,9 @@ try {
   const { prefix, bytes } = archiveProject(project);
   mkdirSync(consumer);
   execFileSync("tar", ["-x", "-C", consumer], { input: bytes });
-  addOverrides(join(consumer, "package.json"), tarballs);
+  addOverrides(join(consumer, "package.json"), tarballs, version);
   run("pnpm", ["install", "--no-frozen-lockfile"], consumer);
+  run("pnpm", ["install", "--frozen-lockfile"], consumer);
   const lockfile = readFileSync(join(consumer, "pnpm-lock.yaml"), "utf8");
   assertExactTarballResolutions(lockfile, tarballs);
 
@@ -141,8 +142,11 @@ try {
   if (!output || !complete) rmSync(temp, { recursive: true, force: true });
 }
 
-function addOverrides(path, tarballs) {
+function addOverrides(path, tarballs, version = "0.0.0") {
   const manifest = JSON.parse(readFileSync(path, "utf8"));
+  for (const name of tarballs.keys()) {
+    if (manifest.dependencies?.[name]) manifest.dependencies[name] = version;
+  }
   manifest.pnpm ??= {};
   manifest.pnpm.overrides = {
     ...(manifest.pnpm.overrides ?? {}),

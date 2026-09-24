@@ -70,5 +70,8 @@ jobs:
       - name: Check packed-consumer provenance rejection
         run: node scripts/check-packed-consumer.mjs --self-test
 
+      - name: Test packed Core Cloud project build
+        run: node scripts/check-packed-consumer.mjs --project docs/examples/host-cloud-project -- pnpm test
+
       - name: Test packed Core in the reference Worker
         run: pnpm check:worker-consumer
