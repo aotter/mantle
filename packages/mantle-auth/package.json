@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-auth",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Optional Better Auth identity for Mantle: staff roles, email OTP, social sign-in, and the OAuth 2.1 / MCP authorization surface, over a SQLite-shaped DatabaseDriver wrapping the same store Better Auth uses.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",

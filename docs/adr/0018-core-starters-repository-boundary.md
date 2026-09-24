@@ -3,7 +3,7 @@
 > Superseded for 0.1.2 by [ADR-0021](0021-retire-starter-scaffolding.md).
 > The contract below is retained as alpha.17 history, not current launch/release guidance.
 
-**Status:** Accepted for now; revisit only under the triggers below
+**Status:** Superseded by ADR-0021 for 0.1.2 and later. Historical alpha.17 decision only.
 
 **Date:** 2026-08-02
 

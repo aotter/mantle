@@ -32,6 +32,7 @@ version. `latest` and `alpha` can describe different capabilities. Resolve only
 requirements the user has not provided: host, storage, public API/HTML, and
 whether staff need Admin. Follow the bootstrap skill to install the selected
 packages locally.
+No matching `mantle-starters` tag or bundle is needed to create a project.
 
 Then read:
 

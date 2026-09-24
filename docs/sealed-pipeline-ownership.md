@@ -65,7 +65,7 @@ release use `docs/examples/host-minimal-worker` from the same reviewed commit.
 Private consumers can still run the exact-tarball checker in their own repos;
 public Core PRs receive no cross-repository credentials:
 
-| Consumer | Revision | Gate authority | Manifest paths |
+| Historical consumer | Revision | Gate at the time | Manifest paths |
 |---|---|---|---|
 | `aotter/mantle-starters` | `157e8f49e1e25ae1c52c0115f0dd9e8b6017ef0e` | Core CI + release | `blank/manifests/site.yaml`; `overlays/{community,intake,presence,publication,reservation,transaction}/manifests/site.yaml`; `recipes/typed-web/manifests/site.yaml` |
 | `aotter/mantle-landing` | `4381354dd25d5d94f4096cf3e55a4cb9eecbf3ad` | Landing CI + Core release | `manifests/site.yaml` |

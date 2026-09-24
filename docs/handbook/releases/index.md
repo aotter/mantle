@@ -21,6 +21,31 @@ All eleven packages share a single version and are published together, so mixed
 versions across `@aotter/mantle*` are never a supported combination. Pin the
 version you install and upgrade the whole set at once.
 
+## 0.1.4 — 2026-09-24
+
+0.1.4 repairs the published consumer path without changing the Manifest
+grammar. Pin every selected `@aotter/mantle*` package to `0.1.4`, refresh the
+lockfile, then rerun `mantle generate` and `mantle skills` with their `--check`
+commands. Read the handbook and skills from that installed version.
+
+**ChatGPT Sites reference.** The 0.1.3 reference omitted the
+`_mantle_boot_state.store_instance_id` column required by the runtime, which
+could make deployed runtime routes return 500. The reference now adds the
+append-only `drizzle/0003_store_instance_id.sql` migration. If your project
+was copied from that reference, carry the new migration forward and apply
+pending D1 migrations **before** deploying updated code; do not edit a
+migration already applied. Repeated builds now clear `dist` so removed SQL
+files cannot remain in the deployment artifact. The Sites guide also shows
+how to mount an HTTP Trigger, identifies the browser and MCP owner workflows,
+and names its integration chapter `docs/handbook/chatgpt-sites/`.
+
+**Agent installation.** `npx skills add aotter/mantle` installs the small
+`mantle` bootstrap skill; the installed npm package supplies version-matched
+instructions and docs. The skill now checks the application's installed
+version before reading them. Superseded Starter decisions are marked as
+history: no `mantle-starters/v0.1.4` tag or `mantle create` command is needed
+to author a new application.
+
 ## 0.1.3 — 2026-09-23
 
 0.1.3 tightens the contract between Manifests, generated TypeScript, agent
@@ -98,7 +123,7 @@ See [HTTP, MCP, CLI and packages](../reference/surface.md) for the full list.
 D1 and assets bindings, Better Auth 1.7 (social providers, email OTP, magic
 link, passkey), Admin, MCP, Web and R2 media uploads. The Bun and Vercel
 adapters are experimental, cover public Views and HTTP Triggers only, and leave
-authentication and CSRF to the host. [ChatGPT Sites](../sites/index.md) is a
+authentication and CSRF to the host. [ChatGPT Sites](../chatgpt-sites/index.md) is a
 first-class integration with a runnable reference.
 
 **Agents.** `mantle skills` projects the installed package's skills into

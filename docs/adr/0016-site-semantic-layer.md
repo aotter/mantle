@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted (slimmed 2026-05-12 per Epic #116; `mantle/site.md` letter
-surface suspended 2026-06-19 and removed from first-run scaffolds;
-amended 2026-06-27 for landing provision bundles).
+Superseded by [ADR-0021](0021-retire-starter-scaffolding.md) for 0.1.2 and
+later. The launch-state and provision-bundle rules below describe the legacy
+Starter/Landing flow; new applications are authored directly from the installed
+SDK's skill and handbook.
 
 ## Decision
 
