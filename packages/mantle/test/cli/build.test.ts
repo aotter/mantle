@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +35,16 @@ it('builds a pinned project into one plan + module + assets artifact', () => {
     writeFileSync(join(root, 'package.json'), JSON.stringify(invalid));
     expect(spawnSync(process.execPath, [cli, 'build'], { cwd: root, encoding: 'utf8' }).stderr).toContain('path must stay inside the project');
     expect(existsSync(join(root, '.mantle/cloud-artifact.json'))).toBe(false);
+    const outside = mkdtempSync(join(tmpdir(), 'mantle-cloud-outside-'));
+    try {
+      rmSync(join(root, '.mantle'), { recursive: true });
+      writeFileSync(join(outside, 'cloud-artifact.json'), 'keep');
+      symlinkSync(outside, join(root, '.mantle'), 'dir');
+      expect(spawnSync(process.execPath, [cli, 'build'], { cwd: root, encoding: 'utf8' }).stderr).toContain('path must stay inside the project');
+      expect(readFileSync(join(outside, 'cloud-artifact.json'), 'utf8')).toBe('keep');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

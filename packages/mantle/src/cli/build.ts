@@ -36,7 +36,10 @@ export async function runBuild(rawArgs: readonly string[]): Promise<number> {
       return 0;
     }
     const root = cwd();
-    await rm(join(root, '.mantle/cloud-artifact.json'), { force: true });
+    const outputDir = join(root, '.mantle');
+    await mkdir(outputDir, { recursive: true });
+    await assertRealPath(root, outputDir);
+    await rm(join(outputDir, 'cloud-artifact.json'), { force: true });
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as Record<string, unknown>;
     const config = pkg.mantleCloud;
     if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('package.json: mantleCloud configuration is required');
@@ -88,8 +91,7 @@ export async function runBuild(rawArgs: readonly string[]): Promise<number> {
       lockfileSha256: sha256(lockfile), plan: compiled.value, module, assets };
     const output = JSON.stringify(artifact);
     if (Buffer.byteLength(output) > 6_000_000) throw new Error('Cloud artifact exceeds 6 MB');
-    await mkdir(join(root, '.mantle'), { recursive: true });
-    await writeFile(join(root, '.mantle/cloud-artifact.json'), output);
+    await writeFile(join(outputDir, 'cloud-artifact.json'), output);
     stdout.write(`.mantle/cloud-artifact.json sha256:${sha256(output)}\n`);
     return 0;
   } catch (error) {
