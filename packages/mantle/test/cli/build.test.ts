@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
+import { parseManifestSources, ValidateManifestsUseCase } from '@aotter/mantle-spec';
+import { compileRuntimePlan } from '@aotter/mantle-runtime';
 
 it('builds a pinned project into one plan + module + assets artifact', () => {
   const root = mkdtempSync(join(tmpdir(), 'mantle-cloud-build-'));
@@ -32,6 +34,16 @@ it('builds a pinned project into one plan + module + assets artifact', () => {
     expect(artifact.plan.semanticFingerprint).toMatch(/^fnv1a64:[a-f0-9]{16}$/);
     expect(artifact.plan.procedures.ping.manifest.spec.handler.ref).toBe('ping');
     expect(Buffer.from(artifact.manifests['site.yaml'], 'base64')).toEqual(readFileSync(join(root, 'manifests/site.yaml')));
+    const parsed = parseManifestSources({ sources: Object.entries(artifact.manifests).map(([sourceId, base64]) => ({ sourceId, text: Buffer.from(String(base64), 'base64').toString('utf8') })) });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error('uploaded manifests could not be parsed');
+    const validated = ValidateManifestsUseCase.run({ parsed: parsed.value });
+    expect(validated.errorCount).toBe(0);
+    if (!validated.linked) throw new Error('uploaded manifests could not be linked');
+    const compiled = compileRuntimePlan(validated.linked);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) throw new Error('uploaded manifests could not be compiled');
+    expect(compiled.value).toEqual(artifact.plan);
     expect(artifact.module).toContain('export default');
     expect(Buffer.from(artifact.assets['/index.html'].base64, 'base64').toString()).toBe('<h1>Hello</h1>');
     const first = readFileSync(join(root, '.mantle/cloud-artifact.json'));
