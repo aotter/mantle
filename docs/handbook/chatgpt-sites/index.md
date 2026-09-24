@@ -44,7 +44,11 @@ it requires no R2 bucket. The article reference also needs R2 for cover
 images. Build and smoke-test locally before deployment, and keep your
 application outside the SDK checkout.
 
-## Publish your first article
+## Follow the article reference when it fits
+
+The steps below apply to the optional prebuilt article example. A new blank
+generated Site has no article Schema, media bucket or content; add those only
+when your requirements call for them.
 
 1. **Prepare the application.** Follow the
    [runnable reference](../../examples/host-chatgpt-sites/README.md#install-and-run).
@@ -86,15 +90,15 @@ staff connector needs its own verified OAuth flow; see the [host reference](./ho
 
 ## Ask your agent to set it up
 
-Install the Mantle agent plugin, or `@aotter/mantle` itself, then describe your
-audience and content requirements:
+Install the Mantle skill and exact SDK version, then describe your audience
+and content requirements:
 
 ```text
 Build a content site with ChatGPT Sites and Mantle. Read
-handbook/chatgpt-sites/index.md and examples/host-chatgpt-sites/README.md from the
-installed Mantle docs, and follow that reference's install and run steps.
-Adapt the article example to my content requirements. Include ChatGPT
-sign-in, Mantle staff roles, cover uploads, and published article pages.
+handbook/chatgpt-sites/generated-app.md from the installed Mantle docs, and
+start from the blank generated Site when that CLI supports it. Use the article
+reference only if its content model matches my requirements. Include ChatGPT
+sign-in and Mantle staff roles; add cover uploads only if I request media.
 Run the local checks and show me a draft-to-publish walkthrough before
 deploying through Sites. Keep remote staff OAuth MCP outside this scope.
 ```

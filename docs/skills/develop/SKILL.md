@@ -57,9 +57,11 @@ pnpm exec mantle --help
 pnpm validate
 ```
 
-This CLI validates and derives artifacts from application-authored manifests.
-It does not create projects, business schemas or a visitor homepage. There is
-no `mantle create` / `mantle update` happy path.
+On 0.1.5 and newer, `generate --host cf|chatgpt-sites` assembles a new blank
+app; no `--features` selects Spec, Runtime, API, MCP, Admin and Web. Explicit
+`--features` selects a smaller composition. It never invents a business
+Schema. Existing authored apps keep compile mode, and older installed CLIs
+may not support project generation. Check this project's CLI help first.
 
 ## Core Model
 
@@ -155,7 +157,10 @@ teaching the project Mantle internals.
 
 ## Auth Composition
 
-Admin is opt-in. A project without `@aotter/mantle-admin-ui` is complete.
+Generated full apps select Admin by default; smaller selections can omit it.
+A project without `@aotter/mantle-admin-ui` is complete when Admin was not
+selected. If Admin was selected but its package is missing, install the
+CLI-declared exact version and rerun generation.
 When Admin is installed, `createMantleWorker({ auth })` with `email-otp`
 and `ConsoleEmailSender` is the local human path (OTP in wrangler logs).
 That override owns Auth construction; Core still owns `/admin` and
@@ -164,8 +169,11 @@ and an `ASSETS` binding. A white screen at `/admin` with HTML 200 and
 `/_mantle/admin/assets/*` 404 is a missing assets binding, not a missing
 frontend build.
 
-Conventional Cloudflare projects that do not replace Auth declare
-`MANTLE_AUTH_MODE=hosted` or `self-managed`; Core owns that standard
+Generated Cloudflare apps use `MANTLE_AUTH_MODE=local-otp` on loopback after
+copying `.dev.vars.example` to `.dev.vars` and setting a real owner email and
+random secret. Production uses `hosted` or `self-managed` with provider
+credentials and `ADMIN_GITHUB_LOGIN`. Conventional Cloudflare projects that
+do not replace Auth use those two production modes; Core owns that standard
 composition and rejects partial or mixed bindings. Preserve the explicit
 mode recorded in Worker config, keep provider secrets out of source, and
 do not infer a mode from whichever credentials happen to be present.

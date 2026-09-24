@@ -46,8 +46,11 @@ in a project-owned `.npmrc`.
    `package.json` containing `"type":"module"`. Install the exact chosen
    `@aotter/mantle` version locally. Read its
    `node_modules/@aotter/mantle/skills/install/SKILL.md` and version-matched
-   `docs/handbook/start/overview.md` before continuing.
-2. Run the installed CLI with an explicit host, for example
+   `docs/handbook/start/overview.md` before continuing. These installed
+   instructions take precedence over this GitHub bootstrap copy. Check
+   `npx mantle generate --help`: if it does not list `--host`, follow the
+   installed version's direct-authoring path instead of the steps below.
+2. On a CLI that supports it, run with an explicit host, for example
    `npx mantle generate --host cf` or `npx mantle generate --host chatgpt-sites`.
    No `--features` means Spec, Runtime, API, MCP, Admin and a blank editable
    home. For a smaller app, positively list the modules with `--features`
@@ -58,16 +61,20 @@ in a project-owned `.npmrc`.
    `mantle generate` to finish. Read `docs/handbook/start/project-and-cli.md`
    from the same installed package for saved selections, owned files,
    `--check`, and `--adopt`.
-4. Review generated files and add only the user's Schema, View, Procedure and
-   Trigger manifests. Keep the blank home editable; do not invent business
-   data or media bindings. Run `mantle generate --check`, `mantle validate`,
-   `mantle skills`, the project's build/typecheck and local smoke.
+4. Before adding a Schema on ChatGPT Sites, review and apply its initial local
+   D1 migration as the installed Sites guide says. Then add only the user's
+   Schema, View, Procedure and Trigger manifests. Keep the blank home editable;
+   do not invent business data or media bindings. Run `mantle generate` to
+   append any new migration, review and apply it, then run `generate --check`,
+   `validate`, `skills`, build/typecheck and local smoke.
 5. For Cloudflare, follow installed `docs/handbook/cloudflare/` and configure
    the local Admin owner and identity before claiming Admin works. For
    ChatGPT Sites, follow installed
    `docs/handbook/chatgpt-sites/generated-app.md`: review and apply local D1
    migrations, set `OWNER_EMAIL` and `PUBLIC_ORIGIN`, then test the blank home,
-   unauthorized Admin, owner Admin, public MCP and staff MCP. Sites owns
+   unauthorized Admin, owner Admin, public MCP and staff MCP. Local owner
+   identity is simulated by the loopback-only smoke; it does not create a
+   browser ChatGPT session. Sites owns
    production identity and deployment; do not deploy its Worker directly.
    Browser Admin WebMCP and Sites-session `/api/mcp/staff` do not provide
    remote staff OAuth MCP. The owner can maintain content through Admin and

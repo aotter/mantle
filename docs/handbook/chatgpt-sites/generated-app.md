@@ -27,14 +27,16 @@ old `dist` before copying the current migrations and Admin assets.
 
 For local Admin, copy `.dev.vars.example` to `.dev.vars`, set `OWNER_EMAIL` to
 the email of the ChatGPT account that will own this Site, and keep
-`PUBLIC_ORIGIN` equal to the local URL. Run `npm run dev`, then open `/admin`.
-To exercise the Sites identity contract locally, set `MANTLE_TEST_OWNER_EMAIL`
-to the same email and run `npm run smoke:local`. That script refuses non-loopback
+`PUBLIC_ORIGIN` equal to the local URL. Run `npm run dev`.
+The plain local browser has no ChatGPT Sites identity, so it will redirect to
+Sites sign-in and cannot prove owner access. To exercise the identity contract
+locally, set `MANTLE_TEST_OWNER_EMAIL` to the same email and run
+`npm run smoke:local`. That script refuses non-loopback
 targets. Its identity headers are a local simulation; the production Worker
 contains no identity-injection path and must run behind Sites' trusted
 identity-stripping dispatcher. The generated Wrangler config disables the
-independent `workers.dev` URL; do not add a direct Worker route. A passing local smoke does not verify a deployed
-ChatGPT sign-in.
+independent `workers.dev` URL; do not add a direct Worker route. A passing
+local smoke does not verify a deployed ChatGPT sign-in.
 
 Without `OWNER_EMAIL`, sign-in grants no Mantle staff role. If the intended
 owner signed in before configuration, their existing `sites_users` row remains

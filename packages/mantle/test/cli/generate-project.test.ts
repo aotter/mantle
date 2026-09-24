@@ -30,6 +30,7 @@ it("plans a full new app from bootstrap files without confusing them for authore
   await writeFile("README.md", "new app\n");
   await writeFile("package.json", JSON.stringify({ name: "consumer", private: true, dependencies: { "@aotter/mantle": version } }));
   await writeFile("pnpm-lock.yaml", "lockfileVersion: '9.0'\n");
+  await writeFile("skills-lock.json", '{"version":1,"skills":{}}\n');
   expect(await runSkills([])).toBe(0);
   expect(await readdir(".claude")).toContain("skills");
   expect(await runGenerate(["--host", "cf"], coreOnly)).toBe(1);

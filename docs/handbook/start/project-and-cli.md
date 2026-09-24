@@ -91,7 +91,10 @@ npm run dev
 
 Run scripts that exist in the selected project; Spec-only has no server to
 start. A full Cloudflare app should serve the blank home and Admin assets.
-Configure its local owner and verify that anonymous staff access fails before
+For local CF Admin, copy `.dev.vars.example` to `.dev.vars`, replace
+`ADMIN_EMAIL` with the intended owner's address and `BETTER_AUTH_SECRET` with
+a random 32-byte secret, and keep `PUBLIC_ORIGIN` equal to the loopback URL
+wrangler prints. The OTP appears in wrangler logs. Verify that anonymous staff access fails before
 claiming Admin or staff MCP is working. A full Site must also apply its reviewed
 D1 migration before the Worker boots. The public MCP endpoint is discoverable
 without a staff session; the staff endpoint requires the host's verified

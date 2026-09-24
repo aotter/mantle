@@ -133,13 +133,15 @@ editors, plugins, and project instructions.
 
 ### Build it yourself
 
-Install an exact SDK version, then run `mantle generate --host cf` or
+In 0.1.5, install an exact SDK version, then run `mantle generate --host cf` or
 `mantle generate --host chatgpt-sites`. By default, it assembles Spec,
 Runtime, API, MCP, Admin and an editable blank home. Run the package install it
 requests, then rerun `mantle generate` to finish. Use `--features` to select a
 smaller app, including host-free Spec-only. Follow the
 [project and CLI guide](docs/handbook/start/project-and-cli.md) for commands,
 file ownership and local verification.
+For an older installed SDK, use that package's handbook and CLI help; 0.1.4
+does not have the new project flags.
 
 The [handbook](docs/handbook/start/overview.md) explains the parts. The
 [minimal Worker](docs/examples/host-minimal-worker/README.md) and
