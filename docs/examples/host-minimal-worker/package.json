@@ -18,9 +18,9 @@
     "aws4fetch": "^1.0.20"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260907.1",
+    "@cloudflare/workers-types": "5.20260904.1",
     "typescript": "^6.0.3",
-    "wrangler": "^4.125.0"
+    "wrangler": "4.129.0"
   },
   "packageManager": "pnpm@9.15.0"
 }

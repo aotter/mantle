@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -126,6 +126,26 @@ try {
   if (installedCount === 0) throw new Error("consumer did not install any Mantle package");
 
   run(command[0], command.slice(1), consumer);
+  const generated = join(temp, "generated-cf");
+  mkdirSync(generated);
+  writeFileSync(join(generated, "package.json"), `${JSON.stringify({
+    name: "generated-cf-smoke", private: true, type: "module",
+    packageManager: JSON.parse(readFileSync(join(root, "package.json"), "utf8")).packageManager,
+    dependencies: {
+      ...Object.fromEntries([...tarballs.keys()].filter((name) => name === "@aotter/mantle" ||
+        ["@aotter/mantle-cloudflare", "@aotter/mantle-admin", "@aotter/mantle-admin-ui", "@aotter/mantle-auth", "@aotter/mantle-web"].includes(name))
+        .map((name) => [name, version])),
+      zod: "^4.5.0", hono: "^4.12.0", "better-auth": "1.7.2", aws4fetch: "^1.0.20",
+    },
+    devDependencies: { wrangler: "4.129.0", typescript: "^6.0.3", "@cloudflare/workers-types": "5.20260904.1" },
+    pnpm: { overrides: Object.fromEntries([...tarballs].map(([name, path]) => [name, `file:${path}`])),
+      peerDependencyRules: { allowAny: [...tarballs.keys()] } },
+  }, null, 2)}\n`);
+  run("pnpm", ["install", "--no-frozen-lockfile"], generated);
+  run("pnpm", ["exec", "mantle", "generate", "--host", "cf"], generated);
+  run("pnpm", ["run", "build"], generated);
+  run("pnpm", ["exec", "mantle", "generate", "--check"], generated);
+  await smokeGenerated(generated);
   complete = true;
   console.log(JSON.stringify({
     core_sha: coreSha,
@@ -139,6 +159,44 @@ try {
   }, null, 2));
 } finally {
   if (!output || !complete) rmSync(temp, { recursive: true, force: true });
+}
+
+async function smokeGenerated(directory) {
+  const origin = "http://127.0.0.1:18789";
+  const child = spawn("pnpm", ["exec", "wrangler", "dev", "--local", "--ip", "127.0.0.1",
+    "--port", "18789", "--inspector-port", "0"], {
+    cwd: directory, env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let logs = "";
+  child.stdout.on("data", (chunk) => { logs += String(chunk); });
+  child.stderr.on("data", (chunk) => { logs += String(chunk); });
+  try {
+    let ready = false;
+    for (let attempt = 0; attempt < 120; attempt++) {
+      if (child.exitCode !== null) throw new Error(`generated Worker exited ${child.exitCode}\n${logs}`);
+      try { ready = (await fetch(origin)).status === 200; } catch { /* starting */ }
+      if (ready) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    if (!ready) throw new Error(`generated Worker did not start\n${logs}`);
+    const initialize = { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {
+        protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "packed-smoke", version: "1" },
+      } }) };
+    for (const [path, expected, request] of [["/admin/sign-in", 503], ["/mcp", 200, initialize],
+      ["/mcp/staff", 503, initialize]]) {
+      const response = await fetch(`${origin}${path}`, request);
+      if (response.status !== expected) throw new Error(`generated ${path}: ${response.status}, expected ${expected}`);
+    }
+  } finally {
+    child.kill("SIGTERM");
+    await new Promise((resolve) => {
+      if (child.exitCode !== null) { resolve(); return; }
+      const timer = setTimeout(() => { child.kill("SIGKILL"); resolve(); }, 5_000);
+      child.once("exit", () => { clearTimeout(timer); resolve(); });
+    });
+  }
 }
 
 function addOverrides(path, tarballs) {

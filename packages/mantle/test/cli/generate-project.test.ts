@@ -37,10 +37,15 @@ it("plans a full new app from bootstrap files without confusing them for authore
     version: 1, host: "cf", features: ["spec", "runtime", "api", "mcp", "admin", "web"],
   });
   const pkg = JSON.parse(await readFile("package.json", "utf8"));
+  expect(pkg.type).toBe("module");
   expect(pkg.dependencies["@aotter/mantle-cloudflare"]).toBe(version);
   expect(pkg.dependencies["@aotter/mantle-admin-ui"]).toBe(version);
   expect(pkg.dependencies["@aotter/mantle-web"]).toBe(version);
+  expect(pkg.devDependencies.wrangler).toBeTruthy();
   expect(pkg.scripts.generate).toBe("mantle generate");
+  expect(await readFile("src/index.ts", "utf8")).toContain("generated/worker.js");
+  expect(await readFile("src/home.ts", "utf8")).toContain("<main></main>");
+  expect(await readFile("wrangler.jsonc", "utf8")).toContain('"binding": "ASSETS"');
   expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining("pnpm install"));
   const before = await readFile("package.json", "utf8");
   expect(await runGenerate(["--check"], coreOnly)).toBe(1);
@@ -48,7 +53,7 @@ it("plans a full new app from bootstrap files without confusing them for authore
   expect(await runGenerate(["--features", "spec,runtime"], coreOnly)).toBe(2);
   expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("Changing a saved host or feature list"));
   expect(await readFile("package.json", "utf8")).toBe(before);
-  for (const [name, declared] of Object.entries(pkg.dependencies as Record<string, string>)) {
+  for (const [name, declared] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies } as Record<string, string>)) {
     const path = join(root, "node_modules", name);
     await mkdir(path, { recursive: true });
     await writeFile(join(path, "package.json"), JSON.stringify({
@@ -58,11 +63,65 @@ it("plans a full new app from bootstrap files without confusing them for authore
   }
   await mkdir("node_modules/@aotter/mantle-admin-ui/dist", { recursive: true });
   await writeFile("node_modules/@aotter/mantle-admin-ui/dist/index.html", "admin");
-  expect(await runGenerate([])).toBe(1);
+  expect(await runGenerate([])).toBe(0);
   expect(await readFile(".mantle/generated/mantle.ts", "utf8")).toContain("sealRuntimePlan(");
   expect(await readFile("public/_mantle/admin/index.html", "utf8")).toBe("admin");
-  expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("Host composition for cf is not generated yet"));
+  expect(await readFile(".mantle/generated/worker.ts", "utf8")).toContain("createMantleWorker");
+  expect(await readFile(".mantle/generated/worker.ts", "utf8")).toContain("const origin = env.PUBLIC_ORIGIN;");
+  expect(await readFile(".gitignore", "utf8")).toContain(".dev.vars\n");
+  await writeFile("src/home.ts", "export const customHome = true;\n");
+  expect(await runGenerate([])).toBe(0);
+  expect(await runGenerate(["--check"])).toBe(0);
+  expect(await readFile("src/home.ts", "utf8")).toBe("export const customHome = true;\n");
   expect(await readdir(root)).toContain("README.md");
+});
+
+it("preserves an adopted Wrangler TOML and requires the existing entry to opt in", async () => {
+  await project();
+  const toml = 'name = "existing-worker"\nmain = "src/index.ts"\n[[d1_databases]]\nbinding = "DB"\n';
+  await writeFile("wrangler.toml", toml);
+  await writeFile("package.json", JSON.stringify({ name: "existing", type: "module",
+    scripts: { dev: "wrangler dev", build: "my-build" } }));
+  await mkdir("src");
+  await writeFile("src/index.ts", "export default { fetch: () => new Response('mine') };\n");
+  expect(await runGenerate(["--adopt", "--host", "cf", "--features", "spec,api"])).toBe(2);
+  await expect(readFile("mantle.config.json")).rejects.toThrow();
+  await writeFile("src/index.ts", 'export { default } from "../.mantle/generated/worker.js";\n');
+  expect(await runGenerate(["--adopt", "--host", "cf", "--features", "spec,api"])).toBe(1);
+  expect(await readFile("wrangler.toml", "utf8")).toBe(toml);
+  await expect(readFile("wrangler.jsonc")).rejects.toThrow();
+  const pkg = JSON.parse(await readFile("package.json", "utf8"));
+  expect(pkg.scripts.dev).toBe("wrangler dev");
+  expect(pkg.scripts.build).toBe("my-build");
+});
+
+it("refuses a reduced composition while old Admin assets are still present", async () => {
+  await project();
+  await mkdir("public/_mantle/admin", { recursive: true });
+  await writeFile("public/_mantle/admin/index.html", "old Admin");
+  expect(await runGenerate(["--adopt", "--host", "cf", "--features", "spec,api"])).toBe(2);
+  await expect(readFile("mantle.config.json")).rejects.toThrow();
+});
+
+it("keeps the Worker import valid with a custom generated output directory", async () => {
+  await project();
+  expect(await runGenerate(["--host", "cf", "--features", "spec,api", "--output", "generated"])).toBe(1);
+  expect(await readFile("src/index.ts", "utf8")).toContain('../generated/worker.js');
+  expect(await readFile("generated/worker.ts", "utf8")).toContain('../src/handlers.js');
+  expect(await readFile("tsconfig.json", "utf8")).toContain('generated/**/*.ts');
+  expect(JSON.parse(await readFile("mantle.config.json", "utf8")).output).toBe("generated");
+  expect(await runGenerate([])).toBe(1);
+  await expect(readFile(".mantle/generated/worker.ts")).rejects.toThrow();
+});
+
+it("repairs required project files after an interrupted first run", async () => {
+  await project();
+  expect(await runGenerate(["--host", "cf"])).toBe(1);
+  for (const path of ["src/handlers.ts", "src/home.ts", "tsconfig.json"]) await rm(path);
+  expect(await runGenerate([])).toBe(1);
+  for (const path of ["src/handlers.ts", "src/home.ts", "tsconfig.json"]) {
+    expect((await readFile(path, "utf8")).length).toBeGreaterThan(0);
+  }
 });
 
 it("generates a real empty Spec plan without a host or fake Schema", async () => {

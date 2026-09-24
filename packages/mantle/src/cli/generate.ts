@@ -131,7 +131,7 @@ export async function runGenerate(
     catch (error) { stderr.write(`${message(error)}\n`); return 2; }
   }
   if (project.incomplete && !options.check) return 1;
-  const output = resolve(cwd(), options.output);
+  const output = resolve(cwd(), project.selection?.output ?? options.output);
   const generatedCurrent = await syncText(join(output, "mantle.ts"), emitted.source, options.check);
   let stale = project.incomplete || adminUnavailable || !generatedCurrent;
   if (adminIndex !== null) {
@@ -144,12 +144,14 @@ export async function runGenerate(
     stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
     return 1;
   }
-  if (project.mode === "project" && project.selection?.host) {
+  if (project.mode === "project" && project.selection?.host === "chatgpt-sites") {
     stderr.write(`Host composition for ${project.selection.host} is not generated yet; project setup is incomplete.\n`);
     return 1;
   }
   if (project.mode === "project") {
-    if (!options.check) stdout.write("Generated host-free Spec bindings.\n");
+    if (!options.check) stdout.write(project.selection?.host === "cf"
+      ? "Generated Cloudflare Worker composition and typed bindings.\n"
+      : "Generated host-free Spec bindings.\n");
     return 0;
   }
   if (!options.check) printGenerateNextSteps(adminIndex !== null);
