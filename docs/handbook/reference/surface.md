@@ -116,14 +116,14 @@ The `@aotter/mantle` package installs two binaries, `mantle` and `mantle-harness
 
 | Command | Flags |
 |---|---|
-| `mantle generate` | `--manifests <dir>` (default `./manifests`), `-o, --output <dir>` (default `.mantle/generated`), `--namespace <name>` (default `Mantle`), `--check`, `-h, --help` |
+| `mantle generate` | `--manifests <dir>` (default `./manifests`), `-o, --output <dir>` (default `.mantle/generated`), `--namespace <name>` (default `Mantle`), `--host cf\|chatgpt-sites`, `--features <list>`, `--adopt`, `--check`, `-h, --help` |
 | `mantle skills` | `--check`, `-h, --help` |
 | `mantle validate` | `--manifests <dir>` (default `./manifests`), `--source <dir>` (default `./src`), `--no-source`, `--phase preview\|deploy` (default `preview`), `--format json\|text` (default by TTY), `--json`, `-h, --help` |
 | `mantle emit-openapi` | `--manifests <dir>`, `--title <str>` (default `mantle`), `--version <str>` (default `0.1.0`), `--session-cookie-name <str>`, `-o, --output <file>`, `-h, --help` |
 | `mantle-harness indexes` | `--manifests <dir>`, `--rows <n>`, `--require <view>` (repeatable), `--require-public`, `--format json\|text`, `-h, --help` |
 | `mantle-harness http` | `--route <name=url>` (repeatable, required), `--base-url <url>`, `--rounds <n>`, `--warmup <n>`, `--format json\|text`, `-h, --help` |
 
-`generate` validates and compiles the manifest directory, writes the typed module, and — when `@aotter/mantle-admin-ui` is installed — syncs the Admin SPA into `public/_mantle/admin/`, excluding `server.*` files. `--check` fails without writing when either output is stale. `skills` copies every skill the installed package marks `projection: project` into `.agents/skills/mantle-*` and `.claude/skills/mantle-*`; both layouts receive identical bytes. `validate --phase deploy` adds the pre-deploy-only gates on top of the grammar and cross-Schema checks. `emit-openapi` covers HTTP Triggers and View REST routes; MCP is out of scope. `mantle-harness indexes` executes compiled Views against crowded SQLite and inspects query plans; `http` samples a running Worker for p50 and p95. Day-to-day use is in [Project and CLI](../start/project-and-cli.md).
+`generate` assembles new hosted projects with full Spec/Runtime/API/MCP/Admin/Web by default, or a smaller positive `--features` selection, then validates and compiles manifests into a typed module. Saved selections rerun safely; legacy authored projects keep compile mode. Selected Admin syncs its prebuilt SPA into `public/_mantle/admin/`. `--check` fails without writing on drift. `skills` copies project-scoped skills into `.agents/skills/mantle-*` and `.claude/skills/mantle-*`. `validate --phase deploy` adds pre-deploy checks; `emit-openapi` covers HTTP Triggers and View REST routes. `mantle-harness indexes` checks SQLite plans, while `http` samples a running Worker. [Project and CLI](../start/project-and-cli.md) has the install and ownership sequence.
 
 ## The generated module
 
@@ -182,7 +182,7 @@ This handbook describes the snapshot in this source tree. Pin every `@aotter/man
 
 The documentation site pins its handbook commit in `docs/handbook.json` and records its vendored SDK source in `vendor/mantle/SOURCE.txt`. Those commits may differ when the intervening changes are behavior-neutral; the site verifies that condition during the build.
 
-Projects are authored directly: write the manifests, run `generate`, `skills`, `validate` and `emit-openapi`, and wire the Worker. There is no project generator. Prerelease packages take their exact version from their own `package.json`; APIs may change between prereleases until a stable line ships.
+New projects can use `generate` to assemble a blank hosted app. Existing authored Workers can keep their own entry and use the same CLI for typed compilation. Pin all selected packages to one exact SDK version; prerelease APIs can change until stable publication.
 
 ## Source
 

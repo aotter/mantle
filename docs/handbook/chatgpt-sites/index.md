@@ -38,10 +38,11 @@ boundaries.
 
 ## Start with the supported SDK
 
-You need Node.js 22+, pnpm 9+, and Sites access with D1 and R2 available for your
-project. Follow the reference's local build and smoke test before deployment.
-Keep your application outside the SDK checkout. The included article schema is
-a working example; adapt its fields and lifecycle to your team's content.
+You need Node.js 22+ and Sites access with D1. Start with the
+[blank generated app](./generated-app.md) to choose your own content model;
+it requires no R2 bucket. The article reference also needs R2 for cover
+images. Build and smoke-test locally before deployment, and keep your
+application outside the SDK checkout.
 
 ## Publish your first article
 

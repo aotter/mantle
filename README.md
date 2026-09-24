@@ -32,7 +32,7 @@
 
 Mantle is an embeddable application engine for TypeScript. Define your data,
 queries, actions, and triggers in a Manifest, then use them through typed APIs,
-HTTP endpoints, agent tools, and an optional staff console.
+HTTP endpoints, agent tools, and a staff console when your app needs one.
 
 Build a publishing site, an internal operations app, or an API for agents.
 Your application owns its host, storage, and business logic; choose the Mantle
@@ -133,14 +133,22 @@ editors, plugins, and project instructions.
 
 ### Build it yourself
 
-Start with the [handbook](docs/handbook/start/overview.md), or follow the
-[runnable minimal Worker](docs/examples/host-minimal-worker/README.md).
-For a staff console, use the [local Admin example](docs/examples/host-local-admin-otp/README.md).
-The [project and CLI guide](docs/handbook/start/project-and-cli.md) walks through
-installation, authoring Manifests, generating typed bindings, and verification.
+Install an exact SDK version, then run `mantle generate --host cf` or
+`mantle generate --host chatgpt-sites`. By default, it assembles Spec,
+Runtime, API, MCP, Admin and an editable blank home. Run the package install it
+requests, then rerun `mantle generate` to finish. Use `--features` to select a
+smaller app, including host-free Spec-only. Follow the
+[project and CLI guide](docs/handbook/start/project-and-cli.md) for commands,
+file ownership and local verification.
+
+The [handbook](docs/handbook/start/overview.md) explains the parts. The
+[minimal Worker](docs/examples/host-minimal-worker/README.md) and
+[local Admin example](docs/examples/host-local-admin-otp/README.md) remain
+useful for applications that already own their Worker assembly.
 
 Using ChatGPT Sites? Follow the [Sites integration](docs/handbook/chatgpt-sites/index.md)
-for content management, sign-in, media, and publishing.
+for D1, owner sign-in, content management and publishing. Media is added only
+when your app needs it.
 
 ## Choose how much to use
 

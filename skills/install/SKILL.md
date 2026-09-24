@@ -1,6 +1,6 @@
 ---
 name: mantle
-description: Author a new Mantle application directly from version-matched SDK docs, or continue an existing project. Use when asked to install Mantle, build a Mantle application, or open a Mantle repository.
+description: Set up a new Mantle application or continue an existing one using the installed SDK's matching instructions.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/install/SKILL.md
@@ -11,139 +11,83 @@ metadata:
 
 # Mantle
 
-Mantle is an embeddable manifest engine. The application owns its source and
-provider configuration. There is no Starter/type picker or `mantle create`.
-Do not use the SDK checkout as the application, copy an old Starter tree, or
-turn `generate` into implicit scaffolding.
-A same-version `mantle-starters` tag is not required; do not wait for one.
+`npx skills add aotter/mantle` installs this small bootstrap skill. It does not
+install the SDK or create a project. The skill name is `mantle`; the source
+folder remains `skills/install/` so installation does not copy the repository.
 
-## Locate the version-matched instructions
+## Find the application and its version
 
-`npx skills add aotter/mantle` installs this brief, not the SDK,
-a project, or the handbook. Read the path printed by the installer (Codex's
-project-local path is `.agents/skills/mantle/SKILL.md`); `metadata.sourcePath`
-is repository provenance, not a consumer path. A repository install follows
-the selected Git ref and does not pin an npm release.
+First locate the user's target project. If it already has `@aotter/mantle`,
+read that project's `package.json`, lockfile, and
+`node_modules/@aotter/mantle/package.json`. Follow the CLI and docs shipped in
+that exact installed package. Never use another project's dependencies, the
+SDK checkout, a floating GitHub handbook, or an old alpha/Starter fallback.
+An older installed SDK may only support direct authoring; its own
+`mantle generate --help` decides which flags exist. Upgrade only when requested.
 
-After selecting the host and exact version, install `@aotter/mantle` locally
-with the selected optional packages. All `docs/...` paths below then mean
-`node_modules/@aotter/mantle/docs/...`; package skills are under
-`node_modules/@aotter/mantle/skills/`. Read that package's
-`skills/install/SKILL.md` before authoring: it supersedes this bootstrap copy.
-Use the new application's installation, never another project's `node_modules`
-or an SDK checkout packing harness, to resolve these paths.
-Before reading a handbook page, verify the version in that application's
-`node_modules/@aotter/mantle/package.json` against its lockfile and confirm
-the page exists under the same package directory. If the package is missing or
-the versions differ, fix the installation first; do not substitute a nearby
-checkout's docs or another project's `node_modules`.
-If the user requested a prerelease, resolve that channel explicitly; `latest`
-need not contain prerelease features. Never mix versioned npm code with branch
-docs. No local CLI exists until the package is installed.
+For a new project, choose `cf` or `chatgpt-sites` from the request; ask only if
+it remains ambiguous. A host-free Spec-only project needs no host. Resolve the
+latest **published stable** `@aotter/mantle` version from npm once, confirm it
+is not a prerelease, and install it with an exact version in the new project.
+For example, run `npm view @aotter/mantle@latest version`, inspect the returned
+plain `X.Y.Z`, then `npm install --save-exact @aotter/mantle@X.Y.Z` with that
+actual version substituted. Set `type=module` in `package.json` first; npm's
+default project type may be CommonJS.
+When testing a release candidate, use the explicitly supplied exact version
+or local tarball instead of npm latest. Pin every selected `@aotter/mantle*`
+package to the running CLI's exact version; `generate` writes the required
+package declarations. Do not let npm's default `^` range remain. If the
+project registry overrides public npmjs, set `@aotter:registry=https://registry.npmjs.org/`
+in a project-owned `.npmrc`.
 
-## New application
+## New project sequence
 
-1. Determine the actual host and required surfaces from the request. Reuse an
-   existing application when available; otherwise work in its own directory.
-   Do not assume Cloudflare, public HTML or Admin is required. Check Node 22+
-   and pnpm 9+ for these SDK examples. A ChatGPT Site is not a conventional
-   Cloudflare Worker deployment; use the installed
-   `docs/handbook/chatgpt-sites/index.md` integration guide and
-   `docs/examples/host-chatgpt-sites/` runnable reference when selected.
-2. Choose the requested exact SDK version, or resolve the intended release
-   channel once. Pin all selected `@aotter/mantle*` dependencies to that same
-   version. Install only the adapter/optional packages the application needs.
-   If a global scope registry overrides public npmjs, use a project-owned
-   `.npmrc` with `@aotter:registry=https://registry.npmjs.org/`.
-3. Use the host and surfaces already established in step 1; ask only for
-   information still missing. Read `docs/handbook/start/overview.md` and
-   `docs/handbook/reference/features.md`, then select the matching path:
-   - Spec + generate / embed Runtime — `docs/handbook/start/project-and-cli.md`.
-   - Adapter without Admin — `docs/examples/host-minimal-worker/`.
-   - Opt-in Admin / Dev UI — only when a human needs a console: interview
-     the bootstrap owner email, then `docs/examples/host-local-admin-otp/`
-     (`pnpm install && pnpm generate && pnpm dev`, `/admin/sign-in`, OTP
-     in wrangler logs). Admin needs `@aotter/mantle-admin`,
-     `@aotter/mantle-admin-ui`, wrangler `ASSETS` on `./public`, and
-     `createAuth` email-otp + `ConsoleEmailSender`. Do not Vite-build Admin.
-   - ChatGPT Sites with Admin/D1/R2 — follow
-     `docs/examples/host-chatgpt-sites/`, not the email-OTP Worker example.
-     Copy it outside the SDK checkout, pin its `@aotter/mantle*` dependencies
-     to the selected exact version, then `npm install`,
-     `npx mantle validate --phase deploy`, `npm run generate`, `npm run check`,
-     `npx wrangler d1 migrations apply DB --local`,
-     `npm run dev -- --port 4174`, and `npm test` in a second terminal.
-     Preserve its Sites-owned identity ingress and hosting manifest; author the
-     user's Schema/View/Procedure/Trigger, then review migrations, media policy
-     and the local/production smoke gates. Sites provisions and deploys; never
-     `wrangler deploy` a Site. Request both D1 and R2 when uploads are in scope.
-     Browser Admin WebMCP and Sites-session `/api/mcp/staff` do not enable remote staff OAuth MCP.
-     At handoff, show the owner where Admin WebMCP and the public/staff MCP
-     endpoints appear, and state which are usable from the browser versus a
-     remote connector.
-   - ChatGPT Sites with custom business rules or an external callback — the
-     runnable reference covers builtin content only. For application-owned
-     operational state, `handler: { kind: ref }` Procedures, staff-only SQL
-     Views, staff MCP Triggers with `requires.auth`, and outbound webhooks
-     called from handler code, follow
-     `docs/handbook/chatgpt-sites/equipment-checkout.md`. It is an implementation
-     guide, not a shipped app: keep Mantle-owned Schema tables and
-     application-owned tables separate, and give every application table a
-     reviewed migration.
-   - Grammar — `docs/examples/README.md`. Copy `builtin-*` Manifests directly.
-     Read `cf-primitives-*` when the request needs Durable Objects, Queues,
-     cron, payment-provider callbacks, or API-key and entitlement guards;
-     those carry `ref` handlers and are not Builder-ingestible.
-   None of these is a template to install wholesale. Other hosts use the
-   embedded adapter guides. Author package scripts, manifests, entry and
-   configuration for the user's requirements. No default notes model, home
-   page, icon, launch metadata or visitor frontend is required.
-4. Compile and verify using the application's commands. The fundamental CLI
-   sequence is:
+1. Create a separate application directory with Node 22+ and a project
+   `package.json` containing `"type":"module"`. Install the exact chosen
+   `@aotter/mantle` version locally. Read its
+   `node_modules/@aotter/mantle/skills/install/SKILL.md` and version-matched
+   `docs/handbook/start/overview.md` before continuing.
+2. Run the installed CLI with an explicit host, for example
+   `npx mantle generate --host cf` or `npx mantle generate --host chatgpt-sites`.
+   No `--features` means Spec, Runtime, API, MCP, Admin and a blank editable
+   home. For a smaller app, positively list the modules with `--features`
+   (for example `spec,api`); use `--features spec` for a host-free compiler.
+   Do not remove Admin merely because its package is not installed yet.
+3. The first run may declare selected dependencies and exit asking for an
+   install. Install them using the project's package manager, then rerun
+   `mantle generate` to finish. Read `docs/handbook/start/project-and-cli.md`
+   from the same installed package for saved selections, owned files,
+   `--check`, and `--adopt`.
+4. Review generated files and add only the user's Schema, View, Procedure and
+   Trigger manifests. Keep the blank home editable; do not invent business
+   data or media bindings. Run `mantle generate --check`, `mantle validate`,
+   `mantle skills`, the project's build/typecheck and local smoke.
+5. For Cloudflare, follow installed `docs/handbook/cloudflare/` and configure
+   the local Admin owner and identity before claiming Admin works. For
+   ChatGPT Sites, follow installed
+   `docs/handbook/chatgpt-sites/generated-app.md`: review and apply local D1
+   migrations, set `OWNER_EMAIL` and `PUBLIC_ORIGIN`, then test the blank home,
+   unauthorized Admin, owner Admin, public MCP and staff MCP. Sites owns
+   production identity and deployment; do not deploy its Worker directly.
+   Browser Admin WebMCP and Sites-session `/api/mcp/staff` do not provide
+   remote staff OAuth MCP. The owner can maintain content through Admin and
+   the applicable authenticated MCP surface.
 
-```sh
-pnpm exec mantle generate
-pnpm exec mantle generate --check
-pnpm exec mantle validate
-pnpm exec mantle skills
-pnpm exec mantle skills --check
-```
+Use installed `docs/handbook/reference/features.md` for Manifest choices and
+`docs/examples/` for optional examples. The generated project is the starting
+point; a domain example is not a template to copy wholesale. Do not use a
+`mantle-starters` tag or `mantle create`.
 
-Run the project's TypeScript check and start its actual local server. Probe
-a route the application declares. An API-only or adapter-only project may
-correctly return 404 at `/` and have no Admin. When Admin was requested,
-probe `/admin/sign-in` and a `/_mantle/admin/assets/*` URL — both must be
-200. A white screen is an assets 404, not a missing frontend build.
-Conventional Auth routes may return `503 setup_incomplete` until that mode
-is configured; the local OTP path replaces construction instead. Do not
-introduce an auth bypass to make smoke pass.
+## Existing project and handoff
 
-Commit the resolved lockfile in the application's normal workflow; subsequent
-installs use `pnpm install --frozen-lockfile`. Do not initialize/push a remote,
-provision resources, deploy or commit secrets as part of local verification.
+Preserve selected features, user-authored files, migrations, package versions,
+identity settings and provider resources. Use the installed CLI's `--help` and
+package-local docs. Run `generate --check` without writing, then the project's
+normal tests. For a legacy project, keep its established direct-authoring
+flow until an upgrade is requested; the new bootstrap skill does not make an
+old SDK understand new flags.
 
-## Existing application
-
-Read package.json, lockfile, actual entry, manifest files, provider config and
-project instructions. `.mantle/launch-state.json`, features or handoff files
-are optional legacy context, never prerequisites. Preserve them and user code.
-Install the frozen dependency graph, project installed Core skills, then read
-those skills and embedded docs. Never apply develop docs to an older package.
-Use the installed `mantle --help` and the project's scripts as authority.
-
-For a legacy pre-stable project, retain its pinned behavior until an explicit
-upgrade is requested. Do not rewrite provider identities, delete metadata or
-fetch a nonexistent new Starter tag. SDK upgrades follow the update skill, not
-a bundle comparison command.
-
-## Ship and report
-
-When deployment is requested, read
-`node_modules/@aotter/mantle/skills/provision/SKILL.md` (not projected by
-`mantle skills`) and follow that version-matched skill and the
-observed host configuration. Legacy Landing remains a pre-stable product; it
-is not a launch dependency for new Core projects.
-
-Report the project path, exact SDK version, local URL/HTTP result and checks,
-plus any genuinely missing auth/provider setup. Do not claim a working homepage
-or authenticated MCP based only on successful generation.
+When deployment is requested, read the installed version's
+`skills/provision/SKILL.md`. Report the target path, exact SDK version, local
+HTTP results, Admin/MCP identity evidence, and any missing provider setup.
+Local simulated Sites headers do not prove deployed ChatGPT sign-in.

@@ -28,8 +28,10 @@ current npm `latest` contains it.
 | Work through a coding agent | [Skill installation and handoff](../guides/agent-setup.md) | Bootstrap skill, pinned package, then project-local instructions. |
 
 Human authors can follow these pages directly; installing an agent skill is
-optional. Do not start with `mantle generate` in an empty directory: author the
-manifests and host first, then generate and validate.
+optional. For a new app, install an exact SDK version and run
+`mantle generate --host cf` or `--host chatgpt-sites`. The CLI assembles a blank
+site by default; add your own Manifests after generation. Use explicit
+`--features` for a smaller composition, including host-free Spec-only.
 
 ## Find the right kind of documentation
 

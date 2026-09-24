@@ -3,9 +3,11 @@ description: "Open local Admin in one shot: follow the official OTP example, bin
 ---
 # Quickstart: local Admin
 
-Admin is **opt-in**: use it when humans need a Dev UI. A complete Mantle
-service does not require this surface. The default embed path — Spec + Worker
-without Admin — is [Quickstart: a minimal Worker](./quickstart-worker.md).
+New generated CF and Sites apps include Admin by default. To leave it out,
+select smaller features explicitly. This tutorial shows the existing
+direct-authored Worker integration with local email OTP; use it when you own
+the Worker entry. [Project layout and CLI](./project-and-cli.md) describes the
+new generated path.
 
 The procedural source of truth is the official example:
 
@@ -29,7 +31,7 @@ Traps (documented on the example):
 - `pnpm check` / smoke rewrites `.dev.vars` to a smoke-only port — restore it
   from `.dev.vars.example` before `pnpm dev`.
 
-Install every `@aotter/mantle*` package from the `latest` dist-tag; see
+Pin every selected `@aotter/mantle*` package to the same exact version; see
 [Versions](../reference/surface.md#versions). Admin needs both
 `@aotter/mantle-admin` and `@aotter/mantle-admin-ui`, wrangler `ASSETS` on
 `./public`, and `createAuth` email-otp + `ConsoleEmailSender`.

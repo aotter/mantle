@@ -7,7 +7,17 @@ Conventional Auth is chosen by one variable, `MANTLE_AUTH_MODE`, and fails close
 
 ## Local Admin: email OTP
 
-The local human path does not use `MANTLE_AUTH_MODE` or GitHub. Pass `auth` to `createMantleWorker` with `email-otp`, `ConsoleEmailSender`, and `bootstrapOwner.match: "email"`. The one-time code is printed on the wrangler log. See [Quickstart: local Admin](../start/quickstart-admin.md). `ConsoleEmailSender` is for `wrangler dev` only; production needs a real sender. The official example binds `127.0.0.1:8787` and sets `PUBLIC_ORIGIN` to that origin; Better Auth rejects OTP with `INVALID_ORIGIN` when they diverge from the origin wrangler prints.
+The generated CF app's local path sets `MANTLE_AUTH_MODE=local-otp` in
+`.dev.vars` and configures `ADMIN_EMAIL`, `BETTER_AUTH_SECRET`, and
+`PUBLIC_ORIGIN`; its Worker selects an email-OTP auth factory only for a
+loopback origin. If you author the Worker yourself, pass `auth` to
+`createMantleWorker` with `email-otp`, `ConsoleEmailSender`, and
+`bootstrapOwner.match: "email"`; that factory does not read the conventional
+mode matrix. The one-time code is printed in wrangler logs. See
+[Quickstart: local Admin](../start/quickstart-admin.md). `ConsoleEmailSender`
+is for `wrangler dev` only; production needs a real sender. Match
+`PUBLIC_ORIGIN` to wrangler's actual `127.0.0.1:8787` origin or Better Auth
+will reject OTP with `INVALID_ORIGIN`.
 
 With `auth` set, the mode matrix below is not read. Core still owns `/admin` and `/api/auth/*`.
 

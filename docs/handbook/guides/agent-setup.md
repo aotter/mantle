@@ -84,7 +84,7 @@ It does not prove a server, login, Admin assets or MCP connection works.
 | `skills/install/SKILL.md` is missing | That is source provenance. Read the installer's destination instead. |
 | `docs/...` is missing after `skills add` | The skill does not carry the handbook. Install the pinned SDK and read its embedded docs. |
 | `mantle` is missing | Install local `@aotter/mantle`; run its binary through the project package manager. |
-| `MANIFEST_ROOT_NOT_FOUND` | Author manifests in the configured directory; `generate` is not a scaffold command. |
+| `MANIFEST_ROOT_NOT_FOUND` | Check the installed CLI and saved project selection. New generated projects may start with an empty manifest set; legacy compile mode still needs the configured source. |
 | `mantle skills --check` exits 1 | Run `mantle skills`, then read the refreshed project skill. |
 | No projected provision/media-gc skill | These are intentionally opt-in. Read their installed package files when the task calls for them. |
 | A documented feature fails on an older release | Use that release's docs or explicitly upgrade; changing a skill does not change Runtime. |
