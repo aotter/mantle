@@ -34,6 +34,7 @@ metadata: { name: host-report }
 spec: { surface: internal, sql: SELECT 1 AS value }
 `));
     const manifest = await app.request("https://example.test/admin/api/views-manifest");
+    expect(manifest.headers.get("cache-control")).toBe("private, no-store");
     expect(await manifest.json()).toEqual({ views: [] });
     expect((await app.request("https://example.test/admin/api/views/host-report")).status).toBe(404);
   });
