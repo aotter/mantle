@@ -21,6 +21,7 @@ interface BoundStatement {
 
 /** Adapt a caller-owned `bun:sqlite` handle without owning or closing it. */
 export class BunDatabaseDriver implements DatabaseDriver {
+  readonly supportsAtomicEntryWrites = true as const;
   readonly migrations: MigrationRunner;
   private readonly statements = new WeakMap<PreparedStatement, BoundStatement>();
 

@@ -28,6 +28,7 @@ import type { ViewQueryOptions } from "./domain/port/ViewQueryExecutor.js";
 import type { RuntimePlan } from "./domain/service/RuntimePlanCompiler.js";
 import { TriggerIndex } from "./domain/service/TriggerIndex.js";
 import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/LifecycleHookingEntryRepository.js";
+import { AtomicEntryWriteUseCase } from "./usecase/content/AtomicEntryWriteUseCase.js";
 import {
   ArchiveUseCase,
   CreateDraftUseCase,
@@ -130,6 +131,8 @@ export interface MantleRuntime {
   readonly unpublish: UnpublishUseCase;
   readonly archive: ArchiveUseCase;
   readonly deleteEntry: DeleteEntryUseCase;
+  /** All-or-nothing create/update/delete across Schemas when storage supports it. */
+  readonly writeAtomically: AtomicEntryWriteUseCase;
   invokeProcedure<O = unknown>(
     request: InvokeMantleProcedureRequest,
   ): Promise<InvokeProcedureResponse<O>>;
@@ -200,24 +203,27 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     localePolicy,
     validator,
   );
+  let atomicWrite: AtomicEntryWriteUseCase;
   const invokeProcedure = new InvokeProcedureUseCase(
     registry,
     invokeBuiltin,
     proceduresByName,
+    (operations) => atomicWrite.execute(operations),
   );
   const lifecycleHooks = new RunLifecycleHooksUseCase(
     triggerIndex,
     proceduresByName,
     (request) => invokeProcedure.execute(request),
   );
-  entries = invalidateAfterWrites(
-    new LifecycleHookingEntryRepository(
+  const hookedEntries = new LifecycleHookingEntryRepository(
       prepared.entries,
       triggerIndex,
       lifecycleHooks,
       idgen,
       ports.deferredHookDispatcher,
-    ),
+    );
+  entries = invalidateAfterWrites(
+    hookedEntries,
     ports.onPublishingContentChange,
     (collection) =>
       (schemasByName.get(collection)?.spec.lifecycle ?? "publishing") === "publishing",
@@ -250,6 +256,15 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
   const unpublish = new UnpublishUseCase(entries, schemasByName, clock);
   const archive = new ArchiveUseCase(entries, schemasByName, clock);
   const deleteEntry = new DeleteEntryUseCase(entries, schemasByName);
+  const writeAtomically = atomicWrite = new AtomicEntryWriteUseCase(
+    prepared.atomicEntries,
+    createDraft,
+    updateDraft,
+    deleteEntry,
+    (write, previous) => hookedEntries.atomicHooks(write, previous),
+    ports.onPublishingContentChange,
+    (collection) => (schemasByName.get(collection)?.spec.lifecycle ?? "publishing") === "publishing",
+  );
   const executeView = new ExecuteViewUseCase(
     prepared.views,
     async (request) => {
@@ -293,6 +308,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     unpublish,
     archive,
     deleteEntry,
+    writeAtomically,
     invokeProcedure: (request) => {
       const procedure = proceduresByName.get(request.procedure);
       if (!procedure) {

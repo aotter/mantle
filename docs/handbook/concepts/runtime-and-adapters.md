@@ -95,6 +95,13 @@ A storage adapter prepares one `RuntimePlan` into semantic ports. Three are requ
 
 Two are optional and only when a feature needs them: `MediaStorage` for upload flows, and `DeferredHookDispatcher` for at-least-once `after_*` delivery. `DatabaseDriver` is not a portability contract — it is the reusable SQLite/D1 seam. A PostgreSQL, MongoDB or application-owned-table adapter implements the semantic ports directly rather than emulating D1.
 
+`PreparedMantleStorage.atomicEntries` is an optional semantic write capability.
+An adapter exposes it only when it can commit an ordered group of entry
+mutations all-or-nothing, including zero-row version/status failures. The
+SQLite implementation covers Cloudflare D1 and Bun; IndexedDB and custom
+adapters without that guarantee leave it absent. Ref Procedures use
+`ctx.writeAtomically` as described in [Procedure](../reference/procedure.md#atomic-entry-writes-in-a-ref-handler).
+
 Declarative Views compile to logical plans once, and preparation lowers those plans to native queries. `View.spec.sql` is the exception: it is explicitly SQLite-only in v0.1. Storage that does not declare that dialect rejects such a View at preparation with `VIEW_DIALECT_UNSUPPORTED`, before mutating any state. Mantle does not guess a translation and ships no universal query driver. A View that must run everywhere uses `from` with a filter AST; see [View](../reference/view.md).
 
 ## Embedding each adapter

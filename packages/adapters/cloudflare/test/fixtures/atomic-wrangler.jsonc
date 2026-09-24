@@ -1,0 +1,10 @@
+{
+  "name": "mantle-atomic-conformance",
+  "main": "./atomic-worker.ts",
+  "compatibility_date": "2026-09-01",
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "mantle-atomic-conformance",
+    "database_id": "00000000-0000-0000-0000-000000000000"
+  }]
+}

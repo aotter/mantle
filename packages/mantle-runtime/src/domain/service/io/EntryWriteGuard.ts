@@ -20,6 +20,8 @@ export interface AssertEntryWritableArgs {
    *  work-in-progress entry can be saved incomplete. Publish paths
    *  omit this, so completeness is enforced before an entry goes live. */
   readonly partial?: boolean;
+  /** Atomic groups defer uniqueness to the transaction's database constraints. */
+  readonly skipUniquePreflight?: boolean;
 }
 
 /** Shared post-projection guard for every authoring path.
@@ -34,7 +36,7 @@ export async function assertEntryWritable(args: AssertEntryWritableArgs): Promis
   });
   if (diagnostics.length > 0) throw new DiagnosticError(diagnostics);
   await assertLocale(args);
-  await assertUniqueIndexes(args);
+  if (!args.skipUniquePreflight) await assertUniqueIndexes(args);
 }
 
 async function assertLocale(args: AssertEntryWritableArgs): Promise<void> {

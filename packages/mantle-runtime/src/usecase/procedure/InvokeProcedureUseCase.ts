@@ -16,6 +16,7 @@ import type {
   InvokeProcedureResponse,
 } from "../dto/procedure/index.js";
 import type { InvokeBuiltinUseCase } from "./InvokeBuiltinUseCase.js";
+import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 
 /**
  * `InvokeProcedureUseCase` — in-process invocation of a Procedure.
@@ -68,6 +69,7 @@ export class InvokeProcedureUseCase {
     private readonly registry: HandlerRegistry,
     private readonly builtin?: InvokeBuiltinUseCase,
     private readonly proceduresByName: ReadonlyMap<string, ProcedureManifest> = new Map(),
+    private readonly atomicWrites?: HandlerContext["writeAtomically"],
   ) {}
 
   async execute<O = unknown>(request: InvokeProcedureRequest): Promise<InvokeProcedureResponse<O>> {
@@ -219,7 +221,9 @@ export class InvokeProcedureUseCase {
             }),
           };
         }
-        result = await handler(inputResult.data, ctx);
+        result = await handler(inputResult.data, this.atomicWrites && allowGuard
+          ? { ...ctx, writeAtomically: this.atomicWrites }
+          : { ...ctx, writeAtomically: undefined });
       }
     } catch (err) {
       if (err instanceof InvokeFailure) {

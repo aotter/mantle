@@ -8,6 +8,7 @@ import {
 import type { EntryRow } from "../../domain/model/EntryRow.js";
 import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
+import type { UpdateEntryArgs } from "../../domain/port/EntryRepository.js";
 import type { LocalePolicyReader } from "../../domain/port/SiteConfigRepository.js";
 import { projectUpdateAndStamp } from "../../domain/service/BuiltinProjector.js";
 import type { UpdateDraftRequest } from "../dto/content/index.js";
@@ -33,6 +34,14 @@ export class UpdateDraftUseCase {
   ) {}
 
   async execute(request: UpdateDraftRequest): Promise<EntryRow> {
+    const { args } = await this.prepare(request);
+    return withConflictDiagnostic(`usecase/UpdateDraft/${request.id}`, () => this.entries.update(args));
+  }
+
+  async prepare(request: UpdateDraftRequest, options: { readonly skipUniquePreflight?: boolean } = {}): Promise<{
+    readonly args: UpdateEntryArgs & { readonly expectedStatus: EntryRow["status"] };
+    readonly previous: EntryRow;
+  }> {
     const opPath = `usecase/UpdateDraft/${request.id}`;
     const existing = await this.entries.get(request);
     if (!existing) {
@@ -86,17 +95,17 @@ export class UpdateDraftUseCase {
       siteConfig: this.siteConfig,
       // Real drafts save incomplete; operational records are live immediately.
       partial: lifecycle !== "operational",
+      skipUniquePreflight: options.skipUniquePreflight,
     });
-    return withConflictDiagnostic(opPath, () =>
-      this.entries.update({
+    return { previous: existing, args: {
         id: request.id,
         collection: request.collection,
         expectedVersion: request.expectedVersion,
+        expectedStatus: existing.status,
         data,
         now,
         hookContext: ctx,
         originalInput: request.originalInput,
-      }),
-    );
+    } };
   }
 }
