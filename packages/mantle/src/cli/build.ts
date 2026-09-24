@@ -17,6 +17,11 @@ const types: Record<string, string> = {
   '.xml': 'application/xml', '.woff': 'font/woff', '.woff2': 'font/woff2',
 };
 const sha256 = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+const manifestDigest = async (root: string) => sha256(JSON.stringify(await Promise.all(
+  (await readdir(root)).filter(name => /\.ya?ml$/i.test(name)).sort().map(async name =>
+    [name, (await readFile(join(root, name))).toString('base64')],
+  ),
+)));
 const inProject = (root: string, path: string) => {
   const absolute = resolve(root, path);
   const rel = relative(root, absolute);
@@ -40,7 +45,8 @@ export async function runBuild(rawArgs: readonly string[]): Promise<number> {
     await mkdir(outputDir, { recursive: true });
     await assertRealPath(root, outputDir);
     await rm(join(outputDir, 'cloud-artifact.json'), { force: true });
-    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as Record<string, unknown>;
+    const packageBytes = await readFile(join(root, 'package.json'));
+    const pkg = JSON.parse(packageBytes.toString('utf8')) as Record<string, unknown>;
     const config = pkg.mantleCloud;
     if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('package.json: mantleCloud configuration is required');
     const fields = config as Record<string, unknown>;
@@ -59,14 +65,18 @@ export async function runBuild(rawArgs: readonly string[]): Promise<number> {
     await assertRealPath(root, manifests);
     if (await runValidate(['--manifests', manifests, '--no-source', '--phase', 'deploy']) !== 0) return 1;
     if (await runGenerate(['--manifests', manifests]) !== 0) return 1;
-    execFileSync('pnpm', ['run', 'build:mantle'], { cwd: root, stdio: 'inherit' });
-    await assertRealPath(root, modulePath);
-    await assertRealPath(root, assetsPath);
+    const sourceDigest = await manifestDigest(manifests);
     const loaded = await loadManifestsFromRoot(manifests);
     const validated = loaded.parsed ? ValidateManifestsUseCase.run({ parsed: loaded.parsed }) : null;
     if (!validated?.linked || loaded.parseErrors.length || validated.errorCount) throw new Error(`${manifests}: manifest validation failed`);
     const compiled = compileRuntimePlan(validated.linked);
     if (!compiled.ok) throw new Error(`${manifests}: RuntimePlan compilation failed`);
+    execFileSync('pnpm', ['run', 'build:mantle'], { cwd: root, stdio: 'inherit' });
+    if (await manifestDigest(manifests) !== sourceDigest || sha256(await readFile(join(root, 'pnpm-lock.yaml'))) !== sha256(lockfile) ||
+      sha256(await readFile(join(root, 'package.json'))) !== sha256(packageBytes))
+      throw new Error('build:mantle changed Manifest, package.json or lockfile inputs');
+    await assertRealPath(root, modulePath);
+    await assertRealPath(root, assetsPath);
     const module = await readFile(modulePath, 'utf8');
     if (!module || Buffer.byteLength(module) > 1_000_000) throw new Error(`${fields.module}: module must be 1–1,000,000 bytes`);
     const assets: Record<string, { base64: string; type: string }> = {};

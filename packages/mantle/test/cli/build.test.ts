@@ -18,7 +18,8 @@ it('builds a pinned project into one plan + module + assets artifact', () => {
       mantleCloud: { version: 1, manifests: 'manifests', module: 'dist/app.mjs', assets: 'dist/public' },
       scripts: { 'build:mantle': 'node build.mjs' },
     }));
-    writeFileSync(join(root, 'build.mjs'), `import { mkdirSync, writeFileSync } from 'node:fs'; mkdirSync('dist/public', {recursive:true}); writeFileSync('dist/app.mjs', 'export const handlers = {ping(){return {ok:true}}}; export default {fetch(){return new Response("ok")}}'); writeFileSync('dist/public/index.html', '<h1>Hello</h1>');`);
+    const buildScript = `import { mkdirSync, writeFileSync } from 'node:fs'; mkdirSync('dist/public', {recursive:true}); writeFileSync('dist/app.mjs', 'export const handlers = {ping(){return {ok:true}}}; export default {fetch(){return new Response("ok")}}'); writeFileSync('dist/public/index.html', '<h1>Hello</h1>');`;
+    writeFileSync(join(root, 'build.mjs'), buildScript);
     execFileSync(process.execPath, [cli, 'build'], { cwd: root, encoding: 'utf8' });
     const artifact = JSON.parse(readFileSync(join(root, '.mantle/cloud-artifact.json'), 'utf8'));
     expect(artifact.version).toBe(1);
@@ -30,6 +31,10 @@ it('builds a pinned project into one plan + module + assets artifact', () => {
     const first = readFileSync(join(root, '.mantle/cloud-artifact.json'));
     execFileSync(process.execPath, [cli, 'build'], { cwd: root, encoding: 'utf8' });
     expect(readFileSync(join(root, '.mantle/cloud-artifact.json'))).toEqual(first);
+    writeFileSync(join(root, 'build.mjs'), `${buildScript}\nimport { appendFileSync } from 'node:fs'; appendFileSync('manifests/site.yaml', '\\n# altered by build script\\n');`);
+    expect(spawnSync(process.execPath, [cli, 'build'], { cwd: root, encoding: 'utf8' }).stderr).toContain('changed Manifest');
+    expect(existsSync(join(root, '.mantle/cloud-artifact.json'))).toBe(false);
+    writeFileSync(join(root, 'build.mjs'), buildScript);
     const invalid = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
     invalid.mantleCloud.assets = '../outside';
     writeFileSync(join(root, 'package.json'), JSON.stringify(invalid));
