@@ -208,7 +208,7 @@ async function smokeGeneratedSites(temp, tarballs, version) {
     packageManager: JSON.parse(readFileSync(join(root, "package.json"), "utf8")).packageManager,
     dependencies: {
       ...Object.fromEntries([...tarballs.keys()].filter((name) => name === "@aotter/mantle" ||
-        ["@aotter/mantle-cloudflare", "@aotter/mantle-admin", "@aotter/mantle-admin-ui", "@aotter/mantle-web"].includes(name))
+        ["@aotter/mantle-cloudflare", "@aotter/mantle-mcp", "@aotter/mantle-admin", "@aotter/mantle-admin-ui", "@aotter/mantle-web"].includes(name))
         .map((name) => [name, version])),
       zod: "^4.5.0", hono: "^4.12.0", "better-auth": "1.7.2", aws4fetch: "^1.0.20",
     },
