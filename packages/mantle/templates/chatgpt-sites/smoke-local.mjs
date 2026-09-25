@@ -13,7 +13,8 @@ assert.equal((await call('/')).status,200);
 assert.equal((await call('/admin/api/me')).status,401);
 assert.equal((await call('/admin/api/me',stranger)).status,403);
 assert.equal((await call('/admin/api/me',owner)).status,200);
-const mcp=(path,headers={})=>fetch(new URL(path,url),{method:'POST',headers:{...headers,'content-type':'application/json','mcp-protocol-version':'2025-11-25'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize'})});
+// MCP clients must accept JSON and SSE; initialize names the client.
+const mcp=(path,headers={})=>fetch(new URL(path,url),{method:'POST',headers:{...headers,'content-type':'application/json',accept:'application/json, text/event-stream','mcp-protocol-version':'2025-11-25'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'smoke',version:'1'}}})});
 assert.equal((await mcp('/api/mcp')).status,200);
 assert.equal((await mcp('/api/mcp/staff')).status,401);
 assert.equal((await mcp('/api/mcp/staff',owner)).status,200);
