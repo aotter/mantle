@@ -17,7 +17,8 @@ export interface McpToolCallAuditEvent {
    *  conventional `operationId` when no hint is declared. Correlates retries
    *  across admitted and denied outcomes. */
   readonly operationId: string | null;
-  /** `ok`, a runtime Diagnostic code, `UNKNOWN_TOOL`, `INVALID_PARAMS`, `INTERNAL`, or an
+  /** `ok`, a runtime Diagnostic code (argument shape errors are
+   *  `INPUT_VALIDATION_FAILED`), `UNKNOWN_TOOL`, `INTERNAL`, or an
    *  adapter gate denial in the same UPPER_SNAKE vocabulary
    *  (`UNAUTHENTICATED`, `INVALID_TOKEN`, `INVALID_DPOP_PROOF`, `INSUFFICIENT_SCOPE`,
    *  `INSUFFICIENT_ROLE`). */

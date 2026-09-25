@@ -1,5 +1,5 @@
 import type { MediaPurposePolicy } from "@aotter/mantle-spec";
-import type { MantleMedia, MantleRuntime } from "../../MantleRuntime.js";
+import { capabilityUseCases, type CapabilityRuntime } from "../../bindCapabilities.js";
 import type { AuditSink } from "../../domain/port/AuditSink.js";
 import { projectCallableCapabilities } from "../../domain/service/CallableCapabilityProjector.js";
 import type { RuntimePlan } from "../../domain/service/RuntimePlanCompiler.js";
@@ -7,22 +7,7 @@ import { McpJsonRpcDispatcher, type McpServerInfo } from "./McpJsonRpcDispatcher
 import type { McpToolSurface } from "./McpToolCatalog.js";
 
 /** The runtime members an MCP surface dispatches to. */
-export type McpDispatcherRuntime = Pick<
-  MantleRuntime,
-  | "schemas"
-  | "getEntry"
-  | "createDraft"
-  | "updateDraft"
-  | "requestPublish"
-  | "unpublish"
-  | "archive"
-  | "deleteEntry"
-  | "executeView"
-  | "invokeTrigger"
-> & {
-  readonly media: Pick<MantleMedia, "createUpload" | "commitUpload"> | null;
-};
-
+export type McpDispatcherRuntime = CapabilityRuntime;
 export interface CreateMcpDispatcherOptions {
   readonly surface: McpToolSurface;
   /** Declared `media.purposes`. Media tools are served only when the runtime
@@ -43,25 +28,10 @@ export function createMcpDispatcher(
   options: CreateMcpDispatcherOptions,
 ): McpJsonRpcDispatcher {
   const { surface } = options;
-  const purposes = options.mediaPurposes ?? [];
-  const media = runtime.media && purposes.length > 0
-    ? { createUpload: runtime.media.createUpload, commitUpload: runtime.media.commitUpload, purposes }
-    : undefined;
+  const { useCases, mediaPurposes } = capabilityUseCases(runtime, options.mediaPurposes);
+  const media = useCases.media && mediaPurposes ? { ...useCases.media, purposes: mediaPurposes } : undefined;
   return new McpJsonRpcDispatcher(
-    {
-      getEntry: runtime.getEntry,
-      createDraft: runtime.createDraft,
-      updateDraft: runtime.updateDraft,
-      requestPublish: runtime.requestPublish,
-      unpublish: runtime.unpublish,
-      archive: runtime.archive,
-      deleteEntry: runtime.deleteEntry,
-      executeView: {
-        execute: (request) => runtime.executeView({ ...request, view: request.view.metadata.name }),
-      },
-      invokeTrigger: { execute: (request) => runtime.invokeTrigger(request) },
-      media,
-    },
+    { ...useCases, media },
     [...runtime.schemas.values()],
     {
       surface,

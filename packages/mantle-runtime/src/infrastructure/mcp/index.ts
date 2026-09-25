@@ -1,10 +1,7 @@
 export {
-  GENERIC_TOOLS,
-  CREATE_DRAFT_PREFIX,
-  UPDATE_DRAFT_PREFIX,
   buildMcpToolCatalog,
   buildMcpAuditOperationIdResolver,
-  extractCollectionSegment,
+  toMcpToolDefinition,
   type McpToolDefinition,
 } from "./McpToolCatalog.js";
 export {

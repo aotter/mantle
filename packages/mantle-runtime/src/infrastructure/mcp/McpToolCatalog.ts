@@ -1,52 +1,17 @@
+import type { MediaPurposePolicy, SchemaManifest } from "@aotter/mantle-spec";
+import type { RuntimeCallableCapability } from "../../domain/service/CallableCapabilityProjector.js";
 import {
-  MANTLE_BIND_KEYWORD,
-  MCP_CREATE_DRAFT_PREFIX,
-  MCP_CREATE_RECORD_PREFIX,
-  MCP_QUERY_VIEW_PREFIX,
-  MCP_UPDATE_DRAFT_PREFIX,
-  MCP_UPDATE_RECORD_PREFIX,
-  mcpToolNameSegment,
-  expandPolicyRequired,
-  resolveLifecycle,
-  schemaSortableFields,
-  resolveLocalizedText,
-  type JsonSchema,
-  type MediaPurposePolicy,
-  type SchemaManifest,
-} from "@aotter/mantle-spec";
-import type {
-  ProcedureCallableCapability,
-  RuntimeCallableCapability,
-  ViewCallableCapability,
-} from "../../domain/service/CallableCapabilityProjector.js";
+  buildCapabilityCatalog,
+  type Capability,
+  type CapabilityHints,
+  type CapabilitySurface,
+} from "../../domain/service/CapabilityCatalog.js";
 import { projectMcpOutputSchema } from "./McpOutputSchema.js";
 
 /**
- * MCP tool catalog. Mix of generic lifecycle tools plus per-collection emitted authoring
- * tools (`create_draft_*` / `update_draft_*` for authored content,
- * `create_record_*` / `update_record_*` for operational records)
- * with the Schema's properties inlined into the tool's `inputSchema`
- * so MCP clients (LLM agents) see typed authoring contracts without
- * a separate `get_schema` round trip.
- *
- * Per-collection emission rules (POC ADR-0014 + PR #48 collision fix):
- *
- *   - tool name suffix = `Schema.metadata.name` lowercased + `kebab-`
- *     to-`snake_` (`post-translations` → `post_translations`)
- *   - input schema = `Schema.spec.schema.properties` minus any
- *     property carrying `x-mantle-bind` (those are server-stamped and
- *     the agent must not send them)
- *   - `required` = intersection of `Schema.spec.schema.required` with
- *     the surviving authoring fields
- *   - each update tool adds `id` + `expected_version` to the schema
- *     and to `required`
- *   - the dispatcher unwraps the typed top-level fields back into the
- *     chokepoint's `data` arg — the wire surface is flatter than
- *     `{ data: {...} }`, the storage shape is unchanged.
- *
- * Two Schemas that mangle to the same tool-name suffix (`foo-bar` and
- * `foo_bar` both → `foo_bar`) are caught at boot with
- * `MCP_TOOL_NAME_COLLISION`.
+ * MCP wire shape of one catalog capability. Semantics (names, schemas,
+ * descriptions, role floors) come from `CapabilityCatalog`; this module only
+ * renames fields for `tools/list`.
  */
 export interface McpToolDefinition {
   readonly name: string;
@@ -69,542 +34,64 @@ export interface McpToolAnnotations {
   readonly openWorldHint?: boolean;
 }
 
+export type McpToolSurface = CapabilitySurface;
+
+export function toMcpToolDefinition(capability: Capability): McpToolDefinition {
+  const outputSchema = capability.outputSchema && projectMcpOutputSchema(capability.outputSchema);
+  return {
+    name: capability.name,
+    ...(capability.title ? { title: capability.title } : {}),
+    description: capability.description,
+    inputSchema: capability.inputSchema,
+    ...(outputSchema ? { outputSchema } : {}),
+    ...(capability.hints ? { annotations: toMcpAnnotations(capability.hints) } : {}),
+  };
+}
+
+/** Keeps the hint order, so the wire order stays stable. */
+function toMcpAnnotations(hints: CapabilityHints): McpToolAnnotations {
+  return Object.fromEntries(Object.entries(hints).map(([key, value]) => [`${key}Hint`, value]));
+}
+
+export interface BuildMcpToolCatalogOpts {
+  /** When true, registers `create_media_upload` + `commit_media_upload`. */
+  readonly mediaEnabled?: boolean;
+  /** Declared `media.purposes`, inlined into `create_media_upload`. */
+  readonly mediaPurposes?: readonly MediaPurposePolicy[];
+  readonly surface?: McpToolSurface;
+  /** Sealed-plan callable projection. */
+  readonly capabilities?: readonly RuntimeCallableCapability[];
+}
+
+/** `tools/list` for one surface. Kept for the hand-written dispatcher and
+ *  Admin WebMCP until both move to `@aotter/mantle-mcp` (#1131). */
+export function buildMcpToolCatalog(
+  schemas: ReadonlyArray<SchemaManifest>,
+  opts: BuildMcpToolCatalogOpts = {},
+): readonly McpToolDefinition[] {
+  return buildCapabilityCatalog(schemas, {
+    surface: opts.surface ?? "staff",
+    callables: opts.capabilities,
+    mediaPurposes: opts.mediaEnabled ? opts.mediaPurposes ?? [] : undefined,
+  }).capabilities.map(toMcpToolDefinition);
+}
+
 /** Resolve each tool's declared correlation argument once at catalog build. */
 export function buildMcpAuditOperationIdResolver(
   tools: readonly McpToolDefinition[],
 ): (tool: string, args: Readonly<Record<string, unknown>>) => string | null {
-  const argumentsByTool = new Map(tools.map((tool) => [
-    tool.name,
-    idempotencyKeys(tool.inputSchema)[0] ?? "operationId",
-  ]));
+  const argumentsByTool = new Map(tools.map((tool) => [tool.name, idempotencyKey(tool.inputSchema)]));
   return (tool, args) => {
     const value = args[argumentsByTool.get(tool) ?? "operationId"];
     return typeof value === "string" ? value : null;
   };
 }
 
-export const COMMIT_MEDIA_UPLOAD_TOOL: McpToolDefinition = {
-  name: "commit_media_upload",
-  annotations: { readOnlyHint: false },
-  description:
-    "Commit a previously-PUT variant bundle. Verifies every variant landed at the storage backend (HEAD + bytes per declared mime) and writes the committed MediaAsset to the media_assets table. Returns the asset with its variants populated; write the returned MediaAsset.id into the relevant media asset id field via the authoring tools. Only registered when the runtime has a media storage adapter bound and a media.purposes taxonomy declared.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      uploadGroupId: {
-        type: "string",
-        description:
-          "Logical asset id returned by create_media_upload as `uploadGroupId`; passed verbatim to commit.",
-      },
-      alt: { type: "string" },
-      caption: { type: "string" },
-    },
-    required: ["uploadGroupId"],
-  },
-};
-
-function buildMediaTools(
-  mediaPurposes: readonly MediaPurposePolicy[],
-): readonly McpToolDefinition[] {
-  return [
-    buildCreateMediaUploadTool(mediaPurposes),
-    COMMIT_MEDIA_UPLOAD_TOOL,
-  ];
-}
-
-function buildCreateMediaUploadTool(
-  mediaPurposes: readonly MediaPurposePolicy[] = [],
-): McpToolDefinition {
-  const purpose: Record<string, unknown> = {
-    type: "string",
-    description:
-      "Required purpose tag declared by this starter. Determines the required variant mime set + per-mime byte caps.",
-  };
-  if (mediaPurposes.length > 0) purpose["enum"] = mediaPurposes.map((p) => p.name);
-
-  const policySummary =
-    mediaPurposes.length > 0
-      ? "Purpose policies in this deployment:\n" +
-        mediaPurposes
-          .map((p) => {
-            const slots = expandPolicyRequired(p.required)
-              .map(
-                (mimes, i) =>
-                  `slot ${i}: ${
-                    mimes.length > 1
-                      ? `one of [${mimes.join(", ")}]`
-                      : mimes[0]
-                  }`,
-              )
-              .join("; ");
-            const caps = Object.entries(p.maxBytes)
-              .map(([m, b]) => `${m}=${b}`)
-              .join(", ");
-            return `  • ${p.name} upload rules — ${slots}; choose exactly one mime per slot from this live policy; maxBytes: ${caps}`;
-          })
-          .join("\n")
-      : "";
-
-  return {
-    name: "create_media_upload",
-    annotations: { readOnlyHint: false },
-    description:
-      "Issue short-lived PUT capabilities for every variant of one logical media asset. " +
-      "If the user provides an image in chat or the current session, the MCP client/agent must handle it directly: read the attachment bytes in the agent runtime, prepare the required variants locally, call create_media_upload with the variant manifest and byte sizes, HTTP PUT each returned uploadUrl using requiredHeaders, then call commit_media_upload. Do not ask the user to open a terminal. Do not send image bytes through MCP; this server intentionally does not expose a base64 upload tool. " +
-      "Multi-variant by default (#272): one call yields N upload URLs (one per declared slot); the host may use presigned R2 URLs or authenticated same-origin Worker routes. " +
-      "Per-asset, the agent picks ONE mime per slot from that slot's acceptable set (#282); a " +
-      "single purpose declared with slot 0 = `image/jpeg,image/png,image/gif` accepts jpeg photo primary, png alpha/logo primary, or gif primary when animation is preserved. The primary/fallback variant is not always JPEG. Do NOT default to JPEG just because it appears in the policy: read the upload rules below and choose the mime that preserves the source. " +
-      "Preserve source semantics while preparing variants: opaque photos may use JPEG primary plus WebP/AVIF alternates; transparent PNG/logo artwork must keep alpha using PNG primary plus alpha-preserving WebP/AVIF; animated GIFs must stay animated in every generated variant. If the available processor would flatten animation or drop transparency, stop and report that limitation instead of uploading degraded media. maxBytes is a hard safety cap, not a web-performance target. If the source or prepared variants are obviously wasteful for website delivery, ask the user in chat before uploading whether to optimize/compress/resize for faster page loads while preserving alpha/animation semantics. " +
-      "Optimization runs agent-side with whatever image processor the MCP client has available; prefer an already-installed dependency, otherwise install a standard image processing package in the agent workspace if the host permits package installs. Node agents should prefer sharp; Python agents should prefer Pillow. If the host supports reusable agent memory or skills, remember this media-variant workflow for reuse. If the current MCP host/runtime harness blocks HTTP PUT requests to the returned uploadUrl, tell the user this host cannot complete the media upload and suggest retrying from an agent/runtime that allows outbound HTTP file uploads; do not ask the user to run terminal upload commands. Send requiredHeaders and, for same-origin URLs, the authenticated session. The Worker enforces policy and may relay the bytes to storage. After uploading every variant, call commit_media_upload with the returned uploadGroupId. Only registered when the runtime " +
-      "has a media storage adapter bound and a media.purposes taxonomy declared." +
-      (policySummary ? `\n\n${policySummary}` : ""),
-    inputSchema: {
-      type: "object",
-      properties: {
-        filename: {
-          type: "string",
-          description:
-            "Original filename — used in object metadata only; storage keys are server-generated.",
-        },
-        purpose,
-        variants: {
-          type: "array",
-          minItems: 1,
-          description:
-            "One entry per format the agent has prepared. Must cover every slot in the purpose's `required` set. Read the dynamic upload rules in the tool description: if a slot lists alternatives like `image/jpeg,image/png,image/gif`, choose exactly one of them for this asset. Use JPEG only for opaque photos, PNG when alpha/transparency must be preserved, and GIF only when animation is preserved. Modern formats (avif/webp) MUST NOT exceed the fallback's byteSize — the runtime rejects suspicious sizing.",
-          items: {
-            type: "object",
-            properties: {
-              mimeType: {
-                type: "string",
-                description:
-                  "Content-Type. Allowlist: image/png, image/jpeg, image/webp, image/gif, image/avif. SVG only with adapter opt-in.",
-              },
-              byteSize: {
-                type: "number",
-                description:
-                  "Caller-declared payload size. Verified against the purpose's `maxBytes[mimeType]` before an upload URL is issued.",
-              },
-              role: {
-                type: "string",
-                enum: ["primary", "alternate", "fallback"],
-                description:
-                  "`primary` is the `<img>` fallback chosen from the purpose's live policy for this asset; it is not always JPEG. `alternate` is preferred via `<picture><source>` (avif/webp).",
-              },
-            },
-            required: ["mimeType", "byteSize", "role"],
-          },
-        },
-        alt: { type: "string" },
-        caption: { type: "string" },
-      },
-      required: ["filename", "purpose", "variants"],
-    },
-  };
-}
-
-export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
-  {
-    name: "request_publish",
-    annotations: { readOnlyHint: false },
-    description: "Publish a draft immediately. Not available for operational records.",
-    inputSchema: {
-      type: "object",
-      properties: { collection: { type: "string" }, id: { type: "string" } },
-      required: ["collection", "id"],
-    },
-  },
-  {
-    name: "unpublish_entry",
-    annotations: { readOnlyHint: false },
-    description: "Unpublish a content entry back to draft before editing. Not available for operational records.",
-    inputSchema: {
-      type: "object",
-      properties: { collection: { type: "string" }, id: { type: "string" } },
-      required: ["collection", "id"],
-    },
-  },
-  {
-    name: "archive_entry",
-    annotations: { readOnlyHint: false },
-    description: "Archive a content entry. Not available for operational records.",
-    inputSchema: {
-      type: "object",
-      properties: { collection: { type: "string" }, id: { type: "string" } },
-      required: ["collection", "id"],
-    },
-  },
-  {
-    name: "delete_entry",
-    annotations: { readOnlyHint: false, destructiveHint: true },
-    description: "Permanently delete an entry. For content lifecycles, prefer archive_entry when reversibility matters.",
-    inputSchema: {
-      type: "object",
-      properties: { collection: { type: "string" }, id: { type: "string" } },
-      required: ["collection", "id"],
-    },
-  },
-];
-
-export const CREATE_DRAFT_PREFIX = MCP_CREATE_DRAFT_PREFIX;
-export const UPDATE_DRAFT_PREFIX = MCP_UPDATE_DRAFT_PREFIX;
-export const CREATE_RECORD_PREFIX = MCP_CREATE_RECORD_PREFIX;
-export const UPDATE_RECORD_PREFIX = MCP_UPDATE_RECORD_PREFIX;
-export const QUERY_VIEW_PREFIX = MCP_QUERY_VIEW_PREFIX;
-
-export type McpToolSurface = "staff" | "public";
-
-/**
- * Build the full tool catalog from the manifest's Schemas. The
- * runtime constructs this once at boot (post-validation) and the
- * dispatcher reads it for `tools/list` + name-based routing.
- */
-export interface BuildMcpToolCatalogOpts {
-  /** When true, registers `create_media_upload` + `commit_media_upload`.
-   *  Adapters set this from the runtime's `media` field (non-null when
-   *  a `mediaStorage` was bound). */
-  readonly mediaEnabled?: boolean;
-  /** Declared `siteDefaults.media.purposes`; when supplied, the
-   *  `create_media_upload` schema marks purpose as required and emits
-   *  this set as an enum so agents can self-correct from tools/list.
-   *  The policy summary (required mimes + per-mime byte caps) is also
-   *  inlined into the tool description so agents see the contract
-   *  without a separate `get_schema` round trip. */
-  readonly mediaPurposes?: readonly MediaPurposePolicy[];
-  /** Staff surface exposes authoring / lifecycle tools. Public
-   *  surface exposes only read-only View queries for v0.1. */
-  readonly surface?: McpToolSurface;
-  /** Sealed-plan callable projection. The same descriptors drive
-   *  discovery and tools/call routing. */
-  readonly capabilities?: readonly RuntimeCallableCapability[];
-}
-
-export function buildMcpToolCatalog(
-  schemas: ReadonlyArray<SchemaManifest>,
-  opts: BuildMcpToolCatalogOpts = {},
-): readonly McpToolDefinition[] {
-  const surface = opts.surface ?? "staff";
-  const capabilities = (opts.capabilities ?? []).filter((item) => item.surface === surface);
-  const callableTools = capabilities.map(buildCallableTool);
-  if (surface === "public") {
-    return collapseToolSchemaAnnotations(callableTools);
-  }
-  const writable = schemas.filter((s) => s.spec.schema.readOnly !== true);
-  const content = writable.filter((s) => resolveLifecycle(s) !== "operational");
-  const out: McpToolDefinition[] = GENERIC_TOOLS.flatMap((tool) => {
-    const targets = CONTENT_LIFECYCLE_TOOLS.has(tool.name) ? content
-      : tool.name === "delete_entry" ? writable : schemas;
-    if (targets.length === 0) return [];
-    const summary = targets.map((s) =>
-      `${s.metadata.name} (${resolveLifecycle(s)}${s.spec.schema.readOnly ? "; Procedure-only writes" : ""}; search: ${["id", ...(s.spec.searchableFields ?? [])].join(", ")}; sort: ${["id", "status", "updatedAt", ...schemaSortableFields(s)].join(", ")})`,
-    ).join("; ");
-    return [{ ...tool, description: `${tool.description} Collections: ${summary}. Prefer declared business Procedures and Views when available.`,
-    }];
-  });
-  if (opts.mediaEnabled) out.push(...buildMediaTools(opts.mediaPurposes ?? []));
-  for (const s of schemas) {
-    if (s.spec.schema.readOnly === true) continue;
-    out.push(buildCreateTool(s));
-    out.push(buildUpdateTool(s));
-  }
-  out.push(...callableTools);
-  return collapseToolSchemaAnnotations(out);
-}
-
-export const CONTENT_LIFECYCLE_TOOLS: ReadonlySet<string> = new Set([
-  "request_publish", "unpublish_entry", "archive_entry",
-]);
-
-function collapseToolSchemaAnnotations(
-  tools: readonly McpToolDefinition[],
-): readonly McpToolDefinition[] {
-  return tools.map((tool) => ({
-    ...tool,
-    inputSchema: collapseSchemaAnnotations(tool.inputSchema),
-  }));
-}
-
-function collapseSchemaAnnotations(
-  schema: Record<string, unknown>,
-): Record<string, unknown> {
-  const out = { ...schema };
-  for (const keyword of ["title", "description"] as const) {
-    const value = schema[keyword] as JsonSchema[typeof keyword];
-    if (value !== undefined) out[keyword] = resolveLocalizedText(value, "en");
-  }
-  for (const keyword of [
-    "properties",
-    "patternProperties",
-    "dependentSchemas",
-    "$defs",
-    "definitions",
-  ]) {
-    const children = schema[keyword];
-    if (!isRecord(children)) continue;
-    out[keyword] = Object.fromEntries(
-      Object.entries(children).map(([name, child]) => [
-        name,
-        isRecord(child) ? collapseSchemaAnnotations(child) : child,
-      ]),
-    );
-  }
-  for (const keyword of [
-    "additionalProperties",
-    "unevaluatedProperties",
-    "unevaluatedItems",
-    "propertyNames",
-    "items",
-    "contains",
-    "not",
-    "if",
-    "then",
-    "else",
-    "contentSchema",
-  ]) {
-    const child = schema[keyword];
-    if (isRecord(child)) out[keyword] = collapseSchemaAnnotations(child);
-  }
-  for (const keyword of ["prefixItems", "allOf", "anyOf", "oneOf"]) {
-    const children = schema[keyword];
-    if (!Array.isArray(children)) continue;
-    out[keyword] = children.map((child) =>
-      isRecord(child) ? collapseSchemaAnnotations(child) : child,
-    );
-  }
-  return out;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-const OBSERVED_VERSION_DESCRIPTION =
-  "Observed native entry.version at read time (not version+1). A successful write still bumps storage to this value + 1. First-party Admin/SDK bind this field automatically; other callers must send the version they read.";
-
-/** Surface `x-mcp-hint: idempotency-key` where an agent reads: the description.
- *  The hint lives on the raw inputSchema, but nothing there says a retry must
- *  reuse the value — and a fresh uuid re-executes the operation. */
-function idempotencySummary(inputSchema: unknown): string {
-  const keys = idempotencyKeys(inputSchema);
-  if (keys.length === 0) return "";
-  return ` Idempotency: retries must reuse the same ${keys.join(" / ")}; a new value is a new operation.`;
-}
-
-function idempotencyKeys(inputSchema: unknown): string[] {
-  const properties = isRecord(inputSchema) ? inputSchema["properties"] : undefined;
-  if (!isRecord(properties)) return [];
-  return Object.entries(properties)
-    .filter(([, property]) => isRecord(property) && property["x-mcp-hint"] === "idempotency-key")
-    .map(([name]) => name);
-}
-
-function annotateExpectedVersion(
-  schema: Record<string, unknown>,
-): Record<string, unknown> {
-  const properties = schema["properties"];
-  if (!isRecord(properties) || !isRecord(properties["expectedVersion"])) return schema;
-  const current = properties["expectedVersion"];
-  const description = current["description"];
-  if (typeof description === "string" && description.trim()) return schema;
-  return {
-    ...schema,
-    properties: {
-      ...properties,
-      expectedVersion: { ...current, description: OBSERVED_VERSION_DESCRIPTION },
-    },
-  };
-}
-
-/** Re-export the naming util from `domain/service/` so existing
- *  consumers of `McpToolCatalog` (the dispatcher) keep their import
- *  surface stable. */
-/** Inverse routing: given a tool name and its prefix, recover the
- *  segment. Returns `null` if the name doesn't carry the prefix. */
-export function extractCollectionSegment(
-  toolName: string,
-  prefix: string,
-): string | null {
-  if (!toolName.startsWith(prefix)) return null;
-  const segment = toolName.slice(prefix.length);
-  return segment.length === 0 ? null : segment;
-}
-
-function buildCreateTool(schema: SchemaManifest): McpToolDefinition {
-  const { properties, required } = filterAuthoringFields(schema);
-  const inputSchema: Record<string, unknown> = {
-    type: "object",
-    properties,
-  };
-  if (required.length > 0) inputSchema["required"] = required;
-  return {
-    name: `${resolveLifecycle(schema) === "operational" ? CREATE_RECORD_PREFIX : CREATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
-    description: describeCreateTool(schema),
-    inputSchema,
-    annotations: { readOnlyHint: false },
-  };
-}
-
-function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
-  const { properties, required } = filterAuthoringFields(schema);
-  const inputSchema: Record<string, unknown> = {
-    type: "object",
-    properties: {
-      id: { type: "string", description: "Entry id to update." },
-      expected_version: {
-        type: "number",
-        description:
-          "Observed native entry.version at read time (not version+1). A successful write still bumps storage to this value + 1.",
-      },
-      ...properties,
-    },
-    required: ["id", "expected_version", ...required],
-  };
-  return {
-    name: `${resolveLifecycle(schema) === "operational" ? UPDATE_RECORD_PREFIX : UPDATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
-    description: describeUpdateTool(schema),
-    inputSchema,
-    annotations: { readOnlyHint: false },
-  };
-}
-
-/**
- * Per-Procedure MCP tool factory (#281). The Procedure's `input`
- * JSON Schema becomes the tool's `inputSchema`; localized schema
- * annotations are collapsed at the catalog boundary. The
- * description comes from the projected Procedure contract. `output` is not surfaced — MCP
- * clients infer the response shape from the `tools/call` result.
- *
- * Naming: the tool name is the Procedure's metadata name mangled
- * through `mcpToolNameSegment` (lowercase + `-`→`_`). Boot validates
- * that the mangled name does not collide with generic tools, media
- * tools, or per-schema authoring tools.
- */
-function buildCallableTool(capability: RuntimeCallableCapability): McpToolDefinition {
-  return capability.kind === "view"
-    ? buildQueryViewTool(capability)
-    : buildProcedureTool(capability);
-}
-
-function buildProcedureTool(capability: ProcedureCallableCapability): McpToolDefinition {
-  const annotations = procedureAnnotations(capability);
-  const outputSchema = projectMcpOutputSchema(capability.outputSchema);
-  return {
-    name: capability.name,
-    ...(capability.title ? { title: capability.title } : {}),
-    description: `${capability.description}${idempotencySummary(capability.inputSchema)}${authorizationSummary(capability.manifest.spec.requires)}`,
-    inputSchema: annotateExpectedVersion(
-      capability.inputSchema as Record<string, unknown>,
-    ),
-    ...(outputSchema ? { outputSchema } : {}),
-    ...(annotations ? { annotations } : {}),
-  };
-}
-
-/**
- * Only what is provable, plus what the author declared (#972). A `ref`
- * handler is a black box, so nothing is inferred for it beyond the
- * idempotency key; a builtin handler always writes, and `delete` destroys.
- * Absent hints keep the MCP spec's conservative defaults.
- */
-function procedureAnnotations(capability: ProcedureCallableCapability): McpToolAnnotations | undefined {
-  const spec = capability.manifest.spec;
-  const inferred: Record<string, boolean> = {};
-  if (spec.handler.kind === "builtin") {
-    inferred["readOnlyHint"] = false;
-    if (spec.handler.op === "delete") inferred["destructiveHint"] = true;
-  }
-  if (idempotencyKeys(capability.inputSchema).length > 0) inferred["idempotentHint"] = true;
-  const declared = spec.mcp ?? {};
-  const merged: Record<string, boolean> = { ...inferred };
-  for (const key of ["readOnlyHint", "destructiveHint", "openWorldHint"] as const) {
-    if (declared[key] !== undefined) merged[key] = declared[key];
-  }
-  return Object.keys(merged).length > 0 ? (merged as McpToolAnnotations) : undefined;
-}
-
-function buildQueryViewTool(capability: ViewCallableCapability): McpToolDefinition {
-  return {
-    name: capability.name,
-    ...(capability.title ? { title: capability.title } : {}),
-    description: `${capability.description}${authorizationSummary(capability.manifest.spec.requires)}`,
-    inputSchema: capability.inputSchema as Record<string, unknown>,
-    annotations: { readOnlyHint: true },
-  };
-}
-
-function authorizationSummary(
-  requires:
-    | ProcedureCallableCapability["manifest"]["spec"]["requires"]
-    | ViewCallableCapability["manifest"]["spec"]["requires"],
-): string {
-  if (!requires) return "";
-  const scopes = (requires.auth?.all ?? []).flatMap((predicate) =>
-    typeof predicate === "object" && "ctx.auth.scope" in predicate
-      ? [predicate["ctx.auth.scope"]]
-      : [],
-  );
-  const parts: string[] = [];
-  if (requires.auth?.all?.length) {
-    parts.push(
-      scopes.length
-        ? `authorization is enforced at call time; required scopes: ${scopes.join(", ")}`
-        : "authorization is enforced at call time",
-    );
-  }
-  if (requires.guard) {
-    parts.push(`dynamic guard '${requires.guard.procedure}' runs on every call`);
-  }
-  return parts.length ? ` Authorization: ${parts.join("; ")}.` : "";
-}
-
-function describeCreateTool(schema: SchemaManifest): string {
-  const base = resolveLifecycle(schema) === "operational"
-    ? `Create a live operational record in '${schema.metadata.name}'.`
-    : `Create a new draft entry in '${schema.metadata.name}'.`;
-  const description = resolveLocalizedText(schema.spec.description, "en");
-  return description ? `${base} ${description}` : base;
-}
-
-function describeUpdateTool(schema: SchemaManifest): string {
-  const occ =
-    " Send expected_version as the observed native entry.version from read time, not version+1.";
-  const base = resolveLifecycle(schema) === "operational"
-    ? `Update an operational record in '${schema.metadata.name}' with optimistic-concurrency check.${occ}`
-    : `Update a draft entry in '${schema.metadata.name}' with optimistic-concurrency check.${occ}`;
-  const description = resolveLocalizedText(schema.spec.description, "en");
-  return description ? `${base} ${description}` : base;
-}
-
-interface AuthoringFields {
-  readonly properties: Record<string, unknown>;
-  readonly required: readonly string[];
-}
-
-/**
- * Strip server-stamped properties (those carrying `x-mantle-bind`) from
- * the Schema's authoring surface. The agent must not send these — the
- * builtin op projection drops them anyway, but exposing them in the
- * tool schema would invite confusion.
- *
- * The remaining `required` is the intersection of the original
- * `required` array and the surviving property keys.
- */
-function filterAuthoringFields(schema: SchemaManifest): AuthoringFields {
-  const props =
-    (schema.spec.schema as { properties?: Record<string, unknown> }).properties ?? {};
-  const originalRequired =
-    (schema.spec.schema as { required?: readonly string[] }).required ?? [];
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
-  for (const [key, propDef] of Object.entries(props)) {
-    if (hasMantleBind(propDef)) continue;
-    properties[key] = propDef;
-    if (originalRequired.includes(key)) required.push(key);
-  }
-  return { properties, required };
-}
-
-function hasMantleBind(propDef: unknown): boolean {
-  if (typeof propDef !== "object" || propDef === null) return false;
-  return MANTLE_BIND_KEYWORD in (propDef as Record<string, unknown>);
+function idempotencyKey(inputSchema: Record<string, unknown>): string {
+  const properties = inputSchema["properties"];
+  if (typeof properties !== "object" || properties === null) return "operationId";
+  const match = Object.entries(properties as Record<string, unknown>).find(([, property]) =>
+    typeof property === "object" && property !== null
+    && (property as Record<string, unknown>)["x-mcp-hint"] === "idempotency-key");
+  return match?.[0] ?? "operationId";
 }

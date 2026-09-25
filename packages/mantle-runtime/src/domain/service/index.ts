@@ -15,3 +15,4 @@ export * from "./RuntimePlanCompiler.js";
 export * from "./CallableCapabilityProjector.js";
 export * from "./BuiltinProjector.js";
 export * from "./AuthPredicateEvaluator.js";
+export * from "./CapabilityCatalog.js";

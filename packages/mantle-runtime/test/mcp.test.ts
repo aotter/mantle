@@ -948,6 +948,20 @@ describe("McpJsonRpcDispatcher", () => {
     expect(body.error.code).toBe(-32601);
   });
 
+  it("malformed arguments are an INPUT_VALIDATION_FAILED diagnostic, not a transport error", async () => {
+    const { dispatcher } = buildHarness();
+    const res = await dispatcher.dispatch(
+      jsonRpcReq("tools/call", { name: "request_publish", arguments: { collection: "posts" } }),
+      staffCtx(),
+    );
+    const body = (await res.json()) as { error: { code: number; data: { code: string; path: string } } };
+    expect(body.error.code).toBe(-32000);
+    expect(body.error.data).toMatchObject({
+      code: "INPUT_VALIDATION_FAILED",
+      path: "MCP request_publish#/arguments/id",
+    });
+  });
+
   it("create_draft_<unknown> returns -32601 unknown tool", async () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(
