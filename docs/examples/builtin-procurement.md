@@ -48,6 +48,7 @@ metadata:
   name: my-requisitions
 spec:
   title: My requisitions
+  description: The signed-in member's own purchase requisitions and their approval status.
   surface: public
   from: purchase-requisitions
   requires:
@@ -66,6 +67,7 @@ metadata:
   name: pending-approvals
 spec:
   title: Pending approvals
+  description: Purchase requisitions waiting for a staff approval decision, soonest need-by date first.
   surface: staff
   from: purchase-requisitions
   requires:

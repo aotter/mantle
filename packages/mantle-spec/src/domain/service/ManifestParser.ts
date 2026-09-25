@@ -854,7 +854,7 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "uiSchema", "from", "sql", "surface", "cache", "requires", "filter", "fields", "orderBy", "limit", "params"],
+    ["title", "description", "uiSchema", "from", "sql", "surface", "cache", "requires", "filter", "fields", "orderBy", "limit", "params"],
     idx,
     "/spec",
   );
@@ -863,6 +863,13 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
     idx,
     "/spec/title",
     "View.spec.title",
+    false,
+  );
+  validateLocalizedText(
+    s["description"],
+    idx,
+    "/spec/description",
+    "View.spec.description",
     false,
   );
   const hasFrom = typeof s["from"] === "string" && (s["from"] as string).length > 0;
