@@ -1,5 +1,5 @@
 import type { JsonSchema, SchemaManifest, ViewManifest } from "../model/ManifestGrammar.js";
-import { MANTLE_REF_KEYWORD, RESERVED_ENTRY_COLUMNS } from "../model/ManifestGrammar.js";
+import { RESERVED_ENTRY_COLUMNS, resolveMantleRef } from "../model/ManifestGrammar.js";
 import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
 
 export interface SchemaListFilter {
@@ -557,10 +557,10 @@ export function requiredMantleRefFields(
   const fields: Array<{ field: string; collection: string }> = [];
   for (const [field, property] of Object.entries(properties)) {
     if (!required.has(field)) continue;
-    const collection = property[MANTLE_REF_KEYWORD];
-    if (typeof collection === "string" && collection.length > 0) {
-      fields.push({ field, collection });
-    }
+    // A parent scope matches the child's value against the parent entry id,
+    // so only id references compose.
+    const ref = resolveMantleRef(property);
+    if (ref?.field === "id") fields.push({ field, collection: ref.schema });
   }
   return fields;
 }

@@ -20,6 +20,7 @@ import type {
   SiteInfo,
   StaffOperation,
 } from "../../lib/types";
+import { mantleRefOf } from "../../lib/types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1367,7 +1368,8 @@ function fieldWidget(
 }
 
 function isMediaAssetRef(schema: JsonSchema): boolean {
-  return schema["x-mantle-ref"] === "media_assets";
+  const ref = mantleRefOf(schema);
+  return ref?.schema === "media_assets" && ref.field === "id";
 }
 
 /** `x-mantle-bind` marks a Schema property the runtime stamps itself

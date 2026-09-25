@@ -2,10 +2,10 @@ import * as React from "react";
 import { Check, Copy } from "lucide-react";
 import { t } from "../app/i18n";
 import type { AdminLanguage } from "../app/preferences";
-import type { JsonSchema } from "../lib/types";
+import { mantleRefOf, type JsonSchema } from "../lib/types";
 
 export function isIdField(name: string, schema?: JsonSchema): boolean {
-  return name === "id" || /(?:Id|_id)$/.test(name) || typeof schema?.["x-mantle-ref"] === "string";
+  return name === "id" || /(?:Id|_id)$/.test(name) || mantleRefOf(schema)?.field === "id";
 }
 
 export function shortenId(value: string): string {

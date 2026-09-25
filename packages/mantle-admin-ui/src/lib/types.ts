@@ -71,9 +71,18 @@ export interface JsonSchema {
   /** Optional JSON Schema field label. */
   title?: LocalizedText;
   "x-mantle-bind"?: string;
-  "x-mantle-ref"?: string;
+  "x-mantle-ref"?: string | { schema: string; field: string };
   "x-mcp-hint"?: string;
   [key: string]: unknown;
+}
+
+/** Either `x-mantle-ref` form as `{ schema, field }`; the string form means
+ *  the value is the target entry's `id`. */
+export function mantleRefOf(schema: JsonSchema | undefined): { schema: string; field: string } | null {
+  const ref = schema?.["x-mantle-ref"];
+  if (typeof ref === "string") return ref ? { schema: ref, field: "id" } : null;
+  if (ref && typeof ref === "object" && typeof ref.schema === "string" && typeof ref.field === "string") return ref;
+  return null;
 }
 
 export interface EntryEditorCollection extends Collection {
