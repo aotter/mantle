@@ -112,6 +112,8 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
       }),
     enabled: !!view && canQuery,
   });
+  const { refetch: refetchView } = query;
+  const refetchRows = React.useCallback(() => { void refetchView(); }, [refetchView]);
 
   if (viewsQuery.isLoading || collectionsQuery.isLoading) {
     return <Skeleton className="h-64 w-full" />;
@@ -127,8 +129,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
 
   const rows = query.data?.data.rows ?? [];
   const columns = viewColumns(view, rows);
-  const rowActions = runnableRowActions(view.rowActions, operationsQuery.data);
-  const refetchRows = () => { void query.refetch(); };
+  const rowActions = view.from ? runnableRowActions(view.rowActions, operationsQuery.data) : [];
   const viewTitle = resolveLocalizedText(view.title, language, canonical) ?? fieldLabel(view.name);
   const exportHref = viewExportHref(name, urlParams);
 
@@ -222,7 +223,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           </TableHeader>
           <TableBody>
             {rows.map((row, index) => (
-              <TableRow key={index}>
+              <TableRow key={typeof row["id"] === "string" ? row["id"] : index}>
                 {columns.map((col) => {
                   const schema = sourceSchema?.properties?.[col];
                   const value = row[col];
@@ -234,10 +235,10 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                     </TableCell>
                   );
                 })}
-                {rowActions.length > 0 && view.from ? (
+                {rowActions.length > 0 ? (
                   <TableCell className="w-10 text-right">
                     <ViewRowActions
-                      collection={view.from}
+                      collection={view.from!}
                       row={row}
                       actions={rowActions}
                       language={language}

@@ -13,6 +13,7 @@ it("runs a View row action with the reviewed version and asks for a review when 
     page.setDefaultTimeout(8_000);
     await page.addInitScript(() => { localStorage.setItem("cms.preference.language", "en"); history.replaceState(null, "", "/admin/views/pending"); });
     let readVersion = 3;
+    let viewFetches = 0;
     const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
     await page.route("**/admin/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname.replace("/admin/api", "");
@@ -45,11 +46,12 @@ it("runs a View row action with the reviewed version and asks for a review when 
           } },
         }] }
         : path === "/views-manifest" ? { views: [{
-          name: "pending", title: "Pending approvals", surface: "staff", from: "requisitions", params: null,
+          name: "pending", title: "Pending approvals", surface: "staff", from: "requisitions",
+          params: { type: "object", properties: { q: { type: "string" } } },
           fields: ["id", "version", "item"], list: { columns: ["item"], searchFields: [], filterFields: [] },
           rowActions: [{ capability: "review_requisition", procedure: "review-requisition", bind: [{ input: "id", field: "id" }], version: "expectedVersion", mutates: true }],
         }] }
-        : path === "/views/pending" ? { ok: true, data: { rows: [{ id: "r1", version: 3, item: "Laptops" }], page: 1, show: 50, hasMore: false } }
+        : path === "/views/pending" ? (viewFetches++, { ok: true, data: { rows: [{ id: "r1", version: readVersion, item: "Laptops" }], page: 1, show: 50, hasMore: false } })
         : {};
       return route.fulfill({ json });
     });
@@ -62,14 +64,28 @@ it("runs a View row action with the reviewed version and asks for a review when 
     await dialog.getByText("From the selected row").waitFor();
     await dialog.getByRole("textbox").fill("Within budget");
     await dialog.getByRole("button", { name: "Run", exact: true }).click();
+    readVersion = 4;
     await dialog.getByText("Done.", { exact: true }).waitFor();
     expect(calls.map(({ name }) => name)).toEqual(["read_entry", "review_requisition"]);
+    // The list refreshes once and the finished dialog stays finished, even
+    // though the refreshed row carries a new version.
+    const fetchesAfterDone = viewFetches;
+    await page.waitForTimeout(800);
+    expect(viewFetches - fetchesAfterDone).toBeLessThanOrEqual(1);
+    expect(await dialog.getByText("Done.", { exact: true }).isVisible()).toBe(true);
+    expect(calls).toHaveLength(2);
     expect(calls[1]!.arguments).toEqual({ id: "r1", expectedVersion: 3, reviewerNote: "Within budget" });
     await dialog.getByRole("button", { name: "Close", exact: true }).first().click();
     await dialog.waitFor({ state: "hidden" });
 
+    // Cancel closes the dialog.
+    await page.getByRole("button", { name: "Row actions" }).click();
+    await page.getByRole("menuitem", { name: "Review requisition" }).click();
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
+
     // Someone else moved the entry: the reviewed version is never swapped silently.
-    readVersion = 4;
+    readVersion = 5;
     await page.getByRole("button", { name: "Row actions" }).click();
     await page.getByRole("menuitem", { name: "Review requisition" }).click();
     await dialog.getByRole("status").getByText("Someone changed this entry after you opened it.", { exact: false }).waitFor();
@@ -78,6 +94,6 @@ it("runs a View row action with the reviewed version and asks for a review when 
     await dialog.getByRole("button", { name: "Review newer version" }).click();
     await dialog.getByRole("button", { name: "Run", exact: true }).click();
     await dialog.getByText("Done.", { exact: true }).waitFor();
-    expect(calls[calls.length - 1]!.arguments).toMatchObject({ id: "r1", expectedVersion: 4 });
+    expect(calls[calls.length - 1]!.arguments).toMatchObject({ id: "r1", expectedVersion: 5 });
   } finally { await browser.close(); await server.close(); }
 }, 40_000);

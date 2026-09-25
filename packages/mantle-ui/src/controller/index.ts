@@ -51,6 +51,8 @@ export interface InteractionControllerOptions {
    * version is reviewed, so a prefill never reverts someone else's change.
    */
   readonly initialInput?: Readonly<Record<string, unknown>>;
+  /** Inputs the host fills itself (idempotency keys): sent, never shown as changes. */
+  readonly automatic?: readonly string[];
 }
 
 export type InteractionPhase =
@@ -140,7 +142,14 @@ export interface InteractionController {
 }
 
 /** Runtime codes and effect facts meaning a write may have landed (ADR-0023). */
-const UNCERTAIN_CODES: ReadonlySet<string> = new Set(["OUTCOME_UNKNOWN", "PARTIAL_FAILURE"]);
+const UNCERTAIN_CODES: ReadonlySet<string> = new Set([
+  "OUTCOME_UNKNOWN",
+  "PARTIAL_FAILURE",
+  // The handler finished, writes included, but its output was rejected.
+  "OUTPUT_VALIDATION_FAILED",
+  // An unexpected failure can follow a write.
+  "INTERNAL_ERROR",
+]);
 const EDITABLE: ReadonlySet<InteractionPhase> = new Set([
   "idle", "loading", "unreadable", "ready", "changedSinceList", "failed", "conflict", "uncertain",
 ]);
@@ -165,6 +174,9 @@ export function createInteractionController(options: InteractionControllerOption
   const targetId = listSnapshot?.id;
   const fixed = new Set([...Object.keys(bound), ...(versionInput ? [versionInput] : [])]);
   const seeded = Object.fromEntries(Object.entries(options.initialInput ?? {}).filter(([field]) => !fixed.has(field)));
+  const automatic = new Set(options.automatic ?? []);
+  const shown = (draft: Readonly<Record<string, unknown>>) =>
+    Object.fromEntries(Object.entries(draft).filter(([field]) => !automatic.has(field)));
 
   let state: InteractionState = Object.freeze({
     phase: "idle",
@@ -191,7 +203,7 @@ export function createInteractionController(options: InteractionControllerOption
     const next = { ...state, ...patch };
     state = Object.freeze({
       ...next,
-      dirty: next.touched.length > 0 && diff(next.draft, next.reviewed?.data ?? {}).length > 0,
+      dirty: next.touched.some((field) => !automatic.has(field)) && diff(shown(next.draft), next.reviewed?.data ?? {}).length > 0,
       contested: contestedFields(next),
     });
     // A listener's failure is reported, never allowed to interrupt a
@@ -341,7 +353,7 @@ export function createInteractionController(options: InteractionControllerOption
       set({ phase: submitting ? "uncertain" : "cancelled", reading: false });
     },
 
-    changes: () => diff(state.draft, state.reviewed?.data ?? {}),
+    changes: () => diff(shown(state.draft), state.reviewed?.data ?? {}),
     latestChanges() {
       if (!state.reviewed || !state.latest) return [];
       return comparable(state.reviewed, state.latest)

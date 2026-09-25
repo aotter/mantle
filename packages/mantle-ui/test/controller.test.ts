@@ -297,6 +297,24 @@ describe("createInteractionController", () => {
     expect(c.latestChanges()).toEqual([{ field: "requestStatus", before: "submitted", after: "approved" }]);
   });
 
+  it("sends automatic inputs without listing them as changes", async () => {
+    const { controller: c, invoke } = controller({ initialInput: { requestId: "k1" }, automatic: ["requestId"] });
+    await c.open();
+    expect(c.changes()).toEqual([]);
+    expect(c.getSnapshot().dirty).toBe(false);
+    await c.submit();
+    expect(invoke.mock.calls[0]![0]).toMatchObject({ requestId: "k1" });
+  });
+
+  it("treats a rejected output or an internal error after invoking as uncertain", async () => {
+    for (const code of ["OUTPUT_VALIDATION_FAILED", "INTERNAL_ERROR"]) {
+      const { controller: c } = controller({ invoke: async () => ({ ok: false, diagnostics: [{ code, message: code }] }) });
+      await c.open();
+      await c.submit();
+      expect(c.getSnapshot().phase).toBe("uncertain");
+    }
+  });
+
   it("drops bound and version keys from the initial input", () => {
     const { controller: c } = controller({ initialInput: { id: "x", expectedVersion: 1, note: "n" } });
     expect(c.getSnapshot().draft).toEqual({ note: "n" });

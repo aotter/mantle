@@ -67,9 +67,9 @@ export function ChangeDiff(props: FieldLabelProps & {
       <tbody>
         {props.changes.map((change) => (
           <tr key={change.field} className="border-t align-top">
-            <th scope="row" className="py-1 pr-2 text-left font-normal">{label(change.field)}</th>
-            <td className="py-1 pr-2 line-through decoration-muted-foreground/60">{formatValue(change.before, labels.empty)}</td>
-            <td className="py-1">{formatValue(change.after, labels.empty)}</td>
+            <th scope="row" className="py-1 pr-2 text-left font-normal break-words">{label(change.field)}</th>
+            <td className="py-1 pr-2 break-all line-through decoration-muted-foreground/60">{formatValue(change.before, labels.empty)}</td>
+            <td className="py-1 break-all">{formatValue(change.after, labels.empty)}</td>
           </tr>
         ))}
       </tbody>
@@ -167,6 +167,8 @@ export function OperationPanel(props: FieldLabelProps & {
   readonly renderResult?: (result: unknown) => ReactNode;
   /** Called when the person closes the panel after it finished or was cancelled. */
   readonly onClose?: () => void;
+  /** Called after Cancel; a dialog closes here. Defaults to showing "Cancelled". */
+  readonly onCancel?: () => void;
 }): ReactNode {
   const { controller } = props;
   const state = useInteraction(controller);
@@ -208,8 +210,11 @@ export function OperationPanel(props: FieldLabelProps & {
         : null}
       <fieldset disabled={busy || done} className="grid gap-3">{props.children}</fieldset>
       <ChangeDiff changes={controller.changes()} labels={labels} fieldLabel={props.fieldLabel} />
-      <OperationStatus controller={controller} state={state} labels={labels} fieldLabel={props.fieldLabel} />
-      <OperationOutcome state={state} labels={labels} renderResult={props.renderResult} />
+      {/* One live region that stays mounted, so screen readers announce each step. */}
+      <div aria-live="polite" className="grid gap-2">
+        <OperationStatus controller={controller} state={state} labels={labels} fieldLabel={props.fieldLabel} />
+        <OperationOutcome state={state} labels={labels} renderResult={props.renderResult} />
+      </div>
       <footer className="flex justify-end gap-2">
         {done ? (
           <button type="button" onClick={props.onClose} className="rounded-md border px-3 py-2 text-sm font-medium">{labels.close}</button>
@@ -217,7 +222,7 @@ export function OperationPanel(props: FieldLabelProps & {
           <>
             <button
               type="button"
-              onClick={() => { controller.cancel(); }}
+              onClick={() => { controller.cancel(); props.onCancel?.(); }}
               className="rounded-md border px-3 py-2 text-sm font-medium"
             >
               {labels.cancel}
