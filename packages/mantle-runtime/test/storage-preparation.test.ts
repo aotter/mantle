@@ -58,13 +58,15 @@ describe("prepareDeployment", () => {
       .get("runtime")!.store_instance_id).toBe(storeInstanceId);
     expect(db.executions.slice(before).map(({ sql }) => sql)).toEqual([
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) = 'entries' LIMIT 1",
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state')",
+      "SELECT canonical_version FROM _mantle_managed_runtime_state WHERE id = 1",
       "SELECT fingerprint, store_instance_id FROM _mantle_boot_state WHERE id = ? LIMIT 1",
     ]);
   });
 
   it("mints a store identity when upgrading an existing boot marker", async () => {
     const db = new InMemoryDatabase();
-    await db.migrations.runAll(CANONICAL_MIGRATIONS.slice(0, -1));
+    await db.migrations.runAll(CANONICAL_MIGRATIONS.slice(0, -2));
     db.native().prepare("INSERT INTO _mantle_boot_state(id, fingerprint) VALUES (?, ?)")
       .run("runtime", "legacy");
 
@@ -86,6 +88,8 @@ describe("prepareDeployment", () => {
     }
     await db.prepare("INSERT INTO _mantle_storage_state(id, fingerprint) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint")
       .bind(artifact.targetFingerprint).run();
+    await db.prepare("INSERT INTO _mantle_managed_runtime_state(id, canonical_version) VALUES (1, ?)")
+      .bind(artifact.targetCanonicalVersion).run();
 
     const adapter = new SqliteMantleStorageAdapter(db, undefined, {
       managedStorageFingerprint: artifact.targetFingerprint,
@@ -96,6 +100,68 @@ describe("prepareDeployment", () => {
     expect(storeInstanceId).toMatch(/^[0-9a-f-]{36}$/u);
     await prepareDeployment(plan, adapter);
     await expect(readStoreInstanceId(db)).resolves.toBe(storeInstanceId);
+
+    await db.prepare("UPDATE _mantle_managed_runtime_state SET canonical_version = 'old' WHERE id = 1").run();
+    await expect(prepareDeployment(plan, adapter)).rejects.toThrow("pending runtime migration");
+    await db.prepare("UPDATE _mantle_managed_runtime_state SET canonical_version = ? WHERE id = 1")
+      .bind(artifact.targetCanonicalVersion).run();
+    await expect(prepareDeployment(plan, new SqliteMantleStorageAdapter(db)))
+      .rejects.toThrow("cannot use runtime-managed migrations");
+
+    await db.prepare("UPDATE _mantle_storage_state SET fingerprint = 'pending' WHERE id = 1").run();
+    await expect(prepareDeployment(plan, new SqliteMantleStorageAdapter(db, undefined, {
+      managedStorageFingerprint: artifact.targetFingerprint,
+    }))).rejects.toThrow("pending migration");
+    expect((await db.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id = 1").first<{ fingerprint: string }>())?.fingerprint)
+      .toBe("pending");
+
+    await db.prepare("UPDATE _mantle_storage_state SET fingerprint = ? WHERE id = 1")
+      .bind(artifact.targetFingerprint).run();
+    await db.prepare('DROP TABLE "posts"').run();
+    await expect(prepareDeployment(plan, new SqliteMantleStorageAdapter(db, undefined, {
+      managedStorageFingerprint: artifact.targetFingerprint,
+    }))).rejects.toThrow("Schema table 'posts' is missing");
+  });
+
+  it("keeps an older managed plan available after an additive Schema migration", async () => {
+    const db = new InMemoryDatabase();
+    const oldPlan = compilePlan(declarativeManifest);
+    const newPlan = compilePlan(declarativeManifest.replace(
+      "      title: { type: string }",
+      "      title: { type: string }\n      rank: { type: integer }",
+    ));
+    const oldSchemas = Object.values(oldPlan.schemas).map(({ manifest }) => manifest);
+    const newSchemas = Object.values(newPlan.schemas).map(({ manifest }) => manifest);
+    const initial = await buildSqliteMigrationArtifact([], oldSchemas);
+    await db.migrations.runAll(initial.migrations);
+    for (const { name, projection } of initial.projections) {
+      await db.prepare("INSERT INTO _mantle_schema_tables(name, projection) VALUES (?, ?)").bind(name, projection).run();
+    }
+    await db.prepare("INSERT INTO _mantle_storage_state(id, fingerprint) VALUES (1, ?)").bind(initial.targetFingerprint).run();
+    await db.prepare("INSERT INTO _mantle_managed_runtime_state(id, canonical_version) VALUES (1, ?)")
+      .bind(initial.targetCanonicalVersion).run();
+    const oldAdapter = new SqliteMantleStorageAdapter(db, undefined, { managedStorageFingerprint: initial.targetFingerprint });
+    await prepareDeployment(oldPlan, oldAdapter);
+    const upgrade = await buildSqliteMigrationArtifact(oldSchemas, newSchemas, {
+      appliedMigrationIds: initial.migrations.map(({ id }) => id),
+    });
+    await db.migrations.runAll(upgrade.migrations);
+    for (const { name, projection } of upgrade.projections) {
+      await db.prepare("UPDATE _mantle_schema_tables SET projection = ? WHERE name = ?").bind(projection, name).run();
+    }
+    await db.prepare("UPDATE _mantle_storage_state SET fingerprint = ? WHERE id = 1").bind(upgrade.targetFingerprint).run();
+    await expect(prepareDeployment(oldPlan, oldAdapter)).resolves.toBeDefined();
+    await expect(prepareDeployment(newPlan, new SqliteMantleStorageAdapter(db, undefined, {
+      managedStorageFingerprint: upgrade.targetFingerprint,
+    }))).resolves.toBeDefined();
+  });
+
+  it("does not replay runtime migrations on a legacy managed database", async () => {
+    const db = new InMemoryDatabase();
+    for (const migration of CANONICAL_MIGRATIONS) db.native().exec(migration.sql);
+    db.native().exec("INSERT INTO _mantle_storage_state(id, fingerprint) VALUES (1, 'legacy')");
+    await expect(prepareDeployment(compilePlan(declarativeManifest), new SqliteMantleStorageAdapter(db)))
+      .rejects.toThrow("cannot use runtime-managed migrations");
   });
 
   it("activates locales on a new adapter over a current database without reseeding", async () => {
@@ -117,11 +183,11 @@ describe("prepareDeployment", () => {
     const prepared = await prepareDeployment(plan, fresh);
     expect(migrations).not.toHaveBeenCalled();
     expect(seed).not.toHaveBeenCalled();
-    expect(db.executions.slice(before)).toHaveLength(2);
+    expect(db.executions.slice(before)).toHaveLength(4);
     for (let i = 0; i < 3; i++) {
       expect(await prepared.storage.localePolicy?.readLocales()).toEqual(["en"]);
     }
-    expect(db.executions.slice(before)).toHaveLength(3);
+    expect(db.executions.slice(before)).toHaveLength(5);
     expect(db.executions.slice(before).every(({ sql }) => sql.startsWith("SELECT"))).toBe(true);
 
     db.siteConfig.set("title", "Edited live");

@@ -1,0 +1,59 @@
+{
+  "fingerprint": "9ef85f9933e22328140e924045820af6be2a6985ed8ecc19b63a4f2a37826618",
+  "schemas": [
+    {
+      "apiVersion": "cms.mantle.aotter.net/v1",
+      "kind": "Schema",
+      "metadata": {
+        "name": "articles"
+      },
+      "spec": {
+        "title": "文章",
+        "schema": {
+          "type": "object",
+          "required": [
+            "title"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "title": "標題",
+              "maxLength": 160
+            },
+            "summary": {
+              "type": "string",
+              "title": "摘要",
+              "maxLength": 1000
+            },
+            "body": {
+              "type": "string",
+              "title": "內容",
+              "x-mcp-hint": "markdown"
+            },
+            "coverAssetId": {
+              "type": "string",
+              "title": "封面圖片",
+              "x-mantle-ref": "media_assets",
+              "x-mcp-hint": "media-image"
+            }
+          }
+        },
+        "lifecycle": "publishing",
+        "uniqueIndexes": [],
+        "indexes": [],
+        "searchableFields": [],
+        "localized": false
+      }
+    }
+  ],
+  "appliedMigrationIds": [
+    "0001-init",
+    "0002-media-assets",
+    "0003-pending-media-uploads",
+    "0004-native-schema-storage",
+    "0005-store-instance-id",
+    "0006-managed-runtime-version"
+  ],
+  "lastIndex": 4,
+  "canonicalVersion": "0006-managed-runtime-version"
+}

@@ -10,7 +10,7 @@ export { isNullableJsonSchema };
 
 const SYSTEM_COLUMNS = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at"] as const;
 const RESERVED_TABLES = new Set([
-  "entries", "_migrations", "_mantle_boot_state", "_mantle_schema_tables", "_mantle_storage_state",
+  "entries", "_migrations", "_mantle_boot_state", "_mantle_schema_tables", "_mantle_storage_state", "_mantle_managed_runtime_state",
   "site_config", "user", "session", "account", "verification", "jwks", "oauthclient",
   "oauthresource", "oauthclientresource", "oauthrefreshtoken", "oauthaccesstoken", "oauthconsent",
   "oauthclientassertion", "media_assets", "pending_media_uploads",
@@ -168,6 +168,18 @@ export function isAdditiveSchemaTableChange(previous: string, next: string): boo
   const uniqueBefore = new Set(before.indexes.filter(([unique]) => unique).map(indexKey));
   const uniqueAfter = new Set(after.indexes.filter(([unique]) => unique).map(indexKey));
   return setsEqual(uniqueBefore, uniqueAfter);
+}
+
+/** A managed database may serve an older plan only when its stored table is an additive superset. */
+export function coversSchemaTableProjection(expected: string, actual: string): boolean {
+  const want = parseProjection(expected);
+  const have = parseProjection(actual);
+  const columns = new Map(have.columns.map((column) => [column[0].toLowerCase(), column]));
+  if (want.columns.some((column) => JSON.stringify(columns.get(column[0].toLowerCase())) !== JSON.stringify(column))) return false;
+  return setsEqual(
+    new Set(want.indexes.filter(([unique]) => unique).map(indexKey)),
+    new Set(have.indexes.filter(([unique]) => unique).map(indexKey)),
+  );
 }
 
 /** Persist physical ownership as a superset so an additive rollback remains valid. */

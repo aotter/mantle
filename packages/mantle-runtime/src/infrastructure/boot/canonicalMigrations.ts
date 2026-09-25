@@ -285,4 +285,12 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
     description: "Bind derivative storage keys to one physical store instance",
     sql: "ALTER TABLE _mantle_boot_state ADD COLUMN store_instance_id TEXT;",
   },
+  {
+    id: "0006-managed-runtime-version",
+    description: "Record canonical migration readiness for managed SQLite hosts",
+    sql: `CREATE TABLE IF NOT EXISTS _mantle_managed_runtime_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      canonical_version TEXT NOT NULL
+    );`,
+  },
 ];
