@@ -6,6 +6,7 @@ import {
   compileRuntimePlan,
   type CapabilityRuntime,
   type HandlerContext,
+  type McpToolCallAuditEvent,
   type RuntimePlan,
 } from "@aotter/mantle-runtime";
 import { describe, expect, it, vi } from "vitest";
@@ -132,6 +133,45 @@ describe("MCP Apps registration", () => {
     await expect(plain.readResource({ uri: APP_URI })).rejects.toThrow();
   });
 
+  it("treats a hidden app-only tool as unknown: audited, never an identity challenge", async () => {
+    const events: McpToolCallAuditEvent[] = [];
+    const plan = compile(manifest);
+    const handler = createMantleMcpHandler(bindCapabilities(runtime(plan), plan, { surface: "public" }), {
+      apps,
+      audit: { record: (event) => { events.push(event); } },
+      unauthenticated: () => new Response(null, { status: 401 }),
+    });
+    const call = await handler.fetch(new Request(`${ORIGIN}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2026-07-28" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: {
+        name: "refresh_post",
+        arguments: {},
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": { name: "plain", version: "1" },
+        },
+      } }),
+    }), anonymous());
+    expect(call.status).not.toBe(401);
+    await Promise.resolve();
+    expect(events).toEqual([expect.objectContaining({ tool: "refresh_post", outcome: "UNKNOWN_TOOL" })]);
+  });
+
+  it("lets an App call its app-only tool on a stateless 2025 request", async () => {
+    const client = await connect("legacy", UI_CAPABILITIES);
+    const result = await client.callTool({ name: "refresh_post", arguments: { id: "p1" } });
+    expect(result.isError).toBeFalsy();
+  });
+
+  it("omits empty resource metadata", async () => {
+    const bare: MantleMcpApps = { resources: [{ uri: APP_URI, name: "bare", html: HTML, renders: () => false }] };
+    const client = await connect("modern", UI_CAPABILITIES, { apps: bare });
+    const { resources } = await client.listResources();
+    expect(resources[0]).not.toHaveProperty("_meta");
+  });
+
   it("carries no UI dependency: the HTML is injected by the host", async () => {
     const { default: pkg } = await import("../package.json", { with: { type: "json" } });
     const runtimeDeps = Object.keys({ ...pkg.dependencies, ...(pkg as { peerDependencies?: object }).peerDependencies });
@@ -142,7 +182,11 @@ describe("MCP Apps registration", () => {
     const invoker = bindCapabilities(runtime(compile(manifest)), compile(manifest), { surface: "public" });
     const resource = apps.resources[0]!;
     expect(() => createMantleMcpHandler(invoker, { apps: { resources: [{ ...resource, appOnly: ["like_post"] }] } }))
-      .toThrow(/must be read-only/u);
+      .toThrow(/must be declared read-only/u);
+    // One tool links to one resource, whether it renders there or is app-only there.
+    const other = { ...resource, uri: "ui://mantle/other", name: "other", renders: () => false, appOnly: ["query_view_public_posts"] };
+    expect(() => createMantleMcpHandler(invoker, { apps: { resources: [{ ...resource, appOnly: [] }, other] } }))
+      .toThrow(/links to both/u);
     expect(() => createMantleMcpHandler(invoker, { apps: { resources: [{ ...resource, uri: "https://x.test/app" }] } }))
       .toThrow(/ui:\/\//u);
     expect(() => createMantleMcpHandler(invoker, { apps: { resources: [{ ...resource, appOnly: ["ghost"] }] } }))

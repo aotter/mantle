@@ -70,6 +70,9 @@ export interface MantleMcpServerOptions {
 export interface MantleMcpServerFactory {
   readonly invoker: InvokeCapabilityUseCase;
   create(ctx: HandlerContext, ui?: ClientUiSupport): McpServer;
+  /** Whether `create(ctx, ui)` registers the tool: an app-only tool is
+   *  absent for a client without MCP Apps. */
+  registers(name: string, ui: ClientUiSupport): boolean;
   /** Record one audit event for a call that never reached a tool. */
   audit(ctx: HandlerContext, tool: string, args: Readonly<Record<string, unknown>>, outcome: string): void;
 }
@@ -141,9 +144,14 @@ export function createMantleMcpServer(
           registerAppResource(server, resource.name, resource.uri, {
             ...(resource.title ? { title: resource.title } : {}),
             ...(resource.description ? { description: resource.description } : {}),
-            _meta: meta,
+            ...(meta ? { _meta: meta } : {}),
           }, async () => ({
-            contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: await appResourceHtml(resource), _meta: meta }],
+            contents: [{
+              uri: resource.uri,
+              mimeType: RESOURCE_MIME_TYPE,
+              text: await appResourceHtml(resource),
+              ...(meta ? { _meta: meta } : {}),
+            }],
           }));
         }
       }
@@ -196,6 +204,10 @@ export function createMantleMcpServer(
         } as Parameters<typeof registerAppTool>[2], run as never);
       }
       return server;
+    },
+    registers(name, ui) {
+      if (!invoker.serves(name)) return false;
+      return !(apps.appOnly.has(name) && (ui === "unsupported" || apps.resources.length === 0));
     },
     audit(ctx, tool, args, outcome) {
       record(ctx, tool, operationIdOf(tool, args), outcome, Date.now());

@@ -84,12 +84,15 @@ export function createMantleMcpHandler(
       // Unparseable bodies go to the SDK untouched so it answers with its
       // own JSON-RPC parse error.
       if (message === undefined) return sdk.fetch(request, { authInfo });
-      if (options.apps) authInfo.extra![UI_KEY] = clientUiSupport(message);
-      // A 2025-era batch carries several calls; every one is checked.
+      const ui = options.apps ? clientUiSupport(message) : "unknown";
+      if (options.apps) authInfo.extra![UI_KEY] = ui;
+      // A 2025-era batch carries several calls; every one is checked. A tool
+      // this request does not register (an app-only tool for a client
+      // without MCP Apps) is an unknown tool, never an identity challenge.
       const calls = (Array.isArray(message) ? message : [message]).flatMap(toolCall);
       const refused = calls.filter(({ name }) => {
         const capability = invoker.catalog.get(name);
-        return capability?.requiresIdentity === true && isAnonymous(ctx);
+        return servers.registers(name, ui) && capability?.requiresIdentity === true && isAnonymous(ctx);
       });
       if (refused.length > 0) {
         // The whole request is refused, so no call in it runs; each is recorded.
@@ -100,7 +103,7 @@ export function createMantleMcpHandler(
       }
       // Registered tools audit themselves; anything else is a probe.
       for (const call of calls) {
-        if (!invoker.serves(call.name)) servers.audit(ctx, call.name, call.args, "UNKNOWN_TOOL");
+        if (!servers.registers(call.name, ui)) servers.audit(ctx, call.name, call.args, "UNKNOWN_TOOL");
       }
       return sdk.fetch(request, { authInfo, parsedBody: message });
     },
