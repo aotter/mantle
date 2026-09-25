@@ -28,6 +28,7 @@ try {
     ["@aotter/mantle", "packages/mantle"],
     ["@aotter/mantle-spec", "packages/mantle-spec"],
     ["@aotter/mantle-runtime", "packages/mantle-runtime"],
+    ["@aotter/mantle-mcp", "packages/mantle-mcp"],
     ["@aotter/mantle-web", "packages/mantle-web"],
     ["@aotter/mantle-indexeddb", "packages/adapters/indexeddb"],
     ["@aotter/mantle-admin-ui", "packages/mantle-admin-ui"],
@@ -98,6 +99,7 @@ try {
   `);
   for (const optional of [
     "mantle-web",
+    "mantle-mcp",
     "mantle-admin",
     "mantle-admin-ui",
     "mantle-auth",
@@ -193,6 +195,7 @@ try {
   }
   for (const optional of [
     "mantle-web",
+    "mantle-mcp",
     "mantle-admin",
     "mantle-admin-ui",
     "mantle-auth",
@@ -220,6 +223,48 @@ try {
     const binding = await webmcp.bindWebMcp();
     if (binding.supported !== false) throw new Error("headless WebMCP feature detection failed");
   `);
+
+  installConsumer("core-with-mcp", {
+    "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
+    "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
+    "@aotter/mantle-mcp": `file:${tarballs["@aotter/mantle-mcp"]}`,
+    zod,
+  }, `
+    const spec = await import("@aotter/mantle-spec");
+    const core = await import("@aotter/mantle-runtime");
+    const mcp = await import("@aotter/mantle-mcp");
+    const parsed = spec.parseManifestSources({ sources: [] });
+    if (!parsed.ok) throw new Error("empty source set did not parse");
+    const linked = spec.linkManifestSet(parsed.value);
+    if (!linked.ok) throw new Error("empty source set did not link");
+    const compiled = core.compileRuntimePlan(linked.value);
+    if (!compiled.ok) throw new Error("empty source set did not compile");
+    const runtime = await core.bootMantleRuntime({
+      plan: compiled.value,
+      storage: { prepare: async () => ({ entries: {}, views: {}, localePolicy: {} }) },
+    });
+    const invoker = core.bindCapabilities(runtime, compiled.value, { surface: "public" });
+    const handler = mcp.createMantleMcpHandler(invoker, { serverInfo: { name: "packed" } });
+    const response = await handler.fetch(new Request("https://example.test/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "packed", version: "1" } },
+      }),
+    }), { user: null, staff: null, env: {} });
+    const text = await response.text();
+    if (response.status !== 200 || !text.includes('"serverInfo"')) {
+      throw new Error("packed MCP handler did not answer initialize: " + response.status + " " + text);
+    }
+  `);
+  for (const forbidden of ["react", "@aotter/mantle-admin", "@aotter/mantle-web"]) {
+    if (existsSync(join(temp, `core-with-mcp/node_modules/${forbidden}`))) {
+      throw new Error(`MCP consumer installed ${forbidden}`);
+    }
+  }
 
   installConsumer("core-with-indexeddb", {
     "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
@@ -290,7 +335,7 @@ try {
     throw new Error("Admin API consumer installed the optional Admin UI");
   }
 
-  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+IndexedDB, Core+Admin, and Auth packing consumers passed.");
+  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+MCP, Core+IndexedDB, Core+Admin, and Auth packing consumers passed.");
 } finally {
   rmSync(localState, { recursive: true, force: true });
   rmSync(temp, { recursive: true, force: true });
