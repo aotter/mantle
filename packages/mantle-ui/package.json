@@ -51,12 +51,17 @@
     }
   },
   "devDependencies": {
+    "@aotter/mantle-mcp": "workspace:*",
+    "@aotter/mantle-runtime": "workspace:*",
+    "@aotter/mantle-spec": "workspace:*",
+    "@modelcontextprotocol/client": "2.1.0",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "catalog:",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "playwright": "catalog:",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tailwindcss": "^4.3.3",
