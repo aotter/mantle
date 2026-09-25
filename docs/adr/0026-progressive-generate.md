@@ -15,10 +15,22 @@ Mantle is progressive. A new application defaults to Spec, Runtime, API, MCP, Ad
 
 The host adapter's declared peers (`better-auth`, `hono`, `zod`, `aws4fetch`) are installed for host-dependent selections until its package dependency graph is split. A reduced selection still omits unselected routes and assets; it does not claim smaller transitive installation today.
 
-An application with only Git, installed skills, package metadata, a lockfile, README, and installed dependencies is new. Existing manifests or application code remain in compile-only mode until `--adopt` is given. A saved `mantle.config.json` decides subsequent runs before that heuristic. V1 refuses host changes and feature-list changes after selection; application owners can make an explicit migration rather than have generation delete routes or data. An explicitly named missing manifest path is an error. A new default manifest directory may be absent or empty, yielding a valid empty plan without a fake business Schema.
+An application with only Git, installed skills, package metadata, a lockfile, README, and installed dependencies is new. Existing manifests or application code remain in direct-authoring compile mode. A saved `mantle.config.json` decides subsequent runs before that heuristic. V1 refuses host changes and feature-list changes after selection; application owners can make an explicit migration rather than have generation delete routes or data. An explicitly named missing manifest path is an error. A new default manifest directory may be absent or empty, yielding a valid empty plan without a fake business Schema.
 
 Generation preflights selection, manifest validity, package/script conflicts, file ownership, and symlink escapes before writing. It saves the selection and adds only absent package declarations and scripts; it does not run a package manager. Selected Mantle packages use the running CLI's exact version. Missing selected packages produce an incomplete, nonzero result and an explicit install-and-rerun instruction. `--check` never writes, installs, prompts, or provisions. Generated code and assets remain CLI-owned; the editable frontend, host config, identity, secrets, handlers, and historical migrations are application-owned. A later SDK upgrade does not overwrite them. Clean builds remove only copied output.
 
 Cloudflare currently has a facade with transitive Admin/Auth/Web dependencies and mounts OAuth/MCP unconditionally. Host generation must use a lower-level composition for reduced selections or change that facade; omitting dependencies from a manifest does not prove route omission. Cloudflare D1 remains runtime-managed. ChatGPT Sites uses reviewed, append-only managed migrations with applied-state checks (owned by #1086). Neither host generator provisions resources or deploys.
 
 This decision restores a convenient default while keeping the sealed Manifest-to-RuntimePlan pipeline and user-owned application source. It does not reintroduce a remote Starter catalog or a `mantle create` command.
+
+## 2026-09-25 amendment — existing application integration
+
+The original implementation added `--adopt` to convert an existing authored
+application into the generated-project layout. This amendment removes that
+mode. Applications with their own host shape continue direct authoring;
+integrating Mantle is guided by the version-matched `integrate` consumer skill.
+The agent may embed selected capabilities, replace one part at a time, or
+build a fresh Mantle application and migrate frontend and data. The CLI owns
+only deterministic generation and its declared checks; it does not certify
+arbitrary user-owned host wiring. A saved generated project still reruns from
+its own configuration, with file ownership and migration safeguards intact.

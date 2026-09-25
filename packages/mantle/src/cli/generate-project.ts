@@ -13,10 +13,8 @@ export interface ProjectOptions {
   readonly root: string;
   readonly host?: string;
   readonly features?: string;
-  readonly adopt: boolean;
   readonly check: boolean;
   readonly output: string;
-  readonly adminAssetsCurrent?: () => Promise<boolean>;
 }
 export interface ProjectDecision {
   readonly mode: "legacy" | "project";
@@ -45,13 +43,11 @@ export async function prepareProject(options: ProjectOptions): Promise<ProjectDe
     throw error;
   });
   const evidence = (await readdir(root)).filter((name) => !BOOTSTRAP.has(name) && name !== CONFIG);
-  if (saved === null && evidence.length && !options.adopt) {
-    if (options.host || options.features) throw new Error(`Existing application (${evidence.join(", ")}) needs --adopt before selecting generated features.`);
-    stdout.write(`Legacy compile mode: existing application files ${evidence.join(", ")} (use --adopt to opt in).\n`);
+  if (saved === null && evidence.length) {
+    if (options.host || options.features) throw new Error(`Existing application (${evidence.join(", ")}) uses direct authoring; generate a new application separately or integrate Mantle with the installed integration skill.`);
+    stdout.write(`Legacy compile mode: existing application files ${evidence.join(", ")}.\n`);
     return { mode: "legacy", incomplete: false };
   }
-  if (options.adopt && saved !== null) throw new Error("This application already has mantle.config.json; omit --adopt.");
-  if (options.adopt && !evidence.length) throw new Error("--adopt is only for an existing authored application.");
   const selection = saved !== null ? parseSelection(saved) : await chooseSelection(options);
   if (saved !== null && options.output !== ".mantle/generated" && options.output !== (selection.output ?? ".mantle/generated")) {
     throw new Error("Changing a saved generated output directory is not supported; use the saved output path.");
@@ -59,7 +55,7 @@ export async function prepareProject(options: ProjectOptions): Promise<ProjectDe
   if (saved !== null && (options.host !== undefined || options.features !== undefined)) {
     const requested = await chooseSelection(options, selection);
     if (JSON.stringify(requested) !== JSON.stringify(selection)) {
-      throw new Error("Changing a saved host or feature list is not supported in v1; edit the application deliberately before adopting a new composition.");
+      throw new Error("Changing a saved host or feature list is not supported in v1; plan a deliberate application migration.");
     }
   }
   stdout.write(`Generated project mode: ${selection.host ?? "host-free"}; features ${selection.features.join(", ")}${saved !== null ? " (saved)" : " (new)"}.\n`);
@@ -125,7 +121,7 @@ export async function prepareProject(options: ProjectOptions): Promise<ProjectDe
   if (selection.features.includes("admin")) {
     const admin = resolve(root, "public/_mantle/admin");
     await assertInsideProject(root, admin);
-    if (saved === null && existsSync(admin) && !(options.adopt && await options.adminAssetsCurrent?.())) {
+    if (saved === null && existsSync(admin)) {
       throw new Error(`Admin asset target already exists and cannot be verified as generated: ${admin}`);
     }
   }

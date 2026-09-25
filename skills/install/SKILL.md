@@ -60,7 +60,7 @@ in a project-owned `.npmrc`.
    install. Install them using the project's package manager, then rerun
    `mantle generate` to finish. Read `docs/handbook/start/project-and-cli.md`
    from the same installed package for saved selections, owned files,
-   `--check`, and `--adopt`.
+   `--check`.
 4. Before adding a Schema on ChatGPT Sites, review and apply its initial local
    D1 migration as the installed Sites guide says. Then add only the user's
    Schema, View, Procedure and Trigger manifests. Keep the blank home editable;
@@ -87,12 +87,20 @@ point; a domain example is not a template to copy wholesale. Do not use a
 
 ## Existing project and handoff
 
-Preserve selected features, user-authored files, migrations, package versions,
-identity settings and provider resources. Use the installed CLI's `--help` and
-package-local docs. Run `generate --check` without writing, then the project's
-normal tests. For a legacy project, keep its established direct-authoring
-flow until an upgrade is requested; the new bootstrap skill does not make an
-old SDK understand new flags.
+For an application that already uses Mantle, preserve selected features,
+user-authored files, migrations, package versions, identity settings and
+provider resources. Use its installed CLI's `--help` and package-local docs.
+Run `generate --check` without writing, then the project's normal tests.
+
+When the request is to add Mantle to an independently authored application,
+inspect its host, code and data first. Use the exact installed package's
+`docs/skills/integrate/SKILL.md` if available. If Mantle is not installed,
+choose between selective embedding, incremental replacement and creating a
+separate Mantle app followed by frontend/data migration before installing an
+exact SDK version. The existing application does not need to adopt the
+generated project's entry or directory layout. An older SDK's own docs and
+CLI govern its behavior; upgrade deliberately if the selected strategy needs
+newer capabilities.
 
 When deployment is requested, read the installed version's
 `skills/provision/SKILL.md`. Report the target path, exact SDK version, local

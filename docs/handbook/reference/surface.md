@@ -116,7 +116,7 @@ The `@aotter/mantle` package installs two binaries, `mantle` and `mantle-harness
 
 | Command | Flags |
 |---|---|
-| `mantle generate` | `--manifests <dir>` (default `./manifests`), `-o, --output <dir>` (default `.mantle/generated`), `--namespace <name>` (default `Mantle`), `--host cf\|chatgpt-sites`, `--features <list>`, `--adopt`, `--review-unique-indexes` (managed Sites only), `--check`, `-h, --help` |
+| `mantle generate` | `--manifests <dir>` (default `./manifests`), `-o, --output <dir>` (default `.mantle/generated`), `--namespace <name>` (default `Mantle`), `--host cf\|chatgpt-sites`, `--features <list>`, `--review-unique-indexes` (managed Sites only), `--check`, `-h, --help` |
 | `mantle skills` | `--check`, `-h, --help` |
 | `mantle validate` | `--manifests <dir>` (default `./manifests`), `--source <dir>` (default `./src`), `--no-source`, `--phase preview\|deploy` (default `preview`), `--format json\|text` (default by TTY), `--json`, `-h, --help` |
 | `mantle emit-openapi` | `--manifests <dir>`, `--title <str>` (default `mantle`), `--version <str>` (default `0.1.0`), `--session-cookie-name <str>`, `-o, --output <file>`, `-h, --help` |

@@ -27,6 +27,7 @@ async function project(): Promise<string> {
 
 it("rejects a scheduled Trigger on ChatGPT Sites before writing generated files", async () => {
   await project();
+  await writeFile("mantle.config.json", JSON.stringify({ version: 1, host: "chatgpt-sites", features: ["spec", "runtime", "api"] }));
   await mkdir("manifests");
   await writeFile("manifests/schedule.yaml", `apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
@@ -43,7 +44,7 @@ spec:
   source: { kind: schedule, cron: "0 2 * * *" }
   target: { procedure: tick }
 `);
-  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites", "--features", "spec,api"], coreOnly)).toBe(1);
+  expect(await runGenerate([], coreOnly)).toBe(1);
   expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("RESOURCE_UNAVAILABLE: Trigger 'daily-tick' requires host 'cf'"));
   await expect(readFile(".mantle/generated/mantle.ts")).rejects.toThrow();
 });
@@ -94,13 +95,15 @@ it("plans a full new app from bootstrap files without confusing them for authore
   expect(await readFile(".mantle/generated/worker.ts", "utf8")).toContain("const origin = env.PUBLIC_ORIGIN;");
   expect(await readFile(".gitignore", "utf8")).toContain(".dev.vars\n");
   await writeFile("src/home.ts", "export const customHome = true;\n");
+  await writeFile("src/index.ts", "export default { fetch: () => new Response('custom') };\n");
   expect(await runGenerate([])).toBe(0);
   expect(await runGenerate(["--check"])).toBe(0);
   expect(await readFile("src/home.ts", "utf8")).toBe("export const customHome = true;\n");
+  expect(await readFile("src/index.ts", "utf8")).toContain("custom");
   expect(await readdir(root)).toContain("README.md");
 });
 
-it("preserves an adopted Wrangler TOML and requires the existing entry to opt in", async () => {
+it("does not rewrite an existing Cloudflare application into the generated shape", async () => {
   await project();
   const toml = 'name = "existing-worker"\nmain = "src/index.ts"\n[[d1_databases]]\nbinding = "DB"\n';
   await writeFile("wrangler.toml", toml);
@@ -108,10 +111,10 @@ it("preserves an adopted Wrangler TOML and requires the existing entry to opt in
     scripts: { dev: "wrangler dev", build: "my-build" } }));
   await mkdir("src");
   await writeFile("src/index.ts", "export default { fetch: () => new Response('mine') };\n");
-  expect(await runGenerate(["--adopt", "--host", "cf", "--features", "spec,api"])).toBe(2);
+  expect(await runGenerate(["--host", "cf", "--features", "spec,api"])).toBe(2);
   await expect(readFile("mantle.config.json")).rejects.toThrow();
   await writeFile("src/index.ts", 'export { default } from "../.mantle/generated/worker.js";\n');
-  expect(await runGenerate(["--adopt", "--host", "cf", "--features", "spec,api"])).toBe(1);
+  expect(await runGenerate(["--host", "cf", "--features", "spec,api"])).toBe(2);
   expect(await readFile("wrangler.toml", "utf8")).toBe(toml);
   await expect(readFile("wrangler.jsonc")).rejects.toThrow();
   const pkg = JSON.parse(await readFile("package.json", "utf8"));
@@ -119,11 +122,12 @@ it("preserves an adopted Wrangler TOML and requires the existing entry to opt in
   expect(pkg.scripts.build).toBe("my-build");
 });
 
-it("refuses a reduced composition while old Admin assets are still present", async () => {
+it("preserves preexisting Admin assets in an authored application", async () => {
   await project();
   await mkdir("public/_mantle/admin", { recursive: true });
   await writeFile("public/_mantle/admin/index.html", "old Admin");
-  expect(await runGenerate(["--adopt", "--host", "cf", "--features", "spec,api"])).toBe(2);
+  expect(await runGenerate(["--host", "cf", "--features", "spec,api"])).toBe(2);
+  expect(await readFile("public/_mantle/admin/index.html", "utf8")).toBe("old Admin");
   await expect(readFile("mantle.config.json")).rejects.toThrow();
 });
 
@@ -185,35 +189,27 @@ it("generates a blank Sites app with an immutable initial D1 migration", async (
   expect(await readFile("wrangler.jsonc", "utf8")).toContain("custom-local-db");
 });
 
-it("refuses to adopt unrelated Sites migrations and resumes its own first write", async () => {
+it("leaves unrelated Sites migrations in direct-authoring mode", async () => {
   await project();
   await mkdir("drizzle/meta", { recursive: true });
   await writeFile("drizzle/0000_existing.sql", "CREATE TABLE existing (id TEXT);\n");
-  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites", "--features", "spec,api"], coreOnly)).toBe(2);
-  expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("cannot be adopted"));
-  await rm("drizzle/0000_existing.sql");
-  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites", "--features", "spec,api"], coreOnly)).toBe(1);
-  const sql = await readFile("drizzle/0000_mantle.sql", "utf8");
-  await rm("drizzle/meta/mantle-state.json");
-  await rm("src/storage-fingerprint.json");
-  expect(await runGenerate([], coreOnly)).toBe(1);
-  expect(await readFile("drizzle/0000_mantle.sql", "utf8")).toBe(sql);
-  expect(await readFile("drizzle/meta/mantle-state.json", "utf8")).toContain('"lastIndex": 0');
+  expect(await runGenerate(["--host", "chatgpt-sites", "--features", "spec,api"], coreOnly)).toBe(2);
+  expect(await readFile("drizzle/0000_existing.sql", "utf8")).toContain("CREATE TABLE existing");
+  await expect(readFile("mantle.config.json")).rejects.toThrow();
 });
 
-it("requires adopted Sites Admin Workers to remain behind Sites identity", async () => {
+it("requires saved Sites Admin Workers to remain behind Sites identity", async () => {
   await project();
-  await mkdir("src");
-  await writeFile("src/index.ts", 'export { default } from "../.mantle/generated/worker.js";\n');
+  expect(await runGenerate(["--host", "chatgpt-sites"], coreOnly)).toBe(1);
   const config = { main: "dist/server/index.js", assets: { binding: "ASSETS" },
     d1_databases: [{ binding: "DB", database_name: "local", migrations_dir: "drizzle" }], workers_dev: true };
   await writeFile("wrangler.jsonc", JSON.stringify(config));
-  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites"], coreOnly)).toBe(2);
+  expect(await runGenerate([], coreOnly)).toBe(2);
   expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("workers_dev=false"));
   await writeFile("wrangler.jsonc", JSON.stringify({ ...config, workers_dev: false, routes: ["example.com/*"] }));
-  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites"], coreOnly)).toBe(2);
+  expect(await runGenerate([], coreOnly)).toBe(2);
   await writeFile("wrangler.jsonc", JSON.stringify({ ...config, workers_dev: false }, null, 2));
-  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites"], coreOnly)).toBe(1);
+  expect(await runGenerate([], coreOnly)).toBe(1);
 });
 
 it("keeps a reduced Sites composition free of Admin and media bindings", async () => {
@@ -273,27 +269,28 @@ it("rejects invalid selections, explicit missing manifests, and path escapes bef
   expect(await readdir(root)).toEqual([".mantle", "mantle.config.json"]);
 });
 
-it("preserves legacy compilation and requires explicit adoption for an authored application", async () => {
+it("preserves direct-authoring compilation without converting an authored application", async () => {
   await project();
   await mkdir("manifests");
   await writeFile("manifests/site.yaml", `apiVersion: cms.mantle.aotter.net/v1\nkind: Schema\nmetadata: { name: notes }\nspec: { title: Notes, schema: { type: object } }\n`);
   expect(await runGenerate([], coreOnly)).toBe(0);
   await expect(readFile("mantle.config.json")).rejects.toThrow();
   expect(await runGenerate(["--host", "cf"], coreOnly)).toBe(2);
-  expect(await runGenerate(["--adopt", "--host", "cf", "--features", "spec,api"], coreOnly)).toBe(1);
-  expect(JSON.parse(await readFile("mantle.config.json", "utf8")).features).toEqual(["spec", "runtime", "api"]);
+  expect(await runGenerate(["--adopt", "--host", "cf"], coreOnly)).toBe(2);
+  expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("Unknown option"));
+  await expect(readFile("mantle.config.json")).rejects.toThrow();
 });
 
-it("does not save adoption when linking or code generation fails", async () => {
+it("does not write project configuration when direct-authoring validation fails", async () => {
   await project();
   await mkdir("manifests");
   await writeFile("manifests/bad.yaml", `apiVersion: cms.mantle.aotter.net/v1\nkind: View\nmetadata: { name: orphan }\nspec: { surface: public, from: missing }\n`);
-  expect(await runGenerate(["--adopt", "--features", "spec"], coreOnly)).toBe(1);
+  expect(await runGenerate([], coreOnly)).toBe(1);
   await expect(readFile("mantle.config.json")).rejects.toThrow();
   await expect(readFile("package.json")).rejects.toThrow();
 });
 
-it("can adopt a legacy app whose Admin assets still match the installed bundle", async () => {
+it("keeps an existing app in direct-authoring mode with matching Admin assets", async () => {
   const root = await project();
   await mkdir("manifests");
   await writeFile("manifests/site.yaml", `apiVersion: cms.mantle.aotter.net/v1\nkind: Schema\nmetadata: { name: notes }\nspec: { title: Notes, schema: { type: object } }\n`);
@@ -302,8 +299,8 @@ it("can adopt a legacy app whose Admin assets still match the installed bundle",
   const admin = { resolveAdminUiIndexHtml: () => join(root, "admin-assets/index.html") };
   expect(await runGenerate([], admin)).toBe(0);
   expect(await readFile("public/_mantle/admin/index.html", "utf8")).toBe("admin");
-  expect(await runGenerate(["--adopt", "--host", "cf"], admin)).toBe(1);
-  expect(JSON.parse(await readFile("mantle.config.json", "utf8")).host).toBe("cf");
+  expect(await runGenerate([], admin)).toBe(0);
+  await expect(readFile("mantle.config.json")).rejects.toThrow();
 });
 
 it("leaves conflicting user package scripts untouched", async () => {

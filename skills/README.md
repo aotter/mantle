@@ -5,6 +5,7 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | Skill | When to invoke |
 |---|---|
 | [`develop`](../docs/skills/develop/SKILL.md) | `mantle:develop`: Core-owned workflow for manifest, runtime, handler, adapter, validation, and MCP work in any Mantle project. |
+| [`integrate`](../docs/skills/integrate/SKILL.md) | `mantle:integrate`: choose and carry out an existing application's Mantle integration or rebuild and data migration. |
 | [`media-gc`](../docs/skills/media-gc/SKILL.md) | `mantle:media-gc`: audit or remove stale uncommitted public media objects with the connected Cloudflare API. |
 | [`plugin`](../docs/skills/plugin/SKILL.md) | `mantle:plugin`: Core-owned marketplace workflow for plan-first capability installs across applications and adapters. |
 | [`theme`](../docs/skills/theme/SKILL.md) | `mantle:theme`: Core-owned visual workflow. Reads project-owned theme and UI contracts. |
@@ -26,6 +27,7 @@ enforces the columns below.
 | Skill | Routes on | Entry-path constraints (read before acting) | Path-gated sections | Projection | Restricted because |
 |---|---|---|---|---|---|
 | `develop` | existing project; manifest, runtime, handler, adapter, or MCP work | four-atom model; adapter neutrality; no direct D1/KV/Postgres writes; no committed secrets | performance harness; local MCP client; locale rules | project | — |
+| `integrate` | independently authored application; add Mantle or rebuild with migration | inspect application before strategy; version-matched SDK; protect live data | embed; incrementally replace; rebuild and migrate | package | Existing-project migration is opt-in; a fresh generated app does not need this brief. |
 | `plugin` | user wants an installable capability | plan before apply; lock entry is the removal manifest; delete only plugin-owned files and atoms | apply; remove | project | — |
 | `theme` | brand or visual direction in a project | repo-owned theme and UI contracts | — | project | — |
 | `update` | SDK upgrade or plugin lock review | never blindly overwrite user-owned code | — | project | — |
@@ -61,7 +63,7 @@ contracts.
 
 `skills/install/SKILL.md` declares `name: mantle`. It is the only repository
 skill discovered by the no-flag command and copied as a small directory.
-The other six skills live in `docs/skills/` and ship with the npm package.
+The other seven skills live in `docs/skills/` and ship with the npm package.
 `mantle skills` projects the four ongoing workflows after package installation.
 
 Other marketplace hosts point to the same entry:
