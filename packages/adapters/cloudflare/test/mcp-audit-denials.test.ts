@@ -117,6 +117,24 @@ describe("MCP audit: gate denials", () => {
     ]);
   });
 
+  it("records every call in a denied batch", async () => {
+    events.length = 0;
+    const request = new Request("https://example.test/mcp/staff", {
+      method: "POST",
+      headers: { ...MCP_HEADERS, authorization: "Bearer member" },
+      body: JSON.stringify([
+        { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "hello", arguments: { requestKey: "op-1" } } },
+        { jsonrpc: "2.0", id: 2, method: "tools/list" },
+        { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "hidden", arguments: {} } },
+      ]),
+    });
+    expect((await run(staff, request)).status).toBe(403);
+    expect(events.map((event) => [event.tool, event.operationId, event.outcome])).toEqual([
+      ["hello", "op-1", "INSUFFICIENT_ROLE"],
+      ["hidden", null, "INSUFFICIENT_ROLE"],
+    ]);
+  });
+
   it("does not record denied discovery methods", async () => {
     events.length = 0;
     expect((await run(staff, call("/mcp/staff", "member", "tools/list", {}))).status).toBe(403);

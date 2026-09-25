@@ -31,8 +31,17 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
     await page.route("**/admin/api/**", async route => {
       const path = new URL(route.request().url()).pathname.replace("/admin/api", "");
       if (path === "/mcp") {
-        calls.push(route.request().postDataJSON());
-        return route.fulfill({ json: fail ? { error: { message: "Stale version", data: { code: "CONFLICT" } } } : { result: { content: [{ type: "text", text: '{"rows":[]}' }] } } });
+        // A minimal Streamable HTTP server: the official client initializes,
+        // notifies, then calls; it may also probe the standalone GET stream.
+        if (route.request().method() !== "POST") return route.fulfill({ status: 405 });
+        const message = route.request().postDataJSON() as { id?: number; method: string; params?: { protocolVersion?: string } };
+        if (message.id === undefined) return route.fulfill({ status: 202 });
+        if (message.method === "initialize") return route.fulfill({ json: { jsonrpc: "2.0", id: message.id, result: {
+          protocolVersion: message.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "test", version: "1.0.0" },
+        } } });
+        calls.push(message);
+        const text = fail ? JSON.stringify({ diagnostics: [{ code: "CONFLICT", message: "Stale version" }] }) : '{"rows":[]}';
+        return route.fulfill({ json: { jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text }], ...(fail ? { isError: true } : {}) } } });
       }
       return route.fulfill({ json: path === "/me" ? { role: "owner", login: "owner" }
         : path === "/site" ? { brand: "WebMCP test", icons: [], canonicalLocale: "en" }

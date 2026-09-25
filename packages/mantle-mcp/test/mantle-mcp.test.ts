@@ -156,7 +156,11 @@ describe("createMantleMcpHandler with the official client", () => {
     const response = await handler.fetch(post(batch), anonymous());
     expect(response.status).toBe(401);
     expect(invokeTrigger).not.toHaveBeenCalled();
-    expect(events).toEqual([expect.objectContaining({ tool: "member_only", outcome: "UNAUTHENTICATED" })]);
+    // Neither call ran, so both are recorded against the refused request.
+    expect(events).toEqual([
+      expect.objectContaining({ tool: "shaped", outcome: "UNAUTHENTICATED" }),
+      expect.objectContaining({ tool: "member_only", outcome: "UNAUTHENTICATED" }),
+    ]);
     await handler.fetch(post([{ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "ghost", arguments: {} } }]), member());
     expect(events.at(-1)).toMatchObject({ tool: "ghost", outcome: "UNKNOWN_TOOL" });
   });
@@ -200,6 +204,17 @@ describe("createMantleMcpHandler with the official client", () => {
     expect((await handler.fetch(rpc("tools/call", { name: "write_orders", arguments: {} }), granted)).status).toBe(200);
     const session = { ...member(), auth: { ...member().auth!, credential: "session" as const, scopes: [] } };
     expect((await handler.fetch(rpc("tools/call", { name: "write_orders", arguments: {} }), session)).status).toBe(200);
+  });
+
+  it("keeps the denied result when the missing scope cannot be granted", async () => {
+    const invokeTrigger = vi.fn(async () => ({
+      ok: false as const,
+      diagnostic: { code: "AUTH_DENIED", severity: "error" as const, path: "MCP write_orders", message: "Denied." },
+    }));
+    const { handler } = harness({ invokeTrigger }, { oauth: { scopes: ["mcp"], grantable: ["mcp"] } });
+    const response = await handler.fetch(rpc("tools/call", { name: "write_orders", arguments: {} }), member());
+    expect(response.status).toBe(200);
+    expect(await jsonRpcBody(response)).toMatchObject({ result: { isError: true } });
   });
 
   it("lets a signed-in caller through to the tool", async () => {

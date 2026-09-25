@@ -34,8 +34,10 @@ const response = await mcp.fetch(request, handlerContext);
 - **Identity.** When an anonymous caller calls a tool that requires identity,
   the handler answers with `unauthenticated(request)` before any tool runs,
   including when the call is one member of a 2025-era batch.
-- **Audit.** Every `tools/call` produces one `AuditSink` event, including
-  unknown-tool probes and identity refusals.
+- **Audit.** Each `tools/call` that reaches the SDK records one `AuditSink`
+  event, and so does each call for a tool this surface does not serve. When an
+  identity refusal answers a request, every call in it is recorded as
+  `UNAUTHENTICATED`, since none of them ran.
 
 `createMantleMcpServer(invoker, options).create(ctx)` returns a plain
 `McpServer`, for hosts that wire their own transport.

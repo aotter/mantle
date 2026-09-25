@@ -228,7 +228,7 @@ Staff review through Staff MCP on `/mcp/staff`. First `query_view_pending_approv
 }
 ```
 
-A second reviewer replaying `expectedVersion: 1` after that succeeds receives a JSON-RPC error whose `error.data.code` is `CONFLICT`. A contributor-role session is denied with `AUTH_DENIED`. `review_requisition` appears only in `tools/list` on `/mcp/staff`; the public surface lists `submit_requisition` and `query_view_my_requisitions`.
+A second reviewer replaying `expectedVersion: 1` after that succeeds receives an `isError` result whose `diagnostics[0].code` is `CONFLICT`. A contributor-role session is denied with `AUTH_DENIED`. `review_requisition` appears only in `tools/list` on `/mcp/staff`; the public surface lists `submit_requisition` and `query_view_my_requisitions`.
 
 ## What this deliberately leaves out
 

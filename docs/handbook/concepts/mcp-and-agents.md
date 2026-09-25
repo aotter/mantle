@@ -40,9 +40,9 @@ A Procedure tool advertises an `outputSchema` when its declared `output` can be 
 A business failure, such as a denied role, a version conflict or invalid arguments, is a tool result with `isError: true`, so the agent can read it and decide what to do. The text block carries `{ "diagnostics": [Diagnostic] }` in the [diagnostic shape](../reference/diagnostics.md). The same payload is also `structuredContent`, unless the tool advertises an `outputSchema`: structured results must conform to that schema. Protocol failures, such as a malformed request, an unknown tool or an unsupported protocol version, stay JSON-RPC errors. Two cases are answered over HTTP before any tool runs:
 
 - An anonymous call to a tool that requires identity gets `401` with the OAuth challenge.
-- An OAuth token that lacks a scope the tool declares with `ctx.auth.scope` gets `403 insufficient_scope`, which names the missing scopes so the client can step up.
+- An OAuth token that lacks a scope the tool declares with `ctx.auth.scope` gets `403 insufficient_scope`, which names the missing scopes so the client can step up — when the authorization server can issue them (`grantableScopes` on the Cloudflare MCP handler, which defaults to `mcp`). A scope it cannot issue gives the tool's `AUTH_DENIED` result instead, since re-authorizing would not help.
 
-The MCP surface is served by the official MCP TypeScript SDK through `@aotter/mantle-mcp`. It answers both the 2026-07-28 protocol and 2025-era stateless clients.
+The MCP surface is served by the official MCP TypeScript SDK through `@aotter/mantle-mcp`. It answers both the 2026-07-28 protocol and 2025-era stateless clients. Clients built on an MCP SDK need nothing more. A hand-written client, such as a `curl` smoke test, must send `Accept: application/json, text/event-stream` (without it the request gets `406`) and must read an answer that may arrive as one server-sent event: the JSON-RPC message is on its `data:` line.
 
 ## Keeping an action human-only
 

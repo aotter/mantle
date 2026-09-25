@@ -17,6 +17,7 @@ export async function staffMcp(runtime: MantleRuntime, plan: RuntimePlan): Promi
   const cached = cache.get(runtime);
   if (cached?.key === key && cached.plan === plan) return cached.value;
   const value = build(runtime, plan, mediaPurposes);
+  if (cached) void cached.value.handler.close().catch(() => {});
   cache.set(runtime, { key, plan, value });
   return value;
 }

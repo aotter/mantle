@@ -138,7 +138,7 @@ origin, the only column Analytics Engine filters cheaply. Columns, in order:
 `AUTH_DENIED` (malformed arguments are `INPUT_VALIDATION_FAILED`), `UNKNOWN_TOOL`,
 `INTERNAL`, or a transport gate denial
 (`INVALID_TOKEN`, `INSUFFICIENT_SCOPE`, `INSUFFICIENT_ROLE`, `CROSS_ORIGIN`): a
-`tools/call` refused before it reaches the dispatcher is recorded too, with
+`tools/call` refused before it reaches the MCP handler is recorded too, once per call in a batch, with
 whatever identity the gate established. Its body goes through the same 1 MiB
 bounded reader as an admitted call; a denied request whose body is oversized
 or not JSON is still recorded, with `tool` set to `(unreadable)`, so padding a

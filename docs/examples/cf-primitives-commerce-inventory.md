@@ -778,7 +778,7 @@ Staff, on `/mcp/staff`:
 }
 ```
 
-The result is the new snapshot `{ productSlug, available, reserved, revision }`. Repeating the exact call returns the same snapshot; changing `delta` while reusing `operationId` is a JSON-RPC error with `error.data.code = "CONFLICT"`. A non-owner staff session is denied with `AUTH_DENIED`.
+The result is the new snapshot `{ productSlug, available, reserved, revision }`. Repeating the exact call returns the same snapshot; changing `delta` while reusing `operationId` is an `isError` result whose `diagnostics[0].code` is `CONFLICT`. A non-owner staff session is denied with `AUTH_DENIED`.
 
 | Surface | Tool | Origin |
 |---|---|---|

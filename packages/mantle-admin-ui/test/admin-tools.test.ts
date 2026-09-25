@@ -35,4 +35,20 @@ describe("Admin tool transport and routing", () => {
       .rejects.toMatchObject({ message: "Stale version", body: diagnostic });
     expect(calls.filter((method) => method === "tools/call")).toHaveLength(1);
   });
+  it("reports a transport failure with its status and a serialisable body", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (init?.method !== "POST") return new Response(null, { status: 405 });
+      const message = JSON.parse(String(init.body)) as { id?: number; method: string };
+      if (message.id === undefined) return new Response(null, { status: 202 });
+      if (message.method === "initialize") return Response.json({ jsonrpc: "2.0", id: message.id, result: {
+        protocolVersion: "2025-11-25", capabilities: { tools: {} }, serverInfo: { name: "admin", version: "1" },
+      } });
+      return new Response("upstream down", { status: 503 });
+    }));
+    vi.stubGlobal("location", new URL("https://admin.example.test/admin"));
+    const error = await callStaffTool("query_view_report", {}).catch((caught: unknown) => caught) as { status: number; body: unknown };
+    expect(error.status).toBe(503);
+    expect(error.body).toEqual({ code: "MCP_REQUEST_FAILED", message: expect.any(String) });
+    expect(JSON.parse(JSON.stringify(error.body))).toEqual(error.body);
+  });
 });

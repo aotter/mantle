@@ -21,6 +21,11 @@ export interface CreateMcpApiHandlerOptions {
    *  the existing compatibility scope `mcp`. Target-specific scopes
    *  remain manifest predicates enforced on tools/call. */
   readonly requiredScopes?: readonly string[];
+  /** Scopes the authorization server can issue for this resource. A token
+   *  missing a tool's declared scope is asked to step up only when every
+   *  such scope is listed here; otherwise the call is a denied tool result.
+   *  Defaults to `requiredScopes`, which is all conventional Auth grants. */
+  readonly grantableScopes?: readonly string[];
 }
 
 /**
@@ -39,6 +44,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
 ): ExportedHandler<Env> {
   const { ref, surface, resource } = options;
   const requiredScopes = options.requiredScopes ?? ["mcp"];
+  const grantableScopes = options.grantableScopes ?? requiredScopes;
   // Denied requests never reach the handler, so their audit events resolve
   // the correlation argument from the same catalog here.
   const auditCatalog = buildCapabilityCatalog(
@@ -138,12 +144,14 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
               ...(ref.audit ? { audit: ref.audit } : {}),
               // Anonymous calls to identity-requiring tools get the same
               // challenge as the gate's own denials (#977); a token that lacks
-              // a tool's declared scope gets the SDK's step-up challenge.
+              // a grantable declared scope gets the SDK's step-up challenge.
               unauthenticated: () => oauthDenied(resource, requiredScopes, { status: 401, reason: "unauthenticated" }),
-              oauth: { scopes: requiredScopes },
+              oauth: { scopes: requiredScopes, grantable: grantableScopes },
               resourceMetadataUrl,
             },
           );
+          // Release the replaced handler's open listen streams.
+          if (cached) void cached.handler.close().catch(() => {});
           cached = { configKey, handler };
           handlerCache.set(runtime, cached);
         }
@@ -198,33 +206,35 @@ function auditDenial(
   // because auditing is on. A body that is oversized or not JSON is still a
   // denied request and is recorded with `tool: AUDIT_UNREADABLE_TOOL`, so
   // padding the body cannot hide a credential probe from the trail.
+  const unreadable = [{ tool: AUDIT_UNREADABLE_TOOL, operationId: null }];
   const settled = readJsonBody(request.clone())
     .then((body: unknown) => {
-      const message = body as {
-        method?: unknown;
-        params?: { name?: unknown; arguments?: Record<string, unknown> };
-      } | null;
-      if (!message || typeof message !== "object") return { tool: AUDIT_UNREADABLE_TOOL, operationId: null };
-      if (message.method !== "tools/call" || typeof message.params?.name !== "string") return null;
-      return {
-        tool: message.params.name,
-        operationId: auditOperationId(message.params.name, message.params.arguments ?? {}),
-      };
-    }, () => ({ tool: AUDIT_UNREADABLE_TOOL, operationId: null }))
-    .then((call) => {
-      if (!call) return;
-      return audit.record({
-        at,
-        surface,
-        callerId: ctx?.user?.id ?? null,
-        clientId: ctx?.auth?.clientId ?? null,
-        credential: ctx?.auth?.credential ?? null,
-        tool: call.tool,
-        operationId: call.operationId,
-        outcome: reason.toUpperCase().replaceAll("-", "_"),
-        durationMs: Date.now() - at,
+      if (!body || typeof body !== "object") return unreadable;
+      // A 2025-era batch is denied as a whole; each of its calls is recorded.
+      return (Array.isArray(body) ? body : [body]).flatMap((item: unknown) => {
+        const message = item as {
+          method?: unknown;
+          params?: { name?: unknown; arguments?: Record<string, unknown> };
+        } | null;
+        if (!message || typeof message !== "object") return unreadable;
+        if (message.method !== "tools/call" || typeof message.params?.name !== "string") return [];
+        return [{
+          tool: message.params.name,
+          operationId: auditOperationId(message.params.name, message.params.arguments ?? {}),
+        }];
       });
-    })
+    }, () => unreadable)
+    .then((calls) => Promise.all(calls.map((call) => audit.record({
+      at,
+      surface,
+      callerId: ctx?.user?.id ?? null,
+      clientId: ctx?.auth?.clientId ?? null,
+      credential: ctx?.auth?.credential ?? null,
+      tool: call.tool,
+      operationId: call.operationId,
+      outcome: reason.toUpperCase().replaceAll("-", "_"),
+      durationMs: Date.now() - at,
+    }))))
     .catch((error: unknown) => {
       console.error("[mountMcp] audit sink failed", error);
     });
