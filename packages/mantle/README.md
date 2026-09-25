@@ -26,7 +26,7 @@ npm install --save-exact "@aotter/mantle@$MANTLE_VERSION"
 ## What's inside
 
 The umbrella provides Spec and Runtime by default. Install an optional package
-before importing its matching Web, Admin, Auth, Bun, Vercel, Cloudflare, or Admin UI
+before importing its matching Web, MCP, Admin, Auth, Bun, Vercel, Cloudflare, or Admin UI
 subpath. Every sub-package also remains directly installable.
 
 | Subpath | Re-exports |
@@ -36,6 +36,7 @@ subpath. Every sub-package also remains directly installable.
 | `@aotter/mantle/runtime/testing` | Node-only crowded SQLite planner and HTTP sampling helpers |
 | `@aotter/mantle/codegen` | Pure linked manifests or compiled plan → typed runtime module emitter (no IO) |
 | `@aotter/mantle/web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition (no routes or platform deps) |
+| `@aotter/mantle/mcp` | Optional MCP server over the official SDK: one capability surface per handler |
 | `@aotter/mantle/admin` | Optional Admin API, auth routes, and static-asset composition |
 | `@aotter/mantle/auth` | Optional host-neutral Better Auth identity; adapters own IP headers and storage bindings |
 | `@aotter/mantle/bun` | Bun adapter — caller-owned `bun:sqlite` and Web-standard View/Trigger transport |

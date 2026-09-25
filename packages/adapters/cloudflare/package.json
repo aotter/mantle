@@ -60,7 +60,7 @@
     "@better-auth/core": "catalog:",
     "@better-auth/utils": "catalog:",
     "@cloudflare/workers-types": "^5.20260904.1",
-    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/client": "2.1.0",
     "@types/node": "catalog:",
     "aws4fetch": "catalog:",
     "better-auth": "catalog:",

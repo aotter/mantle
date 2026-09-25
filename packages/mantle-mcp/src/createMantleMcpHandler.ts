@@ -19,6 +19,13 @@ export interface MantleMcpHandlerOptions extends MantleMcpServerOptions {
   readonly maxRequestBodySize?: number;
   /** RFC 9728 metadata URL advertised on scope challenges. */
   readonly resourceMetadataUrl?: string;
+  /**
+   * Open 2026-era `subscriptions/listen` streams allowed per handler. Mantle
+   * publishes no change events, so a stream only idles; the bound keeps
+   * anonymous listeners from holding requests open without limit. Defaults
+   * to 32.
+   */
+  readonly maxSubscriptions?: number;
 }
 
 export interface MantleMcpHandler {
@@ -28,6 +35,7 @@ export interface MantleMcpHandler {
 }
 
 const DEFAULT_MAX_BODY = 1024 * 1024;
+const DEFAULT_MAX_SUBSCRIPTIONS = 32;
 const CONTEXT_KEY = "mantle.handlerContext";
 const ANONYMOUS: HandlerContext = Object.freeze({ user: null, staff: null, env: {} });
 
@@ -50,6 +58,7 @@ export function createMantleMcpHandler(
     {
       legacy: "stateless",
       maxRequestBodySize,
+      maxSubscriptions: options.maxSubscriptions ?? DEFAULT_MAX_SUBSCRIPTIONS,
       onerror: (error) => console.error("[mantle-mcp] request failed", error),
     },
   );
@@ -80,13 +89,15 @@ export function createMantleMcpHandler(
         return capability?.requiresIdentity === true && isAnonymous(ctx);
       });
       if (refused.length > 0) {
-        for (const call of refused) servers.audit(ctx, call.name, call.args, "UNAUTHENTICATED");
+        // The whole request is refused, so no call in it runs; each is recorded.
+        for (const call of calls) servers.audit(ctx, call.name, call.args, "UNAUTHENTICATED");
         return options.unauthenticated
           ? options.unauthenticated(request)
           : new Response(null, { status: 401 });
       }
+      // Registered tools audit themselves; anything else is a probe.
       for (const call of calls) {
-        if (!invoker.catalog.get(call.name)) servers.audit(ctx, call.name, call.args, "UNKNOWN_TOOL");
+        if (!invoker.serves(call.name)) servers.audit(ctx, call.name, call.args, "UNKNOWN_TOOL");
       }
       return sdk.fetch(request, { authInfo, parsedBody: message });
     },

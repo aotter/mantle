@@ -47,8 +47,10 @@ describe("MCP tools/call structuredContent", () => {
 function harness(procedureData: unknown, viewResult: unknown = { rows: [], page: 1, show: 20, hasMore: false }) {
   return new McpJsonRpcDispatcher(useCases(procedureData, viewResult), [postsSchema()], {
     surface: "public",
-    // No projectable output: Runtime would reject a non-object result for a
-    // Procedure that advertises an object outputSchema.
+    // No declared output, so no outputSchema: these cases return arrays and
+    // strings, which the SDK would refuse to send under an advertised
+    // outputSchema (Runtime's output validation rejects them first in a real
+    // plan).
     capabilities: [procedure("echo", {}), view()],
   });
 }

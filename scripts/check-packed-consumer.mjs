@@ -257,11 +257,11 @@ async function smokeGeneratedSites(temp, tarballs, version) {
     response = await call("/api/echo", { value: 42 });
     if (response.status !== 400) throw new Error("Sites HTTP Trigger validation status was not 400");
     const mcp = (path, method, params) => fetch(`${origin}${path}`, { method: "POST", headers: { ...owner,
-      "content-type": "application/json", "mcp-protocol-version": "2025-11-25" },
+      "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, ...(params ? { params } : {}) }) });
     response = await mcp("/api/mcp/staff", "tools/call", { name: "create_draft_posts", arguments: { title: "Kept" } });
     if (response.status !== 200) throw new Error(`Sites staff MCP call failed: ${response.status}`);
-    const body = await response.json();
+    const body = rpcJson(await response.text());
     entryId = JSON.parse(body.result.content[0].text).id;
     response = await fetch(`${origin}/api/views/published-posts`);
     if (response.status !== 200 || (await response.json()).data.rows.length !== 0) throw new Error("Draft leaked into public View");
@@ -475,4 +475,10 @@ function archiveProject(directory) {
   const prefix = execFileSync("git", ["-C", directory, "rev-parse", "--show-prefix"], { encoding: "utf8" }).trim().replace(/\/$/, "");
   const bytes = execFileSync("git", ["-C", top, "archive", prefix ? `HEAD:${prefix}` : "HEAD"], { maxBuffer: 64 * 1024 * 1024 });
   return { prefix, bytes };
+}
+
+/** One JSON-RPC answer, sent as JSON or as a single-event SSE stream. */
+function rpcJson(text) {
+  const data = text.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
+  return JSON.parse(data.length ? data.join("\n") : text);
 }

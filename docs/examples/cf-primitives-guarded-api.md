@@ -363,7 +363,8 @@ Standard remote MCP uses the MCP server's OAuth bearer, not the raw personal tok
 
 ```sh
 curl -sS -X POST http://localhost:8787/mcp \
-  -H 'content-type: application/json' -H "authorization: Bearer $MCP_OAUTH_ACCESS_TOKEN" \
+  -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+  -H 'mcp-protocol-version: 2025-11-25' -H "authorization: Bearer $MCP_OAUTH_ACCESS_TOKEN" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_account","arguments":{"accountId":"acct-1"}}}'
 ```
 
@@ -371,8 +372,8 @@ curl -sS -X POST http://localhost:8787/mcp \
 |---|---|---|
 | valid user credential, `accounts:read`, active membership | `200` | JSON-RPC `result` |
 | missing or invalid credential | `401` | OAuth layer rejects the request |
-| verified caller missing `ctx.user` or `accounts:read` | `403` | JSON-RPC error, `error.data.code = "AUTH_DENIED"` |
-| membership revoked while the credential stays valid | `402` | JSON-RPC error, `error.data.code = "ENTITLEMENT_REQUIRED"` |
+| verified caller missing `ctx.user` or `accounts:read` | `403` | `isError` result whose `diagnostics[0].code` is `AUTH_DENIED`; an OAuth token gets `403 insufficient_scope` instead when the authorization server can issue `accounts:read` |
+| membership revoked while the credential stays valid | `402` | `isError` result whose `diagnostics[0].code` is `ENTITLEMENT_REQUIRED` |
 | MCP bearer lacking the resource-level `mcp` scope | n/a | HTTP `403` plus `WWW-Authenticate: ... insufficient_scope` |
 
 `tools/list` on `/mcp` includes `read_account` because its MCP Trigger selects the public surface, and `query_view_public_catalog` because the View is public. Discovery is not enforcement: every `tools/call` re-evaluates the predicates and the guard. `read_catalog` and `download_export` have no MCP Trigger and are not tools.

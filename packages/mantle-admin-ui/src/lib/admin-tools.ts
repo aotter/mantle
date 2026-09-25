@@ -59,14 +59,25 @@ export async function callStaffTool(name: string, input: Record<string, unknown>
     const client = await connectStaffClient();
     result = await client.callTool({ name, arguments: input }, { signal });
   } catch (error) {
+    // Transport and protocol failures (HTTP status, JSON-RPC error) carry no
+    // Mantle diagnostic; the body stays a plain, serialisable object.
     const status = typeof (error as { status?: unknown } | null)?.status === "number" ? (error as { status: number }).status : 0;
-    throw new ApiError(error instanceof Error ? error.message : "Admin tool failed.", status, error);
+    const message = error instanceof Error ? error.message : "Admin tool failed.";
+    throw new ApiError(message, status, { code: "MCP_REQUEST_FAILED", message });
   }
-  const text = result.content?.find((item) => item.type === "text");
-  const output: unknown = text && "text" in text ? JSON.parse(text.text) : result;
+  const output = toolOutput(result);
   if (result.isError) {
     const diagnostic = (output as { diagnostics?: readonly { message?: string }[] } | null)?.diagnostics?.[0];
     throw new ApiError(diagnostic?.message ?? "Admin tool failed.", 0, diagnostic ?? output);
   }
   return { result, output };
+}
+
+/** Structured content when present, else the JSON text block, else the text
+ *  itself: a server may answer with prose. */
+function toolOutput(result: CallToolResult): unknown {
+  if (result.structuredContent !== undefined) return result.structuredContent;
+  const text = result.content?.find((item) => item.type === "text");
+  if (!text || !("text" in text)) return result;
+  try { return JSON.parse(text.text) as unknown; } catch { return text.text; }
 }

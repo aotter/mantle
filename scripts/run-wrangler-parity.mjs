@@ -127,7 +127,7 @@ try {
     await measure(`mcp-invalid-${layer}`, "/mcp", { layer, token: "invalid", json: rpc, status: 401, rounds: 3 });
     await measure(`mcp-no-dpop-proof-${layer}`, "/mcp", { layer, token: dpopCredentials.accessToken, json: rpc, status: 401, rounds: 3 });
     const invalid = await measure(`mcp-invalid-params-${layer}`, "/mcp", { layer, token: true, json: { ...call, params: { ...call.params, arguments: { unexpected: true } } }, rounds: 3 });
-    assert(invalid.records.every(({ record }) => record.rpcOutcome === "error"));
+    assert(invalid.records.every(({ record }) => record.rpcOutcome === "tool-error"));
   }
   await control("role", { userId: credentials.userId, role: "user" });
   for (const layer of (process.env.BENCH_ORDER === "reverse" ? ["M", "F2"] : ["F2", "M"])) await measure(`mcp-nonstaff-${layer}`, "/mcp/staff", { layer, token: true, json: rpc, status: 403, rounds: 3 });
@@ -214,9 +214,13 @@ async function measure(name, path, options = {}) {
         if (options.dpop || options.proof) headers.dpop = options.proof ?? await proof("POST", `${origin}${path}`, token);
       }
       if (options.json !== undefined) headers["content-type"] = "application/json";
+      if (path.startsWith("/mcp")) headers.accept = "application/json, text/event-stream";
       return { method: options.json === undefined && path !== "/r2" && !path.startsWith("/r2?") ? "GET" : "POST", headers, ...(options.json === undefined ? {} : { body: JSON.stringify(options.json) }) };
     }, validate(response, buffer) {
-      const text = new TextDecoder().decode(buffer); bodies.push(text);
+      const raw = new TextDecoder().decode(buffer);
+      // Streamable HTTP may answer one request as a single SSE event.
+      const events = raw.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
+      const text = path.startsWith("/mcp") && events.length ? events.join("\n") : raw; bodies.push(text);
       if (options.expected !== undefined) assert.deepEqual(typeof options.expected === "string" ? text : JSON.parse(text), options.expected, name);
       if (path.startsWith("/mcp") || path.startsWith("/admin")) assert.match(response.headers.get("cache-control"), /private.*no-store/);
       assert(buffer.byteLength <= 2 * 1024 * 1024, `${name} bounded response`);

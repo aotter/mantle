@@ -37,8 +37,13 @@ export interface MantleMcpServerOptions {
    * declared `ctx.auth.scope` scopes gets the SDK's `insufficient_scope`
    * challenge (403) naming `scopes` plus the tool's scopes, instead of a
    * denied tool result it cannot recover from.
+   *
+   * `grantable` lists the scopes the authorization server can issue for this
+   * resource; omitted, any scope is assumed grantable. A tool whose missing
+   * scopes are not all grantable keeps the runtime's denied result, because
+   * re-authorizing could never satisfy it.
    */
-  readonly oauth?: { readonly scopes: readonly string[] };
+  readonly oauth?: { readonly scopes: readonly string[]; readonly grantable?: readonly string[] };
 }
 
 /**
@@ -114,7 +119,7 @@ export function createMantleMcpServer(
     create(ctx) {
       const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } } });
       for (const { capability, config } of tools) {
-        const scopeChallenge = stepUp(capability, ctx, options.oauth?.scopes, (args) => {
+        const scopeChallenge = stepUp(capability, ctx, options.oauth, (args) => {
           record(ctx, capability.name, operationIdOf(capability.name, args), "INSUFFICIENT_SCOPE", Date.now());
         });
         server.registerTool(capability.name, { ...config, ...(scopeChallenge ? { scopeChallenge } : {}) }, async (args: unknown): Promise<CallToolResult> => {
@@ -171,12 +176,14 @@ export function mcpToolDefinitions(invoker: InvokeCapabilityUseCase): Tool[] {
 function stepUp(
   capability: Capability,
   ctx: HandlerContext,
-  baseScopes: readonly string[] | undefined,
+  oauth: MantleMcpServerOptions["oauth"],
   onChallenge: (args: Readonly<Record<string, unknown>>) => void,
 ): ScopeChallengeHandler | undefined {
   const required = capability.requiredScopes;
-  if (!baseScopes || required.length === 0) return undefined;
-  const scopes = [...new Set([...baseScopes, ...required])] as [string, ...string[]];
+  if (!oauth || required.length === 0) return undefined;
+  const grantable = oauth.grantable ? new Set(oauth.grantable) : null;
+  if (grantable && !required.every((scope) => grantable.has(scope))) return undefined;
+  const scopes = [...new Set([...oauth.scopes, ...required])] as [string, ...string[]];
   return ({ request }) => {
     // Only an OAuth token can be re-issued with more scopes. Sessions, API
     // keys and personal tokens get the runtime's denial instead.

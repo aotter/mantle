@@ -221,6 +221,12 @@ describe("authorization integration: one target across REST and MCP", () => {
       surface: "staff",
       resource: MCP_RESOURCE,
     });
+    const stepUpMcp = createMcpApiHandler<typeof workerEnv>({
+      ref,
+      surface: "public",
+      resource: MCP_RESOURCE,
+      grantableScopes: ["mcp", "accounts:read"],
+    });
     const mcpContext = {
       props: {
         userId: "user-1",
@@ -259,12 +265,21 @@ describe("authorization integration: one target across REST and MCP", () => {
     expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
 
     mcpScopes = ["mcp"];
-    // A token without the tool's declared scope is asked to step up with the
-    // SDK's insufficient_scope challenge, before any guard or handler runs.
+    // The authorization server cannot issue `accounts:read`, so re-authorizing
+    // would never help: the call is the runtime's denied result.
     const downscoped = await publicMcp.fetch!(mcpCall(), workerEnv, mcpContext);
-    expect(downscoped.status).toBe(403);
-    expect(downscoped.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
-    expect(downscoped.headers.get("www-authenticate")).toContain('scope="mcp accounts:read"');
+    expect(downscoped.status).toBe(200);
+    const downscopedBody = (await readJsonRpc(downscoped)) as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(downscopedBody.result?.isError).toBe(true);
+    expect(JSON.parse(downscopedBody.result?.content?.[0]?.text ?? "{}").diagnostics?.[0]?.code).toBe("AUTH_DENIED");
+    // Where it can be issued, the token is asked to step up with the SDK's
+    // insufficient_scope challenge, before any guard or handler runs.
+    const stepUp = await stepUpMcp.fetch!(mcpCall(), workerEnv, mcpContext);
+    expect(stepUp.status).toBe(403);
+    expect(stepUp.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+    expect(stepUp.headers.get("www-authenticate")).toContain('scope="mcp accounts:read"');
     expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
     mcpScopes = ["mcp", "accounts:read"];
 

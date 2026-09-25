@@ -99,7 +99,7 @@ Scopes are opaque strings the site defines and grants. Mantle compares them; it 
 
 ## MCP is the same pipeline
 
-An MCP `tools/call` runs the identical evaluator, in the identical order, with the identical diagnostics — surfaced as `isError` tool results carrying `{ "diagnostics": [Diagnostic] }` instead of an HTTP status. An anonymous call to a tool that needs identity is refused with `401`, and an OAuth token missing a declared scope with `403 insufficient_scope`, before the tool runs. A Trigger's `source.surface` selects which catalog lists a tool, and `tools/list` hides what the caller cannot see. That filtering is discovery UX, not enforcement: a client that guesses a tool name still meets every predicate and the guard. Discovery is never the authorization boundary. See [MCP and agents](./mcp-and-agents.md).
+An MCP `tools/call` runs the identical evaluator, in the identical order, with the identical diagnostics — surfaced as `isError` tool results carrying `{ "diagnostics": [Diagnostic] }` instead of an HTTP status. An anonymous call to a tool that needs identity is refused with `401`, and an OAuth token missing a declared scope that the authorization server can issue with `403 insufficient_scope`, before the tool runs. A Trigger's `source.surface` selects which catalog lists a tool, and `tools/list` hides what the caller cannot see. That filtering is discovery UX, not enforcement: a client that guesses a tool name still meets every predicate and the guard. Discovery is never the authorization boundary. See [MCP and agents](./mcp-and-agents.md).
 
 ## Related
 

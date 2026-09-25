@@ -183,8 +183,10 @@ Minimum auth/MCP behavior:
   then pass the `HandlerContext` built from the validated caller to `fetch`. The
   handler does not authenticate; the adapter's gate stays in front of it and
   supplies `unauthenticated` (the 401 challenge for anonymous calls to tools that
-  need identity) and, for OAuth, `oauth.scopes` plus `resourceMetadataUrl` so a
-  token that lacks a tool's declared scope gets the SDK's step-up challenge.
+  need identity) and, for OAuth, `oauth.scopes`, `oauth.grantable` and
+  `resourceMetadataUrl`, so a token that lacks a tool's declared scope gets the
+  SDK's step-up challenge when the authorization server can issue that scope,
+  and the runtime's denied result when it cannot.
 - Build Procedure/View `HandlerContext` with `user`, live `staff`, normalized
   `auth`, adapter `env`, and optional `waitUntil`.
 - Re-read mutable staff role for each protected REST/MCP invocation. Token or
