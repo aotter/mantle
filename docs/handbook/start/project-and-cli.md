@@ -84,7 +84,6 @@ queries and running routes. [Command reference](../reference/surface.md).
 
 ```sh
 npx mantle generate --check
-npx mantle validate
 npx mantle skills
 npx mantle skills --check
 npm run typecheck
@@ -93,12 +92,17 @@ npm run dev
 ```
 
 Run scripts that exist in the selected project; Spec-only has no server to
-start. A full Cloudflare app should serve the blank home and Admin assets.
+start. Run `npx mantle validate` after adding the first Manifest: the validator
+reports `MANIFEST_ROOT_NOT_FOUND` on an intentionally empty app. A full
+Cloudflare app should serve the blank home and Admin assets.
 For local CF Admin, copy `.dev.vars.example` to `.dev.vars`, replace
 `ADMIN_EMAIL` with the intended owner's address and `BETTER_AUTH_SECRET` with
 a random 32-byte secret, and keep `PUBLIC_ORIGIN` equal to the loopback URL
-wrangler prints. The OTP appears in wrangler logs. Verify that anonymous staff access fails before
-claiming Admin or staff MCP is working. A full Site must also apply its reviewed
+wrangler prints. Open `/admin/sign-in` with that email and read the OTP in
+wrangler logs. Check that `/_mantle/admin/assets/*` loads, an anonymous
+`/admin/api/site-settings` request is denied, and the signed-in owner can read
+it. Verify anonymous staff MCP access fails before claiming it works. A full
+Site must also apply its reviewed
 D1 migration before the Worker boots. The public MCP endpoint is discoverable
 without a staff session; the staff endpoint requires the host's verified
 identity and a Mantle role. See [MCP and agents](../concepts/mcp-and-agents.md).
