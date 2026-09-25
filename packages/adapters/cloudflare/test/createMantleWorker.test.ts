@@ -111,6 +111,25 @@ describe("createMantleWorker", () => {
     expect((await fetchWorker(worker, "/mcp/staff", env)).status).toBe(404);
     expect((await fetchWorker(worker, "/admin", env)).status).toBe(404);
   });
+  it("serves the public MCP App resource from mcpApps, and never a staff one without Admin", async () => {
+    const app = (uri: string) => ({ resources: [{ uri, name: uri, html: "<!doctype html><title>App</title>", renders: () => false }] });
+    const worker = createMantleWorker<TestEnv>({
+      plan: compileTestPlan([]), auth: () => createSetupIncompleteAuth({ message: "not configured" }),
+      bindings: testBindings, surfaces: { api: false, mcp: true, admin: false },
+      mcpApps: { public: app("ui://test/public"), staff: app("ui://test/staff") },
+    });
+    const rpc = (method: string, params: unknown) => fetchWorker(worker, "/mcp", testEnv(), {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+    const read = await readJsonRpc<{ result: { contents: { uri: string; text: string }[] } }>(
+      await rpc("resources/read", { uri: "ui://test/public" }));
+    expect(read.result.contents).toEqual([expect.objectContaining({ uri: "ui://test/public", text: expect.stringContaining("<title>App</title>") })]);
+    const staff = await readJsonRpc<{ error?: unknown }>(await rpc("resources/read", { uri: "ui://test/staff" }));
+    expect(staff.error).toBeDefined();
+    expect((await fetchWorker(worker, "/mcp/staff", testEnv())).status).toBe(404);
+  });
   it("isolates frontend fallback from native routes and resolves one request client", async () => {
     const clients = new Set();
     const frontend = vi.fn(async (_request, { client }) => { clients.add(client); return new Response('app', { headers: { 'cache-control': 'public, max-age=60' } }); });

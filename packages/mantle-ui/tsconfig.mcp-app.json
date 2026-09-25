@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.lib.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": null,
+    "rootDir": "."
+  },
+  "include": [
+    "src/**/*",
+    "examples/**/*"
+  ],
+  "exclude": [
+    "dist/**/*"
+  ]
+}

@@ -37,8 +37,8 @@ export function SchemaForm(props: {
     <div data-slot="schema-form" className="grid gap-3">
       {fields.map(([name, field]) => {
         const id = `mantle-field-${name}`;
-        const label = text(field.title, props.language) ?? name;
-        const hint = text(field.description, props.language);
+        const label = schemaText(field.title, props.language) ?? name;
+        const hint = schemaText(field.description, props.language);
         const value = props.state.draft[name];
         return (
           <div key={name} className="grid gap-1 text-sm">
@@ -115,8 +115,18 @@ function JsonField(props: { common: Record<string, unknown>; name: string; value
   );
 }
 
-function text(value: FormSchema["title"], language: string | undefined): string | undefined {
+/**
+ * A schema `title` or `description` in the language: an exact tag, then the
+ * same tag in any case, then the same primary language, then English.
+ */
+export function schemaText(value: FormSchema["title"], language: string | undefined): string | undefined {
   if (typeof value === "string") return value;
   if (!value) return undefined;
-  return (language ? value[language] : undefined) ?? value["en"] ?? Object.values(value)[0];
+  const tags = Object.keys(value);
+  const wanted = language?.toLowerCase();
+  const primary = wanted?.split("-")[0];
+  const tag = (language && language in value ? language : undefined)
+    ?? tags.find((item) => item.toLowerCase() === wanted)
+    ?? tags.find((item) => item.toLowerCase().split("-")[0] === primary);
+  return (tag ? value[tag] : undefined) ?? value["en"] ?? Object.values(value)[0];
 }

@@ -88,28 +88,47 @@ export function createMantleMcpServer(
     .map((capability) => ({ capability, config: toolConfig(capability) }));
   const apps = linkApps(options.apps, invoker);
   /**
-   * What an App needs to act on a View's rows (ADR-0029 D7): the source
-   * collection and each row action with the tool's title and input schema,
-   * limited to tools this request registers. It travels in the result's
-   * `_meta`, so hosts that render no UI and the model's text are unchanged.
+   * A tool this request registers whose `collection` input accepts the
+   * collection, such as `read_entry`; the App calls it only when named.
+   */
+  const coversCollection = (name: string, collection: string | null, ui: ClientUiSupport): boolean => {
+    const target = catalog.get(name);
+    if (!target || !collection || !invoker.serves(name) || (apps.appOnly.has(name) && ui === "unsupported")) return false;
+    const property = (target.inputSchema["properties"] as { collection?: { enum?: readonly string[] } } | undefined)?.collection;
+    return (property?.enum ?? []).includes(collection);
+  };
+  /**
+   * What an App needs to render a View and act on its rows (ADR-0029 D7):
+   * the source collection, the tool that reads one of its entries when this
+   * surface has one, and each row action with the tool's title and input
+   * schema, limited to tools this request registers. It travels in the
+   * result's `_meta` of App-linked Views only, so hosts that render no UI
+   * and the model's text are unchanged.
    */
   const interactionMeta = (capability: Capability, ui: ClientUiSupport): Record<string, unknown> | undefined => {
-    if (capability.route.kind !== "view" || !capability.rowActions?.length) return undefined;
-    const actions = capability.rowActions.flatMap((action) => {
+    if (capability.route.kind !== "view") return undefined;
+    const collection = capability.route.view.spec.from ?? null;
+    const actions = (capability.rowActions ?? []).flatMap((action) => {
       const target = catalog.get(action.capability);
       if (!target || !invoker.serves(action.capability) || (apps.appOnly.has(action.capability) && ui === "unsupported")) return [];
       return [{
         capability: action.capability,
+        // People see the title; the description is written for the model.
         ...(target.title ? { title: target.title } : {}),
-        description: target.description,
         inputSchema: target.inputSchema,
         bind: action.bind,
         ...(action.version ? { version: action.version } : {}),
         mutates: action.mutates,
       }];
     });
-    if (actions.length === 0) return undefined;
-    return { [INTERACTION_META_KEY]: { view: capability.name, collection: capability.route.view.spec.from ?? null, rowActions: actions } };
+    return {
+      [INTERACTION_META_KEY]: {
+        view: capability.name,
+        collection,
+        rowActions: actions,
+        ...(coversCollection(READ_ENTRY, collection, ui) ? { read: READ_ENTRY } : {}),
+      },
+    };
   };
   const serverInfo = {
     ...(options.serverInfo ?? { name: "aotter.mantle" }),
@@ -311,6 +330,9 @@ function toAnnotations(hints: CapabilityHints): ToolAnnotations {
 
 /** Result `_meta` key carrying a View's row actions for MCP Apps. */
 export const INTERACTION_META_KEY = "net.aotter.mantle/interaction";
+
+/** The staff tool that reads one entry (ADR-0029 D7). */
+const READ_ENTRY = "read_entry";
 
 /** MCP requires `structuredContent` to be an object, so arrays and
  *  primitives travel in the text block only. */

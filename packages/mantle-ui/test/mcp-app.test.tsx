@@ -37,10 +37,22 @@ describe("MCP App bridge", () => {
     await expect(invokeTool(call, "x", {}, signal)).rejects.toThrow("Tool failed");
   });
 
-  it("reads the entry through read_entry", async () => {
+  it("reads the entry through the reader the server names", async () => {
     const call = vi.fn(async () => ({ structuredContent: { id: "r1", version: 4, data: { item: "Laptops" } } }));
-    expect(await readEntry(call, "requisitions", "r1", new AbortController().signal)).toEqual({ id: "r1", version: 4, data: { item: "Laptops" } });
+    expect(await readEntry(call, "read_entry", "requisitions", "r1", new AbortController().signal)).toEqual({ id: "r1", version: 4, data: { item: "Laptops" } });
     expect(call).toHaveBeenCalledWith("read_entry", { collection: "requisitions", id: "r1" }, expect.any(AbortSignal));
+    expect(viewOf(viewResult)?.read).toBeNull();
+  });
+
+  it("reads diagnostics from the text block of a tool with an output schema", async () => {
+    const call = vi.fn(async () => ({ isError: true, content: [{ type: "text", text: JSON.stringify({ diagnostics: [{ code: "CONFLICT", message: "Moved." }] }) }] }));
+    expect(await invokeTool(call, "x", {}, new AbortController().signal)).toEqual({ ok: false, diagnostics: [{ code: "CONFLICT", message: "Moved." }] });
+  });
+
+  it("treats a View without row actions as a View, and an error result as no View", () => {
+    const bare: ToolResult = { ...viewResult, _meta: { [INTERACTION_META_KEY]: { view: "query_view_mine", collection: "requisitions", rowActions: [] } } };
+    expect(viewOf(bare)).toMatchObject({ rows: [{ id: "r1" }], rowActions: [] });
+    expect(viewOf({ ...viewResult, isError: true })).toBeNull();
   });
 });
 
@@ -50,5 +62,21 @@ describe("InteractionApp", () => {
     expect(html).toContain("Laptops");
     expect(html).toContain("Review requisition");
     expect(renderToStaticMarkup(<InteractionApp call={vi.fn()} result={null} input={null} />)).toContain("Waiting for results");
+    // Each row's button names its row for assistive technology.
+    expect(html).toContain('aria-label="Review requisition: r1"');
+  });
+
+  it("shows a failed or cancelled View instead of waiting", () => {
+    const failed: ToolResult = { isError: true, content: [{ type: "text", text: JSON.stringify({ diagnostics: [{ code: "FORBIDDEN", message: "Not allowed." }] }) }] };
+    const html = renderToStaticMarkup(<InteractionApp call={vi.fn()} result={failed} input={{}} />);
+    expect(html).toContain("These results could not be shown.");
+    expect(html).toContain("Not allowed.");
+    expect(renderToStaticMarkup(<InteractionApp call={vi.fn()} result={null} input={null} cancelled />)).toContain("cancelled");
+  });
+
+  it("speaks the host's locale", () => {
+    expect(renderToStaticMarkup(<InteractionApp call={vi.fn()} result={null} input={null} locale="zh-TW" />)).toContain("正在等待結果");
+    expect(renderToStaticMarkup(<InteractionApp call={vi.fn()} result={null} input={null} locale="zh-Hans-CN" />)).toContain("正在等待结果");
+    expect(renderToStaticMarkup(<InteractionApp call={vi.fn()} result={null} input={null} locale="fr" />)).toContain("Waiting for results");
   });
 });

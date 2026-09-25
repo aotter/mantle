@@ -121,7 +121,9 @@ export function OperationStatus(props: FieldLabelProps & {
         </>
       ));
     case "conflict":
-      return notice("error", labels.conflict, button(labels.reread, () => void controller.reread()));
+      return state.canRead
+        ? notice("error", labels.conflict, button(labels.reread, () => void controller.reread()))
+        : notice("error", labels.conflictReopen);
     case "uncertain":
       return notice("error", labels.uncertain, !state.canRead
         ? button(labels.acknowledgeUncertain, () => controller.acknowledgeUncertain())
@@ -183,9 +185,16 @@ export function OperationPanel(props: FieldLabelProps & {
       data-slot="operation-panel"
       aria-busy={busy || state.reading}
       className="grid gap-4"
-      onSubmit={(event) => {
+      // Submit from script, never through the browser's form submission:
+      // MCP hosts commonly sandbox Apps with `allow-scripts` but without
+      // `allow-forms`, where a form submission is blocked outright.
+      onSubmit={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        const target = event.target as HTMLElement;
+        if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+        if (target.tagName !== "INPUT" || ["checkbox", "radio", "button", "submit"].includes((target as HTMLInputElement).type)) return;
         event.preventDefault();
-        void controller.submit();
+        if (canSubmit) void controller.submit();
       }}
     >
       <header className="grid gap-1">
@@ -228,7 +237,8 @@ export function OperationPanel(props: FieldLabelProps & {
               {labels.cancel}
             </button>
             <button
-              type="submit"
+              type="button"
+              onClick={() => void controller.submit()}
               disabled={!canSubmit}
               className="bg-primary text-primary-foreground rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
             >

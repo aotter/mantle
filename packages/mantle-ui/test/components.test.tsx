@@ -34,7 +34,23 @@ describe("@aotter/mantle-ui components", () => {
     expect(html).toContain("From the selected row");
     expect(html).toContain('name="note"');
     expect(html).toContain("submitted");
-    expect(html).toMatch(/<button type="submit" disabled=""[^>]*>Run<\/button>/u);
+    // Submitted from script: MCP hosts often sandbox Apps without `allow-forms`.
+    expect(html).toMatch(/<button type="button" disabled=""[^>]*>Run<\/button>/u);
+    expect(html).not.toContain('type="submit"');
+  });
+
+  it("offers no dead re-read after a conflict when the host cannot read", async () => {
+    const c = createInteractionController({
+      interaction,
+      row,
+      invoke: async (): Promise<InvokeOutcome> => ({ ok: false, diagnostics: [{ code: "CONFLICT", message: "Moved." }] }),
+    });
+    await c.open();
+    await c.submit();
+    const html = renderToStaticMarkup(<OperationStatus controller={c} state={c.getSnapshot()} />);
+    expect(html).toContain('data-phase="conflict"');
+    expect(html).toContain("open the action again");
+    expect(html).not.toContain("Load latest version");
   });
 
   it("explains a newer version and offers only the review action", async () => {
