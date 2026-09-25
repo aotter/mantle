@@ -168,7 +168,7 @@ function checkPackageDirection() {
     },
     {
       dir: "packages/mantle-ui/src/controller",
-      forbidden: ['from "react', "@modelcontextprotocol/", "window.", "document.", "localStorage"],
+      forbidden: ["window.", "document.", "localStorage", "sessionStorage"],
       message: "ui controller must stay framework- and host-free",
     },
     {
@@ -231,14 +231,27 @@ function checkPackageDirection() {
   }
 }
 
-/** The UI controller ships no Mantle runtime code: package imports are
- *  type-only, so a browser bundle carries the controller alone. */
+/** The UI controller imports nothing: its Mantle shapes are structural,
+ *  so it installs and bundles alone. Checked on the AST, so re-exports,
+ *  side-effect and dynamic imports count too. */
 function checkUiControllerImports() {
   const files = listFiles(join(ROOT, "packages/mantle-ui/src/controller"), (p) => p.endsWith(".ts"));
   for (const file of files) {
-    const source = stripComments(readFileSync(file, "utf8"));
-    for (const match of source.matchAll(/^\s*import\s+(?!type\b)[^;]*?from\s+["']([^"']+)["']/gmu)) {
-      if (!match[1].startsWith(".")) fail(file, `ui controller must import '${match[1]}' with import type`);
+    const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+    const specifiers = [];
+    const visit = (node) => {
+      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        specifiers.push(node.moduleSpecifier.text);
+      } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
+        specifiers.push(node.arguments[0].text);
+      } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) {
+        specifiers.push(node.argument.literal.text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    for (const specifier of specifiers.filter((value) => !value.startsWith("."))) {
+      fail(file, `ui controller must not import '${specifier}'`);
     }
   }
 }

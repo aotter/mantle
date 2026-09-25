@@ -177,6 +177,7 @@ The umbrella installs Spec and Runtime only. Web, Admin, Auth, Admin UI, Bun, Ve
 | `@aotter/mantle-cloudflare` | `/cloudflare` | Cloudflare Workers adapter: D1, Workers Cache, R2, Queues, Better Auth 1.7 MCP and CIMD. |
 | `@aotter/mantle-indexeddb` | — | Browser IndexedDB adapter. Directly installable; no umbrella subpath. |
 | `@aotter/mantle-mcp` | — | MCP surface on the official MCP SDK: serves a runtime capability catalog as tools to 2026-07-28 and 2025 stateless clients. Directly installable; no umbrella subpath. |
+| `@aotter/mantle-ui` | — | `/controller`: framework-free interaction logic shared by Admin and MCP Apps (review a row, lock its version, submit once, surface conflicts and uncertain writes). Imports nothing. Directly installable; no umbrella subpath. |
 
 ## Versions
 

@@ -20,7 +20,8 @@
     "./controller": {
       "types": "./dist/controller/index.d.ts",
       "import": "./dist/controller/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -32,21 +33,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.lib.json",
     "test": "vitest run"
   },
-  "peerDependencies": {
-    "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*"
-  },
-  "peerDependenciesMeta": {
-    "@aotter/mantle-runtime": {
-      "optional": true
-    },
-    "@aotter/mantle-spec": {
-      "optional": true
-    }
-  },
   "devDependencies": {
-    "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
