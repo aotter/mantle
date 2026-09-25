@@ -25,7 +25,11 @@ const resource = await client.readResource({ uri });
 const html = (resource.contents[0] as { text: string }).text;
 
 const iframe = document.getElementById("app") as HTMLIFrameElement;
-const bridge = new AppBridge(client, { name: "mantle-basic-host", version: "1.0.0" }, { serverTools: {}, logging: {} });
+const theme = params.get("theme") === "dark" ? "dark" : "light";
+const locale = params.get("locale") ?? "en-US";
+const bridge = new AppBridge(client, { name: "mantle-basic-host", version: "1.0.0" }, { serverTools: {}, logging: {} }, {
+  hostContext: { theme, locale },
+});
 bridge.oninitialized = async () => {
   const args = {};
   await bridge.sendToolInput({ arguments: args });

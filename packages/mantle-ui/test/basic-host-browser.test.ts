@@ -147,6 +147,15 @@ describe("MCP Apps host matrix (#1119)", () => {
       await app.getByText("This entry changed before your update was saved.", { exact: false }).waitFor();
       expect(await app.getByLabel("Decision").inputValue()).toBe("rejected");
       expect(writes).toHaveLength(1);
+
+      // The host's theme and locale reach the App.
+      await page.goto(new URL("/index.html?tool=query_view_pending_approvals&theme=dark&locale=zh-TW", server.resolvedUrls!.local[0]!).href);
+      await page.getByText("result delivered").waitFor();
+      await app.getByRole("button", { name: "Review requisition" }).click();
+      await app.getByText("來自選取的資料列").waitFor();
+      const frame = page.frames().find((candidate) => candidate !== page.mainFrame())!;
+      expect(await frame.evaluate(() => [document.documentElement.lang, getComputedStyle(document.body).backgroundColor]))
+        .toEqual(["zh-TW", "rgb(24, 24, 27)"]);
     } finally {
       await browser.close();
       await server.close();

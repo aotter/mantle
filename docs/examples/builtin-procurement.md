@@ -253,6 +253,8 @@ The two audiences then work in chat:
   - If someone else decided first, the App shows what changed and asks for a review before anything is sent.
   - A stale `expectedVersion` still fails with `CONFLICT`, and the note is kept.
 
+`packages/mantle-ui/test/basic-host-browser.test.ts` runs the reviewer flow against a real MCP handler, in a host built on the official MCP Apps bridge; see the [MCP Apps host matrix](../mcp-apps-host-matrix.md).
+
 Clients without MCP Apps run the same steps with the plain tools.
 
 ## What this deliberately leaves out
