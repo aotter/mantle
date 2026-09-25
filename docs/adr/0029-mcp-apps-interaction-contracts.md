@@ -133,7 +133,7 @@ Two packages are added; no other package is split.
 | Package | Responsibility |
 |---|---|
 | `@aotter/mantle-mcp` | Optional. Registers the capability catalog on an official `McpServer` per surface (`createMantleMcpServer`), wraps `createMcpHandler` (`createMantleMcpHandler`), writes audit per call, and registers MCP Apps resources and app tools through `@modelcontextprotocol/ext-apps/server`. No UI dependency. |
-| `@aotter/mantle-ui` | Optional. `/controller`: framework-free interaction controller; must not import React. `/` (root): React components, including the ADR-lite 909 kit moved from `@aotter/mantle-admin-ui/kit`. `/mcp-app`: a single-file `ui://` HTML build (`vite-plugin-singlefile`) using the official `App` bridge. |
+| `@aotter/mantle-ui` | Optional. `/controller`: framework-free interaction controller; must not import React. `/` (root): React interaction components. `/kit` (with `kit.css` and `tokens.css`): the ADR-lite 909 kit moved from `@aotter/mantle-admin-ui/kit`, whose libraries are optional peers so `/controller` installs none. `/mcp-app`: a single-file `ui://` HTML build (`vite-plugin-singlefile`) using the official `App` bridge. |
 
 ```text
 mantle-spec ◄── mantle-runtime ◄── mantle-mcp ◄── adapters, mantle-admin
