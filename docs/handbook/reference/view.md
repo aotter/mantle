@@ -10,6 +10,7 @@ A View is a named read-only query over Schemas. It is the only atom that needs n
 | Field | Type | Required | Default | Rules |
 |---|---|---|---|---|
 | `title` | LocalizedText | no | Title-Cased `metadata.name` | Admin report label. Non-empty string or locale map. |
+| `description` | LocalizedText | no | Generated `Query <surface> View '<name>'.` | What the View answers. Agents read it as the View's MCP tool description. Non-empty string or locale map. |
 | `uiSchema` | object | no | — | Only on `surface: staff`; only the key `list`. Violations are `VIEW_UI_INVALID`. |
 | `from` | string | exactly one of `from` / `sql` | — | Name of a declared Schema (`VIEW_FROM_UNKNOWN_SCHEMA`). The declarative form. |
 | `sql` | string | exactly one of `from` / `sql` | — | One SQLite `SELECT`. See [`sql`](#sql). |

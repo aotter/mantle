@@ -100,7 +100,7 @@ export const MANTLE_BIND_KEYWORD = "x-mantle-bind" as const;
  * language, the v0.1 shape) or a map of locale code → string (e.g.
  * `{ en: "Products", "zh-TW": "商品" }`) so one manifest can serve a
  * multi-language admin UI. `Schema.spec.title`/`.description`,
- * `Procedure.spec.title`/`.description`, and `View.spec.title` (#443)
+ * `Procedure.spec.title`/`.description`, and `View.spec.title`/`.description`
  * use this shape; consumers resolve it to a single displayable string
  * with `resolveLocalizedText`.
  */
@@ -242,6 +242,10 @@ export interface ViewManifestSpec {
    *  rendering of `metadata.name`, exactly as before this field
    *  existed. */
   readonly title?: LocalizedText;
+  /** What the View answers, for agents and people choosing a query
+   *  (ADR-0029). Projected into the View's MCP tool description; absent
+   *  keeps the generated "Query <surface> View '<name>'." text. */
+  readonly description?: LocalizedText;
   /** Admin-only presentation/query affordances for `surface: staff`
    *  Views. v0.1 supports `uiSchema.list.columns`, `searchFields`, and
    *  `filterFields`; public REST and MCP semantics stay unchanged. */

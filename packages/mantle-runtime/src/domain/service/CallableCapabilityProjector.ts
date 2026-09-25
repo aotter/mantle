@@ -44,13 +44,16 @@ export function projectCallableCapabilities(
     if (!view) continue;
     const manifest = view.manifest;
     const title = resolveLocalizedText(manifest.spec.title, "en");
+    const purpose =
+      resolveLocalizedText(manifest.spec.description, "en") ??
+      `Query ${manifest.spec.surface} View '${view.name}'.`;
     capabilities.push({
       kind: "view",
       name: tool.name,
       ownerName: view.name,
       surface: tool.surface,
       ...(title ? { title } : {}),
-      description: `Query ${manifest.spec.surface} View '${view.name}'.${manifest.spec.cache
+      description: `${purpose}${manifest.spec.cache
         ? ` Anonymous REST responses may be shared for up to ${manifest.spec.cache.sharedMaxAge} seconds.`
         : ""}`,
       inputSchema: viewInputSchema(manifest),

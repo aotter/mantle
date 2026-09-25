@@ -189,6 +189,34 @@ spec: { surface: internal, sql: SELECT 1 AS value }
     expect(projectCallableCapabilities(plan)).toEqual([]);
   });
 
+  it("leads a View tool description with the declared View description", () => {
+    const plan = compile(parse(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  schema: { type: object, properties: { title: { type: string } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: described }
+spec:
+  surface: public
+  from: posts
+  description: { en: Posts an editor must review., "zh-TW": 待審文章。 }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: plain }
+spec:
+  surface: public
+  from: posts
+`));
+    const byName = new Map(projectCallableCapabilities(plan).map((item) => [item.name, item.description]));
+    expect(byName.get("query_view_described")).toBe("Posts an editor must review.");
+    expect(byName.get("query_view_plain")).toBe("Query public View 'plain'.");
+  });
+
   it("takes Procedure presentation and schemas from the Procedure contract", () => {
     const plan = compile(parse(`apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure

@@ -307,6 +307,22 @@ describe("ManifestParser — View.spec.title (LocalizedText, optional — #443)"
   });
 });
 
+describe("ManifestParser — View.spec.description (LocalizedText, optional — ADR-0029)", () => {
+  it("accepts a plain string and a locale-map description", () => {
+    for (const description of ["Posts waiting for review.", { en: "Posts waiting for review.", "zh-TW": "待審文章。" }]) {
+      const { manifests, diagnostics } = parseManifests(viewDoc({ from: "posts", description }));
+      expect(diagnostics).toEqual([]);
+      expect((manifests[0] as ViewManifest).spec.description).toEqual(description);
+    }
+  });
+
+  it.each([[""], [{}], [42], [["a"]]])("rejects %j with a message naming the field", (description) => {
+    const { diagnostics } = parseManifests(viewDoc({ from: "posts", description }));
+    expect(diagnostics[0]?.path).toContain("/spec/description");
+    expect(diagnostics[0]?.message).toContain("View.spec.description");
+  });
+});
+
 describe("JSON Schema property `title` keyword (#443)", () => {
   it("a Schema property with a plain string title parses without diagnostics", () => {
     const yaml = schemaDoc({
