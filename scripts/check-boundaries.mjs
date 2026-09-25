@@ -172,6 +172,11 @@ function checkPackageDirection() {
       message: "ui controller must stay framework- and host-free",
     },
     {
+      dir: "packages/mantle-ui/src/react",
+      forbidden: ["@aotter/mantle-admin", "@tanstack/", "@modelcontextprotocol/", "fetch(", "location.", "localStorage", "document.cookie"],
+      message: "ui components must not depend on Admin, a query cache, a transport or host globals",
+    },
+    {
       dir: "packages/mantle-web/src",
       forbidden: [
         "@aotter/mantle-cloudflare",
@@ -219,7 +224,7 @@ function checkPackageDirection() {
   ];
 
   for (const rule of rules) {
-    const files = listFiles(join(ROOT, rule.dir), (p) => p.endsWith(".ts"));
+    const files = listFiles(join(ROOT, rule.dir), (p) => p.endsWith(".ts") || p.endsWith(".tsx"));
     for (const file of files) {
       const source = stripComments(readFileSync(file, "utf8"));
       for (const token of rule.forbidden) {

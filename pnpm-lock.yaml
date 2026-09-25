@@ -380,6 +380,9 @@ importers:
       '@aotter/mantle-admin':
         specifier: workspace:*
         version: link:../mantle-admin
+      '@aotter/mantle-ui':
+        specifier: workspace:*
+        version: link:../mantle-ui
       '@modelcontextprotocol/client':
         specifier: 2.1.0
         version: 2.1.0
@@ -534,6 +537,18 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.1.1
+      '@types/react':
+        specifier: ^19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.2.7
+        version: 19.2.7(@types/react@19.2.18)
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.2.8
+        version: 19.2.8(react@19.2.8)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

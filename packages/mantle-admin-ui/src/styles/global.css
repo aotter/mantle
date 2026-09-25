@@ -4,6 +4,7 @@
 @import "./system-tokens.css";
 
 @source "../**/*.{ts,tsx}";
+@source "../../../mantle-ui/src/react/**/*.tsx";
 
 @custom-variant dark (&:is(.dark *));
 
