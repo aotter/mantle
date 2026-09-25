@@ -53,6 +53,70 @@ spec:
   fields: [ticketNumber]
 ---
 apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: all-tickets }
+spec:
+  surface: staff
+  from: tickets
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: payroll }
+spec:
+  title: Payroll
+  lifecycle: operational
+  schema:
+    type: object
+    properties:
+      salary: { type: number }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: approve-raise }
+spec:
+  requires: { auth: { all: [{ ctx.staff: [owner] }] } }
+  input:
+    type: object
+    required: [id, expectedVersion]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: number }
+      salary: { type: number }
+  output: { type: object }
+  handler: { kind: builtin, op: update, schema: payroll }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: approve-raise-http }
+spec:
+  source: { kind: http, method: POST, path: /api/raises/approve }
+  target: { procedure: approve-raise }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: remove-ticket }
+spec:
+  input:
+    type: object
+    required: [id]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: number }
+  output: { type: object }
+  handler: { kind: builtin, op: delete, schema: tickets }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: legacy-lookup }
+spec:
+  input:
+    type: object
+    properties:
+      ticketNumber: { type: string, x-mantle-ref: tickets }
+  output: { type: object }
+  handler: { kind: ref, ref: legacyLookup }
+---
+apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
 metadata: { name: close-ticket }
 spec:
@@ -133,12 +197,21 @@ describe("interaction descriptors", () => {
     const plan = compile(custom);
     expect(plan.interactions).toEqual([
       {
+        procedure: "approve-raise",
+        schema: "payroll",
+        bind: [{ input: "id", field: "id" }],
+        version: "expectedVersion",
+        mutates: true,
+        views: [],
+      },
+      {
         procedure: "close-ticket",
         schema: "tickets",
         bind: [{ input: "ticketId", field: "id" }],
         version: "expectedVersion",
         mutates: true,
-        views: ["open-tickets"],
+        // A View without `fields` returns the reserved columns, id and version included.
+        views: ["all-tickets", "open-tickets"],
       },
       {
         procedure: "notify-requester",
@@ -147,6 +220,16 @@ describe("interaction descriptors", () => {
         mutates: false,
         views: ["open-tickets", "ticket-numbers"],
       },
+      {
+        // Builtin delete locks the version it reads, so none is bound.
+        procedure: "remove-ticket",
+        schema: "tickets",
+        bind: [{ input: "id", field: "id" }],
+        mutates: true,
+        views: ["all-tickets", "open-tickets"],
+      },
+      // legacy-lookup: a string-form ref Admin still infers onto ticketNumber
+      // offers no binding during the D8 transition.
     ]);
   });
 
@@ -166,6 +249,9 @@ describe("interaction descriptors", () => {
       .toMatchObject({ ok: false });
     expect(getEntry).toHaveBeenCalledTimes(1);
     expect(bindCapabilities(runtime(plan), plan, { surface: "public" }).catalog.get("read_entry")).toBeUndefined();
+    // Only targets of staff MCP tools widen the read: payroll is reachable
+    // over HTTP alone.
+    expect(read.inputSchema).toMatchObject({ properties: { collection: { enum: ["tickets"] } } });
     const plain = compile(custom.split("---").slice(0, 3).join("---"));
     expect(bindCapabilities(runtime(plain), plain, { surface: "staff" }).catalog.get("read_entry")).toBeUndefined();
   });

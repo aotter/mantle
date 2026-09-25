@@ -1,6 +1,6 @@
 import type { MediaPurposePolicy } from "@aotter/mantle-spec";
 import type { MantleMedia, MantleRuntime } from "./MantleRuntime.js";
-import { projectCallableCapabilities } from "./domain/service/CallableCapabilityProjector.js";
+import { interactionReadTargets, projectCallableCapabilities } from "./domain/service/CallableCapabilityProjector.js";
 import { buildCapabilityCatalog, type CapabilitySurface } from "./domain/service/CapabilityCatalog.js";
 import type { RuntimePlan } from "./domain/service/RuntimePlanCompiler.js";
 import {
@@ -51,7 +51,7 @@ export function bindCapabilities(
       surface: options.surface,
       callables: projectCallableCapabilities(plan, { surface: options.surface }),
       mediaPurposes,
-      readTargets: [...new Set((plan.interactions ?? []).map((interaction) => interaction.schema))],
+      readTargets: interactionReadTargets(plan, options.surface),
     }),
     schemas,
   );

@@ -1364,22 +1364,24 @@ function rowBindingsFor(
   warned: Set<string>,
 ): StaffOperationRowBinding[] {
   const name = procedure.metadata.name;
-  const bindings = discoverRowBindings(procedure, schemasByName);
-  for (const binding of bindings) {
+  const key = (collection: string, inputField: string) => `${collection}\0${inputField}`;
+  // The operation target comes first: the SPA prefills the first binding
+  // for a row's collection, and the target is the entry the row *is*. A
+  // target also replaces any inference on the same input.
+  const targets: StaffOperationRowBinding[] = (plan.interactions ?? []).flatMap((interaction) => {
+    const [bind] = interaction.bind;
+    if (interaction.procedure !== name || !interaction.mutates || !bind) return [];
+    if (schemasByName.get(interaction.schema)?.spec.translates) return [];
+    return [{ collection: interaction.schema, inputField: bind.input, rowField: bind.field }];
+  });
+  const taken = new Set(targets.map(({ collection, inputField }) => key(collection, inputField)));
+  const references = discoverRowBindings(procedure, schemasByName)
+    .filter(({ collection, inputField }) => !taken.has(key(collection, inputField)));
+  for (const binding of references) {
     const declared = procedure.spec.input.properties?.[binding.inputField]?.[MANTLE_REF_KEYWORD];
     if (typeof declared === "string" && binding.rowField !== "id") warnInferredBinding(name, binding, warned);
   }
-  const key = (collection: string, inputField: string) => `${collection}\0${inputField}`;
-  const present = new Set(bindings.map(({ collection, inputField }) => key(collection, inputField)));
-  for (const interaction of plan.interactions ?? []) {
-    if (interaction.procedure !== name) continue;
-    if (schemasByName.get(interaction.schema)?.spec.translates) continue;
-    const [bind] = interaction.bind;
-    if (!bind || present.has(key(interaction.schema, bind.input))) continue;
-    present.add(key(interaction.schema, bind.input));
-    bindings.push({ collection: interaction.schema, inputField: bind.input, rowField: bind.field });
-  }
-  return bindings;
+  return [...targets, ...references];
 }
 
 function warnInferredBinding(procedure: string, binding: StaffOperationRowBinding, warned: Set<string>): void {
@@ -1388,7 +1390,8 @@ function warnInferredBinding(procedure: string, binding: StaffOperationRowBindin
   warned.add(id);
   console.warn(
     `[mantle-admin] Procedure '${procedure}' input '${binding.inputField}' binds '${binding.collection}.${binding.rowField}' ` +
-    `by inference. Declare x-mantle-ref: { schema: ${binding.collection}, field: ${binding.rowField} } (ADR-0029); ` +
+    `by inference. Declare x-mantle-ref: { schema: ${binding.collection}, field: ${binding.rowField} } when the input ` +
+    "holds that field, or Procedure.spec.target when it names the entry being changed (ADR-0029); " +
     "the next minor release reads the string form as field: id.",
   );
 }

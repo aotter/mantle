@@ -48,6 +48,7 @@ export type { RuntimeInteractionPlan } from "./domain/service/InteractionCompile
 export type { RunObservation, RunObservationStore } from "./domain/port/RunObservationStore.js";
 export { DatabaseRunObservationStore } from "./infrastructure/persistence/DatabaseRunObservationStore.js";
 export {
+  interactionReadTargets,
   projectCallableCapabilities,
   type RuntimeCallableCapability,
   type ViewCallableCapability,

@@ -18,7 +18,7 @@ A View is a named read-only query over Schemas. It is the only atom that needs n
 | `cache` | `{ sharedMaxAge }` | no | — | Anonymous REST shared-cache hint. `sharedMaxAge` is an integer from 1 to 86400. Only an unguarded, declarative public View over a publishing Schema may declare it. |
 | `requires` | AuthorizationRequirements | no | — | `auth.all` predicates plus one optional `guard.procedure`. See [Authorization](./authorization.md). |
 | `filter` | FilterAst | no | — | `from` form only. See [Filter AST](#filter-ast). |
-| `fields` | `string[]` | no | every column | `from` form only. Projection. Not shape-validated by the parser. |
+| `fields` | `string[]` | no | the reserved entry columns (`id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId`) | `from` form only. Projection. Not shape-validated by the parser. |
 | `orderBy` | `{ field, direction? }[]` | no | `[]` | `from` form only. `direction` defaults to `asc`. |
 | `limit` | number | no | 50 at runtime | `from` and `sql`. Not shape-validated by the parser; clamped at request time. |
 | `params` | JSON Schema | no | — | `type: object` with `properties`. Reserved: `page`, `show`, `cursor`. |
@@ -218,7 +218,7 @@ A `public` declarative View over a `publishing` Schema reads **published rows on
 
 The MCP `inputSchema` is `params.properties` plus `page` and `show` as optional numbers, carrying `params.required` through unchanged; the tool is annotated `readOnlyHint: true`.
 
-A declarative View whose rows carry every field an interaction binds (and `version` when the interaction locks one) appends the interaction to its tool description as a row action, for example `Row actions: review_requisition (id = row.id, expectedVersion = row.version).` Only Procedure tools on the View's own surface are listed. A View that restricts `fields` must include those fields; a SQL View is never bound automatically. See [MCP and agents](../concepts/mcp-and-agents.md).
+A declarative View whose rows carry every field an interaction binds (and `version` when the interaction locks one) appends the interaction to its tool description as a row action, for example `Row actions: review_requisition (id = row.id, expectedVersion = row.version).` Only Procedure tools on the View's own surface are listed. A View without `fields` returns only the reserved entry columns, so it qualifies only for bindings on `id` (and `version`); a SQL View is never bound automatically. See [MCP and agents](../concepts/mcp-and-agents.md).
 
 ## REST contract
 
