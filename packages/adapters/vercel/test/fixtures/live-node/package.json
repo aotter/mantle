@@ -1,7 +1,7 @@
 {
   "name": "mantle-vercel-fixture",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5-alpha.1",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
