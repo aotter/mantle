@@ -73,6 +73,8 @@ export type {
   FindEntryByDataFieldArgs,
   FindEntryByDataFieldsArgs,
 } from "./domain/port/EntryRepository.js";
+export type { AtomicEntryWrite, AtomicEntryWriter } from "./domain/port/AtomicEntryWriter.js";
+export { AtomicEntryWriteUseCase, type AtomicDraftOperation } from "./usecase/content/AtomicEntryWriteUseCase.js";
 export type {
   EntryReader,
   CreationStatisticsArgs,

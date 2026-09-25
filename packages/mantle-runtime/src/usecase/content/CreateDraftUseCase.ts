@@ -7,6 +7,7 @@ import {
 import type { EntryRow } from "../../domain/model/EntryRow.js";
 import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
+import type { CreateEntryArgs } from "../../domain/port/EntryRepository.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
 import type { LocalePolicyReader } from "../../domain/port/SiteConfigRepository.js";
 import { projectAndStamp } from "../../domain/service/BuiltinProjector.js";
@@ -33,6 +34,11 @@ export class CreateDraftUseCase {
   ) {}
 
   async execute(request: CreateDraftRequest): Promise<EntryRow> {
+    const args = await this.prepare(request);
+    return withConflictDiagnostic(`usecase/CreateDraft/${request.collection}`, () => this.entries.create(args));
+  }
+
+  async prepare(request: CreateDraftRequest, options: { readonly id?: string; readonly skipUniquePreflight?: boolean } = {}): Promise<CreateEntryArgs> {
     const opPath = `usecase/CreateDraft/${request.collection}`;
     const schema = this.schemas.get(request.collection);
     if (!schema) {
@@ -40,7 +46,7 @@ export class CreateDraftUseCase {
         schemaUnknownDiagnostic(opPath, request.collection, [...this.schemas.keys()]),
       );
     }
-    const id = this.idgen.next();
+    const id = options.id ?? this.idgen.next();
     const now = this.clock.now();
     const ctx = authoringContext(request.ctx, request.authorId);
     const lifecycle = resolveLifecycle(schema);
@@ -54,9 +60,9 @@ export class CreateDraftUseCase {
       siteConfig: this.siteConfig,
       // Real drafts save incomplete; operational records are live immediately.
       partial: lifecycle !== "operational",
+      skipUniquePreflight: options.skipUniquePreflight,
     });
-    return withConflictDiagnostic(opPath, () =>
-      this.entries.create({
+    return {
         id,
         collection: request.collection,
         // Operational records have no publish step —
@@ -67,7 +73,6 @@ export class CreateDraftUseCase {
         now,
         hookContext: ctx,
         originalInput: request.originalInput,
-      }),
-    );
+    };
   }
 }

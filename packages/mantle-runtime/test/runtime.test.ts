@@ -22,6 +22,14 @@ import { InMemoryDatabase } from "./fakes/database.js";
 import { makeProcedure, postsSchema } from "./fakes/manifests.js";
 
 describe("SQLite runtime composition", () => {
+  it("reports unsupported atomic writes before touching a driver without that capability", async () => {
+    const runtime = await createTestRuntime({ manifests: [postsSchema()], db: new InMemoryDatabase() });
+    await expect(runtime.writeAtomically.execute([
+      { kind: "create", request: { collection: "posts", data: { title: "No partial write" }, authorId: null } },
+    ])).rejects.toMatchObject({ diagnostic: { code: "RESOURCE_UNAVAILABLE" } });
+    expect(await runtime.listEntries.execute({ collection: "posts" })).toEqual([]);
+  });
+
   it("prepares storage, seeds siteDefaults, and validates before returning", async () => {
     const db = new InMemoryDatabase();
     await createTestRuntime({

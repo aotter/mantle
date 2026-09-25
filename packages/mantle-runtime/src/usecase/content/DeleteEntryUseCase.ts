@@ -1,5 +1,7 @@
 import { DiagnosticError, type SchemaManifest } from "@aotter/mantle-spec";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
+import type { DeleteEntryArgs } from "../../domain/port/EntryRepository.js";
+import type { EntryRow } from "../../domain/model/EntryRow.js";
 import { assertEntryDeletable } from "../../domain/service/io/EntryDeleteGuard.js";
 import type {
   DeleteEntryRequest,
@@ -24,6 +26,11 @@ export class DeleteEntryUseCase {
   ) {}
 
   async execute(request: DeleteEntryRequest): Promise<DeleteEntryResponse> {
+    const { args } = await this.prepare(request);
+    return withConflictDiagnostic(`usecase/DeleteEntry/${request.id}`, () => this.entries.delete(args));
+  }
+
+  async prepare(request: DeleteEntryRequest): Promise<{ readonly args: DeleteEntryArgs; readonly previous: EntryRow }> {
     const opPath = `usecase/DeleteEntry/${request.id}`;
     const existing = await this.entries.get(request);
     if (!existing) {
@@ -37,15 +44,13 @@ export class DeleteEntryUseCase {
       expectedCollection: request.collection,
       opPath,
     });
-    return withConflictDiagnostic(opPath, () =>
-      this.entries.delete({
+    return { previous: existing, args: {
         id: request.id,
         collection: request.collection,
         expectedStatus: existing.status,
         expectedVersion: existing.version,
         hookContext: request.ctx,
         originalInput: request.originalInput,
-      }),
-    );
+    } };
   }
 }

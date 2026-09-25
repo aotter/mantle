@@ -225,8 +225,10 @@ function sqliteStoragePorts(
   const schemas = new Map<string, SchemaManifest>(
     Object.values(plan.schemas).map((schema) => [schema.name, schema.manifest]),
   );
+  const entries = new DatabaseEntryRepository(db, schemas);
   return {
-    entries: new DatabaseEntryRepository(db, schemas),
+    entries,
+    atomicEntries: db.supportsAtomicEntryWrites ? entries : undefined,
     views: new SqliteViewQueryExecutor(db, plan),
     localePolicy,
     siteConfig: localePolicy,

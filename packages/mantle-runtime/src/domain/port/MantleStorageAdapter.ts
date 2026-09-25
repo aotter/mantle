@@ -1,4 +1,5 @@
 import type { RuntimePlan } from "../service/RuntimePlanCompiler.js";
+import type { AtomicEntryWriter } from "./AtomicEntryWriter.js";
 import type { EntryReader } from "./EntryReader.js";
 import type { EntryRepository } from "./EntryRepository.js";
 import type { MediaAssetRepository } from "./MediaAssetRepository.js";
@@ -9,6 +10,8 @@ import type { ViewQueryExecutor } from "./ViewQueryExecutor.js";
 
 export interface PreparedMantleStorage {
   readonly entries: EntryRepository & EntryReader;
+  /** Absence means the adapter cannot promise all-or-nothing entry writes. */
+  readonly atomicEntries?: AtomicEntryWriter;
   readonly views: ViewQueryExecutor;
   readonly localePolicy?: LocalePolicyReader;
   readonly siteConfig?: SiteConfigRepository;

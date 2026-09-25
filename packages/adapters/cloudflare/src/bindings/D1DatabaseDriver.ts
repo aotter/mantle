@@ -19,6 +19,7 @@ import {
  * file is the only place in the codebase that does.
  */
 export class D1DatabaseDriver implements DatabaseDriver {
+  readonly supportsAtomicEntryWrites = true as const;
   readonly migrations: MigrationRunner;
 
   constructor(

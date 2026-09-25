@@ -14,6 +14,8 @@
  * See ADR-0019.
  */
 export interface DatabaseDriver {
+  /** Opt in only after proving batch rollback and changes() guard semantics. */
+  readonly supportsAtomicEntryWrites?: true;
   /** Build a parameterised statement. Bind values then execute. */
   prepare(sql: string): PreparedStatement;
   /** Execute multiple statements atomically. Adapters guarantee

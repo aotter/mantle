@@ -207,13 +207,60 @@ An HTTP Trigger wraps a success as `{ "ok": true, "data": <EntryRow> }` with sta
 
 ## Conflicts and idempotency
 
-A unique-index preflight runs before every write, and the database's own constraints catch the races the preflight misses. Both surface as `CONFLICT` (409), as do a stale `expectedVersion` and an illegal lifecycle transition. **There is no automatic retry** — the caller decides whether to re-read and try again.
+A unique-index preflight runs before individual writes, and the database's own constraints catch the races the preflight misses. Atomic groups rely on the transaction's database constraints so an earlier operation may free a unique value for a later one. Both paths surface collisions as `CONFLICT` (409), as do a stale `expectedVersion` and an illegal lifecycle transition. **There is no automatic retry** — the caller decides whether to re-read and try again.
 
 Idempotency has no grammar key. The convention is an `input` property marked `x-mcp-hint: idempotency-key`: Admin generates and hides one UUID per form submission, and other callers generate one and reuse it across retries of the same logical request. The handler is responsible for acting on it.
 
 Optimistic concurrency uses the reserved input name `expectedVersion` — the version the caller **read**, not the next version. First-party Admin and SDK bind-and-hide that property from the OCC target row; other callers send it themselves. There is no `x-mcp-hint` for OCC. On `CONFLICT` (409) Admin keeps the operator's business fields and requires an explicit re-read; it does not retry with the latest version. New reserved Procedure input names need an ADR.
 
 Deferred lifecycle hooks have a stronger guarantee to work with: delivery is at-least-once, and handlers key on `${ctx.event.id}:${ctx.event.trigger}` — stable across enqueue fallback, queue retries and replay. See [Deferred hooks on Queues](../cloudflare/deferred-hooks-queues.md).
+
+## Atomic entry writes in a ref handler
+
+When one request must change several Schemas together, a `ref` handler can call
+`ctx.writeAtomically(operations)`. Cloudflare D1 and Bun SQLite support it; an
+adapter without the optional `atomicEntries` capability returns
+`RESOURCE_UNAVAILABLE` (503)
+instead of committing part of the group. Operations use the `createDraft`,
+`updateDraft`, or `deleteEntry` request shape; atomic deletes additionally
+require `expectedVersion`. Operational Schemas become live on create;
+publishing Schemas create drafts. Updates and deletes require the version the
+caller read.
+
+```ts
+const sessionId = crypto.randomUUID();
+const rows = await ctx.writeAtomically!([
+  { kind: "create", id: sessionId, request: {
+    collection: "sessions", data: { name: input.name }, authorId: ctx.user?.id ?? null, ctx,
+  } },
+  { kind: "create", request: {
+    collection: "exercise-blocks", data: { sessionId, exercise: input.exercise },
+    authorId: ctx.user?.id ?? null, ctx,
+  } },
+  { kind: "create", request: {
+    collection: "receipts", data: { token: input.requestId }, authorId: ctx.user?.id ?? null, ctx,
+  } },
+]);
+return { sessionId: rows[0]!.id };
+```
+
+Declare `receipts.token` as a Schema `uniqueIndexes: [[token]]`. A duplicate
+receipt rejects the whole group, including the session and block. The handler
+can then read the existing receipt **after** the failed transaction to answer
+an idempotent retry. A stale update or delete rejects the whole group even
+when it is the final operation. The group may touch each entry only once;
+read and authorization decisions happen before the batch, and the expected
+version/status is checked again by the conditional database write.
+
+All Schema projection, stamping, validation, uniqueness, and lifecycle rules
+still apply. `before_*` hooks run in operation order before the batch and can
+veto it; their external effects cannot be rolled back. `after_*` hooks run
+only after commit, in operation order. Publishing-content invalidation runs
+once for the group. Deferred Queue delivery is separate from the database
+transaction. Application-owned tables can use their host's transaction
+facility inside a ref handler, but that does not give those tables Mantle
+entry semantics. Direct SQL writes to Mantle Schema tables are unsupported.
+Authorization guard Procedures do not receive `ctx.writeAtomically`.
 
 ## `uiSchema`
 

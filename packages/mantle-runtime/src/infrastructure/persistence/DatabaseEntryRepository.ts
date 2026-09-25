@@ -1,10 +1,13 @@
 import {
+  DiagnosticError,
   checkSchemaAdminUi,
+  runtimeDiagnostic,
   type ContentState,
   type Entry,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { AtomicEntryWrite, AtomicEntryWriter } from "../../domain/port/AtomicEntryWriter.js";
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
@@ -57,7 +60,7 @@ import {
 } from "../storage/SqliteSchemaTables.js";
 
 /** SQLite/D1 repository where each Schema is one physical table. */
-export class DatabaseEntryRepository implements EntryRepository, EntryReader {
+export class DatabaseEntryRepository implements EntryRepository, EntryReader, AtomicEntryWriter {
   constructor(
     private readonly db: DatabaseDriver,
     private readonly schemasByName: ReadonlyMap<string, SchemaManifest> = new Map(),
@@ -109,6 +112,64 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       createdAt: args.now,
       updatedAt: args.now,
     };
+  }
+
+  async writeAtomically(writes: readonly AtomicEntryWrite[]): Promise<void> {
+    if (writes.length === 0) return;
+    const statements = writes.flatMap((write) => {
+      const table = this.table(write.args.collection);
+      if (write.kind === "create") {
+        const { args } = write;
+        const columns = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at", ...table.fields];
+        const values = [args.id, args.status, 1, args.authorId, args.now, args.now, ...this.encodedData(table, args.data)];
+        return [this.db.prepare(`INSERT INTO ${table.table} (${columns.map(quote).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`).bind(...values)];
+      }
+      const mutation = write.kind === "update"
+        ? this.db.prepare(`UPDATE ${table.table} SET ${[
+            ...table.fields.map((field) => `${quote(field)} = ?`),
+            '"_mantle_version" = "_mantle_version" + 1',
+            '"_mantle_updated_at" = ?',
+          ].join(", ")} WHERE "_mantle_id" = ? AND "_mantle_version" = ? AND "_mantle_version" = ? AND "_mantle_status" = ?`)
+          .bind(...this.encodedData(table, write.args.data), write.args.now, write.args.id,
+            write.args.expectedVersion, write.args.observedVersion, write.args.expectedStatus)
+        : this.db.prepare(`DELETE FROM ${table.table} WHERE "_mantle_id" = ? AND "_mantle_version" = ? AND "_mantle_version" = ? AND "_mantle_status" = ? AND "_mantle_status" = ?`)
+          .bind(write.args.id, write.args.expectedVersion, write.args.observedVersion,
+            write.args.expectedStatus, write.args.observedStatus);
+      // Both D1 and Bun roll the batch back on a constraint error. The
+      // NOT NULL check does not depend on a particular boot-state row.
+      const guard = this.db.prepare(`INSERT INTO _mantle_boot_state (id, fingerprint)
+        VALUES ('atomic-guard', CASE WHEN changes() = 1 THEN 'ok' ELSE NULL END)
+        ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint`);
+      const cleanup = this.db.prepare("DELETE FROM _mantle_boot_state WHERE id = 'atomic-guard'");
+      return [mutation, guard, cleanup];
+    });
+    try {
+      await this.db.batch(statements);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("_mantle_boot_state.fingerprint")) {
+        for (const write of writes) {
+          if (write.kind === "create") continue;
+          const current = await this.get(write.args);
+          if (!current || current.version !== write.args.expectedVersion) {
+            throw new EntryVersionConflict(write.args.id, write.args.expectedVersion, current?.version ?? 0);
+          }
+          if (current.status !== write.args.expectedStatus) {
+            throw new EntryStatusConflict(write.args.id, write.args.expectedStatus, current.status);
+          }
+        }
+        throw new DiagnosticError(runtimeDiagnostic({
+          code: "CONFLICT", severity: "error", path: "storage/AtomicEntryWrite",
+          message: "An entry precondition changed during the atomic write; reread and retry.",
+        }));
+      }
+      if (isDriverUniqueConstraintError(error)) {
+        throw new DiagnosticError(runtimeDiagnostic({
+          code: "CONFLICT", severity: "error", path: "storage/AtomicEntryWrite",
+          message: `Atomic entry uniqueness conflict: ${(error as Error).message}`,
+        }));
+      }
+      throw error;
+    }
   }
 
   async get(args: EntryKey): Promise<EntryRow | null> {

@@ -1,5 +1,6 @@
 import type { LifecycleHook, StaffRole } from "@aotter/mantle-spec";
 import type { EntryRow } from "./EntryRow.js";
+import type { AtomicDraftOperation } from "../../usecase/content/AtomicEntryWriteUseCase.js";
 
 /**
  * `HandlerContext` — auth + bindings handed to every Procedure
@@ -36,6 +37,8 @@ export interface HandlerContext<Env = unknown> {
    *  target. Undefined on standard Procedure invocations (HTTP Trigger,
    *  MCP, admin endpoints). */
   readonly event?: HandlerLifecycleEvent;
+  /** Runtime-bound semantic atomic entry writer, available in ref Procedures. */
+  readonly writeAtomically?: (operations: readonly AtomicDraftOperation[]) => Promise<readonly (EntryRow | null)[]>;
 }
 
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";

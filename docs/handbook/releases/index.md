@@ -41,6 +41,11 @@ enforces the new constraint when the reviewed migration is applied. Runtime-
 managed CF boot continues to reject uniqueness changes without a reviewed
 artifact path.
 
+Ref Procedures can now group create, update and delete operations across
+Schemas with `ctx.writeAtomically`. D1 and Bun commit the group or roll it
+back, including when the last conditional write finds a stale version. Other
+adapters must explicitly implement the optional capability before using it.
+
 Agents installed through `npx skills add aotter/mantle` must still inspect the
 target project's actual SDK version. Published 0.1.4 packages do **not**
 support the new project flags; use their installed docs until deliberately

@@ -1,5 +1,6 @@
 import type { LifecycleHook } from "@aotter/mantle-spec";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
+import type { AtomicEntryWrite } from "../../domain/port/AtomicEntryWriter.js";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 import {
   DEFERRED_HOOK_ENVELOPE_VERSION,
@@ -36,6 +37,23 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
     private readonly idgen: IdGenerator,
     private readonly deferred?: DeferredHookDispatcher,
   ) {}
+
+  atomicHooks(write: AtomicEntryWrite, previous: EntryRow | null): {
+    readonly before: () => Promise<void>;
+    readonly after: (row: EntryRow) => Promise<void>;
+  } {
+    const beforeHook = `before_${write.kind}` as "before_create" | "before_update" | "before_delete";
+    const afterHook = `after_${write.kind}` as DeferredLifecycleHook;
+    const before = this.triggerNames(write.args.collection, beforeHook);
+    const after = this.triggerNames(write.args.collection, afterHook);
+    const ctx = ctxOf(write.args);
+    const beforeId = before.length > 0 ? this.idgen.next() : undefined;
+    const afterId = after.length > 0 ? this.idgen.next() : undefined;
+    return {
+      before: () => this.fireBefore(beforeHook, write.args.collection, previous, ctx, write.args, before, beforeId),
+      after: (row) => this.fireAfter(afterHook, row, ctx, after, afterId),
+    };
+  }
 
   async create(args: CreateEntryArgs): Promise<EntryRow> {
     const before = this.triggerNames(args.collection, "before_create");
