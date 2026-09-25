@@ -50,6 +50,7 @@ export { DatabaseRunObservationStore } from "./infrastructure/persistence/Databa
 export {
   interactionReadTargets,
   projectCallableCapabilities,
+  viewRowActions,
   type RuntimeCallableCapability,
   type ViewCallableCapability,
   type ViewRowAction,

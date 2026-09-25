@@ -119,6 +119,18 @@ export function interactionReadTargets(plan: RuntimePlan, surface: "staff" | "pu
     .filter((schema) => !plan.schemas[schema]?.manifest.spec.translates))].sort();
 }
 
+/**
+ * Row actions a View's rows feed on one surface, whatever surface the View
+ * itself is listed on. Admin shows every non-internal View to staff and
+ * offers the staff surface's operations on its rows.
+ */
+export function viewRowActions(plan: RuntimePlan, view: string, surface: "staff" | "public"): readonly ViewRowAction[] {
+  const procedureTools = new Map(plan.mcpTools.flatMap((tool) => tool.ownerKind === "Procedure"
+    ? [[`${tool.surface}\0${tool.ownerName}`, tool.name] as const]
+    : []));
+  return rowActionsOf(plan, view, surface, procedureTools).rowActions ?? [];
+}
+
 function rowActionsOf(
   plan: RuntimePlan,
   view: string,

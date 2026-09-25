@@ -37,6 +37,7 @@ import {
   coerceViewParams,
   evaluateAuthAll,
   projectCallableCapabilities,
+  viewRowActions,
   type HandlerContext,
   type MantleRuntime,
   type MediaAsset,
@@ -297,6 +298,9 @@ export function mountMantleAdmin<E extends Env>(
     params: v.spec.params ?? null,
     fields: v.spec.fields ?? null,
     list: checkViewAdminUi(v).list,
+    // Staff operations a row of this View feeds (ADR-0029): the tool, its
+    // row bindings and the version input it locks.
+    rowActions: viewRowActions(ref.plan, v.metadata.name, "staff"),
   }));
   const developerConsole = projectDeveloperConsole(ref.plan);
 

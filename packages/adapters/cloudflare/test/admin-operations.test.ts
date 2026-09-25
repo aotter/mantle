@@ -475,6 +475,12 @@ function rowBindingManifests(): Manifest[] {
       metadata: { name: "rename-sku-mcp" },
       spec: { source: { kind: "mcp", surface: "staff" }, target: { procedure: "rename-sku" } },
     },
+    {
+      apiVersion,
+      kind: "View",
+      metadata: { name: "all-products" },
+      spec: { surface: "staff", from: "products" },
+    },
   ];
 }
 
@@ -547,6 +553,18 @@ describe("GET /admin/api/operations — rowBindings (#430)", () => {
     ]);
     expect(bindings("rename-sku")).toEqual([{ collection: "products", inputField: "id", rowField: "id" }]);
     warn.mockRestore();
+  });
+
+  it("lists each View's staff row actions in the views manifest (ADR-0029)", async () => {
+    const { app } = rowBindingHarness();
+    const body = (await (await app.request("/admin/api/views-manifest")).json()) as {
+      views: Array<{ name: string; rowActions: Array<{ capability: string; bind: unknown; version?: string }> }>;
+    };
+    const view = body.views.find(({ name }) => name === "all-products")!;
+    expect(view.rowActions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ capability: "rename_sku", bind: [{ input: "id", field: "id" }], version: "expectedVersion" }),
+      expect.objectContaining({ capability: "merge_into", bind: [{ input: "productId", field: "id" }], version: "expectedVersion" }),
+    ]));
   });
 
   it("binds exactly the field an object-form x-mantle-ref declares", async () => {
