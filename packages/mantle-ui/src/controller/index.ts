@@ -78,6 +78,8 @@ export interface InteractionState {
   readonly phase: InteractionPhase;
   /** A read is in flight (open, refresh or reread). */
   readonly reading: boolean;
+  /** The host supplied `read`; without it an uncertain write needs `acknowledgeUncertain()`. */
+  readonly canRead: boolean;
   /** Inputs taken from the row; not editable. */
   readonly bound: Readonly<Record<string, unknown>>;
   /** Editable inputs, kept across refreshes, conflicts and failures. */
@@ -167,6 +169,7 @@ export function createInteractionController(options: InteractionControllerOption
   let state: InteractionState = Object.freeze({
     phase: "idle",
     reading: false,
+    canRead: read !== undefined,
     bound,
     draft: Object.freeze(seeded),
     touched: [],

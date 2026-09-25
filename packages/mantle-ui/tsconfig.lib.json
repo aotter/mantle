@@ -6,9 +6,19 @@
     "noEmit": false,
     "tsBuildInfoFile": "./.tsbuildinfo",
     "stripInternal": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": []
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [],
+    "jsx": "react-jsx"
   },
-  "include": ["src/**/*"],
-  "exclude": ["test/**/*", "dist/**/*"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "test/**/*",
+    "dist/**/*"
+  ]
 }

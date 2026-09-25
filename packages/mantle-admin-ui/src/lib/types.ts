@@ -272,6 +272,17 @@ export interface ViewManifestInfo {
   params: JsonSchema | null;
   fields: string[] | null;
   list: { columns: string[]; searchFields: string[]; filterFields: string[] };
+  /** Staff operations a row feeds (ADR-0029); absent from older servers. */
+  rowActions?: ViewRowActionInfo[];
+}
+
+/** One row action: the staff tool, the row fields it binds and the version it locks. */
+export interface ViewRowActionInfo {
+  capability: string;
+  procedure: string;
+  bind: Array<{ input: string; field: string }>;
+  version?: string;
+  mutates: boolean;
 }
 
 export interface DeveloperSchemaModel {

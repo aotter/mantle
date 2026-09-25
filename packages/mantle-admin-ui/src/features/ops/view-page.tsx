@@ -5,10 +5,11 @@ import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api, downloadAdminFile } from "../../lib/api";
-import { viewsManifestQueryOptions } from "../../lib/queries";
+import { operationsQueryOptions, viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { Collection, JsonSchema, SiteInfo, ViewManifestInfo } from "../../lib/types";
+import type { Collection, JsonSchema, SiteInfo, StaffOperation, ViewManifestInfo } from "../../lib/types";
+import { runnableRowActions, ViewRowActions } from "./view-row-actions";
 import {
   Table,
   TableBody,
@@ -90,6 +91,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     queryFn: () => api.get<SiteInfo>("/site"),
   });
   const canonical = site.data?.canonicalLocale ?? null;
+  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
 
   const view = viewsQuery.data?.find((v) => v.name === name);
   const sourceSchema = collectionsQuery.data?.find((c) => c.name === view?.from)?.schema;
@@ -125,6 +127,8 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
 
   const rows = query.data?.data.rows ?? [];
   const columns = viewColumns(view, rows);
+  const rowActions = runnableRowActions(view.rowActions, operationsQuery.data);
+  const refetchRows = () => { void query.refetch(); };
   const viewTitle = resolveLocalizedText(view.title, language, canonical) ?? fieldLabel(view.name);
   const exportHref = viewExportHref(name, urlParams);
 
@@ -213,6 +217,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                   {propertyLabel(col, sourceSchema?.properties?.[col], language, canonical)}
                 </TableHead>
               ))}
+              {rowActions.length > 0 ? <TableHead><span className="sr-only">{t(language, "interaction.rowActions")}</span></TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -229,6 +234,19 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                     </TableCell>
                   );
                 })}
+                {rowActions.length > 0 && view.from ? (
+                  <TableCell className="w-10 text-right">
+                    <ViewRowActions
+                      collection={view.from}
+                      row={row}
+                      actions={rowActions}
+                      language={language}
+                      canonical={canonical}
+                      sourceSchema={sourceSchema}
+                      onDone={refetchRows}
+                    />
+                  </TableCell>
+                ) : null}
               </TableRow>
             ))}
           </TableBody>
