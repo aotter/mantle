@@ -135,7 +135,8 @@ origin, the only column Analytics Engine filters cheaply. Columns, in order:
 | `double1`, `double2` | `at` (epoch ms), `durationMs` |
 
 `outcome` is `ok`, a runtime Diagnostic code such as `UNAUTHENTICATED` or
-`AUTH_DENIED`, `UNKNOWN_TOOL`, `INVALID_PARAMS`, `INTERNAL`, or a transport gate denial
+`AUTH_DENIED` (malformed arguments are `INPUT_VALIDATION_FAILED`), `UNKNOWN_TOOL`,
+`INTERNAL`, or a transport gate denial
 (`INVALID_TOKEN`, `INSUFFICIENT_SCOPE`, `INSUFFICIENT_ROLE`, `CROSS_ORIGIN`): a
 `tools/call` refused before it reaches the dispatcher is recorded too, with
 whatever identity the gate established. Its body goes through the same 1 MiB

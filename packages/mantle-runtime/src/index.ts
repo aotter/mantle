@@ -52,6 +52,27 @@ export {
   type ViewCallableCapability,
   type ProcedureCallableCapability,
 } from "./domain/service/CallableCapabilityProjector.js";
+export {
+  buildCapabilityCatalog,
+  type BuildCapabilityCatalogOptions,
+  type Capability,
+  type CapabilityCatalog,
+  type CapabilityHints,
+  type CapabilityRoute,
+  type CapabilitySurface,
+  type LifecycleAction,
+} from "./domain/service/CapabilityCatalog.js";
+export {
+  InvokeCapabilityUseCase,
+  type CapabilityOutcome,
+  type CapabilityUseCases,
+  type InvokeCapabilityRequest,
+} from "./usecase/capability/InvokeCapabilityUseCase.js";
+export {
+  bindCapabilities,
+  type BindCapabilitiesOptions,
+  type CapabilityRuntime,
+} from "./bindCapabilities.js";
 
 // Adapter-facing ports. These are the stable boundary platform
 // adapters implement; runtime-internal seams remain off the root
