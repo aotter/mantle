@@ -24,13 +24,16 @@ const response = await mcp.fetch(request, handlerContext);
 
 - **Results.** Success returns the value as JSON text, plus
   `structuredContent` when the value is an object. A business failure returns
-  `isError: true` with `structuredContent: { diagnostics: [Diagnostic] }`.
-  Protocol failures stay JSON-RPC errors.
+  `isError: true` with `{ diagnostics: [Diagnostic] }` as JSON text. The same
+  payload is also `structuredContent`, unless the tool advertises an
+  `outputSchema` (structured results must conform to it). Protocol failures
+  stay JSON-RPC errors.
 - **Validation happens once.** Schemas are advertised unchanged and Runtime
   validates every argument and output. The SDK is given a pass-through
   validator, so Ajv is not bundled.
 - **Identity.** When an anonymous caller calls a tool that requires identity,
-  the handler answers with `unauthenticated(request)` before any tool runs.
+  the handler answers with `unauthenticated(request)` before any tool runs,
+  including when the call is one member of a 2025-era batch.
 - **Audit.** Every `tools/call` produces one `AuditSink` event, including
   unknown-tool probes and identity refusals.
 
