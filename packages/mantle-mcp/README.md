@@ -53,7 +53,7 @@ createMantleMcpHandler(invoker, {
       html: () => appHtml,           // a reusable build, never caller data
       csp: { connectDomains: [] },
       renders: (capability) => capability.route.kind === "view",
-      appOnly: ["read_entry"],       // read-only tools only the App calls
+      appOnly: ["read_entry"],       // staff surface: declared-read-only tools only the App calls
     }],
   },
 });
@@ -62,19 +62,28 @@ createMantleMcpHandler(invoker, {
 - **Linked tools.** A tool that `renders` selects carries `_meta.ui.resourceUri`,
   plus the flat `ui/resourceUri` key for older hosts. It keeps its text content.
 - **App-only tools.** `appOnly` tools carry `visibility: ["app"]` and must be
-  read-only.
+  declared read-only. For a `ref` Procedure that declaration is the author's
+  `readOnlyHint`. A tool links to at most one resource.
 - **Client support.** It comes from the client's declared capabilities
   (`getUiCapability`): the 2026-07-28 request envelope, or a 2025-era
   `initialize`.
   - A client that declares no MCP Apps support gets plain tools, no resources
     and no app-only tools.
   - A stateless 2025-era request carries no capabilities, so it gets the App
-    metadata. Hosts without MCP Apps ignore it, and hosts with MCP Apps can
-    still call the App's tools on every request.
+    metadata and the app-only tools. Hosts without MCP Apps ignore the
+    metadata, but they may show app-only tools to the model, which can call
+    them. Hosts with MCP Apps can call the App's tools on every request.
 - **Surfaces.** Each handler serves one surface, so a resource is readable only
   on the surface whose handler registers it.
 
 `mantle-mcp` has no UI dependency; the host injects the HTML.
 
-`createMantleMcpServer(invoker, options).create(ctx)` returns a plain
-`McpServer`, for hosts that wire their own transport.
+A misconfiguration (a non-`ui://` URI, a tool linked twice, an app-only tool
+that is not served or not declared read-only) throws when the handler is
+created. The Cloudflare `createMcpApiHandler` accepts `apps` and checks them at
+construction. `createMantleWorker` and Admin do not pass `apps` yet.
+
+`createMantleMcpServer(invoker, options).create(ctx, ui)` returns an official
+`McpServer`, for hosts that wire their own transport. `ui` is the client's MCP
+Apps support (`"supported"`, `"unsupported"` or `"unknown"`, the default); read
+it from the request with `clientUiSupport(message)`.

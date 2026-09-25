@@ -52,9 +52,9 @@ The MCP surface is served by the official MCP TypeScript SDK through `@aotter/ma
 A host can render tool results as an interactive UI through [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps). Pass `apps` to `createMantleMcpHandler`, or to the Cloudflare `createMcpApiHandler`, for one surface. Each resource is a `ui://` HTML asset plus a rule for which tools render in it. Mantle registers it with the official `ext-apps` helpers, and the linked tools advertise `_meta.ui.resourceUri`.
 
 - The HTML is reusable and never carries caller data or tokens. Per-call data travels only in each tool result's `structuredContent`, and every tool keeps its text content for hosts that render no UI.
-- App-only helpers (`visibility: ["app"]`) must be read-only.
-- A client that declares no MCP Apps support gets exactly the plain catalog.
-- A stateless 2025-era request declares nothing. It gets the App metadata, which other hosts ignore.
+- App-only helpers (`visibility: ["app"]`) must be declared read-only.
+- Support is decided per request. A 2026-07-28 request that declares no MCP Apps support gets exactly the plain catalog.
+- A stateless 2025-era request declares nothing. It gets the App metadata and the app-only tools. Hosts without MCP Apps ignore the metadata, but the model may see and call those read-only tools.
 - Resources are per surface: a staff App is never readable on `/mcp`.
 
 ## Keeping an action human-only

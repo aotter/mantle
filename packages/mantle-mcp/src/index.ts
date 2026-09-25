@@ -12,7 +12,10 @@ export {
 } from "./createMantleMcpHandler.js";
 export {
   clientUiSupport,
+  validateApps,
   type ClientUiSupport,
+  type MantleMcpAppCsp,
+  type MantleMcpAppPermissions,
   type MantleMcpAppResource,
   type MantleMcpApps,
 } from "./apps.js";

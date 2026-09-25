@@ -5,7 +5,7 @@ import {
   projectCallableCapabilities,
   readJsonBody,
 } from "@aotter/mantle-runtime";
-import { createMantleMcpHandler, type MantleMcpApps, type MantleMcpHandler } from "@aotter/mantle-mcp";
+import { createMantleMcpHandler, validateApps, type MantleMcpApps, type MantleMcpHandler } from "@aotter/mantle-mcp";
 import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
 import type { HandlerContext } from "@aotter/mantle-runtime";
@@ -55,6 +55,8 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
     Object.values(ref.plan.schemas).map(({ manifest }) => manifest),
     { surface, callables: projectCallableCapabilities(ref.plan, { surface }), readTargets: interactionReadTargets(ref.plan, surface) },
   );
+  // A bad Apps configuration fails here, at construction, not per request.
+  validateApps(options.apps, auditCatalog);
   const auditOperationId = (tool: string, args: Readonly<Record<string, unknown>>): string | null => {
     const value = args[auditCatalog.get(tool)?.operationIdArgument ?? "operationId"];
     return typeof value === "string" ? value : null;
