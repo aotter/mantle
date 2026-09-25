@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { atomKindLabel, focusSlice, traceAtomIds } from "../src/features/logic/atom-graph";
+import { atomKindLabel, focusSlice, relationLabel, traceAtomIds } from "../src/features/logic/atom-graph";
 import { developerDetailHref, developerSelectionHref } from "../src/features/logic/developer-route";
 import { buildSchemaDiagram } from "../src/features/logic/schema-diagram";
 import type { DeveloperConsoleSnapshot } from "../src/lib/types";
@@ -47,6 +47,8 @@ describe("manifest graph trace", () => {
     ]);
     expect([...focusSlice(placed, "Procedure:place-order").relationIds]).toEqual(["trigger"]);
     expect([...focusSlice(placed, "Schema:orders").relationIds]).not.toContain("placement");
+    expect(placed.relations).toContainEqual(expect.objectContaining({ kind: "collection-action" }));
+    expect(relationLabel("en", "collection-action")).toBe("placed as collection action");
   });
 
   it("keeps graph and model selection in shareable URLs", () => {
