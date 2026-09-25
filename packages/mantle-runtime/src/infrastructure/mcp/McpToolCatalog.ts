@@ -19,6 +19,7 @@ import type {
   RuntimeCallableCapability,
   ViewCallableCapability,
 } from "../../domain/service/CallableCapabilityProjector.js";
+import { projectMcpOutputSchema } from "./McpOutputSchema.js";
 
 /**
  * MCP tool catalog. Mix of generic lifecycle tools plus per-collection emitted authoring
@@ -52,6 +53,9 @@ export interface McpToolDefinition {
   readonly title?: string;
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
+  /** Advertised only when every output Runtime accepts also satisfies it
+   *  under a standard JSON Schema validator; see `projectMcpOutputSchema`. */
+  readonly outputSchema?: Record<string, unknown>;
   /** MCP tool annotations (spec: absent hints default to the conservative
    *  `destructiveHint: true` / `openWorldHint: true`). Only provable or
    *  author-declared values are emitted (#972). */
@@ -483,6 +487,7 @@ function buildCallableTool(capability: RuntimeCallableCapability): McpToolDefini
 
 function buildProcedureTool(capability: ProcedureCallableCapability): McpToolDefinition {
   const annotations = procedureAnnotations(capability);
+  const outputSchema = projectMcpOutputSchema(capability.outputSchema);
   return {
     name: capability.name,
     ...(capability.title ? { title: capability.title } : {}),
@@ -490,6 +495,7 @@ function buildProcedureTool(capability: ProcedureCallableCapability): McpToolDef
     inputSchema: annotateExpectedVersion(
       capability.inputSchema as Record<string, unknown>,
     ),
+    ...(outputSchema ? { outputSchema } : {}),
     ...(annotations ? { annotations } : {}),
   };
 }
