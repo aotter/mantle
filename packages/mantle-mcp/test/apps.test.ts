@@ -10,7 +10,7 @@ import {
   type RuntimePlan,
 } from "@aotter/mantle-runtime";
 import { describe, expect, it, vi } from "vitest";
-import { clientUiSupport, createMantleMcpHandler, type MantleMcpApps } from "../src/index.js";
+import { clientUiSupport, createMantleMcpHandler, INTERACTION_META_KEY, type MantleMcpApps } from "../src/index.js";
 
 /** ADR-0029 D7: MCP Apps registered through the official ext-apps helpers. */
 
@@ -55,7 +55,7 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
 metadata: { name: like-post }
 spec:
-  input: { type: object, properties: { id: { type: string } } }
+  input: { type: object, properties: { id: { type: string, x-mantle-ref: { schema: posts, field: id } } } }
   output: { type: object }
   handler: { kind: ref, ref: like }
 ---
@@ -96,6 +96,23 @@ describe("MCP Apps registration", () => {
     // Every App tool keeps its text content for hosts that render no UI.
     const result = await client.callTool({ name: "query_view_public_posts", arguments: {} });
     expect(result.content).toEqual([expect.objectContaining({ type: "text" })]);
+  });
+
+  it("gives an App the View's row actions in the result _meta, and nothing to a plain client", async () => {
+    const app = await connect("modern", UI_CAPABILITIES);
+    const result = await app.callTool({ name: "query_view_public_posts", arguments: {} });
+    expect(result._meta?.[INTERACTION_META_KEY]).toEqual({
+      collection: "posts",
+      rowActions: [expect.objectContaining({
+        capability: "like_post",
+        bind: [{ input: "id", field: "id" }],
+        mutates: false,
+        inputSchema: expect.objectContaining({ type: "object" }),
+      })],
+    });
+    const plain = await connect("modern", {});
+    const text = await plain.callTool({ name: "query_view_public_posts", arguments: {} });
+    expect(text._meta?.[INTERACTION_META_KEY]).toBeUndefined();
   });
 
   it("serves plain tools, no resources and no app-only tools to a client without MCP Apps", async () => {
