@@ -16,3 +16,8 @@ export {
   McpJsonRpcDispatcher,
   type McpUseCases,
 } from "./McpJsonRpcDispatcher.js";
+export {
+  createMcpDispatcher,
+  type CreateMcpDispatcherOptions,
+  type McpDispatcherRuntime,
+} from "./createMcpDispatcher.js";

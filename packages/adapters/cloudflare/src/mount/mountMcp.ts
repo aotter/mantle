@@ -1,6 +1,7 @@
 import {
-  McpJsonRpcDispatcher,
+  type McpJsonRpcDispatcher,
   buildMcpAuditOperationIdResolver,
+  createMcpDispatcher,
   buildMcpToolCatalog,
   projectCallableCapabilities,
   readJsonBody,
@@ -126,41 +127,12 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
         const configKey = JSON.stringify({ mediaPurposes, serverInfo });
         let cached = dispatcherCache.get(runtime);
         if (!cached || cached.configKey !== configKey) {
-          const mediaEnabled = runtime.media !== null && mediaPurposes.length > 0;
-          const dispatcher = new McpJsonRpcDispatcher(
-            {
-              getEntry: runtime.getEntry,
-              createDraft: runtime.createDraft,
-              updateDraft: runtime.updateDraft,
-              requestPublish: runtime.requestPublish,
-              unpublish: runtime.unpublish,
-              archive: runtime.archive,
-              deleteEntry: runtime.deleteEntry,
-              executeView: {
-                execute: (request) => runtime.executeView({
-                  ...request,
-                  view: request.view.metadata.name,
-                }),
-              },
-              invokeTrigger: {
-                execute: (request) => runtime.invokeTrigger(request),
-              },
-              media: mediaEnabled && runtime.media
-                ? {
-                    createUpload: runtime.media.createUpload,
-                    commitUpload: runtime.media.commitUpload,
-                    purposes: mediaPurposes,
-                  }
-                : undefined,
-            },
-            [...runtime.schemas.values()],
-            {
-              surface,
-              capabilities,
-              serverInfo,
-              audit: ref.audit,
-            },
-          );
+          const dispatcher = createMcpDispatcher(runtime, ref.plan, {
+            surface,
+            mediaPurposes,
+            serverInfo,
+            ...(ref.audit ? { audit: ref.audit } : {}),
+          });
           cached = { configKey, dispatcher };
           dispatcherCache.set(runtime, cached);
         }

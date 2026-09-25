@@ -226,8 +226,14 @@ export {
 // export the whole MCP infrastructure barrel from the root.
 export {
   McpJsonRpcDispatcher,
+  type McpServerInfo,
   type McpUseCases,
 } from "./infrastructure/mcp/McpJsonRpcDispatcher.js";
+export {
+  createMcpDispatcher,
+  type CreateMcpDispatcherOptions,
+  type McpDispatcherRuntime,
+} from "./infrastructure/mcp/createMcpDispatcher.js";
 export type { AuditSink, McpToolCallAuditEvent } from "./domain/port/AuditSink.js";
 
 // Starter fixture support. Kept explicit so persistence/http
