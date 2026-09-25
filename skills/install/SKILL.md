@@ -67,8 +67,12 @@ in a project-owned `.npmrc`.
    do not invent business data or media bindings. Run `mantle generate` to
    append any new migration, review and apply it, then run `generate --check`,
    `validate`, `skills`, build/typecheck and local smoke.
-5. For Cloudflare, follow installed `docs/handbook/cloudflare/` and configure
-   the local Admin owner and identity before claiming Admin works. For
+5. For Cloudflare, follow installed `docs/handbook/start/project-and-cli.md`
+   and `docs/handbook/cloudflare/authentication.md`. Copy `.dev.vars.example`
+   to `.dev.vars`, set `ADMIN_EMAIL` and `BETTER_AUTH_SECRET`, and match
+   `PUBLIC_ORIGIN` to the loopback URL printed by `wrangler dev`. Open
+   `/admin/sign-in` with that email; read the OTP from wrangler logs. Check
+   Admin assets and an owner-only Admin API before claiming Admin works. For
    ChatGPT Sites, follow installed
    `docs/handbook/chatgpt-sites/generated-app.md`: review and apply local D1
    migrations, set `OWNER_EMAIL` and `PUBLIC_ORIGIN`, then test the blank home,
