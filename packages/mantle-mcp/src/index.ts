@@ -10,3 +10,9 @@ export {
   type MantleMcpHandler,
   type MantleMcpHandlerOptions,
 } from "./createMantleMcpHandler.js";
+export {
+  clientUiSupport,
+  type ClientUiSupport,
+  type MantleMcpAppResource,
+  type MantleMcpApps,
+} from "./apps.js";

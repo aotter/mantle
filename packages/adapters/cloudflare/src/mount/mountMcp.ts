@@ -5,7 +5,7 @@ import {
   projectCallableCapabilities,
   readJsonBody,
 } from "@aotter/mantle-runtime";
-import { createMantleMcpHandler, type MantleMcpHandler } from "@aotter/mantle-mcp";
+import { createMantleMcpHandler, type MantleMcpApps, type MantleMcpHandler } from "@aotter/mantle-mcp";
 import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
 import type { HandlerContext } from "@aotter/mantle-runtime";
@@ -27,6 +27,9 @@ export interface CreateMcpApiHandlerOptions {
    *  such scope is listed here; otherwise the call is a denied tool result.
    *  Defaults to `requiredScopes`, which is all conventional Auth grants. */
   readonly grantableScopes?: readonly string[];
+  /** MCP Apps UI resources for this surface only (ADR-0029 D7). A staff
+   *  resource passed to the staff handler is never readable on public. */
+  readonly apps?: MantleMcpApps;
 }
 
 /**
@@ -148,6 +151,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
               // a grantable declared scope gets the SDK's step-up challenge.
               unauthenticated: () => oauthDenied(resource, requiredScopes, { status: 401, reason: "unauthenticated" }),
               oauth: { scopes: requiredScopes, grantable: grantableScopes },
+              ...(options.apps ? { apps: options.apps } : {}),
               resourceMetadataUrl,
             },
           );
