@@ -1,6 +1,7 @@
 import {
   bindCapabilities,
   buildCapabilityCatalog,
+  interactionReadTargets,
   projectCallableCapabilities,
   readJsonBody,
 } from "@aotter/mantle-runtime";
@@ -49,7 +50,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
   // the correlation argument from the same catalog here.
   const auditCatalog = buildCapabilityCatalog(
     Object.values(ref.plan.schemas).map(({ manifest }) => manifest),
-    { surface, callables: projectCallableCapabilities(ref.plan, { surface }) },
+    { surface, callables: projectCallableCapabilities(ref.plan, { surface }), readTargets: interactionReadTargets(ref.plan, surface) },
   );
   const auditOperationId = (tool: string, args: Readonly<Record<string, unknown>>): string | null => {
     const value = args[auditCatalog.get(tool)?.operationIdArgument ?? "operationId"];

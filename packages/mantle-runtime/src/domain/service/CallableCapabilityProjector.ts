@@ -103,6 +103,22 @@ export function projectCallableCapabilities(
     .map((capability) => Object.freeze(capability)));
 }
 
+/**
+ * Schemas the bounded staff `read_entry` may read (ADR-0029 D2): operation
+ * targets of Procedures that are themselves tools on the staff surface. A
+ * Procedure reachable only over HTTP, a schedule or not at all never widens
+ * what reaches a model's context. Translation children are excluded.
+ */
+export function interactionReadTargets(plan: RuntimePlan, surface: "staff" | "public"): readonly string[] {
+  if (surface !== "staff") return [];
+  const staffProcedures = new Set(plan.mcpTools.flatMap((tool) =>
+    tool.ownerKind === "Procedure" && tool.surface === "staff" ? [tool.ownerName] : []));
+  return [...new Set((plan.interactions ?? [])
+    .filter((interaction) => interaction.mutates && staffProcedures.has(interaction.procedure))
+    .map((interaction) => interaction.schema)
+    .filter((schema) => !plan.schemas[schema]?.manifest.spec.translates))].sort();
+}
+
 function rowActionsOf(
   plan: RuntimePlan,
   view: string,
@@ -112,15 +128,15 @@ function rowActionsOf(
   const actions = (plan.interactions ?? []).flatMap((interaction): ViewRowAction[] => {
     const capability = procedureTools.get(`${surface}\0${interaction.procedure}`);
     if (!capability || !interaction.views.includes(view)) return [];
-    return [{
+    return [Object.freeze({
       capability,
       procedure: interaction.procedure,
       bind: interaction.bind,
       ...(interaction.version ? { version: interaction.version } : {}),
       mutates: interaction.mutates,
-    }];
+    })];
   });
-  return actions.length > 0 ? { rowActions: actions } : {};
+  return actions.length > 0 ? { rowActions: Object.freeze(actions) } : {};
 }
 
 function viewInputSchema(view: ViewManifest): JsonSchema {

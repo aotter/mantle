@@ -426,6 +426,55 @@ function rowBindingManifests(): Manifest[] {
         target: { procedure: "retire-product" },
       },
     },
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "merge-into" },
+      spec: {
+        title: "Merge Into",
+        input: {
+          type: "object",
+          properties: {
+            duplicateOf: { type: "string", "x-mantle-ref": { schema: "products", field: "id" } },
+            productId: { type: "string" },
+            expectedVersion: { type: "integer" },
+          },
+          required: ["duplicateOf", "productId", "expectedVersion"],
+        },
+        output: { type: "object" },
+        handler: { kind: "ref", ref: "mergeInto" },
+        target: { schema: "products", id: "productId", version: "expectedVersion" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: "merge-into-mcp" },
+      spec: { source: { kind: "mcp", surface: "staff" }, target: { procedure: "merge-into" } },
+    },
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "rename-sku" },
+      spec: {
+        title: "Rename SKU",
+        input: {
+          type: "object",
+          // The builtin update targets `id`; the string-form inference
+          // (single unique index → sku) must not win.
+          properties: { id: { type: "string", "x-mantle-ref": "products" }, expectedVersion: { type: "number" }, sku: { type: "string" } },
+          required: ["id", "expectedVersion"],
+        },
+        output: { type: "object" },
+        handler: { kind: "builtin", op: "update", schema: "products" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: "rename-sku-mcp" },
+      spec: { source: { kind: "mcp", surface: "staff" }, target: { procedure: "rename-sku" } },
+    },
   ];
 }
 
@@ -439,6 +488,7 @@ function rowBindingHarness() {
       auditWarehouse: () => ({ ok: true }),
       unknownRefOp: () => ({ ok: true }),
       translatePost: () => ({ ok: true }),
+      mergeInto: () => ({ ok: true }),
     },
     bindings: {
       db: new InMemoryDatabase(),
@@ -479,6 +529,23 @@ describe("GET /admin/api/operations — rowBindings (#430)", () => {
     expect(messages.filter((message) => message.includes("'restock-sku' input 'sku'"))).toHaveLength(1);
     expect(messages.some((message) => message.includes("'resend-receipt'"))).toBe(false);
     expect(messages.some((message) => message.includes("'retire-product'"))).toBe(false);
+    // The builtin target replaces the inference, so there is nothing to warn about.
+    expect(messages.some((message) => message.includes("'rename-sku'"))).toBe(false);
+    warn.mockRestore();
+  });
+
+  it("puts the operation target first and lets it replace an inference", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { app } = rowBindingHarness();
+    const body = (await (await app.request("/admin/api/operations")).json()) as {
+      operations: Array<{ name: string; rowBindings: Array<{ collection: string; inputField: string; rowField: string }> }>;
+    };
+    const bindings = (name: string) => body.operations.find((op) => op.name === name)!.rowBindings;
+    expect(bindings("merge-into")).toEqual([
+      { collection: "products", inputField: "productId", rowField: "id" },
+      { collection: "products", inputField: "duplicateOf", rowField: "id" },
+    ]);
+    expect(bindings("rename-sku")).toEqual([{ collection: "products", inputField: "id", rowField: "id" }]);
     warn.mockRestore();
   });
 

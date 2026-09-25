@@ -107,7 +107,7 @@ Tool names are the mangled `metadata.name`: lower-cased, with `-` replaced by `_
 | `create_draft_<segment>`, `update_draft_<segment>` | staff | Per publishing Schema whose `schema.readOnly` is not `true`. |
 | `create_record_<segment>`, `update_record_<segment>` | staff | Per operational Schema whose `schema.readOnly` is not `true`. |
 | `create_media_upload`, `commit_media_upload` | staff | Only when a `mediaStorage` port is bound **and** at least one `media.purposes` entry is declared. |
-| `read_entry` | staff | Only when some Procedure has an interaction (an operation `target` or an `x-mantle-ref` input) with a declared Schema; `collection` is limited to those Schemas. `readOnlyHint: true`; contributor role and above. |
+| `read_entry` | staff | Only when a Procedure with a staff MCP Trigger has an operation target; `collection` is limited to those target Schemas (translation children excluded). `readOnlyHint: true`; contributor role and above, the same floor as Admin entry reads. |
 
 The public surface carries callable capabilities only — public Views and Procedures with a public MCP Trigger. No generic entry tool and no authoring tool is ever advertised there. Update tools add `id` and `expected_version` as required fields, and `x-mantle-bind` properties are stripped from authoring tool schemas because the server stamps them. Localized `title` and `description` collapse to their `en` value in tool schemas. Concepts are in [MCP and agents](../concepts/mcp-and-agents.md).
 
