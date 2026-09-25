@@ -105,15 +105,18 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 
 - **Success:** `content` is one JSON text block; `structuredContent` carries
   the value when it is a plain object.
-- **Business failure:** `isError: true`, `structuredContent:
-  { diagnostics: [Diagnostic] }` using the ADR-0008 shape, and the same JSON
-  as a text block. This replaces the JSON-RPC `-32000` business error and is a
-  breaking wire change, announced with the cutover.
+- **Business failure:** `isError: true` with `{ diagnostics: [Diagnostic] }`
+  (the ADR-0008 shape) as a JSON text block, repeated as `structuredContent`
+  unless the tool advertises an `outputSchema`. Structured results must
+  conform to that schema, and 1.x clients validate them even on `isError`.
+  This replaces the JSON-RPC `-32000` business error and is a breaking wire
+  change, announced with the cutover.
 - **Protocol failure** (malformed request, unknown method, unsupported
   version) stays a JSON-RPC error owned by the SDK.
 - **Authentication:** an anonymous call to a tool whose capability
-  `requiresIdentity` is answered by the adapter before the SDK with HTTP 401
-  and a `WWW-Authenticate` challenge built by the SDK helper. The SDK's own
+  `requiresIdentity` (including any member of a 2025-era batch) is answered
+  before the SDK with HTTP 401 and a `WWW-Authenticate` challenge built by the
+  SDK helper. The SDK's own
   `scopeChallenge` covers scopes only; identity stays outside it.
 
 ### 5. Identity stays outside the SDK
