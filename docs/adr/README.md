@@ -21,10 +21,11 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Superseded by 0021 |
 | [0019](0019-sealed-manifest-runtime-pipeline.md) | One sealed source-to-runtime pipeline, semantic storage seam, and optional Web/Admin/platform dependency direction. | Accepted |
 | [0020](0020-builtin-handler-contracts-and-matched-upsert.md) | Static builtin handler contracts and natural-key matched upsert (`handler.match`). | Accepted + amended by 0022 |
-| [0021](0021-retire-starter-scaffolding.md) | Direct authoring; retire Starter scaffolding. | Accepted; supersedes 0018 |
+| [0021](0021-retire-starter-scaffolding.md) | Direct authoring; retire Starter scaffolding. | Accepted; no-initialization clause superseded by 0026 |
 | [0022](0022-caller-observed-version-occ.md) | Caller-observed `expectedVersion` for Admin bind and builtin upsert OCC. | Accepted |
 | [0024](0024-manifest-native-schema-tables.md) | Materialize each Schema as a native storage table and deploy reviewed migration artifacts. | Accepted; authored-native-name clauses superseded by 0025 |
 | [0025](0025-reserved-native-columns-and-published-only-public-views.md) | Reserve the six native column names, let `indexes` reference them, and compile public publishing Views published-only. | Accepted |
+| [0026](0026-progressive-generate.md) | Progressive `mantle generate` with a full default, positive features, saved host selection, and user-owned source. | Accepted; supersedes part of 0021 |
 
 ## Reading order
 
@@ -36,7 +37,7 @@ If you're new to the codebase:
 4. **0007** — what running the SDK feels like as an AI author (and as the operator agent).
 5. **0011** — the boundary between the runtime and the adapter.
 6. **0010** — how locale flows through the system.
-7. **0021** — current direct-authoring boundary; **0013** is historical install-session context.
+7. **0026** — current progressive generation boundary; **0021** retains the direct-authoring history and **0013** is historical install-session context.
 8. **0002, 0008** — the two ADRs that touch every diagnostic and every binding.
 
 ## What's NOT here (and why)

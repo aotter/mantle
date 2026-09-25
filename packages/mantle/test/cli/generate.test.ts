@@ -19,14 +19,14 @@ afterEach(() => {
 });
 
 describe("mantle generate", () => {
-  it("rejects starter types and missing manifests without scaffolding", async () => {
+  it("rejects starter types and requires a host for a new full project", async () => {
     const root = await mkdtemp(join(tmpdir(), "mantle-no-scaffold-"));
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     try {
       process.chdir(root);
       expect(await runGenerate(["blank"], coreOnly)).toBe(2);
-      expect(await runGenerate([], coreOnly)).toBe(1);
-      expect(stderr.mock.calls.flat().join("")).toContain("MANIFEST_ROOT_NOT_FOUND");
+      expect(await runGenerate([], coreOnly)).toBe(2);
+      expect(stderr.mock.calls.flat().join("")).toContain("Host required");
       expect(await readdir(root)).toEqual([]);
     } finally {
       process.chdir(originalCwd);
