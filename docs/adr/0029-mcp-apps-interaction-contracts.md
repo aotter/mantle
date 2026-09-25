@@ -227,8 +227,15 @@ skills describe:
 - `mantle-mcp` registers `ui://` resources with `registerAppResource` and
   interaction tools with `registerAppTool` and `_meta.ui.resourceUri`.
   App-only helpers use `_meta.ui.visibility: ["app"]` and are read-only.
-- Negotiation uses `getUiCapability`. Clients without MCP Apps support get no
-  `_meta.ui` and no app-only tools; everything else is unchanged.
+- Negotiation uses `getUiCapability`, per request. A 2026-07-28 request, or a
+  2025-era `initialize`, that declares no MCP Apps support gets no `_meta.ui`,
+  no resources and no app-only tools; everything else is unchanged.
+- A stateless 2025-era request after `initialize` carries no client
+  capabilities. It is treated as possibly supporting MCP Apps: it gets the App
+  metadata and the app-only tools, so hosts with MCP Apps can call them on
+  every request. Hosts without MCP Apps ignore the metadata but may list the
+  app-only tools to the model. This is why app-only tools must be declared
+  read-only.
 - Each surface is its own `McpServer`; staff resources never appear on public.
 - Resources hold reusable assets only: no caller data, no bearer. Per-call data
   travels in `structuredContent`. Every app tool keeps its text `content`.
