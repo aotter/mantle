@@ -1,4 +1,4 @@
-import { StrictMode, useState } from "react";
+import { StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useApp, useHostStyles } from "@modelcontextprotocol/ext-apps/react";
 import { InteractionApp } from "./app.js";
@@ -17,10 +17,11 @@ function Root() {
     },
   });
   useHostStyles(app, app?.getHostContext());
+  const call = useMemo<CallTool | null>(() => app
+    ? (name, args, signal) => app.callServerTool({ name, arguments: args }, signal ? { signal } : undefined) as Promise<ToolResult>
+    : null, [app]);
   if (error) return <p role="alert" className="p-4 text-sm text-destructive">{error.message}</p>;
-  if (!app) return null;
-  const call: CallTool = (name, args, signal) =>
-    app.callServerTool({ name, arguments: args }, signal ? { signal } : undefined) as Promise<ToolResult>;
+  if (!call) return null;
   return <InteractionApp call={call} result={result} input={input} />;
 }
 

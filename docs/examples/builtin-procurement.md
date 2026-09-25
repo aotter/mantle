@@ -230,6 +230,17 @@ Staff review through Staff MCP on `/mcp/staff`. First `query_view_pending_approv
 
 A second reviewer replaying `expectedVersion: 1` after that succeeds receives an `isError` result whose `diagnostics[0].code` is `CONFLICT`. A contributor-role session is denied with `AUTH_DENIED`. `review_requisition` appears only in `tools/list` on `/mcp/staff`; the public surface lists `submit_requisition` and `query_view_my_requisitions`.
 
+## In chat, with the MCP App
+
+Register the built-in interaction App on both surfaces, as in [MCP and agents](../handbook/concepts/mcp-and-agents.md#the-built-in-interaction-app). The two audiences then work in chat:
+
+- **Members** get `query_view_my_requisitions` rendered as rows. A new request still goes through `submit_requisition`, as a form in chat or as a plain tool call.
+- **Reviewers** ask what is waiting. The agent calls `query_view_pending_approvals`, and the App lists the requisitions. `review_requisition` opens against the chosen row, with `id` and `expectedVersion` bound, so the reviewer only picks a decision and a note.
+  - If someone else decided first, the App shows what changed and asks for a review before anything is sent.
+  - A stale `expectedVersion` still fails with `CONFLICT`, and the note is kept.
+
+Clients without MCP Apps run the same steps with the plain tools.
+
 ## What this deliberately leaves out
 
 - **Multi-step approval chains.** One decision by one staff member. Sequential approvers would add a step field, more enum states and a `before_update` hook that validates the transition.
