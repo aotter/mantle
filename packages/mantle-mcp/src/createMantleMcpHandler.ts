@@ -58,23 +58,33 @@ export function createMantleMcpHandler(
       if (request.method.toUpperCase() !== "POST" || !isJsonContentType(request.headers.get("content-type"))) {
         return sdk.fetch(request, { authInfo });
       }
-      const body = await readRequestBody(request.clone(), maxRequestBodySize);
-      if (body.tooLarge) return new Response("Payload Too Large", { status: 413 });
-      const message = parseJson(body.text);
+      let text: string;
+      try {
+        const body = await readRequestBody(request.clone(), maxRequestBodySize);
+        if (body.tooLarge) return payloadTooLarge(maxRequestBodySize);
+        text = body.text;
+      } catch {
+        // An unreadable stream is the SDK's to answer.
+        return sdk.fetch(request, { authInfo });
+      }
+      const message = parseJson(text);
       // Unparseable bodies go to the SDK untouched so it answers with its
       // own JSON-RPC parse error.
       if (message === undefined) return sdk.fetch(request, { authInfo });
-      const call = toolCall(message);
-      if (call) {
-        const capability = invoker.catalog.get(call.name);
-        if (!capability) {
-          servers.audit(ctx, call.name, call.args, "UNKNOWN_TOOL");
-        } else if (capability.requiresIdentity && isAnonymous(ctx)) {
-          servers.audit(ctx, call.name, call.args, "UNAUTHENTICATED");
-          return options.unauthenticated
-            ? options.unauthenticated(request)
-            : new Response(null, { status: 401 });
-        }
+      // A 2025-era batch carries several calls; every one is checked.
+      const calls = (Array.isArray(message) ? message : [message]).flatMap(toolCall);
+      const refused = calls.filter(({ name }) => {
+        const capability = invoker.catalog.get(name);
+        return capability?.requiresIdentity === true && isAnonymous(ctx);
+      });
+      if (refused.length > 0) {
+        for (const call of refused) servers.audit(ctx, call.name, call.args, "UNAUTHENTICATED");
+        return options.unauthenticated
+          ? options.unauthenticated(request)
+          : new Response(null, { status: 401 });
+      }
+      for (const call of calls) {
+        if (!invoker.catalog.get(call.name)) servers.audit(ctx, call.name, call.args, "UNKNOWN_TOOL");
       }
       return sdk.fetch(request, { authInfo, parsedBody: message });
     },
@@ -101,11 +111,22 @@ function isAnonymous(ctx: HandlerContext): boolean {
   return ctx.user === null && ctx.staff === null && ctx.auth === undefined;
 }
 
-function toolCall(message: unknown): { name: string; args: Record<string, unknown> } | undefined {
-  if (!isRecord(message) || message["method"] !== "tools/call") return undefined;
+/** A `tools/call` request, as zero or one call. Notifications (no `id`)
+ *  never run a tool, so they are not calls. */
+function toolCall(message: unknown): { name: string; args: Record<string, unknown> }[] {
+  if (!isRecord(message) || message["method"] !== "tools/call" || !("id" in message)) return [];
   const params = message["params"];
-  if (!isRecord(params) || typeof params["name"] !== "string") return undefined;
-  return { name: params["name"], args: isRecord(params["arguments"]) ? params["arguments"] : {} };
+  if (!isRecord(params) || typeof params["name"] !== "string") return [];
+  return [{ name: params["name"], args: isRecord(params["arguments"]) ? params["arguments"] : {} }];
+}
+
+/** Same shape as the SDK's own oversize answer. */
+function payloadTooLarge(limit: number): Response {
+  return new Response(JSON.stringify({
+    jsonrpc: "2.0",
+    id: null,
+    error: { code: -32000, message: `Request body exceeds the ${limit}-byte limit.` },
+  }), { status: 413, headers: { "content-type": "application/json" } });
 }
 
 function parseJson(text: string): unknown {

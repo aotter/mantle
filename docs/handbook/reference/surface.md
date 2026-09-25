@@ -163,7 +163,7 @@ The umbrella installs Spec and Runtime only. Web, Admin, Auth, Admin UI, Bun, Ve
 |---|---|---|
 | `@aotter/mantle` | root | Umbrella plus the `mantle` and `mantle-harness` binaries. |
 | `@aotter/mantle-spec` | `/spec` | Manifest grammar, parser, validators, JSON Schema to zod, site-config contract, diagnostic catalog. No environment, no IO. |
-| `@aotter/mantle-runtime` | `/runtime` | Hexagonal runtime: domain ports, use cases, MCP catalog, storage helpers. No adapter dependencies. |
+| `@aotter/mantle-runtime` | `/runtime` | Hexagonal runtime: domain ports, use cases, the transport-neutral capability catalog, storage helpers. No adapter dependencies. |
 | — | `/runtime/testing` | Node-only crowded-SQLite planner and HTTP sampling helpers used by `mantle-harness`. |
 | — | `/codegen` | The pure linked-manifests or compiled-plan to typed-module emitter, with no IO. |
 | `@aotter/mantle-web` | `/web` | HTML, Markdown, `llms.txt`, sitemap, SEO and preview composition. No routes, no platform dependencies. |
@@ -175,6 +175,7 @@ The umbrella installs Spec and Runtime only. Web, Admin, Auth, Admin UI, Bun, Ve
 | — | `/vercel/libsql` | Optional application-owned Turso/libSQL driver. |
 | `@aotter/mantle-cloudflare` | `/cloudflare` | Cloudflare Workers adapter: D1, Workers Cache, R2, Queues, Better Auth 1.7 MCP and CIMD. |
 | `@aotter/mantle-indexeddb` | — | Browser IndexedDB adapter. Directly installable; no umbrella subpath. |
+| `@aotter/mantle-mcp` | — | MCP surface on the official MCP SDK: serves a runtime capability catalog as tools to 2026-07-28 and 2025 stateless clients. Directly installable; no umbrella subpath. |
 
 ## Versions
 

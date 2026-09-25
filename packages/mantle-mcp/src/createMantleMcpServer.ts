@@ -69,7 +69,9 @@ export function createMantleMcpServer(
   ): void => {
     const sink = options.audit;
     if (!sink) return;
-    const settled = Promise.resolve()
+    // Audit is off the response path: nothing it does may change a result.
+    try {
+      const settled = Promise.resolve()
       .then(() => sink.record({
         at: startedAt,
         surface: catalog.surface,
@@ -84,7 +86,10 @@ export function createMantleMcpServer(
       .catch((error: unknown) => {
         console.error("[mantle-mcp] audit sink failed", error);
       });
-    ctx.waitUntil?.(settled);
+      ctx.waitUntil?.(settled);
+    } catch (error) {
+      console.error("[mantle-mcp] audit scheduling failed", error);
+    }
   };
 
   const operationIdOf = (tool: string, args: Readonly<Record<string, unknown>>): string | null => {
@@ -110,7 +115,7 @@ export function createMantleMcpServer(
             });
             if (result.ok) return successResult(result.data);
             outcome = result.diagnostic.code;
-            return errorResult(redactForWire(result.diagnostic));
+            return errorResult(redactForWire(result.diagnostic), config.outputSchema !== undefined);
           } catch (error) {
             // Adapter exceptions can carry binding or driver detail; the real
             // cause goes to server logs and the wire stays opaque.
@@ -121,7 +126,7 @@ export function createMantleMcpServer(
               severity: "error",
               path: `MCP ${capability.name}`,
               message: "Internal error.",
-            }));
+            }), config.outputSchema !== undefined);
           } finally {
             record(ctx, capability.name, operationIdOf(capability.name, input), outcome, startedAt);
           }
@@ -178,13 +183,19 @@ function successResult(data: unknown): CallToolResult {
   };
 }
 
-/** Business failures are tool results the model can read and act on (D1). */
-function errorResult(diagnostic: Diagnostic): CallToolResult {
+/**
+ * Business failures are tool results the model can read and act on (D1).
+ * When the tool advertises an `outputSchema`, the diagnostics travel in the
+ * text block only: 1.x clients validate `structuredContent` against that
+ * schema even on `isError`, and the spec requires structured results to
+ * conform to it.
+ */
+function errorResult(diagnostic: Diagnostic, hasOutputSchema: boolean): CallToolResult {
   const payload = { diagnostics: [diagnostic] };
   return {
     isError: true,
     content: [{ type: "text", text: JSON.stringify(payload) }],
-    structuredContent: payload,
+    ...(hasOutputSchema ? {} : { structuredContent: payload }),
   };
 }
 

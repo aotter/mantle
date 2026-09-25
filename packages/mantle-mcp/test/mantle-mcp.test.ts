@@ -85,11 +85,21 @@ describe("createMantleMcpHandler with the official client", () => {
 
       it("returns business failures as isError results carrying the diagnostic", async () => {
         const diagnostic = { code: "CONFLICT", phase: "runtime", severity: "error", path: "MCP shaped", message: "Version moved." };
-        const { client } = await connect(era, { invokeTrigger: async () => ({ ok: false, diagnostic }) });
-        const result = await client.callTool({ name: "shaped", arguments: {} });
-        expect(result.isError).toBe(true);
-        expect(result.structuredContent).toEqual({ diagnostics: [diagnostic] });
-        expect(JSON.parse((result.content as { text: string }[])[0]!.text)).toEqual({ diagnostics: [diagnostic] });
+        const { client } = await connect(era, {
+          invokeTrigger: async () => ({ ok: false, diagnostic }),
+          executeView: async () => ({ ok: false, diagnostic }),
+        });
+        // Listing first caches each outputSchema, which is when clients
+        // validate structured results.
+        await client.listTools();
+        const shaped = await client.callTool({ name: "shaped", arguments: {} });
+        expect(shaped.isError).toBe(true);
+        expect(JSON.parse((shaped.content as { text: string }[])[0]!.text)).toEqual({ diagnostics: [diagnostic] });
+        // A tool with an outputSchema keeps its structured results conforming.
+        expect(shaped).not.toHaveProperty("structuredContent");
+        const view = await client.callTool({ name: "query_view_public_posts", arguments: {} });
+        expect(view.isError).toBe(true);
+        expect(view.structuredContent).toEqual({ diagnostics: [diagnostic] });
       });
     });
   }
@@ -100,7 +110,8 @@ describe("createMantleMcpHandler with the official client", () => {
     const result = await client.callTool({ name: "shaped", arguments: {} });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result)).not.toContain("D1 binding detail");
-    expect(result.structuredContent).toMatchObject({ diagnostics: [{ code: "INTERNAL_ERROR", message: "Internal error." }] });
+    expect(JSON.parse((result.content as { text: string }[])[0]!.text))
+      .toMatchObject({ diagnostics: [{ code: "INTERNAL_ERROR", message: "Internal error." }] });
     spy.mockRestore();
   });
 
@@ -116,6 +127,41 @@ describe("createMantleMcpHandler with the official client", () => {
     expect(response.headers.get("www-authenticate")).toContain("Bearer");
     expect(invokeTrigger).not.toHaveBeenCalled();
     expect(events).toEqual([expect.objectContaining({ tool: "member_only", outcome: "UNAUTHENTICATED", operationId: "op-1" })]);
+  });
+
+  it("checks every call in a 2025 batch before any tool runs", async () => {
+    const invokeTrigger = vi.fn(async () => ({ ok: true as const, data: {} }));
+    const events: McpToolCallAuditEvent[] = [];
+    const { handler } = harness({ invokeTrigger }, { audit: sink(events) });
+    const batch = [
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "shaped", arguments: {} } },
+      { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "member_only", arguments: {} } },
+    ];
+    const response = await handler.fetch(post(batch), anonymous());
+    expect(response.status).toBe(401);
+    expect(invokeTrigger).not.toHaveBeenCalled();
+    expect(events).toEqual([expect.objectContaining({ tool: "member_only", outcome: "UNAUTHENTICATED" })]);
+    await handler.fetch(post([{ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "ghost", arguments: {} } }]), member());
+    expect(events.at(-1)).toMatchObject({ tool: "ghost", outcome: "UNKNOWN_TOOL" });
+  });
+
+  it("does not challenge a tools/call notification, which runs nothing", async () => {
+    const { handler } = harness({});
+    const response = await handler.fetch(post({ jsonrpc: "2.0", method: "tools/call", params: { name: "member_only" } }), anonymous());
+    expect(response.status).not.toBe(401);
+  });
+
+  it("never lets a failing audit path change a tool result", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { handler } = harness({ invokeTrigger: async () => ({ ok: true, data: { id: "p1" } }) }, {
+      audit: sink([]),
+    });
+    const ctx = { ...member(), waitUntil: () => { throw new Error("SECRET waitUntil detail"); } };
+    const response = await handler.fetch(rpc("tools/call", { name: "shaped", arguments: {} }), ctx);
+    const body = JSON.stringify(await jsonRpcBody(response));
+    expect(body).not.toContain("SECRET");
+    expect(body).toContain('"structuredContent":{"id":"p1"}');
+    spy.mockRestore();
   });
 
   it("lets a signed-in caller through to the tool", async () => {
@@ -150,6 +196,7 @@ describe("createMantleMcpHandler with the official client", () => {
     expect(form.status).toBe(415);
     const large = await handler.fetch(rpc("tools/call", { name: "shaped", arguments: { echo: "x".repeat(200) } }), member());
     expect(large.status).toBe(413);
+    expect(await large.json()).toMatchObject({ jsonrpc: "2.0", error: { code: -32000 } });
     expect(invokeTrigger).not.toHaveBeenCalled();
   });
 });
@@ -209,6 +256,10 @@ function compile(text: string): RuntimePlan {
 }
 
 function rpc(method: string, params?: unknown): Request {
+  return post({ jsonrpc: "2.0", id: 1, method, params });
+}
+
+function post(body: unknown): Request {
   return new Request(`${ORIGIN}/mcp`, {
     method: "POST",
     headers: {
@@ -216,7 +267,7 @@ function rpc(method: string, params?: unknown): Request {
       accept: "application/json, text/event-stream",
       "mcp-protocol-version": "2025-11-25",
     },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    body: JSON.stringify(body),
   });
 }
 
