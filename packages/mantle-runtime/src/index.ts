@@ -44,6 +44,7 @@ export {
   type SchedulePlan,
   type McpToolPlan,
 } from "./domain/service/RuntimePlanCompiler.js";
+export type { RuntimeInteractionPlan } from "./domain/service/InteractionCompiler.js";
 export type { RunObservation, RunObservationStore } from "./domain/port/RunObservationStore.js";
 export { DatabaseRunObservationStore } from "./infrastructure/persistence/DatabaseRunObservationStore.js";
 export {

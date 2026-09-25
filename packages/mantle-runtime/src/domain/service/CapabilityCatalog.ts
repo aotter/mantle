@@ -19,6 +19,7 @@ import type {
   ProcedureCallableCapability,
   RuntimeCallableCapability,
   ViewCallableCapability,
+  ViewRowAction,
 } from "./CallableCapabilityProjector.js";
 import { projectStandardOutputSchema } from "./StandardOutputSchema.js";
 
@@ -53,6 +54,7 @@ export type CapabilityRoute =
   | { readonly kind: "lifecycle"; readonly action: LifecycleAction }
   | { readonly kind: "create"; readonly collection: string }
   | { readonly kind: "update"; readonly collection: string }
+  | { readonly kind: "read" }
   | { readonly kind: "mediaCreateUpload" }
   | { readonly kind: "mediaCommitUpload" };
 
@@ -80,6 +82,8 @@ export interface Capability {
   /** Argument that correlates retries of one operation in audit trails. */
   readonly operationIdArgument: string;
   readonly route: CapabilityRoute;
+  /** For a View: operations a row can open, with the fields they bind. */
+  readonly rowActions?: readonly ViewRowAction[];
 }
 
 export interface CapabilityCatalog {
@@ -95,6 +99,9 @@ export interface BuildCapabilityCatalogOptions {
   /** Declared media purposes. Media operations exist only when this is set,
    *  which callers do when the runtime has media storage bound. */
   readonly mediaPurposes?: readonly MediaPurposePolicy[];
+  /** Schemas that are the subject of a declared interaction. Staff surfaces
+   *  get a bounded single-entry read for exactly these (ADR-0029 D2). */
+  readonly readTargets?: readonly string[];
 }
 
 export function buildCapabilityCatalog(
@@ -105,8 +112,10 @@ export function buildCapabilityCatalog(
   const callables = (options.callables ?? [])
     .filter((item) => item.surface === surface)
     .map((item) => callableCapability(item));
+  const readTargets = (options.readTargets ?? []).filter((name) => schemas.some((schema) => schema.metadata.name === name));
   const drafts = surface === "public" ? callables : [
     ...lifecycleCapabilities(schemas),
+    ...(readTargets.length > 0 ? [readCapability(readTargets)] : []),
     ...(options.mediaPurposes ? mediaCapabilities(options.mediaPurposes) : []),
     ...schemas
       .filter((schema) => schema.spec.schema.readOnly !== true)
@@ -179,6 +188,27 @@ const LIFECYCLE_OPERATIONS: ReadonlyArray<{
     hints: { readOnly: false, destructive: true },
   },
 ];
+
+/**
+ * One entry by id, for the collections an interaction is about. A staff
+ * snapshot read is bounded to those so a model provider's context only ever
+ * receives records someone declared an operation for.
+ */
+function readCapability(collections: readonly string[]): CapabilityDraft {
+  const sorted = [...collections].sort();
+  return {
+    name: "read_entry",
+    description: `Read one entry by id, including its version, to review it before an operation. Collections: ${sorted.join(", ")}.`,
+    inputSchema: {
+      type: "object",
+      properties: { collection: { type: "string", enum: sorted }, id: { type: "string" } },
+      required: ["collection", "id"],
+    },
+    hints: { readOnly: true },
+    minimumRole: "contributor",
+    route: { kind: "read" },
+  };
+}
 
 /** Lifecycle actions that need a content (publishing) lifecycle. */
 export const CONTENT_LIFECYCLE_ACTIONS: ReadonlySet<LifecycleAction> = new Set([
@@ -417,7 +447,8 @@ function viewCapability(capability: ViewCallableCapability): CapabilityDraft {
   return {
     name: capability.name,
     ...(capability.title ? { title: capability.title } : {}),
-    description: `${capability.description}${authorizationSummary(requires)}`,
+    description: `${capability.description}${rowActionSummary(capability.rowActions)}${authorizationSummary(requires)}`,
+    ...(capability.rowActions ? { rowActions: capability.rowActions } : {}),
     inputSchema: capability.inputSchema as Record<string, unknown>,
     hints: { readOnly: true },
     anonymousDenied: declaresIdentity(requires),
@@ -475,6 +506,20 @@ function declaredScopes(
 ): string[] {
   return [...new Set((requires?.auth?.all ?? []).flatMap((predicate) =>
     typeof predicate === "object" && "ctx.auth.scope" in predicate ? [predicate["ctx.auth.scope"]] : []))];
+}
+
+/** Tell agents which operation a row feeds and how, so ids and versions are
+ *  copied from the row instead of guessed. */
+function rowActionSummary(actions: readonly ViewRowAction[] | undefined): string {
+  if (!actions?.length) return "";
+  const described = actions.map((action) => {
+    const inputs = [
+      ...action.bind.map(({ input, field }) => `${input} = row.${field}`),
+      ...(action.version ? [`${action.version} = row.version`] : []),
+    ];
+    return `${action.capability} (${inputs.join(", ")})`;
+  });
+  return ` Row actions: ${described.join("; ")}.`;
 }
 
 function authorizationSummary(

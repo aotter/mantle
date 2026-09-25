@@ -16,3 +16,4 @@ export * from "./CallableCapabilityProjector.js";
 export * from "./BuiltinProjector.js";
 export * from "./AuthPredicateEvaluator.js";
 export * from "./CapabilityCatalog.js";
+export * from "./InteractionCompiler.js";

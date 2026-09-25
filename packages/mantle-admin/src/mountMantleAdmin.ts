@@ -1332,6 +1332,8 @@ function discoverStaffOperations(
   }
 
   const out: StaffOperation[] = [];
+  // Discovery runs once per mount, so each inferred binding warns once.
+  const warned = new Set<string>();
   for (const [name, kinds] of triggerKindsByProcedure) {
     const procedure = procedures.get(name);
     if (!procedure) continue;
@@ -1342,11 +1344,53 @@ function discoverStaffOperations(
       input: procedure.spec.input,
       uiSchema: procedure.spec.uiSchema ?? null,
       triggers: [...kinds],
-      rowBindings: discoverRowBindings(procedure, schemasByName),
+      rowBindings: rowBindingsFor(procedure, plan, schemasByName, warned),
       procedure,
     });
   }
   return out;
+}
+
+/**
+ * Row bindings come from the sealed plan's interactions (ADR-0029). The
+ * string-form `x-mantle-ref` inference below is kept for one minor release:
+ * when it binds a field other than `id`, which is what the string form
+ * means, Admin warns once and keeps the old binding (D8).
+ */
+function rowBindingsFor(
+  procedure: ProcedureManifest,
+  plan: RuntimePlan,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+  warned: Set<string>,
+): StaffOperationRowBinding[] {
+  const name = procedure.metadata.name;
+  const bindings = discoverRowBindings(procedure, schemasByName);
+  for (const binding of bindings) {
+    const declared = procedure.spec.input.properties?.[binding.inputField]?.[MANTLE_REF_KEYWORD];
+    if (typeof declared === "string" && binding.rowField !== "id") warnInferredBinding(name, binding, warned);
+  }
+  const key = (collection: string, inputField: string) => `${collection}\0${inputField}`;
+  const present = new Set(bindings.map(({ collection, inputField }) => key(collection, inputField)));
+  for (const interaction of plan.interactions ?? []) {
+    if (interaction.procedure !== name) continue;
+    if (schemasByName.get(interaction.schema)?.spec.translates) continue;
+    const [bind] = interaction.bind;
+    if (!bind || present.has(key(interaction.schema, bind.input))) continue;
+    present.add(key(interaction.schema, bind.input));
+    bindings.push({ collection: interaction.schema, inputField: bind.input, rowField: bind.field });
+  }
+  return bindings;
+}
+
+function warnInferredBinding(procedure: string, binding: StaffOperationRowBinding, warned: Set<string>): void {
+  const id = `${procedure}\0${binding.inputField}`;
+  if (warned.has(id)) return;
+  warned.add(id);
+  console.warn(
+    `[mantle-admin] Procedure '${procedure}' input '${binding.inputField}' binds '${binding.collection}.${binding.rowField}' ` +
+    `by inference. Declare x-mantle-ref: { schema: ${binding.collection}, field: ${binding.rowField} } (ADR-0029); ` +
+    "the next minor release reads the string form as field: id.",
+  );
 }
 
 /**
