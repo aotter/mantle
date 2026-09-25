@@ -291,8 +291,8 @@ describe("createInteractionController", () => {
   });
 
   it("compares only fields both snapshots carry", async () => {
-    // The list row is a projection: it has no `note`, so `note` is not a change.
-    const { controller: c } = controller({ read: async () => ({ id: "r1", version: 4, data: { requestStatus: "approved", note: "x" } }) });
+    // The list row is a projection: it has no `reviewerNote`, so that is not a change.
+    const { controller: c } = controller({ read: async () => ({ id: "r1", version: 4, data: { requestStatus: "approved", note: "", reviewerNote: "x" } }) });
     await c.open();
     expect(c.latestChanges()).toEqual([{ field: "requestStatus", before: "submitted", after: "approved" }]);
   });
