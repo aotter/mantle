@@ -92,6 +92,19 @@ export class InvokeCapabilityUseCase {
     this.schemas = new Map(schemas.map((schema) => [schema.metadata.name, schema]));
   }
 
+  /** Whether `name` is in the catalog and its use case is bound. */
+  serves(name: string): boolean {
+    const route = this.catalog.get(name)?.route;
+    if (!route) return false;
+    switch (route.kind) {
+      case "procedure": return this.useCases.invokeTrigger !== undefined;
+      case "view": return this.useCases.executeView !== undefined;
+      case "mediaCreateUpload":
+      case "mediaCommitUpload": return this.useCases.media !== undefined;
+      default: return true;
+    }
+  }
+
   async execute(request: InvokeCapabilityRequest): Promise<CapabilityOutcome> {
     const path = request.path ?? request.name;
     const capability = this.catalog.get(request.name);
@@ -315,6 +328,8 @@ function variantsArgument(
   });
 }
 
+/** Own `__proto__` keys are dropped: they are never data, and copying them
+ *  onward would let a later `key in input` check see a smuggled prototype. */
 function omit(args: Readonly<Record<string, unknown>>, keys: readonly string[]): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(args).filter(([key]) => !keys.includes(key)));
+  return Object.fromEntries(Object.entries(args).filter(([key]) => key !== "__proto__" && !keys.includes(key)));
 }

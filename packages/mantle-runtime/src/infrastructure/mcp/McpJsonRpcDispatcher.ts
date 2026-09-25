@@ -14,7 +14,6 @@ import {
   type CapabilityUseCases,
 } from "../../usecase/capability/InvokeCapabilityUseCase.js";
 import {
-  buildMcpAuditOperationIdResolver,
   toMcpToolDefinition,
   type McpToolSurface,
 } from "./McpToolCatalog.js";
@@ -53,7 +52,6 @@ export interface McpUseCases extends Omit<CapabilityUseCases, "media"> {
 export class McpJsonRpcDispatcher {
   private readonly invoker: InvokeCapabilityUseCase;
   private readonly catalogWireJson: string;
-  private readonly auditOperationId: ReturnType<typeof buildMcpAuditOperationIdResolver>;
 
   constructor(
     useCases: McpUseCases,
@@ -74,7 +72,6 @@ export class McpJsonRpcDispatcher {
     this.invoker = new InvokeCapabilityUseCase(useCases, catalog, schemas);
     const tools = catalog.capabilities.map(toMcpToolDefinition);
     this.catalogWireJson = `{"tools":${JSON.stringify(tools)}}`;
-    this.auditOperationId = buildMcpAuditOperationIdResolver(tools);
   }
 
   async dispatch(
@@ -149,10 +146,11 @@ export class McpJsonRpcDispatcher {
     const args = (p.arguments ?? {}) as Record<string, unknown>;
     // Probing for tools that do not exist is audited like any other call.
     const startedAt = Date.now();
-    const operationId = this.auditOperationId(p.name, args);
+    const argument = this.invoker.catalog.get(p.name)?.operationIdArgument ?? "operationId";
+    const operationId = typeof args[argument] === "string" ? args[argument] as string : null;
     let outcome = "ok";
     try {
-      if (!this.invoker.catalog.get(p.name)) {
+      if (!this.invoker.serves(p.name)) {
         outcome = "UNKNOWN_TOOL";
         return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
       }

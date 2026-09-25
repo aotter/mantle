@@ -103,6 +103,25 @@ describe("InvokeCapabilityUseCase", () => {
     }));
   });
 
+  it("drops own __proto__ keys instead of passing them on as data", async () => {
+    const { invoker, useCases } = harness();
+    const createDraft = vi.spyOn(useCases.createDraft, "execute");
+    const args = JSON.parse('{"title":"t","__proto__":{"title":"x"}}') as Record<string, unknown>;
+    await invoker.execute({ name: "create_draft_posts", args, ctx: staff("owner") });
+    const data = createDraft.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(Object.keys(data)).toEqual(["title"]);
+    expect(Object.getPrototypeOf(data)).toBe(Object.prototype);
+  });
+
+  it("serves a capability only when its use case is bound", () => {
+    const { invoker } = harness({ surface: "public" });
+    expect(invoker.serves("query_view_recent_posts")).toBe(false);
+    expect(invoker.serves("echo")).toBe(false);
+    expect(harness({ surface: "public", invokeTrigger: vi.fn() }).invoker.serves("echo")).toBe(true);
+    expect(harness().invoker.serves("delete_entry")).toBe(true);
+    expect(harness().invoker.serves("nope")).toBe(false);
+  });
+
   it("lets unexpected errors escape instead of hiding them in an outcome", async () => {
     const invokeTrigger = vi.fn(async () => { throw new Error("driver exploded"); });
     const { invoker } = harness({ surface: "public", invokeTrigger });
@@ -132,6 +151,23 @@ describe("buildCapabilityCatalog", () => {
     });
     const catalog = buildCapabilityCatalog([], { surface: "staff", callables: [procedure(keyed, "staff")] });
     expect(catalog.get("keyed")).toMatchObject({ operationIdArgument: "requestKey", hints: { idempotent: true } });
+  });
+
+  it("freezes every catalog entry deeply so callers cannot mutate shared definitions", () => {
+    const catalog = buildCapabilityCatalog([postsSchema()]);
+    const publish = catalog.get("request_publish")!;
+    expect(Object.isFrozen(publish.inputSchema["required"])).toBe(true);
+    expect(Object.isFrozen(publish.hints)).toBe(true);
+    expect(() => (publish.inputSchema["required"] as string[]).push("x")).toThrow();
+    expect(buildCapabilityCatalog([postsSchema()]).get("request_publish")!.inputSchema["required"]).toEqual(["collection", "id"]);
+  });
+
+  it("advertises only the standard projection of a Procedure output", () => {
+    const shaped = makeProcedure({ name: "shaped", output: { type: "object", properties: { id: { type: "string", format: "uuid" } } } });
+    const bag = makeProcedure({ name: "bag", output: { type: "object", properties: { tags: { type: "array", uniqueItems: true } } } });
+    const catalog = buildCapabilityCatalog([], { callables: [procedure(shaped, "staff"), procedure(bag, "staff")] });
+    expect(catalog.get("shaped")?.outputSchema).toEqual({ type: "object", properties: { id: { type: "string" } } });
+    expect(catalog.get("bag")).not.toHaveProperty("outputSchema");
   });
 
   it("serves media operations only when purposes are supplied", () => {

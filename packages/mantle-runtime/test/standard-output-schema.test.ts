@@ -1,10 +1,10 @@
 import type { JsonSchema } from "@aotter/mantle-spec";
 import { describe, expect, it } from "vitest";
-import { projectMcpOutputSchema } from "../src/infrastructure/mcp/McpOutputSchema.js";
+import { projectStandardOutputSchema } from "../src/domain/service/StandardOutputSchema.js";
 
-describe("projectMcpOutputSchema", () => {
+describe("projectStandardOutputSchema", () => {
   it("projects an object root and normalizes Mantle extensions", () => {
-    expect(projectMcpOutputSchema({
+    expect(projectStandardOutputSchema({
       type: "object",
       title: { en: "Result", "zh-TW": "結果" },
       additionalProperties: false,
@@ -33,7 +33,7 @@ describe("projectMcpOutputSchema", () => {
   });
 
   it("keeps local $defs references and applies the rules inside definitions", () => {
-    expect(projectMcpOutputSchema({
+    expect(projectStandardOutputSchema({
       type: "object",
       $defs: { item: { type: "object", required: ["x"], properties: { x: { type: "string", default: "d" } } } },
       properties: { item: { $ref: "#/$defs/item", description: "One item" } },
@@ -45,7 +45,7 @@ describe("projectMcpOutputSchema", () => {
   });
 
   it("drops array bounds that Runtime ignores without an items schema", () => {
-    expect(projectMcpOutputSchema({
+    expect(projectStandardOutputSchema({
       type: "object",
       properties: { a: { type: "array", minItems: 1, maxItems: 2 }, b: { type: "array", items: { type: "string" }, minItems: 1 } },
     })).toEqual({
@@ -55,7 +55,7 @@ describe("projectMcpOutputSchema", () => {
   });
 
   it("keeps recursion through an object and dedupes required", () => {
-    expect(projectMcpOutputSchema({
+    expect(projectStandardOutputSchema({
       type: "object",
       $defs: { node: { type: "object", properties: { child: { $ref: "#/$defs/node" } } } },
       required: ["root", "root"],
@@ -64,7 +64,7 @@ describe("projectMcpOutputSchema", () => {
   });
 
   it("drops a property from required when its default is reached through a $ref chain", () => {
-    expect(projectMcpOutputSchema({
+    expect(projectStandardOutputSchema({
       type: "object",
       $defs: { a: { $ref: "#/$defs/b" }, b: { type: "string", default: "x" } },
       required: ["p"],
@@ -94,7 +94,7 @@ describe("projectMcpOutputSchema", () => {
     }],
     ["enum and const on one node", { type: "object", properties: { a: { enum: ["x", "y"], const: "x" } } }],
   ] as unknown as [string, JsonSchema][])("advertises nothing Ajv cannot compile: %s", (_label, schema) => {
-    expect(projectMcpOutputSchema(schema)).toBeUndefined();
+    expect(projectStandardOutputSchema(schema)).toBeUndefined();
   });
 
   it.each<[string, JsonSchema]>([
@@ -120,6 +120,6 @@ describe("projectMcpOutputSchema", () => {
     ["nested $defs", { type: "object", properties: { a: { type: "object", $defs: {} } } }],
     ["nullable without type", { type: "object", properties: { a: { enum: ["x"], nullable: true } } }],
   ])("advertises nothing for %s", (_label, schema) => {
-    expect(projectMcpOutputSchema(schema)).toBeUndefined();
+    expect(projectStandardOutputSchema(schema)).toBeUndefined();
   });
 });

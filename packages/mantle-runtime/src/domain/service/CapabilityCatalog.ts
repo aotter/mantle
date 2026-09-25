@@ -20,6 +20,7 @@ import type {
   RuntimeCallableCapability,
   ViewCallableCapability,
 } from "./CallableCapabilityProjector.js";
+import { projectStandardOutputSchema } from "./StandardOutputSchema.js";
 
 /**
  * Transport-neutral catalog of everything a caller can invoke on one
@@ -62,8 +63,10 @@ export interface Capability {
   readonly description: string;
   /** Advertised input contract, with localized annotations collapsed. */
   readonly inputSchema: Record<string, unknown>;
-  /** Declared Procedure output. Transports decide what they can advertise. */
-  readonly outputSchema?: JsonSchema;
+  /** Standard JSON Schema for structured results, present only when every
+   *  output Runtime accepts also passes a standard validator
+   *  (`projectStandardOutputSchema`). */
+  readonly outputSchema?: Record<string, unknown>;
   readonly hints?: CapabilityHints;
   /** Staff role floor checked before any argument is read. */
   readonly minimumRole?: StaffRole;
@@ -117,10 +120,14 @@ type CapabilityDraft = Omit<Capability, "surface" | "requiresIdentity" | "operat
 };
 
 function finish(draft: CapabilityDraft, surface: CapabilitySurface): Capability {
-  const { anonymousDenied, ...rest } = draft;
-  const inputSchema = collapseSchemaAnnotations(rest.inputSchema);
+  const { anonymousDenied, outputSchema, route, ...rest } = draft;
+  const inputSchema = frozenCopy(collapseSchemaAnnotations(rest.inputSchema));
   return Object.freeze({
     ...rest,
+    ...(rest.hints ? { hints: frozenCopy(rest.hints) } : {}),
+    ...(outputSchema ? { outputSchema: frozenCopy(outputSchema) } : {}),
+    // A View route carries the sealed plan's manifest, which stays shared.
+    route: Object.freeze({ ...route }),
     surface,
     inputSchema,
     // Staff surfaces admit only verified staff, so every staff capability
@@ -421,7 +428,7 @@ function procedureCapability(capability: ProcedureCallableCapability): Capabilit
     ...(capability.title ? { title: capability.title } : {}),
     description: `${capability.description}${idempotencySummary(capability.inputSchema)}${authorizationSummary(requires)}`,
     inputSchema: annotateExpectedVersion(capability.inputSchema as Record<string, unknown>),
-    outputSchema: capability.outputSchema,
+    outputSchema: projectStandardOutputSchema(capability.outputSchema),
     ...(hints ? { hints } : {}),
     anonymousDenied: declaresIdentity(requires),
     route: { kind: "procedure", trigger: capability.trigger },
@@ -560,4 +567,15 @@ function collapseSchemaAnnotations(schema: Record<string, unknown>): Record<stri
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Catalog entries are public and shared across callers, so nothing a
+ *  caller can reach through one may mutate module state. */
+function frozenCopy<T>(value: T): T {
+  const freeze = (node: unknown): unknown => {
+    if (typeof node !== "object" || node === null) return node;
+    for (const child of Object.values(node)) freeze(child);
+    return Object.freeze(node);
+  };
+  return freeze(structuredClone(value)) as T;
 }

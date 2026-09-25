@@ -628,8 +628,8 @@ export function mountMantleAdmin<E extends Env>(
       const runtime = await ref.get();
       const input = (await c.req.raw.json().catch(() => ({}))) as unknown;
       // Reuse the exact use case the staff MCP surface invokes
-      // Procedures through (`McpJsonRpcDispatcher.dispatchToolByName`
-      // → `runtime.invokeProcedure`) — same auth evaluation,
+      // Procedures through (`InvokeCapabilityUseCase`
+      // → `runtime.invokeTrigger`) — same auth evaluation,
       // same input/output validation, same handler dispatch. The
       // staff HandlerContext below mirrors the MCP dispatcher's
       // `procCtx` construction 1:1.

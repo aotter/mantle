@@ -138,5 +138,6 @@ The full worked version of this pattern, with a locale-parameterized public View
 - [`packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts`](../../../packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts)
 - [`packages/mantle-spec/src/domain/model/SiteConfig.ts`](../../../packages/mantle-spec/src/domain/model/SiteConfig.ts)
 - [`packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts`](../../../packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts)
-- [`packages/mantle-runtime/src/infrastructure/mcp/McpToolCatalog.ts`](../../../packages/mantle-runtime/src/infrastructure/mcp/McpToolCatalog.ts)
+- [`packages/mantle-runtime/src/domain/service/CapabilityCatalog.ts`](../../../packages/mantle-runtime/src/domain/service/CapabilityCatalog.ts)
+- [`packages/mantle-runtime/src/usecase/capability/InvokeCapabilityUseCase.ts`](../../../packages/mantle-runtime/src/usecase/capability/InvokeCapabilityUseCase.ts)
 - [`docs/skills/develop/SKILL.md`](../../skills/develop/SKILL.md)

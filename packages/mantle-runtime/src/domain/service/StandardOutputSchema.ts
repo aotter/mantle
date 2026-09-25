@@ -1,10 +1,11 @@
 import { resolveLocalizedText, type JsonSchema, type LocalizedText } from "@aotter/mantle-spec";
 
 /**
- * Project a Procedure's declared `output` into an MCP tool `outputSchema`.
+ * Project a Procedure's declared `output` (Mantle's JSON Schema dialect) into
+ * a standard JSON Schema that a caller may validate structured results with.
  *
- * MCP clients validate `structuredContent` against the advertised schema with
- * a standard JSON Schema validator (the official SDKs use Ajv), while Runtime
+ * Clients validate results against the advertised schema with a standard
+ * JSON Schema validator (the official MCP SDKs use Ajv), while Runtime
  * validates handler output with `jsonSchemaToZod`. An advertised schema is
  * therefore a promise: every value Runtime accepts must also pass the
  * client's validator. The two engines disagree on some keywords (for example
@@ -27,10 +28,10 @@ import { resolveLocalizedText, type JsonSchema, type LocalizedText } from "@aott
  *   accepts `undefined` elements that JSON serializes as `null`.
  *
  * Every rewrite only loosens the schema. A schema outside the allowlist
- * returns `undefined` and the tool advertises no `outputSchema`; Runtime still
+ * returns `undefined` and no `outputSchema` is advertised; Runtime still
  * enforces the full declared schema either way.
  */
-export function projectMcpOutputSchema(output: JsonSchema): Record<string, unknown> | undefined {
+export function projectStandardOutputSchema(output: JsonSchema): Record<string, unknown> | undefined {
   // One tool's malformed output declaration must never break tools/list.
   try {
     return projectRoot(output);
