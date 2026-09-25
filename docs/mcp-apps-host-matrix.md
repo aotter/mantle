@@ -17,7 +17,8 @@ Cells marked **not verified** have no evidence yet. Do not assume they behave li
 | App calls tools (`tools/call`) | ✅ `read_entry`, `review_requisition`, then the View refresh | n/a | not verified | not verified |
 | Model context updates | not used | n/a | not verified | not verified |
 | External links | not used | n/a | not verified | not verified |
-| CSP and nested iframes | App loaded in a `sandbox="allow-scripts allow-forms"` iframe; the HTML is self-contained | n/a | not verified | not verified |
+| CSP and nested iframes | ✅ App loaded in a `sandbox="allow-scripts"` iframe (no `allow-forms`, as in the reference host); the HTML is self-contained | n/a | not verified | not verified |
+| Host theme and locale | ✅ `theme: "dark"` and `locale: "zh-TW"` from the host context: dark palette, `html lang`, Traditional Chinese strings | n/a | not verified | not verified |
 | Success visibility | ✅ `structuredContent` rendered by the App | ✅ `structuredContent`, plus text naming the row actions in the tool description | not verified | not verified |
 | Error visibility (`isError`, `CONFLICT`) | ✅ `CONFLICT` shown; input kept; "Load latest version" offered | ✅ `isError` with `{ diagnostics: [{ code: "CONFLICT" }] }` in text | not verified | not verified |
 | Auth challenge (401 + `WWW-Authenticate`) | covered by the Cloudflare MCP tests, not in this host | covered by `mcp-sdk-client-conformance` | not verified | not verified |
@@ -36,6 +37,7 @@ It then runs example A:
 1. Staff lists pending requisitions.
 2. Staff reviews one with the version it read.
 3. A concurrent change makes a second decision conflict. The input is kept and no write happens.
+4. The same App, reloaded with a dark theme and a `zh-TW` locale, follows both.
 
 **No-UI row.** The same flow runs through the official client with no UI, over the 2026-07-28 era.
 
