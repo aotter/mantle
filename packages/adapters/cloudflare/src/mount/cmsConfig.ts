@@ -5,6 +5,7 @@ import type {
   MediaStorage,
   MantleStorageAdapter,
   RuntimePlan,
+  RunObservationStore,
   AuditSink,
 } from "@aotter/mantle-runtime";
 import type { AdminAssetServer } from "@aotter/mantle-admin";
@@ -34,6 +35,8 @@ export interface MantleCloudflareConfig {
      *  owns site defaults/preparation when supplied; cannot combine with the
      *  conventional `mcpCatalogKv` decorator. Auth still owns its database. */
     readonly storage?: MantleStorageAdapter;
+    /** Optional durable schedule observations for custom storage. */
+    readonly runObservations?: RunObservationStore;
     /** Optional Admin SPA assets. Omitting this mounts no Admin surface. */
     readonly adminAssets?: AdminAssetServer;
     /** Optional media storage adapter. When set, media MCP tools and

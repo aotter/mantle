@@ -1,5 +1,6 @@
 import {
   SqliteMantleStorageAdapter,
+  DatabaseRunObservationStore,
   bootMantleRuntime,
   type MantleRuntime,
   type RuntimePlan,
@@ -61,6 +62,8 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
         }
       : undefined,
   });
+  const runObservations = config.bindings.runObservations
+    ?? (config.bindings.storage ? undefined : new DatabaseRunObservationStore(config.bindings.db));
   return {
     plan: config.plan,
     auth: config.auth,
@@ -92,6 +95,7 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
               reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
             },
             ports: {
+              runObservations,
               deferredHookDispatcher: config.bindings.deferredHookDispatcher,
               mediaStorage: config.bindings.mediaStorage,
               mediaAllowSvg: config.mediaAllowSvg,

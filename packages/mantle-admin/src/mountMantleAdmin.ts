@@ -523,7 +523,29 @@ export function mountMantleAdmin<E extends Env>(
     return Response.json({ ...statistics, from, to, bucketMs }, { headers: { "cache-control": "private, no-store" } });
   });
 
-  roleGuarded("get", "/admin/api/developer-console", "owner", () => Response.json(developerConsole));
+  roleGuarded("get", "/admin/api/developer-console", "owner", async () => {
+    let observationAvailability: "available" | "unavailable" = "unavailable";
+    let runs: readonly import("@aotter/mantle-runtime").RunObservation[] = [];
+    let latestRuns: readonly import("@aotter/mantle-runtime").RunObservation[] = [];
+    if (ref.plan.schedules.length) {
+      try {
+        const store = (await ref.get()).runObservations;
+        if (store) {
+          [runs, latestRuns] = await Promise.all([store.recent(30), store.latestBySchedule()]);
+          observationAvailability = "available";
+        }
+      } catch { /* Declarations remain inspectable when observations are unavailable. */ }
+    }
+    return Response.json({ ...developerConsole, operations: {
+      schedules: ref.plan.schedules.map((schedule) => ({
+        id: schedule.trigger, procedure: schedule.procedure, cron: schedule.cron,
+        enabled: schedule.enabled, registration: "not-observed" as const,
+      })),
+      ttlPolicies: Object.values(ref.plan.schemas).filter((schema) => schema.ttl)
+        .map((schema) => ({ schema: schema.name, ...schema.ttl!, sweepObservation: "unavailable" as const })),
+      observationAvailability, runs, latestRuns,
+    } }, { headers: { "cache-control": "private, no-store" } });
+  });
 
   guarded("get", "/admin/api/views-manifest", () => Response.json({ views: viewsManifest }));
 

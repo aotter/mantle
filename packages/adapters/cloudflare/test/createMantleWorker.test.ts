@@ -53,6 +53,10 @@ describe("createMantleWorker", () => {
     const scheduled = worker.scheduled; // matches `export default { scheduled: worker.scheduled }`
     await scheduled(event("0 2 * * *"), env, execution);
     await scheduled(event("0 2 * * *"), env, execution);
+    expect(await (await worker.getRuntime(env)).runObservations?.recent(10)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ scheduleId: "daily-public", runId: "daily-public:1700000000000", attempt: 1, status: "succeeded" }),
+      expect.objectContaining({ scheduleId: "daily-public", runId: "daily-public:1700000000000", attempt: 2, status: "succeeded" }),
+    ]));
     expect(calls).toHaveLength(2);
     expect(calls[0]).toMatchObject({ user: null, staff: null, schedule: {
       id: "daily-public:1700000000000", trigger: "daily-public", cron: "0 2 * * *",
@@ -72,6 +76,10 @@ describe("createMantleWorker", () => {
     });
     await expect(withFailure.scheduled(event("0 2 * * *"), env, execution)).rejects.toThrow("Scheduled Procedures failed");
     expect(calls).toHaveLength(3); // the second Trigger still ran after the first failed
+    expect(await (await withFailure.getRuntime(env)).runObservations?.recent(10)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ scheduleId: "a-fail", status: "failed", errorSummary: "INTERNAL_ERROR" }),
+      expect.objectContaining({ scheduleId: "daily-public", status: "succeeded" }),
+    ]));
   });
   it("omits unselected API, MCP and Admin routes", async () => {
     const worker = createMantleWorker<TestEnv>({

@@ -54,12 +54,16 @@ describe("SQLite migration artifacts", () => {
 
   it("does not replay canonical migrations already applied through 0004", async () => {
     const db = new DatabaseSync(":memory:");
-    const applied = CANONICAL_MIGRATIONS.slice(0, -2);
+    const applied = CANONICAL_MIGRATIONS.slice(0, 4);
     for (const migration of applied) db.exec(migration.sql);
     const upgrade = await buildSqliteMigrationArtifact([], [], {
       appliedMigrationIds: applied.map(({ id }) => id),
     });
-    expect(upgrade.migrations.map(({ id }) => id)).toEqual(["0005-store-instance-id", "0006-managed-runtime-version"]);
+    expect(upgrade.migrations.map(({ id }) => id)).toEqual([
+      "0005-store-instance-id",
+      "0006-managed-runtime-version",
+      "0007-schedule-run-observations",
+    ]);
     db.exec(upgrade.migrations[0]!.sql);
     expect(db.prepare("PRAGMA table_info('_mantle_boot_state')").all().map((row) => row.name))
       .toContain("store_instance_id");

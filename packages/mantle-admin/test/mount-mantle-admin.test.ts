@@ -25,6 +25,61 @@ const auth: AdminAuth = {
 };
 
 describe("mountMantleAdmin", () => {
+  it("shows declared schedules and TTL separately from unavailable observations to owners only", async () => {
+    const plan = compilePlan(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: events }
+spec:
+  title: Events
+  ttl: { field: expiresAt, expireAfterSeconds: 0 }
+  schema: { type: object, properties: { expiresAt: { type: string, format: date-time } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: cleanup }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: cleanup }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: nightly }
+spec:
+  source: { kind: schedule, cron: "0 2 * * *" }
+  target: { procedure: cleanup }
+`);
+    const get = vi.fn(async () => ({ runObservations: { recent: async () => [], latestBySchedule: async () => [] } }) as MantleAdminRuntime);
+    const makeApp = (role: "owner" | "editor", getRuntime: () => Promise<MantleAdminRuntime> = get) => {
+      const app = new Hono();
+      mountMantleAdmin(app, { plan, auth: { ...auth,
+        getSession: async () => ({ session: { id: "s" }, user: { id: "u", role, roleCurrent: true as const } }),
+      }, assets: { fetch: async () => null }, get: getRuntime });
+      return app;
+    };
+    const denied = await makeApp("editor").request("https://example.test/admin/api/developer-console");
+    expect(denied.status).toBe(403);
+    expect(get).not.toHaveBeenCalled();
+    const response = await makeApp("owner").request("https://example.test/admin/api/developer-console");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect((await response.json()).operations).toMatchObject({
+      schedules: [{ id: "nightly", procedure: "cleanup", registration: "not-observed" }],
+      ttlPolicies: [{ schema: "events", field: "expiresAt", sweepObservation: "unavailable" }],
+      observationAvailability: "available", runs: [], latestRuns: [],
+    });
+    const unavailable = await makeApp("owner", async () => ({}) as MantleAdminRuntime)
+      .request("https://example.test/admin/api/developer-console");
+    expect((await unavailable.json()).operations.observationAvailability).toBe("unavailable");
+    const broken = await makeApp("owner", async () => ({ runObservations: {
+      recent: async () => { throw Error("database unavailable"); }, latestBySchedule: async () => [],
+    } }) as MantleAdminRuntime).request("https://example.test/admin/api/developer-console");
+    expect(broken.status).toBe(200);
+    expect((await broken.json()).operations).toMatchObject({
+      schedules: [{ id: "nightly" }], observationAvailability: "unavailable", runs: [], latestRuns: [],
+    });
+  });
+
   it("does not project or mount internal Views", async () => {
     const app = mounted({
       getSession: async () => ({ session: { id: "s" }, user: { id: "owner", role: "owner", roleCurrent: true as const } }),

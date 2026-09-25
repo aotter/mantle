@@ -8,6 +8,7 @@ import type {
   AnyHandler,
   RuntimePlan,
   AuditSink,
+  RunObservation,
 } from "@aotter/mantle-runtime";
 import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
 import { createRuntimeClient } from "@aotter/mantle-web/client-runtime";
@@ -338,6 +339,20 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       const runtime = await getRuntime(env);
       const failures: Error[] = [];
       for (const schedule of schedules) {
+        const runId = `${schedule.trigger}:${controller.scheduledTime}`;
+        const startedAt = Date.now();
+        let attempt: number | null = null;
+        try {
+          attempt = await runtime.runObservations?.start({
+            scheduleId: schedule.trigger, runId, scheduledAt: controller.scheduledTime, startedAt,
+          }) ?? null;
+        } catch (error) {
+          failures.push(error instanceof Error ? error : new Error(String(error)));
+          continue;
+        }
+        let failure: Error | null = null;
+        let errorSummary: string | null = null;
+        let counts: RunObservation["counts"] = null;
         try {
           const result = await runtime.invokeTrigger({
             trigger: schedule.trigger,
@@ -346,17 +361,32 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
               user: null, staff: null, env,
               waitUntil: (promise) => ctx.waitUntil(promise),
               schedule: {
-                id: `${schedule.trigger}:${controller.scheduledTime}`,
+                id: runId,
                 trigger: schedule.trigger,
                 cron: controller.cron,
                 scheduledTime: controller.scheduledTime,
               },
             },
           });
-          if (!result.ok) failures.push(new Error(`Scheduled Procedure '${schedule.procedure}' failed: ${result.diagnostic.code}`));
+          if (!result.ok) {
+            errorSummary = result.diagnostic.code;
+            failure = new Error(`Scheduled Procedure '${schedule.procedure}' failed: ${errorSummary}`);
+          } else counts = safeRunCounts(result.data);
         } catch (error) {
-          failures.push(error instanceof Error ? error : new Error(String(error)));
+          errorSummary = "HANDLER_ERROR";
+          failure = error instanceof Error ? error : new Error(String(error));
         }
+        if (attempt !== null) {
+          try {
+            await runtime.runObservations!.finish({
+              runId, attempt, finishedAt: Date.now(),
+              status: failure ? "failed" : "succeeded", errorSummary, counts,
+            });
+          } catch (error) {
+            failures.push(error instanceof Error ? error : new Error(String(error)));
+          }
+        }
+        if (failure) failures.push(failure);
       }
       if (failures.length) throw new AggregateError(failures, "Scheduled Procedures failed");
     },
@@ -380,6 +410,15 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       });
     },
   };
+}
+
+function safeRunCounts(data: unknown): RunObservation["counts"] {
+  if (!data || typeof data !== "object") return null;
+  const value = data as Record<string, unknown>;
+  const counts: { scanned?: number; removed?: number } = {};
+  if (Number.isSafeInteger(value.scanned) && (value.scanned as number) >= 0) counts.scanned = value.scanned as number;
+  if (Number.isSafeInteger(value.removed) && (value.removed as number) >= 0) counts.removed = value.removed as number;
+  return Object.keys(counts).length ? counts : null;
 }
 
 async function purgePublicCache(publicCacheTag: string | undefined): Promise<void> {

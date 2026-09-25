@@ -372,7 +372,21 @@ export interface DeveloperAtomRelation {
   value: string;
 }
 
+export interface DeveloperRunObservation {
+  scheduleId: string; runId: string; attempt: number; scheduledAt: number; startedAt: number;
+  finishedAt: number | null; status: "started" | "succeeded" | "failed";
+  durationMs: number | null; errorSummary: string | null;
+  counts: { scanned?: number; removed?: number } | null;
+}
+
 export interface DeveloperConsoleSnapshot {
+  operations?: {
+    schedules: Array<{ id: string; procedure: string; cron: string; enabled: boolean; registration: "not-observed" }>;
+    ttlPolicies: Array<{ schema: string; field: string; expireAfterSeconds: number; sweepObservation: "unavailable" }>;
+    observationAvailability: "available" | "unavailable";
+    runs: DeveloperRunObservation[];
+    latestRuns: DeveloperRunObservation[];
+  };
   dataModel: {
     schemas: DeveloperSchemaModel[];
     views: DeveloperViewModel[];

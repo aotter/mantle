@@ -36,6 +36,10 @@ const worker = createMantleWorker({
 });
 
 export default {
-  fetch: () => Response.json({ seen }),
+  fetch: async (request: Request, env: { DB: D1Database }) => {
+    if (new URL(request.url).pathname === "/ready") return Response.json({ ready: true });
+    const runs = await env.DB.prepare("SELECT run_id AS runId, attempt, status FROM _mantle_schedule_runs ORDER BY attempt").all();
+    return Response.json({ seen, runs: runs.results });
+  },
   scheduled: worker.scheduled,
 };

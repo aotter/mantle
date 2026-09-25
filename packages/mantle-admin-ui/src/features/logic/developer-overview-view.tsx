@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AtomGraph } from "./atom-graph";
 import { developerDetailHref, developerSelectionHref } from "./developer-route";
 import { SchemaDiagram } from "./schema-diagram";
+import { DeveloperOperations } from "./developer-operations";
 
 export function DeveloperOverviewView(): React.ReactElement {
   const location = useAdminLocation();
@@ -22,10 +23,13 @@ export function DeveloperOverviewView(): React.ReactElement {
   if (!snapshot.data) return <></>;
 
   if (relationships) return <SchemaDiagram snapshot={snapshot.data} onOpen={(id) => navigate(developerDetailHref(id))} />;
-  return <AtomGraph
-    graph={snapshot.data.graph}
-    selectedAtomId={selectedId}
-    onSelect={(id) => navigate(developerSelectionHref("/admin/dev/overview/flow", id))}
-    onOpen={(atom) => navigate(developerDetailHref(atom.id))}
-  />;
+  return <div className="flex h-full min-h-0 flex-col">
+    <DeveloperOperations operations={snapshot.data.operations} />
+    <div className="min-h-0 flex-1"><AtomGraph
+      graph={snapshot.data.graph}
+      selectedAtomId={selectedId}
+      onSelect={(id) => navigate(developerSelectionHref("/admin/dev/overview/flow", id))}
+      onOpen={(atom) => navigate(developerDetailHref(atom.id))}
+    /></div>
+  </div>;
 }
