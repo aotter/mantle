@@ -28,7 +28,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0026](0026-progressive-generate.md) | Progressive `mantle generate` with a full default, positive features, saved host selection, and user-owned source. | Accepted; supersedes part of 0021 |
 | [0027](0027-scheduled-procedure-triggers.md) | Schedule Triggers in the sealed plan with Cloudflare-hosted invocation and system identity. | Accepted for 0.1.5 |
 | [0028](0028-schema-ttl-expiry.md) | Logical TTL on Schema reads with preview-first, explicit bounded cleanup. | Accepted for 0.1.5 |
-| [0029](0029-mcp-apps-interaction-contracts.md) | MCP Apps interaction contracts: projection ownership, snapshot/version binding, transport and package boundaries (#1110). | Proposed; open decisions D1–D8 |
+| [0029](0029-mcp-apps-interaction-contracts.md) | Official MCP SDK for all MCP wire handling; transport-neutral capability catalog with validate-once invocation; `@aotter/mantle-mcp` and `@aotter/mantle-ui`; Manifest-declared interaction contracts and MCP Apps (#1110). | Accepted; amends ADR-lite 909 |
 
 ## Reading order
 

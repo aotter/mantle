@@ -1,6 +1,6 @@
 # ADR-lite 909: Mantle Admin UI kit export
 
-**Status:** Accepted
+**Status:** Accepted; amended by [ADR-0029](0029-mcp-apps-interaction-contracts.md) (the kit moves to `@aotter/mantle-ui`, with a one-minor re-export from `@aotter/mantle-admin-ui/kit`)
 
 ## Context
 
