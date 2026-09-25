@@ -72,8 +72,8 @@ include TTL content use `no-store` so a cached page cannot outlive its entries.
 
 Agents installed through `npx skills add aotter/mantle` must still inspect the
 target project's actual SDK version. Published 0.1.4 packages do **not**
-support the new project flags; use their installed docs until deliberately
-upgrading all selected packages. The bootstrap skill remains a small directory,
+support the new project flags; 0.1.5-alpha.1 does. Use the installed docs and
+upgrade all selected packages together. The bootstrap skill remains a small directory,
 not a repository clone.
 
 ## 0.1.4 — 2026-09-24

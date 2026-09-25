@@ -8,8 +8,8 @@ npx skills add aotter/mantle
 
 The installed skill locates the target project, resolves its actual SDK
 version, and sends the agent to that package's CLI and docs. A GitHub skill
-may be newer than npm: published 0.1.4 still uses the direct-authoring path;
-0.1.5 adds full generated projects. Never assume a new flag exists without
+may be newer than npm: published 0.1.4 uses the direct-authoring path;
+0.1.5-alpha.1 adds full generated projects. Never assume a new flag exists without
 checking the installed CLI.
 
 ## New full Cloudflare app
