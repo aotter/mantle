@@ -8,6 +8,7 @@
 # Engine packages
 /packages/mantle-spec/          @guyspy
 /packages/mantle-runtime/       @guyspy
+/packages/mantle-mcp/           @guyspy
 /packages/mantle-web/           @guyspy
 /packages/mantle-admin/         @guyspy
 /packages/mantle-admin-ui/      @guyspy

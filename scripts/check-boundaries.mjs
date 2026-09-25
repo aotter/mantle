@@ -127,6 +127,8 @@ function checkPackageDirection() {
         "@aotter/mantle-auth",
         "@aotter/mantle-bun",
         "@aotter/mantle-vercel",
+        "@aotter/mantle-mcp",
+        "@modelcontextprotocol/",
       ],
       message: "spec must not import runtime, optional product, or adapter packages",
     },
@@ -141,8 +143,26 @@ function checkPackageDirection() {
         "@aotter/mantle-admin-ui",
         "@aotter/mantle-bun",
         "@aotter/mantle-vercel",
+        "@aotter/mantle-mcp",
+        "@modelcontextprotocol/",
       ],
-      message: "runtime must not import optional product or adapter packages",
+      message: "runtime must not import optional product or adapter packages, or the MCP SDK",
+    },
+    {
+      dir: "packages/mantle-mcp/src",
+      forbidden: [
+        "@aotter/mantle-cloudflare",
+        "@aotter/mantle-admin",
+        "@aotter/mantle-auth",
+        "@aotter/mantle-web",
+        "@aotter/mantle-bun",
+        "@aotter/mantle-vercel",
+        "react",
+        "D1Database",
+        "KVNamespace",
+        "ExecutionContext",
+      ],
+      message: "mcp must not import platform, product, or UI packages",
     },
     {
       dir: "packages/mantle-web/src",
@@ -635,8 +655,8 @@ function checkRepositoryGuidance() {
       fail(contributingPath, `contributor authority is missing '${text}'`);
     }
   }
-  if (!releaseSkill.includes("All eleven npmjs artifacts")) {
-    fail(releaseSkillPath, "canonical release skill must match the eleven-package topology");
+  if (!releaseSkill.includes("All twelve npmjs artifacts")) {
+    fail(releaseSkillPath, "canonical release skill must match the twelve-package topology");
   }
   if (!claudeRelease.includes("../../../.agents/skills/mantle-release/SKILL.md") ||
       claudeRelease.split("\n").length > 8 ||

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false,
+    "tsBuildInfoFile": "./.tsbuildinfo",
+    "stripInternal": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/**/*"],
+  "exclude": ["test/**/*", "dist/**/*"]
+}
