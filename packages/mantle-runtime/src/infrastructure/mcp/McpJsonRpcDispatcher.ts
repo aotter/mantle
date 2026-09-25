@@ -239,6 +239,10 @@ export class McpJsonRpcDispatcher {
       }
       return jsonRpcOk(reqId, {
         content: [{ type: "text", text: JSON.stringify(result) }],
+        // Additive: the text block stays byte-identical for existing clients.
+        // MCP requires structuredContent to be an object, so arrays and
+        // primitives keep the text block only.
+        ...(isPlainObject(result) ? { structuredContent: result } : {}),
       });
     } catch (e) {
       if (e instanceof DiagnosticError) {
@@ -563,4 +567,8 @@ function stripViewReservedArgs(args: Record<string, unknown>): Record<string, un
     out[k] = v;
   }
   return out;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

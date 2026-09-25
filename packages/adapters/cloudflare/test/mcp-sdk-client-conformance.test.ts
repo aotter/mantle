@@ -48,6 +48,44 @@ function manifests(): Manifest[] {
       metadata: { name: "member-hello" },
       spec: { input: io, output: io, requires: { auth: { all: ["ctx.user"] } }, handler: { kind: "ref", ref: "hello" } },
     },
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "shaped" },
+      spec: {
+        input: { type: "object" },
+        // Runtime accepts a missing defaulted field, an unknown required name
+        // and a nullable string; the advertised outputSchema must too.
+        output: {
+          type: "object",
+          title: { en: "Shaped", "zh-TW": "形狀" },
+          required: ["id", "status", "ghost", "note"],
+          properties: {
+            id: { type: "string", format: "uuid", "x-mcp-hint": "idempotency-key" },
+            status: { type: "string", enum: ["open", "closed"], default: "open" },
+            note: { type: "string", nullable: true },
+            tags: { type: "array", items: { type: "string" } },
+          },
+        },
+        handler: { kind: "ref", ref: "shaped" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "bag" },
+      spec: {
+        input: { type: "object" },
+        output: { type: "object", properties: { tags: { type: "array", uniqueItems: true } } },
+        handler: { kind: "ref", ref: "bag" },
+      },
+    },
+    ...(["shaped", "bag"] as const).map((procedure): Manifest => ({
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: `${procedure}-public-mcp` },
+      spec: { source: { kind: "mcp", surface: "public" }, target: { procedure } },
+    })),
     ...(["public-hello", "member-hello"] as const).flatMap((procedure) =>
       (["public", "staff"] as const).map((surface): Manifest => ({
         apiVersion,
@@ -63,7 +101,11 @@ function harness() {
   const seen: { request: Request; response: Response }[] = [];
   const ref = createMantleRuntimeRef({
     plan: compileTestPlan(manifests()),
-    handlers: { hello: (input, ctx) => ({ echo: `${(input as { echo?: string }).echo ?? ""}:${ctx.user?.id ?? "anonymous"}`, }) },
+    handlers: {
+      hello: (input, ctx) => ({ echo: `${(input as { echo?: string }).echo ?? ""}:${ctx.user?.id ?? "anonymous"}`, }),
+      shaped: () => ({ id: "0190a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b", note: null, tags: ["a"] }),
+      bag: () => ({ tags: ["a", "a"] }),
+    },
     bindings: { db: new InMemoryDatabase(), adminAssets: new StubAssetServer() },
     auth: {
       ...stubAuth,
@@ -125,6 +167,33 @@ describe("MCP SDK 2.x client against Mantle /mcp", () => {
     // client carries on, exactly as the Streamable HTTP spec allows.
     const gets = seen.filter(({ request }) => request.method === "GET");
     expect(gets.map(({ response }) => response.status)).toEqual([405]);
+    await client.close();
+  });
+
+  it("returns structuredContent that the SDK validates against the advertised outputSchema", async () => {
+    const { connect } = harness();
+    const client = await connect("public");
+    const tools = new Map((await client.listTools()).tools.map((tool) => [tool.name, tool]));
+    expect(tools.get("public_hello")?.outputSchema).toEqual({ type: "object", properties: { echo: { type: "string" } } });
+    // The advertised schema only loosens the declared one: no format or x-*
+    // keywords, nullable as a null type, and only required fields a JSON
+    // Schema validator will actually find.
+    expect(tools.get("shaped")?.outputSchema).toMatchObject({
+      title: "Shaped",
+      required: ["id", "note"],
+      properties: { id: { type: "string" }, note: { type: ["string", "null"] } },
+    });
+    // uniqueItems disagrees between Runtime and JSON Schema validators, so
+    // this output is not advertised; the result is still structured.
+    expect(tools.get("bag")?.outputSchema).toBeUndefined();
+    const hello = await client.callTool({ name: "public_hello", arguments: { echo: "hi" } });
+    expect(hello.structuredContent).toEqual({ echo: "hi:anonymous" });
+    // The SDK validates structuredContent against outputSchema and throws on
+    // a mismatch, so these calls resolving is the conformance check.
+    const shaped = await client.callTool({ name: "shaped", arguments: {} });
+    expect(shaped.structuredContent).toEqual({ id: "0190a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b", note: null, tags: ["a"] });
+    const bag = await client.callTool({ name: "bag", arguments: {} });
+    expect(bag.structuredContent).toEqual({ tags: ["a", "a"] });
     await client.close();
   });
 
