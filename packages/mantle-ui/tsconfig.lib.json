@@ -19,6 +19,7 @@
   ],
   "exclude": [
     "test/**/*",
-    "dist/**/*"
+    "dist/**/*",
+    "src/mcp-app/**/*"
   ]
 }

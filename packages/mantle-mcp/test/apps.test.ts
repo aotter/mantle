@@ -102,6 +102,7 @@ describe("MCP Apps registration", () => {
     const app = await connect("modern", UI_CAPABILITIES);
     const result = await app.callTool({ name: "query_view_public_posts", arguments: {} });
     expect(result._meta?.[INTERACTION_META_KEY]).toEqual({
+      view: "query_view_public_posts",
       collection: "posts",
       rowActions: [expect.objectContaining({
         capability: "like_post",
