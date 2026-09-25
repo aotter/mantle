@@ -341,9 +341,7 @@ export function createInteractionController(options: InteractionControllerOption
     changes: () => diff(state.draft, state.reviewed?.data ?? {}),
     latestChanges() {
       if (!state.reviewed || !state.latest) return [];
-      const fields = new Set([...Object.keys(state.reviewed.data), ...Object.keys(state.latest.data)]);
-      fields.delete("version");
-      return [...fields]
+      return comparable(state.reviewed, state.latest)
         .filter((field) => !same(state.reviewed!.data[field], state.latest!.data[field]))
         .map((field) => ({ field, before: state.reviewed!.data[field], after: state.latest!.data[field] }));
     },
@@ -358,7 +356,14 @@ function isUncertain(diagnostic: InteractionDiagnostic): boolean {
 
 function contestedFields(state: InteractionState): string[] {
   if (!state.reviewed || !state.latest) return [];
-  return state.touched.filter((field) => !same(state.reviewed!.data[field], state.latest!.data[field]));
+  const fields = new Set(comparable(state.reviewed, state.latest));
+  return state.touched.filter((field) => fields.has(field) && !same(state.reviewed!.data[field], state.latest!.data[field]));
+}
+
+/** Fields both snapshots carry. A list row is a projection, so a field it
+ *  lacks is unknown, not changed. */
+function comparable(reviewed: EntrySnapshot, latest: EntrySnapshot): string[] {
+  return Object.keys(latest.data).filter((field) => field !== "version" && field in reviewed.data);
 }
 
 function diff(draft: Readonly<Record<string, unknown>>, before: Readonly<Record<string, unknown>>): FieldChange[] {

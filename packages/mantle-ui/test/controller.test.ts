@@ -290,6 +290,13 @@ describe("createInteractionController", () => {
     expect(c.getSnapshot()).toMatchObject({ phase: "failed", diagnostics: [conflict] });
   });
 
+  it("compares only fields both snapshots carry", async () => {
+    // The list row is a projection: it has no `note`, so `note` is not a change.
+    const { controller: c } = controller({ read: async () => ({ id: "r1", version: 4, data: { requestStatus: "approved", note: "x" } }) });
+    await c.open();
+    expect(c.latestChanges()).toEqual([{ field: "requestStatus", before: "submitted", after: "approved" }]);
+  });
+
   it("drops bound and version keys from the initial input", () => {
     const { controller: c } = controller({ initialInput: { id: "x", expectedVersion: 1, note: "n" } });
     expect(c.getSnapshot().draft).toEqual({ note: "n" });
