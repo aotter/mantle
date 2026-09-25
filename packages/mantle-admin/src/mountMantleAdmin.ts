@@ -184,6 +184,10 @@ export function mountMantleAdmin<E extends Env>(
 
   const limitBody = bodyLimit({ maxSize: MAX_JSON_BODY_BYTES });
   app.use("/admin/api/*", limitBody);
+  app.use("/admin/api/*", async (c, next) => {
+    await next();
+    c.header("cache-control", "private, no-store");
+  });
   app.use(`${authBasePath}/*`, limitBody);
 
   // Public read-only manifest of registered sign-in methods. The admin

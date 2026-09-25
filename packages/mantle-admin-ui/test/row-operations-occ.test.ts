@@ -44,7 +44,7 @@ it("binds observed entry.version on row operations and does not reuse it after t
     await memberDialog.getByRole("textbox", { name: "Role" }).fill("owner");
     const memberRun = memberDialog.getByRole("button", { name: "Run", exact: true });
     await expect.poll(() => memberReads.includes("member-1")).toBe(true);
-    await expect.poll(() => memberRun.isEnabled()).toBe(true);
+    // Playwright waits for enablement; Vitest's short poll raced the UI under CI load.
     await memberRun.click();
     await memberDialog.getByRole("region", { name: "Result" }).waitFor();
     await expect.poll(() => memberBodies[0]).toEqual({
@@ -55,7 +55,6 @@ it("binds observed entry.version on row operations and does not reuse it after t
     });
     await memberDialog.getByRole("textbox", { name: "Id" }).fill("member-2");
     await expect.poll(() => memberReads.includes("member-2")).toBe(true);
-    await expect.poll(() => memberRun.isEnabled()).toBe(true);
     await memberRun.click();
     await expect.poll(() => memberBodies[1]).toEqual({
       organizationId: "org-1",

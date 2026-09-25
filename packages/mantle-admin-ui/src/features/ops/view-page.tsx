@@ -47,7 +47,7 @@ interface ViewQueryResult {
 }
 
 /** Fetch a staff View while preserving its declared query parameters. */
-async function fetchView(
+export async function fetchView(
   name: string,
   params: Record<string, unknown>,
 ): Promise<ViewQueryResult> {

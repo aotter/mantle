@@ -33,12 +33,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DeveloperExplorer } from "./developer-explorer";
 import { developerSelectionHref } from "./developer-route";
+import { SchemaDataPreview, ViewDataPreview } from "./live-data-preview";
 
 type ModelItem =
   | { kind: "Schema"; id: string; model: DeveloperSchemaModel }
   | { kind: "View"; id: string; model: DeveloperViewModel };
 
-type ModelTab = "definition" | "raw" | "manifest";
+type ModelTab = "definition" | "raw" | "manifest" | "data";
 
 export interface SchemaFieldRow {
   path: string;
@@ -150,7 +151,7 @@ export function DataModelView(): React.ReactElement {
     : [];
   const selected = items.find((item) => item.id === requestedId) ?? items[0] ?? null;
   const requestedTab = params.get("tab");
-  const tab: ModelTab = requestedTab === "raw" || requestedTab === "manifest" ? requestedTab : "definition";
+  const tab: ModelTab = requestedTab === "raw" || requestedTab === "manifest" || requestedTab === "data" ? requestedTab : "definition";
   const manifestFocus = tab === "manifest" ? params.get("pointer") : null;
   const query = search.trim().toLowerCase();
   const visibleItems = query
@@ -161,7 +162,7 @@ export function DataModelView(): React.ReactElement {
     navigate(developerSelectionHref(route, id, { tab: "manifest", pointer }));
   };
   const selectTab = (next: string): void => {
-    if (next !== "definition" && next !== "raw" && next !== "manifest") return;
+    if (next !== "definition" && next !== "raw" && next !== "manifest" && next !== "data") return;
     navigate(developerSelectionHref(route, selected!.id, next === "definition" ? undefined : { tab: next }));
   };
 
@@ -215,7 +216,7 @@ function SchemaDefinition({ model, schemas, tab, manifestFocus, onTabChange, onO
   return (
     <>
       <DefinitionHeader name={model.name} title={resolveLocalizedText(model.title, language)} />
-      <DefinitionTabs definitionLabel={t(language, "model.fields")} rawLabel={t(language, "model.rawSchema")} rawValue={model.schema} manifestValue={model.manifest} tab={tab} manifestFocus={manifestFocus} onTabChange={onTabChange}>
+      <DefinitionTabs definitionLabel={t(language, "model.fields")} rawLabel={t(language, "model.rawSchema")} rawValue={model.schema} manifestValue={model.manifest} tab={tab} manifestFocus={manifestFocus} onTabChange={onTabChange} data={<SchemaDataPreview key={model.name} model={model} />}>
         <Table>
           <TableHeader><TableRow><TableHead className="ps-5">{t(language, "model.path")}</TableHead><TableHead>{t(language, "model.type")}</TableHead><TableHead>{t(language, "model.required")}</TableHead><TableHead>{t(language, "model.constraints")}</TableHead></TableRow></TableHeader>
           <TableBody>
@@ -272,7 +273,7 @@ function ViewDefinition({ model, tab, manifestFocus, onTabChange }: { model: Dev
   return (
     <>
       <DefinitionHeader name={model.name} title={resolveLocalizedText(model.title, language)} />
-      <DefinitionTabs definitionLabel={t(language, "model.queryKind")} rawLabel={t(language, "model.rawQuery")} rawValue={query} manifestValue={model.manifest} tab={tab} manifestFocus={manifestFocus} onTabChange={onTabChange}>
+      <DefinitionTabs definitionLabel={t(language, "model.queryKind")} rawLabel={t(language, "model.rawQuery")} rawValue={query} manifestValue={model.manifest} tab={tab} manifestFocus={manifestFocus} onTabChange={onTabChange} data={<ViewDataPreview key={model.name} model={model} />}>
         <div className="space-y-5 p-5">
           <FactGrid entries={query.kind === "declarative" ? [
             [t(language, "model.queryKind"), query.kind],
@@ -298,7 +299,7 @@ export function FactGrid({ entries }: { entries: Array<[string, string]> }): Rea
   return <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">{entries.map(([label, value]) => <React.Fragment key={label}><dt className="text-muted-foreground">{label}</dt><dd className="break-words font-mono text-foreground">{value}</dd></React.Fragment>)}</dl>;
 }
 
-function DefinitionTabs({ definitionLabel, rawLabel, rawValue, manifestValue, tab, manifestFocus, onTabChange, children }: { definitionLabel: string; rawLabel: string; rawValue: unknown; manifestValue: unknown; tab: ModelTab; manifestFocus: string | null; onTabChange: (tab: string) => void; children: React.ReactNode }): React.ReactElement {
+function DefinitionTabs({ definitionLabel, rawLabel, rawValue, manifestValue, tab, manifestFocus, onTabChange, data, children }: { definitionLabel: string; rawLabel: string; rawValue: unknown; manifestValue: unknown; tab: ModelTab; manifestFocus: string | null; onTabChange: (tab: string) => void; data: React.ReactNode; children: React.ReactNode }): React.ReactElement {
   const { language } = usePreferences();
   return (
     <Tabs value={tab} onValueChange={onTabChange} className="gap-0">
@@ -306,10 +307,12 @@ function DefinitionTabs({ definitionLabel, rawLabel, rawValue, manifestValue, ta
         <TabsTrigger value="definition" className="flex-none px-3">{definitionLabel}</TabsTrigger>
         <TabsTrigger value="raw" className="flex-none px-3">{rawLabel}</TabsTrigger>
         <TabsTrigger value="manifest" className="flex-none px-3">{t(language, "model.manifest")}</TabsTrigger>
+        <TabsTrigger value="data" className="flex-none px-3">{t(language, "model.liveData")}</TabsTrigger>
       </TabsList>
       <TabsContent value="definition">{children}</TabsContent>
       <TabsContent value="raw"><CodeTab value={rawValue} label={rawLabel} /></TabsContent>
       <TabsContent value="manifest"><CodeTab value={manifestValue} label={t(language, "model.compiledManifest")} focus={manifestFocus} /></TabsContent>
+      <TabsContent value="data">{data}</TabsContent>
     </Tabs>
   );
 }
