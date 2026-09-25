@@ -141,6 +141,8 @@ export interface MantleWorkerExtension<Env extends MantleCloudflareEnv> {
 export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
   /** Sealed generated plan imported from `.mantle/generated/mantle.js`. */
   readonly plan: RuntimePlan;
+  /** Omit unselected HTTP surfaces in generated progressive applications. */
+  readonly surfaces?: { readonly api?: boolean; readonly mcp?: boolean; readonly admin?: boolean };
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly siteDefaults?: SiteDefaults | ((env: Env) => SiteDefaults);
   /** Stable deployment/site identifier used by public cache tags and optional KV. */
@@ -192,6 +194,9 @@ interface AssembledWorker<Env extends MantleCloudflareEnv> {
 export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloudflareEnv>(
   options: CreateMantleWorkerOptions<Env>,
 ): MantleWorkerHandler<Env> {
+  if (options.surfaces?.admin !== false && options.surfaces?.mcp === false) {
+    throw new Error("Admin requires the MCP/Auth surface.");
+  }
   let assembled: AssembledWorker<Env> | null = null;
 
   const assemble = (env: Env): AssembledWorker<Env> => {
@@ -243,39 +248,35 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     // Schema readiness belongs to database consumers, not static dispatch.
     app.use("*", async (c, next) => {
       const path = c.req.path;
-      if (hasOwnedPrefix(path, auth.basePath)
+      if ((options.surfaces?.mcp !== false && (hasOwnedPrefix(path, auth.basePath)
         || hasOwnedPrefix(path, "/oauth")
         || hasOwnedPrefix(path, "/mcp")
-        || hasOwnedPrefix(path, "/admin/api")
-        || path.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX)) {
+        || path.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX)))
+        || (options.surfaces?.admin !== false && hasOwnedPrefix(path, "/admin/api"))) {
         await getRuntime();
       }
       await next();
     });
-    mountRuntimeEndpoints(app, ref);
-    if (bindings.adminAssets) mountAdmin(app, ref, bindings.adminAssets);
-    mountMantleOAuth(app, { auth, assets: bindings.adminAssets });
-    const mcpResource = auth.mcpResource ?? conventionalMcpResource(env);
-    const publicMcp = createMcpApiHandler<Env>({
-      ref,
-      surface: "public",
-      resource: mcpResource,
-    });
-    const staffMcp = createMcpApiHandler<Env>({
-      ref,
-      surface: "staff",
-      resource: mcpResource,
-    });
-    app.all("/mcp", (c) => publicMcp.fetch!(
-      c.req.raw as Parameters<NonNullable<typeof publicMcp.fetch>>[0],
-      c.env,
-      c.executionCtx as Parameters<NonNullable<typeof publicMcp.fetch>>[2],
-    ));
-    app.all("/mcp/staff", (c) => staffMcp.fetch!(
-      c.req.raw as Parameters<NonNullable<typeof staffMcp.fetch>>[0],
-      c.env,
-      c.executionCtx as Parameters<NonNullable<typeof staffMcp.fetch>>[2],
-    ));
+    if (options.surfaces?.api !== false) mountRuntimeEndpoints(app, ref);
+    if (options.surfaces?.admin !== false && bindings.adminAssets) mountAdmin(app, ref, bindings.adminAssets);
+    if (options.surfaces?.mcp !== false) {
+      const mcpResource = auth.mcpResource ?? conventionalMcpResource(env);
+      const publicMcp = createMcpApiHandler<Env>({ ref, surface: "public", resource: mcpResource });
+      app.all("/mcp", (c) => publicMcp.fetch!(
+        c.req.raw as Parameters<NonNullable<typeof publicMcp.fetch>>[0],
+        c.env,
+        c.executionCtx as Parameters<NonNullable<typeof publicMcp.fetch>>[2],
+      ));
+      if (options.surfaces?.admin !== false) {
+        mountMantleOAuth(app, { auth, assets: bindings.adminAssets });
+        const staffMcp = createMcpApiHandler<Env>({ ref, surface: "staff", resource: mcpResource });
+        app.all("/mcp/staff", (c) => staffMcp.fetch!(
+          c.req.raw as Parameters<NonNullable<typeof staffMcp.fetch>>[0],
+          c.env,
+          c.executionCtx as Parameters<NonNullable<typeof staffMcp.fetch>>[2],
+        ));
+      }
+    }
     const standardRouteCount = app.routes.length;
     extension.mount?.({
       ...bootstrap,
@@ -285,7 +286,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     assertExtensionRoutes(app, standardRouteCount, auth.basePath);
 
     // A convention, not a reserved namespace: an existing host route wins.
-    app.get("/favicon.ico", async (c) => {
+    if (options.surfaces?.admin !== false) app.get("/favicon.ico", async (c) => {
       const icons = (await (await ref!.get()).siteConfig.load()).icons;
       const icon = icons.find((candidate) => candidate.mimeType === "image/png" && !candidate.theme)
         ?? icons.find((candidate) => !candidate.theme)
@@ -331,10 +332,15 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       return runMantleWorkerRequest(async () => {
         const worker = assemble(env);
         if (worker.auth.ready) ctx.waitUntil(worker.auth.ready);
-        const setupIncomplete = await setupIncompleteAuthResponse(request, worker.auth);
+        const pathname = new URL(request.url).pathname;
+        const authSurfaceSelected = options.surfaces?.admin !== false && (
+          hasOwnedPrefix(pathname, "/admin") || hasOwnedPrefix(pathname, worker.auth.basePath)
+          || hasOwnedPrefix(pathname, "/mcp/staff") || hasOwnedPrefix(pathname, "/oauth")
+          || pathname.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX));
+        const setupIncomplete = authSurfaceSelected
+          ? await setupIncompleteAuthResponse(request, worker.auth) : null;
         if (setupIncomplete) return setupIncomplete;
         const origins = resolve(options.frontendOrigins, env);
-        const pathname = new URL(request.url).pathname;
         return origins && (pathname.startsWith("/api/") || pathname.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX))
           ? withFrontendCors(request, origins, () => worker.fetch(request, env, ctx))
           : worker.fetch(request, env, ctx);

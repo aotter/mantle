@@ -13,6 +13,7 @@ import type {
 import type { Manifest } from "@aotter/mantle-spec";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import { D1DatabaseDriver } from "../src/bindings/D1DatabaseDriver.js";
+import { createSetupIncompleteAuth } from "../src/auth/createAuth.js";
 import { SqliteMantleStorageAdapter, SqliteMigrationRunner } from "@aotter/mantle-runtime";
 import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import {
@@ -28,6 +29,39 @@ import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 type TestEnv = MantleCloudflareEnv & { readonly TEST_NAME?: string };
 
 describe("createMantleWorker", () => {
+  it("requires MCP/Auth when Admin is selected", () => {
+    expect(() => createMantleWorker({ plan: compileTestPlan([]), surfaces: { admin: true, mcp: false } }))
+      .toThrow("Admin requires the MCP/Auth surface");
+  });
+  it("omits unselected API, MCP and Admin routes", async () => {
+    const worker = createMantleWorker<TestEnv>({
+      plan: compileTestPlan([]), auth: () => createSetupIncompleteAuth({ message: "not configured" }), bindings: testBindings,
+      surfaces: { api: false, mcp: false, admin: false },
+      frontend: () => new Response("home"),
+    });
+    const env = testEnv();
+    expect(await (await fetchWorker(worker, "/", env)).text()).toBe("home");
+    for (const path of ["/api/views", "/mcp", "/mcp/staff", "/admin", "/oauth/authorize"]) {
+      expect((await fetchWorker(worker, path, env)).status).toBe(404);
+    }
+  });
+  it("serves public-only MCP without Admin or owner setup", async () => {
+    const worker = createMantleWorker<TestEnv>({
+      plan: compileTestPlan([]), auth: () => createSetupIncompleteAuth({ message: "not configured" }),
+      bindings: testBindings, surfaces: { api: false, mcp: true, admin: false },
+    });
+    const env = testEnv();
+    const initialized = await fetchWorker(worker, "/mcp", env, {
+      method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {
+        protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "smoke", version: "1" },
+      } }),
+    });
+    expect(initialized.status).toBe(200);
+    expect(await initialized.json()).toMatchObject({ result: { serverInfo: { name: "aotter.mantle.public" } } });
+    expect((await fetchWorker(worker, "/mcp/staff", env)).status).toBe(404);
+    expect((await fetchWorker(worker, "/admin", env)).status).toBe(404);
+  });
   it("isolates frontend fallback from native routes and resolves one request client", async () => {
     const clients = new Set();
     const frontend = vi.fn(async (_request, { client }) => { clients.add(client); return new Response('app', { headers: { 'cache-control': 'public, max-age=60' } }); });
