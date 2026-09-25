@@ -1,6 +1,7 @@
 import type { LifecycleHook, StaffRole } from "@aotter/mantle-spec";
 import type { EntryRow } from "./EntryRow.js";
 import type { AtomicDraftOperation } from "../../usecase/content/AtomicEntryWriteUseCase.js";
+import type { SweepExpiredRequest, SweepExpiredResult } from "../port/ExpirySweeper.js";
 
 /**
  * `HandlerContext` — auth + bindings handed to every Procedure
@@ -41,6 +42,8 @@ export interface HandlerContext<Env = unknown> {
   readonly schedule?: { readonly id: string; readonly trigger: string; readonly cron: string; readonly scheduledTime: number };
   /** Runtime-bound semantic atomic entry writer, available in ref Procedures. */
   readonly writeAtomically?: (operations: readonly AtomicDraftOperation[]) => Promise<readonly (EntryRow | null)[]>;
+  /** Preview or explicitly remove a bounded page of expired entries. */
+  readonly sweepExpired?: (request: SweepExpiredRequest) => Promise<SweepExpiredResult>;
 }
 
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";

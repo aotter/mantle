@@ -24,6 +24,7 @@ export class IntrospectManifestsUseCase {
         title: s.spec.title,
         localized: s.spec.localized ?? false,
         lifecycle: s.spec.lifecycle ?? "publishing",
+        ttl: s.spec.ttl ?? null,
         translates: s.spec.translates ?? null,
         uniqueIndexes: s.spec.uniqueIndexes ?? [],
         indexes: s.spec.indexes ?? [],

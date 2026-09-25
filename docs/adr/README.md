@@ -27,6 +27,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0025](0025-reserved-native-columns-and-published-only-public-views.md) | Reserve the six native column names, let `indexes` reference them, and compile public publishing Views published-only. | Accepted |
 | [0026](0026-progressive-generate.md) | Progressive `mantle generate` with a full default, positive features, saved host selection, and user-owned source. | Accepted; supersedes part of 0021 |
 | [0027](0027-scheduled-procedure-triggers.md) | Schedule Triggers in the sealed plan with Cloudflare-hosted invocation and system identity. | Accepted for 0.1.5 |
+| [0028](0028-schema-ttl-expiry.md) | Logical TTL on Schema reads with preview-first, explicit bounded cleanup. | Accepted for 0.1.5 |
 
 ## Reading order
 

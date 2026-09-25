@@ -1,5 +1,5 @@
 ---
-description: Schema field reference — JSON Schema subset, extension keywords, uiSchema, indexes, searchable fields, translates and lifecycle rules.
+description: Schema field reference — JSON Schema subset, uiSchema, indexes, translates, lifecycle and TTL rules.
 ---
 # Schema
 
@@ -19,6 +19,7 @@ A Schema declares one collection: the JSON Schema for each entry's `data`, its i
 | `localized` | boolean | no | `false` | When `false`, a `locale` property is rejected. Must be a boolean. |
 | `translates` | `{ parent, on }` | no | — | Marks a translation child. Requires `localized: true`. |
 | `lifecycle` | `publishing` \| `operational` | no | `publishing` | Selects the [state machine](#lifecycle). |
+| `ttl` | `{ field, expireAfterSeconds }` | no | — | Logical expiry over one top-level date-time property. See [TTL](#ttl). |
 
 ### Reserved entry columns
 
@@ -241,6 +242,29 @@ Every authoring path (Admin, Staff MCP, builtin Procedures) runs the same guard 
 | Site locales list is empty. | Locale membership is not checked. |
 
 Site locales are configured in [Site config](./site-config.md).
+
+## TTL
+
+```yaml
+spec:
+  ttl: { field: expiresAt, expireAfterSeconds: 0 }
+  schema:
+    type: object
+    properties:
+      expiresAt: { type: string, format: date-time, nullable: true }
+```
+
+`field` must name one top-level `date-time` string property; `expireAfterSeconds` is finite and nonnegative. An entry expires when its timestamp plus the duration is **at or before** the current instant. Missing or null dates never expire. `SCHEMA_TTL_INVALID` rejects invalid policies.
+
+Legacy values that SQLite cannot parse as dates also remain visible and are not swept; correct those rows before relying on TTL. New writes must pass the Schema's date-time validation.
+
+Expiry is logical first: Entry, declarative View, Admin, MCP and Web reads stop returning the row at the boundary, even before a sweep deletes it. A native SQL View cannot guarantee that filter and is rejected (`VIEW_TTL_NATIVE_UNSAFE`) while any Schema has TTL. A View over a TTL Schema cannot use shared caching (`VIEW_CACHE_INVALID`). Bun and D1 use the same SQLite predicate; other storage adapters must supply equivalent read filtering or reject the plan.
+
+TTL is currently rejected on either side of a `translates` relationship (`SCHEMA_TTL_TRANSLATION_UNSUPPORTED`), because a translation child could otherwise remain visible after its parent expires.
+
+Physical cleanup is **explicit**. `runtime.sweepExpired({ collection: "events", limit: 50 })` previews one page; add `delete: true` to remove it. Follow `nextCursor` until absent. The limit is 1–100, `scanned` counts expired candidates and `removed` counts successful deletes. A failure throws and the previous cursor is safe to retry. Ref Procedures can call `ctx.sweepExpired`; a Cloudflare schedule may invoke such a Procedure. The sweep does not fire entry lifecycle hooks: expiration already changed logical visibility, and the sweep only reclaims storage (ADR-0028).
+
+Adding or shortening TTL on an existing Schema immediately changes **read visibility**, but never starts a deletion job. Preview a sweep and review its counts before requesting `delete: true`. Keep a backup when changing the policy on populated data. Physical unique constraints still see expired rows until cleanup, so a reused unique value may conflict before the sweep.
 
 ## Source
 

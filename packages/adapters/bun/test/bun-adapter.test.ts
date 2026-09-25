@@ -5,7 +5,7 @@ import { linkManifestSet, parseManifestSources } from "@aotter/mantle-spec";
 import { compileRuntimePlan, type HandlerContext } from "@aotter/mantle-runtime";
 import { createBunMantle } from "../src/index.js";
 
-const EXPECTED_FINGERPRINT = "fnv1a64:c32c410a664c9aeb";
+const EXPECTED_FINGERPRINT = "fnv1a64:5d812457ba8034de";
 const fixture = readFileSync(
   new URL("../../../mantle-spec/test/fixtures/pipeline-v0.1/valid.yaml", import.meta.url),
   "utf8",

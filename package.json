@@ -26,11 +26,12 @@
     "check:bun-package": "node scripts/check-bun-package.mjs",
     "check:vercel-package": "pnpm --dir packages/adapters/vercel/test/fixtures/live-node typecheck && node scripts/check-vercel-package.mjs",
     "check:release": "node scripts/release-tag-order.mjs --self-test",
-    "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm run check:optional-packages && pnpm run check:bun-package && pnpm run check:vercel-package && pnpm typecheck && pnpm test && pnpm check:worker-consumer && pnpm check:atomic-d1 && pnpm check:schedule-cf",
+    "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm run check:optional-packages && pnpm run check:bun-package && pnpm run check:vercel-package && pnpm typecheck && pnpm test && pnpm check:worker-consumer && pnpm check:atomic-d1 && pnpm check:schedule-cf && pnpm check:ttl-d1",
     "bench:parity": "pnpm --filter @aotter/mantle-cloudflare bench:parity",
     "check:worker-consumer": "node scripts/check-worker-consumer.mjs",
     "check:atomic-d1": "node scripts/check-atomic-d1.mjs",
-    "check:schedule-cf": "node scripts/check-schedule-cf.mjs"
+    "check:schedule-cf": "node scripts/check-schedule-cf.mjs",
+    "check:ttl-d1": "node scripts/check-ttl-d1.mjs"
   },
   "devDependencies": {
     "typescript": "catalog:"

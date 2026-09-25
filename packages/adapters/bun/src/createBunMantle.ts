@@ -31,7 +31,9 @@ export interface BunMantle {
 /** Embed one prepared Mantle revision in an application-owned Bun process. */
 export function createBunMantle(options: CreateBunMantleOptions): BunMantle {
   const driver = new BunDatabaseDriver(options.database);
-  const storage = new SqliteMantleStorageAdapter(driver, options.siteDefaults);
+  const storage = new SqliteMantleStorageAdapter(driver, options.siteDefaults, {
+    now: options.ports?.clock ? () => options.ports!.clock!.now() : undefined,
+  });
   let initialization: Promise<MantleRuntime> | null = null;
 
   const getRuntime = (): Promise<MantleRuntime> => {

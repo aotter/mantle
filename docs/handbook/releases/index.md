@@ -52,6 +52,14 @@ registration remains application-owned. Scheduled calls have no user or staff
 authority, carry a stable retry key, and pass through Procedure validation and
 authorization. Other hosts do not register schedules.
 
+Schemas may declare a `ttl` date-time policy. D1 and Bun hide expired entries
+from semantic reads and declarative Views before any deletion. Physical cleanup
+is an explicit bounded sweep, previewed by default and resumable by cursor;
+there is no automatic bulk deletion when a policy is introduced or shortened.
+Native SQL Views and shared View caches are rejected for TTL Schemas because
+they cannot guarantee the expiry boundary. Cloudflare public routes that can
+include TTL content use `no-store` so a cached page cannot outlive its entries.
+
 Agents installed through `npx skills add aotter/mantle` must still inspect the
 target project's actual SDK version. Published 0.1.4 packages do **not**
 support the new project flags; use their installed docs until deliberately

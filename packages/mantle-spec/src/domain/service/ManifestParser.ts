@@ -636,6 +636,7 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       "localized",
       "translates",
       "lifecycle",
+      "ttl",
     ],
     idx,
     "/spec",
@@ -697,6 +698,24 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   }
   const schema = s["schema"] as Record<string, unknown>;
   const properties = schema["properties"];
+  if (s["ttl"] !== undefined) {
+    const ttl = s["ttl"];
+    if (!ttl || typeof ttl !== "object" || Array.isArray(ttl)) {
+      throw new ManifestParseError("Schema.spec.ttl must be a mapping", idx, "/spec/ttl", "SCHEMA_TTL_INVALID");
+    }
+    const policy = ttl as Record<string, unknown>;
+    rejectUnknownKeys(policy, ["field", "expireAfterSeconds"], idx, "/spec/ttl");
+    const field = policy["field"];
+    const seconds = policy["expireAfterSeconds"];
+    const property = typeof field === "string" && properties && typeof properties === "object" && !Array.isArray(properties)
+      ? (properties as Record<string, Record<string, unknown>>)[field] : undefined;
+    const types = property && (typeof property["type"] === "string" ? [property["type"]] : property["type"]);
+    if (typeof field !== "string" || !field || !property || property["format"] !== "date-time" ||
+      !Array.isArray(types) || !types.includes("string") || types.some((type) => type !== "string" && type !== "null") ||
+      typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0 || seconds > Number.MAX_SAFE_INTEGER / 1000) {
+      throw new ManifestParseError("Schema.spec.ttl requires a top-level date-time string field and finite nonnegative expireAfterSeconds", idx, "/spec/ttl", "SCHEMA_TTL_INVALID");
+    }
+  }
   const propertyNames = properties && typeof properties === "object" && !Array.isArray(properties)
     ? Object.keys(properties)
     : [];

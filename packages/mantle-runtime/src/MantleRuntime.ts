@@ -1,4 +1,5 @@
 import {
+  DiagnosticError,
   EntryDataValidator,
   runtimeDiagnostic,
   type SchemaManifest,
@@ -8,6 +9,7 @@ import type { PreparedMantleRevision } from "./domain/model/PreparedMantleRevisi
 import { SystemClock, type Clock } from "./domain/port/Clock.js";
 import type { DeferredHookDispatcher } from "./domain/port/DeferredHookDispatcher.js";
 import type { EntryReader } from "./domain/port/EntryReader.js";
+import type { SweepExpiredRequest, SweepExpiredResult } from "./domain/port/ExpirySweeper.js";
 import type { EntryRepository } from "./domain/port/EntryRepository.js";
 import type { MediaAssetRepository } from "./domain/port/MediaAssetRepository.js";
 import type { MediaAsset, MediaStorage } from "./domain/port/MediaStorage.js";
@@ -135,6 +137,8 @@ export interface MantleRuntime {
   readonly deleteEntry: DeleteEntryUseCase;
   /** All-or-nothing create/update/delete across Schemas when storage supports it. */
   readonly writeAtomically: AtomicEntryWriteUseCase;
+  /** Preview by default; `delete: true` explicitly removes one bounded page. */
+  sweepExpired(request: SweepExpiredRequest): Promise<SweepExpiredResult>;
   invokeProcedure<O = unknown>(
     request: InvokeMantleProcedureRequest,
   ): Promise<InvokeProcedureResponse<O>>;
@@ -187,6 +191,25 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
   const idgen = ports.idgen ?? RandomUuidGenerator;
   const localePolicy = ports.localePolicy ?? prepared.localePolicy;
   const validator = new EntryDataValidator();
+  const sweepExpired = async (request: SweepExpiredRequest): Promise<SweepExpiredResult> => {
+    if (!prepared.expiry) throw new DiagnosticError(runtimeDiagnostic({
+      code: "RESOURCE_UNAVAILABLE", severity: "error", path: "runtime/sweepExpired",
+      message: "This storage adapter cannot sweep expired entries.",
+    }));
+    if (!schemasByName.get(request.collection)?.spec.ttl) throw new DiagnosticError(runtimeDiagnostic({
+      code: "RESOURCE_UNAVAILABLE", severity: "error", path: "runtime/sweepExpired",
+      message: `Schema '${request.collection}' has no TTL policy.`,
+    }));
+    const limit = request.limit ?? 50;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+      (request.cursor !== undefined && (typeof request.cursor !== "string" || request.cursor.length > 200))) {
+      throw new DiagnosticError(runtimeDiagnostic({
+        code: "INPUT_VALIDATION_FAILED", severity: "error", path: "runtime/sweepExpired",
+        message: "Sweep requires a limit from 1 to 100 and an optional short cursor.",
+      }));
+    }
+    return prepared.expiry.sweepExpired({ ...request, limit });
+  };
   const triggerIndex = TriggerIndex.fromPlan(plan.lifecycleHooks, plan.triggers);
 
   let entries: EntryRepository;
@@ -214,6 +237,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     invokeBuiltin,
     proceduresByName,
     (operations) => atomicWrite.execute(operations),
+    sweepExpired,
   );
   const lifecycleHooks = new RunLifecycleHooksUseCase(
     triggerIndex,
@@ -314,6 +338,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     archive,
     deleteEntry,
     writeAtomically,
+    sweepExpired,
     invokeProcedure: (request) => {
       const procedure = proceduresByName.get(request.procedure);
       if (!procedure) {

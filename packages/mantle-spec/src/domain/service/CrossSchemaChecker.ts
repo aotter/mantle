@@ -122,6 +122,15 @@ export function checkTranslatesReferences(
       );
       continue;
     }
+    if (s.spec.ttl || parent.spec.ttl) {
+      out.push(emit(phase, {
+        code: "SCHEMA_TTL_TRANSLATION_UNSUPPORTED",
+        severity: "error",
+        path: path("/spec/translates"),
+        message: `Schema '${s.metadata.name}' cannot translate TTL Schema '${parent.metadata.name}' or declare TTL itself; joined translations cannot guarantee expiry across both Schemas.`,
+        expected: "TTL only on Schemas outside a translation relationship",
+      }));
+    }
     if (parent.spec.localized === true) {
       out.push(
         emit(phase, {

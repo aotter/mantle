@@ -82,6 +82,18 @@ function trigger(name: string, procedureName: string): TriggerManifest {
 }
 
 describe("validateManifests()", () => {
+  it("accepts top-level date-time TTL and rejects unsafe native Views", () => {
+    const expiring = schema("events", { schema: { type: "object", properties: {
+      expiresAt: { type: "string", format: "date-time", nullable: true },
+    } }, ttl: { field: "expiresAt", expireAfterSeconds: 0 } });
+    expect(validateManifests({ manifests: [expiring, view("current", "events")] }).errorCount).toBe(0);
+    expect(validateManifests({ manifests: [expiring, view("raw", "events", { from: undefined, sql: "SELECT * FROM events" })] })
+      .diagnostics.map((d) => d.code)).toContain("VIEW_TTL_NATIVE_UNSAFE");
+    for (const ttl of [{ field: "missing", expireAfterSeconds: 0 }, { field: "expiresAt", expireAfterSeconds: -1 }]) {
+      expect(validateManifests({ manifests: [{ ...expiring, spec: { ...expiring.spec, ttl } }] })
+        .diagnostics.map((d) => d.code)).toContain("SCHEMA_TTL_INVALID");
+    }
+  });
   it("returns no error diagnostics for a valid manifest set", () => {
     const manifests: Manifest[] = [
       schema("posts"),
@@ -215,6 +227,32 @@ describe("validateManifests()", () => {
     const result = validateManifests({ manifests: [child] });
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("TRANSLATES_PARENT_UNKNOWN");
+  });
+
+  it("rejects TTL on either side of a translation join", () => {
+    const parent: SchemaManifest = {
+      apiVersion, kind: "Schema", metadata: { name: "stories" },
+      spec: { title: "Stories", schema: { type: "object", properties: {
+        slug: { type: "string" }, expiresAt: { type: "string", format: "date-time" },
+      } }, ttl: { field: "expiresAt", expireAfterSeconds: 0 } },
+    };
+    const child: SchemaManifest = {
+      apiVersion, kind: "Schema", metadata: { name: "story-translations" },
+      spec: { title: "Translations", localized: true, translates: { parent: "stories", on: "slug" },
+        schema: { type: "object", properties: {
+          slug: { type: "string" }, locale: { type: "string" }, title: { type: "string" },
+          expiresAt: { type: "string", format: "date-time" },
+        } },
+      },
+    };
+    expect(validateManifests({ manifests: [parent, child] }).diagnostics.map((d) => d.code))
+      .toContain("SCHEMA_TTL_TRANSLATION_UNSUPPORTED");
+    const childWithTtl: SchemaManifest = { ...child, spec: { ...child.spec,
+      ttl: { field: "expiresAt", expireAfterSeconds: 0 },
+    } };
+    const parentWithoutTtl: SchemaManifest = { ...parent, spec: { ...parent.spec, ttl: undefined } };
+    expect(validateManifests({ manifests: [parentWithoutTtl, childWithTtl] }).diagnostics.map((d) => d.code))
+      .toContain("SCHEMA_TTL_TRANSLATION_UNSUPPORTED");
   });
 
   it("reports every duplicate including the original (#210 PR12 H1 + PR17 first-copy fix)", () => {

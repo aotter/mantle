@@ -205,6 +205,8 @@ export interface SchemaManifestSpec {
    *  editable in place, and have no publish/unpublish transitions — the
    *  admin hides the content-lifecycle chrome for them. */
   readonly lifecycle?: LifecycleMode;
+  /** Logical expiry policy. Physical removal requires an explicit sweep. */
+  readonly ttl?: { readonly field: string; readonly expireAfterSeconds: number };
 }
 
 export interface TranslatesBinding {

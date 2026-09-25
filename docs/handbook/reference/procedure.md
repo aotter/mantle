@@ -262,6 +262,10 @@ facility inside a ref handler, but that does not give those tables Mantle
 entry semantics. Direct SQL writes to Mantle Schema tables are unsupported.
 Authorization guard Procedures do not receive `ctx.writeAtomically`.
 
+## TTL sweep in a ref handler
+
+`ctx.sweepExpired({ collection, limit })` previews a bounded page of expired rows; `delete: true` explicitly removes it. The result contains `scanned`, `removed` and an optional `nextCursor`. Continue with that cursor until absent. D1 and Bun SQLite implement this semantic capability; unsupported storage returns `RESOURCE_UNAVAILABLE`. Authorization guard Procedures do not receive the sweep function. For a scheduled cleanup, declare a [schedule Trigger](./trigger.md#schedule-source) targeting a no-input ref Procedure. No sweep is scheduled automatically. See [Schema TTL](./schema.md#ttl).
+
 ## `uiSchema`
 
 Admin presentation only. It never affects input validation, the MCP tool schema or the OpenAPI document. Roots are closed: `collectionAction` and `fields`.

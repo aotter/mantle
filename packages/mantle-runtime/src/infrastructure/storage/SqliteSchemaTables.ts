@@ -288,3 +288,8 @@ function utf8Hex(value: string): string {
 export function quoteIdent(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
+/** Below SQLite's supported date range, no stored date can have expired. */
+export function ttlCutoff(now: number, seconds: number): string | null {
+  const cutoff = now - seconds * 1000;
+  return cutoff < Date.parse("0000-01-01T00:00:00.000Z") ? null : new Date(cutoff).toISOString();
+}
