@@ -1,6 +1,6 @@
 import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
 import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountTestEndpoints } from "./mountTestEndpoints.js";
@@ -468,6 +468,18 @@ describe("GET /admin/api/operations — rowBindings (#430)", () => {
     expect(audit.rowBindings).toEqual([
       { collection: "warehouses", inputField: "code", rowField: "code" },
     ]);
+  });
+
+  it("warns once when string-form inference binds a field other than id (ADR-0029 D8)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { app } = rowBindingHarness();
+    await app.request("/admin/api/operations");
+    await app.request("/admin/api/operations");
+    const messages = warn.mock.calls.map(([message]) => String(message));
+    expect(messages.filter((message) => message.includes("'restock-sku' input 'sku'"))).toHaveLength(1);
+    expect(messages.some((message) => message.includes("'resend-receipt'"))).toBe(false);
+    expect(messages.some((message) => message.includes("'retire-product'"))).toBe(false);
+    warn.mockRestore();
   });
 
   it("binds exactly the field an object-form x-mantle-ref declares", async () => {

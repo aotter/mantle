@@ -18,6 +18,18 @@ export interface ViewCallableCapability extends CallableCapabilityBase {
   readonly kind: "view";
   readonly ownerName: string;
   readonly manifest: ViewManifest;
+  /** Operations on the same surface a row of this View can open, with the
+   *  row fields they bind (ADR-0029). */
+  readonly rowActions?: readonly ViewRowAction[];
+}
+
+export interface ViewRowAction {
+  /** Capability name of the Procedure on the same surface. */
+  readonly capability: string;
+  readonly procedure: string;
+  readonly bind: readonly { readonly input: string; readonly field: string }[];
+  readonly version?: string;
+  readonly mutates: boolean;
 }
 
 export interface ProcedureCallableCapability extends CallableCapabilityBase {
@@ -38,6 +50,9 @@ export function projectCallableCapabilities(
   options: { readonly surface?: "staff" | "public" } = {},
 ): readonly RuntimeCallableCapability[] {
   const capabilities: RuntimeCallableCapability[] = [];
+  const procedureTools = new Map(plan.mcpTools.flatMap((tool) => tool.ownerKind === "Procedure"
+    ? [[`${tool.surface}\0${tool.ownerName}`, tool.name] as const]
+    : []));
   for (const tool of plan.mcpTools) {
     if (tool.ownerKind !== "View") continue;
     const view = plan.views[tool.ownerName];
@@ -58,6 +73,7 @@ export function projectCallableCapabilities(
         : ""}`,
       inputSchema: viewInputSchema(manifest),
       manifest,
+      ...rowActionsOf(plan, view.name, tool.surface, procedureTools),
     });
   }
   for (const tool of plan.mcpTools) {
@@ -85,6 +101,26 @@ export function projectCallableCapabilities(
     .filter((capability) => !options.surface || capability.surface === options.surface)
     .sort((a, b) => compareText(`${a.surface}\0${a.name}\0${a.ownerName}`, `${b.surface}\0${b.name}\0${b.ownerName}`))
     .map((capability) => Object.freeze(capability)));
+}
+
+function rowActionsOf(
+  plan: RuntimePlan,
+  view: string,
+  surface: "staff" | "public",
+  procedureTools: ReadonlyMap<string, string>,
+): { rowActions?: readonly ViewRowAction[] } {
+  const actions = (plan.interactions ?? []).flatMap((interaction): ViewRowAction[] => {
+    const capability = procedureTools.get(`${surface}\0${interaction.procedure}`);
+    if (!capability || !interaction.views.includes(view)) return [];
+    return [{
+      capability,
+      procedure: interaction.procedure,
+      bind: interaction.bind,
+      ...(interaction.version ? { version: interaction.version } : {}),
+      mutates: interaction.mutates,
+    }];
+  });
+  return actions.length > 0 ? { rowActions: actions } : {};
 }
 
 function viewInputSchema(view: ViewManifest): JsonSchema {

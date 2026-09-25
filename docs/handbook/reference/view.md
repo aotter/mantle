@@ -218,6 +218,8 @@ A `public` declarative View over a `publishing` Schema reads **published rows on
 
 The MCP `inputSchema` is `params.properties` plus `page` and `show` as optional numbers, carrying `params.required` through unchanged; the tool is annotated `readOnlyHint: true`.
 
+A declarative View whose rows carry every field an interaction binds (and `version` when the interaction locks one) appends the interaction to its tool description as a row action, for example `Row actions: review_requisition (id = row.id, expectedVersion = row.version).` Only Procedure tools on the View's own surface are listed. A View that restricts `fields` must include those fields; a SQL View is never bound automatically. See [MCP and agents](../concepts/mcp-and-agents.md).
+
 ## REST contract
 
 Pagination uses the two reserved knobs, `?page=` (1-indexed) and `?show=`. The response envelope is:

@@ -149,6 +149,17 @@ export class InvokeCapabilityUseCase {
         if (!result.ok) throw new DiagnosticError(result.diagnostic);
         return result.result;
       }
+      case "read": {
+        const collection = stringArgument(args, "collection", path);
+        const id = stringArgument(args, "id", path);
+        // The advertised enum is a hint; the catalog is the boundary.
+        const allowed = (capability.inputSchema["properties"] as { collection?: { enum?: readonly string[] } } | undefined)
+          ?.collection?.enum ?? [];
+        if (!allowed.includes(collection)) {
+          throw invalidArgument(path, "collection", `one of ${allowed.join(", ")}`, collection);
+        }
+        return this.useCases.getEntry.execute({ id, collection });
+      }
       case "lifecycle": {
         const collection = stringArgument(args, "collection", path);
         const id = stringArgument(args, "id", path);

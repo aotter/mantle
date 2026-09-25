@@ -18,6 +18,7 @@ import {
   type TriggerManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
+import { compileInteractions, type RuntimeInteractionPlan } from "./InteractionCompiler.js";
 
 /**
  * Bump when the runtime's interpretation of a sealed plan changes, so a plan
@@ -28,7 +29,7 @@ import {
  * a v2 artifact has no schedule capability marker. v4 adds Schema TTL read
  * semantics; older plans must not expose expired entries.
  */
-export const RUNTIME_PLAN_VERSION = 4 as const;
+export const RUNTIME_PLAN_VERSION = 5 as const;
 
 export interface RuntimeSchemaPlan {
   readonly name: string;
@@ -131,6 +132,8 @@ export interface RuntimePlanData {
   readonly httpRoutes: readonly HttpRoutePlan[];
   readonly schedules: readonly SchedulePlan[];
   readonly mcpTools: readonly McpToolPlan[];
+  /** Row-to-operation bindings every surface reads (ADR-0029). */
+  readonly interactions: readonly RuntimeInteractionPlan[];
 }
 
 export interface RuntimePlan extends RuntimePlanData {
@@ -202,6 +205,11 @@ export function compileRuntimePlan(
       : [])
     .sort((a, b) => compareText(`${a.method} ${a.path}`, `${b.method} ${b.path}`));
   const mcpTools = compileMcpTools(schemas, views, triggers);
+  const interactions = compileInteractions(
+    Object.values(procedures).map(({ manifest }) => manifest),
+    Object.values(views).map(({ manifest }) => manifest),
+    Object.values(schemas).map(({ manifest }) => manifest),
+  );
   const schedules = Object.values(triggers)
     .flatMap((trigger): SchedulePlan[] => trigger.manifest.spec.source.kind === "schedule"
       ? [{ trigger: trigger.name, cron: trigger.manifest.spec.source.cron,
@@ -219,6 +227,7 @@ export function compileRuntimePlan(
     httpRoutes,
     schedules,
     mcpTools,
+    interactions,
   };
   return {
     ok: true,

@@ -51,6 +51,7 @@ export function bindCapabilities(
       surface: options.surface,
       callables: projectCallableCapabilities(plan, { surface: options.surface }),
       mediaPurposes,
+      readTargets: [...new Set((plan.interactions ?? []).map((interaction) => interaction.schema))],
     }),
     schemas,
   );
