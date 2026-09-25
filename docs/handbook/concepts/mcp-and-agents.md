@@ -35,7 +35,23 @@ Procedures are never exposed on their own. A Procedure becomes a tool only throu
 
 A successful `tools/call` returns the result serialized as JSON in one `text` content block. When the result is a JSON object — for example a View page, an entry returned by an authoring tool, or the output of a Procedure whose `output` is an object — the same value is also returned as `structuredContent`. Arrays and primitives have only the text block, because MCP requires `structuredContent` to be an object.
 
-A Procedure tool advertises an `outputSchema` when its declared `output` can be stated so that a standard JSON Schema validator accepts every value the runtime accepts. The advertised schema can be looser than the declaration: `format` and `x-*` keywords are dropped, `nullable` becomes a `null` type, and `required` keeps only declared properties that have no `default`. An output that uses keywords the two validators disagree on, such as `oneOf`, `pattern`, `uniqueItems` or `contains`, advertises no `outputSchema`; the runtime still enforces the full declaration. Views advertise no `outputSchema`, because View rows have no declared row schema. Errors are unchanged: they remain JSON-RPC errors carrying `error.data.code`.
+A Procedure tool advertises an `outputSchema` when its declared `output` can be stated so that a standard JSON Schema validator accepts every value the runtime accepts. The advertised schema can be looser than the declaration: `format` and `x-*` keywords are dropped, `nullable` becomes a `null` type, and `required` keeps only declared properties that have no `default`. An output that uses keywords the two validators disagree on, such as `oneOf`, `pattern`, `uniqueItems` or `contains`, advertises no `outputSchema`; the runtime still enforces the full declaration. Views advertise no `outputSchema`, because View rows have no declared row schema.
+
+A business failure, such as a denied role, a version conflict or invalid arguments, is a tool result with `isError: true`, so the agent can read it and decide what to do. The text block carries `{ "diagnostics": [Diagnostic] }` in the [diagnostic shape](../reference/diagnostics.md). The same payload is also `structuredContent`, unless the tool advertises an `outputSchema`: structured results must conform to that schema. Protocol failures, such as a malformed request, an unknown tool or an unsupported protocol version, stay JSON-RPC errors. Two cases are answered over HTTP before any tool runs:
+
+- An anonymous call to a tool that requires identity gets `401` with the OAuth challenge.
+- An OAuth token that lacks a scope the tool declares with `ctx.auth.scope` gets `403 insufficient_scope`, which names the missing scopes so the client can step up.
+
+The MCP surface is served by the official MCP TypeScript SDK through `@aotter/mantle-mcp`. It answers both the 2026-07-28 protocol and 2025-era stateless clients.
+
+## Keeping an action human-only
+
+A confirmation step in a chat UI, and a tool marked app-only, do not prove that a person made the decision: a host sends every call with the same credential the model uses. When an action must stay with people, keep it off MCP entirely:
+
+1. Mark the Schema `readOnly: true`. Generic authoring tools then neither list nor write it.
+2. Give the approval Procedure a `ctx.staff` requirement and **only an HTTP Trigger**. No MCP catalog lists it, and Admin still offers it as a staff operation.
+
+REST accepts no OAuth bearer unless the host enables `jwtBearer`, and then only for its own audience. So a token issued for `/mcp` cannot call the HTTP Trigger either. Core has no separate approval mechanism (ADR-0029 D3).
 
 ## The OAuth model
 

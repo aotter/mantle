@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { MAX_JSON_BODY_BYTES, JsonBodyTooLargeError, readJsonBody } from "../src/infrastructure/http/readJsonBody.js";
-import { McpJsonRpcDispatcher, type McpUseCases } from "../src/infrastructure/mcp/McpJsonRpcDispatcher.js";
 
 describe("JSON transport byte limit", () => {
   it("accepts the exact boundary and UTF-8 characters split across chunks", async () => {
@@ -28,17 +27,4 @@ describe("JSON transport byte limit", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  it("returns 413 from MCP before invoking a tool, while malformed JSON stays a parse error", async () => {
-    const dispatcher = new McpJsonRpcDispatcher({} as McpUseCases, []);
-    const ctx = { user: null, staff: null, env: {} };
-    const json = { "content-type": "application/json" };
-    const response = await dispatcher.dispatch(new Request("https://site.test/mcp", {
-      method: "POST", headers: json, body: JSON.stringify({ padding: "x".repeat(MAX_JSON_BODY_BYTES) }),
-    }), ctx);
-    expect(response.status).toBe(413);
-    const malformed = await dispatcher.dispatch(new Request("https://site.test/mcp", {
-      method: "POST", headers: json, body: "{",
-    }), ctx);
-    expect(await malformed.json()).toMatchObject({ error: { code: -32700 } });
-  });
 });

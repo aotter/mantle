@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { HandlerContext } from "../src/domain/model/HandlerContext.js";
-import { McpJsonRpcDispatcher, MCP_PROTOCOL_VERSION, type McpUseCases } from "../src/infrastructure/mcp/McpJsonRpcDispatcher.js";
+import type { HandlerContext } from "../../mantle-runtime/src/domain/model/HandlerContext.js";
+import { McpJsonRpcDispatcher, MCP_PROTOCOL_VERSION, type McpUseCases } from "./dispatcherShim.js";
 import type {
   ProcedureCallableCapability,
   ViewCallableCapability,
-} from "../src/domain/service/CallableCapabilityProjector.js";
-import { makeProcedure, postsSchema, recentPostsView } from "./fakes/manifests.js";
+} from "../../mantle-runtime/src/domain/service/CallableCapabilityProjector.js";
+import { makeProcedure, postsSchema, recentPostsView } from "../../mantle-runtime/test/fakes/manifests.js";
 
 describe("MCP tools/call structuredContent", () => {
   it("adds structuredContent for object results and keeps the text block unchanged", async () => {
@@ -47,7 +47,9 @@ describe("MCP tools/call structuredContent", () => {
 function harness(procedureData: unknown, viewResult: unknown = { rows: [], page: 1, show: 20, hasMore: false }) {
   return new McpJsonRpcDispatcher(useCases(procedureData, viewResult), [postsSchema()], {
     surface: "public",
-    capabilities: [procedure("echo", { type: "object" }), view()],
+    // No projectable output: Runtime would reject a non-object result for a
+    // Procedure that advertises an object outputSchema.
+    capabilities: [procedure("echo", {}), view()],
   });
 }
 

@@ -74,6 +74,9 @@ export interface Capability {
    *  challenge for credentials before invoking. Dynamic guards may still
    *  deny an identified caller at call time. */
   readonly requiresIdentity: boolean;
+  /** OAuth scopes the declared `ctx.auth.scope` predicates require, so a
+   *  transport can ask for them before invoking. Empty when none. */
+  readonly requiredScopes: readonly string[];
   /** Argument that correlates retries of one operation in audit trails. */
   readonly operationIdArgument: string;
   readonly route: CapabilityRoute;
@@ -115,12 +118,13 @@ export function buildCapabilityCatalog(
   return Object.freeze({ surface, capabilities, get: (name: string) => byName.get(name) });
 }
 
-type CapabilityDraft = Omit<Capability, "surface" | "requiresIdentity" | "operationIdArgument"> & {
+type CapabilityDraft = Omit<Capability, "surface" | "requiresIdentity" | "requiredScopes" | "operationIdArgument"> & {
   readonly anonymousDenied?: boolean;
+  readonly requiredScopes?: readonly string[];
 };
 
 function finish(draft: CapabilityDraft, surface: CapabilitySurface): Capability {
-  const { anonymousDenied, outputSchema, route, ...rest } = draft;
+  const { anonymousDenied, outputSchema, route, requiredScopes, ...rest } = draft;
   const inputSchema = frozenCopy(collapseSchemaAnnotations(rest.inputSchema));
   return Object.freeze({
     ...rest,
@@ -133,6 +137,7 @@ function finish(draft: CapabilityDraft, surface: CapabilitySurface): Capability 
     // Staff surfaces admit only verified staff, so every staff capability
     // needs an identity; public ones need one only when they declare it.
     requiresIdentity: surface === "staff" || anonymousDenied === true,
+    requiredScopes: Object.freeze([...(requiredScopes ?? [])]),
     operationIdArgument: idempotencyKeys(inputSchema)[0] ?? "operationId",
   });
 }
@@ -416,6 +421,7 @@ function viewCapability(capability: ViewCallableCapability): CapabilityDraft {
     inputSchema: capability.inputSchema as Record<string, unknown>,
     hints: { readOnly: true },
     anonymousDenied: declaresIdentity(requires),
+    requiredScopes: declaredScopes(requires),
     route: { kind: "view", view: capability.manifest },
   };
 }
@@ -431,6 +437,7 @@ function procedureCapability(capability: ProcedureCallableCapability): Capabilit
     outputSchema: projectStandardOutputSchema(capability.outputSchema),
     ...(hints ? { hints } : {}),
     anonymousDenied: declaresIdentity(requires),
+    requiredScopes: declaredScopes(requires),
     route: { kind: "procedure", trigger: capability.trigger },
   };
 }
@@ -461,6 +468,13 @@ function declaresIdentity(
   requires: ViewManifest["spec"]["requires"] | ProcedureCallableCapability["manifest"]["spec"]["requires"],
 ): boolean {
   return (requires?.auth?.all?.length ?? 0) > 0;
+}
+
+function declaredScopes(
+  requires: ViewManifest["spec"]["requires"] | ProcedureCallableCapability["manifest"]["spec"]["requires"],
+): string[] {
+  return [...new Set((requires?.auth?.all ?? []).flatMap((predicate) =>
+    typeof predicate === "object" && "ctx.auth.scope" in predicate ? [predicate["ctx.auth.scope"]] : []))];
 }
 
 function authorizationSummary(

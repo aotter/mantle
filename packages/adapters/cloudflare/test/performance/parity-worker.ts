@@ -1,7 +1,8 @@
 /** Synthetic, secret-protected benchmark only. Never bind a consumer database. */
 import { Hono } from "hono";
 import { AwsClient } from "aws4fetch";
-import { McpJsonRpcDispatcher, projectCallableCapabilities, sealRuntimePlan, type RuntimePlanData, type McpUseCases } from "@aotter/mantle-runtime";
+import { buildCapabilityCatalog, InvokeCapabilityUseCase, projectCallableCapabilities, sealRuntimePlan, type CapabilityUseCases, type RuntimePlanData } from "@aotter/mantle-runtime";
+import { createMantleMcpHandler, type MantleMcpHandler } from "@aotter/mantle-mcp";
 import { jsonSchemaToZod, redactForWire, type SiteDefaults } from "@aotter/mantle-spec";
 import { TemplateRegistry, createPublicPathResolver } from "@aotter/mantle-web";
 import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
@@ -77,7 +78,7 @@ function createState(raw: Env, origin: string, observed: boolean) {
     if (!parsed.success) return Response.json({ ok: false, diagnostic: { code: "INPUT_VALIDATION_FAILED" } }, { status: 400 });
     return Response.json({ ok: true, data: output.parse(await lookup(parsed.data as { id: string })) });
   }
-  let dispatcher: { key: string; value: McpJsonRpcDispatcher } | undefined;
+  let dispatcher: { key: string; value: MantleMcpHandler } | undefined;
   async function nativeMcp(request: Request, ctx: ExecutionContext) {
     const surface = new URL(request.url).pathname.endsWith("/staff") ? "staff" : "public";
     // Mirrors mountMcp: one shared gate, surface decides only the staff rule (#977).
@@ -93,13 +94,14 @@ function createState(raw: Env, origin: string, observed: boolean) {
       // workload is implemented in F2; unmeasured content mutations fail closed.
       const unavailable = () => { throw new Error("Operation outside native benchmark workload"); };
       const cases = new Proxy({ executeView }, { get(target, name) { return name === "executeView" ? target.executeView : { execute: unavailable, executePage: unavailable }; } });
-      dispatcher = { key, value: new McpJsonRpcDispatcher(cases as unknown as McpUseCases,
-        Object.values(plan.schemas).map((schema) => schema.manifest), { surface, capabilities: projectCallableCapabilities(plan, { surface }), serverInfo }) };
+      const schemas = Object.values(plan.schemas).map((schema) => schema.manifest);
+      const catalog = buildCapabilityCatalog(schemas, { surface, callables: projectCallableCapabilities(plan, { surface }) });
+      dispatcher = { key, value: createMantleMcpHandler(new InvokeCapabilityUseCase(cases as unknown as CapabilityUseCases, catalog, schemas), {
+        serverInfo,
+        unauthenticated: () => denied(401, "unauthenticated"),
+      }) };
     }
-    const response = await diagnosticPhase("dispatch", () => dispatcher!.value.dispatch(request, caller));
-    if ((response.status !== 401 && response.status !== 403) || response.headers.has("www-authenticate")) return response;
-    const challenged = denied(response.status, "unauthenticated");
-    return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...Object.fromEntries(challenged.headers) } });
+    return diagnosticPhase("dispatch", () => dispatcher!.value.fetch(request, caller));
   }
   function denied(status: 401 | 403, reason: string) {
     return Response.json({ jsonrpc: "2.0", error: { code: -32000, message: status === 403 ? "insufficient scope" : "unauthorized" }, id: null }, {

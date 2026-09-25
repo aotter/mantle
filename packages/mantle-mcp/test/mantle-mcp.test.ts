@@ -53,6 +53,22 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
+metadata: { name: write-orders }
+spec:
+  requires: { auth: { all: [ctx.auth, { ctx.auth.scope: "orders:write" }] } }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: writeOrders }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: write-orders-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: write-orders }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
 metadata: { name: member-only }
 spec:
   requires: { auth: { all: [ctx.user] } }
@@ -74,7 +90,7 @@ describe("createMantleMcpHandler with the official client", () => {
       it("lists the catalog and returns structuredContent the client validates", async () => {
         const { client } = await connect(era, { invokeTrigger: async () => ({ ok: true, data: { id: "p1" } }) });
         const { tools } = await client.listTools();
-        expect(tools.map((tool) => tool.name).sort()).toEqual(["member_only", "query_view_public_posts", "shaped"]);
+        expect(tools.map((tool) => tool.name).sort()).toEqual(["member_only", "query_view_public_posts", "shaped", "write_orders"]);
         const shaped = tools.find((tool) => tool.name === "shaped");
         expect(shaped?.outputSchema).toMatchObject({ type: "object", required: ["id"] });
         const result = await client.callTool({ name: "shaped", arguments: { echo: "x" } });
@@ -162,6 +178,28 @@ describe("createMantleMcpHandler with the official client", () => {
     expect(body).not.toContain("SECRET");
     expect(body).toContain('"structuredContent":{"id":"p1"}');
     spy.mockRestore();
+  });
+
+  it("asks an OAuth caller missing a tool scope to step up, with the SDK's challenge", async () => {
+    const invokeTrigger = vi.fn(async () => ({ ok: true as const, data: {} }));
+    const events: McpToolCallAuditEvent[] = [];
+    const { handler } = harness({ invokeTrigger }, {
+      audit: sink(events),
+      oauth: { scopes: ["mcp"] },
+      resourceMetadataUrl: "https://example.test/.well-known/oauth-protected-resource/mcp",
+    });
+    const response = await handler.fetch(rpc("tools/call", { name: "write_orders", arguments: {} }), member());
+    expect(response.status).toBe(403);
+    const challenge = response.headers.get("www-authenticate") ?? "";
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain('scope="mcp orders:write"');
+    expect(challenge).toContain('resource_metadata="https://example.test/.well-known/oauth-protected-resource/mcp"');
+    expect(invokeTrigger).not.toHaveBeenCalled();
+    expect(events).toEqual([expect.objectContaining({ tool: "write_orders", outcome: "INSUFFICIENT_SCOPE" })]);
+    const granted = { ...member(), auth: { ...member().auth!, scopes: ["mcp", "orders:write"] } };
+    expect((await handler.fetch(rpc("tools/call", { name: "write_orders", arguments: {} }), granted)).status).toBe(200);
+    const session = { ...member(), auth: { ...member().auth!, credential: "session" as const, scopes: [] } };
+    expect((await handler.fetch(rpc("tools/call", { name: "write_orders", arguments: {} }), session)).status).toBe(200);
   });
 
   it("lets a signed-in caller through to the tool", async () => {

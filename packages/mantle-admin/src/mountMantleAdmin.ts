@@ -356,10 +356,13 @@ export function mountMantleAdmin<E extends Env>(
     const { tools, routes } = await staffMcp(await ref.get(), ref.plan);
     return Response.json({ tools, routes }, { headers: { "cache-control": "private, no-store" } });
   });
-  guarded("post", "/admin/api/mcp", async (c, gate) => {
-    const { dispatcher } = await staffMcp(await ref.get(), ref.plan);
-    return dispatcher.dispatch(c.req.raw, adminHandlerContext(c, gate, ref));
-  });
+  // The official client may probe GET/DELETE; the stateless handler answers 405.
+  for (const method of ["post", "get", "delete"] as const) {
+    guarded(method, "/admin/api/mcp", async (c, gate) => {
+      const { handler } = await staffMcp(await ref.get(), ref.plan);
+      return handler.fetch(c.req.raw, adminHandlerContext(c, gate, ref));
+    });
+  }
 
   guarded("get", "/admin/api/me", (_c, gate) =>
     Response.json({ login: gate.login, role: gate.role, userId: gate.userId, image: gate.image }),

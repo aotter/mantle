@@ -47,6 +47,10 @@
       "types": "./dist/web.d.ts",
       "import": "./dist/web.js"
     },
+    "./mcp": {
+      "types": "./dist/mcp.d.ts",
+      "import": "./dist/mcp.js"
+    },
     "./admin": {
       "types": "./dist/admin.d.ts",
       "import": "./dist/admin.js"
@@ -93,6 +97,7 @@
     "@aotter/mantle-auth": "workspace:*",
     "@aotter/mantle-bun": "workspace:*",
     "@aotter/mantle-cloudflare": "workspace:*",
+    "@aotter/mantle-mcp": "workspace:*",
     "@aotter/mantle-vercel": "workspace:*",
     "@aotter/mantle-web": "workspace:*",
     "aws4fetch": "catalog:peer",
@@ -115,6 +120,9 @@
       "optional": true
     },
     "@aotter/mantle-cloudflare": {
+      "optional": true
+    },
+    "@aotter/mantle-mcp": {
       "optional": true
     },
     "@aotter/mantle-vercel": {
@@ -150,6 +158,7 @@
     "@aotter/mantle-auth": "workspace:*",
     "@aotter/mantle-bun": "workspace:*",
     "@aotter/mantle-cloudflare": "workspace:*",
+    "@aotter/mantle-mcp": "workspace:*",
     "@aotter/mantle-vercel": "workspace:*",
     "@aotter/mantle-web": "workspace:*",
     "@types/node": "catalog:",

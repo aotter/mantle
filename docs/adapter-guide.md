@@ -178,10 +178,13 @@ Minimum auth/MCP behavior:
 - Validate `/mcp/staff` requests with the staff D1 admin role (`owner`/`editor`/`contributor`).
 - Validate `/mcp` requests with any authenticated session (D1 role check is surface-driven, not OAuth-scope-driven — claude.ai rejects colon-shaped scopes).
 - Advertise a single non-colon scope (default `["mcp"]`) in `scopes_supported`. Per-surface enforcement happens server-side in the apiHandler.
-- Bind each MCP surface with `createMcpDispatcher(runtime, plan, { surface })`
-  rather than wiring `McpJsonRpcDispatcher` use cases by hand, then pass the
-  `HandlerContext` built from the validated session to `dispatch`. The factory
-  does not authenticate; the adapter's gate stays in front of it.
+- Serve each MCP surface with the official MCP SDK through `@aotter/mantle-mcp`:
+  `createMantleMcpHandler(bindCapabilities(runtime, plan, { surface }), options)`,
+  then pass the `HandlerContext` built from the validated caller to `fetch`. The
+  handler does not authenticate; the adapter's gate stays in front of it and
+  supplies `unauthenticated` (the 401 challenge for anonymous calls to tools that
+  need identity) and, for OAuth, `oauth.scopes` plus `resourceMetadataUrl` so a
+  token that lacks a tool's declared scope gets the SDK's step-up challenge.
 - Build Procedure/View `HandlerContext` with `user`, live `staff`, normalized
   `auth`, adapter `env`, and optional `waitUntil`.
 - Re-read mutable staff role for each protected REST/MCP invocation. Token or

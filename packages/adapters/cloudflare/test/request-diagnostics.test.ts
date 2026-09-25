@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { readJsonRpc } from "./mcpWire.js";
 import { createMantleWorker } from "../src/worker/createMantleWorker.js";
 import { instrumentD1, instrumentKv, instrumentR2, runWithRequestDiagnostics, type RequestDiagnosticRecord } from "../src/testing.js";
 import { D1DatabaseDriver } from "../src/bindings/D1DatabaseDriver.js";
@@ -44,7 +45,7 @@ function fixture() {
   const request = (authorized = true) => new Request("https://example.test/mcp/staff", {
     // An invalid bearer, not an anonymous request: anonymous callers never reach
     // token verification, so the denied path under test must present a token.
-    method: "POST", headers: { "content-type": "application/json", "mcp-protocol-version": "2025-11-25", authorization: authorized ? "Bearer PRIVATE_TOKEN" : "Bearer PRIVATE_WRONG" },
+    method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25", authorization: authorized ? "Bearer PRIVATE_TOKEN" : "Bearer PRIVATE_WRONG" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
   });
   return { sqlite, db, values, worker, env, request,
@@ -70,7 +71,7 @@ describe("request-local diagnostics", () => {
         expect(response.status).toBe(200);
         expect(response.headers.get("cache-control")).toBe("private, no-store");
         expect([...response.headers.keys()].some((key) => key.startsWith("x-mantle"))).toBe(false);
-        expect(await response.json()).toMatchObject({ jsonrpc: "2.0", id: 1, result: { tools: expect.any(Array) } });
+        expect(await readJsonRpc(response)).toMatchObject({ jsonrpc: "2.0", id: 1, result: { tools: expect.any(Array) } });
       }
       for (const record of [first!, second!]) {
         expect(record.d1).toMatchObject({ statements: 2, bindingCalls: 2, failures: 0, inFlight: 0 });

@@ -4,7 +4,9 @@ import {
   type CallToolResult,
   type JsonSchemaType,
   type JsonSchemaValidator,
+  type ScopeChallengeHandler,
   type StandardSchemaWithJSON,
+  type Tool,
   type ToolAnnotations,
   type jsonSchemaValidator,
 } from "@modelcontextprotocol/server";
@@ -30,6 +32,13 @@ export interface MantleMcpServerOptions {
   readonly serverInfo?: MantleMcpServerInfo;
   /** Optional tools/call audit trail; one event per call. */
   readonly audit?: AuditSink;
+  /**
+   * OAuth step-up. When set, an OAuth caller whose token lacks a tool's
+   * declared `ctx.auth.scope` scopes gets the SDK's `insufficient_scope`
+   * challenge (403) naming `scopes` plus the tool's scopes, instead of a
+   * denied tool result it cannot recover from.
+   */
+  readonly oauth?: { readonly scopes: readonly string[] };
 }
 
 /**
@@ -50,7 +59,10 @@ export function createMantleMcpServer(
   options: MantleMcpServerOptions = {},
 ): MantleMcpServerFactory {
   const catalog = invoker.catalog;
-  const tools = catalog.capabilities.map((capability) => ({ capability, config: toolConfig(capability) }));
+  // A capability whose use case is not bound is not served at all.
+  const tools = catalog.capabilities
+    .filter((capability) => invoker.serves(capability.name))
+    .map((capability) => ({ capability, config: toolConfig(capability) }));
   const serverInfo = {
     ...(options.serverInfo ?? { name: "aotter.mantle" }),
     icons: options.serverInfo?.icons?.map(({ sizes, ...icon }) => ({
@@ -102,7 +114,10 @@ export function createMantleMcpServer(
     create(ctx) {
       const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } } });
       for (const { capability, config } of tools) {
-        server.registerTool(capability.name, config, async (args: unknown): Promise<CallToolResult> => {
+        const scopeChallenge = stepUp(capability, ctx, options.oauth?.scopes, (args) => {
+          record(ctx, capability.name, operationIdOf(capability.name, args), "INSUFFICIENT_SCOPE", Date.now());
+        });
+        server.registerTool(capability.name, { ...config, ...(scopeChallenge ? { scopeChallenge } : {}) }, async (args: unknown): Promise<CallToolResult> => {
           const input = isRecord(args) ? args : {};
           const startedAt = Date.now();
           let outcome = "ok";
@@ -137,6 +152,40 @@ export function createMantleMcpServer(
     audit(ctx, tool, args, outcome) {
       record(ctx, tool, operationIdOf(tool, args), outcome, Date.now());
     },
+  };
+}
+
+/** MCP `tools/list` definitions for a catalog, for transports that list
+ *  tools outside an `McpServer` (for example WebMCP in a browser). */
+export function mcpToolDefinitions(invoker: InvokeCapabilityUseCase): Tool[] {
+  return invoker.catalog.capabilities.filter((capability) => invoker.serves(capability.name)).map((capability) => ({
+    name: capability.name,
+    ...(capability.title ? { title: capability.title } : {}),
+    description: capability.description,
+    inputSchema: capability.inputSchema as Tool["inputSchema"],
+    ...(capability.outputSchema ? { outputSchema: capability.outputSchema as Tool["outputSchema"] } : {}),
+    ...(capability.hints ? { annotations: toAnnotations(capability.hints) } : {}),
+  }));
+}
+
+function stepUp(
+  capability: Capability,
+  ctx: HandlerContext,
+  baseScopes: readonly string[] | undefined,
+  onChallenge: (args: Readonly<Record<string, unknown>>) => void,
+): ScopeChallengeHandler | undefined {
+  const required = capability.requiredScopes;
+  if (!baseScopes || required.length === 0) return undefined;
+  const scopes = [...new Set([...baseScopes, ...required])] as [string, ...string[]];
+  return ({ request }) => {
+    // Only an OAuth token can be re-issued with more scopes. Sessions, API
+    // keys and personal tokens get the runtime's denial instead.
+    if (ctx.auth?.credential !== "oauth") return undefined;
+    const granted = new Set(ctx.auth.scopes);
+    if (required.every((scope) => granted.has(scope))) return undefined;
+    const params = request.params as { arguments?: unknown } | undefined;
+    onChallenge(isRecord(params?.arguments) ? params.arguments : {});
+    return { scopes };
   };
 }
 

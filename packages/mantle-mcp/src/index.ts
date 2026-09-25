@@ -1,5 +1,6 @@
 export {
   createMantleMcpServer,
+  mcpToolDefinitions,
   type MantleMcpServerFactory,
   type MantleMcpServerInfo,
   type MantleMcpServerOptions,

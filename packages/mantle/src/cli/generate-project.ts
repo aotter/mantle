@@ -212,7 +212,11 @@ function requiredPackages(selection: ProjectSelection, version: string): Record<
     required.typescript = "^6.0.3";
     required["@cloudflare/workers-types"] = "5.20260904.1";
   }
-  if (selection.host === "chatgpt-sites") required.esbuild = "^0.28.0";
+  if (selection.host === "chatgpt-sites") {
+    required.esbuild = "^0.28.0";
+    // The Sites MCP templates import @aotter/mantle/mcp.
+    required["@aotter/mantle-mcp"] = version;
+  }
   return required;
 }
 

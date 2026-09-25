@@ -49,7 +49,7 @@ export function runWithRequestDiagnostics(
         if (!response.body) observation.rpcOutcome = "notification";
         else {
           try {
-            const rpc: unknown = await response.clone().json();
+            const rpc = parseRpcBody(await response.clone().text(), response.headers.get("content-type"));
             observation.rpcOutcome = !isRecord(rpc) ? "invalid-response" : "error" in rpc ? "error"
               : "result" in rpc ? isRecord(rpc.result) && rpc.result.isError === true ? "tool-error" : "result" : "invalid-response";
           } catch { observation.rpcOutcome = "invalid-response"; }
@@ -237,3 +237,11 @@ function cachedProxy<T extends object>(target: T, get: ProxyHandler<T>["get"]): 
 }
 function finite(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
 function isRecord(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object"; }
+
+/** A JSON-RPC answer, whether sent as JSON or as the one-event SSE stream a
+ *  2025-era stateless MCP exchange may use. */
+function parseRpcBody(text: string, contentType: string | null): unknown {
+  if (!/^text\/event-stream\b/iu.test(contentType ?? "")) return JSON.parse(text);
+  const data = text.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
+  return JSON.parse(data.at(-1) ?? "");
+}

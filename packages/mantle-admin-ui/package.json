@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle-admin-ui",
   "version": "0.1.5-alpha.1",
-  "description": "Admin SPA for mantle — React 19 + Vite + Tailwind v4 + shadcn, shipped as static assets.",
+  "description": "Admin SPA for mantle \u2014 React 19 + Vite + Tailwind v4 + shadcn, shipped as static assets.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -64,6 +64,7 @@
   },
   "devDependencies": {
     "@aotter/mantle-admin": "workspace:*",
+    "@modelcontextprotocol/client": "2.1.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

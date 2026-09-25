@@ -1,12 +1,12 @@
 import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle-spec";
 import { describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
-import { buildMcpToolCatalog } from "../src/infrastructure/mcp/McpToolCatalog.js";
 import {
+  buildMcpToolCatalog,
   McpJsonRpcDispatcher,
   MCP_PROTOCOL_VERSION,
   type McpUseCases,
-} from "../src/infrastructure/mcp/McpJsonRpcDispatcher.js";
+} from "./dispatcherShim.js";
 import {
   ArchiveUseCase,
   CreateDraftUseCase,
@@ -15,30 +15,30 @@ import {
   RequestPublishUseCase,
   UnpublishUseCase,
   UpdateDraftUseCase,
-} from "../src/usecase/content/index.js";
-import { InvokeProcedureUseCase } from "../src/usecase/procedure/InvokeProcedureUseCase.js";
-import { InMemoryHandlerRegistry } from "../src/domain/port/HandlerRegistry.js";
-import type { HandlerContext } from "../src/domain/model/HandlerContext.js";
-import type { Clock } from "../src/domain/port/Clock.js";
-import type { IdGenerator } from "../src/domain/port/IdGenerator.js";
+} from "../../mantle-runtime/src/usecase/content/index.js";
+import { InvokeProcedureUseCase } from "../../mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.js";
+import { InMemoryHandlerRegistry } from "../../mantle-runtime/src/domain/port/HandlerRegistry.js";
+import type { HandlerContext } from "../../mantle-runtime/src/domain/model/HandlerContext.js";
+import type { Clock } from "../../mantle-runtime/src/domain/port/Clock.js";
+import type { IdGenerator } from "../../mantle-runtime/src/domain/port/IdGenerator.js";
 import type {
   DeferredHookDispatcher,
   DeferredHookEnvelope,
-} from "../src/domain/port/DeferredHookDispatcher.js";
-import { TriggerIndex } from "../src/domain/service/TriggerIndex.js";
+} from "../../mantle-runtime/src/domain/port/DeferredHookDispatcher.js";
+import { TriggerIndex } from "../../mantle-runtime/src/domain/service/TriggerIndex.js";
 import type {
   ProcedureCallableCapability,
   ViewCallableCapability,
-} from "../src/domain/service/CallableCapabilityProjector.js";
-import { LifecycleHookingEntryRepository } from "../src/infrastructure/persistence/LifecycleHookingEntryRepository.js";
-import { RunLifecycleHooksUseCase } from "../src/usecase/lifecycle/RunLifecycleHooksUseCase.js";
-import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
+} from "../../mantle-runtime/src/domain/service/CallableCapabilityProjector.js";
+import { LifecycleHookingEntryRepository } from "../../mantle-runtime/src/infrastructure/persistence/LifecycleHookingEntryRepository.js";
+import { RunLifecycleHooksUseCase } from "../../mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.js";
+import { InMemoryEntryRepository } from "../../mantle-runtime/test/fakes/in-memory-store.js";
 import {
   makeLifecycleTrigger,
   makeProcedure,
   postsSchema,
   recentPostsView,
-} from "./fakes/manifests.js";
+} from "../../mantle-runtime/test/fakes/manifests.js";
 
 interface Harness {
   store: InMemoryEntryRepository;
@@ -185,7 +185,11 @@ function staffCtx(
 describe("McpJsonRpcDispatcher", () => {
   it("initialize returns protocol info", async () => {
     const { dispatcher } = buildHarness();
-    const res = await dispatcher.dispatch(jsonRpcReq("initialize"), mcpContext());
+    const res = await dispatcher.dispatch(jsonRpcReq("initialize", {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: { name: "test", version: "1" },
+    }), mcpContext());
     const body = (await res.json()) as {
       result: { protocolVersion: string; serverInfo: { name: string; version: string } };
     };
@@ -198,29 +202,25 @@ describe("McpJsonRpcDispatcher", () => {
 
   it("requires the negotiated protocol version after initialize", async () => {
     const { dispatcher } = buildHarness();
-    const missing = new Request("https://example.com/mcp", {
+    const unsupported = new Request("https://example.com/mcp", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "mcp-protocol-version": "1999-01-01" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
     });
-    expect((await dispatcher.dispatch(missing, mcpContext())).status).toBe(400);
+    expect((await dispatcher.dispatch(unsupported, mcpContext())).status).toBe(400);
     const get = await dispatcher.dispatch(new Request("https://example.com/mcp"), mcpContext());
     expect(get.status).toBe(405);
-    expect(get.headers.get("allow")).toBe("POST");
   });
 
-  it("rejects malformed and batch JSON-RPC envelopes", async () => {
+  it("answers malformed JSON with the SDK's parse error", async () => {
     const { dispatcher } = buildHarness();
-    for (const body of [{ method: "initialize" }, [{ jsonrpc: "2.0", method: "initialize" }]]) {
-      const response = await dispatcher.dispatch(new Request("https://example.com/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }), mcpContext());
-      expect((await response.json()) as { error: { code: number } }).toMatchObject({
-        error: { code: -32600 },
-      });
-    }
+    const response = await dispatcher.dispatch(new Request("https://example.com/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", "mcp-protocol-version": MCP_PROTOCOL_VERSION },
+      body: "{",
+    }), mcpContext());
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: { code: number } }).error.code).toBe(-32700);
   });
 
   it("accepts the initialized notification without a response body", async () => {
@@ -259,7 +259,7 @@ describe("McpJsonRpcDispatcher", () => {
       const call = await dispatcher.dispatch(jsonRpcReq("tools/call", {
         name, arguments: name === "list_entries" ? { collection: "posts" } : { id: "post-1" },
       }), mcpContext());
-      expect((await call.json()) as { error: { code: number } }).toMatchObject({ error: { code: -32601 } });
+      expect((await call.json()) as { error: { code: number } }).toMatchObject({ error: { code: -32602 } });
     }
   });
 
@@ -401,7 +401,7 @@ describe("McpJsonRpcDispatcher", () => {
       arguments: { collection: "posts", id: "managed-1" },
     }), mcpContext());
     const deletionBody = (await deletion.json()) as { error: { code: number } };
-    expect(deletionBody.error.code).toBe(-32601);
+    expect(deletionBody.error.code).toBe(-32602);
     expect(await store.get({ id: "managed-1", collection: "posts" })).not.toBeNull();
   });
 
@@ -426,7 +426,7 @@ describe("McpJsonRpcDispatcher", () => {
           const body = await response.json() as { error: { code: number; data?: { code: string } } };
           expect(body.error).toBeDefined();
           if (hasContent) expect(body.error.data?.code).toBe(name === "update_draft_articles" ? "NOT_FOUND" : "CONFLICT");
-          else expect(body.error.code).toBe(-32601);
+          else expect(body.error.code).toBe(-32602);
           expect(await store.get({ id: original.id, collection: original.collection })).toEqual(original);
         }
       }
@@ -447,10 +447,10 @@ describe("McpJsonRpcDispatcher", () => {
           h.store,
           new Map([["posts", postsSchema()]]),
         ),
+        executeView: { execute: async () => ({ ok: true, result: { rows: [], page: 1, show: 20, hasMore: false } }) } as never,
       },
       [postsSchema()],
       {
-        getEntry: new GetEntryUseCase(h.store),
         surface: "public",
         capabilities: [viewCapability(recentPostsView())],
       },
@@ -938,14 +938,14 @@ describe("McpJsonRpcDispatcher", () => {
     });
   });
 
-  it("unknown tool returns -32601", async () => {
+  it("unknown tool is the SDK's invalid-params error", async () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(
       jsonRpcReq("tools/call", { name: "ghost_tool", arguments: {} }),
       mcpContext(),
     );
     const body = (await res.json()) as { error: { code: number } };
-    expect(body.error.code).toBe(-32601);
+    expect(body.error.code).toBe(-32602);
   });
 
   it("malformed arguments are an INPUT_VALIDATION_FAILED diagnostic, not a transport error", async () => {
@@ -969,10 +969,10 @@ describe("McpJsonRpcDispatcher", () => {
     });
     const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "echo", arguments: {} }), staffCtx());
     const body = (await res.json()) as { error: { code: number } };
-    expect(body.error.code).toBe(-32601);
+    expect(body.error.code).toBe(-32602);
   });
 
-  it("create_draft_<unknown> returns -32601 unknown tool", async () => {
+  it("create_draft_<unknown> is an unknown tool", async () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(
       jsonRpcReq("tools/call", {
@@ -982,7 +982,7 @@ describe("McpJsonRpcDispatcher", () => {
       mcpContext(),
     );
     const body = (await res.json()) as { error: { code: number } };
-    expect(body.error.code).toBe(-32601);
+    expect(body.error.code).toBe(-32602);
   });
 
   it("Procedure-MCP trigger: tool appears in tools/list and tools/call invokes the Procedure (#281)", async () => {
@@ -1055,7 +1055,11 @@ describe("McpJsonRpcDispatcher", () => {
     registry.register("echoHandler", () => ({ ok: true }));
     const invokeProcedure = new InvokeProcedureUseCase(registry);
     const dispatcher = new McpJsonRpcDispatcher(
-      { ...minimalUseCases(), invokeTrigger: triggerInvoker(procedure, invokeProcedure) },
+      {
+        ...minimalUseCases(),
+        invokeTrigger: triggerInvoker(procedure, invokeProcedure),
+        executeView: { execute: async () => ({ ok: true, result: { rows: [], page: 1, show: 20, hasMore: false } }) } as never,
+      },
       [postsSchema()],
       {
         surface: "public",
@@ -1079,7 +1083,7 @@ describe("McpJsonRpcDispatcher", () => {
       mcpContext(),
     );
     const guessedBody = (await guessedStaffCall.json()) as { error: { code: number } };
-    expect(guessedBody.error.code).toBe(-32601);
+    expect(guessedBody.error.code).toBe(-32602);
   });
 
   it("Procedure-MCP trigger: requires.auth.all enforces the predicate, returning AUTH_DENIED for missing staff (#281)", async () => {
@@ -1299,7 +1303,10 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
     fail = true;
     const denied = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: {} }), ctx);
     expect(ok.status).toBe(200);
-    expect(denied.status).toBe(401);
+    // A dynamic identity failure for an identified caller is a tool result
+    // (ADR-0029 D1); only the static anonymous pre-check answers HTTP 401.
+    expect(denied.status).toBe(200);
+    expect(((await denied.json()) as { error?: { data?: { code?: string } } }).error?.data?.code).toBe("UNAUTHENTICATED");
     // Both responses were sent while the sink was still blocked.
     expect(events).toEqual([]);
     expect(deferred).toHaveLength(2);
@@ -1329,7 +1336,7 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
     const events: unknown[] = [];
     const dispatcher = auditedDispatcher({ record: (e) => { events.push(e); } }, async () => ({ ok: true, result: {} }));
     const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "nope", arguments: { operationId: "probe-1" } }), mcpContext());
-    expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32601);
+    expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32602);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(events).toEqual([expect.objectContaining({ tool: "nope", operationId: "probe-1", outcome: "UNKNOWN_TOOL" })]);
   });

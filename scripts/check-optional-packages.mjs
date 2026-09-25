@@ -284,6 +284,8 @@ try {
   installConsumer("core-with-admin", {
     "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
     "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
+    // Admin's staff MCP depends on it; the tarball keeps the install offline.
+    "@aotter/mantle-mcp": `file:${tarballs["@aotter/mantle-mcp"]}`,
     "@aotter/mantle-admin": `file:${tarballs["@aotter/mantle-admin"]}`,
     hono,
     zod,

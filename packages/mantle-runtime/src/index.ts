@@ -243,18 +243,6 @@ export {
   ViewParamCoercionError,
 } from "./domain/service/ViewParamCoercer.js";
 
-// Explicit adapter contract for the Cloudflare MCP mount. Do not
-// export the whole MCP infrastructure barrel from the root.
-export {
-  McpJsonRpcDispatcher,
-  type McpServerInfo,
-  type McpUseCases,
-} from "./infrastructure/mcp/McpJsonRpcDispatcher.js";
-export {
-  createMcpDispatcher,
-  type CreateMcpDispatcherOptions,
-  type McpDispatcherRuntime,
-} from "./infrastructure/mcp/createMcpDispatcher.js";
 export type { AuditSink, McpToolCallAuditEvent } from "./domain/port/AuditSink.js";
 
 // Starter fixture support. Kept explicit so persistence/http
@@ -266,8 +254,3 @@ export { readStoreInstanceId } from "./infrastructure/boot/bootState.js";
 // such as Cloudflare Turnstile.
 export { InvokeFailure } from "./usecase/procedure/InvokeProcedureUseCase.js";
 
-export {
-  buildMcpAuditOperationIdResolver,
-  buildMcpToolCatalog,
-  type McpToolDefinition,
-} from "./infrastructure/mcp/McpToolCatalog.js";

@@ -144,6 +144,13 @@ describe("buildCapabilityCatalog", () => {
     expect(staffCatalog.capabilities.every((capability) => capability.requiresIdentity)).toBe(true);
   });
 
+  it("lists the OAuth scopes declared by ctx.auth.scope predicates", () => {
+    const scoped = makeProcedure({ name: "scoped", authPredicates: ["ctx.auth", { "ctx.auth.scope": "orders:write" }, { "ctx.auth.scope": "orders:write" }] });
+    const catalog = buildCapabilityCatalog([], { surface: "public", callables: [procedure(scoped, "public")] });
+    expect(catalog.get("scoped")?.requiredScopes).toEqual(["orders:write"]);
+    expect(buildCapabilityCatalog([postsSchema()]).get("request_publish")?.requiredScopes).toEqual([]);
+  });
+
   it("resolves the audit correlation argument from the idempotency hint", () => {
     const keyed = makeProcedure({
       name: "keyed",

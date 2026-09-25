@@ -45,6 +45,7 @@
   "dependencies": {
     "@aotter/mantle-admin": "workspace:*",
     "@aotter/mantle-auth": "workspace:*",
+    "@aotter/mantle-mcp": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*",
     "@aotter/mantle-web": "workspace:*"

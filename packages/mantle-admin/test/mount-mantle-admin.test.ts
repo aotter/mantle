@@ -553,11 +553,17 @@ spec:
       ...auth, getSession: async () => ({ session: { id: "s" }, user: { id: "staff" } }), getUserRole: async () => role,
     } });
     const call = (method: string, params?: unknown, origin = "https://example.test") => app.request("https://example.test/admin/api/mcp", {
-      method: "POST", headers: { origin, "content-type": "application/json", "mcp-protocol-version": "2025-11-25" },
+      method: "POST",
+      headers: {
+        origin,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-11-25",
+      },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     });
     const catalog = await (await app.request("https://example.test/admin/api/webmcp")).json();
-    const rpc = await (await call("tools/list")).json();
+    const rpc = await jsonRpc(await call("tools/list"));
     expect(catalog.tools).toEqual(rpc.result.tools);
     const names = catalog.tools.map((tool: { name: string }) => tool.name);
     expect(names).toContain("create_media_upload");
@@ -565,10 +571,10 @@ spec:
     const staffTool = catalog.tools.find((tool: { description: string }) => tool.description === "Staff operation description");
     expect(staffTool).toBeDefined();
     expect(names.some((name: string) => name.includes("member"))).toBe(false);
-    expect((await (await call("tools/call", { name: staffTool.name, arguments: {} })).json()).result).toBeDefined();
+    expect((await jsonRpc(await call("tools/call", { name: staffTool.name, arguments: {} }))).result).toBeDefined();
     expect(invokeTrigger).toHaveBeenCalledWith(expect.objectContaining({ ctx: expect.objectContaining({ staff: { id: "staff", role: "owner" }, auth: expect.objectContaining({ credential: "session" }) }) }));
     expect((await call("tools/call", { name: staffTool.name }, "https://evil.test")).status).toBe(403);
-    const unknown = await (await call("tools/call", { name: "member_action" })).json();
+    const unknown = await jsonRpc(await call("tools/call", { name: "member_action" }));
     expect(unknown.error).toBeDefined();
     purposes = [];
     expect((await (await app.request("https://example.test/admin/api/webmcp")).json()).tools.some((tool: { name: string }) => tool.name === "create_media_upload")).toBe(false);
@@ -637,4 +643,13 @@ function compilePlan(text: string): RuntimePlan {
   const compiled = compileRuntimePlan(linked.value);
   if (!compiled.ok) throw new Error("expected Admin logic fixture to compile");
   return compiled.value;
+}
+
+/** The stateless 2025 transport may answer as a one-event SSE stream. */
+async function jsonRpc(response: Response): Promise<{ result?: { tools: unknown[] } & Record<string, unknown>; error?: unknown }> {
+  const text = await response.text();
+  const data = /^(?:event|data):/u.test(text)
+    ? text.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5)).join("")
+    : text;
+  return JSON.parse(data);
 }

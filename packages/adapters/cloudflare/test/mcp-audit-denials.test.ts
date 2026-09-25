@@ -1,6 +1,7 @@
 /** Gate denials on /mcp are audit events too (#1017): a token refused before
  *  the dispatcher runs must still leave a `tools/call` trail. */
 import { describe, expect, it } from "vitest";
+import { MCP_HEADERS } from "./mcpWire.js";
 import type { Manifest } from "@aotter/mantle-spec";
 import type { McpToolCallAuditEvent } from "@aotter/mantle-runtime";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
@@ -29,8 +30,7 @@ function call(path: string, token: string | null, method = "tools/call", params:
   return new Request(`https://example.test${path}`, {
     method: "POST",
     headers: {
-      "content-type": "application/json",
-      "mcp-protocol-version": "2025-11-25",
+      ...MCP_HEADERS,
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
@@ -89,7 +89,7 @@ describe("MCP audit: gate denials", () => {
     });
     const request = new Request("https://example.test/mcp", {
       method: "POST",
-      headers: { "content-type": "application/json", "mcp-protocol-version": "2025-11-25", authorization: "Bearer garbage" },
+      headers: { ...MCP_HEADERS, authorization: "Bearer garbage" },
       body,
       // @ts-expect-error duplex is required by undici for streamed bodies
       duplex: "half",
