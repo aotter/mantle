@@ -47,6 +47,16 @@ A business failure, such as a denied role, a version conflict or invalid argumen
 
 The MCP surface is served by the official MCP TypeScript SDK through `@aotter/mantle-mcp`. It answers both the 2026-07-28 protocol and 2025-era stateless clients. Clients built on an MCP SDK need nothing more. A hand-written client, such as a `curl` smoke test, must send `Accept: application/json, text/event-stream` (without it the request gets `406`) and must read an answer that may arrive as one server-sent event: the JSON-RPC message is on its `data:` line.
 
+## MCP Apps
+
+A host can render tool results as an interactive UI through [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps). Pass `apps` to `createMantleMcpHandler`, or to the Cloudflare `createMcpApiHandler`, for one surface. Each resource is a `ui://` HTML asset plus a rule for which tools render in it. Mantle registers it with the official `ext-apps` helpers, and the linked tools advertise `_meta.ui.resourceUri`.
+
+- The HTML is reusable and never carries caller data or tokens. Per-call data travels only in each tool result's `structuredContent`, and every tool keeps its text content for hosts that render no UI.
+- App-only helpers (`visibility: ["app"]`) must be read-only.
+- A client that declares no MCP Apps support gets exactly the plain catalog.
+- A stateless 2025-era request declares nothing. It gets the App metadata, which other hosts ignore.
+- Resources are per surface: a staff App is never readable on `/mcp`.
+
 ## Keeping an action human-only
 
 A confirmation step in a chat UI, and a tool marked app-only, do not prove that a person made the decision: a host sends every call with the same credential the model uses. When an action must stay with people, keep it off MCP entirely:

@@ -37,6 +37,7 @@
   "dependencies": {
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/server": "2.1.0"
   },
   "peerDependencies": {

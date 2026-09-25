@@ -5,6 +5,7 @@ import {
   type AuthInfo,
 } from "@modelcontextprotocol/server";
 import type { HandlerContext, InvokeCapabilityUseCase } from "@aotter/mantle-runtime";
+import { clientUiSupport, type ClientUiSupport } from "./apps.js";
 import { createMantleMcpServer, type MantleMcpServerOptions } from "./createMantleMcpServer.js";
 
 export interface MantleMcpHandlerOptions extends MantleMcpServerOptions {
@@ -37,6 +38,7 @@ export interface MantleMcpHandler {
 const DEFAULT_MAX_BODY = 1024 * 1024;
 const DEFAULT_MAX_SUBSCRIPTIONS = 32;
 const CONTEXT_KEY = "mantle.handlerContext";
+const UI_KEY = "mantle.clientUi";
 const ANONYMOUS: HandlerContext = Object.freeze({ user: null, staff: null, env: {} });
 
 /**
@@ -54,7 +56,7 @@ export function createMantleMcpHandler(
   const servers = createMantleMcpServer(invoker, options);
   const maxRequestBodySize = options.maxRequestBodySize ?? DEFAULT_MAX_BODY;
   const sdk = createMcpHandler(
-    ({ authInfo }) => servers.create(contextOf(authInfo)),
+    ({ authInfo }) => servers.create(contextOf(authInfo), uiOf(authInfo)),
     {
       legacy: "stateless",
       maxRequestBodySize,
@@ -82,6 +84,7 @@ export function createMantleMcpHandler(
       // Unparseable bodies go to the SDK untouched so it answers with its
       // own JSON-RPC parse error.
       if (message === undefined) return sdk.fetch(request, { authInfo });
+      if (options.apps) authInfo.extra![UI_KEY] = clientUiSupport(message);
       // A 2025-era batch carries several calls; every one is checked.
       const calls = (Array.isArray(message) ? message : [message]).flatMap(toolCall);
       const refused = calls.filter(({ name }) => {
@@ -119,6 +122,11 @@ function toAuthInfo(ctx: HandlerContext, resourceMetadataUrl: string | undefined
 function contextOf(authInfo: AuthInfo | undefined): HandlerContext {
   const ctx = authInfo?.extra?.[CONTEXT_KEY];
   return isRecord(ctx) ? ctx as unknown as HandlerContext : ANONYMOUS;
+}
+
+function uiOf(authInfo: AuthInfo | undefined): ClientUiSupport {
+  const ui = authInfo?.extra?.[UI_KEY];
+  return ui === "supported" || ui === "unsupported" ? ui : "unknown";
 }
 
 function isAnonymous(ctx: HandlerContext): boolean {

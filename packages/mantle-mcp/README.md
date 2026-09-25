@@ -39,5 +39,42 @@ const response = await mcp.fetch(request, handlerContext);
   identity refusal answers a request, every call in it is recorded as
   `UNAUTHENTICATED`, since none of them ran.
 
+## MCP Apps
+
+`apps.resources` registers UI resources with the official
+`@modelcontextprotocol/ext-apps/server` helpers:
+
+```ts
+createMantleMcpHandler(invoker, {
+  apps: {
+    resources: [{
+      uri: "ui://mantle/views",
+      name: "mantle-views",
+      html: () => appHtml,           // a reusable build, never caller data
+      csp: { connectDomains: [] },
+      renders: (capability) => capability.route.kind === "view",
+      appOnly: ["read_entry"],       // read-only tools only the App calls
+    }],
+  },
+});
+```
+
+- **Linked tools.** A tool that `renders` selects carries `_meta.ui.resourceUri`,
+  plus the flat `ui/resourceUri` key for older hosts. It keeps its text content.
+- **App-only tools.** `appOnly` tools carry `visibility: ["app"]` and must be
+  read-only.
+- **Client support.** It comes from the client's declared capabilities
+  (`getUiCapability`): the 2026-07-28 request envelope, or a 2025-era
+  `initialize`.
+  - A client that declares no MCP Apps support gets plain tools, no resources
+    and no app-only tools.
+  - A stateless 2025-era request carries no capabilities, so it gets the App
+    metadata. Hosts without MCP Apps ignore it, and hosts with MCP Apps can
+    still call the App's tools on every request.
+- **Surfaces.** Each handler serves one surface, so a resource is readable only
+  on the surface whose handler registers it.
+
+`mantle-mcp` has no UI dependency; the host injects the HTML.
+
 `createMantleMcpServer(invoker, options).create(ctx)` returns a plain
 `McpServer`, for hosts that wire their own transport.

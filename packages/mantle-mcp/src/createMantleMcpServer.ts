@@ -18,7 +18,15 @@ import type {
   HandlerContext,
   InvokeCapabilityUseCase,
 } from "@aotter/mantle-runtime";
+import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import packageJson from "../package.json" with { type: "json" };
+import {
+  appResourceHtml,
+  appResourceMeta,
+  linkApps,
+  type ClientUiSupport,
+  type MantleMcpApps,
+} from "./apps.js";
 
 export interface MantleMcpServerInfo {
   readonly name: string;
@@ -44,6 +52,13 @@ export interface MantleMcpServerOptions {
    * re-authorizing could never satisfy it.
    */
   readonly oauth?: { readonly scopes: readonly string[]; readonly grantable?: readonly string[] };
+  /**
+   * MCP Apps (ADR-0029 D7): UI resources for this surface, and which tools
+   * render in them. A client that declares no MCP Apps support gets plain
+   * tools, no resources and no app-only tools; a client whose support is
+   * unknown gets the App metadata, which hosts without MCP Apps ignore.
+   */
+  readonly apps?: MantleMcpApps;
 }
 
 /**
@@ -54,7 +69,7 @@ export interface MantleMcpServerOptions {
  */
 export interface MantleMcpServerFactory {
   readonly invoker: InvokeCapabilityUseCase;
-  create(ctx: HandlerContext): McpServer;
+  create(ctx: HandlerContext, ui?: ClientUiSupport): McpServer;
   /** Record one audit event for a call that never reached a tool. */
   audit(ctx: HandlerContext, tool: string, args: Readonly<Record<string, unknown>>, outcome: string): void;
 }
@@ -68,6 +83,7 @@ export function createMantleMcpServer(
   const tools = catalog.capabilities
     .filter((capability) => invoker.serves(capability.name))
     .map((capability) => ({ capability, config: toolConfig(capability) }));
+  const apps = linkApps(options.apps, invoker);
   const serverInfo = {
     ...(options.serverInfo ?? { name: "aotter.mantle" }),
     icons: options.serverInfo?.icons?.map(({ sizes, ...icon }) => ({
@@ -116,13 +132,30 @@ export function createMantleMcpServer(
 
   return {
     invoker,
-    create(ctx) {
+    create(ctx, ui = "unknown") {
       const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } } });
+      const withApps = ui !== "unsupported" && apps.resources.length > 0;
+      if (withApps) {
+        for (const resource of apps.resources) {
+          const meta = appResourceMeta(resource);
+          registerAppResource(server, resource.name, resource.uri, {
+            ...(resource.title ? { title: resource.title } : {}),
+            ...(resource.description ? { description: resource.description } : {}),
+            _meta: meta,
+          }, async () => ({
+            contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: await appResourceHtml(resource), _meta: meta }],
+          }));
+        }
+      }
       for (const { capability, config } of tools) {
+        const appOnlyUri = apps.appOnly.get(capability.name);
+        if (appOnlyUri && !withApps) continue;
+        const resourceUri = withApps ? appOnlyUri ?? apps.rendersIn.get(capability.name) : undefined;
         const scopeChallenge = stepUp(capability, ctx, options.oauth, (args) => {
           record(ctx, capability.name, operationIdOf(capability.name, args), "INSUFFICIENT_SCOPE", Date.now());
         });
-        server.registerTool(capability.name, { ...config, ...(scopeChallenge ? { scopeChallenge } : {}) }, async (args: unknown): Promise<CallToolResult> => {
+        const definition = { ...config, ...(scopeChallenge ? { scopeChallenge } : {}) };
+        const run = async (args: unknown): Promise<CallToolResult> => {
           const input = isRecord(args) ? args : {};
           const startedAt = Date.now();
           let outcome = "ok";
@@ -150,7 +183,17 @@ export function createMantleMcpServer(
           } finally {
             record(ctx, capability.name, operationIdOf(capability.name, input), outcome, startedAt);
           }
-        });
+        };
+        if (!resourceUri) {
+          server.registerTool(capability.name, definition, run);
+          continue;
+        }
+        // The official helper writes both the `ui` object and the legacy
+        // flat `ui/resourceUri` key, so older hosts find the resource too.
+        registerAppTool(server, capability.name, {
+          ...definition,
+          _meta: { ui: { resourceUri, ...(appOnlyUri ? { visibility: ["app"] } : {}) } },
+        } as Parameters<typeof registerAppTool>[2], run as never);
       }
       return server;
     },
