@@ -103,6 +103,9 @@ importers:
       '@aotter/mantle-auth':
         specifier: workspace:*
         version: link:../../mantle-auth
+      '@aotter/mantle-mcp':
+        specifier: workspace:*
+        version: link:../../mantle-mcp
       '@aotter/mantle-runtime':
         specifier: workspace:*
         version: link:../../mantle-runtime
@@ -255,6 +258,9 @@ importers:
       '@aotter/mantle-cloudflare':
         specifier: workspace:*
         version: link:../adapters/cloudflare
+      '@aotter/mantle-mcp':
+        specifier: workspace:*
+        version: link:../mantle-mcp
       '@aotter/mantle-vercel':
         specifier: workspace:*
         version: link:../adapters/vercel
@@ -288,6 +294,9 @@ importers:
 
   packages/mantle-admin:
     dependencies:
+      '@aotter/mantle-mcp':
+        specifier: workspace:*
+        version: link:../mantle-mcp
       '@aotter/mantle-runtime':
         specifier: workspace:*
         version: link:../mantle-runtime
@@ -371,6 +380,9 @@ importers:
       '@aotter/mantle-admin':
         specifier: workspace:*
         version: link:../mantle-admin
+      '@modelcontextprotocol/client':
+        specifier: 2.1.0
+        version: 2.1.0
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))

@@ -17,6 +17,8 @@ export interface MantleMcpHandlerOptions extends MantleMcpServerOptions {
   readonly unauthenticated?: (request: Request) => Response | Promise<Response>;
   /** POST body bound in bytes. Defaults to 1 MiB. */
   readonly maxRequestBodySize?: number;
+  /** RFC 9728 metadata URL advertised on scope challenges. */
+  readonly resourceMetadataUrl?: string;
 }
 
 export interface MantleMcpHandler {
@@ -54,7 +56,7 @@ export function createMantleMcpHandler(
 
   return {
     async fetch(request, ctx) {
-      const authInfo = toAuthInfo(ctx);
+      const authInfo = toAuthInfo(ctx, options.resourceMetadataUrl);
       if (request.method.toUpperCase() !== "POST" || !isJsonContentType(request.headers.get("content-type"))) {
         return sdk.fetch(request, { authInfo });
       }
@@ -92,12 +94,13 @@ export function createMantleMcpHandler(
   };
 }
 
-function toAuthInfo(ctx: HandlerContext): AuthInfo {
+function toAuthInfo(ctx: HandlerContext, resourceMetadataUrl: string | undefined): AuthInfo {
   return {
     // Mantle forwards the verified caller, never the raw credential.
     token: "",
     clientId: ctx.auth?.clientId ?? "",
     scopes: [...(ctx.auth?.scopes ?? [])],
+    ...(resourceMetadataUrl ? { resourceMetadataUrl } : {}),
     extra: { [CONTEXT_KEY]: ctx },
   };
 }

@@ -15,6 +15,7 @@ import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import { createMcpApiHandler } from "../src/mount/mountMcp.js";
 import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
+import { MCP_HEADERS, readJsonRpc } from "./mcpWire.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
   StubAssetServer,
@@ -409,7 +410,7 @@ describe("smoke: MCP media tool catalog", () => {
       {},
       props as unknown as ExecutionContext,
     );
-    const firstBody = (await first.json()) as {
+    const firstBody = (await readJsonRpc(first)) as {
       result: {
         tools: Array<{
           name: string;
@@ -440,7 +441,7 @@ describe("smoke: MCP media tool catalog", () => {
     if (useKv) {
       // Simulate an out-of-band D1 edit while discovery still has the old policy.
       const stale = await handler.fetch!(jsonRpcReq("tools/list"), {}, props as unknown as ExecutionContext);
-      expect(JSON.stringify(await stale.json())).toContain("post-cover");
+      expect(JSON.stringify(await readJsonRpc(stale))).toContain("post-cover");
       const upload = await handler.fetch!(jsonRpcReq("tools/call", {
         name: "create_media_upload",
         arguments: {
@@ -453,7 +454,7 @@ describe("smoke: MCP media tool catalog", () => {
           ],
         },
       }), {}, props as unknown as ExecutionContext);
-      expect(JSON.stringify(await upload.json())).toContain("MEDIA_PURPOSE_REJECTED");
+      expect(JSON.stringify(await readJsonRpc(upload))).toContain("MEDIA_PURPOSE_REJECTED");
       expect(storage.createCalls).toHaveLength(0);
 
       // An ordinary settings write republishes actual persisted state, not defaults.
@@ -465,7 +466,7 @@ describe("smoke: MCP media tool catalog", () => {
       {},
       props as unknown as ExecutionContext,
     );
-    const secondBody = (await second.json()) as typeof firstBody;
+    const secondBody = (await readJsonRpc(second)) as typeof firstBody;
     expect(
       secondBody.result.tools.find((t) => t.name === "create_media_upload")
         ?.inputSchema.properties?.purpose?.enum,
@@ -697,14 +698,16 @@ describe("media library: /admin/api/media", () => {
   });
 });
 
+const INITIALIZE_PARAMS = {
+  protocolVersion: "2025-11-25",
+  capabilities: {},
+  clientInfo: { name: "smoke", version: "1" },
+};
+
 function jsonRpcReq(method: string, params?: unknown, headers: Record<string, string> = { authorization: "Bearer test-token" }): Request {
   return new Request("https://example.test/mcp/staff", {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "mcp-protocol-version": "2025-11-25",
-      ...headers,
-    },
+    headers: { ...MCP_HEADERS, ...headers },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
 }
@@ -778,7 +781,7 @@ describe("MCP View surface gating (#438)", () => {
       {},
       props as unknown as ExecutionContext,
     );
-    const body = (await res.json()) as {
+    const body = (await readJsonRpc(res)) as {
       result: { tools: Array<{ name: string }> };
     };
     return body.result.tools.map((t) => t.name);
@@ -793,11 +796,11 @@ describe("MCP View surface gating (#438)", () => {
   it("projects the canonical site identity into current MCP server metadata", async () => {
     const handler = createMcpApiHandler({ ref: viewRef(), surface: "public", resource: MCP_RESOURCE });
     const response = await handler.fetch!(
-      jsonRpcReq("initialize"),
+      jsonRpcReq("initialize", INITIALIZE_PARAMS),
       {},
       props as unknown as ExecutionContext,
     );
-    const body = (await response.json()) as {
+    const body = (await readJsonRpc(response)) as {
       result: { protocolVersion: string; serverInfo: Record<string, unknown> };
     };
     expect(body.result.protocolVersion).toBe("2025-11-25");
@@ -827,11 +830,11 @@ describe("MCP View surface gating (#438)", () => {
       resource: MCP_RESOURCE,
     });
     const response = await handler.fetch!(
-      jsonRpcReq("initialize"),
+      jsonRpcReq("initialize", INITIALIZE_PARAMS),
       {},
       props as unknown as ExecutionContext,
     );
-    const body = (await response.json()) as {
+    const body = (await readJsonRpc(response)) as {
       result: { serverInfo: { icons: unknown[] } };
     };
     expect(body.result.serverInfo.icons).toEqual([
@@ -925,8 +928,9 @@ describe("MCP View surface gating (#438)", () => {
     expect(res.status).toBe(401);
     // RFC 6750: no `error` attribute when the caller presented no token.
     expect(res.headers.get("www-authenticate")).toMatch(/^Bearer realm="mcp", scope="mcp", resource_metadata=/u);
-    const body = await res.json() as { error: { data: { code: string } } };
-    expect(body.error.data.code).toBe("UNAUTHENTICATED");
+    // Refused before any tool runs, with the gate's own challenge body.
+    const body = await readJsonRpc(res) as { error: { message: string } };
+    expect(body.error.message).toBe("unauthorized");
   });
 
   it("challenges an anonymous caller on the staff surface", async () => {
@@ -1021,16 +1025,14 @@ describe("MCP View surface gating (#438)", () => {
       {},
       props as unknown as ExecutionContext,
     );
-    const body = (await res.json()) as {
+    const body = (await readJsonRpc(res)) as {
       result?: { isError?: boolean; content?: Array<{ text?: string }> };
       error?: { message?: string };
     };
-    // The dispatcher reports an unknown tool either as a JSON-RPC error
-    // or an isError tool result naming the tool; either way the staff
-    // View must not be routable on the public surface.
-    const serialized = JSON.stringify(body);
-    expect(serialized).toContain("query_view_staff_report");
-    expect(serialized.toLowerCase()).toContain("unknown");
+    // The SDK answers an unregistered tool with a JSON-RPC error naming it;
+    // the staff View must not be routable on the public surface.
+    expect(body.error?.message).toContain("query_view_staff_report");
+    expect(body.error?.message).toContain("not found");
   });
 
   it("staff surface lists and calls the staff View but not the public View (#332)", async () => {
@@ -1045,7 +1047,7 @@ describe("MCP View surface gating (#438)", () => {
       {},
       props as unknown as ExecutionContext,
     );
-    const body = (await res.json()) as {
+    const body = (await readJsonRpc(res)) as {
       result?: { content?: Array<{ text?: string }> };
       error?: unknown;
     };

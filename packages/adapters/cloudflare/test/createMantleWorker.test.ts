@@ -2,6 +2,7 @@ import { compileTestPlan } from "./compileTestPlan.js";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import { readJsonRpc } from "./mcpWire.js";
 import { basicAuth } from "hono/basic-auth";
 import { HTTPException } from "hono/http-exception";
 import type {
@@ -106,7 +107,7 @@ describe("createMantleWorker", () => {
       } }),
     });
     expect(initialized.status).toBe(200);
-    expect(await initialized.json()).toMatchObject({ result: { serverInfo: { name: "aotter.mantle.public" } } });
+    expect(await readJsonRpc(initialized)).toMatchObject({ result: { serverInfo: { name: "aotter.mantle.public" } } });
     expect((await fetchWorker(worker, "/mcp/staff", env)).status).toBe(404);
     expect((await fetchWorker(worker, "/admin", env)).status).toBe(404);
   });

@@ -1,3 +1,4 @@
+import type { CallToolResult, Client } from "@modelcontextprotocol/client";
 import { ApiError } from "./api";
 
 export interface AdminTool {
@@ -31,15 +32,41 @@ export function resultPath(catalog: AdminToolCatalog, name: string, output: unkn
   const path = route.path + (route.entry && typeof row.id === "string" ? `/${encodeURIComponent(row.id)}` : "");
   return adminPath(path + (route.entry && typeof row.status === "string" ? `?status=${encodeURIComponent(row.status)}` : ""));
 }
-export async function callStaffTool(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ result: unknown; output: unknown }> {
-  const response = await fetch("/admin/api/mcp", {
-    method: "POST", credentials: "same-origin", signal,
-    headers: { "content-type": "application/json", "mcp-protocol-version": "2025-11-25" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: input } }),
+/** One official MCP client per page, connected on first use; a failed
+ *  connection is dropped so the next call reconnects. */
+let staffClient: Promise<Client> | null = null;
+function connectStaffClient(): Promise<Client> {
+  staffClient ??= (async () => {
+    // Loaded only when a WebMCP host or the preview bridge calls a tool.
+    const { Client, StreamableHTTPClientTransport } = await import("@modelcontextprotocol/client");
+    const client = new Client({ name: "mantle-admin", version: "1.0.0" });
+    await client.connect(new StreamableHTTPClientTransport(new URL("/admin/api/mcp", location.origin), {
+      requestInit: { credentials: "same-origin" },
+    }));
+    return client;
+  })().catch((error: unknown) => {
+    staffClient = null;
+    throw error;
   });
-  const body = await response.json();
-  if (!response.ok || body.error) throw new ApiError(body.error?.message ?? "Admin tool failed.", response.status, body.error?.data ?? body);
-  const result = body.result;
-  const text = result?.content?.find((item: { type: string }) => item.type === "text")?.text;
-  return { result, output: typeof text === "string" ? JSON.parse(text) : result };
+  return staffClient;
+}
+
+/** Call a staff tool once. A tool failure keeps its Mantle diagnostic, and
+ *  nothing is retried: a write whose outcome is unknown must be re-read. */
+export async function callStaffTool(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ result: unknown; output: unknown }> {
+  let result: CallToolResult;
+  try {
+    const client = await connectStaffClient();
+    result = await client.callTool({ name, arguments: input }, { signal });
+  } catch (error) {
+    const status = typeof (error as { status?: unknown } | null)?.status === "number" ? (error as { status: number }).status : 0;
+    throw new ApiError(error instanceof Error ? error.message : "Admin tool failed.", status, error);
+  }
+  const text = result.content?.find((item) => item.type === "text");
+  const output: unknown = text && "text" in text ? JSON.parse(text.text) : result;
+  if (result.isError) {
+    const diagnostic = (output as { diagnostics?: readonly { message?: string }[] } | null)?.diagnostics?.[0];
+    throw new ApiError(diagnostic?.message ?? "Admin tool failed.", 0, diagnostic ?? output);
+  }
+  return { result, output };
 }

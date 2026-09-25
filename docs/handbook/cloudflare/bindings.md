@@ -109,7 +109,7 @@ Staff media uploads through Staff MCP presigned PUT. The binding alone cannot si
 ```
 
 An MCP `tools/call` audit trail: who called which tool on which surface, with
-what outcome and how long it took. The runtime's `McpJsonRpcDispatcher` is the
+what outcome and how long it took. The `@aotter/mantle-mcp` handler is the
 single write point; it records nothing unless the composition root passes an
 `AuditSink`, and the write happens through `waitUntil`, off the response path.
 Request and response payloads are never recorded.

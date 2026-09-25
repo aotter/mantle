@@ -2,6 +2,7 @@ import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { MCP_HEADERS, readJsonRpc, toolText } from "./mcpWire.js";
 import {
   DiagnosticError,
   runtimeDiagnostic,
@@ -101,8 +102,7 @@ function mcpCall(): Request {
   return new Request("https://example.test/mcp", {
     method: "POST",
     headers: {
-      "content-type": "application/json",
-      "mcp-protocol-version": "2025-11-25",
+      ...MCP_HEADERS,
       // An OAuth bearer, not the site PAT: the shared gate hands it to
       // verifyOAuthAccessToken after the credential resolver declines it.
       authorization: "Bearer oauth-access-token",
@@ -248,7 +248,7 @@ describe("authorization integration: one target across REST and MCP", () => {
     expect((await publicMcp.fetch!(badPat, workerEnv, mcpContext)).status).toBe(401);
     for (const mcp of [publicMcp, staffMcp]) {
       const mcpGranted = await mcp.fetch!(mcpCall(), workerEnv, mcpContext);
-      const mcpGrantedBody = (await mcpGranted.json()) as {
+      const mcpGrantedBody = (await readJsonRpc(mcpGranted)) as {
         result?: { content?: Array<{ text?: string }> };
       };
       expect(JSON.parse(mcpGrantedBody.result?.content?.[0]?.text ?? "{}")).toEqual({
@@ -259,11 +259,12 @@ describe("authorization integration: one target across REST and MCP", () => {
     expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
 
     mcpScopes = ["mcp"];
+    // A token without the tool's declared scope is asked to step up with the
+    // SDK's insufficient_scope challenge, before any guard or handler runs.
     const downscoped = await publicMcp.fetch!(mcpCall(), workerEnv, mcpContext);
-    const downscopedBody = (await downscoped.json()) as {
-      error?: { data?: { code?: string } };
-    };
-    expect(downscopedBody.error?.data?.code).toBe("AUTH_DENIED");
+    expect(downscoped.status).toBe(403);
+    expect(downscoped.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+    expect(downscoped.headers.get("www-authenticate")).toContain('scope="mcp accounts:read"');
     expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
     mcpScopes = ["mcp", "accounts:read"];
 
@@ -282,10 +283,9 @@ describe("authorization integration: one target across REST and MCP", () => {
     );
     expect(restDenied.status).toBe(402);
     const mcpDenied = await publicMcp.fetch!(mcpCall(), workerEnv, mcpContext);
-    const mcpDeniedBody = (await mcpDenied.json()) as {
-      error?: { data?: { code?: string } };
-    };
-    expect(mcpDeniedBody.error?.data?.code).toBe("ENTITLEMENT_REQUIRED");
+    const mcpDeniedBody = await readJsonRpc<{ result: { isError?: boolean; content: { type: string; text?: string }[] } }>(mcpDenied);
+    expect(mcpDeniedBody.result.isError).toBe(true);
+    expect(toolText<{ diagnostics: { code: string }[] }>(mcpDeniedBody.result).diagnostics[0]?.code).toBe("ENTITLEMENT_REQUIRED");
     expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 5, targetCalls: 3 });
   });
 });
