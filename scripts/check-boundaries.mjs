@@ -167,6 +167,11 @@ function checkPackageDirection() {
       message: "mcp must not import platform, product, or UI packages",
     },
     {
+      dir: "packages/mantle-ui/src/controller",
+      forbidden: ['from "react', "@modelcontextprotocol/", "window.", "document.", "localStorage"],
+      message: "ui controller must stay framework- and host-free",
+    },
+    {
       dir: "packages/mantle-web/src",
       forbidden: [
         "@aotter/mantle-cloudflare",
@@ -222,6 +227,18 @@ function checkPackageDirection() {
           fail(file, `${rule.message}: '${token}'`);
         }
       }
+    }
+  }
+}
+
+/** The UI controller ships no Mantle runtime code: package imports are
+ *  type-only, so a browser bundle carries the controller alone. */
+function checkUiControllerImports() {
+  const files = listFiles(join(ROOT, "packages/mantle-ui/src/controller"), (p) => p.endsWith(".ts"));
+  for (const file of files) {
+    const source = stripComments(readFileSync(file, "utf8"));
+    for (const match of source.matchAll(/^\s*import\s+(?!type\b)[^;]*?from\s+["']([^"']+)["']/gmu)) {
+      if (!match[1].startsWith(".")) fail(file, `ui controller must import '${match[1]}' with import type`);
     }
   }
 }
@@ -657,8 +674,8 @@ function checkRepositoryGuidance() {
       fail(contributingPath, `contributor authority is missing '${text}'`);
     }
   }
-  if (!releaseSkill.includes("All twelve npmjs artifacts")) {
-    fail(releaseSkillPath, "canonical release skill must match the twelve-package topology");
+  if (!releaseSkill.includes("All thirteen npmjs artifacts")) {
+    fail(releaseSkillPath, "canonical release skill must match the thirteen-package topology");
   }
   if (!claudeRelease.includes("../../../.agents/skills/mantle-release/SKILL.md") ||
       claudeRelease.split("\n").length > 8 ||
@@ -751,6 +768,7 @@ function checkRepositoryGuidance() {
 checkDatabasePropertyDetector();
 checkRuntimeCloudflareFree();
 checkPackageDirection();
+checkUiControllerImports();
 checkEntryReadOwnership();
 checkWebPackageBoundary();
 checkAdminPackageBoundary();
