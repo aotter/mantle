@@ -281,6 +281,36 @@ async function smokeGeneratedSites(temp, tarballs, version) {
     } });
     if (response.status !== 200 || (await response.json()).entry.data.title !== "Kept") throw new Error("Sites additive migration lost existing data");
   });
+  const withUnique = field => sitesManifest(true).replace("  title: Posts\n", `  title: Posts\n  uniqueIndexes:\n    - [${field}]\n`);
+  const d1 = sql => run("pnpm", ["exec", "wrangler", "d1", "execute", "generated-sites", "--local", "--command", sql], directory, true);
+  writeFileSync(join(directory, "manifests/site.yaml"), withUnique("title"));
+  run("pnpm", ["exec", "mantle", "generate", "--review-unique-indexes"], directory);
+  run("pnpm", ["exec", "wrangler", "d1", "migrations", "apply", "generated-sites", "--local"], directory);
+  const row = (id, title, rank) => `INSERT INTO posts (_mantle_id,_mantle_status,_mantle_version,_mantle_created_at,_mantle_updated_at,title,rank) VALUES ('${id}','draft',1,1,1,'${title}',${rank})`;
+  d1(row("unique-a", "A", 1));
+  d1(row("unique-b", "B", 1));
+  writeFileSync(join(directory, "manifests/site.yaml"), withUnique("rank"));
+  let conflict = false;
+  try { run("pnpm", ["exec", "mantle", "generate", "--review-unique-indexes"], directory, true); }
+  catch (error) { conflict = String(error.stderr).includes("UNIQUE_INDEX_CONFLICT"); }
+  if (!conflict || existsSync(join(directory, "drizzle/0004_mantle.sql"))) throw new Error("Unique-index preflight did not fail before mutation");
+  d1("UPDATE posts SET rank=2 WHERE _mantle_id='unique-b'");
+  run("pnpm", ["exec", "mantle", "generate", "--review-unique-indexes"], directory);
+  if (!existsSync(join(directory, "drizzle/meta/0004_mantle.review.json"))) throw new Error("Reviewed unique-index report missing");
+  const review = JSON.parse(readFileSync(join(directory, "drizzle/meta/0004_mantle.review.json"), "utf8"));
+  const marker = () => JSON.parse(execFileSync("pnpm", ["exec", "wrangler", "d1", "execute", "generated-sites", "--local", "--command",
+    "SELECT fingerprint FROM _mantle_storage_state WHERE id=1", "--json"], { cwd: directory, encoding: "utf8" }))[0].results[0].fingerprint;
+  d1(row("unique-late", "Late", 2));
+  let applyRejected = false;
+  try { run("pnpm", ["exec", "wrangler", "d1", "migrations", "apply", "generated-sites", "--local"], directory, true); }
+  catch { applyRejected = true; }
+  if (!applyRejected || marker() !== review.sourceFingerprint) throw new Error("Failed D1 unique migration did not roll back to its source fingerprint");
+  d1("DELETE FROM posts WHERE _mantle_id='unique-late'");
+  run("pnpm", ["exec", "wrangler", "d1", "migrations", "apply", "generated-sites", "--local"], directory);
+  d1(row("unique-c", "A", 3));
+  let duplicateRejected = false;
+  try { d1(row("unique-d", "D", 3)); } catch { duplicateRejected = true; }
+  if (!duplicateRejected) throw new Error("Replaced unique index did not reject duplicate rank");
 }
 
 function sitesManifest(rank) {

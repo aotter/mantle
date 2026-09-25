@@ -20,6 +20,7 @@ interface GenerateOptions {
   readonly features?: string;
   readonly adopt: boolean;
   readonly manifestsExplicit: boolean;
+  readonly reviewUniqueIndexes: boolean;
 }
 
 /** Test seam for Core-only vs Admin-present installs. */
@@ -120,10 +121,16 @@ export async function runGenerate(
   }
 
   let sites: Awaited<ReturnType<typeof prepareSites>> | null = null;
+  if (options.reviewUniqueIndexes && project.selection?.host !== "chatgpt-sites") {
+    stderr.write("--review-unique-indexes requires a managed ChatGPT Sites project.\n");
+    return 2;
+  }
   if (project.mode === "project" && project.selection?.host === "chatgpt-sites") {
     try {
       sites = await prepareSites(root, project.selection.output ?? options.output, project.selection,
-        loaded.parsed!.entries.filter((entry) => entry.manifest.kind === "Schema").map((entry) => entry.manifest as import("@aotter/mantle-spec").SchemaManifest), options.check);
+        loaded.parsed!.entries.filter((entry) => entry.manifest.kind === "Schema").map((entry) => entry.manifest as import("@aotter/mantle-spec").SchemaManifest), options.check,
+        options.reviewUniqueIndexes);
+      if (sites.report) stdout.write(`${sites.report}\n`);
     } catch (error) {
       stderr.write(`${message(error)}\n`);
       return 2;
@@ -178,6 +185,7 @@ function parseGenerateArgs(rawArgs: readonly string[]): GenerateOptions | null {
       host: { type: "string" },
       features: { type: "string" },
       adopt: { type: "boolean" },
+      "review-unique-indexes": { type: "boolean" },
       check: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
@@ -193,6 +201,7 @@ function parseGenerateArgs(rawArgs: readonly string[]): GenerateOptions | null {
     host: values.host,
     features: values.features,
     adopt: values.adopt === true,
+    reviewUniqueIndexes: values["review-unique-indexes"] === true,
     manifestsExplicit: values.manifests !== undefined,
   };
 }
@@ -214,6 +223,7 @@ Options:
   --host <name>       cf or chatgpt-sites (required for host-dependent features)
   --features <list>   Comma-separated: spec,runtime,api,mcp,admin,web
   --adopt             Adopt an existing authored application into saved selection
+  --review-unique-indexes  Plan a reviewed Sites unique-index tuple replacement
   --check             Check selection, dependencies and output without writing
   -h, --help          This help
 

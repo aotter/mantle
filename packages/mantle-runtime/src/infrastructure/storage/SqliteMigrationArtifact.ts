@@ -15,6 +15,7 @@ export interface SqliteMigrationArtifact {
   readonly targetFingerprint: string;
   readonly targetCanonicalVersion: string;
   readonly destructive: boolean;
+  readonly reviewedUniqueIndexes?: readonly { readonly schema: string; readonly removed: readonly (readonly string[])[]; readonly added: readonly (readonly string[])[] }[];
   readonly migrations: readonly Migration[];
   readonly projections: readonly { readonly name: string; readonly projection: string }[];
   readonly checksum: string;
@@ -23,6 +24,8 @@ export interface SqliteMigrationArtifact {
 export interface SqliteMigrationSource {
   /** IDs in the source state; callers must verify that state against their migration ledger. */
   readonly appliedMigrationIds?: Iterable<string>;
+  /** Explicitly permits only unique-index tuple replacement; other destructive changes still fail. */
+  readonly reviewUniqueIndexes?: boolean;
 }
 
 /** Build the immutable SQLite artifact reviewed and replayed by deployment. */
@@ -35,15 +38,34 @@ export async function buildSqliteMigrationArtifact(
   const target = [...validateSqliteSchemaTables(targetSchemas)];
   const sourceByName = new Map(source.map((schema) => [schema.metadata.name.toLowerCase(), schema]));
   const targetNames = new Set(target.map((schema) => schema.metadata.name.toLowerCase()));
-  const destructive = source.some((schema) => !targetNames.has(schema.metadata.name.toLowerCase())) || target.some((schema) => {
+  const reviewedUniqueIndexes = target.flatMap((schema) => {
     const previous = sourceByName.get(schema.metadata.name.toLowerCase());
-    return previous !== undefined && (previous.metadata.name !== schema.metadata.name ||
-      Object.keys(previous.spec.schema.properties ?? {}).some((field) => !Object.hasOwn(schema.spec.schema.properties ?? {}, field)) ||
-      !isAdditiveSchemaTableChange(schemaTableProjection(previous), schemaTableProjection(schema)));
+    if (!previous) return [];
+    const before = new Map((previous.spec.uniqueIndexes ?? []).map((fields) => [JSON.stringify(fields), fields]));
+    const after = new Map((schema.spec.uniqueIndexes ?? []).map((fields) => [JSON.stringify(fields), fields]));
+    const removed = [...before].filter(([key]) => !after.has(key)).map(([, fields]) => fields);
+    const added = [...after].filter(([key]) => !before.has(key)).map(([, fields]) => fields);
+    return removed.length || added.length ? [{ schema: schema.metadata.name, removed, added }] : [];
   });
+  const structuralDestructive = source.some((schema) => !targetNames.has(schema.metadata.name.toLowerCase())) || target.some((schema) => {
+    const previous = sourceByName.get(schema.metadata.name.toLowerCase());
+    if (!previous) return false;
+    const sameUnique = { ...schema, spec: { ...schema.spec,
+      uniqueIndexes: previous.spec.uniqueIndexes, indexes: previous.spec.indexes } };
+    return previous.metadata.name !== schema.metadata.name ||
+      Object.keys(previous.spec.schema.properties ?? {}).some((field) => !Object.hasOwn(schema.spec.schema.properties ?? {}, field)) ||
+      !isAdditiveSchemaTableChange(schemaTableProjection(previous), schemaTableProjection(sameUnique));
+  });
+  const reviewed = sourceState.reviewUniqueIndexes && reviewedUniqueIndexes.length > 0 && !structuralDestructive;
+  const destructive = structuralDestructive || (reviewedUniqueIndexes.length > 0 && !reviewed);
   const sourceFingerprint = await storageFingerprint(source);
   const targetFingerprint = await storageFingerprint(target);
   const sourceMigrationIds = new Set(schemaTableMigrations(source).map(({ id }) => id));
+  const sourceUnique = schemaTableMigrations(source).filter(({ id }) => id.includes(":unique_"));
+  const targetUnique = schemaTableMigrations(target).filter(({ id }) => id.includes(":unique_"));
+  const sourceUniqueIds = new Set(sourceUnique.map(({ id }) => id));
+  const targetUniqueIds = new Set(targetUnique.map(({ id }) => id));
+  const addedUniqueIds = new Set(targetUnique.filter(({ id }) => !sourceUniqueIds.has(id)).map(({ id }) => id));
   const appliedMigrationIds = new Set(sourceState.appliedMigrationIds ?? []);
   const content = {
     version: 2 as const,
@@ -53,9 +75,22 @@ export async function buildSqliteMigrationArtifact(
     destructive,
     migrations: [
       ...CANONICAL_MIGRATIONS.filter(({ id }) => !appliedMigrationIds.has(id)),
-      ...schemaTableMigrations(target).filter(({ id }) => !sourceMigrationIds.has(id) && !appliedMigrationIds.has(id)),
+      ...schemaTableMigrations(target).filter(({ id }) => !sourceMigrationIds.has(id) && !appliedMigrationIds.has(id) && !(reviewed && addedUniqueIds.has(id))),
+      ...(reviewed ? targetUnique.filter(({ id }) => addedUniqueIds.has(id)).map((migration) => ({
+        ...migration, id: `reviewed-unique:${targetFingerprint}:create:${migration.id}`,
+      })) : []),
+      ...(reviewed ? sourceUnique.filter(({ id }) => !targetUniqueIds.has(id)).map((migration) => {
+        const name = migration.sql.match(/CREATE UNIQUE INDEX IF NOT EXISTS ("(?:[^"]|"")+") ON /)?.[1];
+        if (!name) throw new Error("Invalid generated unique index SQL.");
+        return {
+          id: `reviewed-unique:${targetFingerprint}:drop:${migration.id}`,
+          description: "Remove old unique index after target constraint is active",
+          sql: `DROP INDEX IF EXISTS ${name}`,
+        };
+      }) : []),
     ],
     projections: target.map((schema) => ({ name: schema.metadata.name, projection: schemaTableProjection(schema) })),
+    ...(reviewed ? { reviewedUniqueIndexes } : {}),
   };
   return { ...content, checksum: await sha256(JSON.stringify(content)) };
 }

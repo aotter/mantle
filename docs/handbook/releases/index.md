@@ -34,6 +34,13 @@ running code that expects the new Schema. The new Sites worker trusts identity
 only behind the Sites dispatcher and does not expose a separate `workers.dev`
 URL.
 
+Reviewed Sites unique-index tuple replacement can now generate an immutable
+SQL migration with source/target fingerprints, checksum and an explicit report.
+Local D1 duplicate preflight fails before writing files; production D1 still
+enforces the new constraint when the reviewed migration is applied. Runtime-
+managed CF boot continues to reject uniqueness changes without a reviewed
+artifact path.
+
 Agents installed through `npx skills add aotter/mantle` must still inspect the
 target project's actual SDK version. Published 0.1.4 packages do **not**
 support the new project flags; use their installed docs until deliberately

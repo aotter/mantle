@@ -58,6 +58,22 @@ migration files remain untouched; an unapplied migration keeps the old database
 fingerprint, and managed boot refuses to use an older database. Sites owns
 `.openai/hosting.json` project metadata and production D1 migration delivery.
 
+Replacing a Schema's `uniqueIndexes` tuple requires an explicit reviewed
+migration. With the old local D1 migration applied, edit the Manifest and run
+`npx mantle generate --review-unique-indexes --check` to inspect the proposed
+source/target fingerprints, affected tuples and checksum without writing. Then
+run `npx mantle generate --review-unique-indexes`, review the new
+`drizzle/meta/000N_mantle.review.json` and matching SQL, and apply that SQL
+through the normal Sites D1 migration path. The CLI checks **local D1 only**
+for duplicate target tuples and reports a count and sample before writing;
+inspect production data separately before applying there. SQLite also refuses
+to create the new unique index if production has conflicts; do
+not deploy the target Worker until the migration has succeeded. Old Workers
+cannot safely reactivate after the old uniqueness guarantee is removed.
+This option is limited to managed Sites SQLite and unique tuple changes;
+field conversions and runtime-managed CF boot still reject destructive
+changes.
+
 For a complete article, media, and publishing example, use the
 [Sites reference](../../examples/host-chatgpt-sites/README.md).
 

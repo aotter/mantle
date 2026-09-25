@@ -204,6 +204,12 @@ it("keeps a reduced Sites composition free of Admin and media bindings", async (
   expect(await readFile(".openai/hosting.json", "utf8")).not.toContain("r2");
 });
 
+it("rejects reviewed unique-index migration outside managed Sites", async () => {
+  await project();
+  expect(await runGenerate(["--host", "cf", "--features", "spec,api", "--review-unique-indexes"], coreOnly)).toBe(2);
+  expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("managed ChatGPT Sites"));
+});
+
 it("generates a real empty Spec plan without a host or fake Schema", async () => {
   await project();
   await mkdir("node_modules/@aotter/mantle", { recursive: true });
