@@ -220,6 +220,8 @@ The MCP `inputSchema` is `params.properties` plus `page` and `show` as optional 
 
 A declarative View whose rows carry every field an interaction binds (and `version` when the interaction locks one) appends the interaction to its tool description as a row action, for example `Row actions: review_requisition (id = row.id, expectedVersion = row.version).` Only Procedure tools on the View's own surface are listed. A View without `fields` returns only the reserved entry columns, so it qualifies only for bindings on `id` (and `version`); a SQL View is never bound automatically. See [MCP and agents](../concepts/mcp-and-agents.md).
 
+Admin offers the same staff row actions from each row of the View page, to staff members who may run the operation. The dialog shows the inputs taken from the row, reads the entry through `read_entry` and locks the version the person reviewed. If the entry changed since the list was loaded, the dialog shows what changed and asks for a review before anything is submitted. A conflict keeps the input and asks for the latest version. A write whose outcome is unknown is never retried automatically. `GET /admin/api/views-manifest` lists each View's `rowActions`.
+
 ## REST contract
 
 Pagination uses the two reserved knobs, `?page=` (1-indexed) and `?show=`. The response envelope is:

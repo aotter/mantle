@@ -26,7 +26,7 @@ it("runs a View row action with the reviewed version and asks for a review when 
         const call = message.params!;
         calls.push({ name: call.name, arguments: call.arguments });
         const data = call.name === "read_entry"
-          ? { id: "r1", collection: "requisitions", version: readVersion, data: { item: "Laptops", requestStatus: "submitted" } }
+          ? { id: "r1", collection: "requisitions", version: readVersion, data: { item: readVersion > 3 ? "Laptops ×2" : "Laptops", requestStatus: "submitted" } }
           : { id: "r1", version: readVersion + 1 };
         return route.fulfill({ json: { jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data } } });
       }
@@ -78,6 +78,6 @@ it("runs a View row action with the reviewed version and asks for a review when 
     await dialog.getByRole("button", { name: "Review newer version" }).click();
     await dialog.getByRole("button", { name: "Run", exact: true }).click();
     await dialog.getByText("Done.", { exact: true }).waitFor();
-    expect(calls.at(-1)!.arguments).toMatchObject({ id: "r1", expectedVersion: 4 });
+    expect(calls[calls.length - 1]!.arguments).toMatchObject({ id: "r1", expectedVersion: 4 });
   } finally { await browser.close(); await server.close(); }
 }, 40_000);
