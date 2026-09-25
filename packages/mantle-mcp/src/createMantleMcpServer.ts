@@ -109,7 +109,7 @@ export function createMantleMcpServer(
       }];
     });
     if (actions.length === 0) return undefined;
-    return { [INTERACTION_META_KEY]: { collection: capability.route.view.spec.from ?? null, rowActions: actions } };
+    return { [INTERACTION_META_KEY]: { view: capability.name, collection: capability.route.view.spec.from ?? null, rowActions: actions } };
   };
   const serverInfo = {
     ...(options.serverInfo ?? { name: "aotter.mantle" }),

@@ -1,0 +1,34 @@
+@import "tailwindcss";
+@source "../react/**/*.tsx";
+@source "./**/*.tsx";
+
+/* Mantle tokens resolve to the host's MCP Apps style variables when the host
+   provides them (useHostStyles), and to neutral defaults otherwise. */
+@theme inline {
+  --color-background: var(--color-background-primary, #ffffff);
+  --color-foreground: var(--color-text-primary, #18181b);
+  --color-muted: var(--color-background-secondary, #f4f4f5);
+  --color-muted-foreground: var(--color-text-secondary, #52525b);
+  --color-border: var(--color-border-primary, #e4e4e7);
+  --color-destructive: var(--color-text-danger, #b91c1c);
+  --color-primary: var(--color-background-inverse, #18181b);
+  --color-primary-foreground: var(--color-text-inverse, #fafafa);
+  --font-sans: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  body { background: var(--color-background); color: var(--color-foreground); font-family: var(--font-sans); margin: 0; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-background-primary: #18181b;
+      --color-text-primary: #fafafa;
+      --color-background-secondary: #27272a;
+      --color-text-secondary: #a1a1aa;
+      --color-border-primary: #3f3f46;
+      --color-text-danger: #f87171;
+      --color-background-inverse: #fafafa;
+      --color-text-inverse: #18181b;
+    }
+  }
+}

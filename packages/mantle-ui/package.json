@@ -25,7 +25,12 @@
       "types": "./dist/controller/index.d.ts",
       "import": "./dist/controller/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./mcp-app/interaction.html": "./dist/mcp-app/interaction.html",
+    "./mcp-app": {
+      "types": "./dist/mcp-app/index.d.ts",
+      "import": "./dist/mcp-app/index.js"
+    }
   },
   "files": [
     "dist",
@@ -33,7 +38,7 @@
   ],
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json",
+    "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json",
     "test": "vitest run"
   },
@@ -46,12 +51,18 @@
     }
   },
   "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "catalog:",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3",
     "typescript": "catalog:",
+    "vite": "^8.2.2",
+    "vite-plugin-singlefile": "^2.3.0",
     "vitest": "catalog:"
   }
 }

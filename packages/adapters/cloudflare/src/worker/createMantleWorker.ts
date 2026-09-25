@@ -32,6 +32,7 @@ import {
 } from "../mount/bootRuntimeOnce.js";
 import type { MantleCloudflareConfig } from "../mount/cmsConfig.js";
 import { createMcpApiHandler } from "../mount/mountMcp.js";
+import type { MantleMcpApps } from "@aotter/mantle-mcp";
 import { mountAdmin } from "../mount/mountAdmin.js";
 import { withFrontendCors } from "../mount/frontendCors.js";
 import { mountRuntimeEndpoints } from "../mount/mountRuntimeEndpoints.js";
@@ -144,6 +145,9 @@ export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
   readonly plan: RuntimePlan;
   /** Omit unselected HTTP surfaces in generated progressive applications. */
   readonly surfaces?: { readonly api?: boolean; readonly mcp?: boolean; readonly admin?: boolean };
+  /** MCP Apps UI resources per MCP surface (ADR-0029 D7), for example
+   *  `interactionAppResource()` from `@aotter/mantle-ui/mcp-app`. */
+  readonly mcpApps?: { readonly public?: MantleMcpApps; readonly staff?: MantleMcpApps };
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly siteDefaults?: SiteDefaults | ((env: Env) => SiteDefaults);
   /** Stable deployment/site identifier used by public cache tags and optional KV. */
@@ -263,7 +267,10 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     if (options.surfaces?.admin !== false && bindings.adminAssets) mountAdmin(app, ref, bindings.adminAssets);
     if (options.surfaces?.mcp !== false) {
       const mcpResource = auth.mcpResource ?? conventionalMcpResource(env);
-      const publicMcp = createMcpApiHandler<Env>({ ref, surface: "public", resource: mcpResource });
+      const publicMcp = createMcpApiHandler<Env>({
+        ref, surface: "public", resource: mcpResource,
+        ...(options.mcpApps?.public ? { apps: options.mcpApps.public } : {}),
+      });
       app.all("/mcp", (c) => publicMcp.fetch!(
         c.req.raw as Parameters<NonNullable<typeof publicMcp.fetch>>[0],
         c.env,
@@ -271,7 +278,10 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       ));
       if (options.surfaces?.admin !== false) {
         mountMantleOAuth(app, { auth, assets: bindings.adminAssets });
-        const staffMcp = createMcpApiHandler<Env>({ ref, surface: "staff", resource: mcpResource });
+        const staffMcp = createMcpApiHandler<Env>({
+          ref, surface: "staff", resource: mcpResource,
+          ...(options.mcpApps?.staff ? { apps: options.mcpApps.staff } : {}),
+        });
         app.all("/mcp/staff", (c) => staffMcp.fetch!(
           c.req.raw as Parameters<NonNullable<typeof staffMcp.fetch>>[0],
           c.env,
