@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import {
   buildSqliteMigrationArtifact,
+  renderSqliteManagedMigration,
   verifySqliteMigrationArtifact,
 } from "../src/infrastructure/storage/SqliteMigrationArtifact.js";
 import { splitSqlStatements } from "../src/infrastructure/boot/SqliteMigrationRunner.js";
@@ -65,6 +66,25 @@ describe("SQLite migration artifacts", () => {
     db.close();
   });
 
+  it("renders guarded managed migrations without advancing a mismatched marker", async () => {
+    const db = new DatabaseSync(":memory:");
+    const first = await buildSqliteMigrationArtifact([], [schema({ title: { type: "string" } })]);
+    db.exec(renderSqliteManagedMigration(first));
+    const second = await buildSqliteMigrationArtifact(
+      [schema({ title: { type: "string" } })],
+      [schema({ title: { type: "string" }, rank: { type: "integer" } })],
+      { appliedMigrationIds: first.migrations.map(({ id }) => id) },
+    );
+    db.exec(renderSqliteManagedMigration(second, { canonicalVersion: first.targetCanonicalVersion }));
+    expect(db.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id=1").get()?.fingerprint)
+      .toBe(second.targetFingerprint);
+    db.exec("UPDATE _mantle_storage_state SET fingerprint='unexpected' WHERE id=1");
+    expect(() => db.exec(renderSqliteManagedMigration(second, { canonicalVersion: first.targetCanonicalVersion })))
+      .toThrow();
+    expect(db.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id=1").get()?.fingerprint).toBe("unexpected");
+    db.close();
+  });
+
   it("marks unsupported conversions for rebuild and detects mutation", async () => {
     const before = schema({ title: { type: "string" } });
     const after = schema({ title: { type: "integer" } });
@@ -90,6 +110,10 @@ describe("SQLite migration artifacts", () => {
     await expect(buildSqliteMigrationArtifact([], [{ ...schema({ title: { type: "string" } }), metadata: { name: "entries" } }]))
       .rejects.toThrow("reserved SQLite table");
     await expect(buildSqliteMigrationArtifact([], [{ ...schema({ title: { type: "string" } }), metadata: { name: "session" } }]))
+      .rejects.toThrow("reserved SQLite table");
+    await expect(buildSqliteMigrationArtifact([], [{ ...schema({ title: { type: "string" } }), metadata: { name: "sites_users" } }]))
+      .rejects.toThrow("reserved SQLite table");
+    await expect(buildSqliteMigrationArtifact([], [{ ...schema({ title: { type: "string" } }), metadata: { name: "d1_migrations" } }]))
       .rejects.toThrow("reserved SQLite table");
     await expect(buildSqliteMigrationArtifact([], [schema({ _mantle_id: { type: "string" } })]))
       .rejects.toThrow("reserved SQLite namespace");

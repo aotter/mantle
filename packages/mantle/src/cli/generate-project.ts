@@ -91,14 +91,16 @@ export async function prepareProject(options: ProjectOptions): Promise<ProjectDe
       throw new Error(`package.json declares ${name}@${actual}; expected exact ${expected}. Review this conflict before generating.`);
     }
     if (!actual) {
-      if (["wrangler", "typescript", "@cloudflare/workers-types"].includes(name)) devDependencies[name] = expected;
+      if (["wrangler", "typescript", "@cloudflare/workers-types", "esbuild"].includes(name)) devDependencies[name] = expected;
       else dependencies[name] = expected;
       packageChanged = true;
     }
   }
   const scripts = { ...((pkg.scripts ?? {}) as Record<string, string>) };
   const requiredScripts = { generate: "mantle generate", "generate:check": "mantle generate --check",
-    ...(selection.host === "cf" ? { dev: "wrangler dev --local --ip 127.0.0.1 --port 8787", deploy: "wrangler deploy", typecheck: "tsc --noEmit", build: "mantle generate && tsc --noEmit" } : {}) };
+    ...(selection.host === "cf" ? { dev: "wrangler dev --local --ip 127.0.0.1 --port 8787", deploy: "wrangler deploy", typecheck: "tsc --noEmit", build: "mantle generate && tsc --noEmit" } : {}),
+    ...(selection.host === "chatgpt-sites" ? { dev: "wrangler dev --local --ip 127.0.0.1 --port 4174", typecheck: "tsc --noEmit", build: "node scripts/build.mjs",
+      ...(selection.features.includes("admin") ? { "smoke:local": "node scripts/smoke-local.mjs" } : {}) } : {}) };
   for (const [name, expected] of Object.entries(requiredScripts)) {
     if (scripts[name] && scripts[name] !== expected) {
       if (name === "generate" || name === "generate:check") throw new Error(`package.json scripts.${name} conflicts with generated command ${expected}.`);
@@ -209,11 +211,12 @@ function requiredPackages(selection: ProjectSelection, version: string): Record<
     required["aws4fetch"] = "^1.0.20";
   }
   if (selection.host === "cf" && selection.features.includes("admin")) required["@aotter/mantle-auth"] = version;
-  if (selection.host === "cf") {
+  if (selection.host === "cf" || selection.host === "chatgpt-sites") {
     required.wrangler = "4.129.0";
     required.typescript = "^6.0.3";
     required["@cloudflare/workers-types"] = "5.20260904.1";
   }
+  if (selection.host === "chatgpt-sites") required.esbuild = "^0.28.0";
   return required;
 }
 

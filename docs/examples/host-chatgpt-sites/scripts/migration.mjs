@@ -1,5 +1,5 @@
 // Append a reviewed D1 migration only after the previous one is applied locally.
-import { buildSqliteMigrationArtifact, splitSqlStatements } from '@aotter/mantle/runtime';
+import { buildSqliteMigrationArtifact, renderSqliteManagedMigration } from '@aotter/mantle/runtime';
 import { parseManifestSources, ValidateManifestsUseCase } from '@aotter/mantle/spec';
 import { execFileSync } from 'node:child_process';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
@@ -30,13 +30,7 @@ const version=versionTable?(JSON.parse(execFileSync('node',['node_modules/wrangl
 if(version!==null&&version!==state.canonicalVersion)throw Error(`Local D1 runtime version ${version} does not match migration source ${state.canonicalVersion}.`);
 if(version===null&&state.canonicalVersion!=='0005-store-instance-id')throw Error('Local D1 is missing the managed runtime version marker. Apply pending migrations first.');
 if(unchanged){console.log('D1 migrations are current.');process.exit(0);}
-const quote=value=>`'${value.replaceAll("'","''")}'`;
-const sql=[
-  ...artifact.migrations.flatMap(m=>splitSqlStatements(m.sql).map(s=>s+';')),
-  ...artifact.projections.map(p=>`INSERT INTO _mantle_schema_tables(name,projection) VALUES (${quote(p.name)},${quote(p.projection)}) ON CONFLICT(name) DO UPDATE SET projection=excluded.projection;`),
-  `INSERT INTO _mantle_managed_runtime_state(id,canonical_version) VALUES (1,${version===null?quote(artifact.targetCanonicalVersion):`(SELECT CASE WHEN canonical_version=${quote(state.canonicalVersion)} THEN ${quote(artifact.targetCanonicalVersion)} ELSE NULL END FROM _mantle_managed_runtime_state WHERE id=1)`}) ON CONFLICT(id) DO UPDATE SET canonical_version=excluded.canonical_version;`,
-  `INSERT INTO _mantle_storage_state(id,fingerprint) VALUES (1,(SELECT CASE WHEN fingerprint=${quote(artifact.sourceFingerprint)} THEN ${quote(artifact.targetFingerprint)} ELSE NULL END FROM _mantle_storage_state WHERE id=1)) ON CONFLICT(id) DO UPDATE SET fingerprint=excluded.fingerprint;`,
-].join('\n--> statement-breakpoint\n')+'\n';
+const sql=renderSqliteManagedMigration(artifact,{canonicalVersion:state.canonicalVersion});
 const index=state.lastIndex+1;
 const path=`drizzle/${String(index).padStart(4,'0')}_mantle.sql`;
 const journalPath='drizzle/meta/_journal.json';

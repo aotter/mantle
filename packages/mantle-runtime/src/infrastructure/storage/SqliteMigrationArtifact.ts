@@ -1,6 +1,7 @@
 import type { SchemaManifest } from "@aotter/mantle-spec";
 import type { Migration } from "../../domain/port/DatabaseDriver.js";
 import { CANONICAL_MIGRATIONS } from "../boot/canonicalMigrations.js";
+import { splitSqlStatements } from "../boot/SqliteMigrationRunner.js";
 import {
   isAdditiveSchemaTableChange,
   schemaTableMigrations,
@@ -62,6 +63,27 @@ export async function buildSqliteMigrationArtifact(
 export async function verifySqliteMigrationArtifact(artifact: SqliteMigrationArtifact): Promise<void> {
   const { checksum, ...content } = artifact;
   if (await sha256(JSON.stringify(content)) !== checksum) throw new Error("SQLite migration artifact checksum mismatch.");
+}
+
+/** Render a managed SQLite migration; deployment applies this file, not Runtime boot. */
+export function renderSqliteManagedMigration(
+  artifact: SqliteMigrationArtifact,
+  source?: { readonly canonicalVersion: string },
+): string {
+  const quote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+  const version = source?.canonicalVersion && source.canonicalVersion >= "0006-managed-runtime-version"
+    ? `(SELECT CASE WHEN canonical_version=${quote(source.canonicalVersion)} THEN ${quote(artifact.targetCanonicalVersion)} ELSE NULL END FROM _mantle_managed_runtime_state WHERE id=1)`
+    : quote(artifact.targetCanonicalVersion);
+  const fingerprint = source
+    ? `(SELECT CASE WHEN fingerprint=${quote(artifact.sourceFingerprint)} THEN ${quote(artifact.targetFingerprint)} ELSE NULL END FROM _mantle_storage_state WHERE id=1)`
+    : quote(artifact.targetFingerprint);
+  return [
+    ...artifact.migrations.flatMap(({ sql }) => splitSqlStatements(sql).map((statement) => `${statement};`)),
+    ...artifact.projections.map(({ name, projection }) =>
+      `INSERT INTO _mantle_schema_tables(name,projection) VALUES (${quote(name)},${quote(projection)}) ON CONFLICT(name) DO UPDATE SET projection=excluded.projection;`),
+    `INSERT INTO _mantle_managed_runtime_state(id,canonical_version) VALUES (1,${version}) ON CONFLICT(id) DO UPDATE SET canonical_version=excluded.canonical_version;`,
+    `INSERT INTO _mantle_storage_state(id,fingerprint) VALUES (1,${fingerprint}) ON CONFLICT(id) DO UPDATE SET fingerprint=excluded.fingerprint;`,
+  ].join("\n--> statement-breakpoint\n") + "\n";
 }
 
 export async function storageFingerprint(schemas: Iterable<SchemaManifest>): Promise<string> {

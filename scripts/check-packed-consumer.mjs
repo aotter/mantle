@@ -146,6 +146,7 @@ try {
   run("pnpm", ["run", "build"], generated);
   run("pnpm", ["exec", "mantle", "generate", "--check"], generated);
   await smokeGenerated(generated);
+  await smokeGeneratedSites(temp, tarballs, version);
   complete = true;
   console.log(JSON.stringify({
     core_sha: coreSha,
@@ -192,6 +193,154 @@ async function smokeGenerated(directory) {
   } finally {
     child.kill("SIGTERM");
     await new Promise((resolve) => {
+      if (child.exitCode !== null) { resolve(); return; }
+      const timer = setTimeout(() => { child.kill("SIGKILL"); resolve(); }, 5_000);
+      child.once("exit", () => { clearTimeout(timer); resolve(); });
+    });
+  }
+}
+
+async function smokeGeneratedSites(temp, tarballs, version) {
+  const directory = join(temp, "generated-sites");
+  mkdirSync(directory);
+  writeFileSync(join(directory, "package.json"), `${JSON.stringify({
+    name: "generated-sites-smoke", private: true, type: "module",
+    packageManager: JSON.parse(readFileSync(join(root, "package.json"), "utf8")).packageManager,
+    dependencies: {
+      ...Object.fromEntries([...tarballs.keys()].filter((name) => name === "@aotter/mantle" ||
+        ["@aotter/mantle-cloudflare", "@aotter/mantle-admin", "@aotter/mantle-admin-ui", "@aotter/mantle-web"].includes(name))
+        .map((name) => [name, version])),
+      zod: "^4.5.0", hono: "^4.12.0", "better-auth": "1.7.2", aws4fetch: "^1.0.20",
+    },
+    devDependencies: { wrangler: "4.129.0", typescript: "^6.0.3", "@cloudflare/workers-types": "5.20260904.1", esbuild: "^0.28.0" },
+    pnpm: { overrides: Object.fromEntries([...tarballs].map(([name, path]) => [name, `file:${path}`])),
+      peerDependencyRules: { allowAny: [...tarballs.keys()] } },
+  }, null, 2)}\n`);
+  run("pnpm", ["install", "--no-frozen-lockfile"], directory);
+  run("pnpm", ["exec", "mantle", "generate", "--host", "chatgpt-sites"], directory);
+  let remoteRejected = false;
+  try {
+    execFileSync("node", ["scripts/smoke-local.mjs"], { cwd: directory, env: {
+      ...process.env, MANTLE_TEST_ORIGIN: "https://example.com", MANTLE_TEST_OWNER_EMAIL: "owner@example.test",
+    }, stdio: "pipe" });
+  } catch { remoteRejected = true; }
+  if (!remoteRejected) throw new Error("Sites identity simulator accepted a remote origin");
+  const initial = readFileSync(join(directory, "drizzle/0000_mantle.sql"), "utf8");
+  const initialState = readFileSync(join(directory, "drizzle/meta/mantle-state.json"), "utf8");
+  const initialFingerprint = readFileSync(join(directory, "src/storage-fingerprint.json"), "utf8");
+  const hosting = JSON.parse(readFileSync(join(directory, ".openai/hosting.json"), "utf8"));
+  if (hosting.d1 !== "DB" || hosting.r2 || hosting.project_id) throw new Error("Generated Sites hosting metadata is invalid");
+  run("pnpm", ["run", "build"], directory);
+  run("pnpm", ["exec", "wrangler", "d1", "migrations", "apply", "generated-sites", "--local"], directory);
+  writeFileSync(join(directory, ".dev.vars"), "OWNER_EMAIL=owner@example.test\nPUBLIC_ORIGIN=http://127.0.0.1:18791\n");
+  await withSitesWorker(directory, async origin => {
+    execFileSync("pnpm", ["run", "smoke:local"], { cwd: directory, stdio: "inherit", env: {
+      ...process.env, MANTLE_TEST_ORIGIN: origin, MANTLE_TEST_OWNER_EMAIL: "owner@example.test",
+    } });
+  });
+
+  mkdirSync(join(directory, "manifests"));
+  writeFileSync(join(directory, "manifests/site.yaml"), sitesManifest(false));
+  writeFileSync(join(directory, "src/handlers.ts"), `import type { AnyHandler } from '@aotter/mantle/runtime';\nexport const handlers: Record<string, AnyHandler> = { echo: input => input };\n`);
+  run("pnpm", ["exec", "mantle", "generate"], directory);
+  run("pnpm", ["exec", "wrangler", "d1", "migrations", "apply", "generated-sites", "--local"], directory);
+  writeFileSync(join(directory, "drizzle/meta/mantle-state.json"), initialState);
+  writeFileSync(join(directory, "src/storage-fingerprint.json"), initialFingerprint);
+  run("pnpm", ["exec", "mantle", "generate"], directory);
+  run("pnpm", ["run", "build"], directory);
+  let entryId;
+  await withSitesWorker(directory, async origin => {
+    const owner = { "oai-authenticated-user-id": "mantle-local-owner", "oai-authenticated-user-email": "owner@example.test" };
+    const call = (path, body) => fetch(`${origin}${path}`, body === undefined ? {} : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    let response = await call("/api/echo", { value: "ok" });
+    if (response.status !== 200 || (await response.json()).data.value !== "ok") throw new Error("Sites HTTP Trigger did not invoke the handler");
+    response = await call("/api/echo", { value: 42 });
+    if (response.status !== 400) throw new Error("Sites HTTP Trigger validation status was not 400");
+    const mcp = (path, method, params) => fetch(`${origin}${path}`, { method: "POST", headers: { ...owner,
+      "content-type": "application/json", "mcp-protocol-version": "2025-11-25" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, ...(params ? { params } : {}) }) });
+    response = await mcp("/api/mcp/staff", "tools/call", { name: "create_draft_posts", arguments: { title: "Kept" } });
+    if (response.status !== 200) throw new Error(`Sites staff MCP call failed: ${response.status}`);
+    const body = await response.json();
+    entryId = JSON.parse(body.result.content[0].text).id;
+    response = await fetch(`${origin}/api/views/published-posts`);
+    if (response.status !== 200 || (await response.json()).data.rows.length !== 0) throw new Error("Draft leaked into public View");
+    response = await fetch(`${origin}/admin/api/entries/${entryId}?collection=posts`, { headers: owner });
+    if (response.status !== 200 || (await response.json()).entry.data.title !== "Kept") throw new Error("Staff MCP draft was not persisted");
+  });
+
+  writeFileSync(join(directory, "manifests/site.yaml"), sitesManifest(true));
+  run("pnpm", ["exec", "mantle", "generate"], directory);
+  run("pnpm", ["exec", "wrangler", "d1", "migrations", "apply", "generated-sites", "--local"], directory);
+  run("pnpm", ["run", "build"], directory);
+  run("pnpm", ["exec", "mantle", "generate", "--check"], directory);
+  if (readFileSync(join(directory, "drizzle/0000_mantle.sql"), "utf8") !== initial) throw new Error("Sites generator replaced an applied migration");
+  await withSitesWorker(directory, async origin => {
+    const response = await fetch(`${origin}/admin/api/entries/${entryId}?collection=posts`, { headers: {
+      "oai-authenticated-user-id": "mantle-local-owner", "oai-authenticated-user-email": "owner@example.test",
+    } });
+    if (response.status !== 200 || (await response.json()).entry.data.title !== "Kept") throw new Error("Sites additive migration lost existing data");
+  });
+}
+
+function sitesManifest(rank) {
+  return `apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  schema:
+    type: object
+    properties:
+      title: { type: string }
+${rank ? "      rank: { type: integer }\n" : ""}---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: published-posts }
+spec:
+  surface: public
+  from: posts
+  fields: [id, title]
+  filter: { eq: { field: status, value: published } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: echo }
+spec:
+  input: { type: object, required: [value], properties: { value: { type: string } } }
+  output: { type: object, properties: { value: { type: string } } }
+  handler: { kind: ref, ref: echo }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: echo-http }
+spec:
+  source: { kind: http, method: POST, path: /api/echo }
+  target: { procedure: echo }
+`;
+}
+
+async function withSitesWorker(directory, probe) {
+  const origin = "http://127.0.0.1:18791";
+  const child = spawn("pnpm", ["exec", "wrangler", "dev", "--local", "--ip", "127.0.0.1", "--port", "18791", "--inspector-port", "0"], {
+    cwd: directory, env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" }, stdio: ["ignore", "pipe", "pipe"],
+  });
+  let logs = "";
+  child.stdout.on("data", chunk => { logs += String(chunk); });
+  child.stderr.on("data", chunk => { logs += String(chunk); });
+  try {
+    let ready = false;
+    for (let attempt = 0; attempt < 120; attempt++) {
+      if (child.exitCode !== null) throw new Error(`generated Sites Worker exited ${child.exitCode}\n${logs}`);
+      try { ready = (await fetch(`${origin}/health`)).status === 200; } catch { /* starting */ }
+      if (ready) break;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    if (!ready) throw new Error(`generated Sites Worker did not start\n${logs}`);
+    await probe(origin);
+  } finally {
+    child.kill("SIGTERM");
+    await new Promise(resolve => {
       if (child.exitCode !== null) { resolve(); return; }
       const timer = setTimeout(() => { child.kill("SIGKILL"); resolve(); }, 5_000);
       child.once("exit", () => { clearTimeout(timer); resolve(); });

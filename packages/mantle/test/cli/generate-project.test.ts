@@ -124,6 +124,85 @@ it("repairs required project files after an interrupted first run", async () => 
   }
 });
 
+it("generates a blank Sites app with an immutable initial D1 migration", async () => {
+  const root = await project();
+  expect(await runGenerate(["--host", "chatgpt-sites"], coreOnly)).toBe(1);
+  expect(await readFile("src/home.ts", "utf8")).toContain("<main></main>");
+  expect(await readFile(".openai/hosting.json", "utf8")).toBe('{"d1":"DB"}\n');
+  expect(await readFile("drizzle/0000_mantle.sql", "utf8")).toContain("_mantle_managed_runtime_state");
+  expect(await readFile("drizzle/0000_mantle.sql", "utf8")).toContain("CREATE TABLE sites_users");
+  expect(await readFile(".mantle/generated/worker.ts", "utf8")).toContain("createMantleRequestHandler");
+  expect(await readFile(".mantle/generated/worker.ts", "utf8")).not.toContain("oai-authenticated-user-id");
+  expect(await readFile("scripts/smoke-local.mjs", "utf8")).toContain("loopback-only");
+  const pkg = JSON.parse(await readFile("package.json", "utf8"));
+  expect(pkg.scripts.build).toBe("node scripts/build.mjs");
+  expect(pkg.scripts["smoke:local"]).toBe("node scripts/smoke-local.mjs");
+  expect(pkg.dependencies["@aotter/mantle-admin-ui"]).toBe(version);
+  for (const [name, declared] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies } as Record<string, string>)) {
+    const path = join(root, "node_modules", name);
+    await mkdir(path, { recursive: true });
+    await writeFile(join(path, "package.json"), JSON.stringify({
+      version: name.startsWith("@aotter/") ? declared : "0.0.0",
+      ...(name === "@aotter/mantle-admin-ui" ? { exports: { "./index.html": "./dist/index.html" } } : {}),
+    }));
+  }
+  await mkdir("node_modules/@aotter/mantle-admin-ui/dist", { recursive: true });
+  await writeFile("node_modules/@aotter/mantle-admin-ui/dist/index.html", "admin");
+  expect(await runGenerate([])).toBe(0);
+  expect(await runGenerate(["--check"])).toBe(0);
+  await writeFile("src/home.ts", "export const customHome = true;\n");
+  await writeFile(".openai/hosting.json", '{"d1":"DB","project_id":"sites-owned"}\n');
+  const wrangler = JSON.parse(await readFile("wrangler.jsonc", "utf8"));
+  wrangler.d1_databases[0].database_name = "custom-local-db";
+  await writeFile("wrangler.jsonc", `${JSON.stringify(wrangler, null, 2)}\n`);
+  expect(await runGenerate([])).toBe(0);
+  expect(await readFile("src/home.ts", "utf8")).toBe("export const customHome = true;\n");
+  expect(await readFile(".openai/hosting.json", "utf8")).toContain("sites-owned");
+  expect(await readFile("wrangler.jsonc", "utf8")).toContain("custom-local-db");
+});
+
+it("refuses to adopt unrelated Sites migrations and resumes its own first write", async () => {
+  await project();
+  await mkdir("drizzle/meta", { recursive: true });
+  await writeFile("drizzle/0000_existing.sql", "CREATE TABLE existing (id TEXT);\n");
+  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites", "--features", "spec,api"], coreOnly)).toBe(2);
+  expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("cannot be adopted"));
+  await rm("drizzle/0000_existing.sql");
+  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites", "--features", "spec,api"], coreOnly)).toBe(1);
+  const sql = await readFile("drizzle/0000_mantle.sql", "utf8");
+  await rm("drizzle/meta/mantle-state.json");
+  await rm("src/storage-fingerprint.json");
+  expect(await runGenerate([], coreOnly)).toBe(1);
+  expect(await readFile("drizzle/0000_mantle.sql", "utf8")).toBe(sql);
+  expect(await readFile("drizzle/meta/mantle-state.json", "utf8")).toContain('"lastIndex": 0');
+});
+
+it("requires adopted Sites Admin Workers to remain behind Sites identity", async () => {
+  await project();
+  await mkdir("src");
+  await writeFile("src/index.ts", 'export { default } from "../.mantle/generated/worker.js";\n');
+  const config = { main: "dist/server/index.js", assets: { binding: "ASSETS" },
+    d1_databases: [{ binding: "DB", database_name: "local", migrations_dir: "drizzle" }], workers_dev: true };
+  await writeFile("wrangler.jsonc", JSON.stringify(config));
+  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites"], coreOnly)).toBe(2);
+  expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("workers_dev=false"));
+  await writeFile("wrangler.jsonc", JSON.stringify({ ...config, workers_dev: false, routes: ["example.com/*"] }));
+  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites"], coreOnly)).toBe(2);
+  await writeFile("wrangler.jsonc", JSON.stringify({ ...config, workers_dev: false }, null, 2));
+  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites"], coreOnly)).toBe(1);
+});
+
+it("keeps a reduced Sites composition free of Admin and media bindings", async () => {
+  await project();
+  expect(await runGenerate(["--host", "chatgpt-sites", "--features", "spec,api"], coreOnly)).toBe(1);
+  const pkg = JSON.parse(await readFile("package.json", "utf8"));
+  expect(pkg.dependencies["@aotter/mantle-admin-ui"]).toBeUndefined();
+  expect(pkg.scripts["smoke:local"]).toBeUndefined();
+  expect(await readFile("drizzle/0000_mantle.sql", "utf8")).not.toContain("CREATE TABLE sites_users");
+  expect(await readFile("wrangler.jsonc", "utf8")).not.toContain("ASSETS");
+  expect(await readFile(".openai/hosting.json", "utf8")).not.toContain("r2");
+});
+
 it("generates a real empty Spec plan without a host or fake Schema", async () => {
   await project();
   await mkdir("node_modules/@aotter/mantle", { recursive: true });
