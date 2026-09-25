@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Diagnostic } from "@aotter/mantle-spec";
 import {
   createInteractionController,
   type EntrySnapshot,
+  type InteractionDiagnostic as Diagnostic,
   type InteractionControllerOptions,
   type InvokeOutcome,
 } from "../src/controller/index.js";
@@ -144,7 +144,7 @@ describe("createInteractionController", () => {
   it("does not submit against an unconfirmed version after a failed read", async () => {
     const { controller: c, invoke } = controller({ read: async () => { throw new Error("offline"); } });
     await c.open();
-    expect(c.getSnapshot()).toMatchObject({ phase: "failed", error: expect.any(Error) });
+    expect(c.getSnapshot()).toMatchObject({ phase: "unreadable", error: expect.any(Error) });
     await c.submit();
     expect(invoke).not.toHaveBeenCalled();
   });
@@ -177,6 +177,121 @@ describe("createInteractionController", () => {
     expect(c.getSnapshot()).not.toBe(before);
     unsubscribe();
     c.edit("note", "x");
-    expect(seen).toEqual(["loading", "ready"]);
+    expect(seen).toEqual(["loading", "loading", "ready"]);
+  });
+
+  it("treats a runtime OUTCOME_UNKNOWN or partial failure as uncertain, never retryable", async () => {
+    for (const diagnostic of [
+      { code: "OUTCOME_UNKNOWN", message: "Unknown." },
+      { code: "PROVIDER_FAILED", message: "Partial.", failure: { outcome: "partial", retry: "reconcile" } },
+    ]) {
+      const invoke = vi.fn(async (): Promise<InvokeOutcome> => ({ ok: false, diagnostics: [diagnostic] }));
+      const { controller: c } = controller({ invoke });
+      await c.open();
+      await c.submit();
+      expect(c.getSnapshot()).toMatchObject({ phase: "uncertain", diagnostics: [diagnostic] });
+      await c.submit();
+      expect(invoke).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("rebases untouched prefilled fields onto a newer review and flags contested edits", async () => {
+    const read = vi.fn(async () => entry(3));
+    const { controller: c, invoke } = controller({ read, initialInput: { requestStatus: "submitted", note: "" } });
+    await c.open();
+    c.edit("requestStatus", "approved");
+    read.mockResolvedValueOnce(entry(4, { note: "added by someone else", requestStatus: "rejected" }));
+    await c.refresh();
+    expect(c.getSnapshot().contested).toEqual(["requestStatus"]);
+    expect(c.latestChanges()).toEqual(expect.arrayContaining([
+      { field: "note", before: "", after: "added by someone else" },
+    ]));
+    c.review();
+    expect(c.getSnapshot().draft).toEqual({ requestStatus: "approved", note: "added by someone else" });
+    await c.submit();
+    expect(invoke.mock.calls[0]![0]).toMatchObject({ note: "added by someone else", requestStatus: "approved", expectedVersion: 4 });
+  });
+
+  it("keeps an uncertain write uncertain without a read until the person acknowledges it", async () => {
+    const invoke = vi.fn(async (): Promise<InvokeOutcome> => { throw new Error("timeout"); });
+    const c = createInteractionController({ interaction: review, row, invoke });
+    await c.open();
+    await c.submit();
+    await c.reread();
+    expect(c.getSnapshot().phase).toBe("uncertain");
+    c.acknowledgeUncertain();
+    expect(c.getSnapshot().phase).toBe("ready");
+  });
+
+  it("keeps working when a listener throws", async () => {
+    const reported = vi.fn();
+    const original = globalThis.queueMicrotask;
+    globalThis.queueMicrotask = (task) => { try { task(); } catch (error) { reported(error); } };
+    try {
+      const { controller: c, invoke } = controller();
+      c.subscribe(() => { throw new Error("render bug"); });
+      await c.open();
+      await c.submit();
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(c.getSnapshot().phase).toBe("succeeded");
+      expect(reported).toHaveBeenCalled();
+    } finally {
+      globalThis.queueMicrotask = original;
+    }
+  });
+
+  it("records a failed background refresh without blocking submit, and exposes reading", async () => {
+    const read = vi.fn(async () => entry(3));
+    const { controller: c, invoke } = controller({ read });
+    await c.open();
+    read.mockRejectedValueOnce(new Error("blip"));
+    const refreshing = c.refresh();
+    expect(c.getSnapshot().reading).toBe(true);
+    await refreshing;
+    expect(c.getSnapshot()).toMatchObject({ phase: "ready", reading: false, error: expect.any(Error) });
+    await c.submit();
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns to ready when a refresh confirms the reviewed version, and ignores older reads", async () => {
+    const read = vi.fn(async () => entry(5));
+    const { controller: c } = controller({ read });
+    await c.open();
+    expect(c.getSnapshot().phase).toBe("changedSinceList");
+    read.mockResolvedValueOnce(entry(4));
+    await c.refresh();
+    expect(c.getSnapshot().latest).toMatchObject({ version: 5 });
+    read.mockResolvedValueOnce(entry(3));
+    await c.refresh();
+    expect(c.getSnapshot()).toMatchObject({ phase: "changedSinceList", latest: { version: 5 } });
+  });
+
+  it("rejects a read of a different entry", async () => {
+    const { controller: c, invoke } = controller({ read: async () => ({ id: "r2", version: 3, data: {} }) });
+    await c.open();
+    expect(c.getSnapshot()).toMatchObject({ phase: "unreadable", error: expect.any(Error) });
+    await c.submit();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("refuses a construction that could only submit unbound values", () => {
+    const invoke = async (): Promise<InvokeOutcome> => ({ ok: true, data: {} });
+    expect(() => createInteractionController({ interaction: review, invoke })).toThrow(/does not carry/u);
+    expect(() => createInteractionController({ interaction: { bind: [{ input: "sku", field: "sku" }], version: "expectedVersion" }, row: { sku: "A" }, invoke }))
+      .toThrow(/needs a `read`/u);
+  });
+
+  it("shows a non-version refusal again after a conflict reread finds the same version", async () => {
+    const invoke = vi.fn(async (): Promise<InvokeOutcome> => ({ ok: false, diagnostics: [conflict] }));
+    const { controller: c } = controller({ invoke });
+    await c.open();
+    await c.submit();
+    await c.reread();
+    expect(c.getSnapshot()).toMatchObject({ phase: "failed", diagnostics: [conflict] });
+  });
+
+  it("drops bound and version keys from the initial input", () => {
+    const { controller: c } = controller({ initialInput: { id: "x", expectedVersion: 1, note: "n" } });
+    expect(c.getSnapshot().draft).toEqual({ note: "n" });
   });
 });

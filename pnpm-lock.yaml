@@ -531,12 +531,6 @@ importers:
 
   packages/mantle-ui:
     devDependencies:
-      '@aotter/mantle-runtime':
-        specifier: workspace:*
-        version: link:../mantle-runtime
-      '@aotter/mantle-spec':
-        specifier: workspace:*
-        version: link:../mantle-spec
       '@types/node':
         specifier: 'catalog:'
         version: 26.1.1
