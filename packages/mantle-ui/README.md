@@ -1,7 +1,12 @@
 # @aotter/mantle-ui
 
-Framework-free interaction logic shared by the Mantle Admin and MCP Apps
-(ADR-0029). The `/controller` subpath takes one operation opened from one
+Shared interaction UI for the Mantle Admin and MCP Apps (ADR-0029). The
+`/controller` subpath is framework-free; the root adds React components on top
+of it (React 19 is an optional peer, needed only for the root).
+
+## Controller
+
+The `/controller` subpath takes one operation opened from one
 row, the version the person reviewed, and one submit. It imports nothing at
 all, not even Mantle types. The shapes it expects (`InteractionBinding`,
 `InteractionDiagnostic`, `EntrySnapshot`) are structural, so a runtime
@@ -44,3 +49,36 @@ Behaviour to rely on:
 - Bound inputs and the version input are not editable. A binding to a field the row lacks is refused at construction, and so is a locking operation with neither a `read` nor a row carrying `id` and `version`.
 - `changes()` lists the draft fields that differ from the reviewed entry, and `dirty` is true while the person's edits are unsaved.
 - A success that arrives after `cancel()` is ignored: the phase stays `uncertain` until a reread shows it.
+
+## Components
+
+```tsx
+import { OperationPanel, createInteractionController } from "@aotter/mantle-ui";
+
+<OperationPanel controller={controller} title="Review requisition" labels={labels} fieldLabel={label}>
+  {/* the host's own inputs, wired to controller.edit */}
+</OperationPanel>
+```
+
+`OperationPanel` composes the parts for a page, a dialog or a chat surface:
+
+- `EntityPreview`: the reviewed entry.
+- `ChangeDiff`: the person's own changes, or what someone else changed.
+- `OperationStatus`: the next step for each phase, with its one action.
+- `OperationOutcome`: the result.
+
+Each part reads only the controller snapshot (`useInteraction`) and calls only
+controller actions. None of them reads a router, a query cache, a transport or
+host globals.
+
+The host supplies:
+
+- **Inputs:** the editable fields, rendered as `children` and wired to
+  `controller.edit`.
+- **Strings:** every string, as `labels` (English defaults in
+  `defaultInteractionLabels`).
+- **Field labels:** a `fieldLabel` function.
+
+Styling uses Tailwind token classes (`bg-muted`, `border`, `text-destructive`,
+`bg-primary`, …) resolved from the host's CSS variables. Add the package
+sources to your Tailwind `@source` so the classes are generated.
