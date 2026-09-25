@@ -1,7 +1,7 @@
 {
   "name": "mantle",
   "description": "Build and embed Mantle applications. Cold start: npx skills add aotter/mantle.",
-  "version": "0.1.4",
+  "version": "0.1.5-alpha.1",
   "author": {
     "name": "Aotter",
     "url": "https://mantle.tools/"
