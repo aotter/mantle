@@ -7,11 +7,28 @@ Conventional Auth is chosen by one variable, `MANTLE_AUTH_MODE`, and fails close
 
 ## Local Admin: email OTP
 
-The local human path does not use `MANTLE_AUTH_MODE` or GitHub. Pass `auth` to `createMantleWorker` with `email-otp`, `ConsoleEmailSender`, and `bootstrapOwner.match: "email"`. The one-time code is printed on the wrangler log. See [Quickstart: local Admin](../start/quickstart-admin.md). `ConsoleEmailSender` is for `wrangler dev` only; production needs a real sender. The official example binds `127.0.0.1:8787` and sets `PUBLIC_ORIGIN` to that origin; Better Auth rejects OTP with `INVALID_ORIGIN` when they diverge from the origin wrangler prints.
+The generated CF app writes `.dev.vars.example`. Copy it to `.dev.vars` for
+local use, then set `MANTLE_AUTH_MODE=local-otp`, the real `ADMIN_EMAIL`, a
+random `BETTER_AUTH_SECRET`, and the exact loopback `PUBLIC_ORIGIN`. It configures
+its email-OTP auth factory only for a
+loopback origin. If you author the Worker yourself, pass `auth` to
+`createMantleWorker` with `email-otp`, `ConsoleEmailSender`, and
+`bootstrapOwner.match: "email"`; that factory does not read the conventional
+mode matrix. The one-time code is printed in wrangler logs. See
+[Quickstart: local Admin](../start/quickstart-admin.md). `ConsoleEmailSender`
+is for `wrangler dev` only; production needs a real sender. Match
+`PUBLIC_ORIGIN` to wrangler's actual `127.0.0.1:8787` origin or Better Auth
+will reject OTP with `INVALID_ORIGIN`.
+
+For production, the generated Worker's local OTP branch is disabled outside
+loopback. Configure the conventional `self-managed` or `hosted` Auth mode,
+including its required provider credentials and `ADMIN_GITHUB_LOGIN`, instead
+of editing the CLI-owned Worker. An application that needs production email
+delivery should author its own Worker Auth factory and real `EmailSender`.
 
 With `auth` set, the mode matrix below is not read. Core still owns `/admin` and `/api/auth/*`.
 
-For production email OTP, keep the custom `createAuth()` factory, replace
+For production email OTP in a manually authored Worker, keep the custom `createAuth()` factory, replace
 `ConsoleEmailSender` with the application's production `EmailSender`, and keep
 `bootstrapOwner: { match: "email", value: <owner email> }`. Store the sender
 credentials and `BETTER_AUTH_SECRET` as Worker secrets. If the application has

@@ -33,7 +33,7 @@ const DEPENDS: Record<Feature, readonly Feature[]> = {
 const BOOTSTRAP = new Set([
   ".git", ".gitignore", ".agent", ".agents", ".claude", ".codex", ".cursor", ".gemini", ".opencode", ".windsurf",
   ".vscode", ".idea", ".skills", "skills", "node_modules", "package.json",
-  "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", "README.md", "AGENTS.md",
+  "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", "skills-lock.json", "README.md", "AGENTS.md",
   ".DS_Store", ".npmrc", ".yarnrc.yml", ".yarn", ".nvmrc", "CLAUDE.md", "LICENSE", ".editorconfig",
 ]);
 

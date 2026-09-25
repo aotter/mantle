@@ -9,19 +9,18 @@ where agents write config and the runtime carries the complexity.
 
 ## Install
 
-Cold start for a new application is the install skill, not a bare npm add:
+An agent can install the small bootstrap skill:
 
 ```sh
 npx skills add aotter/mantle
 ```
 
-To depend on this package in an existing project, pin the exact version
-from `package.json` (currently `0.1.4`):
+For a new application, resolve one published stable version and install it
+exactly. `mantle generate` will declare matching selected packages:
 
 ```bash
-npm install @aotter/mantle
-# or
-pnpm add @aotter/mantle
+MANTLE_VERSION=$(npm view @aotter/mantle@latest version)
+npm install --save-exact "@aotter/mantle@$MANTLE_VERSION"
 ```
 
 ## What's inside
@@ -67,11 +66,13 @@ pnpm exec mantle-harness indexes --require-public
 pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
 ```
 
-`mantle generate` validates and compiles `./manifests/`, then writes one typed
-`.mantle/generated/mantle.ts` module. When `@aotter/mantle-admin-ui` is
-installed, it also syncs the Admin SPA to `public/_mantle/admin/` (excluding
-`server.*` package exports). Core-only installs skip that copy. It performs no
-skill sync, package update, styling, provisioning, or deployment.
+`mantle generate --host cf` or `--host chatgpt-sites` assembles a new blank
+app with Spec, Runtime, API, MCP, Admin and Web by default. Use `--features`
+to select a smaller set, including host-free Spec-only. The first run declares
+matching optional dependencies; install them, then rerun. In an existing
+direct-authored app, `generate` keeps its compile behavior: validate
+`./manifests/` and write `.mantle/generated/mantle.ts`. Selected Admin syncs
+its prebuilt SPA to `public/_mantle/admin/`. Generation does not deploy.
 The same pure emitter is available from `@aotter/mantle/codegen` when a host
 wants to own parsing and filesystem IO. TypeScript-authored manifests can pass
 their already-compiled `plan` directly:
@@ -104,11 +105,10 @@ does not cache or retry. Dynamic and platform hosts can keep their own lifecycle
 use generated `bindMantle(runtime)`, or skip code generation and call
 `runtime.executeView({ view: "published-notes" })` directly.
 
-Author the application directly using [the installed guide](docs/handbook/start/project-and-cli.md).
-Admin is opt-in; use [local Admin OTP](docs/handbook/start/quickstart-admin.md)
-only when humans need a console.
-The CLI has no scaffold/type picker; missing manifests fail without creating
-an application or a visitor home page.
+Start with [Project layout and CLI](docs/handbook/start/project-and-cli.md).
+The [local Admin OTP](docs/handbook/start/quickstart-admin.md) tutorial remains
+for apps that own their Worker entry. Generated apps start with an editable
+blank home and no invented business Schema.
 
 `mantle skills` copies every skill the installed package marks
 `projection: project` in its front matter into matching

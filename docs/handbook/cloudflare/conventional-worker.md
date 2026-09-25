@@ -3,7 +3,10 @@ description: Assemble a Mantle Worker with createMantleWorker, add handlers and 
 ---
 # The conventional Worker
 
-`createMantleWorker` is the normal Cloudflare entry for a Mantle application. This page covers its options, what the facade owns, how to add application handlers and routes, and the readiness and reserved-path rules that keep those extensions safe.
+New applications can start with `mantle generate --host cf`, which writes a
+blank home, Worker entry and selected Admin/API/MCP wiring. This page covers
+the lower-level `createMantleWorker` facade for applications that author their
+own Worker entry: its options, extension seam, readiness and reserved paths.
 
 ## Minimal entry
 
@@ -14,7 +17,7 @@ import { plan } from "../.mantle/generated/mantle.js";
 export default createMantleWorker({ plan, cacheScope: "my-site-production" });
 ```
 
-`plan` is the sealed plan that `mantle generate` writes to `.mantle/generated/mantle.ts`. With only `plan`, the Worker serves public View REST, HTTP Triggers, Admin, Auth, OAuth and MCP. It renders no public pages and `/` is a 404; see [Public web](./public-web.md). Local Admin with email OTP replaces Auth construction; see [Quickstart: local Admin](../start/quickstart-admin.md). Admin still requires the `ASSETS` binding.
+`plan` is the sealed plan that `mantle generate` writes to `.mantle/generated/mantle.ts`. With only `plan`, this manually assembled Worker serves public View REST, HTTP Triggers, Admin, Auth, OAuth and MCP. It renders no public pages and `/` is a 404; see [Public web](./public-web.md). A newly generated full CF project wires a separate editable blank home. Local Admin with email OTP replaces Auth construction; see [Quickstart: local Admin](../start/quickstart-admin.md). Admin still requires the `ASSETS` binding.
 
 ## Options
 

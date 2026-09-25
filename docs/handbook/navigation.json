@@ -5,9 +5,9 @@
       "text": "Start here",
       "items": [
         { "text": "Handbook overview", "link": "/start/overview" },
-        { "text": "Project layout and the CLI loop", "link": "/start/project-and-cli" },
+        { "text": "Generate a project and use the CLI", "link": "/start/project-and-cli" },
         { "text": "Quickstart: a minimal Worker", "link": "/start/quickstart-worker" },
-        { "text": "Quickstart: local Admin (opt-in)", "link": "/start/quickstart-admin" },
+        { "text": "Quickstart: authored Worker Admin", "link": "/start/quickstart-admin" },
         { "text": "When the host is ChatGPT Sites", "link": "/chatgpt-sites/index" }
       ]
     },

@@ -21,6 +21,25 @@ All eleven packages share a single version and are published together, so mixed
 versions across `@aotter/mantle*` are never a supported combination. Pin the
 version you install and upgrade the whole set at once.
 
+## 0.1.5 — in preparation
+
+`mantle generate` now assembles a blank, editable full site by default for
+Cloudflare Workers or ChatGPT Sites. `--features` positively selects a smaller
+composition; Spec-only needs no host. The first run declares exact matching
+dependencies, and a second run after installation completes the project.
+Existing directly authored applications retain their compile path. Saved
+choices and user-owned files survive reruns, while `--check` reports drift
+without writing. On Sites, review and apply append-only D1 migrations before
+running code that expects the new Schema. The new Sites worker trusts identity
+only behind the Sites dispatcher and does not expose a separate `workers.dev`
+URL.
+
+Agents installed through `npx skills add aotter/mantle` must still inspect the
+target project's actual SDK version. Published 0.1.4 packages do **not**
+support the new project flags; use their installed docs until deliberately
+upgrading all selected packages. The bootstrap skill remains a small directory,
+not a repository clone.
+
 ## 0.1.4 — 2026-09-24
 
 0.1.4 repairs the published consumer path without changing the Manifest

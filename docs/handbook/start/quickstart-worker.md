@@ -3,7 +3,13 @@ description: "Author a minimal Cloudflare Worker from scratch: one Schema, one p
 ---
 # Quickstart: a minimal Worker
 
-This page reproduces Core's API-only Worker reference as a from-scratch walkthrough. It is the embed / adapter path: View REST without Admin, Auth or a visitor frontend. Admin is opt-in when humans need a console — [Quickstart: local Admin](./quickstart-admin.md). Resolve the intended release once and pin every `@aotter/mantle*` package to it; see [Versions](../reference/surface.md#versions).
+This page reproduces the API-only Worker reference as a direct-authoring
+walkthrough: View REST without Admin, Auth or a visitor frontend. For a new
+project, `mantle generate --host cf --features spec,api` assembles that smaller
+composition. Omit `--features` to include Admin, MCP and a blank home. The
+[local Admin tutorial](./quickstart-admin.md) covers an authored Worker entry.
+Pin every selected `@aotter/mantle*` package to one exact version; see
+[Versions](../reference/surface.md#versions).
 
 ## Prerequisites
 
@@ -13,10 +19,9 @@ This page reproduces Core's API-only Worker reference as a from-scratch walkthro
 
 ## 1. `package.json`
 
-The `latest` entries below are bootstrap placeholders. Step 5 replaces both
-with one exact version before the first build. For a prerelease evaluation,
-select its exact version explicitly rather than mixing channels. The other
-entries are the peers and tools used by this reference.
+Step 5 adds the two Mantle packages at one exact version. For a prerelease
+evaluation, select its exact version explicitly rather than mixing channels.
+The entries below are the peers and tools used by this direct-authored reference.
 
 ```json
 {
@@ -31,8 +36,6 @@ entries are the peers and tools used by this reference.
     "check": "mantle generate && mantle generate --check && mantle validate && mantle skills && mantle skills --check && tsc --noEmit"
   },
   "dependencies": {
-    "@aotter/mantle": "latest",
-    "@aotter/mantle-cloudflare": "latest",
     "better-auth": "1.7.2",
     "hono": "^4.13.3",
     "zod": "^4.5.4",
@@ -172,7 +175,13 @@ curl -i http://127.0.0.1:8787/mcp/staff
 - `.mantle/generated/mantle.ts` — one module with the sealed `plan`, generated types (`MantleHandlers<Env>`), `createMantle` and `bindMantle`. The Worker entry above imports only `plan`.
 - `public/_mantle/admin/` — the Admin SPA, synced only when `@aotter/mantle-admin-ui` is installed. This project did not install it, so nothing is written there and `/admin` has no assets.
 
-`generate` fails on missing or invalid manifests and never creates a project, a default Schema or a home route. `mantle generate --check` reports stale output without writing. The reference keeps `.mantle/`, `.agents/` and `.claude/` out of git and regenerates them in `check`; see [Project layout and the CLI loop](./project-and-cli.md).
+This walkthrough uses the existing direct-authored Worker entry; in that legacy
+compile mode, `generate` expects the supplied manifests and does not add a
+home route. New applications can instead use `mantle generate --host cf`
+with `--features spec,api` for a smaller assembled Worker. The CLI never
+invents a Schema. `mantle generate --check` reports stale output without
+writing. The reference keeps `.mantle/`, `.agents/` and `.claude/` out of git
+and regenerates them in `check`; see [Project layout and CLI](./project-and-cli.md).
 
 ## Next steps
 

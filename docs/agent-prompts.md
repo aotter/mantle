@@ -1,102 +1,64 @@
 # Task-specific agent prompts
 
-Cold start from GitHub or a marketplace host is the install skill:
+First install the small bootstrap skill:
 
 ```sh
 npx skills add aotter/mantle
 ```
 
-Copy one block into a coding agent after that skill is present. Paths below
-are relative to the Mantle docs root: `node_modules/@aotter/mantle/docs/`
-after `@aotter/mantle` is installed. A standalone `skills add` installation
-contains only the selected skill, not these docs.
-`npx --no-install mantle --help` is the layered CLI overview; it mirrors the
-authoring docs. A live `/mcp` catalog mirrors the Manifest → RuntimePlan, not
-the CLI. Resolve only missing requirements first; do not assume a host. There is no `mantle create`. Empty `generate` fails until
-manifests exist. Admin is opt-in.
+The installed skill locates the target project, resolves its actual SDK
+version, and sends the agent to that package's CLI and docs. A GitHub skill
+may be newer than npm: published 0.1.4 still uses the direct-authoring path;
+0.1.5 adds full generated projects. Never assume a new flag exists without
+checking the installed CLI.
 
-### Interview then build
+## New full Cloudflare app
 
 ```text
-Interview me about the service: host, who uses it, whether humans need a
-Dev UI, and whether we only embed Spec/Runtime. If the install skill is
-missing, run npx skills add aotter/mantle. Read the
-installer-reported skill, choose and install an exact SDK version, then read
-its embedded skills/install/SKILL.md,
-run npx --no-install mantle --help, and
-read handbook/start/overview.md.
-Use examples/README.md as the examples index; copy builtin-* Manifests only
-(not cf-primitives-*). Implement locally first. Take only the surfaces we
-chose. For Spec-only use, skip Runtime and code generation. For a Worker
-without Admin, follow examples/host-minimal-worker/. For a Worker with
-Dev UI, follow examples/host-local-admin-otp/README.md. ChatGPT Sites only
-if I name that host. No mantle create. Pin all @aotter/mantle* packages
-to one exact version.
+Build a Mantle app on Cloudflare. Follow the installed mantle skill, pin one
+exact stable SDK version, and use its project-generation path if supported.
+Select the full default Spec, Runtime, API, MCP, Admin and blank home. Install
+the CLI-declared dependencies and rerun generation. Ask for my actual data and
+workflow before adding Manifests. For local Admin, copy .dev.vars.example,
+set the real owner email and a random secret, and verify OTP, Admin assets,
+unauthorized access, public API and MCP. Do not claim production Auth is set
+up from a local OTP test.
 ```
 
-### Embed Runtime with typed APIs
+## Small API or Spec-only app
 
 ```text
-Read handbook/start/project-and-cli.md and npx --no-install mantle --help.
-Pin @aotter/mantle at the exact version we agree, author manifests for
-this existing host, then run mantle generate. Embed
-the typed binding from .mantle/generated/mantle.ts into the current
-system. Do not add Admin, mantle-admin-ui, a visitor frontend, or a
-Cloudflare adapter unless I ask. Do not invent a default Schema.
+Use the installed Mantle CLI and version-matched docs. For a Cloudflare API,
+select --host cf --features spec,api if that CLI supports project generation.
+For manifest parsing only, use --features spec without a host. Keep unselected
+Admin, Web and MCP packages out. Author the Schema and View I request, then
+run generate, validate, typecheck and a real route probe when a host exists.
+Preserve an existing direct-authored application instead of regenerating it.
 ```
 
-### Minimal API service locally
+## ChatGPT Sites
 
 ```text
-Read handbook/start/quickstart-worker.md and examples/host-minimal-worker/.
-Author a Cloudflare Worker from that official example or from scratch:
-one Schema, one public View (copy the contract, not the tree wholesale).
-Pin every @aotter/mantle* package to the same exact version. Run
-pnpm install && pnpm generate && pnpm dev (or wrangler dev --local).
-Probe GET /api/views/<name> with curl. GET / may 404. Do not install
-Admin or wrangler ASSETS unless I ask.
+Build with ChatGPT Sites and Mantle. Start from the installed SDK's generated
+blank app when supported; otherwise follow that version's Sites reference.
+Pin all selected Mantle packages exactly, install declared dependencies,
+review and apply the initial local D1 migration, then add my Manifests and
+review each appended migration. Configure OWNER_EMAIL and PUBLIC_ORIGIN. The
+local owner smoke simulates Sites identity; deployed ChatGPT sign-in needs a
+separate check. Show how I will maintain content through Admin, browser
+WebMCP, public MCP and Sites-session staff MCP. Add R2 only if my workflow
+requires uploads. Never deploy the Worker directly or claim remote staff OAuth
+MCP from a Sites browser session.
 ```
 
-### Full local Dev UI (opt-in)
+## Existing project with typed queries
 
 ```text
-I want the optional Admin / Dev UI. Read examples/host-local-admin-otp/README.md
-(the procedural SSOT) and the thin pointer at handbook/start/quickstart-admin.md.
-Interview me for a bootstrap owner email, then follow that example locally.
-Prefer 127.0.0.1 over localhost. After pnpm check / smoke, restore .dev.vars
-from .dev.vars.example before pnpm dev.
+Read this project's package.json, lockfile, installed Mantle package and
+projected develop skill. Keep its host and selected surfaces. Use the installed
+CLI's help and handbook to add the requested Schema/View/Procedure, then run
+its generate/check, validation, TypeScript and host smoke. Do not use another
+checkout's SDK docs or overwrite user-owned files.
 ```
 
-### Later layer: MCP or public web (opt-in)
-
-```text
-Do not add Admin unless it is already in this project. Read
-handbook/concepts/mcp-and-agents.md and/or
-handbook/cloudflare/public-web.md. Add only the surface I name: MCP
-Triggers at /mcp or /mcp/staff, or optional @aotter/mantle-web
-composition. Keep Core adapter-neutral. Probe the new route; do not
-claim Auth or Admin works from a public 200.
-```
-
-### Mantle on ChatGPT Sites, including media
-
-Use only when the user names ChatGPT Sites as the host.
-
-```text
-Build with ChatGPT Sites; use Mantle for content management and publishing.
-Read handbook/chatgpt-sites/index.md and examples/host-chatgpt-sites/README.md.
-Use that runnable host as a reference and install its pinned
-dependencies from the registry. Derive Schema, View,
-Procedure and Trigger from my requirements and check the Admin editor/picker and public
-projections against them. Request both Sites D1 and R2 when my workflow
-includes uploads. Bind the R2 media port, declare media.purposes, and keep
-the same-origin PUT and committed-only public GET checks. Pin every
-@aotter/mantle* dependency to one exact version. Run the local smoke,
-show a draft-to-publish walkthrough, then save and deploy through Sites when
-requested. Verify the deployed owner/member role, R2 upload, published page, and anonymous draft 404. Treat public read-only
-MCP, Admin WebMCP, and staff OAuth MCP as separate acceptance gates; never
-claim staff MCP from a working browser session or connector URL alone.
-```
-
-
-[Back to the Core README](../README.md#for-engineers-and-agents).
+[Back to the Core README](../README.md).
