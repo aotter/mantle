@@ -183,7 +183,7 @@ See [Authorization](../handbook/concepts/authorization.md) and the [Procedure re
 
 ## Worker and handlers
 
-None. Both Procedures are builtin and the Worker is `export default createMantleWorker({ plan })`. Sign-in is provided by the conventional Worker's Auth; see [Authentication](../handbook/cloudflare/authentication.md).
+None. Both Procedures are builtin and the Worker is `export default createMantleWorker({ plan })`; add `mcpApps` to render the Views in chat, as in [In chat, with the MCP App](#in-chat-with-the-mcp-app). Sign-in is provided by the conventional Worker's Auth; see [Authentication](../handbook/cloudflare/authentication.md).
 
 ## Try it
 
@@ -232,10 +232,24 @@ A second reviewer replaying `expectedVersion: 1` after that succeeds receives an
 
 ## In chat, with the MCP App
 
-Register the built-in interaction App on both surfaces, as in [MCP and agents](../handbook/concepts/mcp-and-agents.md#the-built-in-interaction-app). The two audiences then work in chat:
+Register the built-in interaction App on both surfaces, as in [MCP and agents](../handbook/concepts/mcp-and-agents.md#the-built-in-interaction-app):
 
-- **Members** get `query_view_my_requisitions` rendered as rows. A new request still goes through `submit_requisition`, as a form in chat or as a plain tool call.
-- **Reviewers** ask what is waiting. The agent calls `query_view_pending_approvals`, and the App lists the requisitions. `review_requisition` opens against the chosen row, with `id` and `expectedVersion` bound, so the reviewer only picks a decision and a note.
+```ts
+import { interactionAppResource } from "@aotter/mantle-ui/mcp-app";
+
+export default createMantleWorker({
+  plan,
+  mcpApps: {
+    public: { resources: [interactionAppResource()] },
+    staff: { resources: [interactionAppResource()] },
+  },
+});
+```
+
+The two audiences then work in chat:
+
+- **Members** see `query_view_my_requisitions` rendered as rows. That View has no row actions, so the App only lists. A new request is a plain `submit_requisition` call; the App does not render a form for it.
+- **Reviewers** ask what is waiting. The agent calls `query_view_pending_approvals`, and the App lists the requisitions. `review_requisition` opens against the chosen row, with `id` and `expectedVersion` bound, so the reviewer only picks a decision and a note. The App reads the requisition with `read_entry` first.
   - If someone else decided first, the App shows what changed and asks for a review before anything is sent.
   - A stale `expectedVersion` still fails with `CONFLICT`, and the note is kept.
 

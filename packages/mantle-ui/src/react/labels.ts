@@ -20,6 +20,8 @@ export interface InteractionLabels {
   readonly reviewLatest: string;
   readonly contested: string;
   readonly conflict: string;
+  /** A conflict where the host cannot read the entry again (no `read`). */
+  readonly conflictReopen: string;
   readonly uncertain: string;
   readonly reread: string;
   readonly acknowledgeUncertain: string;
@@ -49,6 +51,7 @@ export const defaultInteractionLabels: InteractionLabels = {
   reviewLatest: "Review newer version",
   contested: "Someone else also changed fields you edited:",
   conflict: "This entry changed before your update was saved. Nothing was saved. Load the latest version and review it again.",
+  conflictReopen: "This entry changed before your update was saved. Nothing was saved. Close this, then open the action again from the refreshed list.",
   uncertain: "We could not confirm whether this was saved. Check the latest version before trying again.",
   reread: "Load latest version",
   acknowledgeUncertain: "I checked; continue",

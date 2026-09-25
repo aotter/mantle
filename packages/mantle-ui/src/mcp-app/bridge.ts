@@ -8,7 +8,6 @@ export const INTERACTION_META_KEY = "net.aotter.mantle/interaction";
 export interface AppRowAction {
   readonly capability: string;
   readonly title?: string;
-  readonly description?: string;
   readonly inputSchema: FormSchema;
   readonly bind: readonly { readonly input: string; readonly field: string }[];
   readonly version?: string;
@@ -19,6 +18,8 @@ export interface AppView {
   /** Tool that produced the rows, called again to refresh them. */
   readonly view: string;
   readonly collection: string | null;
+  /** Tool that reads one entry of the collection; absent on surfaces without one. */
+  readonly read: string | null;
   readonly rows: readonly Readonly<Record<string, unknown>>[];
   readonly rowActions: readonly AppRowAction[];
 }
@@ -37,18 +38,31 @@ export type CallTool = (name: string, args: Record<string, unknown>, signal?: Ab
 /** The View a tool result describes, or null for any other result. */
 export function viewOf(result: ToolResult): AppView | null {
   const meta = result._meta?.[INTERACTION_META_KEY];
-  if (!isRecord(meta) || typeof meta["view"] !== "string" || !Array.isArray(meta["rowActions"])) return null;
+  if (result.isError || !isRecord(meta) || typeof meta["view"] !== "string") return null;
   const output = outputOf(result);
   const rows = isRecord(output) && Array.isArray(output["rows"]) ? output["rows"].filter(isRecord) : [];
   return {
     view: meta["view"],
     collection: typeof meta["collection"] === "string" ? meta["collection"] : null,
+    read: typeof meta["read"] === "string" ? meta["read"] : null,
     rows,
-    rowActions: meta["rowActions"] as AppRowAction[],
+    rowActions: Array.isArray(meta["rowActions"]) ? meta["rowActions"] as AppRowAction[] : [],
   };
 }
 
-/** `structuredContent`, else the JSON text block, else the text itself. */
+/** The diagnostics an `isError` result carries, from either content form. */
+export function diagnosticsOf(result: ToolResult): InteractionDiagnostic[] {
+  const output = outputOf(result);
+  return isRecord(output) && Array.isArray(output["diagnostics"])
+    ? output["diagnostics"].filter((item): item is InteractionDiagnostic =>
+      isRecord(item) && typeof item["code"] === "string" && typeof item["message"] === "string")
+    : [];
+}
+
+/**
+ * `structuredContent`, else the JSON text block, else the text itself. A
+ * tool with an output schema reports failures in the text block only.
+ */
 export function outputOf(result: ToolResult): unknown {
   if (result.structuredContent !== undefined) return result.structuredContent;
   const text = result.content?.find((item) => item.type === "text")?.text;
@@ -64,22 +78,21 @@ export function outputOf(result: ToolResult): unknown {
 export async function invokeTool(call: CallTool, name: string, args: Record<string, unknown>, signal: AbortSignal): Promise<InvokeOutcome> {
   const result = await call(name, args, signal);
   if (!result.isError) return { ok: true, data: outputOf(result) };
-  const output = outputOf(result);
-  const diagnostics = isRecord(output) && Array.isArray(output["diagnostics"])
-    ? output["diagnostics"].filter((item): item is InteractionDiagnostic =>
-      isRecord(item) && typeof item["code"] === "string" && typeof item["message"] === "string")
-    : [];
-  if (diagnostics.length === 0) throw new Error(typeof output === "string" ? output : "The tool failed without a diagnostic.");
+  const diagnostics = diagnosticsOf(result);
+  if (diagnostics.length === 0) {
+    const output = outputOf(result);
+    throw new Error(typeof output === "string" ? output : "The tool failed without a diagnostic.");
+  }
   return { ok: false, diagnostics };
 }
 
-/** `read_entry` for the row's entry, as the controller's snapshot. */
-export async function readEntry(call: CallTool, collection: string, id: string, signal: AbortSignal): Promise<EntrySnapshot> {
-  const result = await call("read_entry", { collection, id }, signal);
-  if (result.isError) throw new Error("The entry could not be read.");
+/** The server's entry reader (`read_entry`) for the row's entry, as the controller's snapshot. */
+export async function readEntry(call: CallTool, tool: string, collection: string, id: string, signal: AbortSignal): Promise<EntrySnapshot> {
+  const result = await call(tool, { collection, id }, signal);
+  if (result.isError) throw new Error(diagnosticsOf(result)[0]?.message ?? "The entry could not be read.");
   const entry = outputOf(result);
   if (!isRecord(entry) || typeof entry["id"] !== "string" || typeof entry["version"] !== "number") {
-    throw new Error("read_entry returned no entry version.");
+    throw new Error(`${tool} returned no entry version.`);
   }
   return { id: entry["id"], version: entry["version"], data: isRecord(entry["data"]) ? entry["data"] : {} };
 }

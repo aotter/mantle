@@ -48,6 +48,7 @@ const LABEL_KEYS: Record<keyof InteractionLabels, I18nKey> = {
   reviewLatest: "interaction.reviewLatest",
   contested: "interaction.contested",
   conflict: "interaction.conflict",
+  conflictReopen: "interaction.conflictReopen",
   uncertain: "interaction.uncertain",
   reread: "interaction.reread",
   acknowledgeUncertain: "interaction.acknowledgeUncertain",

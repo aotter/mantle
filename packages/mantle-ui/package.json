@@ -39,7 +39,7 @@
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
     "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.lib.json",
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json && tsc -p tsconfig.mcp-app.json",
     "test": "vitest run"
   },
   "peerDependencies": {

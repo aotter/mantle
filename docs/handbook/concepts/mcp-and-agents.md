@@ -74,17 +74,28 @@ export default createMantleWorker({
 });
 ```
 
-For an App-linked View tool that has row actions, the result's `_meta["net.aotter.mantle/interaction"]` carries the View tool name, the source collection and each action. An action entry holds its tool name, title, input schema, the row fields it binds and the version input it locks. The App reads nothing else. Each read and write is a server tool call through the host (`callServerTool`), under the caller's own MCP authorization. The App holds no credentials, opening it has no side effect, and the Admin itself still refuses to be embedded.
+`staff` Apps are served on `/mcp/staff`, which exists only while the Admin surface does: with `surfaces: { admin: false }`, `mcpApps.staff` is ignored.
+
+Every App-linked View tool result carries `_meta["net.aotter.mantle/interaction"]`, whether or not the View has row actions. It names:
+
+- the View tool, which the App calls again to refresh;
+- the source collection;
+- `read`, the tool that reads one entry, when the surface has one (`read_entry` on staff surfaces only);
+- each row action: its tool name, title, input schema, the row fields it binds and the version input it locks.
+
+Error results carry no such metadata. The App reads nothing else. Each read and write is a server tool call through the host (`callServerTool`), under the caller's own MCP authorization. The App holds no credentials, opening it has no side effect, and the Admin itself still refuses to be embedded. It submits from script rather than through a browser form, so it works in hosts that sandbox Apps without `allow-forms`, and it follows the host's theme and locale (English, Traditional or Simplified Chinese).
 
 A staff session works like this:
 
 1. The person asks what needs attention.
 2. The agent calls the application's own staff View, for example `query_view_pending_approvals`.
 3. The App lists the rows. The person picks one and opens its action.
-4. The App reads the entry with `read_entry`, locks the version the person reviews, and runs the operation's own tool.
+4. The App reads the entry with the named reader, locks the version the person reviews, and runs the operation's own tool.
 5. On a conflict the input is kept and the App asks for the latest version. A write whose outcome is unknown is never retried.
 
-The same App serves public and member Views, because the contract never depends on staff Admin. In [Procurement approvals](../../examples/builtin-procurement.md), members work in `query_view_my_requisitions` and `submit_requisition`, and reviewers in `query_view_pending_approvals` and `review_requisition`.
+On a surface without a reader, such as the public one, an action that locks a version uses the `id` and `version` of the row as listed. A stale version then fails with `CONFLICT` at submit, and the App offers no fresh read; the person refreshes the list instead.
+
+The same App serves public and member Views, because the contract never depends on staff Admin. It renders a View whether or not it has row actions, but it creates nothing on its own: a tool that starts a new entry, such as `submit_requisition`, stays a plain tool call. In [Procurement approvals](../../examples/builtin-procurement.md), members list `query_view_my_requisitions` in the App and submit through `submit_requisition`; reviewers work in `query_view_pending_approvals` and `review_requisition`.
 
 Core defines no inbox, pending state, assignment or approval engine. "Pending" is whatever View the application declares.
 
@@ -92,32 +103,68 @@ A client without MCP Apps runs the same steps with the plain tools: the View too
 
 ### An application-owned renderer
 
-An App does not need the built-in components. Only the contract matters: the result `_meta`, the tools, and the controller's review-and-submit rules. A minimal renderer with the official `App` and the framework-free controller:
+An App does not need the built-in components. Only the contract matters: the result `_meta`, the tools, and the controller's review-and-submit rules. A minimal renderer with the official `App` and the framework-free controller, from [`packages/mantle-ui/examples/own-renderer.ts`](../../../packages/mantle-ui/examples/own-renderer.ts), which is type-checked with the package:
 
 ```ts
 import { App } from "@modelcontextprotocol/ext-apps";
-import { createInteractionController } from "@aotter/mantle-ui/controller";
+import {
+  createInteractionController,
+  type EntrySnapshot,
+  type InteractionBinding,
+  type InteractionDiagnostic,
+  type InteractionState,
+  type InvokeOutcome,
+} from "@aotter/mantle-ui/controller";
+
+interface Interaction {
+  readonly view: string;
+  readonly collection: string | null;
+  readonly read?: string;
+  readonly rowActions: readonly (InteractionBinding & { readonly capability: string; readonly title?: string })[];
+}
+type CallResult = Awaited<ReturnType<App["callServerTool"]>>;
+
+declare function render(state: InteractionState): void; // your own markup
+
+/** `structuredContent`, else the JSON text block: failures of a tool with an output schema travel as text. */
+function output(result: CallResult): unknown {
+  if (result.structuredContent !== undefined) return result.structuredContent;
+  const text = result.content.find((item) => item.type === "text");
+  return text && "text" in text ? JSON.parse(text.text) as unknown : undefined;
+}
 
 const app = new App({ name: "my-review-app", version: "1.0.0" }, {});
 app.ontoolresult = (result) => {
-  const meta = result._meta?.["net.aotter.mantle/interaction"];
-  const [row] = result.structuredContent?.rows ?? [];
+  const meta = result._meta?.["net.aotter.mantle/interaction"] as Interaction | undefined;
+  const rows = ((result.structuredContent as { rows?: Record<string, unknown>[] } | undefined)?.rows) ?? [];
+  const [row] = rows;
   const [action] = meta?.rowActions ?? [];
-  if (!row || !action) return;
+  if (!meta || !row || !action) return;
+  const reader = meta.read;
   const controller = createInteractionController({
     interaction: action,
     row,
-    read: async () => (await app.callServerTool({ name: "read_entry", arguments: { collection: meta.collection, id: row.id } })).structuredContent,
-    invoke: async (input) => {
-      const answer = await app.callServerTool({ name: action.capability, arguments: input });
-      return answer.isError ? { ok: false, diagnostics: answer.structuredContent.diagnostics } : { ok: true, data: answer.structuredContent };
+    // Only surfaces with an entry reader name one; otherwise the row is what the person reviews.
+    ...(reader ? {
+      read: async (signal: AbortSignal) => output(await app.callServerTool(
+        { name: reader, arguments: { collection: meta.collection, id: row["id"] } }, { signal })) as EntrySnapshot,
+    } : {}),
+    invoke: async (input, signal): Promise<InvokeOutcome> => {
+      const answer = await app.callServerTool({ name: action.capability, arguments: input }, { signal });
+      if (!answer.isError) return { ok: true, data: output(answer) };
+      const diagnostics = (output(answer) as { diagnostics?: InteractionDiagnostic[] } | undefined)?.diagnostics;
+      // No diagnostics means the outcome is unknown: throw, and the controller never retries it.
+      if (!diagnostics?.length) throw new Error("The tool failed without a diagnostic.");
+      return { ok: false, diagnostics };
     },
   });
-  controller.subscribe(() => render(controller.getSnapshot()));  // your own markup
+  controller.subscribe(() => render(controller.getSnapshot()));
   void controller.open();
 };
 await app.connect();
 ```
+
+Two details matter. A tool that declares an output schema reports failures in its text block only, so read the diagnostics from there when `structuredContent` is absent. A failure without diagnostics has an unknown outcome: throw it, and the controller asks the person to check before anything is sent again.
 
 ## Keeping an action human-only
 

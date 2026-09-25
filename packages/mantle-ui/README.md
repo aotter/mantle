@@ -37,7 +37,7 @@ reported asynchronously; it cannot interrupt a transition.
 |---|---|
 | `unreadable` | The target could not be read, or a different entry came back. Nothing is confirmed, so submit waits for a successful `reread()` or `refresh()`. |
 | `changedSinceList` | A read found a newer version than the one reviewed. `latestChanges()` shows what moved and `review()` adopts it; nothing is swapped silently. |
-| `conflict` | The runtime answered `CONFLICT`. The input is kept; `reread()`, then review again. |
+| `conflict` | The runtime answered `CONFLICT`. The input is kept; `reread()`, then review again. Without a `read`, the components ask the person to reopen the action from a refreshed list instead. |
 | `uncertain` | The write may have landed, so it is never retried. This covers a submit that threw, timed out or was cancelled, and a runtime `OUTCOME_UNKNOWN`, `PARTIAL_FAILURE` or `failure.outcome` of `unknown` or `partial`. `reread()` first; a host without `read` calls `acknowledgeUncertain()` after checking elsewhere. |
 | `failed` | The runtime refused, and `diagnostics` holds its answer. A conflict whose reread finds the same version also lands here, because the refusal was not about the version. |
 
