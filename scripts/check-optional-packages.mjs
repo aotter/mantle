@@ -229,6 +229,7 @@ try {
     "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
     "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
     "@aotter/mantle-mcp": `file:${tarballs["@aotter/mantle-mcp"]}`,
+    "@aotter/mantle-ui": `file:${tarballs["@aotter/mantle-ui"]}`,
     zod,
   }, `
     const spec = await import("@aotter/mantle-spec");
@@ -259,6 +260,18 @@ try {
     const text = await response.text();
     if (response.status !== 200 || !text.includes('"serverInfo"')) {
       throw new Error("packed MCP handler did not answer initialize: " + response.status + " " + text);
+    }
+    // The built MCP App registers as a UI resource and is served whole.
+    const { interactionAppResource, INTERACTION_APP_URI } = await import("@aotter/mantle-ui/mcp-app");
+    const withApp = mcp.createMantleMcpHandler(invoker, { apps: { resources: [interactionAppResource()] } });
+    const read = await withApp.fetch(new Request("https://example.test/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "resources/read", params: { uri: INTERACTION_APP_URI } }),
+    }), { user: null, staff: null, env: {} });
+    const resource = await read.text();
+    if (read.status !== 200 || !resource.includes("text/html;profile=mcp-app") || !resource.includes("<!doctype html>")) {
+      throw new Error("packed MCP App resource was not served: " + read.status + " " + resource.slice(0, 200));
     }
   `);
   for (const forbidden of ["react", "@aotter/mantle-admin", "@aotter/mantle-web"]) {

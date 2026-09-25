@@ -57,6 +57,68 @@ A host can render tool results as an interactive UI through [MCP Apps](https://m
 - A stateless 2025-era request declares nothing. It gets the App metadata and the app-only tools. Hosts without MCP Apps ignore the metadata, but the model may see and call those read-only tools.
 - Resources are per surface: a staff App is never readable on `/mcp`.
 
+### The built-in interaction App
+
+`@aotter/mantle-ui/mcp-app` ships one self-contained HTML App that shows a View's rows and runs the row actions those rows feed. Register it per surface:
+
+```ts
+import { interactionAppResource } from "@aotter/mantle-ui/mcp-app";
+
+export default createMantleWorker({
+  plan,
+  handlers,
+  mcpApps: {
+    staff: { resources: [interactionAppResource()] },
+    public: { resources: [interactionAppResource()] },
+  },
+});
+```
+
+For an App-linked View tool that has row actions, the result's `_meta["net.aotter.mantle/interaction"]` carries the View tool name, the source collection and each action. An action entry holds its tool name, title, input schema, the row fields it binds and the version input it locks. The App reads nothing else. Each read and write is a server tool call through the host (`callServerTool`), under the caller's own MCP authorization. The App holds no credentials, opening it has no side effect, and the Admin itself still refuses to be embedded.
+
+A staff session works like this:
+
+1. The person asks what needs attention.
+2. The agent calls the application's own staff View, for example `query_view_pending_approvals`.
+3. The App lists the rows. The person picks one and opens its action.
+4. The App reads the entry with `read_entry`, locks the version the person reviews, and runs the operation's own tool.
+5. On a conflict the input is kept and the App asks for the latest version. A write whose outcome is unknown is never retried.
+
+The same App serves public and member Views, because the contract never depends on staff Admin. In [Procurement approvals](../../examples/builtin-procurement.md), members work in `query_view_my_requisitions` and `submit_requisition`, and reviewers in `query_view_pending_approvals` and `review_requisition`.
+
+Core defines no inbox, pending state, assignment or approval engine. "Pending" is whatever View the application declares.
+
+A client without MCP Apps runs the same steps with the plain tools: the View tool lists the rows, and its description names each row action and the fields it binds.
+
+### An application-owned renderer
+
+An App does not need the built-in components. Only the contract matters: the result `_meta`, the tools, and the controller's review-and-submit rules. A minimal renderer with the official `App` and the framework-free controller:
+
+```ts
+import { App } from "@modelcontextprotocol/ext-apps";
+import { createInteractionController } from "@aotter/mantle-ui/controller";
+
+const app = new App({ name: "my-review-app", version: "1.0.0" }, {});
+app.ontoolresult = (result) => {
+  const meta = result._meta?.["net.aotter.mantle/interaction"];
+  const [row] = result.structuredContent?.rows ?? [];
+  const [action] = meta?.rowActions ?? [];
+  if (!row || !action) return;
+  const controller = createInteractionController({
+    interaction: action,
+    row,
+    read: async () => (await app.callServerTool({ name: "read_entry", arguments: { collection: meta.collection, id: row.id } })).structuredContent,
+    invoke: async (input) => {
+      const answer = await app.callServerTool({ name: action.capability, arguments: input });
+      return answer.isError ? { ok: false, diagnostics: answer.structuredContent.diagnostics } : { ok: true, data: answer.structuredContent };
+    },
+  });
+  controller.subscribe(() => render(controller.getSnapshot()));  // your own markup
+  void controller.open();
+};
+await app.connect();
+```
+
 ## Keeping an action human-only
 
 A confirmation step in a chat UI, and a tool marked app-only, do not prove that a person made the decision: a host sends every call with the same credential the model uses. When an action must stay with people, keep it off MCP entirely:

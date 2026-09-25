@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { createInteractionController } from "../controller/index.js";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createInteractionController, type InteractionController } from "../controller/index.js";
 import { OperationPanel } from "../react/components.js";
 import { defaultInteractionLabels } from "../react/labels.js";
 import { SchemaForm } from "../react/schema-form.js";
@@ -43,7 +43,7 @@ export function InteractionApp(props: {
   if (open && view.collection) {
     return (
       <RowAction
-        key={`${open.action.capability}:${String(open.row["id"])}`}
+        key={`${open.action.capability}:${open.action.bind.map(({ input }) => input).join(",")}:${String(open.row["id"])}`}
         call={props.call}
         collection={view.collection}
         row={open.row}
@@ -71,10 +71,10 @@ export function InteractionApp(props: {
             <div className="flex flex-wrap gap-2">
               {view.rowActions.map((action) => (
                 <button
-                  key={action.capability}
+                  key={`${action.capability}:${action.bind.map(({ input }) => input).join(",")}`}
                   type="button"
                   className="rounded-md border px-3 py-1 font-medium"
-                  onClick={() => setOpen({ row, action })}
+                  onClick={() => setOpen({ row: { ...row }, action })}
                 >
                   {action.title ?? action.capability}
                 </button>
@@ -95,18 +95,64 @@ function RowAction(props: {
   readonly onClose: () => void;
   readonly onDone: () => void;
 }): ReactNode {
-  const { call, collection, row, action } = props;
-  const controller = useMemo(() => createInteractionController({
-    interaction: action,
-    row,
-    ...(action.version ? { read: (signal: AbortSignal) => readEntry(call, collection, String(row["id"]), signal) } : {}),
-    invoke: (values, signal) => invokeTool(call, action.capability, values, signal),
-    // One key per opened action, so a retry after an uncertain write reuses it.
-    initialInput: Object.fromEntries(idempotencyInputs(action).map((field) => [field, crypto.randomUUID()])),
-  }), [call, collection, row, action]);
+  const automatic = idempotencyInputs(props.action);
+  // Created once when the action is opened, from the row as it was then: a
+  // refresh of the list never rebuilds it or points it at another entry.
+  const [created] = useState(() => {
+    const { call, collection, row, action } = props;
+    try {
+      return {
+        controller: createInteractionController({
+          interaction: action,
+          row,
+          ...(action.version ? { read: (signal: AbortSignal) => readEntry(call, collection, String(row["id"]), signal) } : {}),
+          invoke: (values, signal) => invokeTool(call, action.capability, values, signal),
+          // One key per opened action, so a retry after an uncertain write reuses it.
+          initialInput: Object.fromEntries(automatic.map((field) => [field, crypto.randomUUID()])),
+          automatic,
+        }),
+      };
+    } catch (error) {
+      return { error };
+    }
+  });
+  if (!("controller" in created) || !created.controller) {
+    return <p role="alert" className="text-destructive p-4 text-sm">{String((created as { error: unknown }).error)}</p>;
+  }
+  return <RowActionPanel {...props} controller={created.controller} automatic={automatic} />;
+}
+
+function RowActionPanel(props: {
+  readonly action: AppRowAction;
+  readonly controller: InteractionController;
+  readonly automatic: readonly string[];
+  readonly onClose: () => void;
+  readonly onDone: () => void;
+}): ReactNode {
+  const { action, controller } = props;
   const state = useInteraction(controller);
+  const submitted = useRef(false);
+  const refreshed = useRef(false);
   useEffect(() => { void controller.open(); }, [controller]);
-  useEffect(() => { if (state.phase === "succeeded") props.onDone(); }, [state.phase]);
+  useEffect(() => {
+    if (state.phase === "submitting") submitted.current = true;
+    if (state.phase === "succeeded" && !refreshed.current) {
+      refreshed.current = true;
+      props.onDone();
+    }
+    // A refused or conflicting payload is a new operation next time.
+    if (state.phase === "failed" || state.phase === "conflict") {
+      for (const field of props.automatic) controller.edit(field, crypto.randomUUID());
+    }
+  }, [state.phase]);
+  const close = () => {
+    if (state.phase !== "succeeded" && state.phase !== "cancelled") controller.cancel();
+    if (submitted.current && !refreshed.current) {
+      refreshed.current = true;
+      props.onDone();
+    }
+    props.onClose();
+  };
   return (
     <div className="p-3">
       <OperationPanel
@@ -114,7 +160,8 @@ function RowAction(props: {
         title={action.title ?? action.capability}
         description={action.description}
         labels={defaultInteractionLabels}
-        onClose={props.onClose}
+        onClose={close}
+        onCancel={close}
       >
         <SchemaForm schema={action.inputSchema} controller={controller} state={state} hidden={hiddenInputs(action)} />
       </OperationPanel>
