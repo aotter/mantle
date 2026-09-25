@@ -87,6 +87,30 @@ export function createMantleMcpServer(
     .filter((capability) => invoker.serves(capability.name))
     .map((capability) => ({ capability, config: toolConfig(capability) }));
   const apps = linkApps(options.apps, invoker);
+  /**
+   * What an App needs to act on a View's rows (ADR-0029 D7): the source
+   * collection and each row action with the tool's title and input schema,
+   * limited to tools this request registers. It travels in the result's
+   * `_meta`, so hosts that render no UI and the model's text are unchanged.
+   */
+  const interactionMeta = (capability: Capability, ui: ClientUiSupport): Record<string, unknown> | undefined => {
+    if (capability.route.kind !== "view" || !capability.rowActions?.length) return undefined;
+    const actions = capability.rowActions.flatMap((action) => {
+      const target = catalog.get(action.capability);
+      if (!target || !invoker.serves(action.capability) || (apps.appOnly.has(action.capability) && ui === "unsupported")) return [];
+      return [{
+        capability: action.capability,
+        ...(target.title ? { title: target.title } : {}),
+        description: target.description,
+        inputSchema: target.inputSchema,
+        bind: action.bind,
+        ...(action.version ? { version: action.version } : {}),
+        mutates: action.mutates,
+      }];
+    });
+    if (actions.length === 0) return undefined;
+    return { [INTERACTION_META_KEY]: { collection: capability.route.view.spec.from ?? null, rowActions: actions } };
+  };
   const serverInfo = {
     ...(options.serverInfo ?? { name: "aotter.mantle" }),
     icons: options.serverInfo?.icons?.map(({ sizes, ...icon }) => ({
@@ -174,7 +198,7 @@ export function createMantleMcpServer(
               ctx,
               path: `MCP ${capability.name}`,
             });
-            if (result.ok) return successResult(result.data);
+            if (result.ok) return successResult(result.data, resourceUri ? interactionMeta(capability, ui) : undefined);
             outcome = result.diagnostic.code;
             return errorResult(redactForWire(result.diagnostic), config.outputSchema !== undefined);
           } catch (error) {
@@ -285,12 +309,16 @@ function toAnnotations(hints: CapabilityHints): ToolAnnotations {
   return Object.fromEntries(Object.entries(hints).map(([key, value]) => [`${key}Hint`, value]));
 }
 
+/** Result `_meta` key carrying a View's row actions for MCP Apps. */
+export const INTERACTION_META_KEY = "net.aotter.mantle/interaction";
+
 /** MCP requires `structuredContent` to be an object, so arrays and
  *  primitives travel in the text block only. */
-function successResult(data: unknown): CallToolResult {
+function successResult(data: unknown, meta?: Record<string, unknown>): CallToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify(data) }],
     ...(isRecord(data) ? { structuredContent: data } : {}),
+    ...(meta ? { _meta: meta } : {}),
   };
 }
 

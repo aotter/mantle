@@ -1,5 +1,6 @@
 export {
   createMantleMcpServer,
+  INTERACTION_META_KEY,
   mcpToolDefinitions,
   type MantleMcpServerFactory,
   type MantleMcpServerInfo,
