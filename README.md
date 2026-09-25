@@ -177,6 +177,7 @@ and HTTP Triggers, with authentication and CSRF owned by the host.
 | `@aotter/mantle-spec` | Manifest parsing, validation, and introspection. |
 | `@aotter/mantle-runtime` | Runtime execution and storage ports. |
 | `@aotter/mantle-mcp` | MCP surface on the official MCP SDK. |
+| `@aotter/mantle-ui` | Framework-free interaction controller shared by Admin and MCP Apps. |
 | `@aotter/mantle-web` | Public rendering and discovery metadata. |
 | `@aotter/mantle-admin` | Admin API and session integration. |
 | `@aotter/mantle-admin-ui` | Prebuilt staff console and Developer UI. |

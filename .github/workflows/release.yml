@@ -44,7 +44,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Single source of truth for the twelve public packages, in dependency order.
+    # Single source of truth for the thirteen public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       PKG_DIRS: >-
@@ -52,6 +52,7 @@ jobs:
         packages/mantle-admin-ui
         packages/mantle-runtime
         packages/mantle-mcp
+        packages/mantle-ui
         packages/adapters/indexeddb
         packages/mantle-web
         packages/mantle-admin

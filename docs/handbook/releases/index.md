@@ -17,7 +17,7 @@ stable candidate cut from `main`. Installing a prerelease means opting into an
 exact version, not a channel. [GitHub Releases](https://github.com/aotter/mantle/releases)
 is the canonical, immutable change history; this chapter is the narrative one.
 
-All twelve packages share a single version and are published together, so mixed
+All thirteen packages share a single version and are published together, so mixed
 versions across `@aotter/mantle*` are never a supported combination. Pin the
 version you install and upgrade the whole set at once.
 

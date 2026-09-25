@@ -33,6 +33,7 @@ The package topology is:
 | `@aotter/mantle-spec` | Pure manifest grammar, parse, link, diagnostics, and authoring CLI. |
 | `@aotter/mantle-runtime` | Adapter-neutral plan compilation, semantic storage ports, preparation, and runtime invocation. |
 | `@aotter/mantle-mcp` | Optional MCP surface: registers the runtime capability catalog on the official MCP SDK (ADR-0029). |
+| `@aotter/mantle-ui` | Optional interaction logic (`/controller`) shared by Admin and MCP Apps; no framework, no runtime code (ADR-0029). |
 | `@aotter/mantle` | Core umbrella, code generation, and authoring CLI; optional packages are peers. |
 | `@aotter/mantle-web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition. |
 | `@aotter/mantle-admin` | Optional Admin API, auth, and static-asset composition. |

@@ -52,6 +52,7 @@ export {
   projectCallableCapabilities,
   type RuntimeCallableCapability,
   type ViewCallableCapability,
+  type ViewRowAction,
   type ProcedureCallableCapability,
 } from "./domain/service/CallableCapabilityProjector.js";
 export {

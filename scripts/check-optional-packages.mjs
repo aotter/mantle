@@ -29,6 +29,7 @@ try {
     ["@aotter/mantle-spec", "packages/mantle-spec"],
     ["@aotter/mantle-runtime", "packages/mantle-runtime"],
     ["@aotter/mantle-mcp", "packages/mantle-mcp"],
+    ["@aotter/mantle-ui", "packages/mantle-ui"],
     ["@aotter/mantle-web", "packages/mantle-web"],
     ["@aotter/mantle-indexeddb", "packages/adapters/indexeddb"],
     ["@aotter/mantle-admin-ui", "packages/mantle-admin-ui"],
@@ -266,6 +267,28 @@ try {
     }
   }
 
+  // The controller runs alone: its Mantle imports are type-only.
+  installConsumer("ui-controller-only", {
+    "@aotter/mantle-ui": `file:${tarballs["@aotter/mantle-ui"]}`,
+  }, `
+    const { createInteractionController } = await import("@aotter/mantle-ui/controller");
+    const controller = createInteractionController({
+      interaction: { bind: [{ input: "id", field: "id" }], version: "expectedVersion" },
+      row: { id: "r1", version: 1 },
+      read: async () => ({ id: "r1", version: 1, data: {} }),
+      invoke: async (input) => ({ ok: true, data: input }),
+    });
+    await controller.open();
+    await controller.submit();
+    const { phase, result } = controller.getSnapshot();
+    if (phase !== "succeeded" || result.expectedVersion !== 1) throw new Error("packed controller did not submit: " + phase);
+  `);
+  for (const forbidden of ["react", "@aotter/mantle-runtime", "@aotter/mantle-spec"]) {
+    if (existsSync(join(temp, `ui-controller-only/node_modules/${forbidden}`))) {
+      throw new Error(`UI controller consumer installed ${forbidden}`);
+    }
+  }
+
   installConsumer("core-with-indexeddb", {
     "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
     "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
@@ -337,7 +360,7 @@ try {
     throw new Error("Admin API consumer installed the optional Admin UI");
   }
 
-  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+MCP, Core+IndexedDB, Core+Admin, and Auth packing consumers passed.");
+  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+MCP, UI controller, Core+IndexedDB, Core+Admin, and Auth packing consumers passed.");
 } finally {
   rmSync(localState, { recursive: true, force: true });
   rmSync(temp, { recursive: true, force: true });
