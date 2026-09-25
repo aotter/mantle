@@ -243,11 +243,12 @@ function triggerFacts(language: ReturnType<typeof usePreferences>["language"], m
   ];
   if (model.source.kind === "http") return [...base, [t(language, "logic.method"), model.source.method], [t(language, "model.path"), model.source.path]];
   if (model.source.kind === "mcp") return [...base, [t(language, "logic.surface"), model.source.surface]];
+  if (model.source.kind === "schedule") return [...base, ["UTC cron", model.source.cron], ["Enabled", String(model.source.enabled !== false)]];
   return [...base, [t(language, "developer.graph.fact.schema"), model.source.schema], [t(language, "logic.hooks"), model.source.on.join(", ")], [t(language, "logic.errorPolicy"), model.source.errorPolicy ?? "—"]];
 }
 
-export function triggerChannel(source: DeveloperTriggerSource): "MCP" | "HTTP" | "SYSTEM" {
-  return source.kind === "lifecycle" ? "SYSTEM" : source.kind === "mcp" ? "MCP" : "HTTP";
+export function triggerChannel(source: DeveloperTriggerSource): "MCP" | "HTTP" | "SYSTEM" | "SCHEDULE" {
+  return source.kind === "schedule" ? "SCHEDULE" : source.kind === "lifecycle" ? "SYSTEM" : source.kind === "mcp" ? "MCP" : "HTTP";
 }
 
 function procedureFacts(language: ReturnType<typeof usePreferences>["language"], model: DeveloperProcedureModel): Array<[string, string]> {

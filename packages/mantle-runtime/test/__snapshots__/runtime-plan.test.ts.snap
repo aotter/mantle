@@ -122,6 +122,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "name": "place-order",
     },
   },
+  "schedules": [],
   "schemas": {
     "orders": {
       "manifest": {
@@ -174,7 +175,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "name": "orders",
     },
   },
-  "semanticFingerprint": "fnv1a64:e8dea4bda72d8a32",
+  "semanticFingerprint": "fnv1a64:c32c410a664c9aeb",
   "triggers": {
     "order-created": {
       "lifecycleSchema": "orders",
@@ -243,7 +244,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "target": "place-order",
     },
   },
-  "version": 2,
+  "version": 3,
   "views": {
     "open-orders": {
       "authorization": {

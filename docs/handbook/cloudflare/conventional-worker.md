@@ -67,9 +67,10 @@ If `auth.ready` rejects, the memoized assembly is evicted so the next request re
 const worker = createMantleWorker<Env>({ plan });
 worker.fetch(request, env, ctx);   // HTTP entry
 worker.getRuntime(env);            // the runtime fetch uses, resolved after auth.ready
+worker.scheduled(controller, env, ctx); // declared scheduled Procedure Triggers
 ```
 
-Queue and scheduled handlers call `worker.getRuntime(env)` and then generated `bindMantle(runtime)` so they reuse the assembled runtime and never write Mantle tables directly. See [Bindings](./bindings.md#cron-triggers) and [Deferred hooks](./deferred-hooks-queues.md).
+Queue handlers call `worker.getRuntime(env)` and then generated `bindMantle(runtime)` so they reuse the assembled runtime. Scheduled Procedure Triggers use `worker.scheduled` with expressions registered in Wrangler. See [Bindings](./bindings.md#cron-triggers), [Trigger](../reference/trigger.md#schedule-source), and [Deferred hooks](./deferred-hooks-queues.md).
 
 ## Readiness rule
 

@@ -25,6 +25,29 @@ async function project(): Promise<string> {
   return root;
 }
 
+it("rejects a scheduled Trigger on ChatGPT Sites before writing generated files", async () => {
+  await project();
+  await mkdir("manifests");
+  await writeFile("manifests/schedule.yaml", `apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: tick }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: tick }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: daily-tick }
+spec:
+  source: { kind: schedule, cron: "0 2 * * *" }
+  target: { procedure: tick }
+`);
+  expect(await runGenerate(["--adopt", "--host", "chatgpt-sites", "--features", "spec,api"], coreOnly)).toBe(1);
+  expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining("RESOURCE_UNAVAILABLE: Trigger 'daily-tick' requires host 'cf'"));
+  await expect(readFile(".mantle/generated/mantle.ts")).rejects.toThrow();
+});
+
 it("plans a full new app from bootstrap files without confusing them for authored code", async () => {
   const root = await project();
   await writeFile("README.md", "new app\n");

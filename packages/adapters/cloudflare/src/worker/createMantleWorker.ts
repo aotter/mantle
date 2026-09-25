@@ -178,6 +178,7 @@ export interface MantleWorkerHandler<Env extends MantleCloudflareEnv> {
    *  use this instead of constructing a second runtime or bypassing it. */
   getRuntime(env: Env): Promise<CloudflareMantleRuntime>;
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
+  scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void>;
 }
 
 interface AssembledWorker<Env extends MantleCloudflareEnv> {
@@ -322,12 +323,44 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     return next;
   };
 
+  const getRuntime = async (env: Env): Promise<CloudflareMantleRuntime> => {
+    const worker = assemble(env);
+    const [runtime] = await Promise.all([worker.getRuntime(), worker.auth.ready]);
+    return runtime;
+  };
+
   return {
-    async getRuntime(env) {
-      const worker = assemble(env);
-      const [runtime] = await Promise.all([worker.getRuntime(), worker.auth.ready]);
-      return runtime;
+    async scheduled(controller, env, ctx) {
+      const declared = options.plan.schedules.filter((schedule) => schedule.cron === controller.cron);
+      if (declared.length === 0) throw new Error(`No Mantle schedule matches '${controller.cron}'.`);
+      const schedules = declared.filter((schedule) => schedule.enabled);
+      if (schedules.length === 0) return;
+      const runtime = await getRuntime(env);
+      const failures: Error[] = [];
+      for (const schedule of schedules) {
+        try {
+          const result = await runtime.invokeTrigger({
+            trigger: schedule.trigger,
+            input: {},
+            ctx: {
+              user: null, staff: null, env,
+              waitUntil: (promise) => ctx.waitUntil(promise),
+              schedule: {
+                id: `${schedule.trigger}:${controller.scheduledTime}`,
+                trigger: schedule.trigger,
+                cron: controller.cron,
+                scheduledTime: controller.scheduledTime,
+              },
+            },
+          });
+          if (!result.ok) failures.push(new Error(`Scheduled Procedure '${schedule.procedure}' failed: ${result.diagnostic.code}`));
+        } catch (error) {
+          failures.push(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+      if (failures.length) throw new AggregateError(failures, "Scheduled Procedures failed");
     },
+    getRuntime,
     async fetch(request, env, ctx) {
       return runMantleWorkerRequest(async () => {
         const worker = assemble(env);

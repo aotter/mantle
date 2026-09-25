@@ -91,6 +91,8 @@ export interface BootMantleRuntimeArgs {
   readonly ports?: MantleRuntimePorts;
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly deployment?: Omit<DeploymentPreparationOptions, "handlerNames">;
+  /** The host has registered a scheduled-event entrypoint. Cloudflare opts in. */
+  readonly supportsScheduledTriggers?: boolean;
 }
 
 export interface InvokeMantleProcedureRequest {
@@ -159,6 +161,9 @@ export interface MantleMedia {
 
 /** Prepare and bind once. Hosts remain responsible for caching and retry policy. */
 export async function bootMantleRuntime(args: BootMantleRuntimeArgs): Promise<MantleRuntime> {
+  if (!args.supportsScheduledTriggers && args.plan.schedules.some((schedule) => schedule.enabled)) {
+    throw new Error("RESOURCE_UNAVAILABLE: this host cannot register scheduled Procedure Triggers.");
+  }
   const handlers = { ...(args.handlers ?? {}) };
   const prepared = await prepareDeployment(args.plan, args.storage, {
     ...args.deployment,

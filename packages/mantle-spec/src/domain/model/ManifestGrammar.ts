@@ -510,7 +510,15 @@ export interface TriggerManifestSpec {
 export type TriggerSource =
   | HttpTriggerSource
   | LifecycleTriggerSource
-  | McpTriggerSource;
+  | McpTriggerSource
+  | ScheduleTriggerSource;
+
+/** Cloudflare Cron Trigger expression. Registration remains host-owned. */
+export interface ScheduleTriggerSource {
+  readonly kind: "schedule";
+  readonly cron: string;
+  readonly enabled?: boolean;
+}
 
 export interface HttpTriggerSource {
   readonly kind: "http";
