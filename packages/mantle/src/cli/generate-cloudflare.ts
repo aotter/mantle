@@ -43,27 +43,13 @@ export async function prepareCloudflare(root: string, output: string, selection:
   const presentWrangler = wrangler.filter((file) => file.text !== null);
   if (presentWrangler.length > 1) throw new Error(`Multiple Wrangler configs found: ${presentWrangler.map((file) => file.path).join(", ")}. Choose one before generating.`);
   const existingWrangler = presentWrangler[0];
-  if (existingWrangler) {
-    const source = existingWrangler.text!;
-    if (!/\bmain["']?\s*[:=]\s*["']src\/index\.ts["']/.test(source) ||
-        !/\bbinding["']?\s*[:=]\s*["']DB["']/.test(source) ||
-        (selected("admin") && !/\bbinding["']?\s*[:=]\s*["']ASSETS["']/.test(source))) {
-      throw new Error(`Existing ${existingWrangler.path} is preserved; configure main=src/index.ts, DB and${selected("admin") ? " ASSETS" : ""} bindings before adoption.`);
-    }
-  } else {
+  if (!existingWrangler) {
     files.push({ path: "wrangler.jsonc", content: `${JSON.stringify({
       $schema: "node_modules/wrangler/config-schema.json", name, main: "src/index.ts",
       compatibility_date: "2026-09-08", compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"],
       ...(selected("admin") ? { assets: { directory: "./public", binding: "ASSETS" } } : {}),
       d1_databases: [{ binding: "DB", database_name: name }],
     }, null, 2)}\n`, owned: false });
-  }
-  const entry = await readFile(join(root, "src/index.ts"), "utf8").catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return null;
-    throw error;
-  });
-  if (entry !== null && !entry.includes(fromIndex)) {
-    throw new Error(`Existing src/index.ts is preserved; import the generated Worker from ${fromIndex} before adoption.`);
   }
   if (selected("admin")) files.push({ path: ".dev.vars.example", content: "# Copy to .dev.vars for local Admin OTP. Never deploy these values.\nMANTLE_AUTH_MODE=local-otp\nPUBLIC_ORIGIN=http://127.0.0.1:8787\nADMIN_EMAIL=you@example.com\nBETTER_AUTH_SECRET=replace-with-a-random-32-byte-secret\n", owned: false });
   if (selected("web")) files.push({

@@ -62,7 +62,7 @@ pnpm exec mantle skills --check
 |---|---|
 | `.agents/skills/mantle-{develop,plugin,theme,update}/SKILL.md` | The installed package's four project-scoped workflows. |
 | `.claude/skills/mantle-{develop,plugin,theme,update}/SKILL.md` | Identical bytes for Claude compatibility. |
-| `node_modules/@aotter/mantle/skills/` | All seven shipped skills, including opt-in `mantle`, `provision` and `media-gc`. |
+| `node_modules/@aotter/mantle/skills/` | All eight shipped skills, including opt-in `mantle`, `integrate`, `provision` and `media-gc`. |
 | `node_modules/@aotter/mantle/docs/` | Handbook and examples matched to the package. |
 
 `mantle skills` overwrites these four generated projections. Keep project-specific
@@ -86,7 +86,7 @@ It does not prove a server, login, Admin assets or MCP connection works.
 | `mantle` is missing | Install local `@aotter/mantle`; run its binary through the project package manager. |
 | `MANIFEST_ROOT_NOT_FOUND` | Check the installed CLI and saved project selection. New generated projects may start with an empty manifest set; legacy compile mode still needs the configured source. |
 | `mantle skills --check` exits 1 | Run `mantle skills`, then read the refreshed project skill. |
-| No projected provision/media-gc skill | These are intentionally opt-in. Read their installed package files when the task calls for them. |
+| No projected integrate/provision/media-gc skill | These are intentionally opt-in. Read their installed package files when the task calls for them. |
 | A documented feature fails on an older release | Use that release's docs or explicitly upgrade; changing a skill does not change Runtime. |
 
 ## Source

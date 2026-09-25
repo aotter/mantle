@@ -18,7 +18,6 @@ interface GenerateOptions {
   readonly check: boolean;
   readonly host?: string;
   readonly features?: string;
-  readonly adopt: boolean;
   readonly manifestsExplicit: boolean;
   readonly reviewUniqueIndexes: boolean;
 }
@@ -75,11 +74,7 @@ export async function runGenerate(
   let project;
   try {
     project = await prepareProject({
-      root, host: options.host, features: options.features, adopt: options.adopt, check: options.check, output: options.output,
-      adminAssetsCurrent: async () => {
-        const index = (deps.resolveAdminUiIndexHtml ?? (() => resolveProjectAdminUiIndexHtml(root)))();
-        return index !== null && syncAdminAssets(dirname(index), resolve(root, "public/_mantle/admin"), true);
-      },
+      root, host: options.host, features: options.features, check: options.check, output: options.output,
     });
   } catch (error) {
     stderr.write(`${message(error)}\n`);
@@ -192,7 +187,6 @@ function parseGenerateArgs(rawArgs: readonly string[]): GenerateOptions | null {
       namespace: { type: "string" },
       host: { type: "string" },
       features: { type: "string" },
-      adopt: { type: "boolean" },
       "review-unique-indexes": { type: "boolean" },
       check: { type: "boolean" },
       help: { type: "boolean", short: "h" },
@@ -208,7 +202,6 @@ function parseGenerateArgs(rawArgs: readonly string[]): GenerateOptions | null {
     check: values.check === true,
     host: values.host,
     features: values.features,
-    adopt: values.adopt === true,
     reviewUniqueIndexes: values["review-unique-indexes"] === true,
     manifestsExplicit: values.manifests !== undefined,
   };
@@ -222,7 +215,7 @@ Usage: mantle generate [options]
 For a new application, the default selects Spec, Runtime, API, MCP, Admin and Web.
 Select a host with --host cf or --host chatgpt-sites. --features replaces the
 default with a positive list; required feature dependencies are added.
-Existing authored applications retain compile-only mode until --adopt.
+Existing authored applications retain their direct-authoring compile mode.
 
 Options:
   --manifests <dir>   Manifest directory (default: ./manifests)
@@ -230,7 +223,6 @@ Options:
   --namespace <name>  Generated type namespace (default: Mantle)
   --host <name>       cf or chatgpt-sites (required for host-dependent features)
   --features <list>   Comma-separated: spec,runtime,api,mcp,admin,web
-  --adopt             Adopt an existing authored application into saved selection
   --review-unique-indexes  Plan a reviewed Sites unique-index tuple replacement
   --check             Check selection, dependencies and output without writing
   -h, --help          This help

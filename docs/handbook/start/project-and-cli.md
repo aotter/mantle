@@ -62,14 +62,16 @@ not an accidental CLI flag.
 
 A generated Worker imports the sealed `plan`, your handler map and the selected
 modules. Generated files carry a marker so the CLI can distinguish them from
-user-owned code. A rerun refuses to replace an unmarked file. `--adopt` opts an
-existing authored application into project mode only after the existing entry
-and host config deliberately connect the generated output. Legacy applications
-without a saved selection keep their prior compile behavior.
+user-owned code. A rerun refuses to replace an unmarked file. Existing
+applications without a saved selection keep their direct-authoring compile
+behavior. For integration into an independently authored application, use the
+installed `docs/skills/integrate/SKILL.md` to choose an embedding, incremental
+replacement or rebuild strategy. Generation does not verify arbitrary host
+entry points or deployment wiring.
 
 `generate` accepts `--manifests <dir>` (default `./manifests`), `--output <dir>`
 (default `.mantle/generated`), `--namespace <name>`, `--host cf|chatgpt-sites`,
-`--features <comma-list>`, `--adopt`, and `--check`. Check mode exits nonzero
+`--features <comma-list>` and `--check`. Check mode exits nonzero
 on drift and does not write. Sites also accepts `--review-unique-indexes` for
 an explicit, source-bound unique tuple migration and duplicate preflight;
 [review the D1 procedure](../chatgpt-sites/generated-app.md) before applying

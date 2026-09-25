@@ -50,9 +50,6 @@ export async function prepareSites(root: string, output: string, selection: Proj
   if (existingWrangler.length) {
     const config = existingWrangler[0]!;
     await assertInsideProject(root, join(root, config.path));
-    if (!/dist\/server\/index\.js/.test(config.content!) || !/\bDB\b/.test(config.content!) || (has("admin") && !/\bASSETS\b/.test(config.content!))) {
-      throw new Error(`Existing ${config.path} is preserved; configure the generated server, DB${has("admin") ? ", and ASSETS" : ""} before adoption.`);
-    }
     const configuredName = config.content!.match(/\bdatabase_name["']?\s*[:=]\s*["']([^"']+)["']/)?.[1];
     if (!configuredName || !/\bmigrations_dir["']?\s*[:=]\s*["']drizzle["']/.test(config.content!)) {
       throw new Error(`Existing ${config.path} must name its D1 database and use migrations_dir=drizzle.`);
@@ -75,8 +72,6 @@ export async function prepareSites(root: string, output: string, selection: Proj
   if (hosting !== null) {
     if (JSON.parse(hosting).d1 !== "DB") throw new Error("Existing Sites hosting.json must bind D1 as DB; project metadata is preserved.");
   } else files.push({ path: ".openai/hosting.json", content: '{"d1":"DB"}\n' });
-  const entry = await optional(join(root, "src/index.ts"));
-  if (entry !== null && !entry.includes(indexImport)) throw new Error(`Existing src/index.ts must import ${indexImport} before adoption.`);
   const writes: File[] = [];
   for (const file of files) {
     const path = resolve(root, file.path);
@@ -150,12 +145,12 @@ async function prepareMigration(root: string, dbName: string, schemas: readonly 
   const last = journal?.entries?.at(-1);
   const journalAhead = last?.idx === index && last.tag === tag && existingSql === sql;
   if (state && !journalAhead && last?.idx !== state.lastIndex) throw new Error("Sites migration journal does not match saved state.");
-  if (!state && journalText !== null && !journalAhead) throw new Error("Existing D1 migration journal cannot be adopted without Mantle state.");
+  if (!state && journalText !== null && !journalAhead) throw new Error("Existing D1 migration journal conflicts with initial Mantle migration state.");
   const migrationFiles = await readdir(join(root, "drizzle")).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return [];
     throw error;
   });
-  if (!state && migrationFiles.some(file => file.endsWith(".sql") && file !== `${tag}.sql`)) throw new Error("Existing D1 migrations cannot be adopted without Mantle state.");
+  if (!state && migrationFiles.some(file => file.endsWith(".sql") && file !== `${tag}.sql`)) throw new Error("Existing D1 migrations conflict with initial Mantle migration state.");
   if (artifact.reviewedUniqueIndexes?.length) {
     if (!state) throw new Error("Reviewed unique-index replacement requires an existing managed Schema.");
     await verifyLocalD1(root, dbName, state, existingSql === sql ? {

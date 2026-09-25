@@ -21,6 +21,7 @@ current npm `latest` contains it.
 |---|---|---|
 | Understand what manifests can express | [Manifest feature reference](../reference/features.md) | A capability-to-field map across the four atoms. |
 | Validate manifests in an existing tool | [Spec-only adoption](../../spec-only-host-adoption.md) | Parse and link without Runtime, storage or a UI. |
+| Bring Mantle into an existing application | [Integration skill](../../skills/integrate/SKILL.md) | Inspect the app and choose embedding, incremental replacement or rebuilding with data migration. |
 | Embed Runtime in an existing host | [Runtime and adapters](../concepts/runtime-and-adapters.md), then [typed queries](../guides/typed-queries.md) | Bind your storage and call the generated API. |
 | Build a local Cloudflare API | [Minimal Worker tutorial](./quickstart-worker.md) | A running public View and a verified HTTP response. |
 | Add a staff console | [Local Admin tutorial](./quickstart-admin.md) | Email OTP, Admin assets and a local human workflow. |
