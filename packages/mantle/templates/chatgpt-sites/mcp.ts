@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { AdminAuth, MantleAdminRuntime, StaffRole } from '@aotter/mantle/admin';
-import { McpJsonRpcDispatcher, projectCallableCapabilities, type RuntimePlan } from '@aotter/mantle/runtime';
+import { createMcpDispatcher, type McpJsonRpcDispatcher, type RuntimePlan } from '@aotter/mantle/runtime';
 import type { Env } from './sites-auth';
 
 const staffRoles=new Set<string>(['owner','editor','contributor']);
@@ -14,21 +14,7 @@ export function mountMcp(app:Hono<{Bindings:Env}>, get:()=>Promise<MantleAdminRu
     if(!dispatchers)cache.set(runtime,dispatchers=new Map());
     let value=dispatchers.get(surface);
     if(!value) {
-      value=new McpJsonRpcDispatcher({
-        getEntry:runtime.getEntry,
-        createDraft:runtime.createDraft,
-        updateDraft:runtime.updateDraft,
-        requestPublish:runtime.requestPublish,
-        unpublish:runtime.unpublish,
-        archive:runtime.archive,
-        deleteEntry:runtime.deleteEntry,
-        executeView:{execute:request=>runtime.executeView({...request,view:request.view.metadata.name})},
-        invokeTrigger:{execute:request=>runtime.invokeTrigger(request)},
-      },[...runtime.schemas.values()],{
-        surface,
-        capabilities:projectCallableCapabilities(plan,{surface}),
-        serverInfo:{name:`aotter.mantle.${surface}`,title:`Mantle ${surface}`,websiteUrl:origin},
-      });
+      value=createMcpDispatcher(runtime,plan,{surface,serverInfo:{name:`aotter.mantle.${surface}`,title:`Mantle ${surface}`,websiteUrl:origin}});
       dispatchers.set(surface,value);
     }
     return value;
