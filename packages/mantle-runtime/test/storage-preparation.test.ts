@@ -74,10 +74,8 @@ spec:
     expect(db.native().prepare("SELECT store_instance_id FROM _mantle_boot_state WHERE id = ?")
       .get("runtime")!.store_instance_id).toBe(storeInstanceId);
     expect(db.executions.slice(before).map(({ sql }) => sql)).toEqual([
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) = 'entries' LIMIT 1",
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state')",
-      "SELECT canonical_version FROM _mantle_managed_runtime_state WHERE id = 1",
-      "SELECT fingerprint, store_instance_id FROM _mantle_boot_state WHERE id = ? LIMIT 1",
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND (lower(name) = 'entries' OR name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state'))",
+      "SELECT b.fingerprint, b.store_instance_id, m.canonical_version FROM _mantle_boot_state b LEFT JOIN _mantle_managed_runtime_state m ON m.id = 1 WHERE b.id = ? LIMIT 1",
     ]);
   });
 
@@ -122,6 +120,9 @@ spec:
     await expect(prepareDeployment(plan, adapter)).rejects.toThrow("pending runtime migration");
     await db.prepare("UPDATE _mantle_managed_runtime_state SET canonical_version = ? WHERE id = 1")
       .bind(artifact.targetCanonicalVersion).run();
+    await expect(prepareDeployment(plan, new SqliteMantleStorageAdapter(db)))
+      .rejects.toThrow("cannot use runtime-managed migrations");
+    await db.prepare("DELETE FROM _mantle_boot_state WHERE id = 'runtime'").run();
     await expect(prepareDeployment(plan, new SqliteMantleStorageAdapter(db)))
       .rejects.toThrow("cannot use runtime-managed migrations");
 
@@ -200,11 +201,11 @@ spec:
     const prepared = await prepareDeployment(plan, fresh);
     expect(migrations).not.toHaveBeenCalled();
     expect(seed).not.toHaveBeenCalled();
-    expect(db.executions.slice(before)).toHaveLength(4);
+    expect(db.executions.slice(before)).toHaveLength(2);
     for (let i = 0; i < 3; i++) {
       expect(await prepared.storage.localePolicy?.readLocales()).toEqual(["en"]);
     }
-    expect(db.executions.slice(before)).toHaveLength(5);
+    expect(db.executions.slice(before)).toHaveLength(3);
     expect(db.executions.slice(before).every(({ sql }) => sql.startsWith("SELECT"))).toBe(true);
 
     db.siteConfig.set("title", "Edited live");

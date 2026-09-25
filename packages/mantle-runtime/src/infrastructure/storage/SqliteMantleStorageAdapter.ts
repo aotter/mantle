@@ -76,8 +76,8 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
   async prepare(plan: RuntimePlan): Promise<PreparedMantleStorage> {
     const prepared = sqliteStoragePorts(this.db, plan, this.siteConfig, this.options.now ?? Date.now);
     const schemas = [...validateSqliteSchemaTables(Object.values(plan.schemas).map((schema) => schema.manifest))];
-    await assertNoLegacyStorage(this.db);
     if (this.options.managedStorageFingerprint) {
+      await assertNoLegacyStorage(this.db);
       const planned = await storageFingerprint(schemas);
       if (planned !== this.options.managedStorageFingerprint) throw new Error("Managed storage fingerprint does not match the RuntimePlan.");
       const stateTable = await this.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = '_mantle_storage_state'")
@@ -104,22 +104,21 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
       return prepared;
     }
     const storageTables = new Set((await this.db.prepare(
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state')",
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND (lower(name) = 'entries' OR name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state'))",
     ).all<{ name: string }>()).map(({ name }) => name));
+    if ([...storageTables].some((name) => name.toLowerCase() === "entries")) {
+      throw new Error("LEGACY_STORAGE_RESET_REQUIRED: rebuild this pre-native-table database before upgrading; see docs/migration-0.1.2.md.");
+    }
     if (storageTables.has("_mantle_storage_state") && !storageTables.has("_migrations")) {
       throw new Error("Managed SQLite database cannot use runtime-managed migrations.");
     }
-    const managed = storageTables.has("_mantle_managed_runtime_state")
-      ? await this.db.prepare("SELECT canonical_version FROM _mantle_managed_runtime_state WHERE id = 1").first<{ canonical_version: string }>()
-      : null;
-    if (managed) throw new Error("Managed SQLite database cannot use runtime-managed migrations.");
     const schemaMigrations = schemaTableMigrations(schemas);
     const fingerprint = await bootFingerprint({
       semanticFingerprint: plan.semanticFingerprint,
       siteDefaults: this.siteDefaults,
       schemaMigrations,
     });
-    if (await isBootCurrent(this.db, fingerprint)) {
+    if (await isBootCurrent(this.db, fingerprint, storageTables.has("_mantle_managed_runtime_state"))) {
       this.canonicalSiteConfig.usePreparedLocales();
       return prepared;
     }

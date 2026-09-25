@@ -64,10 +64,8 @@ describe("SQLite runtime composition", () => {
     await createTestRuntime(options);
 
     expect(db.executions.slice(firstBootQueries).map(({ sql }) => sql)).toEqual([
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) = 'entries' LIMIT 1",
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state')",
-      "SELECT canonical_version FROM _mantle_managed_runtime_state WHERE id = 1",
-      "SELECT fingerprint, store_instance_id FROM _mantle_boot_state WHERE id = ? LIMIT 1",
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND (lower(name) = 'entries' OR name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state'))",
+      "SELECT b.fingerprint, b.store_instance_id, m.canonical_version FROM _mantle_boot_state b LEFT JOIN _mantle_managed_runtime_state m ON m.id = 1 WHERE b.id = ? LIMIT 1",
     ]);
   });
 
