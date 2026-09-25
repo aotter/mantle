@@ -18,8 +18,8 @@ export function mcpToolNameSegment(collection: string): string {
  * (#281) MUST NOT mangle to any of these names — the dispatcher
  * routes by tool name and a collision would shadow the built-in.
  *
- * Mirror of the `name` fields in `McpToolCatalog.GENERIC_TOOLS` plus
- * the two media tool names. Lives here so the boot validator can
+ * Mirror of the lifecycle and media capability names in the runtime's
+ * `CapabilityCatalog`. Lives here so the boot validator can
  * reference them without an infrastructure→usecase import.
  */
 export const RESERVED_MCP_GENERIC_TOOL_NAMES: ReadonlySet<string> = new Set([

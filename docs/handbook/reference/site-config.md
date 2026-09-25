@@ -217,6 +217,7 @@ export default createMantleWorker({
 - [`packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts`](../../../packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts)
 - [`packages/mantle-runtime/src/usecase/media/diagnostics.ts`](../../../packages/mantle-runtime/src/usecase/media/diagnostics.ts)
 - [`packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts`](../../../packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts)
-- [`packages/mantle-runtime/src/infrastructure/mcp/McpToolCatalog.ts`](../../../packages/mantle-runtime/src/infrastructure/mcp/McpToolCatalog.ts)
+- [`packages/mantle-runtime/src/domain/service/CapabilityCatalog.ts`](../../../packages/mantle-runtime/src/domain/service/CapabilityCatalog.ts)
+- [`packages/mantle-runtime/src/usecase/capability/InvokeCapabilityUseCase.ts`](../../../packages/mantle-runtime/src/usecase/capability/InvokeCapabilityUseCase.ts)
 - [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts)
 - [`docs/media-uploads.md`](../../../docs/media-uploads.md)

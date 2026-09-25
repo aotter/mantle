@@ -6,7 +6,6 @@ import {
   type CapabilityHints,
   type CapabilitySurface,
 } from "../../domain/service/CapabilityCatalog.js";
-import { projectMcpOutputSchema } from "./McpOutputSchema.js";
 
 /**
  * MCP wire shape of one catalog capability. Semantics (names, schemas,
@@ -19,7 +18,7 @@ export interface McpToolDefinition {
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
   /** Advertised only when every output Runtime accepts also satisfies it
-   *  under a standard JSON Schema validator; see `projectMcpOutputSchema`. */
+   *  under a standard JSON Schema validator; see `projectStandardOutputSchema`. */
   readonly outputSchema?: Record<string, unknown>;
   /** MCP tool annotations (spec: absent hints default to the conservative
    *  `destructiveHint: true` / `openWorldHint: true`). Only provable or
@@ -37,7 +36,7 @@ export interface McpToolAnnotations {
 export type McpToolSurface = CapabilitySurface;
 
 export function toMcpToolDefinition(capability: Capability): McpToolDefinition {
-  const outputSchema = capability.outputSchema && projectMcpOutputSchema(capability.outputSchema);
+  const outputSchema = capability.outputSchema;
   return {
     name: capability.name,
     ...(capability.title ? { title: capability.title } : {}),

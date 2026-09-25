@@ -962,6 +962,16 @@ describe("McpJsonRpcDispatcher", () => {
     });
   });
 
+  it("a Procedure capability without a bound Trigger invoker is an unknown tool", async () => {
+    const procedure = makeProcedure({ name: "echo" });
+    const dispatcher = new McpJsonRpcDispatcher(minimalUseCases(), [postsSchema()], {
+      capabilities: [procedureCapability(procedure)],
+    });
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "echo", arguments: {} }), staffCtx());
+    const body = (await res.json()) as { error: { code: number } };
+    expect(body.error.code).toBe(-32601);
+  });
+
   it("create_draft_<unknown> returns -32601 unknown tool", async () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(

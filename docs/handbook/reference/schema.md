@@ -282,5 +282,6 @@ Adding or shortening TTL on an existing Schema immediately changes **read visibi
 - [`packages/mantle-runtime/src/domain/service/BuiltinProjector.ts`](../../../packages/mantle-runtime/src/domain/service/BuiltinProjector.ts)
 - [`packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts`](../../../packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts)
 - [`packages/mantle-runtime/src/domain/service/io/EntryDeleteGuard.ts`](../../../packages/mantle-runtime/src/domain/service/io/EntryDeleteGuard.ts)
-- [`packages/mantle-runtime/src/infrastructure/mcp/McpToolCatalog.ts`](../../../packages/mantle-runtime/src/infrastructure/mcp/McpToolCatalog.ts)
+- [`packages/mantle-runtime/src/domain/service/CapabilityCatalog.ts`](../../../packages/mantle-runtime/src/domain/service/CapabilityCatalog.ts)
+- [`packages/mantle-runtime/src/usecase/capability/InvokeCapabilityUseCase.ts`](../../../packages/mantle-runtime/src/usecase/capability/InvokeCapabilityUseCase.ts)
 - [`packages/mantle-admin/src/mountMantleAdmin.ts`](../../../packages/mantle-admin/src/mountMantleAdmin.ts)
