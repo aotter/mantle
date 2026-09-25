@@ -19,8 +19,9 @@ export function DeveloperOperations({ operations }: { operations: DeveloperConso
         {operations.schedules.length ? <ul className="space-y-2 text-sm">{operations.schedules.map((schedule) => {
           const latest = operations.latestRuns.find((run) => run.scheduleId === schedule.id);
           return <li key={schedule.id} className="rounded-md border p-3">
-            <a className="font-medium underline" href={developerDetailHref(`Procedure:${schedule.procedure}`)}>{schedule.id}</a>
+            <a className="font-medium underline" href={developerDetailHref(`Trigger:${schedule.id}`)}>{schedule.id}</a>
             <span className="ml-2 font-mono text-xs">{schedule.cron}</span>
+            <p><a className="underline" href={developerDetailHref(`Procedure:${schedule.procedure}`)}>{t(language, "developer.graph.kind.procedure")}: {schedule.procedure}</a></p>
             <p>{schedule.enabled ? t(language, "developer.operations.enabled") : t(language, "developer.operations.disabled")}
               {" · "}{t(language, "developer.operations.registration")}: {t(language, "developer.operations.notObserved")}</p>
             <p>{t(language, "developer.operations.lastRun")}: {observed

@@ -394,6 +394,9 @@ spec:
         ]),
       },
     });
+    expect(body.graph.relations).not.toContainEqual(expect.objectContaining({
+      kind: "procedure-schema", sourceId: "Procedure:place-order",
+    }));
   });
 
   it("projects HTTP, MCP, and server-backed WebMCP documentation from the plan", async () => {

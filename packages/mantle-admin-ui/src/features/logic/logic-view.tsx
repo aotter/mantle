@@ -151,6 +151,7 @@ function LogicDefinition({ item, snapshot, tab, manifestFocus, onTabChange, onNa
         </TabsList>
         <TabsContent value="overview" className="space-y-6 p-5">
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{summary}</p>
+          {item.kind === "Procedure" && item.model.handler.kind === "ref" ? <p className="text-sm text-muted-foreground">{t(language, "developer.unknownEffects")}</p> : null}
           {atom ? <ExecutionStrip selectedId={item.id} graph={snapshot.graph} onNavigate={onNavigate} /> : null}
           <section className="space-y-3">
             <h2 className="text-sm font-medium">{t(language, "logic.configuration")}</h2>
@@ -243,7 +244,10 @@ function triggerFacts(language: ReturnType<typeof usePreferences>["language"], m
   ];
   if (model.source.kind === "http") return [...base, [t(language, "logic.method"), model.source.method], [t(language, "model.path"), model.source.path]];
   if (model.source.kind === "mcp") return [...base, [t(language, "logic.surface"), model.source.surface]];
-  if (model.source.kind === "schedule") return [...base, ["UTC cron", model.source.cron], ["Enabled", String(model.source.enabled !== false)]];
+  if (model.source.kind === "schedule") return [...base,
+    [t(language, "developer.operations.cronUtc"), model.source.cron],
+    [t(language, "developer.operations.activation"), t(language, model.source.enabled === false ? "developer.operations.disabled" : "developer.operations.enabled")],
+  ];
   return [...base, [t(language, "developer.graph.fact.schema"), model.source.schema], [t(language, "logic.hooks"), model.source.on.join(", ")], [t(language, "logic.errorPolicy"), model.source.errorPolicy ?? "—"]];
 }
 

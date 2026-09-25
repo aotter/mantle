@@ -21,6 +21,7 @@ it("separates declared schedules, unobserved registration and missing runs", () 
   expect(html).toContain("nightly");
   expect(html).toContain("Not observed");
   expect(html).toContain("No run observed");
+  expect(html).toContain('href="/admin/dev/logic/triggers?selected=Trigger%3Anightly"');
   expect(html).toContain('href="/admin/dev/logic/procedures?selected=Procedure%3Acleanup"');
   expect(html).toContain("events");
   expect(render({ ...declared, observationAvailability: "unavailable" })).toContain("Unavailable");

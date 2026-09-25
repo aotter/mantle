@@ -41,6 +41,12 @@ enforces the new constraint when the reviewed migration is applied. Runtime-
 managed CF boot continues to reject uniqueness changes without a reviewed
 artifact path.
 
+The owner-only Developer Console can inspect live Schema entries and run
+declared Views on demand through guarded Admin routes. Its HTTP and MCP lists
+link to the owning declarations. UI action placement is no longer shown as a
+Procedure-to-Schema execution path; custom handlers and native SQL Views state
+when their data relationships cannot be inferred from the Manifest.
+
 Ref Procedures can now group create, update and delete operations across
 Schemas with `ctx.writeAtomically`. D1 and Bun commit the group or roll it
 back, including when the last conditional write finds a stale version. Other
