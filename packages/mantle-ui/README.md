@@ -80,5 +80,6 @@ The host supplies:
 - **Field labels:** a `fieldLabel` function.
 
 Styling uses Tailwind token classes (`bg-muted`, `border`, `text-destructive`,
-`bg-primary`, …) resolved from the host's CSS variables. Add the package
-sources to your Tailwind `@source` so the classes are generated.
+`bg-primary`, …) resolved from the host's CSS variables. Add
+`@source "../node_modules/@aotter/mantle-ui/dist/**/*.js"` (adjusted to your
+stylesheet's location) so Tailwind generates the classes.

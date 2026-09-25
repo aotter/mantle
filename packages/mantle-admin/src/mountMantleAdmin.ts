@@ -555,7 +555,18 @@ export function mountMantleAdmin<E extends Env>(
     } }, { headers: { "cache-control": "private, no-store" } });
   });
 
-  guarded("get", "/admin/api/views-manifest", () => Response.json({ views: viewsManifest }));
+  // Row actions follow the operations listing: a Procedure this caller's
+  // predicates exclude is not offered, nor named (#877 L3).
+  guarded("get", "/admin/api/views-manifest", (c, gate) => {
+    const ctx = adminHandlerContext(c, gate, ref);
+    const runnable = (procedure: string) => {
+      const manifest = ref.plan.procedures[procedure]?.manifest;
+      return !!manifest && evaluateAuthAll(manifest.spec.requires, ctx, `GET /admin/api/views-manifest#${procedure}`, "runtime") === null;
+    };
+    return Response.json({
+      views: viewsManifest.map((view) => ({ ...view, rowActions: view.rowActions.filter(({ procedure }) => runnable(procedure)) })),
+    });
+  });
 
   // Admin inspection is staff-gated for both surfaces. Public Views keep
   // their separate public `/api/views/<name>` contract.
