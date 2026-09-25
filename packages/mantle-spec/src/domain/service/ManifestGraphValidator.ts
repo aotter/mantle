@@ -8,6 +8,7 @@ import {
   EXPECTED_VERSION_PROPERTY,
   MANTLE_REF_KEYWORD,
   RESERVED_PROCEDURE_INPUT_NAMES,
+  resolveMantleRef,
   hasCtxUserRefKey,
   isCtxUserRef,
   resolveLocalizedText,
@@ -23,6 +24,7 @@ import { partitionManifests } from "./ManifestPartition.js";
 import { jsonSchemaToZod } from "./JsonSchemaToZod.js";
 import { checkTranslatesReferences } from "./CrossSchemaChecker.js";
 import { checkSchemaNavTargets, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
+import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
 import {
   bestMatch,
   manifestPath,
@@ -66,9 +68,14 @@ export function validateManifestGraph(
     diags.push(...checkViewRefs(v, schemasByName, filePaths));
   }
 
+  for (const s of partitioned.schemas) {
+    diags.push(...checkMantleRefs("Schema", s.metadata.name, "/spec/schema", s.spec.schema, schemasByName, filePaths));
+  }
   for (const p of partitioned.procedures) {
     diags.push(...checkBuiltinHandler(p, schemasByName, filePaths));
     diags.push(...checkCollectionActionRef(p, schemasByName, filePaths));
+    diags.push(...checkMantleRefs("Procedure", p.metadata.name, "/spec/input", p.spec.input, schemasByName, filePaths));
+    diags.push(...checkProcedureTarget(p, schemasByName, filePaths));
   }
 
   diags.push(
@@ -133,6 +140,125 @@ function checkCollectionActionRef(
     expected: "the metadata.name of an existing Schema",
     message: `Procedure '${procedure.metadata.name}' collection action references unknown Schema '${target}'.`,
   })];
+}
+
+/**
+ * `x-mantle-ref` on top-level properties. The string form is unchanged; the
+ * object form must name an existing Schema and a field that identifies one
+ * entry: `id` or a single-field unique index (ADR-0029).
+ */
+function checkMantleRefs(
+  kind: "Schema" | "Procedure",
+  name: string,
+  pointer: string,
+  schema: JsonSchema,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const [field, property] of Object.entries(schema.properties ?? {})) {
+    const raw = property?.[MANTLE_REF_KEYWORD];
+    if (raw === undefined || typeof raw === "string") continue;
+    const path = manifestPath(kind, name, `${pointer}/properties/${pointerSegment(field)}/${MANTLE_REF_KEYWORD}`, filePaths);
+    const ref = resolveMantleRef(property);
+    const keys = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? Object.keys(raw) : [];
+    if (!ref || keys.some((key) => key !== "schema" && key !== "field")) {
+      out.push(validateDiagnostic({
+        code: "MANTLE_REF_INVALID",
+        severity: "error",
+        path,
+        value: raw,
+        expected: "a Schema name, or { schema: <Schema name>, field: <id or single-field unique index> }",
+        message: `${kind} '${name}' field '${field}' has a malformed x-mantle-ref.`,
+      }));
+      continue;
+    }
+    const target = schemasByName.get(ref.schema);
+    if (!target) {
+      out.push(validateDiagnostic({
+        code: "MANTLE_REF_INVALID",
+        severity: "error",
+        path: `${path}/schema`,
+        value: ref.schema,
+        expected: "the metadata.name of an existing Schema",
+        candidates: [...schemasByName.keys()],
+        suggestion: bestMatch(ref.schema, [...schemasByName.keys()]),
+        message: `${kind} '${name}' field '${field}' references unknown Schema '${ref.schema}'.`,
+      }));
+      continue;
+    }
+    const keyFields = entryKeyFields(target);
+    if (!keyFields.includes(ref.field)) {
+      out.push(validateDiagnostic({
+        code: "MANTLE_REF_INVALID",
+        severity: "error",
+        path: `${path}/field`,
+        value: ref.field,
+        expected: `one of ${keyFields.join(", ")}`,
+        candidates: keyFields,
+        message: `${kind} '${name}' field '${field}' references '${ref.schema}.${ref.field}', which does not identify one entry; use id or a single-field unique index.`,
+      }));
+    }
+  }
+  return out;
+}
+
+/** Fields whose value identifies exactly one entry of a Schema. */
+function entryKeyFields(schema: SchemaManifest): string[] {
+  const unique = checkSchemaIndexes(schema).declarations
+    .filter((declaration) => declaration.unique && declaration.fields.length === 1)
+    .map((declaration) => declaration.fields[0]!.name);
+  return ["id", ...new Set(unique)];
+}
+
+/**
+ * `Procedure.spec.target` names what a `ref` handler mutates. Builtin
+ * handlers already derive it, so a declaration there could only disagree.
+ */
+function checkProcedureTarget(
+  procedure: ProcedureManifest,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const target = procedure.spec.target;
+  if (!target) return [];
+  const name = procedure.metadata.name;
+  const fail = (pointer: string, value: unknown, expected: string, message: string, candidates?: readonly string[]) =>
+    [validateDiagnostic({
+      code: "PROCEDURE_TARGET_INVALID",
+      severity: "error",
+      path: manifestPath("Procedure", name, `/spec/target${pointer}`, filePaths),
+      value,
+      expected,
+      ...(candidates ? { candidates } : {}),
+      message,
+    })];
+  if (procedure.spec.handler.kind === "builtin") {
+    return fail("", target, "no target on a builtin handler", `Procedure '${name}' uses a builtin handler, whose target is derived from handler.schema; remove spec.target.`);
+  }
+  if (!schemasByName.has(target.schema)) {
+    return fail("/schema", target.schema, "the metadata.name of an existing Schema", `Procedure '${name}' target references unknown Schema '${target.schema}'.`, [...schemasByName.keys()]);
+  }
+  const input = procedure.spec.input;
+  const properties = input.properties ?? {};
+  const required = new Set(input.required ?? []);
+  if (!required.has(target.id) || !hasType(properties[target.id], ["string"])) {
+    return fail("/id", target.id, "a required string input property", `Procedure '${name}' target.id '${target.id}' must be a required string property of spec.input.`, Object.keys(properties));
+  }
+  if (target.version !== undefined && !hasType(properties[target.version], ["number", "integer"])) {
+    return fail("/version", target.version, "a number input property", `Procedure '${name}' target.version '${target.version}' must be a number property of spec.input.`, Object.keys(properties));
+  }
+  return [];
+}
+
+function hasType(schema: JsonSchema | undefined, types: readonly string[]): boolean {
+  const declared = schema?.type;
+  const list = Array.isArray(declared) ? declared : declared === undefined ? [] : [declared];
+  return list.length > 0 && list.every((type) => types.includes(type) || type === "null") && list.some((type) => types.includes(type));
+}
+
+function pointerSegment(value: string): string {
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }
 
 function byName<M extends { metadata: { name: string } }>(arr: ReadonlyArray<M>): Map<string, M> {
@@ -1170,7 +1296,7 @@ function checkMcpExpectedVersionReachability(
       expected: `a '${source.surface}' View over '${collection}' that exposes 'version'`,
       message:
         `MCP tool '${tool}' on the ${source.surface} surface requires '${EXPECTED_VERSION_PROPERTY}' of ` +
-        `'${collection}'${procedure.spec.handler.kind === "ref" ? " (inferred from its x-mantle-ref input)" : ""}, ` +
+        `'${collection}'${procedure.spec.handler.kind === "ref" && !procedure.spec.target ? " (inferred from its x-mantle-ref input)" : ""}, ` +
         `but no ${source.surface} View reads that collection's 'version'; an agent cannot obtain the value it must send.`,
     }));
   }
@@ -1181,11 +1307,11 @@ function checkMcpExpectedVersionReachability(
 function lockedCollection(procedure: ProcedureManifest): string | null {
   const handler = procedure.spec.handler;
   if (handler.kind === "builtin") return handler.schema;
+  if (procedure.spec.target) return procedure.spec.target.schema;
   const input = procedure.spec.input;
   const refs = (input.required ?? []).flatMap((name) => {
-    const property = input.properties?.[name];
-    const ref = property?.[MANTLE_REF_KEYWORD];
-    return typeof ref === "string" ? [ref] : [];
+    const ref = resolveMantleRef(input.properties?.[name]);
+    return ref ? [ref.schema] : [];
   });
   return refs.length === 1 ? refs[0]! : null;
 }

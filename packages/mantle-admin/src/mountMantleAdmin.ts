@@ -13,6 +13,7 @@ import {
   meetsRole,
   redactForWire,
   resolveLocalizedText,
+  resolveMantleRef,
   resolveLifecycle,
   runtimeDiagnostic,
   checkSchemaAdminUi,
@@ -1378,13 +1379,18 @@ function discoverRowBindings(
 
   const bindings: StaffOperationRowBinding[] = [];
   for (const [propertyName, propertySchema] of Object.entries(properties)) {
-    const refTarget = propertySchema[MANTLE_REF_KEYWORD];
-    if (typeof refTarget !== "string" || refTarget.length === 0) continue;
-    const targetSchema = schemasByName.get(refTarget);
+    const ref = resolveMantleRef(propertySchema);
+    if (!ref) continue;
+    const targetSchema = schemasByName.get(ref.schema);
     if (!targetSchema) continue;
     if (targetSchema.spec.translates) continue;
+    // The object form declares the bound field; nothing is inferred.
+    if (typeof propertySchema[MANTLE_REF_KEYWORD] === "object") {
+      bindings.push({ collection: ref.schema, inputField: propertyName, rowField: ref.field });
+      continue;
+    }
     bindings.push({
-      collection: refTarget,
+      collection: ref.schema,
       inputField: propertyName,
       // Same-name wins: when the target Schema declares a property
       // with the input field's own name (skuCode → product-skus.
@@ -1821,7 +1827,8 @@ function discoverChildRelationships(
     }
 
     for (const [childField, childProperty] of Object.entries(childProps)) {
-      if (childProperty[MANTLE_REF_KEYWORD] === parentName) {
+      const ref = resolveMantleRef(childProperty);
+      if (ref?.schema === parentName && ref.field === "id") {
         add(childSchema, "field", "id", childField, parentRow.id);
       }
     }
@@ -1854,9 +1861,9 @@ function collectionParentFor(
   );
   for (const [childField, childProperty] of Object.entries(childProps)) {
     if (!childRequired.has(childField)) continue;
-    const parent = childProperty[MANTLE_REF_KEYWORD];
-    if (typeof parent === "string" && schemaNames.has(parent)) {
-      return { collection: parent, parentField: "id", childField };
+    const ref = resolveMantleRef(childProperty);
+    if (ref?.field === "id" && schemaNames.has(ref.schema)) {
+      return { collection: ref.schema, parentField: "id", childField };
     }
   }
 
@@ -2382,8 +2389,8 @@ function projectDeveloperConsole(plan: RuntimePlan): {
           translationParent,
         )] : []),
         ...Object.entries(manifest.spec.schema.properties ?? {}).flatMap(([field, property]) => {
-          const target = property[MANTLE_REF_KEYWORD];
-          if (typeof target !== "string" || !schemasByName.has(target)) return [];
+          const target = resolveMantleRef(property)?.schema;
+          if (!target || !schemasByName.has(target)) return [];
           return [developerRelation(
             `Schema:${name}:field:${field}:${target}`,
             "schema-reference",

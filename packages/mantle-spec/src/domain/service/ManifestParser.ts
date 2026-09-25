@@ -26,6 +26,7 @@ import {
   FILTER_COMPARISON_OPS,
   VIEW_PARAMS_RESERVED,
   PROCEDURE_MCP_ANNOTATION_KEYS,
+  PROCEDURE_TARGET_KEYS,
   RESERVED_ENTRY_COLUMNS,
   RESERVED_PROCEDURE_INPUT_NAMES,
   isParamRef,
@@ -1188,7 +1189,7 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "description", "requires", "input", "uiSchema", "output", "handler", "mcp"],
+    ["title", "description", "requires", "input", "uiSchema", "output", "handler", "mcp", "target"],
     idx,
     "/spec",
   );
@@ -1209,6 +1210,7 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
       throw new ManifestParseError("Procedure.spec.mcp cannot be both readOnlyHint: true and destructiveHint: true", idx, "/spec/mcp");
     }
   }
+  if (s["target"] !== undefined) validateProcedureTargetShape(s["target"], idx);
   validateLocalizedText(
     s["title"],
     idx,
@@ -1244,6 +1246,31 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
     validateRequires(s["requires"], idx, "Procedure");
   }
   return m;
+}
+
+/** Shape only; graph validation checks the Schema and input properties. */
+function validateProcedureTargetShape(target: unknown, idx: number): void {
+  if (typeof target !== "object" || target === null || Array.isArray(target)) {
+    throw new ManifestParseError(
+      "Procedure.spec.target must be an object { schema, id, version? }",
+      idx,
+      "/spec/target",
+      "PROCEDURE_TARGET_INVALID",
+    );
+  }
+  rejectUnknownKeys(target as Record<string, unknown>, [...PROCEDURE_TARGET_KEYS], idx, "/spec/target");
+  for (const key of PROCEDURE_TARGET_KEYS) {
+    const value = (target as Record<string, unknown>)[key];
+    if (value === undefined && key === "version") continue;
+    if (typeof value !== "string" || value.length === 0) {
+      throw new ManifestParseError(
+        `Procedure.spec.target.${key} must be a non-empty string`,
+        idx,
+        `/spec/target/${key}`,
+        "PROCEDURE_TARGET_INVALID",
+      );
+    }
+  }
 }
 
 const UNSUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([

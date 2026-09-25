@@ -119,7 +119,9 @@ spec:
     additionalProperties: false
     required: [id, expectedVersion, requestStatus]
     properties:
-      id: { type: string }
+      id:
+        type: string
+        x-mantle-ref: { schema: purchase-requisitions, field: id }
       expectedVersion: { type: number, minimum: 1 }
       requestStatus: { type: string, enum: [approved, rejected] }
       reviewerNote: { type: string, maxLength: 1000 }
@@ -175,7 +177,7 @@ A missing identity fails with 401; the runtime never drops the filter and never 
 
 `pending-approvals` exposes the entry `id` and `version` required by `review-requisition`. Drive reviews from that View through Staff MCP or `POST /admin/api/operations/review-requisition`.
 
-The Procedure deliberately does not mark `id` with `x-mantle-ref`. This Schema's lone single-field unique index is `[requestNumber]`; a row-bound Admin action would therefore prefill the reference with the request number, while builtin `update` requires the entry id. Leaving the field unbound keeps every advertised path executable instead of publishing a row action that returns `NOT_FOUND`.
+The Procedure marks `id` with the object form `x-mantle-ref: { schema: purchase-requisitions, field: id }`. The explicit `field` matters here. This Schema's lone single-field unique index is `[requestNumber]`, and the string form would leave Admin to infer the bound field, which would pick the request number. Builtin `update` needs the entry id, so the row action in `pending-approvals` now pre-fills exactly that. `field` may name `id` or a single-field unique index; anything else is `MANTLE_REF_INVALID`.
 
 See [Authorization](../handbook/concepts/authorization.md) and the [Procedure reference](../handbook/reference/procedure.md).
 

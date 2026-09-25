@@ -136,7 +136,7 @@ Stamping semantics: on create the computed value replaces whatever the caller se
 
 ### `x-mantle-ref`
 
-An informational foreign-key marker on a string property that holds another collection's entry id (`x-mantle-ref: customers`). Nothing is enforced: no constraint, cascade or orphan check. Admin uses it for pickers and related rows; `x-mantle-ref: media_assets` marks a media asset id. Declare a single-field index on the ref field when reverse lookups must stay bounded. On a Procedure input property the marker exposes a row action; see [Procedure](./procedure.md#uischema).
+An informational foreign-key marker on a string property that holds another collection's entry id (`x-mantle-ref: customers`). The object form `x-mantle-ref: { schema: customers, field: customerNumber }` names the target field instead. `field` must be `id` or a single-field unique index of that Schema, and the Schema must exist; otherwise it is `MANTLE_REF_INVALID`. The string form means `field: id`. Only `id` references compose parent/child navigation. Nothing is enforced: no constraint, cascade or orphan check. Admin uses it for pickers and related rows; `x-mantle-ref: media_assets` marks a media asset id. Declare a single-field index on the ref field when reverse lookups must stay bounded. On a Procedure input property the marker exposes a row action; see [Procedure](./procedure.md#uischema).
 
 ### `x-mcp-hint`
 

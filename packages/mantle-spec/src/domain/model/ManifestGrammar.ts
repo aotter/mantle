@@ -84,14 +84,37 @@ export type JsonSchema = {
    *  consumer humanizes the property name instead (unchanged v0.1
    *  behavior). */
   readonly title?: LocalizedText;
-  /** Custom: cross-collection reference target. */
-  readonly "x-mantle-ref"?: string;
+  /** Custom: cross-collection reference. The string form names the target
+   *  Schema and means the value is that entry's `id`; the object form also
+   *  names the target field (ADR-0029). */
+  readonly "x-mantle-ref"?: string | MantleRefTarget;
   /** Custom: hint for MCP tool / agent prompt context. */
   readonly "x-mcp-hint"?: string;
   readonly [key: string]: unknown;
 };
 
 export const MANTLE_REF_KEYWORD = "x-mantle-ref" as const;
+
+/** Object form of `x-mantle-ref`: which Schema the value points at, and
+ *  which of its fields holds the value (`id` or a single-field unique
+ *  index). */
+export interface MantleRefTarget {
+  readonly schema: string;
+  readonly field: string;
+}
+
+/** Normalize either `x-mantle-ref` form, or `null` when the property carries
+ *  none (or a malformed value, which graph validation reports). */
+export function resolveMantleRef(property: unknown): MantleRefTarget | null {
+  if (typeof property !== "object" || property === null) return null;
+  const ref = (property as Record<string, unknown>)[MANTLE_REF_KEYWORD];
+  if (typeof ref === "string") return ref.length > 0 ? { schema: ref, field: "id" } : null;
+  if (typeof ref !== "object" || ref === null || Array.isArray(ref)) return null;
+  const { schema, field } = ref as Record<string, unknown>;
+  return typeof schema === "string" && schema.length > 0 && typeof field === "string" && field.length > 0
+    ? { schema, field }
+    : null;
+}
 export const MCP_HINT_KEYWORD = "x-mcp-hint" as const;
 export const MANTLE_BIND_KEYWORD = "x-mantle-bind" as const;
 
@@ -412,7 +435,21 @@ export interface ProcedureManifestSpec {
    *  input and is not declarable. A `readOnlyHint: true` on a writing
    *  builtin handler is rejected at validation. */
   readonly mcp?: ProcedureMcpAnnotations;
+  /** The entity a `ref` handler mutates and whose version it locks
+   *  (ADR-0029). Needed only for entity-bound interactions and automatic
+   *  version binding; builtin handlers derive it and may not declare it. */
+  readonly target?: ProcedureTarget;
 }
+
+export interface ProcedureTarget {
+  /** Target Schema. */
+  readonly schema: string;
+  /** Required string input property carrying the target entry id. */
+  readonly id: string;
+  /** Number input property carrying the observed version, when locked. */
+  readonly version?: string;
+}
+export const PROCEDURE_TARGET_KEYS = ["schema", "id", "version"] as const;
 
 export interface ProcedureMcpAnnotations {
   readonly readOnlyHint?: boolean;

@@ -1,5 +1,6 @@
 import {
   checkSchemaIndexes,
+  resolveMantleRef,
   type JsonSchema,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
@@ -123,7 +124,7 @@ export function schemaTableMigrations(schemas: Iterable<SchemaManifest>): readon
       const fields = declaration.fields.map(({ name }) => quoteIdent(NATIVE_COLUMN[name] ?? name));
       const relationship = !declaration.unique && declaration.fields.length === 1 &&
         (schema.spec.translates?.on === declaration.fields[0]!.name ||
-          typeof schema.spec.schema.properties?.[declaration.fields[0]!.name]?.["x-mantle-ref"] === "string");
+          resolveMantleRef(schema.spec.schema.properties?.[declaration.fields[0]!.name]) !== null);
       if (relationship) fields.push('"_mantle_updated_at" DESC', '"_mantle_id" DESC');
       const suffix = `${declaration.unique ? "unique" : relationship ? "relation" : "index"}_${declaration.fields.map(({ name }) => utf8Hex(name)).join("_")}`;
       migrations.push({
@@ -150,7 +151,7 @@ export function schemaTableProjection(schema: SchemaManifest): string {
       declaration.fields.map(({ name }) => name),
       !declaration.unique && declaration.fields.length === 1 &&
         (schema.spec.translates?.on === declaration.fields[0]!.name ||
-          typeof schema.spec.schema.properties?.[declaration.fields[0]!.name]?.["x-mantle-ref"] === "string"),
+          resolveMantleRef(schema.spec.schema.properties?.[declaration.fields[0]!.name]) !== null),
     ]).sort((a, b) => compareText(JSON.stringify(a), JSON.stringify(b))),
   };
   return JSON.stringify(projection);

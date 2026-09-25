@@ -400,6 +400,32 @@ function rowBindingManifests(): Manifest[] {
         target: { procedure: "translate-post" },
       },
     },
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "retire-product" },
+      spec: {
+        title: "Retire Product",
+        input: {
+          type: "object",
+          // Object form: bind the entry id even though `products` has a
+          // single-field unique index the string form would infer.
+          properties: { productId: { type: "string", "x-mantle-ref": { schema: "products", field: "id" } } },
+          required: ["productId"],
+        },
+        output: { type: "object" },
+        handler: { kind: "ref", ref: "retireProduct" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: "retire-product-mcp" },
+      spec: {
+        source: { kind: "mcp", surface: "staff" },
+        target: { procedure: "retire-product" },
+      },
+    },
   ];
 }
 
@@ -441,6 +467,21 @@ describe("GET /admin/api/operations — rowBindings (#430)", () => {
     const audit = body.operations.find((op) => op.name === "audit-warehouse")!;
     expect(audit.rowBindings).toEqual([
       { collection: "warehouses", inputField: "code", rowField: "code" },
+    ]);
+  });
+
+  it("binds exactly the field an object-form x-mantle-ref declares", async () => {
+    const { app } = rowBindingHarness();
+    const res = await app.request("/admin/api/operations");
+    const body = (await res.json()) as {
+      operations: Array<{
+        name: string;
+        rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
+      }>;
+    };
+    const retire = body.operations.find((op) => op.name === "retire-product")!;
+    expect(retire.rowBindings).toEqual([
+      { collection: "products", inputField: "productId", rowField: "id" },
     ]);
   });
 

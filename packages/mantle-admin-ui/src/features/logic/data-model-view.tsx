@@ -22,6 +22,7 @@ import type {
   DeveloperViewModel,
   JsonSchema,
 } from "../../lib/types";
+import { mantleRefOf } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { ErrorBox } from "../../ui/page";
 import { Badge } from "@/components/ui/badge";
@@ -69,7 +70,7 @@ export function flattenSchemaFields(schema: JsonSchema): SchemaFieldRow[] {
         type: schemaType(property),
         required: required.has(name),
         constraints: schemaConstraints(property),
-        reference: typeof property["x-mantle-ref"] === "string" ? property["x-mantle-ref"] : null,
+        reference: mantleRefOf(property)?.schema ?? null,
       });
       if (property.properties) walk(property, path, fieldPointer);
       if (property.items?.properties) walk(property.items, `${path}[]`, `${fieldPointer}/items`);
