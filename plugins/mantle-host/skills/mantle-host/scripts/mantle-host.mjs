@@ -98,7 +98,8 @@ var core_default = {
 var cliPackage = package_default.name;
 var cliVersion = package_default.version;
 var hostName = "mantle-host";
-var hostCommand = `${hostName} (the Mantle plugin script; see the ${hostName} skill)`;
+var hostCommand = `${hostName} (the ${hostName} plugin script; see the ${hostName} skill)`;
+var updateHost = `Update the ${hostName} plugin, or re-run \`npx skills add aotter/mantle --skill ${hostName}\`.`;
 var corePin = Object.freeze({ version: core_default.version, revision: core_default.revision });
 
 // ../../node_modules/.pnpm/fflate@0.8.3/node_modules/fflate/esm/index.mjs
@@ -4496,9 +4497,9 @@ function saveFailureNext(ctx, code) {
     case "dist_missing":
       return pending ? buildNext(ctx, pending) : fix("Build the frontend first.");
     case "client_outdated":
-      return { kind: "fix", reason: "Update the Mantle plugin: Cloud requires a newer mantle-host protocol. Nothing was uploaded by this call." };
+      return { kind: "fix", reason: `Cloud requires a newer mantle-host protocol. ${updateHost} Nothing was uploaded by this call.` };
     case "cli_core_mismatch":
-      return { kind: "fix", reason: "Cloud pins another Mantle Core than this mantle-host. Update the Mantle plugin." };
+      return { kind: "fix", reason: `Cloud pins another Mantle Core than this mantle-host. ${updateHost}` };
     case "grant_project_mismatch":
       return { kind: "fix", reason: `The grant is for another project than ${ctx.linkFile} names. Call the tool with exactly the arguments of the last nextAction.` };
     case "local_hash_mismatch":
@@ -5118,9 +5119,10 @@ async function main(args, io = {}) {
     return 2;
   }
   const { values: flags, positionals } = parsed;
-  if (!verbs.has(verb) || flags.help) {
+  const help = flags.help || verb === "--help";
+  if (!verbs.has(verb) || help) {
     (io.write ?? ((text) => process.stdout.write(text)))(usage + "\n");
-    return verb && !flags.help ? 2 : 0;
+    return verb && !help ? 2 : 0;
   }
   const scriptPath = io.scriptPath ?? fileURLToPath(import.meta.url);
   const script = `node ${shellWord(scriptPath)}`;
