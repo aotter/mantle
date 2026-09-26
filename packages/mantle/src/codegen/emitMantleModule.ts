@@ -21,8 +21,13 @@ export type EmitMantleModuleResult =
   | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] };
 
 const GENERATED_NAMES = new Set([
-  "RuntimePlanData", "RuntimeHandlerFn", "MantleHandlers", "Schemas", "Views",
-  "Store", "plan", "sealRuntimePlan",
+  "sealRuntimePlan", "RuntimeHandlerFn", "CoreMantleStore", "RuntimePlanData",
+  "StoreInsert", "StoreUpdate", "StoreDelete", "StoreSelect",
+  "StoreSelectResult", "StoreRow", "StoreWriteResult", "ViewQueryOptions",
+  "ViewQueryResult", "Schemas", "Views", "Store", "ViewOptions",
+  "HostInsertValues", "CallerInsertValues", "HostWrite", "CallerWrite",
+  "CallerStore", "MantleHandlers", "plan",
+  "Omit", "Partial", "Pick", "Promise",
 ]);
 
 export function assertMantleNamespace(namespace: string, label = "namespace"): void {
@@ -79,6 +84,13 @@ export function emitMantleModule(request: EmitMantleModuleRequest): EmitMantleMo
       ...schemas.map((schema) => `  readonly ${JSON.stringify(schema.name)}: ${namespace}.Entry_${manifestTypeIdentifier(schema.name)};`),
       '}',
       '',
+      'type HostInsertValues = {',
+      ...schemas.map((schema) => insertValuesLine(schema, false)),
+      '}',
+      'type CallerInsertValues = {',
+      ...schemas.map((schema) => insertValuesLine(schema, true)),
+      '}',
+      '',
       'export interface Views {',
       ...views.map((view) => {
         const name = view.name;
@@ -92,18 +104,26 @@ export function emitMantleModule(request: EmitMantleModuleRequest): EmitMantleMo
       'type ViewOptions<N extends keyof Views> = Pick<ViewQueryOptions, "page" | "show"> &',
       '  (Views[N]["params"] extends undefined ? {} : Views[N]["required"] extends true',
       '    ? { readonly params: Views[N]["params"] } : { readonly params?: Views[N]["params"] });',
-      'type TypedWrite = { [N in keyof Schemas & string]:',
-      '  | (Omit<StoreInsert, "insert" | "values"> & { readonly insert: N; readonly values: Schemas[N] })',
+      'type HostWrite = { [N in keyof Schemas & string]:',
+      '  | (Omit<StoreInsert, "insert" | "values"> & { readonly insert: N; readonly values: HostInsertValues[N] })',
+      '  | (Omit<StoreUpdate, "update" | "set"> & { readonly update: N; readonly set: Partial<Schemas[N]> })',
+      '  | (Omit<StoreDelete, "delete"> & { readonly delete: N })',
+      '}[keyof Schemas & string];',
+      'type CallerWrite = { [N in keyof Schemas & string]:',
+      '  | (Omit<StoreInsert, "insert" | "values"> & { readonly insert: N; readonly values: CallerInsertValues[N] })',
       '  | (Omit<StoreUpdate, "update" | "set"> & { readonly update: N; readonly set: Partial<Schemas[N]> })',
       '  | (Omit<StoreDelete, "delete"> & { readonly delete: N })',
       '}[keyof Schemas & string];',
       'export type Store = Omit<CoreMantleStore, "select" | "write" | "view"> & {',
       '  select<N extends keyof Schemas & string>(query: Omit<StoreSelect, "from"> & { readonly from: N }):',
       '    Promise<Omit<StoreSelectResult, "rows"> & { readonly rows: readonly (StoreRow & Partial<Schemas[N]>)[] }>;',
-      '  write(ops: readonly TypedWrite[]): Promise<readonly StoreWriteResult[]>;',
+      '  write(ops: readonly HostWrite[]): Promise<readonly StoreWriteResult[]>;',
       '  view<N extends keyof Views & string>(name: N, ...options:',
       '    Views[N]["required"] extends true ? [ViewOptions<N>] : [ViewOptions<N>?]):',
       '    Promise<ViewQueryResult<Views[N]["row"]>>;',
+      '};',
+      'export type CallerStore = Omit<Store, "write" | "sweepExpired"> & {',
+      '  write(ops: readonly CallerWrite[]): Promise<readonly StoreWriteResult[]>;',
       '};',
       '',
       'export type MantleHandlers<Env = unknown> = {',
@@ -112,6 +132,21 @@ export function emitMantleModule(request: EmitMantleModuleRequest): EmitMantleMo
       '',
     ].join('\n'),
   };
+}
+
+function insertValuesLine(schema: RuntimePlan["schemas"][string], callerBound: boolean): string {
+  const properties = schema.manifest.spec.schema.properties ?? {};
+  const filled = [...new Set([
+    ...(callerBound ? Object.keys(schema.manifest.spec.scope ?? {}) : []),
+    ...Object.entries(properties).flatMap(([name, property]) =>
+      Object.hasOwn(property, "default") ? [name] : []),
+  ])];
+  const key = JSON.stringify(schema.name);
+  const base = `Schemas[${key}]`;
+  const value = filled.length
+    ? `Omit<${base}, ${filled.map((name) => JSON.stringify(name)).join(" | ")}> & Partial<Pick<${base}, ${filled.map((name) => JSON.stringify(name)).join(" | ")}>>`
+    : base;
+  return `  readonly ${key}: ${value};`;
 }
 
 function handlerContractLines(
@@ -132,7 +167,7 @@ function handlerContractLines(
       const names = entries.map(manifestTypeIdentifier).sort();
       const inputs = names.map((name) => `${namespace}.ProcInput_${name}`).join(" | ");
       const outputs = names.map((name) => `${namespace}.ProcOutput_${name}`).join(" | ");
-      return `  readonly ${JSON.stringify(ref)}: RuntimeHandlerFn<${inputs}, ${outputs}, Env, Omit<Store, "sweepExpired">>;`;
+      return `  readonly ${JSON.stringify(ref)}: RuntimeHandlerFn<${inputs}, ${outputs}, Env, CallerStore>;`;
     });
 }
 
