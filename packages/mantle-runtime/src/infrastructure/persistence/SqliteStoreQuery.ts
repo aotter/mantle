@@ -144,6 +144,7 @@ export class SqliteStoreQueryCompiler {
     const unknownKey = Object.keys(operand).find((key) => !["select", "from", "where"].includes(key));
     if (unknownKey) throw invalid(`Unknown subquery key '${unknownKey}'.`);
     const { select, from, where } = operand as unknown as StoreSubquery;
+    if (Object.hasOwn(operand, "where") && where === undefined) throw invalid("Subquery where is undefined; omit it or provide a condition.");
     spend(budget);
     const table = this.table(from);
     const column = this.column(table, select, "a subquery select");
