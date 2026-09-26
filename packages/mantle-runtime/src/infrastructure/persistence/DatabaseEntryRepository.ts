@@ -1,6 +1,6 @@
 import {
   DiagnosticError,
-  checkSchemaAdminUi,
+  projectSchemaAdminUi,
   runtimeDiagnostic,
   type ContentState,
   type Entry,
@@ -146,7 +146,7 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
       throw new RangeError("Statistics require a positive window <= 20 days and <= 480 buckets.");
     }
     const table = this.table(args.collection);
-    const filter = checkSchemaAdminUi(table.schema).filter;
+    const filter = projectSchemaAdminUi(table.schema).filter;
     const live: string[] = [];
     const liveBinds: unknown[] = [];
     this.addLiveCondition(table, live, liveBinds);

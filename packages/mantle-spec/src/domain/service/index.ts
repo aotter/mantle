@@ -11,6 +11,7 @@ export * from "./CrossSchemaChecker.js";
 export * from "./ManifestPathDiagnoser.js";
 export * from "./SchemaIndexChecker.js";
 export * from "./SchemaAdminUiChecker.js";
+export * from "./ValidatedAdminUiProjection.js";
 export * from "./EntryDataValidator.js";
 export * from "./SiteDefaultsValidator.js";
 export * from "./JsonSchemaToZod.js";
