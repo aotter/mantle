@@ -311,7 +311,7 @@ const { rows, nextCursor } = await ctx.store!.select({
 `like` requires a string column and accepts SQL `%` and `_` pattern wildcards.
 Use `\%`, `\_`, or `\\` for literal wildcard or backslash characters.
 SQLite's default `LIKE` is case-insensitive for ASCII and case-sensitive for
-non-ASCII characters.
+non-ASCII characters. Patterns are limited to 1,024 UTF-8 bytes.
 
 ## TTL sweep in a ref handler
 
