@@ -214,6 +214,7 @@ describe("store.select (#1151)", () => {
     [{ from: "sessions", where: { rpe: "7" } }, /expects a value of type integer/],
     [{ from: "sessions", where: {} }, /must not be empty/],
     [{ from: "sessions", where: { rpe: { like: 1 } } }, /expects a string column and pattern/],
+    [{ from: "sessions", where: { ownerId: { like: "a".repeat(1025) } } }, /at most 1024 UTF-8 bytes/],
     [{ from: "sessions", where: { ownerId: { match: "a" } } }, /Unknown Store operator 'match'/],
     [{ from: "sessions", where: { rpe: { gt: null } } }, /cannot compare with null/],
     [{ from: "sessions", where: { and: [] } }, /non-empty array/],

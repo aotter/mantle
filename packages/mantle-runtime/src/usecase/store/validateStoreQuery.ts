@@ -158,6 +158,9 @@ function checkValue(column: string, operator: string, value: unknown, type: stri
   if (operator === "like" && (type !== "string" || typeof value !== "string")) {
     throw invalid(`'like' on '${column}' expects a string column and pattern.`);
   }
+  if (operator === "like" && new TextEncoder().encode(value as string).byteLength > 1024) {
+    throw invalid(`'like' on '${column}' accepts at most 1024 UTF-8 bytes.`);
+  }
   if (value === null) {
     if (!["eq", "ne"].includes(operator)) throw invalid(`'${operator}' on '${column}' cannot compare with null.`);
     return;
