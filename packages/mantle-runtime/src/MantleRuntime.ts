@@ -302,6 +302,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
   const deleteEntry = new DeleteEntryUseCase(entries, schemasByName);
   atomicWrite = new AtomicEntryWriteUseCase(
     prepared.atomicEntries,
+    entries,
     createDraft,
     updateDraft,
     deleteEntry,
