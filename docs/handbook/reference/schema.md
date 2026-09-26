@@ -24,7 +24,7 @@ A Schema declares one collection: the JSON Schema for each entry's `data`, its i
 
 ### Caller scope
 
-`scope: { ownerId: "$ctx.user.id" }` binds a Schema to the verified caller. Declare `ownerId` as a required, non-null string property and put it first in `indexes` or `uniqueIndexes`. `ctx.store.select` and set deletes AND this predicate with the requested `where`, including subqueries over another scoped Schema. Inserts fill `ownerId` and reject a conflicting value; row updates and deletes verify ownership before hooks. Missing identity fails closed. `runtime.store` is trusted host access without an injected scope. Declarative Views over the Schema must also AND an identity filter at the top level and require `ctx.user`; native SQL Views remain a trusted escape hatch.
+`scope: { ownerId: "$ctx.user.id" }` binds a Schema to the verified caller. Declare `ownerId` as a required, non-null string property and put it first in `indexes` or `uniqueIndexes`. Every unique index on a scoped Schema must start with `ownerId`, and the field cannot bind to another identity. `ctx.store.select` and set deletes AND this predicate with the requested `where`, including subqueries over another scoped Schema. Inserts fill `ownerId` and reject a conflicting value; row updates and deletes verify ownership before hooks, returning the same `NOT_FOUND` for absent and other callers' rows. Missing identity fails closed. `runtime.store` is trusted host access without an injected scope. Declarative Views over the Schema must also AND an identity filter at the top level and require `ctx.user`; native SQL Views remain a trusted escape hatch.
 
 ### Reserved entry columns
 

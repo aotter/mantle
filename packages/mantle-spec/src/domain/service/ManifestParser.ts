@@ -18,6 +18,7 @@ import {
 import {
   API_VERSION,
   BUILTIN_OPS,
+  MANTLE_BIND_KEYWORD,
   MANTLE_BIND_VALUES,
   LIFECYCLE_HOOKS,
   MCP_TRIGGER_SURFACES,
@@ -733,6 +734,12 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       !Array.isArray(schema["required"]) || !schema["required"].includes(field) ||
       ![...(m.spec.uniqueIndexes ?? []), ...(m.spec.indexes ?? [])].some((index) => index[0] === field)) {
       throw new ManifestParseError("Schema.spec.scope requires a required string field with a leftmost index and the exact $ctx.user.id reference", idx, "/spec/scope");
+    }
+    if (property[MANTLE_BIND_KEYWORD] !== undefined && property[MANTLE_BIND_KEYWORD] !== "ctx.user") {
+      throw new ManifestParseError("Schema.spec.scope field cannot be stamped from a different identity", idx, `/spec/schema/properties/${field}/${MANTLE_BIND_KEYWORD}`);
+    }
+    if ((m.spec.uniqueIndexes ?? []).some((index) => index[0] !== field)) {
+      throw new ManifestParseError("Scoped Schema unique indexes must begin with the scope field", idx, "/spec/uniqueIndexes");
     }
   }
   if (s["localized"] !== true && propertyNames.includes("locale")) {

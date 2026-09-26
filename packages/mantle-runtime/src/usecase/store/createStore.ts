@@ -100,7 +100,7 @@ function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | unde
       throw invalid(`${at}.values.${scopeField} conflicts with caller scope.`);
     }
     const data = { ...values, ...(scopeField ? { [scopeField]: callerId } : {}) };
-    return { kind: "create", ...(id === undefined ? {} : { id }), request: { collection, data, originalInput: scopeField ? data : values, authorId, ...(ctx ? { ctx } : {}) } };
+    return { kind: "create", ...(id === undefined ? {} : { id }), request: { collection, data, originalInput: scopeField ? data : values, authorId, ...(ctx ? { ctx } : {}) }, ...(scope ? { scope } : {}) };
   }
   const where = record["where"];
   if (!isRecord(where)) throw invalid(`${at}.where must be an object.`);
