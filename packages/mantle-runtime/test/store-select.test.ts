@@ -289,6 +289,11 @@ describe("store.select (#1151)", () => {
     await expect(store.select({ from: "sessions", where: { ownerId: undefined } })).rejects.toMatchObject({
       diagnostic: { code: "INPUT_VALIDATION_FAILED" },
     });
+    await expect(store.select({ from: "sessions", where: undefined })).rejects.toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+    await expect(store.select({ from: "sessions", where: { id: { in: { select: "id", from: "sessions", where: undefined } } } } as never))
+      .rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
     expect(calls).toBe(0);
   });
 

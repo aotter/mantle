@@ -10,6 +10,7 @@ const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "in", "notIn", 
 export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<string, SchemaManifest>): StoreSelect {
   if (!record(query)) throw invalid("Store select takes an object.");
   unknownKey(query, ["from", "columns", "where", "orderBy", "limit", "cursor"], "Store select");
+  if (Object.hasOwn(query, "where") && query.where === undefined) throw invalid("Store where is undefined; omit it or provide a condition.");
   const schema = requireSchema(query.from, schemas);
   if (query.columns !== undefined) {
     if (!Array.isArray(query.columns) || !query.columns.length) throw invalid("Store columns takes a non-empty array.");
@@ -82,6 +83,7 @@ export function validateStoreWhere(
         } else {
           if (!record(operand)) throw invalid("'in' / 'notIn' take an array or a { select, from, where } subquery.");
           unknownKey(operand, ["select", "from", "where"], "subquery");
+          if (Object.hasOwn(operand, "where") && operand["where"] === undefined) throw invalid("Subquery where is undefined; omit it or provide a condition.");
           spend(budget);
           const inner = requireSchema(operand["from"], schemas);
           columnType(inner, operand["select"], "a subquery select", true);
