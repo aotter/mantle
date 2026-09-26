@@ -638,6 +638,7 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       "translates",
       "lifecycle",
       "ttl",
+      "scope",
     ],
     idx,
     "/spec",
@@ -720,6 +721,20 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   const propertyNames = properties && typeof properties === "object" && !Array.isArray(properties)
     ? Object.keys(properties)
     : [];
+  if (s["scope"] !== undefined) {
+    const scope = s["scope"];
+    if (!scope || typeof scope !== "object" || Array.isArray(scope) || Object.keys(scope).length !== 1) {
+      throw new ManifestParseError("Schema.spec.scope must bind exactly one field to $ctx.user.id", idx, "/spec/scope");
+    }
+    const [field, ref] = Object.entries(scope)[0]!;
+    const property = properties && typeof properties === "object" && !Array.isArray(properties)
+      ? (properties as Record<string, Record<string, unknown>>)[field] : undefined;
+    if (ref !== "$ctx.user.id" || !property || property["type"] !== "string" || property["nullable"] === true || property["oneOf"] !== undefined ||
+      !Array.isArray(schema["required"]) || !schema["required"].includes(field) ||
+      ![...(m.spec.uniqueIndexes ?? []), ...(m.spec.indexes ?? [])].some((index) => index[0] === field)) {
+      throw new ManifestParseError("Schema.spec.scope requires a required string field with a leftmost index and the exact $ctx.user.id reference", idx, "/spec/scope");
+    }
+  }
   if (s["localized"] !== true && propertyNames.includes("locale")) {
     throw new ManifestParseError(
       "Non-localized Schema must not declare the reserved entry field 'locale'; use a domain name such as 'orderLocale', or set localized: true.",

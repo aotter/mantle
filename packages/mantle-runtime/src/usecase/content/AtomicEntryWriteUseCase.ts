@@ -10,8 +10,8 @@ import { withConflictDiagnostic } from "./diagnostics.js";
 
 export type AtomicDraftOperation =
   | { readonly kind: "create"; readonly id?: string; readonly request: CreateDraftRequest }
-  | { readonly kind: "update"; readonly request: UpdateDraftRequest }
-  | { readonly kind: "delete"; readonly request: DeleteEntryRequest & { readonly expectedVersion: number } }
+  | { readonly kind: "update"; readonly request: UpdateDraftRequest; readonly scope?: { readonly field: string; readonly value: string } }
+  | { readonly kind: "delete"; readonly request: DeleteEntryRequest & { readonly expectedVersion: number }; readonly scope?: { readonly field: string; readonly value: string } }
   | { readonly kind: "deleteWhere"; readonly request: {
       readonly collection: string;
       readonly where: StoreWhere;
@@ -72,12 +72,14 @@ export class AtomicEntryWriteUseCase {
           skipUniquePreflight: true, ...current(operation.request),
         });
         previous = preparedUpdate.previous;
+        assertScope(previous, operation.scope);
         write = { kind: "update", args: {
           ...preparedUpdate.args, observedVersion: previous.version,
         } };
       } else if (operation.kind === "delete") {
         const preparedDelete = await this.remove.prepare(operation.request, current(operation.request));
         previous = preparedDelete.previous;
+        assertScope(previous, operation.scope);
         write = { kind: "delete", args: {
           ...preparedDelete.args,
           expectedVersion: operation.request.expectedVersion,
@@ -164,6 +166,10 @@ export class AtomicEntryWriteUseCase {
     return (key) => ids.get(key.collection)?.has(key.id)
       ? { previous: rows.get(`${key.collection}\0${key.id}`) ?? null } : {};
   }
+}
+
+function assertScope(row: EntryRow, scope: { readonly field: string; readonly value: string } | undefined): void {
+  if (scope && row.data[scope.field] !== scope.value) throw invalidOperation("Row is outside caller scope.");
 }
 
 function invalidOperation(message: string): DiagnosticError {
