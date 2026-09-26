@@ -50,6 +50,9 @@ jobs:
       - name: Check generated plugin manifests
         run: pnpm run check:plugin-manifests
 
+      - name: Check vendored plugin scripts
+        run: pnpm run check:plugin-vendor
+
       - name: Check release controller
         run: pnpm run check:release
 

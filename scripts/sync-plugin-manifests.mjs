@@ -14,6 +14,10 @@ const read = (path) => JSON.parse(readFileSync(join(repoRoot, path), "utf8"));
 
 const pkg = read("packages/mantle/package.json");
 const presentation = read(".codex-plugin/plugin.json");
+// A second plugin in this repository: it carries a vendored script, so it
+// cannot ship as a plain skill of the root plugin (skills/README.md).
+const HOST = "plugins/mantle-host";
+const hostPresentation = read(`${HOST}/.codex-plugin/plugin.json`);
 
 const shared = {
   name: "mantle",
@@ -26,6 +30,13 @@ const shared = {
   keywords: ["mantle", "cms", "agent-skills", "marketplace", "sdk"],
 };
 const version = shared.version;
+const host = {
+  ...shared,
+  name: "mantle-host",
+  description: hostPresentation.description,
+  keywords: ["mantle", "mantle-cloud", "deploy", "agent-skills"],
+};
+const policy = { installation: "AVAILABLE", authentication: "ON_INSTALL" };
 
 const manifests = {
   ".claude-plugin/plugin.json": shared,
@@ -33,7 +44,10 @@ const manifests = {
     name: shared.name,
     owner: shared.author,
     description: shared.description,
-    plugins: [{ name: shared.name, source: "./", description: shared.description }],
+    plugins: [
+      { name: shared.name, source: "./", description: shared.description },
+      { name: host.name, source: `./${HOST}`, description: host.description },
+    ],
   },
   ".codex-plugin/plugin.json": {
     ...shared,
@@ -44,6 +58,18 @@ const manifests = {
       websiteURL: shared.homepage,
     },
   },
+  [`${HOST}/.claude-plugin/plugin.json`]: host,
+  [`${HOST}/.codex-plugin/plugin.json`]: {
+    ...host,
+    author: { ...host.author, url: host.homepage },
+    skills: "./skills/",
+    interface: {
+      ...hostPresentation.interface,
+      websiteURL: host.homepage,
+    },
+  },
+  // Cursor and Copilot read one single-plugin manifest at the repository root;
+  // mantle-host is listed only where a multi-plugin marketplace already exists.
   ".cursor-plugin/plugin.json": { ...shared, displayName: presentation.interface.displayName, skills: "./skills/" },
   ".copilot-plugin/plugin.json": { ...shared, skills: "./skills/" },
   // Resolved from the marketplace checkout itself, matching the Claude manifest's
@@ -55,8 +81,13 @@ const manifests = {
     plugins: [{
       name: shared.name,
       source: { source: "local", path: "./" },
-      policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+      policy,
       category: presentation.interface.category,
+    }, {
+      name: host.name,
+      source: { source: "local", path: `./${HOST}` },
+      policy,
+      category: hostPresentation.interface.category,
     }],
   },
 };

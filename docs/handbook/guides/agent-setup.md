@@ -12,7 +12,10 @@ application's SDK. Installing one does not install the other.
 npx skills add aotter/mantle
 ```
 
-The installer selects the repository's `mantle` skill. Read its printed
+The installer finds the repository's `mantle` skill. It also finds
+`mantle-host`, the Mantle Cloud deploy skill from the `mantle-host` plugin. An
+interactive run asks which to install, and an agent run installs both. Add
+`--skill mantle` to install only the bootstrap skill. Read its printed
 installation path. In a project-local Codex installation that is
 `.agents/skills/mantle/SKILL.md`, not `skills/install/SKILL.md` (the latter is
 its source-repository path). Other agent selections and global installation

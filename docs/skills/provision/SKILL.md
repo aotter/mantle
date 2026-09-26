@@ -1,6 +1,6 @@
 ---
 name: provision
-description: Ship a Mantle project through its selected host, routing ChatGPT Sites to its integration guide and conventional Cloudflare Workers to production auth and provisioning.
+description: Ship a Mantle project through its selected deploy target, routing ChatGPT Sites to its integration guide, Mantle Cloud to the mantle-host skill, and conventional Cloudflare Workers to production auth and provisioning.
 metadata:
   source: "@aotter/mantle"
   sourcePath: docs/skills/provision/SKILL.md
@@ -22,6 +22,38 @@ request D1 and R2 on the Site, set `PUBLIC_ORIGIN` and `OWNER_EMAIL` in Sites
 settings, review the migration, then save and deploy a Sites version. Do not
 run `wrangler deploy` or require R2 S3 credentials merely because Sites exposes
 an R2 binding.
+
+## Choose the Target
+
+Cloudflare, ChatGPT Sites and Mantle Cloud are same-level targets. Ask the
+user which one to ship to. Do not infer it from installed packages or config
+files.
+
+| Target | Config it owns | Follow |
+|---|---|---|
+| `cloudflare` | `wrangler.jsonc` or `wrangler.toml` | the rest of this skill |
+| `chatgpt-sites` | `.openai/hosting.json` | the Sites guide and steps named above |
+| `mantle-cloud` | its `.mantle/hosting.json` target | the `mantle-host` skill |
+
+For Mantle Cloud, install the `mantle-host` plugin:
+`/plugin install mantle-host@mantle` in Claude Code,
+`codex plugin add mantle-host@mantle` in Codex, or
+`npx skills add aotter/mantle --skill mantle-host` on other hosts. Then follow
+that skill. It links, saves, deploys and rolls back through Cloud MCP, and the
+sections below do not apply.
+
+### Link file
+
+`.mantle/hosting.json` is the one committed deploy link file. It has
+`schemaVersion: 1` and one `targets` map. It holds no secrets and has no
+endpoint or origin override. A `cloudflare` or `chatgpt-sites` entry only
+names its own config, for example
+`{"runtime": "cloudflare", "config": "wrangler.jsonc"}` or
+`{"runtime": "chatgpt-sites", "config": ".openai/hosting.json"}`. Do not copy
+their ids into it. Worker names, D1 ids and the Sites `project_id` stay in
+`wrangler.jsonc` and `.openai/hosting.json`. The `mantle-host` script keeps
+its local state in `.mantle/host/`, which is gitignored. A project that does
+not use `mantle-host` needs no link file.
 
 ## Source of Truth
 
@@ -190,5 +222,6 @@ Return:
 - Don't commit provider secrets.
 - Don't require R2 for first production.
 - Don't invent a second provision orchestrator.
+- Don't put secrets, origins or endpoints in `.mantle/hosting.json`.
 - Don't use `/admin/auth/github/callback`; the callback is
   `/api/auth/callback/github`.

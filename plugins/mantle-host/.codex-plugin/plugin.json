@@ -1,0 +1,38 @@
+{
+  "name": "mantle-host",
+  "description": "Deploy a Mantle app to Mantle Cloud with one vendored script; Cloudflare and ChatGPT Sites targets get their native step.",
+  "version": "0.1.5-alpha.1",
+  "author": {
+    "name": "Aotter",
+    "url": "https://mantle.tools/"
+  },
+  "homepage": "https://mantle.tools/",
+  "repository": "https://github.com/aotter/mantle",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mantle",
+    "mantle-cloud",
+    "deploy",
+    "agent-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Mantle Host",
+    "shortDescription": "Deploy Mantle apps to Mantle Cloud",
+    "longDescription": "One runtime-neutral deploy tool for three same-level targets: mantle-cloud, cloudflare and chatgpt-sites. It links a project, saves a version from the committed tree, and prints the reviewed deploy and rollback calls. For Cloudflare and ChatGPT Sites it only prints the native step.",
+    "developerName": "Aotter",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Link this Mantle app to its Mantle Cloud project with the mantle-host skill",
+      "Save a Mantle Cloud version of the committed app, then stop before deploy",
+      "Show mantle-host status and the next step for this project"
+    ],
+    "brandColor": "#0F766E",
+    "screenshots": [],
+    "websiteURL": "https://mantle.tools/"
+  }
+}

@@ -1,0 +1,3 @@
+# Vendored bundles are byte-exact copies pinned by SHA-256 in VENDORED.json;
+# never convert their line endings.
+plugins/mantle-host/skills/mantle-host/scripts/mantle-host.mjs -text linguist-generated=true

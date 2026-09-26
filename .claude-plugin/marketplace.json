@@ -9,6 +9,11 @@
       "name": "mantle",
       "source": "./",
       "description": "Build and embed Mantle applications. Cold start: npx skills add aotter/mantle."
+    },
+    {
+      "name": "mantle-host",
+      "source": "./plugins/mantle-host",
+      "description": "Deploy a Mantle app to Mantle Cloud with one vendored script; Cloudflare and ChatGPT Sites targets get their native step."
     }
   ]
 }

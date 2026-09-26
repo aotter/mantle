@@ -11,7 +11,8 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | [`theme`](../docs/skills/theme/SKILL.md) | `mantle:theme`: Core-owned visual workflow. Reads project-owned theme and UI contracts. |
 | [`update`](../docs/skills/update/SKILL.md) | `mantle:update`: Core-owned drift check workflow for SDK dependencies, local skills, and plugin lockfiles. |
 | [`mantle`](install/SKILL.md) | User wants to author a local Mantle application or continue an existing project. |
-| [`provision`](../docs/skills/provision/SKILL.md) | User wants a local project shipped to Cloudflare with production auth and operator handoff. |
+| [`provision`](../docs/skills/provision/SKILL.md) | User wants a local project shipped to Cloudflare, ChatGPT Sites or Mantle Cloud, with production auth and operator handoff. |
+| [`mantle-host`](../plugins/mantle-host/skills/mantle-host/SKILL.md) | User picked the Mantle Cloud deploy target: link, save, deploy, rollback or status. Ships only in the `mantle-host` plugin. |
 
 The skills target Mantle's v0.1 grammar. The installed package version, not
 duplicated skill prose, selects the exact runtime and embedded docs.
@@ -24,6 +25,16 @@ here is section routing inside one file: the agent reads the entry constraints,
 then only the section its selected path names. `scripts/check-skills.mjs`
 enforces the columns below.
 
+The one exception is `mantle-host`. It carries a vendored script,
+`scripts/mantle-host.mjs`, so it lives in its own plugin under
+`plugins/mantle-host/` instead of `docs/skills/`. The script is copied
+byte-exact from `aotter/mantle-home`. `scripts/VENDORED.json` beside it
+records the source commit and SHA-256, and `scripts/check-plugin-vendor.mjs`
+verifies them. The skill is not in the npm package, and `mantle skills` does
+not project it. `scripts/check-skills.mjs` covers every
+`plugins/*/skills/*/SKILL.md` with the same front-matter and audit-row rules,
+and it requires plugin skills to declare `projection: plugin` only.
+
 | Skill | Routes on | Entry-path constraints (read before acting) | Path-gated sections | Projection | Restricted because |
 |---|---|---|---|---|---|
 | `develop` | existing project; manifest, runtime, handler, adapter, or MCP work | four-atom model; adapter neutrality; no direct D1/KV/Postgres writes; no committed secrets | performance harness; local MCP client; locale rules | project | — |
@@ -32,7 +43,8 @@ enforces the columns below.
 | `theme` | brand or visual direction in a project | repo-owned theme and UI contracts | — | project | — |
 | `update` | SDK upgrade or plugin lock review | never blindly overwrite user-owned code | — | project | — |
 | `mantle` | new application, or opening an existing project | do not use the SDK checkout as the application; no push/deploy/provider config during cold start | author local project; continue existing project | plugin | Creates a new project; nothing to project into an existing one. |
-| `provision` | ship to Cloudflare and finish production auth | secrets never enter source or logs; explicit auth mode | hosted auth; self-managed auth | package | Platform-specific deploy that handles production secrets; opt-in only. |
+| `provision` | ship to Cloudflare, ChatGPT Sites or Mantle Cloud and finish production auth | secrets never enter source or logs; explicit auth mode; one committed `.mantle/hosting.json` with no secrets | Mantle Cloud; hosted auth; self-managed auth | package | Platform-specific deploy that handles production secrets; opt-in only. |
+| `mantle-host` | user picked the Mantle Cloud target, or the project has `.mantle/hosting.json` | clean committed tree; grants on stdin only, never in files or logs; deploy is a separate reviewed step; run only printed commands; esbuild is a project devDependency | link; save; deploy; rollback | plugin | Ships only in the mantle-host plugin with its vendored deploy script; Cloud deploy is opt-in. |
 | `media-gc` | audit or remove stale uncommitted media objects | audit by default; confirm exact account, bucket, cutoff, and candidate digest; re-audit before applying; never prefix-delete; never print keys | apply | package | Destructive remote object deletion and Cloudflare-specific; opt-in only. |
 
 Deliberately monolithic:
@@ -49,8 +61,9 @@ Deliberately monolithic:
 The `mantle:*` namespace is owned by `@aotter/mantle`. Every skill declares its
 own distribution scope in front matter: `metadata.projection: project` marks a
 skill `mantle skills` should place in a consumer project, and a skill that
-withholds `project` must say why. `plugin` is the bootstrap skill and `package`
-is an opt-in brief in the installed SDK. `scripts/check-skills.mjs` holds that
+withholds `project` must say why. `plugin` marks a skill installed from this
+repository rather than the npm package: the bootstrap skill and `mantle-host`.
+`package` is an opt-in brief in the installed SDK. `scripts/check-skills.mjs` holds that
 declaration and the audit table below to each other.
 
 Run `mantle skills` to project the installed package's skills into a project;
@@ -61,10 +74,25 @@ contracts.
 
 ## Source-repository marketplace install
 
-`skills/install/SKILL.md` declares `name: mantle`. It is the only repository
-skill discovered by the no-flag command and copied as a small directory.
-The other seven skills live in `docs/skills/` and ship with the npm package.
-`mantle skills` projects the four ongoing workflows after package installation.
+`skills/install/SKILL.md` declares `name: mantle` and is copied as a small
+directory. The other seven package skills live in `docs/skills/` and ship with
+the npm package. `mantle skills` projects the four ongoing workflows after
+package installation.
+
+The `skills` CLI also reads `.claude-plugin/marketplace.json` and finds
+`plugins/mantle-host/skills/mantle-host`. The no-flag command therefore
+discovers two skills, `mantle` and `mantle-host`. An interactive run asks
+which to install, and an agent or `-y` run installs both. Name the skill to
+install exactly one:
+
+```sh
+npx skills add aotter/mantle --skill mantle        # bootstrap only
+npx skills add aotter/mantle --skill mantle-host   # Mantle Cloud deploy, with its script
+```
+
+The second command is the fallback for hosts without a plugin marketplace. It
+copies the whole skill directory, including `scripts/mantle-host.mjs` and
+`scripts/VENDORED.json`.
 
 Other marketplace hosts point to the same entry:
 
@@ -97,6 +125,20 @@ These manifests are not duplicated into the npm package:
 - Codex: `.codex-plugin/plugin.json` plus `.agents/plugins/marketplace.json`.
 - Cursor: `.cursor-plugin/plugin.json`.
 - VS Code + GitHub Copilot: `.copilot-plugin/plugin.json`.
+
+Both marketplaces also list `mantle-host`, whose own manifests are
+`plugins/mantle-host/.claude-plugin/plugin.json` and
+`plugins/mantle-host/.codex-plugin/plugin.json`:
+
+```bash
+/plugin install mantle-host@mantle
+codex plugin add mantle-host@mantle
+```
+
+Cursor and Copilot read a single root `plugin.json` here, and this repository
+has no multi-plugin manifest for them. They use the `--skill mantle-host`
+fallback above. `scripts/sync-plugin-manifests.mjs` generates every manifest
+listed here.
 
 ## Audience
 
