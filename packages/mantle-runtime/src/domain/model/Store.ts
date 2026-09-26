@@ -109,11 +109,11 @@ export interface MantleStore {
   select(query: StoreSelect): Promise<StoreSelectResult>;
   /**
    * Apply every operation or none, in order, as one storage transaction.
-   * Authorization guard Procedures receive a Store whose `write` and
-   * `sweepExpired` fail. Results follow operation order.
+   * Authorization guard Procedures receive a Store whose `write` fails.
+   * Results follow operation order.
    */
   write(ops: readonly StoreWriteOp[]): Promise<readonly StoreWriteResult[]>;
-  /** Preview, or with `delete: true` remove, one bounded page of TTL-expired entries (ADR-0028). */
+  /** Host-only maintenance. Caller-bound Procedure stores reject this operation. */
   sweepExpired(request: SweepExpiredRequest): Promise<SweepExpiredResult>;
   /** Run a named View with the caller's context, as REST and MCP would. */
   view<R = StoreRow>(name: string, options?: Pick<ViewQueryOptions, "params" | "page" | "show">): Promise<ViewQueryResult<R>>;

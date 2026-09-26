@@ -181,8 +181,21 @@ describe("store.write (#1151)", () => {
     expect(seen[0]).toBe("u1");
     await rt.invokeProcedure({ procedure: "guarded", input: {}, ctx });
     expect(seen[1]).toMatch(/read-only/);
-    expect(seen[2]).toMatch(/read-only/);
+    expect(seen[2]).toMatch(/host-only/);
     expect(seen[3]).toBe(1);
+  });
+
+  it("reserves TTL sweeping for the host even in a writable Procedure", async () => {
+    let message: string | undefined;
+    const rt = await runtime(new AtomicDatabase(), [procedure("writer")], {
+      writer: async (_input, ctx: HandlerContext) => {
+        message = await ctx.store!.sweepExpired({ collection: "sessions" })
+          .then(() => "allowed", (error: { diagnostic?: { message: string } }) => error.diagnostic?.message);
+        return {};
+      },
+    });
+    await rt.invokeProcedure({ procedure: "writer", input: {}, ctx: { user: { id: "u1" }, staff: null, env: {} } });
+    expect(message).toMatch(/host-only/);
   });
 
   it("reports storage without atomic writes before touching it", async () => {
