@@ -149,6 +149,10 @@ second manifest/runtime path.
 
 ### Naming and code generation
 
+This section records the original codegen decision. The current generated API
+uses a sealed `plan` and wire-keyed `Schemas`, `Views`, and `Store` type maps;
+see the [typed queries guide](../handbook/guides/typed-queries.md).
+
 The Core execution unit is `MantleRuntime`, not a site. Optional TypeScript
 generation is a pure projection of linked/compiled semantics. It exposes
 `bindMantle(runtime)` plus an eager `createMantle()` convenience that delegates

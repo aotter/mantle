@@ -128,6 +128,8 @@ const handler: MantleHandlers["syncCatalog"] = (_input, ctx) => {
     void ctx.store.write([{ insert: "scoped-posts", values: { title: "Owned" } }]);
     // @ts-expect-error A non-filled required field remains required.
     void ctx.store.write([{ insert: "scoped-posts", values: {} }]);
+    // @ts-expect-error Open Schema index signatures cannot erase declared field types.
+    void ctx.store.write([{ insert: "scoped-posts", values: { title: 42 } }]);
     // @ts-expect-error Handler Store uses the same wire-keyed Schema map.
     void ctx.store.select({ from: "missing" });
   }
@@ -474,7 +476,6 @@ spec:
   scope: { ownerId: "$ctx.user.id" }
   schema:
     type: object
-    additionalProperties: false
     required: [ownerId, title, state]
     properties:
       ownerId: { type: string }
