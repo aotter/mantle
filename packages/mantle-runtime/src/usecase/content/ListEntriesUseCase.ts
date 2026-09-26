@@ -1,6 +1,6 @@
 import {
   DiagnosticError,
-  checkSchemaAdminUi,
+  projectSchemaAdminUi,
   isRequiredMantleRefField,
   runtimeDiagnostic,
   schemaSortableFields,
@@ -69,7 +69,7 @@ export class ListEntriesUseCase {
     if (request.sort && !isSortableField(schema, request.sort.field)) {
       throw new DiagnosticError(sortFieldUnavailableDiagnostic(opPath, request.sort.field));
     }
-    const listFilter = checkSchemaAdminUi(schema).filter;
+    const listFilter = projectSchemaAdminUi(schema).filter;
     if (request.filter && !(
       listFilter?.field === request.filter.field && listFilter.values.includes(request.filter.value)
     )) {
