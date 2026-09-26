@@ -71,8 +71,11 @@ export class SqliteStoreQueryCompiler {
     if (depth > MAX_DEPTH) throw invalid(`Store where nests deeper than ${MAX_DEPTH}.`);
     spend(budget);
     if (!isPlainObject(where)) throw invalid("A Store where condition must be an object.");
-    const entries = Object.entries(where).filter(([, value]) => value !== undefined);
+    // An undefined value is an error, not an omitted key: dropping it would widen the filter.
+    const entries = Object.entries(where);
     if (!entries.length) throw invalid("A Store where condition must not be empty.");
+    const unset = entries.find(([, value]) => value === undefined);
+    if (unset) throw invalid(`Store where '${unset[0]}' is undefined; omit the key or use isNull.`);
     const parts: string[] = [];
     const binds: unknown[] = [];
     for (const [key, value] of entries) {
@@ -99,8 +102,10 @@ export class SqliteStoreQueryCompiler {
   private comparison(table: SqliteSchemaTable, column: string, value: unknown, depth: number, budget: Budget): CompiledSql {
     const sql = this.column(table, column, "a where");
     if (!isPlainObject(value)) return this.operator(table, column, sql, "eq", value, depth, budget);
-    const operators = Object.entries(value).filter(([, operand]) => operand !== undefined);
+    const operators = Object.entries(value);
     if (!operators.length) throw invalid(`Column '${column}' has an empty comparison.`);
+    const unset = operators.find(([, operand]) => operand === undefined);
+    if (unset) throw invalid(`'${unset[0]}' on '${column}' is undefined; omit it or use isNull.`);
     const parts = operators.map(([operator, operand]) => this.operator(table, column, sql, operator, operand, depth, budget));
     return { sql: parts.map((part) => part.sql).join(" AND "), binds: parts.flatMap((part) => part.binds) };
   }

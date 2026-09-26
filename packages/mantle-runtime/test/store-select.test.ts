@@ -214,6 +214,12 @@ describe("store.select (#1151)", () => {
     [{ from: "sessions", cursor: "garbage" }, /cursor/],
     [{ from: "sessions", where: { id: { in: { select: "id", from: "blocks", join: 1 } } } }, /Unknown subquery key/],
     [{ from: "sessions", groupBy: ["ownerId"] }, /Unknown Store select key/],
+    [{ from: "sessions", columns: 42 }, /columns takes a non-empty array/],
+    [{ from: "sessions", columns: "id" }, /columns takes a non-empty array/],
+    // An undefined value must not silently drop its condition and widen the filter.
+    [{ from: "sessions", where: { ownerId: undefined, rpe: 7 } }, /'ownerId' is undefined/],
+    [{ from: "sessions", where: { rpe: { gte: 7, lte: undefined } } }, /'lte' on 'rpe' is undefined/],
+    [{ from: "sessions", where: { id: { in: { select: "id", from: "blocks", where: { sessionId: undefined } } } } }, /'sessionId' is undefined/],
   ])("rejects %j", async (query, message) => {
     const { rt } = await seeded();
     await expect(rt.store.select(query as never)).rejects.toMatchObject({
