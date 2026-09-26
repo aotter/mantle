@@ -41,6 +41,9 @@ describe("mantle generate", () => {
       '--namespace must be a non-reserved TypeScript identifier; got "not-valid"\n',
     );
     expect(await runGenerate(["--namespace", "MantleHandlers"])).toBe(2);
+    expect(await runGenerate(["--namespace", "StoreRow"])).toBe(2);
+    expect(await runGenerate(["--namespace", "ViewOptions"])).toBe(2);
+    expect(await runGenerate(["--namespace", "Omit"])).toBe(2);
   });
 
   it("typechecks the handbook internal View example against generated bindings", async () => {
@@ -122,6 +125,9 @@ if (calls.join(",") !== "select:products,view:products-by-sku,write:products") t
 const handler: MantleHandlers["syncCatalog"] = (_input, ctx) => {
   if (ctx.store) {
     void ctx.store.select({ from: "products", limit: 1 });
+    void ctx.store.write([{ insert: "scoped-posts", values: { title: "Owned" } }]);
+    // @ts-expect-error A non-filled required field remains required.
+    void ctx.store.write([{ insert: "scoped-posts", values: {} }]);
     // @ts-expect-error Handler Store uses the same wire-keyed Schema map.
     void ctx.store.select({ from: "missing" });
   }
@@ -135,8 +141,11 @@ if (false) {
   await store.view("products-by-sku");
   // @ts-expect-error Unknown View wire names are rejected.
   await store.view("missing");
-  // @ts-expect-error Insert values follow the Schema type.
-  await store.write([{ insert: "products", values: { title: "missing sku" } }]);
+  // @ts-expect-error Insert values retain declared field types even when fields are optional.
+  await store.write([{ insert: "products", values: { sku: 42 } }]);
+  // @ts-expect-error Unscoped host writes must supply the owner field.
+  await store.write([{ insert: "scoped-posts", values: { title: "Owned" } }]);
+  await store.write([{ insert: "scoped-posts", values: { ownerId: "u-1", title: "Owned" } }]);
 }
 `);
       const compiled = join(root, "compiled");
@@ -155,10 +164,18 @@ if (false) {
       expect(await runGenerate([], coreOnly)).toBe(0);
       expect(await readFile(mantlePath, "utf8")).toBe(firstMantle);
       expect(await runGenerate(["--check"], coreOnly)).toBe(0);
+
+      const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
+      await mkdir(join(root, "public", "_mantle", "admin"), { recursive: true });
+      await writeFile(adminIndexPath, "owned by the host\n");
+      expect(await runGenerate(["--check"], coreOnly)).toBe(0);
+      expect(await readFile(adminIndexPath, "utf8")).toBe("owned by the host\n");
+
       await writeFile(mantlePath, "stale\n");
       const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
       expect(await runGenerate(["--check"], coreOnly)).toBe(1);
       expect(stderr).toHaveBeenCalledWith("Mantle generated files are stale; run `mantle generate`.\n");
+      expect(await readFile(mantlePath, "utf8")).toBe("stale\n");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -448,6 +465,22 @@ spec:
     properties:
       code: { type: string }
       seats: { type: number }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: scoped-posts }
+spec:
+  title: Scoped posts
+  scope: { ownerId: "$ctx.user.id" }
+  schema:
+    type: object
+    additionalProperties: false
+    required: [ownerId, title, state]
+    properties:
+      ownerId: { type: string }
+      title: { type: string }
+      state: { type: string, default: draft }
+  indexes: [[ownerId]]
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: View

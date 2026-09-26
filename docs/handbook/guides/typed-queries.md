@@ -69,9 +69,13 @@ The generated module exports a sealed `plan` plus `Schemas`, `Views`, and
 
 ```ts
 import type { MantleRuntime } from "@aotter/mantle/runtime";
+import { plan } from "../.mantle/generated/mantle.js";
 import type { Store } from "../.mantle/generated/mantle.js";
 
 export async function openTickets(runtime: MantleRuntime) {
+  if (runtime.revision !== plan.semanticFingerprint) {
+    throw new Error("Generated Store types do not match this runtime revision.");
+  }
   const store = runtime.store as Store;
   const result = await store.view("tickets-by-state", {
     params: { ticketState: "open" },
@@ -83,6 +87,8 @@ export async function openTickets(runtime: MantleRuntime) {
 ```
 
 The wire name remains `tickets-by-state`; no lower-camel name is generated.
+Check the runtime revision before asserting generated types on a host-owned
+runtime. Booting directly with the generated `plan` provides the same match.
 Required params are checked by TypeScript and Runtime validates the values.
 `show` remains capped by the View's `limit`. A View with `requires` still
 needs a verified caller context; invoke it through `runtime.executeView({
