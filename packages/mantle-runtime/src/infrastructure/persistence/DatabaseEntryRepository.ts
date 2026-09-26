@@ -275,11 +275,9 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     // Under D1's 100 bound-parameter limit, leaving room for the live condition.
     for (let start = 0; start < unique.length; start += 95) {
       const chunk = unique.slice(start, start + 95);
-      const conditions = [`"_mantle_id" IN (${chunk.map(() => "?").join(", ")})`];
-      const binds: unknown[] = [...chunk];
-      this.addLiveCondition(table, conditions, binds);
-      const found = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")}`)
-        .bind(...binds).all<NativeEntryRow>();
+      const where = this.store().where(table, { id: { in: chunk } });
+      const found = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${where.sql}`)
+        .bind(...where.binds).all<NativeEntryRow>();
       rows.push(...found.map((row) => rowFromDb(table, row)));
     }
     return rows;
@@ -287,11 +285,9 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
 
   async get(args: EntryKey): Promise<EntryRow | null> {
     const table = this.table(args.collection);
-    const conditions = ['"_mantle_id" = ?'];
-    const binds: unknown[] = [args.id];
-    this.addLiveCondition(table, conditions, binds);
-    const row = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")}`)
-      .bind(...binds).first<NativeEntryRow>();
+    const where = this.store().where(table, { id: args.id });
+    const row = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${where.sql}`)
+      .bind(...where.binds).first<NativeEntryRow>();
     return row ? rowFromDb(table, row) : null;
   }
 
