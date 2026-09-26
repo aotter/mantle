@@ -11,7 +11,7 @@ A View is a named, read-only query over Schemas. Public and staff Views mount on
 
 Exposing collections directly — a `Schema.spec.expose.rest` flag, or a `GET /api/<collection>` shortcut — was considered and rejected. A Schema declares the storage shape. Its entries carry drafts, internal status, server-stamped fields and per-row data the author never intended to publish; `contact-messages` is the canonical example, where a direct collection route would be a privacy bug by default. A View already has the right semantics — a named query with explicit fields, filter, ordering and limit — so auto-exposing it only ratifies what the manifest already says.
 
-Use `surface: internal` for a named query callable only by host code. It remains in the plan and generated bindings, but is absent from REST, MCP, WebMCP and Admin reports. Its `requires` and guards still run. See [Typed queries](../guides/typed-queries.md).
+Use `surface: internal` for a named query callable only by host code. It remains in the plan and generated type map, but is absent from REST, MCP, WebMCP and Admin reports. Its `requires` and guards still run. See [Typed queries](../guides/typed-queries.md).
 
 ## Surfaces
 
@@ -21,7 +21,7 @@ Use `surface: internal` for a named query callable only by host code. It remains
 |---|---|---|---|
 | `public` | `GET /api/views/<name>` | `query_view_<segment>` on `/mcp` | Listed by `GET /api/views` |
 | `staff` | `GET /admin/api/views/<name>` | `query_view_<segment>` on `/mcp/staff` | `GET /admin/api/views/<name>/export`, Admin report sidebar |
-| `internal` | None | None | Host calls through `executeView` or generated `views` bindings |
+| `internal` | None | None | Host calls through `executeView` or the typed Store map |
 
 The adapter filters the View set before building each MCP dispatcher, so a guessed public tool call cannot reach a staff View. Surface decides transport visibility; `spec.requires` decides whether the verified caller may execute the View, on REST and MCP alike. See [Authorization](./authorization.md).
 

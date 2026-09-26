@@ -172,7 +172,7 @@ curl -i http://127.0.0.1:8787/mcp/staff
 
 ## What `mantle generate` wrote
 
-- `.mantle/generated/mantle.ts` — one module with the sealed `plan`, generated types (`MantleHandlers<Env>`), `createMantle` and `bindMantle`. The Worker entry above imports only `plan`.
+- `.mantle/generated/mantle.ts` — one module with the sealed `plan`, generated `Schemas`, `Views`, `Store` and `MantleHandlers<Env>` types. The Worker entry above imports only `plan`.
 - `public/_mantle/admin/` — the Admin SPA, synced only when `@aotter/mantle-admin-ui` is installed. This project did not install it, so nothing is written there and `/admin` has no assets.
 
 This walkthrough uses the existing direct-authored Worker entry; in that legacy

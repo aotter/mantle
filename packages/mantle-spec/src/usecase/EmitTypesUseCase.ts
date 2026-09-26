@@ -114,8 +114,11 @@ export function emitTypesFromManifests(request: {
 }
 
 export function manifestTypeIdentifier(name: string): string {
-  const identifier = name.replace(/[^a-zA-Z0-9_$]+/g, "_");
-  return /^[A-Za-z_$]/.test(identifier) ? identifier : `_${identifier}`;
+  // Keep wire names injective: `open-orders` and `open.orders` must have
+  // distinct TypeScript names now that generated bindings use string keys.
+  const identifier = [...name].map((char) => /[A-Za-z0-9]/.test(char)
+    ? char : `_u${char.codePointAt(0)!.toString(16).padStart(4, "0")}_`).join("");
+  return /^[A-Za-z]/.test(identifier) ? identifier : `_${identifier}`;
 }
 
 function docText(value: string): string {

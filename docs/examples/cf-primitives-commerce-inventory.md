@@ -458,7 +458,7 @@ crons = ["*/5 * * * *"]
 ```ts
 // src/index.ts
 import { createMantleWorker } from "@aotter/mantle/cloudflare";
-import { bindMantle, plan } from "../.mantle/generated/mantle.js";
+import { plan } from "../.mantle/generated/mantle.js";
 import { buildCommerceHandlers } from "./commerce/handlers.js";
 import { verifyProviderEvent } from "./commerce/provider.js";
 import type { Env, ExpiryMessage } from "./env.js";
@@ -476,11 +476,12 @@ const worker = createMantleWorker<Env>({
         const event = await verifyProviderEvent(raw, c.req.header("x-provider-signature"), env.PAYMENT_WEBHOOK_SECRET);
         if (!event) return c.text("invalid signature", 400);
         if (event.type !== "payment.succeeded") return c.text("ignored", 200);
-        const api = bindMantle(await getRuntime());
-        const result = await api.procedures.payOrder(
-          { orderToken: event.orderToken },
-          { user: null, staff: null, env, waitUntil: (p) => c.executionCtx.waitUntil(p) },
-        );
+        const runtime = await getRuntime();
+        const result = await runtime.invokeProcedure({
+          procedure: "pay-order",
+          input: { orderToken: event.orderToken },
+          ctx: { user: null, staff: null, env, waitUntil: (p) => c.executionCtx.waitUntil(p) },
+        });
         if (!result.ok) return c.text(result.diagnostic.code, result.diagnostic.code === "INTERNAL_ERROR" ? 500 : 200);
         return c.text("OK", 200); // paid, already_paid, expired, closed, missing are all terminal for the provider
       });
@@ -501,9 +502,9 @@ export default {
   fetch: worker.fetch,
 
   async queue(batch: MessageBatch<ExpiryMessage>, env: Env, ctx: ExecutionContext): Promise<void> {
-    let api: ReturnType<typeof bindMantle>;
+    let runtime: Awaited<ReturnType<typeof worker.getRuntime>>;
     try {
-      api = bindMantle(await worker.getRuntime(env));
+      runtime = await worker.getRuntime(env);
     } catch (error) {
       console.error("[order-expiry] runtime unavailable", error);
       batch.retryAll();
@@ -517,7 +518,11 @@ export default {
         continue;
       }
       try {
-        const result = await api.procedures.expireOrder({ orderToken: body.orderToken, now: Date.now() }, internalContext(env, ctx));
+        const result = await runtime.invokeProcedure<{ outcome: string }>({
+          procedure: "expire-order",
+          input: { orderToken: body.orderToken, now: Date.now() },
+          ctx: internalContext(env, ctx),
+        });
         if (!result.ok) {
           if (result.diagnostic.code === "INTERNAL_ERROR" || result.diagnostic.code === "CONFLICT") message.retry();
           else message.ack();
@@ -534,14 +539,18 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    const api = bindMantle(await worker.getRuntime(env));
-    const result = await api.procedures.sweepExpiredOrders({ now: Date.now() }, internalContext(env, ctx));
+    const runtime = await worker.getRuntime(env);
+    const result = await runtime.invokeProcedure({
+      procedure: "sweep-expired-orders",
+      input: { now: Date.now() },
+      ctx: internalContext(env, ctx),
+    });
     if (!result.ok) throw new Error(`expiry sweep failed: ${result.diagnostic.code}`);
   },
 } satisfies ExportedHandler<Env, ExpiryMessage>;
 ```
 
-`worker.getRuntime(env)` returns the same booted runtime `fetch` uses; `bindMantle(runtime).procedures.<lowerCamel>(input, ctx)` runs the full Procedure pipeline (auth predicates, input validation, handler, output validation) and returns `{ ok: true, data } | { ok: false, diagnostic }`.
+`worker.getRuntime(env)` returns the same booted runtime `fetch` uses; `runtime.invokeProcedure({ procedure, input, ctx })` runs the full Procedure pipeline (auth predicates, input validation, handler, output validation) and returns `{ ok: true, data } | { ok: false, diagnostic }`.
 
 `internalContext` is a **system caller**: `user: null, staff: null` and no `auth`. It satisfies no `requires.auth` predicate, so it can only invoke Procedures that declare none. That is intentional. `expire-order` and `sweep-expired-orders` have no `requires` and no Trigger, so the Queue and cron are their only callers. Never hand this context to a staff-guarded Procedure to "skip" authorization; declare an internal Procedure instead.
 
@@ -727,7 +736,7 @@ Provider callbacks do not fit the JSON HTTP Trigger path: Stripe-style webhooks 
 
 1. Read the raw body with `c.req.text()` and verify the provider signature with the secret from `Env`. Reject on failure and return before touching Mantle.
 2. Map the verified event to an `orderToken` (store it as the provider's client reference when creating the provider session).
-3. Invoke the internal `pay-order` Procedure through `bindMantle(await getRuntime()).procedures.payOrder(...)`. Do not call the handler function directly and do not write Mantle tables from the route; the Procedure pipeline and the DO transition stay the single path.
+3. Invoke the internal `pay-order` Procedure through `runtime.invokeProcedure({ procedure: "pay-order", input, ctx })`. Do not call the handler function directly and do not write Mantle tables from the route; the Procedure pipeline and the DO transition stay the single path.
 4. Treat every callback as a retry. `pay` returns `already_paid` on repetition, `sale:<orderToken>:<slug>` movement keys are inserted only if absent, and `paidAt` keeps its first value. A duplicate callback therefore cannot deduct inventory twice.
 5. Answer the provider with whatever it requires for acknowledgement once the outcome is terminal (`paid`, `already_paid`, `expired`, `closed`, `missing`). Return 5xx only for `INTERNAL_ERROR` so the provider retries.
 
@@ -806,4 +815,4 @@ The DO protects local coordination. It is not a distributed transaction across t
 - [Schema](../handbook/reference/schema.md), [Procedure](../handbook/reference/procedure.md), and [View](../handbook/reference/view.md) references — `readOnly`, `x-mantle-ref`, `idempotency-key`, `sql` Views
 - [`docs/deferred-lifecycle-queues.md`](../deferred-lifecycle-queues.md) — Queue contract and multiplexing
 - [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts) — `extend.mount`, `getRuntime`
-- [`packages/mantle/src/codegen/emitMantleModule.ts`](../../packages/mantle/src/codegen/emitMantleModule.ts) — `bindMantle(...).procedures`
+- [`packages/mantle/src/codegen/emitMantleModule.ts`](../../packages/mantle/src/codegen/emitMantleModule.ts) — sealed plan and Store type maps

@@ -112,7 +112,7 @@ queue(batch, env, ctx) {
 }
 ```
 
-Application consumers own their own acknowledgement. A common pattern is to `bindMantle(await worker.getRuntime(env))` and call a Procedure, then `ack()` on success, `retry()` on `INTERNAL_ERROR` or `CONFLICT`, and `ack()` on other diagnostics so a poison message does not loop. See [Bindings](./bindings.md#queues).
+Application consumers own their own acknowledgement. A common pattern is to `worker.getRuntime(env)` and call `runtime.invokeProcedure({ procedure, input, ctx })`, then `ack()` on success, `retry()` on `INTERNAL_ERROR` or `CONFLICT`, and `ack()` on other diagnostics so a poison message does not loop. See [Bindings](./bindings.md#queues).
 
 ## Consumer semantics
 

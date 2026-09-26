@@ -18,7 +18,7 @@ import type { CallerStore } from "./Store.js";
  * value-typed concept used by domain / usecase / infrastructure
  * alike — it's a per-request VO, not a request DTO.
  */
-export interface HandlerContext<Env = unknown> {
+export interface HandlerContext<Env = unknown, Store = CallerStore> {
   readonly user: { readonly id: string } | null;
   readonly staff: { readonly id: string; readonly role: StaffRole } | null;
   /** Verified credential metadata normalized by the adapter. Raw
@@ -43,7 +43,7 @@ export interface HandlerContext<Env = unknown> {
    * Store bound to this caller (ADR-0030), available in ref Procedures.
    * Authorization guard Procedures receive a read-only Store.
    */
-  readonly store?: CallerStore;
+  readonly store?: Store;
 }
 
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
@@ -77,9 +77,9 @@ export interface HandlerLifecycleEvent {
  * surfaces as `OUTPUT_VALIDATION_FAILED` to the caller and is a
  * handler bug.
  */
-export type HandlerFn<I = unknown, O = unknown, Env = unknown> = (
+export type HandlerFn<I = unknown, O = unknown, Env = unknown, Store = CallerStore> = (
   input: I,
-  ctx: HandlerContext<Env>,
+  ctx: HandlerContext<Env, Store>,
 ) => Promise<O> | O;
 
 /**
@@ -89,4 +89,4 @@ export type HandlerFn<I = unknown, O = unknown, Env = unknown> = (
  * appears only on registry boundaries.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyHandler = HandlerFn<any, any, any>;
+export type AnyHandler = HandlerFn<any, any, any, any>;
