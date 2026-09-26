@@ -123,7 +123,7 @@ export class SqliteStoreQueryCompiler {
     }
     const symbol = { eq: "=", ne: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=", like: "LIKE" }[operator as "eq"];
     // `ne` keeps NULL rows out, matching SQL; ask for them explicitly with `or` + `isNull`.
-    return { sql: `${sql} ${symbol} ?`, binds: [bound] };
+    return { sql: `${sql} ${symbol} ?${operator === "like" ? " ESCAPE '\\'" : ""}`, binds: [bound] };
   }
 
   private subquery(operand: unknown, depth: number, budget: Budget): CompiledSql {
