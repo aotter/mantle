@@ -68,7 +68,7 @@ describe("createVercelMantle", () => {
     queries.length = 0;
     const second = createVercelMantle(options);
     await second.getRuntime();
-    expect(queries.some((sql) => /\bCREATE\b|\bFROM _migrations\b|\bINSERT INTO _migrations\b/.test(sql))).toBe(false);
+    expect(queries.some((sql) => /\bCREATE\b|\bFROM _(?:mantle_)?migrations\b|\bINSERT INTO _(?:mantle_)?migrations\b/.test(sql))).toBe(false);
     queries.length = 0;
 
     const view = await second.handle(new Request(

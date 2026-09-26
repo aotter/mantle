@@ -98,7 +98,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
           methods: [{ kind: "email-otp", sender: { send: async () => {} } }],
         });
         expect(await cold.getSession(new Request(ORIGIN, { headers: { cookie: cookies } }))).toBeNull();
-        expect(empty.sqlite.prepare("SELECT COUNT(*) AS count FROM _migrations").get()!.count).toBe(1);
+        expect(empty.sqlite.prepare("SELECT COUNT(*) AS count FROM _mantle_migrations").get()!.count).toBe(1);
       } finally {
         log.mockRestore();
         empty.sqlite.close();

@@ -1341,11 +1341,11 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(context.tables)));
     const id = `auth-schema:1:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("")}`;
     try {
-      const applied = await config.driver.prepare("SELECT id FROM _migrations WHERE id = ?").bind(id).first<{ id: string }>();
+      const applied = await config.driver.prepare("SELECT id FROM _mantle_migrations WHERE id = ?").bind(id).first<{ id: string }>();
       if (applied?.id === id) return;
     } catch (error) {
-      // A new, auth-only database has no legacy Runtime ledger yet.
-      if (!/no such table: _migrations/i.test(String(error))) throw error;
+      // A new, auth-only or pre-#1150 database has no ledger yet; the runner creates and backfills it.
+      if (!/no such table: _mantle_migrations/i.test(String(error))) throw error;
     }
     const { compileMigrations } = await getMigrations(context.options);
     await config.driver.migrations.runAll([{

@@ -20,7 +20,7 @@ function failingD1(winnerId: string | null) {
     all: async <T>() => ({ success: true, meta: {}, results: [] as T[] }) as D1Result<T>,
     first: async <T>() => {
       if (sql.includes("sqlite_schema")) return null;
-      if (sql === "SELECT id FROM _migrations WHERE id = ?") {
+      if (sql === "SELECT id FROM _mantle_migrations WHERE id = ?") {
         return (winnerId === params[0] ? { id: winnerId } : null) as T | null;
       }
       throw new Error(`unexpected first(): ${sql}`);
@@ -51,11 +51,11 @@ describe("D1DatabaseDriver migrations", () => {
         success: true,
         meta: {},
         results: (sql.includes("sqlite_schema")
-          ? [{ name: "_migrations" }]
+          ? [{ name: "_mantle_migrations" }]
           : [{ id: migration.id }]) as T[],
       }) as D1Result<T>,
       first: async <T>() => (
-        sql.includes("sqlite_schema") ? { name: "_migrations" } as T : null
+        sql.includes("sqlite_schema") ? { name: "_mantle_migrations" } as T : null
       ),
     }) as D1PreparedStatement;
     const driver = new D1DatabaseDriver({
