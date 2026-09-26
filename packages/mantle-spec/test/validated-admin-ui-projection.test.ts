@@ -22,6 +22,14 @@ it("projects the same Admin descriptors from validated manifests without recheck
   expect(projected).toEqual({
     filter: checked.filter, list: checked.list, nav: checked.nav, sortableFields: schemaSortableFields(schema),
   });
+  const mixedRefs: SchemaManifest = { ...schema, spec: { ...schema.spec, schema: {
+    ...schema.spec.schema, required: ["externalKey", "customerId", "state"], properties: {
+      externalKey: { type: "string", "x-mantle-ref": { schema: "external", field: "slug" } },
+      ...schema.spec.schema.properties,
+    },
+  } } };
+  expect(checkSchemaAdminUi(mixedRefs).problems).toEqual([]);
+  expect(projectSchemaAdminUi(mixedRefs).nav).toEqual(checkSchemaAdminUi(mixedRefs).nav);
 
   const view: ViewManifest = {
     apiVersion: "cms.mantle.aotter.net/v1", kind: "View", metadata: { name: "orders" },
