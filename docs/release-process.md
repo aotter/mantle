@@ -133,10 +133,10 @@ dist-tag DELETE only added failure and re-run state, and Actions
 The thirteen public packages remain in dependency order:
 
 1. @aotter/mantle-spec
-2. @aotter/mantle-admin-ui
-3. @aotter/mantle-runtime
-4. @aotter/mantle-mcp
-5. @aotter/mantle-ui
+2. @aotter/mantle-ui
+3. @aotter/mantle-admin-ui
+4. @aotter/mantle-runtime
+5. @aotter/mantle-mcp
 6. @aotter/mantle-indexeddb
 7. @aotter/mantle-web
 8. @aotter/mantle-admin

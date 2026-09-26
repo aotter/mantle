@@ -8,24 +8,24 @@ import { api } from "../../lib/api";
 import type { AdminUser, MemberListResult, StaffRole } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { formatTimestampMs } from "../content/field-render";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@aotter/mantle-ui/kit";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Input } from "@aotter/mantle-ui/kit";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@aotter/mantle-ui/kit";
 import {
   Pagination,
   PaginationContent,
   PaginationItem,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import {
   Table,
   TableBody,
@@ -33,7 +33,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@aotter/mantle-ui/kit";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { IdValue } from "../../ui/id-value";
 

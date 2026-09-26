@@ -1,10 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "./system-tokens.css";
+@import "../../../mantle-ui/src/kit/styles/tokens.css";
 
 @source "../**/*.{ts,tsx}";
 @source "../../../mantle-ui/src/react/**/*.tsx";
+@source "../../../mantle-ui/src/kit/**/*.tsx";
 
 @custom-variant dark (&:is(.dark *));
 

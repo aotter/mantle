@@ -18,11 +18,11 @@ import type {
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { ErrorBox } from "../../ui/page";
-import { Badge } from "@/components/ui/badge";
-import { SidebarContent, SidebarHeader, SidebarInput } from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@aotter/mantle-ui/kit";
+import { SidebarContent, SidebarHeader, SidebarInput } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
 import { atomKindLabel, atomKindTone, audienceLabel, focusSlice, traceAtomIds } from "./atom-graph";
 import { CodeTab, FactGrid, flattenSchemaFields } from "./data-model-view";
 import { DeveloperExplorer } from "./developer-explorer";

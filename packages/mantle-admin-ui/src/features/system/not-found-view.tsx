@@ -1,7 +1,7 @@
 import * as React from "react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { Card } from "@/components/ui/card";
+import { Card } from "@aotter/mantle-ui/kit";
 
 export function NotFoundView({
   path,

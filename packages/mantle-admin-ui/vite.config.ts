@@ -49,7 +49,8 @@ function serverExportsPlugin(): Plugin {
       writeFileSync(resolve(dist, "preview.html"), readFileSync(resolve(dist, "index.html"), "utf8")
         .replace("<head>", `<head><meta name="mantle-admin-preview" content="1"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`));
       const systemTokensCss = readFileSync(
-        resolve(__dirname, "src/styles/system-tokens.css"),
+        // The tokens live with the kit in @aotter/mantle-ui (ADR-0029).
+        resolve(__dirname, "../mantle-ui/src/kit/styles/tokens.css"),
         "utf8",
       );
       const banner =

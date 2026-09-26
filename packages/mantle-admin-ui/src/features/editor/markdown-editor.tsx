@@ -4,8 +4,8 @@ import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
+import { Textarea } from "@aotter/mantle-ui/kit";
 
 const remarkPlugins = [remarkGfm];
 const rehypePlugins = [rehypeSanitize];

@@ -339,7 +339,9 @@ export function createInteractionController(options: InteractionControllerOption
       }
       const { diagnostics } = outcome;
       const phase: InteractionPhase = diagnostics.some(isUncertain) ? "uncertain"
-        : diagnostics.some((diagnostic) => diagnostic.code === "CONFLICT") ? "conflict"
+        // Only a version lock makes a conflict recoverable by review; any
+        // other CONFLICT (a unique key, a state rule) is a refusal to fix.
+        : locks && diagnostics.some((diagnostic) => diagnostic.code === "CONFLICT") ? "conflict"
         : "failed";
       set({ phase, diagnostics });
     },

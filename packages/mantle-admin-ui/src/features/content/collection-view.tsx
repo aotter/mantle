@@ -37,18 +37,18 @@ import type {
 } from "../../lib/types";
 import { PUBLISHING_STATUSES } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Checkbox } from "@aotter/mantle-ui/kit";
+import { Input } from "@aotter/mantle-ui/kit";
+import { Popover, PopoverContent, PopoverTrigger } from "@aotter/mantle-ui/kit";
 import {
   Pagination,
   PaginationContent,
   PaginationItem,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import {
   Table,
   TableBody,
@@ -56,7 +56,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@aotter/mantle-ui/kit";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { CollapsibleDescription, EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";

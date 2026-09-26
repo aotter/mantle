@@ -6,7 +6,7 @@ import {
   SidebarHeader,
   SidebarRail,
   SidebarTrigger,
-} from "@/components/ui/sidebar";
+} from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../app/preferences";
 import { t } from "../app/i18n";
 import { AppTitle } from "./app-title";

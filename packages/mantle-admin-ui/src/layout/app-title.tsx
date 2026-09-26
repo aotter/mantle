@@ -4,8 +4,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+} from "@aotter/mantle-ui/kit";
+import { Avatar, AvatarFallback, AvatarImage } from "@aotter/mantle-ui/kit";
 import { initialsFor } from "@/lib/initials";
 import type { AdminBrand } from "./types";
 

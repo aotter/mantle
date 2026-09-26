@@ -35,9 +35,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string): Promise<T> => request<T>(path),
-  post: <T>(path: string, body?: unknown): Promise<T> =>
-    request<T>(path, jsonInit("POST", body)),
+  get: <T>(path: string, options: { signal?: AbortSignal } = {}): Promise<T> =>
+    request<T>(path, options.signal ? { signal: options.signal } : undefined),
+  post: <T>(path: string, body?: unknown, options: { signal?: AbortSignal } = {}): Promise<T> =>
+    request<T>(path, { ...jsonInit("POST", body), ...(options.signal ? { signal: options.signal } : {}) }),
   patch: <T>(path: string, body?: unknown): Promise<T> =>
     request<T>(path, jsonInit("PATCH", body)),
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: "DELETE" }),

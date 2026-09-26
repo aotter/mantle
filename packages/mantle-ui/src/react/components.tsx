@@ -232,7 +232,10 @@ export function OperationPanel(props: FieldLabelProps & {
             <button
               type="button"
               onClick={() => { controller.cancel(); props.onCancel?.(); }}
-              className="rounded-md border px-3 py-2 text-sm font-medium"
+              // A write in flight cannot be taken back; closing then would
+              // hide whether it landed.
+              disabled={state.phase === "submitting"}
+              className="rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-50"
             >
               {labels.cancel}
             </button>

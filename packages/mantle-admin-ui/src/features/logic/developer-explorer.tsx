@@ -4,9 +4,9 @@ import { Braces, ListTree, PanelRight } from "lucide-react";
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
 import type { DeveloperConsoleSnapshot } from "../../lib/types";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@aotter/mantle-ui/kit";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 import { DeveloperRelations } from "./developer-relations";
 import { developerSelectionHref } from "./developer-route";
 

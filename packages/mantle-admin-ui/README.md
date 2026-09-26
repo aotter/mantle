@@ -8,31 +8,16 @@ This package builds a React/Tailwind static bundle. When it is installed,
 It currently provides the system admin shell, preference UI, site overview
 surfaces, and Mantle-branded system pages.
 
-## Mantle UI kit
+## Mantle UI kit (moved)
 
-Applications that need the same React/shadcn visual language without embedding
-the Admin product can import the domain-neutral primitives and compiled theme:
+The domain-neutral kit now lives in `@aotter/mantle-ui/kit`, with
+`@aotter/mantle-ui/kit.css` and `@aotter/mantle-ui/tokens.css` (ADR-0029).
+`@aotter/mantle-admin-ui/kit`, `kit.css` and `tokens.css` still work for one
+minor release and re-export the same components; move imports to
+`@aotter/mantle-ui`.
 
-```tsx
-import { Button, Card, CardContent, Input } from "@aotter/mantle-admin-ui/kit";
-import "@aotter/mantle-admin-ui/kit.css";
-```
-
-`SignInFlow` exports Admin's own two-step email-OTP form (email screen, then
-six-digit code screen). The host injects transport (`onSendCode`,
-`onVerifyCode`), whatever navigation follows a successful verify, and all copy;
-the component owns only the step, busy, and error state. A verify that resolves
-without an error is terminal: the form stays busy and locked so the consumed
-code cannot be resubmitted, and the host must navigate or unmount it (Admin
-does `window.location.assign`). Admin renders the same component, so a host's
-sign-in cannot drift from it.
-
-Use `@aotter/mantle-admin-ui/tokens.css` when an application only needs the
-Mantle color, radius, background, and sidebar variables. The kit intentionally
-does not export `AdminApp`, authenticated layouts, routes, queries, or feature
-views; use the static Admin SPA or sandbox preview for the complete product.
-
-`dist/r/auth-page.json` is a shadcn registry item for a working email OTP page.
+`dist/r/auth-page.json` is a shadcn registry item for a working email OTP page,
+built on `@aotter/mantle-ui/kit`.
 It is copied into the consuming application, so its agent or author can change
 the markup and flow without forking this package. The recipe accepts optional
 Privacy Policy and Terms of Use links; their discovery and enforcement remain

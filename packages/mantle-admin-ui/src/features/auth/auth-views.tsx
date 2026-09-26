@@ -2,17 +2,17 @@ import * as React from "react";
 import type { OAuthConsentInfo, OAuthConsentRequest } from "@aotter/mantle-admin";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, LogOut } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { AuthCard } from "@/components/auth-card";
+import { Button } from "@aotter/mantle-ui/kit";
+import { AuthCard } from "@aotter/mantle-ui/kit";
 import {
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { SignInButton, SignInFlow } from "@/components/sign-in-flow";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@aotter/mantle-ui/kit";
+import { Input } from "@aotter/mantle-ui/kit";
+import { SignInButton, SignInFlow } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { authMethodsQueryOptions } from "../../lib/queries";
@@ -133,7 +133,7 @@ export function signedOAuthQuery(search: string): string | undefined {
 
 // Both moved to the kit component that now owns the email-OTP flow;
 // re-exported here so Admin call sites and tests keep one import path.
-export { claimInFlight, SignInButton } from "@/components/sign-in-flow";
+export { claimInFlight, SignInButton } from "@aotter/mantle-ui/kit";
 
 /**
  * Data-driven sign-in. Fetches `/api/auth/methods` on mount; renders

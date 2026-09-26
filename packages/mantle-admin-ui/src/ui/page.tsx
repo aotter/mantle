@@ -4,8 +4,8 @@ import { createPortal } from "react-dom";
 import { AlertCircle, Check, Copy, ExternalLink, type LucideIcon } from "lucide-react";
 import { ApiError } from "../lib/api";
 import { cn } from "../lib/utils";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Card } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../app/preferences";
 import { t } from "../app/i18n";
 
@@ -140,11 +140,16 @@ export function OperationErrorBox({ error }: { error: unknown }): React.ReactEle
 function useUnauthorizedRedirect(error: unknown): boolean {
   const is401 = error instanceof ApiError && error.status === 401;
   React.useEffect(() => {
-    if (!is401 || isAdminPreview() || typeof window === "undefined") return;
-    const ret = window.location.pathname + window.location.search;
-    window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
+    if (is401) redirectToSignIn();
   }, [is401]);
   return is401 && !isAdminPreview();
+}
+
+/** Sends an expired session to sign-in, returning here afterwards. */
+export function redirectToSignIn(): void {
+  if (isAdminPreview() || typeof window === "undefined") return;
+  const ret = window.location.pathname + window.location.search;
+  window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
 }
 
 /** Renders `description` plainly unless it looks like raw schema notes

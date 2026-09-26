@@ -2,7 +2,7 @@ import * as React from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Bold, Code2, Italic, Link, List, ListOrdered, Quote, Redo2, Strikethrough, Underline, Undo2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@aotter/mantle-ui/kit";
 
 export function HtmlEditor({ value, onChange }: { value: string; onChange: (value: string) => void }): React.ReactElement {
   const editor = useEditor({

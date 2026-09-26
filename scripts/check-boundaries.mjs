@@ -177,6 +177,11 @@ function checkPackageDirection() {
       message: "ui components must not depend on Admin, a query cache, a transport or host globals",
     },
     {
+      dir: "packages/mantle-ui/src/kit",
+      forbidden: ["@aotter/", "@tanstack/", "@modelcontextprotocol/", "fetch(", "localStorage", '"@/'],
+      message: "ui kit must stay domain-neutral: no Mantle packages, query cache, transport, storage or Admin aliases",
+    },
+    {
       dir: "packages/mantle-web/src",
       forbidden: [
         "@aotter/mantle-cloudflare",

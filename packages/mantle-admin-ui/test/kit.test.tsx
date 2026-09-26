@@ -1,23 +1,13 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import * as moved from "@aotter/mantle-ui/kit";
+import * as compat from "../src/kit";
 
-import { AuthCard, AuthLegalNotice, Button, Card, CardContent, CardHeader, Input } from "../src/kit";
-
-describe("Mantle UI kit", () => {
-  it("renders the shared shadcn primitives without an Admin runtime", () => {
-    const html = renderToStaticMarkup(
-      <Card><CardContent><Input aria-label="Email" /><Button>Continue</Button></CardContent></Card>,
-    );
-    expect(html).toContain('data-slot="card"');
-    expect(html).toContain('data-slot="input"');
-    expect(html).toContain('data-slot="button"');
-  });
-
-  it("renders only the legal links supplied by the host application", () => {
-    const privacy = renderToStaticMarkup(<AuthLegalNotice legal={{ privacy: "/privacy" }} />);
-    expect(privacy).toContain("Privacy Policy");
-    expect(privacy).not.toContain("Terms of Use");
-    expect(renderToStaticMarkup(<AuthCard action={<button>Theme</button>}><CardHeader>Sign in</CardHeader></AuthCard>))
-      .toContain("max-w-sm");
+describe("@aotter/mantle-admin-ui/kit (compatibility re-export, ADR-0029)", () => {
+  it("exports exactly the components of @aotter/mantle-ui/kit", () => {
+    expect(Object.keys(compat).sort()).toEqual(Object.keys(moved).sort());
+    for (const name of Object.keys(moved)) {
+      expect(compat[name as keyof typeof compat]).toBe(moved[name as keyof typeof moved]);
+    }
+    expect(Object.keys(moved)).toEqual(expect.arrayContaining(["AuthCard", "Button", "Dialog", "SignInButton"]));
   });
 });

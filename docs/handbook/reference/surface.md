@@ -29,7 +29,7 @@ All `/admin/api/*` routes require a staff session, carry a 1 MiB JSON body limit
 | `GET /admin/api/views/<name>` | Staff execution of any declared View, public or staff, with Admin search and filtering applied before pagination. |
 | `GET /admin/api/views/<name>/export` | The same query as CSV, covering every matching row rather than one page. |
 | `GET /admin/api/views-manifest` | `{ views: … }` — the View manifest projection the SPA renders from. |
-| `GET /admin/api/operations` | `{ operations: [ { name, title, description, input, uiSchema, triggers, rowBindings } ] }`, filtered per caller by re-evaluating each Procedure's `requires.auth.all`. |
+| `GET /admin/api/operations` | `{ operations: [ { name, title, description, input, uiSchema, triggers, interactions, rowBindings } ] }`, filtered per caller by re-evaluating each Procedure's `requires.auth.all`. |
 | `POST /admin/api/operations/:name` | Invokes a staff-operable Procedure through the same use case the staff MCP surface uses. `404` when the name is not staff-operable or when the caller's `requires.auth.all` predicates exclude it — the same filter the listing applies, so names cannot be probed. |
 | `GET /admin/api/me`, `/collections`, `/collections/:name/statistics`, `/entries`, `/entries/export`, `/entries/:id`, `/site` | Session, catalog and entry reads. Entry detail requires `?collection=<schema>`. |
 | `POST /admin/api/entries`, `PATCH /admin/api/entries/:id` | Create and edit. Entry mutation routes require `?collection=<schema>`; contributors are limited to drafts on publishing Schemas. |
@@ -178,7 +178,7 @@ The umbrella installs Spec and Runtime only. Web, Admin, Auth, Admin UI, Bun, Ve
 | `@aotter/mantle-cloudflare` | `/cloudflare` | Cloudflare Workers adapter: D1, Workers Cache, R2, Queues, Better Auth 1.7 MCP and CIMD. |
 | `@aotter/mantle-indexeddb` | — | Browser IndexedDB adapter. Directly installable; no umbrella subpath. |
 | `@aotter/mantle-mcp` | — | MCP surface on the official MCP SDK: serves a runtime capability catalog as tools to 2026-07-28 and 2025 stateless clients. Directly installable; no umbrella subpath. |
-| `@aotter/mantle-ui` | — | `/controller`: framework-free interaction logic shared by Admin and MCP Apps (review a row, lock its version, submit once, surface conflicts and uncertain writes). Imports nothing. Directly installable; no umbrella subpath. |
+| `@aotter/mantle-ui` | — | Shared UI for Admin and MCP Apps. `/controller`: framework-free interaction logic (review a row, lock its version, submit once, surface conflicts and uncertain writes) that imports nothing. `/`: React interaction components. `/kit` with `kit.css` and `tokens.css`: the UI kit, whose libraries are optional peers. `/mcp-app`: the built-in MCP App. Directly installable; no umbrella subpath. |
 
 ## Versions
 

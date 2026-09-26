@@ -246,6 +246,14 @@ export interface MediaLibraryListResult {
 }
 
 /** Staff-operable Procedure derived from the manifest. */
+/** One row binding of a staff operation, from the sealed plan. */
+export interface StaffOperationInteraction {
+  collection: string;
+  bind: Array<{ input: string; field: string }>;
+  version?: string;
+  mutates: boolean;
+}
+
 export interface StaffOperation {
   name: string;
   title: LocalizedText | null;
@@ -256,11 +264,11 @@ export interface StaffOperation {
   /** References that expose this operation from collection row menus. */
   rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
   /**
-   * Builtin handler schema name, when this Procedure writes through
-   * `handler.kind: builtin`. Admin uses it to bind `expectedVersion` to
-   * the mutated collection rather than a contextual parent row.
+   * How a row of each collection feeds the operation (ADR-0029): the
+   * inputs it binds and, on the operation target, the input carrying the
+   * version the person reviewed. The first one per collection applies.
    */
-  targetCollection?: string | null;
+  interactions: StaffOperationInteraction[];
 }
 
 /** Read-only View projection exposed by the Admin API. */

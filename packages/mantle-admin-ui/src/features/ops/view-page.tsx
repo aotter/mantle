@@ -17,11 +17,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Badge } from "@aotter/mantle-ui/kit";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
 import { IdValue, isIdField } from "../../ui/id-value";
@@ -32,7 +32,7 @@ import {
   PaginationItem,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination";
+} from "@aotter/mantle-ui/kit";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 
 const VIEW_PAGE_SIZE = 50;
