@@ -1,5 +1,5 @@
 import { DiagnosticError, runtimeDiagnostic, type SchemaManifest } from "@aotter/mantle-spec";
-import type { StoreScalar, StoreSelect, StoreSubquery, StoreWhere } from "../../domain/model/Store.js";
+import type { StoreScalar, StoreSubquery, StoreWhere } from "../../domain/model/Store.js";
 import { encodeField, fieldCodec, fieldColumn, isNullableJsonSchema, sqliteSchemaTable, type SqliteSchemaTable } from "../storage/SqliteSchemaTables.js";
 
 /** D1 binds at most 100 parameters per statement; keep every compiled Store statement under it. */
@@ -7,7 +7,6 @@ export const STORE_MAX_BINDS = 100;
 const MAX_DEPTH = 16;
 /** Bounds statement size across and/or width and nested subqueries. */
 const MAX_NODES = 256;
-const COMPARISONS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "in", "notIn", "isNull"]);
 const NATIVE_TYPES: Readonly<Record<string, "string" | "integer">> = {
   id: "string", status: "string", version: "integer", createdAt: "integer", updatedAt: "integer", authorId: "string",
 };
@@ -18,7 +17,7 @@ export interface CompiledSql {
 }
 
 /**
- * Compiles the closed Store where AST (ADR-0030) against one Schema table.
+ * Compiles Runtime-validated Store where AST (ADR-0030) against one Schema table.
  * Every value is bound; identifiers come only from the linked Schema.
  * `live` supplies each table's TTL visibility condition.
  */
@@ -67,28 +66,22 @@ export class SqliteStoreQueryCompiler {
     return { sql: parts.length ? parts.map((part) => `(${part})`).join(" AND ") : "1 = 1", binds };
   }
 
-  private node(table: SqliteSchemaTable, where: unknown, depth: number, budget: Budget): CompiledSql {
+  private node(table: SqliteSchemaTable, where: StoreWhere, depth: number, budget: Budget): CompiledSql {
     if (depth > MAX_DEPTH) throw invalid(`Store where nests deeper than ${MAX_DEPTH}.`);
     spend(budget);
-    if (!isPlainObject(where)) throw invalid("A Store where condition must be an object.");
-    // An undefined value is an error, not an omitted key: dropping it would widen the filter.
     const entries = Object.entries(where);
-    if (!entries.length) throw invalid("A Store where condition must not be empty.");
-    const unset = entries.find(([, value]) => value === undefined);
-    if (unset) throw invalid(`Store where '${unset[0]}' is undefined; omit the key or use isNull.`);
     const parts: string[] = [];
     const binds: unknown[] = [];
     for (const [key, value] of entries) {
       let compiled: CompiledSql;
       if (key === "and" || key === "or") {
-        if (!Array.isArray(value) || value.length === 0) throw invalid(`'${key}' takes a non-empty array.`);
-        const children = value.map((child) => this.node(table, child, depth + 1, budget));
+        const children = (value as readonly StoreWhere[]).map((child) => this.node(table, child, depth + 1, budget));
         compiled = {
           sql: children.map((child) => `(${child.sql})`).join(key === "and" ? " AND " : " OR "),
           binds: children.flatMap((child) => child.binds),
         };
       } else if (key === "not") {
-        const child = this.node(table, value, depth + 1, budget);
+        const child = this.node(table, value as StoreWhere, depth + 1, budget);
         compiled = { sql: `NOT (${child.sql})`, binds: child.binds };
       } else {
         compiled = this.comparison(table, key, value, depth, budget);
@@ -103,32 +96,26 @@ export class SqliteStoreQueryCompiler {
     const sql = this.column(table, column, "a where");
     if (!isPlainObject(value)) return this.operator(table, column, sql, "eq", value, depth, budget);
     const operators = Object.entries(value);
-    if (!operators.length) throw invalid(`Column '${column}' has an empty comparison.`);
-    const unset = operators.find(([, operand]) => operand === undefined);
-    if (unset) throw invalid(`'${unset[0]}' on '${column}' is undefined; omit it or use isNull.`);
     const parts = operators.map(([operator, operand]) => this.operator(table, column, sql, operator, operand, depth, budget));
     return { sql: parts.map((part) => part.sql).join(" AND "), binds: parts.flatMap((part) => part.binds) };
   }
 
   private operator(table: SqliteSchemaTable, column: string, sql: string, operator: string, operand: unknown, depth: number, budget: Budget): CompiledSql {
-    if (!COMPARISONS.has(operator)) throw invalid(`Unknown Store operator '${operator}' on '${column}'.`);
     spend(budget);
     if (operator === "isNull") {
-      if (typeof operand !== "boolean") throw invalid(`'isNull' on '${column}' takes a boolean.`);
       return { sql: `${sql} IS ${operand ? "" : "NOT "}NULL`, binds: [] };
     }
     if (operator === "in" || operator === "notIn") {
       const negate = operator === "notIn";
       if (Array.isArray(operand)) {
         if (!operand.length) return { sql: negate ? "1 = 1" : "0 = 1", binds: [] };
-        const values = operand.map((item) => this.value(table, column, item, operator));
-        if (values.some((item) => item === null)) throw invalid(`'${operator}' on '${column}' cannot contain null; use isNull.`);
+        const values = operand.map((item) => this.value(table, column, item));
         return { sql: `${sql} ${negate ? "NOT IN" : "IN"} (${values.map(() => "?").join(", ")})`, binds: values };
       }
       const sub = this.subquery(operand, depth, budget);
       return { sql: `${sql} ${negate ? "NOT IN" : "IN"} (${sub.sql})`, binds: sub.binds };
     }
-    const bound = this.value(table, column, operand, operator);
+    const bound = this.value(table, column, operand);
     if (bound === null) {
       if (operator === "eq") return { sql: `${sql} IS NULL`, binds: [] };
       if (operator === "ne") return { sql: `${sql} IS NOT NULL`, binds: [] };
@@ -140,11 +127,7 @@ export class SqliteStoreQueryCompiler {
   }
 
   private subquery(operand: unknown, depth: number, budget: Budget): CompiledSql {
-    if (!isPlainObject(operand)) throw invalid("'in' / 'notIn' take an array or a { select, from, where } subquery.");
-    const unknownKey = Object.keys(operand).find((key) => !["select", "from", "where"].includes(key));
-    if (unknownKey) throw invalid(`Unknown subquery key '${unknownKey}'.`);
     const { select, from, where } = operand as unknown as StoreSubquery;
-    if (Object.hasOwn(operand, "where") && where === undefined) throw invalid("Subquery where is undefined; omit it or provide a condition.");
     spend(budget);
     const table = this.table(from);
     const column = this.column(table, select, "a subquery select");
@@ -154,13 +137,8 @@ export class SqliteStoreQueryCompiler {
     return { sql: `SELECT ${column} FROM ${table.table} WHERE ${column} IS NOT NULL AND (${body.sql})`, binds: body.binds };
   }
 
-  private value(table: SqliteSchemaTable, column: string, value: unknown, operator: string): unknown {
+  private value(table: SqliteSchemaTable, column: string, value: unknown): unknown {
     if (value === null) return null;
-    const type = NATIVE_TYPES[column] ?? fieldCodec(this.property(table, column));
-    const ok = type === "boolean" ? typeof value === "boolean"
-      : type === "string" ? typeof value === "string"
-        : typeof value === "number" && Number.isFinite(value) && (type !== "integer" || Number.isSafeInteger(value));
-    if (!ok) throw invalid(`'${operator}' on '${column}' expects a value of type ${type}.`);
     return Object.hasOwn(NATIVE_TYPES, column) ? value : encodeField(value, this.property(table, column));
   }
 
@@ -181,13 +159,6 @@ export function assertBindBudget(compiled: CompiledSql): void {
   if (compiled.binds.length > STORE_MAX_BINDS) {
     throw invalid(`A Store statement may bind at most ${STORE_MAX_BINDS} values; use a subquery instead of a long 'in' list.`);
   }
-}
-
-export function validateSelect(query: StoreSelect): void {
-  if (!isPlainObject(query)) throw invalid("Store select takes an object.");
-  const unknownKey = Object.keys(query).find((key) => !["from", "columns", "where", "orderBy", "limit", "cursor"].includes(key));
-  if (unknownKey) throw invalid(`Unknown Store select key '${unknownKey}'.`);
-  if (Object.hasOwn(query, "where") && query.where === undefined) throw invalid("Store where is undefined; omit it or provide a condition.");
 }
 
 export function invalid(message: string): DiagnosticError {
