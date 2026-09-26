@@ -310,7 +310,7 @@ const { rows, nextCursor } = await ctx.store!.select({
 
 ## TTL sweep in a ref handler
 
-`ctx.store.sweepExpired({ collection, limit })` previews a bounded page of expired rows; `delete: true` explicitly removes it. The result contains `scanned`, `removed` and an optional `nextCursor`. Continue with that cursor until absent. Host code calls `runtime.store.sweepExpired` with the same request. D1 and Bun SQLite implement this semantic capability; unsupported storage returns `RESOURCE_UNAVAILABLE`. The read-only Store given to authorization guard Procedures rejects the sweep. For a scheduled cleanup, declare a [schedule Trigger](./trigger.md#schedule-source) targeting a no-input ref Procedure. No sweep is scheduled automatically. See [Schema TTL](./schema.md#ttl).
+`runtime.store.sweepExpired({ collection, limit })` previews a bounded page of expired rows; `delete: true` explicitly removes it. The result contains `scanned`, `removed` and an optional `nextCursor`. Continue with that cursor until absent. TTL cleanup is host maintenance and is absent from `ctx.store` in Procedures. D1 and Bun SQLite implement this semantic capability; unsupported storage returns `RESOURCE_UNAVAILABLE`. No sweep is scheduled automatically. See [Schema TTL](./schema.md#ttl).
 
 ## `uiSchema`
 
