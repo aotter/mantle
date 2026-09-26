@@ -104,6 +104,14 @@ describe("store.select (#1151)", () => {
     expect(ids(result)).toEqual(["b2", "b1"]);
   });
 
+  it("escapes literal LIKE wildcards", async () => {
+    const { db, rt } = await seeded();
+    db.seedEntry(row("sessions", "literal", { ownerId: "a_b", performedAt: "2026-09-04" }));
+    db.seedEntry(row("sessions", "wildcard", { ownerId: "axb", performedAt: "2026-09-05" }));
+    db.entryCount("sessions");
+    expect(ids(await rt.store.select({ from: "sessions", where: { ownerId: { like: "a\\_b" } } }))).toEqual(["literal"]);
+  });
+
   it("paginates with a keyset cursor and projects columns", async () => {
     const { rt } = await seeded();
     const first = await rt.store.select({ from: "sessions", orderBy: { performedAt: "asc" }, limit: 2, columns: ["id", "rpe"] });
