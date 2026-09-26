@@ -10,7 +10,7 @@ An application needs a portable expiry rule across D1 and Bun SQLite. A cron-onl
 
 ## Decision
 
-`Schema.spec.ttl` names one top-level date-time field and a nonnegative `expireAfterSeconds`. At `timestamp + duration <= now`, semantic reads exclude the row. Missing, null and unparseable legacy dates never expire. Declarative Views include the same predicate. Native SQL Views are rejected while any TTL Schema exists, and shared caching of a TTL View is rejected. The compiled plan and introspection expose the policy. Public Cloudflare pages derived from TTL collections use `no-store` rather than shared caching.
+`Schema.spec.ttl` names one top-level date-time field and a nonnegative `expireAfterSeconds`. At `timestamp + duration <= now`, semantic reads exclude the row. Missing, null and unparseable legacy dates never expire. Declarative Views include the same predicate. Native SQL Views that name a TTL Schema's table are rejected (SQL over other tables is unaffected), and shared caching of a TTL View is rejected. The compiled plan and introspection expose the policy. Public Cloudflare pages derived from TTL collections use `no-store` rather than shared caching.
 
 SQLite storage implements an optional bounded `ExpirySweeper`. A sweep previews by default; `delete: true` is required for physical removal. It returns counts and a cursor, selects at most 100 expired IDs in stable order, and rechecks expiry in one bounded delete statement. A failed page can be retried with the previous cursor. Ref Procedures can call the semantic capability, including from a scheduled Trigger. No host automatically invokes it.
 
