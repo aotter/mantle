@@ -59,6 +59,7 @@ import {
   fieldColumn,
   fieldSql,
   isNullableJsonSchema,
+  liveTtlCondition,
   sqliteSchemaTable,
   ttlCutoff,
   type SqliteSchemaTable,
@@ -577,13 +578,8 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
   }
 
   private addLiveCondition(table: SqliteSchemaTable, conditions: string[], binds: unknown[]): void {
-    const ttl = table.schema.spec.ttl;
-    if (!ttl) return;
-    const cutoff = ttlCutoff(this.now(), ttl.expireAfterSeconds);
-    if (cutoff === null) return;
-    const field = requiredFieldSql(table.schema, ttl.field);
-    conditions.push(`(${field} IS NULL OR julianday(${field}) IS NULL OR julianday(${field}) > julianday(?))`);
-    binds.push(cutoff);
+    const live = liveTtlCondition(table.schema, this.now);
+    if (live) { conditions.push(live.sql); binds.push(...live.binds); }
   }
 
   private addLocaleCondition(table: SqliteSchemaTable, conditions: string[], binds: unknown[], locale: string | null | undefined): void {
