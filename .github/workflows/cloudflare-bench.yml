@@ -5,7 +5,11 @@ on:
   pull_request:
     branches: [main, develop]
     paths:
+      - package.json
+      - pnpm-lock.yaml
       - packages/adapters/cloudflare/**
+      - packages/mantle-auth/**
+      - packages/mantle-mcp/**
       - packages/mantle-spec/src/**
       - packages/mantle-runtime/src/**
       - packages/mantle-admin/src/**
@@ -21,7 +25,11 @@ on:
   push:
     branches: [main, develop]
     paths:
+      - package.json
+      - pnpm-lock.yaml
       - packages/adapters/cloudflare/**
+      - packages/mantle-auth/**
+      - packages/mantle-mcp/**
       - packages/mantle-spec/src/**
       - packages/mantle-runtime/src/**
       - packages/mantle-admin/src/**
