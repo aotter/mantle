@@ -47,8 +47,8 @@ link to the owning declarations. UI action placement is no longer shown as a
 Procedure-to-Schema execution path; custom handlers and native SQL Views state
 when their data relationships cannot be inferred from the Manifest.
 
-Ref Procedures can now group create, update and delete operations across
-Schemas with `ctx.writeAtomically`. D1 and Bun commit the group or roll it
+Ref Procedures can now group insert, update and delete operations across
+Schemas with `ctx.store.write`. D1 and Bun commit the group or roll it
 back, including when the last conditional write finds a stale version. Other
 adapters must explicitly implement the optional capability before using it.
 

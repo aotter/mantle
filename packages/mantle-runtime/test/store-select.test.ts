@@ -261,7 +261,11 @@ describe("store.select (#1151)", () => {
   });
 
   it("reports adapters without the store capability", async () => {
-    const store = createStore({ idgen: { next: () => "x" }, runView: async () => ({ ok: true, result: { rows: [], page: 1, show: 1, hasMore: false } }) });
+    const unused = async (): Promise<never> => { throw new Error("unused"); };
+    const store = createStore({
+      idgen: { next: () => "x" }, write: unused, sweepExpired: unused,
+      runView: async () => ({ ok: true, result: { rows: [], page: 1, show: 1, hasMore: false } }),
+    });
     await expect(store.select({ from: "sessions" })).rejects.toMatchObject({ diagnostic: { code: "RESOURCE_UNAVAILABLE" } });
   });
 });

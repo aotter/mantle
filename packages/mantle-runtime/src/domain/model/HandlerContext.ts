@@ -1,7 +1,5 @@
 import type { LifecycleHook, StaffRole } from "@aotter/mantle-spec";
 import type { EntryRow } from "./EntryRow.js";
-import type { AtomicDraftOperation } from "../../usecase/content/AtomicEntryWriteUseCase.js";
-import type { SweepExpiredRequest, SweepExpiredResult } from "../port/ExpirySweeper.js";
 import type { MantleStore } from "./Store.js";
 
 /**
@@ -41,12 +39,11 @@ export interface HandlerContext<Env = unknown> {
   readonly event?: HandlerLifecycleEvent;
   /** One Cloudflare scheduled delivery; retries retain the same id. */
   readonly schedule?: { readonly id: string; readonly trigger: string; readonly cron: string; readonly scheduledTime: number };
-  /** Store bound to this caller (ADR-0030), available in ref Procedures and guards. */
+  /**
+   * Store bound to this caller (ADR-0030), available in ref Procedures.
+   * Authorization guard Procedures receive a read-only Store.
+   */
   readonly store?: MantleStore;
-  /** Runtime-bound semantic atomic entry writer, available in ref Procedures. */
-  readonly writeAtomically?: (operations: readonly AtomicDraftOperation[]) => Promise<readonly (EntryRow | null)[]>;
-  /** Preview or explicitly remove a bounded page of expired entries. */
-  readonly sweepExpired?: (request: SweepExpiredRequest) => Promise<SweepExpiredResult>;
 }
 
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";

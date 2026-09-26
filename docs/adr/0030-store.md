@@ -19,7 +19,7 @@ Entry persistence grew parallel paths: builtin-op use cases over `EntryRepositor
 - Storage support is an optional `StoreReader` capability; absent support is `RESOURCE_UNAVAILABLE`. Invalid queries are `INPUT_VALIDATION_FAILED`. A statement binds at most 100 values (D1's limit) on every adapter.
 - `store.view(name, options)` runs a named View with the caller's context; `store.id()` returns an entry id.
 
-Delivery order (each a reviewed PR): (1) `select`, `view`, `id` — this ADR's first slice; (2) `store.write(ops)` with `insert`/`update`/`delete`, `lock` and `expect`, set-based deletes rejected on Schemas with per-row delete hooks, replacing `ctx.writeAtomically`; (3) manifest grammar (handler `ref | store`, View `select`, Schema `scope`) and removal of the parallel read paths, under grammar-revise.
+Delivery order (each a reviewed PR): (1) `select`, `view`, `id` — this ADR's first slice; (2) `store.write(ops)` with `insert`/`update`/`delete`, `lock` and `expect`, set-based deletes over live rows only, rejected on Schemas with per-row delete hooks and on publishing Schemas (published entries are protected), replacing `ctx.writeAtomically`; (3) manifest grammar (handler `ref | store`, View `select`, Schema `scope`) and removal of the parallel read paths, under grammar-revise.
 
 ## Consequences
 
