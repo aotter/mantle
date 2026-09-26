@@ -7,7 +7,7 @@ import {
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
-import { decodeField, fieldSql, NATIVE_COLUMN, quoteIdent, ttlCutoff } from "./SqliteSchemaTables.js";
+import { decodeField, fieldSql, liveTtlCondition, NATIVE_COLUMN, quoteIdent } from "./SqliteSchemaTables.js";
 import { escapeLikeTerm } from "../persistence/Pagination.js";
 import { clampPage, clampShow } from "../../domain/service/Pagination.js";
 import type { ViewQueryOptions } from "../../domain/port/ViewQueryExecutor.js";
@@ -105,15 +105,8 @@ export function prepareSqliteView(
         whereParts.push(`(${filter.sql})`);
         sqlParams.push(...filter.bind(options.params ?? {}, options.ctxUserId));
       }
-      if (schema?.spec.ttl) {
-        const { field, expireAfterSeconds } = schema.spec.ttl;
-        const cutoff = ttlCutoff(now(), expireAfterSeconds);
-        if (cutoff !== null) {
-          const column = fieldSql(schema, field)!;
-          whereParts.push(`(${column} IS NULL OR julianday(${column}) IS NULL OR julianday(${column}) > julianday(?))`);
-          sqlParams.push(cutoff);
-        }
-      }
+      const live = schema && liveTtlCondition(schema, now);
+      if (live) { whereParts.push(live.sql); sqlParams.push(...live.binds); }
       const listQuery = compileListQuery(options, (field) => fieldRefExpr(field, schema));
       whereParts.push(...listQuery.conditions);
       sqlParams.push(...listQuery.params);
