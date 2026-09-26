@@ -1,5 +1,4 @@
 import {
-  checkSchemaIndexes,
   resolveMantleRef,
   type JsonSchema,
   type ReservedEntryColumn,
@@ -117,17 +116,11 @@ export function schemaTableMigrations(schemas: Iterable<SchemaManifest>): readon
         sql: `CREATE INDEX IF NOT EXISTS ${quoteIdent(indexName(schema.metadata.name, "locale_status_updated"))} ON ${table.table}(${quoteIdent("locale")}, "_mantle_status", "_mantle_updated_at" DESC, "_mantle_id" DESC)`,
       });
     }
-    const checked = checkSchemaIndexes(schema);
-    const problem = checked.problems[0];
-    if (problem) throw new Error(`invalid Schema index declaration at ${problem.pointer}: ${problem.message}`);
-    for (const declaration of checked.declarations) {
+    for (const declaration of indexDeclarations(schema)) {
       // Native columns (`status`, `createdAt`, …) map to their `_mantle_*` column (#1008).
-      const fields = declaration.fields.map(({ name }) => quoteIdent(NATIVE_COLUMN[name] ?? name));
-      const relationship = !declaration.unique && declaration.fields.length === 1 &&
-        (schema.spec.translates?.on === declaration.fields[0]!.name ||
-          resolveMantleRef(schema.spec.schema.properties?.[declaration.fields[0]!.name]) !== null);
-      if (relationship) fields.push('"_mantle_updated_at" DESC', '"_mantle_id" DESC');
-      const suffix = `${declaration.unique ? "unique" : relationship ? "relation" : "index"}_${declaration.fields.map(({ name }) => utf8Hex(name)).join("_")}`;
+      const fields = declaration.fields.map((name) => quoteIdent(NATIVE_COLUMN[name] ?? name));
+      if (declaration.relationship) fields.push('"_mantle_updated_at" DESC', '"_mantle_id" DESC');
+      const suffix = `${declaration.unique ? "unique" : declaration.relationship ? "relation" : "index"}_${declaration.fields.map(utf8Hex).join("_")}`;
       migrations.push({
         id: `schema-table-v2:index:${utf8Hex(schema.metadata.name)}:${suffix}`,
         description: `Schema ${schema.metadata.name} ${declaration.unique ? "unique " : ""}index`,
@@ -140,22 +133,30 @@ export function schemaTableMigrations(schemas: Iterable<SchemaManifest>): readon
 
 export function schemaTableProjection(schema: SchemaManifest): string {
   sqliteSchemaTable(schema);
-  const checked = checkSchemaIndexes(schema);
-  const problem = checked.problems[0];
-  if (problem) throw new Error(`invalid Schema index declaration at ${problem.pointer}: ${problem.message}`);
   const projection: SchemaTableProjection = {
     columns: Object.entries(schema.spec.schema.properties ?? {})
       .sort(([a], [b]) => compareText(a, b))
       .map(([name, property]) => [name, ...fieldDescriptor(property)]),
-    indexes: checked.declarations.map((declaration): IndexProjection => [
+    indexes: indexDeclarations(schema).map((declaration): IndexProjection => [
       declaration.unique,
-      declaration.fields.map(({ name }) => name),
-      !declaration.unique && declaration.fields.length === 1 &&
-        (schema.spec.translates?.on === declaration.fields[0]!.name ||
-          resolveMantleRef(schema.spec.schema.properties?.[declaration.fields[0]!.name]) !== null),
+      declaration.fields,
+      declaration.relationship,
     ]).sort((a, b) => compareText(JSON.stringify(a), JSON.stringify(b))),
   };
   return JSON.stringify(projection);
+}
+
+/** Index shape and field rules were checked when the linked plan was built. */
+function indexDeclarations(schema: SchemaManifest) {
+  return ([
+    ...(schema.spec.uniqueIndexes ?? []).map((fields) => ({ unique: true, fields })),
+    ...(schema.spec.indexes ?? []).map((fields) => ({ unique: false, fields })),
+  ]).map(({ unique, fields }) => ({
+    unique, fields,
+    relationship: !unique && fields.length === 1 &&
+      (schema.spec.translates?.on === fields[0] ||
+        resolveMantleRef(schema.spec.schema.properties?.[fields[0]!]) !== null),
+  }));
 }
 
 /** Automatic deploys may expand storage but never reinterpret values or alter uniqueness. */

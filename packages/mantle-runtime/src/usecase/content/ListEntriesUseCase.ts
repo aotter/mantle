@@ -3,7 +3,6 @@ import {
   projectSchemaAdminUi,
   isRequiredMantleRefField,
   runtimeDiagnostic,
-  schemaSortableFields,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
@@ -66,10 +65,11 @@ export class ListEntriesUseCase {
         schemaUnknownDiagnostic(opPath, request.collection, [...this.schemas.keys()]),
       );
     }
-    if (request.sort && !isSortableField(schema, request.sort.field)) {
+    const ui = projectSchemaAdminUi(schema);
+    if (request.sort && !["id", "status", "updatedAt", ...ui.sortableFields].includes(request.sort.field)) {
       throw new DiagnosticError(sortFieldUnavailableDiagnostic(opPath, request.sort.field));
     }
-    const listFilter = projectSchemaAdminUi(schema).filter;
+    const listFilter = ui.filter;
     if (request.filter && !(
       listFilter?.field === request.filter.field && listFilter.values.includes(request.filter.value)
     )) {
@@ -123,9 +123,4 @@ function scopeUnavailableDiagnostic(
     expected: "a required x-mantle-ref field and a non-empty parent id",
     message: `Scope '${scope.field}=${scope.value}' is not available.`,
   });
-}
-
-function isSortableField(schema: SchemaManifest, field: string): boolean {
-  if (field === "id" || field === "status" || field === "updatedAt") return true;
-  return schemaSortableFields(schema).includes(field);
 }

@@ -6,9 +6,9 @@ import {
   MCP_UPDATE_RECORD_PREFIX,
   expandPolicyRequired,
   mcpToolNameSegment,
+  projectSchemaAdminUi,
   resolveLifecycle,
   resolveLocalizedText,
-  schemaSortableFields,
   type JsonSchema,
   type MediaPurposePolicy,
   type SchemaManifest,
@@ -251,7 +251,7 @@ function lifecycleCapabilities(schemas: ReadonlyArray<SchemaManifest>): Capabili
       : operation.action === "delete" ? writable : schemas;
     if (targets.length === 0) return [];
     const summary = targets.map((s) =>
-      `${s.metadata.name} (${resolveLifecycle(s)}${s.spec.schema.readOnly ? "; Procedure-only writes" : ""}; search: ${["id", ...(s.spec.searchableFields ?? [])].join(", ")}; sort: ${["id", "status", "updatedAt", ...schemaSortableFields(s)].join(", ")})`,
+      `${s.metadata.name} (${resolveLifecycle(s)}${s.spec.schema.readOnly ? "; Procedure-only writes" : ""}; search: ${["id", ...(s.spec.searchableFields ?? [])].join(", ")}; sort: ${["id", "status", "updatedAt", ...projectSchemaAdminUi(s).sortableFields].join(", ")})`,
     ).join("; ");
     return [{
       name: operation.name,
