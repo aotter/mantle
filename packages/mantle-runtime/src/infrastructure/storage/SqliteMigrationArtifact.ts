@@ -1,4 +1,4 @@
-import type { SchemaManifest } from "@aotter/mantle-spec";
+import { checkSchemaIndexes, type SchemaManifest } from "@aotter/mantle-spec";
 import type { Migration } from "../../domain/port/DatabaseDriver.js";
 import { CANONICAL_MIGRATIONS } from "../boot/canonicalMigrations.js";
 import { splitSqlStatements } from "../boot/SqliteMigrationRunner.js";
@@ -34,8 +34,8 @@ export async function buildSqliteMigrationArtifact(
   targetSchemas: Iterable<SchemaManifest>,
   sourceState: SqliteMigrationSource = {},
 ): Promise<SqliteMigrationArtifact> {
-  const source = [...validateSqliteSchemaTables(sourceSchemas)];
-  const target = [...validateSqliteSchemaTables(targetSchemas)];
+  const source = checkedArtifactSchemas(sourceSchemas);
+  const target = checkedArtifactSchemas(targetSchemas);
   const sourceByName = new Map(source.map((schema) => [schema.metadata.name.toLowerCase(), schema]));
   const targetNames = new Set(target.map((schema) => schema.metadata.name.toLowerCase()));
   const reviewedUniqueIndexes = target.flatMap((schema) => {
@@ -93,6 +93,16 @@ export async function buildSqliteMigrationArtifact(
     ...(reviewed ? { reviewedUniqueIndexes } : {}),
   };
   return { ...content, checksum: await sha256(JSON.stringify(content)) };
+}
+
+/** Saved migration state is JSON read from disk, outside the linked-plan boundary. */
+function checkedArtifactSchemas(schemas: Iterable<SchemaManifest>): readonly SchemaManifest[] {
+  const checked = validateSqliteSchemaTables(schemas);
+  for (const schema of checked) {
+    const problem = checkSchemaIndexes(schema).problems[0];
+    if (problem) throw new Error(`invalid Schema index declaration at ${problem.pointer}: ${problem.message}`);
+  }
+  return checked;
 }
 
 export async function verifySqliteMigrationArtifact(artifact: SqliteMigrationArtifact): Promise<void> {

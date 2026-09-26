@@ -169,6 +169,15 @@ describe("SQLite migration artifacts", () => {
       .rejects.toThrow("reserved SQLite namespace");
   });
 
+  it("rejects invalid indexes in saved migration state", async () => {
+    const malformed = { ...schema({ title: { type: "string" } }), spec: {
+      ...schema({ title: { type: "string" } }).spec, uniqueIndexes: [["status"]],
+    } } as SchemaManifest;
+    await expect(buildSqliteMigrationArtifact([malformed], [])).rejects.toThrow(
+      "invalid Schema index declaration at /spec/uniqueIndexes/0/0",
+    );
+  });
+
   it("splits scripts without breaking semicolons in identifiers, values, or comments", () => {
     expect(splitSqlStatements(`CREATE TABLE "part;code" (value TEXT DEFAULT ';'); -- ;\nINSERT INTO "part;code" VALUES ('a;''b');`))
       .toEqual([`CREATE TABLE "part;code" (value TEXT DEFAULT ';')`, `-- ;\nINSERT INTO "part;code" VALUES ('a;''b')`]);
