@@ -1403,6 +1403,23 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     }
   };
 
+  const readUserRole = async (userId: string): Promise<string | null> => {
+    await prepareAuth();
+    const row = await config.driver
+      .prepare("SELECT role FROM user WHERE id = ? LIMIT 1")
+      .bind(userId)
+      .first<{ role: string | null }>();
+    return row?.role ?? null;
+  };
+  // A session user is a fresh database read unless a KV session cache or a
+  // cookie cache serves it; a cached snapshot only follows cache propagation.
+  // Plugins merge their `init` options into the context, not `auth.options`.
+  let cachedSessions: Promise<boolean> | undefined;
+  const sessionsAreCached = (): Promise<boolean> => cachedSessions ??= config.sessionCache
+    ? Promise.resolve(true)
+    : auth.$context.then((context) => Boolean(
+        (context.options as { session?: { cookieCache?: { enabled?: boolean } } }).session?.cookieCache?.enabled));
+
   return {
     basePath,
     ready,
@@ -1415,6 +1432,20 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
         const pathname = new URL(request.url).pathname;
         if (pathname.startsWith(`${basePath}/oauth2/`)) {
           await pruneExpiredDynamicClients();
+        }
+        // Better Auth's admin endpoints authorize from the session snapshot.
+        // Refuse them while that snapshot's role disagrees with the database.
+        if (pathname.startsWith(`${basePath}/admin/`) && await sessionsAreCached()) {
+          let session;
+          try {
+            // Read the snapshot the admin middleware will authorize from (it skips the cookie cache).
+            session = await api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
+          } catch {
+            return Response.json({ code: "SERVICE_UNAVAILABLE", message: "Could not verify the staff role." }, { status: 503 });
+          }
+          if (session && ((session.user as { role?: string | null }).role ?? null) !== await readUserRole(session.user.id)) {
+            return Response.json({ code: "FORBIDDEN", message: "Staff role changed; sign in again." }, { status: 403 });
+          }
         }
         return normalizeAuthResponseCookies(await auth.handler(request));
       };
@@ -1431,26 +1462,24 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
         await prepareAuth();
         session = await api.getSession({ headers: request.headers });
       }
+      // A cached snapshot never vouches for a staff role, so callers re-read it
+      // and a demoted user is locked out immediately (ADR-0014 §5). A cached
+      // non-staff role may be trusted: at worst a fresh promotion waits for
+      // the cache, which fails closed.
+      const role = (session?.user as { role?: string | null } | undefined)?.role;
       return session
         ? {
             ...session,
             user: {
               ...session.user,
-              ...(Object.hasOwn(session.user, "role")
+              ...(Object.hasOwn(session.user, "role") && (!await sessionsAreCached() || !STAFF_ROLE_SET.has(role ?? ""))
                 ? { roleCurrent: true as const }
                 : {}),
             },
           }
         : null;
     },
-    getUserRole: async (userId) => {
-      await prepareAuth();
-      const row = await config.driver
-        .prepare("SELECT role FROM user WHERE id = ? LIMIT 1")
-        .bind(userId)
-        .first<{ role: string | null }>();
-      return row?.role ?? null;
-    },
+    getUserRole: readUserRole,
     getUser: async (userId) => {
       await prepareAuth();
       const row = await config.driver

@@ -115,7 +115,14 @@ Auth operations; do not construct cache keys or seed the identity yourself.
 OTP verification remains in the primary database and rate limiting remains
 isolate-local. Revocation/user-update cache invalidation still follows KV
 propagation; the namespace change is isolation across stores, not a promise of
-instant global invalidation. See the [Auth decision](../../adr/0014-auth-better-auth-and-multi-tenant-mcp.md).
+instant global invalidation. A cached session therefore never vouches for a
+staff role: when the cached snapshot names one, Admin, MCP, preview and HTTP
+Trigger calls re-read `user.role` from the database, and Better Auth's own
+`/api/auth/admin/*` endpoints refuse the request while the snapshot and the
+database disagree. A demoted or revoked staff member loses access immediately
+rather than when KV converges. A cached non-staff role is trusted, so ordinary
+signed-in members pay no extra read; a fresh promotion may wait for the cache,
+which fails closed. See the [Auth decision](../../adr/0014-auth-better-auth-and-multi-tenant-mcp.md).
 
 ## Better Auth configuration
 
