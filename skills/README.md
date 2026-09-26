@@ -32,9 +32,12 @@ byte-exact from `aotter/mantle-home`. `scripts/VENDORED.json` beside it
 records the source commit, SHA-256, host protocol and the Core version the
 bundle is pinned to. `scripts/check-plugin-vendor.mjs` verifies the hash, runs
 the bundle's `version --json` to compare the protocol and Core pin, and fails
-when `coreVersion` is not `packages/mantle`'s version. A Core version bump
-therefore needs a mantle-home build pinned to the new version, re-vendored in
-the same change. The skill is not in the npm package, and `mantle skills` does
+when `coreVersion` is newer than `packages/mantle`'s version or, when the
+release tag is fetched, when the pinned revision is not that tag's commit. The
+pin follows the Core that Mantle Cloud runs, so it normally trails this
+repository by a release: a Core release does not re-vendor. After Mantle Cloud
+moves to a new Core, mantle-home rebuilds the script and a normal PR here
+re-vendors it. The skill is not in the npm package, and `mantle skills` does
 not project it. `scripts/check-skills.mjs` covers every
 `plugins/*/skills/*/SKILL.md` with the same front-matter and audit-row rules,
 and it requires plugin skills to declare `projection: plugin` only.
