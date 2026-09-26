@@ -51,7 +51,7 @@ function compareVersions(a, b) {
 /** The commit a Core release tag names, or null when the tag is not fetched (shallow CI checkouts). */
 function taggedRevision(version) {
   try {
-    return execFileSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", `refs/tags/v${version}^{commit}`], { encoding: "utf8" }).trim() || null;
+    return execFileSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", `refs/tags/v${version}^{commit}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
   } catch {
     return null;
   }
@@ -73,7 +73,7 @@ function verifyVendored(record, bytes) {
   if (!Number.isInteger(record.protocol) || record.protocol < 1) problems.push("protocol must be a positive integer");
   if (typeof record.builtWith !== "string" || !record.builtWith) problems.push("builtWith must name the build command");
   if (typeof record.coreVersion !== "string" || !parseVersion(record.coreVersion)) problems.push("coreVersion must be a Core release version");
-  else if (compareVersions(record.coreVersion, coreVersion) > 0) {
+  else if (parseVersion(coreVersion) && compareVersions(record.coreVersion, coreVersion) > 0) {
     problems.push(`coreVersion ${record.coreVersion} is newer than packages/mantle ${coreVersion}`);
   }
   if (bytes === null) problems.push(`vendored file ${basename(record.path ?? "")} is missing`);
@@ -95,6 +95,7 @@ function selfReport(file) {
   }
 }
 
+if (!parseVersion(coreVersion)) failures.push(`packages/mantle version ${coreVersion} is not a release version`);
 for (const plugin of directories(join(repoRoot, "plugins"))) {
   for (const skill of directories(join(plugin, "skills"))) {
     const scripts = join(skill, "scripts");

@@ -51,7 +51,10 @@ jobs:
         run: pnpm run check:plugin-manifests
 
       - name: Check vendored plugin scripts
-        run: pnpm run check:plugin-vendor
+        # The pinned Core revision is compared with its release tag; the default checkout fetches none.
+        run: |
+          git fetch --no-recurse-submodules --depth=1 origin 'refs/tags/v*:refs/tags/v*'
+          pnpm run check:plugin-vendor
 
       - name: Check release controller
         run: pnpm run check:release
