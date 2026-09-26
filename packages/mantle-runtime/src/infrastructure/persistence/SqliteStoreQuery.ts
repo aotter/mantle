@@ -121,7 +121,7 @@ export class SqliteStoreQueryCompiler {
       if (operator === "ne") return { sql: `${sql} IS NOT NULL`, binds: [] };
       throw invalid(`'${operator}' on '${column}' cannot compare with null.`);
     }
-    const symbol = { eq: "=", ne: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" }[operator as "eq"];
+    const symbol = { eq: "=", ne: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=", like: "LIKE" }[operator as "eq"];
     // `ne` keeps NULL rows out, matching SQL; ask for them explicitly with `or` + `isNull`.
     return { sql: `${sql} ${symbol} ?`, binds: [bound] };
   }
