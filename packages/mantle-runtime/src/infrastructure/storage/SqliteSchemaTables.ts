@@ -2,6 +2,7 @@ import {
   checkSchemaIndexes,
   resolveMantleRef,
   type JsonSchema,
+  type ReservedEntryColumn,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import { isNullableJsonSchema } from "../../domain/model/EntryRow.js";
@@ -208,7 +209,7 @@ export const NATIVE_COLUMN: Readonly<Record<string, string>> = Object.freeze({
   createdAt: "_mantle_created_at",
   updatedAt: "_mantle_updated_at",
   authorId: "_mantle_author_id",
-});
+} satisfies Readonly<Record<ReservedEntryColumn, string>>);
 
 export function fieldColumn(schema: SchemaManifest, field: string): string | null {
   if (Object.hasOwn(NATIVE_COLUMN, field)) return NATIVE_COLUMN[field]!;

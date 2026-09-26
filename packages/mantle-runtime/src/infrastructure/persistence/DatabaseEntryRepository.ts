@@ -59,6 +59,7 @@ import {
   fieldColumn,
   fieldSql,
   isNullableJsonSchema,
+  quoteIdent as quote,
   sqliteSchemaTable,
   ttlCutoff,
   type SqliteSchemaTable,
@@ -690,10 +691,6 @@ function sortValue(row: NativeEntryRow, schema: SchemaManifest, field: string): 
   const value = row[physical];
   if (typeof value !== "string" && typeof value !== "number") throw new Error(`non-scalar sort value for ${field}`);
   return value;
-}
-
-function quote(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
 }
 
 /** Compatibility helper now requires the Schema that owns the table. */

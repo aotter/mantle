@@ -1,6 +1,6 @@
 import { DiagnosticError, runtimeDiagnostic, type SchemaManifest } from "@aotter/mantle-spec";
 import type { StoreScalar, StoreSubquery, StoreWhere } from "../../domain/model/Store.js";
-import { encodeField, fieldCodec, fieldColumn, isNullableJsonSchema, sqliteSchemaTable, type SqliteSchemaTable } from "../storage/SqliteSchemaTables.js";
+import { encodeField, fieldCodec, fieldColumn, isNullableJsonSchema, quoteIdent as quote, sqliteSchemaTable, type SqliteSchemaTable } from "../storage/SqliteSchemaTables.js";
 
 /** D1 binds at most 100 parameters per statement; keep every compiled Store statement under it. */
 export const STORE_MAX_BINDS = 100;
@@ -169,10 +169,6 @@ export function invalid(message: string): DiagnosticError {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function quote(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
 }
 
 export type { StoreScalar };
