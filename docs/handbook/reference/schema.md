@@ -258,7 +258,7 @@ spec:
 
 Legacy values that SQLite cannot parse as dates also remain visible and are not swept; correct those rows before relying on TTL. New writes must pass the Schema's date-time validation.
 
-Expiry is logical first: Entry, declarative View, Admin, MCP and Web reads stop returning the row at the boundary, even before a sweep deletes it. A native SQL View cannot guarantee that filter and is rejected (`VIEW_TTL_NATIVE_UNSAFE`) while any Schema has TTL. A View over a TTL Schema cannot use shared caching (`VIEW_CACHE_INVALID`). Bun and D1 use the same SQLite predicate; other storage adapters must supply equivalent read filtering or reject the plan.
+Expiry is logical first: Entry, declarative View, Admin, MCP and Web reads stop returning the row at the boundary, even before a sweep deletes it. A native SQL View cannot guarantee that filter, so a SQL View whose statement names a TTL Schema's table is rejected (`VIEW_TTL_NATIVE_UNSAFE`); SQL over other tables is unaffected. Mantle tables are named after their Schema, so any read of a TTL table spells its name, and a match inside a string literal or comment rejects too. A View over a TTL Schema cannot use shared caching (`VIEW_CACHE_INVALID`). Bun and D1 use the same SQLite predicate; other storage adapters must supply equivalent read filtering or reject the plan.
 
 TTL is currently rejected on either side of a `translates` relationship (`SCHEMA_TTL_TRANSLATION_UNSUPPORTED`), because a translation child could otherwise remain visible after its parent expires.
 

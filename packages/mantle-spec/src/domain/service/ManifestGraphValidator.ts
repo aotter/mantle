@@ -326,18 +326,36 @@ function checkDuplicates<M extends { kind: string; metadata: { name: string } }>
   return out;
 }
 
+/**
+ * Whether native SQL names a Schema's table (bare, `"quoted"`, `` `quoted` ``
+ * or `[bracketed]`). Mantle tables are named after their Schema, so every
+ * read of a TTL table spells its name. A match inside a literal or comment
+ * over-rejects, which is the safe direction.
+ */
+function referencesTable(sql: string, table: string): boolean {
+  const name = table.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`(?<![\\p{L}\\p{N}_$])${name}(?![\\p{L}\\p{N}_$])`, "iu").test(sql);
+}
+
 function checkViewRefs(
   v: ViewManifest,
   schemasByName: ReadonlyMap<string, SchemaManifest>,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
-  if (v.spec.sql) return [...schemasByName.values()].some((schema) => schema.spec.ttl)
-    ? [validateDiagnostic({
-        code: "VIEW_TTL_NATIVE_UNSAFE", severity: "error",
-        path: manifestPath("View", v.metadata.name, "/spec/sql", filePaths),
-        message: `Native SQL View '${v.metadata.name}' cannot guarantee logical TTL filtering while a Schema has a TTL policy.`,
-        expected: "a declarative View or no Schema TTL policies",
-      })] : [];
+  if (v.spec.sql) {
+    const sql = v.spec.sql;
+    const expiring = [...schemasByName.values()]
+      .filter((schema) => schema.spec.ttl && referencesTable(sql, schema.metadata.name))
+      .map((schema) => schema.metadata.name);
+    return expiring.length > 0
+      ? [validateDiagnostic({
+          code: "VIEW_TTL_NATIVE_UNSAFE", severity: "error",
+          path: manifestPath("View", v.metadata.name, "/spec/sql", filePaths),
+          value: expiring,
+          message: `Native SQL View '${v.metadata.name}' reads TTL Schema ${expiring.map((name) => `'${name}'`).join(", ")} and cannot guarantee logical TTL filtering.`,
+          expected: "a declarative View over a TTL Schema, or SQL that does not read one",
+        })] : [];
+  }
   const out: Diagnostic[] = [];
   const fromName = v.spec.from;
   if (!fromName) return out;

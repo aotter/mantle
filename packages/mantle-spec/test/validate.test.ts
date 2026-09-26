@@ -94,6 +94,19 @@ describe("validateManifests()", () => {
         .diagnostics.map((d) => d.code)).toContain("SCHEMA_TTL_INVALID");
     }
   });
+  it("rejects only the native SQL Views that read a TTL Schema's table", () => {
+    const expiring = schema("events", { schema: { type: "object", properties: {
+      expiresAt: { type: "string", format: "date-time", nullable: true },
+    } }, ttl: { field: "expiresAt", expireAfterSeconds: 0 } });
+    const codes = (sql: string) => validateManifests({ manifests: [expiring, schema("posts"),
+      view("raw", "posts", { from: undefined, sql })] }).diagnostics.map((d) => d.code);
+    // SQL over other tables keeps working when some Schema has TTL.
+    expect(codes("SELECT * FROM posts")).not.toContain("VIEW_TTL_NATIVE_UNSAFE");
+    expect(codes("SELECT * FROM posts_events_archive")).not.toContain("VIEW_TTL_NATIVE_UNSAFE");
+    for (const sql of ['SELECT * FROM "events"', "SELECT p.* FROM posts p JOIN Events e ON e.id = p.id", "SELECT * FROM [events]"]) {
+      expect(codes(sql)).toContain("VIEW_TTL_NATIVE_UNSAFE");
+    }
+  });
   it("returns no error diagnostics for a valid manifest set", () => {
     const manifests: Manifest[] = [
       schema("posts"),
