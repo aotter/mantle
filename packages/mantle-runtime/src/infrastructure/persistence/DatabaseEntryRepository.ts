@@ -10,8 +10,8 @@ import type { BatchResult, DatabaseDriver, PreparedStatement } from "../../domai
 import type { AtomicEntryWrite, AtomicEntryWriter } from "../../domain/port/AtomicEntryWriter.js";
 import type { ExpirySweeper, SweepExpiredRequest, SweepExpiredResult } from "../../domain/port/ExpirySweeper.js";
 import type { StoreReader } from "../../domain/port/StoreReader.js";
-import type { StoreRow, StoreSelect, StoreSelectResult, StoreWhere } from "../../domain/model/Store.js";
-import { assertBindBudget, invalid, SqliteStoreQueryCompiler, validateSelect, type CompiledSql } from "./SqliteStoreQuery.js";
+import type { StoreRow, StoreSelectResult, ValidatedStoreSelect, ValidatedStoreWhere } from "../../domain/model/Store.js";
+import { assertBindBudget, invalid, SqliteStoreQueryCompiler, type CompiledSql } from "./SqliteStoreQuery.js";
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
@@ -84,26 +84,13 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
   }
 
   /** Store select (ADR-0030): one keyset-paginated statement; TTL-expired rows stay hidden. */
-  async select(query: StoreSelect): Promise<StoreSelectResult> {
-    validateSelect(query);
+  async select(query: ValidatedStoreSelect): Promise<StoreSelectResult> {
     const compiler = this.store();
     const table = compiler.table(query.from);
-    const sortEntries = Object.entries(query.orderBy ?? { updatedAt: "desc" });
-    if (sortEntries.length !== 1) throw invalid("Store orderBy takes exactly one column.");
-    const [sortField, direction] = sortEntries[0]!;
-    if (direction !== "asc" && direction !== "desc") throw invalid(`orderBy '${sortField}' must be 'asc' or 'desc'.`);
+    const [sortField, direction] = Object.entries(query.orderBy ?? { updatedAt: "desc" })[0]!;
     const sortSql = compiler.orderColumn(table, sortField);
-    if (query.columns !== undefined && (!Array.isArray(query.columns) || !query.columns.length)) {
-      throw invalid("Store columns takes a non-empty array.");
-    }
-    const columns = query.columns === undefined ? undefined : [...new Set(query.columns)];
-    for (const column of columns ?? []) {
-      if (!fieldColumn(table.schema, column)) throw invalid(`Schema '${table.schema.metadata.name}' has no column '${String(column)}'.`);
-    }
+    const columns = query.columns;
     const where = compiler.where(table, query.where);
-    if (query.limit !== undefined && (!Number.isSafeInteger(query.limit) || query.limit < 1 || query.limit > 500)) {
-      throw invalid("Store limit must be an integer from 1 to 500.");
-    }
     const limit = clampLimit(query.limit);
     const cursor = query.cursor === undefined ? null : decodeStoreCursor(query.cursor, query.from, sortField, direction);
     if (query.cursor !== undefined && !cursor) throw invalid("Store cursor does not belong to this from and orderBy.");
@@ -190,12 +177,12 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     };
   }
 
-  assertDeleteWhere(collection: string, where: StoreWhere): void {
+  assertDeleteWhere(collection: string, where: ValidatedStoreWhere): void {
     this.deleteWhere(collection, where);
   }
 
   /** Set-based deletes see live rows only, like `select`; the TTL sweeper reclaims expired ones. */
-  private deleteWhere(collection: string, where: StoreWhere): CompiledSql {
+  private deleteWhere(collection: string, where: ValidatedStoreWhere): CompiledSql {
     const table = this.table(collection);
     const compiled = this.store().where(table, where);
     const statement = { sql: `DELETE FROM ${table.table} WHERE ${compiled.sql}`, binds: compiled.binds };

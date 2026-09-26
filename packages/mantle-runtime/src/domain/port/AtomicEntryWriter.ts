@@ -1,6 +1,6 @@
 import type { ContentState } from "@aotter/mantle-spec";
 import type { EntryRow } from "../model/EntryRow.js";
-import type { StoreWhere } from "../model/Store.js";
+import type { ValidatedStoreWhere } from "../model/Store.js";
 import type { CreateEntryArgs, DeleteEntryArgs, UpdateEntryArgs } from "./EntryRepository.js";
 
 /** A prepared semantic mutation; adapters must enforce uniqueness and commit the whole list or none. */
@@ -14,7 +14,7 @@ export type AtomicEntryWrite =
   /** Set-based Store delete (ADR-0030): one statement; `expect` guards the affected count. */
   | { readonly kind: "deleteWhere"; readonly args: {
       readonly collection: string;
-      readonly where: StoreWhere;
+      readonly where: ValidatedStoreWhere;
       readonly expect?: number;
     } };
 
@@ -22,7 +22,7 @@ export interface AtomicEntryWriter {
   /** Returns the rows each write affected, in order. */
   writeAtomically(writes: readonly AtomicEntryWrite[]): Promise<readonly number[]>;
   /** Throws the diagnostic `writeAtomically` would for this set-based delete, before any hook runs. */
-  assertDeleteWhere(collection: string, where: StoreWhere): void;
+  assertDeleteWhere(collection: string, where: ValidatedStoreWhere): void;
   /**
    * Exactly the rows `EntryRepository.get` of the same store would return for
    * these ids (expired TTL rows hidden), with absent ids omitted. Lets a group

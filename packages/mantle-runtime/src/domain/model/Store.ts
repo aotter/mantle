@@ -54,6 +54,14 @@ export interface StoreSelect {
   readonly cursor?: string;
 }
 
+declare const validatedStore: unique symbol;
+/** Only Runtime validation may create these inputs for storage adapters. */
+export type ValidatedStoreWhere = StoreWhere & { readonly [validatedStore]: true };
+export type ValidatedStoreSelect = Omit<StoreSelect, "where"> & {
+  readonly where?: ValidatedStoreWhere;
+  readonly [validatedStore]: true;
+};
+
 /** A flat row: native columns next to Schema fields (the parser forbids name clashes). */
 export type StoreRow = Readonly<Record<string, unknown>>;
 
