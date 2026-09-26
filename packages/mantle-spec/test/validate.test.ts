@@ -82,6 +82,33 @@ function trigger(name: string, procedureName: string): TriggerManifest {
 }
 
 describe("validateManifests()", () => {
+  it("requires a required indexed string scope and a scoped View filter", () => {
+    const scoped = schema("sessions", {
+      schema: { type: "object", properties: { ownerId: { type: "string" } }, required: ["ownerId"] },
+      indexes: [["ownerId"]], scope: { ownerId: "$ctx.user.id" },
+    });
+    expect(validateManifests({ manifests: [scoped] }).errorCount).toBe(0);
+    for (const spec of [
+      { ...scoped.spec, indexes: [] },
+      { ...scoped.spec, scope: { ownerId: "$input.ownerId" } },
+    ]) {
+      expect(validateManifests({ manifests: [{ ...scoped, spec } as SchemaManifest] }).errorCount).toBeGreaterThan(0);
+    }
+    expect(validateManifests({ manifests: [scoped, view("all", "sessions")] }).diagnostics.map((d) => d.code))
+      .toContain("VIEW_FILTER_CTX_USER_REF_INVALID");
+    expect(validateManifests({ manifests: [scoped, view("or-bypass", "sessions", {
+      requires: { auth: { all: ["ctx.user"] } },
+      filter: { or: [
+        { eq: { field: "ownerId", value: { "$ctx.user": "id" } } },
+        { eq: { field: "ownerId", value: "other" } },
+      ] },
+    })] }).diagnostics.map((d) => d.code)).toContain("VIEW_FILTER_CTX_USER_REF_INVALID");
+    const own = view("own", "sessions", {
+      requires: { auth: { all: ["ctx.user"] } },
+      filter: { eq: { field: "ownerId", value: { "$ctx.user": "id" } } },
+    });
+    expect(validateManifests({ manifests: [scoped, own] }).errorCount).toBe(0);
+  });
   it("accepts top-level date-time TTL and rejects unsafe native Views", () => {
     const expiring = schema("events", { schema: { type: "object", properties: {
       expiresAt: { type: "string", format: "date-time", nullable: true },

@@ -477,6 +477,15 @@ function checkViewRefs(
     );
     out.push(...checkCtxUserFilter(v, schema, filePaths));
   }
+  const scopeField = Object.keys(schema.spec.scope ?? {})[0];
+  if (scopeField && (!v.spec.filter || !hasTopLevelScope(v.spec.filter, scopeField))) {
+    out.push(validateDiagnostic({
+      code: "VIEW_FILTER_CTX_USER_REF_INVALID",
+      severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/filter", filePaths),
+      message: `View '${v.metadata.name}' must AND the Schema scope '${scopeField}' with the caller identity.`,
+    }));
+  }
 
   if (v.spec.orderBy) {
     v.spec.orderBy.forEach((o, i) => {
@@ -549,6 +558,14 @@ function checkCtxUserFilter(
     }
   }
   return out;
+}
+
+function hasTopLevelScope(filter: FilterAst, field: string): boolean {
+  const matches = (node: FilterAst) => {
+    const comparison = getFilterComparison(node);
+    return comparison?.op === "eq" && comparison.node.field === field && isCtxUserRef(comparison.node.value);
+  };
+  return matches(filter) || ("and" in filter && filter.and.some(matches));
 }
 
 function collectCtxUserFilters(

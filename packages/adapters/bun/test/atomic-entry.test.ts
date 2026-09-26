@@ -188,3 +188,49 @@ test("Bun commits semantic multi-Schema writes and rolls back duplicate receipt 
   expect(events.filter((event) => event === "invalidate")).toHaveLength(4);
   database.close();
 });
+
+test("Bun enforces caller scope in real SQLite select and set delete", async () => {
+  const scopedSource = `apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: privateSessions }
+spec:
+  title: Private sessions
+  lifecycle: operational
+  scope: { ownerId: $ctx.user.id }
+  indexes: [[ownerId]]
+  schema:
+    type: object
+    required: [ownerId]
+    properties: { ownerId: { type: string }, label: { type: string } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: clear-mine }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: clearMine }
+`;
+  const parsed = parseManifestSources({ sources: [{ sourceId: "scope", text: scopedSource }] });
+  if (!parsed.ok) throw new Error(JSON.stringify(parsed.diagnostics));
+  const linked = linkManifestSet(parsed.value);
+  if (!linked.ok) throw new Error(JSON.stringify(linked.diagnostics));
+  const compiled = compileRuntimePlan(linked.value);
+  if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+  const database = new Database(":memory:");
+  const runtime = await createBunMantle({ plan: compiled.value, database, handlers: {
+    clearMine: async (_input: unknown, ctx: HandlerContext) => {
+      const before = (await ctx.store!.select({ from: "privateSessions" })).rows.map((row) => row["id"]);
+      const deleted = await ctx.store!.write([{ delete: "privateSessions", where: { label: "old" } }]);
+      return { before, deleted };
+    },
+  } }).getRuntime();
+  await runtime.store.write([
+    { insert: "privateSessions", id: "a", values: { ownerId: "a", label: "old" } },
+    { insert: "privateSessions", id: "b", values: { ownerId: "b", label: "old" } },
+  ]);
+  const result = await runtime.invokeProcedure({ procedure: "clear-mine", input: {}, ctx: { user: { id: "a" }, staff: null, env: {} } });
+  expect(result).toMatchObject({ ok: true, data: { before: ["a"], deleted: [{ deleted: 1 }] } });
+  expect((await runtime.store.select({ from: "privateSessions" })).rows.map((row) => row["id"])).toEqual(["b"]);
+  database.close();
+});

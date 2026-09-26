@@ -230,6 +230,8 @@ export interface SchemaManifestSpec {
   readonly lifecycle?: LifecycleMode;
   /** Logical expiry policy. Physical removal requires an explicit sweep. */
   readonly ttl?: { readonly field: string; readonly expireAfterSeconds: number };
+  /** Caller identity scope for Store operations. The field must be required and indexed first. */
+  readonly scope?: Readonly<Record<string, "$ctx.user.id">>;
 }
 
 export interface TranslatesBinding {
