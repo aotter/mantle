@@ -211,9 +211,11 @@ function requiredPackages(selection: ProjectSelection, version: string): Record<
     required.wrangler = "4.129.0";
     required.typescript = "^6.0.3";
     required["@cloudflare/workers-types"] = "5.20260904.1";
+    // The Sites build bundles with it, and the mantle-host plugin bundles a
+    // Mantle Cloud handler module with the project's own esbuild.
+    required.esbuild = "^0.28.0";
   }
   if (selection.host === "chatgpt-sites") {
-    required.esbuild = "^0.28.0";
     // The Sites MCP templates import @aotter/mantle/mcp.
     required["@aotter/mantle-mcp"] = version;
   }
