@@ -271,6 +271,21 @@ Schema cost 3 reads and 401 statements. A conflict re-reads the targets once
 more to name the stale entry. D1 counts queries against a per-invocation limit;
 size groups with that in mind.
 
+## Store queries in a ref handler
+
+`ctx.store` is the caller-bound Store ([ADR-0030](../../adr/0030-store.md)). `select` reads any Schema with a closed relational filter; values are always bound.
+
+```ts
+const { rows, nextCursor } = await ctx.store!.select({
+  from: "training_sets",
+  where: { blockId: { in: { select: "id", from: "training_blocks", where: { sessionId: input.id } } } },
+  orderBy: { position: "asc" },
+  limit: 200,
+});
+```
+
+`where` takes `{ column: value }` (equality; sibling keys AND), `{ column: { eq, ne, gt, gte, lt, lte, in, notIn, isNull } }`, `and`/`or`/`not`, and a `{ select, from, where }` subquery inside `in`/`notIn`. Columns are scalar Schema fields and the native `id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId`. Rows are flat and include every lifecycle status — filter `status` yourself before returning publishing entries to a caller. `orderBy` takes one scalar column (default `{ updatedAt: "desc" }`; NULLs sort last); pass `nextCursor` back as `cursor` for the next page (limit 1–500, default 50). `ne` and `not` exclude NULL rows, as in SQL. TTL-expired rows are hidden. A statement binds at most 100 values — use a subquery rather than a long `in` list. `ctx.store.view(name, { params })` runs a named View as the caller; `ctx.store.id()` returns a new entry id. Host code uses `runtime.store` without a caller context. Adapters without the capability return `RESOURCE_UNAVAILABLE`.
+
 ## TTL sweep in a ref handler
 
 `ctx.sweepExpired({ collection, limit })` previews a bounded page of expired rows; `delete: true` explicitly removes it. The result contains `scanned`, `removed` and an optional `nextCursor`. Continue with that cursor until absent. D1 and Bun SQLite implement this semantic capability; unsupported storage returns `RESOURCE_UNAVAILABLE`. Authorization guard Procedures do not receive the sweep function. For a scheduled cleanup, declare a [schedule Trigger](./trigger.md#schedule-source) targeting a no-input ref Procedure. No sweep is scheduled automatically. See [Schema TTL](./schema.md#ttl).

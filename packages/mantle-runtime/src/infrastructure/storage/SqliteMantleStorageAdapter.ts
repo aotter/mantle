@@ -235,6 +235,7 @@ function sqliteStoragePorts(
     entries,
     atomicEntries: db.supportsAtomicEntryWrites ? entries : undefined,
     expiry: entries,
+    store: entries,
     views: new SqliteViewQueryExecutor(db, plan, now),
     localePolicy,
     siteConfig: localePolicy,

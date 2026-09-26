@@ -7,6 +7,7 @@ import type { MediaAssetRepository } from "./MediaAssetRepository.js";
 import type { PendingUploadRepository } from "./PendingUploadRepository.js";
 import type { LocalePolicyReader } from "./SiteConfigRepository.js";
 import type { SiteConfigRepository } from "./SiteConfigRepository.js";
+import type { StoreReader } from "./StoreReader.js";
 import type { ViewQueryExecutor } from "./ViewQueryExecutor.js";
 
 export interface PreparedMantleStorage {
@@ -15,6 +16,8 @@ export interface PreparedMantleStorage {
   readonly atomicEntries?: AtomicEntryWriter;
   /** Absence means this adapter cannot physically sweep expired rows. */
   readonly expiry?: ExpirySweeper;
+  /** Absence means this adapter cannot run Store queries (ADR-0030). */
+  readonly store?: StoreReader;
   readonly views: ViewQueryExecutor;
   readonly localePolicy?: LocalePolicyReader;
   readonly siteConfig?: SiteConfigRepository;

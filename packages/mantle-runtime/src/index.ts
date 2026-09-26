@@ -106,6 +106,17 @@ export type { AtomicEntryWrite, AtomicEntryWriter } from "./domain/port/AtomicEn
 export type { ExpirySweeper, SweepExpiredRequest, SweepExpiredResult } from "./domain/port/ExpirySweeper.js";
 export { AtomicEntryWriteUseCase, type AtomicDraftOperation } from "./usecase/content/AtomicEntryWriteUseCase.js";
 export type {
+  MantleStore,
+  StoreComparison,
+  StoreRow,
+  StoreScalar,
+  StoreSelect,
+  StoreSelectResult,
+  StoreSubquery,
+  StoreWhere,
+} from "./domain/model/Store.js";
+export type { StoreReader } from "./domain/port/StoreReader.js";
+export type {
   EntryReader,
   CreationStatisticsArgs,
   CreationStatistics,

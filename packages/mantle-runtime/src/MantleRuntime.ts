@@ -65,6 +65,8 @@ import {
   type ExecuteViewResponse,
 } from "./usecase/view/index.js";
 import { UpdateSiteSettingsUseCase } from "./usecase/site/index.js";
+import { createStore, type StoreDependencies } from "./usecase/store/createStore.js";
+import type { MantleStore } from "./domain/model/Store.js";
 import {
   assertDeploymentPlan,
   prepareDeployment,
@@ -127,6 +129,8 @@ export interface MantleRuntime {
   /** Linked schemas needed by optional projections such as Mantle Web. */
   readonly schemas: ReadonlyMap<string, SchemaManifest>;
   readonly entries: EntryReader;
+  /** Store for trusted host code, without a caller context (ADR-0030). */
+  readonly store: MantleStore;
   readonly siteConfig: SiteConfigRepository | null;
   readonly updateSiteSettings: UpdateSiteSettingsUseCase | null;
   readonly media: MantleMedia | null;
@@ -235,12 +239,22 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     validator,
   );
   let atomicWrite: AtomicEntryWriteUseCase;
+  const storeDependencies: StoreDependencies = {
+    reader: prepared.store,
+    idgen,
+    runView: (name, options, ctx) => {
+      const view = viewsByName.get(name);
+      if (!view) return Promise.resolve(unknown("View", name, undefined));
+      return executeView.execute({ view, options, ctx });
+    },
+  };
   const invokeProcedure = new InvokeProcedureUseCase(
     registry,
     invokeBuiltin,
     proceduresByName,
     (operations) => atomicWrite.execute(operations),
     sweepExpired,
+    (ctx) => createStore(storeDependencies, ctx),
   );
   const lifecycleHooks = new RunLifecycleHooksUseCase(
     triggerIndex,
@@ -341,6 +355,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     unpublish,
     archive,
     deleteEntry,
+    store: createStore(storeDependencies),
     writeAtomically,
     sweepExpired,
     invokeProcedure: (request) => {

@@ -9,6 +9,9 @@ import {
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
 import type { AtomicEntryWrite, AtomicEntryWriter } from "../../domain/port/AtomicEntryWriter.js";
 import type { ExpirySweeper, SweepExpiredRequest, SweepExpiredResult } from "../../domain/port/ExpirySweeper.js";
+import type { StoreReader } from "../../domain/port/StoreReader.js";
+import type { StoreRow, StoreSelect, StoreSelectResult } from "../../domain/model/Store.js";
+import { assertBindBudget, invalid, SqliteStoreQueryCompiler, validateSelect } from "./SqliteStoreQuery.js";
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
@@ -62,12 +65,77 @@ import {
 } from "../storage/SqliteSchemaTables.js";
 
 /** SQLite/D1 repository where each Schema is one physical table. */
-export class DatabaseEntryRepository implements EntryRepository, EntryReader, AtomicEntryWriter, ExpirySweeper {
+export class DatabaseEntryRepository implements EntryRepository, EntryReader, AtomicEntryWriter, ExpirySweeper, StoreReader {
   constructor(
     private readonly db: DatabaseDriver,
     private readonly schemasByName: ReadonlyMap<string, SchemaManifest> = new Map(),
     private readonly now: () => number = Date.now,
   ) {}
+
+  private storeCompiler?: SqliteStoreQueryCompiler;
+
+  private store(): SqliteStoreQueryCompiler {
+    return this.storeCompiler ??= new SqliteStoreQueryCompiler(this.schemasByName, (table) => {
+      const conditions: string[] = [];
+      const binds: unknown[] = [];
+      this.addLiveCondition(table, conditions, binds);
+      return conditions.length ? { sql: conditions.join(" AND "), binds } : null;
+    });
+  }
+
+  /** Store select (ADR-0030): one keyset-paginated statement; TTL-expired rows stay hidden. */
+  async select(query: StoreSelect): Promise<StoreSelectResult> {
+    validateSelect(query);
+    const compiler = this.store();
+    const table = compiler.table(query.from);
+    const sortEntries = Object.entries(query.orderBy ?? { updatedAt: "desc" });
+    if (sortEntries.length !== 1) throw invalid("Store orderBy takes exactly one column.");
+    const [sortField, direction] = sortEntries[0]!;
+    if (direction !== "asc" && direction !== "desc") throw invalid(`orderBy '${sortField}' must be 'asc' or 'desc'.`);
+    const sortSql = compiler.orderColumn(table, sortField);
+    const columns = query.columns === undefined ? undefined : [...new Set(query.columns)];
+    if (columns !== undefined && (!Array.isArray(query.columns) || !columns.length)) throw invalid("Store columns takes a non-empty array.");
+    for (const column of columns ?? []) {
+      if (!fieldColumn(table.schema, column)) throw invalid(`Schema '${table.schema.metadata.name}' has no column '${String(column)}'.`);
+    }
+    const where = compiler.where(table, query.where);
+    if (query.limit !== undefined && (!Number.isSafeInteger(query.limit) || query.limit < 1 || query.limit > 500)) {
+      throw invalid("Store limit must be an integer from 1 to 500.");
+    }
+    const limit = clampLimit(query.limit);
+    const cursor = query.cursor === undefined ? null : decodeStoreCursor(query.cursor, query.from, sortField, direction);
+    if (query.cursor !== undefined && !cursor) throw invalid("Store cursor does not belong to this from and orderBy.");
+    const conditions = [where.sql];
+    const binds: unknown[] = [...where.binds];
+    // NULLs sort last in both directions. SQLite already puts them last for
+    // DESC; ASC needs NULLS LAST. Native sort columns are never NULL, so they
+    // keep the index-friendly row-value keyset.
+    const nullable = !NON_NULL_SORT.has(sortField);
+    const after = direction === "asc" ? ">" : "<";
+    if (cursor) {
+      if (!nullable) {
+        conditions.push(`(${sortSql}, "_mantle_id") ${after} (?, ?)`);
+        binds.push(cursor.value, cursor.id);
+      } else if (cursor.value === null) {
+        conditions.push(`(${sortSql} IS NULL AND "_mantle_id" ${after} ?)`);
+        binds.push(cursor.id);
+      } else {
+        conditions.push(`(${sortSql} IS NULL OR ${sortSql} ${after} ? OR (${sortSql} = ? AND "_mantle_id" ${after} ?))`);
+        binds.push(cursor.value, cursor.value, cursor.id);
+      }
+    }
+    const nulls = nullable && direction === "asc" ? " NULLS LAST" : "";
+    const statement = { sql: `SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")}
+      ORDER BY ${sortSql} ${direction.toUpperCase()}${nulls}, "_mantle_id" ${direction.toUpperCase()} LIMIT ?`, binds: [...binds, limit + 1] };
+    assertBindBudget(statement);
+    const rows = await this.db.prepare(statement.sql).bind(...statement.binds).all<NativeEntryRow>();
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    const nextCursor = rows.length > limit && last
+      ? encodeStoreCursor(query.from, sortField, direction, (last[fieldColumn(table.schema, sortField)!] ?? null) as string | number | null, last._mantle_id)
+      : undefined;
+    return { rows: page.map((row) => storeRow(table, row, columns)), ...(nextCursor ? { nextCursor } : {}) };
+  }
 
   async readCreationStatistics(args: CreationStatisticsArgs): Promise<CreationStatistics> {
     const { from, to, bucketMs } = args;
@@ -550,6 +618,40 @@ function rowFromDb(table: SqliteSchemaTable, row: NativeEntryRow, dataFields?: r
     createdAt: row._mantle_created_at,
     updatedAt: row._mantle_updated_at,
   };
+}
+
+/** Native sort columns that are never NULL. */
+const NON_NULL_SORT = new Set(["id", "status", "version", "createdAt", "updatedAt"]);
+
+/** Opaque Store keyset cursor bound to its Schema, sort column and direction; the value may be NULL. */
+function encodeStoreCursor(from: string, field: string, direction: string, value: string | number | null, id: string): string {
+  return `st:${encodeURIComponent(JSON.stringify([from, field, direction, value, id]))}`;
+}
+
+function decodeStoreCursor(cursor: unknown, from: string, field: string, direction: string):
+  { readonly value: string | number | null; readonly id: string } | null {
+  if (typeof cursor !== "string" || !cursor.startsWith("st:")) return null;
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(cursor.slice(3)));
+    if (!Array.isArray(parsed) || parsed.length !== 5) return null;
+    const [cursorFrom, cursorField, cursorDirection, value, id] = parsed as unknown[];
+    if (cursorFrom !== from || cursorField !== field || cursorDirection !== direction || typeof id !== "string") return null;
+    if (value !== null && typeof value !== "string" && !(typeof value === "number" && Number.isFinite(value))) return null;
+    return { value, id };
+  } catch {
+    return null;
+  }
+}
+
+/** Flat Store row: native columns plus decoded Schema fields, optionally projected. */
+function storeRow(table: SqliteSchemaTable, row: NativeEntryRow, columns?: readonly string[]): StoreRow {
+  const entry = rowFromDb(table, row);
+  const flat: Record<string, unknown> = {
+    id: entry.id, status: entry.status, version: entry.version, authorId: entry.authorId,
+    createdAt: entry.createdAt, updatedAt: entry.updatedAt, ...entry.data,
+  };
+  if (!columns) return flat;
+  return Object.fromEntries(columns.map((column) => [column, flat[column] ?? null]));
 }
 
 function requiredFieldSql(schema: SchemaManifest, field: string): string {
