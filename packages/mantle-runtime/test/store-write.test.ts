@@ -107,6 +107,8 @@ describe("store.write (#1151)", () => {
     const ownerId: string | undefined = undefined;
     await expect(rt.store.write([{ delete: "sessions", where: { ownerId, note: "shared" } }]))
       .rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED", message: expect.stringMatching(/'ownerId' is undefined/) } });
+    await expect(rt.store.write([{ delete: "sessions", where: { id: { in: { select: "id", from: "sessions", where: undefined } } } } as never]))
+      .rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED", message: expect.stringMatching(/Subquery where is undefined/) } });
     expect(await count(rt, "sessions")).toBe(2);
   });
 
