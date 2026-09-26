@@ -33,7 +33,7 @@ const procedure = (name: string, ref = name) => ({
   spec: { input: { type: "object", properties: {} }, output: { type: "object", properties: {} }, handler: { kind: "ref", ref } },
 } as Manifest);
 
-async function runtime(db: InMemoryDatabase, extra: readonly Manifest[] = [], handlers: Record<string, AnyHandler> = {}): Promise<MantleRuntime> {
+async function runtime(db: InMemoryDatabase, extra: readonly Manifest[] = [], handlers: Record<string, AnyHandler> = {}, withoutBatchRead = false): Promise<MantleRuntime> {
   const parsed = parseManifestSources({
     sources: [sessions, blocks, sets, audited, auditTrigger, procedure("audit"), ...extra]
       .map((manifest, index) => ({ sourceId: `t:${index}`, text: JSON.stringify(manifest) })),
@@ -44,7 +44,10 @@ async function runtime(db: InMemoryDatabase, extra: readonly Manifest[] = [], ha
   const compiled = compileRuntimePlan(linked.value);
   if (!compiled.ok) throw new BootValidationError(compiled.diagnostics);
   const prepared = await prepareDeployment(compiled.value, new SqliteMantleStorageAdapter(db), { handlerNames: ["audit", ...Object.keys(handlers)] });
-  return createMantleRuntime({ prepared, handlers: { audit: () => ({}), ...handlers } });
+  const atomic = prepared.atomicEntries;
+  return createMantleRuntime({ prepared: withoutBatchRead && atomic ? { ...prepared, atomicEntries: {
+    writeAtomically: atomic.writeAtomically.bind(atomic), assertDeleteWhere: atomic.assertDeleteWhere.bind(atomic),
+  } } : prepared, handlers: { audit: () => ({}), ...handlers } });
 }
 
 async function workout(rt: MantleRuntime) {
@@ -119,6 +122,24 @@ describe("store.write (#1151)", () => {
     expect(seen.slice(0, 5)).toEqual(["INPUT_VALIDATION_FAILED", "NOT_FOUND", "NOT_FOUND", "NOT_FOUND", "NOT_FOUND"]);
     expect(seen.slice(7)).toEqual(["INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED"]);
     expect((await rt.store.select({ from: "privateSessions" })).rows[0]?.["label"]).toBe("old");
+  });
+  it("checks scope with a single-row read when the adapter has no batch prefetch", async () => {
+    const seen: unknown[] = [];
+    const rt = await runtime(new AtomicDatabase(), [privateSessions, procedure("probe")], {
+      probe: async (_input, ctx: HandlerContext) => {
+        seen.push(await ctx.store!.write([{ update: "privateSessions", where: { id: "mine" }, lock: 1, set: { label: "updated" } }]));
+        seen.push(await ctx.store!.write([{ delete: "privateSessions", where: { id: "theirs" }, lock: 1 }])
+          .then(() => "allowed", (error: { diagnostic?: { code: string } }) => error.diagnostic?.code));
+        seen.push(await ctx.store!.write([{ delete: "privateSessions", where: { id: "mine" }, lock: 2 }]));
+        return {};
+      },
+    }, true);
+    await rt.store.write([
+      { insert: "privateSessions", id: "mine", values: { ownerId: "a", label: "old" } },
+      { insert: "privateSessions", id: "theirs", values: { ownerId: "b", label: "old" } },
+    ]);
+    expect((await rt.invokeProcedure({ procedure: "probe", input: {}, ctx: { user: { id: "a" }, staff: null, env: {} } })).ok).toBe(true);
+    expect(seen).toEqual([[{ id: "mine", version: 2 }], "NOT_FOUND", [{ deleted: 1 }]]);
   });
   it("inserts, updates and deletes atomically and reports per-op results", async () => {
     const rt = await runtime(new AtomicDatabase());
