@@ -50,7 +50,7 @@ export function projectAndStamp(args: ProjectAndStampArgs): Record<string, unkno
       out[key] = computeBind(bind, args.ctx, args.clockNow);
       continue;
     }
-    if (key in args.input && args.input[key] !== undefined) {
+    if (Object.hasOwn(args.input, key) && args.input[key] !== undefined) {
       out[key] = args.input[key];
     } else if (propDef && typeof propDef === "object" && Object.hasOwn(propDef, "default")) {
       out[key] = structuredClone((propDef as { default: unknown }).default);
