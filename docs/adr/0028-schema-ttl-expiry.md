@@ -14,7 +14,7 @@ An application needs a portable expiry rule across D1 and Bun SQLite. A cron-onl
 
 SQLite storage implements an optional bounded `ExpirySweeper`. A sweep previews by default; `delete: true` is required for physical removal. It returns counts and a cursor, selects at most 100 expired IDs in stable order, and rechecks expiry in one bounded delete statement. A failed page can be retried with the previous cursor. Ref Procedures can call the semantic capability, including from a scheduled Trigger. No host automatically invokes it.
 
-Physical TTL removal does not fire before/after entry lifecycle hooks. Expiry already changed logical visibility; cleanup reclaims storage rather than representing an editorial deletion. Consumers needing business actions at expiry must implement them in an idempotent scheduled Procedure before calling the sweep.
+Physical TTL removal does not fire before/after entry lifecycle hooks. Expiry already changed logical visibility; cleanup reclaims storage rather than representing an editorial deletion. Consumers needing business actions at expiry must implement them in idempotent scheduled host code before calling the sweep.
 
 ## Consequences
 

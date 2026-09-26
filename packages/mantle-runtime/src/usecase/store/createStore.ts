@@ -1,6 +1,6 @@
 import { DiagnosticError, runtimeDiagnostic, type SchemaManifest } from "@aotter/mantle-spec";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
-import type { MantleStore, StoreWhere, StoreWriteOp, StoreWriteResult } from "../../domain/model/Store.js";
+import type { CallerStore, MantleStore, StoreWhere, StoreWriteOp, StoreWriteResult } from "../../domain/model/Store.js";
 import type { SweepExpiredRequest, SweepExpiredResult } from "../../domain/port/ExpirySweeper.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
 import type { StoreReader } from "../../domain/port/StoreReader.js";
@@ -30,7 +30,9 @@ export interface StoreBinding {
 }
 
 /** The Store facade (ADR-0030), bound to one caller context when inside a Procedure. */
-export function createStore(deps: StoreDependencies, binding: StoreBinding = {}): MantleStore {
+export function createStore(deps: StoreDependencies): MantleStore;
+export function createStore(deps: StoreDependencies, binding: StoreBinding): CallerStore;
+export function createStore(deps: StoreDependencies, binding: StoreBinding = {}): MantleStore | CallerStore {
   const { ctx, readOnly = false } = binding;
   const callerBound = Object.hasOwn(binding, "ctx");
   const refuseWrite = (path: string, message = "Authorization guard Procedures cannot write; the Store they receive is read-only.") => Promise.reject(new DiagnosticError(runtimeDiagnostic({
@@ -56,9 +58,7 @@ export function createStore(deps: StoreDependencies, binding: StoreBinding = {})
         ? { id: outcome.row.id, version: outcome.row.version }
         : { deleted: outcome.affected });
     },
-    sweepExpired: (request) => callerBound
-      ? refuseWrite("store/sweepExpired", "TTL sweeping is host-only; caller-bound Stores cannot run it.")
-      : readOnly ? refuseWrite("store/sweepExpired") : deps.sweepExpired(request),
+    ...(!callerBound ? { sweepExpired: (request: SweepExpiredRequest) => deps.sweepExpired(request) } : {}),
     view: async (name, options = {}) => {
       const response = await deps.runView(name, options, ctx);
       if (!response.ok) throw new DiagnosticError(response.diagnostic);

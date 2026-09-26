@@ -171,7 +171,7 @@ describe("store.write (#1151)", () => {
       },
       guard: async (_input, ctx: HandlerContext) => {
         seen.push(await ctx.store!.write([{ insert: "sessions", values: { ownerId: "guard" } }]).catch((error: { diagnostic?: { message: string } }) => error.diagnostic?.message));
-        seen.push(await ctx.store!.sweepExpired({ collection: "sessions" }).catch((error: { diagnostic?: { message: string } }) => error.diagnostic?.message));
+        seen.push("sweepExpired" in ctx.store!);
         seen.push((await ctx.store!.select({ from: "sessions" })).rows.length);
         return {};
       },
@@ -181,21 +181,20 @@ describe("store.write (#1151)", () => {
     expect(seen[0]).toBe("u1");
     await rt.invokeProcedure({ procedure: "guarded", input: {}, ctx });
     expect(seen[1]).toMatch(/read-only/);
-    expect(seen[2]).toMatch(/host-only/);
+    expect(seen[2]).toBe(false);
     expect(seen[3]).toBe(1);
   });
 
   it("reserves TTL sweeping for the host even in a writable Procedure", async () => {
-    let message: string | undefined;
+    let available: boolean | undefined;
     const rt = await runtime(new AtomicDatabase(), [procedure("writer")], {
       writer: async (_input, ctx: HandlerContext) => {
-        message = await ctx.store!.sweepExpired({ collection: "sessions" })
-          .then(() => "allowed", (error: { diagnostic?: { message: string } }) => error.diagnostic?.message);
+        available = "sweepExpired" in ctx.store!;
         return {};
       },
     });
     await rt.invokeProcedure({ procedure: "writer", input: {}, ctx: { user: { id: "u1" }, staff: null, env: {} } });
-    expect(message).toMatch(/host-only/);
+    expect(available).toBe(false);
   });
 
   it("reports storage without atomic writes before touching it", async () => {

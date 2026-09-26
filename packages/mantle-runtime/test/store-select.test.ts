@@ -297,8 +297,7 @@ describe("store.select (#1151)", () => {
       sweepExpired: async () => { sweeps++; return { scanned: 0, removed: 0 }; },
       runView: async () => ({ ok: true as const, result: { rows: [], page: 1, show: 1, hasMore: false } }),
     };
-    await expect(createStore(deps, { ctx: undefined }).sweepExpired({ collection: "sessions" }))
-      .rejects.toMatchObject({ diagnostic: { message: expect.stringMatching(/host-only/) } });
+    expect("sweepExpired" in createStore(deps, { ctx: undefined })).toBe(false);
     expect(sweeps).toBe(0);
     await createStore(deps).sweepExpired({ collection: "sessions" });
     expect(sweeps).toBe(1);
