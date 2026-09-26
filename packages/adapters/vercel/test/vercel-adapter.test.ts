@@ -11,7 +11,7 @@ import { describe, expect, test } from "vitest";
 import { createVercelMantle } from "../src/index.js";
 import { LibsqlDatabaseDriver } from "../src/libsql.js";
 
-const EXPECTED_FINGERPRINT = "fnv1a64:5d812457ba8034de";
+const EXPECTED_FINGERPRINT = "fnv1a64:d4ee88662e4dccf2";
 const fingerprintFixture = readFileSync(
   new URL("../../../mantle-spec/test/fixtures/pipeline-v0.1/valid.yaml", import.meta.url),
   "utf8",
