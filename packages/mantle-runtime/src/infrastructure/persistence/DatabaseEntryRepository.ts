@@ -154,11 +154,8 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
 
   async create(args: CreateEntryArgs): Promise<EntryRow> {
     const table = this.table(args.collection);
-    const columns = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at", ...table.fields];
-    const values = [args.id, args.status, 1, args.authorId, args.now, args.now, ...this.encodedData(table, args.data)];
     try {
-      await this.db.prepare(`INSERT INTO ${table.table} (${columns.map(quote).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`)
-        .bind(...values).run();
+      await this.insertStatement(table, args).run();
     } catch (error) {
       if (isDriverUniqueConstraintError(error)) {
         throw new EntryUniqueConflict(args.collection, args.data, (error as Error).message);
@@ -205,11 +202,8 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     for (const write of writes) {
       const table = this.table(write.args.collection);
       if (write.kind === "create") {
-        const { args } = write;
-        const columns = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at", ...table.fields];
-        const values = [args.id, args.status, 1, args.authorId, args.now, args.now, ...this.encodedData(table, args.data)];
         mutationAt.push(statements.length);
-        statements.push(this.db.prepare(`INSERT INTO ${table.table} (${columns.map(quote).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`).bind(...values));
+        statements.push(this.insertStatement(table, write.args));
         continue;
       }
       if (write.kind === "deleteWhere") {
@@ -540,6 +534,12 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     const unknown = Object.keys(data).find((field) => !Object.hasOwn(properties, field));
     if (unknown) throw new Error(`Schema '${table.schema.metadata.name}' has no field '${unknown}'.`);
     return table.fields.map((field) => encodeField(data[field], properties[field]!));
+  }
+
+  private insertStatement(table: SqliteSchemaTable, args: CreateEntryArgs): PreparedStatement {
+    const columns = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at", ...table.fields];
+    return this.db.prepare(`INSERT INTO ${table.table} (${columns.map(quote).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`)
+      .bind(args.id, args.status, 1, args.authorId, args.now, args.now, ...this.encodedData(table, args.data));
   }
 
   private async findOne(args: {
