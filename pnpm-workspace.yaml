@@ -46,7 +46,7 @@ catalog:
   '@vercel/functions': ^3.9.5
   idb: ^8.0.3
   '@vitest/browser-playwright': 4.1.11
-  playwright: ^1.62.1
+  playwright: ^1.63.0
   # Shared toolchain — every package's devDeps.
   typescript: ^6.0.3
   '@types/node': ^26
