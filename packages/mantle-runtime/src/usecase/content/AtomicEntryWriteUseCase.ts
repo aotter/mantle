@@ -42,6 +42,7 @@ export class AtomicEntryWriteUseCase {
     }
     const prepared: { write: AtomicEntryWrite; previous: EntryRow | null; result: EntryRow | null }[] = [];
     const touched = new Set<string>();
+    const current = await this.readTargets(operations);
     for (const operation of operations) {
       let previous: EntryRow | null = null;
       let write: AtomicEntryWrite;
@@ -53,13 +54,15 @@ export class AtomicEntryWriteUseCase {
           id: operation.id, skipUniquePreflight: true,
         }) };
       } else if (operation.kind === "update") {
-        const preparedUpdate = await this.update.prepare(operation.request, { skipUniquePreflight: true });
+        const preparedUpdate = await this.update.prepare(operation.request, {
+          skipUniquePreflight: true, ...current(operation.request),
+        });
         previous = preparedUpdate.previous;
         write = { kind: "update", args: {
           ...preparedUpdate.args, observedVersion: previous.version,
         } };
       } else if (operation.kind === "delete") {
-        const preparedDelete = await this.remove.prepare(operation.request);
+        const preparedDelete = await this.remove.prepare(operation.request, current(operation.request));
         previous = preparedDelete.previous;
         write = { kind: "delete", args: {
           ...preparedDelete.args,
@@ -101,6 +104,31 @@ export class AtomicEntryWriteUseCase {
       }
     }
     return prepared.map(({ result }) => result);
+  }
+
+  /**
+   * Reads every update and delete target up front, one query per collection,
+   * when the writer can. The batch still guards each observed version, so
+   * this changes the number of round trips, not what the group asserts.
+   */
+  private async readTargets(operations: readonly AtomicDraftOperation[]):
+    Promise<(key: { readonly collection: string; readonly id: string }) => { previous?: EntryRow | null }> {
+    const readForWrite = this.writer?.readForWrite?.bind(this.writer);
+    if (!readForWrite) return () => ({});
+    const ids = new Map<string, Set<string>>();
+    for (const operation of operations) {
+      if (operation.kind === "create" || typeof operation.request?.collection !== "string" ||
+        typeof operation.request.id !== "string") continue;
+      const set = ids.get(operation.request.collection) ?? new Set<string>();
+      set.add(operation.request.id);
+      ids.set(operation.request.collection, set);
+    }
+    const rows = new Map<string, EntryRow>();
+    for (const [collection, set] of ids) {
+      for (const row of await readForWrite(collection, [...set])) rows.set(`${collection}\0${row.id}`, row);
+    }
+    return (key) => ids.get(key.collection)?.has(key.id)
+      ? { previous: rows.get(`${key.collection}\0${key.id}`) ?? null } : {};
   }
 }
 

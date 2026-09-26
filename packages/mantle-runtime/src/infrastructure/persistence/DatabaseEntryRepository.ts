@@ -142,20 +142,28 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
           .bind(write.args.id, write.args.expectedVersion, write.args.observedVersion,
             write.args.expectedStatus, write.args.observedStatus);
       // Both D1 and Bun roll the batch back on a constraint error. The
-      // NOT NULL check does not depend on a particular boot-state row.
+      // NOT NULL check does not depend on a particular boot-state row. Each
+      // guard overwrites the previous one, so one cleanup ends the group.
       const guard = this.db.prepare(`INSERT INTO _mantle_boot_state (id, fingerprint)
         VALUES ('atomic-guard', CASE WHEN changes() = 1 THEN 'ok' ELSE NULL END)
         ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint`);
-      const cleanup = this.db.prepare("DELETE FROM _mantle_boot_state WHERE id = 'atomic-guard'");
-      return [mutation, guard, cleanup];
+      return [mutation, guard];
     });
+    if (writes.some((write) => write.kind !== "create")) {
+      statements.push(this.db.prepare("DELETE FROM _mantle_boot_state WHERE id = 'atomic-guard'"));
+    }
     try {
       await this.db.batch(statements);
     } catch (error) {
       if (error instanceof Error && error.message.includes("_mantle_boot_state.fingerprint")) {
-        for (const write of writes) {
-          if (write.kind === "create") continue;
-          const current = await this.get(write.args);
+        const guarded = writes.filter((write) => write.kind !== "create");
+        const latest = new Map<string, EntryRow>();
+        for (const collection of new Set(guarded.map((write) => write.args.collection))) {
+          const ids = guarded.filter((write) => write.args.collection === collection).map((write) => write.args.id);
+          for (const row of await this.readForWrite(collection, ids)) latest.set(`${collection}\0${row.id}`, row);
+        }
+        for (const write of guarded) {
+          const current = latest.get(`${write.args.collection}\0${write.args.id}`) ?? null;
           if (!current || current.version !== write.args.expectedVersion) {
             throw new EntryVersionConflict(write.args.id, write.args.expectedVersion, current?.version ?? 0);
           }
@@ -176,6 +184,23 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
       }
       throw error;
     }
+  }
+
+  async readForWrite(collection: string, ids: readonly string[]): Promise<readonly EntryRow[]> {
+    const table = this.table(collection);
+    const unique = [...new Set(ids)];
+    const rows: EntryRow[] = [];
+    // Under D1's 100 bound-parameter limit, leaving room for the live condition.
+    for (let start = 0; start < unique.length; start += 95) {
+      const chunk = unique.slice(start, start + 95);
+      const conditions = [`"_mantle_id" IN (${chunk.map(() => "?").join(", ")})`];
+      const binds: unknown[] = [...chunk];
+      this.addLiveCondition(table, conditions, binds);
+      const found = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")}`)
+        .bind(...binds).all<NativeEntryRow>();
+      rows.push(...found.map((row) => rowFromDb(table, row)));
+    }
+    return rows;
   }
 
   async get(args: EntryKey): Promise<EntryRow | null> {

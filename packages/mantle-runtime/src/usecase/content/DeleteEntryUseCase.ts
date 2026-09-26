@@ -30,9 +30,11 @@ export class DeleteEntryUseCase {
     return withConflictDiagnostic(`usecase/DeleteEntry/${request.id}`, () => this.entries.delete(args));
   }
 
-  async prepare(request: DeleteEntryRequest): Promise<{ readonly args: DeleteEntryArgs; readonly previous: EntryRow }> {
+  /** `previous` is the row the caller already read for this id (null: none); omitted, it is read here. */
+  async prepare(request: DeleteEntryRequest, options: { readonly previous?: EntryRow | null } = {}):
+    Promise<{ readonly args: DeleteEntryArgs; readonly previous: EntryRow }> {
     const opPath = `usecase/DeleteEntry/${request.id}`;
-    const existing = await this.entries.get(request);
+    const existing = options.previous !== undefined ? options.previous : await this.entries.get(request);
     if (!existing) {
       throw new DiagnosticError(
         notFoundDiagnostic(opPath, request.collection, request.id),
