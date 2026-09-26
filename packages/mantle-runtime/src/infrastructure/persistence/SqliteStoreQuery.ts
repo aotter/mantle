@@ -187,6 +187,7 @@ export function validateSelect(query: StoreSelect): void {
   if (!isPlainObject(query)) throw invalid("Store select takes an object.");
   const unknownKey = Object.keys(query).find((key) => !["from", "columns", "where", "orderBy", "limit", "cursor"].includes(key));
   if (unknownKey) throw invalid(`Unknown Store select key '${unknownKey}'.`);
+  if (Object.hasOwn(query, "where") && query.where === undefined) throw invalid("Store where is undefined; omit it or provide a condition.");
 }
 
 export function invalid(message: string): DiagnosticError {
