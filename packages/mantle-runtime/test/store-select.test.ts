@@ -220,6 +220,7 @@ describe("store.select (#1151)", () => {
     [{ from: "sessions", where: { ownerId: undefined, rpe: 7 } }, /'ownerId' is undefined/],
     [{ from: "sessions", where: { rpe: { gte: 7, lte: undefined } } }, /'lte' on 'rpe' is undefined/],
     [{ from: "sessions", where: { id: { in: { select: "id", from: "blocks", where: { sessionId: undefined } } } } }, /'sessionId' is undefined/],
+    [{ from: "sessions", where: { id: { in: { select: "id", from: "blocks", where: undefined } } } }, /Subquery where is undefined/],
   ])("rejects %j", async (query, message) => {
     const { rt } = await seeded();
     await expect(rt.store.select(query as never)).rejects.toMatchObject({
