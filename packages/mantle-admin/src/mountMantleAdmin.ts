@@ -16,9 +16,8 @@ import {
   resolveMantleRef,
   resolveLifecycle,
   runtimeDiagnostic,
-  checkSchemaAdminUi,
-  checkViewAdminUi,
-  schemaSortableFields,
+  projectSchemaAdminUi,
+  projectViewAdminUi,
   STAFF_ROLES,
   type AuthPredicate,
   type ContentState,
@@ -297,7 +296,7 @@ export function mountMantleAdmin<E extends Env>(
     from: v.spec.from ?? null,
     params: v.spec.params ?? null,
     fields: v.spec.fields ?? null,
-    list: checkViewAdminUi(v).list,
+    list: projectViewAdminUi(v),
     // Staff operations a row of this View feeds (ADR-0029): the tool, its
     // row bindings and the version input it locks.
     rowActions: viewRowActions(ref.plan, v.metadata.name, "staff"),
@@ -1571,7 +1570,7 @@ function adminDataPreview(
   manifest?: SchemaManifest,
 ): Record<string, unknown> | undefined {
   if (!manifest || manifest.spec.lifecycle !== "operational") return undefined;
-  const list = checkSchemaAdminUi(manifest).list;
+  const list = projectSchemaAdminUi(manifest).list;
   const fields = [...(list.primaryField ? [list.primaryField] : []), ...list.columns];
   if (fields.length === 0) return undefined;
   const preview: Record<string, unknown> = {};
@@ -1787,7 +1786,7 @@ function adminEditorCollection(
   schema: SchemaManifest,
   schemas: SchemaManifest[],
 ): AdminEditorCollection {
-  const adminUi = checkSchemaAdminUi(schema);
+  const adminUi = projectSchemaAdminUi(schema);
   return {
     name: schema.metadata.name,
     title: schema.spec.title,
@@ -1800,7 +1799,7 @@ function adminEditorCollection(
     schema: schema.spec.schema,
     uiSchema: schema.spec.uiSchema ?? null,
     mediaFields: mediaFieldsForCollection(schema, schemas),
-    sortableFields: schemaSortableFields(schema),
+    sortableFields: adminUi.sortableFields,
     filter: adminUi.filter,
     list: adminUi.list,
     nav: adminUi.nav,
@@ -1980,7 +1979,7 @@ function parentEntryTitle(
   schemas: SchemaManifest[],
 ): string {
   const schema = schemas.find((candidate) => candidate.metadata.name === entry.collection);
-  const primaryField = schema ? checkSchemaAdminUi(schema).list.primaryField : null;
+  const primaryField = schema ? projectSchemaAdminUi(schema).list.primaryField : null;
   const value = adminEntryTitle(entry.data, schema?.spec.schema, primaryField);
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
     ? String(value)
@@ -2199,7 +2198,7 @@ async function handleViewRequest(
         { status },
       );
     }
-    const declaredColumns = checkViewAdminUi(view).list.columns;
+    const declaredColumns = projectViewAdminUi(view).columns;
     const columns = declaredColumns.length > 0
       ? [...declaredColumns]
       : view.spec.fields?.length
@@ -2243,7 +2242,7 @@ function readViewListQuery(
   readonly search?: { readonly term: string; readonly fields: readonly string[] };
   readonly filters: ReadonlyArray<{ readonly field: string; readonly value: string }>;
 } {
-  const list = checkViewAdminUi(view).list;
+  const list = projectViewAdminUi(view);
   const rawSearch = query.get("search")?.trim() ?? "";
   if (rawSearch && list.searchFields.length === 0) {
     throw new ViewParamCoercionError(`View '${view.metadata.name}' does not declare Admin search fields.`);
