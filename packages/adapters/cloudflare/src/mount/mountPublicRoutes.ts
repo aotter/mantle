@@ -147,6 +147,33 @@ export function mountPublicRoutes(
 ): void {
   const liveDev = options.liveDev === true;
   const overrideIndex = buildOverrideIndex(options.slugOverrides ?? []);
+  // The staff MCP surface previews entries through the same renderer as
+  // `?preview=1`, authorized by the MCP caller instead of a staff cookie.
+  ref.setEntryPreview?.((runtime) => ({
+    collections: options.collectionRoutes.map(({ collection }) => collection),
+    async execute({ collection, id }) {
+      const route = options.collectionRoutes.find((candidate) => candidate.collection === collection);
+      if (!route) return null;
+      const entry = await runtime.getEntry.execute({ id, collection });
+      const site = await runtime.siteConfig.load();
+      const locale = entry.locale ?? site.canonicalLocale ?? site.locales[0] ?? "en";
+      const slug = typeof entry.data["slug"] === "string" ? entry.data["slug"] : id;
+      // A slug override serves its own page for a request; there is no
+      // request here, so it has no preview rather than a wrong one.
+      if (overrideIndex.has(overrideKey(route.collection, slug))) return null;
+      const shared = contentLocale(runtime, collection, locale) === null;
+      const html = await ref.web(runtime).previewEntry.execute({
+        collection,
+        id,
+        slug,
+        locale,
+        contentLocale: contentLocale(runtime, collection, locale),
+        site,
+        ...entrySeoRoute(site, route, locale, slug, shared),
+      });
+      return html === null ? null : withSiteBase(html, site.origin);
+    },
+  }));
 
   // Literal root paths register BEFORE any param-catch-all routes —
   // Hono's trie matches `/llms.txt` against `/:locale` with
@@ -668,6 +695,17 @@ function buildOverrideIndex(
   const map = new Map<string, SlugOverride>();
   for (const o of overrides) map.set(overrideKey(o.collection, o.slug), o);
   return map;
+}
+
+/**
+ * A preview is shown outside the site (in an MCP App frame), so its
+ * relative links and assets resolve against the site origin, as they
+ * would on the page itself.
+ */
+function withSiteBase(html: string, origin: string): string {
+  if (!URL.canParse(origin) || /<base\s/iu.test(html)) return html;
+  const base = `<base href="${new URL("/", origin).href.replace(/"/gu, "&quot;")}">`;
+  return /<head[^>]*>/iu.test(html) ? html.replace(/<head[^>]*>/iu, (head) => `${head}${base}`) : `${base}${html}`;
 }
 
 function overrideKey(collection: string, slug: string): string {

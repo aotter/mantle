@@ -1,3 +1,4 @@
+import type { EntryPreviewPort } from "@aotter/mantle-runtime";
 import {
   SqliteMantleStorageAdapter,
   DatabaseRunObservationStore,
@@ -37,6 +38,10 @@ export interface MantleRuntimeRef {
   /** Caller-independent catalog reader. MCP invokes this only after auth. */
   readonly mcpCatalogSiteConfig?: McpCatalogSiteConfigReader;
   readonly publicCacheTag?: string;
+  /** Site preview for staff MCP (ADR-0029 D10), when public routes are mounted. */
+  entryPreview?(runtime: CloudflareMantleRuntime): EntryPreviewPort | undefined;
+  /** Called by `mountPublicRoutes`, which owns the collection routes a preview needs. */
+  setEntryPreview?(factory: (runtime: CloudflareMantleRuntime) => EntryPreviewPort): void;
 }
 
 export type CloudflareMantleRuntime = MantleRuntime & {
@@ -47,6 +52,7 @@ export type CloudflareMantleRuntime = MantleRuntime & {
 export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRuntimeRef {
   let booted: Promise<CloudflareMantleRuntime> | null = null;
   let web: MantleWeb | null = null;
+  let entryPreview: ((runtime: CloudflareMantleRuntime) => EntryPreviewPort) | null = null;
   let mcpCatalogSiteConfig: McpCatalogSiteConfigReader | undefined;
   const mcpCatalogKv = config.bindings.mcpCatalogKv;
   const publicCacheTag = scopedPublicCacheTag(config.cacheScope);
@@ -67,6 +73,8 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
   return {
     plan: config.plan,
     auth: config.auth,
+    entryPreview: (runtime) => entryPreview?.(runtime),
+    setEntryPreview: (factory) => { entryPreview = factory; },
     adminAssets: config.bindings.adminAssets,
     credentialResolver: config.credentialResolver,
     jwtBearer: config.jwtBearer,

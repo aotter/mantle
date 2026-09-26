@@ -89,7 +89,15 @@ function harness() {
     },
     media: null,
   } as unknown as CapabilityRuntime;
-  const invoker = bindCapabilities(runtime, plan, { surface: "staff" });
+  const invoker = bindCapabilities(runtime, plan, {
+    surface: "staff",
+    // The site renderer an application mounts; here a stand-in page (ADR-0029 D10).
+    preview: {
+      collections: ["requisitions"],
+      execute: async ({ id }) => `<html><body><head><meta http-equiv="refresh" content="0;url=https://elsewhere.test/"></head><body><h1>Site page for ${String(entries.get(id)?.data["item"])}</h1><a href="https://elsewhere.test/">Elsewhere</a><script>parent.postMessage("escaped", "*"); top.postMessage("escaped", "*")</script></body></html>`,
+    },
+  });
+  // The built-in resource offers the App-only preview by default.
   const handler = createMantleMcpHandler(invoker, { apps: { resources: [interactionAppResource()] } });
   const staff: HandlerContext = { user: { id: "s1" }, staff: { id: "s1", role: "editor" }, env: {} } as HandlerContext;
   return { handler, entries, writes, staff };
@@ -126,6 +134,24 @@ describe("MCP Apps host matrix (#1119)", () => {
       const app = page.frameLocator("#app");
       await app.getByText("Laptops").waitFor();
 
+      // Site preview: the page renders in a frame with no script rights,
+      // and its links and refreshes lead nowhere.
+      await page.evaluate(() => {
+        (window as unknown as { escaped: unknown[] }).escaped = [];
+        window.addEventListener("message", (event) => {
+          if (event.data === "escaped") (window as unknown as { escaped: unknown[] }).escaped.push(event.data);
+        });
+      });
+      await app.getByRole("button", { name: "Preview page" }).click();
+      const preview = app.frameLocator('iframe[title="Site preview"]');
+      await preview.getByText("Site page for Laptops").waitFor();
+      expect(await app.locator('iframe[title="Site preview"]').getAttribute("sandbox")).toBe("");
+      expect(await preview.getByText("Elsewhere").getAttribute("href")).toBeNull();
+      expect(await preview.locator('meta[http-equiv="refresh"]').count()).toBe(0);
+      expect(await page.evaluate(() => (window as unknown as { escaped: unknown[] }).escaped)).toEqual([]);
+      await app.getByRole("button", { name: "Close", exact: true }).click();
+      await app.getByRole("button", { name: "Review requisition" }).waitFor();
+
       await app.getByRole("button", { name: "Review requisition" }).click();
       await app.getByText("From the selected row").waitFor();
       await app.getByLabel("Decision").selectOption("approved");
@@ -135,7 +161,7 @@ describe("MCP Apps host matrix (#1119)", () => {
       expect(writes).toEqual([{ id: "r1", expectedVersion: 3, requestStatus: "approved", reviewerNote: "Within budget" }]);
       // The host's own View call, then the App's read, write and refresh.
       // The refresh follows the success asynchronously.
-      await expect.poll(() => toolCalls).toEqual(["query_view_pending_approvals", "read_entry", "review_requisition", "query_view_pending_approvals"]);
+      await expect.poll(() => toolCalls).toEqual(["query_view_pending_approvals", "preview_entry", "read_entry", "review_requisition", "query_view_pending_approvals"]);
       await app.getByRole("button", { name: "Close", exact: true }).click();
 
       // Someone else decides between the read and the submit.

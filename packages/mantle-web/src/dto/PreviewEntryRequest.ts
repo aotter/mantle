@@ -8,6 +8,8 @@ import type { SiblingTranslation } from "../service/SeoMetaComposer.js";
  */
 export interface PreviewEntryRequest {
   readonly collection: string;
+  /** Render exactly this entry instead of walking the status order by slug. */
+  readonly id?: string;
   readonly slug: string;
   readonly locale: string;
   readonly contentLocale?: string | null;

@@ -49,8 +49,10 @@ export class PreviewEntryUseCase {
   ) {}
 
   async execute(request: PreviewEntryRequest): Promise<string | null> {
-    let raw: Entry | null = null;
-    for (const status of DEFAULT_PREVIEW_STATUS_ORDER) {
+    let raw: Entry | null = request.id
+      ? await this.reader.readById({ collection: request.collection, id: request.id })
+      : null;
+    for (const status of request.id ? [] : DEFAULT_PREVIEW_STATUS_ORDER) {
       raw = await this.reader.readBySlug({
         collection: request.collection,
         slug: request.slug,

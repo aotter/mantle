@@ -22,6 +22,8 @@ export interface AppView {
   readonly read: string | null;
   readonly rows: readonly Readonly<Record<string, unknown>>[];
   readonly rowActions: readonly AppRowAction[];
+  /** Tool that renders a row's site page, when the site offers previews. */
+  readonly preview?: string;
 }
 
 /** The shape every MCP tool result shares, independent of an SDK. */
@@ -47,6 +49,7 @@ export function viewOf(result: ToolResult): AppView | null {
     read: typeof meta["read"] === "string" ? meta["read"] : null,
     rows,
     rowActions: Array.isArray(meta["rowActions"]) ? meta["rowActions"] as AppRowAction[] : [],
+    ...(typeof meta["preview"] === "string" ? { preview: meta["preview"] } : {}),
   };
 }
 
@@ -95,6 +98,32 @@ export async function readEntry(call: CallTool, tool: string, collection: string
     throw new Error(`${tool} returned no entry version.`);
   }
   return { id: entry["id"], version: entry["version"], data: isRecord(entry["data"]) ? entry["data"] : {} };
+}
+
+/** The site page for one entry, from the preview tool's `{ html }`. */
+export async function previewHtml(call: CallTool, tool: string, collection: string, id: string): Promise<string> {
+  const result = await call(tool, { collection, id });
+  const output = outputOf(result);
+  if (result.isError) throw new Error(diagnosticsOf(result)[0]?.message ?? "This entry has no page to preview.");
+  if (!isRecord(output) || typeof output["html"] !== "string") throw new Error("This entry has no page to preview.");
+  return output["html"];
+}
+
+/**
+ * The page with navigation taken out: a preview frame with an empty sandbox
+ * runs no scripts and submits no forms, but it can still follow its own
+ * links or a meta refresh. Links keep their text and lose their target.
+ * Parsing as `text/html` runs nothing.
+ */
+export function inertPreview(html: string): string {
+  if (typeof DOMParser === "undefined") return html;
+  const page = new DOMParser().parseFromString(html, "text/html");
+  for (const link of page.querySelectorAll("a[href], area[href]")) link.removeAttribute("href");
+  for (const meta of page.querySelectorAll("meta[http-equiv]")) {
+    if (/^refresh$/iu.test(meta.getAttribute("http-equiv") ?? "")) meta.remove();
+  }
+  for (const form of page.querySelectorAll("form")) form.removeAttribute("action");
+  return `<!doctype html>${page.documentElement.outerHTML}`;
 }
 
 /** Inputs the form does not render: row bindings, the version, idempotency keys. */

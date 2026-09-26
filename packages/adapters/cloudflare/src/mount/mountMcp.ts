@@ -144,7 +144,11 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
         let cached = handlerCache.get(runtime);
         if (!cached || cached.configKey !== configKey) {
           const handler = createMantleMcpHandler(
-            bindCapabilities(runtime, ref.plan, { surface, mediaPurposes }),
+            bindCapabilities(runtime, ref.plan, {
+              surface,
+              mediaPurposes,
+              ...(surface === "staff" && ref.entryPreview?.(runtime) ? { preview: ref.entryPreview(runtime)! } : {}),
+            }),
             {
               serverInfo,
               ...(ref.audit ? { audit: ref.audit } : {}),
@@ -164,7 +168,8 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
         }
         selected = cached.handler;
       } finally { stopBuild(); }
-      return diagnosticPhase("dispatch", () => selected.fetch(request, handlerContext));
+      // Every MCP answer is for this caller only (drafts included): never cached.
+      return privateNoStore(await diagnosticPhase("dispatch", () => selected.fetch(request, handlerContext)));
     },
   };
 }
@@ -264,6 +269,12 @@ function oauthDenied(
     status: denied.status,
     headers: challengeHeaders(resource, requiredScopes, denied),
   });
+}
+
+function privateNoStore(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "private, no-store");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 /** RFC 9728 metadata location for the protected resource. */

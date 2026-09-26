@@ -96,6 +96,15 @@ export interface AppLinks {
  * tool links to at most one resource, whether it renders there or is
  * app-only there.
  */
+/**
+ * Capabilities offered only to an MCP App (ADR-0029 D10). `preview_entry`
+ * returns a whole rendered page, drafts included: a model gains nothing from
+ * it and would take in draft content as instructions. It is registered only
+ * when an App resource lists it in `appOnly`, and such an entry is ignored,
+ * not rejected, where the surface does not serve it (no site renderer).
+ */
+export const APP_ONLY_CAPABILITIES: ReadonlySet<string> = new Set(["preview_entry"]);
+
 export function validateApps(
   apps: MantleMcpApps | undefined,
   catalog: CapabilityCatalog,
@@ -120,6 +129,7 @@ export function validateApps(
       rendersIn.set(capability.name, resource.uri);
     }
     for (const name of resource.appOnly ?? []) {
+      if (APP_ONLY_CAPABILITIES.has(name) && (!catalog.get(name) || !serves(name))) continue;
       const capability = catalog.get(name);
       if (!capability || !serves(name)) throw new TypeError(`App-only tool '${name}' is not served on the ${catalog.surface} surface.`);
       // An App acts on behalf of the user without the model seeing the

@@ -30,6 +30,7 @@ export const RESERVED_MCP_GENERIC_TOOL_NAMES: ReadonlySet<string> = new Set([
   "create_media_upload",
   "commit_media_upload",
   "read_entry",
+  "preview_entry",
 ]);
 
 /**

@@ -21,6 +21,7 @@ import type {
 import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import packageJson from "../package.json" with { type: "json" };
 import {
+  APP_ONLY_CAPABILITIES,
   appResourceHtml,
   appResourceMeta,
   linkApps,
@@ -82,25 +83,27 @@ export function createMantleMcpServer(
   options: MantleMcpServerOptions = {},
 ): MantleMcpServerFactory {
   const catalog = invoker.catalog;
-  // A capability whose use case is not bound is not served at all.
-  const tools = catalog.capabilities
-    .filter((capability) => invoker.serves(capability.name))
-    .map((capability) => ({ capability, config: toolConfig(capability) }));
   const apps = linkApps(options.apps, invoker);
+  // A capability whose use case is not bound is not served at all, and an
+  // App-only capability no App lists is not offered to anyone.
+  const offered = (name: string) => invoker.serves(name) && (!APP_ONLY_CAPABILITIES.has(name) || apps.appOnly.has(name));
+  const tools = catalog.capabilities
+    .filter((capability) => offered(capability.name))
+    .map((capability) => ({ capability, config: toolConfig(capability) }));
   /**
    * A tool this request registers whose `collection` input accepts the
    * collection, such as `read_entry`; the App calls it only when named.
    */
   const coversCollection = (name: string, collection: string | null, ui: ClientUiSupport): boolean => {
     const target = catalog.get(name);
-    if (!target || !collection || !invoker.serves(name) || (apps.appOnly.has(name) && ui === "unsupported")) return false;
+    if (!target || !collection || !offered(name) || (apps.appOnly.has(name) && ui === "unsupported")) return false;
     const property = (target.inputSchema["properties"] as { collection?: { enum?: readonly string[] } } | undefined)?.collection;
     return (property?.enum ?? []).includes(collection);
   };
   /**
    * What an App needs to render a View and act on its rows (ADR-0029 D7):
-   * the source collection, the tool that reads one of its entries when this
-   * surface has one, and each row action with the tool's title and input
+   * the source collection, the tools that read one of its entries and
+   * render its site preview when this surface has them, and each row action with the tool's title and input
    * schema, limited to tools this request registers. It travels in the
    * result's `_meta` of App-linked Views only, so hosts that render no UI
    * and the model's text are unchanged.
@@ -127,6 +130,7 @@ export function createMantleMcpServer(
         collection,
         rowActions: actions,
         ...(coversCollection(READ_ENTRY, collection, ui) ? { read: READ_ENTRY } : {}),
+        ...(coversCollection(PREVIEW_ENTRY, collection, ui) ? { preview: PREVIEW_ENTRY } : {}),
       },
     };
   };
@@ -217,6 +221,7 @@ export function createMantleMcpServer(
               ctx,
               path: `MCP ${capability.name}`,
             });
+            if (result.ok && capability.route.kind === "preview") return previewResult(result.data, input);
             if (result.ok) return successResult(result.data, resourceUri ? interactionMeta(capability, ui) : undefined);
             outcome = result.diagnostic.code;
             return errorResult(redactForWire(result.diagnostic), config.outputSchema !== undefined);
@@ -249,7 +254,7 @@ export function createMantleMcpServer(
       return server;
     },
     registers(name, ui) {
-      if (!invoker.serves(name)) return false;
+      if (!offered(name)) return false;
       return !(apps.appOnly.has(name) && (ui === "unsupported" || apps.resources.length === 0));
     },
     audit(ctx, tool, args, outcome) {
@@ -331,8 +336,9 @@ function toAnnotations(hints: CapabilityHints): ToolAnnotations {
 /** Result `_meta` key carrying a View's row actions for MCP Apps. */
 export const INTERACTION_META_KEY = "net.aotter.mantle/interaction";
 
-/** The staff tool that reads one entry (ADR-0029 D7). */
+/** The staff tools that read one entry and render its site preview (ADR-0029 D7, D10). */
 const READ_ENTRY = "read_entry";
+const PREVIEW_ENTRY = "preview_entry";
 
 /** MCP requires `structuredContent` to be an object, so arrays and
  *  primitives travel in the text block only. */
@@ -341,6 +347,18 @@ function successResult(data: unknown, meta?: Record<string, unknown>): CallToolR
     content: [{ type: "text", text: JSON.stringify(data) }],
     ...(isRecord(data) ? { structuredContent: data } : {}),
     ...(meta ? { _meta: meta } : {}),
+  };
+}
+
+/**
+ * A rendered page is for the App only: the text block, which every host
+ * shows to the model, says what was rendered and carries none of the page.
+ */
+function previewResult(data: unknown, input: Readonly<Record<string, unknown>>): CallToolResult {
+  const html = isRecord(data) && typeof data["html"] === "string" ? data["html"] : "";
+  return {
+    content: [{ type: "text", text: `Rendered the site page of ${String(input["collection"])} entry ${String(input["id"])} (${html.length} characters) for the App to show.` }],
+    structuredContent: { html },
   };
 }
 

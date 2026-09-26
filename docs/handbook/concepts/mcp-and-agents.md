@@ -26,6 +26,7 @@ A tool name is derived from a manifest name by `mcpToolNameSegment`: lowercased,
 | `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | Present when an applicable Schema exists | Staff |
 | `create_media_upload`, `commit_media_upload` | Media storage bound and at least one purpose declared | Staff |
 | `read_entry` | A staff MCP Procedure with an operation target | Staff |
+| `preview_entry` | A site renderer, and an App resource listing it as app-only | Staff, App only |
 | `<procedure segment>` | A Trigger with `source.kind: mcp` | The Trigger's `source.surface` |
 
 A Schema whose root `schema` sets `readOnly: true` gets no authoring tools; its declared Procedures still work. Update tools add required `id` and `expected_version` arguments, and fields carrying `x-mantle-bind` are stripped from authoring tool schemas because the runtime stamps them. Those generic names (including `read_entry`) and the `create_draft_`, `update_draft_`, `create_record_`, `update_record_` and `query_view_` prefixes are reserved; a collision is rejected at validation with `MCP_TOOL_NAME_COLLISION`.
@@ -81,6 +82,7 @@ Every App-linked View tool result carries `_meta["net.aotter.mantle/interaction"
 - the View tool, which the App calls again to refresh;
 - the source collection;
 - `read`, the tool that reads one entry, when the surface has one (`read_entry` on staff surfaces only);
+- `preview`, the tool that renders an entry's site page, when the surface offers one for that collection (`preview_entry`, see [Site preview](#site-preview));
 - each row action: its tool name, title, input schema, the row fields it binds and the version input it locks.
 
 Error results carry no such metadata. The App reads nothing else. Each read and write is a server tool call through the host (`callServerTool`), under the caller's own MCP authorization. The App holds no credentials, opening it has no side effect, and the Admin itself still refuses to be embedded. It submits from script rather than through a browser form, so it works in hosts that sandbox Apps without `allow-forms`, and it follows the host's theme and locale (English, Traditional or Simplified Chinese).
@@ -100,6 +102,30 @@ The same App serves public and member Views, because the contract never depends 
 Core defines no inbox, pending state, assignment or approval engine. "Pending" is whatever View the application declares.
 
 A client without MCP Apps runs the same steps with the plain tools: the View tool lists the rows, and its description names each row action and the fields it binds.
+
+### Site preview
+
+`preview_entry` renders one entry's site page, drafts included, with the same renderer as `?preview=1`, and returns it as `structuredContent.html`. It is read-only, needs the contributor role, and is bounded to the rendered collections.
+
+It is an App-only tool: the staff surface offers it only when both of these hold.
+
+- **A site renderer exists.** On Cloudflare, that means the application mounts public routes. Other hosts pass one as `bindCapabilities(runtime, plan, { surface: "staff", preview })`.
+- **An App resource on that surface lists it in `appOnly`.** `interactionAppResource()` does this by default. Nothing else registers it, so no model is offered the page, and an App-only entry is ignored where the surface has no renderer.
+
+The call is scoped like this:
+
+- It is authorized by the MCP caller, never by a staff cookie, which a sandboxed App frame could not send anyway.
+- The page travels only in that call's result, which is `private, no-store`, and never in the shared `ui://` asset. The text block, which hosts show to the model, only says what was rendered.
+- The public surface has no such tool, and public routes still serve no drafts.
+- An entry whose slug is served by a slug override has no MCP preview. That page renders per request, and there is none here.
+
+The built-in App offers **Preview page** on each row and shows the page in a frame with an empty sandbox: no scripts, forms, popups or access to the App. It removes links and meta refreshes before showing the page, so the frame cannot navigate. Relative URLs resolve against the site origin (`<base href>`), but assets still load only as far as the App's CSP allows. Templates that inline their CSS render faithfully. For external stylesheets and images, pass `csp: { resourceDomains: [siteOrigin] }` to `interactionAppResource()`, which also lets the preview fetch from that origin. The site preview is separate from the plain entity preview the interaction panel shows.
+
+Example B follows from these tools:
+1. On request, the agent creates a draft with `create_draft_<schema>`.
+2. The person edits it with `update_draft_<schema>` or a row action.
+3. The person previews the site page.
+4. The person saves or publishes through the canonical lifecycle tools.
 
 ### An application-owned renderer
 
