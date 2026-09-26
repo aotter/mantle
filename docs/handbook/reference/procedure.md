@@ -263,6 +263,12 @@ facility inside a ref handler, but that does not give those tables Mantle
 entry semantics. Direct SQL writes to Mantle Schema tables are unsupported.
 Authorization guard Procedures do not receive `ctx.writeAtomically`.
 
+On D1 and Bun SQLite a group reads its update and delete targets with one query
+per Schema (95 ids per query) before the batch. The batch holds one statement per
+create, two per update or delete (the conditional write and its guard) and one
+final cleanup, so 200 updates cost about 3 reads and 401 statements. D1 counts
+queries against a per-invocation limit; size groups with that in mind.
+
 ## TTL sweep in a ref handler
 
 `ctx.sweepExpired({ collection, limit })` previews a bounded page of expired rows; `delete: true` explicitly removes it. The result contains `scanned`, `removed` and an optional `nextCursor`. Continue with that cursor until absent. D1 and Bun SQLite implement this semantic capability; unsupported storage returns `RESOURCE_UNAVAILABLE`. Authorization guard Procedures do not receive the sweep function. For a scheduled cleanup, declare a [schedule Trigger](./trigger.md#schedule-source) targeting a no-input ref Procedure. No sweep is scheduled automatically. See [Schema TTL](./schema.md#ttl).

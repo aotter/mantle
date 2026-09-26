@@ -38,12 +38,16 @@ export class UpdateDraftUseCase {
     return withConflictDiagnostic(`usecase/UpdateDraft/${request.id}`, () => this.entries.update(args));
   }
 
-  async prepare(request: UpdateDraftRequest, options: { readonly skipUniquePreflight?: boolean } = {}): Promise<{
+  /** `previous` is the row the caller already read for this id (null: none); omitted, it is read here. */
+  async prepare(request: UpdateDraftRequest, options: {
+    readonly skipUniquePreflight?: boolean;
+    readonly previous?: EntryRow | null;
+  } = {}): Promise<{
     readonly args: UpdateEntryArgs & { readonly expectedStatus: EntryRow["status"] };
     readonly previous: EntryRow;
   }> {
     const opPath = `usecase/UpdateDraft/${request.id}`;
-    const existing = await this.entries.get(request);
+    const existing = options.previous !== undefined ? options.previous : await this.entries.get(request);
     if (!existing) {
       throw new DiagnosticError(notFoundDiagnostic(opPath, request.collection, request.id));
     }
