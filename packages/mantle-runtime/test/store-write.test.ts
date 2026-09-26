@@ -101,6 +101,8 @@ describe("store.write (#1151)", () => {
           [{ insert: "privateSessions", values: { ownerId: "b", label: "x" } }],
           [{ update: "privateSessions", where: { id: "theirs" }, lock: 1, set: { label: "changed" } }],
           [{ delete: "privateSessions", where: { id: "theirs" }, lock: 1 }],
+          [{ update: "privateSessions", where: { id: "missing" }, lock: 1, set: { label: "changed" } }],
+          [{ delete: "privateSessions", where: { id: "missing" }, lock: 1 }],
         ]) {
           seen.push(await ctx.store!.write(ops as never).then(() => "allowed", (error: { diagnostic?: { code: string } }) => error.diagnostic?.code));
         }
@@ -114,8 +116,8 @@ describe("store.write (#1151)", () => {
     await rt.store.write([{ insert: "privateSessions", id: "theirs", values: { ownerId: "b", label: "old" } }]);
     await rt.invokeProcedure({ procedure: "probe", input: {}, ctx: { user: { id: "a" }, staff: null, env: {} } });
     await rt.invokeProcedure({ procedure: "probe", input: {}, ctx: { user: null, staff: null, env: {} } });
-    expect(seen.slice(0, 3)).toEqual(["INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED"]);
-    expect(seen.slice(5)).toEqual(["INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED"]);
+    expect(seen.slice(0, 5)).toEqual(["INPUT_VALIDATION_FAILED", "NOT_FOUND", "NOT_FOUND", "NOT_FOUND", "NOT_FOUND"]);
+    expect(seen.slice(7)).toEqual(["INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED"]);
     expect((await rt.store.select({ from: "privateSessions" })).rows[0]?.["label"]).toBe("old");
   });
   it("inserts, updates and deletes atomically and reports per-op results", async () => {
