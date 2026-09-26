@@ -63,6 +63,23 @@ describe("projectAndStamp", () => {
     expect(out["editorId"]).toBeNull();
   });
 
+  it("materializes a missing Schema default without sharing mutable values", () => {
+    const withDefault: SchemaManifest = {
+      ...schema,
+      spec: { ...schema.spec, schema: { type: "object", properties: {
+        state: { type: "string", default: "draft" },
+        flags: { type: "array", default: ["new"] },
+      } } },
+    };
+    const args = { schema: withDefault, input: {}, ctx: { user: null, staff: null, env: {} }, clockNow: 0 };
+    const first = projectAndStamp(args);
+    expect(first).toEqual({ state: "draft", flags: ["new"] });
+    (first["flags"] as string[]).push("changed");
+    expect(projectAndStamp(args)).toEqual({ state: "draft", flags: ["new"] });
+    expect(projectAndStamp({ ...args, input: { state: "open" } })["state"]).toBe("open");
+    expect(projectAndStamp({ ...args, input: { state: undefined } })["state"]).toBe("draft");
+  });
+
   it("schemas without properties yield an empty object", () => {
     const noProps: SchemaManifest = {
       ...schema,

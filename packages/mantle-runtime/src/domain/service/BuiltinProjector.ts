@@ -19,7 +19,9 @@ import type { HandlerContext } from "../model/HandlerContext.js";
  *      from the row. They remain available as the input to matching
  *      synchronous `before_*` lifecycle hooks only.
  *
- *   2. **Stamping**: any Schema property carrying `x-mantle-bind: <value>`
+ *   2. **Defaults and stamping**: missing declared properties with a JSON
+ *      Schema `default` receive that value. Any property carrying
+ *      `x-mantle-bind: <value>`
  *      gets its value computed at write time:
  *        - `ctx.user` → `ctx.user?.id ?? null`
  *        - `ctx.staff` → `ctx.staff?.id ?? null`
@@ -48,8 +50,10 @@ export function projectAndStamp(args: ProjectAndStampArgs): Record<string, unkno
       out[key] = computeBind(bind, args.ctx, args.clockNow);
       continue;
     }
-    if (key in args.input) {
+    if (key in args.input && args.input[key] !== undefined) {
       out[key] = args.input[key];
+    } else if (propDef && typeof propDef === "object" && Object.hasOwn(propDef, "default")) {
+      out[key] = structuredClone((propDef as { default: unknown }).default);
     }
   }
   return out;
