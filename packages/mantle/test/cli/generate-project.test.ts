@@ -223,6 +223,16 @@ it("keeps a reduced Sites composition free of Admin and media bindings", async (
   expect(await readFile(".openai/hosting.json", "utf8")).not.toContain("r2");
 });
 
+it("declares esbuild for every host so a Mantle Cloud handler bundle can resolve it", async () => {
+  for (const host of ["cf", "chatgpt-sites"]) {
+    await project();
+    expect(await runGenerate(["--host", host, "--features", "spec,api"], coreOnly)).toBe(1);
+    const pkg = JSON.parse(await readFile("package.json", "utf8"));
+    expect(pkg.devDependencies.esbuild).toBe("^0.28.0");
+    expect(pkg.dependencies.esbuild).toBeUndefined();
+  }
+});
+
 it("rejects reviewed unique-index migration outside managed Sites", async () => {
   await project();
   expect(await runGenerate(["--host", "cf", "--features", "spec,api", "--review-unique-indexes"], coreOnly)).toBe(2);
@@ -236,6 +246,7 @@ it("generates a real empty Spec plan without a host or fake Schema", async () =>
   await mkdir("node_modules/zod", { recursive: true });
   await writeFile("node_modules/zod/package.json", '{"version":"4.5.4"}');
   expect(await runGenerate(["--features", "spec"], coreOnly)).toBe(0);
+  expect(JSON.parse(await readFile("package.json", "utf8")).devDependencies).toBeUndefined();
   const source = await readFile(".mantle/generated/mantle.ts", "utf8");
   expect(source).toContain("sealRuntimePlan(");
   expect(source).not.toContain("EntryDataScalar");

@@ -137,7 +137,7 @@ try {
         .map((name) => [name, version])),
       zod: "^4.5.0", hono: "^4.12.0", "better-auth": "1.7.2", aws4fetch: "^1.0.20",
     },
-    devDependencies: { wrangler: "4.129.0", typescript: "^6.0.3", "@cloudflare/workers-types": "5.20260904.1" },
+    devDependencies: { wrangler: "4.129.0", typescript: "^6.0.3", "@cloudflare/workers-types": "5.20260904.1", esbuild: "^0.28.0" },
     pnpm: { overrides: Object.fromEntries([...tarballs].map(([name, path]) => [name, `file:${path}`])),
       peerDependencyRules: { allowAny: [...tarballs.keys()] } },
   }, null, 2)}\n`);
