@@ -26,7 +26,8 @@ an R2 binding.
 ## Choose the Target
 
 Cloudflare, ChatGPT Sites and Mantle Cloud are same-level targets. Ask the
-user which one to ship to. Do not infer it from installed packages or config
+user which one to ship to, unless the project already has a linked target in
+`.mantle/hosting.json`. Do not infer it from installed packages or other config
 files.
 
 | Target | Config it owns | Follow |
