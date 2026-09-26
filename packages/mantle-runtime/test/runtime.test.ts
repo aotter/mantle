@@ -24,8 +24,8 @@ import { makeProcedure, postsSchema } from "./fakes/manifests.js";
 describe("SQLite runtime composition", () => {
   it("reports unsupported atomic writes before touching a driver without that capability", async () => {
     const runtime = await createTestRuntime({ manifests: [postsSchema()], db: new InMemoryDatabase() });
-    await expect(runtime.writeAtomically.execute([
-      { kind: "create", request: { collection: "posts", data: { title: "No partial write" }, authorId: null } },
+    await expect(runtime.store.write([
+      { insert: "posts", values: { title: "No partial write" } },
     ])).rejects.toMatchObject({ diagnostic: { code: "RESOURCE_UNAVAILABLE" } });
     expect(await runtime.listEntries.execute({ collection: "posts" })).toEqual([]);
   });
@@ -64,7 +64,7 @@ describe("SQLite runtime composition", () => {
     await createTestRuntime(options);
 
     expect(db.executions.slice(firstBootQueries).map(({ sql }) => sql)).toEqual([
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND (lower(name) = 'entries' OR name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state'))",
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND (lower(name) = 'entries' OR name IN ('_mantle_migrations', '_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state'))",
       "SELECT b.fingerprint, b.store_instance_id, m.canonical_version FROM _mantle_boot_state b LEFT JOIN _mantle_managed_runtime_state m ON m.id = 1 WHERE b.id = ? LIMIT 1",
     ]);
   });

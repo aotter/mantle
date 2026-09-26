@@ -47,7 +47,7 @@ test("Bun TTL hides expired rows before an explicit bounded, resumable sweep", a
     plan: compiled.value, database,
     ports: { clock: { now: () => now } },
     handlers: { sweepEvents: async (_input: unknown, ctx: HandlerContext) =>
-      ctx.sweepExpired!({ collection: "events", limit: 1 }) },
+      ctx.store!.sweepExpired({ collection: "events", limit: 1 }) },
   });
   const runtime = await mantle.getRuntime();
   const rows = [];
@@ -68,17 +68,17 @@ test("Bun TTL hides expired rows before an explicit bounded, resumable sweep", a
   const preview = await runtime.invokeProcedure({ procedure: "sweep-events", input: {}, ctx: { user: null, staff: null, env: {} } });
   expect(preview).toMatchObject({ ok: true, data: { scanned: 1, removed: 0 } });
   expect(database.query("SELECT count(*) AS count FROM events").get()).toEqual({ count: 5 });
-  const first = await runtime.sweepExpired({ collection: "events", limit: 1, delete: true });
+  const first = await runtime.store.sweepExpired({ collection: "events", limit: 1, delete: true });
   expect(first).toMatchObject({ scanned: 1, removed: 1 });
   expect(first.nextCursor).toBeTruthy();
-  const second = await runtime.sweepExpired({ collection: "events", limit: 1, delete: true, cursor: first.nextCursor });
+  const second = await runtime.store.sweepExpired({ collection: "events", limit: 1, delete: true, cursor: first.nextCursor });
   expect(second).toMatchObject({ scanned: 1, removed: 1 });
   expect(database.query("SELECT count(*) AS count FROM events").get()).toEqual({ count: 3 });
   expect((await runtime.listEntries.execute({ collection: "events" })).map((row) => row.data.label).sort())
     .toEqual(["future", "missing", "null"]);
   database.query('UPDATE events SET "expiresAt" = ? WHERE "_mantle_id" = ?').run("legacy-invalid", rows[2]!.id);
   expect(await runtime.entries.readById({ collection: "events", id: rows[2]!.id })).not.toBeNull();
-  expect((await runtime.sweepExpired({ collection: "events", delete: true })).removed).toBe(0);
+  expect((await runtime.store.sweepExpired({ collection: "events", delete: true })).removed).toBe(0);
   database.close();
 });
 
@@ -100,6 +100,6 @@ test("a very long TTL does not hide valid dates", async () => {
   }, authorId: null });
   expect((await runtime.listEntries.execute({ collection: "events" })).map((row) => row.data.label))
     .toEqual(["still live"]);
-  expect((await runtime.sweepExpired({ collection: "events", delete: true })).removed).toBe(0);
+  expect((await runtime.store.sweepExpired({ collection: "events", delete: true })).removed).toBe(0);
   database.close();
 });

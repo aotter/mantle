@@ -104,12 +104,13 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
       return prepared;
     }
     const storageTables = new Set((await this.db.prepare(
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND (lower(name) = 'entries' OR name IN ('_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state'))",
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND (lower(name) = 'entries' OR name IN ('_mantle_migrations', '_migrations', '_mantle_storage_state', '_mantle_managed_runtime_state'))",
     ).all<{ name: string }>()).map(({ name }) => name));
     if ([...storageTables].some((name) => name.toLowerCase() === "entries")) {
       throw new Error("LEGACY_STORAGE_RESET_REQUIRED: rebuild this pre-native-table database before upgrading; see docs/migration-0.1.2.md.");
     }
-    if (storageTables.has("_mantle_storage_state") && !storageTables.has("_migrations")) {
+    // A pre-#1150 database still has only the legacy ledger until the runner backfills it.
+    if (storageTables.has("_mantle_storage_state") && !storageTables.has("_mantle_migrations") && !storageTables.has("_migrations")) {
       throw new Error("Managed SQLite database cannot use runtime-managed migrations.");
     }
     const schemaMigrations = schemaTableMigrations(schemas);
@@ -234,6 +235,7 @@ function sqliteStoragePorts(
     entries,
     atomicEntries: db.supportsAtomicEntryWrites ? entries : undefined,
     expiry: entries,
+    store: entries,
     views: new SqliteViewQueryExecutor(db, plan, now),
     localePolicy,
     siteConfig: localePolicy,

@@ -1,7 +1,8 @@
-import { DiagnosticError, runtimeDiagnostic, type ContentState } from "@aotter/mantle-spec";
+import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle-spec";
 import { liftLocale, type EntryRow } from "../../domain/model/EntryRow.js";
 import type { AtomicEntryWrite, AtomicEntryWriter } from "../../domain/port/AtomicEntryWriter.js";
 import type { CreateDraftRequest, DeleteEntryRequest, UpdateDraftRequest } from "../dto/content/index.js";
+import type { StoreWhere } from "../../domain/model/Store.js";
 import type { CreateDraftUseCase } from "./CreateDraftUseCase.js";
 import type { DeleteEntryUseCase } from "./DeleteEntryUseCase.js";
 import type { UpdateDraftUseCase } from "./UpdateDraftUseCase.js";
@@ -10,10 +11,18 @@ import { withConflictDiagnostic } from "./diagnostics.js";
 export type AtomicDraftOperation =
   | { readonly kind: "create"; readonly id?: string; readonly request: CreateDraftRequest }
   | { readonly kind: "update"; readonly request: UpdateDraftRequest }
-  | { readonly kind: "delete"; readonly request: DeleteEntryRequest & {
-      readonly expectedVersion: number;
-      readonly expectedStatus?: ContentState;
+  | { readonly kind: "delete"; readonly request: DeleteEntryRequest & { readonly expectedVersion: number } }
+  | { readonly kind: "deleteWhere"; readonly request: {
+      readonly collection: string;
+      readonly where: StoreWhere;
+      readonly expect?: number;
     } };
+
+/** One operation's result: the written row (null for deletes) and the rows it affected. */
+export interface AtomicWriteOutcome {
+  readonly row: EntryRow | null;
+  readonly affected: number;
+}
 
 /** Declarative entry mutations; all preparation and before hooks precede one storage batch. */
 export class AtomicEntryWriteUseCase {
@@ -26,11 +35,16 @@ export class AtomicEntryWriteUseCase {
       readonly before: () => Promise<void>;
       readonly after: (row: EntryRow) => Promise<void>;
     },
-    private readonly invalidate?: () => Promise<void>,
-    private readonly affectsPublishing?: (collection: string) => boolean,
+    private readonly invalidate: (() => Promise<void>) | undefined,
+    private readonly affectsPublishing: (collection: string) => boolean,
+    /**
+     * Why a Schema refuses set-based deletes: `unknown` Schema, per-row delete
+     * `hooks` it would skip, or `published` entries it could remove.
+     */
+    private readonly deleteWherePolicy: (collection: string) => "ok" | "unknown" | "hooks" | "published",
   ) {}
 
-  async execute(operations: readonly AtomicDraftOperation[]): Promise<readonly (EntryRow | null)[]> {
+  async execute(operations: readonly AtomicDraftOperation[]): Promise<readonly AtomicWriteOutcome[]> {
     if (!this.writer) {
       throw new DiagnosticError(runtimeDiagnostic({
         code: "RESOURCE_UNAVAILABLE",
@@ -67,12 +81,26 @@ export class AtomicEntryWriteUseCase {
         write = { kind: "delete", args: {
           ...preparedDelete.args,
           expectedVersion: operation.request.expectedVersion,
-          expectedStatus: operation.request.expectedStatus ?? preparedDelete.args.expectedStatus,
           observedVersion: previous.version,
-          observedStatus: previous.status,
         } };
+      } else if (operation.kind === "deleteWhere") {
+        const { collection, where, expect } = operation.request;
+        const policy = this.deleteWherePolicy(collection);
+        if (policy === "unknown") throw invalidOperation(`Unknown Schema '${String(collection)}'.`);
+        if (policy === "hooks") {
+          throw invalidOperation(`Schema '${collection}' has delete lifecycle Triggers; delete its entries one by one with where { id } and lock.`);
+        }
+        if (policy === "published") {
+          throw invalidOperation(`Schema '${collection}' uses the publishing lifecycle, where published entries cannot be deleted; delete its entries one by one with where { id } and lock.`);
+        }
+        if (expect !== undefined && (!Number.isSafeInteger(expect) || expect < 0)) {
+          throw invalidOperation("expect must be a non-negative integer.");
+        }
+        this.writer.assertDeleteWhere(collection, where);
+        prepared.push({ write: { kind: "deleteWhere", args: { collection, where, ...(expect === undefined ? {} : { expect }) } }, previous: null, result: null });
+        continue;
       } else {
-        throw invalidOperation("Atomic operation kind must be create, update, or delete.");
+        throw invalidOperation("Atomic operation kind must be create, update, delete, or deleteWhere.");
       }
       if (write.kind !== "create" && (!Number.isSafeInteger(write.args.expectedVersion) || write.args.expectedVersion < 1)) {
         throw invalidOperation("Update and delete require a positive expectedVersion.");
@@ -92,18 +120,18 @@ export class AtomicEntryWriteUseCase {
     }
     const hooks = prepared.map(({ write, previous }) => this.hooksFor(write, previous));
     for (const hook of hooks) await hook.before();
-    await withConflictDiagnostic("usecase/AtomicEntryWrite", () =>
+    const affected = await withConflictDiagnostic("usecase/AtomicEntryWrite", () =>
       this.writer!.writeAtomically(prepared.map(({ write }) => write)));
     for (let i = 0; i < hooks.length; i += 1) {
       const row = prepared[i]!.result ?? prepared[i]!.previous;
       if (row) await hooks[i]!.after(row);
     }
-    if (this.invalidate && prepared.some(({ write }) => this.affectsPublishing?.(write.args.collection))) {
+    if (this.invalidate && prepared.some(({ write }) => this.affectsPublishing(write.args.collection))) {
       try { await this.invalidate(); } catch (error) {
         console.error("[mantle] public cache invalidation failed after committed write", error);
       }
     }
-    return prepared.map(({ result }) => result);
+    return prepared.map(({ result }, i) => ({ row: result, affected: affected[i] ?? 0 }));
   }
 
   /**

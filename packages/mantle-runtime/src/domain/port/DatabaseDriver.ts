@@ -68,8 +68,9 @@ export interface BatchResult {
  * canonical list (see `infrastructure/boot/canonicalMigrations.ts`);
  * adapter just executes.
  *
- * The runner records applied migrations in a `_migrations` table so
- * subsequent boots are idempotent.
+ * The runner records applied migrations in a `_mantle_migrations` table so
+ * subsequent boots are idempotent. A legacy `_migrations` ledger is read once
+ * to backfill Mantle's own ids and is otherwise left to the application.
  */
 export interface MigrationRunner {
   runAll(migrations: ReadonlyArray<Migration>): Promise<void>;
@@ -77,7 +78,7 @@ export interface MigrationRunner {
 
 export interface Migration {
   /** Stable ordinal — never reused, never renamed. Adapter records
-   *  this in `_migrations` for idempotency. */
+   *  this in `_mantle_migrations` for idempotency. */
   readonly id: string;
   /** Free-form description for boot logs. */
   readonly description: string;

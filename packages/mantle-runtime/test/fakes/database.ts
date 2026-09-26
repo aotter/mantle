@@ -48,19 +48,19 @@ export class InMemoryDatabase implements DatabaseDriver {
 
   readonly appliedMigrations = (() => {
     const owner = this;
-    const exists = () => Boolean(owner.sqlite.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = '_migrations'").get());
+    const exists = () => Boolean(owner.sqlite.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = '_mantle_migrations'").get());
     return {
-    has: (id: string): boolean => exists() && Boolean(owner.sqlite.prepare("SELECT 1 FROM _migrations WHERE id = ?").get(id)),
+    has: (id: string): boolean => exists() && Boolean(owner.sqlite.prepare("SELECT 1 FROM _mantle_migrations WHERE id = ?").get(id)),
     add: (id: string): void => {
-      owner.sqlite.exec("CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)");
-      owner.sqlite.prepare("INSERT OR IGNORE INTO _migrations(id, applied_at) VALUES (?, ?)").run(id, Date.now());
+      owner.sqlite.exec("CREATE TABLE IF NOT EXISTS _mantle_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)");
+      owner.sqlite.prepare("INSERT OR IGNORE INTO _mantle_migrations(id, applied_at) VALUES (?, ?)").run(id, Date.now());
     },
     [Symbol.iterator]: (): Iterator<string> => {
-      const ids = exists() ? (owner.sqlite.prepare("SELECT id FROM _migrations ORDER BY applied_at, id").all() as { id: string }[]).map(({ id }) => id) : [];
+      const ids = exists() ? (owner.sqlite.prepare("SELECT id FROM _mantle_migrations ORDER BY applied_at, id").all() as { id: string }[]).map(({ id }) => id) : [];
       return ids[Symbol.iterator]();
     },
     get size(): number {
-      return exists() ? Number((owner.sqlite.prepare("SELECT COUNT(*) AS count FROM _migrations").get() as { count: number }).count) : 0;
+      return exists() ? Number((owner.sqlite.prepare("SELECT COUNT(*) AS count FROM _mantle_migrations").get() as { count: number }).count) : 0;
     },
   };
   })();

@@ -1,6 +1,8 @@
 import { DiagnosticError, linkManifestSet, parseManifestSources } from "@aotter/mantle-spec";
-import { bootMantleRuntime, compileRuntimePlan, SqliteMantleStorageAdapter } from "@aotter/mantle-runtime";
+import { bootMantleRuntime, compileRuntimePlan, SqliteMantleStorageAdapter, type MantleStore } from "@aotter/mantle-runtime";
 import { D1DatabaseDriver } from "../../src/bindings/D1DatabaseDriver.js";
+
+type StoreWriteResult = Awaited<ReturnType<MantleStore["write"]>>[number];
 
 const source = `apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
@@ -40,90 +42,107 @@ export default {
       storage: new SqliteMantleStorageAdapter(new D1DatabaseDriver(env.DB)),
     });
     const token = crypto.randomUUID();
-    const committed = await runtime.writeAtomically.execute([
-      { kind: "create", request: { collection: "sessions", data: { name: token }, authorId: null } },
-      { kind: "create", request: { collection: "receipts", data: { token }, authorId: null } },
+    const committed = await runtime.store.write([
+      { insert: "sessions", values: { name: token } },
+      { insert: "receipts", values: { token } },
     ]);
     let duplicate = false;
     try {
-      await runtime.writeAtomically.execute([
-        { kind: "create", request: { collection: "sessions", data: { name: `duplicate-${token}` }, authorId: null } },
-        { kind: "create", request: { collection: "receipts", data: { token }, authorId: null } },
+      await runtime.store.write([
+        { insert: "sessions", values: { name: `duplicate-${token}` } },
+        { insert: "receipts", values: { token } },
       ]);
     } catch (error) { duplicate = conflict(error); }
     let duplicateBatch = false;
     try {
-      await runtime.writeAtomically.execute([
-        { kind: "create", request: { collection: "sessions", data: { name: `batch-${token}` }, authorId: null } },
-        { kind: "create", request: { collection: "receipts", data: { token: `batch-${token}` }, authorId: null } },
-        { kind: "create", request: { collection: "receipts", data: { token: `batch-${token}` }, authorId: null } },
+      await runtime.store.write([
+        { insert: "sessions", values: { name: `batch-${token}` } },
+        { insert: "receipts", values: { token: `batch-${token}` } },
+        { insert: "receipts", values: { token: `batch-${token}` } },
       ]);
     } catch (error) { duplicateBatch = conflict(error); }
-    await runtime.writeAtomically.execute([
-      { kind: "delete", request: { collection: "receipts", id: committed[1]!.id, expectedVersion: 1 } },
-      { kind: "create", request: { collection: "receipts", data: { token }, authorId: null } },
+    await runtime.store.write([
+      { delete: "receipts", where: { id: idOf(committed[1]) }, lock: 1 },
+      { insert: "receipts", values: { token } },
     ]);
-    const existing = committed[0]!;
-    await runtime.updateDraft.execute({ collection: "sessions", id: existing.id, expectedVersion: 1, data: { name: `updated-${token}` } });
-    let statusMismatch = false;
+    const existing = idOf(committed[0]);
+    await runtime.updateDraft.execute({ collection: "sessions", id: existing, expectedVersion: 1, data: { name: `updated-${token}` } });
+    // A set-based delete whose expected count is not met rolls back the group.
+    let countMismatch = false;
     try {
-      await runtime.writeAtomically.execute([
-        { kind: "create", request: { collection: "receipts", data: { token: `status-mismatch-${token}` }, authorId: null } },
-        { kind: "delete", request: { collection: "sessions", id: existing.id, expectedVersion: 2, expectedStatus: "draft" } },
+      await runtime.store.write([
+        { insert: "receipts", values: { token: `count-mismatch-${token}` } },
+        { delete: "sessions", where: { name: `absent-${token}` }, expect: 1 },
       ]);
-    } catch (error) { statusMismatch = conflict(error); }
+    } catch (error) { countMismatch = conflict(error); }
     let stale = false;
     try {
-      await runtime.writeAtomically.execute([
-        { kind: "create", request: { collection: "receipts", data: { token: `stale-${token}` }, authorId: null } },
-        { kind: "update", request: { collection: "sessions", id: existing.id, expectedVersion: 1, data: { name: "stale" } } },
+      await runtime.store.write([
+        { insert: "receipts", values: { token: `stale-${token}` } },
+        { update: "sessions", set: { name: "stale" }, where: { id: existing }, lock: 1 },
       ]);
     } catch (error) { stale = conflict(error); }
     let staleDelete = false;
     try {
-      await runtime.writeAtomically.execute([
-        { kind: "create", request: { collection: "receipts", data: { token: `stale-delete-${token}` }, authorId: null } },
-        { kind: "delete", request: { collection: "sessions", id: existing.id, expectedVersion: 1 } },
+      await runtime.store.write([
+        { insert: "receipts", values: { token: `stale-delete-${token}` } },
+        { delete: "sessions", where: { id: existing }, lock: 1 },
       ]);
     } catch (error) { staleDelete = conflict(error); }
     // Several guarded writes share one guard row and one cleanup: a stale
     // write in the middle still rolls back the others, and a clean group commits.
-    const trio = await runtime.writeAtomically.execute(["a", "b", "c"].map((part) => (
-      { kind: "create" as const, request: { collection: "sessions", data: { name: `trio-${part}-${token}` }, authorId: null } })));
+    const trio = (await runtime.store.write(["a", "b", "c"].map((part) => (
+      { insert: "sessions", values: { name: `trio-${part}-${token}` } })))).map(idOf);
     let staleMiddle = false;
     try {
-      await runtime.writeAtomically.execute(trio.map((row, index) => ({ kind: "update" as const, request: {
-        collection: "sessions", id: row!.id, expectedVersion: index === 1 ? 7 : 1, data: { name: `moved-${index}-${token}` },
-      } })));
+      await runtime.store.write(trio.map((id, index) => ({
+        update: "sessions", set: { name: `moved-${index}-${token}` }, where: { id }, lock: index === 1 ? 7 : 1,
+      })));
     } catch (error) { staleMiddle = conflict(error); }
     const untouched = (await runtime.listEntries.execute({ collection: "sessions" }))
       .filter((row) => row.data.name === `moved-0-${token}` || row.data.name === `moved-2-${token}`).length === 0;
-    await runtime.writeAtomically.execute(trio.map((row) => ({ kind: "delete" as const, request: {
-      collection: "sessions", id: row!.id, expectedVersion: 1 } })));
+    await runtime.store.write(trio.map((id) => ({ delete: "sessions", where: { id }, lock: 1 })));
     const multiGuard = staleMiddle && untouched &&
       !(await runtime.listEntries.execute({ collection: "sessions" })).some((row) => String(row.data.name).startsWith("trio-"));
+    // Set-based deletes commit together, a subquery included, and report their counts.
+    const pairNames = [`set-a-${token}`, `set-b-${token}`];
+    const pair = (await runtime.store.write([
+      ...pairNames.map((name) => ({ insert: "sessions", values: { name } })),
+      ...pairNames.map((name) => ({ insert: "receipts", values: { token: name } })),
+    ])).slice(0, 2).map(idOf);
+    const setBased = await runtime.store.write([
+      { delete: "receipts", where: { token: { in: { select: "name", from: "sessions", where: { id: { in: pair } } } } }, expect: 2 },
+      { delete: "sessions", where: { id: { in: pair } }, expect: 2 },
+      { delete: "sessions", where: { name: `absent-${token}` } },
+    ]);
+    const setDelete = JSON.stringify(setBased) === JSON.stringify([{ deleted: 2 }, { deleted: 2 }, { deleted: 0 }]);
     let invalid = false;
     try {
-      await runtime.writeAtomically.execute([
-        { kind: "create", request: { collection: "sessions", data: { name: `invalid-${token}` }, authorId: null } },
-        { kind: "create", request: { collection: "receipts", data: { token: 17 }, authorId: null } },
+      await runtime.store.write([
+        { insert: "sessions", values: { name: `invalid-${token}` } },
+        { insert: "receipts", values: { token: 17 } },
       ]);
     } catch (error) { invalid = error instanceof DiagnosticError && error.diagnostic.code === "INPUT_VALIDATION_FAILED"; }
-    await runtime.writeAtomically.execute([
-      { kind: "delete", request: { collection: "sessions", id: existing.id, expectedVersion: 2 } },
-      { kind: "create", request: { collection: "receipts", data: { token: `done-${token}` }, authorId: null } },
+    await runtime.store.write([
+      { delete: "sessions", where: { id: existing }, lock: 2 },
+      { insert: "receipts", values: { token: `done-${token}` } },
     ]);
     const sessions = await runtime.listEntries.execute({ collection: "sessions" });
     const receipts = await runtime.listEntries.execute({ collection: "receipts" });
-    const passed = duplicate && duplicateBatch && statusMismatch && stale && staleDelete && invalid && multiGuard &&
+    const passed = duplicate && duplicateBatch && countMismatch && stale && staleDelete && invalid && multiGuard && setDelete &&
       sessions.filter((row) => row.data.name === token || row.data.name === `updated-${token}`).length === 0 &&
       !sessions.some((row) => row.data.name === `duplicate-${token}` || row.data.name === `batch-${token}` || row.data.name === `invalid-${token}`) &&
       receipts.filter((row) => row.data.token === token).length === 1 &&
       receipts.filter((row) => row.data.token === `done-${token}`).length === 1 &&
-      !receipts.some((row) => row.data.token === `batch-${token}` || row.data.token === `status-mismatch-${token}` || row.data.token === `stale-${token}` || row.data.token === `stale-delete-${token}`);
-    return Response.json({ passed, duplicate, duplicateBatch, statusMismatch, stale, staleDelete, invalid, multiGuard }, { status: passed ? 200 : 500 });
+      !receipts.some((row) => row.data.token === `batch-${token}` || row.data.token === `count-mismatch-${token}` || row.data.token === `stale-${token}` || row.data.token === `stale-delete-${token}`);
+    return Response.json({ passed, duplicate, duplicateBatch, countMismatch, stale, staleDelete, invalid, multiGuard, setDelete }, { status: passed ? 200 : 500 });
   },
 };
+
+function idOf(result: StoreWriteResult | undefined): string {
+  if (!result || !("id" in result)) throw new Error("expected an inserted or updated row");
+  return result.id;
+}
 
 function conflict(error: unknown): boolean {
   return error instanceof DiagnosticError && error.diagnostic.code === "CONFLICT";

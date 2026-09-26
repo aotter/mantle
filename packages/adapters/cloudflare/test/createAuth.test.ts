@@ -1187,7 +1187,7 @@ function fakeDbWith(behaviour: FakeDbBehaviour): D1Database {
   };
   return {
     prepare: (sql: string) => {
-      if (sql === "SELECT id FROM _migrations WHERE id = ?") return fakeDb().prepare(sql);
+      if (sql === "SELECT id FROM _mantle_migrations WHERE id = ?") return fakeDb().prepare(sql);
       behaviour.onPrepare?.(sql);
       return stmt;
     },

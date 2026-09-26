@@ -6,9 +6,12 @@ import {
   type Entry,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { BatchResult, DatabaseDriver, PreparedStatement } from "../../domain/port/DatabaseDriver.js";
 import type { AtomicEntryWrite, AtomicEntryWriter } from "../../domain/port/AtomicEntryWriter.js";
 import type { ExpirySweeper, SweepExpiredRequest, SweepExpiredResult } from "../../domain/port/ExpirySweeper.js";
+import type { StoreReader } from "../../domain/port/StoreReader.js";
+import type { StoreRow, StoreSelect, StoreSelectResult, StoreWhere } from "../../domain/model/Store.js";
+import { assertBindBudget, invalid, SqliteStoreQueryCompiler, validateSelect, type CompiledSql } from "./SqliteStoreQuery.js";
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
@@ -62,12 +65,77 @@ import {
 } from "../storage/SqliteSchemaTables.js";
 
 /** SQLite/D1 repository where each Schema is one physical table. */
-export class DatabaseEntryRepository implements EntryRepository, EntryReader, AtomicEntryWriter, ExpirySweeper {
+export class DatabaseEntryRepository implements EntryRepository, EntryReader, AtomicEntryWriter, ExpirySweeper, StoreReader {
   constructor(
     private readonly db: DatabaseDriver,
     private readonly schemasByName: ReadonlyMap<string, SchemaManifest> = new Map(),
     private readonly now: () => number = Date.now,
   ) {}
+
+  private storeCompiler?: SqliteStoreQueryCompiler;
+
+  private store(): SqliteStoreQueryCompiler {
+    return this.storeCompiler ??= new SqliteStoreQueryCompiler(this.schemasByName, (table) => {
+      const conditions: string[] = [];
+      const binds: unknown[] = [];
+      this.addLiveCondition(table, conditions, binds);
+      return conditions.length ? { sql: conditions.join(" AND "), binds } : null;
+    });
+  }
+
+  /** Store select (ADR-0030): one keyset-paginated statement; TTL-expired rows stay hidden. */
+  async select(query: StoreSelect): Promise<StoreSelectResult> {
+    validateSelect(query);
+    const compiler = this.store();
+    const table = compiler.table(query.from);
+    const sortEntries = Object.entries(query.orderBy ?? { updatedAt: "desc" });
+    if (sortEntries.length !== 1) throw invalid("Store orderBy takes exactly one column.");
+    const [sortField, direction] = sortEntries[0]!;
+    if (direction !== "asc" && direction !== "desc") throw invalid(`orderBy '${sortField}' must be 'asc' or 'desc'.`);
+    const sortSql = compiler.orderColumn(table, sortField);
+    const columns = query.columns === undefined ? undefined : [...new Set(query.columns)];
+    if (columns !== undefined && (!Array.isArray(query.columns) || !columns.length)) throw invalid("Store columns takes a non-empty array.");
+    for (const column of columns ?? []) {
+      if (!fieldColumn(table.schema, column)) throw invalid(`Schema '${table.schema.metadata.name}' has no column '${String(column)}'.`);
+    }
+    const where = compiler.where(table, query.where);
+    if (query.limit !== undefined && (!Number.isSafeInteger(query.limit) || query.limit < 1 || query.limit > 500)) {
+      throw invalid("Store limit must be an integer from 1 to 500.");
+    }
+    const limit = clampLimit(query.limit);
+    const cursor = query.cursor === undefined ? null : decodeStoreCursor(query.cursor, query.from, sortField, direction);
+    if (query.cursor !== undefined && !cursor) throw invalid("Store cursor does not belong to this from and orderBy.");
+    const conditions = [where.sql];
+    const binds: unknown[] = [...where.binds];
+    // NULLs sort last in both directions. SQLite already puts them last for
+    // DESC; ASC needs NULLS LAST. Native sort columns are never NULL, so they
+    // keep the index-friendly row-value keyset.
+    const nullable = !NON_NULL_SORT.has(sortField);
+    const after = direction === "asc" ? ">" : "<";
+    if (cursor) {
+      if (!nullable) {
+        conditions.push(`(${sortSql}, "_mantle_id") ${after} (?, ?)`);
+        binds.push(cursor.value, cursor.id);
+      } else if (cursor.value === null) {
+        conditions.push(`(${sortSql} IS NULL AND "_mantle_id" ${after} ?)`);
+        binds.push(cursor.id);
+      } else {
+        conditions.push(`(${sortSql} IS NULL OR ${sortSql} ${after} ? OR (${sortSql} = ? AND "_mantle_id" ${after} ?))`);
+        binds.push(cursor.value, cursor.value, cursor.id);
+      }
+    }
+    const nulls = nullable && direction === "asc" ? " NULLS LAST" : "";
+    const statement = { sql: `SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")}
+      ORDER BY ${sortSql} ${direction.toUpperCase()}${nulls}, "_mantle_id" ${direction.toUpperCase()} LIMIT ?`, binds: [...binds, limit + 1] };
+    assertBindBudget(statement);
+    const rows = await this.db.prepare(statement.sql).bind(...statement.binds).all<NativeEntryRow>();
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    const nextCursor = rows.length > limit && last
+      ? encodeStoreCursor(query.from, sortField, direction, (last[fieldColumn(table.schema, sortField)!] ?? null) as string | number | null, last._mantle_id)
+      : undefined;
+    return { rows: page.map((row) => storeRow(table, row, columns)), ...(nextCursor ? { nextCursor } : {}) };
+  }
 
   async readCreationStatistics(args: CreationStatisticsArgs): Promise<CreationStatistics> {
     const { from, to, bucketMs } = args;
@@ -120,17 +188,49 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     };
   }
 
-  async writeAtomically(writes: readonly AtomicEntryWrite[]): Promise<void> {
-    if (writes.length === 0) return;
-    const statements = writes.flatMap((write) => {
+  assertDeleteWhere(collection: string, where: StoreWhere): void {
+    this.deleteWhere(collection, where);
+  }
+
+  /** Set-based deletes see live rows only, like `select`; the TTL sweeper reclaims expired ones. */
+  private deleteWhere(collection: string, where: StoreWhere): CompiledSql {
+    const table = this.table(collection);
+    const compiled = this.store().where(table, where);
+    const statement = { sql: `DELETE FROM ${table.table} WHERE ${compiled.sql}`, binds: compiled.binds };
+    assertBindBudget(statement);
+    return statement;
+  }
+
+  async writeAtomically(writes: readonly AtomicEntryWrite[]): Promise<readonly number[]> {
+    if (writes.length === 0) return [];
+    // Both D1 and Bun roll the batch back on a constraint error. The NOT NULL
+    // check does not depend on a particular boot-state row. Each guard
+    // overwrites the previous one, so one cleanup ends the group.
+    const guard = (expected: number) => this.db.prepare(`INSERT INTO _mantle_boot_state (id, fingerprint)
+      VALUES ('atomic-guard', CASE WHEN changes() = ? THEN 'ok' ELSE NULL END)
+      ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint`).bind(expected);
+    const statements: PreparedStatement[] = [];
+    const mutationAt: number[] = [];
+    let guarded = false;
+    for (const write of writes) {
       const table = this.table(write.args.collection);
       if (write.kind === "create") {
         const { args } = write;
         const columns = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at", ...table.fields];
         const values = [args.id, args.status, 1, args.authorId, args.now, args.now, ...this.encodedData(table, args.data)];
-        return [this.db.prepare(`INSERT INTO ${table.table} (${columns.map(quote).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`).bind(...values)];
+        mutationAt.push(statements.length);
+        statements.push(this.db.prepare(`INSERT INTO ${table.table} (${columns.map(quote).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`).bind(...values));
+        continue;
       }
-      const mutation = write.kind === "update"
+      if (write.kind === "deleteWhere") {
+        const statement = this.deleteWhere(write.args.collection, write.args.where);
+        mutationAt.push(statements.length);
+        statements.push(this.db.prepare(statement.sql).bind(...statement.binds));
+        if (write.args.expect !== undefined) { statements.push(guard(write.args.expect)); guarded = true; }
+        continue;
+      }
+      mutationAt.push(statements.length);
+      statements.push(write.kind === "update"
         ? this.db.prepare(`UPDATE ${table.table} SET ${[
             ...table.fields.map((field) => `${quote(field)} = ?`),
             '"_mantle_version" = "_mantle_version" + 1',
@@ -138,31 +238,25 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
           ].join(", ")} WHERE "_mantle_id" = ? AND "_mantle_version" = ? AND "_mantle_version" = ? AND "_mantle_status" = ?`)
           .bind(...this.encodedData(table, write.args.data), write.args.now, write.args.id,
             write.args.expectedVersion, write.args.observedVersion, write.args.expectedStatus)
-        : this.db.prepare(`DELETE FROM ${table.table} WHERE "_mantle_id" = ? AND "_mantle_version" = ? AND "_mantle_version" = ? AND "_mantle_status" = ? AND "_mantle_status" = ?`)
-          .bind(write.args.id, write.args.expectedVersion, write.args.observedVersion,
-            write.args.expectedStatus, write.args.observedStatus);
-      // Both D1 and Bun roll the batch back on a constraint error. The
-      // NOT NULL check does not depend on a particular boot-state row. Each
-      // guard overwrites the previous one, so one cleanup ends the group.
-      const guard = this.db.prepare(`INSERT INTO _mantle_boot_state (id, fingerprint)
-        VALUES ('atomic-guard', CASE WHEN changes() = 1 THEN 'ok' ELSE NULL END)
-        ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint`);
-      return [mutation, guard];
-    });
-    if (writes.some((write) => write.kind !== "create")) {
-      statements.push(this.db.prepare("DELETE FROM _mantle_boot_state WHERE id = 'atomic-guard'"));
+        : this.db.prepare(`DELETE FROM ${table.table} WHERE "_mantle_id" = ? AND "_mantle_version" = ? AND "_mantle_version" = ? AND "_mantle_status" = ?`)
+          .bind(write.args.id, write.args.expectedVersion, write.args.observedVersion, write.args.expectedStatus));
+      statements.push(guard(1));
+      guarded = true;
     }
+    if (guarded) statements.push(this.db.prepare("DELETE FROM _mantle_boot_state WHERE id = 'atomic-guard'"));
+    let results: readonly BatchResult[];
     try {
-      await this.db.batch(statements);
+      results = await this.db.batch(statements);
     } catch (error) {
       if (error instanceof Error && error.message.includes("_mantle_boot_state.fingerprint")) {
-        const guarded = writes.filter((write) => write.kind !== "create");
+        const rowWrites = writes.filter((write): write is Extract<AtomicEntryWrite, { kind: "update" | "delete" }> =>
+          write.kind === "update" || write.kind === "delete");
         const latest = new Map<string, EntryRow>();
-        for (const collection of new Set(guarded.map((write) => write.args.collection))) {
-          const ids = guarded.filter((write) => write.args.collection === collection).map((write) => write.args.id);
+        for (const collection of new Set(rowWrites.map((write) => write.args.collection))) {
+          const ids = rowWrites.filter((write) => write.args.collection === collection).map((write) => write.args.id);
           for (const row of await this.readForWrite(collection, ids)) latest.set(`${collection}\0${row.id}`, row);
         }
-        for (const write of guarded) {
+        for (const write of rowWrites) {
           const current = latest.get(`${write.args.collection}\0${write.args.id}`) ?? null;
           if (!current || current.version !== write.args.expectedVersion) {
             throw new EntryVersionConflict(write.args.id, write.args.expectedVersion, current?.version ?? 0);
@@ -171,9 +265,12 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
             throw new EntryStatusConflict(write.args.id, write.args.expectedStatus, current.status);
           }
         }
+        const counted = writes.some((write) => write.kind === "deleteWhere" && write.args.expect !== undefined);
         throw new DiagnosticError(runtimeDiagnostic({
           code: "CONFLICT", severity: "error", path: "storage/AtomicEntryWrite",
-          message: "An entry precondition changed during the atomic write; reread and retry.",
+          message: counted
+            ? "A delete did not affect its expected number of rows, or an entry precondition changed; nothing was written."
+            : "An entry precondition changed during the atomic write; reread and retry.",
         }));
       }
       if (isDriverUniqueConstraintError(error)) {
@@ -184,6 +281,7 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
       }
       throw error;
     }
+    return mutationAt.map((index) => results[index]?.meta.changes ?? 0);
   }
 
   async readForWrite(collection: string, ids: readonly string[]): Promise<readonly EntryRow[]> {
@@ -550,6 +648,40 @@ function rowFromDb(table: SqliteSchemaTable, row: NativeEntryRow, dataFields?: r
     createdAt: row._mantle_created_at,
     updatedAt: row._mantle_updated_at,
   };
+}
+
+/** Native sort columns that are never NULL. */
+const NON_NULL_SORT = new Set(["id", "status", "version", "createdAt", "updatedAt"]);
+
+/** Opaque Store keyset cursor bound to its Schema, sort column and direction; the value may be NULL. */
+function encodeStoreCursor(from: string, field: string, direction: string, value: string | number | null, id: string): string {
+  return `st:${encodeURIComponent(JSON.stringify([from, field, direction, value, id]))}`;
+}
+
+function decodeStoreCursor(cursor: unknown, from: string, field: string, direction: string):
+  { readonly value: string | number | null; readonly id: string } | null {
+  if (typeof cursor !== "string" || !cursor.startsWith("st:")) return null;
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(cursor.slice(3)));
+    if (!Array.isArray(parsed) || parsed.length !== 5) return null;
+    const [cursorFrom, cursorField, cursorDirection, value, id] = parsed as unknown[];
+    if (cursorFrom !== from || cursorField !== field || cursorDirection !== direction || typeof id !== "string") return null;
+    if (value !== null && typeof value !== "string" && !(typeof value === "number" && Number.isFinite(value))) return null;
+    return { value, id };
+  } catch {
+    return null;
+  }
+}
+
+/** Flat Store row: native columns plus decoded Schema fields, optionally projected. */
+function storeRow(table: SqliteSchemaTable, row: NativeEntryRow, columns?: readonly string[]): StoreRow {
+  const entry = rowFromDb(table, row);
+  const flat: Record<string, unknown> = {
+    id: entry.id, status: entry.status, version: entry.version, authorId: entry.authorId,
+    createdAt: entry.createdAt, updatedAt: entry.updatedAt, ...entry.data,
+  };
+  if (!columns) return flat;
+  return Object.fromEntries(columns.map((column) => [column, flat[column] ?? null]));
 }
 
 function requiredFieldSql(schema: SchemaManifest, field: string): string {

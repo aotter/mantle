@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CANONICAL_MIGRATIONS } from "@aotter/mantle-runtime";
 import { createAuth } from "../src/auth/createAuth.js";
-import { contextForVerifiedUser } from "../src/mount/resolveCaller.js";
+import { contextForVerifiedUser, resolveCaller } from "../src/mount/resolveCaller.js";
 import { sqliteD1 } from "./fakes/sqlite-d1.js";
 import { createMantleWorker } from "../src/worker/createMantleWorker.js";
 import { compileTestPlan } from "./compileTestPlan.js";
@@ -68,9 +68,25 @@ describe("Better Auth 1.7 MCP smoke", () => {
       });
       const cachedSession = await cachedAuth.getSession(new Request(ORIGIN, { headers: { cookie: cookies } }));
       expect(cachedSession?.user.role).toBe("owner");
-      expect(cachedSession?.user.roleCurrent).toBe(true);
+      // A KV snapshot must not vouch for a staff role (ADR-0014 §5): callers re-read it.
+      expect(cachedSession?.user.roleCurrent).toBeUndefined();
       expect(prepare.mock.calls.some(([sql]) => String(sql).includes("_migrations"))).toBe(false);
-      expect(prepare.mock.calls.some(([sql]) => String(sql).includes("SELECT role FROM user"))).toBe(false);
+      sqlite.prepare("UPDATE user SET role = NULL WHERE id = ?").run(cached.user.id);
+      const cookieRequest = () => new Request(`${ORIGIN}/api/x`, { headers: { cookie: cookies } });
+      expect((await cachedAuth.getSession(cookieRequest()))?.user.role).toBe("owner");
+      expect(await cachedAuth.getUserRole(cached.user.id)).toBeNull();
+      // Gate level: the demoted user is no longer staff although KV still says owner.
+      const caller = await resolveCaller(cookieRequest(), { auth: cachedAuth });
+      expect(caller).toMatchObject({ kind: "authenticated", context: { user: { id: cached.user.id }, staff: null } });
+      // Better Auth's own admin endpoints must not accept the stale snapshot either.
+      const selfPromote = await cachedAuth.handler(new Request(`${ORIGIN}/api/auth/admin/set-role`, {
+        method: "POST",
+        headers: { cookie: cookies, origin: ORIGIN, "content-type": "application/json" },
+        body: JSON.stringify({ userId: cached.user.id, role: "owner" }),
+      }));
+      expect(selfPromote.status).toBe(403);
+      expect(await selfPromote.json()).toMatchObject({ message: "Staff role changed; sign in again." });
+      expect(sqlite.prepare("SELECT role FROM user WHERE id = ?").get(cached.user.id)!.role).toBeNull();
 
       const replacement = sqliteD1();
       try {
@@ -98,7 +114,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
           methods: [{ kind: "email-otp", sender: { send: async () => {} } }],
         });
         expect(await cold.getSession(new Request(ORIGIN, { headers: { cookie: cookies } }))).toBeNull();
-        expect(empty.sqlite.prepare("SELECT COUNT(*) AS count FROM _migrations").get()!.count).toBe(1);
+        expect(empty.sqlite.prepare("SELECT COUNT(*) AS count FROM _mantle_migrations").get()!.count).toBe(1);
       } finally {
         log.mockRestore();
         empty.sqlite.close();

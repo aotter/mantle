@@ -211,8 +211,7 @@ export const NATIVE_COLUMN: Readonly<Record<string, string>> = Object.freeze({
 });
 
 export function fieldColumn(schema: SchemaManifest, field: string): string | null {
-  const native = NATIVE_COLUMN[field];
-  if (native) return native;
+  if (Object.hasOwn(NATIVE_COLUMN, field)) return NATIVE_COLUMN[field]!;
   return Object.hasOwn(schema.spec.schema.properties ?? {}, field) ? field : null;
 }
 
@@ -243,6 +242,11 @@ export function decodeField(value: unknown, property: JsonSchema): unknown {
     }
   }
   return value;
+}
+
+/** The storage codec of a Schema property: scalar types compare natively, `json` does not. */
+export function fieldCodec(property: JsonSchema): "string" | "integer" | "number" | "boolean" | "json" {
+  return fieldDescriptor(property)[1];
 }
 
 function fieldDescriptor(property: JsonSchema): readonly [SqliteAffinity, FieldCodec, boolean] {

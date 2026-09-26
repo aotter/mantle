@@ -45,7 +45,7 @@ test("Auth prepares lazily, retries failures, coalesces callers and preserves da
     const batch = vi.spyOn(db, "batch").mockRejectedValueOnce(new Error("temporary D1 failure"));
     await expect(auth.listUsers()).rejects.toThrow("temporary D1 failure");
     expect(await Promise.all([auth.getUserRole("missing"), auth.getUserRole("missing")])).toEqual([null, null]);
-    expect(sqlite.prepare("SELECT COUNT(*) AS count FROM _migrations WHERE id LIKE 'auth-schema:%'").get()!.count).toBe(1);
+    expect(sqlite.prepare("SELECT COUNT(*) AS count FROM _mantle_migrations WHERE id LIKE 'auth-schema:%'").get()!.count).toBe(1);
     const preparedBatches = batch.mock.calls.length;
     const invited = await auth.inviteUser("Owner@Example.test", "owner");
     expect(invited.kind).toBe("created");

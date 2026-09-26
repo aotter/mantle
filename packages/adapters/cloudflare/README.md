@@ -44,7 +44,7 @@ An already prepared database needs only a ledger read on a new Auth instance.
 `Auth.ready` remains Better Auth context initialization, not database preparation;
 static and plan-only routes do not trigger schema migrations. Custom Auth facades
 own their own readiness. Content storage uses the Runtime plan's native Schema
-tables and the same `_migrations` ledger; the retired generic `entries` layout
+tables and the same `_mantle_migrations` ledger; the retired generic `entries` layout
 is intentionally not a compatibility path.
 
 Without an `auth` option, `createMantleWorker` requires one explicit mode:
