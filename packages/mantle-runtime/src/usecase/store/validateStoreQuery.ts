@@ -4,7 +4,7 @@ import type { StoreSelect, StoreWhere, ValidatedStoreSelect } from "../../domain
 const NATIVE_TYPES: Readonly<Record<string, string>> = {
   id: "string", status: "string", version: "integer", createdAt: "integer", updatedAt: "integer", authorId: "string",
 };
-const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "in", "notIn", "isNull"]);
+const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "like", "in", "notIn", "isNull"]);
 
 /** Validate caller input before it reaches any storage adapter. */
 export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<string, SchemaManifest>, callerId?: string, callerBound = false): ValidatedStoreSelect {
@@ -155,6 +155,9 @@ function columnType(schema: SchemaManifest, column: unknown, purpose: string, sc
 }
 
 function checkValue(column: string, operator: string, value: unknown, type: string): void {
+  if (operator === "like" && (type !== "string" || typeof value !== "string")) {
+    throw invalid(`'like' on '${column}' expects a string column and pattern.`);
+  }
   if (value === null) {
     if (!["eq", "ne"].includes(operator)) throw invalid(`'${operator}' on '${column}' cannot compare with null.`);
     return;
