@@ -78,6 +78,9 @@ describe("projectAndStamp", () => {
     expect(projectAndStamp(args)).toEqual({ state: "draft", flags: ["new"] });
     expect(projectAndStamp({ ...args, input: { state: "open" } })["state"]).toBe("open");
     expect(projectAndStamp({ ...args, input: { state: undefined } })["state"]).toBe("draft");
+    const inherited = Object.create({ state: "inherited" }) as Record<string, unknown>;
+    expect(projectAndStamp({ ...args, input: inherited })["state"]).toBe("draft");
+    expect(projectAndStamp({ ...args, input: { state: null } })["state"]).toBeNull();
   });
 
   it("schemas without properties yield an empty object", () => {

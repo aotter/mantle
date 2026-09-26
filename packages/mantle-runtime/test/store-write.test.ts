@@ -64,6 +64,15 @@ async function workout(rt: MantleRuntime) {
 const count = async (rt: MantleRuntime, from: string) => (await rt.store.select({ from, limit: 500 })).rows.length;
 
 describe("store.write (#1151)", () => {
+  it("persists an omitted Schema default on Store insert", async () => {
+    const defaults = schema("defaults", {
+      title: { type: "string" }, state: { type: "string", default: "draft" },
+    }, ["title", "state"]);
+    const rt = await runtime(new AtomicDatabase(), [defaults]);
+    await rt.store.write([{ insert: "defaults", values: { title: "first" } }]);
+    expect((await rt.store.select({ from: "defaults" })).rows[0]?.["state"]).toBe("draft");
+  });
+
   it("scopes reads, subqueries, inserts and set deletes to the caller", async () => {
     const seen: unknown[] = [];
     const rt = await runtime(new AtomicDatabase(), [privateSessions, procedure("probe")], {
