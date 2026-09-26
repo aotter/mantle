@@ -231,12 +231,27 @@ describe("store.write (#1151)", () => {
     [[{ delete: "sets", where: { reps: 1 }, expect: -1 }], /non-negative integer/],
     [[{ insert: "sessions", values: {}, update: "sessions" }], /exactly one of/],
     [[{ insert: "sessions", values: {}, returning: ["id"] }], /unknown key 'returning'/],
+    [[{ insert: "sessions", values: { ownerId: () => "a" } }], /cloneable data/],
     [[{ delete: "sets", where: { reps: { in: Array.from({ length: 101 }, (_, i) => i) } } }], /at most 100/],
+    [[{ delete: "sets", where: { reps: { bogus: 1 } } }], /Unknown Store operator/],
   ])("rejects %j", async (ops, message) => {
     const rt = await runtime(new AtomicDatabase());
     await expect(rt.store.write(ops as never)).rejects.toMatchObject({
       diagnostic: { code: expect.stringMatching(/INPUT_VALIDATION_FAILED|ENTRY_VALIDATION_FAILED|NOT_FOUND|UNKNOWN/), message: expect.stringMatching(message) },
     });
+  });
+
+  it("validates the exact write predicate sent to storage", async () => {
+    const rt = await runtime(new AtomicDatabase());
+    await rt.store.write([
+      { insert: "sessions", id: "a", values: { ownerId: "a" } },
+      { insert: "sessions", id: "b", values: { ownerId: "b" } },
+    ]);
+    let reads = 0;
+    const where = Object.defineProperty({}, "ownerId", { enumerable: true, get: () => ++reads === 1 ? "a" : "b" });
+    expect(await rt.store.write([{ delete: "sessions", where: where as never }])).toEqual([{ deleted: 1 }]);
+    expect(reads).toBe(1);
+    expect((await rt.store.select({ from: "sessions" })).rows.map((row) => row["id"])).toEqual(["b"]);
   });
 
   it("sets authorId from the caller and gives guard Procedures a read-only Store", async () => {
