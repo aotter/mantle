@@ -216,6 +216,7 @@ describe("store.select (#1151)", () => {
     [{ from: "sessions", groupBy: ["ownerId"] }, /Unknown Store select key/],
     [{ from: "sessions", columns: 42 }, /columns takes a non-empty array/],
     [{ from: "sessions", columns: "id" }, /columns takes a non-empty array/],
+    [{ from: "sessions", where: { ownerId: () => "a" } }, /cloneable data/],
     // An undefined value must not silently drop its condition and widen the filter.
     [{ from: "sessions", where: { ownerId: undefined, rpe: 7 } }, /'ownerId' is undefined/],
     [{ from: "sessions", where: { rpe: { gte: 7, lte: undefined } } }, /'lte' on 'rpe' is undefined/],
@@ -225,6 +226,14 @@ describe("store.select (#1151)", () => {
     await expect(rt.store.select(query as never)).rejects.toMatchObject({
       diagnostic: { code: "INPUT_VALIDATION_FAILED", message: expect.stringMatching(message) },
     });
+  });
+
+  it("validates the exact snapshot sent to storage", async () => {
+    const { rt } = await seeded();
+    let reads = 0;
+    const where = Object.defineProperty({}, "ownerId", { enumerable: true, get: () => ++reads === 1 ? "a" : "b" });
+    expect(ids(await rt.store.select({ from: "sessions", where: where as never }))).toEqual(["s2", "s1"]);
+    expect(reads).toBe(1);
   });
 
   it("binds a caller-bound store into ref Procedures with select, view and id", async () => {

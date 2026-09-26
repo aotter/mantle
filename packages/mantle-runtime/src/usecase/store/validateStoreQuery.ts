@@ -9,6 +9,7 @@ const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "in", "notIn", 
 /** Validate caller input before it reaches any storage adapter. */
 export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<string, SchemaManifest>, callerId?: string, callerBound = false): StoreSelect {
   if (!record(query)) throw invalid("Store select takes an object.");
+  try { query = structuredClone(query); } catch { throw invalid("Store select must contain cloneable data."); }
   unknownKey(query, ["from", "columns", "where", "orderBy", "limit", "cursor"], "Store select");
   const schema = requireSchema(query.from, schemas);
   if (query.columns !== undefined) {
@@ -28,7 +29,7 @@ export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<str
   if (query.where !== undefined) validateStoreWhere(query.where, schema, schemas);
   const [sortField, direction] = Object.entries(orderBy)[0]!;
   const where = callerBound ? scopeStoreWhere(query.where, schema, schemas, callerId)
-    : query.where === undefined ? undefined : structuredClone(query.where);
+    : query.where;
   return {
     from: query.from,
     ...(query.columns === undefined ? {} : { columns: [...new Set(query.columns)] }),
@@ -162,7 +163,7 @@ function checkValue(column: string, operator: string, value: unknown, type: stri
   if (!ok) throw invalid(`'${operator}' on '${column}' expects a value of type ${type}.`);
 }
 
-function unknownKey(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
+function unknownKey(value: object, allowed: readonly string[], label: string): void {
   const key = Object.keys(value).find((name) => !allowed.includes(name));
   if (key) throw invalid(label === "subquery" ? `Unknown subquery key '${key}'.` : `Unknown ${label} key '${key}'.`);
 }
