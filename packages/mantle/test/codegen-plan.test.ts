@@ -26,11 +26,11 @@ spec:
 
     expect(fromPlan).toEqual(fromLinked);
     expect(fromPlan.ok && fromPlan.source).toContain(
-      'findManyByDataField: <F extends ("sku") & keyof Mantle.Entry_products>',
+      'readonly "products": Mantle.Entry_products;',
     );
   });
 
-  it("reports generated identifier collisions from a plan", () => {
+  it("keeps colliding lower-camel names distinct as wire keys", () => {
     const parsed = parseManifestSources({ sources: [{ sourceId: "memory:collision", text: [
       schema("open-orders"),
       schema("open.orders"),
@@ -41,13 +41,11 @@ spec:
     const compiled = compileRuntimePlan(linked.value);
     if (!compiled.ok) throw new Error("expected compiled fixture");
 
-    expect(emitMantleModule({ plan: compiled.value })).toEqual({
-      ok: false,
-      diagnostics: [expect.objectContaining({
-        code: "CODEGEN_IDENTIFIER_COLLISION",
-        source: expect.objectContaining({ sourceId: "runtime-plan" }),
-      })],
-    });
+    const emitted = emitMantleModule({ plan: compiled.value });
+    expect(emitted.ok).toBe(true);
+    if (!emitted.ok) return;
+    expect(emitted.source).toContain('readonly "open-orders": Mantle.Entry_open_u002d_orders;');
+    expect(emitted.source).toContain('readonly "open.orders": Mantle.Entry_open_u002e_orders;');
   });
 });
 

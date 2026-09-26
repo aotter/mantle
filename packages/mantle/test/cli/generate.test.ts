@@ -70,168 +70,102 @@ describe("mantle generate", () => {
     }
   });
 
-  it("emits and runs one deterministic typed Mantle module", async () => {
+  it("emits deterministic wire-keyed Store types without per-name runtime wrappers", async () => {
     const root = await mkdtemp(join(originalCwd, ".mantle-generate-"));
     try {
       await mkdir(join(root, "manifests"));
       await writeFile(join(root, "manifests", "site.yaml"), fixture);
       process.chdir(root);
-
       expect(await runGenerate([], coreOnly)).toBe(0);
       const mantlePath = join(root, ".mantle", "generated", "mantle.ts");
       const firstMantle = await readFile(mantlePath, "utf8");
-      expect(firstMantle).toContain("export async function createMantle<Env = unknown>");
-      expect(firstMantle).toContain("export function bindMantle(runtime: CoreMantleRuntime)");
       expect(firstMantle).toContain("export const plan = sealRuntimePlan(");
-      expect(firstMantle).toContain("productsBySku: (request:");
-      expect(firstMantle).toContain('view: "products-by-sku"');
-      expect(firstMantle).toContain("importProduct: (input:");
-      expect(firstMantle).toContain('procedure: "import-product"');
-      expect(firstMantle).toContain("products: {");
-      expect(firstMantle).toContain('collection: "products"');
-      expect(firstMantle).toContain('findManyByDataField: <F extends ("sku" | "title") & keyof Mantle.Entry_products>');
-      expect(firstMantle).toContain('readByDataFieldIn: <F extends ("code" | "seats") & keyof Mantle.Entry_members>');
-      expect(firstMantle.match(/readonly "syncCatalog":/g)).toHaveLength(1);
-      expect(firstMantle).toContain("ProcInput_import_product | Mantle.ProcInput_remove_product");
-      await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
-        .rejects.toThrow();
+      expect(firstMantle).toContain('readonly "products": Mantle.Entry_products;');
+      expect(firstMantle).toContain('readonly "products-by-sku":');
+      expect(firstMantle).toContain('readonly "syncCatalog": RuntimeHandlerFn<');
+      expect(firstMantle).not.toContain("function bindMantle");
+      expect(firstMantle).not.toContain("function createMantle");
+      await expect(readFile(join(root, "public", "_mantle", "admin", "index.html"))).rejects.toThrow();
 
       const consumerPath = join(root, "consumer.ts");
       await writeFile(consumerPath, `
-import { bindMantle, createMantle, plan } from "./.mantle/generated/mantle.js";
-import type { MantleRuntime, MantleStorageAdapter } from "@aotter/mantle/runtime";
+import { plan } from "./.mantle/generated/mantle.js";
+import type { Store, MantleHandlers } from "./.mantle/generated/mantle.js";
+import type { MantleRuntime } from "@aotter/mantle/runtime";
 
 const calls: string[] = [];
 const runtime = {
   revision: plan.semanticFingerprint,
-  createDraft: { execute: async (request: { collection: string; data: unknown }) => {
-    calls.push("entry:" + request.collection);
-    return request;
-  } },
-  executeView: async (request: { view: string }) => {
-    calls.push("view:" + request.view);
-    return { ok: true as const, result: { rows: [{ id: "1", title: "Typed" }], page: 1, show: 20, hasMore: false } };
-  },
-  invokeProcedure: async (request: { procedure: string }) => {
-    calls.push("procedure:" + request.procedure);
-    return { ok: true as const, data: { imported: true } };
-  },
-  entries: {
-    findManyByDataField: async (request: { collection: string; field: string; value: unknown; limit: number }) => {
-      calls.push("find:" + request.collection + "." + request.field);
-      return [{ id: "3", collection: request.collection, status: "published", version: 1, data: { sku: String(request.value), title: "Found" }, createdAt: 0, updatedAt: 0 }];
+  store: {
+    select: async (query: { from: string }) => {
+      calls.push("select:" + query.from);
+      return { rows: [{ id: "1", sku: "sku-1", title: "Typed" }] };
+    },
+    write: async (ops: readonly { insert?: string }[]) => {
+      calls.push("write:" + ops[0]?.insert);
+      return [{ id: "2", version: 1 }];
+    },
+    view: async (name: string) => {
+      calls.push("view:" + name);
+      return { rows: [{ id: "1", title: "Typed" }], page: 1, show: 20, hasMore: false };
     },
   },
 } as unknown as MantleRuntime;
-
-const mantle = bindMantle(runtime);
-if (mantle.runtime !== runtime) throw new Error("raw runtime escape hatch changed");
-await mantle.entries.products.createDraft({ data: { sku: "sku-1" }, authorId: null });
-const view = await mantle.views.productsBySku({ params: { sku: "sku-1" } });
-const procedure = await mantle.procedures.importProduct(
-  { sku: "sku-1" },
-  { user: null, staff: null, env: {} },
-);
-if (!view.ok || view.result.rows[0]?.title !== "Typed") throw new Error("typed View failed");
-if (!procedure.ok || procedure.data.imported !== true) throw new Error("typed Procedure failed");
-const found = await mantle.entries.products.findManyByDataField({ field: "sku", value: "sku-1", limit: 10 });
-const title: string | undefined = found[0]?.data.title;
-if (found[0]?.data.sku !== "sku-1" || title !== "Found") throw new Error("typed field read failed");
-if (calls.join(",") !== "entry:products,view:products-by-sku,procedure:import-product,find:products.sku") {
-  throw new Error("wire names changed: " + calls.join(","));
-}
-
-const storage = {
-  async prepare() {
-    return {
-      entries: {},
-      views: {
-        async execute() {
-          return { rows: [{ id: "2", title: "Created" }], page: 1, show: 20, hasMore: false };
-        },
-      },
-    };
-  },
-} as unknown as MantleStorageAdapter;
-const created = await createMantle({
-  storage,
-  handlers: { syncCatalog: () => ({ imported: true }) },
-});
-const createdView = await created.views.productsBySku({ params: { sku: "sku-2" } });
-if (!createdView.ok || createdView.result.rows[0]?.title !== "Created") {
-  throw new Error("one-step Mantle creation failed");
-}
-if (created.runtime.revision !== plan.semanticFingerprint) throw new Error("created runtime revision changed");
-
-let rejectedMismatch = false;
-try {
-  bindMantle({ ...runtime, revision: "wrong-revision" });
-} catch {
-  rejectedMismatch = true;
-}
-if (!rejectedMismatch) throw new Error("generated binding accepted another revision");
-
+const store = runtime.store as Store;
+const selected = await store.select({ from: "products", where: { sku: "sku-1" } });
+const sku: string | undefined = selected.rows[0]?.sku;
+if (sku !== "sku-1") throw new Error("typed select failed");
+const view = await store.view("products-by-sku", { params: { sku: "sku-1" } });
+if (view.rows[0]?.title !== "Typed") throw new Error("typed View failed");
+await store.write([{ insert: "products", values: { sku: "sku-2" } }]);
+if (calls.join(",") !== "select:products,view:products-by-sku,write:products") throw new Error(calls.join(","));
+const handler: MantleHandlers["syncCatalog"] = (_input, ctx) => {
+  if (ctx.store) {
+    void ctx.store.select({ from: "products", limit: 1 });
+    // @ts-expect-error Handler Store uses the same wire-keyed Schema map.
+    void ctx.store.select({ from: "missing" });
+  }
+  return { imported: true };
+};
+void handler;
 if (false) {
-  // @ts-expect-error Unknown Views are absent from the generated surface.
-  mantle.views.missing();
+  // @ts-expect-error Unknown Schema wire names are rejected.
+  await store.select({ from: "missing" });
   // @ts-expect-error Required View params cannot be omitted.
-  mantle.views.productsBySku();
-  // @ts-expect-error Schema payload is generated from the manifest.
-  await mantle.entries.products.createDraft({ data: { title: "missing sku" }, authorId: null });
-  // @ts-expect-error Field reads only accept declared Schema fields, even when the Schema allows extra properties.
-  await mantle.entries.products.findManyByDataField({ field: "price", value: "1", limit: 1 });
-  // @ts-expect-error A field's value must match its declared scalar type.
-  await mantle.entries.products.readByDataField({ field: "sku", value: 42 });
-  // A closed Schema (additionalProperties: false) generates a plain interface; the accessors still compile.
-  const closed: Promise<readonly { data: { code: string; seats?: number } }[]> = mantle.entries.members.findManyByDataField({ field: "seats", value: 2, limit: 1 });
-  void closed;
-  // @ts-expect-error Undeclared fields on a closed Schema are rejected on the field name.
-  await mantle.entries.members.readByDataField({ field: "email", value: "x" });
+  await store.view("products-by-sku");
+  // @ts-expect-error Unknown View wire names are rejected.
+  await store.view("missing");
+  // @ts-expect-error Insert values follow the Schema type.
+  await store.write([{ insert: "products", values: { title: "missing sku" } }]);
 }
 `);
       const compiled = join(root, "compiled");
       try {
         await execFileAsync(process.execPath, [
-          tscPath,
-          "--ignoreConfig",
-          "--strict",
-          "--target", "ES2022",
-          "--module", "NodeNext",
-          "--moduleResolution", "NodeNext",
-          "--skipLibCheck",
-          "--rootDir", root,
-          "--outDir", compiled,
-          consumerPath,
-          mantlePath,
+          tscPath, "--ignoreConfig", "--strict", "--target", "ES2022",
+          "--module", "NodeNext", "--moduleResolution", "NodeNext",
+          "--skipLibCheck", "--rootDir", root, "--outDir", compiled,
+          consumerPath, mantlePath,
         ], { cwd: root });
         await execFileAsync(process.execPath, [join(compiled, "consumer.js")], { cwd: root });
       } catch (error) {
         const output = error as { stdout?: string; stderr?: string };
         throw new Error(output.stderr || output.stdout || String(error));
       }
-
       expect(await runGenerate([], coreOnly)).toBe(0);
       expect(await readFile(mantlePath, "utf8")).toBe(firstMantle);
       expect(await runGenerate(["--check"], coreOnly)).toBe(0);
-
-      const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
-      await mkdir(join(root, "public", "_mantle", "admin"), { recursive: true });
-      await writeFile(adminIndexPath, "owned by the host\n");
-      expect(await runGenerate(["--check"], coreOnly)).toBe(0);
-      expect(await readFile(adminIndexPath, "utf8")).toBe("owned by the host\n");
-
       await writeFile(mantlePath, "stale\n");
       const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
       expect(await runGenerate(["--check"], coreOnly)).toBe(1);
       expect(stderr).toHaveBeenCalledWith("Mantle generated files are stale; run `mantle generate`.\n");
-      expect(await readFile(mantlePath, "utf8")).toBe("stale\n");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  it("fails normalized identifier collisions at the authored source", async () => {
-    const root = await mkdtemp(join(tmpdir(), "mantle-generate-collision-"));
+  it("keeps colliding lower-camel View names as distinct wire keys", async () => {
+    const root = await mkdtemp(join(originalCwd, ".mantle-collision-"));
     try {
       await mkdir(join(root, "manifests"));
       await writeFile(join(root, "manifests", "site.yaml"), `
@@ -251,17 +185,20 @@ metadata: { name: open.orders }
 spec: { surface: public, from: products }
 `);
       process.chdir(root);
-      let error = "";
-      vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
-        error += String(chunk);
-        return true;
-      });
-
-      expect(await runGenerate([])).toBe(1);
-      expect(error).toContain("CODEGEN_IDENTIFIER_COLLISION");
-      expect(error).toContain("site.yaml#/2/metadata/name");
-      expect(error).toContain("'open-orders' and 'open.orders' both generate 'openOrders'");
-      await expect(readFile(join(root, ".mantle", "generated", "mantle.ts"))).rejects.toThrow();
+      expect(await runGenerate([], coreOnly)).toBe(0);
+      const generated = await readFile(join(root, ".mantle", "generated", "mantle.ts"), "utf8");
+      expect(generated).toContain('readonly "open-orders": {');
+      expect(generated).toContain('readonly "open.orders": {');
+      expect(generated).toContain('ViewRow_open_u002d_orders');
+      expect(generated).toContain('ViewRow_open_u002e_orders');
+      try {
+        await execFileAsync(process.execPath, [tscPath, "--ignoreConfig", "--noEmit",
+          "--strict", "--target", "ES2022", "--module", "NodeNext",
+          "--moduleResolution", "NodeNext", "--skipLibCheck",
+          join(root, ".mantle", "generated", "mantle.ts")], { cwd: root });
+      } catch (error) {
+        throw new Error((error as { stdout?: string }).stdout || String(error));
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -303,7 +240,7 @@ spec: {}
 
       expect(await runGenerate([], coreOnly)).toBe(0);
       expect(await readFile(join(root, ".mantle", "generated", "mantle.ts"), "utf8"))
-        .toContain("export async function createMantle<Env = unknown>");
+        .toContain("export interface Schemas");
       await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
         .rejects.toThrow();
     } finally {

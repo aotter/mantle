@@ -17,7 +17,7 @@ Every Mantle Worker keeps both flags:
 
 ## The composition-root rule
 
-Bindings appear in two places only: the Worker entry (`createMantleWorker` options and the `bindings` hook) and `wrangler.jsonc`. Procedure handlers receive them through `ctx.env`. An application may own additional tables behind its own repository, but it never queries Mantle-owned native Schema tables, site settings, media or Auth tables outside the runtime. Use `runtime.entries`, generated `bindMantle(runtime)` and Views instead.
+Bindings appear in two places only: the Worker entry (`createMantleWorker` options and the `bindings` hook) and `wrangler.jsonc`. Procedure handlers receive them through `ctx.env`. An application may own additional tables behind its own repository, but it never queries Mantle-owned native Schema tables, site settings, media or Auth tables outside the runtime. Use `runtime.entries`, `runtime.store` and Views instead.
 
 ## The Env interface
 

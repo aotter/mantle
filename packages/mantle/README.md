@@ -86,25 +86,25 @@ if (!emitted.ok) throw new Error(emitted.diagnostics.map(({ message }) => messag
 ```
 
 ```ts
-import { createMantle } from "../.mantle/generated/mantle.js";
+import { bootMantleRuntime } from "@aotter/mantle/runtime";
+import { plan } from "../.mantle/generated/mantle.js";
+import type { Store, MantleHandlers } from "../.mantle/generated/mantle.js";
 
-const mantle = await createMantle({ storage, handlers, ports });
-const notes = await mantle.views.publishedNotes();
-const result = await mantle.procedures.expireOrder(
-  { orderId },
-  { user: null, staff: null, env },
-);
-await mantle.entries.orders.createDraft({ data, authorId: user.id });
-
-// The typed projection never hides the underlying Core runtime.
-await mantle.runtime.archive.execute({ id: noteId, ctx });
+const typedHandlers: MantleHandlers<typeof env> = handlers;
+const runtime = await bootMantleRuntime({ plan, storage, handlers: typedHandlers, ports });
+const store = runtime.store as Store;
+const notes = await store.view("published-notes");
+await store.write([{ insert: "orders", values: data }]);
+await runtime.invokeProcedure({
+  procedure: "expire-order", input: { orderId },
+  ctx: { user: null, staff: null, env },
+});
 ```
 
-Generated property names are deterministic lower-camel identifiers; calls keep
-the authored wire names internally. `createMantle()` eagerly prepares once and
-does not cache or retry. Dynamic and platform hosts can keep their own lifecycle,
-use generated `bindMantle(runtime)`, or skip code generation and call
-`runtime.executeView({ view: "published-notes" })` directly.
+Generated type maps use the authored wire names. The generated module has no
+per-Schema or per-View runtime wrappers; the host owns boot, caching and retry.
+For a caller-authenticated View, pass the verified context through
+`runtime.executeView({ view, ctx, options })`.
 
 Start with [Project layout and CLI](docs/handbook/start/project-and-cli.md).
 The [local Admin OTP](docs/handbook/start/quickstart-admin.md) tutorial remains

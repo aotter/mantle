@@ -102,7 +102,6 @@ Resolution order (`resolveLocalizedText`): the viewer's preferred locale, then t
 | Unique after MCP mangling (`mcpToolNameSegment`: lower-case, `-` becomes `_`). Two Schemas, or two Views, that mangle to the same segment collide. | Schema, View | `MCP_TOOL_NAME_COLLISION` |
 | A Procedure's mangled name must not equal a reserved generic tool name, start with a reserved tool prefix, equal a Schema's mangled segment, or equal another Procedure's mangled name. | Procedure | `MCP_TOOL_NAME_COLLISION` |
 | One MCP Trigger per `(surface, tool name)`. | Trigger | `MCP_TOOL_NAME_COLLISION` |
-| Unique lower-camel identifier within each group (`entries`, `views`, `procedures`, `triggers`) when running `mantle generate`. The identifier joins the `[A-Za-z0-9]+` runs of the name, lower-casing the first and capitalising the rest; `my-orders` and `My Orders` both become `myOrders`. | all kinds | `CODEGEN_IDENTIFIER_COLLISION` |
 
 Names containing `-` must be double-quoted when used as tables in a `sql` View (`"post-translations"`).
 
