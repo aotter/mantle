@@ -51,6 +51,8 @@ Ref Procedures can now group insert, update and delete operations across
 Schemas with `ctx.store.write`. D1 and Bun commit the group or roll it
 back, including when the last conditional write finds a stale version. Other
 adapters must explicitly implement the optional capability before using it.
+New entries now persist top-level Schema property defaults when the caller
+omits those fields; explicit values and server-bound fields retain precedence.
 
 Generated modules now expose wire-keyed `Schemas`, `Views`, and `Store` type
 maps alongside the sealed `plan`. Regenerate, replace `bindMantle(runtime)`
