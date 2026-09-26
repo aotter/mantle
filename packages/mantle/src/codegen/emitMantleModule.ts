@@ -143,8 +143,9 @@ function insertValuesLine(schema: RuntimePlan["schemas"][string], callerBound: b
   ])];
   const key = JSON.stringify(schema.name);
   const base = `Schemas[${key}]`;
+  const required = Object.keys(properties).filter((name) => !filled.includes(name));
   const value = filled.length
-    ? `Omit<${base}, ${filled.map((name) => JSON.stringify(name)).join(" | ")}> & Partial<Pick<${base}, ${filled.map((name) => JSON.stringify(name)).join(" | ")}>>`
+    ? `${required.length ? `Pick<${base}, ${required.map((name) => JSON.stringify(name)).join(" | ")}> & ` : ""}Partial<Pick<${base}, ${filled.map((name) => JSON.stringify(name)).join(" | ")}>>`
     : base;
   return `  readonly ${key}: ${value};`;
 }

@@ -70,10 +70,10 @@ spec:
     const emitted = emitMantleModule({ linked: linked.value });
     if (!emitted.ok) throw new Error(JSON.stringify(emitted.diagnostics));
     expect(emitted.source).toContain(
-      'readonly "scoped-posts": Omit<Schemas["scoped-posts"], "state"> & Partial<Pick<Schemas["scoped-posts"], "state">>;',
+      'readonly "scoped-posts": Pick<Schemas["scoped-posts"], "ownerId" | "title"> & Partial<Pick<Schemas["scoped-posts"], "state">>;',
     );
     expect(emitted.source).toContain(
-      'readonly "scoped-posts": Omit<Schemas["scoped-posts"], "ownerId" | "state"> & Partial<Pick<Schemas["scoped-posts"], "ownerId" | "state">>;',
+      'readonly "scoped-posts": Pick<Schemas["scoped-posts"], "title"> & Partial<Pick<Schemas["scoped-posts"], "ownerId" | "state">>;',
     );
   });
 });

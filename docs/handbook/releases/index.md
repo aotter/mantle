@@ -56,13 +56,16 @@ Generated modules now expose wire-keyed `Schemas`, `Views`, and `Store` type
 maps alongside the sealed `plan`. Regenerate, replace `bindMantle(runtime)`
 with `runtime.store as Store` for Store operations, and call
 `runtime.invokeProcedure({ procedure, input, ctx })` for Procedures. The
-per-name `bindMantle` and `createMantle` functions are removed; boot with
+per-name Schema, View, and Procedure wrappers, `bindMantle`, and `createMantle`
+are removed; boot with
 `bootMantleRuntime({ plan, storage, handlers, ports })`. Type identifiers
 escape punctuation so distinct wire names stay distinct: for example,
 `Mantle.Entry_open_orders` becomes `Mantle.Entry_open_u002d_orders` for the
 wire name `open-orders`. Hosts using a runtime they did not boot with the
 generated `plan` must check `runtime.revision === plan.semanticFingerprint`
 before asserting the generated `Store` type.
+Lower-camel name collisions no longer produce `CODEGEN_IDENTIFIER_COLLISION`:
+wire names remain distinct keys in the generated maps.
 
 Cloudflare Cron Triggers now target ordinary Procedures through `source.kind:
 schedule`. The generated runtime plan records each schedule, while Wrangler
