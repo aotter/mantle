@@ -23,10 +23,10 @@ package's `node_modules/@aotter/mantle/README.md` (“Conventional Cloudflare Wo
 section.
 
 The returned facade also exposes `getRuntime(env)`. Site-owned Queue and
-scheduled handlers use it with generated `bindMantle(...)` Procedures so
-they reuse the fetch path's assembled runtime instead of writing directly to
-Mantle tables. Queue handlers still own per-message acknowledgement, retry,
-and idempotency.
+scheduled handlers use it with `runtime.invokeProcedure({ procedure, input,
+ctx })` so they reuse the fetch path's assembled runtime instead of writing
+directly to Mantle tables. Queue handlers still own per-message
+acknowledgement, retry, and idempotency.
 
 ### Conventional Auth
 
