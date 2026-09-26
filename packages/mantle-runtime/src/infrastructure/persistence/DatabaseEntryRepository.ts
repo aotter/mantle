@@ -6,12 +6,12 @@ import {
   type Entry,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { BatchResult, DatabaseDriver, PreparedStatement } from "../../domain/port/DatabaseDriver.js";
 import type { AtomicEntryWrite, AtomicEntryWriter } from "../../domain/port/AtomicEntryWriter.js";
 import type { ExpirySweeper, SweepExpiredRequest, SweepExpiredResult } from "../../domain/port/ExpirySweeper.js";
 import type { StoreReader } from "../../domain/port/StoreReader.js";
-import type { StoreRow, StoreSelect, StoreSelectResult } from "../../domain/model/Store.js";
-import { assertBindBudget, invalid, SqliteStoreQueryCompiler, validateSelect } from "./SqliteStoreQuery.js";
+import type { StoreRow, StoreSelect, StoreSelectResult, StoreWhere } from "../../domain/model/Store.js";
+import { assertBindBudget, invalid, SqliteStoreQueryCompiler, validateSelect, type CompiledSql } from "./SqliteStoreQuery.js";
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
@@ -188,17 +188,49 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     };
   }
 
-  async writeAtomically(writes: readonly AtomicEntryWrite[]): Promise<void> {
-    if (writes.length === 0) return;
-    const statements = writes.flatMap((write) => {
+  assertDeleteWhere(collection: string, where: StoreWhere): void {
+    this.deleteWhere(collection, where);
+  }
+
+  /** Set-based deletes see live rows only, like `select`; the TTL sweeper reclaims expired ones. */
+  private deleteWhere(collection: string, where: StoreWhere): CompiledSql {
+    const table = this.table(collection);
+    const compiled = this.store().where(table, where);
+    const statement = { sql: `DELETE FROM ${table.table} WHERE ${compiled.sql}`, binds: compiled.binds };
+    assertBindBudget(statement);
+    return statement;
+  }
+
+  async writeAtomically(writes: readonly AtomicEntryWrite[]): Promise<readonly number[]> {
+    if (writes.length === 0) return [];
+    // Both D1 and Bun roll the batch back on a constraint error. The NOT NULL
+    // check does not depend on a particular boot-state row. Each guard
+    // overwrites the previous one, so one cleanup ends the group.
+    const guard = (expected: number) => this.db.prepare(`INSERT INTO _mantle_boot_state (id, fingerprint)
+      VALUES ('atomic-guard', CASE WHEN changes() = ? THEN 'ok' ELSE NULL END)
+      ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint`).bind(expected);
+    const statements: PreparedStatement[] = [];
+    const mutationAt: number[] = [];
+    let guarded = false;
+    for (const write of writes) {
       const table = this.table(write.args.collection);
       if (write.kind === "create") {
         const { args } = write;
         const columns = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at", ...table.fields];
         const values = [args.id, args.status, 1, args.authorId, args.now, args.now, ...this.encodedData(table, args.data)];
-        return [this.db.prepare(`INSERT INTO ${table.table} (${columns.map(quote).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`).bind(...values)];
+        mutationAt.push(statements.length);
+        statements.push(this.db.prepare(`INSERT INTO ${table.table} (${columns.map(quote).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`).bind(...values));
+        continue;
       }
-      const mutation = write.kind === "update"
+      if (write.kind === "deleteWhere") {
+        const statement = this.deleteWhere(write.args.collection, write.args.where);
+        mutationAt.push(statements.length);
+        statements.push(this.db.prepare(statement.sql).bind(...statement.binds));
+        if (write.args.expect !== undefined) { statements.push(guard(write.args.expect)); guarded = true; }
+        continue;
+      }
+      mutationAt.push(statements.length);
+      statements.push(write.kind === "update"
         ? this.db.prepare(`UPDATE ${table.table} SET ${[
             ...table.fields.map((field) => `${quote(field)} = ?`),
             '"_mantle_version" = "_mantle_version" + 1',
@@ -206,31 +238,25 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
           ].join(", ")} WHERE "_mantle_id" = ? AND "_mantle_version" = ? AND "_mantle_version" = ? AND "_mantle_status" = ?`)
           .bind(...this.encodedData(table, write.args.data), write.args.now, write.args.id,
             write.args.expectedVersion, write.args.observedVersion, write.args.expectedStatus)
-        : this.db.prepare(`DELETE FROM ${table.table} WHERE "_mantle_id" = ? AND "_mantle_version" = ? AND "_mantle_version" = ? AND "_mantle_status" = ? AND "_mantle_status" = ?`)
-          .bind(write.args.id, write.args.expectedVersion, write.args.observedVersion,
-            write.args.expectedStatus, write.args.observedStatus);
-      // Both D1 and Bun roll the batch back on a constraint error. The
-      // NOT NULL check does not depend on a particular boot-state row. Each
-      // guard overwrites the previous one, so one cleanup ends the group.
-      const guard = this.db.prepare(`INSERT INTO _mantle_boot_state (id, fingerprint)
-        VALUES ('atomic-guard', CASE WHEN changes() = 1 THEN 'ok' ELSE NULL END)
-        ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint`);
-      return [mutation, guard];
-    });
-    if (writes.some((write) => write.kind !== "create")) {
-      statements.push(this.db.prepare("DELETE FROM _mantle_boot_state WHERE id = 'atomic-guard'"));
+        : this.db.prepare(`DELETE FROM ${table.table} WHERE "_mantle_id" = ? AND "_mantle_version" = ? AND "_mantle_version" = ? AND "_mantle_status" = ?`)
+          .bind(write.args.id, write.args.expectedVersion, write.args.observedVersion, write.args.expectedStatus));
+      statements.push(guard(1));
+      guarded = true;
     }
+    if (guarded) statements.push(this.db.prepare("DELETE FROM _mantle_boot_state WHERE id = 'atomic-guard'"));
+    let results: readonly BatchResult[];
     try {
-      await this.db.batch(statements);
+      results = await this.db.batch(statements);
     } catch (error) {
       if (error instanceof Error && error.message.includes("_mantle_boot_state.fingerprint")) {
-        const guarded = writes.filter((write) => write.kind !== "create");
+        const rowWrites = writes.filter((write): write is Extract<AtomicEntryWrite, { kind: "update" | "delete" }> =>
+          write.kind === "update" || write.kind === "delete");
         const latest = new Map<string, EntryRow>();
-        for (const collection of new Set(guarded.map((write) => write.args.collection))) {
-          const ids = guarded.filter((write) => write.args.collection === collection).map((write) => write.args.id);
+        for (const collection of new Set(rowWrites.map((write) => write.args.collection))) {
+          const ids = rowWrites.filter((write) => write.args.collection === collection).map((write) => write.args.id);
           for (const row of await this.readForWrite(collection, ids)) latest.set(`${collection}\0${row.id}`, row);
         }
-        for (const write of guarded) {
+        for (const write of rowWrites) {
           const current = latest.get(`${write.args.collection}\0${write.args.id}`) ?? null;
           if (!current || current.version !== write.args.expectedVersion) {
             throw new EntryVersionConflict(write.args.id, write.args.expectedVersion, current?.version ?? 0);
@@ -239,9 +265,12 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
             throw new EntryStatusConflict(write.args.id, write.args.expectedStatus, current.status);
           }
         }
+        const counted = writes.some((write) => write.kind === "deleteWhere" && write.args.expect !== undefined);
         throw new DiagnosticError(runtimeDiagnostic({
           code: "CONFLICT", severity: "error", path: "storage/AtomicEntryWrite",
-          message: "An entry precondition changed during the atomic write; reread and retry.",
+          message: counted
+            ? "A delete did not affect its expected number of rows, or an entry precondition changed; nothing was written."
+            : "An entry precondition changed during the atomic write; reread and retry.",
         }));
       }
       if (isDriverUniqueConstraintError(error)) {
@@ -252,6 +281,7 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
       }
       throw error;
     }
+    return mutationAt.map((index) => results[index]?.meta.changes ?? 0);
   }
 
   async readForWrite(collection: string, ids: readonly string[]): Promise<readonly EntryRow[]> {
