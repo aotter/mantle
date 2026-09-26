@@ -218,40 +218,59 @@ Deferred lifecycle hooks have a stronger guarantee to work with: delivery is at-
 
 ## Atomic entry writes in a ref handler
 
-When one request must change several Schemas together, a `ref` handler can call
-`ctx.writeAtomically(operations)`. Cloudflare D1 and Bun SQLite support it; an
-adapter without the optional `atomicEntries` capability returns
-`RESOURCE_UNAVAILABLE` (503)
-instead of committing part of the group. Operations use the `createDraft`,
-`updateDraft`, or `deleteEntry` request shape; atomic deletes additionally
-require `expectedVersion`. Operational Schemas become live on create;
-publishing Schemas create drafts. Updates and deletes require the version the
-caller read.
+When one request must change several Schemas together, a `ref` handler calls
+`ctx.store.write(ops)`. Every operation commits or none does, in order, as one
+storage transaction. Cloudflare D1 and Bun SQLite support it; an adapter
+without the optional `atomicEntries` capability returns `RESOURCE_UNAVAILABLE`
+(503) instead of committing part of the group.
+
+| Operation | Shape | Result |
+|---|---|---|
+| Insert | `{ insert: "<schema>", values: {...}, id? }` | `{ id, version }` |
+| Row update | `{ update: "<schema>", set: {...}, where: { id }, lock: <version> }` | `{ id, version }` |
+| Row delete | `{ delete: "<schema>", where: { id }, lock: <version> }` | `{ deleted: 1 }` |
+| Set-based delete | `{ delete: "<schema>", where: <any filter>, expect? }` | `{ deleted: <count> }` |
+
+Results follow operation order. `insert` validates `values` like `createDraft`;
+the author is the caller (`ctx.user?.id ?? null`) and `id` is optional (see
+`ctx.store.id()`). Operational Schemas become live on insert; publishing
+Schemas create drafts. `update` merges `set` into the entry. `lock` is the
+version the caller **read**, not the next one; it is required for a row update
+and for a row delete.
+
+A `delete` whose `where` is anything other than exactly `{ id }` with `lock` is
+set-based: one statement over the same filter grammar as
+[`select`](#store-queries-in-a-ref-handler). With `expect: n` the whole group
+fails with `CONFLICT` unless exactly `n` rows were deleted. Like `select`, it
+sees only live rows; TTL-expired rows are left to `store.sweepExpired`. A
+set-based delete skips per-row checks, so it is rejected with
+`INPUT_VALIDATION_FAILED` on a publishing Schema (published entries cannot be
+deleted) and on a Schema that has `before_delete` or `after_delete` lifecycle
+Triggers; delete those entries one by one with `where: { id }` and `lock`.
 
 ```ts
-const sessionId = crypto.randomUUID();
-const rows = await ctx.writeAtomically!([
-  { kind: "create", id: sessionId, request: {
-    collection: "sessions", data: { name: input.name }, authorId: ctx.user?.id ?? null, ctx,
-  } },
-  { kind: "create", request: {
-    collection: "exercise-blocks", data: { sessionId, exercise: input.exercise },
-    authorId: ctx.user?.id ?? null, ctx,
-  } },
-  { kind: "create", request: {
-    collection: "receipts", data: { token: input.requestId }, authorId: ctx.user?.id ?? null, ctx,
-  } },
+const sessionId = ctx.store!.id();
+await ctx.store!.write([
+  { insert: "sessions", id: sessionId, values: { name: input.name } },
+  { insert: "exercise-blocks", values: { sessionId, exercise: input.exercise } },
+  { insert: "receipts", values: { token: input.requestId } },
+  { update: "programs", set: { lastSessionId: sessionId }, where: { id: input.programId }, lock: input.programVersion },
+  { delete: "reminders", where: { programId: input.programId, dueAt: { lte: input.startedAt } } },
 ]);
-return { sessionId: rows[0]!.id };
+return { sessionId };
 ```
 
 Declare `receipts.token` as a Schema `uniqueIndexes: [[token]]`. A duplicate
 receipt rejects the whole group, including the session and block. The handler
 can then read the existing receipt **after** the failed transaction to answer
-an idempotent retry. A stale update or delete rejects the whole group even
-when it is the final operation. The group may touch each entry only once;
-read and authorization decisions happen before the batch, and the expected
-version/status is checked again by the conditional database write.
+an idempotent retry. A stale `lock` or an unmet `expect` rejects the whole
+group with `CONFLICT` even when it is the final operation. Row operations may
+touch each entry only once, and a set-based delete must not match an entry
+another operation in the group writes: the conditional write then finds it
+gone and the group fails with `CONFLICT`. Read and authorization decisions happen before the batch,
+and the version and status the group read are checked again by the conditional
+database write. An invalid operation or value is `INPUT_VALIDATION_FAILED`.
+Failures throw `DiagnosticError` from `ctx.store.write`.
 
 All Schema projection, stamping, validation, uniqueness, and lifecycle rules
 still apply. `before_*` hooks run in operation order before the batch and can
@@ -261,19 +280,37 @@ once for the group. Deferred Queue delivery is separate from the database
 transaction. Application-owned tables can use their host's transaction
 facility inside a ref handler, but that does not give those tables Mantle
 entry semantics. Direct SQL writes to Mantle Schema tables are unsupported.
-Authorization guard Procedures do not receive `ctx.writeAtomically`.
+Authorization guard Procedures receive a read-only Store: `write` and
+`sweepExpired` fail with `INPUT_VALIDATION_FAILED`. Host code uses
+`runtime.store.write` the same way, with a `null` author.
 
-On D1 and Bun SQLite a group reads its update and delete targets before the
+On D1 and Bun SQLite a group reads its row update and delete targets before the
 batch with one query per 95 ids per Schema. The batch holds one statement per
-create, two per update or delete (the conditional write and its guard) and,
-when the group has any update or delete, one final cleanup: 200 updates in one
-Schema cost 3 reads and 401 statements. A conflict re-reads the targets once
-more to name the stale entry. D1 counts queries against a per-invocation limit;
-size groups with that in mind.
+insert, two per row update or delete (the write and its guard), one per
+set-based delete (two with `expect`: the delete and its guard) and, when the
+group has any guard, one final cleanup: 200 row updates in one Schema cost
+3 reads and 401 statements. A conflict re-reads the targets once more to name
+the stale entry. D1 counts queries against a per-invocation limit; size groups
+with that in mind.
+
+## Store queries in a ref handler
+
+`ctx.store` is the caller-bound Store ([ADR-0030](../../adr/0030-store.md)). `select` reads any Schema with a closed relational filter; values are always bound.
+
+```ts
+const { rows, nextCursor } = await ctx.store!.select({
+  from: "training_sets",
+  where: { blockId: { in: { select: "id", from: "training_blocks", where: { sessionId: input.id } } } },
+  orderBy: { position: "asc" },
+  limit: 200,
+});
+```
+
+`where` takes `{ column: value }` (equality; sibling keys AND), `{ column: { eq, ne, gt, gte, lt, lte, in, notIn, isNull } }`, `and`/`or`/`not`, and a `{ select, from, where }` subquery inside `in`/`notIn`. Columns are scalar Schema fields and the native `id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId`. Rows are flat and include every lifecycle status — filter `status` yourself before returning publishing entries to a caller. `orderBy` takes one scalar column (default `{ updatedAt: "desc" }`; NULLs sort last); pass `nextCursor` back as `cursor` for the next page (limit 1–500, default 50). `ne` and `not` exclude NULL rows, as in SQL. TTL-expired rows are hidden. A statement binds at most 100 values — use a subquery rather than a long `in` list. `ctx.store.view(name, { params })` runs a named View as the caller; `ctx.store.id()` returns a new entry id. Host code uses `runtime.store` without a caller context. Adapters without the capability return `RESOURCE_UNAVAILABLE`.
 
 ## TTL sweep in a ref handler
 
-`ctx.sweepExpired({ collection, limit })` previews a bounded page of expired rows; `delete: true` explicitly removes it. The result contains `scanned`, `removed` and an optional `nextCursor`. Continue with that cursor until absent. D1 and Bun SQLite implement this semantic capability; unsupported storage returns `RESOURCE_UNAVAILABLE`. Authorization guard Procedures do not receive the sweep function. For a scheduled cleanup, declare a [schedule Trigger](./trigger.md#schedule-source) targeting a no-input ref Procedure. No sweep is scheduled automatically. See [Schema TTL](./schema.md#ttl).
+`ctx.store.sweepExpired({ collection, limit })` previews a bounded page of expired rows; `delete: true` explicitly removes it. The result contains `scanned`, `removed` and an optional `nextCursor`. Continue with that cursor until absent. Host code calls `runtime.store.sweepExpired` with the same request. D1 and Bun SQLite implement this semantic capability; unsupported storage returns `RESOURCE_UNAVAILABLE`. The read-only Store given to authorization guard Procedures rejects the sweep. For a scheduled cleanup, declare a [schedule Trigger](./trigger.md#schedule-source) targeting a no-input ref Procedure. No sweep is scheduled automatically. See [Schema TTL](./schema.md#ttl).
 
 ## `uiSchema`
 

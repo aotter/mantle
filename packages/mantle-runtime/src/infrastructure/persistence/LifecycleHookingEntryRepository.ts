@@ -38,10 +38,17 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
     private readonly deferred?: DeferredHookDispatcher,
   ) {}
 
+  /** Whether any lifecycle Trigger watches these hooks on the Schema. */
+  hasHooks(collection: string, hooks: readonly LifecycleHook[]): boolean {
+    return hooks.some((hook) => this.triggerNames(collection, hook).length > 0);
+  }
+
   atomicHooks(write: AtomicEntryWrite, previous: EntryRow | null): {
     readonly before: () => Promise<void>;
     readonly after: (row: EntryRow) => Promise<void>;
   } {
+    // Set-based deletes are refused on Schemas with delete hooks (ADR-0030), so there is nothing to fire.
+    if (write.kind === "deleteWhere") return { before: async () => {}, after: async () => {} };
     const beforeHook = `before_${write.kind}` as "before_create" | "before_update" | "before_delete";
     const afterHook = `after_${write.kind}` as DeferredLifecycleHook;
     const before = this.triggerNames(write.args.collection, beforeHook);

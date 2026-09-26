@@ -29,6 +29,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0027](0027-scheduled-procedure-triggers.md) | Schedule Triggers in the sealed plan with Cloudflare-hosted invocation and system identity. | Accepted for 0.1.5 |
 | [0028](0028-schema-ttl-expiry.md) | Logical TTL on Schema reads with preview-first, explicit bounded cleanup. | Accepted for 0.1.5 |
 | [0029](0029-mcp-apps-interaction-contracts.md) | Official MCP SDK for all MCP wire handling; transport-neutral capability catalog with validate-once invocation; `@aotter/mantle-mcp` and `@aotter/mantle-ui`; Manifest-declared interaction contracts and MCP Apps (#1110). | Accepted; amends ADR-lite 909 |
+| [0030](0030-store.md) | Store: one persistence object (`ctx.store` / `runtime.store`) over one relational JSON query AST compiled by each adapter; first slice `select`, `view`, `id`, then `write`, then manifest grammar (#1151). | Accepted |
 
 ## Reading order
 

@@ -57,9 +57,9 @@ export default {
     const listed = (await runtime.listEntries.execute({ collection: "events" })).map((row) => row.id);
     const view = await runtime.executeView({ view: "current-events" });
     const viewIds = view.ok ? view.result.rows.map((row) => row.id) : [];
-    const preview = await runtime.sweepExpired({ collection: "events", limit: 1 });
-    const first = await runtime.sweepExpired({ collection: "events", limit: 1, delete: true });
-    const second = await runtime.sweepExpired({ collection: "events", limit: 1, delete: true, cursor: first.nextCursor });
+    const preview = await runtime.store.sweepExpired({ collection: "events", limit: 1 });
+    const first = await runtime.store.sweepExpired({ collection: "events", limit: 1, delete: true });
+    const second = await runtime.store.sweepExpired({ collection: "events", limit: 1, delete: true, cursor: first.nextCursor });
     const count = await env.DB.prepare("SELECT count(*) AS count FROM events").first<{ count: number }>();
     return Response.json({ passed: hidden && !listed.includes(expired.id) && !listed.includes(boundary.id)
       && listed.includes(future.id) && listed.includes(missing.id) && listed.includes(nullable.id)
