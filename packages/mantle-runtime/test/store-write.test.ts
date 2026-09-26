@@ -203,6 +203,7 @@ describe("store.write (#1151)", () => {
     [[{ insert: "sessions", values: {}, update: "sessions" }], /exactly one of/],
     [[{ insert: "sessions", values: {}, returning: ["id"] }], /unknown key 'returning'/],
     [[{ delete: "sets", where: { reps: { in: Array.from({ length: 101 }, (_, i) => i) } } }], /at most 100/],
+    [[{ delete: "sets", where: { reps: { bogus: 1 } } }], /Unknown Store operator/],
   ])("rejects %j", async (ops, message) => {
     const rt = await runtime(new AtomicDatabase());
     await expect(rt.store.write(ops as never)).rejects.toMatchObject({
