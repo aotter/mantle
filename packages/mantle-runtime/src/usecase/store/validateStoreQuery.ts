@@ -7,7 +7,7 @@ const NATIVE_TYPES: Readonly<Record<string, string>> = {
 const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "in", "notIn", "isNull"]);
 
 /** Validate caller input before it reaches any storage adapter. */
-export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<string, SchemaManifest>): StoreSelect {
+export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<string, SchemaManifest>, callerId?: string, callerBound = false): StoreSelect {
   if (!record(query)) throw invalid("Store select takes an object.");
   unknownKey(query, ["from", "columns", "where", "orderBy", "limit", "cursor"], "Store select");
   const schema = requireSchema(query.from, schemas);
@@ -27,14 +27,51 @@ export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<str
   if (query.cursor !== undefined && typeof query.cursor !== "string") throw invalid("Store cursor must be a string.");
   if (query.where !== undefined) validateStoreWhere(query.where, schema, schemas);
   const [sortField, direction] = Object.entries(orderBy)[0]!;
+  const where = callerBound ? scopeStoreWhere(query.where, schema, schemas, callerId)
+    : query.where === undefined ? undefined : structuredClone(query.where);
   return {
     from: query.from,
     ...(query.columns === undefined ? {} : { columns: [...new Set(query.columns)] }),
-    ...(query.where === undefined ? {} : { where: structuredClone(query.where) }),
+    ...(where === undefined ? {} : { where }),
     orderBy: { [sortField]: direction as "asc" | "desc" },
     limit: query.limit ?? 50,
     ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
   };
+}
+
+/** Add the caller predicate outside each user expression, including subqueries. */
+export function scopeStoreWhere(
+  where: StoreWhere | undefined,
+  schema: SchemaManifest,
+  schemas: ReadonlyMap<string, SchemaManifest>,
+  callerId: string | undefined,
+): StoreWhere | undefined {
+  const field = Object.keys(schema.spec.scope ?? {})[0];
+  if (field && !callerId) throw invalid(`Schema '${schema.metadata.name}' requires a caller identity.`);
+  const mapped = where && scopeSubqueries(where, schemas, callerId);
+  if (!field) return mapped;
+  const scoped = { [field]: callerId! };
+  return mapped ? { and: [mapped, scoped] } : scoped;
+}
+
+function scopeSubqueries(where: StoreWhere, schemas: ReadonlyMap<string, SchemaManifest>, callerId: string | undefined): StoreWhere {
+  return Object.fromEntries(Object.entries(where).map(([key, value]) => {
+    if (key === "and" || key === "or") return [key, (value as readonly StoreWhere[]).map((child) => scopeSubqueries(child, schemas, callerId))];
+    if (key === "not") return [key, scopeSubqueries(value as StoreWhere, schemas, callerId)];
+    return [key, scopeComparison(value, schemas, callerId)];
+  })) as StoreWhere;
+}
+
+function scopeComparison(value: unknown, schemas: ReadonlyMap<string, SchemaManifest>, callerId: string | undefined): unknown {
+  if (!record(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([operator, operand]) => {
+    if ((operator === "in" || operator === "notIn") && record(operand)) {
+      const schema = requireSchema(operand["from"], schemas);
+      const where = scopeStoreWhere(operand["where"] as StoreWhere | undefined, schema, schemas, callerId);
+      return [operator, { select: operand["select"], from: operand["from"], ...(where === undefined ? {} : { where }) }];
+    }
+    return [operator, operand];
+  }));
 }
 
 export function validateStoreWhere(

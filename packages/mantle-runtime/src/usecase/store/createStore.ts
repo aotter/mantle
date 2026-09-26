@@ -7,7 +7,7 @@ import type { StoreReader } from "../../domain/port/StoreReader.js";
 import type { ViewQueryOptions } from "../../domain/port/ViewQueryExecutor.js";
 import type { AtomicDraftOperation, AtomicWriteOutcome } from "../content/AtomicEntryWriteUseCase.js";
 import type { ExecuteViewResponse } from "../view/ExecuteViewUseCase.js";
-import { validateStoreSelect, validateStoreWhere } from "./validateStoreQuery.js";
+import { scopeStoreWhere, validateStoreSelect, validateStoreWhere } from "./validateStoreQuery.js";
 
 export interface StoreDependencies {
   readonly schemasByName: ReadonlyMap<string, SchemaManifest>;
@@ -48,12 +48,12 @@ export function createStore(deps: StoreDependencies, binding: StoreBinding = {})
           message: "This storage adapter cannot run Store queries.",
         })));
       }
-      return deps.reader.select(validateStoreSelect(query, deps.schemasByName));
+      return deps.reader.select(validateStoreSelect(query, deps.schemasByName, ctx?.user?.id, callerBound));
     },
     write: async (ops) => {
       if (readOnly) return refuseWrite("store/write");
       if (!Array.isArray(ops)) throw invalid("store.write takes an array of operations.");
-      const outcomes = await deps.write(ops.map((op, index) => toOperation(op, index, ctx, deps.schemasByName)));
+      const outcomes = await deps.write(ops.map((op, index) => toOperation(op, index, ctx, callerBound, deps.schemasByName)));
       return outcomes.map((outcome): StoreWriteResult => outcome.row
         ? { id: outcome.row.id, version: outcome.row.version }
         : { deleted: outcome.affected });
@@ -74,7 +74,7 @@ const OP_KEYS = {
   delete: ["delete", "where", "lock", "expect"],
 } as const;
 
-function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | undefined, schemas: ReadonlyMap<string, SchemaManifest>): AtomicDraftOperation {
+function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | undefined, callerBound: boolean, schemas: ReadonlyMap<string, SchemaManifest>): AtomicDraftOperation {
   const at = `store.write[${index}]`;
   if (typeof op !== "object" || op === null || Array.isArray(op)) throw invalid(`${at} must be an object.`);
   const kinds = (["insert", "update", "delete"] as const).filter((kind) => Object.hasOwn(op, kind));
@@ -85,13 +85,22 @@ function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | unde
   const record = op as unknown as Record<string, unknown>;
   const collection = record[kind];
   if (typeof collection !== "string" || !collection) throw invalid(`${at}.${kind} must name a Schema.`);
+  const schema = schemas.get(collection);
+  const scopeField = callerBound ? Object.keys(schema?.spec.scope ?? {})[0] : undefined;
+  const callerId = ctx?.user?.id;
+  if (scopeField && !callerId) throw invalid(`Schema '${collection}' requires a caller identity.`);
+  const scope = scopeField ? { field: scopeField, value: callerId! } : undefined;
   const authorId = ctx?.user?.id ?? null;
   if (kind === "insert") {
     const values = record["values"];
     if (!isRecord(values)) throw invalid(`${at}.values must be an object.`);
     const id = record["id"];
     if (id !== undefined && typeof id !== "string") throw invalid(`${at}.id must be a string.`);
-    return { kind: "create", ...(id === undefined ? {} : { id }), request: { collection, data: { ...values }, originalInput: values, authorId, ...(ctx ? { ctx } : {}) } };
+    if (scopeField && values[scopeField] !== undefined && values[scopeField] !== callerId) {
+      throw invalid(`${at}.values.${scopeField} conflicts with caller scope.`);
+    }
+    const data = { ...values, ...(scopeField ? { [scopeField]: callerId } : {}) };
+    return { kind: "create", ...(id === undefined ? {} : { id }), request: { collection, data, originalInput: scopeField ? data : values, authorId, ...(ctx ? { ctx } : {}) } };
   }
   const where = record["where"];
   if (!isRecord(where)) throw invalid(`${at}.where must be an object.`);
@@ -103,19 +112,22 @@ function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | unde
     if (!isRecord(set)) throw invalid(`${at}.set must be an object.`);
     if (rowId === undefined) throw invalid(`${at}.where must be exactly { id } for an update.`);
     if (typeof lock !== "number") throw invalid(`${at}.lock (the version you read) is required for an update.`);
-    return { kind: "update", request: { collection, id: rowId, expectedVersion: lock, data: { ...set }, originalInput: set, ...(ctx ? { ctx } : {}) } };
+    if (scopeField && Object.hasOwn(set, scopeField) && set[scopeField] !== callerId) {
+      throw invalid(`${at}.set.${scopeField} conflicts with caller scope.`);
+    }
+    return { kind: "update", request: { collection, id: rowId, expectedVersion: lock, data: { ...set }, originalInput: set, ...(ctx ? { ctx } : {}) }, ...(scope ? { scope } : {}) };
   }
   if (lock !== undefined) {
     if (rowId === undefined) throw invalid(`${at}.lock needs where to be exactly { id }.`);
     if (typeof lock !== "number") throw invalid(`${at}.lock must be a number.`);
     if (expect !== undefined) throw invalid(`${at}.expect applies only to a set-based delete; a locked row delete already affects exactly one row.`);
-    return { kind: "delete", request: { collection, id: rowId, expectedVersion: lock, ...(ctx ? { ctx } : {}) } };
+    return { kind: "delete", request: { collection, id: rowId, expectedVersion: lock, ...(ctx ? { ctx } : {}) }, ...(scope ? { scope } : {}) };
   }
   if (expect !== undefined && typeof expect !== "number") throw invalid(`${at}.expect must be a number.`);
-  const schema = schemas.get(collection);
   if (!schema) throw invalid(`Unknown Schema '${collection}'.`);
   validateStoreWhere(where as StoreWhere, schema, schemas);
-  return { kind: "deleteWhere", request: { collection, where: structuredClone(where) as StoreWhere, ...(expect === undefined ? {} : { expect }) } };
+  const scoped = callerBound ? scopeStoreWhere(where as StoreWhere, schema, schemas, ctx?.user?.id) : structuredClone(where) as StoreWhere;
+  return { kind: "deleteWhere", request: { collection, where: scoped!, ...(expect === undefined ? {} : { expect }) } };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
