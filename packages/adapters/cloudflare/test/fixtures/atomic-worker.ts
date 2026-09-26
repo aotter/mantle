@@ -86,6 +86,22 @@ export default {
         { kind: "delete", request: { collection: "sessions", id: existing.id, expectedVersion: 1 } },
       ]);
     } catch (error) { staleDelete = conflict(error); }
+    // Several guarded writes share one guard row and one cleanup: a stale
+    // write in the middle still rolls back the others, and a clean group commits.
+    const trio = await runtime.writeAtomically.execute(["a", "b", "c"].map((part) => (
+      { kind: "create" as const, request: { collection: "sessions", data: { name: `trio-${part}-${token}` }, authorId: null } })));
+    let staleMiddle = false;
+    try {
+      await runtime.writeAtomically.execute(trio.map((row, index) => ({ kind: "update" as const, request: {
+        collection: "sessions", id: row!.id, expectedVersion: index === 1 ? 7 : 1, data: { name: `moved-${index}-${token}` },
+      } })));
+    } catch (error) { staleMiddle = conflict(error); }
+    const untouched = (await runtime.listEntries.execute({ collection: "sessions" }))
+      .filter((row) => row.data.name === `moved-0-${token}` || row.data.name === `moved-2-${token}`).length === 0;
+    await runtime.writeAtomically.execute(trio.map((row) => ({ kind: "delete" as const, request: {
+      collection: "sessions", id: row!.id, expectedVersion: 1 } })));
+    const multiGuard = staleMiddle && untouched &&
+      !(await runtime.listEntries.execute({ collection: "sessions" })).some((row) => String(row.data.name).startsWith("trio-"));
     let invalid = false;
     try {
       await runtime.writeAtomically.execute([
@@ -99,13 +115,13 @@ export default {
     ]);
     const sessions = await runtime.listEntries.execute({ collection: "sessions" });
     const receipts = await runtime.listEntries.execute({ collection: "receipts" });
-    const passed = duplicate && duplicateBatch && statusMismatch && stale && staleDelete && invalid &&
+    const passed = duplicate && duplicateBatch && statusMismatch && stale && staleDelete && invalid && multiGuard &&
       sessions.filter((row) => row.data.name === token || row.data.name === `updated-${token}`).length === 0 &&
       !sessions.some((row) => row.data.name === `duplicate-${token}` || row.data.name === `batch-${token}` || row.data.name === `invalid-${token}`) &&
       receipts.filter((row) => row.data.token === token).length === 1 &&
       receipts.filter((row) => row.data.token === `done-${token}`).length === 1 &&
       !receipts.some((row) => row.data.token === `batch-${token}` || row.data.token === `status-mismatch-${token}` || row.data.token === `stale-${token}` || row.data.token === `stale-delete-${token}`);
-    return Response.json({ passed, duplicate, duplicateBatch, statusMismatch, stale, staleDelete, invalid }, { status: passed ? 200 : 500 });
+    return Response.json({ passed, duplicate, duplicateBatch, statusMismatch, stale, staleDelete, invalid, multiGuard }, { status: passed ? 200 : 500 });
   },
 };
 

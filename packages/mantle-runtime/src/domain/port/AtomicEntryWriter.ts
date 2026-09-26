@@ -17,9 +17,10 @@ export type AtomicEntryWrite =
 export interface AtomicEntryWriter {
   writeAtomically(writes: readonly AtomicEntryWrite[]): Promise<void>;
   /**
-   * The current rows for these ids, read as `EntryRepository.get` reads one
-   * (expired TTL rows hidden). Lets a group read its targets in one query
-   * per collection instead of one per operation; absent rows are omitted.
+   * Exactly the rows `EntryRepository.get` of the same store would return for
+   * these ids (expired TTL rows hidden), with absent ids omitted. Lets a group
+   * read its targets per collection instead of once per operation. A throw
+   * falls back to per-operation reads.
    */
   readForWrite?(collection: string, ids: readonly string[]): Promise<readonly EntryRow[]>;
 }

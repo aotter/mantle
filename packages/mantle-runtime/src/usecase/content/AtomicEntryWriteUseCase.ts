@@ -117,15 +117,21 @@ export class AtomicEntryWriteUseCase {
     if (!readForWrite) return () => ({});
     const ids = new Map<string, Set<string>>();
     for (const operation of operations) {
-      if (operation.kind === "create" || typeof operation.request?.collection !== "string" ||
-        typeof operation.request.id !== "string") continue;
+      if ((operation.kind !== "update" && operation.kind !== "delete") ||
+        typeof operation.request?.collection !== "string" || typeof operation.request.id !== "string") continue;
       const set = ids.get(operation.request.collection) ?? new Set<string>();
       set.add(operation.request.id);
       ids.set(operation.request.collection, set);
     }
     const rows = new Map<string, EntryRow>();
     for (const [collection, set] of ids) {
-      for (const row of await readForWrite(collection, [...set])) rows.set(`${collection}\0${row.id}`, row);
+      try {
+        for (const row of await readForWrite(collection, [...set])) rows.set(`${collection}\0${row.id}`, row);
+      } catch {
+        // An unreadable collection (e.g. an unknown Schema) is left to each
+        // operation's own read, so errors still surface in operation order.
+        ids.delete(collection);
+      }
     }
     return (key) => ids.get(key.collection)?.has(key.id)
       ? { previous: rows.get(`${key.collection}\0${key.id}`) ?? null } : {};
