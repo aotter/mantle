@@ -237,6 +237,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
   );
   let atomicWrite: AtomicEntryWriteUseCase;
   const storeDependencies: StoreDependencies = {
+    schemasByName,
     reader: prepared.store,
     write: (operations) => atomicWrite.execute(operations),
     sweepExpired,
