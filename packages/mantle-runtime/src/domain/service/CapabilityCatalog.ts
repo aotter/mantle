@@ -55,6 +55,7 @@ export type CapabilityRoute =
   | { readonly kind: "create"; readonly collection: string }
   | { readonly kind: "update"; readonly collection: string }
   | { readonly kind: "read" }
+  | { readonly kind: "preview" }
   | { readonly kind: "mediaCreateUpload" }
   | { readonly kind: "mediaCommitUpload" };
 
@@ -102,6 +103,9 @@ export interface BuildCapabilityCatalogOptions {
   /** Schemas that are the subject of a declared interaction. Staff surfaces
    *  get a bounded single-entry read for exactly these (ADR-0029 D2). */
   readonly readTargets?: readonly string[];
+  /** Collections the site renders; staff surfaces get a read-only
+   *  `preview_entry` for them (ADR-0029 D10). */
+  readonly previewTargets?: readonly string[];
 }
 
 export function buildCapabilityCatalog(
@@ -116,6 +120,7 @@ export function buildCapabilityCatalog(
   const drafts = surface === "public" ? callables : [
     ...lifecycleCapabilities(schemas),
     ...(readTargets.length > 0 ? [readCapability(readTargets)] : []),
+    ...(options.previewTargets?.length ? [previewCapability(options.previewTargets)] : []),
     ...(options.mediaPurposes ? mediaCapabilities(options.mediaPurposes) : []),
     ...schemas
       .filter((schema) => schema.spec.schema.readOnly !== true)
@@ -207,6 +212,27 @@ function readCapability(collections: readonly string[]): CapabilityDraft {
     hints: { readOnly: true },
     minimumRole: "contributor",
     route: { kind: "read" },
+  };
+}
+
+/**
+ * The site page for one entry, drafts included, as HTML in the result. An
+ * MCP App renders it in a sandboxed frame; nothing reaches a shared asset
+ * and no staff cookie is involved.
+ */
+function previewCapability(collections: readonly string[]): CapabilityDraft {
+  const sorted = [...collections].sort();
+  return {
+    name: "preview_entry",
+    description: `Render one entry as the public site would show it, drafts included, for review. Collections: ${sorted.join(", ")}.`,
+    inputSchema: {
+      type: "object",
+      properties: { collection: { type: "string", enum: sorted }, id: { type: "string" } },
+      required: ["collection", "id"],
+    },
+    hints: { readOnly: true },
+    minimumRole: "contributor",
+    route: { kind: "preview" },
   };
 }
 

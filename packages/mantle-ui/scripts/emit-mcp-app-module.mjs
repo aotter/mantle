@@ -13,8 +13,9 @@ export const interactionAppHtml = ${JSON.stringify(html)};
 export const INTERACTION_APP_URI = "ui://mantle/interaction";
 
 /**
- * An MCP Apps resource for \`apps.resources\` that renders every View tool,
- * with or without row actions. Override any field, for example \`renders\`.
+ * An MCP Apps resource for \`apps.resources\` that renders every View tool
+ * and, where the surface has a site renderer, offers the App-only
+ * \`preview_entry\`. Override any field, for example \`renders\`.
  */
 export function interactionAppResource(overrides = {}) {
   return {
@@ -24,6 +25,7 @@ export function interactionAppResource(overrides = {}) {
     description: "Rows of a Mantle View and the operations they feed.",
     html: interactionAppHtml,
     renders: (capability) => capability.route?.kind === "view",
+    appOnly: ["preview_entry"],
     ...overrides,
   };
 }
@@ -40,9 +42,10 @@ export interface InteractionAppResource {
   readonly description?: string;
   readonly html: string | (() => string | Promise<string>);
   readonly renders: (capability: { readonly route: { readonly kind: string }; readonly rowActions?: readonly unknown[] }) => boolean;
+  readonly appOnly?: readonly string[];
   readonly [option: string]: unknown;
 }
-/** An MCP Apps resource that renders every View tool. */
+/** An MCP Apps resource that renders every View tool and offers the App-only site preview. */
 export declare function interactionAppResource(overrides?: Partial<InteractionAppResource>): InteractionAppResource;
 `);
 console.log("mcp-app module written");

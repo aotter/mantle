@@ -70,6 +70,7 @@ export {
   InvokeCapabilityUseCase,
   type CapabilityOutcome,
   type CapabilityUseCases,
+  type EntryPreviewPort,
   type InvokeCapabilityRequest,
 } from "./usecase/capability/InvokeCapabilityUseCase.js";
 export {

@@ -205,6 +205,51 @@ describe("MCP Apps registration", () => {
     });
   });
 
+  it("offers the site preview only to an App that lists it, and never gives the page to the model (D10)", async () => {
+    const plan = compile(STAFF_MANIFEST);
+    const staff: HandlerContext = { user: { id: "s1" }, staff: { id: "s1", role: "editor" }, env: {} } as HandlerContext;
+    const preview = { collections: ["requisitions"], execute: async () => "<html><body>Draft page</body></html>" };
+    const client = async (appOnly: readonly string[] | null, capabilities: Record<string, unknown>) => {
+      const handler = createMantleMcpHandler(bindCapabilities(runtime(plan), plan, { surface: "staff", preview }), {
+        ...(appOnly ? { apps: { resources: [{ ...apps.resources[0]!, appOnly }] } } : {}),
+      });
+      const connected = new Client({ name: "staff", version: "1.0.0" }, { capabilities, versionNegotiation: { mode: { pin: "2026-07-28" } } });
+      await connected.connect(new StreamableHTTPClientTransport(new URL(`${ORIGIN}/mcp`), {
+        fetch: async (input: string | URL | Request, init?: RequestInit) => handler.fetch(new Request(input, init), staff),
+      }));
+      return connected;
+    };
+    const names = async (connected: Client) => (await connected.listTools()).tools.map(({ name }) => name);
+    const meta = async (connected: Client) =>
+      (await connected.callTool({ name: "query_view_pending_approvals", arguments: {} }))._meta?.[INTERACTION_META_KEY] as { preview?: string } | undefined;
+
+    // No App lists it: nobody is offered the tool, and a call is unknown.
+    const bare = await client(null, {});
+    expect(await names(bare)).not.toContain("preview_entry");
+    const unlisted = await client([], UI_CAPABILITIES);
+    expect(await names(unlisted)).not.toContain("preview_entry");
+    expect(await meta(unlisted)).not.toHaveProperty("preview");
+
+    const app = await client(["preview_entry"], UI_CAPABILITIES);
+    const tool = (await app.listTools()).tools.find(({ name }) => name === "preview_entry");
+    expect(tool?._meta).toMatchObject({ ui: { visibility: ["app"] } });
+    expect(await meta(app)).toMatchObject({ preview: "preview_entry" });
+    const rendered = await app.callTool({ name: "preview_entry", arguments: { collection: "requisitions", id: "r1" } });
+    expect(rendered.structuredContent).toEqual({ html: "<html><body>Draft page</body></html>" });
+    expect(JSON.stringify(rendered.content)).not.toContain("Draft page");
+
+    // A client without MCP Apps gets neither the tool nor the metadata.
+    const plain = await client(["preview_entry"], {});
+    expect(await names(plain)).not.toContain("preview_entry");
+  });
+
+  it("ignores an App-only preview on a surface that cannot render one", () => {
+    const plan = compile(manifest);
+    expect(() => createMantleMcpHandler(bindCapabilities(runtime(plan), plan, { surface: "public" }), {
+      apps: { resources: [{ ...apps.resources[0]!, appOnly: ["refresh_post", "preview_entry"] }] },
+    })).not.toThrow();
+  });
+
   it("serves plain tools, no resources and no app-only tools to a client without MCP Apps", async () => {
     const client = await connect("modern", {});
     const { tools } = await client.listTools();

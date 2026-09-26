@@ -29,6 +29,14 @@ import type { CommitMediaUploadUseCase, CreateMediaUploadUseCase } from "../medi
 import type { ExecuteViewUseCase } from "../view/index.js";
 
 /** The use cases a capability can route to. */
+/** Renders an entry as the public site would, for staff review. */
+export interface EntryPreviewPort {
+  /** Collections the site renders; the catalog offers previews for these only. */
+  readonly collections: readonly string[];
+  /** The page HTML, or null when the entry or its template does not exist. */
+  execute(request: { readonly collection: string; readonly id: string; readonly ctx: HandlerContext }): Promise<string | null>;
+}
+
 export interface CapabilityUseCases {
   readonly getEntry: Pick<GetEntryUseCase, "execute">;
   readonly createDraft: Pick<CreateDraftUseCase, "execute">;
@@ -51,6 +59,9 @@ export interface CapabilityUseCases {
       | { readonly ok: false; readonly diagnostic: Diagnostic }
     >;
   };
+  /** Site rendering of one entry, drafts included (ADR-0029 D10); present
+   *  only when the application mounts a Web renderer. */
+  readonly preview?: EntryPreviewPort;
   readonly media?: {
     readonly createUpload: Pick<CreateMediaUploadUseCase, "execute">;
     readonly commitUpload: Pick<CommitMediaUploadUseCase, "execute">;
@@ -99,6 +110,7 @@ export class InvokeCapabilityUseCase {
     switch (route.kind) {
       case "procedure": return this.useCases.invokeTrigger !== undefined;
       case "view": return this.useCases.executeView !== undefined;
+      case "preview": return this.useCases.preview !== undefined;
       case "mediaCreateUpload":
       case "mediaCommitUpload": return this.useCases.media !== undefined;
       default: return true;
@@ -159,6 +171,30 @@ export class InvokeCapabilityUseCase {
           throw invalidArgument(path, "collection", `one of ${allowed.join(", ")}`, collection);
         }
         return this.useCases.getEntry.execute({ id, collection });
+      }
+      case "preview": {
+        const preview = this.useCases.preview;
+        if (!preview) throw new DiagnosticError(unknownCapability(path, capability.name));
+        const collection = stringArgument(args, "collection", path);
+        const id = stringArgument(args, "id", path);
+        // The advertised enum is the boundary: rendered collections that
+        // are also known Schemas, as for `read_entry`.
+        const allowed = (capability.inputSchema["properties"] as { collection?: { enum?: readonly string[] } } | undefined)
+          ?.collection?.enum ?? [];
+        if (!allowed.includes(collection)) {
+          throw invalidArgument(path, "collection", `one of ${allowed.join(", ")}`, collection);
+        }
+        // Rendered for this call only; nothing here is cached or shared.
+        const html = await preview.execute({ collection, id, ctx });
+        if (html === null) {
+          throw new DiagnosticError(runtimeDiagnostic({
+            code: "NOT_FOUND",
+            severity: "error",
+            path,
+            message: `No page renders entry '${id}' of '${collection}'.`,
+          }));
+        }
+        return { html };
       }
       case "lifecycle": {
         const collection = stringArgument(args, "collection", path);

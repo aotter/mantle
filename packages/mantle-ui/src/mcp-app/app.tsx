@@ -7,7 +7,9 @@ import {
   diagnosticsOf,
   hiddenInputs,
   idempotencyInputs,
+  inertPreview,
   invokeTool,
+  previewHtml,
   readEntry,
   viewOf,
   type AppRowAction,
@@ -38,9 +40,11 @@ export function InteractionApp(props: {
   const [view, setView] = useState<AppView | null>(() => (props.result ? viewOf(props.result) : null));
   const [stale, setStale] = useState(false);
   const [open, setOpen] = useState<{ row: Readonly<Record<string, unknown>>; action: AppRowAction } | null>(null);
+  const [previewing, setPreviewing] = useState<string | null>(null);
   useEffect(() => {
     setView(props.result ? viewOf(props.result) : null);
     setStale(false);
+    setPreviewing(null);
   }, [props.result]);
 
   const refresh = async () => {
@@ -66,6 +70,18 @@ export function InteractionApp(props: {
       );
     }
     return <p className="text-muted-foreground p-4 text-sm">{props.cancelled ? labels.viewCancelled : labels.waiting}</p>;
+  }
+  if (previewing && view.preview && view.collection) {
+    return (
+      <SitePreview
+        call={props.call}
+        tool={view.preview}
+        collection={view.collection}
+        id={previewing}
+        labels={labels}
+        onClose={() => setPreviewing(null)}
+      />
+    );
   }
   if (open && view.collection) {
     return (
@@ -102,8 +118,18 @@ export function InteractionApp(props: {
                   </div>
                 ))}
               </dl>
-              {view.rowActions.length > 0 ? (
+              {view.rowActions.length > 0 || (view.preview && id) ? (
                 <div className="flex flex-wrap gap-2">
+                  {view.preview && id ? (
+                    <button
+                      type="button"
+                      aria-label={`${labels.preview}: ${id}`}
+                      className="rounded-md border px-3 py-1 font-medium"
+                      onClick={() => setPreviewing(id)}
+                    >
+                      {labels.preview}
+                    </button>
+                  ) : null}
                   {view.rowActions.map((action) => {
                     const title = action.title ?? action.capability;
                     return (
@@ -217,6 +243,39 @@ function RowActionPanel(props: {
       >
         <SchemaForm schema={action.inputSchema} controller={controller} state={state} hidden={hiddenInputs(action)} language={props.locale} />
       </OperationPanel>
+    </div>
+  );
+}
+
+/**
+ * The entry's site page, rendered by the server for this caller. It is
+ * shown in an iframe with an empty sandbox (no scripts, forms, popups or
+ * access to the App) and with its links and refreshes removed. Assets load
+ * only as far as the App's CSP allows.
+ */
+function SitePreview(props: {
+  readonly call: CallTool;
+  readonly tool: string;
+  readonly collection: string;
+  readonly id: string;
+  readonly labels: AppLabels;
+  readonly onClose: () => void;
+}): ReactNode {
+  const [page, setPage] = useState<{ html: string } | { error: string } | null>(null);
+  useEffect(() => {
+    let live = true;
+    previewHtml(props.call, props.tool, props.collection, props.id)
+      .then((html) => { if (live) setPage({ html: inertPreview(html) }); }, (error: unknown) => { if (live) setPage({ error: error instanceof Error ? error.message : String(error) }); });
+    return () => { live = false; };
+  }, [props.call, props.tool, props.collection, props.id]);
+  return (
+    <div className="grid gap-2 p-3">
+      <div className="flex justify-end">
+        <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" onClick={props.onClose}>{props.labels.interaction.close}</button>
+      </div>
+      {page === null ? <p className="text-muted-foreground text-sm">{props.labels.previewLoading}</p>
+        : "error" in page ? <p role="alert" className="text-destructive text-sm">{page.error}</p>
+        : <iframe title={props.labels.sitePreview} sandbox="" srcDoc={page.html} className="h-[70vh] w-full rounded-md border" />}
     </div>
   );
 }
