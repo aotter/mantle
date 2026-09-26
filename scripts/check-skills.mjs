@@ -29,9 +29,26 @@ function frontMatter(text) {
 
 const scopesOf = (declared) => (declared ?? "").split(",").map((scope) => scope.trim()).filter(Boolean);
 
-const skills = ["mantle", ...readdirSync(skillsRoot, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)].sort();
+const directories = (path) => existsSync(path)
+  ? readdirSync(path, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+  : [];
+
+// Package skills ship in the npm package; plugin skills ship only in their own
+// plugin under plugins/<plugin>/skills/, together with any files beside them.
+const sources = new Map([
+  ["mantle", "skills/install/SKILL.md"],
+  ...directories(skillsRoot).map((skill) => [skill, `docs/skills/${skill}/SKILL.md`]),
+]);
+const pluginSkills = new Set();
+for (const plugin of directories(join(repoRoot, "plugins"))) {
+  for (const skill of directories(join(repoRoot, "plugins", plugin, "skills"))) {
+    const where = `plugins/${plugin}/skills/${skill}/SKILL.md`;
+    if (sources.has(skill)) fail(where, `skill name ${skill} is already shipped by ${sources.get(skill)}`);
+    else sources.set(skill, where);
+    pluginSkills.add(skill);
+  }
+}
+const skills = [...sources.keys()].sort();
 
 if (skills.length === 0) fail("skills/", "no skills found");
 
@@ -40,8 +57,8 @@ const declaredReason = new Map();
 const projected = [];
 
 for (const skill of skills) {
-  const file = skill === "mantle" ? join(repoRoot, "skills", "install", "SKILL.md") : join(skillsRoot, skill, "SKILL.md");
-  const where = skill === "mantle" ? "skills/install/SKILL.md" : `docs/skills/${skill}/SKILL.md`;
+  const where = sources.get(skill);
+  const file = join(repoRoot, where);
   if (!existsSync(file)) {
     fail(where, "missing SKILL.md");
     continue;
@@ -65,6 +82,8 @@ for (const skill of skills) {
   } else {
     const unknown = scopes.filter((scope) => !SCOPES.has(scope));
     if (unknown.length > 0) fail(where, `unknown projection scope: ${unknown.join(", ")}`);
+    // `mantle skills` projects from the npm package, which carries no plugin skill.
+    if (pluginSkills.has(skill) && scopes.join() !== "plugin") fail(where, "a plugin skill declares projection `plugin` only");
     if (scopes.includes("project")) projected.push(skill);
     // A skill kept out of generated projects is a safety decision; make it explain itself.
     else if (!front("projectionReason")) fail(where, "projection excludes `project` but no projectionReason is given");
