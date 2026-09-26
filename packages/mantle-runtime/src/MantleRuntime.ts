@@ -1,6 +1,7 @@
 import {
   DiagnosticError,
   EntryDataValidator,
+  resolveLifecycle,
   runtimeDiagnostic,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
@@ -65,6 +66,8 @@ import {
   type ExecuteViewResponse,
 } from "./usecase/view/index.js";
 import { UpdateSiteSettingsUseCase } from "./usecase/site/index.js";
+import { createStore, type StoreDependencies } from "./usecase/store/createStore.js";
+import type { MantleStore } from "./domain/model/Store.js";
 import {
   assertDeploymentPlan,
   prepareDeployment,
@@ -127,6 +130,8 @@ export interface MantleRuntime {
   /** Linked schemas needed by optional projections such as Mantle Web. */
   readonly schemas: ReadonlyMap<string, SchemaManifest>;
   readonly entries: EntryReader;
+  /** Store for trusted host code, without a caller context (ADR-0030). */
+  readonly store: MantleStore;
   readonly siteConfig: SiteConfigRepository | null;
   readonly updateSiteSettings: UpdateSiteSettingsUseCase | null;
   readonly media: MantleMedia | null;
@@ -138,10 +143,6 @@ export interface MantleRuntime {
   readonly unpublish: UnpublishUseCase;
   readonly archive: ArchiveUseCase;
   readonly deleteEntry: DeleteEntryUseCase;
-  /** All-or-nothing create/update/delete across Schemas when storage supports it. */
-  readonly writeAtomically: AtomicEntryWriteUseCase;
-  /** Preview by default; `delete: true` explicitly removes one bounded page. */
-  sweepExpired(request: SweepExpiredRequest): Promise<SweepExpiredResult>;
   invokeProcedure<O = unknown>(
     request: InvokeMantleProcedureRequest,
   ): Promise<InvokeProcedureResponse<O>>;
@@ -196,18 +197,18 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
   const validator = new EntryDataValidator();
   const sweepExpired = async (request: SweepExpiredRequest): Promise<SweepExpiredResult> => {
     if (!prepared.expiry) throw new DiagnosticError(runtimeDiagnostic({
-      code: "RESOURCE_UNAVAILABLE", severity: "error", path: "runtime/sweepExpired",
+      code: "RESOURCE_UNAVAILABLE", severity: "error", path: "store/sweepExpired",
       message: "This storage adapter cannot sweep expired entries.",
     }));
     if (!schemasByName.get(request.collection)?.spec.ttl) throw new DiagnosticError(runtimeDiagnostic({
-      code: "RESOURCE_UNAVAILABLE", severity: "error", path: "runtime/sweepExpired",
+      code: "RESOURCE_UNAVAILABLE", severity: "error", path: "store/sweepExpired",
       message: `Schema '${request.collection}' has no TTL policy.`,
     }));
     const limit = request.limit ?? 50;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
       (request.cursor !== undefined && (typeof request.cursor !== "string" || request.cursor.length > 200))) {
       throw new DiagnosticError(runtimeDiagnostic({
-        code: "INPUT_VALIDATION_FAILED", severity: "error", path: "runtime/sweepExpired",
+        code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store/sweepExpired",
         message: "Sweep requires a limit from 1 to 100 and an optional short cursor.",
       }));
     }
@@ -235,12 +236,22 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     validator,
   );
   let atomicWrite: AtomicEntryWriteUseCase;
+  const storeDependencies: StoreDependencies = {
+    reader: prepared.store,
+    write: (operations) => atomicWrite.execute(operations),
+    sweepExpired,
+    idgen,
+    runView: (name, options, ctx) => {
+      const view = viewsByName.get(name);
+      if (!view) return Promise.resolve(unknown("View", name, undefined));
+      return executeView.execute({ view, options, ctx });
+    },
+  };
   const invokeProcedure = new InvokeProcedureUseCase(
     registry,
     invokeBuiltin,
     proceduresByName,
-    (operations) => atomicWrite.execute(operations),
-    sweepExpired,
+    (ctx, readOnly) => createStore(storeDependencies, { ctx, readOnly }),
   );
   const lifecycleHooks = new RunLifecycleHooksUseCase(
     triggerIndex,
@@ -288,7 +299,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
   const unpublish = new UnpublishUseCase(entries, schemasByName, clock);
   const archive = new ArchiveUseCase(entries, schemasByName, clock);
   const deleteEntry = new DeleteEntryUseCase(entries, schemasByName);
-  const writeAtomically = atomicWrite = new AtomicEntryWriteUseCase(
+  atomicWrite = new AtomicEntryWriteUseCase(
     prepared.atomicEntries,
     createDraft,
     updateDraft,
@@ -296,6 +307,12 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     (write, previous) => hookedEntries.atomicHooks(write, previous),
     ports.onPublishingContentChange,
     (collection) => (schemasByName.get(collection)?.spec.lifecycle ?? "publishing") === "publishing",
+    (collection) => {
+      const schema = schemasByName.get(collection);
+      if (!schema) return "unknown";
+      if (hookedEntries.hasHooks(collection, ["before_delete", "after_delete"])) return "hooks";
+      return resolveLifecycle(schema) === "operational" ? "ok" : "published";
+    },
   );
   const executeView = new ExecuteViewUseCase(
     prepared.views,
@@ -341,8 +358,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     unpublish,
     archive,
     deleteEntry,
-    writeAtomically,
-    sweepExpired,
+    store: createStore(storeDependencies),
     invokeProcedure: (request) => {
       const procedure = proceduresByName.get(request.procedure);
       if (!procedure) {

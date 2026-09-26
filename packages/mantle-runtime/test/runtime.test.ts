@@ -24,8 +24,8 @@ import { makeProcedure, postsSchema } from "./fakes/manifests.js";
 describe("SQLite runtime composition", () => {
   it("reports unsupported atomic writes before touching a driver without that capability", async () => {
     const runtime = await createTestRuntime({ manifests: [postsSchema()], db: new InMemoryDatabase() });
-    await expect(runtime.writeAtomically.execute([
-      { kind: "create", request: { collection: "posts", data: { title: "No partial write" }, authorId: null } },
+    await expect(runtime.store.write([
+      { insert: "posts", values: { title: "No partial write" } },
     ])).rejects.toMatchObject({ diagnostic: { code: "RESOURCE_UNAVAILABLE" } });
     expect(await runtime.listEntries.execute({ collection: "posts" })).toEqual([]);
   });

@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { linkManifestSet, parseManifestSources, runtimeDiagnostic } from "@aotter/mantle-spec";
-import { compileRuntimePlan, InvokeFailure, type AtomicDraftOperation, type HandlerContext } from "@aotter/mantle-runtime";
+import { compileRuntimePlan, InvokeFailure, type HandlerContext, type MantleStore } from "@aotter/mantle-runtime";
 import { createBunMantle } from "../src/index.js";
 
 const source = `apiVersion: cms.mantle.aotter.net/v1
@@ -94,12 +94,13 @@ test("Bun commits semantic multi-Schema writes and rolls back duplicate receipt 
       },
       recordSession: async (input: { name: string; token: string }, ctx: HandlerContext) => {
         const sessionId = crypto.randomUUID();
-        const rows = await ctx.writeAtomically!([
-          { kind: "create", id: sessionId, request: { collection: "sessions", data: { name: input.name }, authorId: null, ctx } },
-          { kind: "create", request: { collection: "blocks", data: { name: `${input.name}-block`, sessionId }, authorId: null, ctx } },
-          { kind: "create", request: { collection: "receipts", data: { token: input.token }, authorId: null, ctx } },
+        const rows = await ctx.store!.write([
+          { insert: "sessions", id: sessionId, values: { name: input.name } },
+          { insert: "blocks", values: { name: `${input.name}-block`, sessionId } },
+          { insert: "receipts", values: { token: input.token } },
         ]);
-        return { sessionId: rows[0]?.id };
+        const session = rows[0];
+        return { sessionId: session && "id" in session ? session.id : undefined };
       },
     },
     ports: { onPublishingContentChange: async () => { events.push("invalidate"); } },
@@ -113,9 +114,9 @@ test("Bun commits semantic multi-Schema writes and rolls back duplicate receipt 
   expect(events).toEqual(["before_create", "after_create", "invalidate"]);
   expect(await runtime.listEntries.execute({ collection: "sessions" })).toHaveLength(1);
 
-  await expect(runtime.writeAtomically.execute([
-    { kind: "create", request: { collection: "sessions", data: { name: "veto" }, authorId: null, originalInput: { name: "veto" } } },
-    { kind: "create", request: { collection: "receipts", data: { token: "veto" }, authorId: null } },
+  await expect(runtime.store.write([
+    { insert: "sessions", values: { name: "veto" } },
+    { insert: "receipts", values: { token: "veto" } },
   ])).rejects.toThrow();
   expect(events).toEqual(["before_create", "after_create", "invalidate", "before_create"]);
   events.length = 3;
@@ -131,54 +132,57 @@ test("Bun commits semantic multi-Schema writes and rolls back duplicate receipt 
   expect(await runtime.listEntries.execute({ collection: "sessions" })).toHaveLength(1);
   expect(await runtime.listEntries.execute({ collection: "blocks" })).toHaveLength(1);
 
-  await expect(runtime.writeAtomically.execute([
-    { kind: "create", request: { collection: "sessions", data: { name: "batch-duplicate" }, authorId: null } },
-    { kind: "create", request: { collection: "receipts", data: { token: "batch-duplicate" }, authorId: null } },
-    { kind: "create", request: { collection: "receipts", data: { token: "batch-duplicate" }, authorId: null } },
+  await expect(runtime.store.write([
+    { insert: "sessions", values: { name: "batch-duplicate" } },
+    { insert: "receipts", values: { token: "batch-duplicate" } },
+    { insert: "receipts", values: { token: "batch-duplicate" } },
   ])).rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
   expect((await runtime.listEntries.execute({ collection: "sessions" })).some((row) => row.data.name === "batch-duplicate")).toBe(false);
 
   const firstReceipt = (await runtime.listEntries.execute({ collection: "receipts" }))[0]!;
-  await runtime.writeAtomically.execute([
-    { kind: "delete", request: { collection: "receipts", id: firstReceipt.id, expectedVersion: firstReceipt.version } },
-    { kind: "create", request: { collection: "receipts", data: { token: "once" }, authorId: null } },
+  const swapped = await runtime.store.write([
+    { delete: "receipts", where: { id: firstReceipt.id }, lock: firstReceipt.version },
+    { insert: "receipts", values: { token: "once" } },
   ]);
+  expect(swapped[0]).toEqual({ deleted: 1 });
+  expect(swapped[1]).toMatchObject({ version: 1 });
   expect(await runtime.listEntries.execute({ collection: "receipts" })).toHaveLength(1);
 
-  await expect(runtime.writeAtomically.execute([
-    { kind: "create", request: { collection: "sessions", data: { name: "validated" }, authorId: null } },
-    { kind: "create", request: { collection: "blocks", data: { name: 42, sessionId: "invalid" }, authorId: null } },
+  await expect(runtime.store.write([
+    { insert: "sessions", values: { name: "validated" } },
+    { insert: "blocks", values: { name: 42, sessionId: "invalid" } },
   ])).rejects.toMatchObject({ diagnostics: [{ code: "INPUT_VALIDATION_FAILED" }] });
   expect(await runtime.listEntries.execute({ collection: "sessions" })).toHaveLength(1);
 
   const existing = await runtime.createDraft.execute({ collection: "sessions", data: { name: "old" }, authorId: null });
   await runtime.updateDraft.execute({ collection: "sessions", id: existing.id, expectedVersion: 1, data: { name: "new" } });
-  await expect(runtime.writeAtomically.execute([{
-    kind: "updte", request: { collection: "sessions", id: existing.id, expectedVersion: 2, data: { name: "typo" } },
-  } as unknown as AtomicDraftOperation])).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  await expect(runtime.store.write([{
+    updte: "sessions", set: { name: "typo" }, where: { id: existing.id }, lock: 2,
+  } as unknown as Parameters<MantleStore["write"]>[0][number]])).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
   expect((await runtime.getEntry.execute({ collection: "sessions", id: existing.id })).data.name).toBe("new");
   const effectsBeforeStale = events.length;
-  await expect(runtime.writeAtomically.execute([
-    { kind: "create", request: { collection: "receipts", data: { token: "status-mismatch" }, authorId: null } },
-    { kind: "delete", request: { collection: "sessions", id: existing.id, expectedVersion: 2, expectedStatus: "published" } },
+  // A set-based delete whose expected count is not met rolls back the whole group.
+  await expect(runtime.store.write([
+    { insert: "receipts", values: { token: "count-mismatch" } },
+    { delete: "blocks", where: { name: "no such block" }, expect: 1 },
   ])).rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
   expect(await runtime.listEntries.execute({ collection: "receipts" })).toHaveLength(1);
-  await expect(runtime.writeAtomically.execute([
-    { kind: "create", request: { collection: "receipts", data: { token: "second" }, authorId: null } },
-    { kind: "update", request: { collection: "sessions", id: existing.id, expectedVersion: 1, data: { name: "stale" } } },
+  await expect(runtime.store.write([
+    { insert: "receipts", values: { token: "second" } },
+    { update: "sessions", set: { name: "stale" }, where: { id: existing.id }, lock: 1 },
   ])).rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
   expect(await runtime.listEntries.execute({ collection: "receipts" })).toHaveLength(1);
   expect((await runtime.getEntry.execute({ collection: "sessions", id: existing.id })).data.name).toBe("new");
   expect(events).toHaveLength(effectsBeforeStale);
 
-  await expect(runtime.writeAtomically.execute([
-    { kind: "create", request: { collection: "receipts", data: { token: "third" }, authorId: null } },
-    { kind: "delete", request: { collection: "sessions", id: existing.id, expectedVersion: 1 } },
+  await expect(runtime.store.write([
+    { insert: "receipts", values: { token: "third" } },
+    { delete: "sessions", where: { id: existing.id }, lock: 1 },
   ])).rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
   expect(await runtime.listEntries.execute({ collection: "receipts" })).toHaveLength(1);
-  await runtime.writeAtomically.execute([
-    { kind: "delete", request: { collection: "sessions", id: existing.id, expectedVersion: 2 } },
-    { kind: "create", request: { collection: "receipts", data: { token: "third" }, authorId: null } },
+  await runtime.store.write([
+    { delete: "sessions", where: { id: existing.id }, lock: 2 },
+    { insert: "receipts", values: { token: "third" } },
   ]);
   expect(await runtime.listEntries.execute({ collection: "receipts" })).toHaveLength(2);
   expect(events.filter((event) => event === "invalidate")).toHaveLength(4);
