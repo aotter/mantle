@@ -1,14 +1,16 @@
-import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle-spec";
+import { DiagnosticError, runtimeDiagnostic, type SchemaManifest } from "@aotter/mantle-spec";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
-import type { MantleStore, StoreWhere, StoreWriteOp, StoreWriteResult } from "../../domain/model/Store.js";
+import type { CallerStore, MantleStore, StoreWhere, StoreWriteOp, StoreWriteResult } from "../../domain/model/Store.js";
 import type { SweepExpiredRequest, SweepExpiredResult } from "../../domain/port/ExpirySweeper.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
 import type { StoreReader } from "../../domain/port/StoreReader.js";
 import type { ViewQueryOptions } from "../../domain/port/ViewQueryExecutor.js";
 import type { AtomicDraftOperation, AtomicWriteOutcome } from "../content/AtomicEntryWriteUseCase.js";
 import type { ExecuteViewResponse } from "../view/ExecuteViewUseCase.js";
+import { validateStoreSelect, validateStoreWhere } from "./validateStoreQuery.js";
 
 export interface StoreDependencies {
+  readonly schemasByName: ReadonlyMap<string, SchemaManifest>;
   /** Absent when the storage adapter cannot run Store queries. */
   readonly reader?: StoreReader;
   readonly write: (operations: readonly AtomicDraftOperation[]) => Promise<readonly AtomicWriteOutcome[]>;
@@ -28,14 +30,17 @@ export interface StoreBinding {
 }
 
 /** The Store facade (ADR-0030), bound to one caller context when inside a Procedure. */
-export function createStore(deps: StoreDependencies, binding: StoreBinding = {}): MantleStore {
+export function createStore(deps: StoreDependencies): MantleStore;
+export function createStore(deps: StoreDependencies, binding: StoreBinding): CallerStore;
+export function createStore(deps: StoreDependencies, binding: StoreBinding = {}): MantleStore | CallerStore {
   const { ctx, readOnly = false } = binding;
-  const refuseWrite = (path: string) => Promise.reject(new DiagnosticError(runtimeDiagnostic({
+  const callerBound = Object.hasOwn(binding, "ctx");
+  const refuseWrite = (path: string, message = "Authorization guard Procedures cannot write; the Store they receive is read-only.") => Promise.reject(new DiagnosticError(runtimeDiagnostic({
     code: "INPUT_VALIDATION_FAILED", severity: "error", path,
-    message: "Authorization guard Procedures cannot write; the Store they receive is read-only.",
+    message,
   })));
   return {
-    select: (query) => {
+    select: async (query) => {
       if (!deps.reader) {
         return Promise.reject(new DiagnosticError(runtimeDiagnostic({
           code: "RESOURCE_UNAVAILABLE", severity: "error", path: "store/select",
@@ -43,17 +48,17 @@ export function createStore(deps: StoreDependencies, binding: StoreBinding = {})
           message: "This storage adapter cannot run Store queries.",
         })));
       }
-      return deps.reader.select(query);
+      return deps.reader.select(validateStoreSelect(query, deps.schemasByName));
     },
     write: async (ops) => {
       if (readOnly) return refuseWrite("store/write");
       if (!Array.isArray(ops)) throw invalid("store.write takes an array of operations.");
-      const outcomes = await deps.write(ops.map((op, index) => toOperation(op, index, ctx)));
+      const outcomes = await deps.write(ops.map((op, index) => toOperation(op, index, ctx, deps.schemasByName)));
       return outcomes.map((outcome): StoreWriteResult => outcome.row
         ? { id: outcome.row.id, version: outcome.row.version }
         : { deleted: outcome.affected });
     },
-    sweepExpired: (request) => readOnly ? refuseWrite("store/sweepExpired") : deps.sweepExpired(request),
+    ...(!callerBound ? { sweepExpired: (request: SweepExpiredRequest) => deps.sweepExpired(request) } : {}),
     view: async (name, options = {}) => {
       const response = await deps.runView(name, options, ctx);
       if (!response.ok) throw new DiagnosticError(response.diagnostic);
@@ -69,7 +74,7 @@ const OP_KEYS = {
   delete: ["delete", "where", "lock", "expect"],
 } as const;
 
-function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | undefined): AtomicDraftOperation {
+function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | undefined, schemas: ReadonlyMap<string, SchemaManifest>): AtomicDraftOperation {
   const at = `store.write[${index}]`;
   if (typeof op !== "object" || op === null || Array.isArray(op)) throw invalid(`${at} must be an object.`);
   const kinds = (["insert", "update", "delete"] as const).filter((kind) => Object.hasOwn(op, kind));
@@ -107,7 +112,10 @@ function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | unde
     return { kind: "delete", request: { collection, id: rowId, expectedVersion: lock, ...(ctx ? { ctx } : {}) } };
   }
   if (expect !== undefined && typeof expect !== "number") throw invalid(`${at}.expect must be a number.`);
-  return { kind: "deleteWhere", request: { collection, where: where as StoreWhere, ...(expect === undefined ? {} : { expect }) } };
+  const schema = schemas.get(collection);
+  if (!schema) throw invalid(`Unknown Schema '${collection}'.`);
+  validateStoreWhere(where as StoreWhere, schema, schemas);
+  return { kind: "deleteWhere", request: { collection, where: structuredClone(where) as StoreWhere, ...(expect === undefined ? {} : { expect }) } };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

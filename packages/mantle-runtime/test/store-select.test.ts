@@ -269,9 +269,37 @@ describe("store.select (#1151)", () => {
   it("reports adapters without the store capability", async () => {
     const unused = async (): Promise<never> => { throw new Error("unused"); };
     const store = createStore({
+      schemasByName: new Map(),
       idgen: { next: () => "x" }, write: unused, sweepExpired: unused,
       runView: async () => ({ ok: true, result: { rows: [], page: 1, show: 1, hasMore: false } }),
     });
     await expect(store.select({ from: "sessions" })).rejects.toMatchObject({ diagnostic: { code: "RESOURCE_UNAVAILABLE" } });
+  });
+
+  it("rejects invalid filters before calling an adapter", async () => {
+    let calls = 0;
+    const store = createStore({
+      schemasByName: new Map([["sessions", sessions]]),
+      reader: { select: async () => { calls++; return { rows: [] }; } },
+      idgen: { next: () => "x" }, write: async () => [], sweepExpired: async () => ({ scanned: 0, removed: 0 }),
+      runView: async () => ({ ok: true, result: { rows: [], page: 1, show: 1, hasMore: false } }),
+    });
+    await expect(store.select({ from: "sessions", where: { ownerId: undefined } })).rejects.toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+    expect(calls).toBe(0);
+  });
+
+  it("keeps anonymous caller-bound maintenance separate from host maintenance", async () => {
+    let sweeps = 0;
+    const deps = {
+      schemasByName: new Map(), idgen: { next: () => "x" }, write: async () => [],
+      sweepExpired: async () => { sweeps++; return { scanned: 0, removed: 0 }; },
+      runView: async () => ({ ok: true as const, result: { rows: [], page: 1, show: 1, hasMore: false } }),
+    };
+    expect("sweepExpired" in createStore(deps, { ctx: undefined })).toBe(false);
+    expect(sweeps).toBe(0);
+    await createStore(deps).sweepExpired({ collection: "sessions" });
+    expect(sweeps).toBe(1);
   });
 });
