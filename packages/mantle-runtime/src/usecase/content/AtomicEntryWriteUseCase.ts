@@ -1,6 +1,7 @@
 import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle-spec";
 import { liftLocale, type EntryRow } from "../../domain/model/EntryRow.js";
 import type { AtomicEntryWrite, AtomicEntryWriter } from "../../domain/port/AtomicEntryWriter.js";
+import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { CreateDraftRequest, DeleteEntryRequest, UpdateDraftRequest } from "../dto/content/index.js";
 import type { StoreWhere } from "../../domain/model/Store.js";
 import type { CreateDraftUseCase } from "./CreateDraftUseCase.js";
@@ -28,6 +29,7 @@ export interface AtomicWriteOutcome {
 export class AtomicEntryWriteUseCase {
   constructor(
     private readonly writer: AtomicEntryWriter | undefined,
+    private readonly entries: Pick<EntryRepository, "get">,
     private readonly create: CreateDraftUseCase,
     private readonly update: UpdateDraftUseCase,
     private readonly remove: DeleteEntryUseCase,
@@ -70,7 +72,8 @@ export class AtomicEntryWriteUseCase {
         assertScope(args.data, operation.scope);
         write = { kind: "create", args };
       } else if (operation.kind === "update") {
-        const target = current(operation.request);
+        let target = current(operation.request);
+        if (operation.scope && target.previous === undefined) target = { previous: await this.entries.get(operation.request) };
         assertScopedTarget(target.previous, operation.scope, operation.request, "UpdateDraft");
         const preparedUpdate = await this.update.prepare(operation.request, {
           skipUniquePreflight: true, ...target,
@@ -80,7 +83,8 @@ export class AtomicEntryWriteUseCase {
           ...preparedUpdate.args, observedVersion: previous.version,
         } };
       } else if (operation.kind === "delete") {
-        const target = current(operation.request);
+        let target = current(operation.request);
+        if (operation.scope && target.previous === undefined) target = { previous: await this.entries.get(operation.request) };
         assertScopedTarget(target.previous, operation.scope, operation.request, "DeleteEntry");
         const preparedDelete = await this.remove.prepare(operation.request, target);
         previous = preparedDelete.previous;
