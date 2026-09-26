@@ -23,6 +23,7 @@ export interface StoreComparison {
   readonly gte?: string | number;
   readonly lt?: string | number;
   readonly lte?: string | number;
+  readonly like?: string;
   readonly in?: readonly StoreScalar[] | StoreSubquery;
   readonly notIn?: readonly StoreScalar[] | StoreSubquery;
   readonly isNull?: boolean;

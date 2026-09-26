@@ -90,6 +90,8 @@ describe("store.select (#1151)", () => {
     expect(await q({ or: [{ ownerId: "b" }, { rpe: null }] })).toEqual(["s2", "s3"]);
     expect(await q({ not: { ownerId: "a" } })).toEqual(["s3"]);
     expect(await q({ version: 1, status: "published", performedAt: { gt: "2026-09-01" } })).toEqual(["s2", "s3"]);
+    expect(await q({ performedAt: { like: "2026-09-0_" }, ownerId: "a" })).toEqual(["s1", "s2"]);
+    await expect(q({ rpe: { like: "%7%" } })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
   });
 
   it("filters through an in-subquery across Schemas", async () => {
@@ -199,7 +201,8 @@ describe("store.select (#1151)", () => {
     [{ from: "sessions", where: { tags: "x" } }, /not a scalar/],
     [{ from: "sessions", where: { rpe: "7" } }, /expects a value of type integer/],
     [{ from: "sessions", where: {} }, /must not be empty/],
-    [{ from: "sessions", where: { rpe: { like: 1 } } }, /Unknown Store operator 'like'/],
+    [{ from: "sessions", where: { rpe: { like: 1 } } }, /expects a string column and pattern/],
+    [{ from: "sessions", where: { ownerId: { match: "a" } } }, /Unknown Store operator 'match'/],
     [{ from: "sessions", where: { rpe: { gt: null } } }, /cannot compare with null/],
     [{ from: "sessions", where: { and: [] } }, /non-empty array/],
     [{ from: "sessions", where: { id: { in: Array.from({ length: 101 }, (_, i) => `s${i}`) } } }, /at most 100/],
