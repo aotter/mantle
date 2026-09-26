@@ -19,6 +19,11 @@ const sessions = schema("sessions", { ownerId: { type: "string" }, note: { type:
 const blocks = schema("blocks", { sessionId: { type: "string" }, exercise: { type: "string" } }, ["sessionId"]);
 const sets = schema("sets", { blockId: { type: "string" }, reps: { type: "integer" } }, ["blockId"]);
 const audited = schema("audited", { name: { type: "string" } });
+const privateSessionsBase = schema("privateSessions", { ownerId: { type: "string" }, label: { type: "string" } }, ["ownerId"]);
+const privateSessions: SchemaManifest = {
+  ...privateSessionsBase,
+  spec: { ...privateSessionsBase.spec, indexes: [["ownerId"]], scope: { ownerId: "$ctx.user.id" } },
+};
 const auditTrigger = {
   apiVersion: "cms.mantle.aotter.net/v1", kind: "Trigger", metadata: { name: "audit-delete" },
   spec: { source: { kind: "lifecycle", schema: "audited", on: ["before_delete"] }, target: { procedure: "audit" } },
@@ -56,6 +61,63 @@ async function workout(rt: MantleRuntime) {
 const count = async (rt: MantleRuntime, from: string) => (await rt.store.select({ from, limit: 500 })).rows.length;
 
 describe("store.write (#1151)", () => {
+  it("scopes reads, subqueries, inserts and set deletes to the caller", async () => {
+    const seen: unknown[] = [];
+    const rt = await runtime(new AtomicDatabase(), [privateSessions, procedure("probe")], {
+      probe: async (_input, ctx: HandlerContext) => {
+        seen.push((await ctx.store!.select({ from: "privateSessions" })).rows.map((row) => row["id"]));
+        seen.push((await ctx.store!.select({ from: "blocks", where: {
+          sessionId: { in: { select: "id", from: "privateSessions" } },
+        } })).rows.map((row) => row["id"]));
+        seen.push(await ctx.store!.write([{ delete: "blocks", where: {
+          sessionId: { in: { select: "id", from: "privateSessions" } },
+        } }]));
+        seen.push(await ctx.store!.write([{ insert: "privateSessions", values: { label: "new" } }]));
+        seen.push(await ctx.store!.write([{ delete: "privateSessions", where: { label: "old" } }]));
+        return {};
+      },
+    });
+    await rt.store.write([
+      { insert: "privateSessions", id: "mine", values: { ownerId: "a", label: "old" } },
+      { insert: "privateSessions", id: "theirs", values: { ownerId: "b", label: "old" } },
+      { insert: "blocks", id: "own-block", values: { sessionId: "mine", exercise: "a" } },
+      { insert: "blocks", id: "other-block", values: { sessionId: "theirs", exercise: "b" } },
+    ]);
+    expect((await rt.invokeProcedure({ procedure: "probe", input: {}, ctx: { user: { id: "a" }, staff: null, env: {} } })).ok).toBe(true);
+    expect(seen[0]).toEqual(["mine"]);
+    expect(seen[1]).toEqual(["own-block"]);
+    expect(seen[2]).toEqual([{ deleted: 1 }]);
+    expect(seen[4]).toEqual([{ deleted: 1 }]);
+    expect((await rt.store.select({ from: "blocks" })).rows.map((row) => row["id"])).toEqual(["other-block"]);
+    expect((await rt.store.select({ from: "privateSessions", where: { ownerId: "b" } })).rows.map((row) => row["id"])).toEqual(["theirs"]);
+    expect((await rt.store.select({ from: "privateSessions", where: { ownerId: "a" } })).rows[0]?.["ownerId"]).toBe("a");
+  });
+
+  it("rejects missing identity and cross-owner row mutations before writing", async () => {
+    const seen: unknown[] = [];
+    const rt = await runtime(new AtomicDatabase(), [privateSessions, procedure("probe")], {
+      probe: async (_input, ctx: HandlerContext) => {
+        for (const ops of [
+          [{ insert: "privateSessions", values: { ownerId: "b", label: "x" } }],
+          [{ update: "privateSessions", where: { id: "theirs" }, lock: 1, set: { label: "changed" } }],
+          [{ delete: "privateSessions", where: { id: "theirs" }, lock: 1 }],
+        ]) {
+          seen.push(await ctx.store!.write(ops as never).then(() => "allowed", (error: { diagnostic?: { code: string } }) => error.diagnostic?.code));
+        }
+        seen.push(await ctx.store!.select({ from: "privateSessions" }).then(() => "allowed", (error: { diagnostic?: { code: string } }) => error.diagnostic?.code));
+        seen.push(await ctx.store!.select({ from: "blocks", where: {
+          sessionId: { in: { select: "id", from: "privateSessions" } },
+        } }).then(() => "allowed", (error: { diagnostic?: { code: string } }) => error.diagnostic?.code));
+        return {};
+      },
+    });
+    await rt.store.write([{ insert: "privateSessions", id: "theirs", values: { ownerId: "b", label: "old" } }]);
+    await rt.invokeProcedure({ procedure: "probe", input: {}, ctx: { user: { id: "a" }, staff: null, env: {} } });
+    await rt.invokeProcedure({ procedure: "probe", input: {}, ctx: { user: null, staff: null, env: {} } });
+    expect(seen.slice(0, 3)).toEqual(["INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED"]);
+    expect(seen.slice(5)).toEqual(["INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED", "INPUT_VALIDATION_FAILED"]);
+    expect((await rt.store.select({ from: "privateSessions" })).rows[0]?.["label"]).toBe("old");
+  });
   it("inserts, updates and deletes atomically and reports per-op results", async () => {
     const rt = await runtime(new AtomicDatabase());
     const { sessionId, results } = await workout(rt);

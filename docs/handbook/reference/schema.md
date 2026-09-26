@@ -20,6 +20,11 @@ A Schema declares one collection: the JSON Schema for each entry's `data`, its i
 | `translates` | `{ parent, on }` | no | — | Marks a translation child. Requires `localized: true`. |
 | `lifecycle` | `publishing` \| `operational` | no | `publishing` | Selects the [state machine](#lifecycle). |
 | `ttl` | `{ field, expireAfterSeconds }` | no | — | Logical expiry over one top-level date-time property. See [TTL](#ttl). |
+| `scope` | `{ field: "$ctx.user.id" }` | no | — | One required string field with a leftmost index; caller-bound Store operations enforce it. |
+
+### Caller scope
+
+`scope: { ownerId: "$ctx.user.id" }` binds a Schema to the verified caller. Declare `ownerId` as a required, non-null string property and put it first in `indexes` or `uniqueIndexes`. `ctx.store.select` and set deletes AND this predicate with the requested `where`, including subqueries over another scoped Schema. Inserts fill `ownerId` and reject a conflicting value; row updates and deletes verify ownership before hooks. Missing identity fails closed. `runtime.store` is trusted host access without an injected scope. Declarative Views over the Schema must also AND an identity filter at the top level and require `ctx.user`; native SQL Views remain a trusted escape hatch.
 
 ### Reserved entry columns
 
