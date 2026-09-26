@@ -2,7 +2,6 @@
 import { Hono } from "hono";
 import { AwsClient } from "aws4fetch";
 import { buildCapabilityCatalog, InvokeCapabilityUseCase, projectCallableCapabilities, sealRuntimePlan, type CapabilityUseCases, type RuntimePlanData } from "@aotter/mantle-runtime";
-import { DatabaseSiteConfigRepository, ExecuteViewUseCase, prepareSqliteView } from "@aotter/mantle-runtime/testing/storage";
 import { createMantleMcpHandler, type MantleMcpHandler } from "@aotter/mantle-mcp";
 import { jsonSchemaToZod, redactForWire, type SiteDefaults } from "@aotter/mantle-spec";
 import { TemplateRegistry, createPublicPathResolver } from "@aotter/mantle-web";
@@ -13,6 +12,9 @@ import { diagnosticPhase } from "../../src/requestDiagnostics.js";
 import { gateCaller } from "../../src/mount/resolveCaller.js";
 import { KvSiteConfigRepository } from "../../src/bindings/KvSiteConfigRepository.js";
 import { applyCachePolicy } from "../../src/oauth/cachePolicy.js";
+import { DatabaseSiteConfigRepository } from "../../../../mantle-runtime/dist/infrastructure/persistence/DatabaseSiteConfigRepository.js";
+import { ExecuteViewUseCase } from "../../../../mantle-runtime/dist/usecase/view/ExecuteViewUseCase.js";
+import { prepareSqliteView } from "../../../../mantle-runtime/dist/infrastructure/storage/SqliteViewCompiler.js";
 import { fixtureAuth } from "./parity-auth.js";
 import planData from "./parity-plan.generated.json" with { type: "json" };
 
