@@ -29,11 +29,22 @@ The one exception is `mantle-host`. It carries a vendored script,
 `scripts/mantle-host.mjs`, so it lives in its own plugin under
 `plugins/mantle-host/` instead of `docs/skills/`. The script is copied
 byte-exact from `aotter/mantle-home`. `scripts/VENDORED.json` beside it
-records the source commit and SHA-256, and `scripts/check-plugin-vendor.mjs`
-verifies them. The skill is not in the npm package, and `mantle skills` does
+records the source commit, SHA-256, host protocol and the Core version the
+bundle is pinned to. `scripts/check-plugin-vendor.mjs` verifies the hash, runs
+the bundle's `version --json` to compare the protocol and Core pin, and fails
+when `coreVersion` is not `packages/mantle`'s version. A Core version bump
+therefore needs a mantle-home build pinned to the new version, re-vendored in
+the same change. The skill is not in the npm package, and `mantle skills` does
 not project it. `scripts/check-skills.mjs` covers every
 `plugins/*/skills/*/SKILL.md` with the same front-matter and audit-row rules,
 and it requires plugin skills to declare `projection: plugin` only.
+
+Claude Code updates an installed plugin only when its manifest version
+changes, and `scripts/sync-plugin-manifests.mjs` sets that version to Core's.
+Every re-vendor therefore needs a plugin version bump, that is a Core release,
+before Claude Code users receive it; until then they keep the previous bundle.
+`npx skills add aotter/mantle --skill mantle-host` reads the repository's
+default branch (`main`) and picks up a re-vendor when that branch does.
 
 | Skill | Routes on | Entry-path constraints (read before acting) | Path-gated sections | Projection | Restricted because |
 |---|---|---|---|---|---|
