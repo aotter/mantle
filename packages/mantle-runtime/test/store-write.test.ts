@@ -98,6 +98,18 @@ describe("store.write (#1151)", () => {
     expect(await count(rt, "sessions")).toBe(1);
   });
 
+  it("refuses a set-based delete whose where has an undefined value instead of widening it", async () => {
+    const rt = await runtime(new AtomicDatabase());
+    await rt.store.write([
+      { insert: "sessions", values: { ownerId: "a", note: "shared" } },
+      { insert: "sessions", values: { ownerId: "b", note: "shared" } },
+    ]);
+    const ownerId: string | undefined = undefined;
+    await expect(rt.store.write([{ delete: "sessions", where: { ownerId, note: "shared" } }]))
+      .rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED", message: expect.stringMatching(/'ownerId' is undefined/) } });
+    expect(await count(rt, "sessions")).toBe(2);
+  });
+
   it("rolls everything back when an expect count does not hold", async () => {
     const rt = await runtime(new AtomicDatabase());
     await workout(rt);
