@@ -92,6 +92,8 @@ function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | unde
   if (!isRecord(where)) throw invalid(`${at}.where must be an object.`);
   const lock = record["lock"];
   const expect = record["expect"];
+  if (Object.hasOwn(record, "lock") && lock === undefined) throw invalid(`${at}.lock is undefined; omit it or provide a version.`);
+  if (Object.hasOwn(record, "expect") && expect === undefined) throw invalid(`${at}.expect is undefined; omit it or provide a count.`);
   const rowId = Object.keys(where).length === 1 && typeof where["id"] === "string" ? where["id"] : undefined;
   if (kind === "update") {
     const set = record["set"];
