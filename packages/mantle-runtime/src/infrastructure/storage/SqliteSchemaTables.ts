@@ -299,3 +299,14 @@ export function ttlCutoff(now: number, seconds: number): string | null {
   const cutoff = now - seconds * 1000;
   return cutoff < Date.parse("0000-01-01T00:00:00.000Z") ? null : new Date(cutoff).toISOString();
 }
+
+/** Shared visibility predicate for Store, Views and legacy entry reads. */
+export function liveTtlCondition(schema: SchemaManifest, now: () => number): { sql: string; binds: readonly [string] } | null {
+  const ttl = schema.spec.ttl;
+  if (!ttl) return null;
+  const cutoff = ttlCutoff(now(), ttl.expireAfterSeconds);
+  if (cutoff === null) return null;
+  const field = fieldSql(schema, ttl.field);
+  if (!field) throw new Error(`Schema '${schema.metadata.name}' has no field '${ttl.field}'.`);
+  return { sql: `(${field} IS NULL OR julianday(${field}) IS NULL OR julianday(${field}) > julianday(?))`, binds: [cutoff] };
+}
