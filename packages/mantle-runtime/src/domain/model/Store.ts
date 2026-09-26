@@ -113,10 +113,13 @@ export interface MantleStore {
    * Results follow operation order.
    */
   write(ops: readonly StoreWriteOp[]): Promise<readonly StoreWriteResult[]>;
-  /** Host-only maintenance. Caller-bound Procedure stores reject this operation. */
+  /** Host-only maintenance. Caller-bound Procedure stores omit this operation. */
   sweepExpired(request: SweepExpiredRequest): Promise<SweepExpiredResult>;
   /** Run a named View with the caller's context, as REST and MCP would. */
   view<R = StoreRow>(name: string, options?: Pick<ViewQueryOptions, "params" | "page" | "show">): Promise<ViewQueryResult<R>>;
   /** A new entry id from the runtime's id generator. */
   id(): string;
 }
+
+/** Procedure-facing Store; TTL cleanup belongs to trusted host code. */
+export type CallerStore = Omit<MantleStore, "sweepExpired">;

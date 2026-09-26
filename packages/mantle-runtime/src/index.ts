@@ -105,6 +105,7 @@ export type {
 export type { AtomicEntryWrite, AtomicEntryWriter } from "./domain/port/AtomicEntryWriter.js";
 export type { ExpirySweeper, SweepExpiredRequest, SweepExpiredResult } from "./domain/port/ExpirySweeper.js";
 export type {
+  CallerStore,
   MantleStore,
   StoreComparison,
   StoreRow,
@@ -273,4 +274,3 @@ export { readStoreInstanceId } from "./infrastructure/boot/bootState.js";
 // Procedure handler failure carrier used by platform helper handlers
 // such as Cloudflare Turnstile.
 export { InvokeFailure } from "./usecase/procedure/InvokeProcedureUseCase.js";
-

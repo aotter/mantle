@@ -1,6 +1,6 @@
 import type { LifecycleHook, StaffRole } from "@aotter/mantle-spec";
 import type { EntryRow } from "./EntryRow.js";
-import type { MantleStore } from "./Store.js";
+import type { CallerStore } from "./Store.js";
 
 /**
  * `HandlerContext` — auth + bindings handed to every Procedure
@@ -43,7 +43,7 @@ export interface HandlerContext<Env = unknown> {
    * Store bound to this caller (ADR-0030), available in ref Procedures.
    * Authorization guard Procedures receive a read-only Store.
    */
-  readonly store?: MantleStore;
+  readonly store?: CallerStore;
 }
 
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
