@@ -1,5 +1,5 @@
 import { DiagnosticError, runtimeDiagnostic, type SchemaManifest } from "@aotter/mantle-spec";
-import type { StoreScalar, StoreSelect, StoreSubquery, StoreWhere } from "../../domain/model/Store.js";
+import type { StoreScalar, StoreSubquery, StoreWhere } from "../../domain/model/Store.js";
 import { encodeField, fieldCodec, fieldColumn, isNullableJsonSchema, sqliteSchemaTable, type SqliteSchemaTable } from "../storage/SqliteSchemaTables.js";
 
 /** D1 binds at most 100 parameters per statement; keep every compiled Store statement under it. */
@@ -180,12 +180,6 @@ export function assertBindBudget(compiled: CompiledSql): void {
   if (compiled.binds.length > STORE_MAX_BINDS) {
     throw invalid(`A Store statement may bind at most ${STORE_MAX_BINDS} values; use a subquery instead of a long 'in' list.`);
   }
-}
-
-export function validateSelect(query: StoreSelect): void {
-  if (!isPlainObject(query)) throw invalid("Store select takes an object.");
-  const unknownKey = Object.keys(query).find((key) => !["from", "columns", "where", "orderBy", "limit", "cursor"].includes(key));
-  if (unknownKey) throw invalid(`Unknown Store select key '${unknownKey}'.`);
 }
 
 export function invalid(message: string): DiagnosticError {

@@ -140,7 +140,8 @@ function requireSchema(name: unknown, schemas: ReadonlyMap<string, SchemaManifes
 function columnType(schema: SchemaManifest, column: unknown, purpose: string, scalar: boolean): string {
   if (typeof column !== "string") throw invalid(`${purpose} must name a column.`);
   if (Object.hasOwn(NATIVE_TYPES, column)) return NATIVE_TYPES[column]!;
-  const property = schema.spec.schema.properties?.[column];
+  const properties = schema.spec.schema.properties;
+  const property = properties && Object.hasOwn(properties, column) ? properties[column] : undefined;
   if (!property) throw invalid(`Schema '${schema.metadata.name}' has no column '${column}'.`);
   const types = [...new Set((typeof property.type === "string" ? [property.type] : property.type ?? []).filter((type) => type !== "null"))];
   const type = types.length === 1 && !property.oneOf ? types[0]! : "json";
