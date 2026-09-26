@@ -25,6 +25,18 @@ spec:
     type: object
     required: [sessionId, reps]
     properties: { sessionId: { type: string }, reps: { type: integer } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: passes }
+spec:
+  title: Passes
+  lifecycle: operational
+  ttl: { field: expiresAt, expireAfterSeconds: 0 }
+  schema:
+    type: object
+    required: [expiresAt]
+    properties: { expiresAt: { type: string, format: date-time } }
 `;
 
 /** Counts statements outside and inside the batch, and can act just before the batch runs. */
@@ -123,5 +135,78 @@ test("the shared guard still rejects a write that went stale after the prefetch,
   await expect(runtime.writeAtomically.execute([
     { kind: "update", request: { collection: "sets", id: sets[5]!.id, expectedVersion: 1, data: { reps: 1 } } },
   ])).rejects.toMatchObject({ diagnostic: { code: "NOT_FOUND" } });
+  raw.close();
+});
+
+test("a stale write is caught first, last, as a delete or by status, and the conflict names it", async () => {
+  const { raw, probe, runtime, sets } = await setup();
+  const group = (stale: number, kind: "update" | "delete"): AtomicDraftOperation[] => sets.slice(0, 10).map((set, index) =>
+    kind === "update" || index !== stale
+      ? { kind: "update", request: { collection: "sets", id: set.id, expectedVersion: 1, data: { reps: 555 } } }
+      : { kind: "delete", request: { collection: "sets", id: set.id, expectedVersion: 1 } });
+  for (const [stale, kind] of [[0, "update"], [9, "update"], [4, "delete"]] as const) {
+    probe.before(() => raw.run(`UPDATE sets SET "_mantle_version" = 2 WHERE "_mantle_id" = ?`, [sets[stale]!.id]));
+    const failure = await runtime.writeAtomically.execute(group(stale, kind)).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ diagnostic: { code: "CONFLICT" } });
+    expect(JSON.stringify((failure as { diagnostic: unknown }).diagnostic)).toContain(sets[stale]!.id);
+    expect(raw.query("SELECT count(*) AS n FROM sets WHERE reps = 555").get()).toEqual({ n: 0 });
+    expect(raw.query("SELECT count(*) AS n FROM sets").get()).toEqual({ n: 200 });
+    raw.run(`UPDATE sets SET "_mantle_version" = 1 WHERE "_mantle_id" = ?`, [sets[stale]!.id]);
+  }
+  // A status that moved between read and batch, under the shared guard.
+  probe.before(() => raw.run(`UPDATE sets SET "_mantle_status" = 'archived' WHERE "_mantle_id" = ?`, [sets[3]!.id]));
+  await expect(runtime.writeAtomically.execute(group(-1, "update")))
+    .rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
+  expect(raw.query("SELECT count(*) AS n FROM sets WHERE reps = 555").get()).toEqual({ n: 0 });
+  raw.close();
+});
+
+test("a leftover guard row neither hides a stale write nor blocks a clean group", async () => {
+  const { raw, probe, runtime, sets } = await setup();
+  raw.run("INSERT INTO _mantle_boot_state (id, fingerprint) VALUES ('atomic-guard', 'ok')");
+  probe.before(() => raw.run(`UPDATE sets SET "_mantle_version" = 2 WHERE "_mantle_id" = ?`, [sets[1]!.id]));
+  await expect(runtime.writeAtomically.execute(sets.slice(0, 3).map((set): AtomicDraftOperation => ({
+    kind: "update", request: { collection: "sets", id: set.id, expectedVersion: 1, data: { reps: 555 } } }))))
+    .rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
+  expect(raw.query("SELECT count(*) AS n FROM sets WHERE reps = 555").get()).toEqual({ n: 0 });
+  await runtime.writeAtomically.execute([
+    { kind: "update", request: { collection: "sets", id: sets[5]!.id, expectedVersion: 1, data: { reps: 555 } } },
+  ]);
+  expect(raw.query("SELECT count(*) AS n FROM sets WHERE reps = 555").get()).toEqual({ n: 1 });
+  expect(raw.query("SELECT count(*) AS n FROM _mantle_boot_state WHERE id = 'atomic-guard'").get()).toEqual({ n: 0 });
+  raw.close();
+});
+
+test("the prefetch hides expired rows across a chunk boundary, and a group still touches each entry once", async () => {
+  const { raw, probe, runtime, sets } = await setup();
+  const future = new Date(Date.now() + 3_600_000).toISOString();
+  const passes = [];
+  for (let i = 0; i < 97; i++) {
+    passes.push(await runtime.createDraft.execute({ collection: "passes", data: { expiresAt: future }, authorId: null }));
+  }
+  // The 96th id opens the second 95-id chunk; it expires before the group reads it.
+  raw.run(`UPDATE passes SET expiresAt = '2000-01-01T00:00:00.000Z' WHERE "_mantle_id" = ?`, [passes[95]!.id]);
+  probe.reset();
+  await expect(runtime.writeAtomically.execute(passes.map((pass): AtomicDraftOperation => ({
+    kind: "delete", request: { collection: "passes", id: pass.id, expectedVersion: 1 } }))))
+    .rejects.toMatchObject({ diagnostic: { code: "NOT_FOUND" } });
+  expect(probe.counts.reads).toBe(2);
+  expect(probe.counts.batches).toBe(0);
+  await expect(runtime.writeAtomically.execute([
+    { kind: "update", request: { collection: "sets", id: sets[0]!.id, expectedVersion: 1, data: { reps: 1 } } },
+    { kind: "delete", request: { collection: "sets", id: sets[0]!.id, expectedVersion: 1 } },
+  ])).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  raw.close();
+});
+
+test("errors keep operation order when a later operation names an unknown Schema", async () => {
+  const { raw, runtime } = await setup();
+  await expect(runtime.writeAtomically.execute([
+    { kind: "update", request: { collection: "sets", id: "missing", expectedVersion: 1, data: { reps: 1 } } },
+    { kind: "update", request: { collection: "nope", id: "x", expectedVersion: 1, data: {} } },
+  ])).rejects.toMatchObject({ diagnostic: { code: "NOT_FOUND" } });
+  await expect(runtime.writeAtomically.execute([
+    { kind: "upsert", request: { collection: "nope", id: "x" } } as unknown as AtomicDraftOperation,
+  ])).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
   raw.close();
 });

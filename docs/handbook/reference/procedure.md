@@ -263,11 +263,13 @@ facility inside a ref handler, but that does not give those tables Mantle
 entry semantics. Direct SQL writes to Mantle Schema tables are unsupported.
 Authorization guard Procedures do not receive `ctx.writeAtomically`.
 
-On D1 and Bun SQLite a group reads its update and delete targets with one query
-per Schema (95 ids per query) before the batch. The batch holds one statement per
-create, two per update or delete (the conditional write and its guard) and one
-final cleanup, so 200 updates cost about 3 reads and 401 statements. D1 counts
-queries against a per-invocation limit; size groups with that in mind.
+On D1 and Bun SQLite a group reads its update and delete targets before the
+batch with one query per 95 ids per Schema. The batch holds one statement per
+create, two per update or delete (the conditional write and its guard) and,
+when the group has any update or delete, one final cleanup: 200 updates in one
+Schema cost 3 reads and 401 statements. A conflict re-reads the targets once
+more to name the stale entry. D1 counts queries against a per-invocation limit;
+size groups with that in mind.
 
 ## TTL sweep in a ref handler
 
