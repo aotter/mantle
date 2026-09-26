@@ -70,7 +70,7 @@ worker.getRuntime(env);            // the runtime fetch uses, resolved after aut
 worker.scheduled(controller, env, ctx); // declared scheduled Procedure Triggers
 ```
 
-Queue handlers call `worker.getRuntime(env)` and then generated `bindMantle(runtime)` so they reuse the assembled runtime. Scheduled Procedure Triggers use `worker.scheduled` with expressions registered in Wrangler. See [Bindings](./bindings.md#cron-triggers), [Trigger](../reference/trigger.md#schedule-source), and [Deferred hooks](./deferred-hooks-queues.md).
+Queue handlers call `worker.getRuntime(env)` and then `runtime.invokeProcedure({ procedure, input, ctx })` so they reuse the assembled runtime. Scheduled Procedure Triggers use `worker.scheduled` with expressions registered in Wrangler. See [Bindings](./bindings.md#cron-triggers), [Trigger](../reference/trigger.md#schedule-source), and [Deferred hooks](./deferred-hooks-queues.md).
 
 ## Readiness rule
 

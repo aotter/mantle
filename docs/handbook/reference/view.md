@@ -208,7 +208,7 @@ Admin applies search and filters before pagination, rejecting a search term or f
 | `staff` | `GET /admin/api/views/<name>` and `/admin/api/views/<name>/export` — not mounted publicly | `query_view_<segment>` on `/mcp/staff` | Report sidebar |
 | `internal` | Not mounted | Not mounted | Not listed or mounted |
 
-For a complete generated-binding example, see [Typed queries](../guides/typed-queries.md).
+For a complete generated Store type-map example, see [Typed queries](../guides/typed-queries.md).
 
 An `internal` View remains in the compiled plan for host code to call through `MantleRuntime.executeView`. It is an exposure policy, not an authorization bypass: `requires` and guards still evaluate against the `ctx` supplied by the host. Shared HTTP caching is invalid because no adapter owns an HTTP response for the View.
 

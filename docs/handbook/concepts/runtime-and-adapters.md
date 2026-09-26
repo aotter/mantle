@@ -36,22 +36,25 @@ pnpm exec mantle generate
 pnpm exec mantle generate --check
 ```
 
-`generate` validates and compiles the manifests directory, then writes one typed module at `.mantle/generated/mantle.ts` containing the sealed `plan` with its fingerprint, the handler types, and two entry points:
+`generate` validates and compiles the manifests directory, then writes
+`.mantle/generated/mantle.ts`: a sealed `plan`, typed handler contracts and
+wire-keyed `Schemas`, `Views` and `Store` type maps.
 
 ```ts
-import { bindMantle, createMantle, plan } from "../.mantle/generated/mantle.js";
+import { bootMantleRuntime } from "@aotter/mantle/runtime";
+import { plan } from "../.mantle/generated/mantle.js";
+import type { Store } from "../.mantle/generated/mantle.js";
 
-// Eager: one preparation attempt, no caching and no retry.
-const mantle = await createMantle({ storage, handlers, ports });
-const notes = await mantle.views.publishedNotes();
-await mantle.entries.orders.createDraft({ data, authorId: user.id });
-
-// Or bind a runtime the host already assembled and owns the lifecycle of.
-const bound = bindMantle(runtime);
-await bound.runtime.archive.execute({ id, ctx });
+const runtime = await bootMantleRuntime({ plan, storage, handlers, ports });
+const store = runtime.store as Store;
+const notes = await store.view("published-notes");
+await store.write([{ insert: "orders", values: data }]);
+await runtime.archive.execute({ id, ctx });
 ```
 
-Generated property names are deterministic lower-camel identifiers; calls keep the authored wire names internally, and a collision is an error (`CODEGEN_IDENTIFIER_COLLISION`). The emitter accepts either `emitMantleModule({ linked })` or `emitMantleModule({ plan })` for hosts that already compiled the plan; see [Typed queries](../guides/typed-queries.md). Code generation is a pure projection: it never caches, retries, mounts routes or owns host lifecycle, and the typed API keeps its raw `runtime` so it hides nothing. Skipping generation is valid — call `runtime.executeView({ view: "published-notes" })` by name.
+The emitter also accepts `emitMantleModule({ linked })` or
+`emitMantleModule({ plan })`. Generated code has no per-name runtime wrappers
+or lower-camel name conversion; distinct wire names remain distinct.
 
 ## Core, optional products, adapters
 
@@ -162,7 +165,7 @@ await runtime.invokeTrigger({ trigger: "rename-board-mcp", input, ctx });
 
 Platform bindings belong at the composition root only: the Worker entry, `createMantleWorker` options, the `bindings` hook and `wrangler.jsonc`. Procedure handlers receive them through `ctx.env`.
 
-Application code does not bypass Mantle's storage ports to write Schema tables, `site_config`, media, or Auth tables. Each Schema is a native table, but Mantle still owns its metadata columns, lifecycle checks, and optimistic concurrency. Use Manifests, runtime use cases, `runtime.entries`, `runtime.siteConfig`, generated `bindMantle(runtime)`, and Views instead. An application may own separate tables behind its own repository; that is different from writing around Core's invariants.
+Application code does not bypass Mantle's storage ports to write Schema tables, `site_config`, media, or Auth tables. Each Schema is a native table, but Mantle still owns its metadata columns, lifecycle checks, and optimistic concurrency. Use Manifests, runtime use cases, `runtime.entries`, `runtime.siteConfig`, `runtime.store`, and Views instead. An application may own separate tables behind its own repository; that is different from writing around Core's invariants.
 
 If a normal feature cannot be expressed through a purpose-shaped surface, treat that as a gap in the abstraction rather than teaching the project Mantle's internals. Internals change between versions; the ports do not.
 

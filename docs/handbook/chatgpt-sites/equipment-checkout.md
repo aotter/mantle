@@ -86,7 +86,7 @@ Follow the existing [Procedure contract](../reference/procedure.md) and
    require the existing Sites session, check exact same-origin on browser
    writes, and construct the runtime context from verified identity. Never
    accept caller-supplied `staff`, role or borrower identity.
-4. Invoke `bindMantle(runtime).procedures.<generatedName>(input, ctx)` and handle
+4. Invoke `runtime.invokeProcedure({ procedure: "<wire-name>", input, ctx })` and handle
    its success/diagnostic result. Do not call the handler function directly.
    A host-mounted route is an explicit entry point; the Procedure alone does
    not install it. A manifest HTTP Trigger likewise needs the host's matching

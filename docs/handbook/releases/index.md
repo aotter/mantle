@@ -52,6 +52,14 @@ Schemas with `ctx.store.write`. D1 and Bun commit the group or roll it
 back, including when the last conditional write finds a stale version. Other
 adapters must explicitly implement the optional capability before using it.
 
+Generated modules now expose wire-keyed `Schemas`, `Views`, and `Store` type
+maps alongside the sealed `plan`. Regenerate, replace `bindMantle(runtime)`
+with `runtime.store as Store` for Store operations, and call
+`runtime.invokeProcedure({ procedure, input, ctx })` for Procedures. The
+per-name `bindMantle` and `createMantle` functions are removed; boot with
+`bootMantleRuntime({ plan, storage, handlers, ports })`. Type identifiers
+escape punctuation so distinct wire names stay distinct.
+
 Cloudflare Cron Triggers now target ordinary Procedures through `source.kind:
 schedule`. The generated runtime plan records each schedule, while Wrangler
 registration remains application-owned. Scheduled calls have no user or staff

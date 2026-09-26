@@ -134,28 +134,26 @@ The `@aotter/mantle` package installs two binaries, `mantle` and `mantle-harness
 | Export | Shape |
 |---|---|
 | `plan` | The sealed `RuntimePlan`, carrying a semantic fingerprint. |
-| `Mantle` (or `--namespace`) | Type namespace holding `Entry_*`, `ViewRow_*`, `ViewParams_*`, `ProcInput_*` and `ProcOutput_*` for every atom. |
-| `MantleViewOptions` | `{ page?, show?, ctx? }`. |
+| `Mantle` (or `--namespace`) | Type namespace holding per-atom data, params, row, input and output types. |
+| `Schemas`, `Views`, `Store` | Wire-keyed type maps for `runtime.store`; no generated runtime wrappers. |
 | `MantleHandlers<Env>` | Typed map of every `handler.kind: ref` key the manifests declare. |
-| `CreateMantleOptions<Env>` | `BootMantleRuntimeArgs` without `plan` and `handlers`, plus the typed `handlers` map. |
-| `createMantle(options)` | Boots the runtime and returns the bound facade. Eager: it prepares once and neither caches nor retries. |
-| `bindMantle(runtime)` | Binds an already-booted runtime. Throws when `runtime.revision` does not equal the generated plan's fingerprint. |
-
-The bound object is deterministic lower-camel property names over the authored wire names:
 
 ```ts
-import { createMantle } from "../.mantle/generated/mantle.js";
+import { bootMantleRuntime } from "@aotter/mantle/runtime";
+import { plan } from "../.mantle/generated/mantle.js";
+import type { Store } from "../.mantle/generated/mantle.js";
 
-const mantle = await createMantle({ storage, handlers });
-
-await mantle.views.publishedNotes({ page: 1, show: 20 });
-await mantle.procedures.expireOrder({ orderId }, { user: null, staff: null, env });
-await mantle.entries.orders.createDraft({ data, authorId: user.id });
-mantle.triggers.expireOrderHttp;   // { name, source, target }
-await mantle.runtime.archive.execute({ id, ctx });
+const runtime = await bootMantleRuntime({ plan, storage, handlers });
+const store = runtime.store as Store;
+await store.view("published-notes", { page: 1, show: 20 });
+await store.write([{ insert: "orders", values: data }]);
+await runtime.invokeProcedure({ procedure: "expire-order", input: { orderId }, ctx });
 ```
 
-`entries.<collection>` exposes `createDraft`, `get`, `list`, `delete`, and the indexed field reads `readBySlug`, `readByDataField`, `readByDataFieldIn` and `findManyByDataField`, supplying the required collection identity to Core. The field reads accept only declared Schema fields and their scalar types, and return entries whose `data` is the generated Schema shape, so an author never has to drop to an untyped `runtime.entries` call or scan `list` to find rows by an indexed field. Generic MCP entry tools require a `collection` argument. `runtime` is the underlying Core runtime, so the typed projection never hides it. A host that owns its own lifecycle can skip generation entirely and call `runtime.executeView({ view: "published-notes" })` directly.
+The Store map preserves authored names and types. Runtime validates actual
+inputs and performs authorization. For caller-authenticated Views, use
+`runtime.executeView({ view, ctx, options })` with the verified context.
+
 
 ## Packages
 
