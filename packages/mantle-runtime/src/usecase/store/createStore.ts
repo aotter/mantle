@@ -53,7 +53,9 @@ export function createStore(deps: StoreDependencies, binding: StoreBinding = {})
     write: async (ops) => {
       if (readOnly) return refuseWrite("store/write");
       if (!Array.isArray(ops)) throw invalid("store.write takes an array of operations.");
-      const outcomes = await deps.write(ops.map((op, index) => toOperation(op, index, ctx, callerBound, deps.schemasByName)));
+      let snapshot: typeof ops;
+      try { snapshot = structuredClone(ops); } catch { throw invalid("store.write operations must contain cloneable data."); }
+      const outcomes = await deps.write(snapshot.map((op, index) => toOperation(op, index, ctx, callerBound, deps.schemasByName)));
       return outcomes.map((outcome): StoreWriteResult => outcome.row
         ? { id: outcome.row.id, version: outcome.row.version }
         : { deleted: outcome.affected });
@@ -128,7 +130,7 @@ function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | unde
   if (expect !== undefined && typeof expect !== "number") throw invalid(`${at}.expect must be a number.`);
   if (!schema) throw invalid(`Unknown Schema '${collection}'.`);
   validateStoreWhere(where as StoreWhere, schema, schemas);
-  const scoped = callerBound ? scopeStoreWhere(where as StoreWhere, schema, schemas, ctx?.user?.id) : structuredClone(where) as StoreWhere;
+  const scoped = callerBound ? scopeStoreWhere(where as StoreWhere, schema, schemas, ctx?.user?.id) : where as StoreWhere;
   return { kind: "deleteWhere", request: { collection, where: scoped!, ...(expect === undefined ? {} : { expect }) } };
 }
 

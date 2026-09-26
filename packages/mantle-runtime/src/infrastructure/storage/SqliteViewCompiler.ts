@@ -1,6 +1,5 @@
 import {
   DiagnosticError,
-  RESERVED_ENTRY_COLUMNS,
   isCtxUserRef,
   isParamRef,
   runtimeDiagnostic,
@@ -8,7 +7,8 @@ import {
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
-import { decodeField, fieldSql, ttlCutoff } from "./SqliteSchemaTables.js";
+import { decodeField, fieldSql, NATIVE_COLUMN, quoteIdent, ttlCutoff } from "./SqliteSchemaTables.js";
+import { escapeLikeTerm } from "../persistence/Pagination.js";
 import { clampPage, clampShow } from "../../domain/service/Pagination.js";
 import type { ViewQueryOptions } from "../../domain/port/ViewQueryExecutor.js";
 import {
@@ -43,23 +43,7 @@ export interface PreparedSqliteView {
   normalizeRows<R>(rows: readonly R[]): readonly R[];
 }
 
-// alias → SQL column. Aliases mirror RESERVED_ENTRY_COLUMNS from
-// spec; SQL column shape (snake_case) is local to the storage layout.
-// The compile-time check below ensures the alias set stays in sync —
-// adding to spec without updating here is a type error.
-const RESERVED_COLUMN: Readonly<Record<string, string>> = {
-  id: "_mantle_id",
-  status: "_mantle_status",
-  version: "_mantle_version",
-  createdAt: "_mantle_created_at",
-  updatedAt: "_mantle_updated_at",
-  authorId: "_mantle_author_id",
-};
-const _aliasCheck: Readonly<Record<(typeof RESERVED_ENTRY_COLUMNS)[number], string>> =
-  RESERVED_COLUMN;
-void _aliasCheck;
-
-const DEFAULT_PROJECTION = Object.entries(RESERVED_COLUMN)
+const DEFAULT_PROJECTION = Object.entries(NATIVE_COLUMN)
   .map(([alias, col]) => (alias === col ? col : `${col} AS ${alias}`))
   .join(", ");
 
@@ -233,10 +217,6 @@ function compileListQuery(
   return { conditions, params };
 }
 
-function escapeLikeTerm(term: string): string {
-  return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-}
-
 function buildSelect(
   fields?: readonly string[],
   schema?: SchemaManifest,
@@ -246,7 +226,7 @@ function buildSelect(
 }
 
 function fieldExpr(field: string, schema?: SchemaManifest): string {
-  const reserved = RESERVED_COLUMN[field];
+  const reserved = NATIVE_COLUMN[field];
   const expression = fieldRefExpr(field, schema);
   if (reserved === field) return expression;
   return `${expression} AS ${reserved ? field : quoteIdent(field)}`;
@@ -255,7 +235,7 @@ function fieldExpr(field: string, schema?: SchemaManifest): string {
 function fieldRefExpr(field: string, schema?: SchemaManifest): string {
   // Native columns win, matching IndexedDB and the index DDL; the parser
   // rejects data properties with these names, so nothing is shadowed (#1008).
-  const reserved = RESERVED_COLUMN[field];
+  const reserved = NATIVE_COLUMN[field];
   if (reserved) return reserved;
   if (schema && Object.hasOwn(schema.spec.schema.properties ?? {}, field)) return quoteIdent(field);
   if (!schema) return quoteIdent(field);
@@ -341,12 +321,4 @@ function buildOrderBy(
     return `${fieldRefExpr(o.field, schema)} ${dir}`;
   });
   return ` ORDER BY ${parts.join(", ")}`;
-}
-
-/**
- * SQLite quoted-identifier alias (`"hero-image"`). Used as the result
- * column name so callers read the field back under its declared key.
- */
-function quoteIdent(name: string): string {
-  return `"${name.replace(/"/g, '""')}"`;
 }
