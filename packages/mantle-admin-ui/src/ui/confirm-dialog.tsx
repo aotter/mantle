@@ -9,7 +9,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@aotter/mantle-ui/kit";
 import { usePreferences } from "@/app/preferences";
 import { t } from "@/app/i18n";
 

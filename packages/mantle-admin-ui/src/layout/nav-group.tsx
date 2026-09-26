@@ -5,7 +5,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+} from "@aotter/mantle-ui/kit";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +13,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@aotter/mantle-ui/kit";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -24,9 +24,9 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   useSidebar,
-} from "@/components/ui/sidebar";
+} from "@aotter/mantle-ui/kit";
 import { cn } from "../lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../app/preferences";
 import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../lib/queries";
 import {

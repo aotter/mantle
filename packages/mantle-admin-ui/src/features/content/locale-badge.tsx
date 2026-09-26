@@ -1,11 +1,11 @@
 import * as React from "react";
 import { Check, Globe } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@aotter/mantle-ui/kit";
 import type { JsonSchema } from "../../lib/types";
 import { t } from "../../app/i18n";
 import type { AdminLanguage } from "../../app/preferences";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@aotter/mantle-ui/kit";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 
 export function LocaleBadge({ locale }: { locale: string | null }): React.ReactElement {
   if (!locale) return <span className="text-muted-foreground">-</span>;

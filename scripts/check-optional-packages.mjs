@@ -296,11 +296,33 @@ try {
     const { phase, result } = controller.getSnapshot();
     if (phase !== "succeeded" || result.expectedVersion !== 1) throw new Error("packed controller did not submit: " + phase);
   `);
-  for (const forbidden of ["react", "@aotter/mantle-runtime", "@aotter/mantle-spec"]) {
+  // The kit's libraries are optional peers: the controller pulls none of them.
+  for (const forbidden of ["react", "@aotter/mantle-runtime", "@aotter/mantle-spec", "radix-ui", "lucide-react", "sonner"]) {
     if (existsSync(join(temp, `ui-controller-only/node_modules/${forbidden}`))) {
       throw new Error(`UI controller consumer installed ${forbidden}`);
     }
   }
+
+  // The kit with its peers, as an application building its own auth page.
+  const uiManifest = JSON.parse(readFileSync(join(root, "packages/mantle-ui/package.json"), "utf8"));
+  const kitPeers = Object.fromEntries(Object.entries(uiManifest.peerDependencies).filter(([name]) => name !== "react"));
+  installConsumer("ui-kit", {
+    "@aotter/mantle-ui": `file:${tarballs["@aotter/mantle-ui"]}`,
+    react: uiManifest.devDependencies.react,
+    "react-dom": uiManifest.devDependencies["react-dom"],
+    ...kitPeers,
+  }, `
+    const { existsSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { createElement } = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const kit = await import("@aotter/mantle-ui/kit");
+    const html = renderToStaticMarkup(createElement(kit.Card, null, createElement(kit.Button, null, "Continue")));
+    if (!html.includes('data-slot="button"')) throw new Error("packed kit did not render");
+    for (const sheet of ["@aotter/mantle-ui/kit.css", "@aotter/mantle-ui/tokens.css"]) {
+      if (!existsSync(fileURLToPath(import.meta.resolve(sheet)))) throw new Error("packed kit is missing " + sheet);
+    }
+  `);
 
   installConsumer("core-with-indexeddb", {
     "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
@@ -373,7 +395,7 @@ try {
     throw new Error("Admin API consumer installed the optional Admin UI");
   }
 
-  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+MCP, UI controller, Core+IndexedDB, Core+Admin, and Auth packing consumers passed.");
+  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+MCP, UI controller, UI kit, Core+IndexedDB, Core+Admin, and Auth packing consumers passed.");
 } finally {
   rmSync(localState, { recursive: true, force: true });
   rmSync(temp, { recursive: true, force: true });

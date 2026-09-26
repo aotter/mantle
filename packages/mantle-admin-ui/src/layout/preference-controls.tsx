@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@aotter/mantle-ui/kit";
 import {
   ADMIN_LANGUAGES,
   usePreferences,
@@ -14,8 +14,8 @@ import {
   type AdminTheme,
 } from "../app/preferences";
 import { t } from "../app/i18n";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 import { cn } from "../lib/utils";
 
 export function LanguagePreferenceDropdown({ compact = false }: { compact?: boolean }): React.ReactElement {

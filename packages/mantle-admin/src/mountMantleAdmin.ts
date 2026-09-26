@@ -608,10 +608,10 @@ export function mountMantleAdmin<E extends Env>(
         input: op.input,
         uiSchema: op.uiSchema,
         triggers: op.triggers,
-        rowBindings: op.rowBindings,
-        targetCollection: op.procedure.spec.handler.kind === "builtin"
-          ? op.procedure.spec.handler.schema
-          : null,
+        rowBindings: op.interactions.map(({ collection, bind: [first] }) => ({
+          collection, inputField: first!.input, rowField: first!.field,
+        })),
+        interactions: op.interactions,
       })),
   });
 
@@ -1290,6 +1290,18 @@ type StaffOperationRowBinding = {
   readonly rowField: string;
 };
 
+/**
+ * How a row of `collection` feeds the operation (ADR-0029 D7): the inputs
+ * it binds and, for the operation target, the input carrying the version
+ * the person reviewed. Admin binds nothing else.
+ */
+type StaffOperationInteraction = {
+  readonly collection: string;
+  readonly bind: ReadonlyArray<{ readonly input: string; readonly field: string }>;
+  readonly version?: string;
+  readonly mutates: boolean;
+};
+
 type StaffOperation = {
   readonly name: string;
   readonly title: LocalizedText | null;
@@ -1297,7 +1309,7 @@ type StaffOperation = {
   readonly input: JsonSchema;
   readonly uiSchema: Record<string, unknown> | null;
   readonly triggers: ReadonlyArray<"mcp" | "http">;
-  readonly rowBindings: ReadonlyArray<StaffOperationRowBinding>;
+  readonly interactions: ReadonlyArray<StaffOperationInteraction>;
   readonly procedure: ProcedureManifest;
 };
 
@@ -1359,7 +1371,7 @@ function discoverStaffOperations(
       input: procedure.spec.input,
       uiSchema: procedure.spec.uiSchema ?? null,
       triggers: [...kinds],
-      rowBindings: rowBindingsFor(procedure, plan, schemasByName, warned),
+      interactions: interactionsFor(procedure, plan, schemasByName, warned),
       procedure,
     });
   }
@@ -1367,36 +1379,48 @@ function discoverStaffOperations(
 }
 
 /**
- * Row bindings come from the sealed plan's interactions (ADR-0029). The
- * string-form `x-mantle-ref` inference below is kept for one minor release:
- * when it binds a field other than `id`, which is what the string form
- * means, Admin warns once and keeps the old binding (D8).
+ * Row interactions come from the sealed plan (ADR-0029). The string-form
+ * `x-mantle-ref` inference below is kept for one minor release: when it
+ * binds a field other than `id`, which is what the string form means,
+ * Admin warns once and keeps the old binding, which locks no version (D8).
  */
-function rowBindingsFor(
+function interactionsFor(
   procedure: ProcedureManifest,
   plan: RuntimePlan,
   schemasByName: ReadonlyMap<string, SchemaManifest>,
   warned: Set<string>,
-): StaffOperationRowBinding[] {
+): StaffOperationInteraction[] {
   const name = procedure.metadata.name;
   const key = (collection: string, inputField: string) => `${collection}\0${inputField}`;
-  // The operation target comes first: the SPA prefills the first binding
-  // for a row's collection, and the target is the entry the row *is*. A
-  // target also replaces any inference on the same input.
-  const targets: StaffOperationRowBinding[] = (plan.interactions ?? []).flatMap((interaction) => {
-    const [bind] = interaction.bind;
-    if (interaction.procedure !== name || !interaction.mutates || !bind) return [];
-    if (schemasByName.get(interaction.schema)?.spec.translates) return [];
-    return [{ collection: interaction.schema, inputField: bind.input, rowField: bind.field }];
-  });
-  const taken = new Set(targets.map(({ collection, inputField }) => key(collection, inputField)));
-  const references = discoverRowBindings(procedure, schemasByName)
+  // The operation target comes first: the SPA uses the first interaction
+  // for a row's collection, and the target is the entry the row *is*.
+  const declared: StaffOperationInteraction[] = (plan.interactions ?? [])
+    .filter((interaction) => interaction.procedure === name && interaction.bind.length > 0)
+    .filter((interaction) => !schemasByName.get(interaction.schema)?.spec.translates)
+    .map((interaction) => ({
+      collection: interaction.schema,
+      bind: interaction.bind,
+      ...(interaction.version ? { version: interaction.version } : {}),
+      mutates: interaction.mutates,
+    }));
+  const taken = new Set(declared.flatMap(({ collection, bind }) => bind.map(({ input }) => key(collection, input))));
+  const inferred = discoverRowBindings(procedure, schemasByName)
     .filter(({ collection, inputField }) => !taken.has(key(collection, inputField)));
-  for (const binding of references) {
-    const declared = procedure.spec.input.properties?.[binding.inputField]?.[MANTLE_REF_KEYWORD];
-    if (typeof declared === "string" && binding.rowField !== "id") warnInferredBinding(name, binding, warned);
+  for (const binding of inferred) {
+    const ref = procedure.spec.input.properties?.[binding.inputField]?.[MANTLE_REF_KEYWORD];
+    if (typeof ref === "string" && binding.rowField !== "id") warnInferredBinding(name, binding, warned);
   }
-  return [...targets, ...references];
+  // The target first, then references in input declaration order, as the
+  // row menus have always listed them.
+  const order = Object.keys(procedure.spec.input.properties ?? {});
+  const position = (interaction: StaffOperationInteraction) =>
+    interaction.mutates ? -1 : order.indexOf(interaction.bind[0]!.input);
+  return [
+    ...declared,
+    ...inferred.map(({ collection, inputField, rowField }) => ({
+      collection, bind: [{ input: inputField, field: rowField }], mutates: false,
+    })),
+  ].sort((a, b) => position(a) - position(b));
 }
 
 function warnInferredBinding(procedure: string, binding: StaffOperationRowBinding, warned: Set<string>): void {

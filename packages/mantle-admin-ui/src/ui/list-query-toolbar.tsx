@@ -3,8 +3,8 @@ import { Search } from "lucide-react";
 import { t } from "../app/i18n";
 import type { AdminLanguage } from "../app/preferences";
 import { cn } from "../lib/utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Input } from "@aotter/mantle-ui/kit";
 
 export interface ListQueryFilter {
   name: string;

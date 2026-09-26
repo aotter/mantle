@@ -9,9 +9,9 @@ import { entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queri
 import { entryEditPath, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, EntryEditorPayload, SiteInfo, StaffOperation } from "../../lib/types";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
+import { Tabs, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
 import { ErrorBox, PageHeader } from "../../ui/page";
 import { CollectionView } from "./collection-view";
 import { entryTitle } from "./entry-edit-view";

@@ -49,10 +49,10 @@ jobs:
     env:
       PKG_DIRS: >-
         packages/mantle-spec
+        packages/mantle-ui
         packages/mantle-admin-ui
         packages/mantle-runtime
         packages/mantle-mcp
-        packages/mantle-ui
         packages/adapters/indexeddb
         packages/mantle-web
         packages/mantle-admin

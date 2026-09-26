@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ChevronsUpDown, LogOut, Settings, Unplug } from "lucide-react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@aotter/mantle-ui/kit";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,12 +9,12 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@aotter/mantle-ui/kit";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar";
+} from "@aotter/mantle-ui/kit";
 import { usePreferences } from "@/app/preferences";
 import { t } from "@/app/i18n";
 import { signOut } from "@/lib/auth";

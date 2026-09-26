@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import { api } from "../../lib/api";
 import type { Collection, SiteInfo } from "../../lib/types";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Badge } from "@aotter/mantle-ui/kit";
 import {
   Dialog,
   DialogContent,
@@ -19,9 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
 import { CopyField, EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";

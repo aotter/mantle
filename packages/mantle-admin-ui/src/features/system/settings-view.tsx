@@ -5,10 +5,10 @@ import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Input } from "@aotter/mantle-ui/kit";
+import { Textarea } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import { ErrorBox, FormActionBar, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
 interface SiteSettings {

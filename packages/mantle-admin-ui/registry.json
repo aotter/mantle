@@ -8,10 +8,20 @@
       "type": "registry:block",
       "title": "Mantle auth page",
       "description": "A copy-owned email OTP page with optional legal links.",
-      "dependencies": ["@aotter/mantle-admin-ui@0.1.5-alpha.1"],
+      "dependencies": [
+        "@aotter/mantle-ui@0.1.5-alpha.1",
+        "class-variance-authority@^0.7.1",
+        "clsx@^2.1.1",
+        "input-otp@^1.5.0",
+        "lucide-react@^1.41.0",
+        "radix-ui@^1.6.7",
+        "react-day-picker@^10.0.1",
+        "sonner@^2.0.8",
+        "tailwind-merge@^3.6.0"
+      ],
       "files": [
         {
-          "path": "recipes/auth-page.tsx",
+          "path": "../mantle-ui/recipes/auth-page.tsx",
           "type": "registry:component",
           "target": "components/auth-page.tsx"
         }

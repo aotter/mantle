@@ -8,17 +8,17 @@ import { api } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
 import { authMethodsQueryOptions } from "../../lib/queries";
 import type { AdminUser, StaffRole, StaffUser } from "../../lib/types";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Badge } from "@aotter/mantle-ui/kit";
+import { Input } from "@aotter/mantle-ui/kit";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import {
   Table,
   TableBody,
@@ -26,7 +26,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@aotter/mantle-ui/kit";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import { IdValue } from "../../ui/id-value";

@@ -8,8 +8,8 @@ import { queryClient } from "../app/query-client";
 import { adminWebMcpQueryOptions } from "../lib/queries";
 import { isAdminPreview } from "../app/frame-policy";
 import { adminPath, callStaffTool, resultPath, type AdminModelContext, type AdminToolCatalog } from "../lib/admin-tools";
-import { Button } from "../components/ui/button";
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@aotter/mantle-ui/kit";
 
 export function WebMcpControl(): React.ReactElement | null {
   const { navigate } = useAdminRouter();

@@ -20,5 +20,5 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["src", "recipes", "vite.config.ts", "vitest.config.ts", "test"]
+  "include": ["src", "vite.config.ts", "vitest.config.ts", "test"]
 }

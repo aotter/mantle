@@ -36,8 +36,8 @@ import type {
   DeveloperRelationKind,
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 
 export const atomKindTone = {
   Schema: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",

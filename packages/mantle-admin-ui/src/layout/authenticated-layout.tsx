@@ -16,7 +16,7 @@ import {
   Workflow,
 } from "lucide-react";
 
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@aotter/mantle-ui/kit";
 import { api } from "../lib/api";
 import { isPrimaryNavCollection } from "../lib/collection-nav";
 import { fieldLabel } from "../lib/field-label";
@@ -119,7 +119,7 @@ export function AuthenticatedLayout({
           canonical,
           me.data?.role ?? null,
           (operationsQuery.data ?? []).some((operation) =>
-            operation.rowBindings.length === 0 && !operation.uiSchema?.["collectionAction"]),
+            (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]),
         ),
     [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.role, workspace],
   );

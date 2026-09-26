@@ -7,8 +7,8 @@ import { PreferencesProvider } from "./app/preferences";
 import { queryClient } from "./app/query-client";
 import { AdminRouterProvider } from "./app/router";
 import { ConfirmProvider } from "./ui/confirm-dialog";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@aotter/mantle-ui/kit";
+import { Toaster } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "./app/preferences";
 import "./styles/global.css";
 

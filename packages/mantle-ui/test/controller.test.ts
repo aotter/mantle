@@ -319,4 +319,14 @@ describe("createInteractionController", () => {
     const { controller: c } = controller({ initialInput: { id: "x", expectedVersion: 1, note: "n" } });
     expect(c.getSnapshot().draft).toEqual({ note: "n" });
   });
+
+  it("treats a CONFLICT on an operation that locks no version as a refusal to fix", async () => {
+    const controller = createInteractionController({
+      interaction: { bind: [] },
+      invoke: async () => ({ ok: false, diagnostics: [{ code: "CONFLICT", message: "That key is taken." }] }),
+    });
+    await controller.open();
+    await controller.submit();
+    expect(controller.getSnapshot()).toMatchObject({ phase: "failed", diagnostics: [{ message: "That key is taken." }] });
+  });
 });

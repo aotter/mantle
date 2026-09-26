@@ -169,7 +169,7 @@ describe("GET /admin/api/operations", () => {
         uiSchema: Record<string, unknown> | null;
         triggers: string[];
         rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
-        targetCollection: string | null;
+        interactions: unknown[];
       }>;
     };
     const names = body.operations.map((op) => op.name).sort();
@@ -184,7 +184,7 @@ describe("GET /admin/api/operations", () => {
     expect(recompute.uiSchema).toEqual({ fields: { sku: { widget: "textarea" } } });
     expect(recompute.triggers).toEqual(["mcp"]);
     expect(recompute.rowBindings).toEqual([]);
-    expect(recompute.targetCollection).toBeNull();
+    expect(recompute.interactions).toEqual([]);
 
     const reindex = body.operations.find((op) => op.name === "reindex-catalog")!;
     expect(reindex.triggers).toEqual(["http"]);
@@ -552,6 +552,22 @@ describe("GET /admin/api/operations — rowBindings (#430)", () => {
       { collection: "products", inputField: "duplicateOf", rowField: "id" },
     ]);
     expect(bindings("rename-sku")).toEqual([{ collection: "products", inputField: "id", rowField: "id" }]);
+    warn.mockRestore();
+  });
+
+  it("gives each binding its interaction: the version only on the operation target (ADR-0029 D7)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { app } = rowBindingHarness();
+    const body = (await (await app.request("/admin/api/operations")).json()) as {
+      operations: Array<{ name: string; interactions: unknown[] }>;
+    };
+    const interactions = (name: string) => body.operations.find((op) => op.name === name)!.interactions;
+    expect(interactions("merge-into")).toEqual([
+      { collection: "products", bind: [{ input: "productId", field: "id" }], version: "expectedVersion", mutates: true },
+      { collection: "products", bind: [{ input: "duplicateOf", field: "id" }], mutates: false },
+    ]);
+    // The transitional string-form inference binds its field and never locks a version.
+    expect(interactions("restock-sku")).toEqual([{ collection: "products", bind: [{ input: "sku", field: "sku" }], mutates: false }]);
     warn.mockRestore();
   });
 

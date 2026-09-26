@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -13,7 +13,7 @@ import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { OperationDialog } from "../content/row-operations";
 
 export function globalOperations(operations: readonly StaffOperation[]): StaffOperation[] {
-  return operations.filter(operation => operation.rowBindings.length === 0 && !operation.uiSchema?.["collectionAction"]);
+  return operations.filter(operation => (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]);
 }
 
 export function OperationsView(): React.ReactElement {

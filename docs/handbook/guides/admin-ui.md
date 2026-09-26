@@ -99,9 +99,22 @@ for a complete action declaration.
 
 An eligible operation with row bindings appears on those records. One with
 `collectionAction` appears on that collection's list. Operations without either
-appear in the standalone Operations screen. Row mutations use the observed
-entry version for optimistic concurrency where the Procedure contract declares
-`expectedVersion`; keep its input contract intact when adjusting presentation.
+appear in the standalone Operations screen.
+
+Every entry point runs the operation the same way, through the shared
+interaction controller ([MCP and agents](../concepts/mcp-and-agents.md)):
+
+- A row binds only what the compiled plan declares for that collection: the
+  operation target (a builtin id operation or `Procedure.spec.target`) binds
+  its id and locks the version the person reviewed; a reference
+  (`x-mantle-ref`) binds its input and locks nothing. Admin guesses no other
+  target, so an `expectedVersion` with no declared target is an ordinary input.
+- If the entry changed after the list was loaded, Admin shows what changed and
+  submits only after the person reviews the newer version.
+- A conflict keeps the input. A write whose outcome is unknown is never
+  retried: the person reloads the entry, or confirms they checked, first.
+
+Keep the Procedure's input contract intact when adjusting presentation.
 
 ## Verify a change
 

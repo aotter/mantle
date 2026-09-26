@@ -4,9 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 import { resolve } from "node:path";
-import { Card, CardDescription } from "../src/components/ui/card";
-import { Dialog, DialogDescription } from "../src/components/ui/dialog";
-import { AlertDialog, AlertDialogDescription } from "../src/components/ui/alert-dialog";
+import { Card, CardDescription } from "@aotter/mantle-ui/kit";
+import { Dialog, DialogDescription } from "@aotter/mantle-ui/kit";
+import { AlertDialog, AlertDialogDescription } from "@aotter/mantle-ui/kit";
 import { CollapsibleDescription, PageHeader } from "../src/ui/page";
 
 it("keeps primary descriptions readable in dark mode without changing light or metadata colors", async () => {

@@ -12,9 +12,9 @@ import type {
   SiteInfo,
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Input } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { uploadMediaAsset } from "./media-upload";

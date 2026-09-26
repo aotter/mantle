@@ -10,9 +10,9 @@ import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../../lib/queri
 import { renderDataValue } from "../../lib/render-data-value";
 import type { Collection, DeveloperSchemaModel, DeveloperViewModel } from "../../lib/types";
 import { EmptyState, ErrorBox } from "../../ui/page";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
 import { SchemaFields } from "../content/entry-edit-view";
 import { formatTimestampMs } from "../content/field-render";
 import { fetchView } from "../ops/view-page";

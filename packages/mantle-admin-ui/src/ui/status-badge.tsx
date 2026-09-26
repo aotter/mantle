@@ -2,7 +2,7 @@ import type { ContentStatus } from "../lib/types";
 import { cn } from "../lib/utils";
 import { usePreferences } from "../app/preferences";
 import { t, type I18nKey } from "../app/i18n";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@aotter/mantle-ui/kit";
 
 const STATUS_CLASS: Record<ContentStatus, string> = {
   draft: "bg-muted text-muted-foreground",

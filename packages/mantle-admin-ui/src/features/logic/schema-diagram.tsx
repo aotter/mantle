@@ -9,8 +9,8 @@ import { usePreferences } from "../../app/preferences";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { DeveloperAtomRelation, DeveloperConsoleSnapshot, DeveloperSchemaModel } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@aotter/mantle-ui/kit";
+import { Button } from "@aotter/mantle-ui/kit";
 import { flattenSchemaFields } from "./data-model-view";
 import { GraphControls, graphCanvasClassName, manifestEdgeTypes, relationLabel, type ManifestGraphEdge } from "./atom-graph";
 

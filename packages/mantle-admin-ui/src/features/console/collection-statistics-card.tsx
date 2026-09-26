@@ -7,9 +7,9 @@ import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection } from "../../lib/types";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import { ErrorBox, SectionCard } from "../../ui/page";
 import { STATISTICS_RANGES, STATISTICS_PREFERENCE_KEY, parseStatisticsPreferences, statisticsCsv, statisticsSeries, stackedAreas, type CollectionStatistics, type StatisticsPreferences } from "./collection-statistics";
 

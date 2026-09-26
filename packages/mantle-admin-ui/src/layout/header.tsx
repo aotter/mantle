@@ -5,7 +5,7 @@ import { ExternalLink, type LucideIcon } from "lucide-react";
 import { useAdminLocation } from "@/app/router";
 import { usePreferences } from "@/app/preferences";
 import { t } from "@/app/i18n";
-import { Button } from "@/components/ui/button";
+import { Button } from "@aotter/mantle-ui/kit";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,9 +13,9 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+} from "@aotter/mantle-ui/kit";
+import { SidebarTrigger } from "@aotter/mantle-ui/kit";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 import { cn } from "@/lib/utils";
 import { fieldLabel } from "@/lib/field-label";
 import type { AdminBrand } from "./types";

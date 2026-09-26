@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { developerConsoleQueryOptions } from "../../lib/queries";
 import { ErrorBox } from "../../ui/page";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import { AtomGraph } from "./atom-graph";
 import { developerDetailHref, developerSelectionHref } from "./developer-route";
 import { SchemaDiagram } from "./schema-diagram";

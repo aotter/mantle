@@ -10,10 +10,10 @@ import { adminWebMcpQueryOptions, developerConsoleQueryOptions } from "../../lib
 import type { AdminTool } from "../../lib/admin-tools";
 import type { DeveloperCallableCapability, DeveloperHttpOperation, JsonSchema, SiteInfo } from "../../lib/types";
 import { ErrorBox } from "../../ui/page";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@aotter/mantle-ui/kit";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Input } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import { atomKindLabel, audienceLabel } from "./atom-graph";
 import { developerDetailHref } from "./developer-route";
 
