@@ -14,7 +14,7 @@ export function projectSchemaAdminUi(schema: SchemaManifest): {
   const required = new Set(schema.spec.schema.required ?? []);
   const parentField = nav?.["standalone"] === true
     ? (nav["parentField"] as string | undefined) ?? Object.entries(schema.spec.schema.properties ?? {})
-      .find(([name, property]) => required.has(name) && resolveMantleRef(property))?.[0]
+      .find(([name, property]) => required.has(name) && resolveMantleRef(property)?.field === "id")?.[0]
     : undefined;
   const parent = parentField && resolveMantleRef(schema.spec.schema.properties?.[parentField]);
   return {
