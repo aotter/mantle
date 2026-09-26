@@ -43,8 +43,12 @@ const pluginSkills = new Set();
 for (const plugin of directories(join(repoRoot, "plugins"))) {
   for (const skill of directories(join(repoRoot, "plugins", plugin, "skills"))) {
     const where = `plugins/${plugin}/skills/${skill}/SKILL.md`;
+    // `mantle skills` projects docs skill X as mantle-X, so that name is taken too.
+    const projectedAs = skill.startsWith("mantle-") ? skill.slice("mantle-".length) : null;
     if (sources.has(skill)) fail(where, `skill name ${skill} is already shipped by ${sources.get(skill)}`);
-    else sources.set(skill, where);
+    else if (projectedAs && sources.has(projectedAs) && projectedAs !== "mantle") {
+      fail(where, `skill name ${skill} collides with ${sources.get(projectedAs)}, which mantle skills projects as ${skill}`);
+    } else sources.set(skill, where);
     pluginSkills.add(skill);
   }
 }
@@ -84,6 +88,9 @@ for (const skill of skills) {
     if (unknown.length > 0) fail(where, `unknown projection scope: ${unknown.join(", ")}`);
     // `mantle skills` projects from the npm package, which carries no plugin skill.
     if (pluginSkills.has(skill) && scopes.join() !== "plugin") fail(where, "a plugin skill declares projection `plugin` only");
+    // The skills CLI hides internal skills from `npx skills add aotter/mantle`,
+    // which must keep installing only the bootstrap skill; `--skill <name>` still works.
+    if (pluginSkills.has(skill) && front("internal") !== "true") fail(where, "a plugin skill declares metadata.internal: true");
     if (scopes.includes("project")) projected.push(skill);
     // A skill kept out of generated projects is a safety decision; make it explain itself.
     else if (!front("projectionReason")) fail(where, "projection excludes `project` but no projectionReason is given");

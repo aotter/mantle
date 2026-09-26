@@ -7,6 +7,7 @@ metadata:
   applies_to: mantle-host protocol 1
   projection: plugin
   projectionReason: Ships only in the mantle-host plugin with its vendored deploy script; Cloud deploy is opt-in.
+  internal: true
 ---
 
 # Mantle Host
@@ -36,10 +37,11 @@ path. Run that command as printed.
    start.
 2. You have a shell, Git and a Cloud MCP connection with the `member-*` and
    `cloud-*` tools. MCP clients without a shell are not supported in v1.
-3. If the project has handlers, `esbuild` is a devDependency of the project and
-   is installed. The script loads the project's own esbuild and never installs
-   packages. If it reports `esbuild_missing`, add `esbuild` as a
-   devDependency, install it, and commit the lockfile.
+3. `esbuild` is a devDependency of the project and is installed. Every
+   `mantle-cloud` save bundles the handler module with the project's own
+   esbuild, and the script never installs packages. If it reports
+   `esbuild_missing`, add `esbuild` as a devDependency, install it, and commit
+   the lockfile.
 4. For an existing app, work from the user's Git checkout. You can also
    restore the source snapshot through Cloud MCP. Do not rebuild an app from
    its deployed bundle.
@@ -112,8 +114,10 @@ Cloud MCP grants are short-lived bearer capabilities. Pipe them on stdin with
 `--grant -`, or pass `--grant-file <path>` with a path outside the
 repository. Never put a grant on the command line, in a repository file, or in
 logs or chat. The script never prints a grant. It sends requests only to the
-Cloud origins built into it. Nothing in the link file or the environment can
-add an origin.
+Cloud origins built into it (`https://cloud.mantle.tools` and
+`https://cloud-staging.mantle.tools`), plus loopback (`localhost`,
+`127.0.0.1`, `[::1]`) for a local Control or test server. Nothing in the link
+file or the environment can add an origin.
 
 ## Link file
 
@@ -154,7 +158,7 @@ gitignored and never holds a grant.
 | `source_archive_secret_path` | A secret-named file is committed. | Untrack it, or pass `--omit <path>` so the deployer sees the omission. |
 | `link_file_invalid` with a JSON pointer | The link file has an unknown key, a secret or an endpoint. | Remove the key the pointer names. Never add origins. |
 | `grant_inline_refused` | A grant was passed as an argument. | Pipe the tool result to `--grant -`. |
-| `client_outdated` | The Cloud requires a newer protocol. | Update the Mantle plugin. Do not patch the script. |
+| `client_outdated` or `cli_core_mismatch` | The Cloud requires a newer protocol or another Mantle Core. | Update the `mantle-host` plugin, or re-run `npx skills add aotter/mantle --skill mantle-host`. Do not patch the script. |
 | Version conflict | Someone else changed the project. | Re-read `member-project`. Do not overwrite their change. |
 
 ## Don't

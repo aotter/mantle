@@ -54,8 +54,8 @@ default branch (`main`) and picks up a re-vendor when that branch does.
 | `theme` | brand or visual direction in a project | repo-owned theme and UI contracts | — | project | — |
 | `update` | SDK upgrade or plugin lock review | never blindly overwrite user-owned code | — | project | — |
 | `mantle` | new application, or opening an existing project | do not use the SDK checkout as the application; no push/deploy/provider config during cold start | author local project; continue existing project | plugin | Creates a new project; nothing to project into an existing one. |
-| `provision` | ship to Cloudflare, ChatGPT Sites or Mantle Cloud and finish production auth | secrets never enter source or logs; explicit auth mode; one committed `.mantle/hosting.json` with no secrets | Mantle Cloud; hosted auth; self-managed auth | package | Platform-specific deploy that handles production secrets; opt-in only. |
-| `mantle-host` | user picked the Mantle Cloud target, or the project has `.mantle/hosting.json` | clean committed tree; grants on stdin only, never in files or logs; deploy is a separate reviewed step; run only printed commands; esbuild is a project devDependency | link; save; deploy; rollback | plugin | Ships only in the mantle-host plugin with its vendored deploy script; Cloud deploy is opt-in. |
+| `provision` | ship to Cloudflare, ChatGPT Sites or Mantle Cloud and finish production auth | secrets never enter source or logs; explicit auth mode; one committed `.mantle/hosting.json` with no secrets | Choose the Target; Hosted Auth (legacy Landing); Self-hosted email OTP; Self-hosted GitHub OAuth | package | Platform-specific deploy that handles production secrets; opt-in only. |
+| `mantle-host` | user picked the Mantle Cloud target, or the project has `.mantle/hosting.json` | clean committed tree; grants on stdin only, never in files or logs; deploy is a separate reviewed step; run only printed commands; esbuild is a project devDependency | Verbs; Save, then deploy separately; Link file | plugin | Ships only in the mantle-host plugin with its vendored deploy script; Cloud deploy is opt-in. |
 | `media-gc` | audit or remove stale uncommitted media objects | audit by default; confirm exact account, bucket, cutoff, and candidate digest; re-audit before applying; never prefix-delete; never print keys | apply | package | Destructive remote object deletion and Cloudflare-specific; opt-in only. |
 
 Deliberately monolithic:
@@ -91,19 +91,18 @@ the npm package. `mantle skills` projects the four ongoing workflows after
 package installation.
 
 The `skills` CLI also reads `.claude-plugin/marketplace.json` and finds
-`plugins/mantle-host/skills/mantle-host`. The no-flag command therefore
-discovers two skills, `mantle` and `mantle-host`. An interactive run asks
-which to install, and an agent or `-y` run installs both. Name the skill to
-install exactly one:
+`plugins/mantle-host/skills/mantle-host`. That skill declares
+`metadata.internal: true`, so the no-flag command still installs only
+`mantle`. `--skill mantle-host` installs it:
 
 ```sh
-npx skills add aotter/mantle --skill mantle        # bootstrap only
-npx skills add aotter/mantle --skill mantle-host   # Mantle Cloud deploy, with its script
+npx skills add aotter/mantle --skill mantle-host
 ```
 
-The second command is the fallback for hosts without a plugin marketplace. It
-copies the whole skill directory, including `scripts/mantle-host.mjs` and
-`scripts/VENDORED.json`.
+This is the fallback for hosts without a plugin marketplace. It copies the
+whole skill directory, including `scripts/mantle-host.mjs` and
+`scripts/VENDORED.json`. `scripts/check-skills.mjs` requires every plugin skill
+to declare `internal: true`.
 
 Other marketplace hosts point to the same entry:
 
