@@ -40,7 +40,8 @@
   "packageManager": "pnpm@9.15.0",
   "pnpm": {
     "overrides": {
-      "miniflare>sharp": "0.35.4"
+      "miniflare>sharp": "0.35.4",
+      "@better-auth/mcp>@better-auth/oauth-provider": "1.7.2"
     }
   }
 }
