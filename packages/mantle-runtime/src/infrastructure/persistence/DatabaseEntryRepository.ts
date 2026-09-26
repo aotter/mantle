@@ -93,8 +93,10 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader, At
     const [sortField, direction] = sortEntries[0]!;
     if (direction !== "asc" && direction !== "desc") throw invalid(`orderBy '${sortField}' must be 'asc' or 'desc'.`);
     const sortSql = compiler.orderColumn(table, sortField);
+    if (query.columns !== undefined && (!Array.isArray(query.columns) || !query.columns.length)) {
+      throw invalid("Store columns takes a non-empty array.");
+    }
     const columns = query.columns === undefined ? undefined : [...new Set(query.columns)];
-    if (columns !== undefined && (!Array.isArray(query.columns) || !columns.length)) throw invalid("Store columns takes a non-empty array.");
     for (const column of columns ?? []) {
       if (!fieldColumn(table.schema, column)) throw invalid(`Schema '${table.schema.metadata.name}' has no column '${String(column)}'.`);
     }
