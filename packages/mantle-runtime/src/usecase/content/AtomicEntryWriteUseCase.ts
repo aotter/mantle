@@ -6,10 +6,10 @@ import type { StoreWhere } from "../../domain/model/Store.js";
 import type { CreateDraftUseCase } from "./CreateDraftUseCase.js";
 import type { DeleteEntryUseCase } from "./DeleteEntryUseCase.js";
 import type { UpdateDraftUseCase } from "./UpdateDraftUseCase.js";
-import { withConflictDiagnostic } from "./diagnostics.js";
+import { notFoundDiagnostic, withConflictDiagnostic } from "./diagnostics.js";
 
 export type AtomicDraftOperation =
-  | { readonly kind: "create"; readonly id?: string; readonly request: CreateDraftRequest }
+  | { readonly kind: "create"; readonly id?: string; readonly request: CreateDraftRequest; readonly scope?: { readonly field: string; readonly value: string } }
   | { readonly kind: "update"; readonly request: UpdateDraftRequest; readonly scope?: { readonly field: string; readonly value: string } }
   | { readonly kind: "delete"; readonly request: DeleteEntryRequest & { readonly expectedVersion: number }; readonly scope?: { readonly field: string; readonly value: string } }
   | { readonly kind: "deleteWhere"; readonly request: {
@@ -64,22 +64,26 @@ export class AtomicEntryWriteUseCase {
         if (operation.id !== undefined && (typeof operation.id !== "string" || !operation.id || operation.id.includes("\0"))) {
           throw invalidOperation("Create id must be a non-empty string without NUL.");
         }
-        write = { kind: "create", args: await this.create.prepare(operation.request, {
+        const args = await this.create.prepare(operation.request, {
           id: operation.id, skipUniquePreflight: true,
-        }) };
+        });
+        assertScope(args.data, operation.scope);
+        write = { kind: "create", args };
       } else if (operation.kind === "update") {
+        const target = current(operation.request);
+        assertScopedTarget(target.previous, operation.scope, operation.request, "UpdateDraft");
         const preparedUpdate = await this.update.prepare(operation.request, {
-          skipUniquePreflight: true, ...current(operation.request),
+          skipUniquePreflight: true, ...target,
         });
         previous = preparedUpdate.previous;
-        assertScope(previous, operation.scope);
         write = { kind: "update", args: {
           ...preparedUpdate.args, observedVersion: previous.version,
         } };
       } else if (operation.kind === "delete") {
-        const preparedDelete = await this.remove.prepare(operation.request, current(operation.request));
+        const target = current(operation.request);
+        assertScopedTarget(target.previous, operation.scope, operation.request, "DeleteEntry");
+        const preparedDelete = await this.remove.prepare(operation.request, target);
         previous = preparedDelete.previous;
-        assertScope(previous, operation.scope);
         write = { kind: "delete", args: {
           ...preparedDelete.args,
           expectedVersion: operation.request.expectedVersion,
@@ -168,8 +172,19 @@ export class AtomicEntryWriteUseCase {
   }
 }
 
-function assertScope(row: EntryRow, scope: { readonly field: string; readonly value: string } | undefined): void {
-  if (scope && row.data[scope.field] !== scope.value) throw invalidOperation("Row is outside caller scope.");
+function assertScope(data: Record<string, unknown>, scope: { readonly field: string; readonly value: string } | undefined): void {
+  if (scope && data[scope.field] !== scope.value) throw invalidOperation("Row is outside caller scope.");
+}
+
+function assertScopedTarget(
+  row: EntryRow | null | undefined,
+  scope: { readonly field: string; readonly value: string } | undefined,
+  request: { readonly collection: string; readonly id: string },
+  usecase: "UpdateDraft" | "DeleteEntry",
+): void {
+  if (scope && (!row || row.data[scope.field] !== scope.value)) {
+    throw new DiagnosticError(notFoundDiagnostic(`usecase/${usecase}/${request.id}`, request.collection, request.id));
+  }
 }
 
 function invalidOperation(message: string): DiagnosticError {

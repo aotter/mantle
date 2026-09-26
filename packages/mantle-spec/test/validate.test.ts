@@ -84,13 +84,15 @@ function trigger(name: string, procedureName: string): TriggerManifest {
 describe("validateManifests()", () => {
   it("requires a required indexed string scope and a scoped View filter", () => {
     const scoped = schema("sessions", {
-      schema: { type: "object", properties: { ownerId: { type: "string" } }, required: ["ownerId"] },
+      schema: { type: "object", properties: { ownerId: { type: "string" }, slug: { type: "string" } }, required: ["ownerId"] },
       indexes: [["ownerId"]], scope: { ownerId: "$ctx.user.id" },
     });
     expect(validateManifests({ manifests: [scoped] }).errorCount).toBe(0);
     for (const spec of [
       { ...scoped.spec, indexes: [] },
       { ...scoped.spec, scope: { ownerId: "$input.ownerId" } },
+      { ...scoped.spec, schema: { ...scoped.spec.schema, properties: { ownerId: { type: "string", "x-mantle-bind": "ctx.staff" } } } },
+      { ...scoped.spec, uniqueIndexes: [["slug"]] },
     ]) {
       expect(validateManifests({ manifests: [{ ...scoped, spec } as SchemaManifest] }).errorCount).toBeGreaterThan(0);
     }
