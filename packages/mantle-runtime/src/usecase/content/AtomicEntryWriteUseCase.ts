@@ -3,7 +3,7 @@ import { liftLocale, type EntryRow } from "../../domain/model/EntryRow.js";
 import type { AtomicEntryWrite, AtomicEntryWriter } from "../../domain/port/AtomicEntryWriter.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { CreateDraftRequest, DeleteEntryRequest, UpdateDraftRequest } from "../dto/content/index.js";
-import type { StoreWhere } from "../../domain/model/Store.js";
+import type { ValidatedStoreWhere } from "../../domain/model/Store.js";
 import type { CreateDraftUseCase } from "./CreateDraftUseCase.js";
 import type { DeleteEntryUseCase } from "./DeleteEntryUseCase.js";
 import type { UpdateDraftUseCase } from "./UpdateDraftUseCase.js";
@@ -15,7 +15,7 @@ export type AtomicDraftOperation =
   | { readonly kind: "delete"; readonly request: DeleteEntryRequest & { readonly expectedVersion: number }; readonly scope?: { readonly field: string; readonly value: string } }
   | { readonly kind: "deleteWhere"; readonly request: {
       readonly collection: string;
-      readonly where: StoreWhere;
+      readonly where: ValidatedStoreWhere;
       readonly expect?: number;
     } };
 

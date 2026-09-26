@@ -1,6 +1,6 @@
 import { DiagnosticError, runtimeDiagnostic, type SchemaManifest } from "@aotter/mantle-spec";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
-import type { CallerStore, MantleStore, StoreWhere, StoreWriteOp, StoreWriteResult } from "../../domain/model/Store.js";
+import type { CallerStore, MantleStore, StoreWhere, StoreWriteOp, StoreWriteResult, ValidatedStoreWhere } from "../../domain/model/Store.js";
 import type { SweepExpiredRequest, SweepExpiredResult } from "../../domain/port/ExpirySweeper.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
 import type { StoreReader } from "../../domain/port/StoreReader.js";
@@ -131,7 +131,7 @@ function toOperation(op: StoreWriteOp, index: number, ctx: HandlerContext | unde
   if (!schema) throw invalid(`Unknown Schema '${collection}'.`);
   validateStoreWhere(where as StoreWhere, schema, schemas);
   const scoped = callerBound ? scopeStoreWhere(where as StoreWhere, schema, schemas, ctx?.user?.id) : where as StoreWhere;
-  return { kind: "deleteWhere", request: { collection, where: scoped!, ...(expect === undefined ? {} : { expect }) } };
+  return { kind: "deleteWhere", request: { collection, where: scoped! as ValidatedStoreWhere, ...(expect === undefined ? {} : { expect }) } };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

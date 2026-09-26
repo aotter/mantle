@@ -298,6 +298,8 @@ describe("store.select (#1151)", () => {
     await expect(store.select({ from: "sessions", where: { ownerId: undefined } })).rejects.toMatchObject({
       diagnostic: { code: "INPUT_VALIDATION_FAILED" },
     });
+    await expect(store.select({ from: "sessions", where: { ownerId: { bogus: "a" } } } as never))
+      .rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
     await expect(store.select({ from: "sessions", where: undefined })).rejects.toMatchObject({
       diagnostic: { code: "INPUT_VALIDATION_FAILED" },
     });

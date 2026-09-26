@@ -1,5 +1,5 @@
 import { DiagnosticError, runtimeDiagnostic, type SchemaManifest } from "@aotter/mantle-spec";
-import type { StoreSelect, StoreWhere } from "../../domain/model/Store.js";
+import type { StoreSelect, StoreWhere, ValidatedStoreSelect } from "../../domain/model/Store.js";
 
 const NATIVE_TYPES: Readonly<Record<string, string>> = {
   id: "string", status: "string", version: "integer", createdAt: "integer", updatedAt: "integer", authorId: "string",
@@ -7,7 +7,7 @@ const NATIVE_TYPES: Readonly<Record<string, string>> = {
 const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "in", "notIn", "isNull"]);
 
 /** Validate caller input before it reaches any storage adapter. */
-export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<string, SchemaManifest>, callerId?: string, callerBound = false): StoreSelect {
+export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<string, SchemaManifest>, callerId?: string, callerBound = false): ValidatedStoreSelect {
   if (!record(query)) throw invalid("Store select takes an object.");
   try { query = structuredClone(query); } catch { throw invalid("Store select must contain cloneable data."); }
   unknownKey(query, ["from", "columns", "where", "orderBy", "limit", "cursor"], "Store select");
@@ -38,7 +38,7 @@ export function validateStoreSelect(query: StoreSelect, schemas: ReadonlyMap<str
     orderBy: { [sortField]: direction as "asc" | "desc" },
     limit: query.limit ?? 50,
     ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-  };
+  } as ValidatedStoreSelect;
 }
 
 /** Add the caller predicate outside each user expression, including subqueries. */
