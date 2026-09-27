@@ -48,8 +48,8 @@ Core has one diff function and one place that calls it.
 - **Boot** compares the plan fingerprint with the one stored in `_mantle_boot_state`. When they match, nothing is read. When they differ, boot introspects, applies the safe changes in one batch, stores the new fingerprint, and refuses to serve while a blocked change remains.
 - **Concurrent cold starts** may race on the same change. A safe change that another isolate already applied (for example SQLite's duplicate-column error on `ADD COLUMN`) counts as applied, and the next introspection decides.
 - **Cloud** keeps its deploy order (ADR-0024): Control calls the same Core function against the tenant database before it uploads the new Worker, then runs the canary. The new Worker's boot then finds a matching fingerprint and reads nothing. No migration file is involved.
-- `mantle generate --check` prints the three classes against the local database and never writes.
-- **ChatGPT Sites is gated on #1192.** If deployed Worker code can run DDL against the Site's D1, Sites uses the same boot path and the `drizzle/` directory is removed. If production DDL only happens through `.openai/drizzle`, `mantle generate` writes the same diff as the next file in that directory, and boot on Sites only verifies. Either way the diff comes from the same function; there is no second planner.
+- `mantle generate --check` prints the three classes against the local database, with the safe changes as SQL, and never writes.
+- **Hosts that do not allow DDL from deployed code**, for whatever reason and however their rules change: Core does not model their migration mechanism. `mantle generate --check` prints the safe changes as SQL, the author's coding agent delivers them through the host's own path (a migration directory, a console, a deploy hook), and boot then finds the database converged and serves. Core ships no host-specific migration directory, journal or file format. What is known about a host (for example ChatGPT Sites, #1192) belongs in its consumer skill and docs, not in Core.
 
 ### 4. What stays versioned
 
@@ -75,7 +75,7 @@ The SQLite family (D1, Bun, libSQL) implements introspection. The IndexedDB adap
 
 - **Keep the reviewed-artifact workflow** (#1080, #1086) and extend it case by case. Rejected: each new change kind needs its own artifact type and review path, and the files still drift from the database.
 - **Let Mantle generate destructive migrations behind a flag.** Rejected: Mantle cannot know whether a removed field is a rename, a split or garbage, and a wrong guess loses data.
-- **A separate planner for file-based hosts** (the CLI reads the remote database and writes a file). Rejected: Cloud can call the Core function directly, and Sites waits on #1192 before any file path is kept.
+- **A planner per file-based host** (the CLI reads the remote database and writes that host's migration file). Rejected: Cloud calls the Core function directly, and other hosts' delivery rules change faster than Core releases; the agent bridges them from the printed SQL.
 - **Diff against `_mantle_schema_tables` instead of the database.** Rejected: that is today's design, and it cannot see what the author or another tool changed.
 - **Introspect on every boot.** Rejected: the fingerprint already says when the plan changed; cold starts should not pay for `PRAGMA` reads.
 
@@ -83,7 +83,7 @@ The SQLite family (D1, Bun, libSQL) implements introspection. The IndexedDB adap
 
 1. Build the introspection and diff in the Store storage layer (ADR-0032 decision 4), shared by boot, `mantle generate --check` and Cloud's deploy step.
 2. Port the ADR-0024 conformance cases to the three classes, and add: an undeclared index is reported and kept; a failed unique index is blocked and applies nothing; a blocked change resolved by hand passes the next check; an unchanged fingerprint reads nothing; two boots racing on one `ADD COLUMN` both succeed.
-3. Remove the artifact workflow in the same change that ships boot convergence, so there is never a release with neither. The Sites part follows #1192.
+3. Remove the artifact workflow, including the Sites `drizzle/` generation in `generate-sites.ts`, in the same change that ships boot convergence, so there is never a release with neither. Move what the Sites handbook says about D1 migrations into the Sites consumer skill.
 
 ## Implementation status
 
