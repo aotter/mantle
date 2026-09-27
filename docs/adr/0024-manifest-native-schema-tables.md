@@ -1,6 +1,6 @@
 # ADR-0024: Materialize each Schema as a native storage table
 
-**Status:** Accepted; the clauses allowing authored data to use `id`, `status` or `createdAt` are superseded by [ADR-0025](0025-reserved-native-columns-and-published-only-public-views.md) (2026-09-22)
+**Status:** Accepted; the clauses allowing authored data to use `id`, `status` or `createdAt` are superseded by [ADR-0025](0025-reserved-native-columns-and-published-only-public-views.md) (2026-09-22); the migration-artifact and destructive-change workflow is superseded by [ADR-0033](0033-storage-converges-to-the-plan.md) for 0.2.0
 
 **Date:** 2026-09-18
 
@@ -108,7 +108,7 @@ destructive in the pre-beta contract. Cloud rejects them; operators rebuild the
 database and move required data manually outside Mantle and Control. Production
 neither generates nor accepts arbitrary migration SQL.
 
-Preparation records applied migration ids in the existing `_migrations` ledger.
+Preparation records applied migration ids in the `_mantle_migrations` ledger (#1150).
 The enclosing immutable artifact checksum protects the ordered SQL,
 fingerprints, and target projections. Preparation rejects an unknown source
 fingerprint, changed artifact checksum, skipped revision, or target mismatch.

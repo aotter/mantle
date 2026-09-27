@@ -1,0 +1,209 @@
+# ADR-0032: Store-centric Core, an application-owned service, and caller identity
+
+**Status:** Proposed for 0.2.0 (#1188). Amends ADR-0014, ADR-0026, ADR-0027 and ADR-0030; storage evolution is decided separately in [ADR-0033](0033-storage-converges-to-the-plan.md).
+
+**Date:** 2026-09-27
+
+**Related:** #1151 (Store), #1152 (identity), #1156 (table namespace), #1150, #1189, ADR-0022, ADR-0023, ADR-0028, ADR-0031, aotter/mantle-home#201
+
+## Context
+
+`develop` (3b829e6) carries the first Store slices from ADR-0030, but six persistence paths still generate their own SQL: builtin ops (`EntryRepository`), `store.write` (`AtomicEntryWriter`), legacy Views (`SqliteViewCompiler`), select Views (`SqliteStoreQueryCompiler`), `runtime.entries` (`EntryReader`) and the TTL sweep (`sweepExpired`). Scope, TTL, OCC and hook rules are spread across them, and builtin ops, Admin/MCP CRUD, `EntryReader` and legacy Views ignore `Schema.spec.scope`.
+
+The host boundary has the same problem in a different place:
+
+- **Mantle owns the entry.** `createMantleWorker` owns the Worker and hands the application a restricted seam (`extend`, `getRuntime`, `MANTLE_RESERVED_PATH_PREFIXES`, `MantleExtensionApp`).
+- **Mantle owns the user.** `0001-init` creates the twelve Better Auth tables on every SQLite database, even without `@aotter/mantle-auth`. `createMantleWorker` requires a full `MantleAuth`, `resolveCaller` calls `getUserRole`, and `mountMantleAdmin` depends on the Better Auth session shape. ChatGPT Sites fakes the Admin methods and hand-mounts Admin.
+- **Cloudflare semantics sit in Core contracts.** ADR-0027 Triggers use Cloudflare's cron dialect and put a required `cloudflare` host in the plan; `HandlerContext.schedule` and `waitUntil` are documented as Cloudflare deliveries.
+
+No 0.1.5 has been tagged, and the release is allowed to break grammar, so it ships as 0.2.0.
+
+## Decision
+
+Spec (the four atoms) compiles into a sealed `RuntimePlan`; Core executes it; everything else is built around Core.
+
+```
+application-owned service (MantleHandlers + one WinterTC fetch entry)
+  └─ Core: Trigger dispatch → View / Procedure → Store → StoreExecutor
+                                  └ ref → handlers (the only custom code)
+host adapters: createMantleWorker / createBunMantle / createVercelMantle take the service
+```
+
+### 1. Store is the only path to Mantle-owned entry storage
+
+Every entry read and write goes through `MantleStore` / `CallerStore` over the relational JSON IR of ADR-0030. Policies are **IR rewrites applied before storage**: caller scope (including subqueries), TTL visibility, published-only, and OCC (`lock` becomes a version predicate plus `expect: 1`). Storage implementations compile a dialect and apply atomic batches; nothing else.
+
+- **Contract.** `select`, `view`, `write` and `id` on both types; `as(caller)` and `sweepExpired` on `MantleStore` only. `as` now takes a `Caller` (decision 7), not a `HandlerContext`.
+- **Write ops** stay `insert | update | delete`, all or nothing. `StoreInsert` gains `onConflict?: "ignore" | { columns, update }` (#1151). `StoreUpdate` and `StoreDelete` both take any `where`, optional `lock` and optional `expect`.
+- **Results.** A row op returns `{ id, version }`; a set op, or an insert ignored by `onConflict`, returns `{ affected }`. `StoreWriteResult` renames `deleted` to `affected`.
+- **Errors** stay `DiagnosticError`: `INPUT_VALIDATION_FAILED`, `CONFLICT`, `RESOURCE_UNAVAILABLE`, `OUTCOME_UNKNOWN` (ADR-0023). `Diagnostic` gains `conflict?: { opIndex?: number; reason: "lock" | "expect" | "unique" }`. `opIndex` is best effort, because a D1 batch cannot report which statement failed.
+- **Status changes** are `update` with `set: { status }`, validated by one domain service, `LifecycleStateMachine`, which owns drafts, publish, unpublish, archive and published protection. Its tests are ported from the `content-ops` suite before any legacy path is removed.
+- **One cursor format.** Cursors are opaque, versioned and bound to `from`, the `orderBy` column and direction. The three formats in use today (`s:`, `st:`, `o:`) are removed.
+- **Admin statistics** (`readCreationStatistics`) stay a narrow optional storage capability outside Store. Store does not grow aggregates for one Admin chart.
+- **Translations.** Mantle Web resolves a locale with two Store selects (the base rows, then the translation rows for the requested and the site default locale) and merges them; the requested locale wins, then the default. Both reads are Store selects, so scope, TTL and published-only apply to each. `JoinedEntryReader` is removed and no read path grows around Store.
+
+### 2. Row ops and set ops
+
+A write op's `where` is classified **on the caller's `where`, before any policy rewrite**, so an injected scope predicate never changes the class.
+
+- **Row op:** the top level of `where` pins `id` to one value, alone or ANDed with further conditions (`{ id, performedAt: { gte } }`). It affects at most one row, may carry `lock`, and fires per-row lifecycle hooks. A row op that matches nothing is re-read by id: a present row with another version is `CONFLICT` with reason `lock`; otherwise reason `expect`.
+- **Set op:** any other `where`. It fires no hooks. `mantle validate` and Store reject it on a Schema with a per-row `before_*`/`after_*` Trigger for that operation and on a Schema whose published entries are protected.
+- `Procedure.target` is inferred with the same rule: a program with exactly one row op whose `where` pins `id` to an input field gets that target; otherwise `target` is explicit, as today.
+
+### 3. Lifecycle hooks and atomicity
+
+- A lifecycle Trigger targets a Procedure whose handler is a `ref`. `mantle validate` rejects an inline Store program as a hook target.
+- **`before_*` is a read-only check.** It receives a read-only `CallerStore` (as guard Procedures do today) and no `ctx.invoke`. It allows the mutation by returning and rejects it by throwing; it cannot rewrite the mutation in 0.2.0. A rejection or failure means nothing in the batch is applied: before hooks always fail closed. Hooks for a multi-op batch run in op order, and for one op in Trigger-name order, all before the batch applies. Each sees committed data only, never a sibling op. OCC at apply time still guards the race between the check and the commit. The contract forbids external mutations in a before hook; this limits what Mantle injects, not arbitrary user code.
+- **`after_*` runs only after a successful commit.** A rollback emits nothing, a failure never changes the committed result, and a write the hook makes is a new `write` in a new transaction. The hook receives the mutation snapshot (the row and version at commit), not the latest row.
+- **Delivery.** `LifecycleTriggerSource.errorPolicy` is removed and replaced by `delivery?: "best-effort" | "reliable"`, valid on after hooks only, default `best-effort` (today's behavior). `reliable` writes an after-event record to `_mantle_outbox` in the same batch as the rows, with a stable event id; delivery is then at-least-once and handlers deduplicate on `ctx.cause.id`. A host without the `reliableDelivery` capability fails boot for a plan that declares `reliable`, rather than degrading silently.
+- **Retries.** External side effects sit outside Store atomicity. A retry after `OUTCOME_UNKNOWN` reconciles through client ids (`store.id()`) and versions: a replayed insert conflicts on its id, a replayed update on its lock.
+- **Identity and depth.** Hooks run with the originating `Caller`; deferred and outbox deliveries rehydrate it from the event record. `MAX_INVOCATION_DEPTH = 8` counts the `cause` chain across hook chains and `ctx.invoke`; exceeding it fails with `INVOCATION_DEPTH_EXCEEDED`.
+- An entitlement check for one action belongs in that Procedure's `requires.guard`. A before hook is for rules every path must obey, Admin, import and maintenance included.
+- The Store hands mutations to a `LifecycleDispatcher` port (`before(mutations)`, `after(events)`) that the Trigger layer implements; Store never references Procedures. It replaces `LifecycleHookingEntryRepository`, `RunLifecycleHooksUseCase` and `DeferredHookDispatcher`.
+
+### 4. Storage port
+
+`StoreReader` grows into **`StoreExecutor`**: `capabilities`, `select(query)` and `apply(batch)` over validated IR only. `StoreCapabilities` declares `subqueries`, `like`, `onConflict`, `atomicBatch` and `maxBindings`; the one Core validator reads its limits from there, which removes the duplicated `NATIVE_TYPES`, depth and node checks. `ViewQueryExecutor` shrinks to native SQL Views, the remaining escape hatch.
+
+- `SqliteStoreExecutor` serves D1, Bun and libSQL, so libSQL gains writes.
+- `MemoryStoreExecutor` is the reference implementation, the test fake (replacing `test/fakes/in-memory-store.ts`) and the base of the IndexedDB adapter, which keeps its own persistence and concurrency tests.
+- `@aotter/mantle-runtime/testing` exports one conformance suite that runs against every executor.
+
+The rewrite is built in a private workspace package (working label "MK2") that depends only on `@aotter/mantle-spec`, then folded into `mantle-runtime` with the label removed.
+
+### 5. Grammar is the IR
+
+`API_VERSION` becomes `cms.mantle.aotter.net/v2`, and `RUNTIME_PLAN_VERSION` becomes 6. A v1 manifest fails with the existing apiVersion diagnostic, whose suggestion names `mantle-update`. There is no legacy lowering layer.
+
+- **Procedure handler** is `{ ref: <name> }` or `{ store: [<write ops>] }`. `kind`, `builtin`, `op`, `match` and `BUILTIN_OPS` are removed. Views read; Procedures write, so an inline program holds write ops only. Its output is `{ results }`, the `store.write` results in op order; `mantle validate` checks the declared `output` schema accepts that shape.
+- **View** is `spec.select` or `spec.sql`. The top-level `from`/`filter`/`fields`/`orderBy`/`limit`, the Filter AST, `$param`, `{"$ctx.user": "id"}` and `VIEW_PARAMS_RESERVED` are removed. `spec.params` is renamed `spec.input`, matching the `$input` reference.
+- **Value references** are one set everywhere: `$input.<path>`, `$ctx.user.id`, `$now` and `{ $literal: <value> }`.
+- **Pagination.** REST, MCP and Admin page with `limit` and `cursor` only.
+- Staff View `uiSchema.searchFields` and `filterFields` compile to `like` and `eq` conditions.
+- A native SQL View may not target a scoped Schema (`VIEW_SQL_SCOPED_SCHEMA`); `VIEW_TTL_NATIVE_UNSAFE` stays.
+- **Schedule Triggers** take a five-field POSIX cron in UTC (weekday 0 = Sunday). The plan no longer carries a required host; a host declares the `schedules` capability, the Cloudflare adapter translates the expression to Cloudflare's dialect, and a host without it fails boot for any enabled schedule.
+- **Webhooks.** An HTTP Trigger does not receive the raw request body in 0.2.0. The service owns its HTTP entry (decision 6), so it verifies a signature there and calls `runtime.invokeProcedure`. A raw-body Trigger key is additive and can come later.
+
+### 6. The portable unit is an application-owned service
+
+```ts
+interface MantleService<Env = unknown> {
+  readonly handlers: MantleHandlers<Env>;
+  fetch(request: Request, env: Env, context: MantleServiceContext): Response | Promise<Response>;
+}
+interface MantleServiceContext {
+  readonly runtime: MantleRuntime;
+  waitUntil(promise: Promise<unknown>): void;
+}
+```
+
+- `env` stays opaque. HTTP is the service's only Mantle ingress; schedules, deferred hooks, outbox drains, MCP and REST enter through Trigger atoms and surfaces, and the service exports no scheduled or queue handler of its own for Mantle.
+- **Host adapters change direction.** `createMantleWorker(service, options)`, `createBunMantle(service, options)` and `createVercelMantle(service, options)` boot the runtime from the host's storage binding, pass it to `service.fetch`, and produce the host's native entry. `createMantleWorker` also maps cron and Queue deliveries to Trigger invocations. The output is a plain object, so an application adds its own native handlers next to Mantle's (`{ ...createMantleWorker(service, options), queue: myConsumer }`); Core absorbs no platform event types. ChatGPT Sites uses `createMantleWorker` with the custom identity.
+- `BootMantleRuntimeArgs.supportsScheduledTriggers` becomes `host: { schedules, reliableDelivery }`.
+- Removed: `MANTLE_RESERVED_PATH_PREFIXES`, `MantleExtensionApp`, `extend`, `extend.mount` and `getRuntime`. `mantle generate` emits the standard composition (today's `createMantleWorker` wiring) as application-owned source: `src/service.ts` and `src/handlers.ts`.
+
+### 7. Handlers, invocation and capabilities
+
+- The codegen `MantleHandlers` type lists exactly the plan's refs. `mantle validate` and boot check both directions: a plan ref without a handler is `HANDLER_NOT_REGISTERED` (existing), a handler the plan does not declare is `HANDLER_NOT_DECLARED`.
+- A handler receives only `(input, ctx)`. The serializable part is an **`Invocation`**: `{ procedure, input, caller, cause }`. Every source (HTTP, MCP, schedule, lifecycle, internal) produces one, and `runtime.invokeProcedure(invocation)` runs auth → guard → input → handler → output for all of them. Only an `Invocation` ever crosses a wire.
+- `HandlerContext` is `{ caller, cause, env, waitUntil, store, invoke }`. `user`, `staff`, `auth`, `event` and `schedule` are removed.
+- **`InvocationCause`** is `{ kind: "http" | "mcp" | "schedule" | "lifecycle" | "internal", id, parent? }` plus kind-specific facts: `trigger`, `cron` and `scheduledTime` for schedules; `trigger`, `hook`, `schema` and the mutation snapshot for lifecycle. `id` is stable across retries.
+- **`ctx.invoke(procedure, input)`** is the one Procedure-to-Procedure entry. It keeps the caller, chains `cause.parent`, and re-runs the target's auth and guard. There is no `getRuntime` closure.
+
+### 8. Mantle never owns the user or the auth
+
+A service keeps its existing users and auth. `@aotter/mantle-auth` is one optional producer of the caller identity.
+
+- **`Caller`** (in `@aotter/mantle-runtime`) replaces `HandlerContext.user`, `.staff` and `.auth`:
+
+  ```ts
+  type Caller =
+    | { readonly kind: "anonymous" }
+    | { readonly kind: "user"; readonly subject: string; readonly issuer?: string;
+        readonly role: StaffRole | null; readonly scopes: readonly string[];
+        readonly credential: CredentialKind; readonly credentialId: string | null; readonly clientId: string | null }
+    | { readonly kind: "system"; readonly reason: string };
+  ```
+
+- **Subject key.** `subject` is the application subject key: opaque, stable and unique within the service across every issuer. The resolver owns that uniqueness (mantle-auth uses its user row id; a resolver over several IdPs namespaces the id). `issuer` is informational. `$ctx.user.id`, `scope.ownerId` and `authorId` store the subject key, with no foreign key into any users table. Identity is never keyed by email.
+- **One authentication boundary.** The service's entry resolves the caller once per request with a **`CallerResolver`**: `(request) => Promise<{ caller: Caller } | { invalid: true; challenge?: string }>`. An invalid credential is answered 401 before any surface runs and is never treated as anonymous. Only "no credential presented" is anonymous. Roles are resolved inside the resolver on every request.
+- **Predicates.** `requires.auth` evaluates against the `Caller` only; the grammar is unchanged. `ctx.user` and `ctx.auth` require a user caller, `ctx.staff` a role in the list, `ctx.auth.scope` a scope. `STAFF_ROLES` is Admin's vocabulary: a custom resolver maps its own roles onto it or leaves `role` null and uses scopes and guards.
+- **System caller.** `systemCaller(reason)` is exported for host code only; no wire can produce one. It satisfies no `requires.auth` predicate (so schedule targets still declare none, as ADR-0027) and bypasses caller scope and nothing else: lifecycle rules and TTL visibility apply, and expired rows are visible only to `sweepExpired`. Schedules, outbox drains and maintenance run as the system caller.
+- **Policy origins.** Scope comes from the caller; published-only from the surface or atom (a public View over a publishing Schema); TTL and lifecycle always apply. `runtime.store` is host-level and unscoped, `runtime.store.as(caller)` binds per request, and `ctx.store` arrives bound.
+- **Admin facets.** `@aotter/mantle-admin` defines `AdminIdentity`, whose members are all optional: `directory` (`getUser`, `listUsers`, `listMembers`), `roles` (`setUserRole`, `inviteUser`, `revokeInvite`, `sendStaffInvitation`) and `deleteUser`. Admin hides what is absent. Display names come from `directory`, never from a Store join.
+- **mantle-auth** implements `CallerResolver`, `AdminIdentity` and the optional OAuth server routes. Account deletion is its `deleteUser` facet, so services stop running raw SQL against auth tables; a custom provider owns deletion for its own users. The MCP surface verifies nothing: it takes `authorizationServer` (a URL) for its 401 challenge and protected-resource metadata.
+- **Core creates no auth tables.** The twelve Better Auth `CREATE`s and their indexes are removed from `0001-init`, which keeps its id, so migrated databases are unchanged. mantle-auth already migrates its own schema through Better Auth's `getMigrations`; that becomes the only source of auth DDL, and Core stops carrying a copy. mantle-auth refuses to start when an auth table name belongs to a Schema.
+- **No identity** (anonymous callers only, no auth package, no auth tables) works and is tested. It is an explicit choice, never the default.
+- **Existing services.** Mantle is added to a running service; it does not replace it. The service keeps its entry, users, auth, tables, routes and SSR. Mantle adds `_mantle_*` system tables, the Schemas it declares, and the product tables of the modules it selects. Data the service wants Mantle to manage (Admin, MCP, Store) moves into a Schema, one table at a time, by the data owner's choice. #1102's consumer skill carries that path.
+
+### 9. Surfaces are Fetch functions
+
+A surface is `(request: Request, caller: Caller) => Promise<Response>`, created with its base path:
+
+| Surface | Factory | Package |
+|---|---|---|
+| MCP | `createMcpSurface(runtime, { basePath, authorizationServer? })` | `@aotter/mantle-mcp` |
+| Admin | `createAdminSurface(runtime, { basePath, identity?, assets })` | `@aotter/mantle-admin` |
+| REST Views | `createRestSurface(runtime, { basePath })` | `@aotter/mantle-web` |
+| Web | `createWebSurface(runtime, { basePath, ... })` | `@aotter/mantle-web` |
+
+Each factory records its mount with the runtime for the boot report. Admin UI assets honour the base path. Hono may stay inside a package; it is no longer in any public signature. Mantle Web and Admin read through Store, and `EntryReader` is removed. Codegen emits a typed client for Views and Procedures for custom frontends. The `@aotter/mantle-admin-ui/kit` re-export and `rowBindings` are removed (#1140).
+
+### 10. Cloud verifies the plan; the user owns the entry
+
+- `semanticFingerprint` becomes SHA-256; it now crosses a trust boundary, which its `ponytail:` comment named as the upgrade point. It is the "compiled plan fingerprint" aotter/mantle-home#201 records.
+- `createMantleRuntime` accepts `expectedFingerprint` and refuses to boot on a mismatch (`PLAN_FINGERPRINT_MISMATCH`).
+- `runtime.bootReport()` returns `MantleBootReport`: `{ fingerprint, coreVersion, handlerRefs, schedules, mounts }`.
+- Cloud's guarantee names two kinds of fact. **Platform-verified:** the Cloud-compiled plan, the pinned Core, storage matching the plan (ADR-0033) and the fingerprint handshake. **Service-reported:** the boot report's mounts and refs, which Cloud confirms only by probing them in smoke. A service that never boots the runtime has no manifest scope to guarantee, and smoke shows that.
+- `mantle-host` distinguishes a handlers-only artifact (today's closed module, host protocol 2 per ADR-0031) from a service-entry artifact, which is closed except for `@aotter/mantle*` externals that Cloud supplies at the pinned Core. The artifact field is `artifactKind: "handlers" | "service"`; service entries use host protocol 3. aotter/mantle-home reserves the field now and accepts service entries after Core 0.2.0, as its own issue.
+
+### 11. Table namespace
+
+Tables that start with `_mantle_` are system tables: Mantle's internal state (the ledger, boot, Schema registry, schedule runs, outbox). They are Mantle's alone and the service does not touch them. Every other table Mantle or a Mantle module creates is a **product table** and keeps its name, just as Better Auth's tables keep theirs: `site_config`, `media_assets` and `pending_media_uploads` from Core, and Better Auth's own tables from mantle-auth. #1156 is decided by this rule: no rename. `sites_users` leaves `RESERVED_TABLES`, since ChatGPT Sites' identity is application-owned.
+
+A product table that already exists without the ledger record of the Mantle migration that creates it is someone else's table: Core refuses to boot (`STORAGE_TABLE_NOT_OWNED`) instead of reading and writing it. mantle-auth applies the same rule to `user` and the other Better Auth tables.
+
+### 12. `mantle generate` and identity
+
+- With no `--features`, generate emits the full preset, including mantle-auth, which creates and owns its tables.
+- `--features` stays a positive replacement list (ADR-0026). `mantle.config.json` and the CLI gain `identity: "mantle" | "custom" | "none"`, and identity is part of the positive selection: an explicit `--features` without `--identity` means `none`, and a selected feature that needs a caller identity (`admin`) then fails with the dependency diagnostic below. `custom` emits an application-owned `src/identity.ts` implementing `CallerResolver`.
+- **Amends ADR-0026:** dependencies are no longer closed automatically. A missing dependency fails with `GENERATE_FEATURE_DEPENDENCY_MISSING`, and an omitted module is never re-added.
+- `--host chatgpt-sites` implies `identity: custom` and emits the standard preset. Switching `identity` on a rerun is refused and never drops tables.
+- Acceptance: the default works with users and auth whose tables mantle-auth owns; `custom` keeps the service's users and adds no auth tables; an explicit public service with `none` adds no auth package or tables; a valid positive selection generates, and a missing dependency is refused with a diagnostic.
+
+## Conformance cases
+
+The three contracts #1188 made ADR gates are accepted only with these cases, run against every `StoreExecutor` and the lifecycle layer:
+
+1. **Atomicity and hooks.** A hook target with an inline program is rejected. A before hook has no write and no `invoke`; its rejection applies nothing in the batch. A concurrent write between a before check and the commit fails on OCC. A rollback emits no after event. An after-hook failure leaves the committed result. A reliable after event survives a crash between commit and delivery and keeps its id on retry.
+2. **Row-op classification.** `{ id }` and `{ id, performedAt: { gte } }` are row ops; `{ ownerId }` is a set op; a caller-scoped rewrite of `{ id }` stays a row op; `Procedure.target` inference agrees with Store in every case.
+3. **Caller identity.** Two callers with the same upstream id from different issuers cannot read each other's scoped rows. An invalid credential is 401, never anonymous. The system caller bypasses scope but not TTL or lifecycle. A no-identity service boots with no auth package and no auth tables.
+
+## Consequences
+
+- **Net deletion** of about 3,200 lines: `DatabaseEntryRepository`, `LifecycleHookingEntryRepository`, `InvokeBuiltinUseCase`, `BuiltinProjector`, the content use cases and `AtomicEntryWriteUseCase`; the `EntryRepository`, `EntryReader`, `AtomicEntryWriter` and `ExpirySweeper` ports; the declarative part of `SqliteViewCompiler`; `IndexedDbEntryRepository` and `IndexedDbViewQueryExecutor`; `page`/`show`; the in-memory test fake; the twelve auth `CREATE`s in `0001-init`.
+- **Breaking for every consumer:** grammar, the handler API, Worker composition and the pagination wire. The release ships the `mantle-update` codemod (builtin handlers to inline programs, Filter AST to `select`, `params` to `input`, `page`/`show` to `limit`/`cursor`, `extend` to the service preset) and old-to-new tables.
+- **Main risk: lifecycle semantics.** They move into `LifecycleStateMachine` with their tests ported first.
+- Cloud's promise changes from "Admin at /admin" to "the surfaces you declare work at the mounts you declare".
+- A service with working users and auth keeps them. Fresh databases without mantle-auth get no auth tables; databases that have them are left alone.
+
+## Alternatives
+
+- **A legacy-lowering layer** that compiles builtin ops and the Filter AST into IR without a grammar change. Rejected: it keeps the code this release deletes.
+- **A Worker-shaped artifact.** Rejected: it leaks the Worker name, the `fetch`/`scheduled`/`queue` export shape and `cloudflare:workers` into a host-agnostic contract.
+- **A handler-host port with remote execution.** Deferred: the service already is the host. The serializable `Invocation` keeps remote execution possible.
+- **Keeping a Mantle-owned Worker with extension seams.** Rejected: it limits custom frontends, SSR and webhooks, and duplicates Cloud-only assembly.
+- **An identity port in Runtime, or auth tables in Core.** Rejected in #1152: Core only ever sees a resolved `Caller`.
+- **Prefixing every Mantle-created table** (#1156). Rejected: the prefix marks system tables. Product tables follow the same rule as Better Auth's, and the ownership check in decision 11 covers the collision risk without a rename migration for live sessions and tokens.
+- **Moving the Core auth DDL into mantle-auth as `mantle-auth:0001`** (#1152). Rejected: mantle-auth already derives it from Better Auth's own `getMigrations`, so a copy would be a second source of truth.
+- **`errorPolicy: continue` on before hooks.** Removed: a before hook that fails open is an unchecked rule.
+
+## How to apply
+
+1. Land this ADR and ADR-0033, then build in this order: the three conformance contracts; Store and cross-executor conformance; cut every legacy path over and delete it; service, surfaces and identity; Cloud service-entry artifacts. Vercel and IndexedDB completion may trail.
+2. New code uses only the identifiers named here. A new public name needs an amendment to this ADR.
+3. `mantle validate` diagnostics listed here are added with the grammar slice; the runtime codes with the Store and invocation slices.
+
+## Implementation status
+
+Proposed. Nothing in decisions 1–12 is implemented beyond the ADR-0030 slices already on `develop`.
