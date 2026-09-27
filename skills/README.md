@@ -11,9 +11,16 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | [`update`](../docs/skills/update/SKILL.md) | `mantle:update`: Core-owned drift check workflow for SDK dependencies, local skills, and plugin lockfiles. |
 | [`mantle`](install/SKILL.md) | User wants to author a local Mantle application or continue an existing project. |
 | [`provision`](../docs/skills/provision/SKILL.md) | User wants a local project shipped to Cloudflare with production auth and operator handoff. |
+| [`mantle-host`](mantle-host/SKILL.md) | User chose Mantle Cloud: connect Cloud MCP, then follow its contract and the bundled host script. |
 
 The skills target Mantle's v0.1 grammar. The installed package version, not
 duplicated skill prose, selects the exact runtime and embedded docs.
+
+`mantle-host` is a plugin skill for the released 0.1.4 line. Install the Mantle
+plugin to get its skill, script and production Cloud MCP connection together.
+The script gets the Core version and revision from Cloud MCP; its own version
+is independent of the installed SDK version. A skill-only install with
+`npx skills add aotter/mantle --skill mantle-host` needs a separate MCP connection.
 
 ## Disclosure audit
 
