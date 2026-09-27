@@ -34,8 +34,10 @@ path. Run that command as printed.
 1. The user asked to ship to Mantle Cloud, or the project already has a
    `.mantle/hosting.json` target. Do not link or upload during a local cold
    start.
-2. You have a shell, Git and a Cloud MCP connection with the `member-*` and
-   `cloud-*` tools. MCP clients without a shell are not supported in v1.
+2. You have a shell, Git and a `mantle-cloud` MCP connection at
+   `https://cloud.mantle.tools/mcp`. The plugin bundles that connection; a
+   skill-only install needs it configured separately. MCP clients without a
+   shell are not supported in v1.
 3. `esbuild` is a devDependency of the project and is installed. Every
    `mantle-cloud` save bundles the handler module with the project's own
    esbuild, and the script never installs packages. If it reports
@@ -55,10 +57,10 @@ Follow it literally:
 
 - `mcp`: call `tool` with `arguments` exactly as given. Add only the fields
   that `requires` names, and read each one from the tool it names. For
-  example, `expectedVersion` is the `version` from `member-project`. Then pipe
+  example, `expectedVersion` is the `version` from `query_view_member_project`. Then pipe
   the tool result on stdin to `command`.
 - `confirm`: before you call the tool, show the user the organization and
-  project names from `member-organization` and `member-project`, and get a yes.
+  project names from `query_view_member_organization` and `query_view_member_project`, and get a yes.
   A committed link file can point at someone else's project.
 - `run` or `build`: review the command, then run it. The script prints the
   link file's `frontend.build` command but never runs it.
@@ -74,11 +76,11 @@ or `paired`, and neither one means an `active` release.
 | Verb | Use |
 |---|---|
 | `link --organization <id> --project <id> --slug <slug> [--root <dir>] [--handlers <file>] [--dist <dir>] [--spa] [--build "<command>"]` | Once per project. Writes `.mantle/hosting.json` and gitignores `.mantle/host/`. Commit both. `--runtime cloudflare\|chatgpt-sites [--config <file>]` adds a native target. With several targets, pass `--target <name>` to every verb. |
-| `save [--omit <path>]... [--no-git] [--restart]` | Checks HEAD and prints the `cloud-host-contract` call. Pipe its result to `save --resume` to pack for Cloud's Core and receive the backend upload call. |
+| `save [--omit <path>]... [--no-git] [--restart]` | Checks HEAD and prints the `cloud_host_contract` call. Pipe its result to `save --resume` to pack for Cloud's Core and receive the backend upload call. |
 | `save --resume [--grant -]` | Continues with the Cloud MCP result piped on stdin. It uploads, polls until `ready`, gets the frontend kit, pairs, and ends with a saved version `{versionId, commit}`. That version is paired but not published. |
 | `status` | Reads local state without network access and prints the next step. |
-| `deploy <versionId> [--review -] [--dry-run]` | Reviews the version, then prints the `cloud-publish-paired-release` call. `--dry-run` stops after the review. |
-| `rollback [<versionId>] [--revision <hex>] [--deployment -]` | Prints the `cloud-rollback-project` call. This restores code and assets, not data, identity or connection policy. |
+| `deploy <versionId> [--review -] [--dry-run]` | Reviews the version, then prints the `cloud_publish_paired_release` call. `--dry-run` stops after the review. |
+| `rollback [<versionId>] [--revision <hex>] [--deployment -]` | Prints the `cloud_rollback_project` call. This restores code and assets, not data, identity or connection policy. |
 
 `--help` prints the usage and `version` prints the script and protocol
 versions.
@@ -100,10 +102,10 @@ versions.
    file's `dist`, and run the printed `save --resume`. A changed backend needs
    a new save.
 4. Publishing is a separate, reviewed step for someone with deploy access.
-   Run `deploy <versionId>` and pipe `cloud-paired-review` to
+   Run `deploy <versionId>` and pipe `cloud_paired_review` to
    `--review -`. Show the deployer the rendered review: hashes, uploaders, the
    unverified commit label, file lists, omitted paths, YAML diff, migration
-   and probe evidence. Then call `cloud-publish-paired-release` as printed, and
+   and probe evidence. Then call `cloud_publish_paired_release` as printed, and
    repeat the same call until `release.active`. There is no one-step
    upload-and-publish.
 
@@ -159,8 +161,8 @@ gitignored and never holds a grant.
 | `grant_inline_refused` | A grant was passed as an argument. | Pipe the tool result to `--grant -`. |
 | `client_outdated` | Cloud requires a newer host protocol. | Update the `mantle` plugin, or re-run `npx skills add aotter/mantle --skill mantle-host`. Do not patch the script. |
 | `cli_core_mismatch` | Cloud changed its Core pin during this save, or the pending save predates Core negotiation. | Run the printed `save --restart` command. |
-| `core_pin_invalid` | The Cloud contract did not supply a usable Core version and revision. | Repeat the printed `cloud-host-contract` call and pipe its result. |
-| Version conflict | Someone else changed the project. | Re-read `member-project`. Do not overwrite their change. |
+| `core_pin_invalid` | The Cloud contract did not supply a usable Core version and revision. | Repeat the printed `cloud_host_contract` call and pipe its result. |
+| Version conflict | Someone else changed the project. | Re-read `query_view_member_project`. Do not overwrite their change. |
 
 ## Don't
 

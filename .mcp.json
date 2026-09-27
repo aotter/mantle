@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mantle-cloud": {
+      "type": "http",
+      "url": "https://cloud.mantle.tools/mcp"
+    }
+  }
+}

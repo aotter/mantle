@@ -17,6 +17,9 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 The skills target Mantle's v0.1 grammar. The installed package version, not
 duplicated skill prose, selects the exact runtime and embedded docs.
 
+Install the root plugin for `mantle-host`: it bundles the skill, script and
+production Cloud MCP connection. A skill-only install needs a separate MCP connection.
+
 ## Disclosure audit
 
 Every skill ships as one `SKILL.md` with no reference files, scripts, or

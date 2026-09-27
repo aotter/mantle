@@ -40,6 +40,7 @@ const manifests = {
     ...shared,
     author: { ...shared.author, url: shared.homepage },
     skills: "./skills/",
+    mcpServers: "./.mcp.json",
     interface: {
       ...presentation.interface,
       websiteURL: shared.homepage,
