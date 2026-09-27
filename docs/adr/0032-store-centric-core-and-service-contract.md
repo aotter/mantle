@@ -213,8 +213,13 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 ## How to apply
 
 1. Land this ADR and ADR-0033, then build in this order: the three conformance contracts; Store and cross-executor conformance; cut every legacy path over and delete it; service, surfaces and identity; Cloud service-entry artifacts. Vercel and IndexedDB completion may trail.
-2. New code uses only the identifiers named here. A new public name needs an amendment to this ADR.
-3. `mantle validate` diagnostics listed here are added with the grammar slice; the runtime codes with the Store and invocation slices.
+2. **Keep proven host integrations as maintained examples, not Core contracts.** Core models no host's delivery workflow, but a working integration saves the next user the search. The ChatGPT Sites reference keeps, ported to the 0.2.0 contracts:
+   - Sites sign-in mapped to a `CallerResolver` and an `AdminIdentity` over `sites_users` ([`chatgpt-auth.ts`](../examples/host-chatgpt-sites/src/chatgpt-auth.ts)). Its `chatgpt:<sub>` id is already a namespaced application subject key (decision 8).
+   - R2 as the media store behind the `MediaStorage` port, with same-origin uploads ([`media.ts`](../examples/host-chatgpt-sites/src/media.ts)).
+
+   These stay in `docs/examples/host-chatgpt-sites`, the `--host chatgpt-sites` templates and the Sites consumer skill, and are rechecked when the host changes.
+3. New code uses only the identifiers named here. A new public name needs an amendment to this ADR.
+4. `mantle validate` diagnostics listed here are added with the grammar slice; the runtime codes with the Store and invocation slices.
 
 ## Implementation status
 
