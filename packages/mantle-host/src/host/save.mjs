@@ -45,7 +45,7 @@ export function backendNext(ctx, pending) {
     ...confirm ? { confirm: [{ tool: 'member-organization', arguments: { organizationId: entry.organizationId }, field: 'name' },
       { tool: 'member-project', arguments: { projectId: entry.projectId }, field: 'name' }] } : {},
     reason: (confirm ? `${ctx.linkFile} is new or changed: call each confirm tool, show the user the organization and project names (site slug ${entry.slug}) and get confirmation before uploading. ` : '') +
-      'Call the tool with these arguments plus expectedVersion from member-project, then pipe its result to the command. A retry reuses this operationId.' }
+      'Call the tool with these arguments plus expectedVersion from query_view_member_project, then pipe its result to the command. A retry reuses this operationId.' }
 }
 
 export function staticNext(ctx, pending) {
@@ -55,7 +55,7 @@ export function staticNext(ctx, pending) {
       contractHash: pending.contractHash, contentHash: pending.static.contentHash, sourceHash: pending.static.sourceHash,
       ...pending.mode === 'git' ? { sourceRef: { commit: pending.commit } } : {}, ...pending.omitted.length ? { omitted: pending.omitted } : {} },
     requires: requiresVersion(entry.projectId), command: ctx.resume(true),
-    reason: 'Call the tool with these arguments plus expectedVersion from member-project, then pipe its result to the command. A retry reuses this operationId.' }
+    reason: 'Call the tool with these arguments plus expectedVersion from query_view_member_project, then pipe its result to the command. A retry reuses this operationId.' }
 }
 
 function buildNext(ctx, pending) {
