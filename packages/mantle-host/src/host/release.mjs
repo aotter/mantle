@@ -98,9 +98,9 @@ export async function deploy(ctx, positional, flags, readInput) {
       reason: 'Deploy is a separate, reviewed step for a project deployer. Pipe the review to the command.' } })
     return 0
   }
-  if (flags.review !== '-') throw fail('usage', 'pass --review - and pipe the cloud-paired-review result on stdin')
+  if (flags.review !== '-') throw fail('usage', 'pass --review - and pipe the cloud_paired_review result on stdin')
   const review = unwrapResult(await readInput(), 'validation')
-  if (!review || review.static?.id !== version.staticUploadId || review.candidate?.id !== version.candidateId) throw fail('review_mismatch', 'pipe the cloud-paired-review result for this versionId')
+  if (!review || review.static?.id !== version.staticUploadId || review.candidate?.id !== version.candidateId) throw fail('review_mismatch', 'pipe the cloud_paired_review result for this versionId')
   const summary = reviewSummary(review), commit = review.static?.sourceRef?.commit ?? 'unversioned'
   const notes = [`backend ${summary.backend.contentHash} by ${summary.backend.uploader}`, `static ${summary.static.contentHash} by ${summary.static.uploader}, ${summary.static.files.length} files`,
     `source ${summary.static.sourceHash}, label ${summary.sourceRef}`, `omitted: ${summary.static.omitted.length ? summary.static.omitted.join(', ') : 'none'}`,
@@ -146,7 +146,7 @@ export async function rollback(ctx, positional, flags, readInput) {
       reason: 'Rollback is a reviewed step for a project deployer. Pipe the deployment to the command.' } })
     return 0
   }
-  if (flags.deployment !== '-') throw fail('usage', 'pass --deployment - and pipe the cloud-project-deployment result on stdin')
+  if (flags.deployment !== '-') throw fail('usage', 'pass --deployment - and pipe the cloud_project_deployment result on stdin')
   const row = unwrapResult(await readInput(), 'rows')?.rows?.find(item => item?.projectId === entry.projectId)
   const active = row?.revision
   if (!row || !hex64.test(active ?? '')) throw fail('nothing_to_roll_back', 'the project has no active revision')
@@ -167,6 +167,6 @@ export async function rollback(ctx, positional, flags, readInput) {
   await saveState(ctx.project, ctx.state)
   ctx.emit({ ok: true, stage: 'rollback', state: 'ready', commit: null, notes: [`active ${active}`, `target ${target}`],
     nextAction: { kind: 'mcp', tool: 'cloud-rollback-project', arguments: { projectId: entry.projectId, operationId, expectedRevision: active, targetRevision: target },
-      reason: 'Confirm with the deployer: this restores Manifest, handlers, frontend and assets only, never data. Repeat the identical call until cloud-project-deployment reports targetRevision active.' } })
+      reason: 'Confirm with the deployer: this restores Manifest, handlers, frontend and assets only, never data. Repeat the identical call until cloud_project_deployment reports targetRevision active.' } })
   return 0
 }
