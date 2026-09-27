@@ -8,6 +8,8 @@ import {
   type StaffRole,
 } from "@aotter/mantle-spec";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
+import type { StoreViewOptions } from "../../domain/model/Store.js";
+import type { ViewQueryResult } from "../../domain/port/ViewQueryExecutor.js";
 import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
 import {
   CONTENT_LIFECYCLE_ACTIONS,
@@ -26,7 +28,6 @@ import type {
   UpdateDraftUseCase,
 } from "../content/index.js";
 import type { CommitMediaUploadUseCase, CreateMediaUploadUseCase } from "../media/index.js";
-import type { ExecuteViewUseCase } from "../view/index.js";
 
 /** The use cases a capability can route to. */
 /** Renders an entry as the public site would, for staff review. */
@@ -45,7 +46,7 @@ export interface CapabilityUseCases {
   readonly unpublish: Pick<UnpublishUseCase, "execute">;
   readonly archive: Pick<ArchiveUseCase, "execute">;
   readonly deleteEntry: Pick<DeleteEntryUseCase, "execute">;
-  readonly executeView?: Pick<ExecuteViewUseCase, "execute">;
+  readonly view?: (name: string, options: StoreViewOptions, ctx: HandlerContext) => Promise<ViewQueryResult>;
   /** Trigger-backed Procedures route through the runtime's shared Trigger
    *  invocation chokepoint. */
   readonly invokeTrigger?: {
@@ -109,7 +110,7 @@ export class InvokeCapabilityUseCase {
     if (!route) return false;
     switch (route.kind) {
       case "procedure": return this.useCases.invokeTrigger !== undefined;
-      case "view": return this.useCases.executeView !== undefined;
+      case "view": return this.useCases.view !== undefined;
       case "preview": return this.useCases.preview !== undefined;
       case "mediaCreateUpload":
       case "mediaCommitUpload": return this.useCases.media !== undefined;
@@ -146,20 +147,14 @@ export class InvokeCapabilityUseCase {
         return result.data;
       }
       case "view": {
-        const executeView = this.useCases.executeView;
-        if (!executeView) throw new DiagnosticError(unknownCapability(path, capability.name));
-        const result = await executeView.execute({
-          view: route.view,
-          options: {
+        const view = this.useCases.view;
+        if (!view) throw new DiagnosticError(unknownCapability(path, capability.name));
+        return view(route.view.metadata.name, {
             params: omit(args, VIEW_PAGING_ARGUMENTS),
             page: typeof args["page"] === "number" ? args["page"] : undefined,
             show: typeof args["show"] === "number" ? args["show"] : undefined,
-          },
           pathPrefix: path,
-          ctx,
-        });
-        if (!result.ok) throw new DiagnosticError(result.diagnostic);
-        return result.result;
+        }, ctx);
       }
       case "read": {
         const collection = stringArgument(args, "collection", path);

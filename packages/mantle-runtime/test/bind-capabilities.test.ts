@@ -99,7 +99,8 @@ describe("bindCapabilities", () => {
     const invoker = bindCapabilities(runtime, plan, { surface: "public" });
     expect(await invoker.execute({ name: "query_view_public_posts", args: {}, ctx: context() }))
       .toMatchObject({ ok: true, data: { rows: [] } });
-    expect(runtime.executeView).toHaveBeenCalledWith(expect.objectContaining({ view: "public-posts" }));
+    expect(runtime.store.as).toHaveBeenCalledWith(context());
+    expect(runtime.viewSpy).toHaveBeenCalledWith("public-posts", expect.any(Object));
   });
 });
 
@@ -122,6 +123,8 @@ function fakeRuntime(
   media: { createUpload: unknown; commitUpload: unknown } | null = null,
 ) {
   const unused = { execute: vi.fn() };
+  const viewSpy = vi.fn(async () => ({ rows: [], page: 1, show: 20, hasMore: false }));
+  const as = vi.fn(() => ({ view: viewSpy }));
   return {
     schemas: new Map(Object.values(plan.schemas).map(({ manifest }) => [manifest.metadata.name, manifest])),
     getEntry: unused,
@@ -131,10 +134,10 @@ function fakeRuntime(
     unpublish: unused,
     archive: unused,
     deleteEntry: unused,
-    executeView: vi.fn(async () => ({ ok: true as const, result: { rows: [], page: 1, show: 20, hasMore: false } })),
+    store: { as }, viewSpy,
     invokeTrigger: vi.fn(async () => ({ ok: true as const, data: {} })),
     media,
-  } as unknown as CapabilityRuntime & { executeView: ReturnType<typeof vi.fn> };
+  } as unknown as CapabilityRuntime & { store: { as: ReturnType<typeof vi.fn> }; viewSpy: typeof viewSpy };
 }
 
 function context(): HandlerContext {

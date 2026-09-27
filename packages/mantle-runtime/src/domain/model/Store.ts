@@ -72,6 +72,9 @@ export interface StoreSelectResult {
   readonly nextCursor?: string;
 }
 
+/** View input plus the caller surface's diagnostic location. */
+export type StoreViewOptions = Pick<ViewQueryOptions, "params" | "page" | "show"> & { readonly pathPrefix?: string };
+
 /** Create one entry through Schema validation, defaults and lifecycle hooks. */
 export interface StoreInsert {
   readonly insert: string;
@@ -128,7 +131,7 @@ export interface MantleStore {
   /** Host-only maintenance. Caller-bound Procedure stores omit this operation. */
   sweepExpired(request: SweepExpiredRequest): Promise<SweepExpiredResult>;
   /** Run a named View with the caller's context, as REST and MCP would. */
-  view<R = StoreRow>(name: string, options?: Pick<ViewQueryOptions, "params" | "page" | "show">): Promise<ViewQueryResult<R>>;
+  view<R = StoreRow>(name: string, options?: StoreViewOptions): Promise<ViewQueryResult<R>>;
   /** A new entry id from the runtime's id generator. */
   id(): string;
 }

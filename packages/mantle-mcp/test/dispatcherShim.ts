@@ -79,7 +79,7 @@ export function buildMcpToolCatalog(
   });
   // Listing only: every route is bound, none is ever called.
   const unused = { execute: () => { throw new Error("not called"); } };
-  const bound = { invokeTrigger: unused, executeView: unused, media: { createUpload: unused, commitUpload: unused } };
+  const bound = { invokeTrigger: unused, view: () => { throw new Error("not called"); }, media: { createUpload: unused, commitUpload: unused } };
   return mcpToolDefinitions(new InvokeCapabilityUseCase(bound as unknown as CapabilityUseCases, catalog, schemas));
 }
 

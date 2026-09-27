@@ -73,10 +73,7 @@ function harness() {
   const runtime = {
     schemas: new Map(Object.values(plan.schemas).map(({ manifest: schema }) => [schema.metadata.name, schema])),
     getEntry: { execute: async ({ id }: { id: string }) => ({ ...entries.get(id)!, collection: "requisitions" }) },
-    executeView: async () => ({
-      ok: true,
-      result: { rows: [...entries.values()].map((entry) => ({ id: entry.id, version: entry.version, ...entry.data })), page: 1, show: 20, hasMore: false },
-    }),
+    store: { as: () => ({ view: async () => ({ rows: [...entries.values()].map((entry) => ({ id: entry.id, version: entry.version, ...entry.data })), page: 1, show: 20, hasMore: false }) }) },
     invokeTrigger: async ({ input }: { input: Record<string, unknown> }) => {
         const entry = entries.get(String(input["id"]))!;
         if (input["expectedVersion"] !== entry.version) {
