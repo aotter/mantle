@@ -42,6 +42,7 @@ describe("mantle generate", () => {
     );
     expect(await runGenerate(["--namespace", "MantleHandlers"])).toBe(2);
     expect(await runGenerate(["--namespace", "StoreRow"])).toBe(2);
+    expect(await runGenerate(["--namespace", "HandlerContext"])).toBe(2);
     expect(await runGenerate(["--namespace", "ViewOptions"])).toBe(2);
     expect(await runGenerate(["--namespace", "Omit"])).toBe(2);
   });
