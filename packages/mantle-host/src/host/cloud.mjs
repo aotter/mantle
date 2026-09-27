@@ -4,7 +4,6 @@
 // printed. Nothing in the link file or the environment can add an origin.
 import { unzipSync } from 'fflate'
 import { hostClientHeader, hostProtocol, hostProtocolHeader } from '../protocol.mjs'
-import { corePin } from '../version.mjs'
 import { fail } from './output.mjs'
 
 export const cloudOrigins = Object.freeze(['https://cloud.mantle.tools', 'https://cloud-staging.mantle.tools'])
@@ -123,7 +122,7 @@ export function cloudClient({ fetch: request, client }) {
 }
 
 /** Checks a downloaded kit ZIP against the ready response and returns its five fixed files. */
-export function extractKit(bytes, { candidateId, contractHash }) {
+export function extractKit(bytes, { candidateId, contractHash, core }) {
   const names = []
   let entries
   try {
@@ -137,7 +136,7 @@ export function extractKit(bytes, { candidateId, contractHash }) {
   let kit
   try { kit = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(entries['kit.json'])) } catch { throw fail('kit_invalid') }
   if (kit.candidateId !== candidateId || kit.contractHash !== contractHash) throw fail('kit_contract_mismatch')
-  if (kit.coreRevision !== corePin.revision) throw fail('cli_core_mismatch', `kit pins Core ${String(kit.coreRevision).slice(0, 64)}`, 409)
+  if (kit.coreVersion !== core.version || kit.coreRevision !== core.revision) throw fail('cli_core_mismatch', 'kit pins another Core', 409)
   return { kit, entries }
 }
 

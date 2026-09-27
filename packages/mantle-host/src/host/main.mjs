@@ -7,7 +7,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { hostProtocol } from '../protocol.mjs'
-import { cliVersion, corePin, hostName } from '../version.mjs'
+import { cliVersion, hostName } from '../version.mjs'
 import { cloudClient, decodeInput, rememberCredentials } from './cloud.mjs'
 import { createOutput, failureLine, fail, shellWord } from './output.mjs'
 import { linkFile, pickTarget, readLink } from './link.mjs'
@@ -20,7 +20,7 @@ const usage = `${hostName} <command> [--target <name>] [--json]
 
   link    [--target <name>] [--runtime mantle-cloud|cloudflare|chatgpt-sites] [--organization <id>] [--project <id>]
           [--slug <slug>] [--root <dir>] [--handlers <file>] [--dist <dir>] [--spa] [--build <command>] [--config <file>]
-  save    [--omit <path>]... [--no-git] [--restart]      pack HEAD and print the cloud-backend-upload call
+  save    [--omit <path>]... [--no-git] [--restart]      check HEAD and request Cloud's Core contract
   save    --resume [--grant - | --grant-file <path>]     continue with the piped Cloud MCP tool result
   status                                                 local state and the next step, no network
   deploy  <versionId> [--review -] [--dry-run]           review, then print the cloud-publish-paired-release call
@@ -71,7 +71,7 @@ export async function main(args, io = {}) {
   ctx.line = (...words) => [script, ...words.map(shellWord), ...json ? ['--json'] : []].join(' ')
   try {
     if (verb === 'version') {
-      ctx.emit({ ok: true, stage, state: 'local', version: cliVersion, protocol: hostProtocol.current, core: corePin, commit: null, nextAction: null })
+      ctx.emit({ ok: true, stage, state: 'local', version: cliVersion, protocol: hostProtocol.current, commit: null, nextAction: null })
       return 0
     }
     ctx.project = await realpath(resolve(io.cwd ?? process.cwd()))

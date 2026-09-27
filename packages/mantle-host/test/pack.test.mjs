@@ -9,7 +9,7 @@ import { packBackend } from '../src/pack-backend.mjs'
 import { canonicalSourceZip, inspectSourceArchive, secretSourcePath } from '../src/source-zip.mjs'
 import { inspectStaticAssets } from '../src/static-artifact.mjs'
 import { assertClosedModule } from '../src/closed-module.mjs'
-import { corePin } from '../src/version.mjs'
+import { corePin } from './host-fixture.mjs'
 
 const yaml = 'apiVersion: cms.mantle.aotter.net/v1\nkind: Schema\nmetadata:\n  name: items\nspec:\n  title: Items\n  schema:\n    type: object\n'
 
@@ -32,9 +32,9 @@ async function project() {
 test('packs a static artifact and canonical source ZIP that pass the shared Cloud rules', async () => {
   const { root } = await project()
   try {
-    await packBackend(root, 'handlers.mjs', join(root, 'backend.json'))
+    await packBackend(root, 'handlers.mjs', join(root, 'backend.json'), corePin)
     const out = join(root, '.mantle-cloud')
-    const first = await packFrontend({ project: root, dist: join(root, 'dist'), out, spa: true, backend: join(root, 'backend.json'), exclude: ['backend.json', 'backend.json.metafile.json'] })
+    const first = await packFrontend({ project: root, dist: join(root, 'dist'), out, spa: true, backend: join(root, 'backend.json'), exclude: ['backend.json', 'backend.json.metafile.json'], core: corePin })
     const text = await readFile(first.frontend.path, 'utf8')
     const artifact = JSON.parse(text)
     assert.deepEqual(Object.keys(artifact), ['version', 'sdkRevision', 'spa', 'assets'])
@@ -51,7 +51,7 @@ test('packs a static artifact and canonical source ZIP that pass the shared Clou
     assert.deepEqual(first.source.excluded, ['.git', '.mantle-cloud', 'backend.json', 'backend.json.metafile.json', 'dist', 'node_modules', 'web/node_modules'])
     assert.equal(strFromU8(unzipSync(zip)['manifests/site.yaml']), yaml)
     assert.deepEqual(inspectSourceArchive(zip, JSON.parse(await readFile(join(root, 'backend.json'), 'utf8')).sources).files.length, 4)
-    const second = await packFrontend({ project: root, dist: join(root, 'dist'), out, spa: true, backend: join(root, 'backend.json'), exclude: ['backend.json', 'backend.json.metafile.json'] })
+    const second = await packFrontend({ project: root, dist: join(root, 'dist'), out, spa: true, backend: join(root, 'backend.json'), exclude: ['backend.json', 'backend.json.metafile.json'], core: corePin })
     assert.equal(second.frontend.sha256, first.frontend.sha256)
     assert.equal(second.source.sha256, first.source.sha256)
     assert.ok(second.source.excluded.includes('.mantle-cloud'))
@@ -61,10 +61,10 @@ test('packs a static artifact and canonical source ZIP that pass the shared Clou
 
 test('reports Cloud rejections locally instead of stripping or rewriting files', async () => {
   const { root, put } = await project()
-  const pack = extra => packFrontend({ project: root, dist: join(root, 'dist'), out: join(root, 'out'), ...extra })
+  const pack = extra => packFrontend({ project: root, dist: join(root, 'dist'), out: join(root, 'out'), ...extra, core: corePin })
   const rejects = async (code, extra) => { await assert.rejects(pack(extra), error => error.code === code, code) }
   try {
-    await packBackend(root, 'handlers.mjs', join(root, 'backend.json'))
+    await packBackend(root, 'handlers.mjs', join(root, 'backend.json'), corePin)
     await put('.env', 'TOKEN=secret')
     await put('config/server.PEM', 'secret')
     await assert.rejects(pack(), error => error.code === 'source_archive_secret_path' && error.detail === '.env, config/server.PEM')
@@ -111,11 +111,11 @@ test('reports Cloud rejections locally instead of stripping or rewriting files',
     await rejects('symlink_unsupported')
     await rm(join(root, 'dist/link.js'))
     await mkdir(join(root, 'kit'))
-    await writeFile(join(root, 'kit/kit.json'), JSON.stringify({ candidateId: crypto.randomUUID(), contractHash: 'a'.repeat(64), coreRevision: 'f'.repeat(40) }))
+    await writeFile(join(root, 'kit/kit.json'), JSON.stringify({ candidateId: crypto.randomUUID(), contractHash: 'a'.repeat(64), coreVersion: corePin.version, coreRevision: 'f'.repeat(40) }))
     await rejects('cli_core_mismatch', { kit: join(root, 'kit') })
     const contractHash = 'b'.repeat(64), candidateId = crypto.randomUUID()
-    await writeFile(join(root, 'kit/kit.json'), JSON.stringify({ candidateId, contractHash, coreRevision: corePin.revision }))
-    assert.deepEqual((({ candidateId, contractHash }) => ({ candidateId, contractHash }))(await pack({ kit: join(root, 'kit'), exclude: ['kit'] })), { candidateId, contractHash })
+    await writeFile(join(root, 'kit/kit.json'), JSON.stringify({ candidateId, contractHash, coreVersion: corePin.version, coreRevision: corePin.revision }))
+    assert.deepEqual((({ candidateId, contractHash }) => ({ candidateId, contractHash }))(await pack({ kit: join(root, 'kit'), exclude: ['kit'], core: corePin })), { candidateId, contractHash })
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -138,8 +138,8 @@ test('handles symlinked roots, worktree .git files, OS metadata and the backend 
     await put('dist/.DS_Store', 'finder')
     await put('dist/assets/Thumbs.db', 'explorer')
     await symlink(root, link)
-    await packBackend(link, 'handlers.mjs', join(link, 'backend.json'))
-    const pack = () => packFrontend({ project: link, dist: join(link, 'dist'), out: join(link, 'out'), backend: join(link, 'backend.json') })
+    await packBackend(link, 'handlers.mjs', join(link, 'backend.json'), corePin)
+    const pack = () => packFrontend({ project: link, dist: join(link, 'dist'), out: join(link, 'out'), backend: join(link, 'backend.json'), core: corePin })
     const first = await pack()
     assert.deepEqual(first.frontend.ignored, ['/.DS_Store', '/assets/Thumbs.db'])
     assert.equal(first.frontend.assets, 3)
@@ -155,8 +155,8 @@ test('rejects a manifest with a UTF-8 byte-order mark instead of dropping it', a
   const { root, put } = await project()
   try {
     await put('manifests/site.yaml', Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(yaml)]))
-    await assert.rejects(packBackend(root, 'handlers.mjs', join(root, 'backend.json')), error => error.code === 'manifest_bom' && error.detail === 'manifests/site.yaml')
-    await assert.rejects(packFrontend({ project: root, dist: join(root, 'dist'), out: join(root, 'out') }), error => error.code === 'manifest_bom')
+    await assert.rejects(packBackend(root, 'handlers.mjs', join(root, 'backend.json'), corePin), error => error.code === 'manifest_bom' && error.detail === 'manifests/site.yaml')
+    await assert.rejects(packFrontend({ project: root, dist: join(root, 'dist'), out: join(root, 'out'), core: corePin }), error => error.code === 'manifest_bom')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

@@ -9,12 +9,13 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { strToU8, zipSync } from 'fflate'
 import { main } from '../src/host/main.mjs'
-import { corePin } from '../src/version.mjs'
 import { sourceArchiveLimit } from '../src/source-zip.mjs'
 
 export const sha = bytes => createHash('sha256').update(bytes).digest('hex')
 export const organizationId = '0199aaaa-0000-7000-8000-000000000001'
 export const projectId = '0199aaaa-0000-7000-8000-000000000002'
+// The fake Cloud intentionally runs the previous Core release.
+export const corePin = Object.freeze({ version: '0.1.4', revision: 'a'.repeat(40) })
 export const yaml = 'apiVersion: cms.mantle.aotter.net/v1\nkind: Schema\nmetadata:\n  name: items\nspec:\n  title: Items\n  schema:\n    type: object\n'
 const esbuildDir = dirname(createRequire(import.meta.url).resolve('esbuild/package.json'))
 
@@ -61,8 +62,8 @@ export async function writeDist(root, dir = 'dist') {
 }
 
 /** Runs the host from sources in-process, or the built bundle as a child process. */
-export function runner(bundle) {
-  return async (cwd, args, { stdin = '', env = {}, fetch, timeouts } = {}) => {
+export function runner(bundle, { autoContract = true } = {}) {
+  const execute = async (cwd, args, { stdin = '', env = {}, fetch, timeouts } = {}) => {
     if (!bundle) {
       let text = ''
       const code = await main(args, { cwd, env, write: chunk => { text += chunk }, stdin: async () => typeof stdin === 'string' ? strToU8(stdin) : stdin,
@@ -76,16 +77,25 @@ export function runner(bundle) {
     const code = await new Promise(done => child.on('close', done))
     return { code, text: text + stderr, lines: parse(text), stderr }
   }
+  return async (cwd, args, options = {}) => {
+    const first = await execute(cwd, args, options)
+    if (!autoContract || first.code || first.lines.at(-1)?.nextAction?.tool !== 'cloud-host-contract') return first
+    const contract = { projectId, core: corePin, protocol: { current: 2, minimum: 2 } }
+    const second = await execute(cwd, ['save', '--target', 'production', '--resume', '--grant', '-', ...args.includes('--json') ? ['--json'] : []],
+      { ...options, stdin: JSON.stringify(contract) })
+    return { ...second, text: first.text.replace(/^.*"stage":"contract".*\n?/gm, '') + second.text,
+      lines: [...first.lines.filter(line => line.stage !== 'contract'), ...second.lines] }
+  }
 }
 const parse = text => text.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line))
 
 /** A stand-in Cloud. `mcp.*` return what the Cloud MCP tools would; HTTP endpoints follow Control. */
 export async function fakeCloud() {
   const seen = [], candidates = new Map(), statics = new Map()
-  const hooks = { drop: new Set(), outdated: false, minimum: 1 }
+  const hooks = { drop: new Set(), outdated: false, minimum: 2 }
   const bearer = () => 'Bearer ' + randomUUID().replaceAll('-', '') + 'SECRETTOKEN'
   const kitEntries = candidateId => ({ 'AGENT.md': '# Build\n', 'frontend-contract.json': '{}', 'mantle-client.ts': 'export {}',
-    'openapi.json': '{}', 'kit.json': JSON.stringify({ candidateId, contractHash: 'c'.repeat(64), coreRevision: corePin.revision }) })
+    'openapi.json': '{}', 'kit.json': JSON.stringify({ candidateId, contractHash: 'c'.repeat(64), coreVersion: corePin.version, coreRevision: corePin.revision }) })
   let origin
   const server = createServer(async (request, response) => {
     const chunks = []
@@ -103,11 +113,11 @@ export async function fakeCloud() {
       if (request.method === 'PUT') {
         if (sha(body) !== row.contentHash) return json(400, { error: 'backend_checksum_mismatch' })
         row.bytes = body; row.status = 'ready'
-        return json(200, { candidateId: id, projectId, contentHash: row.contentHash, status: 'ready' })
+        return json(200, { candidateId: id, projectId, contentHash: row.contentHash, status: 'ready', core: corePin })
       }
       const zip = zipSync(Object.fromEntries(Object.entries(kitEntries(id)).map(([name, text]) => [name, strToU8(text)])))
       row.kit = zip
-      return json(200, { candidateId: id, projectId, contentHash: row.contentHash, status: row.status, protocol: { current: 1, minimum: hooks.minimum },
+      return json(200, { candidateId: id, projectId, contentHash: row.contentHash, status: row.status, core: corePin, protocol: { current: 2, minimum: hooks.minimum },
         ...row.status === 'ready' ? { frontendKit: { url: `${origin}/api/cloud/frontend-kits/${id}?token=KITSECRET${id}`, zipSha256: sha(zip), contractHash: 'c'.repeat(64), expiresAt: Date.now() + 60_000 } } : {} })
     }
     if (kind === 'frontend-kits') {
@@ -118,13 +128,13 @@ export async function fakeCloud() {
     if (kind === 'static-uploads' || kind === 'static-sources') {
       const row = statics.get(id), part = kind === 'static-uploads' ? 'frontend' : 'source'
       if (!row) return json(403, {})
-      if (request.method === 'GET') return request.headers.authorization === row.frontend.authorization ? json(200, { staticUploadId: id, status: row.paired ? 'paired' : 'busy', protocol: { current: 1, minimum: 1 } }) : json(403, {})
+      if (request.method === 'GET') return request.headers.authorization === row.frontend.authorization ? json(200, { staticUploadId: id, status: row.paired ? 'paired' : 'busy', core: corePin, protocol: { current: 2, minimum: 2 } }) : json(403, {})
       if (request.headers.authorization !== row[part].authorization) return json(403, {})
       if (sha(body) !== (part === 'frontend' ? row.contentHash : row.sourceHash)) return json(400, { error: 'upload_checksum_mismatch' })
       row.bytes[part] = body
       const done = row.bytes.frontend && row.bytes.source
       if (done) row.paired = true
-      return json(200, { staticUploadId: id, kind: part, hash: sha(body), status: done ? 'uploaded' : 'uploading', pairing: done ? { staticUploadId: id, status: 'paired' } : null })
+      return json(200, { staticUploadId: id, kind: part, hash: sha(body), core: corePin, status: done ? 'uploaded' : 'uploading', pairing: done ? { staticUploadId: id, status: 'paired' } : null })
     }
     json(404, {})
   })
@@ -135,7 +145,7 @@ export async function fakeCloud() {
       let row = [...candidates.values()].find(item => item.operationId === args.operationId)
       if (!row) { row = { id: randomUUID(), ...args, status: 'uploading', authorization: bearer() }; candidates.set(row.id, row) }
       const url = `${origin}/api/cloud/backend-uploads/${row.id}`
-      return { candidateId: row.id, projectId: args.projectId, operationId: row.operationId, contentHash: row.contentHash, status: row.status, protocol: { current: 1, minimum: hooks.minimum },
+      return { candidateId: row.id, projectId: args.projectId, operationId: row.operationId, contentHash: row.contentHash, status: row.status, core: corePin, protocol: { current: 2, minimum: hooks.minimum },
         poll: { url, method: 'GET', authorization: row.authorization }, upload: row.status === 'ready' ? null : { url, method: 'PUT', authorization: row.authorization, maximumBytes: 2_000_000 } }
     },
     staticUpload(args) {
@@ -143,7 +153,7 @@ export async function fakeCloud() {
       statics.set(args.operationId, row)
       const url = `${origin}/api/cloud/static-uploads/${args.operationId}`
       return { staticUploadId: args.operationId, projectId: args.projectId, candidateId: args.candidateId, contractHash: args.contractHash, contentHash: args.contentHash,
-        sourceHash: args.sourceHash, sourceRef: args.sourceRef ?? null, status: 'uploading', protocol: { current: 1, minimum: 1 },
+        sourceHash: args.sourceHash, sourceRef: args.sourceRef ?? null, status: 'uploading', core: corePin, protocol: { current: 2, minimum: 2 },
         poll: { url, method: 'GET', authorization: row.frontend.authorization },
         frontend: { url, method: 'PUT', authorization: row.frontend.authorization, maximumBytes: 9_000_000, uploaded: Boolean(row.bytes.frontend) },
         source: { url: `${origin}/api/cloud/static-sources/${args.operationId}`, method: 'PUT', authorization: row.source.authorization, maximumBytes: sourceArchiveLimit, uploaded: Boolean(row.bytes.source) } }

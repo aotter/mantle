@@ -9,7 +9,7 @@ import { buildHost } from '../scripts/build-host.mjs'
 import { inspectSourceArchive, omittablePath } from '../src/source-zip.mjs'
 import { headTsconfig, parseJsonc } from '../src/host/backend.mjs'
 import { hostProtocol } from '../src/protocol.mjs'
-import { addEsbuild, baseFiles, fakeCloud, git, link, project, projectId, runner, sha, writeDist, writeFiles, yaml } from './host-fixture.mjs'
+import { addEsbuild, baseFiles, corePin, fakeCloud, git, link, project, projectId, runner, sha, writeDist, writeFiles, yaml } from './host-fixture.mjs'
 
 const scratch = await mkdtemp(join(tmpdir(), 'mantle-host-bundle-'))
 let bundle
@@ -46,6 +46,49 @@ test('a bare --help prints the usage and exits 0; an unknown verb exits 2', asyn
       assert.equal(unknown.code, 2)
       assert.match(unknown.text, /^mantle-host <command>/)
     }
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+for (const mode of ['sources', 'bundle']) test(`Cloud supplies the Core pin before backend hashing (${mode})`, async () => {
+  const run = runner(mode === 'bundle' ? bundle : null, { autoContract: false })
+  const root = await project()
+  const resume = value => run(root, ['save', '--resume', '--grant', '-', '--json'], { stdin: JSON.stringify(value) })
+  try {
+    const first = await run(root, ['save', '--json'])
+    assert.equal(first.code, 0, first.text)
+    assert.equal(last(first).nextAction.tool, 'cloud-host-contract')
+    assert.deepEqual(last(first).nextAction.arguments, { projectId })
+    assert.equal(last(await run(root, ['status', '--json'])).nextAction.tool, 'cloud-host-contract')
+    const contract = { projectId, core: corePin, protocol: { current: 2, minimum: 2 } }
+    assert.equal(last(await resume({ ...contract, projectId: '0199aaaa-0000-7000-8000-000000000009' })).error, 'grant_project_mismatch')
+    const invalidPin = last(await resume({ ...contract, core: { version: corePin.version, revision: 'bad' } }))
+    assert.equal(invalidPin.error, 'core_pin_invalid')
+    assert.equal(invalidPin.nextAction.tool, 'cloud-host-contract')
+    assert.equal(last(await resume({ ...contract, core: { version: [corePin.version], revision: [corePin.revision] } })).error, 'core_pin_invalid')
+    assert.equal(last(await resume({ ...contract, protocol: { current: 3, minimum: 3 } })).error, 'client_outdated')
+    assert.equal(last(await resume({ ...contract, protocol: { current: 3, minimum: 3 }, core: { version: 'future-format' } })).error, 'client_outdated')
+    const built = await resume(contract)
+    assert.equal(built.code, 0, built.text)
+    assert.equal(last(built).nextAction.tool, 'cloud-backend-upload')
+    const artifact = JSON.parse(await readFile(join(root, '.mantle/host/out/production/backend.json'), 'utf8'))
+    assert.equal(artifact.sdkVersion, corePin.version)
+    assert.equal(artifact.sdkRevision, corePin.revision)
+    const statePath = join(root, '.mantle/host/state.json')
+    const state = JSON.parse(await readFile(statePath, 'utf8'))
+    delete state.targets.production.pending.core
+    await writeFile(statePath, JSON.stringify(state))
+    assert.match(last(await run(root, ['status', '--json'])).nextAction.command, /--restart/)
+    const old = last(await resume({}))
+    assert.equal(old.error, 'cli_core_mismatch')
+    assert.match(old.nextAction.command, /--restart/)
+    state.targets.production.pending.core = corePin
+    await writeFile(statePath, JSON.stringify(state))
+    const cloud = await fakeCloud()
+    try {
+      const grant = cloud.mcp.backendUpload({ ...last(built).nextAction.arguments, expectedVersion: 1 })
+      assert.equal(last(await resume({ ...grant, core: { ...corePin, revision: 'b'.repeat(40) } })).error, 'cli_core_mismatch')
+      assert.equal(cloud.seen.length, 0, 'a changed pin is refused before upload')
+    } finally { await cloud.close() }
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -317,13 +360,13 @@ for (const mode of ['sources', 'bundle']) describe(`refusals (${mode})`, () => {
       assert.equal(last(inlineEquals).error, 'grant_inline_refused')
       assert.equal(cloud.seen.length, 0)
       // A grant that already requires a newer protocol fails closed.
-      const future = await go(['save', '--resume', '--grant', '-'], { stdin: JSON.stringify({ ...grant, protocol: { current: 2, minimum: 2 } }) })
+      const future = await go(['save', '--resume', '--grant', '-'], { stdin: JSON.stringify({ ...grant, protocol: { current: 3, minimum: 3 } }) })
       assert.equal(last(future).error, 'client_outdated')
       assert.match(last(future).nextAction.reason, /Update the mantle plugin, or re-run `npx skills add aotter\/mantle --skill mantle-host`\./)
       cloud.hooks.outdated = true
       const stale = await go(['save', '--resume'], { env: { MANTLE_CLOUD_GRANT: JSON.stringify(grant) } })
       assert.equal(last(stale).error, 'client_outdated')
-      assert.equal(cloud.seen.at(-1).headers['x-mantle-host-protocol'], '1')
+      assert.equal(cloud.seen.at(-1).headers['x-mantle-host-protocol'], '2')
       cloud.hooks.outdated = false
       // A rejected hash says so without printing the grant.
       const mismatch = await go(['save', '--resume', '--grant', '-'], { stdin: JSON.stringify({ ...grant, contentHash: 'd'.repeat(64) }) })

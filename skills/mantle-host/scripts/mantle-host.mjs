@@ -11,9 +11,12 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 // src/protocol.mjs
-var hostProtocol = Object.freeze({ current: 1, minimum: 1 });
+var hostProtocol = Object.freeze({ current: 2, minimum: 2 });
 var hostProtocolHeader = "x-mantle-host-protocol";
 var hostClientHeader = "x-mantle-host-client";
+function parseCorePin(value) {
+  return value && typeof value === "object" && typeof value.version === "string" && typeof value.revision === "string" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value.version) && /^[0-9a-f]{40}$/.test(value.revision) ? { version: value.version, revision: value.revision } : null;
+}
 
 // package.json
 var package_default = {
@@ -94,19 +97,12 @@ var package_default = {
   ]
 };
 
-// src/core.json
-var core_default = {
-  version: "0.1.5-alpha.1",
-  revision: "35d2c142ba8dbe5d071b64d1b47ca4b722e0dcca"
-};
-
 // src/version.mjs
 var cliPackage = package_default.name;
 var cliVersion = package_default.version;
 var hostName = "mantle-host";
 var hostCommand = `${hostName} (the mantle plugin script; see the ${hostName} skill)`;
 var updateHost = `Update the mantle plugin, or re-run \`npx skills add aotter/mantle --skill ${hostName}\`.`;
-var corePin = Object.freeze({ version: core_default.version, revision: core_default.revision });
 
 // ../../node_modules/.pnpm/fflate@0.8.3/node_modules/fflate/esm/index.mjs
 import { createRequire } from "module";
@@ -899,7 +895,7 @@ function cloudClient({ fetch: request, client }) {
     }
   };
 }
-function extractKit(bytes, { candidateId, contractHash }) {
+function extractKit(bytes, { candidateId, contractHash, core }) {
   const names = [];
   let entries;
   try {
@@ -919,7 +915,7 @@ function extractKit(bytes, { candidateId, contractHash }) {
     throw fail("kit_invalid");
   }
   if (kit.candidateId !== candidateId || kit.contractHash !== contractHash) throw fail("kit_contract_mismatch");
-  if (kit.coreRevision !== corePin.revision) throw fail("cli_core_mismatch", `kit pins Core ${String(kit.coreRevision).slice(0, 64)}`, 409);
+  if (kit.coreVersion !== core.version || kit.coreRevision !== core.revision) throw fail("cli_core_mismatch", "kit pins another Core", 409);
   return { kit, entries };
 }
 var kitLimitBytes = kitLimit;
@@ -3903,8 +3899,10 @@ function closedHandlers(result) {
   }
   return result.outputFiles[0].text;
 }
-function serializeBackend({ sources, handlers, cliVersion: cliVersion2 }) {
-  const text = JSON.stringify({ version: 1, sdkVersion: corePin.version, sdkRevision: corePin.revision, cliVersion: cliVersion2, sources, handlers });
+function serializeBackend({ sources, handlers, cliVersion: cliVersion2, core }) {
+  core = parseCorePin(core);
+  if (!core) throw new CloudRuleError(400, "core_pin_invalid");
+  const text = JSON.stringify({ version: 1, sdkVersion: core.version, sdkRevision: core.revision, cliVersion: cliVersion2, sources, handlers });
   const bytes = Buffer.byteLength(text);
   if (bytes > backendArtifactLimit) throw new CloudRuleError(400, "backend_artifact_too_large", `${bytes} bytes; Cloud accepts ${backendArtifactLimit}`);
   return { text, bytes, sha256: createHash2("sha256").update(text).digest("hex") };
@@ -4107,7 +4105,7 @@ async function bundleHandlers({ esbuild, top, appRoot, entry, files, omit = [] }
     throw fail("backend_handlers_not_closed", "the handler bundle must have no imports or dynamic imports");
   }
 }
-async function packBackendSnapshot({ esbuild, top, appRoot, entry, files, git: git2, omit, cliVersion: cliVersion2 }) {
+async function packBackendSnapshot({ esbuild, top, appRoot, entry, files, git: git2, omit, cliVersion: cliVersion2, core }) {
   let sources;
   try {
     sources = yamlSourcesFrom(files);
@@ -4115,7 +4113,7 @@ async function packBackendSnapshot({ esbuild, top, appRoot, entry, files, git: g
     throw error instanceof CloudRuleError ? error : fail("manifest_invalid", error.message);
   }
   const handlers = await bundleHandlers({ esbuild, top, appRoot, entry, files: git2 ? files : null, omit });
-  return serializeBackend({ sources, handlers, cliVersion: cliVersion2 });
+  return serializeBackend({ sources, handlers, cliVersion: cliVersion2, core });
 }
 
 // src/host/snapshot.mjs
@@ -4416,6 +4414,19 @@ var second = 1e3;
 var unsafeDist = Object.freeze([".git", ".mantle", "node_modules"]);
 var commitOf = (pending) => pending.mode === "git" ? pending.commit : "unversioned";
 var requiresVersion = (projectId) => [{ argument: "expectedVersion", tool: "member-project", arguments: { projectId }, field: "version" }];
+function contractNext(ctx) {
+  return {
+    kind: "mcp",
+    tool: "cloud-host-contract",
+    arguments: { projectId: ctx.link.entry.projectId },
+    command: ctx.resume(true),
+    reason: "Read the Core version and revision Cloud will validate, then pipe this tool result to the command."
+  };
+}
+function sameCore(value, core) {
+  const pin = parseCorePin(value?.core);
+  if (!pin || pin.version !== core.version || pin.revision !== core.revision) throw fail("cli_core_mismatch", "Cloud changed its Core pin during this save", 409);
+}
 function backendNext(ctx, pending) {
   const { entry } = ctx.link;
   const confirm = ctx.targetState.confirmedLink !== ctx.link.hash;
@@ -4505,9 +4516,11 @@ function saveFailureNext(ctx, code) {
     case "client_outdated":
       return { kind: "fix", reason: `Cloud requires a newer mantle-host protocol. ${updateHost} Nothing was uploaded by this call.` };
     case "cli_core_mismatch":
-      return { kind: "fix", reason: `Cloud pins another Mantle Core than this mantle-host. ${updateHost}` };
+      return { kind: "run", command: ctx.line("save", ...ctx.targetArgs, "--restart"), reason: "Cloud changed its Core pin. Start a new save with its current contract." };
     case "grant_project_mismatch":
       return { kind: "fix", reason: `The grant is for another project than ${ctx.linkFile} names. Call the tool with exactly the arguments of the last nextAction.` };
+    case "core_pin_invalid":
+      return pending?.stage === "contract" ? contractNext(ctx) : fix("Cloud returned an invalid Core pin.");
     case "local_hash_mismatch":
     case "nothing_pending":
     case "link_changed":
@@ -4533,6 +4546,7 @@ function saveFailureNext(ctx, code) {
     case "grant_required":
     case "grant_invalid_json":
     case "grant_file_unreadable":
+      if (pending?.stage === "contract") return contractNext(ctx);
       if (pending?.stage === "backend") return backendNext(ctx, pending);
       if (pending?.stage === "static") return staticNext(ctx, pending);
       return fix("Pipe the Cloud MCP tool result on stdin with --grant -.");
@@ -4570,37 +4584,18 @@ async function startSave(ctx, flags) {
     nextAction: null,
     notes: [`${Object.keys(snap.files).length} files`, ...omitted.length ? [`omitted: ${omitted.join(", ")}`] : []]
   });
-  const artifact = await packBackendSnapshot({
-    esbuild: projectEsbuild(ctx.appRoot),
-    top: snap.top,
-    appRoot: ctx.appRoot,
-    entry: entry.handlers,
-    files: snap.files,
-    git: mode === "git",
-    omit: omitted,
-    cliVersion: `${hostName}@${cliVersion}`
-  });
-  await ensureDir(ctx.project, outDir(ctx.target));
-  await writeAtomic(ctx.project, outFile(ctx, "backend.json"), artifact.text);
   const previous = ts.pending;
-  const reuse = previous && !flags.restart && previous.linkHash === ctx.link.hash && previous.mode === mode && previous.commit === snap.commit && previous.backend.contentHash === artifact.sha256 && previous.omitted.join("\0") === omitted.join("\0") && ctx.now() - previous.backend.reservedAt < reuseMs;
+  const reuse = previous && !flags.restart && previous.linkHash === ctx.link.hash && previous.mode === mode && previous.commit === snap.commit && previous.omitted.join("\0") === omitted.join("\0") && ctx.now() - (previous.backend?.reservedAt ?? 0) < reuseMs;
   const pending = ts.pending = {
-    stage: "backend",
+    stage: "contract",
     mode,
     commit: snap.commit,
     omitted,
     linkHash: ctx.link.hash,
-    backend: reuse ? previous.backend : { operationId: randomUUID2(), contentHash: artifact.sha256, reservedAt: ctx.now(), candidateId: null }
+    ...reuse ? { core: previous.core, backend: previous.backend } : {}
   };
   await saveState(ctx.project, ctx.state);
-  ctx.emit({
-    ok: true,
-    stage: "backend",
-    state: "built",
-    commit: snap.commit,
-    verified: { contentHash: artifact.sha256, sourceHash: null, contractHash: null },
-    nextAction: backendNext(ctx, pending)
-  });
+  ctx.emit({ ok: true, stage: "contract", state: "pending", commit: snap.commit, nextAction: contractNext(ctx) });
   return 0;
 }
 async function resumeSave(ctx, readGrant) {
@@ -4608,10 +4603,51 @@ async function resumeSave(ctx, readGrant) {
   if (!pending) throw fail("nothing_pending", "run save first");
   if (pending.linkHash !== ctx.link.hash) throw fail("link_changed", `${ctx.linkFile} changed during this save`);
   if (pending.mode === "git") await cleanHead(ctx.project, pending.commit);
+  if (pending.stage !== "contract" && !parseCorePin(pending.core)) throw fail("cli_core_mismatch", "this save predates Cloud Core negotiation", 409);
+  if (pending.stage === "contract") return resumeContract(ctx, pending, await readGrant());
   if (pending.stage === "backend") return resumeBackend(ctx, pending, await readGrant());
   if (pending.stage === "build") return packStatic(ctx, pending);
   if (pending.stage === "static") return resumeStatic(ctx, pending, await readGrant());
   throw fail("state_invalid");
+}
+async function resumeContract(ctx, pending, raw) {
+  const contract = unwrapResult(raw, "core");
+  if (!contract) throw fail("grant_invalid", "expected the cloud-host-contract result");
+  checkProtocol(contract.protocol);
+  if (contract.projectId !== ctx.link.entry.projectId) throw fail("grant_project_mismatch");
+  const core = parseCorePin(contract.core);
+  if (!core) throw fail("core_pin_invalid", "Cloud must return a Core version and full revision");
+  const snap = await snapshot(ctx, pending);
+  const artifact = await packBackendSnapshot({
+    esbuild: projectEsbuild(ctx.appRoot),
+    top: snap.top,
+    appRoot: ctx.appRoot,
+    entry: ctx.link.entry.handlers,
+    files: snap.files,
+    git: pending.mode === "git",
+    omit: pending.omitted,
+    cliVersion: `${hostName}@${cliVersion}`,
+    core
+  });
+  await ensureDir(ctx.project, outDir(ctx.target));
+  await writeAtomic(ctx.project, outFile(ctx, "backend.json"), artifact.text);
+  const previous = pending.backend;
+  const reuse = previous && pending.core?.version === core.version && pending.core?.revision === core.revision && previous.contentHash === artifact.sha256 && ctx.now() - previous.reservedAt < reuseMs;
+  Object.assign(pending, {
+    stage: "backend",
+    core,
+    backend: reuse ? previous : { operationId: randomUUID2(), contentHash: artifact.sha256, reservedAt: ctx.now(), candidateId: null }
+  });
+  await saveState(ctx.project, ctx.state);
+  ctx.emit({
+    ok: true,
+    stage: "backend",
+    state: "built",
+    commit: pending.commit,
+    verified: { contentHash: artifact.sha256, sourceHash: null, contractHash: null },
+    nextAction: backendNext(ctx, pending)
+  });
+  return 0;
 }
 async function until(ctx, deadline, step) {
   for (let attempt = 0; ; attempt++) {
@@ -4631,6 +4667,7 @@ async function resumeBackend(ctx, pending, raw) {
   if (grant.contentHash !== pending.backend.contentHash) throw fail("local_hash_mismatch", "the grant reserves other bytes", 409);
   if (grant.operationId !== void 0 && grant.operationId !== pending.backend.operationId) throw fail("operation_mismatch");
   checkProtocol(grant.protocol);
+  sameCore(grant, pending.core);
   const id = grant.candidateId, path = `/api/cloud/backend-uploads/${id}`;
   const poll = grantUrl(grant.poll.url, path), pollAuth = bearerOf(grant.poll, ctx.output);
   const upload = grant.upload ? grantUrl(grant.upload.url, path, { origin: poll.origin }) : null;
@@ -4651,11 +4688,13 @@ async function resumeBackend(ctx, pending, raw) {
         throw error;
       }
       if (body.candidateId !== id || body.contentHash !== pending.backend.contentHash) throw fail("cloud_response_mismatch");
+      sameCore(body, pending.core);
       if (!uploaded) ctx.emit({ ok: true, stage: "backend", state: "uploaded", commit: commitOf(pending), nextAction: null });
       uploaded = true;
     } else body = await ctx.cloud.json(poll, { authorization: pollAuth, timeout: 60 * second });
     if (body.status === "ready" && !("frontendKit" in body)) body = await ctx.cloud.json(poll, { authorization: pollAuth, timeout: 60 * second });
     if (body.candidateId !== id) throw fail("cloud_response_mismatch");
+    sameCore(body, pending.core);
     status2 = body.status;
     if (status2 === "failed") throw fail("candidate_failed", JSON.stringify((body.diagnostics ?? []).slice(0, 5)).slice(0, 1500));
     return status2 === "ready" && "frontendKit" in body ? body : null;
@@ -4669,7 +4708,7 @@ async function resumeBackend(ctx, pending, raw) {
   for (const value of kitUrl.searchParams.values()) ctx.output.remember(value);
   const zip = await ctx.cloud.bytes(kitUrl, { limit: kitLimitBytes, timeout: 60 * second });
   if (sha256(zip) !== kit.zipSha256) throw fail("kit_checksum_mismatch");
-  const { entries } = extractKit(zip, { candidateId: id, contractHash: kit.contractHash });
+  const { entries } = extractKit(zip, { candidateId: id, contractHash: kit.contractHash, core: pending.core });
   const dir = await resetDir(ctx.project, `${outDir(ctx.target)}/kit`);
   for (const name2 of kitFiles) await writeFile3(join6(dir, name2), entries[name2], { flag: "wx" });
   Object.assign(pending, { stage: "build", contractHash: kit.contractHash, kitZipSha256: kit.zipSha256 });
@@ -4700,9 +4739,9 @@ async function packStatic(ctx, pending) {
   } catch {
   }
   if (kit?.candidateId !== pending.backend.candidateId || kit?.contractHash !== pending.contractHash) throw fail("kit_contract_mismatch", "the downloaded kit changed; run save --restart");
-  if (kit.coreRevision !== corePin.revision) throw fail("cli_core_mismatch", void 0, 409);
+  if (kit.coreVersion !== pending.core.version || kit.coreRevision !== pending.core.revision) throw fail("cli_core_mismatch", void 0, 409);
   const ignored = [];
-  const frontendText = serializeStaticArtifact(await readDist(dist, ignored), { sdkRevision: corePin.revision, spa: entry.frontend.spa });
+  const frontendText = serializeStaticArtifact(await readDist(dist, ignored), { sdkRevision: pending.core.revision, spa: entry.frontend.spa });
   const snap = await snapshot(ctx, pending, { distPath: dist });
   const backend = JSON.parse(new TextDecoder().decode(await readOwn(ctx, "backend.json", pending.backend.contentHash, 2e6)));
   if (pending.mode !== "git") {
@@ -4714,7 +4753,8 @@ async function packStatic(ctx, pending) {
       files: snap.files,
       git: false,
       omit: pending.omitted,
-      cliVersion: `${hostName}@${cliVersion}`
+      cliVersion: `${hostName}@${cliVersion}`,
+      core: pending.core
     });
     if (again.sha256 !== pending.backend.contentHash) throw fail("local_hash_mismatch", "the manifests or handlers changed after the backend upload", 409);
   }
@@ -4751,6 +4791,7 @@ async function resumeStatic(ctx, pending, raw) {
   if (grant.projectId !== entry.projectId) throw fail("grant_project_mismatch", `${ctx.linkFile} names project ${entry.projectId}`);
   if (grant.candidateId !== pending.backend.candidateId || grant.contentHash !== pending.static.contentHash || grant.sourceHash !== pending.static.sourceHash || grant.contractHash !== void 0 && grant.contractHash !== pending.contractHash) throw fail("local_hash_mismatch", "the grant reserves other bytes", 409);
   checkProtocol(grant.protocol);
+  sameCore(grant, pending.core);
   const parts = {
     frontend: { path: `/api/cloud/static-uploads/${id}`, file: "static-frontend.json", hash: pending.static.contentHash, type: "application/json", limit: staticFrontendLimit },
     source: { path: `/api/cloud/static-sources/${id}`, file: "source.zip", hash: pending.static.sourceHash, type: "application/zip", limit: sourceArchiveLimit }
@@ -4768,12 +4809,14 @@ async function resumeStatic(ctx, pending, raw) {
     if (grant[kind].uploaded) continue;
     const body = await ctx.cloud.json(part.url, { method: "PUT", authorization: part.authorization, body: loaded[kind], type: part.type, timeout: 180 * second });
     if (body.staticUploadId !== id || body.kind !== kind || body.hash !== part.hash) throw fail("cloud_response_mismatch", kind);
+    sameCore(body, pending.core);
     pairing = body.pairing ?? pairing;
   }
   ctx.emit({ ok: true, stage: "static", state: "uploaded", commit: commitOf(pending), nextAction: null });
   let result = pairing?.status === "paired" || pairing?.status === "failed" ? { status: pairing.status, failure: pairing.failure ?? null } : null;
   if (!result) result = await until(ctx, ctx.now() + ctx.timeouts.pairing, async () => {
     const body = await ctx.cloud.json(poll, { authorization: pollAuth, timeout: 150 * second });
+    sameCore(body, pending.core);
     return ["paired", "failed", "blocked", "superseded"].includes(body.status) ? body : null;
   });
   if (result.status === "failed") throw fail("static_pair_failed", String(result.failure ?? "probe failed").slice(0, 200));
@@ -4871,7 +4914,10 @@ async function status(ctx) {
   const { entry } = ctx.link, ts = ctx.targetState, pending = ts.pending;
   const latest = ts.versions.at(-1) ?? null;
   let nextAction;
-  if (pending?.stage === "backend") nextAction = backendNext(ctx, pending);
+  if (pending && pending.stage !== "contract" && !parseCorePin(pending.core))
+    nextAction = { kind: "run", command: ctx.line("save", ...ctx.targetArgs, "--restart"), reason: "This save predates Cloud Core negotiation. Start a new save." };
+  else if (pending?.stage === "contract") nextAction = contractNext(ctx);
+  else if (pending?.stage === "backend") nextAction = backendNext(ctx, pending);
   else if (pending?.stage === "build") nextAction = { kind: "run", command: ctx.resume(false), reason: "Build the frontend, then continue this save." };
   else if (pending?.stage === "static") nextAction = staticNext(ctx, pending);
   else if (latest) nextAction = {
@@ -5066,7 +5112,7 @@ var usage = `${hostName} <command> [--target <name>] [--json]
 
   link    [--target <name>] [--runtime mantle-cloud|cloudflare|chatgpt-sites] [--organization <id>] [--project <id>]
           [--slug <slug>] [--root <dir>] [--handlers <file>] [--dist <dir>] [--spa] [--build <command>] [--config <file>]
-  save    [--omit <path>]... [--no-git] [--restart]      pack HEAD and print the cloud-backend-upload call
+  save    [--omit <path>]... [--no-git] [--restart]      check HEAD and request Cloud's Core contract
   save    --resume [--grant - | --grant-file <path>]     continue with the piped Cloud MCP tool result
   status                                                 local state and the next step, no network
   deploy  <versionId> [--review -] [--dry-run]           review, then print the cloud-publish-paired-release call
@@ -5150,7 +5196,7 @@ async function main(args, io = {}) {
   ctx.line = (...words) => [script, ...words.map(shellWord), ...json ? ["--json"] : []].join(" ");
   try {
     if (verb === "version") {
-      ctx.emit({ ok: true, stage, state: "local", version: cliVersion, protocol: hostProtocol.current, core: corePin, commit: null, nextAction: null });
+      ctx.emit({ ok: true, stage, state: "local", version: cliVersion, protocol: hostProtocol.current, commit: null, nextAction: null });
       return 0;
     }
     ctx.project = await realpath4(resolve2(io.cwd ?? process.cwd()));

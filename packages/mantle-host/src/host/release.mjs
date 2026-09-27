@@ -7,7 +7,8 @@ import { appendInside, readInside } from './files.mjs'
 import { linkFile, readLink, validateLink, writeLink } from './link.mjs'
 import { fail } from './output.mjs'
 import { saveState } from './state.mjs'
-import { backendNext, staticNext } from './save.mjs'
+import { backendNext, contractNext, staticNext } from './save.mjs'
+import { parseCorePin } from '../protocol.mjs'
 
 const versionRule = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/
 
@@ -54,7 +55,10 @@ export async function status(ctx) {
   const latest = ts.versions.at(-1) ?? null
   let nextAction
   // A pending upload continues with the same literal call its save printed (same operationId).
-  if (pending?.stage === 'backend') nextAction = backendNext(ctx, pending)
+  if (pending && pending.stage !== 'contract' && !parseCorePin(pending.core))
+    nextAction = { kind: 'run', command: ctx.line('save', ...ctx.targetArgs, '--restart'), reason: 'This save predates Cloud Core negotiation. Start a new save.' }
+  else if (pending?.stage === 'contract') nextAction = contractNext(ctx)
+  else if (pending?.stage === 'backend') nextAction = backendNext(ctx, pending)
   else if (pending?.stage === 'build') nextAction = { kind: 'run', command: ctx.resume(false), reason: 'Build the frontend, then continue this save.' }
   else if (pending?.stage === 'static') nextAction = staticNext(ctx, pending)
   else if (latest) nextAction = { kind: 'mcp', tool: 'cloud-paired-review', arguments: { projectId: entry.projectId, staticUploadId: latest.staticUploadId },

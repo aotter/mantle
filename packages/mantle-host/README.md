@@ -30,6 +30,11 @@ retries reuse them. The one value the script cannot know, `expectedVersion`, is 
 `requires` (`version` from `member-project`), never left blank. `command` names this script's
 own absolute path.
 
+The first `save` requests `cloud-host-contract`. Its `{projectId, core:
+{version, revision}, protocol}` result supplies the Core pin before backend
+bytes and their hash are made. Backend and static grants, polls, and the kit
+must echo that pin. A changed pin requires `save --restart`.
+
 - **Link file** `.mantle/hosting.json` (committed): `{schemaVersion: 1, targets: {<name>:
   {runtime: 'mantle-cloud', organizationId, projectId, slug, root?, handlers?, frontend?:
   {dist, spa?, build?}}}}`, or `{runtime: 'cloudflare' | 'chatgpt-sites', config?}` for targets
@@ -67,5 +72,6 @@ own absolute path.
   with Control) and `x-mantle-host-client: mantle-host/<version> sha256=<script sha>`. A 426
   or a higher `protocol.minimum` fails closed with `client_outdated`.
 
-The Mantle Core pin (`src/core.json`) is checked against `apps/web/core.json` by Control's
-tests; a Core upgrade needs a new host script.
+The Core pin belongs to Cloud's current deployment. A Core upgrade does not
+require rebuilding this script while the host protocol and artifact rules stay
+compatible.

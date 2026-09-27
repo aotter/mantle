@@ -1,0 +1,25 @@
+# ADR 0031: Cloud supplies the host Core pin
+
+Status: Accepted for mantle-host protocol 2.
+
+The backend artifact includes `sdkVersion` and `sdkRevision` in its hashed
+bytes. The old host bundled a fixed Core revision. Cloud can run the previous
+Core release, so a host built from current Core cannot assume its own revision
+is the revision Cloud accepts. Asking only the backend upload grant is too
+late: that grant requires the artifact hash first.
+
+`save` now preflights the project and emits `cloud-host-contract` with the
+project ID. Control returns `{ projectId, core: { version, revision }, protocol }`
+from the deployed Cloud configuration. The script validates the project,
+40-hex revision and protocol minimum before packing. It persists the pin and
+backend hash together. Upload grants, HTTP responses and the frontend kit must
+echo the same pin; a difference fails before another upload and requires a new
+save. No static Core pin is shipped in the plugin. The script contacts only
+the granted Cloud HTTP endpoints; the contract comes through the Cloud MCP
+tool, like upload grants.
+
+Protocol 2 changes the MCP save sequence and requires both Core version and
+revision in `kit.json`. Control must provide the contract tool and pin echoes
+before this host script is offered to users. A future change to the MCP
+sequence, artifact bytes or validation meaning requires a protocol bump. A
+new Core release using these same rules changes only the Cloud contract pin.
