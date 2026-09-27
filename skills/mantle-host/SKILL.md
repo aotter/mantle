@@ -19,9 +19,8 @@ step: `pnpm exec wrangler deploy`, or save and deploy the version in ChatGPT
 Sites. It never wraps `wrangler`.
 
 The script is `scripts/mantle-host.mjs` in this skill's directory. It is a
-single file with no dependencies. It is vendored from `aotter/mantle-home`, and
-`scripts/VENDORED.json` records its source commit and SHA-256. It is not an npm
-package and has no login. Run it with Node 22 or newer, by absolute path:
+single file with no dependencies. It is generated from `packages/mantle-host` in Mantle Core and committed
+with the plugin. The script has no login. Run it with Node 22 or newer, by absolute path:
 
 ```sh
 node <absolute path to this skill>/scripts/mantle-host.mjs <verb> --json
@@ -165,8 +164,8 @@ gitignored and never holds a grant.
 
 - Don't run install commands that the script did not print, and don't
   install mantle-host from npm.
-- Don't edit `scripts/mantle-host.mjs`. Its SHA-256 is pinned in
-  `VENDORED.json` and sent to the Cloud.
+- Don't edit `scripts/mantle-host.mjs`. Core verifies its bytes against a fresh build and sends
+  its SHA-256 to the Cloud.
 - Don't publish during `save`. Deploy is a reviewed step for someone with
   deploy access.
 - Don't wrap `wrangler` or ChatGPT Sites. Use their native steps.

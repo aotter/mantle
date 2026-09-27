@@ -184,6 +184,7 @@ and HTTP Triggers, with authentication and CSRF owned by the host.
 | `@aotter/mantle-auth` | Identity, roles, and OAuth authorization. |
 | `@aotter/mantle-indexeddb` | Browser-local storage. |
 | `@aotter/mantle-cloudflare` | Workers, D1, and integrated surfaces. |
+| `@aotter/mantle-host` | Mantle Cloud upload rules and source for the plugin script. |
 | `@aotter/mantle-bun` | Experimental Bun adapter. |
 | `@aotter/mantle-vercel` | Experimental Vercel adapter. |
 

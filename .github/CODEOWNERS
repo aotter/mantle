@@ -34,3 +34,4 @@
 # CI / release plumbing
 /.github/                       @guyspy
 /scripts/                       @guyspy
+/packages/mantle-host/          @guyspy

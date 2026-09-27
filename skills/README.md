@@ -25,29 +25,20 @@ here is section routing inside one file: the agent reads the entry constraints,
 then only the section its selected path names. `scripts/check-skills.mjs`
 enforces the columns below.
 
-The one exception is `mantle-host`. It carries a vendored script,
-`scripts/mantle-host.mjs`, so it lives under the root plugin
-`skills/mantle-host/` instead of `docs/skills/`. The script is copied
-byte-exact from `aotter/mantle-home`. `scripts/VENDORED.json` beside it
-records the source commit, SHA-256, host protocol and the Core version the
-bundle is pinned to. `scripts/check-plugin-vendor.mjs` verifies the hash, runs
-the bundle's `version --json` to compare the protocol and Core pin, and fails
-when `coreVersion` is newer than `packages/mantle`'s version or, when the
-release tag is fetched, when the pinned revision is not that tag's commit. The
-pin follows the Core that Mantle Cloud runs, so it normally trails this
-repository by a release: a Core release does not re-vendor. After Mantle Cloud
-moves to a new Core, mantle-home rebuilds the script and a normal PR here
-re-vendors it. The skill is not in the npm package, and `mantle skills` does
-not project it. `scripts/check-skills.mjs` covers every
-`skills/*/SKILL.md` with the same front-matter and audit-row rules,
-and it requires plugin skills to declare `projection: plugin` only.
+The one exception is `mantle-host`. It carries the generated script
+`skills/mantle-host/scripts/mantle-host.mjs`, built from the published
+`packages/mantle-host` source in this repository. The generated-file check
+rebuilds it and compares bytes. The skill is absent from the npm package;
+`mantle skills` does not project it. `scripts/check-skills.mjs` audits root
+plugin skills and requires `mantle-host` to declare `projection: plugin` and
+`internal: true`.
 
 Claude Code updates an installed plugin only when its manifest version
 changes, and `scripts/sync-plugin-manifests.mjs` sets that version to Core's.
-Every re-vendor therefore needs a plugin version bump, that is a Core release,
-before Claude Code users receive it; until then they keep the previous bundle.
+Every script update therefore needs a plugin version bump, that is a Core release,
+before Claude Code users receive it; until then they keep the previous script.
 `npx skills add aotter/mantle --skill mantle-host` reads the repository's
-default branch (`main`) and picks up a re-vendor when that branch does.
+default branch (`main`) and picks up an update when that branch does.
 
 | Skill | Routes on | Entry-path constraints (read before acting) | Path-gated sections | Projection | Restricted because |
 |---|---|---|---|---|---|
@@ -103,8 +94,7 @@ npx skills add aotter/mantle --skill mantle-host
 ```
 
 This is the fallback for hosts without a plugin marketplace. It copies the
-whole skill directory, including `scripts/mantle-host.mjs` and
-`scripts/VENDORED.json`. `scripts/check-skills.mjs` requires every plugin skill
+whole skill directory, including `scripts/mantle-host.mjs`. `scripts/check-skills.mjs` requires every plugin skill
 to declare `internal: true`.
 
 Other marketplace hosts point to the same entry:

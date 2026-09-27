@@ -1,0 +1,77 @@
+{
+  "name": "@aotter/mantle-host",
+  "private": false,
+  "version": "0.1.5-alpha.1",
+  "description": "Mantle hosting upload rules and source for the plugin host script.",
+  "license": "Apache-2.0",
+  "homepage": "https://mantle.tools/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aotter/mantle.git",
+    "directory": "packages/mantle-host"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    "./closed-module": {
+      "types": "./src/closed-module.d.mts",
+      "default": "./src/closed-module.mjs"
+    },
+    "./static-artifact": {
+      "types": "./src/static-artifact.d.mts",
+      "default": "./src/static-artifact.mjs"
+    },
+    "./source-zip": {
+      "types": "./src/source-zip.d.mts",
+      "default": "./src/source-zip.mjs"
+    },
+    "./bounded-body": {
+      "types": "./src/bounded-body.d.mts",
+      "default": "./src/bounded-body.mjs"
+    },
+    "./version": {
+      "types": "./src/version.d.mts",
+      "default": "./src/version.mjs"
+    },
+    "./protocol": {
+      "types": "./src/protocol.d.mts",
+      "default": "./src/protocol.mjs"
+    },
+    "./backend-artifact": {
+      "types": "./src/backend-artifact.d.mts",
+      "default": "./src/backend-artifact.mjs"
+    },
+    "./pack": {
+      "types": "./src/pack.d.mts",
+      "default": "./src/pack.mjs"
+    },
+    "./pack-backend": {
+      "types": "./src/pack-backend.d.mts",
+      "default": "./src/pack-backend.mjs"
+    },
+    "./host": {
+      "types": "./src/host/main.d.mts",
+      "default": "./src/host/main.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node scripts/build-host.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check:generated": "node scripts/check-generated.mjs",
+    "check": "pnpm check:generated && pnpm test"
+  },
+  "dependencies": {
+    "es-module-lexer": "2.3.2",
+    "fflate": "0.8.3",
+    "esbuild": "0.28.1"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
+}

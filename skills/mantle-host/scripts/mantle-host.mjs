@@ -1,4 +1,4 @@
-// mantle-host: generated from packages/cloud-cli/src/host by scripts/build-host.mjs. Do not edit.
+// mantle-host: generated from packages/mantle-host/src/host by scripts/build-host.mjs. Do not edit.
 
 // src/host/entry.mjs
 import { fileURLToPath as fileURLToPath2 } from "node:url";
@@ -17,16 +17,16 @@ var hostClientHeader = "x-mantle-host-client";
 
 // package.json
 var package_default = {
-  name: "@aotter/mantle-cloud",
-  private: true,
-  version: "0.1.0-alpha.1",
-  description: "Shared Mantle Cloud release rules (consumed by Control) and the source of the mantle-host plugin script. Not published.",
+  name: "@aotter/mantle-host",
+  private: false,
+  version: "0.1.5-alpha.1",
+  description: "Mantle hosting upload rules and source for the plugin host script.",
   license: "Apache-2.0",
   homepage: "https://mantle.tools/",
   repository: {
     type: "git",
-    url: "git+https://github.com/aotter/mantle-home.git",
-    directory: "packages/cloud-cli"
+    url: "git+https://github.com/aotter/mantle.git",
+    directory: "packages/mantle-host"
   },
   type: "module",
   sideEffects: false,
@@ -77,15 +77,21 @@ var package_default = {
     "./package.json": "./package.json"
   },
   scripts: {
-    "build:host": "node scripts/build-host.mjs",
+    build: "node scripts/build-host.mjs",
     test: "node --test test/*.test.mjs",
-    check: "pnpm build:host && pnpm test"
+    "check:generated": "node scripts/check-generated.mjs",
+    check: "pnpm check:generated && pnpm test"
   },
   dependencies: {
     "es-module-lexer": "2.3.2",
-    esbuild: "0.28.1",
-    fflate: "0.8.3"
-  }
+    fflate: "0.8.3",
+    esbuild: "0.28.1"
+  },
+  files: [
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
 };
 
 // src/core.json
@@ -98,8 +104,8 @@ var core_default = {
 var cliPackage = package_default.name;
 var cliVersion = package_default.version;
 var hostName = "mantle-host";
-var hostCommand = `${hostName} (the ${hostName} plugin script; see the ${hostName} skill)`;
-var updateHost = `Update the ${hostName} plugin, or re-run \`npx skills add aotter/mantle --skill ${hostName}\`.`;
+var hostCommand = `${hostName} (the mantle plugin script; see the ${hostName} skill)`;
+var updateHost = `Update the mantle plugin, or re-run \`npx skills add aotter/mantle --skill ${hostName}\`.`;
 var corePin = Object.freeze({ version: core_default.version, revision: core_default.revision });
 
 // ../../node_modules/.pnpm/fflate@0.8.3/node_modules/fflate/esm/index.mjs

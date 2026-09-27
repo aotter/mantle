@@ -114,6 +114,16 @@ function checkRuntimeCloudflareFree() {
   }
 }
 
+function checkHostRulesBoundary() {
+  for (const dir of ["packages/mantle-spec", "packages/mantle-runtime", "packages/adapters"]) {
+    for (const file of listFiles(join(ROOT, dir), (path) => /\.(?:ts|mts|mjs|json)$/.test(path))) {
+      if (readFileSync(file, "utf8").includes("@aotter/mantle-host")) {
+        fail(file, "Spec, Runtime and adapters must not import mantle-host");
+      }
+    }
+  }
+}
+
 function checkPackageDirection() {
   const rules = [
     {
@@ -697,8 +707,8 @@ function checkRepositoryGuidance() {
       fail(contributingPath, `contributor authority is missing '${text}'`);
     }
   }
-  if (!releaseSkill.includes("All thirteen npmjs artifacts")) {
-    fail(releaseSkillPath, "canonical release skill must match the thirteen-package topology");
+  if (!releaseSkill.includes("All fourteen npmjs artifacts")) {
+    fail(releaseSkillPath, "canonical release skill must match the fourteen-package topology");
   }
   if (!claudeRelease.includes("../../../.agents/skills/mantle-release/SKILL.md") ||
       claudeRelease.split("\n").length > 8 ||
@@ -790,6 +800,7 @@ function checkRepositoryGuidance() {
 
 checkDatabasePropertyDetector();
 checkRuntimeCloudflareFree();
+checkHostRulesBoundary();
 checkPackageDirection();
 checkUiControllerImports();
 checkEntryReadOwnership();
