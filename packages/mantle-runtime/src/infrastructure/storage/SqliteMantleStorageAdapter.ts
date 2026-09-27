@@ -189,6 +189,7 @@ export class SqliteViewQueryExecutor implements ViewQueryExecutor {
     now: () => number = Date.now,
   ) {
     for (const view of Object.values(plan.views)) {
+      if (view.query.kind === "store") continue;
       const schema = view.query.kind === "declarative"
         ? plan.schemas[view.query.from]?.manifest
         : undefined;

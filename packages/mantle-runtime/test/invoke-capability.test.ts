@@ -95,9 +95,9 @@ describe("InvokeCapabilityUseCase", () => {
     expect(await invoker.execute({ name: "echo", args: { msg: "m" }, ctx: anonymous(), path: "MCP echo" }))
       .toEqual({ ok: false, diagnostic: { code: "CONFLICT" } });
     expect(invokeTrigger).toHaveBeenCalledWith({ trigger: "echo-mcp", input: { msg: "m" }, ctx: anonymous(), pathPrefix: "MCP echo" });
-    expect(await invoker.execute({ name: "query_view_recent_posts", args: { tag: "a", page: 2, show: 5 }, ctx: anonymous() }))
+    expect(await invoker.execute({ name: "query_view_recent_posts", args: { tag: "a", limit: 7, page: 2, show: 5 }, ctx: anonymous() }))
       .toMatchObject({ ok: true, data: { page: 2 } });
-    expect(view).toHaveBeenCalledWith("recent-posts", { params: { tag: "a" }, page: 2, show: 5, pathPrefix: "query_view_recent_posts" }, anonymous());
+    expect(view).toHaveBeenCalledWith("recent-posts", { params: { tag: "a", limit: 7 }, page: 2, show: 5, pathPrefix: "query_view_recent_posts" }, anonymous());
   });
 
   it("returns Store View denials as capability outcomes", async () => {

@@ -110,7 +110,7 @@ export function createMantleMcpServer(
    */
   const interactionMeta = (capability: Capability, ui: ClientUiSupport): Record<string, unknown> | undefined => {
     if (capability.route.kind !== "view") return undefined;
-    const collection = capability.route.view.spec.from ?? null;
+    const collection = capability.route.view.spec.select?.from ?? capability.route.view.spec.from ?? null;
     const actions = (capability.rowActions ?? []).flatMap((action) => {
       const target = catalog.get(action.capability);
       if (!target || !invoker.serves(action.capability) || (apps.appOnly.has(action.capability) && ui === "unsupported")) return [];

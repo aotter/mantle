@@ -151,8 +151,13 @@ function requestBodySchema(input: JsonSchema, pathParams: readonly string[]): Js
 
 function viewOperation(v: ViewManifest, request: EmitOpenapiRequest): Record<string, unknown> {
   const params: Array<Record<string, unknown>> = [
-    { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
-    { name: "show", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
+    ...(v.spec.select ? [
+      { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 500 }, required: false },
+      { name: "cursor", in: "query", schema: { type: "string" }, required: false },
+    ] : [
+      { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
+      { name: "show", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
+    ]),
   ];
   if (v.spec.params?.properties) {
     const required = new Set(v.spec.params.required ?? []);
@@ -181,6 +186,7 @@ function viewOperation(v: ViewManifest, request: EmitOpenapiRequest): Record<str
                   page: { type: "integer" },
                   show: { type: "integer" },
                   hasMore: { type: "boolean" },
+                  ...(v.spec.select ? { nextCursor: { type: "string" } } : {}),
                 },
               },
             },

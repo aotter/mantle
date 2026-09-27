@@ -293,9 +293,10 @@ export function mountMantleAdmin<E extends Env>(
     name: v.metadata.name,
     title: v.spec.title ?? null,
     surface: v.spec.surface,
-    from: v.spec.from ?? null,
+    select: !!v.spec.select,
+    from: v.spec.select?.from ?? v.spec.from ?? null,
     params: v.spec.params ?? null,
-    fields: v.spec.fields ?? null,
+    fields: v.spec.select?.columns ?? v.spec.fields ?? null,
     list: projectViewAdminUi(v),
     // Staff operations a row of this View feeds (ADR-0029): the tool, its
     // row bindings and the version input it locks.
@@ -2145,6 +2146,8 @@ async function handleViewRequest(
   const url = new URL(req.url);
   const page = parsePositiveInt(url.searchParams.get(PAGE_PARAM));
   const show = parsePositiveInt(url.searchParams.get(SHOW_PARAM));
+  const cursor = url.searchParams.get("cursor") ?? undefined;
+  const limit = parsePositiveInt(url.searchParams.get("limit"));
 
   let params: Record<string, unknown>;
   let listQuery: ReturnType<typeof readViewListQuery>;
@@ -2176,12 +2179,17 @@ async function handleViewRequest(
     throw err;
   }
 
-  const execute = async (requestedPage: number | undefined) => {
+  const execute = async (requestedPage: number | undefined, requestedCursor?: string) => {
     try {
       const result = await runtime.store.as(ctx).view(view.metadata.name, {
         params,
-        page: requestedPage,
-        show: exportCsv ? view.spec.limit : show,
+        ...(view.spec.select ? {
+          limit: exportCsv ? view.spec.select.limit ?? 500 : limit ?? show,
+          cursor: requestedCursor,
+        } : {
+          page: requestedPage,
+          show: exportCsv ? view.spec.limit : show,
+        }),
         search: listQuery.search,
         filters: listQuery.filters,
         pathPrefix: viewPath,
@@ -2205,8 +2213,8 @@ async function handleViewRequest(
     const declaredColumns = projectViewAdminUi(view).columns;
     const columns = declaredColumns.length > 0
       ? [...declaredColumns]
-      : view.spec.fields?.length
-        ? [...view.spec.fields]
+      : (view.spec.select?.columns ?? view.spec.fields)?.length
+        ? [...(view.spec.select?.columns ?? view.spec.fields)!]
         : [...new Set(result.result.rows.flatMap((row) => Object.keys(row)))];
     let current = result.result;
     let exportPage = 1;
@@ -2217,8 +2225,8 @@ async function handleViewRequest(
             csvRow(columns.map((column) => viewCsvValue(row[column])))
           ).join("\r\n") + "\r\n";
         }
-        if (current.rows.length < current.show) return;
-        const next = await execute(++exportPage);
+        if (view.spec.select ? !current.nextCursor : current.rows.length < current.show) return;
+        const next = await execute(++exportPage, current.nextCursor);
         if (!next.ok) throw new DiagnosticError(next.diagnostic);
         current = next.result;
       }
@@ -2226,7 +2234,7 @@ async function handleViewRequest(
     return csvDownloadResponse(viewName, columns, chunks());
   }
 
-  const result = await execute(page);
+  const result = await execute(page, cursor);
 
   if (result.ok) {
     return Response.json({ ok: true, data: result.result });

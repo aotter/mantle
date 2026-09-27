@@ -78,6 +78,21 @@ describe("store.write (#1151)", () => {
       .rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
   });
 
+  it("enforces Schema scope for a named Store View", async () => {
+    const ownView = {
+      apiVersion: "cms.mantle.aotter.net/v1", kind: "View", metadata: { name: "own-sessions" },
+      spec: { surface: "staff", requires: { auth: { all: ["ctx.user"] } }, select: { from: "privateSessions", columns: ["id", "ownerId", "label"] } },
+    } as Manifest;
+    const rt = await runtime(new AtomicDatabase(), [privateSessions, ownView]);
+    await rt.store.write([
+      { insert: "privateSessions", id: "mine", values: { ownerId: "a", label: "one" } },
+      { insert: "privateSessions", id: "theirs", values: { ownerId: "b", label: "two" } },
+    ]);
+    await expect(rt.store.view("own-sessions")).rejects.toMatchObject({ diagnostic: { code: "UNAUTHENTICATED" } });
+    expect((await rt.store.as({ user: { id: "a" }, staff: null, env: {} }).view("own-sessions")).rows)
+      .toEqual([expect.objectContaining({ id: "mine", ownerId: "a" })]);
+  });
+
   it("persists an omitted Schema default on Store insert", async () => {
     const defaults = schema("defaults", {
       title: { type: "string" }, state: { type: "string", default: "draft" },

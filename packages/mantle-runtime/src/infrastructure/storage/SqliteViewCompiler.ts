@@ -76,6 +76,7 @@ export function prepareSqliteView(
   schema?: SchemaManifest,
   now: () => number = Date.now,
 ): PreparedSqliteView {
+  if (view.kind === "store") throw new Error("Store-backed Views execute through Store.select.");
   if (view.kind === "native") {
     return {
       bind: prepareSqlView(view),

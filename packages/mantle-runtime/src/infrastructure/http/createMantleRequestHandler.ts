@@ -142,8 +142,11 @@ async function handleView(
   }
   const result = await runtime.store.as(context).view(view, {
     params,
-    page: positiveNumber(search.get(PAGE_PARAM)),
-    show: positiveNumber(search.get(SHOW_PARAM)),
+    ...(manifest.spec.select ? {
+      limit: positiveNumber(search.get("limit")), cursor: search.get("cursor") ?? undefined,
+    } : {
+      page: positiveNumber(search.get(PAGE_PARAM)), show: positiveNumber(search.get(SHOW_PARAM)),
+    }),
     pathPrefix,
   });
   const cache = manifest.spec.cache;

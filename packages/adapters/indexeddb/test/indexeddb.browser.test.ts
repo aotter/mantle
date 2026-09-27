@@ -58,6 +58,8 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     })).resolves.toMatchObject({
       rows: [{ title: "Cake" }],
     });
+    await expect(runtime.store.as(anonymous).view("ranked-posts-select", { params: { locale: "en" } }))
+      .rejects.toMatchObject({ diagnostic: { code: "RESOURCE_UNAVAILABLE" } });
     await expect(runtime.invokeTrigger<{ echoed: string }>({
       trigger: "echo-mcp",
       input: { message: "hello" },
@@ -449,6 +451,19 @@ spec:
       - { gt: { field: score, value: 0 } }
   orderBy: [{ field: score, direction: desc }]
   limit: 50
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: ranked-posts-select }
+spec:
+  surface: public
+  params: { type: object, required: [locale], properties: { locale: { type: string } } }
+  select:
+    from: posts
+    columns: [id, title, score, locale]
+    where: { locale: "$input.locale" }
+    orderBy: { score: desc }
+    limit: 50
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure

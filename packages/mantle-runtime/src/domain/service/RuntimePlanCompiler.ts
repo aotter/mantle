@@ -52,6 +52,7 @@ export interface RuntimeProcedurePlan {
 }
 
 export type LogicalViewPlan =
+  | { readonly kind: "store"; readonly from: string; readonly publishedOnly: boolean }
   | {
       readonly kind: "declarative";
       readonly from: string;
@@ -270,6 +271,10 @@ export const PUBLISHED_ONLY_FILTER: FilterAst = Object.freeze({
  * `operational` Schemas (rows are created published) are untouched.
  */
 export function compileLogicalView(view: ViewManifest, from?: SchemaManifest): LogicalViewPlan {
+  if (view.spec.select) return {
+    kind: "store", from: view.spec.select.from,
+    publishedOnly: view.spec.surface === "public" && from !== undefined && (from.spec.lifecycle ?? "publishing") === "publishing",
+  };
   if (view.spec.sql) {
     return {
       kind: "native",

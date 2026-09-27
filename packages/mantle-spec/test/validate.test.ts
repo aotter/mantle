@@ -82,6 +82,31 @@ function trigger(name: string, procedureName: string): TriggerManifest {
 }
 
 describe("validateManifests()", () => {
+  it("accepts a Store-backed View select and checks its Schema columns", () => {
+    const select = view("by-slug", "posts", {
+      from: undefined,
+      params: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] },
+      select: { from: "posts", columns: ["id", "slug"], where: { slug: "$input.slug" }, orderBy: { id: "asc" }, limit: 10 },
+    });
+    expect(validateManifests({ manifests: [schema("posts"), select] }).errorCount).toBe(0);
+    for (const columns of [["slug"], ["id"]]) {
+      const orderBy = columns.includes("id") ? { slug: "asc" as const } : { id: "asc" as const };
+      expect(validateManifests({ manifests: [schema("posts"), { ...select, spec: { ...select.spec, select: { ...select.spec.select!, columns, orderBy } } }] }).diagnostics.map((d) => d.code))
+        .toContain("VIEW_ORDERBY_INVALID");
+    }
+    expect(validateManifests({ manifests: [schema("posts"), { ...select, spec: { ...select.spec, select: { ...select.spec.select!, columns: ["missing"] } } }] }).diagnostics.map((diagnostic) => diagnostic.code))
+      .toContain("VIEW_FIELD_NOT_IN_SCHEMA");
+    expect(validateManifests({ manifests: [schema("posts", { schema: { type: "object", properties: { slug: { type: "string" }, tags: { type: "array", items: { type: "string" } } } } }), { ...select, spec: { ...select.spec, select: { ...select.spec.select!, orderBy: { tags: "asc" } } } }] }).diagnostics.map((diagnostic) => diagnostic.code))
+      .toContain("VIEW_FIELD_NOT_IN_SCHEMA");
+    expect(validateManifests({ manifests: [schema("posts"), { ...select, spec: { ...select.spec, select: { ...select.spec.select!, where: { slug: "$input.undeclared" } } } }] }).errorCount).toBeGreaterThan(0);
+    for (const params of [
+      { type: "object" as const, properties: { slug: { type: "string" as const } } },
+      { type: "object" as const, properties: { slug: { type: "object" as const } }, required: ["slug"] },
+    ]) {
+      expect(validateManifests({ manifests: [schema("posts"), { ...select, spec: { ...select.spec, params } }] }).errorCount).toBeGreaterThan(0);
+    }
+  });
+
   it("requires a required indexed string scope and a scoped View filter", () => {
     const scoped = schema("sessions", {
       schema: { type: "object", properties: { ownerId: { type: "string" }, slug: { type: "string" } }, required: ["ownerId"] },
@@ -98,6 +123,15 @@ describe("validateManifests()", () => {
     }
     expect(validateManifests({ manifests: [scoped, view("all", "sessions")] }).diagnostics.map((d) => d.code))
       .toContain("VIEW_FILTER_CTX_USER_REF_INVALID");
+    const selected = view("own-select", "sessions", { from: undefined, select: { from: "sessions" } });
+    expect(validateManifests({ manifests: [scoped, selected] }).diagnostics.map((d) => d.code))
+      .toContain("VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH");
+    expect(validateManifests({ manifests: [scoped, { ...selected, spec: { ...selected.spec, requires: { auth: { all: ["ctx.user"] } } } }] }).errorCount).toBe(0);
+    const subquery = view("scoped-subquery", "posts", { from: undefined, select: {
+      from: "posts", where: { id: { in: { select: "id", from: "sessions" } } },
+    } });
+    expect(validateManifests({ manifests: [schema("posts"), scoped, subquery] }).diagnostics.map((d) => d.code))
+      .toContain("VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH");
     expect(validateManifests({ manifests: [scoped, view("or-bypass", "sessions", {
       requires: { auth: { all: ["ctx.user"] } },
       filter: { or: [
@@ -118,6 +152,17 @@ describe("validateManifests()", () => {
     expect(validateManifests({ manifests: [expiring, view("current", "events")] }).errorCount).toBe(0);
     expect(validateManifests({ manifests: [expiring, view("raw", "events", { from: undefined, sql: "SELECT * FROM events" })] })
       .diagnostics.map((d) => d.code)).toContain("VIEW_TTL_NATIVE_UNSAFE");
+    const cached = view("cached", "posts", { from: undefined, cache: { sharedMaxAge: 60 }, select: {
+      from: "posts", where: { id: { in: { select: "id", from: "events" } } },
+    } });
+    expect(validateManifests({ manifests: [schema("posts"), expiring, cached] }).diagnostics.map((d) => d.code))
+      .toContain("VIEW_CACHE_INVALID");
+    expect(validateManifests({ manifests: [schema("posts"), { ...cached, spec: { ...cached.spec, select: {
+      from: "posts", where: { version: { lt: "$now" } },
+    } } }] }).diagnostics.map((d) => d.code)).toContain("VIEW_CACHE_INVALID");
+    expect(validateManifests({ manifests: [schema("posts"), view("search", "posts", { from: undefined,
+      uiSchema: { list: { searchFields: ["slug"] } }, select: { from: "posts" },
+    })] }).diagnostics.map((d) => d.code)).toContain("VIEW_UI_INVALID");
     for (const ttl of [{ field: "missing", expireAfterSeconds: 0 }, { field: "expiresAt", expireAfterSeconds: -1 }]) {
       expect(validateManifests({ manifests: [{ ...expiring, spec: { ...expiring.spec, ttl } }] })
         .diagnostics.map((d) => d.code)).toContain("SCHEMA_TTL_INVALID");
@@ -1554,6 +1599,13 @@ spec:
     required: [show]
 `);
     expect(r.diagnostics.map((d) => d.code)).toContain("VIEW_PARAMS_RESERVED_NAME");
+  });
+
+  it("reserves cursor pagination names only for select Views", () => {
+    const legacy = view("legacy", "posts", { params: { type: "object", properties: { limit: { type: "integer" }, cursor: { type: "string" } } } });
+    expect(parseManifests(JSON.stringify(legacy)).diagnostics).toEqual([]);
+    const select = { ...legacy, spec: { ...legacy.spec, from: undefined, select: { from: "posts" } } };
+    expect(parseManifests(JSON.stringify(select)).diagnostics.map((d) => d.code)).toContain("VIEW_PARAMS_RESERVED_NAME");
   });
 
   it("rejects filter param-ref pointing at undeclared params", () => {

@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { AwsClient } from "aws4fetch";
 import { buildCapabilityCatalog, InvokeCapabilityUseCase, projectCallableCapabilities, sealRuntimePlan, type CapabilityUseCases, type RuntimePlanData } from "@aotter/mantle-runtime";
 import { createMantleMcpHandler, type MantleMcpHandler } from "@aotter/mantle-mcp";
-import { jsonSchemaToZod, redactForWire, type SiteDefaults } from "@aotter/mantle-spec";
+import { DiagnosticError, jsonSchemaToZod, redactForWire, type SiteDefaults } from "@aotter/mantle-spec";
 import { TemplateRegistry, createPublicPathResolver } from "@aotter/mantle-web";
 import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import { createMantleWorker, D1DatabaseDriver, mountPublicRoutes, R2MediaStorage } from "../../src/index.js";
@@ -93,7 +93,14 @@ function createState(raw: Env, origin: string, observed: boolean) {
       // Share the protocol library, not runtime assembly/storage. Only the View
       // workload is implemented in F2; unmeasured content mutations fail closed.
       const unavailable = () => { throw new Error("Operation outside native benchmark workload"); };
-      const cases = new Proxy({ executeView }, { get(target, name) { return name === "executeView" ? target.executeView : { execute: unavailable, executePage: unavailable }; } });
+      const view: NonNullable<CapabilityUseCases["view"]> = async (name, options, ctx) => {
+        const planned = plan.views[name];
+        if (!planned) return unavailable();
+        const result = await executeView.execute({ view: planned.manifest, options, ctx });
+        if (!result.ok) throw new DiagnosticError(result.diagnostic);
+        return result.result;
+      };
+      const cases = new Proxy({ view }, { get(target, name) { return name === "view" ? target.view : { execute: unavailable, executePage: unavailable }; } });
       const schemas = Object.values(plan.schemas).map((schema) => schema.manifest);
       const catalog = buildCapabilityCatalog(schemas, { surface, callables: projectCallableCapabilities(plan, { surface }) });
       dispatcher = { key, value: createMantleMcpHandler(new InvokeCapabilityUseCase(cases as unknown as CapabilityUseCases, catalog, schemas), {

@@ -156,8 +156,13 @@ function viewInputSchema(view: ViewManifest): JsonSchema {
     type: "object",
     properties: {
       ...(view.spec.params?.properties ?? {}),
-      page: { type: "number", description: "Optional 1-based page number." },
-      show: { type: "number", description: "Optional page size, capped by the View limit." },
+      ...(view.spec.select ? {
+        limit: { type: "integer", description: "Optional page size, capped by the View limit." },
+        cursor: { type: "string", description: "Opaque cursor returned by the previous page." },
+      } : {
+        page: { type: "number", description: "Optional 1-based page number." },
+        show: { type: "number", description: "Optional page size, capped by the View limit." },
+      }),
     },
     ...(view.spec.params?.required?.length ? { required: view.spec.params.required } : {}),
   };
