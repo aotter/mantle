@@ -631,7 +631,12 @@ function checkStoreProgram(
     });
   }
   const input = p.spec.input;
+  if (input.type !== "object") {
+    fail("STORE_PROGRAM_INVALID", "/spec/input", `Procedure '${name}' runs a Store program, so its input must be an object schema.`, { value: input.type, expected: "type: object" });
+    return out;
+  }
   const inputProps = input.properties ?? {};
+  const inputRequired = new Set(input.required ?? []);
   const wholeInput = Object.keys(inputProps).filter((key) => key !== "id" && !RESERVED_PROCEDURE_INPUT_NAMES.includes(key as never));
   let requiresCaller = usesReference(handler.store, "$ctx.user.id");
   const scan = scanStoreWhere("Procedure", name, schemasByName, filePaths, out);
@@ -664,6 +669,14 @@ function checkStoreProgram(
       }
       for (const column of update) {
         if (!properties.includes(column)) fail("STORE_PROGRAM_INVALID", `${at}/onConflict/update`, `Procedure '${name}' onConflict updates '${column}', which Schema '${schemaName}' does not declare.`, { value: column });
+      }
+      // Every conflict column must be written on every call; an omitted
+      // optional value would silently turn the upsert into a plain insert.
+      for (const column of columns) {
+        const written = op.values === "$input" ? column : inputReference(op.values[column]) ?? (Object.hasOwn(op.values, column) ? null : undefined);
+        if (written === undefined || (written !== null && !inputRequired.has(written))) {
+          fail("STORE_PROGRAM_INVALID", `${at}/onConflict/columns`, `Procedure '${name}' conflict column '${column}' must be written on every call: set it from a required input property.`, { value: column });
+        }
       }
     }
     if ("insert" in op) return;

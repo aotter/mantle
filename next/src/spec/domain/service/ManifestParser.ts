@@ -990,8 +990,11 @@ function validateStoreValue(
       "STORE_REFERENCE_UNKNOWN",
     );
   }
-  if (!SCALAR_TYPES.has(String(property.type))) {
-    throw new ManifestParseError(`${atom} reference '${value}' must name a scalar input property`, idx, at, "STORE_REFERENCE_UNKNOWN");
+  // A predicate value must be exactly one scalar type: a nullable input
+  // could turn `id = ?` into `id IS NULL` or bind nothing at all.
+  const nullable = (property as { nullable?: boolean }).nullable === true;
+  if (typeof property.type !== "string" || !SCALAR_TYPES.has(property.type) || (required && nullable)) {
+    throw new ManifestParseError(`${atom} reference '${value}' must name a non-null scalar input property`, idx, at, "STORE_REFERENCE_UNKNOWN");
   }
   if (required && !input?.required?.includes(name)) {
     throw new ManifestParseError(

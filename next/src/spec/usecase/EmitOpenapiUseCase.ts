@@ -172,16 +172,14 @@ function viewOperation(v: ViewManifest, request: EmitOpenapiRequest): Record<str
               ok: { const: true },
               data: {
                 type: "object",
-                required: ["rows", "page", "show", "hasMore"],
+                required: ["rows"],
                 properties: {
                   rows: {
                     type: "array",
                     items: { type: "object", additionalProperties: true },
                   },
-                  page: { type: "integer" },
-                  show: { type: "integer" },
-                  hasMore: { type: "boolean" },
-                  ...(v.spec.select ? { nextCursor: { type: "string" } } : {}),
+                  // Present when another page exists; pass it back as `cursor`.
+                  nextCursor: { type: "string" },
                 },
               },
             },
