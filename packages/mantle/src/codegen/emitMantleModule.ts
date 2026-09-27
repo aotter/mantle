@@ -115,7 +115,7 @@ export function emitMantleModule(request: EmitMantleModuleRequest): EmitMantleMo
       '  | (Omit<StoreDelete, "delete"> & { readonly delete: N })',
       '}[keyof Schemas & string];',
       'export type Store = Omit<CoreMantleStore, "as" | "select" | "write" | "view"> & {',
-      '  as(ctx: HandlerContext): CallerStore;',
+      '  as(ctx: HandlerContext<unknown, unknown>): CallerStore;',
       '  select<N extends keyof Schemas & string>(query: Omit<StoreSelect, "from"> & { readonly from: N }):',
       '    Promise<Omit<StoreSelectResult, "rows"> & { readonly rows: readonly (StoreRow & Partial<Schemas[N]>)[] }>;',
       '  write(ops: readonly HostWrite[]): Promise<readonly StoreWriteResult[]>;',

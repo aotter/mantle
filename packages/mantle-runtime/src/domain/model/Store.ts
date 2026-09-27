@@ -117,7 +117,7 @@ export type StoreWriteResult =
  */
 export interface MantleStore {
   /** Bind host work on behalf of a caller to the same Schema scope as a Procedure. */
-  as(ctx: HandlerContext): CallerStore;
+  as(ctx: HandlerContext<unknown, unknown>): CallerStore;
   select(query: StoreSelect): Promise<StoreSelectResult>;
   /**
    * Apply every operation or none, in order, as one storage transaction.
