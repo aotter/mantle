@@ -110,16 +110,8 @@ interface MantleServiceContext {
 
   It boots the runtime lazily from `storage(env)`, passes it to `service.fetch`, and turns a schedule or a deferred-hook message into a Trigger invocation. The host's entry is one to three lines of **generated, application-owned** preset code (`export default { fetch: m.fetch, scheduled: (e, env, ctx) => m.invokeSchedule(e.cron, e.scheduledTime, env, ctx) }` on Cloudflare, `Bun.serve({ fetch: m.fetch })` on Bun), so an application adds its own native handlers next to Mantle's and Core absorbs no platform event types.
 - `createMantleWorker`, `createBunMantle` and `createVercelMantle` are removed; today `createBunMantle` and `createVercelMantle` are 62-line copies of the same lazy boot. The adapter packages keep only what is platform-specific: `@aotter/mantle-cloudflare` the D1 driver, the KV and R2 bindings and `toCloudflareCron`; `@aotter/mantle-bun` the `bun:sqlite` driver; `@aotter/mantle-vercel` the libSQL driver. ChatGPT Sites uses the Cloudflare preset with the custom identity.
-- **Every host has the same four parts**: a driver package (only platform-specific code), a `mantle generate --host <name>` preset (the entry above plus host config, application-owned), one maintained reference example under `docs/examples/host-<name>`, and a handbook page with a consumer-skill section. `--host` gains `bun` and `vercel` next to `cf` and `chatgpt-sites` (amends ADR-0026):
-
-  | `--host` | Driver | Generated entry | Reference example (kept from what already works) | Schedules |
-  |---|---|---|---|---|
-  | `cf` | `@aotter/mantle-cloudflare`: D1, KV, R2, `toCloudflareCron` | `export default { fetch, scheduled }` | `host-minimal-worker`, `host-local-admin-otp` | wired by the preset |
-  | `chatgpt-sites` | `@aotter/mantle-cloudflare` | the `cf` entry, custom identity | `host-chatgpt-sites`: Sites sign-in, R2 media | not wired |
-  | `bun` | `@aotter/mantle-bun`: `bun:sqlite` | `Bun.serve({ fetch })` | `host-bun`, from the `check-bun-package` consumer | not wired |
-  | `vercel` | `@aotter/mantle-vercel`: libSQL | a Vercel Functions fetch export | `host-vercel`, promoted from `adapters/vercel/test/fixtures/live-node` (Turso live smoke) | not wired |
-
-  A capability a preset does not wire is refused at boot with a diagnostic, never silently skipped; the author's coding agent bridges it with the host's own mechanism (for example a Vercel Cron Job calling a route that runs `m.invokeSchedule`), and the consumer skill records what has worked.
+- **`--host` is removed** (amends ADR-0026). Whenever the selection needs an entry (anything beyond `spec`, which stays host-free), `mantle generate` emits the Cloudflare preset: the entry above with `scheduled` wired, D1 storage, and the KV and R2 bindings. `host-minimal-worker` and `host-local-admin-otp` are its reference examples.
+- **Other hosts are examples and drivers, not generator options.** ChatGPT Sites is the `host-chatgpt-sites` reference: an agent adapts the Cloudflare preset from it (Sites sign-in, R2 media, custom identity). `@aotter/mantle-bun` (`bun:sqlite`) and `@aotter/mantle-vercel` (libSQL) keep their drivers, marked experimental until a maintainer runs them end to end; they get no preset and no promised example. On any host, a capability the entry does not wire (schedules, for example) is refused at boot with a diagnostic, never skipped silently, and the author's coding agent bridges it.
 - `BootMantleRuntimeArgs.supportsScheduledTriggers` becomes the `schedules` option above.
 - Removed: `MANTLE_RESERVED_PATH_PREFIXES`, `MantleExtensionApp`, `extend`, `extend.mount` and `getRuntime`. `mantle generate` emits the standard composition as application-owned source: `src/service.ts`, `src/handlers.ts` and the host entry.
 
@@ -189,7 +181,7 @@ A product table that already exists without the ledger record of the Mantle migr
 - With no `--features`, generate emits the full preset, including mantle-auth, which creates and owns its tables.
 - `--features` stays a positive replacement list (ADR-0026). `mantle.config.json` and the CLI gain `identity: "mantle" | "custom" | "none"`, and identity is part of the positive selection: an explicit `--features` without `--identity` means `none`, and a selected feature that needs a caller identity (`admin`) then fails with the dependency diagnostic below. `custom` emits an application-owned `src/identity.ts` implementing `CallerResolver`.
 - **Amends ADR-0026:** dependencies are no longer closed automatically. A missing dependency fails with `GENERATE_FEATURE_DEPENDENCY_MISSING`, and an omitted module is never re-added.
-- `--host chatgpt-sites` implies `identity: custom` and emits the standard preset. Switching `identity` on a rerun is refused and never drops tables.
+- Switching `identity` on a rerun is refused and never drops tables.
 - Acceptance: the default works with users and auth whose tables mantle-auth owns; `custom` keeps the service's users and adds no auth tables; an explicit public service with `none` adds no auth package or tables; a valid positive selection generates, and a missing dependency is refused with a diagnostic.
 
 ## Conformance cases
@@ -223,7 +215,7 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 ## How to apply
 
 1. Land this ADR and ADR-0033, then build in this order: the three conformance contracts; Store and cross-executor conformance; cut every legacy path over and delete it; service, surfaces and identity; Cloud service-entry artifacts. Vercel and IndexedDB completion may trail.
-2. **Keep proven host integrations as maintained examples, not Core contracts.** Core models no host's delivery workflow, but a working integration saves the next user the search. Each host's reference example (decision 6) is ported to the 0.2.0 contracts and rechecked when the host changes. For ChatGPT Sites that means Sites sign-in mapped to a `CallerResolver` and an `AdminIdentity` over `sites_users` ([`chatgpt-auth.ts`](../examples/host-chatgpt-sites/src/chatgpt-auth.ts), whose `chatgpt:<sub>` id is already a namespaced subject key) and R2 behind the `MediaStorage` port ([`media.ts`](../examples/host-chatgpt-sites/src/media.ts)).
+2. **Keep proven host integrations as maintained examples, not Core contracts.** Core models no host's delivery workflow, but a working integration saves the next user the search. The reference examples of decision 6 are ported to the 0.2.0 contracts and rechecked when their host changes. For ChatGPT Sites that means Sites sign-in mapped to a `CallerResolver` and an `AdminIdentity` over `sites_users` ([`chatgpt-auth.ts`](../examples/host-chatgpt-sites/src/chatgpt-auth.ts), whose `chatgpt:<sub>` id is already a namespaced subject key) and R2 behind the `MediaStorage` port ([`media.ts`](../examples/host-chatgpt-sites/src/media.ts)).
 3. New code uses only the identifiers named here. A new public name needs an amendment to this ADR.
 4. `mantle validate` diagnostics listed here are added with the grammar slice; the runtime codes with the Store and invocation slices.
 
