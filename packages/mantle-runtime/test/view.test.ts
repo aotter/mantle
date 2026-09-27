@@ -450,6 +450,61 @@ describe("compileView", () => {
 });
 
 describe("ExecuteViewUseCase", () => {
+  it("does not return a public cursor with hidden sort or id fields", async () => {
+    const manifest: ViewManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1", kind: "View", metadata: { name: "public-score" },
+      spec: { surface: "public", select: { from: "posts", columns: ["title"], orderBy: { internalScore: "desc" } } },
+    };
+    const selected: unknown[] = [];
+    const useCase = new ExecuteViewUseCase({ execute: async () => { throw new Error("old View path"); } }, undefined, {}, async (query) => {
+      selected.push(query);
+      return { rows: [], nextCursor: "secret" };
+    });
+    expect(await useCase.execute({ view: manifest })).toMatchObject({ ok: false, diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+    expect(selected).toHaveLength(0);
+  });
+
+  it("keeps ordinary columns named from and select in View predicates", async () => {
+    const manifest: ViewManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1", kind: "View", metadata: { name: "named-columns" },
+      spec: { surface: "staff", select: { from: "records", where: { from: "a", select: "b", title: "x" } } },
+    };
+    const selected: unknown[] = [];
+    const useCase = new ExecuteViewUseCase({ execute: async () => { throw new Error("old View path"); } }, undefined, {}, async (query) => {
+      selected.push(query);
+      return { rows: [] };
+    });
+    expect((await useCase.execute({ view: manifest })).ok).toBe(true);
+    expect(selected).toMatchObject([{ where: { from: "a", select: "b", title: "x" } }]);
+  });
+
+  it("keeps caller values scalar and published-only in public Store subqueries", async () => {
+    const manifest: ViewManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1", kind: "View", metadata: { name: "related" },
+      spec: { surface: "public", params: { type: "object", properties: { slug: { type: "object" } }, required: ["slug"] },
+        select: { from: "posts", where: { slug: "$input.slug", id: { in: { select: "postId", from: "relations" } } } } },
+    };
+    const queries = { execute: async () => { throw new Error("old View path"); } };
+    const selected: unknown[] = [];
+    const useCase = new ExecuteViewUseCase(queries, undefined, {}, async (query) => {
+      selected.push(query);
+      return { rows: [] };
+    }, Date.now, new Map([["relations", nativeSchema("relations", { postId: { type: "string" } })]]));
+    const rejected = await useCase.execute({ view: manifest, options: { params: { slug: { ne: "x" } } } });
+    expect(rejected).toMatchObject({ ok: false, diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+    expect(selected).toHaveLength(0);
+    const scalarView = { ...manifest, spec: { ...manifest.spec,
+      params: { type: "object" as const, properties: { slug: { type: "string" as const } }, required: ["slug"] } } };
+    const scalarUseCase = new ExecuteViewUseCase(queries, undefined, {}, async (query) => {
+      selected.push(query);
+      return { rows: [] };
+    }, Date.now, new Map([["relations", nativeSchema("relations", { postId: { type: "string" } })]]));
+    expect((await scalarUseCase.execute({ view: scalarView, options: { params: { slug: "hello" } } })).ok).toBe(true);
+    expect(selected).toMatchObject([{ where: {
+      slug: "hello", id: { in: { select: "postId", from: "relations", where: { status: "published" } } },
+    } }]);
+  });
+
   it("returns UNAUTHENTICATED when an identity-bound View reaches runtime without ctx.user", async () => {
     const manifest = view({
       from: "orders",

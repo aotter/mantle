@@ -26,6 +26,31 @@ spec:
   fields: [id, label]
 ---
 apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: current-events-select }
+spec:
+  surface: public
+  params: { type: object, properties: { skip: { type: string } }, required: [skip] }
+  select:
+    from: events
+    columns: [id, label]
+    where: { label: { ne: "$input.skip" } }
+    orderBy: { id: asc }
+    limit: 2
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: future-events-select }
+spec:
+  surface: public
+  select:
+    from: events
+    columns: [id, label]
+    where: { expiresAt: { gt: "$now" } }
+    orderBy: { id: asc }
+    limit: 2
+---
+apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
 metadata: { name: sweep-events }
 spec:
@@ -65,6 +90,12 @@ test("Bun TTL hides expired rows before an explicit bounded, resumable sweep", a
   expect(await runtime.entries.readById({ collection: "events", id: rows[0]!.id })).toBeNull();
   const view = await runtime.store.view("current-events");
   expect(view.rows.map((row) => row.label).sort()).toEqual(["future", "missing", "null"]);
+  const firstPage = await runtime.store.view("current-events-select", { params: { skip: "missing" }, limit: 1 });
+  const secondPage = await runtime.store.view("current-events-select", { params: { skip: "missing" }, limit: 1, cursor: firstPage.nextCursor });
+  expect([...firstPage.rows, ...secondPage.rows].map((row) => row.label).sort()).toEqual(["future", "null"]);
+  expect(firstPage.nextCursor).toBeTruthy();
+  expect(secondPage.nextCursor).toBeUndefined();
+  expect((await runtime.store.view("future-events-select")).rows.map((row) => row.label)).toEqual(["future"]);
   const callerSweep = await runtime.invokeProcedure({ procedure: "sweep-events", input: {}, ctx: { user: null, staff: null, env: {} } });
   expect(callerSweep).toMatchObject({ ok: true, data: { available: false } });
   expect(await runtime.store.sweepExpired({ collection: "events", limit: 1 })).toMatchObject({ scanned: 1, removed: 0 });

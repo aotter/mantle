@@ -357,7 +357,7 @@ function checkViewRefs(
         })] : [];
   }
   const out: Diagnostic[] = [];
-  const fromName = v.spec.from;
+  const fromName = v.spec.select?.from ?? v.spec.from;
   if (!fromName) return out;
   const schema = schemasByName.get(fromName);
   if (!schema) {
@@ -365,7 +365,7 @@ function checkViewRefs(
       validateDiagnostic({
         code: "VIEW_FROM_UNKNOWN_SCHEMA",
         severity: "error",
-        path: manifestPath("View", v.metadata.name, "/spec/from", filePaths),
+        path: manifestPath("View", v.metadata.name, v.spec.select ? "/spec/select/from" : "/spec/from", filePaths),
         value: fromName,
         expected: "name of a declared Schema",
         candidates: [...schemasByName.keys()],
@@ -478,7 +478,7 @@ function checkViewRefs(
     out.push(...checkCtxUserFilter(v, schema, filePaths));
   }
   const scopeField = Object.keys(schema.spec.scope ?? {})[0];
-  if (scopeField && (!v.spec.filter || !hasTopLevelScope(v.spec.filter, scopeField))) {
+  if (scopeField && !v.spec.select && (!v.spec.filter || !hasTopLevelScope(v.spec.filter, scopeField))) {
     out.push(validateDiagnostic({
       code: "VIEW_FILTER_CTX_USER_REF_INVALID",
       severity: "error",
@@ -509,6 +509,115 @@ function checkViewRefs(
         );
       }
     });
+  }
+  if (v.spec.select) {
+    let requiresCaller = Boolean(scopeField);
+    const cursorFields = ["id", Object.keys(v.spec.select.orderBy ?? {})[0] ?? "updatedAt"];
+    if (v.spec.surface === "public" && v.spec.select.columns && cursorFields.some((field) => !v.spec.select!.columns!.includes(field))) {
+      out.push(validateDiagnostic({
+        code: "VIEW_ORDERBY_INVALID", severity: "error",
+        path: manifestPath("View", v.metadata.name, "/spec/select/columns", filePaths),
+        expected: `public View projection includes ${[...new Set(cursorFields)].join(" and ")} used by its pagination cursor`,
+        message: `Public View '${v.metadata.name}' must project its cursor fields.`,
+      }));
+    }
+    const usesReference = (value: unknown, reference: string): boolean => value === reference ||
+      (Array.isArray(value) ? value.some((item) => usesReference(item, reference)) : value && typeof value === "object" && !("$literal" in value)
+        ? Object.values(value).some((item) => usesReference(item, reference)) : false);
+    if (list.searchFields.length || list.filterFields.length) out.push(validateDiagnostic({
+      code: "VIEW_UI_INVALID", severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/uiSchema/list", filePaths),
+      expected: "no Admin search or filters for a Store select View",
+      message: `View '${v.metadata.name}' uses Store select and cannot declare Admin search or filter controls.`,
+    }));
+    if (v.spec.cache && usesReference(v.spec.select.where, "$now")) out.push(validateDiagnostic({
+      code: "VIEW_CACHE_INVALID", severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
+      expected: "a caller and time independent View",
+      message: `View '${v.metadata.name}' uses $now and cannot have a shared cache.`,
+    }));
+    if (usesReference(v.spec.select.where, "$ctx.user.id")) requiresCaller = true;
+    for (const [i, field] of (v.spec.select.columns ?? []).entries()) {
+      if (!validFieldNames.has(field)) out.push(validateDiagnostic({
+        code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
+        path: manifestPath("View", v.metadata.name, `/spec/select/columns/${i}`, filePaths),
+        value: field, expected: `property of Schema '${fromName}' or a reserved metadata field`,
+        message: `View '${v.metadata.name}' select references unknown field '${field}'.`,
+      }));
+    }
+    for (const field of Object.keys(v.spec.select.orderBy ?? {})) {
+      if (!validFieldNames.has(field)) out.push(validateDiagnostic({
+        code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
+        path: manifestPath("View", v.metadata.name, `/spec/select/orderBy/${field}`, filePaths),
+        value: field, expected: `property of Schema '${fromName}' or a reserved metadata field`,
+        message: `View '${v.metadata.name}' orderBy references unknown field '${field}'.`,
+      }));
+      else if (Object.hasOwn(props, field)) {
+        const property = schema.spec.schema.properties?.[field];
+        const types = [property?.type].flat().filter((type) => type !== "null");
+        if (property?.oneOf || types.length !== 1 || !["string", "number", "integer", "boolean"].includes(String(types[0]))) {
+          out.push(validateDiagnostic({
+            code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
+            path: manifestPath("View", v.metadata.name, `/spec/select/orderBy/${field}`, filePaths),
+            value: field, expected: "a scalar Schema column",
+            message: `View '${v.metadata.name}' orderBy requires a scalar field.`,
+          }));
+        }
+      }
+    }
+    const scan = (where: Readonly<Record<string, unknown>>, source: SchemaManifest, pointer: string): void => {
+      const fields = new Set([...RESERVED_ENTRY_COLUMNS, ...Object.keys(source.spec.schema.properties ?? {})]);
+      for (const [field, value] of Object.entries(where)) {
+        const at = `${pointer}/${field}`;
+        if (field === "and" || field === "or") {
+          for (const [index, child] of (value as readonly Readonly<Record<string, unknown>>[]).entries()) scan(child, source, `${at}/${index}`);
+        } else if (field === "not") scan(value as Readonly<Record<string, unknown>>, source, at);
+        else {
+          if (!fields.has(field)) out.push(validateDiagnostic({
+            code: "VIEW_FILTER_FIELD_NOT_IN_SCHEMA", severity: "error",
+            path: manifestPath("View", v.metadata.name, at, filePaths), value: field,
+            expected: `property of Schema '${source.metadata.name}' or a reserved metadata field`,
+            message: `View '${v.metadata.name}' select references unknown field '${field}'.`,
+          }));
+          if (value && typeof value === "object" && !Array.isArray(value)) {
+            for (const [operator, operand] of Object.entries(value)) {
+              if ((operator !== "in" && operator !== "notIn") || !operand || typeof operand !== "object" || Array.isArray(operand)) continue;
+              const sub = operand as { from: string; select: string; where?: Readonly<Record<string, unknown>> };
+              const other = schemasByName.get(sub.from);
+              if (!other) out.push(validateDiagnostic({
+                code: "VIEW_FROM_UNKNOWN_SCHEMA", severity: "error",
+                path: manifestPath("View", v.metadata.name, `${at}/${operator}/from`, filePaths), value: sub.from,
+                expected: "name of a declared Schema", message: `View '${v.metadata.name}' subquery references unknown Schema '${sub.from}'.`,
+              }));
+              else {
+                if (other.spec.scope) requiresCaller = true;
+                if (v.spec.cache && other.spec.ttl) out.push(validateDiagnostic({
+                  code: "VIEW_CACHE_INVALID", severity: "error",
+                  path: manifestPath("View", v.metadata.name, `${at}/${operator}/from`, filePaths),
+                  value: sub.from, expected: "no shared cache over a TTL Schema",
+                  message: `View '${v.metadata.name}' cannot cache a subquery over TTL Schema '${sub.from}'.`,
+                }));
+                const subFields = new Set([...RESERVED_ENTRY_COLUMNS, ...Object.keys(other.spec.schema.properties ?? {})]);
+                if (!subFields.has(sub.select)) out.push(validateDiagnostic({
+                  code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
+                  path: manifestPath("View", v.metadata.name, `${at}/${operator}/select`, filePaths), value: sub.select,
+                  expected: `property of Schema '${sub.from}' or a reserved metadata field`,
+                  message: `View '${v.metadata.name}' subquery references unknown field '${sub.select}'.`,
+                }));
+                if (sub.where) scan(sub.where, other, `${at}/${operator}/where`);
+              }
+            }
+          }
+        }
+      }
+    };
+    if (v.spec.select.where) scan(v.spec.select.where, schema, "/spec/select/where");
+    if (requiresCaller && !v.spec.requires?.auth?.all?.includes("ctx.user")) out.push(validateDiagnostic({
+      code: "VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH", severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/requires/auth/all", filePaths),
+      expected: "ctx.user",
+      message: `View '${v.metadata.name}' needs ctx.user to evaluate its Store select.`,
+    }));
   }
 
   return out;
@@ -1360,8 +1469,9 @@ function viewExposesVersion(view: ViewManifest, collection: string): boolean {
     // matched because CTEs, quoting and aliases hide the table name.
     return /version/iu.test(view.spec.sql) || /select\s+(?:\w+\.)?\*/iu.test(view.spec.sql);
   }
-  if (view.spec.from !== collection) return false;
-  return !view.spec.fields || view.spec.fields.includes("version");
+  if ((view.spec.select?.from ?? view.spec.from) !== collection) return false;
+  const columns = view.spec.select?.columns ?? view.spec.fields;
+  return !columns || columns.includes("version");
 }
 
 function sameOwner(

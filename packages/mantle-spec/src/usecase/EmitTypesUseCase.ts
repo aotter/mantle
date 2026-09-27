@@ -75,7 +75,8 @@ export function emitTypesFromManifests(request: {
     }
 
     for (const v of views) {
-      const parent = v.spec.from ? schemaByName.get(v.spec.from) : undefined;
+      const source = v.spec.select?.from ?? v.spec.from;
+      const parent = source ? schemaByName.get(source) : undefined;
       if (v.spec.params) {
         out.push(`  /** Parameters accepted by View '${docText(v.metadata.name)}' */`);
         out.push(
@@ -90,7 +91,7 @@ export function emitTypesFromManifests(request: {
         const rootSchema = parent.spec.schema;
         const props = (rootSchema.properties ?? {}) as Record<string, JsonSchema>;
         const context = renderContext(`Entry_${manifestTypeIdentifier(parent.metadata.name)}`, rootSchema);
-        const fields = v.spec.fields ?? [...RESERVED_ENTRY_COLUMNS, ...Object.keys(props)];
+        const fields = v.spec.select?.columns ?? v.spec.fields ?? [...RESERVED_ENTRY_COLUMNS, ...Object.keys(props)];
         const reservedSet = new Set<string>(RESERVED_ENTRY_COLUMNS);
         const rendered: string[] = [];
         for (const f of fields) {

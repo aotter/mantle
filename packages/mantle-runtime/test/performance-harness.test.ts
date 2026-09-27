@@ -49,6 +49,19 @@ function publicView(name: string, filter: ViewManifest["spec"]["filter"]): ViewM
 }
 
 describe("performance harness", () => {
+  it("inspects Store select Views through the Store query compiler", async () => {
+    const selected: ViewManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1", kind: "View", metadata: { name: "selected-orders" },
+      spec: { surface: "public", requires: { auth: { all: ["ctx.auth"] } }, select: { from: "orders", columns: ["id", "tenantId", "note"],
+        where: { tenantId: "tenantId-1", state: "state-1" }, orderBy: { id: "asc" }, limit: 20 } },
+    };
+    const report = await inspectIndexCoverage(compilePlan([schema, selected]), { rowsPerSchema: 100 });
+    expect(report.summary.views).toBe(1);
+    expect(report.paths[0]).toMatchObject({ view: "selected-orders", schema: "orders", resultCount: expect.any(Number) });
+    expect(report.paths[0]!.sql).toContain('"_mantle_status"');
+    expect(report.paths[0]!.plan.length).toBeGreaterThan(0);
+  });
+
   it("gates public data access on the measured SQLite plan", async () => {
     const manifests: Manifest[] = [
       schema,

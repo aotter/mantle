@@ -150,9 +150,14 @@ export class InvokeCapabilityUseCase {
         const view = this.useCases.view;
         if (!view) throw new DiagnosticError(unknownCapability(path, capability.name));
         return view(route.view.metadata.name, {
-            params: omit(args, VIEW_PAGING_ARGUMENTS),
-            page: typeof args["page"] === "number" ? args["page"] : undefined,
-            show: typeof args["show"] === "number" ? args["show"] : undefined,
+            params: omit(args, route.view.spec.select ? [...VIEW_PAGING_ARGUMENTS, "limit", "cursor"] : VIEW_PAGING_ARGUMENTS),
+            ...(route.view.spec.select ? {
+              limit: typeof args["limit"] === "number" ? args["limit"] : undefined,
+              cursor: typeof args["cursor"] === "string" ? args["cursor"] : undefined,
+            } : {
+              page: typeof args["page"] === "number" ? args["page"] : undefined,
+              show: typeof args["show"] === "number" ? args["show"] : undefined,
+            }),
           pathPrefix: path,
         }, ctx);
       }

@@ -44,6 +44,7 @@ interface ViewQueryResult {
     page: number;
     show: number;
     hasMore: boolean;
+    nextCursor?: string;
   };
 }
 
@@ -107,8 +108,9 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     queryFn: () =>
       fetchView(name, {
         ...Object.fromEntries(urlParams),
-        page: currentPage,
-        show: VIEW_PAGE_SIZE,
+        ...(view?.select ? { cursor: urlParams.getAll("cursor").slice(-1)[0], limit: VIEW_PAGE_SIZE } : {
+          page: currentPage, show: VIEW_PAGE_SIZE,
+        }),
       }),
     enabled: !!view && canQuery,
   });
@@ -131,7 +133,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   const columns = viewColumns(view, rows);
   const rowActions = view.from ? runnableRowActions(view.rowActions, operationsQuery.data) : [];
   const viewTitle = resolveLocalizedText(view.title, language, canonical) ?? fieldLabel(view.name);
-  const exportHref = viewExportHref(name, urlParams);
+  const exportHref = viewExportHref(name, urlParams, !!view.select);
 
   return (
     <div className="space-y-6">
@@ -197,6 +199,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
             }
             next.delete("page");
             next.delete("show");
+            if (view.select) next.delete("cursor");
             navigate(viewHref(name, next));
           }}
         />
@@ -259,6 +262,8 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           query={urlParams}
           page={query.data.data.page}
           hasMore={query.data.data.hasMore}
+          nextCursor={query.data.data.nextCursor}
+          select={!!view.select}
           language={language}
         />
       ) : null}
@@ -271,17 +276,21 @@ function ViewPagination({
   query,
   page,
   hasMore,
+  nextCursor,
+  select,
   language,
 }: {
   name: string;
   query: URLSearchParams;
   page: number;
   hasMore: boolean;
+  nextCursor?: string;
+  select: boolean;
   language: AdminLanguage;
 }): React.ReactElement | null {
-  if (page <= 1 && !hasMore) return null;
-  const previousHref = page > 1 ? viewPageHref(name, query, page - 1) : undefined;
-  const nextHref = hasMore ? viewPageHref(name, query, page + 1) : undefined;
+  if (select ? !query.has("cursor") && !nextCursor : page <= 1 && !hasMore) return null;
+  const previousHref = select ? viewCursorHref(name, query, undefined) : page > 1 ? viewPageHref(name, query, page - 1) : undefined;
+  const nextHref = select ? nextCursor ? viewCursorHref(name, query, nextCursor) : undefined : hasMore ? viewPageHref(name, query, page + 1) : undefined;
   return (
     <Pagination className="mt-4 justify-end" aria-label={t(language, "collection.pagination")}>
       <PaginationContent>
@@ -346,6 +355,7 @@ function viewParamsHref(
   }
   next.delete("page");
   next.delete("show");
+  if (!Object.prototype.hasOwnProperty.call(schema.properties ?? {}, "cursor")) next.delete("cursor");
   return viewHref(name, next);
 }
 
@@ -357,10 +367,22 @@ function viewPageHref(name: string, query: URLSearchParams, page: number): strin
   return viewHref(name, next);
 }
 
-function viewExportHref(name: string, query: URLSearchParams): string {
+function viewCursorHref(name: string, query: URLSearchParams, nextCursor?: string): string | undefined {
+  const cursors = query.getAll("cursor");
+  if (!nextCursor && cursors.length === 0) return undefined;
+  const next = new URLSearchParams(query);
+  next.delete("cursor");
+  for (const cursor of nextCursor ? [...cursors, nextCursor] : cursors.slice(0, -1)) next.append("cursor", cursor);
+  next.delete("page");
+  next.delete("show");
+  return viewHref(name, next);
+}
+
+function viewExportHref(name: string, query: URLSearchParams, select: boolean): string {
   const next = new URLSearchParams(query);
   next.delete("page");
   next.delete("show");
+  if (select) next.delete("cursor");
   const suffix = next.toString();
   return `/admin/api/views/${encodeURIComponent(name)}/export${suffix ? `?${suffix}` : ""}`;
 }
