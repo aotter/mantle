@@ -905,7 +905,7 @@ function validateViewSelect(raw: unknown, idx: number, input: JsonSchema | undef
   }
   const order = query["orderBy"];
   if (order !== undefined && (typeof order !== "object" || order === null || Array.isArray(order) || Object.keys(order).length !== 1 || !Object.values(order).every((direction) => direction === "asc" || direction === "desc"))) {
-    throw new ManifestParseError("View.spec.select.orderBy must name one column and direction", idx, "/spec/select/orderBy");
+    throw new ManifestParseError("View.spec.select.orderBy must name one column and direction", idx, "/spec/select/orderBy", "VIEW_ORDERBY_INVALID");
   }
   if (query["limit"] !== undefined && (!Number.isSafeInteger(query["limit"]) || (query["limit"] as number) < 1 || (query["limit"] as number) > 500)) {
     throw new ManifestParseError("View.spec.select.limit must be 1–500", idx, "/spec/select/limit");

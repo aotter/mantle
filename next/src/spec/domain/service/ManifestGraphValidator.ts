@@ -399,18 +399,18 @@ function checkViewRefs(
       message: `View '${v.metadata.name}' cannot cache TTL Schema '${fromName}' past its expiry boundary.`,
     }));
   }
-  const status = select.where?.["status"];
-  if (v.spec.surface === "public" && isPublishing(schema) && status !== undefined && status !== "published"
-    && !(status && typeof status === "object" && (status as Record<string, unknown>)["eq"] === "published" && Object.keys(status).length === 1)) {
+  if (v.spec.surface === "public" && isPublishing(schema) && select.where) {
     // The runtime reads published rows only on this View (#1007); any other
-    // status comparison can only contradict it and return nothing.
-    out.push(validateDiagnostic({
-      code: "VIEW_PUBLIC_STATUS_INVALID", severity: "error",
-      path: manifestPath("View", v.metadata.name, "/spec/select/where/status", filePaths),
-      value: status,
-      expected: "status: published, or no status comparison",
-      message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}'; it always reads published rows only, so its status comparison must be 'published' or omitted.`,
-    }));
+    // status comparison, at any depth, can only contradict it.
+    for (const found of statusComparisons(select.where, "/spec/select/where")) {
+      out.push(validateDiagnostic({
+        code: "VIEW_PUBLIC_STATUS_INVALID", severity: "error",
+        path: manifestPath("View", v.metadata.name, found.pointer, filePaths),
+        value: found.value,
+        expected: "status: published, or no status comparison",
+        message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}'; it always reads published rows only, so its status comparison must be 'published' or omitted.`,
+      }));
+    }
   }
 
   const validFieldNames = columnsOf(schema);
@@ -441,12 +441,14 @@ function checkViewRefs(
       message: `Public View '${v.metadata.name}' must project its cursor fields.`,
     }));
   }
-  if (v.spec.cache && usesReference(select.where, "$now")) out.push(validateDiagnostic({
-    code: "VIEW_CACHE_INVALID", severity: "error",
-    path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
-    expected: "a caller and time independent View",
-    message: `View '${v.metadata.name}' uses $now and cannot have a shared cache.`,
-  }));
+  for (const reference of ["$now", "$ctx.user.id"] as const) {
+    if (v.spec.cache && usesReference(select.where, reference)) out.push(validateDiagnostic({
+      code: "VIEW_CACHE_INVALID", severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
+      expected: "a caller and time independent View",
+      message: `View '${v.metadata.name}' uses ${reference} and cannot have a shared cache.`,
+    }));
+  }
   for (const [i, field] of (select.columns ?? []).entries()) {
     if (!validFieldNames.has(field)) out.push(validateDiagnostic({
       code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
@@ -488,6 +490,24 @@ function checkViewRefs(
     message: `View '${v.metadata.name}' reads a scoped Schema or $ctx.user.id, so it must require ctx.user.`,
   }));
   return out;
+}
+
+/** `status` comparisons other than `published`, at any depth of a Store where. */
+function statusComparisons(where: StoreWhereSpec, pointer: string): Array<{ readonly pointer: string; readonly value: unknown }> {
+  const found: Array<{ readonly pointer: string; readonly value: unknown }> = [];
+  for (const [key, value] of Object.entries(where)) {
+    const at = `${pointer}/${key}`;
+    if (key === "and" || key === "or") {
+      (value as readonly StoreWhereSpec[]).forEach((child, index) => found.push(...statusComparisons(child, `${at}/${index}`)));
+    } else if (key === "not") {
+      found.push(...statusComparisons(value as StoreWhereSpec, at));
+    } else if (key === "status") {
+      const published = value === "published" || (value && typeof value === "object"
+        && Object.keys(value).length === 1 && (value as Record<string, unknown>)["eq"] === "published");
+      if (!published) found.push({ pointer: at, value });
+    }
+  }
+  return found;
 }
 
 function columnsOf(schema: SchemaManifest): Set<string> {
