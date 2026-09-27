@@ -1,4 +1,4 @@
-import type { SchemaManifest, StaffRole } from "@aotter/mantle-spec";
+import { DiagnosticError, runtimeDiagnostic, type SchemaManifest, type StaffRole } from "@aotter/mantle-spec";
 import { describe, expect, it, vi } from "vitest";
 import type { HandlerContext } from "../src/domain/model/HandlerContext.js";
 import type { Clock } from "../src/domain/port/Clock.js";
@@ -90,17 +90,21 @@ describe("InvokeCapabilityUseCase", () => {
 
   it("routes Procedures and Views and returns their failures as outcomes", async () => {
     const invokeTrigger = vi.fn(async () => ({ ok: false as const, diagnostic: { code: "CONFLICT" } as never }));
-    const executeView = vi.fn(async () => ({ ok: true as const, result: { rows: [], page: 2, show: 5, hasMore: false } }));
-    const { invoker } = harness({ surface: "public", invokeTrigger, executeView });
+    const view = vi.fn(async () => ({ rows: [], page: 2, show: 5, hasMore: false }));
+    const { invoker } = harness({ surface: "public", invokeTrigger, view });
     expect(await invoker.execute({ name: "echo", args: { msg: "m" }, ctx: anonymous(), path: "MCP echo" }))
       .toEqual({ ok: false, diagnostic: { code: "CONFLICT" } });
     expect(invokeTrigger).toHaveBeenCalledWith({ trigger: "echo-mcp", input: { msg: "m" }, ctx: anonymous(), pathPrefix: "MCP echo" });
     expect(await invoker.execute({ name: "query_view_recent_posts", args: { tag: "a", page: 2, show: 5 }, ctx: anonymous() }))
       .toMatchObject({ ok: true, data: { page: 2 } });
-    expect(executeView).toHaveBeenCalledWith(expect.objectContaining({
-      options: { params: { tag: "a" }, page: 2, show: 5 },
-      pathPrefix: "query_view_recent_posts",
-    }));
+    expect(view).toHaveBeenCalledWith("recent-posts", { params: { tag: "a" }, page: 2, show: 5, pathPrefix: "query_view_recent_posts" }, anonymous());
+  });
+
+  it("returns Store View denials as capability outcomes", async () => {
+    const diagnostic = runtimeDiagnostic({ code: "UNAUTHENTICATED", severity: "error", path: "manifest:View/recent-posts" });
+    const { invoker } = harness({ surface: "public", view: async () => { throw new DiagnosticError(diagnostic); } });
+    expect(await invoker.execute({ name: "query_view_recent_posts", args: {}, ctx: anonymous() }))
+      .toEqual({ ok: false, diagnostic });
   });
 
   it("drops own __proto__ keys instead of passing them on as data", async () => {
@@ -199,7 +203,7 @@ function harness(options: {
   readonly surface?: "staff" | "public";
   readonly media?: boolean;
   readonly invokeTrigger?: CapabilityUseCases["invokeTrigger"]["execute"];
-  readonly executeView?: NonNullable<CapabilityUseCases["executeView"]>["execute"];
+  readonly view?: CapabilityUseCases["view"];
 } = {}) {
   const store = new InMemoryEntryRepository();
   const all = schemas();
@@ -216,7 +220,7 @@ function harness(options: {
     archive: new ArchiveUseCase(store, byName, clock),
     deleteEntry: new DeleteEntryUseCase(store, byName),
     ...(options.invokeTrigger ? { invokeTrigger: { execute: options.invokeTrigger } } : {}),
-    ...(options.executeView ? { executeView: { execute: options.executeView } } : {}),
+    ...(options.view ? { view: options.view } : {}),
     ...(options.media ? { media: { createUpload: { execute: vi.fn() }, commitUpload: { execute: vi.fn() } } } : {}),
   } as CapabilityUseCases & { createDraft: CreateDraftUseCase; updateDraft: UpdateDraftUseCase };
   const surface = options.surface ?? "staff";

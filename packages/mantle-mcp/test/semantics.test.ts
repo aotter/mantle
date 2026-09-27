@@ -447,7 +447,7 @@ describe("McpJsonRpcDispatcher", () => {
           h.store,
           new Map([["posts", postsSchema()]]),
         ),
-        executeView: { execute: async () => ({ ok: true, result: { rows: [], page: 1, show: 20, hasMore: false } }) } as never,
+        view: async () => ({ rows: [], page: 1, show: 20, hasMore: false }),
       },
       [postsSchema()],
       {
@@ -1058,7 +1058,7 @@ describe("McpJsonRpcDispatcher", () => {
       {
         ...minimalUseCases(),
         invokeTrigger: triggerInvoker(procedure, invokeProcedure),
-        executeView: { execute: async () => ({ ok: true, result: { rows: [], page: 1, show: 20, hasMore: false } }) } as never,
+        view: async () => ({ rows: [], page: 1, show: 20, hasMore: false }),
       },
       [postsSchema()],
       {
@@ -1113,20 +1113,18 @@ describe("McpJsonRpcDispatcher", () => {
   it("Procedure-MCP trigger does not shadow public-surface View routing when names don't match (#281)", async () => {
     // Procedures are checked first on every surface, but a non-match
     // must fall through to the existing routing — View tool calls
-    // must still dispatch to executeView even when procedures are
+    // must still dispatch to Store View even when procedures are
     // configured on the dispatcher.
     const procedure = makeProcedure({ name: "restock-sku" });
     const executeViewCalls: Array<{ pathPrefix?: string }> = [];
-    const fakeExecuteView = {
-      execute: async (req: { pathPrefix?: string }) => {
-        executeViewCalls.push({ pathPrefix: req.pathPrefix });
-        return { ok: true, result: { rows: [], page: 1, show: 25, hasMore: false } };
-      },
-    } as unknown as McpUseCases["executeView"];
+    const fakeView: NonNullable<McpUseCases["view"]> = async (_name, options) => {
+      executeViewCalls.push({ pathPrefix: options.pathPrefix });
+      return { rows: [], page: 1, show: 25, hasMore: false };
+    };
     const dispatcher = new McpJsonRpcDispatcher(
       {
         ...minimalUseCases(),
-        executeView: fakeExecuteView,
+        view: fakeView,
         invokeTrigger: triggerInvoker(procedure, new InvokeProcedureUseCase(new InMemoryHandlerRegistry())),
       },
       [postsSchema()],
@@ -1144,7 +1142,7 @@ describe("McpJsonRpcDispatcher", () => {
       error?: unknown;
     };
     expect(body.error).toBeUndefined();
-    // executeView must have been invoked — proves the procedure-first
+    // Store View must have been invoked — proves the procedure-first
     // check correctly fell through instead of short-circuiting as
     // UNKNOWN_TOOL.
     expect(executeViewCalls).toHaveLength(1);
@@ -1256,7 +1254,7 @@ function translatedSchemas() {
 describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
   function auditedDispatcher(
     audit: { record: (event: unknown) => void | Promise<void> },
-    executeView: NonNullable<McpUseCases["executeView"]>["execute"],
+    storeView: NonNullable<McpUseCases["view"]>,
   ) {
     const store = new InMemoryEntryRepository();
     const schemas = new Map([["posts", postsSchema()]]);
@@ -1280,7 +1278,7 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
         unpublish: new UnpublishUseCase(store, schemas, { now: () => 0 }),
         archive: new ArchiveUseCase(store, schemas, { now: () => 0 }),
         deleteEntry: new DeleteEntryUseCase(store, schemas),
-        executeView: { execute: executeView },
+        view: storeView,
       },
       [postsSchema()],
       { surface: "public", capabilities: [viewCapability(correlatedView)], audit },
@@ -1293,9 +1291,10 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const audit = { record: async (event: unknown) => { await gate; events.push(event); } };
     let fail = false;
-    const dispatcher = auditedDispatcher(audit, async () => fail
-      ? { ok: false, diagnostic: runtimeDiagnostic({ code: "UNAUTHENTICATED", severity: "error", path: "view", message: "Sign in." }) }
-      : { ok: true, result: { items: [] } });
+    const dispatcher = auditedDispatcher(audit, async () => {
+      if (fail) throw new DiagnosticError(runtimeDiagnostic({ code: "UNAUTHENTICATED", severity: "error", path: "view", message: "Sign in." }));
+      return { rows: [], page: 1, show: 20, hasMore: false };
+    });
     const deferred: Promise<unknown>[] = [];
     const ctx: HandlerContext = { ...mcpContext("u1", null, { clientId: "claude" }), waitUntil: (p) => { deferred.push(p); } };
 
@@ -1325,7 +1324,7 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
   it("never turns a failing sink into a tool error", async () => {
     const dispatcher = auditedDispatcher(
       { record: () => { throw new Error("dataset down"); } },
-      async () => ({ ok: true, result: { items: [] } }),
+      async () => ({ rows: [], page: 1, show: 20, hasMore: false }),
     );
     const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: {} }), mcpContext());
     expect(res.status).toBe(200);
@@ -1334,7 +1333,7 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
 
   it("records probes for tools that do not exist", async () => {
     const events: unknown[] = [];
-    const dispatcher = auditedDispatcher({ record: (e) => { events.push(e); } }, async () => ({ ok: true, result: {} }));
+    const dispatcher = auditedDispatcher({ record: (e) => { events.push(e); } }, async () => ({ rows: [], page: 1, show: 20, hasMore: false }));
     const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "nope", arguments: { operationId: "probe-1" } }), mcpContext());
     expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32602);
     await new Promise((resolve) => setTimeout(resolve, 0));

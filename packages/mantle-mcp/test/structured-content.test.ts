@@ -58,7 +58,7 @@ function harness(procedureData: unknown, viewResult: unknown = { rows: [], page:
 function useCases(procedureData: unknown, viewResult: unknown = {}): McpUseCases {
   return {
     invokeTrigger: { execute: async () => ({ ok: true as const, data: procedureData }) },
-    executeView: { execute: async () => ({ ok: true as const, result: viewResult }) as never },
+    view: async () => viewResult as never,
   } as unknown as McpUseCases;
 }
 

@@ -1,10 +1,9 @@
 import { DiagnosticError, runtimeDiagnostic, type SchemaManifest } from "@aotter/mantle-spec";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
-import type { CallerStore, MantleStore, StoreWhere, StoreWriteOp, StoreWriteResult, ValidatedStoreWhere } from "../../domain/model/Store.js";
+import type { CallerStore, MantleStore, StoreViewOptions, StoreWhere, StoreWriteOp, StoreWriteResult, ValidatedStoreWhere } from "../../domain/model/Store.js";
 import type { SweepExpiredRequest, SweepExpiredResult } from "../../domain/port/ExpirySweeper.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
 import type { StoreReader } from "../../domain/port/StoreReader.js";
-import type { ViewQueryOptions } from "../../domain/port/ViewQueryExecutor.js";
 import type { AtomicDraftOperation, AtomicWriteOutcome } from "../content/AtomicEntryWriteUseCase.js";
 import type { ExecuteViewResponse } from "../view/ExecuteViewUseCase.js";
 import { scopeStoreWhere, validateStoreSelect, validateStoreWhere } from "./validateStoreQuery.js";
@@ -15,11 +14,7 @@ export interface StoreDependencies {
   readonly reader?: StoreReader;
   readonly write: (operations: readonly AtomicDraftOperation[]) => Promise<readonly AtomicWriteOutcome[]>;
   readonly sweepExpired: (request: SweepExpiredRequest) => Promise<SweepExpiredResult>;
-  readonly runView: (
-    name: string,
-    options: Pick<ViewQueryOptions, "params" | "page" | "show">,
-    ctx: HandlerContext | undefined,
-  ) => Promise<ExecuteViewResponse<unknown>>;
+  readonly runView: (name: string, options: StoreViewOptions, ctx: HandlerContext | undefined) => Promise<ExecuteViewResponse<unknown>>;
   readonly idgen: IdGenerator;
 }
 

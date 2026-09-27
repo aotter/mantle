@@ -242,10 +242,10 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     write: (operations) => atomicWrite.execute(operations),
     sweepExpired,
     idgen,
-    runView: (name, options, ctx) => {
+    runView: (name, { pathPrefix, ...options }, ctx) => {
       const view = viewsByName.get(name);
-      if (!view) return Promise.resolve(unknown("View", name, undefined));
-      return executeView.execute({ view, options, ctx });
+      if (!view) return Promise.resolve(unknown("View", name, pathPrefix));
+      return executeView.execute({ view, options, ctx, pathPrefix });
     },
   };
   const invokeProcedure = new InvokeProcedureUseCase(

@@ -1,5 +1,5 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { linkManifestSet, parseManifestSources } from "@aotter/mantle-spec";
+import { DiagnosticError, linkManifestSet, parseManifestSources } from "@aotter/mantle-spec";
 import {
   bindCapabilities,
   compileRuntimePlan,
@@ -103,7 +103,7 @@ describe("createMantleMcpHandler with the official client", () => {
         const diagnostic = { code: "CONFLICT", phase: "runtime", severity: "error", path: "MCP shaped", message: "Version moved." };
         const { client } = await connect(era, {
           invokeTrigger: async () => ({ ok: false, diagnostic }),
-          executeView: async () => ({ ok: false, diagnostic }),
+          view: async () => { throw new DiagnosticError(diagnostic as never); },
         });
         // Listing first caches each outputSchema, which is when clients
         // validate structured results.
@@ -256,7 +256,7 @@ describe("createMantleMcpHandler with the official client", () => {
 
 interface Fakes {
   readonly invokeTrigger?: (request: never) => Promise<unknown>;
-  readonly executeView?: (request: never) => Promise<unknown>;
+  readonly view?: () => Promise<unknown>;
 }
 
 function harness(fakes: Fakes, options: MantleMcpHandlerOptions = {}) {
@@ -271,7 +271,7 @@ function harness(fakes: Fakes, options: MantleMcpHandlerOptions = {}) {
     unpublish: unused,
     archive: unused,
     deleteEntry: unused,
-    executeView: fakes.executeView ?? (async () => ({ ok: true, result: { rows: [], page: 1, show: 20, hasMore: false } })),
+    store: { as: () => ({ view: fakes.view ?? (async () => ({ rows: [], page: 1, show: 20, hasMore: false })) }) },
     invokeTrigger: fakes.invokeTrigger ?? (async () => ({ ok: true, data: {} })),
     media: null,
   } as unknown as CapabilityRuntime;
