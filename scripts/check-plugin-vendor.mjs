@@ -96,8 +96,7 @@ function selfReport(file) {
 }
 
 if (!parseVersion(coreVersion)) failures.push(`packages/mantle version ${coreVersion} is not a release version`);
-for (const plugin of directories(join(repoRoot, "plugins"))) {
-  for (const skill of directories(join(plugin, "skills"))) {
+for (const skill of directories(join(repoRoot, "skills"))) {
     const scripts = join(skill, "scripts");
     const manifest = join(scripts, "VENDORED.json");
     const where = relative(repoRoot, manifest);
@@ -132,10 +131,9 @@ for (const plugin of directories(join(repoRoot, "plugins"))) {
     }
     for (const problem of problems) failures.push(`${where}: ${problem}`);
     checked.push(`${relative(repoRoot, file)} @ ${String(record?.commit).slice(0, 12)}, protocol ${record?.protocol}, Core ${record?.coreVersion}`);
-  }
 }
 
-if (checked.length === 0) failures.push("plugins/: no VENDORED.json found");
+if (checked.length === 0) failures.push("skills/: no VENDORED.json found");
 if (failures.length > 0) {
   console.error(`check-plugin-vendor: ${failures.length} problem(s)\n${failures.map((line) => `  ${line}`).join("\n")}`);
   process.exit(1);

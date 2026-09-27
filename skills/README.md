@@ -12,7 +12,7 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | [`update`](../docs/skills/update/SKILL.md) | `mantle:update`: Core-owned drift check workflow for SDK dependencies, local skills, and plugin lockfiles. |
 | [`mantle`](install/SKILL.md) | User wants to author a local Mantle application or continue an existing project. |
 | [`provision`](../docs/skills/provision/SKILL.md) | User wants a local project shipped to Cloudflare, ChatGPT Sites or Mantle Cloud, with production auth and operator handoff. |
-| [`mantle-host`](../plugins/mantle-host/skills/mantle-host/SKILL.md) | User picked the Mantle Cloud deploy target: link, save, deploy, rollback or status. Ships only in the `mantle-host` plugin. |
+| [`mantle-host`](mantle-host/SKILL.md) | User picked the Mantle Cloud deploy target: link, save, deploy, rollback or status. Ships in the root `mantle` plugin. |
 
 The skills target Mantle's v0.1 grammar. The installed package version, not
 duplicated skill prose, selects the exact runtime and embedded docs.
@@ -26,8 +26,8 @@ then only the section its selected path names. `scripts/check-skills.mjs`
 enforces the columns below.
 
 The one exception is `mantle-host`. It carries a vendored script,
-`scripts/mantle-host.mjs`, so it lives in its own plugin under
-`plugins/mantle-host/` instead of `docs/skills/`. The script is copied
+`scripts/mantle-host.mjs`, so it lives under the root plugin
+`skills/mantle-host/` instead of `docs/skills/`. The script is copied
 byte-exact from `aotter/mantle-home`. `scripts/VENDORED.json` beside it
 records the source commit, SHA-256, host protocol and the Core version the
 bundle is pinned to. `scripts/check-plugin-vendor.mjs` verifies the hash, runs
@@ -39,7 +39,7 @@ repository by a release: a Core release does not re-vendor. After Mantle Cloud
 moves to a new Core, mantle-home rebuilds the script and a normal PR here
 re-vendors it. The skill is not in the npm package, and `mantle skills` does
 not project it. `scripts/check-skills.mjs` covers every
-`plugins/*/skills/*/SKILL.md` with the same front-matter and audit-row rules,
+`skills/*/SKILL.md` with the same front-matter and audit-row rules,
 and it requires plugin skills to declare `projection: plugin` only.
 
 Claude Code updates an installed plugin only when its manifest version
@@ -58,7 +58,7 @@ default branch (`main`) and picks up a re-vendor when that branch does.
 | `update` | SDK upgrade or plugin lock review | never blindly overwrite user-owned code | — | project | — |
 | `mantle` | new application, or opening an existing project | do not use the SDK checkout as the application; no push/deploy/provider config during cold start | author local project; continue existing project | plugin | Creates a new project; nothing to project into an existing one. |
 | `provision` | ship to Cloudflare, ChatGPT Sites or Mantle Cloud and finish production auth | secrets never enter source or logs; explicit auth mode; one committed `.mantle/hosting.json` with no secrets | Choose the Target; Hosted Auth (legacy Landing); Self-hosted email OTP; Self-hosted GitHub OAuth | package | Platform-specific deploy that handles production secrets; opt-in only. |
-| `mantle-host` | user picked the Mantle Cloud target, or the project has `.mantle/hosting.json` | clean committed tree; grants on stdin only, never in files or logs; deploy is a separate reviewed step; run only printed commands; esbuild is a project devDependency | Verbs; Save, then deploy separately; Link file | plugin | Ships only in the mantle-host plugin with its vendored deploy script; Cloud deploy is opt-in. |
+| `mantle-host` | user picked the Mantle Cloud target, or the project has `.mantle/hosting.json` | clean committed tree; grants on stdin only, never in files or logs; deploy is a separate reviewed step; run only printed commands; esbuild is a project devDependency | Verbs; Save, then deploy separately; Link file | plugin | Ships only in the root plugin with its deploy script; Cloud deploy is opt-in. |
 | `media-gc` | audit or remove stale uncommitted media objects | audit by default; confirm exact account, bucket, cutoff, and candidate digest; re-audit before applying; never prefix-delete; never print keys | apply | package | Destructive remote object deletion and Cloudflare-specific; opt-in only. |
 
 Deliberately monolithic:
@@ -94,7 +94,7 @@ the npm package. `mantle skills` projects the four ongoing workflows after
 package installation.
 
 The `skills` CLI also reads `.claude-plugin/marketplace.json` and finds
-`plugins/mantle-host/skills/mantle-host`. That skill declares
+`skills/mantle-host`. That skill declares
 `metadata.internal: true`, so the no-flag command still installs only
 `mantle`. `--skill mantle-host` installs it:
 
@@ -139,19 +139,10 @@ These manifests are not duplicated into the npm package:
 - Cursor: `.cursor-plugin/plugin.json`.
 - VS Code + GitHub Copilot: `.copilot-plugin/plugin.json`.
 
-Both marketplaces also list `mantle-host`, whose own manifests are
-`plugins/mantle-host/.claude-plugin/plugin.json` and
-`plugins/mantle-host/.codex-plugin/plugin.json`:
-
-```bash
-/plugin install mantle-host@mantle
-codex plugin add mantle-host@mantle
-```
-
-Cursor and Copilot read a single root `plugin.json` here, and this repository
-has no multi-plugin manifest for them. They use the `--skill mantle-host`
-fallback above. `scripts/sync-plugin-manifests.mjs` generates every manifest
-listed here.
+The root `mantle` plugin includes `skills/mantle-host/`. Claude Code,
+Codex, Cursor and Copilot use their existing root manifests; no second
+plugin install or host-specific fallback is needed. The generated manifests
+are checked with `scripts/sync-plugin-manifests.mjs --check`.
 
 ## Audience
 

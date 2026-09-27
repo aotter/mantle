@@ -3,10 +3,10 @@ name: mantle-host
 description: Link, save, deploy, roll back and check a Mantle app on Mantle Cloud with the bundled mantle-host script. Use when the user picks the mantle-cloud deploy target, or asks for the deploy status of a project that has .mantle/hosting.json. Cloudflare and ChatGPT Sites targets only get their native step printed.
 metadata:
   source: aotter/mantle
-  sourcePath: plugins/mantle-host/skills/mantle-host/SKILL.md
+  sourcePath: skills/mantle-host/SKILL.md
   applies_to: mantle-host protocol 1
   projection: plugin
-  projectionReason: Ships only in the mantle-host plugin with its vendored deploy script; Cloud deploy is opt-in.
+  projectionReason: Ships only in the root plugin with its deploy script; Cloud deploy is opt-in.
   internal: true
 ---
 
@@ -158,7 +158,7 @@ gitignored and never holds a grant.
 | `source_archive_secret_path` | A secret-named file is committed. | Untrack it, or pass `--omit <path>` so the deployer sees the omission. |
 | `link_file_invalid` with a JSON pointer | The link file has an unknown key, a secret or an endpoint. | Remove the key the pointer names. Never add origins. |
 | `grant_inline_refused` | A grant was passed as an argument. | Pipe the tool result to `--grant -`. |
-| `client_outdated` or `cli_core_mismatch` | The Cloud requires a newer protocol or another Mantle Core. | Update the `mantle-host` plugin, or re-run `npx skills add aotter/mantle --skill mantle-host`. Do not patch the script. |
+| `client_outdated` or `cli_core_mismatch` | The Cloud requires a newer protocol or another Mantle Core. | Update the `mantle` plugin, or re-run `npx skills add aotter/mantle --skill mantle-host`. Do not patch the script. |
 | Version conflict | Someone else changed the project. | Re-read `member-project`. Do not overwrite their change. |
 
 ## Don't

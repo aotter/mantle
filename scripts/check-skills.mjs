@@ -33,23 +33,23 @@ const directories = (path) => existsSync(path)
   ? readdirSync(path, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
   : [];
 
-// Package skills ship in the npm package; plugin skills ship only in their own
-// plugin under plugins/<plugin>/skills/, together with any files beside them.
+// Package skills ship in the npm package; plugin skills ship under skills/.
 const sources = new Map([
   ["mantle", "skills/install/SKILL.md"],
-  ...directories(skillsRoot).map((skill) => [skill, `docs/skills/${skill}/SKILL.md`]),
+  ...directories(join(repoRoot, "skills")).filter((skill) => skill !== "install")
+    .map((skill) => [skill, `skills/${skill}/SKILL.md`]),
 ]);
-const pluginSkills = new Set();
-for (const plugin of directories(join(repoRoot, "plugins"))) {
-  for (const skill of directories(join(repoRoot, "plugins", plugin, "skills"))) {
-    const where = `plugins/${plugin}/skills/${skill}/SKILL.md`;
-    // `mantle skills` projects docs skill X as mantle-X, so that name is taken too.
-    const projectedAs = skill.startsWith("mantle-") ? skill.slice("mantle-".length) : null;
-    if (sources.has(skill)) fail(where, `skill name ${skill} is already shipped by ${sources.get(skill)}`);
-    else if (projectedAs && sources.has(projectedAs) && projectedAs !== "mantle") {
-      fail(where, `skill name ${skill} collides with ${sources.get(projectedAs)}, which mantle skills projects as ${skill}`);
-    } else sources.set(skill, where);
-    pluginSkills.add(skill);
+for (const skill of directories(skillsRoot)) {
+  const where = `docs/skills/${skill}/SKILL.md`;
+  if (sources.has(skill)) fail(where, `skill name ${skill} is already shipped by ${sources.get(skill)}`);
+  else sources.set(skill, where);
+}
+const pluginSkills = new Set(["mantle", ...directories(join(repoRoot, "skills")).filter((skill) => skill !== "install")]);
+for (const skill of pluginSkills) {
+  if (skill === "mantle") continue;
+  const projectedAs = skill.startsWith("mantle-") ? skill.slice("mantle-".length) : null;
+  if (projectedAs && sources.has(projectedAs)) {
+    fail(sources.get(skill), `skill name ${skill} collides with ${sources.get(projectedAs)}, which mantle skills projects as ${skill}`);
   }
 }
 const skills = [...sources.keys()].sort();
@@ -90,7 +90,7 @@ for (const skill of skills) {
     if (pluginSkills.has(skill) && scopes.join() !== "plugin") fail(where, "a plugin skill declares projection `plugin` only");
     // The skills CLI hides internal skills from `npx skills add aotter/mantle`,
     // which must keep installing only the bootstrap skill; `--skill <name>` still works.
-    if (pluginSkills.has(skill) && front("internal") !== "true") fail(where, "a plugin skill declares metadata.internal: true");
+    if (skill !== "mantle" && pluginSkills.has(skill) && front("internal") !== "true") fail(where, "a plugin skill declares metadata.internal: true");
     if (scopes.includes("project")) projected.push(skill);
     // A skill kept out of generated projects is a safety decision; make it explain itself.
     else if (!front("projectionReason")) fail(where, "projection excludes `project` but no projectionReason is given");

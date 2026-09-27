@@ -2,7 +2,7 @@
 
 Use for explicit version bumps, publication, tagging and release recovery.
 Read fully before acting: docs/release-process.md, .github/release.yml,
-root/workspace package.json files, all six plugin manifests, marketplace
+root/workspace package.json files, all four plugin manifests, marketplace
 manifests and .github/workflows/release.yml. Workflow edits require the Draft
 PR state table in the release process before editing code.
 

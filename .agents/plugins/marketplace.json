@@ -15,18 +15,6 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Developer Tools"
-    },
-    {
-      "name": "mantle-host",
-      "source": {
-        "source": "local",
-        "path": "./plugins/mantle-host"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Developer Tools"
     }
   ]
 }
