@@ -146,7 +146,7 @@ become a runtime port. The Cloudflare reference is
 Minimum HTTP behavior for a full adapter:
 
 - Route manifest HTTP Triggers to `runtime.invokeProcedure`.
-- Route `GET /api/views/<name>` to `runtime.executeView`.
+- Route `GET /api/views/<name>` to `runtime.store.as(ctx).view`.
 - Mount admin content APIs with session/role checks before calling runtime content use cases.
 - Serve selected Admin SPA assets through `AdminAssetServer`, with an SPA catchall for client-side routes.
 - Mount public render routes and markdown mirrors when the application exposes public pages.

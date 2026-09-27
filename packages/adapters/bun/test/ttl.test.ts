@@ -63,8 +63,8 @@ test("Bun TTL hides expired rows before an explicit bounded, resumable sweep", a
   expect((await runtime.listEntries.execute({ collection: "events" })).map((row) => row.data.label).sort())
     .toEqual(["future", "missing", "null"]);
   expect(await runtime.entries.readById({ collection: "events", id: rows[0]!.id })).toBeNull();
-  const view = await runtime.executeView({ view: "current-events" });
-  expect(view.ok && view.result.rows.map((row) => row.label).sort()).toEqual(["future", "missing", "null"]);
+  const view = await runtime.store.view("current-events");
+  expect(view.rows.map((row) => row.label).sort()).toEqual(["future", "missing", "null"]);
   const callerSweep = await runtime.invokeProcedure({ procedure: "sweep-events", input: {}, ctx: { user: null, staff: null, env: {} } });
   expect(callerSweep).toMatchObject({ ok: true, data: { available: false } });
   expect(await runtime.store.sweepExpired({ collection: "events", limit: 1 })).toMatchObject({ scanned: 1, removed: 0 });

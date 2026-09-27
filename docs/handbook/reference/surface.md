@@ -152,7 +152,7 @@ await runtime.invokeProcedure({ procedure: "expire-order", input: { orderId }, c
 
 The Store map preserves authored names and types. Runtime validates actual
 inputs and performs authorization. For caller-authenticated Views, use
-`runtime.executeView({ view, ctx, options })` with the verified context.
+`runtime.store.as(ctx).view(view, options)` with the verified context.
 
 
 ## Packages

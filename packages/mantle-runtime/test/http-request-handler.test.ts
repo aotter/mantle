@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { linkManifestSet, parseManifestSources, type Manifest } from "@aotter/mantle-spec";
+import { DiagnosticError, linkManifestSet, parseManifestSources, runtimeDiagnostic, type Manifest } from "@aotter/mantle-spec";
 import type { MantleRuntime } from "../src/MantleRuntime.js";
 import { compileRuntimePlan } from "../src/domain/service/RuntimePlanCompiler.js";
 import * as paths from "../src/domain/service/PathMatcher.js";
@@ -7,14 +7,14 @@ import { createMantleRequestHandler } from "../src/infrastructure/http/createMan
 
 afterEach(() => vi.restoreAllMocks());
 
-function fixture(routePaths: readonly string[]) {
+function fixture(routePaths: readonly string[], extra: readonly Manifest[] = []) {
   const apiVersion = "cms.mantle.aotter.net/v1" as const;
   const manifests: Manifest[] = [{ apiVersion, kind: "Procedure", metadata: { name: "echo" },
     spec: { input: { type: "object" }, output: { type: "object" }, handler: { kind: "ref", ref: "echo" } },
   }, ...routePaths.map((path, index): Manifest => ({
     apiVersion, kind: "Trigger", metadata: { name: `route-${index}` },
     spec: { source: { kind: "http", method: "POST", path }, target: { procedure: "echo" } },
-  }))];
+  })), ...extra];
   const parsed = parseManifestSources({ sources: manifests.map((value, index) => ({ sourceId: `memory:${index}`, text: JSON.stringify(value) })) });
   if (!parsed.ok) throw new Error(JSON.stringify(parsed.diagnostics));
   const linked = linkManifestSet(parsed.value);
@@ -30,6 +30,21 @@ const request = (path: string, method = "POST") => new Request(`https://site.tes
 });
 
 describe("portable indexed Trigger transport", () => {
+  it("maps rejected Store Views to HTTP diagnostics", async () => {
+    const apiVersion = "cms.mantle.aotter.net/v1" as const;
+    const options = fixture([], [
+      { apiVersion, kind: "Schema", metadata: { name: "posts" }, spec: { title: "Posts", schema: { type: "object", properties: { title: { type: "string" } } } } },
+      { apiVersion, kind: "View", metadata: { name: "secure-posts" }, spec: { surface: "public", from: "posts" } },
+    ]);
+    const handle = createMantleRequestHandler({
+      ...options,
+      getRuntime: async () => ({ store: { as: () => ({ view: async () => { throw new DiagnosticError(runtimeDiagnostic({ code: "UNAUTHENTICATED", severity: "error", path: "GET /api/views/secure-posts" })); } }) } }) as unknown as MantleRuntime,
+    });
+    const response = await handle(request("/api/views/secure-posts", "GET"));
+    expect(response?.status).toBe(401);
+    expect(await response?.json()).toMatchObject({ diagnostic: { code: "UNAUTHENTICATED", path: "GET /api/views/secure-posts" } });
+  });
+
   it("rejects oversized JSON before a Trigger can run", async () => {
     const options = fixture(["/api/items"]);
     const handle = createMantleRequestHandler(options);
