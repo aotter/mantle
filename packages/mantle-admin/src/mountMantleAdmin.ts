@@ -2176,18 +2176,22 @@ async function handleViewRequest(
     throw err;
   }
 
-  const execute = (requestedPage: number | undefined) => runtime.executeView({
-    view: view.metadata.name,
-    pathPrefix: viewPath,
-    options: {
-      params,
-      page: requestedPage,
-      show: exportCsv ? view.spec.limit : show,
-      search: listQuery.search,
-      filters: listQuery.filters,
-    },
-    ctx,
-  });
+  const execute = async (requestedPage: number | undefined) => {
+    try {
+      const result = await runtime.store.as(ctx).view(view.metadata.name, {
+        params,
+        page: requestedPage,
+        show: exportCsv ? view.spec.limit : show,
+        search: listQuery.search,
+        filters: listQuery.filters,
+        pathPrefix: viewPath,
+      });
+      return { ok: true as const, result };
+    } catch (error) {
+      if (error instanceof DiagnosticError) return { ok: false as const, diagnostic: error.diagnostic };
+      throw error;
+    }
+  };
 
   if (exportCsv) {
     const result = await execute(1);

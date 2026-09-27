@@ -91,8 +91,8 @@ Check the runtime revision before asserting generated types on a host-owned
 runtime. Booting directly with the generated `plan` provides the same match.
 Required params are checked by TypeScript and Runtime validates the values.
 `show` remains capped by the View's `limit`. A View with `requires` still
-needs a verified caller context; invoke it through `runtime.executeView({
-view, ctx, options })` until the Store caller-binding grammar lands.
+needs a verified caller context; invoke it through
+`runtime.store.as(ctx).view(view, options)`.
 
 To boot from generated code, pass its `plan` and typed `MantleHandlers` to
 `bootMantleRuntime({ plan, storage, handlers, ports })`. Host code owns
@@ -105,7 +105,7 @@ connection lifetime and retries.
 | Declarative View | `Mantle.ViewParams_<name>` and `Mantle.ViewRow_<name>` | Projection follows `fields`; native columns have their native types. Data properties remain optional in the row type. |
 | SQL View | Typed params; row type `unknown` | The generator does not infer SQL expressions or aliases. Narrow/validate rows in host code. |
 | Store select/write | `Store`, `Schemas` | Schema wire names and insert/update values are typed; Runtime still validates Store queries. |
-| Dynamic Runtime call | `runtime.executeView({ view, ctx, options })` | Useful without codegen; supplying a generic row type is the caller's assertion, not SQL validation. |
+| Dynamic Runtime call | `runtime.store.as(ctx).view(view, options)` | Useful without codegen; supplying a generic row type is the caller's assertion, not SQL validation. |
 
 Without `fields`, a declarative View includes native entry columns and Schema
 properties. Use explicit projections on exposed reads. Public declarative

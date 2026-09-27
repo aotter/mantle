@@ -58,7 +58,7 @@ export function createMantleRequestHandler(
 
     try {
       const runtime = await options.getRuntime();
-      if (view) return handleView(request, runtime, view.name, view.manifest, context, options);
+      if (view) return await handleView(request, runtime, view.name, view.manifest, context, options);
       return handleTrigger(
         request,
         runtime,
@@ -140,23 +140,18 @@ async function handleView(
       message: error.message,
     }), 400);
   }
-  const result = await runtime.executeView({
-    view,
-    options: {
-      params,
-      page: positiveNumber(search.get(PAGE_PARAM)),
-      show: positiveNumber(search.get(SHOW_PARAM)),
-    },
-    ctx: context,
+  const result = await runtime.store.as(context).view(view, {
+    params,
+    page: positiveNumber(search.get(PAGE_PARAM)),
+    show: positiveNumber(search.get(SHOW_PARAM)),
     pathPrefix,
   });
-  if (!result.ok) return diagnosticResponse(result.diagnostic);
   const cache = manifest.spec.cache;
   const shared = cache
     && options.allowSharedViewCache === true
     && request.headers.get("cookie") === null
     && request.headers.get("authorization") === null;
-  return Response.json({ ok: true, data: result.result }, shared ? {
+  return Response.json({ ok: true, data: result }, shared ? {
     headers: {
       "cache-control": `public, max-age=0, s-maxage=${cache.sharedMaxAge}`,
       ...(options.publicCacheTag ? { "cache-tag": options.publicCacheTag } : {}),

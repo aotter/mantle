@@ -210,7 +210,7 @@ Admin applies search and filters before pagination, rejecting a search term or f
 
 For a complete generated Store type-map example, see [Typed queries](../guides/typed-queries.md).
 
-An `internal` View remains in the compiled plan for host code to call through `MantleRuntime.executeView`. It is an exposure policy, not an authorization bypass: `requires` and guards still evaluate against the `ctx` supplied by the host. Shared HTTP caching is invalid because no adapter owns an HTTP response for the View.
+An `internal` View remains in the compiled plan for host code to call through `runtime.store.as(ctx).view()`. It is an exposure policy, not an authorization bypass: `requires` and guards still evaluate against the verified caller context. Shared HTTP caching is invalid because no adapter owns an HTTP response for the View.
 
 A `public` declarative View over a `publishing` Schema reads **published rows only**, on every transport. The runtime adds `status = published` to the compiled query whether or not the filter spells it out; writing it is allowed and redundant, and comparing `status` to any other value is rejected at validate time (`VIEW_PUBLIC_STATUS_INVALID`). Staff Views see every status. `operational` Schemas create rows as `published`, so nothing is added. SQL Views (`spec.sql`) are the author's own statement and receive no injected predicate. Decision record: ADR-0025.
 

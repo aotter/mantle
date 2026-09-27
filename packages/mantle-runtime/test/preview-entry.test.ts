@@ -47,7 +47,7 @@ function runtime(): CapabilityRuntime {
     schemas: new Map(Object.values(plan.schemas).map(({ manifest }) => [manifest.metadata.name, manifest])),
     getEntry: unused, createDraft: unused, updateDraft: unused, requestPublish: unused,
     unpublish: unused, archive: unused, deleteEntry: unused,
-    executeView: vi.fn(), invokeTrigger: vi.fn(), media: null,
+    store: { as: () => ({ view: vi.fn() }) }, invokeTrigger: vi.fn(), media: null,
   } as unknown as CapabilityRuntime;
 }
 

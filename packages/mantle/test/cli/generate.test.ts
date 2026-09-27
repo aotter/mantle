@@ -146,6 +146,7 @@ const handler: MantleHandlers["syncCatalog"] = (_input, ctx) => {
 };
 void handler;
 if (false) {
+  await store.view("products-by-sku", { params: { sku: "sku-1" }, search: { term: "Typed", fields: ["title"] }, filters: [{ field: "title", value: "Typed" }] });
   // @ts-expect-error Unknown Schema wire names are rejected.
   await store.select({ from: "missing" });
   // @ts-expect-error Required View params cannot be omitted.

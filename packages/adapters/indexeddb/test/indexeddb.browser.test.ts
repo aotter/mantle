@@ -42,30 +42,21 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
       authorId: null,
     });
 
-    await expect(runtime.executeView<{ id: string; title: string }>({
-      view: "ranked-posts",
-      options: { params: { locale: "en" }, show: 1 },
-      ctx: anonymous,
+    await expect(runtime.store.as(anonymous).view<{ id: string; title: string }>("ranked-posts", {
+      params: { locale: "en" },
+      show: 1,
     })).resolves.toMatchObject({
-      ok: true,
-      result: {
-        rows: [{ id: "post-1", title: "Tea" }],
-        page: 1,
-        show: 1,
-        hasMore: true,
-      },
+      rows: [{ id: "post-1", title: "Tea" }],
+      page: 1,
+      show: 1,
+      hasMore: true,
     });
-    await expect(runtime.executeView<{ title: string }>({
-      view: "ranked-posts",
-      options: {
-        params: { locale: "en" },
-        search: { term: "cake", fields: ["title"] },
-        filters: [{ field: "locale", value: "en" }],
-      },
-      ctx: anonymous,
+    await expect(runtime.store.as(anonymous).view<{ title: string }>("ranked-posts", {
+      params: { locale: "en" },
+      search: { term: "cake", fields: ["title"] },
+      filters: [{ field: "locale", value: "en" }],
     })).resolves.toMatchObject({
-      ok: true,
-      result: { rows: [{ title: "Cake" }] },
+      rows: [{ title: "Cake" }],
     });
     await expect(runtime.invokeTrigger<{ echoed: string }>({
       trigger: "echo-mcp",

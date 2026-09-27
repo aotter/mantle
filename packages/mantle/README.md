@@ -104,7 +104,7 @@ await runtime.invokeProcedure({
 Generated type maps use the authored wire names. The generated module has no
 per-Schema or per-View runtime wrappers; the host owns boot, caching and retry.
 For a caller-authenticated View, pass the verified context through
-`runtime.executeView({ view, ctx, options })`.
+`runtime.store.as(ctx).view(view, options)`.
 
 Start with [Project layout and CLI](docs/handbook/start/project-and-cli.md).
 The [local Admin OTP](docs/handbook/start/quickstart-admin.md) tutorial remains

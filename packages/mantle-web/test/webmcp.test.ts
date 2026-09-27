@@ -147,11 +147,12 @@ describe("bindWebMcp", () => {
   it("resolves the current local Runtime for View and Trigger invocation", async () => {
     const tools: WebMcpTool[] = [];
     const first = {
-      executeView: vi.fn(),
+      store: { as: () => ({ view: vi.fn() }) },
       invokeTrigger: vi.fn(async () => ({ ok: true, data: "first-trigger" })),
     };
+    const view = vi.fn(async () => "second-view");
     const second = {
-      executeView: vi.fn(async () => ({ ok: true, result: "second-view" })),
+      store: { as: () => ({ view }) },
       invokeTrigger: vi.fn(),
     };
     let current = first;
@@ -168,13 +169,7 @@ describe("bindWebMcp", () => {
           if (!result?.ok) throw new Error("Trigger failed");
           return result.data;
         }
-        const result = await runtime.executeView({
-          view: capability.ownerName,
-          options: { params: input },
-          ctx: {},
-        });
-        if (!result?.ok) throw new Error("View failed");
-        return result.result;
+        return runtime.store.as({}).view(capability.ownerName, { params: input });
       },
       modelContext: { registerTool: (tool) => tools.push(tool) },
     });
@@ -185,9 +180,7 @@ describe("bindWebMcp", () => {
     expect(first.invokeTrigger).toHaveBeenCalledWith(expect.objectContaining({
       trigger: "inspect-companion-mcp",
     }));
-    expect(second.executeView).toHaveBeenCalledWith(expect.objectContaining({
-      view: "recent-posts",
-    }));
+    expect(view).toHaveBeenCalledWith("recent-posts", { params: { locale: "en" } });
   });
 
   it("preserves invocation failures even when the observational after hook rejects", async () => {
