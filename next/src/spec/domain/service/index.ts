@@ -17,3 +17,4 @@ export * from "./SiteDefaultsValidator.js";
 export * from "./JsonSchemaToZod.js";
 export * from "./StaffRoleHierarchy.js";
 export * from "./McpToolNaming.js";
+export * from "./StoreProgram.js";

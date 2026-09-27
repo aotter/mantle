@@ -84,6 +84,26 @@ The rewrite is built in `next/`, a private package beside the shipped ones (see 
 - **Schedule Triggers** take a five-field POSIX cron in UTC (weekday 0 = Sunday). The plan no longer carries a required host. A service that wires schedules passes `schedules: true` to `createMantle`, and boot fails for any enabled schedule without it. `toCloudflareCron` in `@aotter/mantle/cloudflare` translates an expression for Wrangler.
 - **Webhooks.** An HTTP Trigger does not receive the raw request body in 0.2.0. The service owns its HTTP entry (decision 6), so it verifies a signature there and calls `runtime.invokeProcedure`. A raw-body Trigger key is additive and can come later.
 
+- **Diagnostic codes.** The grammar change renames and adds these codes; the v1 codes listed as removed disappear with their constructs.
+
+  | v2 code | Replaces | Raised when |
+  |---|---|---|
+  | `VIEW_INPUT_INVALID_SHAPE` | `VIEW_PARAMS_INVALID_SHAPE` | View `input` is not an object schema with properties |
+  | `VIEW_INPUT_RESERVED_NAME` | `VIEW_PARAMS_RESERVED_NAME` | `input` declares `limit` or `cursor` |
+  | `STORE_REFERENCE_UNKNOWN` | `VIEW_FILTER_PARAM_REF_UNKNOWN` | a value reference names no declared scalar input |
+  | `STORE_REFERENCE_NOT_REQUIRED` | `VIEW_FILTER_PARAM_REF_NOT_REQUIRED` | a predicate reference names an optional input |
+  | `STORE_CALLER_REQUIRED` | `VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH` | a View or program reads or writes a scoped Schema, or uses `$ctx.user.id`, without requiring `ctx.user` |
+  | `STORE_PROGRAM_INVALID` | `BUILTIN_HANDLER_CONTRACT_INVALID` | an inline program contradicts its Schema, input or MCP hints |
+  | `STORE_PROGRAM_SCHEMA_UNKNOWN` | `BUILTIN_HANDLER_SCHEMA_UNKNOWN` | an op names no declared Schema |
+  | `STORE_PROGRAM_OUTPUT_INVALID` | (new) | the output schema does not accept `{ results }` |
+  | `STORE_SET_OP_REJECTED` | (new) | a set op targets a publishing Schema or one with per-row hooks for that operation |
+  | `GUARD_PROCEDURE_NOT_REF` | `GUARD_PROCEDURE_BUILTIN` | a guard Procedure runs a Store program |
+  | `LIFECYCLE_TARGET_NOT_REF` | (new) | a lifecycle Trigger targets a Store program |
+  | `VIEW_SQL_SCOPED_SCHEMA` | (new) | native SQL reads a scoped Schema |
+  | `HANDLER_NOT_DECLARED` | (new) | a handler the plan does not declare (decision 7) |
+
+  Removed with the Filter AST: `VIEW_FILTER_FIELD_NOT_IN_SCHEMA` (now `VIEW_FIELD_NOT_IN_SCHEMA`), `VIEW_FILTER_CTX_USER_REF_INVALID`, `VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX`. `Diagnostic` gains `conflict` (decision 1).
+
 ### 6. The portable unit is an application-owned service
 
 ```ts

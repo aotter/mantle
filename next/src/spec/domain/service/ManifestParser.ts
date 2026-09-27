@@ -1341,6 +1341,15 @@ function escapeJsonPointerSegment(value: string): string {
 }
 
 function validateHandlerBinding(h: Record<string, unknown>, idx: number, input: JsonSchema): void {
+  if ("kind" in h) {
+    throw new ManifestParseError(
+      "Procedure.spec.handler.kind is not v2 grammar; a handler is { ref } or { store }",
+      idx,
+      "/spec/handler/kind",
+      "INVALID_MANIFEST_ENVELOPE",
+      { value: h["kind"], suggestion: "v1 `kind: ref | builtin` handlers are gone; run the mantle-update skill." },
+    );
+  }
   const hasRef = "ref" in h;
   const hasStore = "store" in h;
   if (Number(hasRef) + Number(hasStore) !== 1) {
@@ -1348,8 +1357,6 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number, input: 
       "Procedure.spec.handler must be exactly one of { ref } or { store }",
       idx,
       "/spec/handler",
-      "INVALID_MANIFEST_ENVELOPE",
-      "kind" in h ? { suggestion: "v1 `kind: ref | builtin` handlers are gone; run the mantle-update skill." } : undefined,
     );
   }
   if (hasRef) {
