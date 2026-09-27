@@ -25,15 +25,15 @@ kind: View
 metadata: { name: posts-by-locale }
 spec:
   surface: public
-  from: posts
   cache: { sharedMaxAge: 300 }
-  params:
+  input:
     type: object
     properties:
       locale: { type: string }
     required: [locale]
-  filter:
-    eq: { field: language, value: { $param: locale } }
+  select:
+    from: posts
+    where: { language: $input.locale }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -101,7 +101,8 @@ spec:
       restPath: "/api/views/posts-by-locale",
       cache: { sharedMaxAge: 300 },
     });
-    expect(out.views[0]!.params?.required).toEqual(["locale"]);
+    expect(out.views[0]!.input?.required).toEqual(["locale"]);
+    expect(out.views[0]!.select).toEqual({ from: "posts", where: { language: "$input.locale" } });
     expect(out.procedures).toHaveLength(1);
     expect(out.procedures[0]!.auth?.all).toEqual(["ctx.user"]);
     expect(out.triggers).toHaveLength(1);
@@ -208,7 +209,7 @@ spec:
     expect(paths["/api/contact"]!.post!["security"]).toEqual([{ sessionCookie: [] }]);
   });
 
-  it("View operation includes reserved page/show + declared params as query parameters", () => {
+  it("View operation includes reserved limit/cursor + declared input as query parameters", () => {
     const { document } = EmitOpenapiUseCase.run({
       linked: fixture(),
       title: "Test",
@@ -217,7 +218,7 @@ spec:
     const paths = document["paths"] as Record<string, Record<string, Record<string, unknown>>>;
     const params = paths["/api/views/posts-by-locale"]!.get!["parameters"] as Array<{ name: string; required?: boolean }>;
     const names = params.map((p) => p.name);
-    expect(names).toEqual(["page", "show", "locale"]);
+    expect(names).toEqual(["limit", "cursor", "locale"]);
     expect(params.find((p) => p.name === "locale")?.required).toBe(true);
   });
 
@@ -234,7 +235,7 @@ kind: View
 metadata: { name: privatePosts }
 spec:
   surface: public
-  from: posts
+  select: { from: posts }
   requires:
     auth:
       all: [ctx.user]
@@ -276,7 +277,7 @@ kind: View
 metadata: { name: localPrivate }
 spec:
   surface: public
-  from: posts
+  select: { from: posts }
   requires: { auth: { all: [ctx.user] } }
 `);
     const { document } = EmitOpenapiUseCase.run({
@@ -409,7 +410,7 @@ spec:
     expect(requestSchema.properties.name.description).toBe("Contact name.");
   });
 
-  it("collapses a LocalizedText property `description` on View params to a plain string (#453)", () => {
+  it("collapses a LocalizedText property `description` on View input to a plain string (#453)", () => {
     const localized = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
@@ -423,14 +424,14 @@ kind: View
 metadata: { name: posts-by-locale }
 spec:
   surface: public
-  from: posts
-  params:
+  input:
     type: object
     properties:
       locale: { type: string, description: { en: "Locale filter.", "zh-TW": "語系篩選。" } }
     required: [locale]
-  filter:
-    eq: { field: language, value: { $param: locale } }
+  select:
+    from: posts
+    where: { language: $input.locale }
 `);
     expect(localized.diagnostics).toEqual([]);
     const { document } = EmitOpenapiUseCase.run({
@@ -448,14 +449,14 @@ spec:
 });
 
 describe("EmitTypesUseCase", () => {
-  it("emits Entry / ProcInput / ProcOutput / ViewParams / ViewRow interfaces", () => {
+  it("emits Entry / ProcInput / ProcOutput / ViewInput / ViewRow interfaces", () => {
     const { source } = EmitTypesUseCase.run({ linked: fixture(), namespace: "Test" });
     expect(source).toContain("export namespace Test {");
     expect(source).toContain("export interface Entry_posts");
     expect(source).toContain("export interface ProcInput_submitContact");
     expect(source).toContain("export interface ProcOutput_submitContact");
-    expect(source).toContain("export type ViewParams_posts_u002d_by_u002d_locale");
-    expect(source).toMatch(/ViewParams_posts_u002d_by_u002d_locale[^}]+locale: string;/s);
+    expect(source).toContain("export type ViewInput_posts_u002d_by_u002d_locale");
+    expect(source).toMatch(/ViewInput_posts_u002d_by_u002d_locale[^}]+locale: string;/s);
     expect(source).toContain("export interface ViewRow_posts_u002d_by_u002d_locale");
     // Required field is non-optional, optional field has `?`
     expect(source).toMatch(/slug: string;\n\s+title\?: string;/);

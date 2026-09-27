@@ -34,14 +34,14 @@ kind: View
 metadata: { name: posts-by-locale }
 spec:
   surface: public
-  from: posts
-  params:
+  input:
     type: object
     properties:
       locale: { type: string }
     required: [locale]
-  filter:
-    eq: { field: locale, value: { $param: locale } }
+  select:
+    from: posts
+    where: { locale: $input.locale }
 `;
 
 const PROC_YAML = `apiVersion: cms.mantle.aotter.net/v2
@@ -91,7 +91,7 @@ describe("loadManifestsFromRoot + partition", () => {
     expect(procedures).toHaveLength(1);
     expect(triggers).toHaveLength(1);
     expect(schemas[0]!.metadata.name).toBe("posts");
-    expect(views[0]!.spec.params?.required).toEqual(["locale"]);
+    expect(views[0]!.spec.input?.required).toEqual(["locale"]);
     expect(procedures[0]!.spec.requires?.auth?.all).toEqual(["ctx.user"]);
     expect(triggers[0]!.spec.source).toMatchObject({
       kind: "http",

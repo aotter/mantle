@@ -74,16 +74,16 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
   "linked": {
     "procedures": [
       {
-        "builtinSchema": undefined,
         "collectionActionSchema": undefined,
         "guard": undefined,
         "name": "authorize-order",
+        "writes": [],
       },
       {
-        "builtinSchema": undefined,
         "collectionActionSchema": undefined,
         "guard": undefined,
         "name": "place-order",
+        "writes": [],
       },
     ],
     "schemas": [
@@ -192,39 +192,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "name": "open-orders",
         },
         "spec": {
-          "fields": [
-            "id",
-            "customerId",
-            "orderStatus",
-            "placedAt",
-          ],
-          "filter": {
-            "and": [
-              {
-                "eq": {
-                  "field": "customerId",
-                  "value": {
-                    "$param": "customerId",
-                  },
-                },
-              },
-              {
-                "eq": {
-                  "field": "orderStatus",
-                  "value": "open",
-                },
-              },
-            ],
-          },
-          "from": "orders",
-          "limit": 20,
-          "orderBy": [
-            {
-              "direction": "desc",
-              "field": "placedAt",
-            },
-          ],
-          "params": {
+          "input": {
             "properties": {
               "customerId": {
                 "type": "string",
@@ -246,6 +214,29 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
               "procedure": "authorize-order",
             },
           },
+          "select": {
+            "columns": [
+              "id",
+              "customerId",
+              "orderStatus",
+              "placedAt",
+            ],
+            "from": "orders",
+            "limit": 20,
+            "orderBy": {
+              "placedAt": "desc",
+            },
+            "where": {
+              "and": [
+                {
+                  "customerId": "$input.customerId",
+                },
+                {
+                  "orderStatus": "open",
+                },
+              ],
+            },
+          },
           "surface": "public",
         },
       },
@@ -256,8 +247,8 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         "span": {
           "end": {
             "column": 1,
-            "line": 44,
-            "offset": 1205,
+            "line": 45,
+            "offset": 1161,
           },
           "start": {
             "column": 1,
@@ -276,7 +267,6 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         },
         "spec": {
           "handler": {
-            "kind": "ref",
             "ref": "authorizeOrder",
           },
           "input": {
@@ -302,13 +292,13 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         "span": {
           "end": {
             "column": 1,
-            "line": 57,
-            "offset": 1479,
+            "line": 58,
+            "offset": 1424,
           },
           "start": {
             "column": 1,
-            "line": 45,
-            "offset": 1209,
+            "line": 46,
+            "offset": 1165,
           },
         },
       },
@@ -322,7 +312,6 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         },
         "spec": {
           "handler": {
-            "kind": "ref",
             "ref": "placeOrder",
           },
           "input": {
@@ -356,13 +345,13 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         "span": {
           "end": {
             "column": 1,
-            "line": 73,
-            "offset": 1799,
+            "line": 74,
+            "offset": 1733,
           },
           "start": {
             "column": 1,
-            "line": 58,
-            "offset": 1483,
+            "line": 59,
+            "offset": 1428,
           },
         },
       },
@@ -392,13 +381,13 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         "span": {
           "end": {
             "column": 1,
-            "line": 81,
-            "offset": 1990,
+            "line": 82,
+            "offset": 1924,
           },
           "start": {
             "column": 1,
-            "line": 74,
-            "offset": 1803,
+            "line": 75,
+            "offset": 1737,
           },
         },
       },
@@ -427,13 +416,13 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         "span": {
           "end": {
             "column": 1,
-            "line": 89,
-            "offset": 2163,
+            "line": 90,
+            "offset": 2097,
           },
           "start": {
             "column": 1,
-            "line": 82,
-            "offset": 1994,
+            "line": 83,
+            "offset": 1928,
           },
         },
       },
@@ -447,7 +436,6 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         },
         "spec": {
           "source": {
-            "errorPolicy": "continue",
             "kind": "lifecycle",
             "on": [
               "after_create",
@@ -467,12 +455,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 101,
-            "offset": 2391,
+            "offset": 2299,
           },
           "start": {
             "column": 1,
-            "line": 90,
-            "offset": 2167,
+            "line": 91,
+            "offset": 2101,
           },
         },
       },
@@ -488,23 +476,23 @@ exports[`v0.1 sealed-pipeline characterization > keeps the pre-link semantic dia
     "code": "VIEW_FROM_UNKNOWN_SCHEMA",
     "expected": "name of a declared Schema",
     "message": "View 'missing-source' references unknown Schema 'unknown-schema'.",
-    "path": "/spec/from",
+    "path": "/spec/select/from",
     "phase": "validate",
     "severity": "error",
     "source": {
       "documentIndex": 0,
-      "path": "/spec/from",
+      "path": "/spec/select/from",
       "sourceId": "fixture:link-invalid.yaml",
       "span": {
         "end": {
           "column": 1,
-          "line": 7,
-          "offset": 130,
+          "line": 8,
+          "offset": 142,
         },
         "start": {
-          "column": 9,
-          "line": 6,
-          "offset": 115,
+          "column": 11,
+          "line": 7,
+          "offset": 127,
         },
       },
     },
@@ -526,13 +514,13 @@ exports[`v0.1 sealed-pipeline characterization > keeps the pre-link semantic dia
       "span": {
         "end": {
           "column": 42,
-          "line": 14,
-          "offset": 347,
+          "line": 15,
+          "offset": 362,
         },
         "start": {
           "column": 24,
-          "line": 14,
-          "offset": 329,
+          "line": 15,
+          "offset": 344,
         },
       },
     },
@@ -554,13 +542,13 @@ exports[`v0.1 sealed-pipeline characterization > keeps the pre-link semantic dia
       "span": {
         "end": {
           "column": 59,
-          "line": 13,
-          "offset": 304,
+          "line": 14,
+          "offset": 319,
         },
         "start": {
           "column": 45,
-          "line": 13,
-          "offset": 290,
+          "line": 14,
+          "offset": 305,
         },
       },
     },

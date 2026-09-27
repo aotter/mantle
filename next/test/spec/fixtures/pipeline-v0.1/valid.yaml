@@ -24,19 +24,20 @@ metadata:
   name: open-orders
 spec:
   surface: public
-  from: orders
-  fields: [id, customerId, orderStatus, placedAt]
-  params:
+  input:
     type: object
     required: [customerId]
     properties:
       customerId: { type: string }
-  filter:
-    and:
-      - eq: { field: customerId, value: { $param: customerId } }
-      - eq: { field: orderStatus, value: open }
-  orderBy: [{ field: placedAt, direction: desc }]
-  limit: 20
+  select:
+    from: orders
+    columns: [id, customerId, orderStatus, placedAt]
+    where:
+      and:
+        - customerId: $input.customerId
+        - orderStatus: open
+    orderBy: { placedAt: desc }
+    limit: 20
   requires:
     auth:
       all: [ctx.auth, ctx.user]
@@ -96,5 +97,4 @@ spec:
     kind: lifecycle
     schema: orders
     on: [after_create]
-    errorPolicy: continue
   target: { procedure: place-order }

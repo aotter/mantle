@@ -3,8 +3,9 @@ kind: View
 metadata: { name: missing-source }
 spec:
   surface: public
-  from: unknown-schema
-  fields: [missing]
+  select:
+    from: unknown-schema
+    columns: [missing]
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger

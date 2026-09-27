@@ -29,7 +29,7 @@ spec:
       - { type: object, required: [name, operationId], properties: { name: { type: string }, operationId: { type: string } } }
       - { type: object, required: [id, expectedVersion, name], properties: { id: { type: string }, expectedVersion: { type: number }, name: { type: string } } }
   output: { type: object }
-  handler: { kind: builtin, op: upsert, schema: organizations }
+  handler: { store: [{ insert: organizations, values: { name: $input.name } }] }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure

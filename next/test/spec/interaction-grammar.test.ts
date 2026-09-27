@@ -132,11 +132,24 @@ describe("Procedure.spec.target", () => {
     expect(errors([requisitions(), review()])).toEqual([]);
   });
 
+  it("accepts an inline program whose row op infers the target", () => {
+    const inferred = review({
+      target: undefined,
+      handler: { store: [{ update: "requisitions", set: { item: "$input.decision" }, where: { id: "$input.requisitionId" }, lock: "$input.expectedVersion" }] },
+    });
+    expect(errors([requisitions(), inferred])).toEqual([]);
+  });
+
   it.each([
     [{ target: { schema: "nope", id: "requisitionId" } }, "/spec/target/schema"],
     [{ target: { schema: "requisitions", id: "decision" } }, "/spec/target/id"],
     [{ target: { schema: "requisitions", id: "requisitionId", version: "decision" } }, "/spec/target/version"],
-    [{ handler: { kind: "builtin", op: "update", schema: "requisitions" } }, "/spec/target"],
+    // An inline program infers its target from the row op; the inferred
+    // version (from `lock`) must still name a number input property.
+    [{
+      target: undefined,
+      handler: { store: [{ update: "requisitions", set: { item: "$input.decision" }, where: { id: "$input.requisitionId" }, lock: "$input.requisitionId" }] },
+    }, "/spec/target/version"],
   ])("rejects %j", (spec, pointer) => {
     const found = errors([requisitions(), review(spec as Partial<ProcedureManifest["spec"]>)]);
     expect(found).toEqual(expect.arrayContaining([expect.objectContaining({

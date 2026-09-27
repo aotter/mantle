@@ -35,17 +35,18 @@ describe("parseManifestSources", () => {
     ]);
   });
 
-  it("materializes schema and ordering defaults once", () => {
-    const view = `apiVersion: cms.mantle.aotter.net/v2
+  it("materializes schema defaults once and gives View orderBy no implicit direction", () => {
+    const view = (orderBy: string): string => `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: newest }
 spec:
   surface: public
-  from: articles
-  orderBy: [{ field: createdAt }]
+  select:
+    from: articles
+    orderBy: ${orderBy}
 `;
     const result = parseManifestSources({
-      sources: [{ sourceId: "memory:defaults", text: `${schema("articles")}---\n${view}` }],
+      sources: [{ sourceId: "memory:defaults", text: `${schema("articles")}---\n${view("{ createdAt: asc }")}` }],
     });
 
     if (!result.ok) throw new Error("expected valid defaults fixture");
@@ -61,8 +62,15 @@ spec:
     });
     expect(result.value.entries[1]?.manifest).toMatchObject({
       kind: "View",
-      spec: { orderBy: [{ field: "createdAt", direction: "asc" }] },
+      spec: { select: { from: "articles", orderBy: { createdAt: "asc" } } },
     });
+
+    // v2 orderBy is `{ column: direction }`; a bare column has no default.
+    const bare = parseManifestSources({
+      sources: [{ sourceId: "memory:bare", text: `${schema("articles")}---\n${view("{ createdAt }")}` }],
+    });
+    expect(bare.ok).toBe(false);
+    expect(bare.diagnostics).toContainEqual(expect.objectContaining({ path: "/spec/select/orderBy" }));
   });
 
   it("retains narrow authored spans for later semantic diagnostics", () => {

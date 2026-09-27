@@ -73,7 +73,7 @@ function projectLinked(linked: LinkedManifestSet): unknown {
     })),
     procedures: linked.procedures.map((procedure) => ({
       name: procedure.manifest.metadata.name,
-      builtinSchema: procedure.builtinSchema?.manifest.metadata.name,
+      writes: procedure.writes.map((schema) => schema.manifest.metadata.name),
       collectionActionSchema: procedure.collectionActionSchema?.manifest.metadata.name,
       guard: procedure.guard?.manifest.metadata.name,
     })),

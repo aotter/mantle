@@ -41,34 +41,44 @@ kind: View
 metadata: { name: product-list }
 spec:
   surface: public
-  from: products
+  select: { from: products }
   requires: { guard: { procedure: allow-product } }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: create-product }
 spec:
-  input: { type: object }
+  input: { type: object, properties: { slug: { type: string }, title: { type: string } } }
   uiSchema: { collectionAction: products }
   output: { type: object }
-  handler: { kind: builtin, op: create, schema: products }
+  handler: { store: [{ insert: products, values: $input }] }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: notify-product }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { ref: notifyProduct }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: product-created }
 spec:
   source: { kind: lifecycle, schema: products, on: [after_create] }
-  target: { procedure: create-product }
+  target: { procedure: notify-product }
 `));
 
     if (!linked.ok) throw new Error("expected valid linked graph");
     expect(linked.value.schemas[1]?.translationParent?.manifest.metadata.name).toBe("products");
     expect(linked.value.views[0]?.from?.manifest.metadata.name).toBe("products");
     expect(linked.value.views[0]?.guard?.manifest.metadata.name).toBe("allow-product");
-    expect(linked.value.procedures[1]?.builtinSchema?.manifest.metadata.name).toBe("products");
+    expect(linked.value.procedures[1]?.writes.map((schema) => schema.manifest.metadata.name))
+      .toEqual(["products"]);
+    expect(linked.value.procedures[0]?.writes).toEqual([]);
     expect(linked.value.procedures[1]?.collectionActionSchema?.manifest.metadata.name)
       .toBe("products");
-    expect(linked.value.triggers[0]?.target.manifest.metadata.name).toBe("create-product");
+    expect(linked.value.triggers[0]?.target.manifest.metadata.name).toBe("notify-product");
     expect(linked.value.triggers[0]?.lifecycleSchema?.manifest.metadata.name).toBe("products");
     expect(Object.isFrozen(linked.value)).toBe(true);
   });
@@ -119,12 +129,12 @@ spec:
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: open-orders }
-spec: { surface: public, from: orders }
+spec: { surface: public, select: { from: orders } }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: open_orders }
-spec: { surface: public, from: orders }
+spec: { surface: public, select: { from: orders } }
 `));
 
     expect(linked.ok).toBe(false);
@@ -247,7 +257,9 @@ spec:
       expectedVersion: { type: number }
       projectLimit: { type: number }
   output: { type: object }
-  handler: { kind: builtin, op: update, schema: organizations }
+  handler:
+    store:
+      - { update: organizations, set: $input, where: { id: $input.id }, lock: $input.expectedVersion }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -261,15 +273,14 @@ kind: View
 metadata: { name: platform-organizations }
 spec:
   surface: staff
-  from: organizations
+  select: { from: organizations }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: member-tenant }
 spec:
   surface: public
-  from: tenants
-  fields: [id, slug, version]
+  select: { from: tenants, columns: [id, slug, version, updatedAt] }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
@@ -290,7 +301,7 @@ spec:
     const warnings = linked.diagnostics.filter((d) => d.code === "MCP_TOOL_INPUT_UNREACHABLE");
     // The staff SQL View over tenants selects no version column, so suspend-tenant
     // is unreachable there even though the public member-tenant View exposes it.
-    // platform-organizations omits `fields`, so the default projection carries
+    // platform-organizations omits `select.columns`, so the default projection carries
     // version and set-organization-quotas is reachable.
     expect(warnings.map((d) => [d.severity, d.value, d.path])).toEqual([
       ["warning", "tenants", "/spec/input/properties/expectedVersion"],
@@ -321,7 +332,9 @@ spec:
       id: { type: string, x-mantle-ref: notes }
       expectedVersion: { type: number }
   output: { type: object }
-  handler: { kind: builtin, op: update, schema: notes }
+  handler:
+    store:
+      - { update: notes, set: $input, where: { id: $input.id }, lock: $input.expectedVersion }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -342,7 +355,7 @@ spec:
     expect(linked.diagnostics.filter((d) => d.code === "MCP_TOOL_INPUT_UNREACHABLE")).toEqual([]);
   });
 
-  it("accepts declared MCP tool annotations and rejects a read-only claim over a writing builtin", () => {
+  it("accepts declared MCP tool annotations and rejects a read-only claim over a writing Store program", () => {
     const declared = linkManifestSet(parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -394,11 +407,13 @@ spec:
   mcp: { readOnlyHint: true }
   input: { type: object, required: [id, expectedVersion], properties: { id: { type: string }, expectedVersion: { type: number }, limit: { type: number } } }
   output: { type: object }
-  handler: { kind: builtin, op: update, schema: quotas }
+  handler:
+    store:
+      - { update: quotas, set: $input, where: { id: $input.id }, lock: $input.expectedVersion }
 `));
     expect(lying.ok).toBe(false);
     expect(lying.diagnostics).toContainEqual(expect.objectContaining({
-      code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+      code: "STORE_PROGRAM_INVALID",
       path: "/spec/mcp/readOnlyHint",
     }));
 
@@ -418,10 +433,10 @@ spec:
   mcp: { destructiveHint: false }
   input: { type: object, required: [id], properties: { id: { type: string } } }
   output: { type: object }
-  handler: { kind: builtin, op: delete, schema: quotas }
+  handler: { store: [{ delete: quotas, where: { id: $input.id } }] }
 `));
     expect(gentle.diagnostics).toContainEqual(expect.objectContaining({
-      code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+      code: "STORE_PROGRAM_INVALID",
       path: "/spec/mcp/destructiveHint",
     }));
     expect(() => parse(`

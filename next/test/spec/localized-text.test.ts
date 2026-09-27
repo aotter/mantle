@@ -258,7 +258,7 @@ describe("ManifestParser — Procedure.spec.title / .description (LocalizedText,
 
 describe("ManifestParser — View.spec.title (LocalizedText, optional — #443)", () => {
   it("accepts a View with no title", () => {
-    const yaml = viewDoc({ from: "posts" });
+    const yaml = viewDoc({ select: { from: "posts" } });
     const { manifests, diagnostics } = parseManifests(yaml);
     expect(diagnostics).toEqual([]);
     const view = manifests[0] as ViewManifest;
@@ -266,7 +266,7 @@ describe("ManifestParser — View.spec.title (LocalizedText, optional — #443)"
   });
 
   it("accepts a plain string title", () => {
-    const yaml = viewDoc({ from: "posts", title: "Recent Posts" });
+    const yaml = viewDoc({ select: { from: "posts" }, title: "Recent Posts" });
     const { manifests, diagnostics } = parseManifests(yaml);
     expect(diagnostics).toEqual([]);
     const view = manifests[0] as ViewManifest;
@@ -275,7 +275,7 @@ describe("ManifestParser — View.spec.title (LocalizedText, optional — #443)"
 
   it("accepts a locale-map title", () => {
     const yaml = viewDoc({
-      from: "posts",
+      select: { from: "posts" },
       title: { en: "Recent Posts", "zh-TW": "最新文章" },
     });
     const { manifests, diagnostics } = parseManifests(yaml);
@@ -285,21 +285,21 @@ describe("ManifestParser — View.spec.title (LocalizedText, optional — #443)"
   });
 
   it("rejects an empty string title when present", () => {
-    const yaml = viewDoc({ from: "posts", title: "" });
+    const yaml = viewDoc({ select: { from: "posts" }, title: "" });
     const { diagnostics } = parseManifests(yaml);
     expect(diagnostics.length).toBeGreaterThan(0);
     expect(diagnostics[0]?.path).toContain("/spec/title");
   });
 
   it("rejects an empty object title when present", () => {
-    const yaml = viewDoc({ from: "posts", title: {} });
+    const yaml = viewDoc({ select: { from: "posts" }, title: {} });
     const { diagnostics } = parseManifests(yaml);
     expect(diagnostics.length).toBeGreaterThan(0);
     expect(diagnostics[0]?.path).toContain("/spec/title");
   });
 
   it("rejects a non-string, non-object title", () => {
-    const yaml = viewDoc({ from: "posts", title: 42 });
+    const yaml = viewDoc({ select: { from: "posts" }, title: 42 });
     const { diagnostics } = parseManifests(yaml);
     expect(diagnostics.length).toBeGreaterThan(0);
     expect(diagnostics[0]?.path).toContain("/spec/title");
@@ -310,14 +310,14 @@ describe("ManifestParser — View.spec.title (LocalizedText, optional — #443)"
 describe("ManifestParser — View.spec.description (LocalizedText, optional — ADR-0029)", () => {
   it("accepts a plain string and a locale-map description", () => {
     for (const description of ["Posts waiting for review.", { en: "Posts waiting for review.", "zh-TW": "待審文章。" }]) {
-      const { manifests, diagnostics } = parseManifests(viewDoc({ from: "posts", description }));
+      const { manifests, diagnostics } = parseManifests(viewDoc({ select: { from: "posts" }, description }));
       expect(diagnostics).toEqual([]);
       expect((manifests[0] as ViewManifest).spec.description).toEqual(description);
     }
   });
 
   it.each([[""], [{}], [42], [["a"]]])("rejects %j with a message naming the field", (description) => {
-    const { diagnostics } = parseManifests(viewDoc({ from: "posts", description }));
+    const { diagnostics } = parseManifests(viewDoc({ select: { from: "posts" }, description }));
     expect(diagnostics[0]?.path).toContain("/spec/description");
     expect(diagnostics[0]?.message).toContain("View.spec.description");
   });
