@@ -268,7 +268,7 @@ function runtime(plan: RuntimePlan): CapabilityRuntime {
     unpublish: unused,
     archive: unused,
     deleteEntry: unused,
-    executeView: vi.fn(),
+    store: { as: () => ({ view: vi.fn() }) },
     invokeTrigger: vi.fn(),
     media: null,
   } as unknown as CapabilityRuntime;

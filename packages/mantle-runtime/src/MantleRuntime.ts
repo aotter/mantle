@@ -28,7 +28,6 @@ import type {
   LocalePolicyReader,
   SiteConfigRepository,
 } from "./domain/port/SiteConfigRepository.js";
-import type { ViewQueryOptions } from "./domain/port/ViewQueryExecutor.js";
 import type { RuntimePlan } from "./domain/service/RuntimePlanCompiler.js";
 import { TriggerIndex } from "./domain/service/TriggerIndex.js";
 import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/LifecycleHookingEntryRepository.js";
@@ -61,10 +60,7 @@ import {
   InvokeBuiltinUseCase,
   InvokeProcedureUseCase,
 } from "./usecase/procedure/index.js";
-import {
-  ExecuteViewUseCase,
-  type ExecuteViewResponse,
-} from "./usecase/view/index.js";
+import { ExecuteViewUseCase } from "./usecase/view/index.js";
 import { UpdateSiteSettingsUseCase } from "./usecase/site/index.js";
 import { createStore, type StoreDependencies } from "./usecase/store/createStore.js";
 import type { MantleStore } from "./domain/model/Store.js";
@@ -109,13 +105,6 @@ export interface InvokeMantleProcedureRequest {
   readonly pathPrefix?: string;
 }
 
-export interface ExecuteMantleViewRequest {
-  readonly view: string;
-  readonly options?: ViewQueryOptions;
-  readonly ctx?: HandlerContext;
-  readonly pathPrefix?: string;
-}
-
 export interface InvokeMantleTriggerRequest {
   readonly trigger: string;
   readonly input: unknown;
@@ -146,9 +135,6 @@ export interface MantleRuntime {
   invokeProcedure<O = unknown>(
     request: InvokeMantleProcedureRequest,
   ): Promise<InvokeProcedureResponse<O>>;
-  executeView<R = Record<string, unknown>>(
-    request: ExecuteMantleViewRequest,
-  ): Promise<ExecuteViewResponse<R>>;
   invokeTrigger<O = unknown>(
     request: InvokeMantleTriggerRequest,
   ): Promise<InvokeProcedureResponse<O>>;
@@ -367,11 +353,6 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
         return Promise.resolve(unknown("Procedure", request.procedure, request.pathPrefix));
       }
       return invokeProcedure.execute({ ...request, procedure });
-    },
-    executeView: (request) => {
-      const view = viewsByName.get(request.view);
-      if (!view) return Promise.resolve(unknown("View", request.view, request.pathPrefix));
-      return executeView.execute({ ...request, view });
     },
     invokeTrigger: (request) => {
       const trigger = plan.triggers[request.trigger];

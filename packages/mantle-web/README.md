@@ -158,17 +158,11 @@ async function invokeMantle(capability, input, signal) {
     return result.data;
   }
   const { page, show, ...params } = input;
-  const result = await runtime.executeView({
-    view: capability.ownerName,
-    options: {
-      params,
-      page: typeof page === "number" ? page : undefined,
-      show: typeof show === "number" ? show : undefined,
-    },
-    ctx: getContext(),
+  return runtime.store.as(getContext()).view(capability.ownerName, {
+    params,
+    page: typeof page === "number" ? page : undefined,
+    show: typeof show === "number" ? show : undefined,
   });
-  if (!result.ok) throw result.diagnostic;
-  return result.result;
 }
 
 const binding = await bindWebMcp({ capabilities, invoke: invokeMantle });

@@ -24,7 +24,6 @@ export {
   type MantleMedia,
   type MantleRuntimePorts,
   type InvokeMantleProcedureRequest,
-  type ExecuteMantleViewRequest,
   type InvokeMantleTriggerRequest,
 } from "./MantleRuntime.js";
 export {

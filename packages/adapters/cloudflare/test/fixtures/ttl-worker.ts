@@ -55,8 +55,8 @@ export default {
     }, authorId: null });
     const hidden = await runtime.entries.readById({ collection: "events", id: expired.id }) === null;
     const listed = (await runtime.listEntries.execute({ collection: "events" })).map((row) => row.id);
-    const view = await runtime.executeView({ view: "current-events" });
-    const viewIds = view.ok ? view.result.rows.map((row) => row.id) : [];
+    const view = await runtime.store.view("current-events");
+    const viewIds = view.rows.map((row) => row.id);
     const preview = await runtime.store.sweepExpired({ collection: "events", limit: 1 });
     const first = await runtime.store.sweepExpired({ collection: "events", limit: 1, delete: true });
     const second = await runtime.store.sweepExpired({ collection: "events", limit: 1, delete: true, cursor: first.nextCursor });

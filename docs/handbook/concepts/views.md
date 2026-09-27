@@ -21,7 +21,7 @@ Use `surface: internal` for a named query callable only by host code. It remains
 |---|---|---|---|
 | `public` | `GET /api/views/<name>` | `query_view_<segment>` on `/mcp` | Listed by `GET /api/views` |
 | `staff` | `GET /admin/api/views/<name>` | `query_view_<segment>` on `/mcp/staff` | `GET /admin/api/views/<name>/export`, Admin report sidebar |
-| `internal` | None | None | Host calls through `executeView` or the typed Store map |
+| `internal` | None | None | Host calls through `runtime.store.as(ctx).view()` |
 
 The adapter filters the View set before building each MCP dispatcher, so a guessed public tool call cannot reach a staff View. Surface decides transport visibility; `spec.requires` decides whether the verified caller may execute the View, on REST and MCP alike. See [Authorization](./authorization.md).
 

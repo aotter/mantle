@@ -21,7 +21,7 @@ const runtime = await bootMantleRuntime({
 });
 
 await runtime.invokeProcedure({ procedure: "recompute", input, ctx });
-await runtime.executeView({ view: "open-orders", options: { params }, ctx });
+await runtime.store.as(ctx).view("open-orders", { params });
 ```
 
 `bootMantleRuntime` makes one preparation attempt and derives handler readiness

@@ -70,8 +70,8 @@ describe("createMantleRuntime", () => {
       input: {},
       ctx: anonymous,
     })).toMatchObject({ ok: false, diagnostic: { code: "UNAUTHENTICATED" } });
-    expect(await runtime.executeView({ view: "secure-posts", ctx: anonymous }))
-      .toMatchObject({ ok: false, diagnostic: { code: "UNAUTHENTICATED" } });
+    await expect(runtime.store.as(anonymous).view("secure-posts"))
+      .rejects.toMatchObject({ diagnostic: { code: "UNAUTHENTICATED" } });
     expect(await runtime.invokeTrigger({
       trigger: "secure-http",
       input: {},
@@ -91,11 +91,11 @@ describe("createMantleRuntime", () => {
       input: {},
       ctx: userB,
     })).toEqual({ ok: true, data: { userId: "user-b" } });
-    expect(await runtime.executeView({ view: "secure-posts", ctx: userA }))
-      .toMatchObject({ ok: true, result: { rows: [{ userId: "user-a" }] } });
+    expect(await runtime.store.as(userA).view("secure-posts"))
+      .toMatchObject({ rows: [{ userId: "user-a" }] });
     expect(seenViewUsers).toEqual(["user-a"]);
-    expect(await runtime.executeView({ view: "missing", ctx: userA }))
-      .toMatchObject({ ok: false, diagnostic: { code: "NOT_FOUND" } });
+    await expect(runtime.store.as(userA).view("missing"))
+      .rejects.toMatchObject({ diagnostic: { code: "NOT_FOUND" } });
   });
 });
 

@@ -289,7 +289,7 @@ export interface ViewManifestSpec {
    *  `GET /admin/api/views/<name>` behind the staff gate and becomes
    *  the report-sidebar source. Guards data behind a staff session; use
    *  it for any View over sensitive rows. `"internal"` mounts on no
-   *  adapter and is callable only through `MantleRuntime.executeView`. */
+   *  adapter and is callable only through `runtime.store.as(ctx).view()`. */
   readonly surface: ViewSurface;
   /** Optional anonymous REST response-cache policy. Validation limits this
    *  to caller-independent public declarative Views over publishing Schemas. */

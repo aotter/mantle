@@ -73,7 +73,7 @@ export interface StoreSelectResult {
 }
 
 /** View input plus the caller surface's diagnostic location. */
-export type StoreViewOptions = Pick<ViewQueryOptions, "params" | "page" | "show"> & { readonly pathPrefix?: string };
+export type StoreViewOptions = Pick<ViewQueryOptions, "params" | "page" | "show" | "search" | "filters"> & { readonly pathPrefix?: string };
 
 /** Create one entry through Schema validation, defaults and lifecycle hooks. */
 export interface StoreInsert {
