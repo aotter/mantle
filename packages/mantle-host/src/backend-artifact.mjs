@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { assertClosedModule } from './closed-module.mjs'
+import { parseCorePin } from './protocol.mjs'
 import { CloudRuleError } from './static-artifact.mjs'
-import { corePin } from './version.mjs'
 
 export const backendArtifactLimit = 2_000_000
 /** esbuild options for one closed, Workers-compatible handler module. */
@@ -53,8 +53,10 @@ export function closedHandlers(result) {
 }
 
 /** The exact backend artifact bytes and their digest. */
-export function serializeBackend({ sources, handlers, cliVersion }) {
-  const text = JSON.stringify({ version: 1, sdkVersion: corePin.version, sdkRevision: corePin.revision, cliVersion, sources, handlers })
+export function serializeBackend({ sources, handlers, cliVersion, core }) {
+  core = parseCorePin(core)
+  if (!core) throw new CloudRuleError(400, 'core_pin_invalid')
+  const text = JSON.stringify({ version: 1, sdkVersion: core.version, sdkRevision: core.revision, cliVersion, sources, handlers })
   const bytes = Buffer.byteLength(text)
   if (bytes > backendArtifactLimit) throw new CloudRuleError(400, 'backend_artifact_too_large', `${bytes} bytes; Cloud accepts ${backendArtifactLimit}`)
   return { text, bytes, sha256: createHash('sha256').update(text).digest('hex') }

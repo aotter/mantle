@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { CloudRuleError, serializeStaticArtifact } from './static-artifact.mjs'
 import { canonicalSourceZip, inspectSourceArchive, secretSourcePath, sourceEntryLimit, sourceExpandedLimit, sourcePathKey } from './source-zip.mjs'
 import { yamlSources } from './backend-artifact.mjs'
-import { corePin } from './version.mjs'
+import { parseCorePin } from './protocol.mjs'
 
 /** Names never taken into a source snapshot, at any depth (a worktree's `.git` is a file). */
 export const defaultSourceExcludes = Object.freeze(['.git', 'node_modules', '.wrangler'])
@@ -81,19 +81,21 @@ async function readJson(path, label) {
  * Builds the static artifact JSON v2 and the canonical source ZIP, checks both
  * with Cloud's own rules and writes them to `out`. Nothing is uploaded.
  */
-export async function packFrontend({ project: projectArg = '.', dist: distArg, out: outArg, spa = false, kit: kitArg, backend: backendArg, exclude = [] }) {
+export async function packFrontend({ project: projectArg = '.', dist: distArg, out: outArg, spa = false, kit: kitArg, backend: backendArg, exclude = [], core: inputCore }) {
   if (!distArg || !outArg) throw new CloudRuleError(400, 'usage', 'pack-frontend needs --dist and --out')
+  const core = parseCorePin(inputCore)
+  if (!core) throw new CloudRuleError(400, 'core_pin_invalid')
   const warnings = []
   let kit = null
   if (kitArg) {
     kit = await readJson(join(kitArg, 'kit.json'), 'kit')
-    if (kit.coreRevision !== corePin.revision) throw new CloudRuleError(409, 'cli_core_mismatch', `kit pins Core ${kit.coreRevision}`)
+    if (kit.coreVersion !== core.version || kit.coreRevision !== core.revision) throw new CloudRuleError(409, 'cli_core_mismatch', 'kit pins another Core')
   } else warnings.push('kit_not_checked: pass --kit <dir> so the contract hash and Core pin come from the downloaded kit')
   let sources, backendPath = null
   if (backendArg) {
     backendPath = await realpath(resolve(backendArg))
     const backend = await readJson(backendArg, 'backend')
-    if (backend.sdkRevision !== corePin.revision || !Array.isArray(backend.sources)) throw new CloudRuleError(409, 'cli_core_mismatch', 'backend artifact was packed for another Core')
+    if (backend.sdkVersion !== core.version || backend.sdkRevision !== core.revision || !Array.isArray(backend.sources)) throw new CloudRuleError(409, 'cli_core_mismatch', 'backend artifact was packed for another Core')
     sources = backend.sources
   } else {
     warnings.push('backend_not_checked: pass --backend <backend.json> to compare YAML with the uploaded candidate')
@@ -101,7 +103,7 @@ export async function packFrontend({ project: projectArg = '.', dist: distArg, o
   }
   const ignored = []
   const assets = await readDist(distArg, ignored)
-  const frontendText = serializeStaticArtifact(assets, { sdkRevision: corePin.revision, spa })
+  const frontendText = serializeStaticArtifact(assets, { sdkRevision: core.revision, spa })
   // Compare real paths so a symlinked project or output path is still recognized.
   await mkdir(resolve(outArg), { recursive: true })
   const out = await realpath(resolve(outArg)), dist = await realpath(resolve(distArg)), projectRoot = await realpath(resolve(projectArg))

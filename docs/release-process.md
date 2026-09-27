@@ -103,7 +103,7 @@ dist-tag DELETE only added failure and re-run state, and Actions
 
    ```sh
    OLD=<previous version> NEW=<version>
-   git grep -l "\"version\": \"$OLD\"" -- '*.json' ':!**/package-lock.json' ':!packages/mantle-host/src/core.json' \
+   git grep -l "\"version\": \"$OLD\"" -- '*.json' ':!**/package-lock.json' \
      | xargs perl -pi -e "s/\"version\": \"\Q$OLD\E\"/\"version\": \"$NEW\"/"
    node scripts/sync-plugin-manifests.mjs
    pnpm --filter @aotter/mantle-host build

@@ -4,7 +4,7 @@ description: Link, save, deploy, roll back and check a Mantle app on Mantle Clou
 metadata:
   source: aotter/mantle
   sourcePath: skills/mantle-host/SKILL.md
-  applies_to: mantle-host protocol 1
+  applies_to: mantle-host protocol 2
   projection: plugin
   projectionReason: Ships only in the root plugin with its deploy script; Cloud deploy is opt-in.
   internal: true
@@ -74,7 +74,7 @@ or `paired`, and neither one means an `active` release.
 | Verb | Use |
 |---|---|
 | `link --organization <id> --project <id> --slug <slug> [--root <dir>] [--handlers <file>] [--dist <dir>] [--spa] [--build "<command>"]` | Once per project. Writes `.mantle/hosting.json` and gitignores `.mantle/host/`. Commit both. `--runtime cloudflare\|chatgpt-sites [--config <file>]` adds a native target. With several targets, pass `--target <name>` to every verb. |
-| `save [--omit <path>]... [--no-git] [--restart]` | Packs HEAD and prints the `cloud-backend-upload` call. |
+| `save [--omit <path>]... [--no-git] [--restart]` | Checks HEAD and prints the `cloud-host-contract` call. Pipe its result to `save --resume` to pack for Cloud's Core and receive the backend upload call. |
 | `save --resume [--grant -]` | Continues with the Cloud MCP result piped on stdin. It uploads, polls until `ready`, gets the frontend kit, pairs, and ends with a saved version `{versionId, commit}`. That version is paired but not published. |
 | `status` | Reads local state without network access and prints the next step. |
 | `deploy <versionId> [--review -] [--dry-run]` | Reviews the version, then prints the `cloud-publish-paired-release` call. `--dry-run` stops after the review. |
@@ -157,7 +157,9 @@ gitignored and never holds a grant.
 | `source_archive_secret_path` | A secret-named file is committed. | Untrack it, or pass `--omit <path>` so the deployer sees the omission. |
 | `link_file_invalid` with a JSON pointer | The link file has an unknown key, a secret or an endpoint. | Remove the key the pointer names. Never add origins. |
 | `grant_inline_refused` | A grant was passed as an argument. | Pipe the tool result to `--grant -`. |
-| `client_outdated` or `cli_core_mismatch` | The Cloud requires a newer protocol or another Mantle Core. | Update the `mantle` plugin, or re-run `npx skills add aotter/mantle --skill mantle-host`. Do not patch the script. |
+| `client_outdated` | Cloud requires a newer host protocol. | Update the `mantle` plugin, or re-run `npx skills add aotter/mantle --skill mantle-host`. Do not patch the script. |
+| `cli_core_mismatch` | Cloud changed its Core pin during this save, or the pending save predates Core negotiation. | Run the printed `save --restart` command. |
+| `core_pin_invalid` | The Cloud contract did not supply a usable Core version and revision. | Repeat the printed `cloud-host-contract` call and pipe its result. |
 | Version conflict | Someone else changed the project. | Re-read `member-project`. Do not overwrite their change. |
 
 ## Don't

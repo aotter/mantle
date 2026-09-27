@@ -118,10 +118,10 @@ export async function bundleHandlers({ esbuild, top, appRoot, entry, files, omit
   try { return closedHandlers(result) } catch { throw fail('backend_handlers_not_closed', 'the handler bundle must have no imports or dynamic imports') }
 }
 
-export async function packBackendSnapshot({ esbuild, top, appRoot, entry, files, git, omit, cliVersion }) {
+export async function packBackendSnapshot({ esbuild, top, appRoot, entry, files, git, omit, cliVersion, core }) {
   let sources
   try { sources = yamlSourcesFrom(files) }
   catch (error) { throw error instanceof CloudRuleError ? error : fail('manifest_invalid', error.message) }
   const handlers = await bundleHandlers({ esbuild, top, appRoot, entry, files: git ? files : null, omit })
-  return serializeBackend({ sources, handlers, cliVersion })
+  return serializeBackend({ sources, handlers, cliVersion, core })
 }
