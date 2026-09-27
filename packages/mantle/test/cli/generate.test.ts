@@ -128,6 +128,7 @@ if (view.rows[0]?.title !== "Typed") throw new Error("typed View failed");
 await store.write([{ insert: "products", values: { sku: "sku-2" } }]);
 if (calls.join(",") !== "select:products,view:products-by-sku,write:products") throw new Error(calls.join(","));
 const handler: MantleHandlers["syncCatalog"] = (_input, ctx) => {
+  void store.as(ctx);
   if (ctx.store) {
     // @ts-expect-error Caller Store cannot rebind its identity.
     void ctx.store.as(ctx);
