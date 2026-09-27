@@ -51,7 +51,7 @@ spec:
   input: { type: object, properties: { slug: { type: string }, title: { type: string } } }
   uiSchema: { collectionAction: products }
   output: { type: object }
-  handler: { store: [{ insert: products, values: $input }] }
+  handler: { store: [{ insert: products, values: { slug: $input.slug, title: $input.title } }] }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -259,7 +259,7 @@ spec:
   output: { type: object }
   handler:
     store:
-      - { update: organizations, set: $input, where: { id: $input.id }, lock: $input.expectedVersion }
+      - { update: organizations, set: { projectLimit: $input.projectLimit }, where: { id: $input.id }, lock: $input.expectedVersion }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -331,10 +331,11 @@ spec:
     properties:
       id: { type: string, x-mantle-ref: notes }
       expectedVersion: { type: number }
+      body: { type: string }
   output: { type: object }
   handler:
     store:
-      - { update: notes, set: $input, where: { id: $input.id }, lock: $input.expectedVersion }
+      - { update: notes, set: { body: $input.body }, where: { id: $input.id }, lock: $input.expectedVersion }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -409,7 +410,7 @@ spec:
   output: { type: object }
   handler:
     store:
-      - { update: quotas, set: $input, where: { id: $input.id }, lock: $input.expectedVersion }
+      - { update: quotas, set: { limit: $input.limit }, where: { id: $input.id }, lock: $input.expectedVersion }
 `));
     expect(lying.ok).toBe(false);
     expect(lying.diagnostics).toContainEqual(expect.objectContaining({

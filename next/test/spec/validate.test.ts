@@ -738,13 +738,13 @@ spec:
   output: { type: object }
   handler:
     store:
-      - { insert: posts, values: $input }
+      - { insert: posts, values: { slug: $input.slug } }
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics).toEqual([]);
     expect(result.manifests).toHaveLength(1);
     const proc = result.manifests[0] as ProcedureManifest;
-    expect(proc.spec.handler).toEqual({ store: [{ insert: "posts", values: "$input" }] });
+    expect(proc.spec.handler).toEqual({ store: [{ insert: "posts", values: { slug: "$input.slug" } }] });
   });
 
   it("rejects a store handler that also declares ref (mutually exclusive)", () => {
@@ -756,7 +756,7 @@ spec:
   output: { type: object }
   handler:
     store:
-      - { insert: posts, values: $input }
+      - { insert: posts, values: { slug: x } }
     ref: createPost
 `;
     const result = parseManifests(yaml);
@@ -1156,7 +1156,7 @@ spec:
     });
     const builtin = procedure("builtinGuard", {
       input: { type: "object", properties: { slug: { type: "string" } } },
-      handler: { store: [{ insert: "posts", values: "$input" }] },
+      handler: { store: [{ insert: "posts", values: { slug: "$input.slug" } }] },
     });
     const chained = procedure("chainedGuard", {
       requires: { guard: { procedure: "leafGuard" } },
@@ -1184,7 +1184,7 @@ spec:
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("GUARD_PROCEDURE_UNKNOWN");
     expect(codes).toContain("GUARD_SELF_REFERENCE");
-    expect(codes).toContain("GUARD_PROCEDURE_NOT_REF");
+    expect(codes).toContain("HANDLER_REF_REQUIRED");
     expect(codes).toContain("GUARD_CHAIN_NOT_ALLOWED");
   });
 });

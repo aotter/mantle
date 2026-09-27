@@ -106,10 +106,10 @@ function procedure(opts: {
   };
 }
 
-const create = (schema = "posts"): StoreProgramOp => ({ insert: schema, values: "$input" });
+const create = (schema = "posts"): StoreProgramOp => ({ insert: schema, values: { title: "Untitled" } });
 const update = (schema = "posts"): StoreProgramOp => ({
   update: schema,
-  set: "$input",
+  set: { title: "Edited" },
   where: { id: "$input.id" },
   lock: "$input.expectedVersion",
 });
@@ -175,7 +175,7 @@ describe("validateManifests — inline Store program contracts", () => {
   it("accepts onConflict upserts over a single and a composite unique index", () => {
     const bySlug = procedure({
       name: "upsertBySlug",
-      store: [{ insert: "posts", values: "$input", onConflict: { columns: ["slug"], update: ["title"] } }],
+      store: [{ insert: "posts", values: { slug: "$input.slug", title: "$input.title" }, onConflict: { columns: ["slug"], update: ["title"] } }],
       input: {
         type: "object",
         properties: { slug: { type: "string" }, title: { type: "string" } },
@@ -184,7 +184,7 @@ describe("validateManifests — inline Store program contracts", () => {
     });
     const byComposite = procedure({
       name: "upsertByComposite",
-      store: [{ insert: "posts", values: "$input", onConflict: { columns: ["slug", "variant"], update: ["title"] } }],
+      store: [{ insert: "posts", values: { slug: "$input.slug", variant: "$input.variant", title: "$input.title" }, onConflict: { columns: ["slug", "variant"], update: ["title"] } }],
       input: {
         type: "object",
         properties: { slug: { type: "string" }, variant: { type: "string" }, title: { type: "string" } },
@@ -254,7 +254,7 @@ describe("validateManifests — inline Store program contracts", () => {
     ] as JsonSchema[]) {
       const p = procedure({ name: "createBadOutput", store: [create()], input, output });
       expect(errorsOf([postsSchema, p])).toEqual([expect.objectContaining({
-        code: "STORE_PROGRAM_OUTPUT_INVALID",
+        code: "STORE_PROGRAM_INVALID",
         path: expect.stringMatching(/\/spec\/output$/),
       })]);
     }
@@ -322,17 +322,17 @@ describe("validateManifests — inline Store program contracts", () => {
   it("rejects onConflict columns that are not exactly a declared unique index", () => {
     const unindexed = procedure({
       name: "upsertByTitle",
-      store: [{ insert: "posts", values: "$input", onConflict: { columns: ["title"], update: ["body"] } }],
+      store: [{ insert: "posts", values: { title: "$input.title", body: "$input.body" }, onConflict: { columns: ["title"], update: ["body"] } }],
       input: { type: "object", properties: { title: { type: "string" }, body: { type: "string" } }, required: ["title"] },
     });
     const wrongOrder = procedure({
       name: "upsertWrongOrder",
-      store: [{ insert: "posts", values: "$input", onConflict: { columns: ["variant", "slug"], update: ["title"] } }],
+      store: [{ insert: "posts", values: { slug: "$input.slug", variant: "$input.variant", title: "$input.title" }, onConflict: { columns: ["variant", "slug"], update: ["title"] } }],
       input: { type: "object", properties: { slug: { type: "string" }, variant: { type: "string" }, title: { type: "string" } }, required: ["variant", "slug"] },
     });
     const duplicate = procedure({
       name: "upsertDuplicate",
-      store: [{ insert: "posts", values: "$input", onConflict: { columns: ["slug", "slug"], update: ["title"] } }],
+      store: [{ insert: "posts", values: { slug: "$input.slug", title: "$input.title" }, onConflict: { columns: ["slug", "slug"], update: ["title"] } }],
       input: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" } }, required: ["slug"] },
     });
     for (const p of [unindexed, wrongOrder, duplicate]) {
@@ -346,16 +346,16 @@ describe("validateManifests — inline Store program contracts", () => {
   it("rejects onConflict when a conflict column is not a declared input property", () => {
     const p = procedure({
       name: "upsertMissingProp",
-      store: [{ insert: "posts", values: "$input", onConflict: { columns: ["slug"], update: ["title"] } }],
+      store: [{ insert: "posts", values: { slug: "$input.slug", title: "$input.title" }, onConflict: { columns: ["slug"], update: ["title"] } }],
       input: { type: "object", properties: { title: { type: "string" } } },
     });
-    expect(codes([postsSchema, p])).toContain("STORE_PROGRAM_INVALID");
+    expect(codes([postsSchema, p])).toContain("STORE_REFERENCE_UNKNOWN");
   });
 
   it("rejects onConflict when a conflict column is an optional input property", () => {
     const p = procedure({
       name: "upsertMissingReq",
-      store: [{ insert: "posts", values: "$input", onConflict: { columns: ["slug"], update: ["title"] } }],
+      store: [{ insert: "posts", values: { slug: "$input.slug", title: "$input.title" }, onConflict: { columns: ["slug"], update: ["title"] } }],
       input: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" } } },
     });
     expect(codes([postsSchema, p])).toContain("STORE_PROGRAM_INVALID");
@@ -455,7 +455,7 @@ describe("validateManifests — scoped Schemas need a caller", () => {
   const input: JsonSchema = { type: "object", properties: { text: { type: "string" } } };
 
   it("rejects a program writing a scoped Schema without requires ctx.user", () => {
-    const p = procedure({ name: "createNote", store: [create("notes")], input });
+    const p = procedure({ name: "createNote", store: [{ insert: "notes", values: { text: "$input.text" } }], input });
     expect(errorsOf([scopedSchema, p])).toEqual([expect.objectContaining({
       code: "STORE_CALLER_REQUIRED",
       path: expect.stringMatching(/\/spec\/requires\/auth\/all$/),
@@ -463,7 +463,7 @@ describe("validateManifests — scoped Schemas need a caller", () => {
   });
 
   it("accepts it once the Procedure requires ctx.user", () => {
-    const p = procedure({ name: "createNote", store: [create("notes")], input, spec: { requires: { auth: { all: ["ctx.user"] } } } });
+    const p = procedure({ name: "createNote", store: [{ insert: "notes", values: { text: "$input.text" } }], input, spec: { requires: { auth: { all: ["ctx.user"] } } } });
     expect(codes([scopedSchema, p])).toEqual([]);
   });
 
@@ -510,7 +510,7 @@ spec:
 
   it("rejects empty onConflict columns or non-string elements", () => {
     for (const columns of ["[]", "[1]"]) {
-      const res = parseManifests(doc(`{ store: [{ insert: posts, values: $input, onConflict: { columns: ${columns}, update: [slug] } }] }`));
+      const res = parseManifests(doc(`{ store: [{ insert: posts, values: { slug: $input.slug }, onConflict: { columns: ${columns}, update: [slug] } }] }`));
       expect(res.diagnostics).toEqual([expect.objectContaining({
         code: "STORE_PROGRAM_INVALID",
         message: expect.stringMatching(/onConflict\.columns must be a non-empty array/),

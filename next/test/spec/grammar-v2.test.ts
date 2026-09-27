@@ -146,8 +146,8 @@ metadata: { name: on-event }
 spec: { source: { kind: lifecycle, schema: events, on: [after_create] }, target: { procedure: audit } }
 `;
   it("must be a ref handler", () => {
-    expect(graphCodes(hook("{ ref: audit }"))).not.toContain("LIFECYCLE_TARGET_NOT_REF");
-    expect(graphCodes(hook("{ store: [{ insert: events, values: { kind: audit } }] }"))).toContain("LIFECYCLE_TARGET_NOT_REF");
+    expect(graphCodes(hook("{ ref: audit }"))).not.toContain("HANDLER_REF_REQUIRED");
+    expect(graphCodes(hook("{ store: [{ insert: events, values: { kind: audit } }] }"))).toContain("HANDLER_REF_REQUIRED");
   });
 });
 
@@ -156,12 +156,13 @@ describe("Store program classification", () => {
   it("treats a where that pins id, alone or ANDed, as a row op", () => {
     expect(isRowOp(update({ id: "$input.id" }))).toBe(true);
     expect(isRowOp(update({ id: "$input.id", title: { gte: "a" } }))).toBe(true);
-    expect(isRowOp(update({ id: { eq: "$input.id" } }))).toBe(true);
-    expect(isRowOp({ insert: "posts", values: "$input" })).toBe(true);
+    expect(isRowOp({ insert: "posts", values: { title: "$input.title" } })).toBe(true);
   });
   it("treats anything else as a set op", () => {
     expect(isRowOp(update({ slug: "a" }))).toBe(false);
     expect(isRowOp(update({ id: { in: ["a", "b"] } }))).toBe(false);
+    // Only the equality shorthand pins; an operator form is a set op, the safe side.
+    expect(isRowOp(update({ id: { eq: "$input.id" } }))).toBe(false);
     expect(isRowOp(update({ or: [{ id: "a" }, { id: "b" }] }))).toBe(false);
     expect(pinnedId({ id: null })).toBeUndefined();
   });
@@ -170,9 +171,9 @@ describe("Store program classification", () => {
       apiVersion: "cms.mantle.aotter.net/v2", kind: "Procedure", metadata: { name: "p" },
       spec: { input: { type: "object" }, output: { type: "object" }, handler: { store }, ...(target ? { target } : {}) },
     });
-    expect(procedureTarget(procedure([{ update: "posts", set: "$input", where: { id: "$input.id" }, lock: "$input.expectedVersion" }])))
+    expect(procedureTarget(procedure([{ update: "posts", set: { title: "$input.title" }, where: { id: "$input.id" }, lock: "$input.expectedVersion" }])))
       .toEqual({ schema: "posts", id: "id", version: "expectedVersion" });
-    expect(procedureTarget(procedure([{ insert: "posts", values: "$input" }]))).toBeUndefined();
+    expect(procedureTarget(procedure([{ insert: "posts", values: { title: "$input.title" } }]))).toBeUndefined();
     expect(procedureTarget(procedure([
       { delete: "posts", where: { id: "$input.a" } },
       { delete: "posts", where: { id: "$input.b" } },

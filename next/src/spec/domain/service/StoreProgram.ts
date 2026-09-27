@@ -13,16 +13,14 @@ import {
  * decision 2).
  */
 
-/** The value a top-level `where.id` pins, or `undefined` when it pins none. */
+/**
+ * The value a top-level `where: { id: <value> }` pins, or `undefined`.
+ * Only the equality shorthand pins; any operator form is a set op, which is
+ * the safe side (set ops never skip a hook, they are refused).
+ */
 export function pinnedId(where: StoreWhereSpec | undefined): unknown {
-  if (!where || !Object.hasOwn(where, "id")) return undefined;
-  const value = where["id"];
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const comparison = value as Record<string, unknown>;
-    if (Object.hasOwn(comparison, "$literal")) return value;
-    return Object.keys(comparison).length === 1 && Object.hasOwn(comparison, "eq") ? comparison["eq"] : undefined;
-  }
-  return Array.isArray(value) || value === null ? undefined : value;
+  const value = where?.["id"];
+  return value === null || typeof value === "object" ? undefined : value;
 }
 
 /**

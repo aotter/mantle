@@ -55,7 +55,7 @@ export const DIAGNOSTIC_CODES = [
   "AUTH_PREDICATE_NOT_IN_ENUM",
   "GUARD_PROCEDURE_UNKNOWN",
   "GUARD_SELF_REFERENCE",
-  "GUARD_PROCEDURE_NOT_REF",
+  "HANDLER_REF_REQUIRED",
   "GUARD_CHAIN_NOT_ALLOWED",
   "SCHEMA_INDEX_INVALID",
   "SCHEMA_INDEX_FIELD_UNKNOWN",
@@ -67,8 +67,6 @@ export const DIAGNOSTIC_CODES = [
   "VIEW_SQL_SCOPED_SCHEMA",
   "STORE_CALLER_REQUIRED",
   "STORE_SET_OP_REJECTED",
-  "STORE_PROGRAM_OUTPUT_INVALID",
-  "LIFECYCLE_TARGET_NOT_REF",
   "SCHEMA_UI_INVALID",
   "HANDLER_BUILTIN_NOT_IN_V010",
   "MANIFEST_ROOT_NOT_FOUND",
@@ -77,7 +75,6 @@ export const DIAGNOSTIC_CODES = [
   "FIXTURE_SCHEMA_VIOLATION",
   // Cross-phase (validate / boot / runtime as applicable).
   "HANDLER_NOT_REGISTERED",
-  "HANDLER_NOT_DECLARED",
   "TRIGGER_TARGET_PROCEDURE_UNKNOWN",
   "SCHEDULE_INPUT_INVALID",
   "SCHEDULE_AUTH_INVALID",
@@ -169,9 +166,6 @@ export interface Diagnostic {
   readonly suggestion?: string;
   readonly message: string;
   /** Safe effect/retry facts supplied by a port; never provider payloads. */
-  /** Which write failed and why, on `CONFLICT` from `store.write`. `opIndex`
-   *  is best effort: a D1 batch cannot report the failing statement. */
-  readonly conflict?: { readonly opIndex?: number; readonly reason: "lock" | "expect" | "unique" };
   readonly failure?: {
     readonly outcome: "not-applied" | "partial" | "unknown";
     readonly retry: "never" | "after-change" | "safe" | "reconcile";

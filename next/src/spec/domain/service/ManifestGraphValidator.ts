@@ -626,7 +626,7 @@ function checkStoreProgram(
   const output = p.spec.output;
   const results = output.properties?.["results"];
   if (output.type !== "object" || (output.properties && !hasType(results, ["array"])) || (output.required ?? []).some((key) => key !== "results")) {
-    fail("STORE_PROGRAM_OUTPUT_INVALID", "/spec/output", `Procedure '${name}' runs a Store program, whose output is { results }; its output schema must accept that object.`, {
+    fail("STORE_PROGRAM_INVALID", "/spec/output", `Procedure '${name}' runs a Store program, whose output is { results }; its output schema must accept that object.`, {
       expected: "type: object, with at most a `results` array property",
     });
   }
@@ -637,7 +637,6 @@ function checkStoreProgram(
   }
   const inputProps = input.properties ?? {};
   const inputRequired = new Set(input.required ?? []);
-  const wholeInput = Object.keys(inputProps).filter((key) => key !== "id" && !RESERVED_PROCEDURE_INPUT_NAMES.includes(key as never));
   let requiresCaller = usesReference(handler.store, "$ctx.user.id");
   const scan = scanStoreWhere("Procedure", name, schemasByName, filePaths, out);
   handler.store.forEach((op: StoreProgramOp, index) => {
@@ -655,10 +654,10 @@ function checkStoreProgram(
     const properties = Object.keys(schema.spec.schema.properties ?? {});
     const fieldsKey = "insert" in op ? "values" : "update" in op ? "set" : undefined;
     const fields = "insert" in op ? op.values : "update" in op ? op.set : undefined;
-    const written = fields === "$input" ? wholeInput : Object.keys(fields ?? {}).filter((key) => key !== "status");
+    const written = Object.keys(fields ?? {}).filter((key) => key !== "status");
     for (const column of written) {
       if (!properties.includes(column)) {
-        fail("STORE_PROGRAM_INVALID", fields === "$input" ? `/spec/input/properties/${pointerSegment(column)}` : `${at}/${fieldsKey}/${pointerSegment(column)}`,
+        fail("STORE_PROGRAM_INVALID", `${at}/${fieldsKey}/${pointerSegment(column)}`,
           `Procedure '${name}' writes '${column}', which Schema '${schemaName}' does not declare.`, { value: column, candidates: properties });
       }
     }
@@ -673,7 +672,7 @@ function checkStoreProgram(
       // Every conflict column must be written on every call; an omitted
       // optional value would silently turn the upsert into a plain insert.
       for (const column of columns) {
-        const written = op.values === "$input" ? column : inputReference(op.values[column]) ?? (Object.hasOwn(op.values, column) ? null : undefined);
+        const written = inputReference(op.values[column]) ?? (Object.hasOwn(op.values, column) ? null : undefined);
         if (written === undefined || (written !== null && !inputRequired.has(written))) {
           fail("STORE_PROGRAM_INVALID", `${at}/onConflict/columns`, `Procedure '${name}' conflict column '${column}' must be written on every call: set it from a required input property.`, { value: column });
         }
@@ -681,7 +680,7 @@ function checkStoreProgram(
     }
     if ("insert" in op) return;
     for (const other of scan(op.where, schema, `${at}/where`)) if (other.spec.scope) requiresCaller = true;
-    const status = "update" in op && typeof op.set === "object" ? op.set["status"] : undefined;
+    const status = "update" in op ? op.set["status"] : undefined;
     if (!isRowOp(op)) {
       if (op.lock !== undefined) fail("STORE_PROGRAM_INVALID", `${at}/lock`, `Procedure '${name}' locks a set op; lock needs a where that pins id.`);
       const hooked = [...(hooks.get(schemaName) ?? [])].filter((hook) => hook.endsWith(`_${verb}`) || (status === "published" && hook.endsWith("_publish")));
@@ -757,7 +756,7 @@ function checkGuards(
     if (!("ref" in guard.spec.handler)) {
       out.push(
         validateDiagnostic({
-          code: "GUARD_PROCEDURE_NOT_REF",
+          code: "HANDLER_REF_REQUIRED",
           severity: "error",
           path,
           value: guardName,
@@ -918,7 +917,7 @@ function checkTriggerRefs(
     if (hookTarget && !("ref" in hookTarget.spec.handler)) {
       out.push(
         validateDiagnostic({
-          code: "LIFECYCLE_TARGET_NOT_REF",
+          code: "HANDLER_REF_REQUIRED",
           severity: "error",
           path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
           value: procName,

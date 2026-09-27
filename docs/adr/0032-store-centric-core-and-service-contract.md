@@ -93,16 +93,13 @@ The rewrite is built in `next/`, a private package beside the shipped ones (see 
   | `STORE_REFERENCE_UNKNOWN` | `VIEW_FILTER_PARAM_REF_UNKNOWN` | a value reference names no declared scalar input |
   | `STORE_REFERENCE_NOT_REQUIRED` | `VIEW_FILTER_PARAM_REF_NOT_REQUIRED` | a predicate reference names an optional input |
   | `STORE_CALLER_REQUIRED` | `VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH` | a View or program reads or writes a scoped Schema, or uses `$ctx.user.id`, without requiring `ctx.user` |
-  | `STORE_PROGRAM_INVALID` | `BUILTIN_HANDLER_CONTRACT_INVALID` | an inline program contradicts its Schema, input or MCP hints |
+  | `STORE_PROGRAM_INVALID` | `BUILTIN_HANDLER_CONTRACT_INVALID` | an inline program contradicts its Schema, input, output (`{ results }`) or MCP hints |
   | `STORE_PROGRAM_SCHEMA_UNKNOWN` | `BUILTIN_HANDLER_SCHEMA_UNKNOWN` | an op names no declared Schema |
-  | `STORE_PROGRAM_OUTPUT_INVALID` | (new) | the output schema does not accept `{ results }` |
   | `STORE_SET_OP_REJECTED` | (new) | a set op targets a publishing Schema or one with per-row hooks for that operation |
-  | `GUARD_PROCEDURE_NOT_REF` | `GUARD_PROCEDURE_BUILTIN` | a guard Procedure runs a Store program |
-  | `LIFECYCLE_TARGET_NOT_REF` | (new) | a lifecycle Trigger targets a Store program |
+  | `HANDLER_REF_REQUIRED` | `GUARD_PROCEDURE_BUILTIN` | a guard or a lifecycle Trigger target runs a Store program instead of a `ref` |
   | `VIEW_SQL_SCOPED_SCHEMA` | (new) | native SQL reads a scoped Schema |
-  | `HANDLER_NOT_DECLARED` | (new) | a handler the plan does not declare (decision 7) |
 
-  Removed with the Filter AST: `VIEW_FILTER_FIELD_NOT_IN_SCHEMA` (now `VIEW_FIELD_NOT_IN_SCHEMA`), `VIEW_FILTER_CTX_USER_REF_INVALID`, `VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX`. `Diagnostic` gains `conflict` (decision 1).
+  Removed with the Filter AST: `VIEW_FILTER_FIELD_NOT_IN_SCHEMA` (now `VIEW_FIELD_NOT_IN_SCHEMA`), `VIEW_FILTER_CTX_USER_REF_INVALID`, `VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX`. `Diagnostic.conflict` (decision 1) and `HANDLER_NOT_DECLARED` (decision 7) arrive with the Store and runtime steps that raise them.
 
 ### 6. The portable unit is an application-owned service
 

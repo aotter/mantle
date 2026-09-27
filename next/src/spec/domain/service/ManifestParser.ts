@@ -192,8 +192,8 @@ const V01_VIEW_SURFACES: ReadonlySet<string> = new Set(VIEW_SURFACES);
 const STORE_COMPARISONS: ReadonlySet<string> = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "like", "in", "notIn", "isNull"]);
 const STORE_REFERENCES: ReadonlySet<string> = new Set(STORE_VALUE_REFERENCES);
 const SCALAR_TYPES: ReadonlySet<string> = new Set(["string", "number", "integer", "boolean"]);
-/** Input names a whole-input `"$input"` value never carries. */
-const WHOLE_INPUT_EXCLUDED: ReadonlySet<string> = new Set(["id", ...RESERVED_PROCEDURE_INPUT_NAMES]);
+/** Columns an insert or update may not write: the Store owns them. */
+const STORE_MANAGED_COLUMNS: ReadonlySet<string> = new Set([...RESERVED_ENTRY_COLUMNS, ...RESERVED_PROCEDURE_INPUT_NAMES]);
 const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["publishing", "operational"]);
 
 function rejectUnknownKeys(
@@ -1391,9 +1391,8 @@ function validateStoreProgramOp(raw: unknown, idx: number, at: string, input: Js
   if (typeof op[verb] !== "string" || !op[verb]) invalid(`${verb} must name a Schema`, `${at}/${verb}`);
   const fields = (key: "values" | "set"): void => {
     const value = op[key];
-    if (value === "$input") return;
     if (typeof value !== "object" || value === null || Array.isArray(value) || !Object.keys(value).length) {
-      invalid(`${key} must be a non-empty object or "$input"`, `${at}/${key}`);
+      invalid(`${key} must be a non-empty object of column values`, `${at}/${key}`);
     }
     for (const [column, item] of Object.entries(value as Record<string, unknown>)) {
       if (column === "status" && key === "set") {
@@ -1403,7 +1402,7 @@ function validateStoreProgramOp(raw: unknown, idx: number, at: string, input: Js
         }
         continue;
       }
-      if (WHOLE_INPUT_EXCLUDED.has(column) || RESERVED_ENTRY_COLUMNS.includes(column as never)) {
+      if (STORE_MANAGED_COLUMNS.has(column)) {
         invalid(`${key}.${column} is a native column the Store manages`, `${at}/${key}/${column}`);
       }
       validateStoreValue(item, idx, `${at}/${key}/${column}`, input, "Procedure", false);

@@ -398,15 +398,14 @@ export interface HandlerStoreBinding {
 export type StoreProgramOp = StoreProgramInsert | StoreProgramUpdate | StoreProgramDelete;
 
 /**
- * Values are literals or value references. `"$input"` as a whole `values`
- * or `set` means every declared input property except `id` and
- * `expectedVersion`. In `values` and `set`, a reference to an optional
- * input property that the caller omits is left out of the write; in
- * `where`, `id` and `lock` a reference must name a required scalar.
+ * Values are literals or value references. In `values` and `set`, a
+ * reference to an optional input property that the caller omits is left
+ * out of the write; in `where`, `id` and `lock` a reference must name a
+ * required, non-null scalar.
  */
 export interface StoreProgramInsert {
   readonly insert: string;
-  readonly values: Readonly<Record<string, unknown>> | "$input";
+  readonly values: Readonly<Record<string, unknown>>;
   /** Client id; omitted generates one. */
   readonly id?: unknown;
   /** `ignore` skips a unique conflict; the object form updates `update`
@@ -416,7 +415,7 @@ export interface StoreProgramInsert {
 
 export interface StoreProgramUpdate {
   readonly update: string;
-  readonly set: Readonly<Record<string, unknown>> | "$input";
+  readonly set: Readonly<Record<string, unknown>>;
   readonly where: StoreWhereSpec;
   /** Caller-observed version (ADR-0022); requires a row op. */
   readonly lock?: unknown;
