@@ -31,7 +31,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0029](0029-mcp-apps-interaction-contracts.md) | Official MCP SDK for all MCP wire handling; transport-neutral capability catalog with validate-once invocation; `@aotter/mantle-mcp` and `@aotter/mantle-ui`; Manifest-declared interaction contracts and MCP Apps (#1110). | Accepted; amends ADR-lite 909 |
 | [0030](0030-store.md) | Store: one persistence object (`ctx.store` / `runtime.store`) over one relational JSON query AST compiled by each adapter; first slice `select`, `view`, `id`, then `write`, then manifest grammar (#1151). | Accepted; completed for 0.2.0 by 0032 |
 | [0031](0031-host-cloud-core-contract.md) | Cloud supplies the Core pin before host artifact hashing; protocol 2 checks the same pin through grants and the frontend kit. | Accepted |
-| [0032](0032-store-centric-core-and-service-contract.md) | 0.2.0: Store is the only entry persistence path; an application-owned service with host adapters; one `Caller` identity and no Core-owned user or auth; `_mantle_` marks system tables only. | Proposed for 0.2.0 |
+| [0032](0032-store-centric-core-and-service-contract.md) | 0.2.0: Store is the only entry persistence path; an application-owned service behind one host-neutral `createMantle`; one `Caller` identity and no Core-owned user or auth; `_mantle_` marks system tables only. | Proposed for 0.2.0 |
 | [0033](0033-storage-converges-to-the-plan.md) | Schema storage converges to the plan by introspection: Mantle applies safe additions, blocks the rest, and verifies author-made changes; no Mantle-written migration files. | Proposed for 0.2.0 |
 
 ## Reading order

@@ -26,7 +26,7 @@ Spec (the four atoms) compiles into a sealed `RuntimePlan`; Core executes it; ev
 application-owned service (MantleHandlers + one WinterTC fetch entry)
   └─ Core: Trigger dispatch → View / Procedure → Store → StoreExecutor
                                   └ ref → handlers (the only custom code)
-host adapters: createMantleWorker / createBunMantle / createVercelMantle take the service
+createMantle(service, { storage }) → one fetch; the generated preset wires it into the host's entry
 ```
 
 ### 1. Store is the only path to Mantle-owned entry storage
@@ -55,15 +55,15 @@ A write op's `where` is classified **on the caller's `where`, before any policy 
 - A lifecycle Trigger targets a Procedure whose handler is a `ref`. `mantle validate` rejects an inline Store program as a hook target.
 - **`before_*` is a read-only check.** It receives a read-only `CallerStore` (as guard Procedures do today) and no `ctx.invoke`. It allows the mutation by returning and rejects it by throwing; it cannot rewrite the mutation in 0.2.0. A rejection or failure means nothing in the batch is applied: before hooks always fail closed. Hooks for a multi-op batch run in op order, and for one op in Trigger-name order, all before the batch applies. Each sees committed data only, never a sibling op. OCC at apply time still guards the race between the check and the commit. The contract forbids external mutations in a before hook; this limits what Mantle injects, not arbitrary user code.
 - **`after_*` runs only after a successful commit.** A rollback emits nothing, a failure never changes the committed result, and a write the hook makes is a new `write` in a new transaction. The hook receives the mutation snapshot (the row and version at commit), not the latest row.
-- **Delivery.** `LifecycleTriggerSource.errorPolicy` is removed and replaced by `delivery?: "best-effort" | "reliable"`, valid on after hooks only, default `best-effort` (today's behavior). `reliable` writes an after-event record to `_mantle_outbox` in the same batch as the rows, with a stable event id; delivery is then at-least-once and handlers deduplicate on `ctx.cause.id`. A host without the `reliableDelivery` capability fails boot for a plan that declares `reliable`, rather than degrading silently.
+- **Delivery.** `LifecycleTriggerSource.errorPolicy` is removed: before hooks always fail closed, and an after hook cannot change a committed result. After hooks are best effort, as today: they run inline or through `waitUntil`, and `ctx.cause.id` is stable so a handler can deduplicate a replay. Reliable delivery (an outbox written in the same batch, at-least-once) is deferred until a consumer needs it; it is an additive Trigger key.
 - **Retries.** External side effects sit outside Store atomicity. A retry after `OUTCOME_UNKNOWN` reconciles through client ids (`store.id()`) and versions: a replayed insert conflicts on its id, a replayed update on its lock.
-- **Identity and depth.** Hooks run with the originating `Caller`; deferred and outbox deliveries rehydrate it from the event record. `MAX_INVOCATION_DEPTH = 8` counts the `cause` chain across hook chains and `ctx.invoke`; exceeding it fails with `INVOCATION_DEPTH_EXCEEDED`.
+- **Identity and depth.** Hooks run with the originating `Caller`; deferred deliveries rehydrate it from the event record. `MAX_INVOCATION_DEPTH = 8` counts the `cause` chain across hook chains and `ctx.invoke`; exceeding it fails with `INVOCATION_DEPTH_EXCEEDED`.
 - An entitlement check for one action belongs in that Procedure's `requires.guard`. A before hook is for rules every path must obey, Admin, import and maintenance included.
 - The Store hands mutations to a `LifecycleDispatcher` port (`before(mutations)`, `after(events)`) that the Trigger layer implements; Store never references Procedures. It replaces `LifecycleHookingEntryRepository`, `RunLifecycleHooksUseCase` and `DeferredHookDispatcher`.
 
 ### 4. Storage port
 
-`StoreReader` grows into **`StoreExecutor`**: `capabilities`, `select(query)` and `apply(batch)` over validated IR only. `StoreCapabilities` declares `subqueries`, `like`, `onConflict`, `atomicBatch` and `maxBindings`; the one Core validator reads its limits from there, which removes the duplicated `NATIVE_TYPES`, depth and node checks. `ViewQueryExecutor` shrinks to native SQL Views, the remaining escape hatch.
+`StoreReader` grows into **`StoreExecutor`**: `maxBindings`, `select(query)` and `apply(batch)` over validated IR only. Every executor implements the whole IR and applies a batch atomically, so there are no capability flags; the one Core validator reads `maxBindings` (100 on D1) and removes the duplicated `NATIVE_TYPES`, depth and node checks. `ViewQueryExecutor` shrinks to native SQL Views, the remaining escape hatch.
 
 - `SqliteStoreExecutor` serves D1, Bun and libSQL, so libSQL gains writes.
 - `MemoryStoreExecutor` is the reference implementation, the test fake (replacing `test/fakes/in-memory-store.ts`) and the base of the IndexedDB adapter, which keeps its own persistence and concurrency tests.
@@ -81,7 +81,7 @@ The rewrite is built in a private workspace package (working label "MK2") that d
 - **Pagination.** REST, MCP and Admin page with `limit` and `cursor` only.
 - Staff View `uiSchema.searchFields` and `filterFields` compile to `like` and `eq` conditions.
 - A native SQL View may not target a scoped Schema (`VIEW_SQL_SCOPED_SCHEMA`); `VIEW_TTL_NATIVE_UNSAFE` stays.
-- **Schedule Triggers** take a five-field POSIX cron in UTC (weekday 0 = Sunday). The plan no longer carries a required host; a host declares the `schedules` capability, the Cloudflare adapter translates the expression to Cloudflare's dialect, and a host without it fails boot for any enabled schedule.
+- **Schedule Triggers** take a five-field POSIX cron in UTC (weekday 0 = Sunday). The plan no longer carries a required host. A service that wires schedules passes `schedules: true` to `createMantle`, and boot fails for any enabled schedule without it. `toCloudflareCron` in `@aotter/mantle-cloudflare` translates an expression for Wrangler.
 - **Webhooks.** An HTTP Trigger does not receive the raw request body in 0.2.0. The service owns its HTTP entry (decision 6), so it verifies a signature there and calls `runtime.invokeProcedure`. A raw-body Trigger key is additive and can come later.
 
 ### 6. The portable unit is an application-owned service
@@ -97,10 +97,21 @@ interface MantleServiceContext {
 }
 ```
 
-- `env` stays opaque. HTTP is the service's only Mantle ingress; schedules, deferred hooks, outbox drains, MCP and REST enter through Trigger atoms and surfaces, and the service exports no scheduled or queue handler of its own for Mantle.
-- **Host adapters change direction.** `createMantleWorker(service, options)`, `createBunMantle(service, options)` and `createVercelMantle(service, options)` boot the runtime from the host's storage binding, pass it to `service.fetch`, and produce the host's native entry. `createMantleWorker` also maps cron and Queue deliveries to Trigger invocations. The output is a plain object, so an application adds its own native handlers next to Mantle's (`{ ...createMantleWorker(service, options), queue: myConsumer }`); Core absorbs no platform event types. ChatGPT Sites uses `createMantleWorker` with the custom identity.
-- `BootMantleRuntimeArgs.supportsScheduledTriggers` becomes `host: { schedules, reliableDelivery }`.
-- Removed: `MANTLE_RESERVED_PATH_PREFIXES`, `MantleExtensionApp`, `extend`, `extend.mount` and `getRuntime`. `mantle generate` emits the standard composition (today's `createMantleWorker` wiring) as application-owned source: `src/service.ts` and `src/handlers.ts`.
+- `env` stays opaque. HTTP is the service's only Mantle ingress; schedules, deferred hooks, MCP and REST enter through Trigger atoms and surfaces.
+- **One host-neutral entry, no per-host adapter.** Once the service is a WinterTC fetch, hosts differ only in the storage driver and in how their native entry is spelled. `@aotter/mantle-runtime` exports one function:
+
+  ```ts
+  createMantle(service, { storage: (env) => MantleStorageAdapter, schedules?: boolean }): {
+    fetch(request: Request, env: Env, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response>;
+    invokeSchedule(cron: string, scheduledTime: number, env: Env, ctx?): Promise<void>;
+    runDeferredHook(message: unknown, env: Env, ctx?): Promise<void>;
+  }
+  ```
+
+  It boots the runtime lazily from `storage(env)`, passes it to `service.fetch`, and turns a schedule or a deferred-hook message into a Trigger invocation. The host's entry is one to three lines of **generated, application-owned** preset code (`export default { fetch: m.fetch, scheduled: (e, env, ctx) => m.invokeSchedule(e.cron, e.scheduledTime, env, ctx) }` on Cloudflare, `Bun.serve({ fetch: m.fetch })` on Bun), so an application adds its own native handlers next to Mantle's and Core absorbs no platform event types.
+- `createMantleWorker`, `createBunMantle` and `createVercelMantle` are removed; today `createBunMantle` and `createVercelMantle` are 62-line copies of the same lazy boot. The adapter packages keep only what is platform-specific: `@aotter/mantle-cloudflare` the D1 driver, the KV and R2 bindings and `toCloudflareCron`; `@aotter/mantle-bun` the `bun:sqlite` driver; `@aotter/mantle-vercel` the libSQL driver. ChatGPT Sites uses the Cloudflare preset with the custom identity.
+- `BootMantleRuntimeArgs.supportsScheduledTriggers` becomes the `schedules` option above.
+- Removed: `MANTLE_RESERVED_PATH_PREFIXES`, `MantleExtensionApp`, `extend`, `extend.mount` and `getRuntime`. `mantle generate` emits the standard composition as application-owned source: `src/service.ts`, `src/handlers.ts` and the host entry.
 
 ### 7. Handlers, invocation and capabilities
 
@@ -147,19 +158,19 @@ A surface is `(request: Request, caller: Caller) => Promise<Response>`, created 
 | REST Views | `createRestSurface(runtime, { basePath })` | `@aotter/mantle-web` |
 | Web | `createWebSurface(runtime, { basePath, ... })` | `@aotter/mantle-web` |
 
-Each factory records its mount with the runtime for the boot report. Admin UI assets honour the base path. Hono may stay inside a package; it is no longer in any public signature. Mantle Web and Admin read through Store, and `EntryReader` is removed. Codegen emits a typed client for Views and Procedures for custom frontends. The `@aotter/mantle-admin-ui/kit` re-export and `rowBindings` are removed (#1140).
+Admin UI assets honour the base path. Hono may stay inside a package; it is no longer in any public signature. Mantle Web and Admin read through Store, and `EntryReader` is removed. A typed client for custom frontends is deferred; it is additive. The `@aotter/mantle-admin-ui/kit` re-export and `rowBindings` are removed (#1140).
 
 ### 10. Cloud verifies the plan; the user owns the entry
 
 - `semanticFingerprint` becomes SHA-256; it now crosses a trust boundary, which its `ponytail:` comment named as the upgrade point. It is the "compiled plan fingerprint" aotter/mantle-home#201 records.
 - `createMantleRuntime` accepts `expectedFingerprint` and refuses to boot on a mismatch (`PLAN_FINGERPRINT_MISMATCH`).
-- `runtime.bootReport()` returns `MantleBootReport`: `{ fingerprint, coreVersion, handlerRefs, schedules, mounts }`.
-- Cloud's guarantee names two kinds of fact. **Platform-verified:** the Cloud-compiled plan, the pinned Core, storage matching the plan (ADR-0033) and the fingerprint handshake. **Service-reported:** the boot report's mounts and refs, which Cloud confirms only by probing them in smoke. A service that never boots the runtime has no manifest scope to guarantee, and smoke shows that.
+- `runtime.bootReport()` returns `MantleBootReport`: `{ fingerprint, coreVersion }`. Handler refs need no report because boot already refuses a mismatch; schedules are in the plan.
+- Cloud's guarantee names two kinds of fact. **Platform-verified:** the Cloud-compiled plan, the pinned Core, storage matching the plan (ADR-0033) and the fingerprint handshake. **Service-reported:** the surfaces and mounts the service chose, which Cloud confirms only by probing them in smoke. A service that never boots the runtime has no manifest scope to guarantee, and smoke shows that.
 - `mantle-host` distinguishes a handlers-only artifact (today's closed module, host protocol 2 per ADR-0031) from a service-entry artifact, which is closed except for `@aotter/mantle*` externals that Cloud supplies at the pinned Core. The artifact field is `artifactKind: "handlers" | "service"`; service entries use host protocol 3. aotter/mantle-home reserves the field now and accepts service entries after Core 0.2.0, as its own issue.
 
 ### 11. Table namespace
 
-Tables that start with `_mantle_` are system tables: Mantle's internal state (the ledger, boot, Schema registry, schedule runs, outbox). They are Mantle's alone and the service does not touch them. Every other table Mantle or a Mantle module creates is a **product table** and keeps its name, just as Better Auth's tables keep theirs: `site_config`, `media_assets` and `pending_media_uploads` from Core, and Better Auth's own tables from mantle-auth. #1156 is decided by this rule: no rename. `sites_users` leaves `RESERVED_TABLES`, since ChatGPT Sites' identity is application-owned.
+Tables that start with `_mantle_` are system tables: Mantle's internal state (the ledger, boot, Schema registry, schedule runs). They are Mantle's alone and the service does not touch them. Every other table Mantle or a Mantle module creates is a **product table** and keeps its name, just as Better Auth's tables keep theirs: `site_config`, `media_assets` and `pending_media_uploads` from Core, and Better Auth's own tables from mantle-auth. #1156 is decided by this rule: no rename. `sites_users` leaves `RESERVED_TABLES`, since ChatGPT Sites' identity is application-owned.
 
 A product table that already exists without the ledger record of the Mantle migration that creates it is someone else's table: Core refuses to boot (`STORAGE_TABLE_NOT_OWNED`) instead of reading and writing it. mantle-auth applies the same rule to `user` and the other Better Auth tables.
 
@@ -175,7 +186,7 @@ A product table that already exists without the ledger record of the Mantle migr
 
 The three contracts #1188 made ADR gates are accepted only with these cases, run against every `StoreExecutor` and the lifecycle layer:
 
-1. **Atomicity and hooks.** A hook target with an inline program is rejected. A before hook has no write and no `invoke`; its rejection applies nothing in the batch. A concurrent write between a before check and the commit fails on OCC. A rollback emits no after event. An after-hook failure leaves the committed result. A reliable after event survives a crash between commit and delivery and keeps its id on retry.
+1. **Atomicity and hooks.** A hook target with an inline program is rejected. A before hook has no write and no `invoke`; its rejection applies nothing in the batch. A concurrent write between a before check and the commit fails on OCC. A rollback emits no after event. An after-hook failure leaves the committed result. A replayed after event carries the same `ctx.cause.id`.
 2. **Row-op classification.** `{ id }` and `{ id, performedAt: { gte } }` are row ops; `{ ownerId }` is a set op; a caller-scoped rewrite of `{ id }` stays a row op; `Procedure.target` inference agrees with Store in every case.
 3. **Caller identity.** Two callers with the same upstream id from different issuers cannot read each other's scoped rows. An invalid credential is 401, never anonymous. The system caller bypasses scope but not TTL or lifecycle. A no-identity service boots with no auth package and no auth tables.
 
@@ -191,6 +202,7 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 
 - **A legacy-lowering layer** that compiles builtin ops and the Filter AST into IR without a grammar change. Rejected: it keeps the code this release deletes.
 - **A Worker-shaped artifact.** Rejected: it leaks the Worker name, the `fetch`/`scheduled`/`queue` export shape and `cloudflare:workers` into a host-agnostic contract.
+- **One adapter factory per host** (`createMantleWorker`, `createBunMantle`, `createVercelMantle`, each taking the service). Rejected: with a WinterTC service they would differ only in the storage driver and a few lines of entry spelling, which the driver package and the generated preset already carry.
 - **A handler-host port with remote execution.** Deferred: the service already is the host. The serializable `Invocation` keeps remote execution possible.
 - **Keeping a Mantle-owned Worker with extension seams.** Rejected: it limits custom frontends, SSR and webhooks, and duplicates Cloud-only assembly.
 - **An identity port in Runtime, or auth tables in Core.** Rejected in #1152: Core only ever sees a resolved `Caller`.
