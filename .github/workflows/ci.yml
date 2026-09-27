@@ -36,6 +36,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Check generated host script
+        run: pnpm run check:host-generated
+
       - name: Build dist
         # Vitest tests for cloudflare import runtime/admin UI via dist/,
         # so build before test.
@@ -49,12 +52,6 @@ jobs:
 
       - name: Check generated plugin manifests
         run: pnpm run check:plugin-manifests
-
-      - name: Check vendored plugin scripts
-        # The pinned Core revision is compared with its release tag; the default checkout fetches none.
-        run: |
-          git fetch --no-recurse-submodules --depth=1 origin 'refs/tags/v*:refs/tags/v*'
-          pnpm run check:plugin-vendor
 
       - name: Check release controller
         run: pnpm run check:release

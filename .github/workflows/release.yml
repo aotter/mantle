@@ -44,7 +44,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Single source of truth for the thirteen public packages, in dependency order.
+    # Single source of truth for the fourteen public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       PKG_DIRS: >-
@@ -60,6 +60,7 @@ jobs:
         packages/adapters/bun
         packages/adapters/vercel
         packages/adapters/cloudflare
+        packages/mantle-host
         packages/mantle
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

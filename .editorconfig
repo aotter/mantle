@@ -11,7 +11,7 @@ insert_final_newline = true
 [*.md]
 trim_trailing_whitespace = false
 
-# Byte-exact vendored bundle (see its VENDORED.json); editors must not reformat it.
+# Byte-exact generated host script; editors must not reformat it.
 [skills/mantle-host/scripts/mantle-host.mjs]
 charset = unset
 end_of_line = unset

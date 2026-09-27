@@ -1,9 +1,0 @@
-{
-  "source": "aotter/mantle-home",
-  "path": "packages/cloud-cli/dist/mantle-host.mjs",
-  "commit": "0572bd14ba63ee1bd1a886e787e452932ba2002b",
-  "sha256": "3473362eb94e62107ee49e361d921a8fc60028315a7de5cfcfefebad8385aebc",
-  "protocol": 1,
-  "coreVersion": "0.1.5-alpha.1",
-  "builtWith": "pnpm --filter @aotter/mantle-cloud build:host"
-}

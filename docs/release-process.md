@@ -15,7 +15,7 @@ No task implicitly authorizes publication; no manual package/tag writer exists.
 |---|---|---|
 | Reviewed source; unused version | Core source/packed-consumer gates, then immutable Core tag | Exact canonical merged PR SHA and version required |
 | Tag exists; registry candidates partial | Existing npm/GPR publication steps | Verify existing artifact identity; publish missing versions only |
-| Tag exists and all thirteen npmjs packages already exist | Metadata verify, then channel promote and the GitHub release | Skip pack and immutable tarball compare. The controller tip must not rebuild published artifact identity. npm integrity metadata still has to be `sha512`. The public-registry Worker gate stays skipped |
+| Tag exists and all fourteen npmjs packages already exist | Metadata verify, then channel promote and the GitHub release | Skip pack and immutable tarball compare. The controller tip must not rebuild published artifact identity. npm integrity metadata still has to be `sha512`. The public-registry Worker gate stays skipped |
 | Tag exists on an ancestor of the dispatched tip; tip package versions still match | Resolve binds release identity to the tag SHA; later steps stay the existing writers | Controller-only recovery. Do not retag. The canonical merged-PR check uses the tag SHA. Fail when the tip version differs or the tag commit is not an ancestor |
 | Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels and `mantle-release` unchanged |
 | Consumer passes | That registry's promote step: monotonic channel add for every package | Same version is a no-op; older runs cannot move a channel backward. Public channels are only `alpha`, `beta`, `rc`, and `latest`. `mantle-release` is never removed |
@@ -103,11 +103,15 @@ dist-tag DELETE only added failure and re-run state, and Actions
 
    ```sh
    OLD=<previous version> NEW=<version>
-   git grep -l "\"version\": \"$OLD\"" -- '*.json' ':!**/package-lock.json' \
+   git grep -l "\"version\": \"$OLD\"" -- '*.json' ':!**/package-lock.json' ':!packages/mantle-host/src/core.json' \
      | xargs perl -pi -e "s/\"version\": \"\Q$OLD\E\"/\"version\": \"$NEW\"/"
    node scripts/sync-plugin-manifests.mjs
+   pnpm --filter @aotter/mantle-host build
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
+
+   Commit the regenerated `skills/mantle-host/scripts/mantle-host.mjs` with
+   the version bump. Its byte check runs before build in CI and `pnpm check`.
 
    Leave the consumer cold-start entry **untagged**: `npx skills add
    aotter/mantle`, `/plugin marketplace add aotter/mantle`,
@@ -130,7 +134,7 @@ dist-tag DELETE only added failure and re-run state, and Actions
    stable, continue with the promotion below. The controller refuses an
    untagged source that is no longer the expected branch tip.
 
-The thirteen public packages remain in dependency order:
+The fourteen public packages remain in dependency order:
 
 1. @aotter/mantle-spec
 2. @aotter/mantle-ui
@@ -144,7 +148,8 @@ The thirteen public packages remain in dependency order:
 10. @aotter/mantle-bun
 11. @aotter/mantle-vercel
 12. @aotter/mantle-cloudflare
-13. @aotter/mantle
+13. @aotter/mantle-host
+14. @aotter/mantle
 
 ## Promote to main (beta, RC, stable)
 
@@ -212,7 +217,7 @@ tag/release and mirrors GitHub Packages. No cross-repository fanout token is
 needed. Before tagging, verify credentials and new-version absence on both
 registries. Existing artifacts on retry must have matching integrity.
 
-Completion requires the Core tag SHA, all thirteen npmjs/GPR packages, exact
+Completion requires the Core tag SHA, all fourteen npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
 correct channel tags, and the GitHub release. Leftover `mantle-release`
 pointing at the last published candidate is expected. Retain run links and
@@ -234,7 +239,7 @@ from the source branch. Resolve recovers using the existing tag SHA when
 that commit is an ancestor of the tip and package versions on the tip still
 match. The tag owns the release SHA; the tip only carries controller fixes.
 Tagged recovery skips the Core source check because that tree was already
-released from the immutable tag. When `tag_exists` and all thirteen npmjs
+released from the immutable tag. When `tag_exists` and all fourteen npmjs
 packages already exist at that version, that same existence check skips
 packing, immutable tarball comparison, and the public-registry Worker gate.
 The controller tip must not rebuild an artifact whose identity is already

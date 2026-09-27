@@ -42,6 +42,7 @@ The package topology is:
 | `@aotter/mantle-bun` | Bun adapter over caller-owned `bun:sqlite`. |
 | `@aotter/mantle-vercel` | Vercel Functions adapter over injected durable storage; optional libSQL subpath. |
 | `@aotter/mantle-cloudflare` | Cloudflare Workers adapter over D1 and selected platform services. |
+| `@aotter/mantle-host` | Optional hosting upload rules and the plugin script source; Runtime and Spec do not import it. |
 
 `skills/*` are versioned consumer product artifacts. Maintainer instructions
 live at the repository root and in `.agents/skills`; do not merge the two
