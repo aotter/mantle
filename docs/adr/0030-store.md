@@ -1,6 +1,6 @@
 # ADR-0030: Store — one persistence object over one relational query AST
 
-**Status:** Accepted for 0.1.5 (#1151). Runtime slice first; manifest grammar follows under grammar-revise.
+**Status:** Accepted (#1151). Runtime slices shipped in 0.1.5 alphas; the grammar slice, the storage port and the removal of the parallel paths are decided for 0.2.0 by [ADR-0032](0032-store-centric-core-and-service-contract.md).
 
 **Date:** 2026-09-26
 

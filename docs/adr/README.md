@@ -15,7 +15,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0011](0011-adapter-port-spec.md) | Adapter port spec. Required runtime ports plus optional feature ports. | Accepted (new) |
 | [0012](0012-views-as-public-rest.md) | Views auto-expose matching REST and `query_view_*` MCP reads on their declared `public` or `staff` surface. Schemas never get a public REST endpoint. | Accepted + amended |
 | [0013](0013-agent-provisioned-consumer-projects.md) | Historical agent-provisioned consumer projects path. | Superseded by 0021 |
-| [0014](0014-auth-better-auth-and-multi-tenant-mcp.md) | The Cloudflare adapter owns one Better Auth 1.7 identity/OAuth/MCP authority with native method options and CIMD discovery. Verified callers are normalized into runtime context; mutable staff role and target authorization are re-evaluated per call. | Accepted + amended |
+| [0014](0014-auth-better-auth-and-multi-tenant-mcp.md) | The Cloudflare adapter owns one Better Auth 1.7 identity/OAuth/MCP authority with native method options and CIMD discovery. Verified callers are normalized into runtime context; mutable staff role and target authorization are re-evaluated per call. | Accepted + amended; auth ownership amended by 0032 |
 | [0016](0016-site-semantic-layer.md) | Historical Starter/Landing `AGENTS.md` and launch-state contract. | Superseded by 0021 |
 | [0017](0017-media-multi-variant-agent-side-optimization.md) | Multi-variant media assets with agent-side optimization and asset-id entry references. | Accepted |
 | [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Superseded by 0021 |
@@ -23,14 +23,16 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0020](0020-builtin-handler-contracts-and-matched-upsert.md) | Static builtin handler contracts and natural-key matched upsert (`handler.match`). | Accepted + amended by 0022 |
 | [0021](0021-retire-starter-scaffolding.md) | Direct authoring; retire Starter scaffolding. | Accepted; no-initialization clause superseded by 0026 |
 | [0022](0022-caller-observed-version-occ.md) | Caller-observed `expectedVersion` for Admin bind and builtin upsert OCC. | Accepted |
-| [0024](0024-manifest-native-schema-tables.md) | Materialize each Schema as a native storage table and deploy reviewed migration artifacts. | Accepted; authored-native-name clauses superseded by 0025 |
+| [0024](0024-manifest-native-schema-tables.md) | Materialize each Schema as a native storage table and deploy reviewed migration artifacts. | Accepted; authored-native-name clauses superseded by 0025; migration workflow superseded by 0033 |
 | [0025](0025-reserved-native-columns-and-published-only-public-views.md) | Reserve the six native column names, let `indexes` reference them, and compile public publishing Views published-only. | Accepted |
-| [0026](0026-progressive-generate.md) | Progressive `mantle generate` with a full default, positive features, saved host selection, and user-owned source. | Accepted; supersedes part of 0021 |
-| [0027](0027-scheduled-procedure-triggers.md) | Schedule Triggers in the sealed plan with Cloudflare-hosted invocation and system identity. | Accepted for 0.1.5 |
+| [0026](0026-progressive-generate.md) | Progressive `mantle generate` with a full default, positive features, saved host selection, and user-owned source. | Accepted; supersedes part of 0021; dependency closure, identity and `--host` amended by 0032 |
+| [0027](0027-scheduled-procedure-triggers.md) | Schedule Triggers in the sealed plan with Cloudflare-hosted invocation and system identity. | Accepted for 0.1.5; cron dialect and host requirement amended by 0032 |
 | [0028](0028-schema-ttl-expiry.md) | Logical TTL on Schema reads with preview-first, explicit bounded cleanup. | Accepted for 0.1.5 |
 | [0029](0029-mcp-apps-interaction-contracts.md) | Official MCP SDK for all MCP wire handling; transport-neutral capability catalog with validate-once invocation; `@aotter/mantle-mcp` and `@aotter/mantle-ui`; Manifest-declared interaction contracts and MCP Apps (#1110). | Accepted; amends ADR-lite 909 |
-| [0030](0030-store.md) | Store: one persistence object (`ctx.store` / `runtime.store`) over one relational JSON query AST compiled by each adapter; first slice `select`, `view`, `id`, then `write`, then manifest grammar (#1151). | Accepted |
+| [0030](0030-store.md) | Store: one persistence object (`ctx.store` / `runtime.store`) over one relational JSON query AST compiled by each adapter; first slice `select`, `view`, `id`, then `write`, then manifest grammar (#1151). | Accepted; completed for 0.2.0 by 0032 |
 | [0031](0031-host-cloud-core-contract.md) | Cloud supplies the Core pin before host artifact hashing; protocol 2 checks the same pin through grants and the frontend kit. | Accepted |
+| [0032](0032-store-centric-core-and-service-contract.md) | 0.2.0: Store is the only entry persistence path; an application-owned service behind one host-neutral `createMantle`; one `Caller` identity and no Core-owned user or auth; `_mantle_` marks system tables only. | Proposed for 0.2.0 |
+| [0033](0033-storage-converges-to-the-plan.md) | Schema storage converges to the plan by introspection: Mantle applies safe additions, blocks the rest, and verifies author-made changes; no Mantle-written migration files. | Proposed for 0.2.0 |
 
 ## Reading order
 
