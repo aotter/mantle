@@ -1,6 +1,6 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { RESOURCE_MIME_TYPE, EXTENSION_ID } from "@modelcontextprotocol/ext-apps/server";
-import { linkManifestSet, parseManifestSources } from "@aotter/mantle-spec";
+import { DiagnosticError, linkManifestSet, parseManifestSources } from "@aotter/mantle-spec";
 import {
   bindCapabilities,
   compileRuntimePlan,
@@ -171,7 +171,7 @@ describe("MCP Apps registration", () => {
 
     const plan = compile(manifest);
     const failing = createMantleMcpHandler(bindCapabilities(runtime(plan, {
-      executeView: async () => ({ ok: false, diagnostic: { code: "INVALID_ARGUMENT", phase: "runtime", severity: "error", path: "view", message: "Bad page." } }),
+      view: async () => { throw new DiagnosticError({ code: "INVALID_ARGUMENT", phase: "runtime", severity: "error", path: "view", message: "Bad page." }); },
     }), plan, { surface: "public" }), { apps });
     const client = await connect("modern", UI_CAPABILITIES, { apps }, failing);
     const error = await client.callTool({ name: "query_view_public_posts", arguments: {} });
@@ -364,7 +364,7 @@ async function connect(
   return client;
 }
 
-function runtime(plan: RuntimePlan, overrides: Record<string, unknown> = {}): CapabilityRuntime {
+function runtime(plan: RuntimePlan, overrides: { view?: () => Promise<unknown> } = {}): CapabilityRuntime {
   const unused = { execute: vi.fn() };
   return {
     schemas: new Map(Object.values(plan.schemas).map(({ manifest }) => [manifest.metadata.name, manifest])),
@@ -375,10 +375,9 @@ function runtime(plan: RuntimePlan, overrides: Record<string, unknown> = {}): Ca
     unpublish: unused,
     archive: unused,
     deleteEntry: unused,
-    executeView: async () => ({ ok: true, result: { rows: [], page: 1, show: 20, hasMore: false } }),
+    store: { as: () => ({ view: overrides.view ?? (async () => ({ rows: [], page: 1, show: 20, hasMore: false })) }) },
     invokeTrigger: async () => ({ ok: true, data: {} }),
     media: null,
-    ...overrides,
   } as unknown as CapabilityRuntime;
 }
 

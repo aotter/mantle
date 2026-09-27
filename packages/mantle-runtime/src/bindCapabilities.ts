@@ -20,7 +20,7 @@ export type CapabilityRuntime = Pick<
   | "unpublish"
   | "archive"
   | "deleteEntry"
-  | "executeView"
+  | "store"
   | "invokeTrigger"
 > & {
   readonly media: Pick<MantleMedia, "createUpload" | "commitUpload"> | null;
@@ -81,9 +81,7 @@ export function capabilityUseCases(
       unpublish: runtime.unpublish,
       archive: runtime.archive,
       deleteEntry: runtime.deleteEntry,
-      executeView: {
-        execute: (request) => runtime.executeView({ ...request, view: request.view.metadata.name }),
-      },
+      view: (name, options, ctx) => runtime.store.as(ctx).view(name, options),
       invokeTrigger: { execute: (request) => runtime.invokeTrigger(request) },
       ...(media ? { media } : {}),
     },
