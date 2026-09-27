@@ -115,6 +115,11 @@ const runtime = {
   },
 } as unknown as MantleRuntime;
 const store = runtime.store as Store;
+if (false) {
+  const callerStore = store.as({ user: { id: "u1" }, staff: null, env: {} });
+  const callerRow: string | undefined = (await callerStore.select({ from: "products" })).rows[0]?.sku;
+  void callerRow;
+}
 const selected = await store.select({ from: "products", where: { sku: "sku-1" } });
 const sku: string | undefined = selected.rows[0]?.sku;
 if (sku !== "sku-1") throw new Error("typed select failed");
@@ -124,6 +129,8 @@ await store.write([{ insert: "products", values: { sku: "sku-2" } }]);
 if (calls.join(",") !== "select:products,view:products-by-sku,write:products") throw new Error(calls.join(","));
 const handler: MantleHandlers["syncCatalog"] = (_input, ctx) => {
   if (ctx.store) {
+    // @ts-expect-error Caller Store cannot rebind its identity.
+    void ctx.store.as(ctx);
     void ctx.store.select({ from: "products", limit: 1 });
     void ctx.store.write([{ insert: "scoped-posts", values: { title: "Owned" } }]);
     // @ts-expect-error A non-filled required field remains required.
