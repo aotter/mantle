@@ -1,4 +1,4 @@
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: missing-source }
 spec:
@@ -6,7 +6,7 @@ spec:
   from: unknown-schema
   fields: [missing]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: missing-target }
 spec:

@@ -9,7 +9,7 @@ import type { SchemaManifest } from "../../src/spec/domain/model/ManifestGrammar
  */
 function makeManifest(name: string, schema: SchemaManifest["spec"]["schema"]): SchemaManifest {
   return {
-    apiVersion: "cms.mantle.aotter.net/v1",
+    apiVersion: "cms.mantle.aotter.net/v2",
     kind: "Schema",
     metadata: { name },
     spec: { title: name, schema },

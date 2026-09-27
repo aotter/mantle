@@ -12,7 +12,7 @@ import {
   run as runEmitTypes,
 } from "../../src/spec/infrastructure/cli/EmitTypesCommand.js";
 
-const SCHEMA_YAML = `apiVersion: cms.mantle.aotter.net/v1
+const SCHEMA_YAML = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
@@ -29,7 +29,7 @@ spec:
   indexes: [[locale]]
 `;
 
-const VIEW_YAML = `apiVersion: cms.mantle.aotter.net/v1
+const VIEW_YAML = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: posts-by-locale }
 spec:
@@ -44,7 +44,7 @@ spec:
     eq: { field: locale, value: { $param: locale } }
 `;
 
-const PROC_YAML = `apiVersion: cms.mantle.aotter.net/v1
+const PROC_YAML = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: submitContact }
 spec:
@@ -54,13 +54,13 @@ spec:
     properties:
       name: { type: string }
   output: { type: object }
-  handler: { kind: ref, ref: submitContact }
+  handler: { ref: submitContact }
   requires:
     auth:
       all: [ctx.user]
 `;
 
-const TRIGGER_YAML = `apiVersion: cms.mantle.aotter.net/v1
+const TRIGGER_YAML = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: submitContactHttp }
 spec:
@@ -177,15 +177,15 @@ describe("emit CLI --output", () => {
     const dir = await mkdtemp(join(tmpdir(), "mantle-collide-"));
     const m = join(dir, "manifests");
     await mkdir(m, { recursive: true });
-    const proc = (name: string) => `apiVersion: cms.mantle.aotter.net/v1
+    const proc = (name: string) => `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: ${name} }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: ${name} }
+  handler: { ref: ${name} }
 `;
-    const trig = (name: string, target: string) => `apiVersion: cms.mantle.aotter.net/v1
+    const trig = (name: string, target: string) => `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: ${name} }
 spec:

@@ -18,7 +18,7 @@ import type {
  * throws), so its test goes through parseManifests.
  */
 
-const apiVersion = "cms.mantle.aotter.net/v1" as const;
+const apiVersion = "cms.mantle.aotter.net/v2" as const;
 
 function schema(
   name: string,
@@ -63,7 +63,7 @@ function procedure(
     spec: {
       input: { type: "object" },
       output: { type: "object" },
-      handler: { kind: "ref", ref: name },
+      handler: { ref: name },
       ...overrides,
     },
   };
@@ -367,7 +367,7 @@ describe("validateManifests()", () => {
 
 describe("parseManifests() (envelope-shape errors return diagnostics)", () => {
   it("returns INVALID_MANIFEST_ENVELOPE diagnostic when metadata.name is missing", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {}
 spec:
@@ -389,7 +389,7 @@ describe("parseManifests() — Schema indexes", () => {
     properties = "slug: { type: string }",
     name = "posts",
   ) =>
-    parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: ${name} }
 spec:
@@ -514,7 +514,7 @@ ${indexYaml}
 
 describe("Schema searchableFields", () => {
   it("accepts top-level string fields and preserves their order", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: orders }
 spec:
@@ -539,7 +539,7 @@ spec:
     ["non-string property", "[placedAt]", "SCHEMA_SEARCH_INVALID"],
     ["duplicate field", "[orderNumber, orderNumber]", "SCHEMA_SEARCH_INVALID"],
   ])("rejects %s", (_label, searchableFields, code) => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: orders }
 spec:
@@ -558,7 +558,7 @@ spec:
 });
 
 describe("Schema uiSchema list filter", () => {
-  const yaml = (filterField: string, index = "[orderState, placedAt]") => `apiVersion: cms.mantle.aotter.net/v1
+  const yaml = (filterField: string, index = "[orderState, placedAt]") => `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: orders }
 spec:
@@ -622,7 +622,7 @@ spec:
 
 describe("Procedure uiSchema fields", () => {
   it("accepts an explicit textarea without changing the input schema", () => {
-    const source = `apiVersion: cms.mantle.aotter.net/v1
+    const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: adjust-inventory }
 spec:
@@ -634,40 +634,40 @@ spec:
     fields:
       reason: { widget: textarea }
   output: { type: object }
-  handler: { kind: ref, ref: adjustInventory }
+  handler: { ref: adjustInventory }
 `;
     expect(parseManifests(source).diagnostics).toEqual([]);
   });
 
   it("accepts a collection action targeting an existing Schema", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: orders }
 spec:
   title: Orders
   schema: { type: object }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: create-manual-order }
 spec:
   input: { type: object }
   uiSchema: { collectionAction: orders }
   output: { type: object }
-  handler: { kind: ref, ref: createManualOrder }
+  handler: { ref: createManualOrder }
 `);
     expect(result.diagnostics).toEqual([]);
   });
 
   it("rejects a collection action targeting an unknown Schema", () => {
-    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: create-manual-order }
 spec:
   input: { type: object }
   uiSchema: { collectionAction: orders }
   output: { type: object }
-  handler: { kind: ref, ref: createManualOrder }
+  handler: { ref: createManualOrder }
 `);
     const result = validateManifests({ manifests: parsed.manifests });
     expect(result.diagnostics[0]).toMatchObject({
@@ -679,7 +679,7 @@ spec:
 
 describe("parseManifests() — v0.1.0 promoted grammar", () => {
   it("rejects locale as a property of a non-localized Schema", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: orders }
 spec:
@@ -696,7 +696,7 @@ spec:
   });
 
   it("rejects a translation child with no locale-specific payload field", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: story-translations }
 spec:
@@ -713,7 +713,7 @@ spec:
   });
 
   it("rejects translation ownership rules at parse time", () => {
-    const source = (localized: string, properties: string) => `apiVersion: cms.mantle.aotter.net/v1
+    const source = (localized: string, properties: string) => `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: story-translations }
 spec:
@@ -732,7 +732,7 @@ spec:
   });
 
   it("accepts Procedure.handler.kind: 'builtin' with op + schema", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: createPost }
 spec:
@@ -751,7 +751,7 @@ spec:
   });
 
   it("rejects builtin handler that also declares ref (mutually exclusive)", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: createPost }
 spec:
@@ -768,7 +768,7 @@ spec:
   });
 
   it("accepts Trigger.source.kind: 'lifecycle' with on + schema", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: postsCaptcha }
 spec:
@@ -789,7 +789,7 @@ spec:
   it("accepts Cloudflare schedules and rejects malformed cron, required input, and user authorization", () => {
     const procedure = {
       apiVersion, kind: "Procedure", metadata: { name: "sweep" },
-      spec: { input: { type: "object", properties: {} }, output: { type: "object" }, handler: { kind: "ref", ref: "sweep" } },
+      spec: { input: { type: "object", properties: {} }, output: { type: "object" }, handler: { ref: "sweep" } },
     } as ProcedureManifest;
     const trigger = {
       apiVersion, kind: "Trigger", metadata: { name: "daily-sweep" },
@@ -810,7 +810,7 @@ spec:
   });
 
   it("rejects errorPolicy: 'abort' on after_* hooks", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: postsNotify }
 spec:
@@ -827,7 +827,7 @@ spec:
   });
 
   it("accepts Trigger.source.kind: 'mcp' with surface: staff (#281 promotion)", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: restockSkuMcp }
 spec:
@@ -847,7 +847,7 @@ spec:
   });
 
   it("accepts Trigger.source.kind: 'mcp' with surface: public", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: lookupPriceMcp }
 spec:
@@ -861,7 +861,7 @@ spec:
   });
 
   it("rejects Trigger.source.kind: 'mcp' without a surface", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: bareMcp }
 spec:
@@ -875,7 +875,7 @@ spec:
   });
 
   it("rejects Trigger.source.kind: 'mcp' with an unknown surface", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: wrongSurface }
 spec:
@@ -891,7 +891,7 @@ spec:
   });
 
   it("rejects Trigger.source.kind: 'mcp' mixed with lifecycle keys (schema/on/errorPolicy)", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: mixedLifecycle }
 spec:
@@ -910,7 +910,7 @@ spec:
   });
 
   it("rejects Trigger.source.kind: 'mcp' mixed with http keys (method/path)", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: mixedKeys }
 spec:
@@ -932,7 +932,7 @@ spec:
     // Regression: the prior guard used `.every(after_*)`, so a mixed
     // list of before + after with abort silently passed even though
     // after_* cannot abort.
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: postsMixed }
 spec:
@@ -951,7 +951,7 @@ spec:
 
 describe("parseManifests() — View.requires.auth", () => {
   it("accepts a View with requires.auth.all = [ctx.user]", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: privatePosts }
 spec:
@@ -966,7 +966,7 @@ spec:
   });
 
   it("accepts ctx.auth and scalar ctx.auth.scope predicates", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: scopedPosts }
 spec:
@@ -988,7 +988,7 @@ spec:
   });
 
   it("rejects an empty ctx.auth.scope", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: scopedPosts }
 spec:
@@ -1003,7 +1003,7 @@ spec:
   });
 
   it("rejects View.requires.auth.all with a role outside STAFF_ROLES", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: secretView }
 spec:
@@ -1018,7 +1018,7 @@ spec:
   });
 
   it("rejects unsupported View auth keys", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: vAny }
 spec:
@@ -1033,7 +1033,7 @@ spec:
   });
 
   it("rejects extra keys beside a valid auth predicate", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: mixedPredicate }
 spec:
@@ -1051,7 +1051,7 @@ spec:
   });
 
   it("rejects View.requires.auth.all with a non-STAFF_ROLES role (parser-level)", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: vStaff }
 spec:
@@ -1068,7 +1068,7 @@ spec:
 
 describe("View $ctx.user filter", () => {
   it("parses only the exact eq identity sentinel", () => {
-    const valid = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const valid = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: myOrders }
 spec:
@@ -1084,7 +1084,7 @@ spec:
       `{ eq: { field: userId, value: { "$ctx.user": email } } }`,
       `{ eq: { field: userId, value: { "$ctx.user": id, extra: true } } }`,
     ]) {
-      const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+      const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: myOrders }
 spec:
@@ -1135,16 +1135,16 @@ spec:
 
 describe("requires.guard", () => {
   it("parses the single Procedure guard sub-spec on Procedure and View", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: guardedWrite }
 spec:
   input: { type: object }
   output: { type: object }
   requires: { guard: { procedure: requirePaid } }
-  handler: { kind: ref, ref: guardedWrite }
+  handler: { ref: guardedWrite }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: guardedRead }
 spec:
@@ -1157,7 +1157,7 @@ spec:
   });
 
   it("rejects guard keys beyond procedure", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: guardedRead }
 spec:
@@ -1212,7 +1212,7 @@ spec:
 
 describe("parseManifests() — View.spec.surface (#433)", () => {
   it("accepts a bounded shared cache on an unguarded public View", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: cachedPosts }
 spec:
@@ -1229,7 +1229,7 @@ spec:
     ["guarded", "surface: public\n  from: posts\n  requires: can-read"],
     ["SQL", "surface: public\n  sql: SELECT * FROM posts"],
   ])("rejects shared cache on a %s View", (_case, body) => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: unsafeCache }
 spec:
@@ -1240,7 +1240,7 @@ spec:
   });
 
   it("rejects shared cache outside the supported TTL range", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: cachedPosts }
 spec:
@@ -1254,7 +1254,7 @@ spec:
   it.each(["null", "[]", "{ sharedMaxAge: 0 }", "{ sharedMaxAge: 1.5 }"])(
     "rejects invalid shared cache value %s",
     (cache) => {
-      const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+      const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: cachedPosts }
 spec:
@@ -1267,7 +1267,7 @@ spec:
   );
 
   it("rejects unknown shared cache keys", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: cachedPosts }
 spec:
@@ -1329,7 +1329,7 @@ spec:
   });
 
   it("accepts surface: public", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: publicView }
 spec:
@@ -1343,7 +1343,7 @@ spec:
   });
 
   it("accepts surface: staff", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: staffView }
 spec:
@@ -1357,7 +1357,7 @@ spec:
   });
 
   it("accepts surface: internal and rejects shared caching", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: internalView }
 spec:
@@ -1373,12 +1373,12 @@ spec:
   });
 
   it("does not reserve MCP tool names for internal Views", () => {
-    expect(parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    expect(parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: report-a }
 spec: { surface: internal, sql: SELECT 1 }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: report_a }
 spec: { surface: internal, sql: SELECT 2 }
@@ -1386,7 +1386,7 @@ spec: { surface: internal, sql: SELECT 2 }
   });
 
   it("accepts the minimal staff View Admin list uiSchema", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: staffView }
 spec:
@@ -1405,7 +1405,7 @@ spec:
   });
 
   it("rejects View Admin uiSchema on the public surface", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: publicView }
 spec:
@@ -1417,7 +1417,7 @@ spec:
   });
 
   it("rejects an absent surface", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: defaultView }
 spec:
@@ -1428,7 +1428,7 @@ spec:
   });
 
   it("rejects an unknown surface string", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: badView }
 spec:
@@ -1442,7 +1442,7 @@ spec:
   });
 
   it("accepts one bound SELECT and rejects non-read SQL", () => {
-    const valid = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const valid = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: paidOrders }
 spec:
@@ -1455,7 +1455,7 @@ spec:
 `);
     expect(valid.diagnostics).toEqual([]);
 
-    const invalid = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const invalid = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: bad }
 spec:
@@ -1473,7 +1473,7 @@ describe("parseManifests() — YAML alias-bomb regression (#210 H4)", () => {
     // bail — the parser now catches that throw and converts it to a
     // structured diagnostic instead of propagating as an uncaught
     // ReferenceError.
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: bombed }
 spec:
@@ -1503,7 +1503,7 @@ describe("parseManifests() — View.params + filter param-ref grammar (v0.1.0)",
   };
 
   it("accepts a View with no params (static query)", () => {
-    acceptYaml(`apiVersion: cms.mantle.aotter.net/v1
+    acceptYaml(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: postsPublished }
 spec:
@@ -1515,7 +1515,7 @@ spec:
   });
 
   it("accepts a View with required params + filter param-ref sentinel", () => {
-    const r = acceptYaml(`apiVersion: cms.mantle.aotter.net/v1
+    const r = acceptYaml(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: postsByLocale }
 spec:
@@ -1536,7 +1536,7 @@ spec:
   });
 
   it("accepts comparison filters with literal and param-ref values", () => {
-    acceptYaml(`apiVersion: cms.mantle.aotter.net/v1
+    acceptYaml(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: stockMovementsInRange }
 spec:
@@ -1557,7 +1557,7 @@ spec:
   });
 
   it("rejects View.spec.params when type !== object", () => {
-    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: bad }
 spec:
@@ -1570,7 +1570,7 @@ spec:
   });
 
   it("rejects View.spec.params with reserved name 'page'", () => {
-    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: bad }
 spec:
@@ -1586,7 +1586,7 @@ spec:
   });
 
   it("rejects View.spec.params with reserved name 'show'", () => {
-    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: bad }
 spec:
@@ -1609,7 +1609,7 @@ spec:
   });
 
   it("rejects filter param-ref pointing at undeclared params", () => {
-    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: bad }
 spec:
@@ -1622,7 +1622,7 @@ spec:
   });
 
   it("rejects filter param-ref to a param not in required (v0.1.0 required-only)", () => {
-    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: bad }
 spec:
@@ -1641,7 +1641,7 @@ spec:
   });
 
   it("rejects filter param-ref naming a property the params schema does not declare", () => {
-    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: bad }
 spec:
@@ -1659,7 +1659,7 @@ spec:
   });
 
   it("rejects comparison filter param-ref to a param not in required", () => {
-    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: bad }
 spec:
@@ -1680,7 +1680,7 @@ spec:
 
 describe("parseManifests() — ctx.staff role-enum enforcement", () => {
   it("rejects ctx.staff with a role that is not in STAFF_ROLES", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: secret }
 spec:
@@ -1689,14 +1689,14 @@ spec:
   requires:
     auth:
       all: [{ "ctx.staff": ["superadmin"] }]
-  handler: { kind: ref, ref: secretFn }
+  handler: { ref: secretFn }
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics.map((d) => d.code)).toContain("AUTH_PREDICATE_NOT_IN_ENUM");
   });
 
   it("accepts ctx.staff with all roles in STAFF_ROLES", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: editor }
 spec:
@@ -1705,7 +1705,7 @@ spec:
   requires:
     auth:
       all: [{ "ctx.staff": ["owner", "editor"] }]
-  handler: { kind: ref, ref: editorFn }
+  handler: { ref: editorFn }
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics).toEqual([]);
@@ -1785,7 +1785,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
 
 describe("View orderBy direction (#392)", () => {
   it("rejects an orderBy direction outside asc/desc at parse time", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: posts-sorted }
 spec:
@@ -1800,7 +1800,7 @@ spec:
   });
 
   it("accepts asc/desc and a bare field", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: posts-sorted }
 spec:
@@ -1816,7 +1816,7 @@ spec:
 
 describe("required field absent from properties (#399)", () => {
   it("flags a required entry not declared in properties", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
@@ -1834,7 +1834,7 @@ spec:
 
 describe("uncompilable regex pattern (#395)", () => {
   it("flags a malformed `pattern` at validate time instead of crashing at runtime", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
@@ -1850,13 +1850,13 @@ spec:
 });
 
 describe("JSON Schema composition (#752)", () => {
-  const procedure = (input: string) => `apiVersion: cms.mantle.aotter.net/v1
+  const procedure = (input: string) => `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: composed }
 spec:
   input: ${input}
   output: { type: object }
-  handler: { kind: ref, ref: composed }
+  handler: { ref: composed }
 `;
 
   it("accepts recursive local refs, oneOf, const, and schema-valued additionalProperties", () => {

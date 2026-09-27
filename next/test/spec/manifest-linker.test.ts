@@ -8,7 +8,7 @@ import {
 describe("linkManifestSet", () => {
   it("resolves graph references into one sealed value", () => {
     const linked = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: products }
 spec:
@@ -17,7 +17,7 @@ spec:
     type: object
     properties: { slug: { type: string }, title: { type: string } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: product-translations }
 spec:
@@ -28,15 +28,15 @@ spec:
     type: object
     properties: { slug: { type: string }, locale: { type: string }, title: { type: string } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: allow-product }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: allowProduct }
+  handler: { ref: allowProduct }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: product-list }
 spec:
@@ -44,7 +44,7 @@ spec:
   from: products
   requires: { guard: { procedure: allow-product } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: create-product }
 spec:
@@ -53,7 +53,7 @@ spec:
   output: { type: object }
   handler: { kind: builtin, op: create, schema: products }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: product-created }
 spec:
@@ -74,7 +74,7 @@ spec:
   });
 
   it("withholds a value and preserves every duplicate source span", () => {
-    const source = (sourceId: string) => ({ sourceId, text: `apiVersion: cms.mantle.aotter.net/v1
+    const source = (sourceId: string) => ({ sourceId, text: `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
@@ -109,19 +109,19 @@ spec:
 
   it("rejects View names that collide after MCP name mangling", () => {
     const linked = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: orders }
 spec:
   title: Orders
   schema: { type: object, properties: {} }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: open-orders }
 spec: { surface: public, from: orders }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: open_orders }
 spec: { surface: public, from: orders }
@@ -137,53 +137,53 @@ spec: { surface: public, from: orders }
 
   it("warns when an MCP-exposed Procedure has no description, without withholding the link", () => {
     const linked = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: suspend-tenant }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: suspend-tenant }
+  handler: { ref: suspend-tenant }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: measure-usage }
 spec:
   description: { en: "Measure D1/R2 usage for one tenant.", zh-TW: "量測單一租戶用量。" }
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: measure-usage }
+  handler: { ref: measure-usage }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: http-only }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: http-only }
+  handler: { ref: http-only }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: suspend-tenant-staff }
 spec:
   source: { kind: mcp, surface: staff }
   target: { procedure: suspend-tenant }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: suspend-tenant-public }
 spec:
   source: { kind: mcp, surface: public }
   target: { procedure: suspend-tenant }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: measure-usage-staff }
 spec:
   source: { kind: mcp, surface: staff }
   target: { procedure: measure-usage }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: http-only-http }
 spec:
@@ -204,7 +204,7 @@ spec:
 
   it("warns when an MCP write tool's expectedVersion cannot be read from any View on its surface", () => {
     const linked = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: tenants }
 spec:
@@ -212,7 +212,7 @@ spec:
   lifecycle: operational
   schema: { type: object, readOnly: true, properties: { slug: { type: string }, enabled: { type: boolean } } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: organizations }
 spec:
@@ -220,7 +220,7 @@ spec:
   lifecycle: operational
   schema: { type: object, readOnly: true, properties: { name: { type: string }, projectLimit: { type: number } } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: suspend-tenant }
 spec:
@@ -232,9 +232,9 @@ spec:
       tenantId: { type: string, x-mantle-ref: tenants }
       expectedVersion: { type: number }
   output: { type: object }
-  handler: { kind: ref, ref: suspend-tenant }
+  handler: { ref: suspend-tenant }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: set-organization-quotas }
 spec:
@@ -249,21 +249,21 @@ spec:
   output: { type: object }
   handler: { kind: builtin, op: update, schema: organizations }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: platform-tenant-status }
 spec:
   surface: staff
   sql: "SELECT t._mantle_id AS tenantId, t.slug FROM tenants t"
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: platform-organizations }
 spec:
   surface: staff
   from: organizations
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: member-tenant }
 spec:
@@ -271,14 +271,14 @@ spec:
   from: tenants
   fields: [id, slug, version]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: suspend-tenant-staff }
 spec:
   source: { kind: mcp, surface: staff }
   target: { procedure: suspend-tenant }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: set-organization-quotas-staff }
 spec:
@@ -301,7 +301,7 @@ spec:
 
   it("treats a SQL View that aliases _mantle_version as exposing version", () => {
     const linked = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: notes }
 spec:
@@ -309,7 +309,7 @@ spec:
   lifecycle: operational
   schema: { type: object, readOnly: true, properties: { body: { type: string } } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: archive-note }
 spec:
@@ -323,14 +323,14 @@ spec:
   output: { type: object }
   handler: { kind: builtin, op: update, schema: notes }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: platform-notes }
 spec:
   surface: staff
   sql: "SELECT n._mantle_id AS noteId, n._mantle_version AS noteVersion FROM notes n"
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: archive-note-staff }
 spec:
@@ -344,7 +344,7 @@ spec:
 
   it("accepts declared MCP tool annotations and rejects a read-only claim over a writing builtin", () => {
     const declared = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: measure-usage }
 spec:
@@ -352,34 +352,34 @@ spec:
   mcp: { readOnlyHint: true, openWorldHint: true }
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: measure-usage }
+  handler: { ref: measure-usage }
 `));
     expect(declared.ok).toBe(true);
     expect(declared.value?.procedures[0]?.manifest.spec.mcp).toEqual({ readOnlyHint: true, openWorldHint: true });
 
     expect(() => parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: bad-hint }
 spec:
   mcp: { readOnlyHint: "yes" }
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: bad-hint }
+  handler: { ref: bad-hint }
 `)).toThrow(/mcp\.readOnlyHint must be a boolean/);
     expect(() => parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: bad-key }
 spec:
   mcp: { idempotentHint: true }
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: bad-key }
+  handler: { ref: bad-key }
 `)).toThrow(/idempotentHint/);
 
     const lying = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: quotas }
 spec:
@@ -387,7 +387,7 @@ spec:
   lifecycle: operational
   schema: { type: object, properties: { limit: { type: number } } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: set-quota }
 spec:
@@ -403,7 +403,7 @@ spec:
     }));
 
     const gentle = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: quotas }
 spec:
@@ -411,7 +411,7 @@ spec:
   lifecycle: operational
   schema: { type: object, properties: { limit: { type: number } } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: drop-quota }
 spec:
@@ -425,28 +425,28 @@ spec:
       path: "/spec/mcp/destructiveHint",
     }));
     expect(() => parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: both }
 spec:
   mcp: { readOnlyHint: true, destructiveHint: true }
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: both }
+  handler: { ref: both }
 `)).toThrow(/both readOnlyHint/);
   });
 
   it("allows manifests to define the removed generic read tool names", () => {
     const linked = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: get-entry }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: get-entry }
+  handler: { ref: get-entry }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: get-entry-mcp }
 spec:
@@ -459,22 +459,22 @@ spec:
 
   it("rejects duplicate MCP bindings that would lose Trigger identity", () => {
     const linked = linkManifestSet(parse(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: lookup }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: lookup }
+  handler: { ref: lookup }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: lookup-first }
 spec:
   source: { kind: mcp, surface: public }
   target: { procedure: lookup }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: lookup-second }
 spec:

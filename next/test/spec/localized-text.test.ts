@@ -19,7 +19,7 @@ import type {
  * locale-map shape; not rejected by manifest parsing).
  */
 
-const apiVersion = "cms.mantle.aotter.net/v1" as const;
+const apiVersion = "cms.mantle.aotter.net/v2" as const;
 
 describe("resolveLocalizedText", () => {
   it("returns a plain string as-is", () => {
@@ -180,7 +180,7 @@ describe("ManifestParser — Procedure.spec.title / .description (LocalizedText,
     const yaml = procedureDoc({
       input: { type: "object" },
       output: { type: "object" },
-      handler: { kind: "ref", ref: "doThing" },
+      handler: { ref: "doThing" },
     });
     const { manifests, diagnostics } = parseManifests(yaml);
     expect(diagnostics).toEqual([]);
@@ -195,7 +195,7 @@ describe("ManifestParser — Procedure.spec.title / .description (LocalizedText,
       description: "Does the thing.",
       input: { type: "object" },
       output: { type: "object" },
-      handler: { kind: "ref", ref: "doThing" },
+      handler: { ref: "doThing" },
     });
     const { manifests, diagnostics } = parseManifests(yaml);
     expect(diagnostics).toEqual([]);
@@ -210,7 +210,7 @@ describe("ManifestParser — Procedure.spec.title / .description (LocalizedText,
       description: { en: "Does the thing.", "zh-TW": "執行這個操作。" },
       input: { type: "object" },
       output: { type: "object" },
-      handler: { kind: "ref", ref: "doThing" },
+      handler: { ref: "doThing" },
     });
     const { manifests, diagnostics } = parseManifests(yaml);
     expect(diagnostics).toEqual([]);
@@ -223,7 +223,7 @@ describe("ManifestParser — Procedure.spec.title / .description (LocalizedText,
       title: {},
       input: { type: "object" },
       output: { type: "object" },
-      handler: { kind: "ref", ref: "doThing" },
+      handler: { ref: "doThing" },
     });
     const { diagnostics } = parseManifests(yaml);
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -235,7 +235,7 @@ describe("ManifestParser — Procedure.spec.title / .description (LocalizedText,
       title: 42,
       input: { type: "object" },
       output: { type: "object" },
-      handler: { kind: "ref", ref: "doThing" },
+      handler: { ref: "doThing" },
     });
     const { diagnostics } = parseManifests(yaml);
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -247,7 +247,7 @@ describe("ManifestParser — Procedure.spec.title / .description (LocalizedText,
       description: "",
       input: { type: "object" },
       output: { type: "object" },
-      handler: { kind: "ref", ref: "doThing" },
+      handler: { ref: "doThing" },
     });
     const { diagnostics } = parseManifests(yaml);
     expect(diagnostics.length).toBeGreaterThan(0);

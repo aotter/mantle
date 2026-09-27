@@ -1,6 +1,6 @@
 # Characterization source for ADR-0019. It deliberately uses an alias,
 # an empty document, every v0.1 atom, every Trigger surface, auth, and a guard.
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata:
   name: orders
@@ -18,7 +18,7 @@ spec:
 ---
 # Empty documents are ignored but count toward diagnostic document indexes.
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata:
   name: open-orders
@@ -42,7 +42,7 @@ spec:
       all: [ctx.auth, ctx.user]
     guard: { procedure: authorize-order }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata:
   name: authorize-order
@@ -53,9 +53,9 @@ spec:
     properties:
       customerId: { type: string }
   output: { type: object }
-  handler: { kind: ref, ref: authorizeOrder }
+  handler: { ref: authorizeOrder }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata:
   name: place-order
@@ -66,12 +66,12 @@ spec:
     properties:
       customerId: { type: string }
   output: { type: object }
-  handler: { kind: ref, ref: placeOrder }
+  handler: { ref: placeOrder }
   requires:
     auth:
       all: [ctx.auth, ctx.user]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata:
   name: place-order-http
@@ -79,7 +79,7 @@ spec:
   source: { kind: http, method: POST, path: /api/orders }
   target: { procedure: place-order }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata:
   name: place-order-mcp
@@ -87,7 +87,7 @@ spec:
   source: { kind: mcp, surface: public }
   target: { procedure: place-order }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata:
   name: order-created

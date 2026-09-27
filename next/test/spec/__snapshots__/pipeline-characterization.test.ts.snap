@@ -120,7 +120,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
   "parsed": [
     {
       "manifest": {
-        "apiVersion": "cms.mantle.aotter.net/v1",
+        "apiVersion": "cms.mantle.aotter.net/v2",
         "kind": "Schema",
         "metadata": {
           "name": "orders",
@@ -186,7 +186,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
     },
     {
       "manifest": {
-        "apiVersion": "cms.mantle.aotter.net/v1",
+        "apiVersion": "cms.mantle.aotter.net/v2",
         "kind": "View",
         "metadata": {
           "name": "open-orders",
@@ -269,7 +269,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
     },
     {
       "manifest": {
-        "apiVersion": "cms.mantle.aotter.net/v1",
+        "apiVersion": "cms.mantle.aotter.net/v2",
         "kind": "Procedure",
         "metadata": {
           "name": "authorize-order",
@@ -315,7 +315,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
     },
     {
       "manifest": {
-        "apiVersion": "cms.mantle.aotter.net/v1",
+        "apiVersion": "cms.mantle.aotter.net/v2",
         "kind": "Procedure",
         "metadata": {
           "name": "place-order",
@@ -369,7 +369,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
     },
     {
       "manifest": {
-        "apiVersion": "cms.mantle.aotter.net/v1",
+        "apiVersion": "cms.mantle.aotter.net/v2",
         "kind": "Trigger",
         "metadata": {
           "name": "place-order-http",
@@ -405,7 +405,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
     },
     {
       "manifest": {
-        "apiVersion": "cms.mantle.aotter.net/v1",
+        "apiVersion": "cms.mantle.aotter.net/v2",
         "kind": "Trigger",
         "metadata": {
           "name": "place-order-mcp",
@@ -440,7 +440,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
     },
     {
       "manifest": {
-        "apiVersion": "cms.mantle.aotter.net/v1",
+        "apiVersion": "cms.mantle.aotter.net/v2",
         "kind": "Trigger",
         "metadata": {
           "name": "order-created",

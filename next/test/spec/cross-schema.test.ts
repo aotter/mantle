@@ -11,7 +11,7 @@ import type { SchemaManifest } from "../../src/spec/domain/model/ManifestGrammar
 
 function schema(name: string, spec: Partial<SchemaManifest["spec"]>): SchemaManifest {
   return {
-    apiVersion: "cms.mantle.aotter.net/v1",
+    apiVersion: "cms.mantle.aotter.net/v2",
     kind: "Schema",
     metadata: { name },
     spec: {
@@ -96,7 +96,7 @@ describe("checkLocaleAndTranslates — TRANSLATES_PARENT_IS_LOCALIZED", () => {
 describe("checkLocaleAndTranslates — TRANSLATES_FIELD_NOT_IN_PARENT", () => {
   it("flags join field missing from parent Schema properties", () => {
     const parent: SchemaManifest = {
-      apiVersion: "cms.mantle.aotter.net/v1",
+      apiVersion: "cms.mantle.aotter.net/v2",
       kind: "Schema",
       metadata: { name: "products" },
       spec: {

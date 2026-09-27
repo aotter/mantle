@@ -4,7 +4,7 @@ import { IntrospectManifestsUseCase } from "../../src/spec/usecase/IntrospectMan
 import { EmitOpenapiUseCase } from "../../src/spec/usecase/EmitOpenapiUseCase.js";
 import { EmitTypesUseCase } from "../../src/spec/usecase/EmitTypesUseCase.js";
 
-const FIXTURE = `apiVersion: cms.mantle.aotter.net/v1
+const FIXTURE = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
@@ -20,7 +20,7 @@ spec:
   indexes: [[title, slug], [language]]
   uniqueIndexes: [[slug]]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: posts-by-locale }
 spec:
@@ -35,7 +35,7 @@ spec:
   filter:
     eq: { field: language, value: { $param: locale } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: submitContact }
 spec:
@@ -45,12 +45,12 @@ spec:
     properties:
       name: { type: string }
   output: { type: object }
-  handler: { kind: ref, ref: submitContact }
+  handler: { ref: submitContact }
   requires:
     auth:
       all: [ctx.user]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: submitContactHttp }
 spec:
@@ -67,7 +67,7 @@ function fixture() {
 
 describe("IntrospectManifestsUseCase", () => {
   it("exposes a Schema TTL policy", () => {
-    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: events }
 spec:
@@ -122,7 +122,7 @@ describe("EmitOpenapiUseCase", () => {
   });
 
   it("omits internal Views", () => {
-    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: host-report }
 spec: { surface: internal, sql: SELECT 1 AS value }
@@ -137,7 +137,7 @@ spec: { surface: internal, sql: SELECT 1 AS value }
   });
 
   it("projects HTTP path fields out of the body without changing the Procedure schema (#531)", () => {
-    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: reserve-site }
 spec:
@@ -149,9 +149,9 @@ spec:
       operationId: { type: string, minLength: 1 }
       note: { type: string }
   output: { type: object }
-  handler: { kind: ref, ref: reserveSite }
+  handler: { ref: reserveSite }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: reserve-site-http }
 spec:
@@ -222,14 +222,14 @@ spec:
   });
 
   it("auth-gated View emits session-cookie security + 401/403 responses", () => {
-    const gated = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const gated = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
   title: Posts
   schema: { type: object, properties: { slug: { type: string } } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: privatePosts }
 spec:
@@ -264,14 +264,14 @@ spec:
   });
 
   it("sessionCookie name can be overridden via sessionCookieName (local/non-secure deploys)", () => {
-    const gated = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const gated = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
   title: Posts
   schema: { type: object, properties: { slug: { type: string } } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: localPrivate }
 spec:
@@ -292,15 +292,15 @@ spec:
   });
 
   it("reflects configured API key, OAuth, PAT scopes, and dynamic guard accurately", () => {
-    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: requirePaid }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: requirePaid }
+  handler: { ref: requirePaid }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: readOrders }
 spec:
@@ -313,9 +313,9 @@ spec:
         - { "ctx.auth.scope": "orders:read" }
         - { "ctx.auth.scope": "tenant:read" }
     guard: { procedure: requirePaid }
-  handler: { kind: ref, ref: readOrders }
+  handler: { ref: readOrders }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: readOrdersHttp }
 spec:
@@ -374,7 +374,7 @@ spec:
   });
 
   it("collapses a LocalizedText property `description` on Procedure input to a plain string (#453)", () => {
-    const localized = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const localized = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: submitContact }
 spec:
@@ -384,9 +384,9 @@ spec:
     properties:
       name: { type: string, description: { en: "Contact name.", "zh-TW": "聯絡人姓名。" } }
   output: { type: object }
-  handler: { kind: ref, ref: submitContact }
+  handler: { ref: submitContact }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: submitContactHttp }
 spec:
@@ -410,7 +410,7 @@ spec:
   });
 
   it("collapses a LocalizedText property `description` on View params to a plain string (#453)", () => {
-    const localized = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const localized = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
@@ -418,7 +418,7 @@ spec:
   schema: { type: object, properties: { slug: { type: string }, language: { type: string } } }
   indexes: [[language]]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: posts-by-locale }
 spec:
@@ -465,13 +465,13 @@ describe("EmitTypesUseCase", () => {
   });
 
   it("emits a `type` alias (not an interface) for a non-object top-level schema (#394)", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: ping }
 spec:
   input: { type: string }
   output: { type: object }
-  handler: { kind: ref, ref: ping }
+  handler: { ref: ping }
 `;
     const parsed = parseManifests(yaml);
     const { source } = EmitTypesUseCase.run({ linked: parsed.linked!, namespace: "Test" });
@@ -481,13 +481,13 @@ spec:
   });
 
   it("keeps authored names inside generated documentation comments", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+    const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: "unsafe */\\nexport type Injected = true" }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: safe }
+  handler: { ref: safe }
 `;
     const parsed = parseManifests(yaml);
     const { source } = EmitTypesUseCase.run({ linked: parsed.linked!, namespace: "Test" });
@@ -496,7 +496,7 @@ spec:
   });
 
   it("emits recursive refs, oneOf, const, and dictionary schemas without `unknown`", () => {
-    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: tree }
 spec:
@@ -510,7 +510,7 @@ spec:
           next: { $ref: '#/$defs/node' }
     $ref: '#/$defs/node'
   output: { type: object, additionalProperties: { type: integer } }
-  handler: { kind: ref, ref: tree }
+  handler: { ref: tree }
 `);
     expect(parsed.diagnostics).toEqual([]);
     const { source } = EmitTypesUseCase.run({ linked: parsed.linked!, namespace: "Test" });
@@ -523,7 +523,7 @@ spec:
   });
 
   it("preserves nested composition in emitted OpenAPI", () => {
-    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: choose }
 spec:
@@ -534,9 +534,9 @@ spec:
     properties:
       choice: { $ref: '#/$defs/choice' }
   output: { type: object }
-  handler: { kind: ref, ref: choose }
+  handler: { ref: choose }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: choose-http }
 spec:

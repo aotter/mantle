@@ -7,7 +7,7 @@ import type {
 } from "../../src/spec/domain/model/ManifestGrammar.js";
 
 const postsSchema: SchemaManifest = {
-  apiVersion: "cms.mantle.aotter.net/v1",
+  apiVersion: "cms.mantle.aotter.net/v2",
   kind: "Schema",
   metadata: { name: "posts" },
   spec: {
@@ -27,7 +27,7 @@ const postsSchema: SchemaManifest = {
 };
 
 const operationalSchema: SchemaManifest = {
-  apiVersion: "cms.mantle.aotter.net/v1",
+  apiVersion: "cms.mantle.aotter.net/v2",
   kind: "Schema",
   metadata: { name: "logs" },
   spec: {
@@ -50,7 +50,7 @@ function procedure(opts: {
   input: Record<string, unknown>;
 }): ProcedureManifest {
   return {
-    apiVersion: "cms.mantle.aotter.net/v1",
+    apiVersion: "cms.mantle.aotter.net/v2",
     kind: "Procedure",
     metadata: { name: opts.name },
     spec: {
@@ -431,7 +431,7 @@ describe("validateManifests — builtin handler contracts", () => {
 describe("parseManifests — parser validation for handler.match", () => {
   it("rejects match on non-upsert op", () => {
     const yaml = `
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata:
   name: createWithMatch
@@ -452,7 +452,7 @@ spec:
 
   it("rejects empty match array or non-string elements", () => {
     const emptyYaml = `
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata:
   name: emptyMatch
@@ -471,7 +471,7 @@ spec:
     expect(resEmpty.diagnostics.some((d) => /Procedure.spec.handler.match must be a non-empty array/.test(d.message))).toBe(true);
 
     const dupYaml = `
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata:
   name: dupMatch
@@ -492,7 +492,7 @@ spec:
 
   it("rejects Schema data properties named expectedVersion", () => {
     const colliding: SchemaManifest = {
-      apiVersion: "cms.mantle.aotter.net/v1",
+      apiVersion: "cms.mantle.aotter.net/v2",
       kind: "Schema",
       metadata: { name: "posts" },
       spec: {
@@ -516,7 +516,7 @@ spec:
     )).toBe(true);
 
     const yaml = parseManifests(`
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: logs }
 spec:

@@ -4,7 +4,7 @@ import {
   sourceLocationAt,
 } from "../../src/spec/domain/service/ManifestParser.js";
 
-const schema = (name: string): string => `apiVersion: cms.mantle.aotter.net/v1
+const schema = (name: string): string => `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: ${name} }
 spec:
@@ -36,7 +36,7 @@ describe("parseManifestSources", () => {
   });
 
   it("materializes schema and ordering defaults once", () => {
-    const view = `apiVersion: cms.mantle.aotter.net/v1
+    const view = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: newest }
 spec:

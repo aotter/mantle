@@ -5,7 +5,7 @@ import {
   ValidateManifestsUseCase,
 } from "../../src/spec/index.js";
 
-const schema = `apiVersion: cms.mantle.aotter.net/v1
+const schema = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
@@ -20,7 +20,7 @@ spec:
 function validate(sql: string) {
   const parsed = parseManifestSources({ sources: [{
     sourceId: "test.yaml",
-    text: `${schema}\n---\napiVersion: cms.mantle.aotter.net/v1
+    text: `${schema}\n---\napiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: test-view }
 spec:
@@ -82,7 +82,7 @@ describe("SQL View sandbox", () => {
   it("does not construct a SQLite sandbox when there are no SQL Views", () => {
     const parsed = parseManifestSources({ sources: [{
       sourceId: "portable.yaml",
-      text: `apiVersion: cms.mantle.aotter.net/v1
+      text: `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: portable }
 spec:

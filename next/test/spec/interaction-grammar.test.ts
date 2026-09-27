@@ -10,7 +10,7 @@ import { parseManifests, validateManifests } from "./parse.js";
 
 /** ADR-0029 D4: `x-mantle-ref` object form and `Procedure.spec.target`. */
 
-const apiVersion = "cms.mantle.aotter.net/v1" as const;
+const apiVersion = "cms.mantle.aotter.net/v2" as const;
 
 function requisitions(): SchemaManifest {
   return {
@@ -46,7 +46,7 @@ function review(spec: Partial<ProcedureManifest["spec"]> = {}): ProcedureManifes
         required: ["requisitionId", "expectedVersion"],
       },
       output: { type: "object" },
-      handler: { kind: "ref", ref: "review" },
+      handler: { ref: "review" },
       target: { schema: "requisitions", id: "requisitionId", version: "expectedVersion" },
       ...spec,
     } as ProcedureManifest["spec"],
@@ -154,7 +154,7 @@ metadata: { name: review }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: review }
+  handler: { ref: review }
   target: ${JSON.stringify(target)}
 `;
       const { diagnostics } = parseManifests(doc);
