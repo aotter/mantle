@@ -36,9 +36,9 @@ files.
 | `chatgpt-sites` | `.openai/hosting.json` | the Sites guide and steps named above |
 | `mantle-cloud` | its `.mantle/hosting.json` target | the `mantle-host` skill |
 
-For Mantle Cloud, install the `mantle-host` plugin:
-`/plugin install mantle-host@mantle` in Claude Code,
-`codex plugin add mantle-host@mantle` in Codex, or
+For Mantle Cloud, install the root `mantle` plugin:
+`/plugin install mantle@mantle` in Claude Code,
+`codex plugin add mantle@mantle` in Codex, or
 `npx skills add aotter/mantle --skill mantle-host` on other hosts. Then follow
 that skill. It links, saves, deploys and rolls back through Cloud MCP, and the
 sections below do not apply.

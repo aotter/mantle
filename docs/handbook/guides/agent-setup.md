@@ -13,7 +13,7 @@ npx skills add aotter/mantle
 ```
 
 The installer selects the repository's `mantle` skill. It does not install
-the Mantle Cloud deploy skill from the `mantle-host` plugin;
+the Mantle Cloud deploy skill from the root plugin;
 `--skill mantle-host` installs it. Read the `mantle` skill's printed
 installation path.
 In a project-local Codex installation that is

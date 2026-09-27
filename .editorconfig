@@ -12,7 +12,7 @@ insert_final_newline = true
 trim_trailing_whitespace = false
 
 # Byte-exact vendored bundle (see its VENDORED.json); editors must not reformat it.
-[plugins/mantle-host/skills/mantle-host/scripts/mantle-host.mjs]
+[skills/mantle-host/scripts/mantle-host.mjs]
 charset = unset
 end_of_line = unset
 indent_style = unset
