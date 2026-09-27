@@ -3,6 +3,8 @@ export interface ViewQueryOptions {
   readonly params?: Readonly<Record<string, unknown>>;
   readonly page?: number;
   readonly show?: number;
+  readonly limit?: number;
+  readonly cursor?: string;
   readonly ctxUserId?: string;
   readonly search?: { readonly term: string; readonly fields: readonly string[] };
   readonly filters?: ReadonlyArray<{ readonly field: string; readonly value: string }>;
@@ -17,6 +19,7 @@ export interface ViewQueryResult<R = Record<string, unknown>> {
   readonly page: number;
   readonly show: number;
   readonly hasMore: boolean;
+  readonly nextCursor?: string;
 }
 
 /** Storage-owned execution of already-compiled logical Views. */

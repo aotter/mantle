@@ -877,7 +877,7 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "description", "uiSchema", "from", "sql", "surface", "cache", "requires", "filter", "fields", "orderBy", "limit", "params"],
+    ["title", "description", "uiSchema", "from", "select", "sql", "surface", "cache", "requires", "filter", "fields", "orderBy", "limit", "params"],
     idx,
     "/spec",
   );
@@ -896,13 +896,41 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
     false,
   );
   const hasFrom = typeof s["from"] === "string" && (s["from"] as string).length > 0;
+  const hasSelect = s["select"] !== undefined;
   const hasSql = typeof s["sql"] === "string" && (s["sql"] as string).trim().length > 0;
-  if (hasFrom === hasSql) {
+  if (Number(hasFrom) + Number(hasSelect) + Number(hasSql) !== 1) {
     throw new ManifestParseError(
-      "View.spec requires exactly one of `from` or `sql`",
+      "View.spec requires exactly one of `select`, `from` or `sql`",
       idx,
       "/spec",
     );
+  }
+  if (hasSelect) {
+    const select = s["select"];
+    if (typeof select !== "object" || select === null || Array.isArray(select)) {
+      throw new ManifestParseError("View.spec.select must be an object", idx, "/spec/select");
+    }
+    const query = select as Record<string, unknown>;
+    rejectUnknownKeys(query, ["from", "columns", "where", "orderBy", "limit"], idx, "/spec/select");
+    if (typeof query["from"] !== "string" || !query["from"]) {
+      throw new ManifestParseError("View.spec.select.from must name a Schema", idx, "/spec/select/from");
+    }
+    if (query["columns"] !== undefined && (!Array.isArray(query["columns"]) || !query["columns"].length || !query["columns"].every((column: unknown) => typeof column === "string" && column.length > 0))) {
+      throw new ManifestParseError("View.spec.select.columns must be a non-empty array of column names", idx, "/spec/select/columns");
+    }
+    if (query["where"] !== undefined && (typeof query["where"] !== "object" || query["where"] === null || Array.isArray(query["where"]))) {
+      throw new ManifestParseError("View.spec.select.where must be an object", idx, "/spec/select/where");
+    }
+    const order = query["orderBy"];
+    if (order !== undefined && (typeof order !== "object" || order === null || Array.isArray(order) || Object.keys(order).length !== 1 || !Object.values(order).every((direction) => direction === "asc" || direction === "desc"))) {
+      throw new ManifestParseError("View.spec.select.orderBy must name one column and direction", idx, "/spec/select/orderBy");
+    }
+    if (query["limit"] !== undefined && (!Number.isSafeInteger(query["limit"]) || (query["limit"] as number) < 1 || (query["limit"] as number) > 500)) {
+      throw new ManifestParseError("View.spec.select.limit must be 1–500", idx, "/spec/select/limit");
+    }
+    for (const key of ["filter", "fields", "orderBy", "limit"] as const) {
+      if (s[key] !== undefined) throw new ManifestParseError(`View.spec.${key} cannot be combined with View.spec.select`, idx, `/spec/${key}`);
+    }
   }
   const surface = s["surface"];
   if (typeof surface !== "string" || !V01_VIEW_SURFACES.has(surface)) {
@@ -927,8 +955,11 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   }
   let paramSchema: JsonSchema | undefined;
   if ("params" in s && s["params"] != null) {
-    paramSchema = validateViewParams(s["params"], idx);
+    paramSchema = validateViewParams(s["params"], idx, hasSelect);
     validateJsonSchema(paramSchema, idx, "View", m.metadata.name, "/spec/params");
+  }
+  if (hasSelect && (s["select"] as Record<string, unknown>)["where"] !== undefined) {
+    validateViewSelectWhere((s["select"] as Record<string, unknown>)["where"], idx, "/spec/select/where", paramSchema);
   }
   if (hasSql) {
     validateViewSql(s["sql"] as string, paramSchema, idx);
@@ -949,6 +980,57 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
     validateViewOrderBy(s["orderBy"], idx);
   }
   return m;
+}
+
+function validateViewSelectWhere(raw: unknown, idx: number, pointer: string, params?: JsonSchema, budget = { nodes: 0 }, depth = 0): void {
+  const invalid = (message: string, at = pointer): never => { throw new ManifestParseError(message, idx, at); };
+  if (++budget.nodes > 256 || depth > 16) invalid("View select.where exceeds its query budget");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Object.keys(raw).length) invalid("View select.where must be a non-empty object");
+  const reference = (value: unknown, at: string): void => {
+    if (Array.isArray(value)) invalid("View values must be scalars or declared references", at);
+    if (typeof value === "string" && value.startsWith("$")) {
+      if (value === "$ctx.user.id" || value === "$now") return;
+      const name = value.startsWith("$input.") ? value.slice(7) : "";
+      if (name && Object.hasOwn(params?.properties ?? {}, name)) {
+        const property = params?.properties?.[name];
+        if (!params?.required?.includes(name) || !property || !["string", "number", "integer", "boolean"].includes(String(property.type))) {
+          invalid(`View reference '${value}' requires a required scalar parameter`, at);
+        }
+        return;
+      }
+      invalid(`Unknown View value reference '${value}'`, at);
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const literal = value as Record<string, unknown>;
+      if (Object.keys(literal).length === 1 && typeof literal["$literal"] === "string") return;
+      invalid("View values must be scalars or declared references", at);
+    }
+  };
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const at = `${pointer}/${key}`;
+    if (key === "and" || key === "or") {
+      if (!Array.isArray(value) || !value.length) invalid(`${key} must be a non-empty array`, at);
+      (value as unknown[]).forEach((item, index) => validateViewSelectWhere(item, idx, `${at}/${index}`, params, budget, depth + 1));
+    } else if (key === "not") {
+      validateViewSelectWhere(value, idx, at, params, budget, depth + 1);
+    } else if (value && typeof value === "object" && !Array.isArray(value) && !Object.hasOwn(value, "$literal")) {
+      for (const [operator, operand] of Object.entries(value)) {
+        const opPath = `${at}/${operator}`;
+        if (!new Set(["eq", "ne", "gt", "gte", "lt", "lte", "like", "in", "notIn", "isNull"]).has(operator)) invalid(`Unknown View comparison '${operator}'`, opPath);
+        if (operator === "isNull") {
+          if (typeof operand !== "boolean") invalid("isNull must be boolean", opPath);
+        } else if (operator === "in" || operator === "notIn") {
+          if (Array.isArray(operand)) operand.forEach((item, index) => reference(item, `${opPath}/${index}`));
+          else if (operand && typeof operand === "object" && !Array.isArray(operand)) {
+            const sub = operand as Record<string, unknown>;
+            rejectUnknownKeys(sub, ["select", "from", "where"], idx, opPath);
+            if (typeof sub["select"] !== "string" || typeof sub["from"] !== "string") invalid("Subquery requires select and from", opPath);
+            if (sub["where"] !== undefined) validateViewSelectWhere(sub["where"], idx, `${opPath}/where`, params, budget, depth + 1);
+          } else invalid(`${operator} requires an array or subquery`, opPath);
+        } else reference(operand, opPath);
+      }
+    } else reference(value, at);
+  }
 }
 
 function validateViewCache(raw: unknown, view: ViewManifest, idx: number): void {
@@ -1053,7 +1135,7 @@ function validateViewOrderBy(raw: unknown, idx: number): void {
   });
 }
 
-function validateViewParams(raw: unknown, idx: number): JsonSchema {
+function validateViewParams(raw: unknown, idx: number, select = false): JsonSchema {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new ManifestParseError(
       "View.spec.params must be a JSON Schema object",
@@ -1081,10 +1163,11 @@ function validateViewParams(raw: unknown, idx: number): JsonSchema {
     );
   }
   const propNames = Object.keys(props as Record<string, unknown>);
-  for (const reserved of VIEW_PARAMS_RESERVED) {
+  const reservedNames = select ? [...VIEW_PARAMS_RESERVED, "limit", "cursor"] : VIEW_PARAMS_RESERVED;
+  for (const reserved of reservedNames) {
     if (propNames.includes(reserved)) {
       throw new ManifestParseError(
-        `View.spec.params.properties.${reserved} is reserved (the runtime owns ${VIEW_PARAMS_RESERVED.join(", ")} for pagination); rename the param.`,
+        `View.spec.params.properties.${reserved} is reserved (the runtime owns ${reservedNames.join(", ")} for pagination); rename the param.`,
         idx,
         `/spec/params/properties/${reserved}`,
         "VIEW_PARAMS_RESERVED_NAME",

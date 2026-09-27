@@ -27,6 +27,7 @@ export class IndexedDbViewQueryExecutor implements ViewQueryExecutor {
     plan: RuntimePlan,
   ) {
     for (const view of Object.values(plan.views)) {
+      if (view.query.kind === "store") continue;
       if (view.query.kind === "native") {
         throw new DiagnosticError(runtimeDiagnostic({
           code: "VIEW_DIALECT_UNSUPPORTED",

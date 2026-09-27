@@ -101,7 +101,7 @@ export function emitMantleModule(request: EmitMantleModuleRequest): EmitMantleMo
       }),
       '}',
       '',
-      'type ViewOptions<N extends keyof Views> = Pick<ViewQueryOptions, "page" | "show" | "search" | "filters"> &',
+      'type ViewOptions<N extends keyof Views> = Pick<ViewQueryOptions, "page" | "show" | "limit" | "cursor" | "search" | "filters"> &',
       '  (Views[N]["params"] extends undefined ? {} : Views[N]["required"] extends true',
       '    ? { readonly params: Views[N]["params"] } : { readonly params?: Views[N]["params"] });',
       'type HostWrite = { [N in keyof Schemas & string]:',

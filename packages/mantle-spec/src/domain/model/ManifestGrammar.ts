@@ -259,6 +259,16 @@ export interface ViewCachePolicy {
 export const VIEW_SURFACES = ["public", "staff", "internal"] as const;
 export type ViewSurface = (typeof VIEW_SURFACES)[number];
 
+/** A named Store select. Values may use `$input.<name>`, `$ctx.user.id`,
+ * `$now`, or `{ $literal: string }`; identifiers remain Schema-validated. */
+export interface ViewSelectSpec {
+  readonly from: string;
+  readonly columns?: readonly string[];
+  readonly where?: Readonly<Record<string, unknown>>;
+  readonly orderBy?: Readonly<Record<string, "asc" | "desc">>;
+  readonly limit?: number;
+}
+
 export interface ViewManifestSpec {
   /** Human-readable label for the admin UI's report sidebar / report
    *  page (#443). Same string-or-locale-map `LocalizedText` shape as
@@ -276,8 +286,10 @@ export interface ViewManifestSpec {
    *  `filterFields`; public REST and MCP semantics stay unchanged. */
   readonly uiSchema?: Record<string, unknown>;
   /** Legacy declarative source Schema name (bare; no namespace).
-   *  Exactly one of `from` or `sql` is required. */
+   *  Exactly one of `select`, `from` or `sql` is required. */
   readonly from?: string;
+  /** Declarative relational query executed through Store. */
+  readonly select?: ViewSelectSpec;
   /** A single read-only SQLite SELECT over Schema logical tables.
    *  Named `:params` are declared by `params` and bound by the runtime. */
   readonly sql?: string;
@@ -391,7 +403,7 @@ export function isCtxUserRef(v: unknown): v is CtxUserRef {
  *  (`/api/views/<name>?...`). The runtime owns these for pagination; a
  *  View manifest that declares `params.<name>` for any of them is
  *  rejected at parse time (`VIEW_PARAMS_RESERVED_NAME`). */
-export const VIEW_PARAMS_RESERVED = ["page", "show", "cursor"] as const;
+export const VIEW_PARAMS_RESERVED = ["page", "show"] as const;
 export type ViewParamReserved = (typeof VIEW_PARAMS_RESERVED)[number];
 export interface FilterAnd {
   readonly and: readonly FilterAst[];

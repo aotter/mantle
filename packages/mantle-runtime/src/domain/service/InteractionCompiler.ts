@@ -103,9 +103,9 @@ function legacyInferredField(input: string, schema: SchemaManifest): string {
 function sourceViews(interaction: Draft, views: readonly ViewManifest[]): string[] {
   const needed = [...interaction.bind.map(({ field }) => field), ...(interaction.version ? ["version"] : [])];
   return views
-    .filter((view) => !view.spec.sql && view.spec.from === interaction.schema)
+    .filter((view) => !view.spec.sql && (view.spec.select?.from ?? view.spec.from) === interaction.schema)
     .filter((view) => {
-      const fields: readonly string[] = view.spec.fields ?? RESERVED_ENTRY_COLUMNS;
+      const fields: readonly string[] = view.spec.select?.columns ?? view.spec.fields ?? RESERVED_ENTRY_COLUMNS;
       return needed.every((field) => fields.includes(field));
     })
     .map((view) => view.metadata.name)

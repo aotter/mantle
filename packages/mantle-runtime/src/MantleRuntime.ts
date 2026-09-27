@@ -315,6 +315,9 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
       });
     },
     plan.views,
+    (query, ctx) => createStore(storeDependencies, { ctx }).select(query),
+    () => clock.now(),
+    schemasByName,
   );
   const runDeferredHook = new RunDeferredHookUseCase(lifecycleHooks);
   const siteConfig = prepared.siteConfig ?? null;

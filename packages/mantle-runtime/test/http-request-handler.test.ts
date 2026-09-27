@@ -30,6 +30,19 @@ const request = (path: string, method = "POST") => new Request(`https://site.tes
 });
 
 describe("portable indexed Trigger transport", () => {
+  it("forwards public Store View cursors and limits", async () => {
+    const apiVersion = "cms.mantle.aotter.net/v1" as const;
+    const options = fixture([], [
+      { apiVersion, kind: "Schema", metadata: { name: "posts" }, spec: { title: "Posts", schema: { type: "object", properties: { title: { type: "string" } } } } },
+      { apiVersion, kind: "View", metadata: { name: "recent" }, spec: { surface: "public", select: { from: "posts" } } },
+    ]);
+    const read = vi.fn(async () => ({ rows: [], page: 1, show: 2, hasMore: true, nextCursor: "next" }));
+    const handle = createMantleRequestHandler({ ...options, getRuntime: async () => ({ store: { as: () => ({ view: read }) } }) as unknown as MantleRuntime });
+    const response = await handle(request("/api/views/recent?limit=2&cursor=prior", "GET"));
+    expect(read).toHaveBeenCalledWith("recent", { params: {}, limit: 2, cursor: "prior", pathPrefix: "GET /api/views/recent" });
+    expect(await response?.json()).toMatchObject({ data: { nextCursor: "next" } });
+  });
+
   it("maps rejected Store Views to HTTP diagnostics", async () => {
     const apiVersion = "cms.mantle.aotter.net/v1" as const;
     const options = fixture([], [

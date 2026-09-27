@@ -25,6 +25,36 @@ const auth: AdminAuth = {
 };
 
 describe("mountMantleAdmin", () => {
+  it("forwards Store View cursors and exports every page", async () => {
+    const plan = compilePlan(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  schema: { type: object, properties: { title: { type: string } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: recent }
+spec:
+  surface: staff
+  select: { from: posts, columns: [title], limit: 1 }
+`);
+    const read = vi.fn(async (_name: string, options: { cursor?: string }) => ({
+      rows: [{ title: options.cursor ? "second" : "first" }], page: 1, show: 1,
+      hasMore: !options.cursor, ...(options.cursor ? {} : { nextCursor: "next" }),
+    }));
+    const app = new Hono();
+    mountMantleAdmin(app, { plan, auth: { ...auth,
+      getSession: async () => ({ session: { id: "s" }, user: { id: "u", role: "owner", roleCurrent: true as const } }),
+    }, assets: { fetch: async () => null }, get: async () => ({ store: { as: () => ({ view: read }) } }) as unknown as MantleAdminRuntime });
+    expect((await (await app.request("https://site.test/admin/api/views/recent?cursor=next&limit=1")).json()).data.rows)
+      .toEqual([{ title: "second" }]);
+    expect(read).toHaveBeenCalledWith("recent", expect.objectContaining({ cursor: "next", limit: 1 }));
+    const csv = await app.request("https://site.test/admin/api/views/recent/export");
+    expect(await csv.text()).toContain("first\r\nsecond\r\n");
+  });
+
   it("shows declared schedules and TTL separately from unavailable observations to owners only", async () => {
     const plan = compilePlan(`apiVersion: cms.mantle.aotter.net/v1
 kind: Schema

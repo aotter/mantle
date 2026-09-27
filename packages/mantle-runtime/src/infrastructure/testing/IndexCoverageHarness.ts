@@ -7,9 +7,12 @@ import {
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { RuntimePlan } from "../../domain/service/RuntimePlanCompiler.js";
+import { scopeStoreWhere } from "../../usecase/store/validateStoreQuery.js";
+import { bindStoreViewSelect } from "../../usecase/view/ExecuteViewUseCase.js";
+import { SqliteStoreQueryCompiler } from "../persistence/SqliteStoreQuery.js";
 import { compileView } from "../storage/SqliteViewCompiler.js";
 import { CANONICAL_MIGRATIONS } from "../boot/canonicalMigrations.js";
-import { quoteIdent, schemaTableMigrations } from "../storage/SqliteSchemaTables.js";
+import { liveTtlCondition, quoteIdent, schemaTableMigrations } from "../storage/SqliteSchemaTables.js";
 
 export interface IndexCoverageOptions {
   readonly rowsPerSchema?: number;
@@ -73,12 +76,10 @@ export function inspectIndexCoverage(
     for (const migration of schemaTableMigrations(schemas)) db.exec(migration.sql);
     seedSchemas(db, schemas, rowsPerSchema);
 
-    const paths = views.map((view) => inspectView(
-      db,
-      view,
-      view.spec.from ? schemasByName.get(view.spec.from) : undefined,
-      (options.requirePublic === true && view.spec.surface === "public") ||
-        requiredNames.has(view.metadata.name),
+    const paths: IndexCoveragePath[] = [];
+    for (const view of views) paths.push(inspectView(
+      db, view, runtimePlan, schemasByName,
+      (options.requirePublic === true && view.spec.surface === "public") || requiredNames.has(view.metadata.name),
     ));
     const viewNames = new Set(views.map((view) => view.metadata.name));
     const missingRequiredViews = [...requiredNames]
@@ -111,11 +112,14 @@ export function inspectIndexCoverage(
 function inspectView(
   db: DatabaseSync,
   view: ViewManifest,
-  schema: SchemaManifest | undefined,
+  runtimePlan: RuntimePlan,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
   explicitlyRequired: boolean,
 ): IndexCoveragePath {
   const params = sampleParams(view);
-  const compiled = compileView(view, { params, page: 1, ctxUserId: "index-harness-user" }, schema);
+  const compiled = view.spec.select
+    ? compileStoreView(view, runtimePlan, schemasByName, params)
+    : compileView(view, { params, page: 1, ctxUserId: "index-harness-user" }, view.spec.from ? schemasByName.get(view.spec.from) : undefined);
   const sqliteParams = compiled.params.map(toSqliteValue);
   const plan = (db.prepare(`EXPLAIN QUERY PLAN ${compiled.sql}`)
     .all(...sqliteParams) as unknown as QueryPlanRow[])
@@ -153,7 +157,7 @@ function inspectView(
   }
   return {
     view: view.metadata.name,
-    schema: view.spec.from ?? "(sql)",
+    schema: view.spec.select?.from ?? view.spec.from ?? "(sql)",
     surface: view.spec.surface,
     required: explicitlyRequired,
     sql: compiled.sql,
@@ -169,6 +173,29 @@ function inspectView(
     schemaIndexUsed,
     passed: findings.length === 0,
     findings,
+  };
+}
+
+function compileStoreView(
+  view: ViewManifest,
+  plan: RuntimePlan,
+  schemas: ReadonlyMap<string, SchemaManifest>,
+  params: Record<string, unknown>,
+): { readonly sql: string; readonly params: readonly unknown[] } {
+  const selected = bindStoreViewSelect(
+    view, plan.views[view.metadata.name], { params }, params,
+    { user: { id: "index-harness-user" }, staff: null, env: {} },
+    `manifest:View/${view.metadata.name}`, Date.now, schemas,
+  );
+  const compiler = new SqliteStoreQueryCompiler(schemas, (table) => liveTtlCondition(table.schema, Date.now));
+  const table = compiler.table(selected.from);
+  const where = compiler.where(table, scopeStoreWhere(selected.where, table.schema, schemas, "index-harness-user"));
+  const [sortField, direction] = Object.entries(selected.orderBy ?? { updatedAt: "desc" })[0]!;
+  const sort = compiler.orderColumn(table, sortField);
+  const nulls = direction === "asc" && !["id", "status", "version", "createdAt", "updatedAt"].includes(sortField) ? " NULLS LAST" : "";
+  return {
+    sql: `SELECT ${table.selectColumns} FROM ${table.table} WHERE ${where.sql} ORDER BY ${sort} ${direction.toUpperCase()}${nulls}, "_mantle_id" ${direction.toUpperCase()} LIMIT ?`,
+    params: [...where.binds, (selected.limit ?? 50) + 1],
   };
 }
 
@@ -256,6 +283,8 @@ function sampleProperty(
 
 function dataAccessFields(view: ViewManifest): ReadonlySet<string> {
   const fields = new Set<string>();
+  for (const field of Object.keys(view.spec.select?.orderBy ?? {})) addDataField(fields, field);
+  if (view.spec.select?.where) collectStoreFields(view.spec.select.where, fields);
   for (const item of view.spec.orderBy ?? []) addDataField(fields, item.field);
   if (view.spec.filter) collectFilterFields(view.spec.filter, fields);
   return fields;
@@ -263,8 +292,18 @@ function dataAccessFields(view: ViewManifest): ReadonlySet<string> {
 
 function dataFilterFields(view: ViewManifest): ReadonlySet<string> {
   const fields = new Set<string>();
+  if (view.spec.select?.where) collectStoreFields(view.spec.select.where, fields);
   if (view.spec.filter) collectFilterFields(view.spec.filter, fields);
   return fields;
+}
+
+function collectStoreFields(where: Readonly<Record<string, unknown>>, fields: Set<string>): void {
+  for (const [field, value] of Object.entries(where)) {
+    if (field === "and" || field === "or") {
+      for (const child of value as readonly Readonly<Record<string, unknown>>[]) collectStoreFields(child, fields);
+    } else if (field === "not") collectStoreFields(value as Readonly<Record<string, unknown>>, fields);
+    else addDataField(fields, field);
+  }
 }
 
 function collectFilterFields(node: FilterAst, fields: Set<string>): void {

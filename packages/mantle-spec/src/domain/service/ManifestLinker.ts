@@ -88,7 +88,7 @@ export function linkManifestSet(
   }));
   const views = graph.views.map((manifest) => Object.freeze({
     ...resolve(manifest as ParsedView),
-    ...(manifest.spec.from ? { from: resolveSchema(manifest.spec.from) } : {}),
+    ...((manifest.spec.select?.from ?? manifest.spec.from) ? { from: resolveSchema((manifest.spec.select?.from ?? manifest.spec.from)!) } : {}),
     ...(manifest.spec.requires?.guard
       ? { guard: resolveProcedure(manifest.spec.requires.guard.procedure) }
       : {}),

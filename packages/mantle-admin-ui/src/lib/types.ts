@@ -274,6 +274,7 @@ export interface StaffOperation {
 /** Read-only View projection exposed by the Admin API. */
 export interface ViewManifestInfo {
   name: string;
+  select?: boolean;
   title: LocalizedText | null;
   surface: "public" | "staff";
   from: string | null;

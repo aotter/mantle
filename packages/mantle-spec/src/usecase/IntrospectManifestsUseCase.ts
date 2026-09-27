@@ -34,15 +34,15 @@ export class IntrospectManifestsUseCase {
     });
     const views: IntrospectedView[] = manifests.filter((manifest) => manifest.kind === "View").map((v) => ({
       name: v.metadata.name,
-      from: v.spec.from ?? null,
+      from: v.spec.select?.from ?? v.spec.from ?? null,
       sql: v.spec.sql ?? null,
       surface: v.spec.surface,
       cache: v.spec.cache ?? null,
       params: v.spec.params ?? null,
       filter: v.spec.filter ?? null,
       orderBy: v.spec.orderBy ?? [],
-      fields: v.spec.fields ?? null,
-      limit: v.spec.limit ?? null,
+      fields: v.spec.select?.columns ?? v.spec.fields ?? null,
+      limit: v.spec.select?.limit ?? v.spec.limit ?? null,
       restPath: v.spec.surface === "internal" ? null : `/api/views/${v.metadata.name}`,
       auth: v.spec.requires?.auth ?? null,
       guard: v.spec.requires?.guard ?? null,
