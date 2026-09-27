@@ -1,5 +1,5 @@
 {
-  "source": "aotter/mantle@3b829e6bc60116a1bbc73bb144aff3d3f7941ecf",
+  "source": "aotter/mantle@bf2720b3",
   "path": "packages/mantle-host/src/host",
-  "sha256": "45b379f5154c46ae4daf9c7c77c74f238506cc85f1b12e04f3b4316ce4394ce8"
+  "sha256": "415c743fed802548d4111b64c8e2577d2d5eb61c974ab3a9a83937108d0d1c0d"
 }
