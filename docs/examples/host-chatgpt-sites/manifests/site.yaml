@@ -20,8 +20,8 @@ metadata:
   name: published-articles
 spec:
   surface: public
-  from: articles
-  fields: [id, title, summary]
-  filter:
-    eq: { field: status, value: published }
-  limit: 20
+  select:
+    from: articles
+    columns: [id, title, summary]
+    orderBy: { id: asc }
+    limit: 20

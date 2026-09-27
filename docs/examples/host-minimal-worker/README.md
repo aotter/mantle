@@ -11,12 +11,12 @@ For your own project, author package.json, manifests, Worker/provider config
 and TypeScript settings for your requirements. Pin all selected `@aotter/mantle*`
 dependencies to the same intended release. The checked-in `latest` values are
 placeholders for Core's disposable release test; resolve and pin one exact
-version before installing a copied application.
+version before installing a copied application. This manifest requires a 0.1.5 alpha build with `View.spec.select`; verify the selected `@alpha` release includes it.
 
 Outside the SDK workspace, with Node 22+ and pnpm 9+:
 
 ```sh
-MANTLE_VERSION=$(pnpm view @aotter/mantle@latest version)
+MANTLE_VERSION=$(pnpm view @aotter/mantle@alpha version)
 pnpm add --save-exact "@aotter/mantle@$MANTLE_VERSION" "@aotter/mantle-cloudflare@$MANTLE_VERSION"
 pnpm check
 pnpm dev

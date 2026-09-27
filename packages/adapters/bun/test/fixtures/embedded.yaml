@@ -15,16 +15,15 @@ kind: View
 metadata: { name: published-orders }
 spec:
   surface: public
-  from: orders
-  fields: [id, customerId, title]
+  select:
+    from: orders
+    columns: [id, customerId, title]
+    orderBy: { id: asc }
+    where: { customerId: "$input.customerId" }
   params:
     type: object
     required: [customerId]
     properties: { customerId: { type: string } }
-  filter:
-    and:
-      - eq: { field: customerId, value: { $param: customerId } }
-      - eq: { field: status, value: published }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure

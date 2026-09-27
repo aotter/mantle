@@ -9,9 +9,9 @@ Schema is example business data; `mantle generate` never invents it.
 Spec + adapter without Admin:
 [`docs/examples/host-minimal-worker`](../host-minimal-worker/README.md).
 
-This reference depends on every `@aotter/mantle*` package via the `latest`
-dist-tag, so a fresh install always resolves the current stable release.
-Core's test runner substitutes its exact candidate in a disposable copy.
+The checked-in `latest` values are placeholders for Core's disposable release test.
+Before installing a copied application, replace every `@aotter/mantle*`
+version with the same exact 0.1.5 alpha build that includes `View.spec.select`.
 
 ## One-shot
 

@@ -6,11 +6,11 @@ After setup, follow [Publish your first article](../../handbook/chatgpt-sites/in
 
 ## Before writing code
 
-Read the user's business request and author the manifest for **their** records and lifecycle. The included `articles` example deliberately allows a title-only draft; `body` uses `x-mcp-hint: markdown`, while `coverAssetId` uses both `x-mantle-ref: media_assets` (Admin picker) and `x-mcp-hint: media-image` (agent guidance). The `published-articles` View is a list projection, not the detail page contract. If the user's content must always have a body, add it to `required`; if the public API must return body or cover ID, add those to the View's `fields`. Review staff roles, public filters and indexes before deployment. `mantle validate` checks grammar, **not** whether this model matches the business request. Manifest changes after deployment require a new reviewed D1 migration and matching storage fingerprint; never edit an applied migration.
+Read the user's business request and author the manifest for **their** records and lifecycle. The included `articles` example deliberately allows a title-only draft; `body` uses `x-mcp-hint: markdown`, while `coverAssetId` uses both `x-mantle-ref: media_assets` (Admin picker) and `x-mcp-hint: media-image` (agent guidance). The `published-articles` View is a list projection, not the detail page contract. If the user's content must always have a body, add it to `required`; if the public API must return body or cover ID, add those to the View's `select.columns`. Review staff roles, public `select.where` clauses and indexes before deployment. `mantle validate` checks grammar, **not** whether this model matches the business request. Manifest changes after deployment require a new reviewed D1 migration and matching storage fingerprint; never edit an applied migration.
 
 ## Install and run
 
-Requires Mantle 0.1.2 or newer. Copy this directory from the selected installed SDK version into a new application directory. Replace every `@aotter/mantle*` `latest` dependency in `package.json` with that same exact version, then:
+Requires a Mantle 0.1.5 alpha build with `View.spec.select`. Copy this directory from the selected installed SDK version into a new application directory. Replace every `@aotter/mantle*` `latest` dependency in `package.json` with that same exact version, then:
 
 ```bash
 npm install                                  # or: bun install

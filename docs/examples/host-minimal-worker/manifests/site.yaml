@@ -17,9 +17,9 @@ metadata:
   name: published-notes
 spec:
   surface: public
-  from: notes
+  select:
+    from: notes
+    columns: [id, title]
+    orderBy: { id: asc }
+    limit: 20
   cache: { sharedMaxAge: 3600 }
-  fields: [id, title]
-  filter:
-    eq: { field: status, value: published }
-  limit: 20
