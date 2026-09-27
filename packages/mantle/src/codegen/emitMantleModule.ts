@@ -21,7 +21,7 @@ export type EmitMantleModuleResult =
   | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] };
 
 const GENERATED_NAMES = new Set([
-  "sealRuntimePlan", "RuntimeHandlerFn", "CoreMantleStore", "RuntimePlanData",
+  "sealRuntimePlan", "HandlerContext", "RuntimeHandlerFn", "CoreMantleStore", "RuntimePlanData",
   "StoreInsert", "StoreUpdate", "StoreDelete", "StoreSelect",
   "StoreSelectResult", "StoreRow", "StoreWriteResult", "ViewQueryOptions",
   "ViewQueryResult", "Schemas", "Views", "Store", "ViewOptions",
