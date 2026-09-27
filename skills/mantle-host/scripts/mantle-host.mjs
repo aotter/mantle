@@ -4981,9 +4981,9 @@ async function deploy(ctx, positional, flags, readInput) {
     } });
     return 0;
   }
-  if (flags.review !== "-") throw fail("usage", "pass --review - and pipe the cloud-paired-review result on stdin");
+  if (flags.review !== "-") throw fail("usage", "pass --review - and pipe the cloud_paired_review result on stdin");
   const review = unwrapResult(await readInput(), "validation");
-  if (!review || review.static?.id !== version.staticUploadId || review.candidate?.id !== version.candidateId) throw fail("review_mismatch", "pipe the cloud-paired-review result for this versionId");
+  if (!review || review.static?.id !== version.staticUploadId || review.candidate?.id !== version.candidateId) throw fail("review_mismatch", "pipe the cloud_paired_review result for this versionId");
   const summary = reviewSummary(review), commit = review.static?.sourceRef?.commit ?? "unversioned";
   const notes = [
     `backend ${summary.backend.contentHash} by ${summary.backend.uploader}`,
@@ -5072,7 +5072,7 @@ async function rollback(ctx, positional, flags, readInput) {
     } });
     return 0;
   }
-  if (flags.deployment !== "-") throw fail("usage", "pass --deployment - and pipe the cloud-project-deployment result on stdin");
+  if (flags.deployment !== "-") throw fail("usage", "pass --deployment - and pipe the cloud_project_deployment result on stdin");
   const row = unwrapResult(await readInput(), "rows")?.rows?.find((item) => item?.projectId === entry.projectId);
   const active = row?.revision;
   if (!row || !hex64.test(active ?? "")) throw fail("nothing_to_roll_back", "the project has no active revision");
@@ -5101,7 +5101,7 @@ async function rollback(ctx, positional, flags, readInput) {
       kind: "mcp",
       tool: "cloud-rollback-project",
       arguments: { projectId: entry.projectId, operationId, expectedRevision: active, targetRevision: target },
-      reason: "Confirm with the deployer: this restores Manifest, handlers, frontend and assets only, never data. Repeat the identical call until cloud-project-deployment reports targetRevision active."
+      reason: "Confirm with the deployer: this restores Manifest, handlers, frontend and assets only, never data. Repeat the identical call until cloud_project_deployment reports targetRevision active."
     }
   });
   return 0;
