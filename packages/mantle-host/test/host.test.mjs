@@ -56,20 +56,20 @@ for (const mode of ['sources', 'bundle']) test(`Cloud supplies the Core pin befo
   try {
     const first = await run(root, ['save', '--json'])
     assert.equal(first.code, 0, first.text)
-    assert.equal(last(first).nextAction.tool, 'cloud-host-contract')
+    assert.equal(last(first).nextAction.tool, 'cloud_host_contract')
     assert.deepEqual(last(first).nextAction.arguments, { projectId })
-    assert.equal(last(await run(root, ['status', '--json'])).nextAction.tool, 'cloud-host-contract')
+    assert.equal(last(await run(root, ['status', '--json'])).nextAction.tool, 'cloud_host_contract')
     const contract = { projectId, core: corePin, protocol: { current: 2, minimum: 2 } }
     assert.equal(last(await resume({ ...contract, projectId: '0199aaaa-0000-7000-8000-000000000009' })).error, 'grant_project_mismatch')
     const invalidPin = last(await resume({ ...contract, core: { version: corePin.version, revision: 'bad' } }))
     assert.equal(invalidPin.error, 'core_pin_invalid')
-    assert.equal(invalidPin.nextAction.tool, 'cloud-host-contract')
+    assert.equal(invalidPin.nextAction.tool, 'cloud_host_contract')
     assert.equal(last(await resume({ ...contract, core: { version: [corePin.version], revision: [corePin.revision] } })).error, 'core_pin_invalid')
     assert.equal(last(await resume({ ...contract, protocol: { current: 3, minimum: 3 } })).error, 'client_outdated')
     assert.equal(last(await resume({ ...contract, protocol: { current: 3, minimum: 3 }, core: { version: 'future-format' } })).error, 'client_outdated')
     const built = await resume(contract)
     assert.equal(built.code, 0, built.text)
-    assert.equal(last(built).nextAction.tool, 'cloud-backend-upload')
+    assert.equal(last(built).nextAction.tool, 'cloud_backend_upload')
     const artifact = JSON.parse(await readFile(join(root, '.mantle/host/out/production/backend.json'), 'utf8'))
     assert.equal(artifact.sdkVersion, corePin.version)
     assert.equal(artifact.sdkRevision, corePin.revision)
@@ -109,10 +109,10 @@ for (const mode of ['sources', 'bundle']) describe(`save flow (${mode})`, () => 
       assert.equal(backend.commit, commit)
       assert.deepEqual(Object.keys(backend.nextAction), ['kind', 'tool', 'arguments', 'requires', 'command', 'confirm', 'reason'])
       assert.deepEqual(backend.nextAction.arguments, { projectId, operationId: backend.nextAction.arguments.operationId, contentHash: backend.verified.contentHash })
-      assert.deepEqual(backend.nextAction.requires, [{ argument: 'expectedVersion', tool: 'member-project', arguments: { projectId }, field: 'version' }])
+      assert.deepEqual(backend.nextAction.requires, [{ argument: 'expectedVersion', tool: 'query_view_member_project', arguments: { projectId }, field: 'version' }])
       assert.equal(backend.nextAction.command, `${node} save --target production --resume --grant - --json`)
-      assert.deepEqual(backend.nextAction.confirm, [{ tool: 'member-organization', arguments: { organizationId: '0199aaaa-0000-7000-8000-000000000001' }, field: 'name' },
-        { tool: 'member-project', arguments: { projectId }, field: 'name' }])
+      assert.deepEqual(backend.nextAction.confirm, [{ tool: 'query_view_member_organization', arguments: { organizationId: '0199aaaa-0000-7000-8000-000000000001' }, field: 'name' },
+        { tool: 'query_view_member_project', arguments: { projectId }, field: 'name' }])
       // status repeats the same literal call while the backend upload is pending.
       assert.deepEqual(last(await go(['status'])).nextAction, backend.nextAction)
       // The operationId is persisted before it is printed, and a re-run reuses it.
@@ -152,7 +152,7 @@ for (const mode of ['sources', 'bundle']) describe(`save flow (${mode})`, () => 
       const built = await go(['save', '--resume'])
       assert.equal(built.code, 0, built.text)
       const reserve = last(built).nextAction
-      assert.equal(reserve.tool, 'cloud-static-frontend-upload')
+      assert.equal(reserve.tool, 'cloud_static_frontend_upload')
       assert.deepEqual(Object.keys(reserve.arguments), ['projectId', 'candidateId', 'operationId', 'contractHash', 'contentHash', 'sourceHash', 'sourceRef'])
       assert.deepEqual(reserve.arguments.sourceRef, { commit })
       const zip = new Uint8Array(await readFile(join(root, '.mantle/host/out/production/source.zip')))
@@ -172,7 +172,7 @@ for (const mode of ['sources', 'bundle']) describe(`save flow (${mode})`, () => 
       const done = last(saved)
       assert.deepEqual({ stage: done.stage, state: done.state, commit: done.commit }, { stage: 'saved', state: 'paired', commit })
       assert.equal(done.versionId, `${reserve.arguments.candidateId}.${reserve.arguments.operationId}`)
-      assert.equal(done.nextAction.tool, 'cloud-backend-preview-grant')
+      assert.equal(done.nextAction.tool, 'cloud_backend_preview_grant')
       const row = cloud.statics.get(reserve.arguments.operationId)
       assert.equal(sha(row.bytes.frontend), reserve.arguments.contentHash)
       assert.deepEqual(new Uint8Array(row.bytes.source), zip)
@@ -606,7 +606,7 @@ test('deploy renders the review and prints the literal publish call; rollback pr
   try {
     const ask = last(await run(root, ['deploy', versionId, '--json']))
     assert.deepEqual(ask.nextAction.arguments, { projectId, staticUploadId })
-    assert.equal(ask.nextAction.tool, 'cloud-paired-review')
+    assert.equal(ask.nextAction.tool, 'cloud_paired_review')
     assert.match(ask.nextAction.command, /deploy \S+ --target production --review - --json$/)
     const dry = last(await run(root, ['deploy', versionId, '--review', '-', '--dry-run', '--json'], { stdin: JSON.stringify(envelope(review())) }))
     assert.equal(dry.state, 'reviewed')
@@ -616,7 +616,7 @@ test('deploy renders the review and prints the literal publish call; rollback pr
     assert.ok(last(await run(root, ['deploy', versionId, '--review', '-', '--dry-run', '--json'], { stdin: JSON.stringify(review({ migration: null })) }))
       .notes.includes('migration: unavailable (live schemas failed to compile)'))
     const publish = last(await run(root, ['deploy', versionId, '--review', '-', '--json'], { stdin: JSON.stringify(review()) }))
-    assert.equal(publish.nextAction.tool, 'cloud-publish-paired-release')
+    assert.equal(publish.nextAction.tool, 'cloud_publish_paired_release')
     const { operationId } = publish.nextAction.arguments
     assert.deepEqual(publish.nextAction.arguments, { projectId, candidateId, staticUploadId, expectedActiveRevision: null, operationId, slug: 'shop-app' })
     assert.equal(last(await run(root, ['deploy', versionId, '--review', '-', '--json'], { stdin: JSON.stringify(review()) })).nextAction.arguments.operationId, operationId)
@@ -633,9 +633,9 @@ test('deploy renders the review and prints the literal publish call; rollback pr
 
     const active = '1'.repeat(64), older = '2'.repeat(64)
     const deployment = { rows: [{ projectId, revision: active, operationId, history: [{ operationId: crypto.randomUUID(), revision: older, status: 'active' }] }] }
-    assert.equal(last(await run(root, ['rollback', '--json'])).nextAction.tool, 'cloud-project-deployment')
+    assert.equal(last(await run(root, ['rollback', '--json'])).nextAction.tool, 'cloud_project_deployment')
     const back = last(await run(root, ['rollback', '--deployment', '-', '--json'], { stdin: JSON.stringify(deployment) }))
-    assert.equal(back.nextAction.tool, 'cloud-rollback-project')
+    assert.equal(back.nextAction.tool, 'cloud_rollback_project')
     assert.deepEqual(back.nextAction.arguments, { projectId, operationId: back.nextAction.arguments.operationId, expectedRevision: active, targetRevision: older })
     assert.equal(last(await run(root, ['rollback', versionId, '--deployment', '-', '--json'], { stdin: JSON.stringify(deployment) })).error, 'version_is_active')
   } finally { await rm(root, { recursive: true, force: true }) }

@@ -17,6 +17,7 @@
     "sdk"
   ],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Mantle",
     "shortDescription": "Build and embed Mantle apps",

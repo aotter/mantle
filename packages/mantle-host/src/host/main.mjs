@@ -37,6 +37,13 @@ const options = { json: { type: 'boolean' }, target: { type: 'string' }, 'no-git
   'dry-run': { type: 'boolean' }, deployment: { type: 'string' }, revision: { type: 'string' }, help: { type: 'boolean' } }
 const verbs = new Set(['link', 'save', 'status', 'deploy', 'rollback', 'version'])
 const inputLimit = 8_000_000
+const mcpToolName = name => `${name === 'member-project' || name === 'member-organization' ? 'query_view_' : ''}${name.replaceAll('-', '_')}`
+const mcpAction = action => action && action.kind === 'mcp' ? {
+  ...action,
+  ...(action.tool ? { tool: mcpToolName(action.tool) } : {}),
+  ...(action.requires ? { requires: action.requires.map(item => ({ ...item, tool: mcpToolName(item.tool) })) } : {}),
+  ...(action.confirm ? { confirm: action.confirm.map(item => ({ ...item, tool: mcpToolName(item.tool) })) } : {}),
+} : action
 
 async function readStdin() {
   const chunks = []
@@ -66,7 +73,8 @@ export async function main(args, io = {}) {
   const script = `node ${shellWord(scriptPath)}`
   // Success lines always carry commit and verified, null when not known yet.
   const ctx = { output, json, emit: line => output.emit(line.ok ? { ...line, commit: line.commit ?? null,
-    verified: line.verified ?? { contentHash: null, sourceHash: null, contractHash: null }, nextAction: line.nextAction ?? null } : line), now: io.now ?? Date.now, sleep: io.sleep ?? (ms => new Promise(done => setTimeout(done, ms))),
+    verified: line.verified ?? { contentHash: null, sourceHash: null, contractHash: null }, nextAction: mcpAction(line.nextAction) ?? null } :
+    { ...line, nextAction: mcpAction(line.nextAction) }), now: io.now ?? Date.now, sleep: io.sleep ?? (ms => new Promise(done => setTimeout(done, ms))),
     timeouts: { backend: 6 * 60_000, pairing: 10 * 60_000, ...io.timeouts }, linkFile, targetArgs: [] }
   ctx.line = (...words) => [script, ...words.map(shellWord), ...json ? ['--json'] : []].join(' ')
   try {

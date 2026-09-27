@@ -79,7 +79,7 @@ export function runner(bundle, { autoContract = true } = {}) {
   }
   return async (cwd, args, options = {}) => {
     const first = await execute(cwd, args, options)
-    if (!autoContract || first.code || first.lines.at(-1)?.nextAction?.tool !== 'cloud-host-contract') return first
+    if (!autoContract || first.code || first.lines.at(-1)?.nextAction?.tool !== 'cloud_host_contract') return first
     const contract = { projectId, core: corePin, protocol: { current: 2, minimum: 2 } }
     const second = await execute(cwd, ['save', '--target', 'production', '--resume', '--grant', '-', ...args.includes('--json') ? ['--json'] : []],
       { ...options, stdin: JSON.stringify(contract) })
