@@ -5148,6 +5148,13 @@ var options = {
 };
 var verbs = /* @__PURE__ */ new Set(["link", "save", "status", "deploy", "rollback", "version"]);
 var inputLimit = 8e6;
+var mcpToolName = (name2) => `${name2 === "member-project" || name2 === "member-organization" ? "query_view_" : ""}${name2.replaceAll("-", "_")}`;
+var mcpAction = (action) => action && action.kind === "mcp" ? {
+  ...action,
+  ...action.tool ? { tool: mcpToolName(action.tool) } : {},
+  ...action.requires ? { requires: action.requires.map((item) => ({ ...item, tool: mcpToolName(item.tool) })) } : {},
+  ...action.confirm ? { confirm: action.confirm.map((item) => ({ ...item, tool: mcpToolName(item.tool) })) } : {}
+} : action;
 async function readStdin() {
   const chunks = [];
   let length = 0;
@@ -5185,8 +5192,8 @@ async function main(args, io = {}) {
       ...line,
       commit: line.commit ?? null,
       verified: line.verified ?? { contentHash: null, sourceHash: null, contractHash: null },
-      nextAction: line.nextAction ?? null
-    } : line),
+      nextAction: mcpAction(line.nextAction) ?? null
+    } : { ...line, nextAction: mcpAction(line.nextAction) }),
     now: io.now ?? Date.now,
     sleep: io.sleep ?? ((ms) => new Promise((done) => setTimeout(done, ms))),
     timeouts: { backend: 6 * 6e4, pairing: 10 * 6e4, ...io.timeouts },
