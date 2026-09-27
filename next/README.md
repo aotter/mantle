@@ -1,10 +1,26 @@
 # `next/`: the Mantle 0.2.0 construction zone
 
-0.2.0 (ADR-0032, ADR-0033) is built here as new private workspace packages, next to the shipped ones. Nothing under `packages/` changes while this is built, so `develop` can still ship 0.1.x fixes. At the end, `next/*` replaces `packages/*` in one change and loses its working names.
+0.2.0 (ADR-0032, ADR-0033) is built here as one private package, next to the shipped ones. Nothing under `packages/` changes while this is built, so `develop` can still ship 0.1.x fixes. At the end, `next/` becomes `@aotter/mantle` in one change.
+
+## Layout
+
+`next/` is a single package whose name is already `@aotter/mantle` (`private: true` until the swap). Areas are folders, and each folder is one subpath (ADR-0032 decision 13):
+
+```
+next/src/core/         → @aotter/mantle            next/src/auth/    → @aotter/mantle/auth
+next/src/spec/         → @aotter/mantle/spec       next/src/admin/   → @aotter/mantle/admin
+next/src/testing/      → @aotter/mantle/testing    next/src/mcp/     → @aotter/mantle/mcp
+next/src/cloudflare/   → @aotter/mantle/cloudflare next/src/web/     → @aotter/mantle/web
+next/src/bun/          → @aotter/mantle/bun        next/src/cli/     → bin: mantle
+next/src/vercel/       → @aotter/mantle/vercel
+next/src/indexeddb/    → @aotter/mantle/indexeddb
+```
+
+`core` imports only `spec`; no folder imports `admin`, `web`, `auth` or a platform folder unless it is one of them. `check:boundaries` enforces this. The browser package, `@aotter/mantle-ui`, stays in `packages/mantle-ui` and absorbs `mantle-admin-ui` at the swap.
 
 ## Rules
 
-- `next/*` packages are `private: true` and depend only on each other and on external libraries. They never import `packages/*`. Code that carries over is **copied** and then changed, so the old package stays intact until the swap.
+- `next/` depends only on external libraries and never imports `packages/*`. Code that carries over is **copied** and then changed, so the old package stays intact until the swap.
 - Every public name comes from ADR-0032 or ADR-0033. A new one needs an ADR amendment first.
 - Old tests are the source of the contract. A rule is ported as a failing conformance case before the code that satisfies it is written.
 - Each step below is one reviewed PR, with a Whiteboard.
@@ -14,35 +30,35 @@
 | Step | Output | Review focus |
 |---|---|---|
 | 0 | This scope map | Is the scope right? |
-| 1 | `next/spec`: v2 grammar types, parser, validator; example manifests as fixtures | The grammar |
-| 2 | `next/core`: interfaces only (Store, StoreExecutor, Caller, Invocation, HandlerContext, MantleService, `createMantle`, surface signatures), plus the conformance suite as listed, unimplemented cases | **Architecture and method definitions: the main gate** |
+| 1 | `next/src/spec`: v2 grammar types, parser, validator; example manifests as fixtures | The grammar |
+| 2 | `next/src/core`: interfaces only (Store, StoreExecutor, Caller, Invocation, HandlerContext, MantleService, `createMantle`, surface signatures), plus the conformance suite as listed, unimplemented cases | **Architecture and method definitions: the main gate** |
 | 3 | Implementation against the contract: MemoryStoreExecutor, then SqliteStoreExecutor, then the ported drivers, auth and surfaces | PRs, not every line |
-| 4 | Delete the old packages, move `next/*` into `packages/*` under the real names, ship the `mantle-update` codemod | The swap |
+| 4 | Delete the old packages, move `next/` to `packages/mantle`, fold `mantle-admin-ui` into `mantle-ui`, move the plugin's helper scripts, ship the `mantle-update` codemod | The swap |
 
 ## Package map
 
 **Rewrite**: new design, written fresh against the ADRs. **Port**: existing, proven logic copied and moved onto the new interfaces. **Delete**: removed with no replacement, or replaced by something listed under Rewrite.
 
-| Today | 0.2.0 | Action |
+| Today (npm) | 0.2.0 | Action |
 |---|---|---|
-| `@aotter/mantle-spec` (9.0k src) | `next/spec` | Rewrite the grammar; port the checkers and the tooling |
-| `@aotter/mantle-runtime` (13.6k) | `next/core` | Rewrite Store, invocation and identity; port the rest |
-| `@aotter/mantle-cloudflare` (4.1k) | `next/cloudflare` | Port the bindings and driver; delete the Worker composition |
-| `@aotter/mantle-bun` (0.1k) | `next/bun` | Port the driver only; experimental |
-| `@aotter/mantle-vercel` (0.1k) | `next/vercel` | Port the driver only; experimental |
-| `@aotter/mantle-indexeddb` (0.7k) | `next/indexeddb` | Rewrite on MemoryStoreExecutor plus IndexedDB persistence |
-| `@aotter/mantle-auth` (2.4k) | `next/auth` | Port behind `CallerResolver` and `AdminIdentity` |
-| `@aotter/mantle-admin` (3.2k) | `next/admin` | Port into `createAdminSurface` |
-| `@aotter/mantle-mcp` (0.7k) | `next/mcp` | Port into `createMcpSurface` |
-| `@aotter/mantle-web` (2.1k) | `next/web` | Port into `createWebSurface` and `createRestSurface` |
-| `@aotter/mantle` (1.6k CLI, codegen) | `next/mantle` | Rewrite `generate` and codegen; add `mantle-update` |
-| `@aotter/mantle-admin-ui` (18.2k) | stays in `packages/` | Port in place at the swap: pagination, base path, drop `/kit` and `rowBindings` |
-| `@aotter/mantle-ui` (4.9k) | stays in `packages/` | No change expected |
-| `@aotter/mantle-host` (scripts) | stays in `packages/` | Port at the swap: `artifactKind` |
+| `@aotter/mantle-spec` (9.0k src) | `next/src/spec` | Rewrite the grammar; port the checkers and the tooling |
+| `@aotter/mantle-runtime` (13.6k) | `next/src/core` | Rewrite Store, invocation and identity; port the rest |
+| `@aotter/mantle-cloudflare` (4.1k) | `next/src/cloudflare` | Port the bindings and driver; delete the Worker composition |
+| `@aotter/mantle-bun` (0.1k) | `next/src/bun` | Port the driver only; experimental |
+| `@aotter/mantle-vercel` (0.1k) | `next/src/vercel` | Port the driver only; experimental |
+| `@aotter/mantle-indexeddb` (0.7k) | `next/src/indexeddb` | Rewrite on MemoryStoreExecutor plus IndexedDB persistence |
+| `@aotter/mantle-auth` (2.4k) | `next/src/auth` | Port behind `CallerResolver` and `AdminIdentity` |
+| `@aotter/mantle-admin` (3.2k) | `next/src/admin` | Port into `createAdminSurface` |
+| `@aotter/mantle-mcp` (0.7k) | `next/src/mcp` | Port into `createMcpSurface` |
+| `@aotter/mantle-web` (2.1k) | `next/src/web` | Port into `createWebSurface` and `createRestSurface` |
+| `@aotter/mantle` (1.6k CLI, codegen) | `next/src/cli` | Rewrite `generate` and codegen; add `mantle-update` |
+| `@aotter/mantle-ui` (4.9k) | `packages/mantle-ui` | Stays the browser package; gains `/admin` |
+| `@aotter/mantle-admin-ui` (18.2k) | `@aotter/mantle-ui/admin` | Port at the swap: pagination, base path, drop `/kit` and `rowBindings` |
+| `@aotter/mantle-host` (never published) | the plugin | Its source becomes the plugin's Cloud helper scripts; the name disappears |
 
-Only `next/spec` and `next/core` are built before the step 2 review. The other `next/*` packages start in step 3.
+Only `next/src/spec` and `next/src/core` are built before the step 2 review. The other folders start in step 3.
 
-### `next/spec`, from `@aotter/mantle-spec`
+### `next/src/spec`, from `@aotter/mantle-spec`
 
 | Action | Modules |
 |---|---|
@@ -50,7 +66,7 @@ Only `next/spec` and `next/core` are built before the step 2 review. The other `
 | Port | `kernel/diagnostic` (+ `conflict`), `LifecycleStateMachine` (+ `decideLifecycleWrite` from the parked `refactor/20260927-lifecycle-decision`), `EntryDataValidator`, `JsonSchemaToZod`, `LocaleCanonicalizer`, `SiteConfig`, `SiteDefaultsValidator`, `SchemaIndexChecker`, `SchemaAdminUiChecker`, `SchemaSearchChecker`, `CrossSchemaChecker`, `ManifestLinker`, `ManifestPartition`, `ManifestLocaleTrimmer`, `ManifestPathDiagnoser`, `McpToolNaming`, `StaffRoleHierarchy`, `MediaMimeAccept`, the Validate / EmitTypes / EmitOpenapi / Introspect use cases and the CLI |
 | Delete | `BUILTIN_OPS`, `HandlerBuiltinBinding`, the Filter AST (`FILTER_COMPARISON_OPS`), `VIEW_PARAMS_RESERVED`, `$param` and `{"$ctx.user": …}`, `HookErrorPolicy` |
 
-### `next/core`, from `@aotter/mantle-runtime`
+### `next/src/core`, from `@aotter/mantle-runtime`
 
 | Action | Modules |
 |---|---|
@@ -70,6 +86,7 @@ Only `next/spec` and `next/core` are built before the step 2 review. The other `
 | mcp | `createMantleMcpServer`, `createMantleMcpHandler`, `apps` into `createMcpSurface` | bearer verification inside the surface |
 | web | SEO, sitemap, markdown and HTML rendering, `webmcp`, the frontend client, into `createWebSurface` and `createRestSurface` over Store | `EntryReader` reads |
 | mantle | `skills`, `harness` | `--host`, `generate-sites.ts`, `generate-cloudflare.ts` (into the one Cloudflare preset), per-name codegen, dependency closure; new `mantle-update` |
+| mantle-host | the `mantle-host` script source and tests, as the plugin's Cloud helper scripts that orchestrate `https://cloud.mantle.tools/mcp` | the npm package, the `mantle-host` skill and name (the plugin keeps one `mantle` skill) |
 
 ## Concept map
 
@@ -87,6 +104,7 @@ Only `next/spec` and `next/core` are built before the step 2 review. The other `
 | `errorPolicy` | before hooks fail closed; after hooks best effort |
 | Cloudflare cron (1 = Sunday), required `cloudflare` host | POSIX cron (0 = Sunday), `schedules: true` |
 | auth tables in `0001-init` | Better Auth's `getMigrations` in mantle-auth |
+| fourteen npm packages, a `mantle-host` skill | `@aotter/mantle` and `@aotter/mantle-ui`; one plugin with one `mantle` skill and Cloud helper scripts |
 | per-column ledger ids, `drizzle/` artifacts, managed boot | boot converges by introspection; `generate --check` prints replayable SQL |
 
 ## Contract sources
