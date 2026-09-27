@@ -13,7 +13,7 @@ import type { EmitTypesResponse } from "./dto/EmitTypesResponse.js";
  * Generate TypeScript declarations from v0.1 manifests:
  *   - Schema → Entry_<name> data shape
  *   - Procedure → ProcInput_<name> / ProcOutput_<name>
- *   - View → ViewParams_<name> / ViewRow_<name>
+ *   - View → ViewInput_<name> / ViewRow_<name>
  *
  * Covers Mantle's supported JSON Schema subset, including local `$defs`
  * refs, recursive definitions, `oneOf`, `const`, and dictionaries.
@@ -75,12 +75,12 @@ export function emitTypesFromManifests(request: {
     }
 
     for (const v of views) {
-      const source = v.spec.select?.from ?? v.spec.from;
+      const source = v.spec.select?.from;
       const parent = source ? schemaByName.get(source) : undefined;
-      if (v.spec.params) {
-        out.push(`  /** Parameters accepted by View '${docText(v.metadata.name)}' */`);
+      if (v.spec.input) {
+        out.push(`  /** Input accepted by View '${docText(v.metadata.name)}' */`);
         out.push(
-          ...declarationLines(`ViewParams_${manifestTypeIdentifier(v.metadata.name)}`, v.spec.params, false),
+          ...declarationLines(`ViewInput_${manifestTypeIdentifier(v.metadata.name)}`, v.spec.input, false),
         );
         out.push("");
       }
@@ -91,7 +91,7 @@ export function emitTypesFromManifests(request: {
         const rootSchema = parent.spec.schema;
         const props = (rootSchema.properties ?? {}) as Record<string, JsonSchema>;
         const context = renderContext(`Entry_${manifestTypeIdentifier(parent.metadata.name)}`, rootSchema);
-        const fields = v.spec.select?.columns ?? v.spec.fields ?? [...RESERVED_ENTRY_COLUMNS, ...Object.keys(props)];
+        const fields = v.spec.select?.columns ?? [...RESERVED_ENTRY_COLUMNS, ...Object.keys(props)];
         const reservedSet = new Set<string>(RESERVED_ENTRY_COLUMNS);
         const rendered: string[] = [];
         for (const f of fields) {

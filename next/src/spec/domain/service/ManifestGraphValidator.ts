@@ -3,23 +3,24 @@ import {
   type Diagnostic,
 } from "../../kernel/diagnostic.js";
 import {
-  FILTER_COMPARISON_OPS,
   RESERVED_ENTRY_COLUMNS,
   EXPECTED_VERSION_PROPERTY,
   MANTLE_REF_KEYWORD,
   RESERVED_PROCEDURE_INPUT_NAMES,
   resolveMantleRef,
-  hasCtxUserRefKey,
-  isCtxUserRef,
   resolveLocalizedText,
-  type FilterAst,
   type JsonSchema,
+  type LifecycleHook,
   type Manifest,
   type ProcedureManifest,
   type SchemaManifest,
+  type StoreProgramOp,
+  type StoreWhereSpec,
   type TriggerManifest,
   type ViewManifest,
 } from "../model/ManifestGrammar.js";
+import { isPublishing } from "./LifecycleStateMachine.js";
+import { inputReference, isRowOp, isStoreProgram, pinnedId, procedureTarget, storeOpSchema, storeOpVerb } from "./StoreProgram.js";
 import { partitionManifests } from "./ManifestPartition.js";
 import { jsonSchemaToZod } from "./JsonSchemaToZod.js";
 import { checkTranslatesReferences } from "./CrossSchemaChecker.js";
@@ -71,8 +72,9 @@ export function validateManifestGraph(
   for (const s of partitioned.schemas) {
     diags.push(...checkMantleRefs("Schema", s.metadata.name, "/spec/schema", s.spec.schema, schemasByName, filePaths));
   }
+  const hooks = lifecycleHooksBySchema(partitioned.triggers);
   for (const p of partitioned.procedures) {
-    diags.push(...checkBuiltinHandler(p, schemasByName, filePaths));
+    diags.push(...checkStoreProgram(p, schemasByName, hooks, filePaths));
     diags.push(...checkCollectionActionRef(p, schemasByName, filePaths));
     diags.push(...checkMantleRefs("Procedure", p.metadata.name, "/spec/input", p.spec.input, schemasByName, filePaths));
     diags.push(...checkProcedureTarget(p, schemasByName, filePaths));
@@ -212,15 +214,15 @@ function entryKeyFields(schema: SchemaManifest): string[] {
 }
 
 /**
- * `Procedure.spec.target` names what a `ref` handler mutates. Builtin
- * handlers already derive it, so a declaration there could only disagree.
+ * `Procedure.spec.target` names what the Procedure mutates. An inline
+ * program infers it (`procedureTarget`) unless one is declared.
  */
 function checkProcedureTarget(
   procedure: ProcedureManifest,
   schemasByName: ReadonlyMap<string, SchemaManifest>,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
-  const target = procedure.spec.target;
+  const target = procedureTarget(procedure);
   if (!target) return [];
   const name = procedure.metadata.name;
   const fail = (pointer: string, value: unknown, expected: string, message: string, candidates?: readonly string[]) =>
@@ -233,9 +235,6 @@ function checkProcedureTarget(
       ...(candidates ? { candidates } : {}),
       message,
     })];
-  if (procedure.spec.handler.kind === "builtin") {
-    return fail("", target, "no target on a builtin handler", `Procedure '${name}' uses a builtin handler, whose target is derived from handler.schema; remove spec.target.`);
-  }
   if (!schemasByName.has(target.schema)) {
     return fail("/schema", target.schema, "the metadata.name of an existing Schema", `Procedure '${name}' target references unknown Schema '${target.schema}'.`, [...schemasByName.keys()]);
   }
@@ -344,42 +343,47 @@ function checkViewRefs(
 ): Diagnostic[] {
   if (v.spec.sql) {
     const sql = v.spec.sql;
-    const expiring = [...schemasByName.values()]
-      .filter((schema) => schema.spec.ttl && referencesTable(sql, schema.metadata.name))
-      .map((schema) => schema.metadata.name);
-    return expiring.length > 0
-      ? [validateDiagnostic({
-          code: "VIEW_TTL_NATIVE_UNSAFE", severity: "error",
-          path: manifestPath("View", v.metadata.name, "/spec/sql", filePaths),
-          value: expiring,
-          message: `Native SQL View '${v.metadata.name}' reads TTL Schema ${expiring.map((name) => `'${name}'`).join(", ")} and cannot guarantee logical TTL filtering.`,
-          expected: "a declarative View over a TTL Schema, or SQL that does not read one",
-        })] : [];
-  }
-  const out: Diagnostic[] = [];
-  const fromName = v.spec.select?.from ?? v.spec.from;
-  if (!fromName) return out;
-  const schema = schemasByName.get(fromName);
-  if (!schema) {
-    out.push(
-      validateDiagnostic({
-        code: "VIEW_FROM_UNKNOWN_SCHEMA",
-        severity: "error",
-        path: manifestPath("View", v.metadata.name, v.spec.select ? "/spec/select/from" : "/spec/from", filePaths),
-        value: fromName,
-        expected: "name of a declared Schema",
-        candidates: [...schemasByName.keys()],
-        suggestion: bestMatch(fromName, [...schemasByName.keys()]),
-        message: `View '${v.metadata.name}' references unknown Schema '${fromName}'.`,
-      }),
-    );
+    const out: Diagnostic[] = [];
+    const reads = [...schemasByName.values()].filter((schema) => referencesTable(sql, schema.metadata.name));
+    const expiring = reads.filter((schema) => schema.spec.ttl).map((schema) => schema.metadata.name);
+    if (expiring.length > 0) out.push(validateDiagnostic({
+      code: "VIEW_TTL_NATIVE_UNSAFE", severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/sql", filePaths),
+      value: expiring,
+      message: `Native SQL View '${v.metadata.name}' reads TTL Schema ${expiring.map((name) => `'${name}'`).join(", ")} and cannot guarantee logical TTL filtering.`,
+      expected: "a select View over a TTL Schema, or SQL that does not read one",
+    }));
+    const scoped = reads.filter((schema) => schema.spec.scope).map((schema) => schema.metadata.name);
+    if (scoped.length > 0) out.push(validateDiagnostic({
+      code: "VIEW_SQL_SCOPED_SCHEMA", severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/sql", filePaths),
+      value: scoped,
+      message: `Native SQL View '${v.metadata.name}' reads scoped Schema ${scoped.map((name) => `'${name}'`).join(", ")}; native SQL cannot carry the caller scope. Use a select View.`,
+      expected: "a select View over a scoped Schema",
+    }));
     return out;
   }
-
-  if (v.spec.cache && (schema.spec.lifecycle ?? "publishing") !== "publishing") {
+  const out: Diagnostic[] = [];
+  const select = v.spec.select;
+  if (!select) return out;
+  const fromName = select.from;
+  const schema = schemasByName.get(fromName);
+  if (!schema) {
     out.push(validateDiagnostic({
-      code: "VIEW_CACHE_INVALID",
+      code: "VIEW_FROM_UNKNOWN_SCHEMA",
       severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/select/from", filePaths),
+      value: fromName,
+      expected: "name of a declared Schema",
+      candidates: [...schemasByName.keys()],
+      suggestion: bestMatch(fromName, [...schemasByName.keys()]),
+      message: `View '${v.metadata.name}' references unknown Schema '${fromName}'.`,
+    }));
+    return out;
+  }
+  if (v.spec.cache && !isPublishing(schema)) {
+    out.push(validateDiagnostic({
+      code: "VIEW_CACHE_INVALID", severity: "error",
       path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
       value: fromName,
       expected: "a View over a publishing Schema",
@@ -395,40 +399,23 @@ function checkViewRefs(
       message: `View '${v.metadata.name}' cannot cache TTL Schema '${fromName}' past its expiry boundary.`,
     }));
   }
-  const publicPublishing = v.spec.surface === "public"
-    && (schema.spec.lifecycle ?? "publishing") === "publishing";
-  if (publicPublishing && v.spec.filter) {
-    // The runtime injects `status = published` into this View's plan (#1007);
-    // any other status comparison can only contradict it and return nothing.
-    for (const found of collectStatusComparisons(v.spec.filter, "/spec/filter")) {
-      out.push(validateDiagnostic({
-        code: "VIEW_PUBLIC_STATUS_INVALID",
-        severity: "error",
-        path: manifestPath("View", v.metadata.name, found.pointer, filePaths),
-        value: found.value,
-        expected: "eq status published, or no status comparison at all",
-        message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}'; it always reads published rows only, so its status filter must be 'eq published' or omitted (handbook: reference/view.md#surfaces).`,
-      }));
-    }
-  }
-  if (v.spec.cache && v.spec.filter && collectCtxUserFilters(v.spec.filter, "/spec/filter").length > 0) {
+  const status = select.where?.["status"];
+  if (v.spec.surface === "public" && isPublishing(schema) && status !== undefined && status !== "published"
+    && !(status && typeof status === "object" && (status as Record<string, unknown>)["eq"] === "published" && Object.keys(status).length === 1)) {
+    // The runtime reads published rows only on this View (#1007); any other
+    // status comparison can only contradict it and return nothing.
     out.push(validateDiagnostic({
-      code: "VIEW_CACHE_INVALID",
-      severity: "error",
-      path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
-      expected: "a caller-independent View without $ctx.user filters",
-      message: `View '${v.metadata.name}' cannot cache an identity-bound filter.`,
+      code: "VIEW_PUBLIC_STATUS_INVALID", severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/select/where/status", filePaths),
+      value: status,
+      expected: "status: published, or no status comparison",
+      message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}'; it always reads published rows only, so its status comparison must be 'published' or omitted.`,
     }));
   }
 
-  const props = (schema.spec.schema as { properties?: Record<string, unknown> }).properties ?? {};
-  const validFieldNames = new Set([...Object.keys(props), ...RESERVED_ENTRY_COLUMNS]);
-
+  const validFieldNames = columnsOf(schema);
   const list = checkViewAdminUi(v).list;
-  for (const [key, fields] of Object.entries(list) as Array<[
-    keyof typeof list,
-    readonly string[],
-  ]>) {
+  for (const [key, fields] of Object.entries(list) as Array<[keyof typeof list, readonly string[]]>) {
     fields.forEach((field, index) => {
       if (!validFieldNames.has(field)) {
         out.push(validateDiagnostic({
@@ -445,656 +432,249 @@ function checkViewRefs(
     });
   }
 
-  if (v.spec.fields) {
-    v.spec.fields.forEach((f, i) => {
-      if (!validFieldNames.has(f)) {
-        out.push(
-          validateDiagnostic({
-            code: "VIEW_FIELD_NOT_IN_SCHEMA",
-            severity: "error",
-            path: manifestPath("View", v.metadata.name, `/spec/fields/${i}`, filePaths),
-            value: f,
-            expected: `property of Schema '${fromName}' or a reserved metadata field`,
-            candidates: [...validFieldNames].sort(),
-            suggestion: bestMatch(f, [...validFieldNames]),
-            message: `View '${v.metadata.name}' field '${f}' is not declared on Schema '${fromName}'.`,
-          }),
-        );
-      }
-    });
-  }
-
-  if (v.spec.filter) {
-    out.push(
-      ...checkFilterFields(
-        v.spec.filter,
-        validFieldNames,
-        v.metadata.name,
-        fromName,
-        "/spec/filter",
-        filePaths,
-      ),
-    );
-    out.push(...checkCtxUserFilter(v, schema, filePaths));
-  }
-  const scopeField = Object.keys(schema.spec.scope ?? {})[0];
-  if (scopeField && !v.spec.select && (!v.spec.filter || !hasTopLevelScope(v.spec.filter, scopeField))) {
+  const cursorFields = ["id", Object.keys(select.orderBy ?? {})[0] ?? "updatedAt"];
+  if (v.spec.surface === "public" && select.columns && cursorFields.some((field) => !select.columns!.includes(field))) {
     out.push(validateDiagnostic({
-      code: "VIEW_FILTER_CTX_USER_REF_INVALID",
-      severity: "error",
-      path: manifestPath("View", v.metadata.name, "/spec/filter", filePaths),
-      message: `View '${v.metadata.name}' must AND the Schema scope '${scopeField}' with the caller identity.`,
+      code: "VIEW_ORDERBY_INVALID", severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/select/columns", filePaths),
+      expected: `public View projection includes ${[...new Set(cursorFields)].join(" and ")} used by its pagination cursor`,
+      message: `Public View '${v.metadata.name}' must project its cursor fields.`,
     }));
   }
-
-  if (v.spec.orderBy) {
-    v.spec.orderBy.forEach((o, i) => {
-      if (!validFieldNames.has(o.field)) {
-        out.push(
-          validateDiagnostic({
-            code: "VIEW_FIELD_NOT_IN_SCHEMA",
-            severity: "error",
-            path: manifestPath(
-              "View",
-              v.metadata.name,
-              `/spec/orderBy/${i}/field`,
-              filePaths,
-            ),
-            value: o.field,
-            expected: `property of Schema '${fromName}' or a reserved metadata field`,
-            candidates: [...validFieldNames].sort(),
-            suggestion: bestMatch(o.field, [...validFieldNames]),
-            message: `View '${v.metadata.name}' orderBy references unknown field '${o.field}'.`,
-          }),
-        );
-      }
-    });
+  if (v.spec.cache && usesReference(select.where, "$now")) out.push(validateDiagnostic({
+    code: "VIEW_CACHE_INVALID", severity: "error",
+    path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
+    expected: "a caller and time independent View",
+    message: `View '${v.metadata.name}' uses $now and cannot have a shared cache.`,
+  }));
+  for (const [i, field] of (select.columns ?? []).entries()) {
+    if (!validFieldNames.has(field)) out.push(validateDiagnostic({
+      code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
+      path: manifestPath("View", v.metadata.name, `/spec/select/columns/${i}`, filePaths),
+      value: field, expected: `property of Schema '${fromName}' or a reserved metadata field`,
+      message: `View '${v.metadata.name}' select references unknown field '${field}'.`,
+    }));
   }
-  if (v.spec.select) {
-    let requiresCaller = Boolean(scopeField);
-    const cursorFields = ["id", Object.keys(v.spec.select.orderBy ?? {})[0] ?? "updatedAt"];
-    if (v.spec.surface === "public" && v.spec.select.columns && cursorFields.some((field) => !v.spec.select!.columns!.includes(field))) {
+  for (const field of Object.keys(select.orderBy ?? {})) {
+    if (!validFieldNames.has(field)) {
       out.push(validateDiagnostic({
-        code: "VIEW_ORDERBY_INVALID", severity: "error",
-        path: manifestPath("View", v.metadata.name, "/spec/select/columns", filePaths),
-        expected: `public View projection includes ${[...new Set(cursorFields)].join(" and ")} used by its pagination cursor`,
-        message: `Public View '${v.metadata.name}' must project its cursor fields.`,
-      }));
-    }
-    const usesReference = (value: unknown, reference: string): boolean => value === reference ||
-      (Array.isArray(value) ? value.some((item) => usesReference(item, reference)) : value && typeof value === "object" && !("$literal" in value)
-        ? Object.values(value).some((item) => usesReference(item, reference)) : false);
-    if (list.searchFields.length || list.filterFields.length) out.push(validateDiagnostic({
-      code: "VIEW_UI_INVALID", severity: "error",
-      path: manifestPath("View", v.metadata.name, "/spec/uiSchema/list", filePaths),
-      expected: "no Admin search or filters for a Store select View",
-      message: `View '${v.metadata.name}' uses Store select and cannot declare Admin search or filter controls.`,
-    }));
-    if (v.spec.cache && usesReference(v.spec.select.where, "$now")) out.push(validateDiagnostic({
-      code: "VIEW_CACHE_INVALID", severity: "error",
-      path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
-      expected: "a caller and time independent View",
-      message: `View '${v.metadata.name}' uses $now and cannot have a shared cache.`,
-    }));
-    if (usesReference(v.spec.select.where, "$ctx.user.id")) requiresCaller = true;
-    for (const [i, field] of (v.spec.select.columns ?? []).entries()) {
-      if (!validFieldNames.has(field)) out.push(validateDiagnostic({
-        code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
-        path: manifestPath("View", v.metadata.name, `/spec/select/columns/${i}`, filePaths),
-        value: field, expected: `property of Schema '${fromName}' or a reserved metadata field`,
-        message: `View '${v.metadata.name}' select references unknown field '${field}'.`,
-      }));
-    }
-    for (const field of Object.keys(v.spec.select.orderBy ?? {})) {
-      if (!validFieldNames.has(field)) out.push(validateDiagnostic({
         code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
         path: manifestPath("View", v.metadata.name, `/spec/select/orderBy/${field}`, filePaths),
         value: field, expected: `property of Schema '${fromName}' or a reserved metadata field`,
         message: `View '${v.metadata.name}' orderBy references unknown field '${field}'.`,
       }));
-      else if (Object.hasOwn(props, field)) {
-        const property = schema.spec.schema.properties?.[field];
-        const types = [property?.type].flat().filter((type) => type !== "null");
-        if (property?.oneOf || types.length !== 1 || !["string", "number", "integer", "boolean"].includes(String(types[0]))) {
+    } else if (!RESERVED_ENTRY_COLUMNS.includes(field as never) && !isScalarProperty(schema.spec.schema.properties?.[field])) {
+      out.push(validateDiagnostic({
+        code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
+        path: manifestPath("View", v.metadata.name, `/spec/select/orderBy/${field}`, filePaths),
+        value: field, expected: "a scalar Schema column",
+        message: `View '${v.metadata.name}' orderBy requires a scalar field.`,
+      }));
+    }
+  }
+  const scan = scanStoreWhere("View", v.metadata.name, schemasByName, filePaths, out);
+  const touched = select.where ? scan(select.where, schema, "/spec/select/where") : [];
+  if (v.spec.cache && touched.some((other) => other.spec.ttl)) out.push(validateDiagnostic({
+    code: "VIEW_CACHE_INVALID", severity: "error",
+    path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
+    expected: "no shared cache over a TTL Schema",
+    message: `View '${v.metadata.name}' cannot cache a subquery over a TTL Schema.`,
+  }));
+  const requiresCaller = Boolean(schema.spec.scope) || touched.some((other) => other.spec.scope) || usesReference(select.where, "$ctx.user.id");
+  if (requiresCaller && !v.spec.requires?.auth?.all?.includes("ctx.user")) out.push(validateDiagnostic({
+    code: "STORE_CALLER_REQUIRED", severity: "error",
+    path: manifestPath("View", v.metadata.name, "/spec/requires/auth/all", filePaths),
+    expected: "ctx.user",
+    message: `View '${v.metadata.name}' reads a scoped Schema or $ctx.user.id, so it must require ctx.user.`,
+  }));
+  return out;
+}
+
+function columnsOf(schema: SchemaManifest): Set<string> {
+  return new Set([...RESERVED_ENTRY_COLUMNS, ...Object.keys(schema.spec.schema.properties ?? {})]);
+}
+
+function isScalarProperty(property: JsonSchema | undefined): boolean {
+  const types = [property?.type].flat().filter((type) => type !== "null");
+  return Boolean(property) && !property?.oneOf && types.length === 1 && ["string", "number", "integer", "boolean"].includes(String(types[0]));
+}
+
+function usesReference(value: unknown, reference: string): boolean {
+  if (value === reference) return true;
+  if (Array.isArray(value)) return value.some((item) => usesReference(item, reference));
+  return Boolean(value) && typeof value === "object" && !("$literal" in (value as object))
+    && Object.values(value as object).some((item) => usesReference(item, reference));
+}
+
+/**
+ * Check a Store `where` against the Schemas it names (columns, subquery
+ * Schemas and their columns). Returns the Schemas its subqueries read.
+ */
+function scanStoreWhere(
+  atom: "View" | "Procedure",
+  name: string,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+  filePaths: ManifestFilePaths | undefined,
+  out: Diagnostic[],
+): (where: StoreWhereSpec, source: SchemaManifest, pointer: string) => SchemaManifest[] {
+  const unknownCode = atom === "View" ? "VIEW_FIELD_NOT_IN_SCHEMA" : "STORE_PROGRAM_INVALID";
+  const schemaCode = atom === "View" ? "VIEW_FROM_UNKNOWN_SCHEMA" : "STORE_PROGRAM_SCHEMA_UNKNOWN";
+  const scan = (where: StoreWhereSpec, source: SchemaManifest, pointer: string): SchemaManifest[] => {
+    const touched: SchemaManifest[] = [];
+    const fields = columnsOf(source);
+    for (const [field, value] of Object.entries(where)) {
+      const at = `${pointer}/${field}`;
+      if (field === "and" || field === "or") {
+        for (const [index, child] of (value as readonly StoreWhereSpec[]).entries()) touched.push(...scan(child, source, `${at}/${index}`));
+        continue;
+      }
+      if (field === "not") {
+        touched.push(...scan(value as StoreWhereSpec, source, at));
+        continue;
+      }
+      if (!fields.has(field)) out.push(validateDiagnostic({
+        code: unknownCode, severity: "error",
+        path: manifestPath(atom, name, at, filePaths), value: field,
+        expected: `property of Schema '${source.metadata.name}' or a reserved metadata field`,
+        message: `${atom} '${name}' where references unknown field '${field}' on Schema '${source.metadata.name}'.`,
+      }));
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      for (const [operator, operand] of Object.entries(value)) {
+        if ((operator !== "in" && operator !== "notIn") || !operand || typeof operand !== "object" || Array.isArray(operand)) continue;
+        const sub = operand as { from: string; select: string; where?: StoreWhereSpec };
+        const other = schemasByName.get(sub.from);
+        if (!other) {
           out.push(validateDiagnostic({
-            code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
-            path: manifestPath("View", v.metadata.name, `/spec/select/orderBy/${field}`, filePaths),
-            value: field, expected: "a scalar Schema column",
-            message: `View '${v.metadata.name}' orderBy requires a scalar field.`,
+            code: schemaCode, severity: "error",
+            path: manifestPath(atom, name, `${at}/${operator}/from`, filePaths), value: sub.from,
+            expected: "name of a declared Schema",
+            message: `${atom} '${name}' subquery references unknown Schema '${sub.from}'.`,
           }));
+          continue;
         }
+        touched.push(other);
+        if (!columnsOf(other).has(sub.select)) out.push(validateDiagnostic({
+          code: unknownCode, severity: "error",
+          path: manifestPath(atom, name, `${at}/${operator}/select`, filePaths), value: sub.select,
+          expected: `property of Schema '${sub.from}' or a reserved metadata field`,
+          message: `${atom} '${name}' subquery references unknown field '${sub.select}'.`,
+        }));
+        if (sub.where) touched.push(...scan(sub.where, other, `${at}/${operator}/where`));
       }
     }
-    const scan = (where: Readonly<Record<string, unknown>>, source: SchemaManifest, pointer: string): void => {
-      const fields = new Set([...RESERVED_ENTRY_COLUMNS, ...Object.keys(source.spec.schema.properties ?? {})]);
-      for (const [field, value] of Object.entries(where)) {
-        const at = `${pointer}/${field}`;
-        if (field === "and" || field === "or") {
-          for (const [index, child] of (value as readonly Readonly<Record<string, unknown>>[]).entries()) scan(child, source, `${at}/${index}`);
-        } else if (field === "not") scan(value as Readonly<Record<string, unknown>>, source, at);
-        else {
-          if (!fields.has(field)) out.push(validateDiagnostic({
-            code: "VIEW_FILTER_FIELD_NOT_IN_SCHEMA", severity: "error",
-            path: manifestPath("View", v.metadata.name, at, filePaths), value: field,
-            expected: `property of Schema '${source.metadata.name}' or a reserved metadata field`,
-            message: `View '${v.metadata.name}' select references unknown field '${field}'.`,
-          }));
-          if (value && typeof value === "object" && !Array.isArray(value)) {
-            for (const [operator, operand] of Object.entries(value)) {
-              if ((operator !== "in" && operator !== "notIn") || !operand || typeof operand !== "object" || Array.isArray(operand)) continue;
-              const sub = operand as { from: string; select: string; where?: Readonly<Record<string, unknown>> };
-              const other = schemasByName.get(sub.from);
-              if (!other) out.push(validateDiagnostic({
-                code: "VIEW_FROM_UNKNOWN_SCHEMA", severity: "error",
-                path: manifestPath("View", v.metadata.name, `${at}/${operator}/from`, filePaths), value: sub.from,
-                expected: "name of a declared Schema", message: `View '${v.metadata.name}' subquery references unknown Schema '${sub.from}'.`,
-              }));
-              else {
-                if (other.spec.scope) requiresCaller = true;
-                if (v.spec.cache && other.spec.ttl) out.push(validateDiagnostic({
-                  code: "VIEW_CACHE_INVALID", severity: "error",
-                  path: manifestPath("View", v.metadata.name, `${at}/${operator}/from`, filePaths),
-                  value: sub.from, expected: "no shared cache over a TTL Schema",
-                  message: `View '${v.metadata.name}' cannot cache a subquery over TTL Schema '${sub.from}'.`,
-                }));
-                const subFields = new Set([...RESERVED_ENTRY_COLUMNS, ...Object.keys(other.spec.schema.properties ?? {})]);
-                if (!subFields.has(sub.select)) out.push(validateDiagnostic({
-                  code: "VIEW_FIELD_NOT_IN_SCHEMA", severity: "error",
-                  path: manifestPath("View", v.metadata.name, `${at}/${operator}/select`, filePaths), value: sub.select,
-                  expected: `property of Schema '${sub.from}' or a reserved metadata field`,
-                  message: `View '${v.metadata.name}' subquery references unknown field '${sub.select}'.`,
-                }));
-                if (sub.where) scan(sub.where, other, `${at}/${operator}/where`);
-              }
-            }
-          }
-        }
-      }
-    };
-    if (v.spec.select.where) scan(v.spec.select.where, schema, "/spec/select/where");
-    if (requiresCaller && !v.spec.requires?.auth?.all?.includes("ctx.user")) out.push(validateDiagnostic({
-      code: "VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH", severity: "error",
-      path: manifestPath("View", v.metadata.name, "/spec/requires/auth/all", filePaths),
-      expected: "ctx.user",
-      message: `View '${v.metadata.name}' needs ctx.user to evaluate its Store select.`,
-    }));
-  }
-
-  return out;
-}
-
-function checkCtxUserFilter(
-  view: ViewManifest,
-  schema: SchemaManifest,
-  filePaths?: ManifestFilePaths,
-): Diagnostic[] {
-  if (!view.spec.filter) return [];
-  const refs = collectCtxUserFilters(view.spec.filter, "/spec/filter");
-  if (refs.length === 0) return [];
-  const out: Diagnostic[] = [];
-  const hasUserGate = view.spec.requires?.auth?.all?.includes("ctx.user") ?? false;
-  const indexes = [...(schema.spec.uniqueIndexes ?? []), ...(schema.spec.indexes ?? [])];
-  for (const ref of refs) {
-    if (!ref.valid) {
-      out.push(validateDiagnostic({
-        code: "VIEW_FILTER_CTX_USER_REF_INVALID",
-        severity: "error",
-        path: manifestPath("View", view.metadata.name, ref.pointer, filePaths),
-        value: ref.value,
-        expected: 'exactly { "$ctx.user": "id" } as an eq comparison value',
-        message: `View '${view.metadata.name}' has an invalid ctx.user filter sentinel.`,
-      }));
-      continue;
-    }
-    if (!hasUserGate) {
-      out.push(validateDiagnostic({
-        code: "VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH",
-        severity: "error",
-        path: manifestPath("View", view.metadata.name, "/spec/requires/auth/all", filePaths),
-        expected: "ctx.user",
-        message: `View '${view.metadata.name}' binds a filter to ctx.user but does not require ctx.user.`,
-      }));
-    }
-    if (!indexes.some((index) => index[0] === ref.field)) {
-      out.push(validateDiagnostic({
-        code: "VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX",
-        severity: "error",
-        path: manifestPath("View", view.metadata.name, ref.fieldPointer, filePaths),
-        value: ref.field,
-        expected: `Schema '${schema.metadata.name}' index whose first field is '${ref.field}'`,
-        message: `View '${view.metadata.name}' must index identity-bound field '${ref.field}' as the leftmost field.`,
-      }));
-    }
-  }
-  return out;
-}
-
-function hasTopLevelScope(filter: FilterAst, field: string): boolean {
-  const matches = (node: FilterAst) => {
-    const comparison = getFilterComparison(node);
-    return comparison?.op === "eq" && comparison.node.field === field && isCtxUserRef(comparison.node.value);
+    return touched;
   };
-  return matches(filter) || ("and" in filter && filter.and.some(matches));
+  return scan;
 }
 
-function collectCtxUserFilters(
-  node: FilterAst,
-  pointer: string,
-): Array<{
-  readonly field: string;
-  readonly fieldPointer: string;
-  readonly pointer: string;
-  readonly value: unknown;
-  readonly valid: boolean;
-}> {
-  const comparison = getFilterComparison(node);
-  if (comparison) {
-    if (!hasCtxUserRefKey(comparison.node.value)) return [];
-    return [{
-      field: comparison.node.field,
-      fieldPointer: `${pointer}/${comparison.op}/field`,
-      pointer: `${pointer}/${comparison.op}/value`,
-      value: comparison.node.value,
-      valid: comparison.op === "eq" && isCtxUserRef(comparison.node.value),
-    }];
+/** Per-row lifecycle hooks declared for each Schema, from its lifecycle Triggers. */
+function lifecycleHooksBySchema(triggers: readonly TriggerManifest[]): ReadonlyMap<string, ReadonlySet<LifecycleHook>> {
+  const hooks = new Map<string, Set<LifecycleHook>>();
+  for (const trigger of triggers) {
+    const source = trigger.spec.source;
+    if (source.kind !== "lifecycle") continue;
+    const set = hooks.get(source.schema) ?? new Set<LifecycleHook>();
+    for (const hook of source.on) set.add(hook);
+    hooks.set(source.schema, set);
   }
-  const children = "and" in node ? node.and : "or" in node ? node.or : [];
-  const key = "and" in node ? "and" : "or";
-  return children.flatMap((child, index) =>
-    collectCtxUserFilters(child, `${pointer}/${key}/${index}`),
-  );
+  return hooks;
 }
 
-function checkFilterFields(
-  node: FilterAst,
-  validFields: ReadonlySet<string>,
-  viewName: string,
-  schemaName: string,
-  jsonPointer: string,
-  filePaths?: ManifestFilePaths,
-): Diagnostic[] {
-  const comparison = getFilterComparison(node);
-  if (comparison) {
-    if (!validFields.has(comparison.node.field)) {
-      return [
-        validateDiagnostic({
-          code: "VIEW_FILTER_FIELD_NOT_IN_SCHEMA",
-          severity: "error",
-          path: manifestPath(
-            "View",
-            viewName,
-            `${jsonPointer}/${comparison.op}/field`,
-            filePaths,
-          ),
-          value: comparison.node.field,
-          expected: `property of Schema '${schemaName}' or a reserved metadata field`,
-          candidates: [...validFields].sort(),
-          suggestion: bestMatch(comparison.node.field, [...validFields]),
-          message: `View '${viewName}' filter references unknown field '${comparison.node.field}'.`,
-        }),
-      ];
-    }
-    return [];
-  }
-  if ("and" in node) {
-    return node.and.flatMap((c, i) =>
-      checkFilterFields(c, validFields, viewName, schemaName, `${jsonPointer}/and/${i}`, filePaths),
-    );
-  }
-  if ("or" in node) {
-    return node.or.flatMap((c, i) =>
-      checkFilterFields(c, validFields, viewName, schemaName, `${jsonPointer}/or/${i}`, filePaths),
-    );
-  }
-  return [];
-}
-
-/** Status comparisons other than `eq status published`, with their JSON pointers. */
-function collectStatusComparisons(
-  node: FilterAst,
-  pointer: string,
-): Array<{ readonly pointer: string; readonly value: unknown }> {
-  const comparison = getFilterComparison(node);
-  if (comparison) {
-    if (comparison.node.field !== "status") return [];
-    if (comparison.op === "eq" && comparison.node.value === "published") return [];
-    return [{ pointer: `${pointer}/${comparison.op}/value`, value: comparison.node.value }];
-  }
-  const children = "and" in node ? node.and : "or" in node ? node.or : [];
-  const key = "and" in node ? "and" : "or";
-  return children.flatMap((child, index) => collectStatusComparisons(child, `${pointer}/${key}/${index}`));
-}
-
-function getFilterComparison(
-  node: FilterAst,
-): { readonly op: (typeof FILTER_COMPARISON_OPS)[number]; readonly node: { readonly field: string; readonly value: unknown } } | null {
-  if ("eq" in node) return { op: "eq", node: node.eq };
-  if ("gt" in node) return { op: "gt", node: node.gt };
-  if ("gte" in node) return { op: "gte", node: node.gte };
-  if ("lt" in node) return { op: "lt", node: node.lt };
-  if ("lte" in node) return { op: "lte", node: node.lte };
-  return null;
-}
-
-function checkBuiltinHandler(
+/**
+ * Inline Store program rules (ADR-0032 decisions 1–3). The parser already
+ * checked shapes and value references; this checks them against Schemas,
+ * indexes, hooks and the Procedure's own declarations.
+ */
+function checkStoreProgram(
   p: ProcedureManifest,
   schemasByName: ReadonlyMap<string, SchemaManifest>,
+  hooks: ReadonlyMap<string, ReadonlySet<LifecycleHook>>,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
-  const h = p.spec.handler;
-  if (h.kind !== "builtin") return [];
+  const handler = p.spec.handler;
+  if (!isStoreProgram(handler)) return [];
   const out: Diagnostic[] = [];
-  // Declared annotations must not contradict what the builtin op proves (#972):
-  // every op writes, and delete destroys. A false hint would tell a client to
-  // skip the confirmation the MCP spec defaults to.
+  const name = p.metadata.name;
+  const fail = (code: Diagnostic["code"], pointer: string, message: string, extra: Partial<Pick<Diagnostic, "value" | "expected" | "candidates">> = {}) =>
+    out.push(validateDiagnostic({ code, severity: "error", path: manifestPath("Procedure", name, pointer, filePaths), message, ...extra }));
   if (p.spec.mcp?.readOnlyHint === true) {
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, "/spec/mcp/readOnlyHint", filePaths),
-        value: true,
-        expected: "no readOnlyHint, or readOnlyHint: false, on a builtin handler",
-        message: `Procedure '${p.metadata.name}' declares mcp.readOnlyHint: true but its builtin handler (op: ${h.op}) writes.`,
-      }),
-    );
+    fail("STORE_PROGRAM_INVALID", "/spec/mcp/readOnlyHint", `Procedure '${name}' declares mcp.readOnlyHint: true but its Store program writes.`, { value: true });
   }
-  if (h.op === "delete" && p.spec.mcp?.destructiveHint === false) {
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, "/spec/mcp/destructiveHint", filePaths),
-        value: false,
-        expected: "no destructiveHint, or destructiveHint: true, on a builtin delete",
-        message: `Procedure '${p.metadata.name}' declares mcp.destructiveHint: false but its builtin handler deletes.`,
-      }),
-    );
+  if (p.spec.mcp?.destructiveHint === false && handler.store.some((op) => "delete" in op)) {
+    fail("STORE_PROGRAM_INVALID", "/spec/mcp/destructiveHint", `Procedure '${name}' declares mcp.destructiveHint: false but its Store program deletes.`, { value: false });
   }
-  const target = schemasByName.get(h.schema);
-  if (!target) {
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_SCHEMA_UNKNOWN",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, "/spec/handler/schema", filePaths),
-        value: h.schema,
-        expected: "name of a declared Schema",
-        candidates: [...schemasByName.keys()],
-        suggestion: bestMatch(h.schema, [...schemasByName.keys()]),
-        message: `Procedure '${p.metadata.name}' has handler.kind: builtin / schema: '${h.schema}', but no Schema by that name is declared.`,
-      }),
-    );
-    return out;
-  }
-
-  const inputSchema = p.spec.input as JsonSchema;
-  if (!isObjectSchema(inputSchema)) {
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, "/spec/input", filePaths),
-        value: inputSchema.type,
-        expected: "type: 'object'",
-        message: `Procedure '${p.metadata.name}' (builtin op: ${h.op}) input must be an object schema.`,
-      }),
-    );
-    return out;
-  }
-
-  const inputProps = (inputSchema.properties ?? {}) as Record<string, JsonSchema>;
-  const inputRequired = new Set(inputSchema.required ?? []);
-
-  if (h.op === "update") {
-    if (!("id" in inputProps) || inputProps.id === undefined) {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
-          expected: "property 'id' with type 'string'",
-          message: `Procedure '${p.metadata.name}' (builtin op: update) requires input property 'id' with type 'string'.`,
-        }),
-      );
-    } else if (!isStrictTypeString(inputProps.id)) {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
-          value: inputProps.id.type,
-          expected: "type: 'string'",
-          message: `Procedure '${p.metadata.name}' (builtin op: update) property 'id' must be strict type 'string'.`,
-        }),
-      );
-    }
-
-    pushExpectedVersionContract(out, p, inputProps, inputRequired, filePaths, {
-      opLabel: "update",
-      required: true,
+  const output = p.spec.output;
+  const results = output.properties?.["results"];
+  if (output.type !== "object" || (output.properties && !hasType(results, ["array"])) || (output.required ?? []).some((key) => key !== "results")) {
+    fail("STORE_PROGRAM_OUTPUT_INVALID", "/spec/output", `Procedure '${name}' runs a Store program, whose output is { results }; its output schema must accept that object.`, {
+      expected: "type: object, with at most a `results` array property",
     });
-
-    if (!inputRequired.has("id")) {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
-          expected: "required to include 'id'",
-          message: `Procedure '${p.metadata.name}' (builtin op: update) requires 'id' in input.required.`,
-        }),
-      );
-    }
-  } else if (h.op === "delete" || h.op === "archive") {
-    if (h.op === "archive" && target.spec.lifecycle === "operational") {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/handler/op", filePaths),
-          value: h.op,
-          expected: "Schema with lifecycle: 'publishing' (operational Schemas do not support archive)",
-          message: `Procedure '${p.metadata.name}' (builtin op: archive) targets Schema '${target.metadata.name}' with lifecycle: 'operational'. Operational Schemas cannot be archived.`,
-        }),
-      );
-    }
-
-    if (!("id" in inputProps) || inputProps.id === undefined) {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
-          expected: "property 'id' with type 'string'",
-          message: `Procedure '${p.metadata.name}' (builtin op: ${h.op}) requires input property 'id' with type 'string'.`,
-        }),
-      );
-    } else if (!isStrictTypeString(inputProps.id)) {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
-          value: inputProps.id.type,
-          expected: "type: 'string'",
-          message: `Procedure '${p.metadata.name}' (builtin op: ${h.op}) property 'id' must be strict type 'string'.`,
-        }),
-      );
-    }
-
-    if (!inputRequired.has("id")) {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
-          expected: "required to include 'id'",
-          message: `Procedure '${p.metadata.name}' (builtin op: ${h.op}) requires 'id' in input.required.`,
-        }),
-      );
-    }
-  } else if (h.op === "upsert") {
-    if (h.match) {
-      const targetProps = ((target.spec.schema as { properties?: Record<string, unknown> }).properties ?? {});
-      const uniqueIndexes = target.spec.uniqueIndexes ?? [];
-      const matchesUniqueIndex = uniqueIndexes.some(
-        (idx) => idx.length === h.match!.length && idx.every((col, i) => col === h.match![i]),
-      );
-      if (!matchesUniqueIndex) {
-        out.push(
-          validateDiagnostic({
-            code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-            severity: "error",
-            path: manifestPath("Procedure", p.metadata.name, "/spec/handler/match", filePaths),
-            value: h.match,
-            expected: `exact match with one declared unique index in Schema '${target.metadata.name}'`,
-            message: `Procedure '${p.metadata.name}' handler.match [${h.match.join(", ")}] does not match any declared unique index on Schema '${target.metadata.name}'.`,
-          }),
-        );
-      }
-
-      for (const field of h.match) {
-        if (!(field in targetProps)) {
-          out.push(
-            validateDiagnostic({
-              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-              severity: "error",
-              path: manifestPath("Procedure", p.metadata.name, "/spec/handler/match", filePaths),
-              value: field,
-              expected: `property declared in Schema '${target.metadata.name}' spec.schema.properties`,
-              message: `Procedure '${p.metadata.name}' matched field '${field}' is not declared on Schema '${target.metadata.name}'.`,
-            }),
-          );
-        }
-        if (!(field in inputProps) || inputProps[field] === undefined) {
-          out.push(
-            validateDiagnostic({
-              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-              severity: "error",
-              path: manifestPath("Procedure", p.metadata.name, `/spec/input/properties/${field}`, filePaths),
-              expected: `property '${field}' declared in Procedure input properties`,
-              message: `Procedure '${p.metadata.name}' matched field '${field}' is missing from Procedure input properties.`,
-            }),
-          );
-        }
-        if (!inputRequired.has(field)) {
-          out.push(
-            validateDiagnostic({
-              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-              severity: "error",
-              path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
-              expected: `required to include matched field '${field}'`,
-              message: `Procedure '${p.metadata.name}' matched field '${field}' must be in input.required.`,
-            }),
-          );
-        }
-      }
-
-      if ("id" in inputProps && inputProps.id !== undefined) {
-        out.push(
-          validateDiagnostic({
-            code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-            severity: "error",
-            path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
-            value: inputProps.id,
-            expected: "no 'id' property when using matched upsert",
-            message: `Procedure '${p.metadata.name}' uses matched upsert; input must not declare 'id'.`,
-          }),
-        );
-      }
-      pushExpectedVersionContract(out, p, inputProps, inputRequired, filePaths, {
-        opLabel: "upsert",
-        required: false,
-      });
-    } else {
-      const hasId = "id" in inputProps && inputProps.id !== undefined;
-      if (hasId && !isStrictTypeString(inputProps.id)) {
-        out.push(
-          validateDiagnostic({
-            code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-            severity: "error",
-            path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
-            value: inputProps.id?.type,
-            expected: "type: 'string'",
-            message: `Procedure '${p.metadata.name}' (builtin op: upsert) property 'id' must be strict type 'string'.`,
-          }),
-        );
-      }
-      pushExpectedVersionContract(out, p, inputProps, inputRequired, filePaths, {
-        opLabel: "upsert",
-        required: false,
-      });
-    }
   }
-
+  const input = p.spec.input;
+  const inputProps = input.properties ?? {};
+  const wholeInput = Object.keys(inputProps).filter((key) => key !== "id" && !RESERVED_PROCEDURE_INPUT_NAMES.includes(key as never));
+  let requiresCaller = usesReference(handler.store, "$ctx.user.id");
+  const scan = scanStoreWhere("Procedure", name, schemasByName, filePaths, out);
+  handler.store.forEach((op: StoreProgramOp, index) => {
+    const at = `/spec/handler/store/${index}`;
+    const verb = storeOpVerb(op);
+    const schemaName = storeOpSchema(op);
+    const schema = schemasByName.get(schemaName);
+    if (!schema) {
+      fail("STORE_PROGRAM_SCHEMA_UNKNOWN", `${at}/${verb}`, `Procedure '${name}' writes unknown Schema '${schemaName}'.`, {
+        value: schemaName, expected: "name of a declared Schema", candidates: [...schemasByName.keys()],
+      });
+      return;
+    }
+    if (schema.spec.scope) requiresCaller = true;
+    const properties = Object.keys(schema.spec.schema.properties ?? {});
+    const fieldsKey = "insert" in op ? "values" : "update" in op ? "set" : undefined;
+    const fields = "insert" in op ? op.values : "update" in op ? op.set : undefined;
+    const written = fields === "$input" ? wholeInput : Object.keys(fields ?? {}).filter((key) => key !== "status");
+    for (const column of written) {
+      if (!properties.includes(column)) {
+        fail("STORE_PROGRAM_INVALID", fields === "$input" ? `/spec/input/properties/${pointerSegment(column)}` : `${at}/${fieldsKey}/${pointerSegment(column)}`,
+          `Procedure '${name}' writes '${column}', which Schema '${schemaName}' does not declare.`, { value: column, candidates: properties });
+      }
+    }
+    if ("insert" in op && op.onConflict && op.onConflict !== "ignore") {
+      const { columns, update } = op.onConflict;
+      if (!(schema.spec.uniqueIndexes ?? []).some((declared) => declared.length === columns.length && declared.every((column, i) => column === columns[i]))) {
+        fail("STORE_PROGRAM_INVALID", `${at}/onConflict/columns`, `Procedure '${name}' onConflict.columns [${columns.join(", ")}] is not a declared unique index of Schema '${schemaName}'.`, { value: columns });
+      }
+      for (const column of update) {
+        if (!properties.includes(column)) fail("STORE_PROGRAM_INVALID", `${at}/onConflict/update`, `Procedure '${name}' onConflict updates '${column}', which Schema '${schemaName}' does not declare.`, { value: column });
+      }
+    }
+    if ("insert" in op) return;
+    for (const other of scan(op.where, schema, `${at}/where`)) if (other.spec.scope) requiresCaller = true;
+    const status = "update" in op && typeof op.set === "object" ? op.set["status"] : undefined;
+    if (!isRowOp(op)) {
+      if (op.lock !== undefined) fail("STORE_PROGRAM_INVALID", `${at}/lock`, `Procedure '${name}' locks a set op; lock needs a where that pins id.`);
+      const hooked = [...(hooks.get(schemaName) ?? [])].filter((hook) => hook.endsWith(`_${verb}`) || (status === "published" && hook.endsWith("_publish")));
+      if (hooked.length > 0 || isPublishing(schema) || status !== undefined) {
+        fail("STORE_SET_OP_REJECTED", `${at}/where`, hooked.length > 0
+          ? `Procedure '${name}' runs a set-based ${verb} on Schema '${schemaName}', which has per-row ${hooked.join(", ")} hooks; pin id so hooks fire per row.`
+          : `Procedure '${name}' runs a set-based ${verb} on publishing Schema '${schemaName}'; lifecycle rules apply per row, so pin id.`,
+          { value: op.where, expected: "a where that pins id, or a set op on an operational Schema without per-row hooks" });
+      }
+    }
+    if (status !== undefined && !isPublishing(schema)) {
+      fail("STORE_PROGRAM_INVALID", `${at}/set/status`, `Procedure '${name}' sets status on operational Schema '${schemaName}', which has no lifecycle transitions.`, { value: status });
+    }
+    const lock = inputReference(op.lock);
+    if (lock && !hasType(inputProps[lock], ["number", "integer"])) {
+      fail("STORE_PROGRAM_INVALID", `${at}/lock`, `Procedure '${name}' lock '$input.${lock}' must name a number input property.`, { value: op.lock });
+    }
+    const id = inputReference(pinnedId(op.where));
+    if (id && !hasType(inputProps[id], ["string"])) {
+      fail("STORE_PROGRAM_INVALID", `${at}/where/id`, `Procedure '${name}' pins id to '$input.${id}', which must be a string input property.`, { value: id });
+    }
+  });
+  if (requiresCaller && !p.spec.requires?.auth?.all?.includes("ctx.user")) {
+    fail("STORE_CALLER_REQUIRED", "/spec/requires/auth/all", `Procedure '${name}' writes a scoped Schema or uses $ctx.user.id, so it must require ctx.user.`, { expected: "ctx.user" });
+  }
   return out;
-}
-
-function isObjectSchema(s: JsonSchema): boolean {
-  if (s.type === "object") return true;
-  if (Array.isArray(s.type) && s.type.length === 1 && s.type[0] === "object") return true;
-  return false;
-}
-
-function isStrictTypeString(s?: JsonSchema): boolean {
-  if (!s || typeof s !== "object") return false;
-  if (Array.isArray(s.type)) return false;
-  if (s.type !== "string") return false;
-  if ((s as { nullable?: boolean }).nullable === true) return false;
-  return true;
-}
-
-function isStrictTypeNumber(s?: JsonSchema): boolean {
-  if (!s || typeof s !== "object") return false;
-  if (Array.isArray(s.type)) return false;
-  if (s.type !== "number") return false;
-  if ((s as { nullable?: boolean }).nullable === true) return false;
-  return true;
-}
-
-function pushExpectedVersionContract(
-  out: Diagnostic[],
-  p: ProcedureManifest,
-  inputProps: Record<string, JsonSchema>,
-  inputRequired: ReadonlySet<string>,
-  filePaths: ManifestFilePaths | undefined,
-  opts: { readonly opLabel: string; readonly required: boolean },
-): void {
-  const declared = EXPECTED_VERSION_PROPERTY in inputProps && inputProps[EXPECTED_VERSION_PROPERTY] !== undefined;
-  if (!declared) {
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, `/spec/input/properties/${EXPECTED_VERSION_PROPERTY}`, filePaths),
-        expected: `property '${EXPECTED_VERSION_PROPERTY}' with type 'number'`,
-        message: `Procedure '${p.metadata.name}' (builtin op: ${opts.opLabel}) requires input property '${EXPECTED_VERSION_PROPERTY}' with type 'number' (observed native entry.version at read time, not version+1).`,
-      }),
-    );
-  } else if (!isStrictTypeNumber(inputProps[EXPECTED_VERSION_PROPERTY])) {
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, `/spec/input/properties/${EXPECTED_VERSION_PROPERTY}`, filePaths),
-        value: inputProps[EXPECTED_VERSION_PROPERTY]?.type,
-        expected: "type: 'number'",
-        message: `Procedure '${p.metadata.name}' (builtin op: ${opts.opLabel}) property '${EXPECTED_VERSION_PROPERTY}' must be strict type 'number'.`,
-      }),
-    );
-  }
-  if (opts.required && !inputRequired.has(EXPECTED_VERSION_PROPERTY)) {
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
-        expected: `required to include '${EXPECTED_VERSION_PROPERTY}'`,
-        message: `Procedure '${p.metadata.name}' (builtin op: ${opts.opLabel}) requires '${EXPECTED_VERSION_PROPERTY}' in input.required.`,
-      }),
-    );
-  }
 }
 
 function checkGuards(
@@ -1141,15 +721,15 @@ function checkGuards(
       );
       continue;
     }
-    if (guard.spec.handler.kind !== "ref") {
+    if (!("ref" in guard.spec.handler)) {
       out.push(
         validateDiagnostic({
-          code: "GUARD_PROCEDURE_BUILTIN",
+          code: "GUARD_PROCEDURE_NOT_REF",
           severity: "error",
           path,
           value: guardName,
-          expected: "a Procedure with handler.kind: ref",
-          message: `${target.kind} '${target.metadata.name}' uses '${guardName}' as a guard, but guard Procedures cannot use builtin handlers.`,
+          expected: "a Procedure with a ref handler",
+          message: `${target.kind} '${target.metadata.name}' uses '${guardName}' as a guard, but a guard is a read-only check and cannot run a Store program.`,
         }),
       );
     }
@@ -1301,6 +881,19 @@ function checkTriggerRefs(
         }),
       );
     }
+    const hookTarget = t.spec.source.kind === "lifecycle" ? proceduresByName.get(procName) : undefined;
+    if (hookTarget && !("ref" in hookTarget.spec.handler)) {
+      out.push(
+        validateDiagnostic({
+          code: "LIFECYCLE_TARGET_NOT_REF",
+          severity: "error",
+          path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
+          value: procName,
+          expected: "a Procedure with a ref handler",
+          message: `Trigger '${t.metadata.name}' is a lifecycle hook, so its target '${procName}' must be a ref handler; a before hook is a read-only check and an after hook reacts after the commit.`,
+        }),
+      );
+    }
   }
   return out;
 }
@@ -1440,7 +1033,7 @@ function checkMcpExpectedVersionReachability(
       expected: `a '${source.surface}' View over '${collection}' that exposes 'version'`,
       message:
         `MCP tool '${tool}' on the ${source.surface} surface requires '${EXPECTED_VERSION_PROPERTY}' of ` +
-        `'${collection}'${procedure.spec.handler.kind === "ref" && !procedure.spec.target ? " (inferred from its x-mantle-ref input)" : ""}, ` +
+        `'${collection}'${!procedureTarget(procedure) ? " (inferred from its x-mantle-ref input)" : ""}, ` +
         `but no ${source.surface} View reads that collection's 'version'; an agent cannot obtain the value it must send.`,
     }));
   }
@@ -1449,9 +1042,8 @@ function checkMcpExpectedVersionReachability(
 
 /** The collection whose `version` an OCC write locks, or null when it cannot be told statically. */
 function lockedCollection(procedure: ProcedureManifest): string | null {
-  const handler = procedure.spec.handler;
-  if (handler.kind === "builtin") return handler.schema;
-  if (procedure.spec.target) return procedure.spec.target.schema;
+  const target = procedureTarget(procedure);
+  if (target) return target.schema;
   const input = procedure.spec.input;
   const refs = (input.required ?? []).flatMap((name) => {
     const ref = resolveMantleRef(input.properties?.[name]);
@@ -1469,8 +1061,8 @@ function viewExposesVersion(view: ViewManifest, collection: string): boolean {
     // matched because CTEs, quoting and aliases hide the table name.
     return /version/iu.test(view.spec.sql) || /select\s+(?:\w+\.)?\*/iu.test(view.spec.sql);
   }
-  if ((view.spec.select?.from ?? view.spec.from) !== collection) return false;
-  const columns = view.spec.select?.columns ?? view.spec.fields;
+  if (view.spec.select?.from !== collection) return false;
+  const columns = view.spec.select.columns;
   return !columns || columns.includes("version");
 }
 

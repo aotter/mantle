@@ -1,5 +1,6 @@
 import type { Diagnostic, SourceLocation } from "../../kernel/diagnostic.js";
 import type { ManifestFilePaths } from "./ManifestPathDiagnoser.js";
+import { storeOpSchema } from "./StoreProgram.js";
 import {
   sourceLocationAt,
   type ParsedManifest,
@@ -29,7 +30,8 @@ export interface LinkedView extends ResolvedManifestReference<ParsedView> {
 }
 
 export interface LinkedProcedure extends ResolvedManifestReference<ParsedProcedure> {
-  readonly builtinSchema?: ResolvedManifestReference<ParsedSchema>;
+  /** Schemas an inline Store program writes, in first-write order; empty for a `ref` handler. */
+  readonly writes: readonly ResolvedManifestReference<ParsedSchema>[];
   readonly collectionActionSchema?: ResolvedManifestReference<ParsedSchema>;
   readonly guard?: ResolvedManifestReference<ParsedProcedure>;
 }
@@ -88,16 +90,16 @@ export function linkManifestSet(
   }));
   const views = graph.views.map((manifest) => Object.freeze({
     ...resolve(manifest as ParsedView),
-    ...((manifest.spec.select?.from ?? manifest.spec.from) ? { from: resolveSchema((manifest.spec.select?.from ?? manifest.spec.from)!) } : {}),
+    ...(manifest.spec.select ? { from: resolveSchema(manifest.spec.select.from) } : {}),
     ...(manifest.spec.requires?.guard
       ? { guard: resolveProcedure(manifest.spec.requires.guard.procedure) }
       : {}),
   }));
-  const procedures = graph.procedures.map((manifest) => Object.freeze({
+  const procedures = graph.procedures.map((manifest): LinkedProcedure => Object.freeze({
     ...resolve(manifest as ParsedProcedure),
-    ...(manifest.spec.handler.kind === "builtin"
-      ? { builtinSchema: resolveSchema(manifest.spec.handler.schema) }
-      : {}),
+    writes: "store" in manifest.spec.handler
+      ? [...new Set(manifest.spec.handler.store.map(storeOpSchema))].map(resolveSchema)
+      : [],
     ...(typeof manifest.spec.uiSchema?.["collectionAction"] === "string"
       ? { collectionActionSchema: resolveSchema(manifest.spec.uiSchema["collectionAction"] as string) }
       : {}),

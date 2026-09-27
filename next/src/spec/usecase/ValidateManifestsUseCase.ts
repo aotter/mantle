@@ -202,7 +202,7 @@ function checkHandlerRefsInSource(
   const out: Diagnostic[] = [];
   for (const procedure of linked.procedures) {
     const handler = procedure.manifest.spec.handler;
-    if (handler.kind !== "ref") continue;
+    if (!("ref" in handler)) continue;
     const escaped = handler.ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const quoted = new RegExp(`["'\`]${escaped}["'\`]`);
     const propertyKey = new RegExp(`(?:^|[\\s{,;])${escaped}\\s*:`, "m");
