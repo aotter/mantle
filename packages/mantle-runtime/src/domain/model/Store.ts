@@ -1,5 +1,6 @@
 import type { SweepExpiredRequest, SweepExpiredResult } from "../port/ExpirySweeper.js";
 import type { ViewQueryOptions, ViewQueryResult } from "../port/ViewQueryExecutor.js";
+import type { HandlerContext } from "./HandlerContext.js";
 
 /**
  * Store — Mantle's single persistence object (ADR-0030, #1151).
@@ -115,6 +116,8 @@ export type StoreWriteResult =
  * storage adapter cannot run it.
  */
 export interface MantleStore {
+  /** Bind host work on behalf of a caller to the same Schema scope as a Procedure. */
+  as(ctx: HandlerContext): CallerStore;
   select(query: StoreSelect): Promise<StoreSelectResult>;
   /**
    * Apply every operation or none, in order, as one storage transaction.
@@ -131,4 +134,4 @@ export interface MantleStore {
 }
 
 /** Procedure-facing Store; TTL cleanup belongs to trusted host code. */
-export type CallerStore = Omit<MantleStore, "sweepExpired">;
+export type CallerStore = Omit<MantleStore, "as" | "sweepExpired">;

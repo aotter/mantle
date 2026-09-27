@@ -64,6 +64,20 @@ async function workout(rt: MantleRuntime) {
 const count = async (rt: MantleRuntime, from: string) => (await rt.store.select({ from, limit: 500 })).rows.length;
 
 describe("store.write (#1151)", () => {
+  it("binds host Store work to a caller without exposing host maintenance", async () => {
+    const rt = await runtime(new AtomicDatabase(), [privateSessions]);
+    await rt.store.write([
+      { insert: "privateSessions", id: "mine", values: { ownerId: "a", label: "one" } },
+      { insert: "privateSessions", id: "theirs", values: { ownerId: "b", label: "two" } },
+    ]);
+    const mine = rt.store.as({ user: { id: "a" }, staff: null, env: {} });
+    expect("as" in mine).toBe(false);
+    expect("sweepExpired" in mine).toBe(false);
+    expect((await mine.select({ from: "privateSessions" })).rows.map((row) => row["id"])).toEqual(["mine"]);
+    await expect(rt.store.as({ user: null, staff: null, env: {} }).select({ from: "privateSessions" }))
+      .rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  });
+
   it("persists an omitted Schema default on Store insert", async () => {
     const defaults = schema("defaults", {
       title: { type: "string" }, state: { type: "string", default: "draft" },

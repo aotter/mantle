@@ -40,6 +40,7 @@ export function createStore(deps: StoreDependencies, binding: StoreBinding = {})
     message,
   })));
   return {
+    ...(!callerBound ? { as: (caller: HandlerContext) => createStore(deps, { ctx: caller }) } : {}),
     select: async (query) => {
       if (!deps.reader) {
         return Promise.reject(new DiagnosticError(runtimeDiagnostic({
