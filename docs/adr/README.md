@@ -19,7 +19,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0016](0016-site-semantic-layer.md) | Historical Starter/Landing `AGENTS.md` and launch-state contract. | Superseded by 0021 |
 | [0017](0017-media-multi-variant-agent-side-optimization.md) | Multi-variant media assets with agent-side optimization and asset-id entry references. | Accepted |
 | [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Superseded by 0021 |
-| [0019](0019-sealed-manifest-runtime-pipeline.md) | One sealed source-to-runtime pipeline, semantic storage seam, and optional Web/Admin/platform dependency direction. | Accepted |
+| [0019](0019-sealed-manifest-runtime-pipeline.md) | One sealed source-to-runtime pipeline, semantic storage seam, and optional Web/Admin/platform dependency direction. | Accepted; optional boundaries become subpaths of two packages per 0032 |
 | [0020](0020-builtin-handler-contracts-and-matched-upsert.md) | Static builtin handler contracts and natural-key matched upsert (`handler.match`). | Accepted + amended by 0022 |
 | [0021](0021-retire-starter-scaffolding.md) | Direct authoring; retire Starter scaffolding. | Accepted; no-initialization clause superseded by 0026 |
 | [0022](0022-caller-observed-version-occ.md) | Caller-observed `expectedVersion` for Admin bind and builtin upsert OCC. | Accepted |
@@ -31,7 +31,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0029](0029-mcp-apps-interaction-contracts.md) | Official MCP SDK for all MCP wire handling; transport-neutral capability catalog with validate-once invocation; `@aotter/mantle-mcp` and `@aotter/mantle-ui`; Manifest-declared interaction contracts and MCP Apps (#1110). | Accepted; amends ADR-lite 909 |
 | [0030](0030-store.md) | Store: one persistence object (`ctx.store` / `runtime.store`) over one relational JSON query AST compiled by each adapter; first slice `select`, `view`, `id`, then `write`, then manifest grammar (#1151). | Accepted; completed for 0.2.0 by 0032 |
 | [0031](0031-host-cloud-core-contract.md) | Cloud supplies the Core pin before host artifact hashing; protocol 2 checks the same pin through grants and the frontend kit. | Accepted |
-| [0032](0032-store-centric-core-and-service-contract.md) | 0.2.0: Store is the only entry persistence path; an application-owned service behind one host-neutral `createMantle`; one `Caller` identity and no Core-owned user or auth; `_mantle_` marks system tables only. | Proposed for 0.2.0 |
+| [0032](0032-store-centric-core-and-service-contract.md) | 0.2.0: Store is the only entry persistence path; an application-owned service behind one host-neutral `createMantle`; one `Caller` identity and no Core-owned user or auth; `_mantle_` marks system tables only; two npm packages and one plugin. | Proposed for 0.2.0 |
 | [0033](0033-storage-converges-to-the-plan.md) | Schema storage converges to the plan by introspection: Mantle applies safe additions, blocks the rest, and verifies author-made changes; no Mantle-written migration files. | Proposed for 0.2.0 |
 
 ## Reading order

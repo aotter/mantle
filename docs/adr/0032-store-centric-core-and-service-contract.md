@@ -67,9 +67,9 @@ A write op's `where` is classified **on the caller's `where`, before any policy 
 
 - `SqliteStoreExecutor` serves D1, Bun and libSQL, so libSQL gains writes.
 - `MemoryStoreExecutor` is the reference implementation, the test fake (replacing `test/fakes/in-memory-store.ts`) and the base of the IndexedDB adapter, which keeps its own persistence and concurrency tests.
-- `@aotter/mantle-runtime/testing` exports one conformance suite that runs against every executor.
+- `@aotter/mantle/testing` exports one conformance suite that runs against every executor.
 
-The rewrite is built in a private workspace package (working label "MK2") that depends only on `@aotter/mantle-spec`, then folded into `mantle-runtime` with the label removed.
+The rewrite is built in `next/`, a private package beside the shipped ones (see `next/README.md`), and replaces them at the end.
 
 ### 5. Grammar is the IR
 
@@ -81,7 +81,7 @@ The rewrite is built in a private workspace package (working label "MK2") that d
 - **Pagination.** REST, MCP and Admin page with `limit` and `cursor` only.
 - Staff View `uiSchema.searchFields` and `filterFields` compile to `like` and `eq` conditions.
 - A native SQL View may not target a scoped Schema (`VIEW_SQL_SCOPED_SCHEMA`); `VIEW_TTL_NATIVE_UNSAFE` stays.
-- **Schedule Triggers** take a five-field POSIX cron in UTC (weekday 0 = Sunday). The plan no longer carries a required host. A service that wires schedules passes `schedules: true` to `createMantle`, and boot fails for any enabled schedule without it. `toCloudflareCron` in `@aotter/mantle-cloudflare` translates an expression for Wrangler.
+- **Schedule Triggers** take a five-field POSIX cron in UTC (weekday 0 = Sunday). The plan no longer carries a required host. A service that wires schedules passes `schedules: true` to `createMantle`, and boot fails for any enabled schedule without it. `toCloudflareCron` in `@aotter/mantle/cloudflare` translates an expression for Wrangler.
 - **Webhooks.** An HTTP Trigger does not receive the raw request body in 0.2.0. The service owns its HTTP entry (decision 6), so it verifies a signature there and calls `runtime.invokeProcedure`. A raw-body Trigger key is additive and can come later.
 
 ### 6. The portable unit is an application-owned service
@@ -98,7 +98,7 @@ interface MantleServiceContext {
 ```
 
 - `env` stays opaque. HTTP is the service's only Mantle ingress; schedules, deferred hooks, MCP and REST enter through Trigger atoms and surfaces.
-- **One host-neutral entry, no per-host adapter.** Once the service is a WinterTC fetch, hosts differ only in the storage driver and in how their native entry is spelled. `@aotter/mantle-runtime` exports one function:
+- **One host-neutral entry, no per-host adapter.** Once the service is a WinterTC fetch, hosts differ only in the storage driver and in how their native entry is spelled. `@aotter/mantle` exports one function:
 
   ```ts
   createMantle(service, { storage: (env) => MantleStorageAdapter, schedules?: boolean }): {
@@ -109,9 +109,9 @@ interface MantleServiceContext {
   ```
 
   It boots the runtime lazily from `storage(env)`, passes it to `service.fetch`, and turns a schedule or a deferred-hook message into a Trigger invocation. The host's entry is one to three lines of **generated, application-owned** preset code (`export default { fetch: m.fetch, scheduled: (e, env, ctx) => m.invokeSchedule(e.cron, e.scheduledTime, env, ctx) }` on Cloudflare, `Bun.serve({ fetch: m.fetch })` on Bun), so an application adds its own native handlers next to Mantle's and Core absorbs no platform event types.
-- `createMantleWorker`, `createBunMantle` and `createVercelMantle` are removed; today `createBunMantle` and `createVercelMantle` are 62-line copies of the same lazy boot. The adapter packages keep only what is platform-specific: `@aotter/mantle-cloudflare` the D1 driver, the KV and R2 bindings and `toCloudflareCron`; `@aotter/mantle-bun` the `bun:sqlite` driver; `@aotter/mantle-vercel` the libSQL driver. ChatGPT Sites uses the Cloudflare preset with the custom identity.
+- `createMantleWorker`, `createBunMantle` and `createVercelMantle` are removed; today `createBunMantle` and `createVercelMantle` are 62-line copies of the same lazy boot. The adapter subpaths keep only what is platform-specific: `@aotter/mantle/cloudflare` the D1 driver, the KV and R2 bindings and `toCloudflareCron`; `@aotter/mantle/bun` the `bun:sqlite` driver; `@aotter/mantle/vercel` the libSQL driver. ChatGPT Sites uses the Cloudflare preset with the custom identity.
 - **`--host` is removed** (amends ADR-0026). Whenever the selection needs an entry (anything beyond `spec`, which stays host-free), `mantle generate` emits the Cloudflare preset: the entry above with `scheduled` wired, D1 storage, and the KV and R2 bindings. `host-minimal-worker` and `host-local-admin-otp` are its reference examples.
-- **Other hosts are examples and drivers, not generator options.** ChatGPT Sites is the `host-chatgpt-sites` reference: an agent adapts the Cloudflare preset from it (Sites sign-in, R2 media, custom identity). `@aotter/mantle-bun` (`bun:sqlite`) and `@aotter/mantle-vercel` (libSQL) keep their drivers, marked experimental until a maintainer runs them end to end; they get no preset and no promised example. On any host, a capability the entry does not wire (schedules, for example) is refused at boot with a diagnostic, never skipped silently, and the author's coding agent bridges it.
+- **Other hosts are examples and drivers, not generator options.** ChatGPT Sites is the `host-chatgpt-sites` reference: an agent adapts the Cloudflare preset from it (Sites sign-in, R2 media, custom identity). `@aotter/mantle/bun` (`bun:sqlite`) and `@aotter/mantle/vercel` (libSQL) keep their drivers, marked experimental until a maintainer runs them end to end; they get no preset and no promised example. On any host, a capability the entry does not wire (schedules, for example) is refused at boot with a diagnostic, never skipped silently, and the author's coding agent bridges it.
 - `BootMantleRuntimeArgs.supportsScheduledTriggers` becomes the `schedules` option above.
 - Removed: `MANTLE_RESERVED_PATH_PREFIXES`, `MantleExtensionApp`, `extend`, `extend.mount` and `getRuntime`. `mantle generate` emits the standard composition as application-owned source: `src/service.ts`, `src/handlers.ts` and the host entry.
 
@@ -125,9 +125,9 @@ interface MantleServiceContext {
 
 ### 8. Mantle never owns the user or the auth
 
-A service keeps its existing users and auth. `@aotter/mantle-auth` is one optional producer of the caller identity.
+A service keeps its existing users and auth. `@aotter/mantle/auth` is one optional producer of the caller identity.
 
-- **`Caller`** (in `@aotter/mantle-runtime`) replaces `HandlerContext.user`, `.staff` and `.auth`:
+- **`Caller`** (in `@aotter/mantle`) replaces `HandlerContext.user`, `.staff` and `.auth`:
 
   ```ts
   type Caller =
@@ -143,7 +143,7 @@ A service keeps its existing users and auth. `@aotter/mantle-auth` is one option
 - **Predicates.** `requires.auth` evaluates against the `Caller` only; the grammar is unchanged. `ctx.user` and `ctx.auth` require a user caller, `ctx.staff` a role in the list, `ctx.auth.scope` a scope. `STAFF_ROLES` is Admin's vocabulary: a custom resolver maps its own roles onto it or leaves `role` null and uses scopes and guards.
 - **System caller.** `systemCaller(reason)` is exported for host code only; no wire can produce one. It satisfies no `requires.auth` predicate (so schedule targets still declare none, as ADR-0027) and bypasses caller scope and nothing else: lifecycle rules and TTL visibility apply, and expired rows are visible only to `sweepExpired`. Schedules and maintenance run as the system caller.
 - **Policy origins.** Scope comes from the caller; published-only from the surface or atom (a public View over a publishing Schema); TTL and lifecycle always apply. `runtime.store` is host-level and unscoped, `runtime.store.as(caller)` binds per request, and `ctx.store` arrives bound.
-- **Admin facets.** `@aotter/mantle-admin` defines `AdminIdentity`, whose members are all optional: `directory` (`getUser`, `listUsers`, `listMembers`), `roles` (`setUserRole`, `inviteUser`, `revokeInvite`, `sendStaffInvitation`) and `deleteUser`. Admin hides what is absent. Display names come from `directory`, never from a Store join.
+- **Admin facets.** `@aotter/mantle/admin` defines `AdminIdentity`, whose members are all optional: `directory` (`getUser`, `listUsers`, `listMembers`), `roles` (`setUserRole`, `inviteUser`, `revokeInvite`, `sendStaffInvitation`) and `deleteUser`. Admin hides what is absent. Display names come from `directory`, never from a Store join.
 - **mantle-auth** implements `CallerResolver`, `AdminIdentity` and the optional OAuth server routes. Account deletion is its `deleteUser` facet, so services stop running raw SQL against auth tables; a custom provider owns deletion for its own users. The MCP surface verifies nothing: it takes `authorizationServer` (a URL) for its 401 challenge and protected-resource metadata.
 - **Core creates no auth tables.** The twelve Better Auth `CREATE`s and their indexes are removed from `0001-init`, which keeps its id, so migrated databases are unchanged. mantle-auth already migrates its own schema through Better Auth's `getMigrations`; that becomes the only source of auth DDL, and Core stops carrying a copy. mantle-auth refuses to start when an auth table name belongs to a Schema.
 - **No identity** (anonymous callers only, no auth package, no auth tables) works and is tested. It is an explicit choice, never the default.
@@ -155,12 +155,12 @@ A surface is `(request: Request, caller: Caller) => Promise<Response>`, created 
 
 | Surface | Factory | Package |
 |---|---|---|
-| MCP | `createMcpSurface(runtime, { basePath, authorizationServer? })` | `@aotter/mantle-mcp` |
-| Admin | `createAdminSurface(runtime, { basePath, identity?, assets })` | `@aotter/mantle-admin` |
-| REST Views | `createRestSurface(runtime, { basePath })` | `@aotter/mantle-web` |
-| Web | `createWebSurface(runtime, { basePath, ... })` | `@aotter/mantle-web` |
+| MCP | `createMcpSurface(runtime, { basePath, authorizationServer? })` | `@aotter/mantle/mcp` |
+| Admin | `createAdminSurface(runtime, { basePath, identity?, assets })` | `@aotter/mantle/admin` |
+| REST Views | `createRestSurface(runtime, { basePath })` | `@aotter/mantle/web` |
+| Web | `createWebSurface(runtime, { basePath, ... })` | `@aotter/mantle/web` |
 
-Admin UI assets honour the base path. Hono may stay inside a package; it is no longer in any public signature. Mantle Web and Admin read through Store, and `EntryReader` is removed. A typed client for custom frontends is deferred; it is additive. The `@aotter/mantle-admin-ui/kit` re-export and `rowBindings` are removed (#1140).
+Admin UI assets honour the base path. Hono may stay inside a package; it is no longer in any public signature. Mantle Web and Admin read through Store, and `EntryReader` is removed. A typed client for custom frontends is deferred; it is additive. The `@aotter/mantle/admin-ui/kit` re-export and `rowBindings` are removed (#1140).
 
 ### 10. Cloud verifies the plan; the user owns the entry
 
@@ -168,7 +168,7 @@ Admin UI assets honour the base path. Hono may stay inside a package; it is no l
 - `createMantleRuntime` accepts `expectedFingerprint` and refuses to boot on a mismatch (`PLAN_FINGERPRINT_MISMATCH`).
 - `runtime.bootReport()` returns `MantleBootReport`: `{ fingerprint, coreVersion }`. Handler refs need no report because boot already refuses a mismatch; schedules are in the plan.
 - Cloud's guarantee names two kinds of fact. **Platform-verified:** the Cloud-compiled plan, the pinned Core, storage matching the plan (ADR-0033) and the fingerprint handshake. **Service-reported:** the surfaces and mounts the service chose, which Cloud confirms only by probing them in smoke. A service that never boots the runtime has no manifest scope to guarantee, and smoke shows that.
-- `mantle-host` distinguishes a handlers-only artifact (today's closed module, host protocol 2 per ADR-0031) from a service-entry artifact, which is closed except for `@aotter/mantle*` externals that Cloud supplies at the pinned Core. The artifact field is `artifactKind: "handlers" | "service"`; service entries use host protocol 3. aotter/mantle-home reserves the field now and accepts service entries after Core 0.2.0, as its own issue.
+- The plugin's Cloud helper script (decision 13) distinguishes a handlers-only artifact (today's closed module, host protocol 2 per ADR-0031) from a service-entry artifact, which is closed except for `@aotter/mantle*` externals that Cloud supplies at the pinned Core. The artifact field is `artifactKind: "handlers" | "service"`; service entries use host protocol 3. aotter/mantle-home reserves the field now and accepts service entries after Core 0.2.0, as its own issue.
 
 ### 11. Table namespace
 
@@ -183,6 +183,20 @@ A product table that already exists without the ledger record of the Mantle migr
 - **Amends ADR-0026:** dependencies are no longer closed automatically. A missing dependency fails with `GENERATE_FEATURE_DEPENDENCY_MISSING`, and an omitted module is never re-added.
 - Switching `identity` on a rerun is refused and never drops tables.
 - Acceptance: the default works with users and auth whose tables mantle-auth owns; `custom` keeps the service's users and adds no auth tables; an explicit public service with `none` adds no auth package or tables; a valid positive selection generates, and a missing dependency is refused with a diagnostic.
+
+### 13. Two npm packages and one plugin
+
+Every Mantle package versions and releases together, so splitting by area buys nothing and costs a publish, a peer and a pin per package. 0.2.0 publishes two packages, split where the dependencies, the build and the audience actually differ: server and browser.
+
+| Package | Contents |
+|---|---|
+| `@aotter/mantle` | Core at the root (Store, `createMantle`, `createMantleRuntime`); subpaths `/spec`, `/testing`, `/cloudflare`, `/bun`, `/vercel`, `/indexeddb`, `/auth`, `/admin`, `/mcp`, `/web`; the `mantle` CLI |
+| `@aotter/mantle-ui` | `/controller`, `/kit` (including the sign-in card a service's own frontend can reuse), `/mcp-app`, and the prebuilt Admin SPA at `/admin` |
+
+- Platform and heavy libraries (`better-auth`, `hono`, `@libsql/client`, the MCP SDK, React) are optional peers. A subpath that is not imported is never loaded, so Core still requires no Admin, Web, Auth or platform code; `check:boundaries` enforces this at module level instead of package level (amends ADR-0019's optional-package boundary).
+- `@aotter/mantle` never imports `@aotter/mantle-ui`. The generated preset passes the Admin assets from `@aotter/mantle-ui/admin` to `createAdminSurface`.
+- `@aotter/mantle-spec`, `-runtime`, `-cloudflare`, `-bun`, `-vercel`, `-indexeddb`, `-auth`, `-admin`, `-mcp` and `-web` fold into subpaths; `@aotter/mantle-admin-ui` folds into `@aotter/mantle-ui/admin`. `@aotter/mantle-host` was never published and is removed.
+- **The plugin** (this repository's agent plugin) ships one `mantle` skill and helper scripts. Its configuration carries the Mantle Cloud MCP endpoint as an absolute URL, `https://cloud.mantle.tools/mcp`; aotter/mantle-home provides only that MCP. The helper scripts (`.mjs`) orchestrate the Cloud MCP sequence so an agent does less by hand, and keep the upload rules whose artifact bytes depend on the Core version (ADR-0031). The `mantle-host` name disappears; ADR-0031's protocol is the host protocol. Deploying anywhere else uses that host's own CLI, and the skill states that the user may always self-host: Mantle Cloud is one option, never a requirement.
 
 ## Conformance cases
 
@@ -204,6 +218,7 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 
 - **A legacy-lowering layer** that compiles builtin ops and the Filter AST into IR without a grammar change. Rejected: it keeps the code this release deletes.
 - **A Worker-shaped artifact.** Rejected: it leaks the Worker name, the `fetch`/`scheduled`/`queue` export shape and `cloudflare:workers` into a host-agnostic contract.
+- **One npm package per area** (today's fourteen). Rejected: they version together, so each split adds a publish, a peer and a pin without independent releases.
 - **One adapter factory per host** (`createMantleWorker`, `createBunMantle`, `createVercelMantle`, each taking the service). Rejected: with a WinterTC service they would differ only in the storage driver and a few lines of entry spelling, which the driver package and the generated preset already carry.
 - **A handler-host port with remote execution.** Deferred: the service already is the host. The serializable `Invocation` keeps remote execution possible.
 - **Keeping a Mantle-owned Worker with extension seams.** Rejected: it limits custom frontends, SSR and webhooks, and duplicates Cloud-only assembly.
@@ -221,4 +236,4 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 
 ## Implementation status
 
-Proposed. Nothing in decisions 1–12 is implemented beyond the ADR-0030 slices already on `develop`.
+Proposed. Nothing in decisions 1–13 is implemented beyond the ADR-0030 slices already on `develop`.
