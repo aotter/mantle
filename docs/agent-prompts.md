@@ -1,6 +1,6 @@
 # Task-specific agent prompts
 
-Cold start from GitHub or a marketplace host is the install skill:
+The Mantle plugin includes the install skill. Without the plugin, add it with:
 
 ```sh
 npx skills add aotter/mantle

@@ -1,6 +1,6 @@
 {
   "name": "mantle",
-  "description": "Build and embed Mantle applications. Cold start: npx skills add aotter/mantle.",
+  "description": "Build and embed Mantle applications with version-matched SDK guidance.",
   "version": "0.1.4",
   "author": {
     "name": "Aotter"

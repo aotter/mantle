@@ -1,6 +1,6 @@
 {
   "name": "mantle",
-  "description": "Build and embed Mantle applications. Cold start: npx skills add aotter/mantle.",
+  "description": "Build and embed Mantle applications with version-matched SDK guidance.",
   "version": "0.1.4",
   "author": {
     "name": "Aotter",
@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "Mantle",
     "shortDescription": "Build and embed Mantle apps",
-    "longDescription": "Cold start with npx skills add aotter/mantle. Follow that skill to the pinned CLI and handbook, then compose only the modules the host needs.",
+    "longDescription": "Use the bundled Mantle skill and version-matched SDK docs to build or extend an app. When requested, deploy it with the bundled Mantle Host skill and Cloud MCP.",
     "developerName": "Aotter",
     "category": "Developer Tools",
     "capabilities": [
@@ -30,9 +30,9 @@
     ],
     "websiteURL": "https://mantle.tools/",
     "defaultPrompt": [
-      "Run npx skills add aotter/mantle, then follow the installed mantle skill",
-      "Follow the Mantle skill: interview for host and surfaces before writing files",
-      "Author a Mantle application from the Mantle skill and an official example"
+      "Create a Mantle app. Use the bundled Mantle skill to help me choose a host and features.",
+      "Add Mantle to my existing app. Inspect its stack and follow the version-matched SDK docs.",
+      "Deploy my Mantle app to Mantle Cloud with the bundled Mantle Host skill and Cloud MCP."
     ],
     "brandColor": "#0F766E",
     "composerIcon": "./assets/mantle-shell.svg",
