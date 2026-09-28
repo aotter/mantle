@@ -11,9 +11,11 @@ metadata:
 
 # Mantle
 
-`npx skills add aotter/mantle` installs this small bootstrap skill. It does not
-install the SDK or create a project. The skill name is `mantle`; the source
-folder remains `skills/install/` so installation does not copy the repository.
+The Mantle plugin already includes this small bootstrap skill. Without the
+plugin, `npx skills add aotter/mantle` installs it separately. Neither path
+installs the SDK or creates a project. The skill name is `mantle`; the source
+folder remains `skills/install/` so skill-only installation does not copy the
+repository.
 
 ## Find the application and its version
 
