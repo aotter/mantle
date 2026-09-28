@@ -1,6 +1,6 @@
 # Task-specific agent prompts
 
-First install the small bootstrap skill:
+The Mantle plugin includes the bootstrap skill. Without the plugin, add it with:
 
 ```sh
 npx skills add aotter/mantle

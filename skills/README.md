@@ -1,6 +1,6 @@
 # SKILL.md briefs (mantle)
 
-Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by URL — no plugin install needed.
+Agent-readable skill briefs for consumers of `@aotter/mantle-*`. The plugin bundles `mantle` and `mantle-host`; the SDK package supplies the other skills.
 
 | Skill | When to invoke |
 |---|---|
@@ -100,7 +100,7 @@ This is the fallback for hosts without a plugin marketplace. It copies the
 whole skill directory, including `scripts/mantle-host.mjs`. `scripts/check-skills.mjs` requires every plugin skill
 to declare `internal: true`.
 
-Other marketplace hosts point to the same entry:
+Without the plugin, install the standalone bootstrap skill:
 
 ```sh
 npx skills add aotter/mantle
@@ -146,7 +146,7 @@ package. Two audiences, two artifacts.
 
 ## Discoverability
 
-The skills target ADR-0007's "AI as primary author" thesis: agents reach these files by URL when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). Official cold start is `npx skills add aotter/mantle`. Point the agent at the repository or pass the version-matched markdown content directly.
+The skills target ADR-0007's "AI as primary author" thesis: agents reach these files when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). The Mantle plugin bundles the bootstrap skill; `npx skills add aotter/mantle` is for skill-only installs. Point the agent at the repository or pass the version-matched markdown content directly.
 
 ## Conventions
 
