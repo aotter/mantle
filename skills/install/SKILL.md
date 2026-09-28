@@ -19,11 +19,13 @@ A same-version `mantle-starters` tag is not required; do not wait for one.
 
 ## Locate the version-matched instructions
 
-`npx skills add aotter/mantle` installs this brief, not the SDK,
-a project, or the handbook. Read the path printed by the installer (Codex's
-project-local path is `.agents/skills/mantle/SKILL.md`); `metadata.sourcePath`
-is repository provenance, not a consumer path. A repository install follows
-the selected Git ref and does not pin an npm release.
+The Mantle plugin already includes this brief. Without the plugin,
+`npx skills add aotter/mantle` installs it separately. Neither path
+installs the SDK, a project, or the handbook. For a skill-only install, read
+the path printed by the installer (Codex's project-local path is
+`.agents/skills/mantle/SKILL.md`); `metadata.sourcePath` is repository
+provenance, not a consumer path. A repository install follows the selected
+Git ref and does not pin an npm release.
 
 After selecting the host and exact version, install `@aotter/mantle` locally
 with the selected optional packages. All `docs/...` paths below then mean
