@@ -35,6 +35,8 @@
       "Author a Mantle application from the Mantle skill and an official example"
     ],
     "brandColor": "#0F766E",
+    "composerIcon": "./assets/mantle-shell.svg",
+    "logo": "./assets/mantle-shell.svg",
     "screenshots": []
   }
 }
