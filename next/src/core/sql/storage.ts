@@ -84,8 +84,8 @@ function desired(name: string, s: StorageSchema): Desired {
   ];
   const indexes = [
     ...(s.scope ? [{ name: `_mantle_scope_${name}`, unique: false, columns: [s.scope] }] : []),
-    // unique includes the scope: a collision can only be with the caller's own rows
-    ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: [...(s.scope ? [s.scope] : []), ...u] })),
+
+    ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })), // the grammar already starts a scoped unique index with the scope
   ].map((i) => ({ ...i, sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX ${q(i.name)} ON ${t} (${i.columns.map(q).join(", ")})` }));
 
   const triggers: { name: string; sql: string }[] = [];

@@ -15,7 +15,10 @@ function mapError(e: unknown): never {
   if (op) throw fail("CONFLICT", message, { opIndex: Number(op[1]), reason: "expect" });
   const check = /(CHECK \w+: [^:]*?)(?: at offset|: SQLITE|$)/.exec(message);
   if (check) throw fail("INPUT_VALIDATION_FAILED", check[1]!);
-  if (/UNIQUE constraint failed/.test(message)) throw fail("CONFLICT", message, { reason: "unique" });
+  // the driver's own text names tables and columns, so it stays out of the Diagnostic
+  if (/UNIQUE constraint failed/.test(message)) throw fail("CONFLICT", "A unique constraint of the Schema was violated.", { reason: "unique" });
+  if (/ON CONFLICT clause does not match/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "onConflict.columns must match a unique index of the Schema.");
+  if (/NOT NULL constraint failed/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "A required column has no value; a scoped Schema needs a caller identity.");
   throw e;
 }
 
