@@ -59,13 +59,13 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
   const diagnostics: Diagnostic[] = [];
   const views: Record<string, SqlPlan> = {};
   const procedures: Record<string, SqlPlan> = {};
-  const compile = async (kind: SqlContext["kind"], sql: string, input: JsonSchema | undefined, source: SourceLocation, pointer: string) => {
-    const res = await compileSql(sql, { schemas, inputs: typesOf(input), kind });
+  const compile = async (kind: SqlContext["kind"], sql: string, input: JsonSchema | undefined, source: SourceLocation, pointer: string, isPublic = false) => {
+    const res = await compileSql(sql, { schemas, inputs: typesOf(input), kind, public: isPublic });
     if (res.ok) return res.plan;
     diagnostics.push(toDiagnostic(res.diagnostic, source, pointer));
   };
   for (const { manifest: v, source } of linked.views) {
-    const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql");
+    const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
     if (plan) views[v.metadata.name] = plan;
   }
   for (const { manifest: p, source } of linked.procedures) {

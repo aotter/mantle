@@ -38,6 +38,7 @@ const REFUSED: Refusal[] = [
   ["SELECT id FROM _mantle_tz", "SQL_RELATION", "_mantle_tz"],
   ["SELECT id FROM items WHERE owner = 'o2'", "SQL_COLUMN", "owner", /scope and TTL/],
   ['SELECT id FROM items WHERE "Owner" = \'o2\'', "SQL_COLUMN", undefined, /scope and TTL/], // code review: quoting keeps case, SQLite ignores it
+  ["SELECT nope FROM items", "SQL_COLUMN", "nope", /not a declared field/],
   ['UPDATE items SET "OWNER" = \'o2\' WHERE id = \'a\'', "SQL_WRITE", undefined, /filled by Mantle/],
   ["INSERT INTO orders (id, item_id) VALUES ('x', 'a')", "SQL_WRITE", "id", /generates its ids/],
   ["SELECT id FROM items LIMIT 2", "SQL_SHAPE", "2", /LIMIT needs an ORDER BY/],
@@ -58,6 +59,14 @@ describe("compileSql", () => {
       if (msg) expect(res.diagnostic.message, sql).toMatch(msg);
       if (code !== "SQL_SYNTAX") expect(validateIr({ grammar: PG_GRAMMAR, stmts: (await parsePgSql(sql)).stmts }, ctxOf(kindOf(sql)))[0]?.code, sql).toBe(code);
     }
+  });
+
+  it("a public View must tie a non-publishing Schema to a publishing one in a JOIN ... ON (decision 8)", async () => {
+    const pub = (sql: string) => compileSql(sql, { ...ctxOf("view"), public: true });
+    const j = (on: string) => `SELECT p.id FROM posts p JOIN settings s ON ${on}`;
+    expect(await pub(j("s.key = p.title"))).toMatchObject({ ok: true });
+    expect(await pub(j("s.key = 'a'"))).toMatchObject({ ok: false, diagnostic: { code: "SQL_RELATION", message: /published/ } });
+    expect(await pub("SELECT id FROM settings ORDER BY id")).toMatchObject({ ok: true });
   });
 
   it("points at the right line, column and token (multi-line, after Chinese text, past a quoted keyword)", async () => {

@@ -32,6 +32,8 @@ export interface SqlContext {
   /** declared input properties and their Mantle types */
   readonly inputs: Readonly<Record<string, string>>;
   readonly kind: "view" | "procedure";
+  /** a public View: a caller sees published rows only, even across a join */
+  readonly public?: boolean;
 }
 
 /** A refusal of Store SQL. `line` and `column` are 1-based; `token` is the source text there. */
