@@ -1,5 +1,7 @@
 ADR-0034 spike report (Store authored as SQL): local D1 in workerd
-node v22.14.0, 2026-09-29. Re-run: cd next/spike && npm ci && npm run spike
+node v22.14.0, 2026-09-29. The spike's code was ported: the policy pass, printer and storage are next/src/core/sql, the SQL compiler is
+next/src/spec, and the cases are next/src/testing (run on local D1 by next/test/cloudflare/conformance.test.ts). Kept here: this report as the
+evidence ADR-0034 cites, and production-probe.sql.
 
 == Summary ==
 Spike task 1: deparser overrides

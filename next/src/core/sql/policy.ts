@@ -6,6 +6,7 @@ import { KEYS, SqlRefusal as Refused, intervalMicros, parseNumeric, type SqlNode
 import { encodeDate, encodeNumeric, encodeTimestamptz, sqliteType } from './codec.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from './storage.js';
+import { S, num, op, ref as col, target as res } from './ast.js';
 
 type Schemas = Record<string, SchemaDef>;
 
@@ -68,10 +69,7 @@ export const MANTLE_LOWERINGS = [
 ];
 
 // ---- AST builders -------------------------------------------------------------------------------
-const S = (s: string) => ({ String: { sval: s } });
-const col = (...p: string[]): N => ({ ColumnRef: { fields: p.map(S) } });
 const param = (n: number): N => ({ ParamRef: { number: n } });
-const op = (o: string, l: N, r: N): N => ({ A_Expr: { kind: 'AEXPR_OP', name: [S(o)], lexpr: l, rexpr: r } });
 const and = (...args: (N | undefined | false)[]): N | undefined => {
   const a = args.filter(Boolean) as N[];
   return a.length === 0 ? undefined : a.length === 1 ? a[0] : { BoolExpr: { boolop: 'AND_EXPR', args: a } };
@@ -79,9 +77,6 @@ const and = (...args: (N | undefined | false)[]): N | undefined => {
 const or = (...a: N[]): N => ({ BoolExpr: { boolop: 'OR_EXPR', args: a } });
 const fn = (f: string, ...args: N[]): N => ({ FuncCall: { funcname: [S(f)], args, funcformat: 'COERCE_EXPLICIT_CALL' } });
 const cast = (x: N, t: string): N => ({ TypeCast: { arg: x, typeName: { names: [S(t)], typemod: -1 } } });
-const res = (val: N, name?: string): N => ({ ResTarget: name ? { name, val } : { val } });
-/** integers past int32 must be `fval` in libpg-query's shape; 0 must keep its `ival` key */
-const num = (n: number): N => (Number.isSafeInteger(n) && Math.abs(n) < 2 ** 31 ? { A_Const: { ival: { ival: n } } } : { A_Const: { fval: { fval: String(n) } } });
 const bump = (): N => res(op('+', col('version'), num(1)), 'version');
 const touch = (c: C): N => res(param$(c, { k: 'now' }), 'updated_at');
 const sort = (node: N): N => ({ SortBy: { node, sortby_dir: 'SORTBY_DEFAULT', sortby_nulls: 'SORTBY_NULLS_DEFAULT' } });

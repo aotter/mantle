@@ -9,6 +9,7 @@ import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";
 import { decodeOutput } from "../sql/codec.js";
 import type { BindContext, Mode } from "../sql/compile.js";
+import { num, op, ref, table } from "../sql/ast.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
@@ -157,8 +158,6 @@ export function createStore(deps: StoreDeps): MantleStore {
 }
 
 // ---- TTL sweep ---------------------------------------------------------------------------------------------------
-const S = (s: string) => ({ String: { sval: s } });
-const ref = (...f: string[]): N => ({ ColumnRef: { fields: f.map(S) } });
 
 /**
  * Physical statements built by hand: the sweep is the one path that sees expired rows and addresses `_rid`, so it
@@ -171,9 +170,7 @@ async function sweepExpired(deps: StoreDeps, request: import("../store.js").Swee
   const limit = request.limit ?? 500;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("Sweep limit must be an integer from 1 to 500.");
   const after = request.cursor === undefined ? undefined : Number(decodeCursor(`sweep:${name}`, request.cursor)[0]);
-  const rel = (): N => ({ RangeVar: { relname: name, inh: true, relpersistence: "p", mantle: "system" } });
-  const num = (n: number): N => ({ A_Const: { ival: { ival: n } } });
-  const op = (o: string, l: N, r: N): N => ({ A_Expr: { kind: "AEXPR_OP", name: [S(o)], lexpr: l, rexpr: r } });
+  const rel = (): N => ({ RangeVar: table(name, "system") });
   const expired = (): N => ({ BoolExpr: { boolop: "AND_EXPR", args: [
     { NullTest: { arg: ref(def.ttl!), nulltesttype: "IS_NOT_NULL" } }, op("<=", ref(def.ttl!), { ParamRef: { number: 1 } }),
     ...(after === undefined ? [] : [op(">", ref("_rid"), num(after))]),

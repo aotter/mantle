@@ -8,6 +8,7 @@ import type { Caller } from "../caller.js";
 import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
+import { S, op, ref } from "./ast.js";
 import { applyPolicy, HIDDEN_ID, HIDDEN_VERSION, type BindSpec, type Compiled } from "./policy.js";
 
 export interface Program {
@@ -52,8 +53,6 @@ const ctxOf = (env: RunEnv, p: Program, extra: Partial<CompileContext> = {}): Co
   schemas: env.schemas, inputs: p.inputs, kind: p.kind, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility, ...extra,
 });
 
-const S = (s: string) => ({ String: { sval: s } });
-const ref = (...f: string[]): N => ({ ColumnRef: { fields: f.map(S) } });
 const select = (targetList: N[], from?: N, where?: N): N => ({
   SelectStmt: { targetList, ...(from ? { fromClause: [from] } : {}), ...(where ? { whereClause: where } : {}), limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" },
 });
@@ -190,7 +189,6 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
   const base = c!.binds.length;
   const cursorBinds: BindSpec[] = opts.cursor ? keys.map((_k, i) => ({ k: "cursor", i })) : [];
   const col = (n: string): N => ref("_p", n);
-  const op = (o: string, l: N, r: N): N => ({ A_Expr: { kind: "AEXPR_OP", name: [S(o)], lexpr: l, rexpr: r } });
   const after = opts.cursor
     ? { BoolExpr: { boolop: "OR_EXPR", args: keys.map((k, i) => ({ BoolExpr: { boolop: "AND_EXPR", args: [
         ...keys.slice(0, i).map((_x, j) => op("=", col(`_k${j}`), { ParamRef: { number: base + j + 1 } })),

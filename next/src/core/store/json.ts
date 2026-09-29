@@ -5,6 +5,7 @@
  */
 import { DiagnosticError, firstZodIssueAsJsonPointer, jsonSchemaToZod, runtimeDiagnostic, type JsonSchema, type SqlNode as N } from "../../spec/index.js";
 import type { ZodType } from "zod";
+import { S, op, ref, table, target } from "../sql/ast.js";
 import { encodeInput } from "../sql/codec.js";
 import type { StorageSchema } from "../sql/storage.js";
 import type { StoreScalar, StoreSelect, StoreWhere, StoreWriteOp } from "../store.js";
@@ -33,13 +34,8 @@ interface Column {
   /** the name a row carries */ readonly out: string;
 }
 
-const S = (s: string) => ({ String: { sval: s } });
-const ref = (...f: string[]): N => ({ ColumnRef: { fields: f.map(S) } });
-const table = (relname: string): N => ({ relname, inh: true, relpersistence: "p", mantle: "table" });
-const op = (o: string, l: N, r: N): N => ({ A_Expr: { kind: "AEXPR_OP", name: [S(o)], lexpr: l, rexpr: r } });
 const bool = (boolop: string, args: N[]): N => ({ BoolExpr: { boolop, args } });
 const nullTest = (arg: N, t: "IS_NULL" | "IS_NOT_NULL"): N => ({ NullTest: { arg, nulltesttype: t } });
-const target = (val: N, name?: string): N => ({ ResTarget: name ? { name, val } : { val } });
 const SELECT = { limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } as const;
 
 const zods = new WeakMap<StoreSchema, { full: ZodType; partial: ZodType }>();
