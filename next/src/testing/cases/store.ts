@@ -4,6 +4,7 @@
 import type { Report } from '../report.js';
 import type { DatabaseDriver } from '../../core/driver.js';
 import { createStore } from '../../core/store/createStore.js';
+import { encodeCursor } from '../../core/store/cursor.js';
 import { SqliteStoreExecutor } from '../../core/sql/executor.js';
 import { NOW, boot, program, schemas } from '../harness.js';
 
@@ -45,6 +46,8 @@ export async function run(r: Report, driver: DatabaseDriver) {
   r.equal('cursor: two pages of 3 then 1, no repeats; the last page has no cursor; the cursor is an opaque v1 string', [p1.rows.map((x) => x.id), p2.rows.map((x) => x.id), p2.nextCursor, /^v1\./.test(p1.nextCursor)], [['a', 'b', 'c'], ['d'], undefined, true]);
   const stolen = await fail(() => me.select({ from: 'items', columns: ['id'], orderBy: { name: 'asc' }, limit: 3, cursor: p1.nextCursor }));
   r.check("a cursor from another query (other sort column) is refused, and a made-up cursor is refused", invalid(stolen) && invalid(await fail(() => me.select({ from: 'items', cursor: 'v1.garbage' }))), stolen?.message);
+  const forged = await fail(() => me.select({ from: 'items', columns: ['id'], cursor: encodeCursor('items:updated_at:desc', [{ x: 1 }, 'a']) }));
+  r.check('a well-formed cursor whose keys are not scalars is refused as input, not as a driver error', invalid(forged), forged?.message);
   const vp = await me.view('names', { limit: 2 });
   r.equal('a View pages through the same cursor and returns rows in order', [vp.rows.map((x) => x.name), (await me.view('names', { limit: 2, cursor: vp.nextCursor })).rows.map((x) => x.name)], [['apple', 'berry'], ['cherry', 'date']]);
 
@@ -66,6 +69,9 @@ export async function run(r: Report, driver: DatabaseDriver) {
   r.equal('a set op returns { affected } (a, b, d; the other owner\'s and the expired x rows are not touched)', [setOp, (await b.d1.all("SELECT id FROM items WHERE note = 'bulk' ORDER BY id")).map((x) => x.id)], [{ affected: 3 }, ['a', 'b', 'd']]);
   const wrong = await fail(() => me.write([{ update: 'items', set: { stock: 1 }, where: { id: 'a' } }, { delete: 'items', where: { cat: 'x' }, expect: 2 }]));
   r.equal('expect that does not hold fails the whole write with CONFLICT naming that op, and the first op is rolled back', [conflict(wrong), (await stock('a')).stock], [{ opIndex: 1, reason: 'expect' }, 5]);
+
+  const noRow = await me.write([{ update: 'items', set: { note: 'c' }, where: { id: 'X_z1' }, expect: 0 }]);
+  r.equal("expect: 0 on a row op that matches nothing (another owner's row) succeeds with { affected: 0 }", noRow, [{ affected: 0 }]);
 
   // ---- upsert -------------------------------------------------------------------------------------------------------------------------
   const up = await me.write([
