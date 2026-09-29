@@ -77,7 +77,7 @@ A write op's `where` is classified **on the caller's `where`, before any policy 
 
 The rewrite is built in `next/`, a private package beside the shipped ones (see `next/README.md`), and replaces them at the end.
 
-> **Amendment (ADR-0034):** `SqliteStoreExecutor` is the only executor; `MemoryStoreExecutor` is removed, and so is `ViewQueryExecutor`, since every View compiles to IR. Conformance runs on sqlite-wasm with a D1 profile, and in CI on local D1.
+> **Amendment (ADR-0034):** `SqliteStoreExecutor` is the only executor; `MemoryStoreExecutor` is removed, and so is `ViewQueryExecutor`, since every View compiles to IR. Conformance runs on local D1 inside workerd, and on sqlite-wasm for `/browser`.
 
 ### 5. Grammar is the IR
 
