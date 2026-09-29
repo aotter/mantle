@@ -28,3 +28,6 @@
 export * from "./kernel/index.js";
 export * from "./domain/index.js";
 export * from "./usecase/index.js";
+// The Store SQL compiler (ADR-0034). `libpg-query` loads on the first `compileSql` call only,
+// so a runtime that imports this barrel never instantiates the WASM.
+export * from "./infrastructure/sql/index.js";

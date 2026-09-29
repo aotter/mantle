@@ -72,6 +72,16 @@ export const DIAGNOSTIC_CODES = [
   "HANDLER_BUILTIN_NOT_IN_V010",
   "MANIFEST_ROOT_NOT_FOUND",
   "MANIFEST_READ_FAILED",
+  // Store SQL compile (ADR-0034): raised by the CLI compiler and, for the
+  // shared allowlist, by the runtime's plan validation.
+  "SQL_SYNTAX",
+  "SQL_UNSUPPORTED",
+  "SQL_FUNCTION",
+  "SQL_RELATION",
+  "SQL_COLUMN",
+  "SQL_WRITE",
+  "SQL_SHAPE",
+  "SQL_TYPE",
   // Reserved for consumer-authored test diagnostics.
   "FIXTURE_SCHEMA_VIOLATION",
   // Cross-phase (validate / boot / runtime as applicable).

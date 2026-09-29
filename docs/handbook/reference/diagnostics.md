@@ -91,6 +91,14 @@ Raised by the parser, the graph validator and the code generator. `mantle valida
 | `SCHEDULE_INPUT_INVALID` | A scheduled Procedure cannot accept the empty object supplied by its system Trigger. | — |
 | `SCHEDULE_AUTH_INVALID` | A scheduled Procedure requires user or staff authority that the system caller never has. | — |
 | `FIXTURE_SCHEMA_VIOLATION` | Reserved for consumer-authored test diagnostics on the `test` phase. Core emits purpose-shaped harness reports instead. | — |
+| `SQL_SYNTAX` | The Store SQL could not be parsed. | — |
+| `SQL_UNSUPPORTED` | A statement, node, operator or value outside the supported SQL subset (`OFFSET`, `RIGHT JOIN`, `UNION`, `$1`, a plan compiled by another PostgreSQL grammar). | — |
+| `SQL_FUNCTION` | A function that is not on the allowlist, or a supported function used in the wrong place. | — |
+| `SQL_RELATION` | A table that is not a declared Schema, a `_mantle_*` table, or a reserved name used as a relation. | — |
+| `SQL_COLUMN` | A scope, TTL or rowid column, or an `input.<name>` that is not a declared input. | — |
+| `SQL_WRITE` | A write that names a column Mantle fills, an unknown field, or an `INSERT` without a column list. | — |
+| `SQL_SHAPE` | A statement with the wrong structure: `LIMIT` without `ORDER BY`, a `JOIN` without `ON`, a comma join, several `VALUES` rows, a View that is not one `SELECT`. | — |
+| `SQL_TYPE` | A `CAST`, `interval` unit, `numeric` precision, or `date_trunc` and `extract` field outside the supported set. | — |
 
 ## Cross-phase
 
