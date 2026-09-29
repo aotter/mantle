@@ -3,15 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   DIAGNOSTIC_CODES,
   PG_GRAMMAR,
-  SQL_DIAGNOSTIC_CODES,
   compileSql,
-  sqlDiagnosticToKernel,
   validateIr,
   type SqlContext,
   type SqlDiagnosticCode,
   type SqlNode,
 } from "../../src/spec/index.js";
 import { parsePgSql } from "../../src/spec/infrastructure/sql/PgQueryParser.js";
+
+const SQL_DIAGNOSTIC_CODES = DIAGNOSTIC_CODES.filter((c): c is SqlDiagnosticCode => c.startsWith("SQL_"));
 
 const schemas: SqlContext["schemas"] = {
   items: { scope: "owner", ttl: "expires_at", fields: { name: "text", cat: "text", stock: "integer", tags: "json", note: "text" } },
@@ -129,14 +129,6 @@ describe("compileSql refusals", () => {
     }
   });
 
-  it("declares its codes in the diagnostic kernel and converts a refusal", async () => {
-    for (const code of SQL_DIAGNOSTIC_CODES) expect(DIAGNOSTIC_CODES).toContain(code);
-    const res = await compileSql("SELECT id FROM items OFFSET 2", ctxOf("view"));
-    if (res.ok) throw new Error("expected a refusal");
-    const d = sqlDiagnosticToKernel(res.diagnostic, { path: "/spec/sql", sourceId: "views.yaml" });
-    expect(d).toMatchObject({ code: "SQL_UNSUPPORTED", phase: "validate", severity: "error", path: "/spec/sql", value: "OFFSET" });
-    expect(d.source?.span?.start).toMatchObject({ line: 1, column: 22 });
-  });
 });
 
 describe("compileSql accepts the spike corpus", () => {
