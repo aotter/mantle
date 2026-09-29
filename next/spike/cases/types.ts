@@ -75,12 +75,14 @@ export async function run(r: Report) {
     [[20520, -1], ['d1'], 20521, 1, '2026-03-09', true]);
 
   // ---- E. CAST rules ------------------------------------------------------------------------------------------
-  const c = (await b.d1.all("SELECT CAST(2.7 AS integer) a, CAST(-2.7 AS integer) b, CAST('12.5' AS integer) c, round(2.7) d"))[0];
-  const warn = await tryLower('SELECT CAST(input.x AS int) AS v FROM items', { schemas, inputs: { x: 'float8' }, kind: 'view' });
-  const noWarn = await tryLower('SELECT CAST(7 AS int) AS v, CAST(input.x AS text) AS t FROM items', { schemas, inputs: { x: 'float8' }, kind: 'view' });
-  r.check("CAST: SQLite truncates (2.7 gives 2, -2.7 gives -2, '12.5' gives 12; PostgreSQL rounds) so CAST to int warns SQL_CAST_TRUNC with a position and the advice to round first; an integer literal or a CAST to text does not warn; CAST('12.34' AS numeric(12, 2)) folds to 1234",
-    JSON.stringify(c) === '{"a":2,"b":-2,"c":12,"d":3}' && warn.ok && warn.ir.warnings.length === 1 && warn.ir.warnings[0].code === 'SQL_CAST_TRUNC' && warn.ir.warnings[0].line === 1 && /round\(x\)/.test(warn.ir.warnings[0].message)
-    && noWarn.ok && noWarn.ir.warnings.length === 0 && (await view("SELECT '12.34'::numeric(12, 2) AS n FROM items WHERE id = 'a'"))[0].n === 1234);
+  const c = (await b.d1.all("SELECT CAST(2.7 AS integer) a, CAST(-2.7 AS integer) b, round(2.7) d, round(-2.7) e"))[0];
+  const bad = await tryLower('SELECT CAST(input.x AS int) AS v FROM items', { schemas, inputs: { x: 'float8' }, kind: 'view' });
+  const good = await tryLower('SELECT CAST(7 AS int) AS v, CAST(input.x AS text) AS t FROM items', { schemas, inputs: { x: 'float8' }, kind: 'view' });
+  r.check("CAST: SQLite truncates (2.7 gives 2) where PostgreSQL rounds, so a non-literal CAST to int is refused SQL_TYPE with a position and the advice round(x); an integer literal CAST and CAST to text pass; CAST('12.34' AS numeric(12, 2)) folds to 1234",
+    JSON.stringify(c) === '{"a":2,"b":-2,"d":3,"e":-3}' && !bad.ok && bad.diagnostic.code === 'SQL_TYPE' && bad.diagnostic.line === 1 && /round\(x\)/.test(bad.diagnostic.message)
+    && good.ok && (await view("SELECT '12.34'::numeric(12, 2) AS n FROM items WHERE id = 'a'"))[0].n === 1234);
+  const rd = (await view("SELECT round(2.7) AS a, round(-2.7) AS b, round(2.2) AS c FROM items WHERE id = 'a'"))[0];
+  r.check("round(x) gives PostgreSQL's rounding, not truncation: 2.7 gives 3, -2.7 gives -3, 2.2 gives 2 (exact halves differ: PostgreSQL float8 rounds half to even, SQLite half away from zero)", rd.a === 3 && rd.b === -3 && rd.c === 2);
 
   // ---- F. date_trunc and extract across daylight saving, in the site time zone -----------------------------------
   await dst(r, b, s);

@@ -16,14 +16,14 @@ Spike task 2 and 3: the 8 conformance cases (ADR-0034 "Conformance cases")
   PASS  Case 3:  (6/6 checks)
   PASS  Case 4:  (6/6 checks)
   PASS  Case 5:  (13/13 checks)
-  PASS  Case 6:  (17/17 checks)
+  PASS  Case 6:  (18/18 checks)
   PASS  Case 7:  (18/18 checks)
   PASS  Case 8:  (11/11 checks)
 
 Also
   PASS  Typecheck:  (4/4 checks)
   PASS  Local D1 facts  (5/5 checks)
-103/103 checks pass in 16.2 s
+104/104 checks pass in 16.3 s
 
 == Findings against ADR-0034 (commentary; each names the check that shows it) ==
 Decision 3 (printer). Four printer overrides, not three: ParamRef, TypeCast, A_Const, and A_Expr (x LIKE p ESCAPE e parses to
@@ -54,7 +54,9 @@ Decision 4 (counting). D1's meta.changes counts trigger writes (5 for a one-row 
   batch is required, as the ADR says. RAISE(IGNORE) in a BEFORE INSERT trigger on _mantle_assert keeps no rows. [Case 8, D1 facts]
 Decision 5 (types). `? / 2`, exact sums over numeric(12,2), microsecond comparisons and date_trunc across daylight saving all give
   PostgreSQL's results. numeric input beyond its scale is refused, not rounded. CAST(x AS int) truncates where PostgreSQL rounds
-  (2.7 gives 2; -2.7 gives -2; '12.5' gives 12): the warning is SQL_CAST_TRUNC. CAST(x AS bool) is lowered to x <> 0. A CAST of a
+  (2.7 gives 2; -2.7 gives -2; '12.5' gives 12), so a non-literal CAST to int4 or int8 is refused (SQL_TYPE, in the validation the CLI and the
+  runtime share) and the message asks for round(x); an integer literal CAST passes. round(x) on a float8 rounds exact halves away from zero,
+  PostgreSQL to even. CAST(x AS bool) is lowered to x <> 0. A CAST of a
   non-literal to timestamptz, date or numeric is refused: it would need the arithmetic rewrite the ADR defers. [Case 6]
 Decision 5 (time zone). Transitions generated with Intl (261 rows for New York 1970-2100, three-day scan plus bisection) match the Intl oracle
   on 25 to 175 instants per zone (New York, Berlin, Lord Howe, Kolkata, Apia, Taipei), including every half hour within 6 h of each
@@ -72,7 +74,7 @@ Decision 8 (search and near). search() and near() need the wrapper to expose row
 Decision 9 (D1). R*Tree is refused by workerd 1.20260730 (only fts5 and fts5vocab virtual tables are authorized) and allowed by
   1.20260903.1, the version the monorepo pins. Production D1 must be checked: production-probe.sql. [D1 facts]
 Decision 3 (diagnostics, ADR-0034 How to apply 3). Proposed codes: SQL_SYNTAX SQL_UNSUPPORTED SQL_FUNCTION SQL_RELATION SQL_COLUMN SQL_WRITE
-  SQL_SHAPE SQL_TYPE, and the warning SQL_CAST_TRUNC. libpg-query gives no location for clause keys (WITH, OFFSET, RIGHT, UNION, FOR UPDATE ...),
+  SQL_SHAPE SQL_TYPE (no warning code is needed). libpg-query gives no location for clause keys (WITH, OFFSET, RIGHT, UNION, FOR UPDATE ...),
   so the CLI finds the keyword in the source; the remaining refusals without a position are whole-statement ones. [Case 5]
 Decision 1 (grammar version). libpg-query 18.1.5 reports 180004, the value the plan records; the runtime refuses another. [Case 5]
 
@@ -147,7 +149,7 @@ PASS  ADR threshold: overrides (4) stay under "about a dozen" (12), so Kysely is
 
 == Case 1: requisition ==
 PASS  approve r1: RETURNING of the UPDATE and of the conditional INSERT, and the row op persisted  -> [[[{"id":"r1","state":"approved"}],[{"item_id":"a","qty":2,"total":null}]],"approved"]
-PASS  approve r1: the after hook ran once; its row carries id and version although RETURNING * names neither  -> [[{"item_id":"a","qty":2,"total":null,"id":"c9e58ffbbb790ec7005e093a43eed9aa","version":1}]]
+PASS  approve r1: the after hook ran once; its row carries id and version although RETURNING * names neither  -> [[{"item_id":"a","qty":2,"total":null,"id":"6aa6e3fac556d2e375927e9de11cbc60","version":1}]]
 PASS  reject r2: the conditional INSERT writes nothing, and calls no hook  -> [[[{"id":"r2","state":"rejected"}],[]],{"orders":4,"calls":1}]
 PASS  r1 again and another owner's X_rz: CONFLICT op=0 each, nothing written, no hook  -> [0,0,"pending",{"orders":4,"calls":1}]
 PASS  two row ops, the second matches nothing: CONFLICT op=1 and the first is rolled back (stock of a is still 5)  -> [1,5]
@@ -254,7 +256,8 @@ PASS  numeric input beyond its scale ('0.123'), beyond its precision, not a numb
 PASS  timestamptz in microseconds: now() binds without loss; at > now() - interval '36 hours' takes the row 1 us inside and not the edge (>= takes the edge); 6 fractional digits round-trip; ts - ts is 2 hours; interval arithmetic; 2^53 - 1 stores exactly  -> [1790640000000000,["edge+1us","frac","in"],["edge","edge+1us","frac","in"],"2026-09-27T12:00:00.123456Z",7200000000,1790636400000000,9007199254740991]
 PASS  a timestamp input without an explicit offset is refused; interval '1 day' is refused and the diagnostic says to bind the boundary as an input
 PASS  date is a day count: 2026-03-08 is day 20520, 1969-12-31 is -1; the folded literal matches; day + 1 and day - day are integers; decode gives 2026-03-09; 2026-02-30 is refused  -> [[20520,-1],["d1"],20521,1,"2026-03-09",true]
-PASS  CAST: SQLite truncates (2.7 gives 2, -2.7 gives -2, '12.5' gives 12; PostgreSQL rounds) so CAST to int warns SQL_CAST_TRUNC with a position and the advice to round first; an integer literal or a CAST to text does not warn; CAST('12.34' AS numeric(12, 2)) folds to 1234
+PASS  CAST: SQLite truncates (2.7 gives 2) where PostgreSQL rounds, so a non-literal CAST to int is refused SQL_TYPE with a position and the advice round(x); an integer literal CAST and CAST to text pass; CAST('12.34' AS numeric(12, 2)) folds to 1234
+PASS  round(x) gives PostgreSQL's rounding, not truncation: 2.7 gives 3, -2.7 gives -3, 2.2 gives 2 (exact halves differ: PostgreSQL float8 rounds half to even, SQLite half away from zero)
 --- date_trunc / extract in the site time zone (offsets from Intl.DateTimeFormat into _mantle_tz) ---
 PASS  America/New_York: date_trunc (hour, day, week, month, year) and extract match the Intl oracle on 175 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
 PASS  New York: the day of the spring change is 23 hours long, the day of the fall change 25; UTC arithmetic would be wrong (why _mantle_tz exists); _mantle_tz has the two 2026 transitions  -> [[23,25],true,[-14400000000,-18000000000]]

@@ -212,6 +212,8 @@ const check: Record<string, Checker> = {
     const t = sv(n.typeName.names).replace('pg_catalog.', '');
     if (!CAST_TYPES.has(t)) no('SQL_TYPE', `CAST to ${t} is refused`, at);
     const lit = n.arg?.A_Const;
+    if ((t === 'int4' || t === 'int8') && !(lit?.ival || /^\s*-?\d+\s*$/.test(lit?.sval?.sval ?? 'x')))
+      no('SQL_TYPE', `CAST to ${t} takes an integer literal: SQLite truncates toward zero where PostgreSQL rounds. Write round(x)`, at);
     if (t === 'interval') {
       if (!lit?.sval) no('SQL_TYPE', 'an interval is a literal such as interval \'36 hours\'', at);
       intervalMicros(lit.sval.sval, n.typeName.typmods?.[0]?.A_Const?.ival?.ival); // throws SQL_TYPE for calendar units

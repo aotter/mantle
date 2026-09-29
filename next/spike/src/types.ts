@@ -40,10 +40,9 @@ export type Diagnostic = { code: string; message: string; offset?: number; line?
  *  SQL_COLUMN       a scope, TTL or rowid column, or an undeclared input
  *  SQL_WRITE        a write that names a column Mantle fills, or has no column list
  *  SQL_SHAPE        LIMIT without ORDER BY, a JOIN without ON, a comma join, VALUES with several rows
- *  SQL_TYPE         a CAST, interval unit or date_trunc field outside the supported set
- *  SQL_CAST_TRUNC   (warning) CAST to integer truncates in SQLite where PostgreSQL rounds
+ *  SQL_TYPE         a CAST (a non-literal CAST to int included: write round(x)), interval unit or date_trunc field outside the supported set
  */
-export const CODES = ['SQL_SYNTAX', 'SQL_UNSUPPORTED', 'SQL_FUNCTION', 'SQL_RELATION', 'SQL_COLUMN', 'SQL_WRITE', 'SQL_SHAPE', 'SQL_TYPE', 'SQL_CAST_TRUNC'] as const;
+export const CODES = ['SQL_SYNTAX', 'SQL_UNSUPPORTED', 'SQL_FUNCTION', 'SQL_RELATION', 'SQL_COLUMN', 'SQL_WRITE', 'SQL_SHAPE', 'SQL_TYPE'] as const;
 export type Code = (typeof CODES)[number];
 
 export class Refused extends Error {
