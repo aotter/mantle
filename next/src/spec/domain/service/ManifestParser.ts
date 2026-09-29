@@ -601,6 +601,7 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       "description",
       "schema",
       "uiSchema",
+      "checks",
       "uniqueIndexes",
       "indexes",
       "searchableFields",
@@ -660,6 +661,9 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       adminUiProblem.pointer,
       "SCHEMA_UI_INVALID",
     );
+  }
+  if ("checks" in s && (!Array.isArray(s["checks"]) || s["checks"].some((c) => typeof c !== "string" || !c.trim()))) {
+    throw new ManifestParseError("Schema.spec.checks must be a list of SQL boolean expressions", idx, "/spec/checks");
   }
   if ("localized" in s && typeof s["localized"] !== "boolean") {
     throw new ManifestParseError(
