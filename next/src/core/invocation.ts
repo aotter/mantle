@@ -15,7 +15,7 @@ export type InvocationCause = { readonly id: string; readonly parent?: Invocatio
       readonly trigger: string;
       readonly hook: LifecycleHook;
       readonly schema: string;
-      /** After hooks: the statement's RETURNING rows, each with `id` and `version`. Before hooks: the one row. */
+      /** After hooks: the statement's RETURNING rows, each with `id` and `version`. Before hooks: the one row, or for an insert the row about to be written. */
       readonly rows: readonly [StoreRow, ...StoreRow[]];
     }
 );

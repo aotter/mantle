@@ -57,7 +57,7 @@ export interface StoreSelectResult<R = StoreRow> {
   readonly nextCursor?: string;
 }
 
-/** A row op: `where` pins `id`. Creates one entry through Schema validation, defaults and hooks. */
+/** Creates one entry through Schema validation, defaults and hooks; one row of VALUES is a row op. */
 export interface StoreInsert {
   readonly insert: string;
   readonly values: Readonly<Record<string, unknown>>;
@@ -126,7 +126,7 @@ export interface MantleStore {
 export type CallerStore = Omit<MantleStore, "as" | "sweepExpired">;
 
 /** One compiled statement: validated IR with policy already injected, and numbered binds `?1`, `?2`. */
-export interface StoreStatement {
+interface StoreStatement {
   readonly ir: SqlNode;
   readonly binds: readonly unknown[];
   /** Checked inside the batch with `changes()`; a mismatch is `CONFLICT` naming this statement. */
@@ -134,7 +134,7 @@ export interface StoreStatement {
 }
 
 /** What one applied statement did. `rows` are its RETURNING rows, hidden `_mantle_id` / `_mantle_version` included. */
-export interface StoreApplied {
+interface StoreApplied {
   readonly affected: number;
   readonly rows: readonly StoreRow[];
 }
