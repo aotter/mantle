@@ -1,0 +1,267 @@
+[
+  {
+    "id": "arith",
+    "kind": "view",
+    "sql": "SELECT name, stock + 1 AS s, stock * 2 - 1 AS t, stock / 2 AS h, stock % 3 AS m, -stock AS neg, name || '!' AS shout FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "precedence-concat",
+    "kind": "view",
+    "sql": "SELECT 2 * 3 || 4 AS a, 1 + 2 || 3 AS b, 'x' || 1 + 1 AS c, 10 - 2 - 3 AS d, 10 - (2 - 3) AS e, -(1 + 2) * 3 AS f, (2 + 3) * 4 AS g FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "precedence-bool",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE (stock > 4 AND NOT cat = 'y' OR stock < 3) AND NOT (stock = 7) ORDER BY id"
+  },
+  {
+    "id": "case",
+    "kind": "view",
+    "sql": "SELECT id, CASE WHEN stock > 6 THEN 'hi' WHEN stock > 3 THEN 'mid' ELSE 'lo' END AS lvl, CASE cat WHEN 'x' THEN 1 ELSE 0 END AS isx, COALESCE(NULL, stock) AS cs, NULLIF(stock, 5) AS ns FROM items WHERE id IN ('a', 'c') ORDER BY id"
+  },
+  {
+    "id": "literals",
+    "kind": "view",
+    "sql": "SELECT 'it''s a \\ back\\slash' AS s, -7 AS n, 1.5 AS f, true AS t, false AS x, NULL AS z, 1772928000000000 AS big FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "quoting",
+    "kind": "view",
+    "sql": "SELECT id AS \"Group\", name AS \"select\", stock AS \"Total Count\" FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "between",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE stock BETWEEN 5 AND 7 ORDER BY id"
+  },
+  {
+    "id": "not-between",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE stock NOT BETWEEN 3 AND 8 ORDER BY id"
+  },
+  {
+    "id": "like",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE name LIKE 'a%' OR name LIKE '%y' ORDER BY id"
+  },
+  {
+    "id": "not-like",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE name NOT LIKE '%rr%' ORDER BY id"
+  },
+  {
+    "id": "like-escape",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE 'a%b' LIKE 'a!%b' ESCAPE '!' AND 'axb' NOT LIKE 'a!%b' ESCAPE '!' AND id = 'a'"
+  },
+  {
+    "id": "null-tests",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE cat IS NOT DISTINCT FROM 'x' AND tags IS NOT NULL AND NOT (stock IS NULL) AND cat IS DISTINCT FROM 'q' ORDER BY id"
+  },
+  {
+    "id": "in-list",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE id IN ('a', 'b') AND stock NOT IN (2) ORDER BY id"
+  },
+  {
+    "id": "any-subquery",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE id = ANY (SELECT item_id FROM orders) ORDER BY id"
+  },
+  {
+    "id": "in-subquery",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE id IN (SELECT item_id FROM orders) ORDER BY id"
+  },
+  {
+    "id": "exists",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE EXISTS (SELECT 1 FROM orders o WHERE o.item_id = items.id) ORDER BY id"
+  },
+  {
+    "id": "not-exists",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.item_id = items.id) ORDER BY id"
+  },
+  {
+    "id": "scalar-subquery",
+    "kind": "view",
+    "sql": "SELECT id, (SELECT count(*) FROM orders o WHERE o.item_id = i.id) AS n FROM items i ORDER BY id"
+  },
+  {
+    "id": "input-param",
+    "kind": "view",
+    "sql": "SELECT id FROM items WHERE stock > input.min AND cat = input.cat ORDER BY id",
+    "inputs": {
+      "min": "int8",
+      "cat": "text"
+    }
+  },
+  {
+    "id": "aggregates",
+    "kind": "view",
+    "sql": "SELECT cat, count(*) AS n, count(DISTINCT stock) AS d, sum(stock) AS s, min(stock) AS lo, max(stock) AS hi, avg(stock) AS av, json_group_array(name) AS names, json_group_array(DISTINCT cat) AS cats, json_group_object(id, stock) AS obj FROM items GROUP BY cat HAVING count(*) > 0 ORDER BY cat"
+  },
+  {
+    "id": "windows",
+    "kind": "view",
+    "sql": "SELECT r.cat, r.name, r.rn, r.rk, r.run, r.cnt FROM (SELECT cat, name, row_number() OVER (PARTITION BY cat ORDER BY stock DESC) AS rn, rank() OVER (PARTITION BY cat ORDER BY stock DESC) AS rk, sum(stock) OVER (PARTITION BY cat ORDER BY stock DESC) AS run, count(*) OVER (PARTITION BY cat) AS cnt, id FROM items) r ORDER BY r.cat, r.rn"
+  },
+  {
+    "id": "order-nulls",
+    "kind": "view",
+    "sql": "SELECT id FROM items ORDER BY note DESC NULLS LAST, id ASC LIMIT 3"
+  },
+  {
+    "id": "order-nulls-first",
+    "kind": "view",
+    "sql": "SELECT id FROM items ORDER BY note ASC NULLS FIRST, id DESC LIMIT 3"
+  },
+  {
+    "id": "window-ties",
+    "kind": "view",
+    "sql": "SELECT r.id, r.rk, r.run FROM (SELECT id, rank() OVER (ORDER BY cat) AS rk, sum(stock) OVER (ORDER BY cat) AS run FROM items) r ORDER BY r.id"
+  },
+  {
+    "id": "distinct",
+    "kind": "view",
+    "sql": "SELECT DISTINCT cat FROM items"
+  },
+  {
+    "id": "limit-input",
+    "kind": "view",
+    "sql": "SELECT id FROM items ORDER BY id LIMIT input.n",
+    "inputs": {
+      "n": "int8"
+    }
+  },
+  {
+    "id": "inner-join",
+    "kind": "view",
+    "sql": "SELECT i.id, o.id AS oid FROM items i JOIN orders o ON o.item_id = i.id ORDER BY i.id, o.id"
+  },
+  {
+    "id": "left-join",
+    "kind": "view",
+    "sql": "SELECT i.id, o.id AS oid FROM items i LEFT JOIN orders o ON o.item_id = i.id WHERE i.stock < 8 ORDER BY i.id, o.id"
+  },
+  {
+    "id": "self-join",
+    "kind": "view",
+    "sql": "SELECT a.id AS a, b.id AS b FROM items a JOIN items b ON a.cat = b.cat AND a.id < b.id ORDER BY a.id, b.id"
+  },
+  {
+    "id": "from-subquery",
+    "kind": "view",
+    "sql": "SELECT s.id, s.stock FROM (SELECT id, stock FROM items WHERE cat = 'x') s WHERE s.stock > 4 ORDER BY s.id"
+  },
+  {
+    "id": "json-each",
+    "kind": "view",
+    "sql": "SELECT i.id, j.value AS tag FROM items i, json_each(i.tags) j WHERE j.value = input.tag ORDER BY i.id",
+    "inputs": {
+      "tag": "text"
+    }
+  },
+  {
+    "id": "json-exists",
+    "kind": "view",
+    "sql": "SELECT i.id, i.tags ->> '$[0]' AS first FROM items i WHERE EXISTS (SELECT 1 FROM json_each(i.tags) j WHERE j.value = 'big') ORDER BY i.id"
+  },
+  {
+    "id": "scalar-functions",
+    "kind": "view",
+    "sql": "SELECT lower('AbC') AS lo, upper('AbC') AS up, length('héllo') AS len, abs(-3) AS ab, round(2.567, 2) AS r, substr('abcdef', 2, 3) AS sub, replace('a-b', '-', '+') AS rep, trim('  x ') AS t, ltrim('  x') AS lt, rtrim('x  ') AS rt, instr('abc', 'c') AS ins, typeof(1) AS ty, hex('A') AS hx FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "json-functions",
+    "kind": "view",
+    "sql": "SELECT json_extract(tags, '$[0]') AS e, json_array_length(tags) AS n, json_set(tags, '$[0]', 'z') AS s, json_insert(tags, '$[#]', 'w') AS i, json_remove(tags, '$[0]') AS r FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "casts",
+    "kind": "view",
+    "sql": "SELECT CAST(stock AS text) AS t, round(stock) AS i, CAST(stock AS float8) AS f, CAST(stock AS bool) AS b, CAST('false' AS bool) AS bf, CAST('yes' AS bool) AS bt, stock::text || 'x' AS c FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "literal-casts",
+    "kind": "view",
+    "sql": "SELECT '2026-03-08 10:00:00+00'::timestamptz AS ts, date '2026-03-08' AS d, interval '36 hours' AS iv, interval '90 minutes' AS im, '12.34'::numeric(12, 2) AS n, CAST('2026-03-08T10:00:00.123456Z' AS timestamptz) AS us FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "mantle-refs",
+    "kind": "view",
+    "sql": "SELECT auth.uid() AS uid, auth.role() AS role, now() AS now, input.x AS x FROM items WHERE id = 'a'",
+    "inputs": {
+      "x": "int8"
+    }
+  },
+  {
+    "id": "date-trunc",
+    "kind": "view",
+    "sql": "SELECT date_trunc('hour', now()) AS h, date_trunc('day', now()) AS d, date_trunc('week', now()) AS w, date_trunc('month', now()) AS m, date_trunc('year', now()) AS y FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "extract",
+    "kind": "view",
+    "sql": "SELECT extract(year FROM now()) AS y, extract(month FROM now()) AS mo, extract(day FROM now()) AS d, extract(dow FROM now()) AS dow, extract(hour FROM now()) AS h FROM items WHERE id = 'a'"
+  },
+  {
+    "id": "insert-values",
+    "kind": "procedure",
+    "sql": "INSERT INTO settings (key, value) VALUES ('a', '1') RETURNING key, value"
+  },
+  {
+    "id": "insert-string-escapes",
+    "kind": "procedure",
+    "sql": "INSERT INTO settings (key, value) VALUES ('q', 'it''s a \\ back\\slash') RETURNING value"
+  },
+  {
+    "id": "insert-select-input",
+    "kind": "procedure",
+    "sql": "INSERT INTO orders (item_id, qty) SELECT r.item_id, r.qty FROM requisitions r WHERE r.id = input.id RETURNING item_id, qty",
+    "inputs": {
+      "id": "text"
+    }
+  },
+  {
+    "id": "insert-select",
+    "kind": "procedure",
+    "sql": "INSERT INTO orders (item_id, qty) SELECT id, stock FROM items WHERE cat = 'x' RETURNING item_id, qty"
+  },
+  {
+    "id": "insert-returning-star",
+    "kind": "procedure",
+    "sql": "INSERT INTO requisitions (item_id, qty, state) VALUES ('a', 1, 'new') RETURNING *"
+  },
+  {
+    "id": "update-set",
+    "kind": "procedure",
+    "sql": "UPDATE items SET stock = stock + 1, name = upper(name) WHERE cat = 'x' RETURNING id, name, stock"
+  },
+  {
+    "id": "update-row",
+    "kind": "procedure",
+    "sql": "UPDATE items SET stock = input.s WHERE id = input.id RETURNING id, stock",
+    "inputs": {
+      "id": "text",
+      "s": "int8"
+    }
+  },
+  {
+    "id": "delete",
+    "kind": "procedure",
+    "sql": "DELETE FROM requisitions WHERE state = 'pending' RETURNING id"
+  },
+  {
+    "id": "upsert-nothing",
+    "kind": "procedure",
+    "sql": "INSERT INTO settings (key, value) VALUES ('theme', 'light') ON CONFLICT (key) DO NOTHING RETURNING key"
+  },
+  {
+    "id": "upsert-update",
+    "kind": "procedure",
+    "sql": "INSERT INTO settings (key, value) VALUES ('theme', 'light') ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE settings.value IS DISTINCT FROM excluded.value RETURNING key, value"
+  }
+]
