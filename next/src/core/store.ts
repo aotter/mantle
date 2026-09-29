@@ -5,6 +5,7 @@
  */
 import type { SqlNode } from "../spec/index.js";
 import type { Caller } from "./caller.js";
+import type { InvocationCause } from "./invocation.js";
 
 export type StoreScalar = string | number | boolean | null;
 
@@ -109,8 +110,8 @@ export interface SweepExpiredResult {
  * `RESOURCE_UNAVAILABLE`, `OUTCOME_UNKNOWN`.
  */
 export interface MantleStore {
-  /** Bind to one request's caller; scope follows the caller. */
-  as(caller: Caller): CallerStore;
+  /** Bind to one request's caller; scope follows the caller. `cause` is the invocation being served, so hooks the Store fires chain to it. */
+  as(caller: Caller, cause?: InvocationCause): CallerStore;
   select(query: StoreSelect): Promise<StoreSelectResult>;
   /** Apply every operation or none, in order, as one storage transaction. Results follow operation order. */
   write(ops: readonly StoreWriteOp[]): Promise<readonly StoreWriteResult[]>;

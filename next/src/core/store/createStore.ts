@@ -5,6 +5,7 @@
  */
 import { DiagnosticError, runtimeDiagnostic, SqlRefusal, type AuthorizationRequirements, type SqlNode as N } from "../../spec/index.js";
 import type { Caller } from "../caller.js";
+import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";
 import { decodeOutput } from "../sql/codec.js";
 import type { BindContext, Mode } from "../sql/compile.js";
@@ -33,7 +34,6 @@ export interface StoreDeps {
 }
 
 const invalid = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
-const ROOT = { kind: "internal", id: "store" } as const;
 
 /** A refusal thrown while binding (a value the declared type cannot hold) is the caller's input error. */
 async function guard<T>(f: () => Promise<T>): Promise<T> {
@@ -57,12 +57,13 @@ export function bindFor(now: number, caller: Caller | undefined): { mode: Mode; 
   return { mode: "caller", bind: { uid: caller.subject, now, role: caller.role } };
 }
 
-function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
+/** `parent` is the invocation this Store serves: hooks it fires chain to it, so the depth limit and cause ids hold across writes. */
+function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCause): CallerStore {
   const env = (mode: Mode): RunEnv => ({ executor: deps.executor, schemas: deps.schemas, mode, lifecycle: deps.lifecycle });
   const as = (bound: BindContext) => ({
     bind: bound,
     caller: caller ?? ({ kind: "system", reason: "host" } as const),
-    cause: ROOT,
+    cause: parent ?? ({ kind: "internal", id: `store:${deps.newId()}` } as const),
   });
 
   return {
@@ -91,10 +92,8 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
         throw await refine(e, ops);
       }
       return ops.map((o, i) => {
-        if (StoreJson.isRowOp(o)) {
-          const row = result.rows[i]![0];
-          return { id: String(row!.id), version: Number(row!.version) };
-        }
+        const row = StoreJson.isRowOp(o) ? result.rows[i]![0] : undefined;
+        if (row) return { id: String(row.id), version: Number(row.version) };
         return { affected: result.affected[i]! };
       });
     }),
@@ -132,7 +131,7 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
 export function createStore(deps: StoreDeps): MantleStore {
   return {
     ...make(deps, undefined),
-    as: (caller) => make(deps, caller),
+    as: (caller, cause) => make(deps, caller, cause),
     sweepExpired: (request) => sweepExpired(deps, request),
   };
 }

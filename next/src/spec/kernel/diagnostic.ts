@@ -97,6 +97,7 @@ export const DIAGNOSTIC_CODES = [
   // Lifecycle hooks: validate / boot.
   "LIFECYCLE_SCHEMA_UNKNOWN",
   "LIFECYCLE_HOOK_REJECTED",
+  "LIFECYCLE_TARGET_NOT_REF",
   // Locale + translates: validate / boot.
   "SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES",
   "TRANSLATES_PARENT_UNKNOWN",
