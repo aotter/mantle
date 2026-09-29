@@ -1,0 +1,67 @@
+# Synthetic inventory of host-owned files; readOnly is not authorization.
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: categories }
+spec:
+  title: Categories
+  lifecycle: operational
+  schema:
+    type: object
+    readOnly: true
+    x-example-source: content/categories/*.yaml
+    properties:
+      slug: { type: string }
+      label: { type: string }
+    required: [slug, label]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: articles }
+spec:
+  title: Articles
+  lifecycle: publishing
+  schema:
+    type: object
+    readOnly: true
+    additionalProperties: true
+    x-example-source: content/articles/*.md
+    # Host annotations describe a logical join, not an enforced foreign key.
+    x-example-relations:
+      - fromField: category
+        to: categories
+        toField: slug
+        enforced: false
+    properties:
+      slug: { type: string }
+      category: { type: string }
+      publishedAt: { type: string }
+      attachments:
+        type: array
+        items:
+          type: object
+          properties:
+            name: { type: string }
+            url: { type: string }
+          required: [name, url]
+    required: [slug, category, publishedAt]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: article-translations }
+spec:
+  title: Article translations
+  lifecycle: publishing
+  localized: true
+  translates:
+    parent: articles
+    on: slug
+  schema:
+    type: object
+    readOnly: true
+    x-example-source: content/i18n/*/articles/*.md
+    properties:
+      slug: { type: string }
+      locale: { type: string, enum: [zh-TW, en-US] }
+      title: { type: string }
+      body: { type: string }
+    required: [slug, locale, title]

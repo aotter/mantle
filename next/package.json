@@ -1,0 +1,22 @@
+{
+  "name": "@aotter/mantle-next",
+  "private": true,
+  "description": "Mantle 0.2.0 construction zone; becomes @aotter/mantle at the swap (see README.md).",
+  "type": "module",
+  "exports": {
+    "./spec": "./src/spec/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  }
+}

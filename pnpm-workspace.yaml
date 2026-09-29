@@ -2,6 +2,7 @@ packages:
   - "packages/*"
   - "packages/adapters/*"
   - "packages/adapters/vercel/test/fixtures/live-node"
+  - "next"
 
 # Catalogs centralize shared third-party version specifiers so
 # dependabot only edits one place per dependency, package.json files

@@ -4,7 +4,7 @@
 
 ## Layout
 
-`next/` is a single package whose name is already `@aotter/mantle` (`private: true` until the swap). Areas are folders, and each folder is one subpath (ADR-0032 decision 13):
+`next/` is a single private package, `@aotter/mantle-next` until the swap (the workspace already has `@aotter/mantle`). Areas are folders, and each folder is one subpath (ADR-0032 decision 13):
 
 ```
 next/src/core/         → @aotter/mantle            next/src/auth/    → @aotter/mantle/auth
