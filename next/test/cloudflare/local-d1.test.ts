@@ -9,7 +9,7 @@ beforeAll(async () => {
 afterAll(() => d1.dispose());
 
 it("has the SQLite features ADR-0034 relies on (sqlite_version() itself is not allowlisted)", async () => {
-  expect(await d1.all("SELECT concat('a', 'b') AS c, string_agg('x', ',') AS s, json_extract(jsonb('{"a":1}'), '$.a') AS j")).toEqual([{ c: "ab", s: "x", j: 1 }]);
+  expect(await d1.all(`SELECT concat('a', 'b') AS c, string_agg('x', ',') AS s, json_extract(jsonb('{"a":1}'), '$.a') AS j`)).toEqual([{ c: "ab", s: "x", j: 1 }]);
 });
 
 it("a batch is all or nothing and changes() counts inside it", async () => {
