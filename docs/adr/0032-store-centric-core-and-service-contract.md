@@ -52,7 +52,7 @@ A write op's `where` is classified **on the caller's `where`, before any policy 
 - **Set op:** any other `where`. It fires no hooks. `mantle validate` and Store reject it on a Schema with a per-row `before_*`/`after_*` Trigger for that operation and on a Schema whose published entries are protected.
 - `Procedure.target` is inferred with the same rule: a program with exactly one row op whose `where` pins `id` to an input field gets that target; otherwise `target` is explicit, as today.
 
-> **Amendment (ADR-0034):** Row and set ops are classified on the compiled statement, and the class decides only `target` inference and whether writing no row is `CONFLICT`. A set op calls hooks like a row op; only Schemas whose lifecycle is `publishing` still refuse it.
+> **Amendment (ADR-0034):** Row and set ops are classified on the compiled statement, and the class decides only `target` inference and whether writing no row is `CONFLICT`. A set op calls after hooks with its rows; Schemas with a before hook for that operation, or with `publishing` lifecycle, still refuse it.
 
 ### 3. Lifecycle hooks and atomicity
 
@@ -65,7 +65,7 @@ A write op's `where` is classified **on the caller's `where`, before any policy 
 - An entitlement check for one action belongs in that Procedure's `requires.guard`. A before hook is for rules every path must obey, Admin, import and maintenance included.
 - The Store hands mutations to a `LifecycleDispatcher` port (`before(mutations)`, `after(events)`) that the Trigger layer implements; Store never references Procedures. It replaces `LifecycleHookingEntryRepository`, `RunLifecycleHooksUseCase` and `DeferredHookDispatcher`.
 
-> **Amendment (ADR-0034):** A hook is called once per statement and Trigger with `ctx.cause.rows`. A snapshot guard, not OCC, checks that the batch writes what a before hook saw.
+> **Amendment (ADR-0034):** An after hook is called once per statement and Trigger with `ctx.cause.rows`. Before hooks keep row ops and OCC.
 
 ### 4. Storage port
 
