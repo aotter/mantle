@@ -232,6 +232,7 @@ export class StoreJson {
       const { status, ...rest } = o.set as Record<string, unknown>;
       if (status !== undefined && (!def.publishing || !STATUSES.includes(status as string))) throw invalid(def.publishing ? `A status is one of ${STATUSES.join(", ")}.` : "This Schema has no status.");
       const set = Object.entries(rest);
+      if (status !== undefined && set.length) throw invalid("A status change carries no other values: set the values first, then the status.");
       if (!set.length && status === undefined) throw invalid("An update sets at least one column.");
       validateValues(def, rest, "partial");
       return { status: status as string | undefined, ir: { UpdateStmt: { relation: table(name),

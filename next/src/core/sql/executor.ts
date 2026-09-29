@@ -12,7 +12,7 @@ const fail = (code: Diagnostic["code"], message: string, conflict?: Diagnostic["
 function mapError(e: unknown): never {
   const message = e instanceof Error ? e.message : String(e);
   const op = /CONFLICT op=(\d+)/.exec(message);
-  if (op) throw fail("CONFLICT", message, { opIndex: Number(op[1]), reason: "expect" });
+  if (op) throw fail("CONFLICT", `CONFLICT op=${op[1]}: the write matched a different number of rows than it expected`, { opIndex: Number(op[1]), reason: "expect" });
   const check = /(CHECK \w+: [^:]*?)(?: at offset|: SQLITE|$)/.exec(message);
   if (check) throw fail("INPUT_VALIDATION_FAILED", check[1]!);
   // the driver's own text names tables and columns, so it stays out of the Diagnostic

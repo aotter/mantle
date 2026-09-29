@@ -45,6 +45,7 @@ function match(template: string, path: string): Record<string, string> | null {
   return params;
 }
 
+const MAX_BODY = 1_000_000;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (e: unknown): Response => {
   if (e instanceof DiagnosticError) return json({ error: redactForWire(e.diagnostic) }, httpStatusFor(e.diagnostic));
@@ -55,7 +56,11 @@ const fail = (e: unknown): Response => {
 export function createRestSurface(runtime: MantleRuntime, options: RestSurfaceOptions): Surface {
   const base = options.basePath.replace(/\/+$/, "");
   const { plan } = runtime;
-  const routes = Object.entries(plan.triggers).flatMap(([name, t]) => (t.source.kind === "http" ? [{ name, method: t.source.method, path: t.source.path, procedure: t.procedure }] : []));
+  const params = (path: string) => path.split("/").filter((s) => s.startsWith("{")).length;
+  // a route with fewer path params is more specific, so `/items/search` is never shadowed by `/items/{id}`
+  const routes = Object.entries(plan.triggers)
+    .flatMap(([name, t]) => (t.source.kind === "http" ? [{ name, method: t.source.method, path: t.source.path, procedure: t.procedure }] : []))
+    .sort((a, b) => params(a.path) - params(b.path));
 
   return async (request, caller) => {
     try {
@@ -84,6 +89,7 @@ export function createRestSurface(runtime: MantleRuntime, options: RestSurfaceOp
         let body: unknown = {};
         if (request.body) {
           const text = await request.text();
+          if (text.length > MAX_BODY) throw diag("INPUT_VALIDATION_FAILED", `the request body is larger than ${MAX_BODY} characters`);
           try { body = text.trim() ? JSON.parse(text) : {}; } catch { throw diag("INPUT_VALIDATION_FAILED", "the request body is not valid JSON"); }
         }
         if (typeof body !== "object" || body === null || Array.isArray(body)) throw diag("INPUT_VALIDATION_FAILED", "the request body must be a JSON object");

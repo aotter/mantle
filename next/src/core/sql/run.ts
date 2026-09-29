@@ -9,7 +9,8 @@ import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
 import { S, op, ref } from "./ast.js";
-import { applyPolicy, HIDDEN_ID, HIDDEN_VERSION, type BindSpec, type Compiled } from "./policy.js";
+import { decodeOutput } from "./codec.js";
+import { applyPolicy, isIdCol, HIDDEN_ID, HIDDEN_VERSION, type BindSpec, type Compiled } from "./policy.js";
 
 export interface Program {
   readonly kind: "view" | "procedure";
@@ -65,8 +66,8 @@ function idOf(stmt: N): N {
   for (const x of conjuncts((stmt.UpdateStmt ?? stmt.DeleteStmt).whereClause)) {
     const e = x.A_Expr;
     if (e?.kind !== "AEXPR_OP" || e.name[0].String.sval !== "=") continue;
-    if (e.lexpr.ColumnRef?.fields.at(-1)?.String?.sval === "id") return e.rexpr;
-    if (e.rexpr.ColumnRef?.fields.at(-1)?.String?.sval === "id") return e.lexpr;
+    if (isIdCol(e.lexpr)) return e.rexpr;
+    if (isIdCol(e.rexpr)) return e.lexpr;
   }
   throw new Error("not a row op");
 }
@@ -114,8 +115,13 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
   const base = ctxOf(env, p, { returning: afterSchemas, statuses: p.statuses });
   const plan = compileProgram(p.ir, base);
   const versions: Record<number, unknown> = {};
+  // a hook receives the entry as its JSON Schema declares it (declared names, decoded values), not the storage encoding
+  const entry = (schema: string, row: StoreRow): StoreRow => {
+    const def = env.schemas[schema];
+    return Object.fromEntries(Object.entries(row).map(([k, v]) => (def?.fields[k] && def.fields[k] !== "geo" ? [(def as { names?: Record<string, string> }).names?.[k] ?? k, decodeOutput(def.fields[k]!, v)] : [k, v])));
+  };
   const event = (i: number, hook: string, schema: string, rows: [StoreRow, ...StoreRow[]]) => ({
-    id: `${as.seq ?? as.cause.id}:${i}:${hook}`, schema, hook: hook as never, rows, caller: as.caller, parent: as.cause,
+    id: `${as.seq ?? as.cause.id}:${i}:${hook}`, schema, hook: hook as never, rows: rows.map((r) => entry(schema, r)) as unknown as [StoreRow, ...StoreRow[]], caller: as.caller, parent: as.cause,
   });
 
   for (const [i, c] of plan.entries()) {

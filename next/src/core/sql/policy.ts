@@ -483,7 +483,11 @@ function insert(n: N, c: C): N {
 // ---- classification and entry point -----------------------------------------------------------------
 const conjuncts = (w: N | undefined): N[] => (w?.BoolExpr?.boolop === 'AND_EXPR' ? w.BoolExpr.args.flatMap(conjuncts) : w ? [w] : []);
 const isScalar = (n: N) => !!n.A_Const || (n.ColumnRef?.fields?.length === 2 && n.ColumnRef.fields[0].String?.sval === 'input');
-const isIdCol = (n: N) => n.ColumnRef && n.ColumnRef.fields.at(-1)?.String?.sval === 'id';
+/** The entry's own `id` column (`id` or `alias.id`), never `input.id`: an input that happens to be named id is a value, not the target. */
+export const isIdCol = (n: N): boolean => {
+  const f = n.ColumnRef?.fields;
+  return !!f && f.at(-1)?.String?.sval === 'id' && (f.length === 1 || (f.length === 2 && f[0].String?.sval !== 'input'));
+};
 /** ADR-0034 decision 4: `WHERE ... id = <scalar>` or a one-row INSERT is a row op; every other write is a set op. */
 export function classify(stmt: N): 'read' | 'row' | 'set' {
   if (stmt.SelectStmt) return 'read';
