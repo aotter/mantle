@@ -1,6 +1,6 @@
 # ADR-0030: Store — one persistence object over one relational query AST
 
-**Status:** Accepted (#1151). Runtime slices shipped in 0.1.5 alphas; the grammar slice, the storage port and the removal of the parallel paths are decided for 0.2.0 by [ADR-0032](0032-store-centric-core-and-service-contract.md).
+**Status:** Accepted (#1151). Runtime slices shipped in 0.1.5 alphas; the grammar slice, the storage port and the removal of the parallel paths are decided for 0.2.0 by [ADR-0032](0032-store-centric-core-and-service-contract.md). Manifest authoring is amended by [ADR-0034](0034-store-is-authored-as-sql.md).
 
 **Date:** 2026-09-26
 
@@ -32,6 +32,8 @@ Delivery order (each a reviewed PR): (1) `select`, `view`, `id` — this ADR's f
 ## Alternatives
 
 MongoDB-flavoured operators (`deleteMany`, `$in`) were considered first and rejected: every backend is relational, document semantics (nested paths, missing versus null) mismatch SQLite, and SQL is the vocabulary agents know best. SQL strings cannot carry injected scope and locks without a parser. Extending `writeAtomically` alone would add a fifth path.
+
+> **Amendment (ADR-0034):** Manifests now carry SQL, and the CLI's parser lowers it to this AST before it reaches any Worker. The Store API still takes no SQL string. The AST grows to what the SQL dialect needs (expressions, `CASE`, joins, aggregates, window functions, `RETURNING`, `ON CONFLICT`), and native SQL Views are no longer an escape hatch.
 
 ## New folder rationale
 

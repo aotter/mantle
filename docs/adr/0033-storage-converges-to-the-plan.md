@@ -1,6 +1,6 @@
 # ADR-0033: Schema storage converges to the plan; Mantle verifies, the author changes
 
-**Status:** Proposed for 0.2.0 (#1188). Amends ADR-0024; replaces the reviewed-artifact workflow of #1080 and #1086.
+**Status:** Proposed for 0.2.0 (#1188). Amends ADR-0024; replaces the reviewed-artifact workflow of #1080 and #1086. Amended by [ADR-0034](0034-store-is-authored-as-sql.md).
 
 **Date:** 2026-09-27
 
@@ -61,6 +61,8 @@ Core has one diff function and one place that calls it.
 ### 5. Scope
 
 The SQLite family (D1, Bun, libSQL) implements introspection. The IndexedDB adapter keeps its own object-store versioning; `MemoryStoreExecutor` has no storage to evolve.
+
+> **Amendment (ADR-0034):** The IndexedDB adapter and `MemoryStoreExecutor` are removed. Convergence also creates the triggers that enforce Schema `checks` and foreign keys (`RESTRICT` only, and the triggers only `RAISE`), creates new Schema tables `STRICT`, and adds `_mantle_sequences`, `_mantle_tz`, and the `_mantle_fts_*` and `_mantle_geo_*` indexes behind `search` and `format: geo` to the system tables. Those indexes are Mantle's own and are rebuilt, not verified, when their declaration changes.
 
 ## Consequences
 
