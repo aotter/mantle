@@ -1,6 +1,6 @@
 # ADR-0032: Store-centric Core, an application-owned service, and caller identity
 
-**Status:** Proposed for 0.2.0 (#1188). Amends ADR-0014, ADR-0026, ADR-0027 and ADR-0030; storage evolution is decided separately in [ADR-0033](0033-storage-converges-to-the-plan.md).
+**Status:** Proposed for 0.2.0 (#1188). Amends ADR-0014, ADR-0026, ADR-0027 and ADR-0030; storage evolution is decided separately in [ADR-0033](0033-storage-converges-to-the-plan.md). Decisions 1–5, 10 and 13 are amended by [ADR-0034](0034-store-is-authored-as-sql.md): manifests carry SQL, which the CLI compiles to the IR.
 
 **Date:** 2026-09-27
 
@@ -42,6 +42,8 @@ Every entry read and write goes through `MantleStore` / `CallerStore` over the r
 - **Admin statistics** (`readCreationStatistics`) stay a narrow optional storage capability outside Store. Store does not grow aggregates for one Admin chart.
 - **Translations.** Mantle Web resolves a locale with two Store selects (the base rows, then the translation rows for the requested and the site default locale) and merges them; the requested locale wins, then the default. Both reads are Store selects, so scope, TTL and published-only apply to each. `JoinedEntryReader` is removed and no read path grows around Store.
 
+> **Amendment (ADR-0034):** `conflict.opIndex` is exact: count and guard checks inside the batch name their statement.
+
 ### 2. Row ops and set ops
 
 A write op's `where` is classified **on the caller's `where`, before any policy rewrite**, so an injected scope predicate never changes the class.
@@ -49,6 +51,8 @@ A write op's `where` is classified **on the caller's `where`, before any policy 
 - **Row op:** the top level of `where` pins `id` to one value, alone or ANDed with further conditions (`{ id, performedAt: { gte } }`). It affects at most one row, may carry `lock`, and fires per-row lifecycle hooks. A row op that matches nothing is re-read by id: a present row with another version is `CONFLICT` with reason `lock`; otherwise reason `expect`.
 - **Set op:** any other `where`. It fires no hooks. `mantle validate` and Store reject it on a Schema with a per-row `before_*`/`after_*` Trigger for that operation and on a Schema whose published entries are protected.
 - `Procedure.target` is inferred with the same rule: a program with exactly one row op whose `where` pins `id` to an input field gets that target; otherwise `target` is explicit, as today.
+
+> **Amendment (ADR-0034):** Row and set ops are classified on the compiled statement, and the class decides only `target` inference and whether writing no row is `CONFLICT`. A set op calls hooks like a row op; only Schemas whose lifecycle is `publishing` still refuse it.
 
 ### 3. Lifecycle hooks and atomicity
 
@@ -61,6 +65,8 @@ A write op's `where` is classified **on the caller's `where`, before any policy 
 - An entitlement check for one action belongs in that Procedure's `requires.guard`. A before hook is for rules every path must obey, Admin, import and maintenance included.
 - The Store hands mutations to a `LifecycleDispatcher` port (`before(mutations)`, `after(events)`) that the Trigger layer implements; Store never references Procedures. It replaces `LifecycleHookingEntryRepository`, `RunLifecycleHooksUseCase` and `DeferredHookDispatcher`.
 
+> **Amendment (ADR-0034):** A hook is called once per statement and Trigger with `ctx.cause.rows`. A snapshot guard, not OCC, checks that the batch writes what a before hook saw.
+
 ### 4. Storage port
 
 `StoreReader` grows into **`StoreExecutor`**: `maxBindings`, `select(query)` and `apply(batch)` over validated IR only. Every executor implements the whole IR and applies a batch atomically, so there are no capability flags; the one Core validator reads `maxBindings` (100 on D1) and removes the duplicated `NATIVE_TYPES`, depth and node checks. `ViewQueryExecutor` shrinks to native SQL Views, the remaining escape hatch.
@@ -70,6 +76,8 @@ A write op's `where` is classified **on the caller's `where`, before any policy 
 - `@aotter/mantle/testing` exports one conformance suite that runs against every executor.
 
 The rewrite is built in `next/`, a private package beside the shipped ones (see `next/README.md`), and replaces them at the end.
+
+> **Amendment (ADR-0034):** `SqliteStoreExecutor` is the only executor; `MemoryStoreExecutor` is removed, and so is `ViewQueryExecutor`, since every View compiles to IR. Conformance runs on sqlite-wasm with a D1 profile, and in CI on local D1.
 
 ### 5. Grammar is the IR
 
@@ -83,6 +91,8 @@ The rewrite is built in `next/`, a private package beside the shipped ones (see 
 - A native SQL View may not target a scoped Schema (`VIEW_SQL_SCOPED_SCHEMA`); `VIEW_TTL_NATIVE_UNSAFE` stays.
 - **Schedule Triggers** take a five-field POSIX cron in UTC (weekday 0 = Sunday). The plan no longer carries a required host. A service that wires schedules passes `schedules: true` to `createMantle`, and boot fails for any enabled schedule without it. `toCloudflareCron` in `@aotter/mantle/cloudflare` translates an expression for Wrangler.
 - **Webhooks.** An HTTP Trigger does not receive the raw request body in 0.2.0. The service owns its HTTP entry (decision 6), so it verifies a signature there and calls `runtime.invokeProcedure`. A raw-body Trigger key is additive and can come later.
+
+> **Amendment (ADR-0034):** The grammar is SQL and the plan is the IR. A View is `spec.sql`, one `SELECT`, and an inline Procedure is `handler: { sql }`; `spec.select`, `{ store }` and the `$`-prefixed value references are replaced by `input.<name>`, `auth.uid()`, `auth.role()` and `now()`. Every View gets scope and TTL injected, so `VIEW_SQL_SCOPED_SCHEMA` and `VIEW_TTL_NATIVE_UNSAFE` are removed.
 
 ### 6. The portable unit is an application-owned service
 
@@ -170,6 +180,8 @@ Admin UI assets honour the base path. Hono may stay inside a package; it is no l
 - Cloud's guarantee names two kinds of fact. **Platform-verified:** the Cloud-compiled plan, the pinned Core, storage matching the plan (ADR-0033) and the fingerprint handshake. **Service-reported:** the surfaces and mounts the service chose, which Cloud confirms only by probing them in smoke. A service that never boots the runtime has no manifest scope to guarantee, and smoke shows that.
 - The plugin's Cloud helper script (decision 13) distinguishes a handlers-only artifact (today's closed module, host protocol 2 per ADR-0031) from a service-entry artifact, which is closed except for `@aotter/mantle*` externals that Cloud supplies at the pinned Core. The artifact field is `artifactKind: "handlers" | "service"`; service entries use host protocol 3. aotter/mantle-home reserves the field now and accepts service entries after Core 0.2.0, as its own issue.
 
+> **Amendment (ADR-0034):** The guarantee is a Cloud-validated plan. The CLI compiles; Cloud validates the IR and never parses SQL; whether the IR matches its SQL source is service-reported. Host protocol 3 uploads the plan.
+
 ### 11. Table namespace
 
 Tables that start with `_mantle_` are system tables: Mantle's internal state (the ledger, boot, Schema registry, schedule runs). They are Mantle's alone and the service does not touch them. Every other table Mantle or a Mantle module creates is a **product table** and keeps its name, just as Better Auth's tables keep theirs: `site_config`, `media_assets` and `pending_media_uploads` from Core, and Better Auth's own tables from mantle-auth. #1156 is decided by this rule: no rename. `sites_users` leaves `RESERVED_TABLES`, since ChatGPT Sites' identity is application-owned.
@@ -197,6 +209,8 @@ Every Mantle package versions and releases together, so splitting by area buys n
 - `@aotter/mantle` never imports `@aotter/mantle-ui`. The generated preset passes the Admin assets from `@aotter/mantle-ui/admin` to `createAdminSurface`.
 - `@aotter/mantle-spec`, `-runtime`, `-cloudflare`, `-bun`, `-vercel`, `-indexeddb`, `-auth`, `-admin`, `-mcp` and `-web` fold into subpaths; `@aotter/mantle-admin-ui` folds into `@aotter/mantle-ui/admin`. `@aotter/mantle-host` was never published and is removed.
 - **The plugin** (this repository's agent plugin) ships one `mantle` skill and helper scripts. Its configuration carries the Mantle Cloud MCP endpoint as an absolute URL, `https://cloud.mantle.tools/mcp`; aotter/mantle-home provides only that MCP. The helper scripts (`.mjs`) orchestrate the Cloud MCP sequence so an agent does less by hand, and keep the upload rules whose artifact bytes depend on the Core version (ADR-0031). The `mantle-host` name disappears; ADR-0031's protocol is the host protocol. Deploying anywhere else uses that host's own CLI, and the skill states that the user may always self-host: Mantle Cloud is one option, never a requirement.
+
+> **Amendment (ADR-0034):** `/indexeddb` becomes `/browser`, the sqlite-wasm driver with a `load`/`save` persistence port. D1 test helpers live at `/cloudflare/testing`. The plugin's helper scripts compile with the project's installed `@aotter/mantle/spec` and bundle no parser.
 
 ## Conformance cases
 
