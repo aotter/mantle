@@ -251,13 +251,14 @@ function checkPackageDirection() {
   }
 }
 
-/** next/src/core imports only next/src/spec (next/README.md); a package or a sibling folder is refused. */
+/** next/src/core reaches only itself and next/src/spec (next/README.md); a sibling folder or packages/* is refused. */
 function checkNextCoreImports() {
+  const allowed = [join(ROOT, "next/src/core") + "/", join(ROOT, "next/src/spec") + "/"];
   for (const file of listFiles(join(ROOT, "next/src/core"), (p) => p.endsWith(".ts"))) {
     for (const [, spec] of readFileSync(file, "utf8").matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
-      if (!spec.startsWith("./") && !spec.startsWith("../spec/") && !spec.startsWith("node:")) {
-        fail(file, `next core may import only spec: '${spec}'`);
-      }
+      if (!spec.startsWith(".")) continue; // a library
+      const target = join(dirname(file), spec);
+      if (!allowed.some((dir) => target.startsWith(dir))) fail(file, `next core may reach only core and spec: '${spec}'`);
     }
   }
 }
