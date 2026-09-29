@@ -85,12 +85,11 @@ SQL is source and the IR is the compiled artifact, the way TypeScript is source 
 
 ### 6. One executor, one test line (amends ADR-0032 decisions 4 and 13)
 
-- **One executor.** `SqliteStoreExecutor` is the only executor, over a `DatabaseDriver`: D1, and sqlite-wasm (`@sqlite.org/sqlite-wasm`, Apache-2.0). Bun and libSQL stay experimental. `MemoryStoreExecutor`, the in-memory test fake and the IndexedDB repositories are removed, and so is `ViewQueryExecutor`, since every View compiles to IR.
-- **`/browser`.** `@aotter/mantle/indexeddb` becomes `@aotter/mantle/browser`: the sqlite-wasm driver with a two-method persistence port, `load(): Promise<Uint8Array | null>` and `save(bytes): Promise<void>`, whose built-in store keeps the exported database as one IndexedDB record. `navigator.locks` keeps one writing tab. The browser package runs WASM in a browser, never in a Worker.
+- **One executor.** `SqliteStoreExecutor` is the only executor, over a `DatabaseDriver`: D1, with Bun and libSQL experimental. `MemoryStoreExecutor`, the in-memory test fake and the IndexedDB repositories are removed, and so is `ViewQueryExecutor`, since every View compiles to IR.
+- **`/indexeddb` is removed, with no browser driver in 0.2.0.** Nothing uses `@aotter/mantle-indexeddb` today, and the Builder's preview moves to Cloud. A browser-only application that needs one later gets an additive subpath: a SQLite-in-WASM driver under `SqliteStoreExecutor`, not a new executor.
 - **One test line.** `@aotter/mantle/testing` stays engine-free, `runStorageConformance({ create })`, and each driver runs it on its own engine.
   - D1 runs it on local D1 inside workerd (`@cloudflare/vitest-pool-workers`), locally and in CI alike; 500 cases take about 3.5 s. Code that runs in a Worker is tested there, while spec and CLI tests stay in Node, where `libpg-query` runs.
   - One case prepares every function on the compiler's allowlist against local D1, so CI fails when D1 changes the list.
-  - sqlite-wasm runs it as the `/browser` driver, with foreign keys on. It does not imitate D1: the compiler enforces the allowlist, and the `CAST` rule makes D1's number binding irrelevant.
   - D1 test helpers, if published, live at `@aotter/mantle/cloudflare/testing`, with `wrangler` as an optional peer.
   - `node:sqlite` is not used, and the `sqlite-d1.ts` fake is removed, because its `batch` runs statements without a transaction.
   - Ceiling: workerd's Linux binary needs glibc 2.35 and has no musl build, so the storage tests do not run on Alpine.
@@ -104,11 +103,11 @@ That the IR matches its SQL source is **service-reported**: the plan carries the
 ## Conformance cases
 
 1. The requisition program: a `CASE` value, `RETURNING`, a `WHERE id AND cond` precondition that fails with `CONFLICT`, and a conditional `INSERT … SELECT … WHERE` that writes zero or one row and calls an after hook only when it writes.
-2. Stock: `SET stock = stock - input.qty` with `checks: ["stock >= 0"]`, where oversell fails through the check trigger on D1 and on sqlite-wasm alike.
+2. Stock: `SET stock = stock - input.qty` with `checks: ["stock >= 0"]`, where oversell fails through the check trigger.
 3. A report View with a join, `GROUP BY`/`HAVING` and a cursor, where scope and TTL are injected into every joined Schema.
 4. Snapshot guard: a phantom row, a changed input to an expression, and an earlier statement writing the same table each abort the batch with `CONFLICT` naming the statement.
 5. The dialect: `OFFSET`, a function outside the allowlist, `$1`, `interval '1 day'`, an undeclared table and `_mantle_*` are refused with a position in the source SQL.
-6. Types: `? / 2` with an integer input, `numeric(12, 2)` multiplication, a microsecond timestamp compared with `now() - interval '36 hours'`, and `timezone()` across a daylight-saving boundary give the same results on D1 and sqlite-wasm.
+6. Types: `? / 2` with an integer input, `numeric(12, 2)` multiplication, a microsecond timestamp compared with `now() - interval '36 hours'`, and `timezone()` across a daylight-saving boundary give PostgreSQL's results on D1.
 
 ## Consequences
 
@@ -130,7 +129,7 @@ That the IR matches its SQL source is **service-reported**: the plan carries the
 ## How to apply
 
 1. Spike, in `next/`:
-   - lower the six conformance programs through `libpg-query` to IR and run them on local D1 in workerd and on sqlite-wasm;
+   - lower the six conformance programs through `libpg-query` to IR and run them on local D1 in workerd;
    - measure the lowering code and how helpful its diagnostics are to an agent;
    - build the snapshot guard;
    - prove the `CAST` rule and the type encodings.

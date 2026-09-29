@@ -62,7 +62,7 @@ Core has one diff function and one place that calls it.
 
 The SQLite family (D1, Bun, libSQL) implements introspection. The IndexedDB adapter keeps its own object-store versioning; `MemoryStoreExecutor` has no storage to evolve.
 
-> **Amendment (ADR-0034):** The IndexedDB adapter and `MemoryStoreExecutor` are removed; sqlite-wasm, in the browser and in tests, converges like D1. Convergence also creates the triggers that enforce Schema `checks` and foreign keys (`RESTRICT` only, and the triggers only `RAISE`), creates new Schema tables `STRICT`, and adds `_mantle_sequences` and `_mantle_tz` to the system tables.
+> **Amendment (ADR-0034):** The IndexedDB adapter and `MemoryStoreExecutor` are removed. Convergence also creates the triggers that enforce Schema `checks` and foreign keys (`RESTRICT` only, and the triggers only `RAISE`), creates new Schema tables `STRICT`, and adds `_mantle_sequences` and `_mantle_tz` to the system tables.
 
 ## Consequences
 

@@ -77,7 +77,7 @@ A write op's `where` is classified **on the caller's `where`, before any policy 
 
 The rewrite is built in `next/`, a private package beside the shipped ones (see `next/README.md`), and replaces them at the end.
 
-> **Amendment (ADR-0034):** `SqliteStoreExecutor` is the only executor; `MemoryStoreExecutor` is removed, and so is `ViewQueryExecutor`, since every View compiles to IR. Conformance runs on local D1 inside workerd, and on sqlite-wasm for `/browser`.
+> **Amendment (ADR-0034):** `SqliteStoreExecutor` is the only executor; `MemoryStoreExecutor` is removed, and so is `ViewQueryExecutor`, since every View compiles to IR. Conformance runs on local D1 inside workerd.
 
 ### 5. Grammar is the IR
 
@@ -210,7 +210,7 @@ Every Mantle package versions and releases together, so splitting by area buys n
 - `@aotter/mantle-spec`, `-runtime`, `-cloudflare`, `-bun`, `-vercel`, `-indexeddb`, `-auth`, `-admin`, `-mcp` and `-web` fold into subpaths; `@aotter/mantle-admin-ui` folds into `@aotter/mantle-ui/admin`. `@aotter/mantle-host` was never published and is removed.
 - **The plugin** (this repository's agent plugin) ships one `mantle` skill and helper scripts. Its configuration carries the Mantle Cloud MCP endpoint as an absolute URL, `https://cloud.mantle.tools/mcp`; aotter/mantle-home provides only that MCP. The helper scripts (`.mjs`) orchestrate the Cloud MCP sequence so an agent does less by hand, and keep the upload rules whose artifact bytes depend on the Core version (ADR-0031). The `mantle-host` name disappears; ADR-0031's protocol is the host protocol. Deploying anywhere else uses that host's own CLI, and the skill states that the user may always self-host: Mantle Cloud is one option, never a requirement.
 
-> **Amendment (ADR-0034):** `/indexeddb` becomes `/browser`, the sqlite-wasm driver with a `load`/`save` persistence port. D1 test helpers live at `/cloudflare/testing`. The plugin's helper scripts compile with the project's installed `@aotter/mantle/spec` and bundle no parser.
+> **Amendment (ADR-0034):** `/indexeddb` is removed, with no browser driver in 0.2.0. D1 test helpers live at `/cloudflare/testing`. The plugin's helper scripts compile with the project's installed `@aotter/mantle/spec` and bundle no parser.
 
 ## Conformance cases
 
