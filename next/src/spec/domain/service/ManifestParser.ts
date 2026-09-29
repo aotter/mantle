@@ -17,26 +17,19 @@ import {
 } from "../../kernel/diagnostic.js";
 import {
   API_VERSION,
-  BUILTIN_OPS,
   MANTLE_BIND_KEYWORD,
   MANTLE_BIND_VALUES,
   LIFECYCLE_HOOKS,
   MCP_TRIGGER_SURFACES,
   VIEW_SURFACES,
   STAFF_ROLES,
-  FILTER_COMPARISON_OPS,
-  VIEW_PARAMS_RESERVED,
+  VIEW_INPUT_RESERVED,
   PROCEDURE_MCP_ANNOTATION_KEYS,
   PROCEDURE_TARGET_KEYS,
   RESERVED_ENTRY_COLUMNS,
   RESERVED_PROCEDURE_INPUT_NAMES,
-  isParamRef,
-  hasCtxUserRefKey,
-  isCtxUserRef,
   isStaffRole,
   type AuthPredicate,
-  type BuiltinOp,
-  type FilterAst,
   type HttpMethod,
   type JsonSchema,
   type LifecycleHook,
@@ -191,13 +184,9 @@ const V01_HTTP_METHODS: ReadonlySet<HttpMethod> = new Set([
   "DELETE",
 ]);
 
-const V01_HANDLER_KINDS: ReadonlySet<string> = new Set(["ref", "builtin"]);
-const V01_BUILTIN_OPS: ReadonlySet<BuiltinOp> = new Set(BUILTIN_OPS);
 const V01_LIFECYCLE_HOOKS: ReadonlySet<LifecycleHook> = new Set(LIFECYCLE_HOOKS);
-const V01_HOOK_ERROR_POLICIES: ReadonlySet<string> = new Set(["abort", "continue"]);
 const V01_MCP_TRIGGER_SURFACES: ReadonlySet<string> = new Set(MCP_TRIGGER_SURFACES);
 const V01_VIEW_SURFACES: ReadonlySet<string> = new Set(VIEW_SURFACES);
-const FILTER_COMPARISON_OP_SET: ReadonlySet<string> = new Set(FILTER_COMPARISON_OPS);
 const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["publishing", "operational"]);
 
 function rejectUnknownKeys(
@@ -240,19 +229,10 @@ type ParsedSchemaManifest = Omit<SchemaManifest, "spec"> & {
   };
 };
 
-type ParsedViewManifest = Omit<ViewManifest, "spec"> & {
-  readonly spec: Omit<ViewManifest["spec"], "orderBy"> & {
-    readonly orderBy: ReadonlyArray<{
-      readonly field: string;
-      readonly direction: "asc" | "desc";
-    }>;
-  };
-};
-
 /** Canonical atom value after all static authoring defaults are materialized. */
 export type ParsedManifest =
   | ParsedSchemaManifest
-  | ParsedViewManifest
+  | ViewManifest
   | ProcedureManifest
   | TriggerManifest;
 
@@ -553,18 +533,6 @@ function normalizeManifest(manifest: Manifest): ParsedManifest {
       },
     };
   }
-  if (manifest.kind === "View") {
-    return {
-      ...manifest,
-      spec: {
-        ...manifest.spec,
-        orderBy: (manifest.spec.orderBy ?? []).map((order) => ({
-          ...order,
-          direction: order.direction ?? "asc",
-        })),
-      },
-    };
-  }
   return manifest;
 }
 
@@ -582,7 +550,8 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
 
   if (m["apiVersion"] !== API_VERSION) {
     throw new ManifestParseError(
-      `apiVersion must be "${API_VERSION}"; got ${JSON.stringify(m["apiVersion"])}`,
+      `apiVersion must be "${API_VERSION}"; got ${JSON.stringify(m["apiVersion"])}` +
+        (m["apiVersion"] === "cms.mantle.aotter.net/v1" ? " (a 0.1.x manifest: run mantle-update)" : ""),
       docIndex,
       "/apiVersion",
     );
@@ -725,15 +694,15 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   if (s["scope"] !== undefined) {
     const scope = s["scope"];
     if (!scope || typeof scope !== "object" || Array.isArray(scope) || Object.keys(scope).length !== 1) {
-      throw new ManifestParseError("Schema.spec.scope must bind exactly one field to $ctx.user.id", idx, "/spec/scope");
+      throw new ManifestParseError("Schema.spec.scope must bind exactly one field to auth.uid()", idx, "/spec/scope");
     }
     const [field, ref] = Object.entries(scope)[0]!;
     const property = properties && typeof properties === "object" && !Array.isArray(properties)
       ? (properties as Record<string, Record<string, unknown>>)[field] : undefined;
-    if (ref !== "$ctx.user.id" || !property || property["type"] !== "string" || property["nullable"] === true || property["oneOf"] !== undefined ||
+    if (ref !== "auth.uid()" || !property || property["type"] !== "string" || property["nullable"] === true || property["oneOf"] !== undefined ||
       !Array.isArray(schema["required"]) || !schema["required"].includes(field) ||
       ![...(m.spec.uniqueIndexes ?? []), ...(m.spec.indexes ?? [])].some((index) => index[0] === field)) {
-      throw new ManifestParseError("Schema.spec.scope requires a required string field with a leftmost index and the exact $ctx.user.id reference", idx, "/spec/scope");
+      throw new ManifestParseError("Schema.spec.scope requires a required string field with a leftmost index and the exact auth.uid() reference", idx, "/spec/scope");
     }
     if (property[MANTLE_BIND_KEYWORD] !== undefined && property[MANTLE_BIND_KEYWORD] !== "ctx.user") {
       throw new ManifestParseError("Schema.spec.scope field cannot be stamped from a different identity", idx, `/spec/schema/properties/${field}/${MANTLE_BIND_KEYWORD}`);
@@ -877,60 +846,15 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "description", "uiSchema", "from", "select", "sql", "surface", "cache", "requires", "filter", "fields", "orderBy", "limit", "params"],
+    ["title", "description", "uiSchema", "sql", "surface", "cache", "requires", "input"],
     idx,
     "/spec",
   );
-  validateLocalizedText(
-    s["title"],
-    idx,
-    "/spec/title",
-    "View.spec.title",
-    false,
-  );
-  validateLocalizedText(
-    s["description"],
-    idx,
-    "/spec/description",
-    "View.spec.description",
-    false,
-  );
-  const hasFrom = typeof s["from"] === "string" && (s["from"] as string).length > 0;
-  const hasSelect = s["select"] !== undefined;
-  const hasSql = typeof s["sql"] === "string" && (s["sql"] as string).trim().length > 0;
-  if (Number(hasFrom) + Number(hasSelect) + Number(hasSql) !== 1) {
-    throw new ManifestParseError(
-      "View.spec requires exactly one of `select`, `from` or `sql`",
-      idx,
-      "/spec",
-    );
-  }
-  if (hasSelect) {
-    const select = s["select"];
-    if (typeof select !== "object" || select === null || Array.isArray(select)) {
-      throw new ManifestParseError("View.spec.select must be an object", idx, "/spec/select");
-    }
-    const query = select as Record<string, unknown>;
-    rejectUnknownKeys(query, ["from", "columns", "where", "orderBy", "limit"], idx, "/spec/select");
-    if (typeof query["from"] !== "string" || !query["from"]) {
-      throw new ManifestParseError("View.spec.select.from must name a Schema", idx, "/spec/select/from");
-    }
-    if (query["columns"] !== undefined && (!Array.isArray(query["columns"]) || !query["columns"].length || !query["columns"].every((column: unknown) => typeof column === "string" && column.length > 0))) {
-      throw new ManifestParseError("View.spec.select.columns must be a non-empty array of column names", idx, "/spec/select/columns");
-    }
-    if (query["where"] !== undefined && (typeof query["where"] !== "object" || query["where"] === null || Array.isArray(query["where"]))) {
-      throw new ManifestParseError("View.spec.select.where must be an object", idx, "/spec/select/where");
-    }
-    const order = query["orderBy"];
-    if (order !== undefined && (typeof order !== "object" || order === null || Array.isArray(order) || Object.keys(order).length !== 1 || !Object.values(order).every((direction) => direction === "asc" || direction === "desc"))) {
-      throw new ManifestParseError("View.spec.select.orderBy must name one column and direction", idx, "/spec/select/orderBy");
-    }
-    if (query["limit"] !== undefined && (!Number.isSafeInteger(query["limit"]) || (query["limit"] as number) < 1 || (query["limit"] as number) > 500)) {
-      throw new ManifestParseError("View.spec.select.limit must be 1–500", idx, "/spec/select/limit");
-    }
-    for (const key of ["filter", "fields", "orderBy", "limit"] as const) {
-      if (s[key] !== undefined) throw new ManifestParseError(`View.spec.${key} cannot be combined with View.spec.select`, idx, `/spec/${key}`);
-    }
+  validateLocalizedText(s["title"], idx, "/spec/title", "View.spec.title", false);
+  validateLocalizedText(s["description"], idx, "/spec/description", "View.spec.description", false);
+  // Only the SQL compiler (compilePlan) reads the statement; here it just has to be present.
+  if (typeof s["sql"] !== "string" || s["sql"].trim().length === 0) {
+    throw new ManifestParseError("View.spec.sql is required (one SELECT statement)", idx, "/spec/sql");
   }
   const surface = s["surface"];
   if (typeof surface !== "string" || !V01_VIEW_SURFACES.has(surface)) {
@@ -946,91 +870,13 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   }
   const adminUiProblem = checkViewAdminUi(m).problems[0];
   if (adminUiProblem) {
-    throw new ManifestParseError(
-      adminUiProblem.message,
-      idx,
-      adminUiProblem.pointer,
-      "VIEW_UI_INVALID",
-    );
+    throw new ManifestParseError(adminUiProblem.message, idx, adminUiProblem.pointer, "VIEW_UI_INVALID");
   }
-  let paramSchema: JsonSchema | undefined;
-  if ("params" in s && s["params"] != null) {
-    paramSchema = validateViewParams(s["params"], idx, hasSelect);
-    validateJsonSchema(paramSchema, idx, "View", m.metadata.name, "/spec/params");
-  }
-  if (hasSelect && (s["select"] as Record<string, unknown>)["where"] !== undefined) {
-    validateViewSelectWhere((s["select"] as Record<string, unknown>)["where"], idx, "/spec/select/where", paramSchema);
-  }
-  if (hasSql) {
-    validateViewSql(s["sql"] as string, paramSchema, idx);
-    for (const key of ["filter", "fields", "orderBy"] as const) {
-      if (s[key] !== undefined) {
-        throw new ManifestParseError(
-          `View.spec.${key} cannot be combined with View.spec.sql`,
-          idx,
-          `/spec/${key}`,
-        );
-      }
-    }
-  }
-  if ("filter" in s && s["filter"] != null) {
-    validateFilterAst(s["filter"], idx, "View.spec.filter", "/spec/filter", paramSchema);
-  }
-  if ("orderBy" in s && s["orderBy"] != null) {
-    validateViewOrderBy(s["orderBy"], idx);
+  if ("input" in s && s["input"] != null) {
+    validateViewInput(s["input"], idx);
+    validateJsonSchema(s["input"], idx, "View", m.metadata.name, "/spec/input");
   }
   return m;
-}
-
-function validateViewSelectWhere(raw: unknown, idx: number, pointer: string, params?: JsonSchema, budget = { nodes: 0 }, depth = 0): void {
-  const invalid = (message: string, at = pointer): never => { throw new ManifestParseError(message, idx, at); };
-  if (++budget.nodes > 256 || depth > 16) invalid("View select.where exceeds its query budget");
-  if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Object.keys(raw).length) invalid("View select.where must be a non-empty object");
-  const reference = (value: unknown, at: string): void => {
-    if (Array.isArray(value)) invalid("View values must be scalars or declared references", at);
-    if (typeof value === "string" && value.startsWith("$")) {
-      if (value === "$ctx.user.id" || value === "$now") return;
-      const name = value.startsWith("$input.") ? value.slice(7) : "";
-      if (name && Object.hasOwn(params?.properties ?? {}, name)) {
-        const property = params?.properties?.[name];
-        if (!params?.required?.includes(name) || !property || !["string", "number", "integer", "boolean"].includes(String(property.type))) {
-          invalid(`View reference '${value}' requires a required scalar parameter`, at);
-        }
-        return;
-      }
-      invalid(`Unknown View value reference '${value}'`, at);
-    }
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      const literal = value as Record<string, unknown>;
-      if (Object.keys(literal).length === 1 && typeof literal["$literal"] === "string") return;
-      invalid("View values must be scalars or declared references", at);
-    }
-  };
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    const at = `${pointer}/${key}`;
-    if (key === "and" || key === "or") {
-      if (!Array.isArray(value) || !value.length) invalid(`${key} must be a non-empty array`, at);
-      (value as unknown[]).forEach((item, index) => validateViewSelectWhere(item, idx, `${at}/${index}`, params, budget, depth + 1));
-    } else if (key === "not") {
-      validateViewSelectWhere(value, idx, at, params, budget, depth + 1);
-    } else if (value && typeof value === "object" && !Array.isArray(value) && !Object.hasOwn(value, "$literal")) {
-      for (const [operator, operand] of Object.entries(value)) {
-        const opPath = `${at}/${operator}`;
-        if (!new Set(["eq", "ne", "gt", "gte", "lt", "lte", "like", "in", "notIn", "isNull"]).has(operator)) invalid(`Unknown View comparison '${operator}'`, opPath);
-        if (operator === "isNull") {
-          if (typeof operand !== "boolean") invalid("isNull must be boolean", opPath);
-        } else if (operator === "in" || operator === "notIn") {
-          if (Array.isArray(operand)) operand.forEach((item, index) => reference(item, `${opPath}/${index}`));
-          else if (operand && typeof operand === "object" && !Array.isArray(operand)) {
-            const sub = operand as Record<string, unknown>;
-            rejectUnknownKeys(sub, ["select", "from", "where"], idx, opPath);
-            if (typeof sub["select"] !== "string" || typeof sub["from"] !== "string") invalid("Subquery requires select and from", opPath);
-            if (sub["where"] !== undefined) validateViewSelectWhere(sub["where"], idx, `${opPath}/where`, params, budget, depth + 1);
-          } else invalid(`${operator} requires an array or subquery`, opPath);
-        } else reference(operand, opPath);
-      }
-    } else reference(value, at);
-  }
 }
 
 function validateViewCache(raw: unknown, view: ViewManifest, idx: number): void {
@@ -1048,9 +894,11 @@ function validateViewCache(raw: unknown, view: ViewManifest, idx: number): void 
       "VIEW_CACHE_INVALID",
     );
   }
-  if (view.spec.surface !== "public" || view.spec.sql || view.spec.requires) {
+  // A shared cache must not hold a caller- or time-dependent answer. A match inside a
+  // literal over-rejects, which is the safe direction.
+  if (view.spec.surface !== "public" || view.spec.requires || /\bauth\s*\.|\bnow\s*\(/i.test(view.spec.sql)) {
     throw new ManifestParseError(
-      "View.spec.cache requires an unguarded public declarative View",
+      "View.spec.cache requires an unguarded public View whose sql reads neither auth.* nor now()",
       idx,
       "/spec/cache",
       "VIEW_CACHE_INVALID",
@@ -1058,235 +906,29 @@ function validateViewCache(raw: unknown, view: ViewManifest, idx: number): void 
   }
 }
 
-function validateViewSql(sql: string, params: JsonSchema | undefined, idx: number): void {
-  const trimmed = sql.trim();
-  if (!/^select\b/i.test(trimmed) || trimmed.includes(";")) {
-    throw new ManifestParseError(
-      "View.spec.sql must be one SELECT statement without a semicolon",
-      idx,
-      "/spec/sql",
-    );
-  }
-  const properties = (params?.properties ?? {}) as Record<string, unknown>;
-  const required = new Set(params?.required ?? []);
-  for (const match of trimmed.matchAll(/:([A-Za-z_][A-Za-z0-9_]*)/g)) {
-    const name = match[1]!;
-    if (!Object.prototype.hasOwnProperty.call(properties, name)) {
-      throw new ManifestParseError(
-        `View.spec.sql references unknown param '${name}'; declare it under View.spec.params.properties.`,
-        idx,
-        "/spec/sql",
-        "VIEW_FILTER_PARAM_REF_UNKNOWN",
-      );
-    }
-    if (!required.has(name)) {
-      throw new ManifestParseError(
-        `View.spec.sql references optional param '${name}'; bound SQL params must appear in View.spec.params.required.`,
-        idx,
-        "/spec/sql",
-        "VIEW_FILTER_PARAM_REF_NOT_REQUIRED",
-      );
-    }
-  }
-}
-
-/**
- * `direction` is typed `"asc" | "desc"`, but manifests are parsed from
- * YAML so any string can arrive at runtime. The compiler maps it to a
- * closed set, but an out-of-enum value is an authoring mistake we must
- * surface as a pre-deploy Diagnostic rather than silently coerce.
- */
-function validateViewOrderBy(raw: unknown, idx: number): void {
-  if (!Array.isArray(raw)) {
-    throw new ManifestParseError(
-      "View.spec.orderBy must be an array of { field, direction? }",
-      idx,
-      "/spec/orderBy",
-      "VIEW_ORDERBY_INVALID",
-    );
-  }
-  raw.forEach((entry, i) => {
-    if (typeof entry !== "object" || entry === null) {
-      throw new ManifestParseError(
-        "View.spec.orderBy entries must be objects with a `field`",
-        idx,
-        `/spec/orderBy/${i}`,
-        "VIEW_ORDERBY_INVALID",
-      );
-    }
-    const o = entry as Record<string, unknown>;
-    rejectUnknownKeys(o, ["field", "direction"], idx, `/spec/orderBy/${i}`);
-    if (typeof o["field"] !== "string" || (o["field"] as string).length === 0) {
-      throw new ManifestParseError(
-        "View.spec.orderBy[].field is required (non-empty string)",
-        idx,
-        `/spec/orderBy/${i}/field`,
-        "VIEW_ORDERBY_INVALID",
-      );
-    }
-    if (o["direction"] !== undefined && o["direction"] !== "asc" && o["direction"] !== "desc") {
-      throw new ManifestParseError(
-        `View.spec.orderBy[].direction must be "asc" or "desc" (got ${JSON.stringify(o["direction"])})`,
-        idx,
-        `/spec/orderBy/${i}/direction`,
-        "VIEW_ORDERBY_INVALID",
-      );
-    }
-  });
-}
-
-function validateViewParams(raw: unknown, idx: number, select = false): JsonSchema {
+function validateViewInput(raw: unknown, idx: number): void {
+  const invalid = (message: string, pointer: string, code: DiagnosticCode = "VIEW_INPUT_INVALID_SHAPE"): never => {
+    throw new ManifestParseError(message, idx, pointer, code);
+  };
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new ManifestParseError(
-      "View.spec.params must be a JSON Schema object",
-      idx,
-      "/spec/params",
-      "VIEW_PARAMS_INVALID_SHAPE",
-    );
+    invalid("View.spec.input must be a JSON Schema object", "/spec/input");
   }
   const p = raw as Record<string, unknown>;
   if (p["type"] !== "object") {
-    throw new ManifestParseError(
-      `View.spec.params.type must be "object"; got ${JSON.stringify(p["type"])}`,
-      idx,
-      "/spec/params/type",
-      "VIEW_PARAMS_INVALID_SHAPE",
-    );
+    invalid(`View.spec.input.type must be "object"; got ${JSON.stringify(p["type"])}`, "/spec/input/type");
   }
   const props = p["properties"];
   if (typeof props !== "object" || props === null || Array.isArray(props)) {
-    throw new ManifestParseError(
-      "View.spec.params.properties is required (declare each accepted query-string param)",
-      idx,
-      "/spec/params/properties",
-      "VIEW_PARAMS_INVALID_SHAPE",
-    );
+    invalid("View.spec.input.properties is required (declare each accepted parameter)", "/spec/input/properties");
   }
-  const propNames = Object.keys(props as Record<string, unknown>);
-  const reservedNames = select ? [...VIEW_PARAMS_RESERVED, "limit", "cursor"] : VIEW_PARAMS_RESERVED;
-  for (const reserved of reservedNames) {
-    if (propNames.includes(reserved)) {
-      throw new ManifestParseError(
-        `View.spec.params.properties.${reserved} is reserved (the runtime owns ${reservedNames.join(", ")} for pagination); rename the param.`,
-        idx,
-        `/spec/params/properties/${reserved}`,
-        "VIEW_PARAMS_RESERVED_NAME",
+  for (const reserved of VIEW_INPUT_RESERVED) {
+    if (Object.hasOwn(props as object, reserved)) {
+      invalid(
+        `View.spec.input.properties.${reserved} is reserved (the runtime owns ${VIEW_INPUT_RESERVED.join(", ")} for pagination); rename it.`,
+        `/spec/input/properties/${reserved}`,
+        "VIEW_INPUT_RESERVED_NAME",
       );
     }
-  }
-  return raw as JsonSchema;
-}
-
-function validateFilterAst(
-  node: unknown,
-  idx: number,
-  path: string,
-  jsonPointer: string,
-  paramSchema: JsonSchema | undefined,
-): void {
-  if (typeof node !== "object" || node === null || Array.isArray(node)) {
-    throw new ManifestParseError(
-      `${path} must be an object node (${FILTER_COMPARISON_OPS.join(" | ")} | and | or)`,
-      idx,
-      jsonPointer,
-    );
-  }
-  const n = node as Record<string, unknown>;
-  const keys = Object.keys(n);
-  if (keys.length !== 1) {
-    throw new ManifestParseError(
-      `${path} must have exactly one key (${FILTER_COMPARISON_OPS.join(" | ")} | and | or); got ${JSON.stringify(keys)}`,
-      idx,
-      jsonPointer,
-    );
-  }
-  const op = keys[0]!;
-  if (FILTER_COMPARISON_OP_SET.has(op)) {
-    const comparison = n[op];
-    if (typeof comparison !== "object" || comparison === null || Array.isArray(comparison)) {
-      throw new ManifestParseError(`${path}.${op} must be an object`, idx, `${jsonPointer}/${op}`);
-    }
-    const e = comparison as Record<string, unknown>;
-    rejectUnknownKeys(e, ["field", "value"], idx, `${jsonPointer}/${op}`);
-    if (typeof e["field"] !== "string" || (e["field"] as string).length === 0) {
-      throw new ManifestParseError(
-        `${path}.${op}.field is required (non-empty string)`,
-        idx,
-        `${jsonPointer}/${op}/field`,
-      );
-    }
-    if (!("value" in e)) {
-      throw new ManifestParseError(`${path}.${op}.value is required`, idx, `${jsonPointer}/${op}/value`);
-    }
-    if (hasCtxUserRefKey(e["value"])) {
-      if (op !== "eq" || !isCtxUserRef(e["value"])) {
-        throw new ManifestParseError(
-          `${path}.${op}.value must use the exact identity sentinel { "$ctx.user": "id" } with eq.`,
-          idx,
-          `${jsonPointer}/${op}/value`,
-          "VIEW_FILTER_CTX_USER_REF_INVALID",
-        );
-      }
-    } else if (isParamRef(e["value"])) {
-      validateParamRef(e["value"].$param, idx, `${jsonPointer}/${op}/value/$param`, paramSchema);
-    }
-    return;
-  }
-  if (op === "and" || op === "or") {
-    const arr = n[op];
-    if (!Array.isArray(arr) || arr.length === 0) {
-      throw new ManifestParseError(`${path}.${op} must be a non-empty array`, idx, `${jsonPointer}/${op}`);
-    }
-    for (let i = 0; i < arr.length; i++) {
-      validateFilterAst(arr[i], idx, `${path}.${op}[${i}]`, `${jsonPointer}/${op}/${i}`, paramSchema);
-    }
-    return;
-  }
-  throw new ManifestParseError(
-    `${path} operator must be one of ${FILTER_COMPARISON_OPS.join(", ")}, and, or; got '${op}'`,
-    idx,
-    jsonPointer,
-  );
-}
-
-function validateParamRef(
-  name: string,
-  idx: number,
-  pointer: string,
-  paramSchema: JsonSchema | undefined,
-): void {
-  if (name.length === 0) {
-    throw new ManifestParseError(
-      "filter param ref { $param: '' } is invalid; supply a non-empty param name.",
-      idx,
-      pointer,
-    );
-  }
-  if (!paramSchema) {
-    throw new ManifestParseError(
-      `filter references param '${name}' but View.spec.params is not declared. Add a params JSON Schema or use a literal value.`,
-      idx,
-      pointer,
-      "VIEW_FILTER_PARAM_REF_UNKNOWN",
-    );
-  }
-  const props = (paramSchema.properties ?? {}) as Record<string, unknown>;
-  if (!Object.prototype.hasOwnProperty.call(props, name)) {
-    throw new ManifestParseError(
-      `filter references unknown param '${name}'; declare it under View.spec.params.properties.`,
-      idx,
-      pointer,
-      "VIEW_FILTER_PARAM_REF_UNKNOWN",
-    );
-  }
-  const required = paramSchema.required ?? [];
-  if (!required.includes(name)) {
-    throw new ManifestParseError(
-      `filter references optional param '${name}'; every param-ref'd name must appear in View.spec.params.required.`,
-      idx,
-      pointer,
-      "VIEW_FILTER_PARAM_REF_NOT_REQUIRED",
-    );
   }
 }
 
@@ -1540,89 +1182,23 @@ function escapeJsonPointerSegment(value: string): string {
 }
 
 function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
-  const kind = h["kind"];
-  if (typeof kind !== "string") {
+  const keys = Object.keys(h);
+  const key = keys.length === 1 ? keys[0]! : undefined;
+  if (key !== "ref" && key !== "sql") {
     throw new ManifestParseError(
-      `Procedure.spec.handler.kind is required (one of ${[...V01_HANDLER_KINDS].join(", ")})`,
+      `Procedure.spec.handler must have exactly one key, \`ref\` or \`sql\`; got ${JSON.stringify(keys)}`,
       idx,
-      "/spec/handler/kind",
+      "/spec/handler",
     );
   }
-  if (!V01_HANDLER_KINDS.has(kind)) {
+  // For `sql` only the SQL compiler (compilePlan) reads the statements; here it just has to be present.
+  if (typeof h[key] !== "string" || (h[key] as string).trim().length === 0) {
     throw new ManifestParseError(
-      `Procedure.spec.handler.kind must be one of ${[...V01_HANDLER_KINDS].join(", ")}; got '${kind}'`,
+      key === "ref"
+        ? "Procedure.spec.handler.ref is required (non-empty registration key)"
+        : "Procedure.spec.handler.sql is required (one or more write statements)",
       idx,
-      "/spec/handler/kind",
-    );
-  }
-  if (kind === "ref") {
-    rejectUnknownKeys(h, ["kind", "ref"], idx, "/spec/handler");
-    if (typeof h["ref"] !== "string" || (h["ref"] as string).length === 0) {
-      throw new ManifestParseError(
-        "Procedure.spec.handler.ref is required (non-empty registration key)",
-        idx,
-        "/spec/handler/ref",
-      );
-    }
-    return;
-  }
-  rejectUnknownKeys(h, ["kind", "op", "schema", "match"], idx, "/spec/handler");
-  const op = h["op"];
-  if (typeof op !== "string" || !V01_BUILTIN_OPS.has(op as BuiltinOp)) {
-    throw new ManifestParseError(
-      `Procedure.spec.handler.op must be one of ${[...V01_BUILTIN_OPS].join(", ")}; got ${JSON.stringify(op)}`,
-      idx,
-      "/spec/handler/op",
-    );
-  }
-  if (typeof h["schema"] !== "string" || (h["schema"] as string).length === 0) {
-    throw new ManifestParseError(
-      "Procedure.spec.handler.schema is required (Schema metadata.name) when handler.kind is 'builtin'",
-      idx,
-      "/spec/handler/schema",
-    );
-  }
-  if ("match" in h) {
-    if (op !== "upsert") {
-      throw new ManifestParseError(
-        "Procedure.spec.handler.match is only valid when op is 'upsert'",
-        idx,
-        "/spec/handler/match",
-      );
-    }
-    const match = h["match"];
-    if (!Array.isArray(match) || match.length === 0) {
-      throw new ManifestParseError(
-        "Procedure.spec.handler.match must be a non-empty array of field names",
-        idx,
-        "/spec/handler/match",
-      );
-    }
-    const seen = new Set<string>();
-    for (let i = 0; i < match.length; i++) {
-      const field = match[i];
-      if (typeof field !== "string" || field.length === 0) {
-        throw new ManifestParseError(
-          `Procedure.spec.handler.match[${i}] must be a non-empty string`,
-          idx,
-          `/spec/handler/match/${i}`,
-        );
-      }
-      if (seen.has(field)) {
-        throw new ManifestParseError(
-          `Procedure.spec.handler.match contains duplicate field '${field}'`,
-          idx,
-          `/spec/handler/match/${i}`,
-        );
-      }
-      seen.add(field);
-    }
-  }
-  if ("ref" in h) {
-    throw new ManifestParseError(
-      "Procedure.spec.handler.ref is invalid when handler.kind is 'builtin' (ref + builtin are mutually exclusive)",
-      idx,
-      "/spec/handler/ref",
+      `/spec/handler/${key}`,
     );
   }
 }
@@ -1753,7 +1329,7 @@ function validateHttpSource(source: Record<string, unknown>, idx: number): void 
 function validateLifecycleSource(source: Record<string, unknown>, idx: number): void {
   rejectUnknownKeys(
     source,
-    ["kind", "schema", "on", "errorPolicy"],
+    ["kind", "schema", "on"],
     idx,
     "/spec/source",
   );
@@ -1782,23 +1358,6 @@ function validateLifecycleSource(source: Record<string, unknown>, idx: number): 
       );
     }
   }
-  if ("errorPolicy" in source) {
-    const ep = source["errorPolicy"];
-    if (typeof ep !== "string" || !V01_HOOK_ERROR_POLICIES.has(ep)) {
-      throw new ManifestParseError(
-        `Trigger.spec.source.errorPolicy must be 'abort' or 'continue'; got ${JSON.stringify(ep)}`,
-        idx,
-        "/spec/source/errorPolicy",
-      );
-    }
-    if (ep === "abort" && (on as ReadonlyArray<string>).some((h) => typeof h === "string" && h.startsWith("after_"))) {
-      throw new ManifestParseError(
-        "Trigger.spec.source.errorPolicy: 'abort' is invalid when any after_* hook is in `on` — after_* runs after the response is sent, so abort cannot reach the caller. Move after_* hooks to a separate trigger, or use 'continue'.",
-        idx,
-        "/spec/source/errorPolicy",
-      );
-    }
-  }
 }
 
 function validateMcpSource(source: Record<string, unknown>, idx: number): void {
@@ -1816,9 +1375,8 @@ function validateMcpSource(source: Record<string, unknown>, idx: number): void {
 function validateScheduleSource(source: Record<string, unknown>, idx: number): void {
   rejectUnknownKeys(source, ["kind", "cron", "enabled"], idx, "/spec/source");
   const cron = source["cron"];
-  // The Cloudflare five-field subset. Its weekday numbers are 1=Sunday
-  // through 7=Saturday, unlike Unix cron's 0=Sunday.
-  const bounds = [[0, 59], [0, 23], [1, 31], [1, 12], [1, 7]] as const;
+  // Five-field POSIX cron in UTC: weekday 0 = Sunday through 6.
+  const bounds = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 6]] as const;
   const fields = typeof cron === "string" ? cron.split(" ") : [];
   const valid = fields.length === 5 && fields.every((field, index) => {
     const [min, max] = bounds[index]!;
@@ -1832,7 +1390,7 @@ function validateScheduleSource(source: Record<string, unknown>, idx: number): v
     });
   });
   if (!valid) throw new ManifestParseError(
-    "Trigger.spec.source.cron must be a five-field Cloudflare UTC cron expression (minute hour day month weekday, 1=Sunday)",
+    "Trigger.spec.source.cron must be a five-field POSIX UTC cron expression (minute hour day month weekday, 0=Sunday)",
     idx, "/spec/source/cron",
   );
   if (source["enabled"] !== undefined && typeof source["enabled"] !== "boolean") {
@@ -1874,5 +1432,3 @@ function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
   return m;
 }
 
-
-export type { FilterAst };

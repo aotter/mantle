@@ -4,7 +4,7 @@ import type { SchemaManifest } from "../../src/spec/domain/model/ManifestGrammar
 import { parseManifests, validateManifests } from "./parse.js";
 
 function atom(kind: string, name: string, spec: string): string {
-  return `apiVersion: cms.mantle.aotter.net/v1
+  return `apiVersion: cms.mantle.aotter.net/v2
 kind: ${kind}
 metadata: { name: ${name} }
 spec:
@@ -75,7 +75,7 @@ describe("Schema uiSchema.nav", () => {
     ["Procedure uiSchema.nav", atom("Procedure", "place-order", `  input: { type: object }
   uiSchema: { nav: { standalone: true } }
   output: { type: object }
-  handler: { kind: ref, ref: placeOrder }`), "uiSchema.nav"],
+  handler: { ref: placeOrder }`), "uiSchema.nav"],
     ["parentField without standalone", projects("uiSchema:\n    nav: { parentField: organizationId }"),
       "parentField requires nav.standalone: true"],
     ["parentField when standalone is false",

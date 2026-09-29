@@ -10,7 +10,7 @@
  * `bestMatch` runs Levenshtein edit distance against a candidate list
  * and returns the closest match within distance < 3. Used for "did you
  * mean?" suggestions in `TRIGGER_TARGET_PROCEDURE_UNKNOWN`,
- * `VIEW_FROM_UNKNOWN_SCHEMA`, etc.
+ * `LIFECYCLE_SCHEMA_UNKNOWN`, etc.
  */
 /** Per-manifest source location surfaced by the CLI loader. */
 export interface ManifestSourceLocation {

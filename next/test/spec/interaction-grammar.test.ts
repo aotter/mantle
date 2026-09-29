@@ -10,7 +10,7 @@ import { parseManifests, validateManifests } from "./parse.js";
 
 /** ADR-0029 D4: `x-mantle-ref` object form and `Procedure.spec.target`. */
 
-const apiVersion = "cms.mantle.aotter.net/v1" as const;
+const apiVersion = "cms.mantle.aotter.net/v2" as const;
 
 function requisitions(): SchemaManifest {
   return {
@@ -46,7 +46,7 @@ function review(spec: Partial<ProcedureManifest["spec"]> = {}): ProcedureManifes
         required: ["requisitionId", "expectedVersion"],
       },
       output: { type: "object" },
-      handler: { kind: "ref", ref: "review" },
+      handler: { ref: "review" },
       target: { schema: "requisitions", id: "requisitionId", version: "expectedVersion" },
       ...spec,
     } as ProcedureManifest["spec"],
@@ -136,7 +136,6 @@ describe("Procedure.spec.target", () => {
     [{ target: { schema: "nope", id: "requisitionId" } }, "/spec/target/schema"],
     [{ target: { schema: "requisitions", id: "decision" } }, "/spec/target/id"],
     [{ target: { schema: "requisitions", id: "requisitionId", version: "decision" } }, "/spec/target/version"],
-    [{ handler: { kind: "builtin", op: "update", schema: "requisitions" } }, "/spec/target"],
   ])("rejects %j", (spec, pointer) => {
     const found = errors([requisitions(), review(spec as Partial<ProcedureManifest["spec"]>)]);
     expect(found).toEqual(expect.arrayContaining([expect.objectContaining({
@@ -154,7 +153,7 @@ metadata: { name: review }
 spec:
   input: { type: object }
   output: { type: object }
-  handler: { kind: ref, ref: review }
+  handler: { ref: review }
   target: ${JSON.stringify(target)}
 `;
       const { diagnostics } = parseManifests(doc);

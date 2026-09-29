@@ -4,7 +4,7 @@ import {
   sourceLocationAt,
 } from "../../src/spec/domain/service/ManifestParser.js";
 
-const schema = (name: string): string => `apiVersion: cms.mantle.aotter.net/v1
+const schema = (name: string): string => `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: ${name} }
 spec:
@@ -35,14 +35,13 @@ describe("parseManifestSources", () => {
     ]);
   });
 
-  it("materializes schema and ordering defaults once", () => {
-    const view = `apiVersion: cms.mantle.aotter.net/v1
+  it("materializes schema defaults once", () => {
+    const view = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: newest }
 spec:
   surface: public
-  from: articles
-  orderBy: [{ field: createdAt }]
+  sql: 'SELECT id FROM "articles"'
 `;
     const result = parseManifestSources({
       sources: [{ sourceId: "memory:defaults", text: `${schema("articles")}---\n${view}` }],
@@ -58,10 +57,6 @@ spec:
         localized: false,
         lifecycle: "publishing",
       },
-    });
-    expect(result.value.entries[1]?.manifest).toMatchObject({
-      kind: "View",
-      spec: { orderBy: [{ field: "createdAt", direction: "asc" }] },
     });
   });
 

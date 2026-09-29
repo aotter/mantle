@@ -1,7 +1,7 @@
 /**
  * K8s-style manifest envelope, scoped to the cms group of the mantle universe.
  *
- *   apiVersion: cms.mantle.aotter.net/v1
+ *   apiVersion: cms.mantle.aotter.net/v2
  *   kind: <Kind>
  *   metadata: { name }
  *   spec: { ... kind-specific ... }
@@ -14,7 +14,7 @@
  * Future syntax is added only with its implementation.
  */
 
-export const API_VERSION = "cms.mantle.aotter.net/v1" as const;
+export const API_VERSION = "cms.mantle.aotter.net/v2" as const;
 export type ApiVersion = typeof API_VERSION;
 
 /** Media-shaped `x-mcp-hint` values — the subset marking a field as
@@ -230,8 +230,9 @@ export interface SchemaManifestSpec {
   readonly lifecycle?: LifecycleMode;
   /** Logical expiry policy. Physical removal requires an explicit sweep. */
   readonly ttl?: { readonly field: string; readonly expireAfterSeconds: number };
-  /** Caller identity scope for Store operations. The field must be required and indexed first. */
-  readonly scope?: Readonly<Record<string, "$ctx.user.id">>;
+  /** Caller identity scope for Store operations: one field bound to `auth.uid()`.
+   *  The field must be required and indexed first. */
+  readonly scope?: Readonly<Record<string, "auth.uid()">>;
 }
 
 export interface TranslatesBinding {
@@ -259,16 +260,6 @@ export interface ViewCachePolicy {
 export const VIEW_SURFACES = ["public", "staff", "internal"] as const;
 export type ViewSurface = (typeof VIEW_SURFACES)[number];
 
-/** A named Store select. Values may use `$input.<name>`, `$ctx.user.id`,
- * `$now`, or `{ $literal: string }`; identifiers remain Schema-validated. */
-export interface ViewSelectSpec {
-  readonly from: string;
-  readonly columns?: readonly string[];
-  readonly where?: Readonly<Record<string, unknown>>;
-  readonly orderBy?: Readonly<Record<string, "asc" | "desc">>;
-  readonly limit?: number;
-}
-
 export interface ViewManifestSpec {
   /** Human-readable label for the admin UI's report sidebar / report
    *  page (#443). Same string-or-locale-map `LocalizedText` shape as
@@ -285,14 +276,10 @@ export interface ViewManifestSpec {
    *  Views. v0.1 supports `uiSchema.list.columns`, `searchFields`, and
    *  `filterFields`; public REST and MCP semantics stay unchanged. */
   readonly uiSchema?: Record<string, unknown>;
-  /** Legacy declarative source Schema name (bare; no namespace).
-   *  Exactly one of `select`, `from` or `sql` is required. */
-  readonly from?: string;
-  /** Declarative relational query executed through Store. */
-  readonly select?: ViewSelectSpec;
-  /** A single read-only SQLite SELECT over Schema logical tables.
-   *  Named `:params` are declared by `params` and bound by the runtime. */
-  readonly sql?: string;
+  /** One read-only `SELECT` over declared Schemas (ADR-0034). It reads the
+   *  declared `input` as `input.<name>` and the caller as `auth.uid()` /
+   *  `auth.role()`; the CLI compiles it to the plan's IR. */
+  readonly sql: string;
   /** Adapter exposure policy.
    *  `"public"` auto-mounts at the public
    *  `GET /api/views/<name>` (v0.1 default; `requires` may still gate
@@ -304,7 +291,7 @@ export interface ViewManifestSpec {
    *  adapter and is callable only through `runtime.store.as(ctx).view()`. */
   readonly surface: ViewSurface;
   /** Optional anonymous REST response-cache policy. Validation limits this
-   *  to caller-independent public declarative Views over publishing Schemas. */
+   *  to public Views that read no caller and no TTL or operational Schema. */
   readonly cache?: ViewCachePolicy;
   /** Auth gate. Identical shape to `ProcedureManifestSpec.requires.auth`.
    *  When absent the View is public — `ExecuteViewUseCase` skips the
@@ -313,104 +300,15 @@ export interface ViewManifestSpec {
    *  vocabulary: `ctx.user`, `ctx.staff`, `ctx.auth`, and
    *  `ctx.auth.scope`; an optional guard names one consumer Procedure. */
   readonly requires?: AuthorizationRequirements;
-  /** Filter AST. v0.1 grammar: comparison ops plus and/or. Comparison
-   *  values may be literals, `{ $param: <name> }`, or the identity-bound
-   *  `{ "$ctx.user": "id" }` sentinel. */
-  readonly filter?: FilterAst;
-  /** Projection. */
-  readonly fields?: readonly string[];
-  /** Order. */
-  readonly orderBy?: ReadonlyArray<{ readonly field: string; readonly direction?: "asc" | "desc" }>;
-  /** Server-enforced cap on rows returned per call. The public REST
-   *  surface accepts `?show=<n>`; the runtime trims to `min(show, limit)`.
-   *  Defaults to a runtime-internal value (50) when absent. */
-  readonly limit?: number;
-  /** Caller-supplied parameter shape for the public REST surface
-   *  (`GET /api/views/<name>`). MUST be `type: "object"` with declared
-   *  `properties`. Reserved names (`page`, `show`, `cursor`) are rejected
-   *  by the parser since the runtime owns those for pagination. */
-  readonly params?: JsonSchema;
+  /** Caller-supplied parameters, read in `sql` as `input.<name>`. MUST be
+   *  `type: "object"` with declared `properties`. `limit` and `cursor` are
+   *  reserved: the runtime owns them for pagination. */
+  readonly input?: JsonSchema;
 }
 
-/** v0.1 View filter comparison operators. */
-export const FILTER_COMPARISON_OPS = ["eq", "gt", "gte", "lt", "lte"] as const;
-export type FilterComparisonOp = (typeof FILTER_COMPARISON_OPS)[number];
-
-/** v0.1 filter AST: comparisons plus `and` / `or`. */
-export type FilterAst = FilterComparison | FilterAnd | FilterOr;
-export type FilterComparison = FilterEq | FilterGt | FilterGte | FilterLt | FilterLte;
-interface FilterComparisonNode {
-  readonly field: string;
-  /** Comparison value. Either a literal, a request `ParamRef`, or the
-   *  site-local identity `CtxUserRef`. */
-  readonly value: unknown;
-}
-export interface FilterEq {
-  readonly eq: FilterComparisonNode;
-}
-export interface FilterGt {
-  readonly gt: FilterComparisonNode;
-}
-export interface FilterGte {
-  readonly gte: FilterComparisonNode;
-}
-export interface FilterLt {
-  readonly lt: FilterComparisonNode;
-}
-export interface FilterLte {
-  readonly lte: FilterComparisonNode;
-}
-
-/** Sentinel object form for filter values that pull from caller-supplied
- *  params at request time. */
-export interface ParamRef {
-  readonly $param: string;
-}
-
-export function isParamRef(v: unknown): v is ParamRef {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    !Array.isArray(v) &&
-    typeof (v as Record<string, unknown>)["$param"] === "string"
-  );
-}
-
-/** Site-local Better Auth user id. Deliberately closed to `id`; provider
- *  claims and Platform identities do not belong in View filters. */
-export interface CtxUserRef {
-  readonly "$ctx.user": "id";
-}
-
-export function hasCtxUserRefKey(v: unknown): v is Record<"$ctx.user", unknown> {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    !Array.isArray(v) &&
-    Object.prototype.hasOwnProperty.call(v, "$ctx.user")
-  );
-}
-
-export function isCtxUserRef(v: unknown): v is CtxUserRef {
-  return (
-    hasCtxUserRefKey(v) &&
-    Object.keys(v).length === 1 &&
-    v["$ctx.user"] === "id"
-  );
-}
-
-/** Reserved query-string names on the public View REST surface
- *  (`/api/views/<name>?...`). The runtime owns these for pagination; a
- *  View manifest that declares `params.<name>` for any of them is
- *  rejected at parse time (`VIEW_PARAMS_RESERVED_NAME`). */
-export const VIEW_PARAMS_RESERVED = ["page", "show"] as const;
-export type ViewParamReserved = (typeof VIEW_PARAMS_RESERVED)[number];
-export interface FilterAnd {
-  readonly and: readonly FilterAst[];
-}
-export interface FilterOr {
-  readonly or: readonly FilterAst[];
-}
+/** Reserved query-string names on the View REST surface. A View `input` may
+ *  not declare them (`VIEW_INPUT_RESERVED_NAME`). */
+export const VIEW_INPUT_RESERVED = ["limit", "cursor"] as const;
 
 /* ─── Procedure ─── */
 
@@ -439,19 +337,18 @@ export interface ProcedureManifestSpec {
   readonly uiSchema?: Record<string, unknown>;
   /** JSON Schema for the response body. */
   readonly output: JsonSchema;
-  /** Handler binding. v0.1.0 ships `kind: "ref"` (consumer supplies
-   *  a handler map) and `kind: "builtin"` (5-op CRUD shortcut over
-   *  the entry-writer chokepoint). */
+  /** Handler binding: `{ ref }` (consumer supplies a handler map) or
+   *  `{ sql }` (write statements, compiled to the plan's IR; ADR-0034). */
   readonly handler: HandlerBinding;
   /** MCP tool annotations the author declares because Core cannot infer
    *  them for a `ref` handler (#972). Emitted verbatim on the tool;
    *  `idempotentHint` is inferred from an `x-mcp-hint: idempotency-key`
-   *  input and is not declarable. A `readOnlyHint: true` on a writing
-   *  builtin handler is rejected at validation. */
+   *  input and is not declarable. A `readOnlyHint: true` on a `sql`
+   *  handler, which always writes, is rejected at validation. */
   readonly mcp?: ProcedureMcpAnnotations;
-  /** The entity a `ref` handler mutates and whose version it locks
+  /** The entity the handler mutates and whose version it locks
    *  (ADR-0029). Needed only for entity-bound interactions and automatic
-   *  version binding; builtin handlers derive it and may not declare it. */
+   *  version binding. */
   readonly target?: ProcedureTarget;
 }
 
@@ -472,29 +369,17 @@ export interface ProcedureMcpAnnotations {
 }
 export const PROCEDURE_MCP_ANNOTATION_KEYS = ["readOnlyHint", "destructiveHint", "openWorldHint"] as const;
 
-export type HandlerBinding = HandlerRefBinding | HandlerBuiltinBinding;
+export type HandlerBinding = HandlerRefBinding | HandlerSqlBinding;
 export interface HandlerRefBinding {
-  readonly kind: "ref";
   /** Opaque registration key (NOT a path). The consumer passes a matching
    *  key in the runtime/Worker `handlers` map. */
   readonly ref: string;
 }
 
-/** Shipped v0.1 builtin op vocabulary. `archive` is runtime-wired but
- *  meaningful only for a lifecycle that can transition to archived.
- *  New entries require an explicit grammar-revise round. */
-export const BUILTIN_OPS = ["create", "update", "upsert", "delete", "archive"] as const;
-export type BuiltinOp = (typeof BUILTIN_OPS)[number];
-
-export interface HandlerBuiltinBinding {
-  readonly kind: "builtin";
-  /** Storage op. */
-  readonly op: BuiltinOp;
-  /** Target Schema name (`Schema.metadata.name`). The op writes to
-   *  this collection. */
-  readonly schema: string;
-  /** Ordered composite unique-index field names for matched upsert (valid only when `op: upsert`). */
-  readonly match?: readonly string[];
+/** One or more write statements (`INSERT`, `UPDATE`, `DELETE`), applied as
+ *  one batch. Reads `input.<name>`, `auth.uid()`, `auth.role()`, `now()`. */
+export interface HandlerSqlBinding {
+  readonly sql: string;
 }
 
 /** Closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare
@@ -570,7 +455,7 @@ export type TriggerSource =
   | McpTriggerSource
   | ScheduleTriggerSource;
 
-/** Cloudflare Cron Trigger expression. Registration remains host-owned. */
+/** Five-field POSIX cron expression in UTC (weekday 0 = Sunday). Registration remains host-owned. */
 export interface ScheduleTriggerSource {
   readonly kind: "schedule";
   readonly cron: string;
@@ -600,17 +485,12 @@ export const LIFECYCLE_HOOKS = [
 ] as const;
 export type LifecycleHook = (typeof LIFECYCLE_HOOKS)[number];
 
-export type HookErrorPolicy = "abort" | "continue";
-
 export interface LifecycleTriggerSource {
   readonly kind: "lifecycle";
   /** Schema this Trigger watches (`Schema.metadata.name`). */
   readonly schema: string;
   /** Hooks bound by this Trigger. Non-empty. */
   readonly on: readonly LifecycleHook[];
-  /** Override the per-phase default. before_* defaults to "abort";
-   *  after_* defaults to "continue". */
-  readonly errorPolicy?: HookErrorPolicy;
 }
 
 /** Surfaces an MCP-source Trigger can be bound to. `staff` ⇒

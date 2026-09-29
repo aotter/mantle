@@ -1,0 +1,6 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: missing-target }
+spec:
+  source: { kind: http, method: POST, path: /outside-core }
+  target: { procedure: unknown-procedure }

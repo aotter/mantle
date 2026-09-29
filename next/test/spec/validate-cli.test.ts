@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { parseArgs } from "../../src/spec/infrastructure/cli/ValidateCommand.js";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import { parseArgs, run } from "../../src/spec/infrastructure/cli/ValidateCommand.js";
 
 /**
  * `mantle validate` CLI argument parsing — the surface that maps user
@@ -44,5 +47,33 @@ describe("parseArgs — backwards-compatible flags", () => {
 
   it("rejects unknown flags", () => {
     expect(() => parseArgs(["--bogus"])).toThrowError(/Unknown argument/);
+  });
+});
+
+describe("run — SQL", () => {
+  it("compiles View and Procedure SQL, so a refusal fails validate with its SQL code", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mantle-validate-"));
+    const view = (sql: string) => `apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: notes }
+spec: { title: Notes, schema: { type: object, properties: { body: { type: string } } } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: v }
+spec: { surface: staff, sql: "${sql}" }
+`;
+    const out: string[] = [];
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => (out.push(String(chunk)), true));
+    try {
+      await writeFile(join(dir, "ok.yaml"), view("SELECT id FROM notes"));
+      expect(await run(["--manifests", dir, "--json", "--no-source"])).toBe(0);
+      await writeFile(join(dir, "ok.yaml"), view("SELECT id FROM notes OFFSET 1"));
+      out.length = 0;
+      expect(await run(["--manifests", dir, "--json", "--no-source"])).toBe(1);
+      expect(JSON.parse(out.join("")).diagnostics[0]).toMatchObject({ code: "SQL_UNSUPPORTED" });
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
