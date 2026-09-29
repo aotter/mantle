@@ -16,6 +16,8 @@ export interface MantleBootReport {
 }
 
 export interface MantleRuntime {
+  /** The sealed plan this runtime booted: surfaces read Views, Triggers and Procedures from it. */
+  readonly plan: RuntimePlan;
   readonly store: MantleStore;
   /** The one path for every Invocation: auth, guard, input, handler, output. */
   invokeProcedure(invocation: Invocation): Promise<unknown>;
