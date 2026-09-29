@@ -1,47 +1,8 @@
 name: Cloudflare benchmark
 
+# ponytail: manual only; run `gh workflow run cloudflare-bench.yml --ref <branch>` when perf matters.
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - package.json
-      - pnpm-lock.yaml
-      - packages/adapters/cloudflare/**
-      - packages/mantle-auth/**
-      - packages/mantle-mcp/**
-      - packages/mantle-spec/src/**
-      - packages/mantle-runtime/src/**
-      - packages/mantle-admin/src/**
-      - packages/mantle-web/src/**
-      - packages/mantle-spec/package.json
-      - packages/mantle-runtime/package.json
-      - packages/mantle-admin/package.json
-      - packages/mantle-web/package.json
-      - pnpm-workspace.yaml
-      - scripts/run-wrangler-performance.mjs
-      - scripts/run-wrangler-parity.mjs
-      - .github/workflows/cloudflare-bench.yml
-  push:
-    branches: [main, develop]
-    paths:
-      - package.json
-      - pnpm-lock.yaml
-      - packages/adapters/cloudflare/**
-      - packages/mantle-auth/**
-      - packages/mantle-mcp/**
-      - packages/mantle-spec/src/**
-      - packages/mantle-runtime/src/**
-      - packages/mantle-admin/src/**
-      - packages/mantle-web/src/**
-      - packages/mantle-spec/package.json
-      - packages/mantle-runtime/package.json
-      - packages/mantle-admin/package.json
-      - packages/mantle-web/package.json
-      - pnpm-workspace.yaml
-      - scripts/run-wrangler-performance.mjs
-      - scripts/run-wrangler-parity.mjs
-      - .github/workflows/cloudflare-bench.yml
 
 concurrency:
   group: cloudflare-bench-${{ github.workflow }}-${{ github.ref }}

@@ -1,10 +1,11 @@
 name: CI
 
+# ponytail: PR-only. The merge ref was already tested; push runs repeated it.
+# Drafts skip until ready_for_review — agent PRs iterate in draft.
 on:
-  push:
-    branches: [main, develop]
   pull_request:
     branches: [main, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 # Cancel superseded runs on the same ref. PR pushes that arrive in
 # rapid succession only spend CI on the latest commit.
@@ -17,9 +18,10 @@ permissions:
 
 jobs:
   # Deterministic checks required before merge. Platform performance sampling
-  # runs separately in cloudflare-bench.yml for relevant paths.
+  # runs on demand in cloudflare-bench.yml.
   lint:
     name: Typecheck + tests
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
