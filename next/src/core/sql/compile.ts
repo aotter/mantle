@@ -69,6 +69,8 @@ export function bindValues(binds: readonly BindSpec[], ctx: BindContext, extra: 
     switch (b.k) {
       case "uid": return ctx.uid;
       case "now": return ctx.now;
+      case "cutoff": return ctx.now - b.seconds * 1_000_000;
+      case "const": return b.value;
       case "role": return ctx.role ?? null;
       case "input": return encodeInput(b.type, input[b.name]);
       case "version": return extra.version;

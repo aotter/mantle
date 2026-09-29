@@ -79,10 +79,9 @@ function desired(name: string, s: StorageSchema): Desired {
     { name: "updated_at", type: "INTEGER", native: true },
     { name: "author_id", type: "TEXT", native: true },
     ...(s.scope ? [{ name: s.scope, type: "TEXT", native: true }] : []),
-    ...(s.ttl ? [{ name: s.ttl, type: "INTEGER", native: true }] : []),
     ...(s.publishing ? [{ name: "status", type: "TEXT", native: true }] : []),
-    // the scope and TTL fields are declared properties too, but they are the native columns above
-    ...Object.entries(s.fields).filter(([f]) => f !== s.scope && f !== s.ttl).flatMap(([f, ty]): Column[] =>
+    // the scope field is a declared property too, but it is the native column above
+    ...Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, ty]): Column[] =>
       ty === "geo" ? [{ name: `${f}_lat`, type: "REAL", native: false }, { name: `${f}_lng`, type: "REAL", native: false }] : [{ name: f, type: colType(ty), native: false }]),
   ];
   const indexes = [

@@ -11,7 +11,7 @@ type Schemas = Record<string, SchemaDef>;
 
 export type Arg = { input: string; type: string } | { const: number };
 export type BindSpec =
-  | { k: 'uid' } | { k: 'now' } | { k: 'role' }
+  | { k: 'uid' } | { k: 'now' } | { k: 'role' } | { k: 'cutoff'; seconds: number } | { k: 'const'; value: unknown }
   | { k: 'input'; name: string; type: string }
   | { k: 'box'; which: 'minLat' | 'maxLat' | 'minLng' | 'maxLng'; lat: Arg; lng: Arg; meters: number }
   | { k: 'version' }
@@ -143,7 +143,7 @@ function visible(s: SchemaDef, a: string, c: C): N | undefined {
   if (c.unsafeNoVisibility) return undefined;
   return and(
     mode !== 'trusted' && !!s.scope && op('=', col(a, s.scope), param$(c, { k: 'uid' })),
-    !!s.ttl && or({ NullTest: { arg: col(a, s.ttl), nulltesttype: 'IS_NULL' } }, op('>', col(a, s.ttl), param$(c, { k: 'now' }))),
+    !!s.ttl && or({ NullTest: { arg: col(a, s.ttl), nulltesttype: 'IS_NULL' } }, op('>', col(a, s.ttl), param$(c, { k: 'cutoff', seconds: s.ttlSeconds! }))),
     mode === 'public' && s.publishing && op('=', col(a, 'status'), { A_Const: { sval: { sval: 'published' } } }),
   );
 }
