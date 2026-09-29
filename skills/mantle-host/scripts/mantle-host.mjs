@@ -4,7 +4,7 @@
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/host/main.mjs
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 import { readFile as readFile4, realpath as realpath4, stat } from "node:fs/promises";
 import { resolve as resolve2 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -797,7 +797,7 @@ function grantUrl(raw, path, { origin, query = false } = {}) {
   } catch {
     throw fail("grant_url_invalid");
   }
-  if (!cloudOrigins.includes(url.origin) && !loopback(url) || url.username || url.password || url.hash || url.pathname !== path || !query && url.search || origin && url.origin !== origin) throw fail("grant_url_invalid", origin && url.origin !== origin ? "grant URLs name different origins" : void 0);
+  if (!cloudOrigins.includes(url.origin) && !loopback(url) || url.username || url.password || url.hash || path !== void 0 && url.pathname !== path || !query && url.search || origin && url.origin !== origin) throw fail("grant_url_invalid", origin && url.origin !== origin ? "grant URLs name different origins" : void 0);
   return url;
 }
 function rememberCredentials(value, output, key = "", depth = 0) {
@@ -3890,12 +3890,12 @@ function yamlSourcesFrom(files) {
   return sources.sort((a2, b3) => Buffer.compare(Buffer.from(a2.sourceId), Buffer.from(b3.sourceId)));
 }
 function closedHandlers(result) {
-  const open = new CloudRuleError(400, "backend_handlers_not_closed", "the handler bundle must have no imports or dynamic imports");
-  if (result.outputFiles.length !== 1 || Object.values(result.metafile.outputs).some((output) => output.imports.length) || Object.values(result.metafile.inputs).some((input) => input.imports.some((item) => item.kind === "dynamic-import"))) throw open;
+  const open2 = new CloudRuleError(400, "backend_handlers_not_closed", "the handler bundle must have no imports or dynamic imports");
+  if (result.outputFiles.length !== 1 || Object.values(result.metafile.outputs).some((output) => output.imports.length) || Object.values(result.metafile.inputs).some((input) => input.imports.some((item) => item.kind === "dynamic-import"))) throw open2;
   try {
     assertClosedModule(result.outputFiles[0].text);
   } catch {
-    throw open;
+    throw open2;
   }
   return result.outputFiles[0].text;
 }
@@ -4483,7 +4483,7 @@ function saveFailureNext(ctx, code) {
     case "symlink_unsupported":
       return fix("Replace the listed symlinks with regular files; symlinks could reach outside the project.");
     case "source_archive_secret_path":
-      return fix("Remove the listed files from Git (git rm --cached, then ignore them) or pass --omit <path> for each; an omission is recorded and shown to the deployer. Cloud rejects secret paths instead of stripping them.");
+      return fix("These files are refused by name (.env*, .dev.vars*, .npmrc, *.pem, *.key and similar), not by content, even when harmless. Untrack them (git rm --cached, then ignore them) or pass --omit <path> for each; an omission is recorded and shown to the deployer. Cloud rejects them instead of stripping.");
     case "source_archive_expansion_limit":
       return fix("Pass --omit <path> for large tracked files that are not source; each omission is recorded and shown to the deployer.");
     case "host_state_tracked":
@@ -4847,16 +4847,18 @@ async function resumeStatic(ctx, pending, raw) {
     verified: { contentHash: pending.static.contentHash, sourceHash: pending.static.sourceHash, contractHash: pending.contractHash },
     nextAction: {
       kind: "mcp",
-      tool: "cloud-backend-preview-grant",
-      arguments: { projectId: entry.projectId, candidateId: pending.backend.candidateId },
-      reason: `Saved, not published. Test the paired preview through the entrance this tool returns; to publish, a deployer runs \`${ctx.line("deploy", versionId, ...ctx.targetArgs)}\`.`
+      tool: "cloud-paired-review",
+      arguments: { projectId: entry.projectId, staticUploadId: id },
+      command: ctx.line("deploy", versionId, ...ctx.targetArgs, "--review", "-"),
+      reason: "Saved. Continue to publish with this review unless the user asked to save only; then stop here."
     }
   });
   return 0;
 }
 
 // src/host/release.mjs
-import { randomUUID as randomUUID3 } from "node:crypto";
+import { createHash as createHash4, randomUUID as randomUUID3 } from "node:crypto";
+import { readdir as readdir2 } from "node:fs/promises";
 var versionRule = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 function nativeNext(entry, verb) {
   if (entry.runtime === "cloudflare") {
@@ -4971,6 +4973,7 @@ async function deploy(ctx, positional, flags, readInput) {
   const { entry } = ctx.link;
   const version = parseVersion(positional);
   const again = [...flags["dry-run"] ? ["--dry-run"] : []];
+  if (flags.release) return await released(ctx, version, flags, readInput);
   if (!flags.review) {
     ctx.emit({ ok: true, stage: "deploy", state: "review-needed", versionId: version.versionId, commit: null, nextAction: {
       kind: "mcp",
@@ -5041,19 +5044,72 @@ async function deploy(ctx, positional, flags, readInput) {
     commit,
     review: summary,
     notes,
-    nextAction: {
+    nextAction: publishNext(ctx, version, { operationId, expectedActiveRevision: active }, "Publish now (Cloud checks deploy access). Repeat the identical call while the result is not serving.")
+  });
+  return 0;
+}
+var publishNext = (ctx, version, { operationId, expectedActiveRevision }, reason) => ({
+  kind: "mcp",
+  tool: "cloud-publish-paired-release",
+  arguments: {
+    projectId: ctx.link.entry.projectId,
+    candidateId: version.candidateId,
+    staticUploadId: version.staticUploadId,
+    expectedActiveRevision,
+    operationId,
+    ...expectedActiveRevision === null ? { slug: ctx.link.entry.slug } : {}
+  },
+  command: ctx.line("deploy", version.versionId, ...ctx.targetArgs, "--release", "-"),
+  reason
+});
+async function released(ctx, version, flags, readInput) {
+  if (flags.release !== "-") throw fail("usage", "pass --release - and pipe the cloud_publish_paired_release result on stdin");
+  const saved = ctx.targetState.deploys[version.versionId];
+  if (!saved?.operationId) throw fail("nothing_to_publish", "run deploy for this versionId first");
+  const raw = await readInput(), release = unwrapResult(raw, "release")?.release;
+  const problem = release ? null : unwrapResult(raw, "error");
+  const wait = (reason) => ctx.emit({ ok: true, stage: "deploy", state: "publishing", versionId: version.versionId, commit: null, nextAction: { ...publishNext(ctx, version, saved, reason), kind: "wait" } });
+  if (problem?.error === "media_domain_not_ready" && problem.retryable) wait(`The site address is not ready. Wait ${Number(problem.retryAfter) || 30} seconds, then repeat this identical call.`);
+  else if (problem) throw fail(/^[a-z0-9_]{1,100}$/.test(problem.error) ? problem.error : "publish_failed");
+  else if (!release) throw fail("release_invalid", "pipe the cloud_publish_paired_release result");
+  else if (release.active && release.serving && /^https:\/\/[^\s]+$/.test(release.url ?? "")) {
+    ctx.emit({ ok: true, stage: "deploy", state: "serving", versionId: version.versionId, commit: null, url: release.url, nextAction: null });
+  } else wait("Not serving yet. Repeat this identical call (same operation); it finishes the publish. Do not report a URL until it is serving.");
+  return 0;
+}
+async function open(ctx, flags, readInput) {
+  if (!uuid.test(flags.project ?? "")) throw fail("usage", "pass --project <id>");
+  if ((await readdir2(ctx.project)).length) throw fail("directory_not_empty", "open restores into an empty directory only");
+  if (flags.discover !== "-") {
+    ctx.emit({ ok: true, stage: "open", state: "discover-needed", commit: null, nextAction: {
       kind: "mcp",
-      tool: "cloud-publish-paired-release",
-      arguments: {
-        projectId: entry.projectId,
-        candidateId: version.candidateId,
-        staticUploadId: version.staticUploadId,
-        expectedActiveRevision: active,
-        operationId,
-        ...active === null && review.live?.kind === "none" ? { slug: entry.slug } : {}
-      },
-      reason: "Show this review to the deployer and publish only after they confirm. Repeat the identical call while release.nextAction is retry_same_operation; report the site only after release.active and a live check."
-    }
+      tool: "cloud-static-source-discover",
+      arguments: { projectId: flags.project },
+      command: ctx.line("open", "--project", flags.project, "--discover", "-"),
+      reason: "Call the tool with these arguments (no staticUploadId: it returns the live source), then pipe its result to the command."
+    } });
+    return 0;
+  }
+  const found = unwrapResult(await readInput(), "downloadUrl");
+  if (!found || !hex64.test(found.sourceHash ?? "")) throw fail("discover_invalid", "pipe the cloud_static_source_discover result");
+  ctx.output.remember(found.downloadUrl);
+  const zip = await ctx.cloud.bytes(grantUrl(found.downloadUrl, void 0, { query: true }), { limit: sourceArchiveLimit, timeout: 12e4 });
+  if (createHash4("sha256").update(zip).digest("hex") !== found.sourceHash) throw fail("source_checksum_mismatch");
+  let count = 0, size = 0;
+  const files = unzipSync(zip, { filter: (file) => {
+    size += file.originalSize;
+    if (++count > sourceEntryLimit || size > sourceExpandedLimit || !safeRelative(file.name)) throw fail("source_archive_invalid", file.name);
+    return true;
+  } });
+  for (const [name2, bytes] of Object.entries(files)) await writeAtomic(ctx.project, name2, bytes);
+  ctx.emit({
+    ok: true,
+    stage: "open",
+    state: "restored",
+    commit: null,
+    verified: { contentHash: null, sourceHash: found.sourceHash, contractHash: null },
+    notes: [`${count} files`],
+    nextAction: { kind: "fix", reason: "Source restored. Edit it, then commit it with Git (save reads HEAD; git init first if needed) or use save --no-git. If .mantle/hosting.json is missing, run link." }
   });
   return 0;
 }
@@ -5116,6 +5172,8 @@ var usage = `${hostName} <command> [--target <name>] [--json]
   save    --resume [--grant - | --grant-file <path>]     continue with the piped Cloud MCP tool result
   status                                                 local state and the next step, no network
   deploy  <versionId> [--review -] [--dry-run]           review, then print the cloud-publish-paired-release call
+  deploy  <versionId> --release -                        read the publish result: the live URL, or repeat the same call
+  open    --project <id> [--discover -]                  restore the live source into an empty directory
   rollback [<versionId>] [--revision <hex>] [--deployment -]   print the cloud-rollback-project call
   version
 
@@ -5142,14 +5200,16 @@ var options = {
   config: { type: "string" },
   review: { type: "string" },
   "dry-run": { type: "boolean" },
+  release: { type: "string" },
+  discover: { type: "string" },
   deployment: { type: "string" },
   revision: { type: "string" },
   help: { type: "boolean" }
 };
-var verbs = /* @__PURE__ */ new Set(["link", "save", "status", "deploy", "rollback", "version"]);
+var verbs = /* @__PURE__ */ new Set(["link", "save", "status", "deploy", "rollback", "open", "version"]);
 var inputLimit = 8e6;
 var mcpToolName = (name2) => `${name2 === "member-project" || name2 === "member-organization" ? "query_view_" : ""}${name2.replaceAll("-", "_")}`;
-var mcpAction = (action) => action && action.kind === "mcp" ? {
+var mcpAction = (action) => action?.tool ? {
   ...action,
   ...action.tool ? { tool: mcpToolName(action.tool) } : {},
   ...action.requires ? { requires: action.requires.map((item) => ({ ...item, tool: mcpToolName(item.tool) })) } : {},
@@ -5207,7 +5267,18 @@ async function main(args, io = {}) {
       return 0;
     }
     ctx.project = await realpath4(resolve2(io.cwd ?? process.cwd()));
+    const scriptSha = await readFile4(scriptPath).then((bytes) => createHash5("sha256").update(bytes).digest("hex"), () => "unknown");
+    ctx.cloud = cloudClient({ fetch: io.fetch ?? globalThis.fetch, client: `${hostName}/${cliVersion} sha256=${scriptSha}` });
+    const readInput = async () => {
+      const bytes = await (io.stdin ?? readStdin)();
+      try {
+        return JSON.parse(decodeInput(bytes));
+      } catch {
+        throw fail("input_invalid_json", "pipe the Cloud MCP tool result as JSON");
+      }
+    };
     if (verb === "link") return await link(ctx, flags);
+    if (verb === "open") return await open(ctx, flags, readInput);
     ctx.link = pickTarget(await readLink(ctx.project), flags.target);
     ctx.target = ctx.link.target;
     ctx.targetArgs = ["--target", ctx.target];
@@ -5219,16 +5290,6 @@ async function main(args, io = {}) {
     ctx.state = await loadState(ctx.project);
     ctx.targetState = targetState(ctx.state, ctx.target);
     ctx.appRoot = await appRootOf(ctx.project, ctx.link.entry.root);
-    const scriptSha = await readFile4(scriptPath).then((bytes) => createHash4("sha256").update(bytes).digest("hex"), () => "unknown");
-    ctx.cloud = cloudClient({ fetch: io.fetch ?? globalThis.fetch, client: `${hostName}/${cliVersion} sha256=${scriptSha}` });
-    const readInput = async () => {
-      const bytes = await (io.stdin ?? readStdin)();
-      try {
-        return JSON.parse(decodeInput(bytes));
-      } catch {
-        throw fail("input_invalid_json", "pipe the Cloud MCP tool result as JSON");
-      }
-    };
     const readGrant = async () => {
       if (flags.grant !== void 0 && flags["grant-file"] !== void 0) throw fail("usage", "pass either --grant - or --grant-file");
       let bytes;
@@ -5270,7 +5331,7 @@ async function main(args, io = {}) {
     }
   } catch (error) {
     const code = error?.code && typeof error.code === "string" && /^[a-z0-9_]{1,100}$/.test(error.code) ? error.code : "local_error";
-    const nextAction = error?.nextAction ?? (verb === "save" || !ctx.link ? saveFailureNext(ctx, code) : { kind: "fix", reason: "Fix the reported problem and re-run." });
+    const nextAction = error?.nextAction ?? (verb === "save" || !ctx.link && verb !== "open" ? saveFailureNext(ctx, code) : { kind: "fix", reason: "Fix the reported problem and re-run." });
     ctx.emit(failureLine(stage, error, nextAction));
     return code === "usage" ? 2 : 1;
   }

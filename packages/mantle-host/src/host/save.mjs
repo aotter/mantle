@@ -76,7 +76,7 @@ export function saveFailureNext(ctx, code) {
     case 'head_changed': return { kind: 'run', command: ctx.line('save', ...ctx.targetArgs, '--restart'), reason: 'HEAD moved during this save. Start again from the new commit with a new operationId.' }
     case 'submodule_unsupported': return fix('Submodules are not uploaded. Vendor the listed paths or move them out of the app root.')
     case 'symlink_unsupported': return fix('Replace the listed symlinks with regular files; symlinks could reach outside the project.')
-    case 'source_archive_secret_path': return fix('Remove the listed files from Git (git rm --cached, then ignore them) or pass --omit <path> for each; an omission is recorded and shown to the deployer. Cloud rejects secret paths instead of stripping them.')
+    case 'source_archive_secret_path': return fix('These files are refused by name (.env*, .dev.vars*, .npmrc, *.pem, *.key and similar), not by content, even when harmless. Untrack them (git rm --cached, then ignore them) or pass --omit <path> for each; an omission is recorded and shown to the deployer. Cloud rejects them instead of stripping.')
     case 'source_archive_expansion_limit': return fix('Pass --omit <path> for large tracked files that are not source; each omission is recorded and shown to the deployer.')
     case 'host_state_tracked': return fix('Local mantle-host state is committed. Run git rm -r --cached .mantle/host, add .mantle/host/ to .gitignore and commit.')
     case 'source_archive_path_invalid': return fix('Rename the listed tracked file, or pass --omit <path> for it; the omission is recorded and shown to the deployer.')
@@ -344,7 +344,7 @@ async function resumeStatic(ctx, pending, raw) {
   await saveState(ctx.project, ctx.state)
   ctx.emit({ ok: true, stage: 'saved', state: 'paired', versionId, commit: commitOf(pending),
     verified: { contentHash: pending.static.contentHash, sourceHash: pending.static.sourceHash, contractHash: pending.contractHash },
-    nextAction: { kind: 'mcp', tool: 'cloud-backend-preview-grant', arguments: { projectId: entry.projectId, candidateId: pending.backend.candidateId },
-      reason: `Saved, not published. Test the paired preview through the entrance this tool returns; to publish, a deployer runs \`${ctx.line('deploy', versionId, ...ctx.targetArgs)}\`.` } })
+    nextAction: { kind: 'mcp', tool: 'cloud-paired-review', arguments: { projectId: entry.projectId, staticUploadId: id }, command: ctx.line('deploy', versionId, ...ctx.targetArgs, '--review', '-'),
+      reason: 'Saved. Continue to publish with this review unless the user asked to save only; then stop here.' } })
   return 0
 }
