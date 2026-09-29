@@ -13,7 +13,6 @@ next/src/testing/      → @aotter/mantle/testing    next/src/mcp/     → @aott
 next/src/cloudflare/   → @aotter/mantle/cloudflare next/src/web/     → @aotter/mantle/web
 next/src/bun/          → @aotter/mantle/bun        next/src/cli/     → bin: mantle
 next/src/vercel/       → @aotter/mantle/vercel
-next/src/indexeddb/    → @aotter/mantle/indexeddb
 ```
 
 `core` imports only `spec`; no folder imports `admin`, `web`, `auth` or a platform folder unless it is one of them. `check:boundaries` enforces this. The browser package, `@aotter/mantle-ui`, stays in `packages/mantle-ui` and absorbs `mantle-admin-ui` at the swap.
@@ -30,9 +29,9 @@ next/src/indexeddb/    → @aotter/mantle/indexeddb
 | Step | Output | Review focus |
 |---|---|---|
 | 0 | This scope map | Is the scope right? |
-| 1 | `next/src/spec`: v2 grammar types, parser, validator; example manifests as fixtures | The grammar |
+| 1 | `next/src/spec`: the manifest grammar with Store authored as SQL, `compilePlan` (SQL to IR, ADR-0034), the validator; example manifests as fixtures | The grammar and the SQL subset |
 | 2 | `next/src/core`: interfaces only (Store, StoreExecutor, Caller, Invocation, HandlerContext, MantleService, `createMantle`, surface signatures), plus the conformance suite as listed, unimplemented cases | **Architecture and method definitions: the main gate** |
-| 3 | Implementation against the contract: MemoryStoreExecutor, then SqliteStoreExecutor, then the ported drivers, auth and surfaces | PRs, not every line |
+| 3 | Implementation against the contract: SqliteStoreExecutor (the only executor, ADR-0034), then the ported drivers, auth and surfaces | PRs, not every line |
 | 4 | Delete the old packages, move `next/` to `packages/mantle`, fold `mantle-admin-ui` into `mantle-ui`, move the plugin's helper scripts, ship the `mantle-update` codemod | The swap |
 
 ## Package map
@@ -46,7 +45,7 @@ next/src/indexeddb/    → @aotter/mantle/indexeddb
 | `@aotter/mantle-cloudflare` (4.1k) | `next/src/cloudflare` | Port the bindings and driver; delete the Worker composition |
 | `@aotter/mantle-bun` (0.1k) | `next/src/bun` | Port the driver only; experimental |
 | `@aotter/mantle-vercel` (0.1k) | `next/src/vercel` | Port the driver only; experimental |
-| `@aotter/mantle-indexeddb` (0.7k) | `next/src/indexeddb` | Rewrite on MemoryStoreExecutor plus IndexedDB persistence |
+| `@aotter/mantle-indexeddb` (0.7k) | none | Delete: one SQLite executor, tested on workerd and local D1 (ADR-0034) |
 | `@aotter/mantle-auth` (2.4k) | `next/src/auth` | Port behind `CallerResolver` and `AdminIdentity` |
 | `@aotter/mantle-admin` (3.2k) | `next/src/admin` | Port into `createAdminSurface` |
 | `@aotter/mantle-mcp` (0.7k) | `next/src/mcp` | Port into `createMcpSurface` |
@@ -62,7 +61,7 @@ Only `next/src/spec` and `next/src/core` are built before the step 2 review. The
 
 | Action | Modules |
 |---|---|
-| Rewrite | `ManifestGrammar` (v2: handler `ref \| store`, View `select \| sql`, `input`, value references, POSIX cron, no `errorPolicy`), `ManifestParser` (1.9k), `ManifestGraphValidator` (1.5k) |
+| Rewrite | `ManifestGrammar` (Store authored as SQL: a View is one `SELECT`, a Procedure is write statements, `input`, POSIX cron, no `errorPolicy`), `ManifestParser` (1.9k), `ManifestGraphValidator` (1.5k); new `compilePlan` (SQL to IR with `libpg-query`, CLI only; the IR validator is plain JS the runtime shares, ADR-0034) |
 | Port | `kernel/diagnostic` (+ `conflict`), `LifecycleStateMachine` (+ `decideLifecycleWrite` from the parked `refactor/20260927-lifecycle-decision`), `EntryDataValidator`, `JsonSchemaToZod`, `LocaleCanonicalizer`, `SiteConfig`, `SiteDefaultsValidator`, `SchemaIndexChecker`, `SchemaAdminUiChecker`, `SchemaSearchChecker`, `CrossSchemaChecker`, `ManifestLinker`, `ManifestPartition`, `ManifestLocaleTrimmer`, `ManifestPathDiagnoser`, `McpToolNaming`, `StaffRoleHierarchy`, `MediaMimeAccept`, the Validate / EmitTypes / EmitOpenapi / Introspect use cases and the CLI |
 | Delete | `BUILTIN_OPS`, `HandlerBuiltinBinding`, the Filter AST (`FILTER_COMPARISON_OPS`), `VIEW_PARAMS_RESERVED`, `$param` and `{"$ctx.user": …}`, `HookErrorPolicy` |
 
@@ -70,7 +69,7 @@ Only `next/src/spec` and `next/src/core` are built before the step 2 review. The
 
 | Action | Modules |
 |---|---|
-| Rewrite | `domain/model/Store` and `usecase/store/*` (Store over the IR with policy rewrites); `HandlerContext` into `Caller`, `Invocation`, `InvocationCause` and `HandlerContext`; `MantleRuntime.ts` into `createMantleRuntime` and `createMantle`; `InvokeProcedureUseCase` (one path for every `Invocation`, `ctx.invoke`, depth limit); `RunLifecycleHooksUseCase` and `RunDeferredHookUseCase` into the `LifecycleDispatcher`; `RuntimePlanCompiler` (plan v6, SHA-256 fingerprint, handler bijection); the `StoreExecutor` port; `SqliteStoreExecutor` (from `SqliteStoreQuery` and the write half of `DatabaseEntryRepository`); `MemoryStoreExecutor` (new); storage convergence (ADR-0033) in place of the ledger path in `SqliteSchemaTables` |
+| Rewrite | `domain/model/Store` and `usecase/store/*` (Store over the IR with policy rewrites); `HandlerContext` into `Caller`, `Invocation`, `InvocationCause` and `HandlerContext`; `MantleRuntime.ts` into `createMantleRuntime` and `createMantle`; `InvokeProcedureUseCase` (one path for every `Invocation`, `ctx.invoke`, depth limit); `RunLifecycleHooksUseCase` and `RunDeferredHookUseCase` into the `LifecycleDispatcher`; `RuntimePlanCompiler` (plan v6, SHA-256 fingerprint, handler bijection); the `StoreExecutor` port; `SqliteStoreExecutor` (from `SqliteStoreQuery` and the write half of `DatabaseEntryRepository`); storage convergence (ADR-0033) in place of the ledger path in `SqliteSchemaTables` |
 | Port | `AuthPredicateEvaluator` (against `Caller`), `CapabilityCatalog`, `CallableCapabilityProjector`, `InvokeCapabilityUseCase`, `bindCapabilities`, `InteractionCompiler`, `StandardOutputSchema`, `PathMatcher`, `TriggerIndex`, `LocaleNegotiator`, `ViewParamCoercer` (as View `input` coercion), `EntryWriteGuard` (into Store validation), `EntryMutationDiagnostics`; media (`usecase/media/*`, `MediaStorage`, `DatabaseMediaAssetRepository`, `DatabasePendingUploadRepository`); site config (`DatabaseSiteConfigRepository`, `UpdateSiteSettingsUseCase`); boot (`SqliteMigrationRunner`, `canonicalMigrations` without the auth DDL, `bootState`, `ValidateBootUseCase`); ports `DatabaseDriver`, `Clock`, `IdGenerator`, `EmailSender`, `AuditSink`, `RunObservationStore`; `createMantleRequestHandler` and `readJsonBody`; `infrastructure/testing` (`StorageConformance` becomes the executor conformance suite; the benchmark and index-coverage harnesses) |
 | Delete | ports `EntryRepository`, `EntryReader`, `AtomicEntryWriter`, `ExpirySweeper`, `DeferredHookDispatcher`, `HandlerRegistry`; `DatabaseEntryRepository` (read half), `LifecycleHookingEntryRepository`, `JoinedEntryReader`, `BuiltinProjector`, `InvokeBuiltinUseCase`, every `usecase/content/*` use case, the declarative path of `ExecuteViewUseCase` and `SqliteViewCompiler`, `SqliteMigrationArtifact`, the managed mode of `SqliteMantleStorageAdapter`, the three cursor formats, `Pagination` (`page`/`show`) |
 
@@ -80,7 +79,7 @@ Only `next/src/spec` and `next/src/core` are built before the step 2 review. The
 |---|---|---|
 | cloudflare | `D1DatabaseDriver`, `KvSiteConfigRepository`, `R2MediaStorage`, `WorkersQueueHookDispatcher` (as `runDeferredHook` delivery), `handlers/turnstile`, `oauth/cachePolicy`; new `toCloudflareCron` | `createMantleWorker`, `bootRuntimeOnce`, `mountPublicRoutes` (to REST and Web surfaces), `mountMcp` (to `createMcpSurface`), `resolveCaller` (to mantle-auth's `CallerResolver`), `conventionalAuth` and `createAuth` (to mantle-auth and the preset) |
 | bun, vercel | `BunDatabaseDriver`, the libSQL driver | `createBunMantle`, `createVercelMantle` |
-| indexeddb | persistence and concurrency tests | `IndexedDbEntryRepository`, `IndexedDbViewQueryExecutor` |
+| indexeddb | none | the package: `IndexedDbEntryRepository`, `IndexedDbViewQueryExecutor` (ADR-0034) |
 | auth | `createMantleAuth` (Better Auth wiring, OAuth provider, `appleClientSecret`, email templates); its tables only through Better Auth's `getMigrations`; the #1152 hardening; Better Auth past 1.7.2 (#1189) | the `MantleAuth` shape as the adapter's required type; `getUserRole` as a surface dependency |
 | admin | `mountMantleAdmin` (2.8k) into `createAdminSurface`, reading through Store, facets from `AdminIdentity`; `mountMantleOAuth` into mantle-auth's routes; `staffMcp` into the MCP surface | `AdminAuth`; the session-shape dependency |
 | mcp | `createMantleMcpServer`, `createMantleMcpHandler`, `apps` into `createMcpSurface` | bearer verification inside the surface |
@@ -93,8 +92,8 @@ Only `next/src/spec` and `next/src/core` are built before the step 2 review. The
 | 0.1.x | 0.2.0 |
 |---|---|
 | builtin ops, `ctx.writeAtomically`, `runtime.entries`, `runtime.executeView`, `bindMantle` | `ctx.store` / `runtime.store`: `select`, `view`, `write`, `id` |
-| `handler: { kind: builtin, op, schema, match }` | `handler: { store: [write ops] }`; `match` becomes `onConflict` |
-| View `from` / `filter` / `fields` / `orderBy` / `limit`, `params`, `$param` | View `select` or `sql`, `input`, `$input.x` |
+| `handler: { kind: builtin, op, schema, match }` | a Procedure written as SQL (`INSERT`, `UPDATE`, `DELETE`, `ON CONFLICT`), compiled to IR by the CLI |
+| View `from` / `filter` / `fields` / `orderBy` / `limit`, `params`, `$param` | a View written as one SQL `SELECT`, `input`, `input.x` |
 | `page` / `show` | `limit` / `cursor` |
 | `ctx.user`, `ctx.staff`, `ctx.auth` | `ctx.caller` (`Caller`) |
 | `ctx.event`, `ctx.schedule` | `ctx.cause` (`InvocationCause`) |

@@ -1,6 +1,6 @@
 # ADR-0034: Store is authored as SQL and compiled to IR by the CLI
 
-**Status:** Proposed for 0.2.0 (#1188). Amends ADR-0030, ADR-0032 decisions 1, 2, 3, 4, 5, 10 and 13, and ADR-0033.
+**Status:** Accepted for 0.2.0 (#1188), after the spike (#1203). Amends ADR-0030, ADR-0032 decisions 1, 2, 3, 4, 5, 10 and 13, and ADR-0033.
 
 **Date:** 2026-09-29
 
