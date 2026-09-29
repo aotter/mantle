@@ -162,7 +162,7 @@ const isInputRef = (n: N | undefined) => n?.ColumnRef?.fields?.length === 2 && n
 type Checker = (n: N, ctx: Ctx, path: string[], at: number | undefined) => void;
 const check: Record<string, Checker> = {
   RangeVar: (n, ctx, _p, at) => {
-    const name = n.relname as string;
+    const name = (n.relname as string).toLowerCase(); // SQLite names are case-insensitive, quoted or not; the context is keyed in lower case
     if (name.startsWith('_mantle') || name === 'input' || name === 'auth') no('SQL_RELATION', `${name} is not a declared Schema`, at);
     if (n.mantle === 'cte') no('SQL_RELATION', `${name}: a cte reference is not defined in scope`, at); // no CTE syntax exists in 0.2.0, so every cte tag is unresolved
     if (!ctx.schemas[name]) no('SQL_RELATION', `${name} is not a declared Schema`, at);
@@ -171,7 +171,7 @@ const check: Record<string, Checker> = {
     for (const ident of [name, n.alias?.aliasname]) if (ident && SQLITE_ONLY_KEYWORDS.has(ident)) no('SQL_UNSUPPORTED', `${ident} is an SQLite keyword: the printer would not quote it`, at);
   },
   ColumnRef: (n, ctx, _p, at) => {
-    const f = sv(n.fields), last = f.split('.').pop()!;
+    const f = sv(n.fields), last = f.split('.').pop()!.toLowerCase();
     if (n.fields.length > 2) no('SQL_COLUMN', `${f}: at most alias.column`, at);
     if (['rowid', 'oid', '_rowid_', '_rid'].includes(last)) no('SQL_COLUMN', `${last} is not addressable`, at);
     if (Object.values(ctx.schemas).some((s) => s.scope === last || s.ttl === last)) no('SQL_COLUMN', `${f}: the scope and TTL columns are not addressable`, at);
@@ -276,14 +276,15 @@ const check: Record<string, Checker> = {
 
 /** A write may not name the scope field or a system column; `id` is never writable on update, and on a scoped Schema never on insert. */
 function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean) {
-  const s: SqlSchemaDef | undefined = ctx.schemas[rel.relname];
+  const s: SqlSchemaDef | undefined = ctx.schemas[rel.relname.toLowerCase()];
   for (const { ResTarget: r } of list) {
     const at = firstLoc(r) ?? firstLoc(rel);
-    const scopedId = insert && r.name === 'id' && s?.scope;
-    if (r.name === s?.scope || r.name === s?.ttl || SYSTEM.has(r.name) || (!insert && r.name === 'id') || scopedId)
+    const name = String(r.name).toLowerCase();
+    const scopedId = insert && name === 'id' && s?.scope;
+    if (name === s?.scope || name === s?.ttl || SYSTEM.has(name) || (!insert && name === 'id') || scopedId)
       no('SQL_WRITE', `${r.name} is filled by Mantle and cannot be written${scopedId ? ' (a scoped Schema generates its ids)' : ''}`, at);
     const cols = Object.entries(s?.fields ?? {}).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
-    if (r.name !== 'id' && !cols.includes(r.name)) no('SQL_WRITE', `${rel.relname} has no field ${r.name}`, at);
+    if (name !== 'id' && !cols.includes(name)) no('SQL_WRITE', `${rel.relname} has no field ${r.name}`, at);
   }
 }
 

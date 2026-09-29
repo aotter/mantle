@@ -3,7 +3,6 @@ import {
   type Diagnostic,
 } from "../../kernel/diagnostic.js";
 import {
-  EXPECTED_VERSION_PROPERTY,
   MANTLE_REF_KEYWORD,
   RESERVED_PROCEDURE_INPUT_NAMES,
   resolveMantleRef,
@@ -86,12 +85,6 @@ export function validateManifestGraph(
     partitioned.schemas,
     partitioned.views,
     partitioned.procedures,
-    partitioned.triggers,
-    filePaths,
-  ));
-  diags.push(...checkMcpExpectedVersionReachability(
-    partitioned.views,
-    proceduresByName,
     partitioned.triggers,
     filePaths,
   ));
@@ -681,68 +674,6 @@ function checkMcpToolNameCollisions(
     }
   }
   return out;
-}
-
-/**
- * An MCP write tool that requires `expectedVersion` is only callable when some
- * View on the same surface lets the agent read that collection's `version`.
- * Otherwise the tool is listed, compiles and is dead on arrival (#973).
- * Warning only: the value can still arrive from outside MCP.
- */
-function checkMcpExpectedVersionReachability(
-  views: readonly ViewManifest[],
-  proceduresByName: ReadonlyMap<string, ProcedureManifest>,
-  triggers: readonly TriggerManifest[],
-  filePaths?: ManifestFilePaths,
-): Diagnostic[] {
-  const out: Diagnostic[] = [];
-  const warned = new Set<string>();
-  for (const trigger of triggers) {
-    const source = trigger.spec.source;
-    if (source.kind !== "mcp") continue;
-    const procedure = proceduresByName.get(trigger.spec.target.procedure);
-    if (!procedure) continue;
-    const input = procedure.spec.input;
-    if (!input.required?.includes(EXPECTED_VERSION_PROPERTY)) continue;
-    const collection = lockedCollection(procedure);
-    if (!collection) continue;
-    const key = `${source.surface}\0${procedure.metadata.name}`;
-    if (warned.has(key)) continue;
-    if (views.some((view) => view.spec.surface === source.surface && viewExposesVersion(view, collection))) continue;
-    warned.add(key);
-    const tool = mcpToolNameSegment(procedure.metadata.name);
-    out.push(validateDiagnostic({
-      code: "MCP_TOOL_INPUT_UNREACHABLE",
-      severity: "warning",
-      path: manifestPath("Procedure", procedure.metadata.name, `/spec/input/properties/${EXPECTED_VERSION_PROPERTY}`, filePaths),
-      value: collection,
-      expected: `a '${source.surface}' View over '${collection}' that exposes 'version'`,
-      message:
-        `MCP tool '${tool}' on the ${source.surface} surface requires '${EXPECTED_VERSION_PROPERTY}' of ` +
-        `'${collection}'${!procedure.spec.target ? " (inferred from its x-mantle-ref input)" : ""}, ` +
-        `but no ${source.surface} View reads that collection's 'version'; an agent cannot obtain the value it must send.`,
-    }));
-  }
-  return out;
-}
-
-/** The collection whose `version` an OCC write locks, or null when it cannot be told statically. */
-function lockedCollection(procedure: ProcedureManifest): string | null {
-  if (procedure.spec.target) return procedure.spec.target.schema;
-  const input = procedure.spec.input;
-  const refs = (input.required ?? []).flatMap((name) => {
-    const ref = resolveMantleRef(input.properties?.[name]);
-    return ref ? [ref.schema] : [];
-  });
-  return refs.length === 1 ? refs[0]! : null;
-}
-
-function viewExposesVersion(view: ViewManifest, collection: string): boolean {
-  // A View declares no output columns. The column is spelled `version` in SQL and any alias may
-  // carry the word, so a plain case-insensitive substring (or a `SELECT *`) counts as exposing.
-  // This can only silence the warning, never invent one.
-  return referencesTable(view.spec.sql, collection)
-    && (/version/iu.test(view.spec.sql) || /select\s+(?:\w+\.)?\*/iu.test(view.spec.sql));
 }
 
 function sameOwner(

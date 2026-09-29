@@ -702,106 +702,31 @@ spec:
     });
   });
 
-  it("accepts Trigger.source.kind: 'mcp' with surface: staff (#281 promotion)", () => {
+  // ponytail: one table for the mcp source shape
+  it("accepts an mcp source on staff or public, and refuses a missing or unknown surface and foreign keys", () => {
+    for (const [surface, extra, refusal] of [
+    ["surface: staff", "", undefined],
+    ["surface: public", "", undefined],
+    ["", "", /surface must be one of/],
+    ["surface: admin", "", /surface must be one of/],
+    ["surface: staff", "schema: posts\n    on: [before_create]", "/spec/source/schema"],
+    ["surface: staff", "method: POST\n    path: /api/foo", "/spec/source/method"],
+  ] as const) {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
-metadata: { name: restockSkuMcp }
+metadata: { name: mcpTool }
 spec:
   source:
     kind: mcp
-    surface: staff
-  target: { procedure: restockSku }
+    ${surface}
+    ${extra}
+  target: { procedure: bar }
 `;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
-    expect(result.manifests).toHaveLength(1);
-    const trig = result.manifests[0] as TriggerManifest;
-    expect(trig.spec.source.kind).toBe("mcp");
-    if (trig.spec.source.kind === "mcp") {
-      expect(trig.spec.source.surface).toBe("staff");
+    const { diagnostics } = parseManifests(yaml);
+    if (refusal === undefined) expect(diagnostics).toEqual([]);
+    else if (typeof refusal === "string") expect(diagnostics[0]).toMatchObject({ code: "INVALID_MANIFEST_ENVELOPE", path: expect.stringContaining(refusal) });
+    else expect(diagnostics.map((d) => d.message).join("\n")).toMatch(refusal);
     }
-  });
-
-  it("accepts Trigger.source.kind: 'mcp' with surface: public", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: lookupPriceMcp }
-spec:
-  source:
-    kind: mcp
-    surface: public
-  target: { procedure: lookupPrice }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
-  });
-
-  it("rejects Trigger.source.kind: 'mcp' without a surface", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: bareMcp }
-spec:
-  source: { kind: mcp }
-  target: { procedure: somewhere }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.message).join("\n")).toMatch(
-      /surface must be one of/,
-    );
-  });
-
-  it("rejects Trigger.source.kind: 'mcp' with an unknown surface", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: wrongSurface }
-spec:
-  source:
-    kind: mcp
-    surface: admin
-  target: { procedure: x }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.message).join("\n")).toMatch(
-      /surface must be one of/,
-    );
-  });
-
-  it("rejects Trigger.source.kind: 'mcp' mixed with lifecycle keys (schema/on)", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: mixedLifecycle }
-spec:
-  source:
-    kind: mcp
-    surface: staff
-    schema: posts
-    on: [before_create]
-  target: { procedure: bar }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics[0]).toMatchObject({
-      code: "INVALID_MANIFEST_ENVELOPE",
-      path: expect.stringContaining("/spec/source/schema"),
-    });
-  });
-
-  it("rejects Trigger.source.kind: 'mcp' mixed with http keys (method/path)", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: mixedKeys }
-spec:
-  source:
-    kind: mcp
-    surface: staff
-    method: POST
-    path: /api/foo
-  target: { procedure: bar }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics[0]).toMatchObject({
-      code: "INVALID_MANIFEST_ENVELOPE",
-      path: expect.stringContaining("/spec/source/method"),
-    });
   });
 
 });
