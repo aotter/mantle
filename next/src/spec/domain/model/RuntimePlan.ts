@@ -16,6 +16,8 @@ export interface PlanSchema {
   readonly fields: Readonly<Record<string, string>>;
   /** lower-cased column -> the name the JSON Schema declares */
   readonly names: Readonly<Record<string, string>>;
+  /** The Schema's JSON Schema: Store validates the values of a write against it. */
+  readonly schema: JsonSchema;
   /** Boolean expressions over the row's own columns, as IR. */
   readonly checks?: readonly SqlNode[];
   readonly search?: readonly string[];
