@@ -13,7 +13,7 @@ import { SqlRefusal } from "./SqlRefusal.js";
 import { intervalMicros, parseNumeric } from "./SqlTypes.js";
 
 type Code = SqlDiagnosticCode;
-type Ctx = SqlContext & { source?: string };
+type Ctx = SqlContext & { source?: string; known?: Set<string> };
 
 /** node type -> the keys it may carry */
 export const KEYS_SRC: Record<string, string> = {
@@ -112,6 +112,7 @@ type Walk = { ctx: Ctx; budget: Budget };
 export function validateProgram(stmts: N[], ctx: Ctx, locs: (number | undefined)[] = []): void {
   if (!Array.isArray(stmts) || !stmts.length) no('SQL_SHAPE', 'an empty program');
   if (ctx.kind === 'view' && (stmts.length !== 1 || !stmts[0]!.SelectStmt)) no('SQL_SHAPE', 'a View is exactly one SELECT', locs[1]);
+  ctx = { ...ctx, known: knownColumns(stmts, ctx) };
   const w: Walk = { ctx, budget: { n: 0 } };
   stmts.forEach((s, i) => {
     const t = Object.keys(s)[0] ?? '';
@@ -121,6 +122,43 @@ export function validateProgram(stmts: N[], ctx: Ctx, locs: (number | undefined)
     if (t !== 'SelectStmt' && ctx.kind === 'view') no('SQL_SHAPE', 'a View is one SELECT', at);
     walk(t, s[t], w, [t], at);
   });
+  if (ctx.public) publishedJoin(stmts, ctx);
+}
+
+/** every node of a tree with the given key, at any depth */
+function* find(v: any, key: string): Generator<any> {
+  if (!v || typeof v !== 'object') return;
+  for (const [k, c] of Object.entries(v)) {
+    if (k === key) yield c;
+    yield* find(c, key);
+  }
+}
+
+/**
+ * Every name a column may have: declared fields (a geo field also as _lat and _lng), `id`, the system
+ * columns, json_each's, relation names and aliases, and every output name the program gives (ORDER BY and outer queries read them).
+ * A name outside the set is a typo. Not per relation: a column of another table passes here.
+ */
+function knownColumns(stmts: N[], ctx: Ctx): Set<string> {
+  const known = new Set(['id', 'key', 'value', 'type', 'atom', 'parent', 'fullkey', 'path', ...SYSTEM]);
+  for (const s of Object.values(ctx.schemas))
+    for (const [f, t] of Object.entries(s.fields)) (t === 'geo' ? [f, `${f}_lat`, `${f}_lng`] : [f]).forEach((c) => known.add(c));
+  for (const r of find(stmts, 'ResTarget')) if (r.name) known.add(String(r.name).toLowerCase());
+  for (const r of find(stmts, 'RangeVar')) [r.relname, r.alias?.aliasname].forEach((a) => a && known.add(a.toLowerCase())); // search(<alias>, ...) names a relation
+  return known;
+}
+
+/** ADR-0034 decision 8: a public View that joins a non-publishing Schema must tie it to a publishing one in a JOIN ... ON. */
+function publishedJoin(stmts: N[], ctx: Ctx) {
+  const rels: { alias: string; publishing: boolean }[] = [...find(stmts, 'RangeVar')].map((r) => ({
+    alias: (r.alias?.aliasname ?? r.relname).toLowerCase(),
+    publishing: !!ctx.schemas[r.relname.toLowerCase()]?.publishing,
+  }));
+  if (!rels.some((r) => r.publishing)) return;
+  const ons: Set<string>[] = [...find(stmts, 'JoinExpr')].map((j) => new Set([...find(j.quals, 'ColumnRef')].filter((c) => c.fields.length === 2).map((c) => c.fields[0].String.sval.toLowerCase())));
+  for (const r of rels)
+    if (!r.publishing && !ons.some((o) => o.has(r.alias) && rels.some((p) => p.publishing && o.has(p.alias))))
+      no('SQL_RELATION', `${r.alias} has no published state: a public View must join it to a publishing Schema in a JOIN ... ON`);
 }
 
 function walk(type: string, node: N, w: Walk, path: string[], loc: number | undefined): void {
@@ -177,6 +215,7 @@ const check: Record<string, Checker> = {
     if (Object.values(ctx.schemas).some((s) => s.scope === last || s.ttl === last)) no('SQL_COLUMN', `${f}: the scope and TTL columns are not addressable`, at);
     if (f.startsWith('input.') && !(last in ctx.inputs)) no('SQL_COLUMN', `${f} is not a declared input`, at);
     if (SQLITE_ONLY_KEYWORDS.has(last)) no('SQL_UNSUPPORTED', `${last} is an SQLite keyword: the printer would not quote it`, at);
+    if (last !== '*' && !f.startsWith('input.') && !ctx.known!.has(last)) no('SQL_COLUMN', `${f} is not a declared field`, at);
   },
   FuncCall: (n, ctx, path, at) => {
     const f = fname(n);

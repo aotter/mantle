@@ -38,6 +38,7 @@ const REFUSED: Refusal[] = [
   ["SELECT id FROM _mantle_tz", "SQL_RELATION", "_mantle_tz"],
   ["SELECT id FROM items WHERE owner = 'o2'", "SQL_COLUMN", "owner", /scope and TTL/],
   ['SELECT id FROM items WHERE "Owner" = \'o2\'', "SQL_COLUMN", undefined, /scope and TTL/], // code review: quoting keeps case, SQLite ignores it
+  ["SELECT nope FROM items", "SQL_COLUMN", "nope", /not a declared field/],
   ['UPDATE items SET "OWNER" = \'o2\' WHERE id = \'a\'', "SQL_WRITE", undefined, /filled by Mantle/],
   ["INSERT INTO orders (id, item_id) VALUES ('x', 'a')", "SQL_WRITE", "id", /generates its ids/],
   ["SELECT id FROM items LIMIT 2", "SQL_SHAPE", "2", /LIMIT needs an ORDER BY/],
@@ -60,6 +61,14 @@ describe("compileSql", () => {
     }
   });
 
+  it("a public View must tie a non-publishing Schema to a publishing one in a JOIN ... ON (decision 8)", async () => {
+    const pub = (sql: string) => compileSql(sql, { ...ctxOf("view"), public: true });
+    const j = (on: string) => `SELECT p.id FROM posts p JOIN settings s ON ${on}`;
+    expect(await pub(j("s.key = p.title"))).toMatchObject({ ok: true });
+    expect(await pub(j("s.key = 'a'"))).toMatchObject({ ok: false, diagnostic: { code: "SQL_RELATION", message: /published/ } });
+    expect(await pub("SELECT id FROM settings ORDER BY id")).toMatchObject({ ok: true });
+  });
+
   it("points at the right line, column and token (multi-line, after Chinese text, past a quoted keyword)", async () => {
     const at = async (sql: string) => {
       const r = await compileSql(sql, ctxOf("view"));
@@ -76,6 +85,7 @@ describe("compileSql", () => {
       "SELECT CAST('5' AS int), CAST(7 AS int), round(stock) FROM items",
       "SELECT id FROM events WHERE at > now() - interval '36 hours' ORDER BY id",
       "SELECT id FROM items WHERE name LIKE 'a!%' ESCAPE '!' ORDER BY id",
+      "SELECT p.id FROM posts p WHERE search(p, 'q') ORDER BY search_rank(p) LIMIT 5",
     ].map((sql) => ({ kind: "view" as Kind, sql }));
     for (const c of [...corpus, ...extra]) {
       const res = await compileSql(c.sql, ctxOf(c.kind, c.inputs));
