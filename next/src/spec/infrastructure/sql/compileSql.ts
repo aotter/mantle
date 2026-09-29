@@ -21,7 +21,9 @@ export function locate(source: string, byteOffset: number): Pick<SqlDiagnostic, 
 }
 
 function toDiagnostic(e: SqlRefusal, source: string): SqlDiagnostic {
-  const at = e.keyword?.exec(source); // a clause the AST gives no position: point at its keyword
+  // a clause the AST gives no position: point at its keyword, never at a quoted string or identifier
+  // that spells it (literals are blanked to the same length, so indexes still match the source)
+  const at = e.keyword?.exec(source.replace(/'(?:[^']|'')*'|"(?:[^"]|"")*"/g, (m) => " ".repeat(m.length)));
   if (at) return { code: e.code, message: e.message, ...locate(source, Buffer.byteLength(source.slice(0, at.index))), token: at[0] };
   return { code: e.code, message: e.message, ...(e.offset === undefined ? {} : locate(source, e.offset)) };
 }

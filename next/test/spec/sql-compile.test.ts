@@ -209,3 +209,15 @@ describe("validateIr on IR that never came from SQL", () => {
     expect(validateIr(undefined as never, ctxOf("view"))[0]).toMatchObject({ code: "SQL_UNSUPPORTED" });
   });
 });
+
+describe("diagnostic positions with non-ASCII text and quoted keywords", () => {
+  const ctx = { schemas: { items: { fields: { name: "text" } } }, inputs: {}, kind: "view" } as const;
+  it("a syntax error after Chinese text points at the right token", async () => {
+    const r = await compileSql("SELECT 台北 FORM items", ctx as any);
+    expect(r.ok ? undefined : [r.diagnostic.code, r.diagnostic.column, r.diagnostic.token]).toEqual(["SQL_SYNTAX", 16, "items"]);
+  });
+  it("a keyword spelled inside a string literal is skipped", async () => {
+    const r = await compileSql("SELECT id FROM items WHERE name = 'offset' ORDER BY id OFFSET 2", ctx as any);
+    expect(r.ok ? undefined : [r.diagnostic.code, r.diagnostic.column, r.diagnostic.token]).toEqual(["SQL_UNSUPPORTED", 56, "OFFSET"]);
+  });
+});
