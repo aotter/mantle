@@ -6,6 +6,8 @@
 import type { Report } from '../src/report.ts';
 import { CENTER, NOW, boot, caller, program, reset, site } from '../src/fixtures.ts';
 import { Conflict, runProcedure, runView } from '../src/exec.ts';
+import type { Site } from '../src/exec.ts';
+import { facts } from '../findings.ts';
 import type { Mode } from '../src/policy.ts';
 import { ALL_POSITIONS } from '../src/positions.ts';
 import type { RelationPosition } from '../src/positions.ts';
@@ -77,73 +79,51 @@ async function protectedRows(d1: { all: (sql: string) => Promise<any[]> }) {
 export async function run(r: Report) {
   r.section('Case 7: policy probe (every relation position, another owner / expired / unpublished rows)');
   const b = await boot();
-  const seen = new Set<RelationPosition>();
-  const s = { ...site(b), seen };
   const positions = Object.keys(PROBES) as RelationPosition[];
-  r.equal(`the probe list covers all ${ALL_POSITIONS.length} positions of the IR union (and \`satisfies\` makes that a typecheck error when it does not)`, positions.sort(), [...ALL_POSITIONS].sort());
+  r.equal(`the probe list covers all ${ALL_POSITIONS.length} positions of the IR union (and \`satisfies\` makes that a typecheck error when it does not)`, [...positions].sort(), [...ALL_POSITIONS].sort());
 
-  for (const pos of positions) {
-    const own = new Set<RelationPosition>();
-    s.seen = own;
-    let n = 0;
-    for (const step of PROBES[pos].steps) {
-      n++;
+  // one probe run: the problems found (an error, a LEAK / X_ row in a result, a protected row changed)
+  const probe = async (pos: RelationPosition, opts: Partial<Site>) => {
+    const problems: string[] = [];
+    for (const [n, step] of PROBES[pos].steps.entries()) {
       await reset(b.d1);
       const before = JSON.stringify(await protectedRows(b.d1));
       const p = await program(step.kind, step.sql, step.inputs ?? {});
-      const rt = caller(step.input);
-      const label = `${pos} #${n}`;
+      const s = { ...site(b), ...opts, mode: step.mode };
       let rows: unknown[][] | undefined, err: unknown;
-      try {
-        rows = step.kind === 'view' ? [(await runView({ ...s, mode: step.mode }, p, rt)).rows] : (await runProcedure({ ...s, mode: step.mode }, p, rt)).rows;
-      } catch (e) { err = e; }
-      if (step.conflict) r.check(`${label}: ${step.sql.slice(0, 60)} -> CONFLICT (an invisible row is a missing row)`, err instanceof Conflict, String(err));
-      else {
-        r.check(`${label}: ${step.sql.slice(0, 70)}`, !err, String(err));
-        if (rows) {
-          const json = JSON.stringify(rows);
-          r.check(`${label}: no LEAK and no X_ row in the result`, !json.includes('LEAK') && !json.includes('X_'), json.slice(0, 200));
-          if (step.rows) r.equal(`${label}: the caller's own rows are all there (the probe is not vacuous)`, rows, step.rows);
-        }
-      }
-      r.check(`${label}: other owner's, expired and unpublished rows are unchanged`, JSON.stringify(await protectedRows(b.d1)) === before);
+      try { rows = step.kind === 'view' ? [(await runView(s, p, caller(step.input))).rows] : (await runProcedure(s, p, caller(step.input))).rows; } catch (e) { err = e; }
+      const json = JSON.stringify(rows ?? []);
+      if (step.conflict ? !(err instanceof Conflict) : err || json.includes('LEAK') || json.includes('X_') || (step.rows && json !== JSON.stringify(step.rows))) problems.push(`#${n + 1} ${step.sql.slice(0, 50)}: ${String(err ?? json).slice(0, 100)}`);
+      if (JSON.stringify(await protectedRows(b.d1)) !== before) problems.push(`#${n + 1}: a protected row changed`);
     }
-    r.check(`${pos}: the policy pass printed a wrapper (or emitted a system relation) at this position`, own.has(pos), [...own].join(', '));
-    own.forEach((x) => seen.add(x));
+    return problems;
+  };
+  for (const pos of positions) {
+    const seen = new Set<RelationPosition>();
+    const problems = await probe(pos, { seen });
+    if (!seen.has(pos)) problems.push('the policy pass printed no wrapper (or system relation) at this position');
+    r.check(`${pos}: no LEAK / X_ row in a result, the caller's own rows all there, conflicts where the row is invisible, protected rows unchanged, wrapper printed`, problems.length === 0, problems);
   }
-  r.check('all positions were reached by at least one probe at run time', ALL_POSITIONS.every((p) => seen.has(p)), ALL_POSITIONS.filter((p) => !seen.has(p)).join(', '));
 
   // negative control: with the visibility predicate switched off, every read/write position must be caught by its probe
-  const caught: string[] = [], missed: string[] = [];
-  for (const pos of positions) {
-    let detected = false;
-    for (const step of PROBES[pos].steps) {
-      await reset(b.d1);
-      const before = JSON.stringify(await protectedRows(b.d1));
-      const p = await program(step.kind, step.sql, step.inputs ?? {});
-      let rows: unknown[][] | undefined, err: unknown;
-      try { rows = step.kind === 'view' ? [(await runView({ ...site(b), unsafeNoVisibility: true }, p, caller(step.input))).rows] : (await runProcedure({ ...site(b), unsafeNoVisibility: true }, p, caller(step.input))).rows; } catch (e) { err = e; }
-      const json = JSON.stringify(rows ?? []);
-      if (step.conflict ? !(err instanceof Conflict) : err || json.includes('LEAK') || json.includes('X_') || (step.rows && JSON.stringify(rows) !== JSON.stringify(step.rows))) detected = true;
-      if (JSON.stringify(await protectedRows(b.d1)) !== before) detected = true;
-    }
-    (detected ? caught : missed).push(pos);
-  }
-  r.check(`negative control: with the visibility predicate off, ${caught.length} of ${positions.length} positions are caught by their probes`, caught.length >= positions.length - 1, `missed: ${missed.join(', ') || 'none'}`);
+  const missed: string[] = [];
+  for (const pos of positions) if (!(await probe(pos, { unsafeNoVisibility: true })).length) missed.push(pos);
+  facts.caught = positions.length - missed.length;
+  facts.positions = positions.length;
+  r.check(`negative control: with the visibility predicate off, ${positions.length - missed.length} of ${positions.length} positions are caught by their probes`, missed.length <= 1, `missed: ${missed.join(', ') || 'none'}`);
   r.note(`  not caught by this switch: ${missed.join(', ') || 'none'} (insert-target is protected by the scope and id fill and the scope-including unique index, which the switch leaves on; the check is its owner/id assertion below)`);
 
   // what the ADR says about the write path, on top of the positions
   await reset(b.d1);
-  const ins = await program('procedure', "INSERT INTO settings (key, value) VALUES ('lang', 'yy') RETURNING id");
-  const { rows } = await runProcedure({ ...s }, ins, caller());
+  const { rows } = await runProcedure(site(b), await program('procedure', "INSERT INTO settings (key, value) VALUES ('lang', 'yy') RETURNING id"), caller());
   const mine = (await b.d1.all('SELECT owner, created_at, length(id) AS idlen FROM settings WHERE id = ?1', [(rows[0][0] as any).id]))[0];
-  r.equal('an insert is owned by the caller, stamped with now(), and gets a generated id', mine, { owner: 'o1', created_at: NOW, idlen: 32 });
-  r.equal("another owner's 'lang' setting was not touched by the same-key insert", (await b.d1.all("SELECT value FROM settings WHERE id = 'X_sz2'"))[0].value, 'xx');
+  r.equal("an insert is owned by the caller, stamped with now(), gets a generated id, and does not touch another owner's same-key row",
+    [mine, (await b.d1.all("SELECT value FROM settings WHERE id = 'X_sz2'"))[0].value], [{ owner: 'o1', created_at: NOW, idlen: 32 }, 'xx']);
 
   // modes: public reads see published, unexpired rows only; trusted (runtime.store) sees every owner but TTL still applies
   const posts = await program('view', 'SELECT id FROM posts ORDER BY id');
-  r.equal('public caller: only the published, unexpired post', (await runView({ ...s, mode: 'public' }, posts, caller())).rows, ids('p1'));
   const all = await program('view', 'SELECT id FROM items ORDER BY id');
-  r.equal('trusted runtime.store: no scope, but the expired row is still hidden', (await runView({ ...s, mode: 'trusted' }, all, caller())).rows, ids('X_z1', 'X_z2', 'a', 'b', 'c', 'd'));
+  r.equal('public caller sees only the published, unexpired post; trusted runtime.store sees every owner but not the expired row',
+    [(await runView({ ...site(b), mode: 'public' }, posts, caller())).rows, (await runView({ ...site(b), mode: 'trusted' }, all, caller())).rows], [ids('p1'), ids('X_z1', 'X_z2', 'a', 'b', 'c', 'd')]);
   await b.d1.dispose();
 }

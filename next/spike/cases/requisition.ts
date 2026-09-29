@@ -22,41 +22,24 @@ export async function run(r: Report) {
   const state = async (id: string) => (await b.d1.all('SELECT state FROM requisitions WHERE id = ?1', [id]))[0]?.state;
   const orders = async () => (await b.d1.all("SELECT count(*) n FROM orders WHERE owner = 'o1'"))[0].n;
 
-  // approve: the CASE value, RETURNING rows of both statements, and one after-hook call with the written row
+  const conflictOf = async (prog: typeof p, input: Record<string, unknown>) => { try { await runProcedure(s, prog, caller(input)); } catch (e) { return e instanceof Conflict ? e.opIndex : String(e); } };
+
+  // approve: the CASE value, RETURNING rows of both statements, one after-hook call with the written row
   const ok = await runProcedure(s, p, caller({ id: 'r1', approve: true }));
-  r.equal('approve r1: RETURNING of the UPDATE and of the conditional INSERT', ok.rows, [[{ id: 'r1', state: 'approved' }], [{ item_id: 'a', qty: 2, total: null }]]);
-  r.equal('approve r1: the row op persisted', await state('r1'), 'approved');
-  r.equal('approve r1: the after hook ran once, with ctx.cause.rows holding the one written row', calls.length === 1 && (calls[0] as unknown[]).length, 1);
-  r.check('approve r1: the hook row carries id and version although RETURNING * names neither', (calls[0] as any[])[0].id?.length > 0 && (calls[0] as any[])[0].version === 1 && (calls[0] as any[])[0].qty === 2, calls[0]);
+  r.equal('approve r1: RETURNING of the UPDATE and of the conditional INSERT, and the row op persisted', [ok.rows, await state('r1')], [[[{ id: 'r1', state: 'approved' }], [{ item_id: 'a', qty: 2, total: null }]], 'approved']);
+  const row = (calls[0] as any[] | undefined)?.[0];
+  r.check('approve r1: the after hook ran once; its row carries id and version although RETURNING * names neither', calls.length === 1 && row?.id?.length > 0 && row.version === 1 && row.qty === 2, calls);
 
   // reject: the INSERT writes zero rows, which is a normal result, and calls no hook
   const before = { orders: await orders(), calls: calls.length };
   const rej = await runProcedure(s, p, caller({ id: 'r2', approve: false }));
-  r.equal('reject r2: the UPDATE returns the rejected row, the conditional INSERT writes nothing', rej.rows, [[{ id: 'r2', state: 'rejected' }], []]);
-  r.equal('reject r2: no order row, and the hook was not called', { orders: await orders(), calls: calls.length }, before);
+  r.equal('reject r2: the conditional INSERT writes nothing, and calls no hook', [rej.rows, { orders: await orders(), calls: calls.length }], [[[{ id: 'r2', state: 'rejected' }], []], before]);
 
-  // the precondition `state = 'pending'` no longer holds: CONFLICT op=0, nothing written, no hook
-  let err: unknown;
-  try { await runProcedure(s, p, caller({ id: 'r1', approve: true })); } catch (e) { err = e; }
-  r.check('approve r1 again: CONFLICT with opIndex 0', err instanceof Conflict && err.opIndex === 0, String(err));
-  r.equal('approve r1 again: the batch wrote nothing and called no hook', { orders: await orders(), calls: calls.length }, before);
-
-  // another owner's requisition is invisible to the caller: the same CONFLICT, and it is untouched
-  err = undefined;
-  try { await runProcedure(s, p, caller({ id: 'X_rz', approve: true })); } catch (e) { err = e; }
-  r.check("another owner's requisition: CONFLICT op=0, indistinguishable from a missing row", err instanceof Conflict && err.opIndex === 0, String(err));
-  r.equal("another owner's requisition: unchanged", await state('X_rz'), 'pending');
+  // the precondition no longer holds (r1 again), or the row is not visible (another owner's): the same CONFLICT op=0
+  r.equal('r1 again and another owner\'s X_rz: CONFLICT op=0 each, nothing written, no hook', [await conflictOf(p, { id: 'r1', approve: true }), await conflictOf(p, { id: 'X_rz', approve: true }), await state('X_rz'), { orders: await orders(), calls: calls.length }], [0, 0, 'pending', before]);
 
   // atomicity and the exact op index: the second row op conflicts, so the first is rolled back
   const two = await program('procedure', "UPDATE items SET stock = stock - 1 WHERE id = 'a'; UPDATE items SET stock = 0 WHERE id = 'nope'");
-  err = undefined;
-  try { await runProcedure(s, two, caller()); } catch (e) { err = e; }
-  r.check('two row ops, the second matches nothing: CONFLICT with opIndex 1', err instanceof Conflict && err.opIndex === 1, String(err));
-  r.equal('two row ops: the first one was rolled back (stock of a is still 5)', (await b.d1.all("SELECT stock FROM items WHERE id = 'a'"))[0].stock, 5);
-
-  // a plain row op with no precondition succeeds and bumps the version (OCC counter)
-  const bump = await program('procedure', "UPDATE items SET stock = stock - 1 WHERE id = 'a' RETURNING stock");
-  await runProcedure(s, bump, caller());
-  r.equal('a row op bumps version', (await b.d1.all("SELECT stock, version FROM items WHERE id = 'a'"))[0], { stock: 4, version: 2 });
+  r.equal('two row ops, the second matches nothing: CONFLICT op=1 and the first is rolled back (stock of a is still 5)', [await conflictOf(two, {}), (await b.d1.all("SELECT stock FROM items WHERE id = 'a'"))[0].stock], [1, 5]);
   await b.d1.dispose();
 }

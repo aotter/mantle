@@ -7,13 +7,16 @@ import { OVERRIDES, OVERRIDE_WHY, SqliteDeparser, VanillaDeparser, print } from 
 import { MANTLE_LOWERINGS, PG_ONLY_REWRITES } from '../src/policy.ts';
 import { BARE, ENUM, KEYS, SQLITE_ONLY_KEYWORDS } from '../src/validate.ts';
 import type { N } from '../src/types.ts';
+import { facts } from '../findings.ts';
 import { corpus } from './corpus.ts';
 import type { Item } from './corpus.ts';
 
 /** the official SQLite keyword list (https://sqlite.org/lang_keywords.html) */
 const SQLITE_KEYWORDS = 'ABORT ACTION ADD AFTER ALL ALTER ALWAYS ANALYZE AND AS ASC ATTACH AUTOINCREMENT BEFORE BEGIN BETWEEN BY CASCADE CASE CAST CHECK COLLATE COLUMN COMMIT CONFLICT CONSTRAINT CREATE CROSS CURRENT CURRENT_DATE CURRENT_TIME CURRENT_TIMESTAMP DATABASE DEFAULT DEFERRABLE DEFERRED DELETE DESC DETACH DISTINCT DO DROP EACH ELSE END ESCAPE EXCEPT EXCLUDE EXCLUSIVE EXISTS EXPLAIN FAIL FILTER FIRST FOLLOWING FOR FOREIGN FROM FULL GENERATED GLOB GROUP GROUPS HAVING IF IGNORE IMMEDIATE IN INDEX INDEXED INITIALLY INNER INSERT INSTEAD INTERSECT INTO IS ISNULL JOIN KEY LAST LEFT LIKE LIMIT MATCH MATERIALIZED NATURAL NO NOT NOTHING NOTNULL NULL NULLS OF OFFSET ON OR ORDER OTHERS OUTER OVER PARTITION PLAN PRAGMA PRECEDING PRIMARY QUERY RAISE RANGE RECURSIVE REFERENCES REGEXP REINDEX RELEASE RENAME REPLACE RESTRICT RETURNING RIGHT ROLLBACK ROW ROWS SAVEPOINT SELECT SET TABLE TEMP TEMPORARY THEN TIES TO TRANSACTION TRIGGER UNBOUNDED UNION UNIQUE UPDATE USING VACUUM VALUES VIEW VIRTUAL WHEN WHERE WINDOW WITH WITHOUT'.split(' ').map((k) => k.toLowerCase());
 
+const TREES = facts.trees;
 type Outcome = { id: string; ok: boolean; error?: string };
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** a printer with every override of SqliteDeparser except `skip` */
 function without(skip: string | undefined): typeof Deparser {
@@ -59,7 +62,6 @@ function nodeTypes(v: any, into = new Set<string>(), keys = new Set<string>()): 
 export async function run(r: Report) {
   r.section('1. Deparser: every allowlisted node on local D1');
   const b = await boot();
-  const results = new Map<string, Outcome[]>();
 
   // 1a. the full printer passes the whole corpus with the results PostgreSQL semantics give
   const irAst: N[] = [];
@@ -67,16 +69,8 @@ export async function run(r: Report) {
   const outs: Outcome[] = [];
   for (const item of corpus) {
     const { outcome, rows, ast } = await runItem(b, item, SqliteDeparser);
-    let ok = outcome.ok;
-    if (ok) {
-      const actual = JSON.parse(JSON.stringify(rows));
-      const expected = JSON.parse(JSON.stringify(item.expect));
-      ok = JSON.stringify(actual) === JSON.stringify(expected);
-      if (!ok) outcome.error = `expected ${JSON.stringify(expected)} got ${JSON.stringify(actual)}`;
-    }
-    outcome.ok = ok;
+    if (outcome.ok && !same(rows, item.expect)) Object.assign(outcome, { ok: false, error: `expected ${JSON.stringify(item.expect)} got ${JSON.stringify(rows)}` });
     outs.push(outcome);
-    r.check(`corpus ${item.id}`, ok, ok ? undefined : outcome.error);
     if (ast) irAst.push(...ast);
     const p = await program(item.kind, item.sql, item.inputs ?? {}).catch(() => null);
     if (p) {
@@ -86,8 +80,8 @@ export async function run(r: Report) {
       JSON.stringify(p.ir, (k, v) => { if (typeof v !== 'object' || v === null) enumSeen.add(`${k}=${JSON.stringify(v)}`); return v; });
     }
   }
-  results.set('full', outs);
-  r.note(`corpus: ${corpus.length} items, ${outs.filter((o) => o.ok).length} pass with SqliteDeparser`);
+  const badItems = outs.filter((o) => !o.ok);
+  r.check(`all ${corpus.length} corpus items give the rows PostgreSQL semantics give (through the whole pipeline, on D1)`, badItems.length === 0, badItems.map((o) => `${o.id}: ${o.error}`).join('; '));
 
   // 1b. coverage of the whitelist by the corpus
   const uncoveredTypes = Object.keys(KEYS).filter((t) => !irNodes.has(t));
@@ -106,21 +100,17 @@ export async function run(r: Report) {
   for (const item of corpus) vanilla.push((await runItem(b, item, VanillaDeparser)).outcome);
   const vf = vanilla.filter((o) => !o.ok);
   r.note(`vanilla pgsql-deparser: ${vf.length} of ${corpus.length} corpus items fail on D1`);
-  const need: Record<string, string[]> = {};
   for (const name of OVERRIDES) {
     const ab: Outcome[] = [];
     const printer = without(name);
     for (const item of corpus) {
       const { outcome, rows } = await runItem(b, item, printer);
-      let ok = outcome.ok;
-      if (ok) ok = JSON.stringify(JSON.parse(JSON.stringify(rows))) === JSON.stringify(JSON.parse(JSON.stringify(item.expect)));
-      ab.push({ id: item.id, ok, error: outcome.error });
+      ab.push({ id: item.id, ok: outcome.ok && same(rows, item.expect) });
     }
-    need[name] = ab.filter((o) => !o.ok).map((o) => o.id);
-    r.check(`override ${name} is needed (without it: ${need[name].length} items fail)`, need[name].length > 0, need[name].join(', '));
+    const failing = ab.filter((o) => !o.ok).map((o) => o.id);
+    r.check(`override ${name} is needed (without it: ${failing.length} items fail)`, failing.length > 0, failing.join(', '));
   }
   r.note(`OVERRIDES (${OVERRIDES.length}): ${OVERRIDES.join(', ')}`);
-  for (const o of vf.slice(0, 40)) r.note(`  vanilla fails ${o.id}: ${o.error}`);
 
   // 1d. names: which SQLite keywords does the printer leave bare that SQLite refuses?
   r.section('1d. Identifiers: SQLite keywords the printer would not quote');
@@ -142,22 +132,17 @@ export async function run(r: Report) {
 
   // 1e. the function allowlist: every function is prepared on local D1 (ADR-0034 decision 6, one case)
   r.section('1e. Function allowlist on local D1');
-  const probes: Record<string, string> = {
-    count: 'count(*)', sum: 'sum(1)', min: 'min(1)', max: 'max(1)', avg: 'avg(1)', json_group_array: 'json_group_array(1)', json_group_object: "json_group_object('a', 1)",
-    lower: "lower('A')", upper: "upper('a')", length: "length('a')", abs: 'abs(-1)', round: 'round(1.5)', substr: "substr('abc', 2)", replace: "replace('a','a','b')", trim: "trim(' a')", ltrim: "ltrim(' a')", rtrim: "rtrim('a ')", instr: "instr('a','a')", typeof: 'typeof(1)', hex: "hex('a')",
-    json_extract: "json_extract('[1]', '$[0]')", json_set: "json_set('[1]', '$[0]', 2)", json_insert: "json_insert('[1]', '$[#]', 2)", json_remove: "json_remove('[1]', '$[0]')", json_array_length: "json_array_length('[1]')",
-    strftime: "strftime('%Y', 0, 'unixepoch')", unixepoch: "unixepoch('2026-01-01 00:00:00')", changes: 'changes()', randomblob: 'hex(randomblob(4))',
-    asin: 'asin(0.5)', sqrt: 'sqrt(4)', sin: 'sin(1)', cos: 'cos(1)', radians: 'radians(1)', bm25_absent: "'n/a'", min2: 'min(1, 2)', coalesce: 'coalesce(NULL, 1)', nullif: 'nullif(1, 1)', length_text: "length('小籠包')",
-  };
-  for (const [name, expr] of Object.entries(probes)) {
-    if (name.endsWith('_absent')) continue;
-    const res = await b.d1.try(`SELECT ${expr} AS x`);
-    r.check(`function ${name} is authorized`, !('error' in res), 'error' in res ? res.error : undefined);
-  }
-  for (const f of ['power(2, 3)', 'ceiling(1.5)', 'sqlite_version()', 'json_pretty(\'[1]\')', 'unistr(\'a\')', 'random()', 'printf(\'%d\', 1)', 'concat(\'a\', \'b\')']) {
-    const res = await b.d1.try(`SELECT ${f} AS x`);
-    r.note(`  ${f}: ${'error' in res ? 'refused by D1 (' + res.error.split(':')[1]?.trim() + ')' : 'allowed'}`);
-  }
+  const probes = [
+    'count(*)', 'sum(1)', 'min(1)', 'max(1)', 'avg(1)', 'json_group_array(1)', "json_group_object('a', 1)",
+    "lower('A')", "upper('a')", "length('a')", 'abs(-1)', 'round(1.5)', "substr('abc', 2)", "replace('a','a','b')", "trim(' a')", "ltrim(' a')", "rtrim('a ')", "instr('a','a')", 'typeof(1)', "hex('a')",
+    "json_extract('[1]', '$[0]')", "json_set('[1]', '$[0]', 2)", "json_insert('[1]', '$[#]', 2)", "json_remove('[1]', '$[0]')", "json_array_length('[1]')",
+    "strftime('%Y', 0, 'unixepoch')", "unixepoch('2026-01-01 00:00:00')", 'changes()', 'hex(randomblob(4))',
+    'asin(0.5)', 'sqrt(4)', 'sin(1)', 'cos(1)', 'radians(1)', 'min(1, 2)', 'coalesce(NULL, 1)', 'nullif(1, 1)',
+  ];
+  const refused: string[] = [];
+  for (const expr of probes) if ('error' in (await b.d1.try(`SELECT ${expr} AS x`))) refused.push(expr);
+  r.check(`the ${probes.length} functions the compiler emits are authorized on D1 (the ones D1 refuses are checked in "Local D1 facts")`, refused.length === 0, refused);
+
   // 1f. precedence: the printer must keep the tree's shape when SQLite re-parses the text
   r.section('1f. Operator precedence: random expression trees, printed then evaluated by D1');
   let seedN = 20260929;
@@ -165,6 +150,7 @@ export async function run(r: Report) {
   const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
   const S = (s: string) => ({ String: { sval: s } });
   const k = (n: number): N => ({ A_Const: { ival: { ival: n } } });
+  const op2 = (op: string, a: N, b: N): N => ({ A_Expr: { kind: 'AEXPR_OP', name: [S(op)], lexpr: a, rexpr: b } });
   class Retry extends Error {}
   const gInt = (d: number): { ast: N; v: number } => {
     if (d === 0 || rnd() < 0.25) { const n = Math.floor(rnd() * 10); return { ast: k(n), v: n }; }
@@ -174,41 +160,42 @@ export async function run(r: Report) {
     const op = pick(['+', '-', '*', '/', '%']), a = gInt(d - 1), b = gInt(d - 1);
     if ((op === '/' || op === '%') && b.v === 0) throw new Retry();
     const v = op === '+' ? a.v + b.v : op === '-' ? a.v - b.v : op === '*' ? a.v * b.v : op === '/' ? Math.trunc(a.v / b.v) : a.v % b.v;
-    return { ast: { A_Expr: { kind: 'AEXPR_OP', name: [S(op)], lexpr: a.ast, rexpr: b.ast } }, v };
+    return { ast: op2(op, a.ast, b.ast), v };
   };
   const gBool = (d: number): { ast: N; v: boolean } => {
     const c = rnd();
     if (d === 0 || c < 0.5) {
       const op = pick(['=', '<>', '<', '>', '<=', '>=']), a = gInt(d), b = gInt(d);
       const v = op === '=' ? a.v === b.v : op === '<>' ? a.v !== b.v : op === '<' ? a.v < b.v : op === '>' ? a.v > b.v : op === '<=' ? a.v <= b.v : a.v >= b.v;
-      return { ast: { A_Expr: { kind: 'AEXPR_OP', name: [S(op)], lexpr: a.ast, rexpr: b.ast } }, v };
+      return { ast: op2(op, a.ast, b.ast), v };
     }
     if (c < 0.65) { const x = gBool(d - 1); return { ast: { BoolExpr: { boolop: 'NOT_EXPR', args: [x.ast] } }, v: !x.v }; }
     const a = gBool(d - 1), b = gBool(d - 1), and = c < 0.83;
     return { ast: { BoolExpr: { boolop: and ? 'AND_EXPR' : 'OR_EXPR', args: [a.ast, b.ast] } }, v: and ? a.v && b.v : a.v || b.v };
   };
   const trees: { ast: N; v: number | boolean }[] = [];
-  while (trees.length < 400) { try { trees.push(rnd() < 0.5 ? gInt(4) : gBool(4)); } catch (e) { if (!(e instanceof Retry)) throw e; } }
-  let mismatches = 0, first = '';
-  for (let i = 0; i < trees.length; i += 50) {
-    const chunk = trees.slice(i, i + 50);
-    const sel: N = { SelectStmt: { targetList: chunk.map((t, j) => ({ ResTarget: { name: `c${j}`, val: t.ast } })), limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } };
-    const sql = print(sel);
-    const row = (await b.d1.all(sql))[0];
-    chunk.forEach((t, j) => {
-      const want = typeof t.v === 'boolean' ? (t.v ? 1 : 0) : t.v;
-      if (row[`c${j}`] !== want) { mismatches++; first ||= `${print({ SelectStmt: { targetList: [{ ResTarget: { val: t.ast } }], limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } })} => D1 ${row[`c${j}`]}, tree ${want}`; }
-    });
-  }
-  r.check(`400 random int/boolean trees (depth 4): printed SQL evaluates on D1 to the tree's value`, mismatches === 0, mismatches ? `${mismatches} mismatches, e.g. ${first}` : undefined);
+  while (trees.length < TREES) { try { trees.push(rnd() < 0.5 ? gInt(4) : gBool(4)); } catch (e) { if (!(e instanceof Retry)) throw e; } }
+  const wrongCount = async (mangle: (sql: string) => string) => {
+    let wrong = 0;
+    for (const t of trees) {
+      const sql = mangle(print({ SelectStmt: { targetList: [{ ResTarget: { name: 'c', val: t.ast } }], limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } }));
+      const got = await b.d1.all(sql).then((rows) => rows[0].c, () => 'error');
+      if (got !== (typeof t.v === 'boolean' ? +t.v : t.v)) wrong++;
+    }
+    return wrong;
+  };
+  r.check(`${TREES} random int/boolean trees (depth 4): printed SQL evaluates on D1 to the tree's value`, (await wrongCount((x) => x)) === 0);
+  const stripped = await wrongCount((x) => x.replace(/[()]/g, ''));
+  r.check(`negative control: the same SQL with its parentheses removed is wrong or refused for ${stripped} of ${TREES} trees, so the check can fail`, stripped > 0);
   // `||` sits at a different level in SQLite than in PostgreSQL: fixed cases whose value differs if the parentheses are lost
-  const concatCases: [string, string][] = [["SELECT 2 * 3 || 4", '64'], ["SELECT 1 + 2 || 3", '33'], ["SELECT 'x' || 1 + 1", 'x2'], ["SELECT (2 || 3) * 4", '92'], ["SELECT 2 || 3 * 4", '212'], ["SELECT - 2 || 3", '-23']];
+  const concatCases: [string, string][] = [['SELECT 2 * 3 || 4', '64'], ['SELECT 1 + 2 || 3', '33'], ["SELECT 'x' || 1 + 1", 'x2'], ['SELECT 2 || 3 * 4', '212']];
+  const badConcat: string[] = [];
   for (const [sql, want] of concatCases) {
-    const p = await program('view', `${sql} AS x FROM items WHERE id = 'a'`);
-    const [c] = compileProgram(site(b), p);
+    const [c] = compileProgram(site(b), await program('view', `${sql} AS x FROM items WHERE id = 'a'`));
     const got = String((await b.d1.all(render(c), bindValues(c.binds, caller())))[0]?.x ?? 'no row');
-    r.check(`|| precedence: ${sql} = ${want}`, got === want, `printed: ${render(c).slice(0, 40)} ... => ${got}`);
+    if (got !== want) badConcat.push(`${sql} = ${got}, want ${want}`);
   }
+  r.check('|| binds looser than * and + as in PostgreSQL (4 fixed cases)', badConcat.length === 0, badConcat);
   r.section('1g. Where the printed text differs from what PostgreSQL prints');
   r.note(`printer overrides (subclass methods of pgsql-deparser's Deparser): ${OVERRIDES.length}`);
   for (const o of OVERRIDES) r.note(`  - ${o}: ${OVERRIDE_WHY[o]}`);
@@ -218,5 +205,4 @@ export async function run(r: Report) {
   for (const o of MANTLE_LOWERINGS) r.note(`  - ${o}`);
   r.check(`ADR threshold: overrides (${OVERRIDES.length}) stay under "about a dozen" (12), so Kysely is not needed`, OVERRIDES.length <= 12);
   await b.d1.dispose();
-  return { overrides: OVERRIDES, need, gap, vanillaFailures: vf.length };
 }

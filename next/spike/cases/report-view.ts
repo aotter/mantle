@@ -18,19 +18,15 @@ export async function run(r: Report) {
   const p = await program('view', VIEW, { min: 'int8' });
 
   const all = (await runView(s, p, caller({ min: 0 }))).rows;
-  r.equal("o1's report: apple has its two visible orders; the other owner's order for apple (99) and the order on the expired item are not counted",
+  r.equal("o1's report: apple has its two visible orders; the other owner's order for apple and the order on the expired item are not counted; the LEFT JOIN keeps unmatched items",
     all, [{ name: 'apple', n: 2, total: 4 }, { name: 'berry', n: 0, total: 0 }, { name: 'cherry', n: 0, total: 0 }, { name: 'date', n: 0, total: 0 }]);
-  r.check('no other owner\'s or expired row in the report', !JSON.stringify(all).includes('LEAK'));
-  r.equal('HAVING binds an input: min = 1 keeps only apple', (await runView(s, p, caller({ min: 1 }))).rows, [{ name: 'apple', n: 2, total: 4 }]);
-  r.equal("o2's report sees only o2's rows", (await runView(s, p, caller({ min: 0 }, 'o2'))).rows.map((x: any) => x.name).sort(), ['LEAK-zeta', 'LEAK-zulu']);
+  r.equal("HAVING binds an input (min = 1 keeps only apple); o2's report sees only o2's rows",
+    [(await runView(s, p, caller({ min: 1 }))).rows, (await runView(s, p, caller({ min: 0 }, 'o2'))).rows.map((x: any) => x.name).sort()], [[{ name: 'apple', n: 2, total: 4 }], ['LEAK-zeta', 'LEAK-zulu']]);
 
   // policy is injected into EVERY Schema the View touches
   const sql = render(compileProgram(s, p)[0]);
-  r.check('items is wrapped: scope and TTL', /FROM items WHERE items\.owner = \?1 AND \(items\.expires_at IS NULL OR items\.expires_at > \?2\)/.test(sql), sql.slice(0, 300));
-  r.check('orders is wrapped: scope', /FROM orders WHERE orders\.owner = \?1/.test(sql));
-  r.equal('the caller and now() bind once each, however many references are wrapped', sql.match(/\?1/g)!.length >= 2 && !/\?4/.test(sql), true);
-  // and the LEFT JOIN is still a left join: apple's row count comes from orders, berry keeps its row with 0
-  r.check('LEFT JOIN kept its rows without a match', all.some((x: any) => x.name === 'berry' && x.n === 0));
+  r.check('items is wrapped with scope and TTL, orders with scope; the caller and now() bind once each however many references are wrapped',
+    /FROM items WHERE items\.owner = \?1 AND \(items\.expires_at IS NULL OR items\.expires_at > \?2\)/.test(sql) && /FROM orders WHERE orders\.owner = \?1/.test(sql) && !/\?4/.test(sql), sql.slice(0, 300));
 
   // cursor: keyset pagination over (total DESC, name, and the appended group key)
   const pages: any[][] = [];
@@ -41,17 +37,14 @@ export async function run(r: Report) {
     if (!page.next) break;
     cursor = page.next;
   }
-  r.equal('cursor: pages of 2 cover the report in order, without repeats or gaps', pages, [all.slice(0, 2), all.slice(2, 4)]);
-  r.equal('cursor: the last page has no next cursor', pages.length, 2);
-  // a cursor forged to point at another owner's row cannot reveal it: the keys only filter the caller's own result
+  r.equal('cursor: pages of 2 cover the report in order, without repeats or gaps, and the last page has no next cursor', pages, [all.slice(0, 2), all.slice(2, 4)]);
+  // a forged cursor cannot reveal another owner's row (the keys only filter the caller's own result); ties on the first key are broken by the group key
   const forged = await runView(s, p, caller({ min: 0 }), { cursor: [0, 'LEAK-zeta', 'LEAK-zeta'], pageSize: 5 });
-  r.check("a forged cursor value only filters the caller's own rows", !JSON.stringify(forged.rows).includes('LEAK'), forged.rows);
-  // ties on the first key are broken by the group key, so page boundaries inside the tie are stable
   const inTie = await runView(s, p, caller({ min: 0 }), { cursor: [0, 'berry', 'berry'], pageSize: 5 });
-  r.equal('cursor inside a run of equal totals continues after the given name', inTie.rows.map((x: any) => x.name), ['cherry', 'date']);
+  r.check("a forged cursor value only filters the caller's own rows; a cursor inside a run of equal totals continues after the given name", !JSON.stringify(forged.rows).includes('LEAK') && JSON.stringify(inTie.rows.map((x: any) => x.name)) === '["cherry","date"]', [forged.rows, inTie.rows]);
 
   // the scope index still serves the wrapped read: SQLite flattens the wrapper (ADR-0034 decision 8)
-  const plan = await b.d1.try(`EXPLAIN QUERY PLAN ${sql}`, [ 'o1', 0, 0 ]);
+  const plan = await b.d1.try(`EXPLAIN QUERY PLAN ${sql}`, ['o1', 0, 0]);
   if ('rows' in plan) {
     const detail = plan.rows.map((x: any) => x.detail).join(' | ');
     r.check('EXPLAIN QUERY PLAN uses the scope index on both wrapped Schemas', /_mantle_scope_items/.test(detail) && /_mantle_scope_orders/.test(detail), detail);

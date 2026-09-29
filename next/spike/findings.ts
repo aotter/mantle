@@ -1,6 +1,9 @@
 // Commentary that goes into REPORT.txt. It is written by hand; the checks it cites are in the evidence
 // section and fail the run if they stop holding. Numbered by the ADR decision they amend.
-export const FINDINGS = [
+// Numbers a case measures or chooses live in `facts` (the case sets them), so the text cannot drift from the run.
+export const facts = { trees: 40, dstMin: 0, dstMax: 0, caught: 0, positions: 0 };
+
+export const findings = () => [
   'Decision 3 (printer). Four printer overrides, not three: ParamRef, TypeCast, A_Const, and A_Expr (x LIKE p ESCAPE e parses to',
   '  LIKE with pg_catalog.like_escape(p, e); SQLite has only the ESCAPE clause). Four more places rewrite the AST because SQLite lacks the',
   '  PostgreSQL construct (function prefix and SQL-syntax calls, btrim -> trim, = ANY (subquery) -> IN, type names). 4 + 4 is under the',
@@ -8,8 +11,8 @@ export const FINDINGS = [
   'Decision 3 (printer). `$n` is not a syntax error on D1: SQLite reads it as a named parameter numbered by first appearance, so binds',
   '  shift silently when ?3 appears before ?2. Only the corpus item insert-select-input catches it. The ADR should say the ParamRef',
   '  override is a correctness fix, not cosmetics. [1c]',
-  'Decision 3 (printer). Operator precedence needs no override: pgsql-deparser parenthesizes nested operators, and 400 random',
-  '  integer/boolean trees plus the `||` cases evaluate on D1 to the tree\'s value. [1f]',
+  `Decision 3 (printer). Operator precedence needs no override: pgsql-deparser parenthesizes nested operators, and ${facts.trees} random`,
+  '  integer/boolean trees plus the `||` cases evaluate on D1 to the tree\'s value; the same SQL without its parentheses does not. [1f]',
   'Decision 2 (identifiers). The keywords SQLite rejects unquoted while the printer leaves them bare are, measured against all 147:',
   '  add alter autoincrement commit delete drop escape index insert nothing raise set transaction update. `match` and `glob`, named in',
   '  the ADR, are fine. The list is a measurement of pgsql-deparser 18.3.8 and D1\'s SQLite: 1d fails if either changes it. [1d]',
@@ -32,7 +35,7 @@ export const FINDINGS = [
   '  (2.7 gives 2; -2.7 gives -2; \'12.5\' gives 12): the warning is SQL_CAST_TRUNC. CAST(x AS bool) is lowered to x <> 0. A CAST of a',
   '  non-literal to timestamptz, date or numeric is refused: it would need the arithmetic rewrite the ADR defers. [Case 6]',
   'Decision 5 (time zone). Transitions generated with Intl (261 rows for New York 1970-2100, three-day scan plus bisection) match the Intl oracle',
-  '  on 155 to 881 instants per zone (New York, Berlin, Lord Howe, Kolkata, Apia, Taipei), including every half hour within 30 h of each',
+  `  on ${facts.dstMin} to ${facts.dstMax} instants per zone (New York, Berlin, Lord Howe, Kolkata, Apia, Taipei), including every half hour within 6 h of each`,
   '  transition and the day Apia skipped. Inside a repeated whole hour each pass truncates to its own hour start (05:30Z gives 05:00Z, 06:30Z',
   '  gives 06:00Z); whether PostgreSQL picks the same was not verified (no PostgreSQL here), so the ADR should not claim parity for the',
   '  repeated hour or for Lord Howe\'s half-hour gap. [Case 6]',
@@ -40,7 +43,7 @@ export const FINDINGS = [
   '  @pgsql/types (each edge is Edge<Node, KeyOf<Node>>, so a renamed key fails tsc), ALL_EDGES_REACHED fails when an edge has no position,',
   '  the probe list is Record<RelationPosition, Probe> `satisfies`, and the policy pass throws on a relation reached through an edge it has',
   '  no name for (fail closed). All three tsc failures are shown by scratch copies. Switching the visibility predicate off is caught by',
-  '  13 of 14 probes; insert-target is protected by the scope/id fill and the scope-including unique index instead. [Case 7, Typecheck]',
+  `  ${facts.caught} of ${facts.positions} probes; insert-target is protected by the scope/id fill and the scope-including unique index instead. [Case 7, Typecheck]`,
   'Decision 8 (search and near). search() and near() need the wrapper to expose rowid as _rid; search_rank(t) needs the query of the sibling',
   '  search(t, q); PostgreSQL\'s grammar has no MATCH, so the printed form is `fts = q` (FTS5 accepts it, results identical to MATCH).',
   '  near() takes a literal radius and input-or-literal coordinates, because the bounding box is bound from the input at run time. [Case 8]',

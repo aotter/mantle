@@ -4,7 +4,7 @@
 // Every case runs on local D1 in workerd (wrangler's unstable_startWorker); nothing touches Cloudflare.
 import { writeFileSync } from 'node:fs';
 import { Report } from './src/report.ts';
-import { FINDINGS, NOT_COVERED } from './findings.ts';
+import { findings, NOT_COVERED } from './findings.ts';
 
 process.env.WRANGLER_SEND_METRICS ??= 'false';
 
@@ -59,7 +59,7 @@ const text = [
   `${report.checks.length - report.failed.length}/${report.checks.length} checks pass${report.failed.length ? `, ${report.failed.length} FAIL` : ''} in ${((Date.now() - t0) / 1000).toFixed(1)} s`,
   '',
   '== Findings against ADR-0034 (commentary; each names the check that shows it) ==',
-  ...FINDINGS,
+  ...findings(),
   '',
   '== Not covered by this spike ==',
   ...NOT_COVERED,

@@ -26,7 +26,7 @@ export const schemas: Schemas = {
 
 /** a point and places at known distances north of it */
 export const CENTER = { lat: 25.033, lng: 121.5654 };
-export const METERS_PER_DEGREE_LAT = (2 * Math.PI * 6_371_008.8) / 360;
+const METERS_PER_DEGREE_LAT = (2 * Math.PI * 6_371_008.8) / 360;
 export const north = (m: number) => CENTER.lat + m / METERS_PER_DEGREE_LAT;
 
 const FUTURE = NOW + 1_000_000_000_000;
@@ -55,12 +55,11 @@ export const seed = [
     ('X_pl1','o2',0,NULL,'LEAK-other-owner',${north(300)},${CENTER.lng}), ('X_pl2','o1',0,${EXPIRED},'LEAK-expired',${north(300)},${CENTER.lng})`,
 ];
 
-export async function boot(extraSeed: string[] = [], only?: string[]): Promise<{ d1: LocalD1; schemas: Schemas }> {
+export async function boot(): Promise<{ d1: LocalD1; schemas: Schemas }> {
   const d1 = await LocalD1.create();
-  const s = only ? Object.fromEntries(Object.entries(schemas).filter(([k]) => only.includes(k))) : schemas;
-  await d1.exec(storageDdl(s));
-  await d1.exec([...seed.filter((q) => !only || only.some((t) => q.includes(`INTO ${t} `))), ...extraSeed]);
-  return { d1, schemas: s };
+  await d1.exec(storageDdl(schemas));
+  await d1.exec(seed);
+  return { d1, schemas };
 }
 export async function reset(d1: LocalD1) {
   for (const t of Object.keys(schemas)) await d1.exec([`DELETE FROM ${t}`]);

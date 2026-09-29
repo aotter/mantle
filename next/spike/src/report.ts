@@ -23,15 +23,7 @@ export class Report {
     const ok = isDeepStrictEqual(JSON.parse(JSON.stringify(actual)), JSON.parse(JSON.stringify(expected)));
     this.check(name, ok, ok ? JSON.stringify(actual) : { expected, actual });
   }
-  /** rows returned by a probe must not contain any of these ids (another owner's, expired or unpublished rows) */
   get failed() {
     return this.checks.filter((c) => !c.ok);
-  }
-  summary(byCase: boolean) {
-    const cases = [...new Set(this.checks.map((c) => c.case))];
-    return cases.map((c) => {
-      const cs = this.checks.filter((x) => x.case === c);
-      return `${cs.every((x) => x.ok) ? 'PASS' : 'FAIL'}  ${c}  (${cs.filter((x) => x.ok).length}/${cs.length} checks)`;
-    }).join('\n') + (byCase ? '' : '');
   }
 }
