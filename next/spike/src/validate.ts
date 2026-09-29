@@ -207,6 +207,8 @@ const check: Record<string, Checker> = {
     if (n.kind === 'AEXPR_OP' && !OPS.has(op)) no('SQL_UNSUPPORTED', `operator ${op} is refused`, at);
     if (n.kind === 'AEXPR_IN' && !['=', '<>'].includes(op)) no('SQL_UNSUPPORTED', 'a bad IN', at);
     if (n.kind === 'AEXPR_LIKE' && !['~~', '!~~'].includes(op)) no('SQL_UNSUPPORTED', 'ILIKE and regular expressions are refused', at, /\bILIKE\b/i);
+    const esc = (x: N | undefined) => !!x?.FuncCall && fname(x.FuncCall) === 'like_escape';
+    if (esc(n.lexpr) || (esc(n.rexpr) && n.kind !== 'AEXPR_LIKE')) no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at);
   },
   TypeCast: (n, _c, _p, at) => {
     const t = sv(n.typeName.names).replace('pg_catalog.', '');

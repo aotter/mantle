@@ -53,6 +53,8 @@ const REFUSED: Bad[] = [
   // types and time
   v("SELECT interval '1 day'", 'SQL_TYPE', undefined, /bind the boundary as an input/),
   v("SELECT interval '1 month'", 'SQL_TYPE', undefined, /calendar unit/),
+  v("SELECT interval '1 ms'", 'SQL_TYPE', undefined, /calendar unit|not supported/),
+  v("SELECT id FROM items WHERE name = like_escape('a', '!')", 'SQL_FUNCTION', undefined, /ESCAPE of a LIKE/),
   v("SELECT date_trunc('century', now())", 'SQL_TYPE', undefined, /date_trunc takes/),
   v("SELECT extract(epoch FROM now())", 'SQL_TYPE', undefined, /extract takes/),
   v('SELECT CAST(stock AS varchar) FROM items', 'SQL_TYPE', undefined, /varchar/),

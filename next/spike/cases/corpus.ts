@@ -73,7 +73,7 @@ export const corpus: Item[] = [
     [{ lo: 'abc', up: 'ABC', len: 5, ab: 3, r: 2.57, sub: 'bcd', rep: 'a+b', t: 'x', lt: 'x', rt: 'x', ins: 3, ty: 'integer', hx: '41' }]),
   v('json-functions', "SELECT json_extract(tags, '$[0]') AS e, json_array_length(tags) AS n, json_set(tags, '$[0]', 'z') AS s, json_insert(tags, '$[#]', 'w') AS i, json_remove(tags, '$[0]') AS r FROM items WHERE id = 'a'",
     [{ e: 'red', n: 2, s: '["z","big"]', i: '["red","big","w"]', r: '["big"]' }]),
-  v('casts', "SELECT CAST(stock AS text) AS t, round(stock) AS i, CAST(stock AS float8) AS f, CAST(stock AS bool) AS b, stock::text || 'x' AS c FROM items WHERE id = 'a'", [{ t: '5', i: 5, f: 5, b: 1, c: '5x' }]),
+  v('casts', "SELECT CAST(stock AS text) AS t, round(stock) AS i, CAST(stock AS float8) AS f, CAST(stock AS bool) AS b, CAST('false' AS bool) AS bf, CAST('yes' AS bool) AS bt, stock::text || 'x' AS c FROM items WHERE id = 'a'", [{ t: '5', i: 5, f: 5, b: 1, bf: 0, bt: 1, c: '5x' }]),
   v('literal-casts', "SELECT '2026-03-08 10:00:00+00'::timestamptz AS ts, date '2026-03-08' AS d, interval '36 hours' AS iv, interval '90 minutes' AS im, '12.34'::numeric(12, 2) AS n, CAST('2026-03-08T10:00:00.123456Z' AS timestamptz) AS us FROM items WHERE id = 'a'",
     [{ ts: us(2026, 3, 8, 10), d: Date.UTC(2026, 2, 8) / 86_400_000, iv: 129_600_000_000, im: 5_400_000_000, n: 1234, us: us(2026, 3, 8, 10) + 123456 }]),
   v('mantle-refs', 'SELECT auth.uid() AS uid, auth.role() AS role, now() AS now, input.x AS x FROM items WHERE id = \'a\'', [{ uid: 'o1', role: 'staff', now: NOW, x: 3 }], { x: 'int8' }, { x: 3 }),

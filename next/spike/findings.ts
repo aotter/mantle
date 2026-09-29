@@ -34,7 +34,7 @@ export const findings = () => [
   '  PostgreSQL\'s results. numeric input beyond its scale is refused, not rounded. CAST(x AS int) truncates where PostgreSQL rounds',
   '  (2.7 gives 2; -2.7 gives -2; \'12.5\' gives 12), so a non-literal CAST to int4 or int8 is refused (SQL_TYPE, in the validation the CLI and the',
   '  runtime share) and the message asks for round(x); an integer literal CAST passes. round(x) on a float8 rounds exact halves away from zero,',
-  '  PostgreSQL to even. CAST(x AS bool) is lowered to x <> 0. A CAST of a',
+  '  PostgreSQL to even. CAST(x AS bool) is x <> 0 for a number and the PostgreSQL spellings for text (\'false\' <> 0 is 1 in SQLite). A CAST of a',
   '  non-literal to timestamptz, date or numeric is refused: it would need the arithmetic rewrite the ADR defers. [Case 6]',
   'Decision 5 (time zone). Transitions generated with Intl (261 rows for New York 1970-2100, three-day scan plus bisection) match the Intl oracle',
   `  on ${facts.dstMin} to ${facts.dstMax} instants per zone (New York, Berlin, Lord Howe, Kolkata, Apia, Taipei), including every half hour within 6 h of each`,

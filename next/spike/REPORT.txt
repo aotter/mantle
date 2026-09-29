@@ -23,7 +23,7 @@ Spike task 2 and 3: the 8 conformance cases (ADR-0034 "Conformance cases")
 Also
   PASS  Typecheck:  (4/4 checks)
   PASS  Local D1 facts  (5/5 checks)
-104/104 checks pass in 16.3 s
+104/104 checks pass in 16.8 s
 
 == Findings against ADR-0034 (commentary; each names the check that shows it) ==
 Decision 3 (printer). Four printer overrides, not three: ParamRef, TypeCast, A_Const, and A_Expr (x LIKE p ESCAPE e parses to
@@ -56,7 +56,7 @@ Decision 5 (types). `? / 2`, exact sums over numeric(12,2), microsecond comparis
   PostgreSQL's results. numeric input beyond its scale is refused, not rounded. CAST(x AS int) truncates where PostgreSQL rounds
   (2.7 gives 2; -2.7 gives -2; '12.5' gives 12), so a non-literal CAST to int4 or int8 is refused (SQL_TYPE, in the validation the CLI and the
   runtime share) and the message asks for round(x); an integer literal CAST passes. round(x) on a float8 rounds exact halves away from zero,
-  PostgreSQL to even. CAST(x AS bool) is lowered to x <> 0. A CAST of a
+  PostgreSQL to even. CAST(x AS bool) is x <> 0 for a number and the PostgreSQL spellings for text ('false' <> 0 is 1 in SQLite). A CAST of a
   non-literal to timestamptz, date or numeric is refused: it would need the arithmetic rewrite the ADR defers. [Case 6]
 Decision 5 (time zone). Transitions generated with Intl (261 rows for New York 1970-2100, three-day scan plus bisection) match the Intl oracle
   on 25 to 175 instants per zone (New York, Berlin, Lord Howe, Kolkata, Apia, Taipei), including every half hour within 6 h of each
@@ -136,7 +136,7 @@ AST rewrites in policy.ts because SQLite lacks the PostgreSQL construct (not pri
   - FuncCall: strip pg_catalog., print SQL-syntax calls (TRIM(BOTH FROM x), EXTRACT(.. FROM ..)) as plain calls
   - FuncCall: btrim(x) (how PostgreSQL parses trim(x)) -> trim(x)
   - SubLink: x = ANY (subquery) -> x IN (subquery)
-  - TypeCast: type names to SQLite storage classes (int4/int8 -> integer, float8 -> real, bool -> x <> 0, text -> text)
+  - TypeCast: type names to SQLite storage classes (int4/int8 -> integer, float8 -> real, text -> text); bool -> x <> 0 for a number, the PostgreSQL spellings for text
 Mantle constructs lowered to plain SQLite (features, not PostgreSQL differences): 7
   - input.<name> -> CAST(?n AS <declared type>), auth.uid()/auth.role()/now() -> numbered binds
   - interval 'N second|minute|hour' -> a microsecond integer constant; calendar units refused
@@ -149,7 +149,7 @@ PASS  ADR threshold: overrides (4) stay under "about a dozen" (12), so Kysely is
 
 == Case 1: requisition ==
 PASS  approve r1: RETURNING of the UPDATE and of the conditional INSERT, and the row op persisted  -> [[[{"id":"r1","state":"approved"}],[{"item_id":"a","qty":2,"total":null}]],"approved"]
-PASS  approve r1: the after hook ran once; its row carries id and version although RETURNING * names neither  -> [[{"item_id":"a","qty":2,"total":null,"id":"6aa6e3fac556d2e375927e9de11cbc60","version":1}]]
+PASS  approve r1: the after hook ran once; its row carries id and version although RETURNING * names neither  -> [[{"item_id":"a","qty":2,"total":null,"id":"5bd06926e9450c55cd9f8fcbee9c1efa","version":1}]]
 PASS  reject r2: the conditional INSERT writes nothing, and calls no hook  -> [[[{"id":"r2","state":"rejected"}],[]],{"orders":4,"calls":1}]
 PASS  r1 again and another owner's X_rz: CONFLICT op=0 each, nothing written, no hook  -> [0,0,"pending",{"orders":4,"calls":1}]
 PASS  two row ops, the second matches nothing: CONFLICT op=1 and the first is rolled back (stock of a is still 5)  -> [1,5]
@@ -179,7 +179,7 @@ PASS  a set op on items (before update hook) is refused  -> a set op on items is
 PASS  set ops stay legal where no before hook exists; the update hook does not run for insert
 
 == Case 5: dialect (refusals with a position) ==
-diagnostic table (53 refusals):
+diagnostic table (55 refusals):
 SELECT id FROM items OFFSET 2                                    -> SQL_UNSUPPORTED 1:22 'OFFSET' SelectStmt.limitOffset is not in the subset
 SELECT sqlite_version()                                          -> SQL_FUNCTION 1:8 'sqlite_version' function sqlite_version is not on the allowlist
 SELECT id FROM items WHERE id = $1                               -> SQL_UNSUPPORTED 1:33 '$1' ParamRef is not in the subset
@@ -213,6 +213,8 @@ SELECT nextval('seq')                                            -> SQL_FUNCTION
 SELECT * FROM json_tree('[1]')                                   -> SQL_FUNCTION 1:8 '*' only json_each() is allowed in FROM
 SELECT interval '1 day'                                          -> SQL_TYPE 1:23 ''' interval unit 'day' is a calendar unit (a day is 23 or 25 hours across
 SELECT interval '1 month'                                        -> SQL_TYPE 1:25 ''' interval unit 'month' is a calendar unit (a day is 23 or 25 hours acro
+SELECT interval '1 ms'                                           -> SQL_TYPE 1:22 ''' interval '1 ms' is not supported: write a number and second, minute or
+SELECT id FROM items WHERE name = like_escape('a', '!')          -> SQL_FUNCTION 1:33 '=' like_escape is only the ESCAPE of a LIKE
 SELECT date_trunc('century', now())                              -> SQL_TYPE 1:8 'date_trunc' date_trunc takes hour, day, week, month, year as a literal first argum
 SELECT extract(epoch FROM now())                                 -> SQL_TYPE 1:8 'extract' extract takes year, month, day, dow, hour
 SELECT CAST(stock AS varchar) FROM items                         -> SQL_TYPE 1:8 'CAST' CAST to varchar is refused
@@ -234,15 +236,15 @@ INSERT INTO settings (key) VALUES ('x') ON CONFLICT ON CONSTRAIN -> SQL_UNSUPPOR
 SELEC id FROM items                                              -> SQL_SYNTAX 1:1 'SELEC' syntax error at or near "SELEC"
 INSERT OR REPLACE INTO settings (key) VALUES ('x')               -> SQL_SYNTAX 1:8 'OR' syntax error at or near "OR"
 PASS  SQL_UNSUPPORTED: 17 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
-PASS  SQL_FUNCTION: 7 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
+PASS  SQL_FUNCTION: 8 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
 PASS  SQL_RELATION: 3 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
 PASS  SQL_SHAPE: 9 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
 PASS  SQL_COLUMN: 3 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
-PASS  SQL_TYPE: 7 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
+PASS  SQL_TYPE: 8 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
 PASS  SQL_WRITE: 5 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
 PASS  SQL_SYNTAX: 2 refusals give this code, the token and the message (and the runtime validator refuses the bare IR too)  -> []
 PASS  negative control: 4 valid statements next to them are accepted, so refusing everything cannot pass  -> []
-51 of 53 refusals carry a line, column and token. The AST has no location for a clause key, so the CLI finds its keyword in the source (WITH, OFFSET, RIGHT, UNION, FOR UPDATE ...); 2 have none (interval literal, BEGIN, a whole-statement refusal).
+53 of 55 refusals carry a line, column and token. The AST has no location for a clause key, so the CLI finds its keyword in the source (WITH, OFFSET, RIGHT, UNION, FOR UPDATE ...); 2 have none (interval literal, BEGIN, a whole-statement refusal).
 PASS  crafted IR: an unknown key, an unknown node, an enum value outside the subset and the physical `system` tag are refused, never skipped  -> [true,true,true,true]
 PASS  crafted IR: a cte reference carrying a Schema's name (SQLite would resolve it to the unwrapped table), or not defined in scope, is refused  -> [true,true]
 PASS  fail closed: an untagged relation, and a RangeVar reached through an unclassified edge, are refused by the policy pass, never printed bare  -> [true,true]

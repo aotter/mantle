@@ -102,13 +102,16 @@ export function decodeOutput(type: string, v: any): unknown {
 }
 
 /** PostgreSQL `interval` literal -> microseconds. Only second, minute and hour: day and longer are calendar units. */
-const UNIT_US: Record<string, number> = { second: 1e6, sec: 1e6, s: 1e6, minute: 6e7, min: 6e7, m: 6e7, hour: 3.6e9, hr: 3.6e9, h: 3.6e9 };
+const UNIT_US: Record<string, number> = Object.fromEntries(
+  (['second seconds sec secs s', 'minute minutes min mins m', 'hour hours hr hrs h'] as const).flatMap((names, i) => names.split(' ').map((u) => [u, [1e6, 6e7, 3.6e9][i]])),
+);
 const TYPMOD_UNIT: Record<number, string> = { 1024: 'hour', 2048: 'minute', 4096: 'second' };
 export function intervalMicros(text: string, typmod?: number): number {
-  let m = /^\s*(-?\d+(?:\.\d+)?)\s*([a-z]+?)s?\s*$/i.exec(text);
+  let m = /^\s*(-?\d+(?:\.\d+)?)\s*([a-z]+)\s*$/i.exec(text);
   if (!m && typmod !== undefined && TYPMOD_UNIT[typmod] && /^\s*-?\d+(\.\d+)?\s*$/.test(text)) m = [text, text.trim(), TYPMOD_UNIT[typmod]] as any;
   if (!m) throw new Refused('SQL_TYPE', `interval '${text}' is not supported: write a number and second, minute or hour`);
   const unit = UNIT_US[m[2].toLowerCase()];
-  if (!unit) throw new Refused('SQL_TYPE', `interval unit '${m[2]}' is a calendar unit (a day is 23 or 25 hours across daylight saving): bind the boundary as an input instead`);
+  if (!unit && /^(days?|weeks?|months?|mons?|years?|y)$/i.test(m[2])) throw new Refused('SQL_TYPE', `interval unit '${m[2]}' is a calendar unit (a day is 23 or 25 hours across daylight saving): bind the boundary as an input instead`);
+  if (!unit) throw new Refused('SQL_TYPE', `interval '${text}' is not supported: write a number and second, minute or hour`);
   return Math.round(Number(m[1]) * unit);
 }

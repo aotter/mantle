@@ -52,7 +52,7 @@ export const PG_ONLY_REWRITES = [
   'FuncCall: strip pg_catalog., print SQL-syntax calls (TRIM(BOTH FROM x), EXTRACT(.. FROM ..)) as plain calls',
   'FuncCall: btrim(x) (how PostgreSQL parses trim(x)) -> trim(x)',
   'SubLink: x = ANY (subquery) -> x IN (subquery)',
-  'TypeCast: type names to SQLite storage classes (int4/int8 -> integer, float8 -> real, bool -> x <> 0, text -> text)',
+  'TypeCast: type names to SQLite storage classes (int4/int8 -> integer, float8 -> real, text -> text); bool -> x <> 0 for a number, the PostgreSQL spellings for text',
 ];
 /** Mantle's own SQL constructs, lowered to SQLite expressions */
 export const MANTLE_LOWERINGS = [
@@ -285,7 +285,8 @@ function lowerCast(n: N, c: C): N {
     parseNumeric(`numeric(${p}, ${s})`);
     return num(encodeNumeric(litStr!, p, s));
   }
-  if (t === 'bool') return op('<>', tx(n.arg, c), num(0)); // PostgreSQL: any non-zero is true, NULL stays NULL
+  // PostgreSQL: a number is true when non-zero, text by its spelling; NULL stays NULL. A bare `x <> 0` is always true for text in SQLite ('false' <> 0 is 1)
+  if (t === 'bool') return sql(`CASE WHEN typeof(__x) = 'text' THEN lower(__x) IN ('t', 'true', 'y', 'yes', 'on', '1') WHEN __x IS NULL THEN NULL ELSE __x <> 0 END`, { __x: tx(n.arg, c) });
   const target = t === 'int4' || t === 'int8' ? 'integer' : t === 'float8' ? 'real' : 'text';
   return cast(tx(n.arg, c), target);
 }

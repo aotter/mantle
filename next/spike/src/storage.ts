@@ -36,8 +36,9 @@ function checkExpr(expr: string): string {
 
 export function schemaDdl(name: string, s: SchemaDef): string[] {
   const t = q(name);
+  // `_rid` aliases rowid: FTS5 content_rowid and the R*Tree key on it, and an unaliased rowid may change on VACUUM
   const cols = [
-    'id TEXT PRIMARY KEY', 'version INTEGER NOT NULL DEFAULT 1', 'created_at INTEGER NOT NULL',
+    '_rid INTEGER PRIMARY KEY', 'id TEXT NOT NULL UNIQUE', 'version INTEGER NOT NULL DEFAULT 1', 'created_at INTEGER NOT NULL',
     ...(s.scope ? [`${q(s.scope)} TEXT NOT NULL`] : []),
     ...(s.ttl ? [`${q(s.ttl)} INTEGER`] : []),
     ...(s.publishing ? ["status TEXT NOT NULL DEFAULT 'draft'"] : []),
