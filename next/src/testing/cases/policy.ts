@@ -7,7 +7,7 @@
 import type { Report } from '../report.js';
 import type { DatabaseDriver } from '../../core/driver.js';
 import { CENTER, NOW, boot, caller, program, reset, site } from '../harness.js';
-import { isConflict, runProcedure, runView } from '../harness.js';
+import { isConflict, isRefusal, runProcedure, runView } from '../harness.js';
 import type { Site } from '../harness.js';
 import { facts } from '../harness.js';
 import type { Mode } from '../../core/sql/policy.js';
@@ -127,4 +127,14 @@ export async function run(r: Report, driver: DatabaseDriver) {
   const all = await program('view', 'SELECT id FROM items ORDER BY id');
   r.equal('public caller sees only the published, unexpired post; trusted runtime.store sees every owner but not the expired row',
     [(await runView({ ...site(b), mode: 'public' }, posts, caller())).rows, (await runView({ ...site(b), mode: 'trusted' }, all, caller())).rows], [ids('p1'), ids('X_z1', 'X_z2', 'a', 'b', 'c', 'd')]);
+
+  // an alias that spells one of the lowering placeholders is only an identifier (it must not be spliced into)
+  const odd = await runView(site(b), await program('view', 'SELECT n__q.id FROM notes AS n__q WHERE search(n__q, input.q) ORDER BY n__q.id', { q: 'text' }), caller({ q: '小籠包' }));
+  r.equal('an alias containing __q is an identifier, not a placeholder: search() still works through it', odd.rows, ids('n1'));
+
+  // a Schema whose lifecycle is publishing takes row ops only
+  let setOp: unknown;
+  try { await runProcedure(site(b), await program('procedure', "UPDATE posts SET title = 'x' WHERE title = 'Hello world'"), caller()); } catch (e) { setOp = e; }
+  const rowOp = await runProcedure(site(b), await program('procedure', "UPDATE posts SET title = 'x' WHERE id = 'p1' RETURNING id"), caller());
+  r.check('a set op on a publishing Schema is refused; a row op is allowed', isRefusal(setOp, 'SQL_SHAPE') && rowOp.rows[0].length === 1, String((setOp as Error)?.message));
 }

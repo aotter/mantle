@@ -41,7 +41,13 @@ export function compileProgram(stmts: readonly SqlNode[], ctx: CompileContext): 
   if (diagnostics.length)
     throw new DiagnosticError(diagnostics.map((d) => runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `${d.code}: ${d.message}` })));
   const opts: PolicyOpts = { schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, lockVersion: ctx.lockVersion, returning: ctx.returning as Set<string> | undefined, seen: ctx.seen, unsafeNoVisibility: ctx.unsafeNoVisibility };
-  return stmts.map((stmt) => applyPolicy(stmt, opts));
+  return stmts.map((stmt) => {
+    const c = applyPolicy(stmt, opts);
+    // a Schema whose published entries are protected takes row ops only (ADR-0032 decision 2, ADR-0034 decision 4)
+    if (c.kind === "set" && c.schema && ctx.schemas[c.schema]?.publishing)
+      throw new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `SQL_SHAPE: a set op on ${c.schema} is refused: its lifecycle is publishing, so published entries are protected and writes take row ops only` }));
+    return c;
+  });
 }
 
 /** The box a near() query binds to the R*Tree: a bounding box of the radius, padded for float32 storage. */

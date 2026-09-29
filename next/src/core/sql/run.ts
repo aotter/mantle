@@ -74,6 +74,8 @@ async function beforeRow(env: RunEnv, p: Program, i: number, c: Compiled, as: Ru
   if (c.verb === "insert") {
     const cols: N[] = stmt.InsertStmt.cols;
     const values: N[] = stmt.InsertStmt.selectStmt.SelectStmt.valuesLists[0].List.items;
+    // the hook sees these values in a read of its own, so they must not depend on data that can change before the commit
+    if (JSON.stringify(values).includes('"SubLink"')) throw refuse(`SQL_SHAPE: an insert into ${c.schema}, which has a before create hook, may not read data in its VALUES`);
     read = select(values.map((val, k) => ({ ResTarget: { name: cols[k]!.ResTarget.name, val } })));
   } else {
     const t = (f: string) => ref("t", f);
