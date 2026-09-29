@@ -88,14 +88,20 @@ const clone = <T,>(x: T): T => structuredClone(x);
  * A lowering written as SQLite text. `__name` splices a (cloned) sub-AST, in parentheses; everything else is
  * emitted as written. The printer prints a `Raw` node as a parenthesized expression, so the runtime parses nothing.
  */
+const TOKEN = /"(?:[^"]|"")*"|'(?:[^']|'')*'|__\w+/g;
 function sql(text: string, subst: Record<string, N> = {}): N {
   const parts: (string | N)[] = [];
-  text.split(/(__\w+)/).forEach((piece, i) => {
-    if (i % 2 === 0) { if (piece) parts.push(piece); return; }
-    const node = subst[piece];
-    if (!node) throw new Error(`lowering template names ${piece} but was not given it`);
+  let last = 0;
+  // a placeholder is only ever unquoted: a quoted identifier or string is text, so a user's alias `n__q` cannot be spliced into
+  for (const m of text.matchAll(TOKEN)) {
+    if (!m[0].startsWith('__')) continue;
+    const node = subst[m[0]];
+    if (!node) throw new Error(`lowering template names ${m[0]} but was not given it`);
+    if (m.index > last) parts.push(text.slice(last, m.index));
     parts.push('(', clone(node), ')');
-  });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
   return { Raw: { parts } };
 }
 const q = (id: string) => `"${id.replace(/"/g, '""')}"`;

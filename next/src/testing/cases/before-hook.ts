@@ -54,4 +54,11 @@ export async function run(r: Report, driver: DatabaseDriver) {
   const other = await runProcedure(s, await program('procedure', "UPDATE requisitions SET state = 'x' WHERE state = 'pending' RETURNING id"), caller());
   const ins = await runProcedure(s, await program('procedure', "INSERT INTO items (name, cat, stock) VALUES ('n', 'x', 1) RETURNING name"), caller());
   r.check('set ops stay legal where no before hook exists; the update hook does not run for insert', other.rows[0].length === 2 && seen.length === calls && ins.rows.length === 1);
+
+  // a before create hook reads the VALUES in a read of its own, so they may not depend on data that can change before the commit
+  const own = { ...s, hooks: { before: { orders: { insert: () => undefined } } } };
+  let subq: Error | undefined;
+  try { await runProcedure(own, await program('procedure', "INSERT INTO orders (item_id, qty) VALUES ('a', (SELECT stock FROM items WHERE id = 'a'))"), caller()); } catch (e) { subq = e as Error; }
+  const plain = await runProcedure(own, await program('procedure', "INSERT INTO orders (item_id, qty) VALUES ('a', 1) RETURNING qty"), caller());
+  r.check('an insert with a before create hook may not read data in its VALUES, and constant values are fine', isRefusal(subq, 'SQL_SHAPE') && plain.rows[0].length === 1, subq?.message);
 }
