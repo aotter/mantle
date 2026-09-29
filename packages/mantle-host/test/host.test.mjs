@@ -646,7 +646,7 @@ test('deploy renders the review and prints the literal publish call; rollback pr
     assert.deepEqual([live.state, live.url, live.nextAction], ['serving', 'https://shop-app.mantle.site/', null])
     const pending = last(await release({ serving: false }))
     assert.deepEqual([pending.nextAction.kind, pending.nextAction.arguments.operationId], ['wait', operationId])
-    const domain = last(await run(root, ['deploy', versionId, '--release', '-', '--json'], { stdin: JSON.stringify({ error: 'media_domain_not_ready', retryable: true, retryAfter: 7 }) }))
+    const domain = last(await run(root, ['deploy', versionId, '--release', '-', '--json'], { stdin: JSON.stringify({ isError: true, content: [{ type: 'text', text: JSON.stringify({ diagnostics: [{ code: 'RESOURCE_UNAVAILABLE', value: { code: 'media_domain_not_ready', retryable: true, retryAfter: 7 } }] }) }] }) }))
     assert.equal(domain.nextAction.kind, 'wait')
     assert.match(domain.nextAction.reason, /7 seconds/)
     assert.equal(last(await run(root, ['deploy', versionId, '--review', '-', '--json'], { stdin: JSON.stringify(review({ validation: { status: 'superseded' } })) })).error, 'version_not_paired')

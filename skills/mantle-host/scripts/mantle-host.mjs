@@ -5067,7 +5067,8 @@ async function released(ctx, version, flags, readInput) {
   const saved = ctx.targetState.deploys[version.versionId];
   if (!saved?.operationId) throw fail("nothing_to_publish", "run deploy for this versionId first");
   const raw = await readInput(), release = unwrapResult(raw, "release")?.release;
-  const problem = release ? null : unwrapResult(raw, "error");
+  const diagnostic = release ? null : unwrapResult(raw, "diagnostics")?.diagnostics?.[0];
+  const problem = diagnostic ? { error: String(diagnostic.value?.code ?? diagnostic.code).toLowerCase(), ...diagnostic.value } : null;
   const wait = (reason) => ctx.emit({ ok: true, stage: "deploy", state: "publishing", versionId: version.versionId, commit: null, nextAction: { ...publishNext(ctx, version, saved, reason), kind: "wait" } });
   if (problem?.error === "media_domain_not_ready" && problem.retryable) wait(`The site address is not ready. Wait ${Number(problem.retryAfter) || 30} seconds, then repeat this identical call.`);
   else if (problem) throw fail(/^[a-z0-9_]{1,100}$/.test(problem.error) ? problem.error : "publish_failed");
