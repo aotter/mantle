@@ -33,7 +33,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0031](0031-host-cloud-core-contract.md) | Cloud supplies the Core pin before host artifact hashing; protocol 2 checks the same pin through grants and the frontend kit. | Accepted |
 | [0032](0032-store-centric-core-and-service-contract.md) | 0.2.0: Store is the only entry persistence path; an application-owned service behind one host-neutral `createMantle`; one `Caller` identity and no Core-owned user or auth; `_mantle_` marks system tables only; two npm packages and one plugin. | Proposed for 0.2.0; decisions 1–5, 10 and 13 amended by 0034 |
 | [0033](0033-storage-converges-to-the-plan.md) | Schema storage converges to the plan by introspection: Mantle applies safe additions, blocks the rest, and verifies author-made changes; no Mantle-written migration files. | Proposed for 0.2.0; amended by 0034 |
-| [0034](0034-store-is-authored-as-sql.md) | Store is authored as SQL in the D1 dialect and compiled to IR by the CLI with `libpg-query`; no Worker parses SQL. Hooks take row arrays, before hooks a snapshot guard; one SQLite executor; exact types for time and decimals. | Proposed for 0.2.0 |
+| [0034](0034-store-is-authored-as-sql.md) | Store is authored as SQL in the D1 dialect and compiled to IR by the CLI with `libpg-query`; no Worker parses SQL. A chosen SQL subset with policy wrapped around every Schema reference; FTS5 search and R*Tree places; hooks take row arrays, before hooks a snapshot guard; one SQLite executor; exact types for time and decimals. | Proposed for 0.2.0 |
 
 ## Reading order
 

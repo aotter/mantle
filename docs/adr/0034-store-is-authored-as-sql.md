@@ -28,19 +28,39 @@ SQL is source and the IR is the compiled artifact, the way TypeScript is source 
 |---|---|---|
 | View | `spec.select` (JSON) or `spec.sql` (native) | `spec.sql`: one `SELECT` |
 | Procedure | `handler: { store: [ops] }` | `handler: { sql: <statements> }`: one or more statements, applied as one batch |
-| Schema | — | `checks: [<boolean expression>]`, `sequences: [<name>]` |
+| Schema | — | `checks: [<boolean expression>]`, `sequences: [<name>]`, `search: [<field>]`, fields with `format: geo` |
 
 `handler: { ref }` is unchanged. The IR stays internal to the plan. It is public only through `ctx.store.select` and `ctx.store.write` in handler code, which keep ADR-0030's JSON shape; a manifest never contains IR.
 
 ### 2. The dialect: SQLite semantics in the syntax PostgreSQL and SQLite share
 
 - **Semantics and functions are SQLite's, limited to what D1 authorizes.** The compiler carries the allowlist measured on D1, and CI checks it against local D1.
-- **Syntax is the core the two share,** parsed by `libpg-query`: `SELECT` with joins, CTEs (recursive included), `UNION`/`INTERSECT`/`EXCEPT`, window functions, aggregates with `FILTER`, `GROUP BY`/`HAVING` and subqueries; `INSERT … VALUES | SELECT` with `ON CONFLICT (…) DO NOTHING | DO UPDATE SET … EXCLUDED.x [WHERE]`; `UPDATE … [FROM] … WHERE`; `DELETE … WHERE`; `RETURNING` on every write. SQLite-only spellings the parser rejects have shared equivalents: `IS DISTINCT FROM` for `IS NOT`, `ON CONFLICT` for `INSERT OR …`. `GLOB` is unavailable.
+- **Syntax is a chosen subset** of what PostgreSQL and SQLite share, parsed by `libpg-query`. It covers what applications commonly do (checked against MongoDB's everyday operations and the repository's examples) and stops where a feature would be hard to control. Anything left out can be added later without breaking a manifest; removing a feature would break one. SQLite-only spellings the parser rejects have shared equivalents: `IS DISTINCT FROM` for `IS NOT`, `ON CONFLICT` for `INSERT OR …`.
+
+  | Area | Supported in 0.2.0 | Rule |
+  |---|---|---|
+  | Expressions | columns, aliases, literals, arithmetic, `\|\|`, `CASE`, `COALESCE`, `NULLIF`, `CAST` | `SELECT *` and `RETURNING *` expand to the declared fields, never to scope or system columns. A `CAST` to a Mantle type is rewritten by the compiler; SQLite truncates where PostgreSQL rounds, so a `CAST` to integer warns |
+  | Conditions | comparison, `AND`/`OR`/`NOT`, `BETWEEN`, `IS [NOT] NULL`, `IS DISTINCT FROM`, `IN (list \| subquery)`, `[NOT] EXISTS`, `LIKE … ESCAPE` | an input array in `IN` lowers to `json_each` and binds once. `LIKE` is case-insensitive in SQLite, unlike PostgreSQL; the diagnostics say so |
+  | Relations | one Schema, `INNER`/`LEFT JOIN … ON` (self-joins included), a subquery in `FROM`, `json_each(<input or column>)` | the one comma join allowed is `t, json_each(t.col)` (MongoDB's `$unwind`) |
+  | Subqueries | scalar and correlated | — |
+  | Aggregation | `count`, `sum`, `min`, `max`, `avg`, `count(DISTINCT)`, `json_group_array([DISTINCT])`, `json_group_object`, `GROUP BY`, `HAVING` | a selected column must be grouped or aggregated |
+  | Windows | `row_number()`, `rank()`, `sum`/`count … OVER (PARTITION BY … ORDER BY …)`, in Views only | no frame clause; the compiler appends `id` to the window's `ORDER BY` |
+  | Order and paging | `ORDER BY … [NULLS FIRST \| LAST]`, `LIMIT`, `DISTINCT`, cursors | the compiler appends `id` as the final sort key; `LIMIT` needs an `ORDER BY`; a nullable sort key states its NULL position |
+  | JSON | `->>`, `json_extract`, `json_set`, `json_insert`, `json_remove`, `json_array_length` | a JSON result carries its declared type; `->` is refused |
+  | Writes | `INSERT … VALUES` (one row), `INSERT … SELECT`, `UPDATE … SET <expr> WHERE`, `DELETE … WHERE`, `RETURNING <columns>`, `ON CONFLICT (…) DO NOTHING \| DO UPDATE … EXCLUDED` | see decision 8 for what a write may name. `ON CONFLICT` is a set op, and on a scoped Schema its conflict target includes the scope field |
+  | Programs | several statements, one batch | statements pass values only through tables |
+  | Time | `now()`, `date_trunc('hour' \| 'day' \| 'week' \| 'month' \| 'year', ts)`, `extract(year \| month \| day \| dow \| hour FROM ts)`, `ts ± interval`, `ts - ts`, `timezone()` | `date_trunc` and `extract` compute in the site time zone. `ts - ts` is microseconds. Display formatting belongs to the client |
+  | Search and places | `search()`, `search_rank()`, `near()`, `distance()` | decision 9 |
+  | Mantle | `input.<name>`, `auth.uid()`, `auth.role()`, `nextval()`, `numeric(p, s)` | below |
+
+  **Deferred** (each is additive): `UNION ALL`, `UNION`, `INTERSECT`, `EXCEPT`; non-recursive CTEs (a subquery in `FROM` covers them); aggregate `FILTER` (`sum(CASE …)` covers it); `string_agg`; `$pull`-style array rebuilds.
+
+  **Refused in 0.2.0:** `RIGHT`/`FULL JOIN` (rewrite as `LEFT JOIN`); `CROSS JOIN` and comma joins other than `json_each`, where one forgotten condition is a Cartesian product; recursive CTEs, whose work has no bound; `LATERAL`, `NATURAL`, `USING`, `GROUPING SETS`; `UPDATE … FROM` and `DELETE … USING`, where SQLite picks an arbitrary row when several match (a correlated subquery in `SET` covers them); multi-row `VALUES` (`json_each(input.items)` covers it); window frames.
 - **References.** `input.<name>` reads a declared input property, as PostgreSQL's `NEW`, `OLD` and `EXCLUDED` read pseudo-relations. `auth.uid()` is the caller's application subject key and `auth.role()` its staff role (ADR-0032 decision 8). `now()` is the invocation time. Positional `$1` is refused. `input` and `auth` are reserved and cannot name a Schema or an alias. A Schema's `scope` names the same reference (`scope: { ownerId: "auth.uid()" }`), so ADR-0032's `$input.<path>`, `$ctx.user.id`, `$now` and `{ $literal }` are gone; a SQL literal is a literal.
 - **Identifiers resolve case-insensitively,** as SQLite does. The parser folds unquoted identifiers to lower case, so `createdAt` and `createdat` name the same column. SQLite already refuses two tables or two columns whose names differ only by case, and `mantle validate` refuses them first. A Schema whose name is not a plain identifier is quoted: `"support-requests"`.
-- **Mantle's additions keep PostgreSQL names**, since SQLite has none of them: `nextval('<sequence>')` and `timezone('<zone>', ts)`. Exact decimals are a column type, `numeric(p, s)`, not a function.
-- **`interval` takes exact units only:** `interval '<n> second | minute | hour'` compiles to a microsecond constant. Day, week, month and year are refused until calendar arithmetic ships with time zones, since a PostgreSQL day is a calendar day, 23 or 25 hours across daylight saving.
-- **Refused at compile time:** `OFFSET` (cursor pagination only); DDL; transaction control; data-modifying CTEs; `SELECT … FOR UPDATE`; functions outside the allowlist; any table that is not a declared Schema, `_mantle_*` included. There is no `native` escape: on D1 nothing sits below SQLite, so an escape could only bypass policy.
+- **Mantle's additions keep PostgreSQL names** where PostgreSQL has one: `nextval('<sequence>')`, `timezone('<zone>', ts)`, `date_trunc`, `extract`. Exact decimals are a column type, `numeric(p, s)`, not a function. `nextval()` appears only in a one-row `VALUES`, at most once per sequence per statement. Multiplying two `numeric` values needs p₁ + p₂ ≤ 18, or the scaled integers overflow before the rewrite.
+- **`interval`.** `second`, `minute` and `hour` compile to a microsecond constant. `day`, `week`, `month` and `year` are calendar units, as in PostgreSQL (a day is 23 or 25 hours across daylight saving), and compute in the site time zone through `_mantle_tz`; they land with time zones, last in the order of How to apply.
+- **Always refused:** `OFFSET` (cursor pagination only); DDL; transaction control; data-modifying CTEs; `SELECT … FOR UPDATE`; functions outside the allowlist; any table that is not a declared Schema, `_mantle_*` included; table-valued functions other than `json_each`; `rowid`; SQLite's own clock (`'now'`, `CURRENT_TIMESTAMP`), which bypasses `now()`; `strftime`, `date` and `unixepoch` in source, which return NULL on microsecond integers; `printf` width arguments, `zeroblob` and non-constant `randomblob` sizes, which can build values of any size; `ILIKE`; `REGEXP`, which D1 lacks. There is no `native` escape: on D1 nothing sits below SQLite, so an escape could only bypass policy.
 - **No `expect` in the source.** A row op must affect exactly one row, or the batch fails with `CONFLICT`. A conditional insert (`INSERT … SELECT … WHERE`) is a set op, and writing no row is a normal result.
 
 ### 3. Only the CLI parses SQL
@@ -61,11 +81,13 @@ SQL is source and the IR is the compiled artifact, the way TypeScript is source 
   2. The hook runs on those rows.
   3. Inside the batch, directly before the statement, a guard computes the same SQL again and aborts with `CONFLICT op=<k>` if the result differs.
 
-  A phantom row, a changed input to an expression, or an earlier statement writing the same table therefore rolls the batch back, and a retry sees consistent data.
+  A phantom row or a changed input to an expression therefore rolls the batch back, and a retry sees consistent data.
 - **Limits.**
   - A before-hooked statement may touch at most 500 rows (about 1 MB); more is `INPUT_VALIDATION_FAILED` naming the statement.
-  - It may not use `ON CONFLICT`, or `random()`, `changes()` or `last_insert_rowid()`, whose values differ between the read and the guard.
-  - `nextval()` is excluded from the snapshot comparison.
+  - It may not use `ON CONFLICT`, or `random()` or `changes()`, whose values differ between the read and the guard. `last_insert_rowid()` is refused everywhere.
+  - Its `SET` may not read its own target table. SQLite updates row by row, so a later row reads an earlier row's new value, and the write differs from what the guard computed as a `SELECT`.
+  - It may not read a table that an earlier statement in the batch writes. The read runs before the batch, so the guard would fail on every attempt.
+  - `nextval()` is excluded from the snapshot comparison and masked in the hook's rows.
 - **Counting** uses SQLite's `changes()` inside the batch, not D1's `meta.changes`, which includes rows that triggers wrote. Count and guard checks fail with `CONFLICT op=<k>`, so `conflict.opIndex` becomes exact (amends ADR-0032 decision 1).
 - ADR-0032 decision 3's before-hook rules otherwise stand: read-only, fail closed, committed data only. The guard replaces OCC as the check between the hook and the commit.
 - `mantle-update` rewrites `ctx.event.entry` into a loop over `ctx.cause.rows`, never into `rows[0]`.
@@ -80,7 +102,7 @@ SQL is source and the IR is the compiled artifact, the way TypeScript is source 
   Mantle's native timestamps move from milliseconds to microseconds.
 - **Every parameter is bound through a `CAST` to its declared input type,** so integer arithmetic gives the same result on D1, which binds numbers as floats, and on every other driver.
 - **Schema tables Mantle creates are `STRICT`.** An existing table is not rebuilt.
-- **`checks` and foreign keys are enforced by triggers** that storage convergence creates, because SQLite cannot add a `CHECK` or a foreign key to an existing table. The triggers only `RAISE`. Foreign keys are `RESTRICT` only: storage never creates `CASCADE` or `SET NULL`, whose writes would not run Mantle hooks.
+- **`checks` and foreign keys are enforced by triggers** that storage convergence creates, because SQLite cannot add a `CHECK` or a foreign key to an existing table. The triggers only `RAISE`, except the ones that keep `_mantle_fts_*` and `_mantle_geo_*` in step (decision 9), which write only those system tables. Foreign keys are `RESTRICT` only: storage never creates `CASCADE` or `SET NULL`, whose writes would not run Mantle hooks. A `check` reads only the row's own columns and pure functions, never a subquery.
 - **Sequences and time zones use system tables.** `nextval()` increments `_mantle_sequences` with `UPDATE … RETURNING`, and a later statement in the same batch reads the value back. `timezone()` joins `_mantle_tz`, the site time zone's UTC-offset transitions, so daylight-saving zones compute correctly. The site time zone is a site setting.
 
 ### 6. One executor, one test line (amends ADR-0032 decisions 4 and 13)
@@ -96,18 +118,38 @@ SQL is source and the IR is the compiled artifact, the way TypeScript is source 
 
 ### 7. Cloud validates the plan (amends ADR-0032 decision 10)
 
-The platform-verified facts become the **Cloud-validated plan**, the pinned Core, storage matching the plan and the fingerprint handshake. The runtime's Store injects scope, TTL, published-only and OCC at execution whatever compiled the IR, and a plan can express nothing its SQL author could not, so this loses no guarantee.
+The platform-verified facts become the **Cloud-validated plan**, the pinned Core, storage matching the plan and the fingerprint handshake. The runtime's Store injects scope, TTL, published-only and OCC at execution whatever compiled the IR, and a plan can express nothing its SQL author could not, provided the runtime enforces decision 8 on every IR it compiles, handler-built IR included. So this loses no guarantee.
 
 That the IR matches its SQL source is **service-reported**: the plan carries the source's hash, and the compiler is the pinned Core. Host protocol 3 uploads the plan.
+
+### 8. Policy injection
+
+- **Every Schema reference is wrapped.** The compiler has one function that prints a Schema table's name, and it always prints `(SELECT <declared columns> FROM "t" WHERE <scope> AND <ttl> AND <published>) AS <alias>`. Joins, subqueries, set-op branches and window inputs therefore see only visible rows, and a `LEFT JOIN` stays a left join. SQLite flattens the wrapper, so the scope index is still used; RIGHT JOIN would materialize, one more reason it is refused.
+- **`UPDATE` and `DELETE` targets** cannot be subqueries in SQLite, so the same predicate is ANDed into their `WHERE`. `ON CONFLICT DO UPDATE` gets it in the `DO UPDATE … WHERE`, TTL included, so a conflict cannot overwrite another owner's row or revive an expired one.
+- **A write may not name** the scope field or a system column (`id` on update, `version`, `status`, `authorId`, timestamps) in an `INSERT` column list, an `UPDATE … SET` or a `DO UPDATE SET`. The compiler fills them. Changing `status` belongs to the lifecycle rules. Moving a row to another owner is impossible by construction.
+- **Name resolution is checked at run time too.** The CLI tags each relation `table` or `cte`. The runtime refuses an IR whose `cte` reference is not defined in scope or carries a Schema's name, since SQLite would resolve it to the unwrapped table. The same check runs on IR built by handler code.
+- **Constraints do not leak across owners.** On a scoped Schema a unique constraint includes the scope field, so a collision can only be with the caller's own rows. A foreign key between two scoped Schemas requires the same owner (`parent.owner = NEW.owner`), and a foreign key from an unscoped Schema to a scoped one is refused. Otherwise an insert could pin another owner's row or reveal that it exists.
+- **Published-only does not follow foreign keys.** A public View that joins a Schema without `publishing` must also join that row to a `publishing` Schema by an explicit condition, or `mantle validate` refuses it.
+- **Binds are numbered** (`?1`, `?2`), so the caller and `now()` bind once however many references a statement wraps.
+- `runtime.store` is trusted: no scope, TTL still applies (ADR-0030).
+- **One conformance case guards the rule.** It lists every relation position the IR has (`from`, joins, subqueries, `json_each`, window input, `INSERT … SELECT`, update and delete targets, `DO UPDATE`, search, near) in a `Record` checked with `satisfies` against the IR's position union, seeds a second owner's rows, including an expired and an unpublished one, and asserts none appear or change. A new position without a probe fails typecheck.
+
+### 9. Search and places
+
+- **Full-text search.** A Schema declares `search: [<field>, …]`. Storage keeps `_mantle_fts_<schema>`, an FTS5 external-content table with the `trigram` tokenizer, so Chinese substrings match, in step through triggers, and builds it with FTS5's `rebuild` when `search` is added. `search(t, input.q)` lowers to `t.rowid IN (SELECT rowid FROM _mantle_fts_<schema> WHERE … MATCH ?)`, so policy still applies to `t`. `search_rank(t)` orders by `bm25`. The query binds as a quoted phrase, never as FTS5 syntax. A query shorter than three characters, which trigram cannot match, lowers to `LIKE` over the same fields. Admin's `searchFields` uses `search()` when the Schema declares it.
+- **Places.** A field with `format: geo` holds `{ lat, lng }` as two `REAL` columns, and storage keeps `_mantle_geo_<schema>`, an R*Tree of the points, in step through triggers. `near(t.f, lat, lng, meters)` binds a bounding box the runtime computes from the radius, then filters by haversine distance. `distance(t.f, lat, lng)` is that distance in meters, for `SELECT` and `ORDER BY`; a cursor over it carries the distance and `id` and is bound to the query point. `near()` requires a radius, at most 50 km, so the work has a bound. A box that crosses the antimeridian or a pole is split or refused, decided in the spike. Polygon containment is not provided.
+- Measured on local D1: FTS5 with `trigram` (a three-character Chinese query matches, a two-character one does not), external content kept by a trigger, `bm25` and `snippet`, R*Tree, and `radians`, `sin`, `cos`, `asin`, `sqrt` and `atan2` on the allowlist. Production D1 is checked in the spike.
 
 ## Conformance cases
 
 1. The requisition program: a `CASE` value, `RETURNING`, a `WHERE id AND cond` precondition that fails with `CONFLICT`, and a conditional `INSERT … SELECT … WHERE` that writes zero or one row and calls an after hook only when it writes.
 2. Stock: `SET stock = stock - input.qty` with `checks: ["stock >= 0"]`, where oversell fails through the check trigger.
 3. A report View with a join, `GROUP BY`/`HAVING` and a cursor, where scope and TTL are injected into every joined Schema.
-4. Snapshot guard: a phantom row, a changed input to an expression, and an earlier statement writing the same table each abort the batch with `CONFLICT` naming the statement.
-5. The dialect: `OFFSET`, a function outside the allowlist, `$1`, `interval '1 day'`, an undeclared table and `_mantle_*` are refused with a position in the source SQL.
+4. Snapshot guard: a phantom row and a changed input to an expression each abort the batch with `CONFLICT` naming the statement; a `SET` reading its own target and a read of a table an earlier statement writes are refused at compile time.
+5. The dialect: `OFFSET`, a function outside the allowlist, `$1`, `RIGHT JOIN`, `UPDATE … FROM`, `CURRENT_TIMESTAMP`, an undeclared table, a `cte` reference carrying a Schema's name and `_mantle_*` are refused with a position in the source SQL.
 6. Types: `? / 2` with an integer input, `numeric(12, 2)` multiplication, a microsecond timestamp compared with `now() - interval '36 hours'`, and `timezone()` across a daylight-saving boundary give PostgreSQL's results on D1.
+7. Policy: the relation-position probe of decision 8, on local D1.
+8. Search and places: a trigram match and a two-character fallback, a phrase containing FTS5 operators matched literally, another owner's rows absent from `search()` and `near()`, and `near()` ordered by distance with a cursor.
 
 ## Consequences
 
@@ -124,12 +166,14 @@ That the IR matches its SQL source is **service-reported**: the plan carries the
 - **Compile policies into SQL ahead of time and ship statements.** Rejected: `ctx.store.select` in handler code is built at run time, so the runtime compiles IR anyway, and a second path would bypass the one Store.
 - **A JavaScript executor or an IndexedDB-backed executor.** Rejected: once the IR is what D1 runs, either is a second SQLite.
 - **A second test line on sqlite-wasm made to imitate D1, and a `prepare` check of every compiled statement in the CLI.** Rejected: local D1 in workerd is fast enough for everyday tests, so the imitation would be one more profile to keep in step with D1. The conformance suite on local D1 already catches compiler output that D1 refuses, and without the check the CLI does not depend on sqlite-wasm.
+- **Support as much of the shared syntax as possible.** Rejected in review: every feature is a policy position, a guard case and a diagnostic to keep correct, and a removal breaks manifests while an addition does not. The subset starts from what applications do and grows by addition.
+- **Inject policy through CTEs that shadow table names, or through persistent views reading a caller row written first in the batch.** Rejected: an `UPDATE` target does not resolve to a CTE, so writes would need a second mechanism, and a view reading a context row turns every read into a write and fails open when the context row is missing.
 - **Calling hooks once per row, or rewriting a before-hooked statement to the pre-read ids.** Rejected: the first exceeds subrequest limits; the second reproduced two corruptions on local D1 (a phantom between statements, and an expression reading another table that changed).
 
 ## How to apply
 
 1. Spike, in `next/`:
-   - lower the six conformance programs through `libpg-query` to IR and run them on local D1 in workerd;
+   - lower the conformance programs through `libpg-query` to IR and run them on local D1 in workerd;
    - measure the lowering code and how helpful its diagnostics are to an agent;
    - build the snapshot guard;
    - prove the `CAST` rule and the type encodings.
