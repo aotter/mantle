@@ -107,7 +107,8 @@ const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
 
 // ---- Schema helpers -------------------------------------------------------------------------------
 const geoFields = (s: SchemaDef) => Object.entries(s.fields).filter(([, t]) => t === 'geo').map(([f]) => f);
-const declaredCols = (s: SchemaDef) => Object.entries(s.fields).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
+// the scope column is never read back, not even by `SELECT *`: it is the caller's own subject key
+const declaredCols = (s: SchemaDef) => Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
 /** what the wrapper exposes: the declared fields plus the columns policy and hooks read */
 const readable = (s: SchemaDef) => ['id', 'version', 'created_at', ...(s.publishing ? ['status'] : []), ...declaredCols(s)];
 /** what `SELECT *` and `RETURNING *` expand to: declared fields only, never scope or system columns */
