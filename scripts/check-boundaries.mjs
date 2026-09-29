@@ -251,6 +251,17 @@ function checkPackageDirection() {
   }
 }
 
+/** next/src/core imports only next/src/spec (next/README.md); a package or a sibling folder is refused. */
+function checkNextCoreImports() {
+  for (const file of listFiles(join(ROOT, "next/src/core"), (p) => p.endsWith(".ts"))) {
+    for (const [, spec] of readFileSync(file, "utf8").matchAll(/\bfrom\s+"([^"]+)"/g)) {
+      if (!spec.startsWith("./") && !spec.startsWith("../spec/") && !spec.startsWith("node:")) {
+        fail(file, `next core may import only spec: '${spec}'`);
+      }
+    }
+  }
+}
+
 /** The UI controller imports nothing: its Mantle shapes are structural,
  *  so it installs and bundles alone. Checked on the AST, so re-exports,
  *  side-effect and dynamic imports count too. */
@@ -803,6 +814,7 @@ checkRuntimeCloudflareFree();
 checkHostRulesBoundary();
 checkPackageDirection();
 checkUiControllerImports();
+checkNextCoreImports();
 checkEntryReadOwnership();
 checkWebPackageBoundary();
 checkAdminPackageBoundary();

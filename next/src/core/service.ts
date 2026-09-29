@@ -1,0 +1,70 @@
+/** The application-owned service, the runtime and `createMantle` (ADR-0032 decisions 4, 6, 9 and 10). */
+import type { CompiledPlan } from "../spec/index.js";
+import type { Caller } from "./caller.js";
+import type { Invocation, MantleHandlers } from "./invocation.js";
+import type { MantleStore, StoreExecutor } from "./store.js";
+
+/** A surface is a Fetch function, created with its base path (`createMcpSurface(runtime, { basePath })`). */
+export type Surface = (request: Request, caller: Caller) => Promise<Response>;
+
+/** The sealed plan (version 6): the compiled IR plus its SHA-256 fingerprint. Manifest-derived fields land in step 3. */
+export interface RuntimePlan extends CompiledPlan {
+  readonly version: 6;
+  readonly fingerprint: string;
+}
+
+export interface MantleBootReport {
+  readonly fingerprint: string;
+  readonly coreVersion: string;
+}
+
+export interface MantleRuntime {
+  readonly store: MantleStore;
+  /** The one path for every Invocation: auth, guard, input, handler, output. */
+  invokeProcedure(invocation: Invocation): Promise<unknown>;
+  bootReport(): MantleBootReport;
+}
+
+export interface MantleServiceContext {
+  readonly runtime: MantleRuntime;
+  waitUntil(promise: Promise<unknown>): void;
+}
+
+/** HTTP is the service's only Mantle ingress; `env` stays opaque. */
+export interface MantleService<Env = unknown> {
+  readonly handlers: MantleHandlers<Env>;
+  fetch(request: Request, env: Env, context: MantleServiceContext): Response | Promise<Response>;
+}
+
+export interface PreparedMantleStorage {
+  readonly executor: StoreExecutor;
+}
+
+/** Converges storage to the plan (ADR-0033) and returns the executor for it. */
+export interface MantleStorageAdapter {
+  prepare(plan: RuntimePlan): Promise<PreparedMantleStorage>;
+}
+
+interface WaitUntil {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
+/** Refuses to boot on an `expectedFingerprint` mismatch (`PLAN_FINGERPRINT_MISMATCH`). */
+export declare function createMantleRuntime(args: {
+  readonly plan: RuntimePlan;
+  readonly handlers: MantleHandlers<never>;
+  readonly storage: MantleStorageAdapter;
+  readonly expectedFingerprint?: string;
+  /** Boot fails for any enabled schedule unless the entry wires schedules. */
+  readonly schedules?: boolean;
+}): Promise<MantleRuntime>;
+
+/** The one host-neutral entry. Boots lazily from `storage(env)`; the host's native entry is 1 to 3 generated lines. */
+export declare function createMantle<Env>(
+  service: MantleService<Env>,
+  options: { readonly storage: (env: Env) => MantleStorageAdapter; readonly schedules?: boolean },
+): {
+  fetch(request: Request, env: Env, ctx?: WaitUntil): Promise<Response>;
+  invokeSchedule(cron: string, scheduledTime: number, env: Env, ctx?: WaitUntil): Promise<void>;
+  runDeferredHook(message: unknown, env: Env, ctx?: WaitUntil): Promise<void>;
+};

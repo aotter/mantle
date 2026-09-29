@@ -166,6 +166,11 @@ export interface Diagnostic {
     readonly retry: "never" | "after-change" | "safe" | "reconcile";
     readonly resource?: string;
   };
+  /** Why a `CONFLICT` write failed (ADR-0032 decision 1); `opIndex` names the statement in the batch (ADR-0034). */
+  readonly conflict?: {
+    readonly opIndex?: number;
+    readonly reason: "lock" | "expect" | "unique";
+  };
 }
 
 /**
