@@ -39,7 +39,7 @@ SQL is source and the IR is the compiled artifact, the way TypeScript is source 
 
   | Area | Supported in 0.2.0 | Rule |
   |---|---|---|
-  | Expressions | columns, aliases, literals, arithmetic, `\|\|`, `CASE`, `COALESCE`, `NULLIF`, `CAST` | `SELECT *` and `RETURNING *` expand to the declared fields, never to scope or system columns. A `CAST` to a Mantle type is rewritten by the compiler. SQLite truncates where PostgreSQL rounds, so `CAST(x AS int)` of anything but an integer literal is refused (`SQL_TYPE`, in the validation the runtime shares) and asks for `round(x)`; `CAST(x AS bool)` becomes `x <> 0` |
+  | Expressions | columns, aliases, literals, arithmetic, `\|\|`, `CASE`, `COALESCE`, `NULLIF`, `CAST` | `SELECT *` and `RETURNING *` expand to the declared fields, never to scope or system columns. A `CAST` to a Mantle type is rewritten by the compiler. SQLite truncates where PostgreSQL rounds, so `CAST(x AS int)` of anything but an integer literal is refused (`SQL_TYPE`, in the validation the runtime shares) and asks for `round(x)` (a tie rounds away from zero, as PostgreSQL's `numeric` does; PostgreSQL's `float8` rounds half to even); `CAST(x AS bool)` becomes `x <> 0` |
   | Conditions | comparison, `AND`/`OR`/`NOT`, `BETWEEN`, `IS [NOT] NULL`, `IS DISTINCT FROM`, `IN (list \| subquery)`, `[NOT] EXISTS`, `LIKE … ESCAPE` | an input array in `IN` lowers to `json_each` and binds once. `LIKE` is case-insensitive in SQLite, unlike PostgreSQL; the diagnostics say so |
   | Relations | one Schema, `INNER`/`LEFT JOIN … ON` (self-joins included), a subquery in `FROM`, `json_each(<input or column>)` | the one comma join allowed is `t, json_each(t.col)` (MongoDB's `$unwind`) |
   | Subqueries | scalar and correlated | — |
