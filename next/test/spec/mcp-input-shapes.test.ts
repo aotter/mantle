@@ -3,7 +3,7 @@ import { parseManifests } from "./parse.js";
 import { ValidateManifestsUseCase } from "../../src/spec/usecase/ValidateManifestsUseCase.js";
 
 // Mirrors the mantle-home Cloud control plane shapes cited in #971.
-const FIXTURE = `apiVersion: cms.mantle.aotter.net/v1
+const FIXTURE = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: organizations }
 spec:
@@ -11,7 +11,7 @@ spec:
   lifecycle: operational
   schema: { type: object, readOnly: true, properties: { name: { type: string } } }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: cloud-upsert-organization }
 spec:
@@ -29,9 +29,9 @@ spec:
       - { type: object, required: [name, operationId], properties: { name: { type: string }, operationId: { type: string } } }
       - { type: object, required: [id, expectedVersion, name], properties: { id: { type: string }, expectedVersion: { type: number }, name: { type: string } } }
   output: { type: object }
-  handler: { kind: builtin, op: upsert, schema: organizations }
+  handler: { sql: 'INSERT INTO "organizations" (name) VALUES (input.name) ON CONFLICT (name) DO NOTHING' }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: cloud-upsert-project }
 spec:
@@ -48,9 +48,9 @@ spec:
       labels: { type: object, additionalProperties: { type: string } }
       notes: { type: [array, "null"], items: { type: string } }
   output: { type: object }
-  handler: { kind: ref, ref: upsertProject }
+  handler: { ref: upsertProject }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: http-only-upsert }
 spec:
@@ -60,23 +60,23 @@ spec:
       - { type: object, required: [a], properties: { a: { type: string } } }
       - { type: object, required: [b], properties: { b: { type: string } } }
   output: { type: object }
-  handler: { kind: ref, ref: httpOnly }
+  handler: { ref: httpOnly }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: cloud-upsert-organization-member }
 spec:
   source: { kind: mcp, surface: public }
   target: { procedure: cloud-upsert-organization }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: cloud-upsert-project-member }
 spec:
   source: { kind: mcp, surface: public }
   target: { procedure: cloud-upsert-project }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: http-only-upsert-http }
 spec:

@@ -10,7 +10,7 @@ import type { EmitOpenapiRequest } from "./dto/EmitOpenapiRequest.js";
 import type { EmitOpenapiResponse } from "./dto/EmitOpenapiResponse.js";
 
 /**
- * Build OpenAPI 3.1 from the v0.1 grammar. Two surfaces covered:
+ * Build OpenAPI 3.1 from the manifest grammar. Two surfaces covered:
  * HTTP Triggers (POST/PUT/PATCH/DELETE) and View REST routes
  * (GET /api/views/<name>). MCP is out of scope (own protocol).
  *
@@ -151,17 +151,12 @@ function requestBodySchema(input: JsonSchema, pathParams: readonly string[]): Js
 
 function viewOperation(v: ViewManifest, request: EmitOpenapiRequest): Record<string, unknown> {
   const params: Array<Record<string, unknown>> = [
-    ...(v.spec.select ? [
-      { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 500 }, required: false },
-      { name: "cursor", in: "query", schema: { type: "string" }, required: false },
-    ] : [
-      { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
-      { name: "show", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
-    ]),
+    { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 500 }, required: false },
+    { name: "cursor", in: "query", schema: { type: "string" }, required: false },
   ];
-  if (v.spec.params?.properties) {
-    const required = new Set(v.spec.params.required ?? []);
-    for (const [name, schema] of Object.entries(v.spec.params.properties)) {
+  if (v.spec.input?.properties) {
+    const required = new Set(v.spec.input.required ?? []);
+    for (const [name, schema] of Object.entries(v.spec.input.properties)) {
       params.push({ name, in: "query", required: required.has(name), schema: collapseSchemaDescriptions(schema) });
     }
   }
@@ -177,16 +172,14 @@ function viewOperation(v: ViewManifest, request: EmitOpenapiRequest): Record<str
               ok: { const: true },
               data: {
                 type: "object",
-                required: ["rows", "page", "show", "hasMore"],
+                required: ["rows", "hasMore"],
                 properties: {
                   rows: {
                     type: "array",
                     items: { type: "object", additionalProperties: true },
                   },
-                  page: { type: "integer" },
-                  show: { type: "integer" },
                   hasMore: { type: "boolean" },
-                  ...(v.spec.select ? { nextCursor: { type: "string" } } : {}),
+                  nextCursor: { type: "string" },
                 },
               },
             },

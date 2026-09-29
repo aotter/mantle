@@ -37,6 +37,8 @@ const REFUSED: Refusal[] = [
   ["SELECT id FROM items WHERE name = like_escape('a', '!')", "SQL_FUNCTION", undefined, /ESCAPE of a LIKE/],
   ["SELECT id FROM _mantle_tz", "SQL_RELATION", "_mantle_tz"],
   ["SELECT id FROM items WHERE owner = 'o2'", "SQL_COLUMN", "owner", /scope and TTL/],
+  ['SELECT id FROM items WHERE "Owner" = \'o2\'', "SQL_COLUMN", undefined, /scope and TTL/], // code review: quoting keeps case, SQLite ignores it
+  ['UPDATE items SET "OWNER" = \'o2\' WHERE id = \'a\'', "SQL_WRITE", undefined, /filled by Mantle/],
   ["INSERT INTO orders (id, item_id) VALUES ('x', 'a')", "SQL_WRITE", "id", /generates its ids/],
   ["SELECT id FROM items LIMIT 2", "SQL_SHAPE", "2", /LIMIT needs an ORDER BY/],
   ["INSERT INTO orders (item_id) VALUES ('a'), ('b')", "SQL_SHAPE", undefined, /one row/],

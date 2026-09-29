@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { run as runValidate } from "../../src/spec/infrastructure/cli/ValidateCommand.js";
 
-const SCHEMA_YAML = `apiVersion: cms.mantle.aotter.net/v1
+const SCHEMA_YAML = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: pages }
 spec:

@@ -38,8 +38,8 @@ Options:
 
 Output: JSON object with keys { schemas, views, procedures, triggers,
 parseErrors }. Each entry surfaces its derived shape — auth requirements,
-http source method+path, builtin op, lifecycle hooks, view params
-schema, view filter AST.
+http source method+path, handler binding, lifecycle hooks, view SQL
+and input schema.
 `);
 }
 

@@ -1,5 +1,5 @@
 # Synthetic inventory of host-owned files; readOnly is not authorization.
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: categories }
 spec:
@@ -14,7 +14,7 @@ spec:
       label: { type: string }
     required: [slug, label]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: articles }
 spec:
@@ -45,7 +45,7 @@ spec:
           required: [name, url]
     required: [slug, category, publishedAt]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: article-translations }
 spec:

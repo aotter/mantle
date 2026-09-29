@@ -1,4 +1,4 @@
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata:
   name: stories
@@ -12,7 +12,7 @@ spec:
       slug: { type: string }
   uniqueIndexes: [[slug]]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata:
   name: story-translations

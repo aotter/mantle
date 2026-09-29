@@ -9,11 +9,11 @@ import {
 
 const fixture = (name: string): string =>
   readFileSync(
-    fileURLToPath(new URL(`./fixtures/pipeline-v0.1/${name}`, import.meta.url)),
+    fileURLToPath(new URL(`./fixtures/pipeline/${name}`, import.meta.url)),
     "utf8",
   );
 
-describe("v0.1 sealed-pipeline characterization", () => {
+describe("sealed-pipeline characterization", () => {
   it("freezes successful parse and semantic validation", () => {
     const parsed = parseManifestSources({
       sources: [{ sourceId: "fixture:valid.yaml", text: fixture("valid.yaml") }],
@@ -23,18 +23,14 @@ describe("v0.1 sealed-pipeline characterization", () => {
     expect(parsed.diagnostics).toEqual([]);
     if (!parsed.ok) throw new Error("expected valid characterization fixture");
     const linked = linkManifestSet(parsed.value);
-    // The fixture's MCP-exposed Procedure has no description on purpose: its
-    // semantic fingerprint is pinned by the Bun and Vercel package checks, so
-    // the advisory warning is asserted here instead of edited away.
+    // The fixture's MCP-exposed Procedure has no description on purpose: the
+    // advisory warning is asserted here instead of edited away.
     expect(linked.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
     expect(linked.diagnostics.map((d) => [d.code, d.severity, d.path])).toEqual([
       ["MCP_TOOL_DESCRIPTION_MISSING", "warning", "/spec/description"],
     ]);
     if (!linked.ok) throw new Error("expected linked characterization fixture");
-    expect({
-      parsed: parsed.value.entries.map(({ manifest, source }) => ({ manifest, source })),
-      linked: projectLinked(linked.value),
-    }).toMatchSnapshot();
+    expect(projectLinked(linked.value)).toMatchSnapshot();
   });
 
   it("freezes source-aware parse diagnostic order and withholds partial values", () => {
@@ -68,12 +64,10 @@ function projectLinked(linked: LinkedManifestSet): unknown {
     })),
     views: linked.views.map((view) => ({
       name: view.manifest.metadata.name,
-      from: view.from?.manifest.metadata.name,
       guard: view.guard?.manifest.metadata.name,
     })),
     procedures: linked.procedures.map((procedure) => ({
       name: procedure.manifest.metadata.name,
-      builtinSchema: procedure.builtinSchema?.manifest.metadata.name,
       collectionActionSchema: procedure.collectionActionSchema?.manifest.metadata.name,
       guard: procedure.guard?.manifest.metadata.name,
     })),

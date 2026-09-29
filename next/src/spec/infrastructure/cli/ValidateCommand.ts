@@ -2,12 +2,12 @@ import { readFile, readdir } from "node:fs/promises";
 import { join, resolve, relative } from "node:path";
 import { exit, stdout, stderr, cwd } from "node:process";
 import { parseArgs as parseNodeArgs } from "node:util";
-import { DatabaseSync } from "node:sqlite";
 import {
   validateDiagnostic,
   type Diagnostic,
 } from "../../kernel/diagnostic.js";
 import { ValidateManifestsUseCase } from "../../usecase/ValidateManifestsUseCase.js";
+import { compileLinkedPlan } from "../sql/compilePlan.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
 import { translateParseArgsError } from "./parseArgsError.js";
 
@@ -159,22 +159,16 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   }
 
   // 3. Execute the use case.
-  const sandbox = new DatabaseSync(":memory:");
-  let result;
-  try {
-    result = parsed
-      ? ValidateManifestsUseCase.run({
-          parsed,
-          handlerSource,
-          ...(args.mcpInputChecks ? {} : { mcpInput: false as const }),
-          sqlViewSandbox: {
-            exec: (sql) => sandbox.exec(sql),
-          },
-        })
-      : { diagnostics: [], errorCount: 0, warningCount: 0 };
-  } finally {
-    sandbox.close();
-  }
+  const result = parsed
+    ? ValidateManifestsUseCase.run({
+        parsed,
+        handlerSource,
+        ...(args.mcpInputChecks ? {} : { mcpInput: false as const }),
+      })
+    : { diagnostics: [], errorCount: 0, warningCount: 0, linked: undefined };
+  // The SQL compiles only once the graph is sound; its diagnostics are the last validation pass.
+  const compiled = result.linked && result.errorCount === 0 ? await compileLinkedPlan(result.linked) : undefined;
+  const sqlDiagnostics = compiled && !compiled.ok ? compiled.diagnostics : [];
   const cliWarnings: Diagnostic[] = [];
 
   // The CLI can't reach the runtime DB to read site_config, so it
@@ -201,7 +195,7 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   // ponytail: no diagnostic code is phase-gated yet, so --phase only
   // labels the output. Reintroduce filtering here when the first
   // deploy-only gate lands.
-  const diagnostics = [...parseErrors, ...result.diagnostics, ...cliWarnings];
+  const diagnostics = [...parseErrors, ...result.diagnostics, ...sqlDiagnostics, ...cliWarnings];
 
   let errorCount = 0;
   let warningCount = 0;
@@ -232,7 +226,7 @@ async function loadHandlerSource(root: string): Promise<string> {
   // Probe the root explicitly. walk() swallows readdir errors so it can
   // best-effort skip unreadable SUBdirectories — but that same swallow
   // turns a missing/unreadable source ROOT into an empty string, which
-  // then makes every `handler.kind: ref` Procedure emit a spurious
+  // then makes every `handler: { ref }` Procedure emit a spurious
   // HANDLER_NOT_REGISTERED warning instead of a clear "could not read
   // source root" exit-2. Surface the root error here. (#393)
   await readdir(root, { withFileTypes: true });

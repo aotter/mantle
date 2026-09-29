@@ -5,7 +5,7 @@ import type { SchemaManifest, ViewManifest } from "../../src/spec/domain/model/M
 
 it("projects the same Admin descriptors from validated manifests without rechecking", () => {
   const schema: SchemaManifest = {
-    apiVersion: "cms.mantle.aotter.net/v1", kind: "Schema", metadata: { name: "orders" },
+    apiVersion: "cms.mantle.aotter.net/v2", kind: "Schema", metadata: { name: "orders" },
     spec: {
       title: "Orders", lifecycle: "operational",
       schema: { type: "object", required: ["customerId", "state"], properties: {
@@ -32,7 +32,7 @@ it("projects the same Admin descriptors from validated manifests without recheck
   expect(projectSchemaAdminUi(mixedRefs).nav).toEqual(checkSchemaAdminUi(mixedRefs).nav);
 
   const view: ViewManifest = {
-    apiVersion: "cms.mantle.aotter.net/v1", kind: "View", metadata: { name: "orders" },
+    apiVersion: "cms.mantle.aotter.net/v2", kind: "View", metadata: { name: "orders" },
     spec: { surface: "staff", from: "orders", uiSchema: { list: { columns: ["id"], searchFields: ["state"], filterFields: ["state"] } } },
   };
   expect(checkViewAdminUi(view).problems).toEqual([]);

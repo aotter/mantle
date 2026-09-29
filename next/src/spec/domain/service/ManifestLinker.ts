@@ -24,12 +24,10 @@ export interface LinkedSchema extends ResolvedManifestReference<ParsedSchema> {
 }
 
 export interface LinkedView extends ResolvedManifestReference<ParsedView> {
-  readonly from?: ResolvedManifestReference<ParsedSchema>;
   readonly guard?: ResolvedManifestReference<ParsedProcedure>;
 }
 
 export interface LinkedProcedure extends ResolvedManifestReference<ParsedProcedure> {
-  readonly builtinSchema?: ResolvedManifestReference<ParsedSchema>;
   readonly collectionActionSchema?: ResolvedManifestReference<ParsedSchema>;
   readonly guard?: ResolvedManifestReference<ParsedProcedure>;
 }
@@ -88,16 +86,12 @@ export function linkManifestSet(
   }));
   const views = graph.views.map((manifest) => Object.freeze({
     ...resolve(manifest as ParsedView),
-    ...((manifest.spec.select?.from ?? manifest.spec.from) ? { from: resolveSchema((manifest.spec.select?.from ?? manifest.spec.from)!) } : {}),
     ...(manifest.spec.requires?.guard
       ? { guard: resolveProcedure(manifest.spec.requires.guard.procedure) }
       : {}),
   }));
   const procedures = graph.procedures.map((manifest) => Object.freeze({
     ...resolve(manifest as ParsedProcedure),
-    ...(manifest.spec.handler.kind === "builtin"
-      ? { builtinSchema: resolveSchema(manifest.spec.handler.schema) }
-      : {}),
     ...(typeof manifest.spec.uiSchema?.["collectionAction"] === "string"
       ? { collectionActionSchema: resolveSchema(manifest.spec.uiSchema["collectionAction"] as string) }
       : {}),
