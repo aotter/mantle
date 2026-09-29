@@ -106,7 +106,7 @@ That the IR matches its SQL source is **service-reported**: the plan carries the
 3. A report View with a join, `GROUP BY`/`HAVING` and a cursor, where scope and TTL are injected into every joined Schema.
 4. Snapshot guard: a phantom row, a changed input to an expression, and an earlier statement writing the same table each abort the batch with `CONFLICT` naming the statement.
 5. The dialect: `OFFSET`, a function outside the allowlist, `$1`, an undeclared table and `_mantle_*` are refused with a position in the source SQL.
-6. Types: `? / 2` with an integer input, `numeric(12, 2)` multiplication, a microsecond timestamp compared with `now() - interval '7 days'`, and `timezone()` across a daylight-saving boundary give the same results on D1 and sqlite-wasm.
+6. Types: `? / 2` with an integer input, `numeric(12, 2)` multiplication, a microsecond timestamp compared with `now()`, and `timezone()` across a daylight-saving boundary give the same results on D1 and sqlite-wasm.
 
 ## Consequences
 
@@ -133,6 +133,7 @@ That the IR matches its SQL source is **service-reported**: the plan carries the
    - prove the `CAST` rule and the type encodings.
 2. Settle #1196 from the spike's result.
 3. New diagnostic codes are fixed with the spike and added to ADR-0032 decision 5's table.
+4. Everything here ships in 0.2.0. The additions land in the order sequences, `numeric`, then time zones: a sequence is one system table, `numeric` touches every arithmetic rewrite, and time zones need transition data generated and kept current.
 
 ## Implementation status
 
