@@ -41,6 +41,8 @@ export interface RunAs {
   readonly caller: Caller;
   readonly cause: InvocationCause;
   readonly bind: BindContext;
+  /** Names one write within an invocation that writes several times, so event ids stay unique and stable. */
+  readonly seq?: string;
 }
 
 const refuse = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
@@ -114,7 +116,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
   const plan = compileProgram(p.ir, base);
   const versions: Record<number, unknown> = {};
   const event = (i: number, hook: string, schema: string, rows: [StoreRow, ...StoreRow[]]) => ({
-    id: `${as.cause.id}:${i}:${hook}`, schema, hook: hook as never, rows, caller: as.caller, parent: as.cause,
+    id: `${as.seq ?? as.cause.id}:${i}:${hook}`, schema, hook: hook as never, rows, caller: as.caller, parent: as.cause,
   });
 
   for (const [i, c] of plan.entries()) {

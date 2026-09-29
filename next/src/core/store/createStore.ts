@@ -5,6 +5,7 @@
  */
 import { DiagnosticError, runtimeDiagnostic, SqlRefusal, type AuthorizationRequirements, type SqlNode as N } from "../../spec/index.js";
 import type { Caller } from "../caller.js";
+import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";
 import { decodeOutput } from "../sql/codec.js";
 import type { BindContext, Mode } from "../sql/compile.js";
@@ -20,6 +21,8 @@ export interface StoreView {
   readonly public?: boolean;
   /** Checked against a caller-bound Store (the host's own `runtime.store` is trusted and skips it). */
   readonly requires?: AuthorizationRequirements;
+  /** The Procedure `requires.guard` names, run before the View on a caller-bound Store. */
+  readonly guard?: string;
 }
 
 export interface StoreDeps {
@@ -30,10 +33,11 @@ export interface StoreDeps {
   /** Microseconds since the epoch. */
   readonly now: () => number;
   readonly newId: () => string;
+  /** Runs a View's guard Procedure with the View's input; the runtime supplies it (Store never references Procedures). */
+  readonly guardView?: (procedure: string, caller: Caller, input: Readonly<Record<string, unknown>>, cause: InvocationCause) => Promise<void>;
 }
 
 const invalid = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
-const ROOT = { kind: "internal", id: "store" } as const;
 
 /** A refusal thrown while binding (a value the declared type cannot hold) is the caller's input error. */
 async function guard<T>(f: () => Promise<T>): Promise<T> {
@@ -57,12 +61,15 @@ export function bindFor(now: number, caller: Caller | undefined): { mode: Mode; 
   return { mode: "caller", bind: { uid: caller.subject, now, role: caller.role } };
 }
 
-function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
+/** `parent` is the invocation this Store serves: hooks it fires chain to it, so the depth limit and cause ids hold across writes. */
+function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCause): CallerStore {
   const env = (mode: Mode): RunEnv => ({ executor: deps.executor, schemas: deps.schemas, mode, lifecycle: deps.lifecycle });
+  let writes = 0;
   const as = (bound: BindContext) => ({
     bind: bound,
+    ...(parent ? { seq: `${parent.id}#${++writes}` } : {}),
     caller: caller ?? ({ kind: "system", reason: "host" } as const),
-    cause: ROOT,
+    cause: parent ?? ({ kind: "internal", id: `store:${deps.newId()}` } as const),
   });
 
   return {
@@ -80,7 +87,7 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
 
     write: (ops) => guard(async (): Promise<readonly StoreWriteResult[]> => {
       if (!Array.isArray(ops) || !ops.length) throw invalid("A write takes a non-empty list of operations.");
-      const json = new StoreJson(deps.schemas);
+      const json = new StoreJson(deps.schemas, (schema) => [...(deps.lifecycle?.after ?? [])].some((k) => k.startsWith(`${schema}.`)));
       const built = ops.map((o) => json.write(o));
       const { mode, bind: b } = bindFor(deps.now(), caller);
       const program: Program = {
@@ -104,10 +111,8 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
         throw await refine(e, ops);
       }
       return ops.map((o, i) => {
-        if (StoreJson.isRowOp(o)) {
-          const row = result.rows[i]![0];
-          return { id: String(row!.id), version: Number(row!.version) };
-        }
+        const row = StoreJson.isRowOp(o) ? result.rows[i]![0] : undefined;
+        if (row) return { id: String(row.id), version: Number(row.version) };
         return { affected: result.affected[i]! };
       });
     }),
@@ -117,6 +122,7 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
       if (!v) throw invalid(`Unknown View '${name}'.`);
       const denial = caller && evaluateAuthAll(v.requires, caller, `manifest:View/${name}`);
       if (denial) throw new DiagnosticError(denial);
+      if (caller && v.guard) await deps.guardView?.(v.guard, caller, options.input ?? {}, parent ?? { kind: "internal", id: `store:${deps.newId()}` });
       const limit = options.limit ?? 50;
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");
       const { mode, bind: b } = bindFor(deps.now(), caller);
@@ -145,7 +151,7 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
 export function createStore(deps: StoreDeps): MantleStore {
   return {
     ...make(deps, undefined),
-    as: (caller) => make(deps, caller),
+    as: (caller, cause) => make(deps, caller, cause),
     sweepExpired: (request) => sweepExpired(deps, request),
   };
 }

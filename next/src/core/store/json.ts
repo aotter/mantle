@@ -67,7 +67,8 @@ export function validateValues(def: StoreSchema, values: Readonly<Record<string,
 export class StoreJson {
   readonly inputs: Record<string, string> = {};
   readonly values: Record<string, unknown> = {};
-  constructor(private readonly schemas: StoreSchemas) {}
+  /** `wantRow` says whether a Schema has an after hook: its writes then return the whole entry, which the hook receives (ADR-0032 decision 3). */
+  constructor(private readonly schemas: StoreSchemas, private readonly wantRow: (schema: string) => boolean = () => false) {}
 
   private schema(name: unknown): { name: string; def: StoreSchema } {
     const def = typeof name === "string" ? this.schemas[name.toLowerCase()] : undefined;
@@ -183,7 +184,7 @@ export class StoreJson {
     const columns = q.columns
       ? [...new Set(q.columns)].map((c) => this.column(def, c, "columns", false))
       : [...Object.keys(NATIVE).filter((n) => n !== "status" || def.publishing).map((n) => this.column(def, n, "columns", false)),
-         ...Object.entries(def.fields).filter(([, t]) => t !== "geo").map(([f]) => this.column(def, def.names?.[f] ?? f, "columns", false))];
+         ...Object.entries(def.fields).filter(([f, t]) => t !== "geo" && f !== def.scope).map(([f]) => this.column(def, def.names?.[f] ?? f, "columns", false))];
     const orderBy = q.orderBy ?? { updatedAt: "desc" };
     if (typeof orderBy !== "object" || Array.isArray(orderBy) || Object.keys(orderBy).length !== 1) throw invalid("Store orderBy takes exactly one column.");
     const [sortName, dir] = Object.entries(orderBy)[0]!;
@@ -207,7 +208,9 @@ export class StoreJson {
 
   /** The IR of one write op, and the status an update moves the entry to. Only a row op returns `id` and `version`; a set op reports how many rows it touched. */
   write(o: StoreWriteOp): { ir: N; status?: string } {
-    const returning = StoreJson.isRowOp(o) ? { exprs: [target(ref("id")), target(ref("version"))] } : undefined;
+    const returningFor = (schema: string) => StoreJson.isRowOp(o)
+      ? { exprs: [...(this.wantRow(schema) ? [target({ ColumnRef: { fields: [{ A_Star: {} }] } })] : []), target(ref("id")), target(ref("version"))] }
+      : undefined;
     if ("insert" in o) {
       const { name, def } = this.schema(o.insert);
       validateValues(def, o.values, def.publishing ? "partial" : "full");
@@ -226,7 +229,7 @@ export class StoreJson {
       }
       return { ir: { InsertStmt: { relation: table(name), cols: cols.map(({ c }) => ({ ResTarget: { name: c.col } })),
         selectStmt: { SelectStmt: { valuesLists: [{ List: { items } }], ...SELECT } },
-        ...(onConflictClause ? { onConflictClause } : {}), ...(returning ? { returningClause: returning } : {}), override: "OVERRIDING_NOT_SET" } } };
+        ...(onConflictClause ? { onConflictClause } : {}), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}), override: "OVERRIDING_NOT_SET" } } };
     }
     if ("update" in o) {
       const { name, def } = this.schema(o.update);
@@ -237,10 +240,10 @@ export class StoreJson {
       validateValues(def, rest, "partial");
       return { status: status as string | undefined, ir: { UpdateStmt: { relation: table(name),
         targetList: set.map(([k, v]) => { const c = this.column(def, k, "set", false); return target(v === null ? { A_Const: { isnull: true } } : this.val(c.type, v, `'${c.out}'`), c.col); }),
-        whereClause: this.guarded(o.where, def, o.lock), ...(returning ? { returningClause: returning } : {}) } } };
+        whereClause: this.guarded(o.where, def, o.lock), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}) } } };
     }
     const { name, def } = this.schema(o.delete);
-    return { ir: { DeleteStmt: { relation: table(name), whereClause: this.guarded(o.where, def, o.lock), ...(returning ? { returningClause: returning } : {}) } } };
+    return { ir: { DeleteStmt: { relation: table(name), whereClause: this.guarded(o.where, def, o.lock), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}) } } };
   }
 
   /** `where`, with `AND version = <lock>` when the caller observed a version (OCC). */
