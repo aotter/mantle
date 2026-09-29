@@ -79,6 +79,7 @@ const res = (val: N, name?: string): N => ({ ResTarget: name ? { name, val } : {
 /** integers past int32 must be `fval` in libpg-query's shape; 0 must keep its `ival` key */
 const num = (n: number): N => (Number.isSafeInteger(n) && Math.abs(n) < 2 ** 31 ? { A_Const: { ival: { ival: n } } } : { A_Const: { fval: { fval: String(n) } } });
 const bump = (): N => res(op('+', col('version'), num(1)), 'version');
+const touch = (c: C): N => res(param$(c, { k: 'now' }), 'updated_at');
 const sort = (node: N): N => ({ SortBy: { node, sortby_dir: 'SORTBY_DEFAULT', sortby_nulls: 'SORTBY_NULLS_DEFAULT' } });
 const newId = (): N => fn('lower', fn('hex', fn('randomblob', num(16))));
 const clone = <T,>(x: T): T => structuredClone(x);
@@ -103,7 +104,7 @@ const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
 const geoFields = (s: SchemaDef) => Object.entries(s.fields).filter(([, t]) => t === 'geo').map(([f]) => f);
 const declaredCols = (s: SchemaDef) => Object.entries(s.fields).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
 /** what the wrapper exposes: the declared fields plus the columns policy and hooks read */
-const readable = (s: SchemaDef) => ['id', 'version', 'created_at', ...(s.publishing ? ['status'] : []), ...declaredCols(s)];
+const readable = (s: SchemaDef) => ['id', 'version', 'created_at', 'updated_at', 'author_id', ...(s.publishing ? ['status'] : []), ...declaredCols(s)];
 /** what `SELECT *` and `RETURNING *` expand to: declared fields only, never scope or system columns */
 const starCols = (s: SchemaDef) => declaredCols(s);
 const needsRid = (s: SchemaDef) => !!s.search?.length || geoFields(s).length > 0;
@@ -425,7 +426,7 @@ function update(n: N, c: C): N {
   dmlScope(n.relation, c);
   const out = deep(n, c, 'UpdateStmt');
   c.sel.pop();
-  out.targetList.push(bump());
+  out.targetList.push(bump(), touch(c));
   out.whereClause = and(out.whereClause, visible(s, a, c), c.lockVersion && op('=', col(a, 'version'), param$(c, { k: 'version' })));
   out.returningClause = returning(out.returningClause, s, n.relation.relname, c);
   return { UpdateStmt: out };
@@ -448,6 +449,8 @@ function insert(n: N, c: C): N {
   const fill: [string, N][] = [
     ...(s.scope ? [[s.scope, param$(c, { k: 'uid' })] as [string, N]] : []),
     ['created_at', param$(c, { k: 'now' })],
+    ['updated_at', param$(c, { k: 'now' })],
+    ['author_id', param$(c, { k: 'uid' })],
     // a scoped Schema always gets a generated id: a caller-chosen id would collide with (and reveal) another owner's row
     ...(named('id') && !s.scope ? [] : [['id', newId()] as [string, N]]),
   ];
@@ -463,7 +466,7 @@ function insert(n: N, c: C): N {
     if (s.scope && oc.infer) oc.infer.indexElems.unshift({ IndexElem: { name: s.scope, ordering: 'SORTBY_DEFAULT', nulls_ordering: 'SORTBY_NULLS_DEFAULT' } });
     if (oc.action === 'ONCONFLICT_UPDATE') {
       c.seen?.add('conflict-update');
-      oc.targetList.push(bump());
+      oc.targetList.push(bump(), touch(c));
       oc.whereClause = and(oc.whereClause, visible(s, n.relation.relname, c)); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one
     }
   }

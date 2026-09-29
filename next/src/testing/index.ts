@@ -13,6 +13,7 @@ import * as types from "./cases/types.js";
 import * as policy from "./cases/policy.js";
 import * as searchPlaces from "./cases/search-places.js";
 import * as printer from "./cases/printer.js";
+import * as store from "./cases/store.js";
 
 export interface StorageConformanceFixture {
   readonly driver: DatabaseDriver;
@@ -34,7 +35,7 @@ export interface StorageConformanceReport {
 
 const CASES: readonly [string, { run(r: Report, driver: DatabaseDriver): Promise<unknown> }][] = [
   ["requisition", requisition], ["stock", stock], ["report-view", reportView], ["before-hook", beforeHook],
-  ["types", types], ["policy", policy], ["search-places", searchPlaces], ["printer", printer],
+  ["types", types], ["policy", policy], ["search-places", searchPlaces], ["printer", printer], ["store", store],
 ];
 
 /** Runs every case on its own database. A failing case never suppresses cleanup or the cases after it. */

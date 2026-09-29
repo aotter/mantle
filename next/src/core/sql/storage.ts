@@ -74,6 +74,8 @@ function desired(name: string, s: StorageSchema): Desired {
     { name: "id", type: "TEXT", native: true },
     { name: "version", type: "INTEGER", native: true },
     { name: "created_at", type: "INTEGER", native: true },
+    { name: "updated_at", type: "INTEGER", native: true },
+    { name: "author_id", type: "TEXT", native: true },
     ...(s.scope ? [{ name: s.scope, type: "TEXT", native: true }] : []),
     ...(s.ttl ? [{ name: s.ttl, type: "INTEGER", native: true }] : []),
     ...(s.publishing ? [{ name: "status", type: "TEXT", native: true }] : []),
@@ -126,6 +128,8 @@ function createTable(d: Desired): string {
     if (c.name === "id") return "id TEXT NOT NULL UNIQUE";
     if (c.name === "version") return "version INTEGER NOT NULL DEFAULT 1";
     if (c.name === "created_at") return "created_at INTEGER NOT NULL";
+    if (c.name === "updated_at") return "updated_at INTEGER NOT NULL DEFAULT 0";
+    if (c.name === "author_id") return "author_id TEXT";
     if (c.name === "status") return "status TEXT NOT NULL DEFAULT 'draft'";
     return `${q(c.name)} ${c.type}${c.native && c.type === "TEXT" ? " NOT NULL" : ""}`;
   });

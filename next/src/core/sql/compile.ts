@@ -13,7 +13,8 @@ export type { Compiled, Mode } from "./policy.js";
 
 /** Who and when a statement runs for; `input` is the Procedure or View input. */
 export interface BindContext {
-  readonly uid: string;
+  /** The caller's subject; null for an anonymous caller, who matches no scoped row. */
+  readonly uid: string | null;
   readonly now: number;
   readonly role?: string | null;
   readonly input?: Readonly<Record<string, unknown>>;
