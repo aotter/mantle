@@ -21,6 +21,8 @@ export interface StoreView {
   readonly public?: boolean;
   /** Checked against a caller-bound Store (the host's own `runtime.store` is trusted and skips it). */
   readonly requires?: AuthorizationRequirements;
+  /** The Procedure `requires.guard` names, run before the View on a caller-bound Store. */
+  readonly guard?: string;
 }
 
 export interface StoreDeps {
@@ -31,6 +33,8 @@ export interface StoreDeps {
   /** Microseconds since the epoch. */
   readonly now: () => number;
   readonly newId: () => string;
+  /** Runs a View's guard Procedure with the View's input; the runtime supplies it (Store never references Procedures). */
+  readonly guardView?: (procedure: string, caller: Caller, input: Readonly<Record<string, unknown>>, cause: InvocationCause) => Promise<void>;
 }
 
 const invalid = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
@@ -60,8 +64,10 @@ export function bindFor(now: number, caller: Caller | undefined): { mode: Mode; 
 /** `parent` is the invocation this Store serves: hooks it fires chain to it, so the depth limit and cause ids hold across writes. */
 function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCause): CallerStore {
   const env = (mode: Mode): RunEnv => ({ executor: deps.executor, schemas: deps.schemas, mode, lifecycle: deps.lifecycle });
+  let writes = 0;
   const as = (bound: BindContext) => ({
     bind: bound,
+    ...(parent ? { seq: `${parent.id}#${++writes}` } : {}),
     caller: caller ?? ({ kind: "system", reason: "host" } as const),
     cause: parent ?? ({ kind: "internal", id: `store:${deps.newId()}` } as const),
   });
@@ -81,7 +87,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
 
     write: (ops) => guard(async (): Promise<readonly StoreWriteResult[]> => {
       if (!Array.isArray(ops) || !ops.length) throw invalid("A write takes a non-empty list of operations.");
-      const json = new StoreJson(deps.schemas);
+      const json = new StoreJson(deps.schemas, (schema) => [...(deps.lifecycle?.after ?? [])].some((k) => k.startsWith(`${schema}.`)));
       const ir = ops.map((o) => json.write(o));
       const { mode, bind: b } = bindFor(deps.now(), caller);
       const program: Program = { kind: "procedure", inputs: json.inputs, ir, expects: ops.map((o) => (o as { expect?: number }).expect) };
@@ -103,6 +109,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       if (!v) throw invalid(`Unknown View '${name}'.`);
       const denial = caller && evaluateAuthAll(v.requires, caller, `manifest:View/${name}`);
       if (denial) throw new DiagnosticError(denial);
+      if (caller && v.guard) await deps.guardView?.(v.guard, caller, options.input ?? {}, parent ?? { kind: "internal", id: `store:${deps.newId()}` });
       const limit = options.limit ?? 50;
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");
       const { mode, bind: b } = bindFor(deps.now(), caller);

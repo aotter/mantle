@@ -69,6 +69,11 @@ export function createMantle<Env>(service: MantleService<Env>, options: MantleOp
     async runDeferredHook(message, env, ctx) {
       const inv = message as Partial<Invocation> | null;
       if (!inv || typeof inv.procedure !== "string" || !inv.caller || inv.cause?.kind !== "lifecycle" || !inv.cause.hook.startsWith("after_")) throw bad("a deferred hook message is the Invocation of an after hook");
+      // the queue is Mantle's own channel, but the message is only ever honoured for what a Trigger of the plan would have run:
+      // that Trigger, its Procedure and its hook, and never as the system caller (no wire produces one)
+      const t = options.plan.triggers[inv.cause.trigger];
+      if (inv.caller.kind === "system" || t?.source.kind !== "lifecycle" || t.procedure !== inv.procedure || t.source.schema !== inv.cause.schema || !t.source.on.includes(inv.cause.hook))
+        throw bad("the message does not match a lifecycle Trigger of the plan");
       await (await runtimeFor(env, ctx)).invokeProcedure(inv as Invocation);
     },
   };
