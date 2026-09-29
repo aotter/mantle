@@ -4,7 +4,7 @@ import { existsSync, realpathSync, writeFileSync } from 'node:fs'
 import { chmod, utimes, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
-import { unzipSync, strFromU8 } from 'fflate'
+import { unzipSync, strFromU8, strToU8, zipSync } from 'fflate'
 import { buildHost } from '../scripts/build-host.mjs'
 import { inspectSourceArchive, omittablePath } from '../src/source-zip.mjs'
 import { headTsconfig, parseJsonc } from '../src/host/backend.mjs'
@@ -172,7 +172,8 @@ for (const mode of ['sources', 'bundle']) describe(`save flow (${mode})`, () => 
       const done = last(saved)
       assert.deepEqual({ stage: done.stage, state: done.state, commit: done.commit }, { stage: 'saved', state: 'paired', commit })
       assert.equal(done.versionId, `${reserve.arguments.candidateId}.${reserve.arguments.operationId}`)
-      assert.equal(done.nextAction.tool, 'cloud_backend_preview_grant')
+      assert.equal(done.nextAction.tool, 'cloud_paired_review')
+      assert.match(done.nextAction.command, /deploy \S+ --target production --review - --json$/)
       const row = cloud.statics.get(reserve.arguments.operationId)
       assert.equal(sha(row.bytes.frontend), reserve.arguments.contentHash)
       assert.deepEqual(new Uint8Array(row.bytes.source), zip)
@@ -269,6 +270,7 @@ for (const mode of ['sources', 'bundle']) describe(`refusals (${mode})`, () => {
     try {
       const secret = await refuse(root, ['save'], 'source_archive_secret_path')
       assert.equal(secret.detail, '.env, config/.dev.vars')
+      assert.match(secret.nextAction.reason, /by name.*not by content/)
       assert.match(secret.nextAction.reason, /--omit/)
       assert.equal((await refuse(root, ['save', '--omit', 'nope'], 'omit_unmatched')).detail, 'nope')
       assert.equal((await refuse(root, ['save', '--omit', '../x'], 'omit_invalid')).error, 'omit_invalid')
@@ -593,6 +595,24 @@ test('link writes a strict link file, ignores .mantle/host/ and native targets p
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test('open restores the live source into an empty directory only, after the sha256 check', async () => {
+  const root = await mkdtemp(join(scratch, 'open-')), zip = zipSync({ 'manifests/site.yaml': strToU8(yaml) })
+  const found = sourceHash => ({ downloadUrl: 'http://127.0.0.1:1/api/cloud/static-sources/x?token=T', sourceHash })
+  const fetch = async () => new Response(zip)
+  const run = runner()
+  try {
+    const ask = last(await run(root, ['open', '--project', projectId, '--json']))
+    assert.deepEqual([ask.nextAction.tool, ask.nextAction.arguments], ['cloud_static_source_discover', { projectId }])
+    const bad = await run(root, ['open', '--project', projectId, '--discover', '-', '--json'], { stdin: JSON.stringify(found('0'.repeat(64))), fetch })
+    assert.equal(last(bad).error, 'source_checksum_mismatch')
+    assert.equal((await readdir(root)).length, 0)
+    const ok = await run(root, ['open', '--project', projectId, '--discover', '-', '--json'], { stdin: JSON.stringify(found(sha(zip))), fetch })
+    assert.equal(last(ok).state, 'restored', ok.text)
+    assert.equal(await readFile(join(root, 'manifests/site.yaml'), 'utf8'), yaml)
+    assert.equal(last(await run(root, ['open', '--project', projectId, '--json'])).error, 'directory_not_empty')
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('deploy renders the review and prints the literal publish call; rollback prints cloud-rollback-project', async () => {
   const root = await project()
   const run = runner()
@@ -620,6 +640,15 @@ test('deploy renders the review and prints the literal publish call; rollback pr
     const { operationId } = publish.nextAction.arguments
     assert.deepEqual(publish.nextAction.arguments, { projectId, candidateId, staticUploadId, expectedActiveRevision: null, operationId, slug: 'shop-app' })
     assert.equal(last(await run(root, ['deploy', versionId, '--review', '-', '--json'], { stdin: JSON.stringify(review()) })).nextAction.arguments.operationId, operationId)
+    // The publish result: only a serving release ends with a URL; otherwise the same operation repeats.
+    const release = (value, extra) => run(root, ['deploy', versionId, '--release', '-', '--json'], { stdin: JSON.stringify(envelope({ release: { active: true, ...value }, ...extra })) })
+    const live = last(await release({ serving: true, url: 'https://shop-app.mantle.site/' }))
+    assert.deepEqual([live.state, live.url, live.nextAction], ['serving', 'https://shop-app.mantle.site/', null])
+    const pending = last(await release({ serving: false }))
+    assert.deepEqual([pending.nextAction.kind, pending.nextAction.arguments.operationId], ['wait', operationId])
+    const domain = last(await run(root, ['deploy', versionId, '--release', '-', '--json'], { stdin: JSON.stringify({ isError: true, content: [{ type: 'text', text: JSON.stringify({ diagnostics: [{ code: 'RESOURCE_UNAVAILABLE', value: { code: 'media_domain_not_ready', retryable: true, retryAfter: 7 } }] }) }] }) }))
+    assert.equal(domain.nextAction.kind, 'wait')
+    assert.match(domain.nextAction.reason, /7 seconds/)
     assert.equal(last(await run(root, ['deploy', versionId, '--review', '-', '--json'], { stdin: JSON.stringify(review({ validation: { status: 'superseded' } })) })).error, 'version_not_paired')
     assert.equal(last(await run(root, ['deploy', 'nope', '--json'])).error, 'version_invalid')
     // An unsupported storage change is shown and no publish call is printed.

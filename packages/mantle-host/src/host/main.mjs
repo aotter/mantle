@@ -13,7 +13,7 @@ import { createOutput, failureLine, fail, shellWord } from './output.mjs'
 import { linkFile, pickTarget, readLink } from './link.mjs'
 import { loadState, targetState } from './state.mjs'
 import { resumeSave, saveFailureNext, startSave } from './save.mjs'
-import { deploy, link, nativeNext, rollback, status } from './release.mjs'
+import { deploy, link, nativeNext, open, rollback, status } from './release.mjs'
 import { appRootOf } from './snapshot.mjs'
 
 const usage = `${hostName} <command> [--target <name>] [--json]
@@ -24,6 +24,8 @@ const usage = `${hostName} <command> [--target <name>] [--json]
   save    --resume [--grant - | --grant-file <path>]     continue with the piped Cloud MCP tool result
   status                                                 local state and the next step, no network
   deploy  <versionId> [--review -] [--dry-run]           review, then print the cloud-publish-paired-release call
+  deploy  <versionId> --release -                        read the publish result: the live URL, or repeat the same call
+  open    --project <id> [--discover -]                  restore the live source into an empty directory
   rollback [<versionId>] [--revision <hex>] [--deployment -]   print the cloud-rollback-project call
   version
 
@@ -34,11 +36,11 @@ const options = { json: { type: 'boolean' }, target: { type: 'string' }, 'no-git
   grant: { type: 'string' }, 'grant-file': { type: 'string' }, omit: { type: 'string', multiple: true }, runtime: { type: 'string' },
   organization: { type: 'string' }, project: { type: 'string' }, slug: { type: 'string' }, root: { type: 'string' }, handlers: { type: 'string' },
   dist: { type: 'string' }, spa: { type: 'boolean' }, build: { type: 'string' }, config: { type: 'string' }, review: { type: 'string' },
-  'dry-run': { type: 'boolean' }, deployment: { type: 'string' }, revision: { type: 'string' }, help: { type: 'boolean' } }
-const verbs = new Set(['link', 'save', 'status', 'deploy', 'rollback', 'version'])
+  'dry-run': { type: 'boolean' }, release: { type: 'string' }, discover: { type: 'string' }, deployment: { type: 'string' }, revision: { type: 'string' }, help: { type: 'boolean' } }
+const verbs = new Set(['link', 'save', 'status', 'deploy', 'rollback', 'open', 'version'])
 const inputLimit = 8_000_000
 const mcpToolName = name => `${name === 'member-project' || name === 'member-organization' ? 'query_view_' : ''}${name.replaceAll('-', '_')}`
-const mcpAction = action => action && action.kind === 'mcp' ? {
+const mcpAction = action => action?.tool ? {
   ...action,
   ...(action.tool ? { tool: mcpToolName(action.tool) } : {}),
   ...(action.requires ? { requires: action.requires.map(item => ({ ...item, tool: mcpToolName(item.tool) })) } : {}),
@@ -83,7 +85,15 @@ export async function main(args, io = {}) {
       return 0
     }
     ctx.project = await realpath(resolve(io.cwd ?? process.cwd()))
+    // Advisory for Cloud; the script's own bytes, or `unknown` when it cannot read itself.
+    const scriptSha = await readFile(scriptPath).then(bytes => createHash('sha256').update(bytes).digest('hex'), () => 'unknown')
+    ctx.cloud = cloudClient({ fetch: io.fetch ?? globalThis.fetch, client: `${hostName}/${cliVersion} sha256=${scriptSha}` })
+    const readInput = async () => {
+      const bytes = await (io.stdin ?? readStdin)()
+      try { return JSON.parse(decodeInput(bytes)) } catch { throw fail('input_invalid_json', 'pipe the Cloud MCP tool result as JSON') }
+    }
     if (verb === 'link') return await link(ctx, flags)
+    if (verb === 'open') return await open(ctx, flags, readInput)
     ctx.link = pickTarget(await readLink(ctx.project), flags.target)
     ctx.target = ctx.link.target
     ctx.targetArgs = ['--target', ctx.target]
@@ -95,13 +105,6 @@ export async function main(args, io = {}) {
     ctx.state = await loadState(ctx.project)
     ctx.targetState = targetState(ctx.state, ctx.target)
     ctx.appRoot = await appRootOf(ctx.project, ctx.link.entry.root)
-    // Advisory for Cloud; the script's own bytes, or `unknown` when it cannot read itself.
-    const scriptSha = await readFile(scriptPath).then(bytes => createHash('sha256').update(bytes).digest('hex'), () => 'unknown')
-    ctx.cloud = cloudClient({ fetch: io.fetch ?? globalThis.fetch, client: `${hostName}/${cliVersion} sha256=${scriptSha}` })
-    const readInput = async () => {
-      const bytes = await (io.stdin ?? readStdin)()
-      try { return JSON.parse(decodeInput(bytes)) } catch { throw fail('input_invalid_json', 'pipe the Cloud MCP tool result as JSON') }
-    }
     const readGrant = async () => {
       if (flags.grant !== undefined && flags['grant-file'] !== undefined) throw fail('usage', 'pass either --grant - or --grant-file')
       let bytes
@@ -131,7 +134,7 @@ export async function main(args, io = {}) {
     }
   } catch (error) {
     const code = error?.code && typeof error.code === 'string' && /^[a-z0-9_]{1,100}$/.test(error.code) ? error.code : 'local_error'
-    const nextAction = error?.nextAction ?? (verb === 'save' || !ctx.link ? saveFailureNext(ctx, code) : { kind: 'fix', reason: 'Fix the reported problem and re-run.' })
+    const nextAction = error?.nextAction ?? (verb === 'save' || (!ctx.link && verb !== 'open') ? saveFailureNext(ctx, code) : { kind: 'fix', reason: 'Fix the reported problem and re-run.' })
     ctx.emit(failureLine(stage, error, nextAction))
     return code === 'usage' ? 2 : 1
   }
