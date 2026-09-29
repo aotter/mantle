@@ -1,0 +1,58 @@
+// CLI side of ADR-0034: SQL text -> IR. libpg-query parses; validation runs on the raw AST (so a
+// refusal has a source offset); then locations are stripped and every relation is tagged.
+// Nothing in a Worker imports this file: libpg-query declares a 128 MiB WASM memory.
+import { parse } from 'libpg-query';
+import type { Ctx, Diagnostic, N } from './types.ts';
+import { Refused } from './types.ts';
+import { stripLocations, tagRelations, validateProgram } from './validate.ts';
+
+/** the PostgreSQL grammar version the plan records (libpg-query 18: PG 18.0.4) */
+export const PG_GRAMMAR = 180004;
+
+/** The runtime refuses a plan built by another PostgreSQL grammar: the AST changes between majors. */
+export function assertGrammar(plan: { grammar: number }) {
+  if (plan.grammar !== PG_GRAMMAR) throw new Refused('SQL_UNSUPPORTED', `plan was compiled with PostgreSQL grammar ${plan.grammar}, this runtime reads ${PG_GRAMMAR}`);
+}
+
+export type Lowered = { stmts: N[] };
+
+/** UTF-8 byte offset (what libpg-query reports) -> line, column (1-based) and the token there. */
+export function locate(source: string, byteOffset: number): Pick<Diagnostic, 'offset' | 'line' | 'column' | 'token'> {
+  const bytes = Buffer.from(source, 'utf8');
+  const prefix = bytes.subarray(0, byteOffset).toString('utf8');
+  const lines = prefix.split('\n');
+  const rest = source.slice(prefix.length);
+  const token = /^("[^"]*"|'[^']*'|[\w.$]+|\S)/.exec(rest)?.[0];
+  return { offset: prefix.length, line: lines.length, column: lines.at(-1)!.length + 1, token };
+}
+
+export function toDiagnostic(e: Refused, source: string): Diagnostic {
+  const at = e.keyword?.exec(source); // a clause the AST gives no position: point at its keyword
+  if (at) return { code: e.code, message: e.message, ...locate(source, Buffer.byteLength(source.slice(0, at.index))), token: at[0] };
+  return { code: e.code, message: e.message, ...(e.offset === undefined ? {} : locate(source, e.offset)) };
+}
+
+/** Throws `Refused` (with an offset when the AST has one) or returns the IR. */
+export async function lower(sql: string, ctx: Omit<Ctx, 'source'>): Promise<Lowered> {
+  let tree;
+  try {
+    tree = await parse(sql);
+  } catch (e: any) {
+    throw new Refused('SQL_SYNTAX', String(e.message).replace(/^.*?:\s*/, ''), typeof e.sqlDetails?.cursorPosition === 'number' ? e.sqlDetails.cursorPosition : undefined);
+  }
+  const raw = tree.stmts.map((s: N) => s.stmt);
+  const locs = tree.stmts.map((s: N) => s.stmt_location);
+  const tagged = tagRelations(raw);
+  validateProgram(tagged, { ...ctx, source: sql }, locs);
+  return { stmts: stripLocations(tagged) };
+}
+
+/** `lower`, but a refusal becomes a Diagnostic (what the CLI prints). */
+export async function tryLower(sql: string, ctx: Omit<Ctx, 'source'>): Promise<{ ok: true; ir: Lowered } | { ok: false; diagnostic: Diagnostic }> {
+  try {
+    return { ok: true, ir: await lower(sql, ctx) };
+  } catch (e) {
+    if (e instanceof Refused) return { ok: false, diagnostic: toDiagnostic(e, sql) };
+    throw e;
+  }
+}
