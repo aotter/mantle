@@ -62,6 +62,19 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   for (const [name, t] of triggers)
     if (t.source.kind === "lifecycle" && t.source.on.some((h) => h.endsWith("_publish"))) throw fail("DISPATCHER_NOT_BUILT", `${at}#/triggers/${name}`, "publish lifecycle hooks are not wired yet: status transitions are not part of the Store");
 
+  // hook targets and guards are consumer code: an inline program would write inside a before hook or a guard, which fails open
+  const inline = (name: string) => !("ref" in (plan.procedures[name]?.handler ?? { ref: "" }));
+  for (const [name, t] of triggers)
+    if (t.source.kind === "lifecycle" && inline(t.procedure)) throw fail("LIFECYCLE_TARGET_NOT_REF", `${at}#/triggers/${name}`, `lifecycle Trigger '${name}' targets '${t.procedure}', which is an inline program`);
+  for (const [name, p] of Object.entries(plan.procedures)) {
+    const g = p.requires?.guard?.procedure;
+    if (g && inline(g)) throw fail("GUARD_PROCEDURE_NOT_REF", `${at}#/procedures/${name}`, `'${name}' is guarded by '${g}', which is an inline program`);
+  }
+  for (const [name, v] of Object.entries(plan.views)) {
+    const g = v.requires?.guard?.procedure;
+    if (g && inline(g)) throw fail("GUARD_PROCEDURE_NOT_REF", `${at}#/views/${name}`, `View '${name}' is guarded by '${g}', which is an inline program`);
+  }
+
   const { executor } = await args.storage.prepare(plan);
 
   // ---- lifecycle: Store hands mutations to this dispatcher; Procedures are only reached through invokeProcedure ---------------
@@ -98,7 +111,8 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   const store = createStore({
     executor, schemas: plan.schemas, lifecycle, now,
     newId: args.newId ?? (() => crypto.randomUUID().replaceAll("-", "")),
-    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}) }])),
+    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}) }])),
+    guardView: async (procedure, caller, input, cause) => { await invoke({ procedure, input, caller, cause: child(cause, procedure) }, true); },
   });
 
   // ---- invocation ---------------------------------------------------------------------------------------------------------------
@@ -134,10 +148,11 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
 
     const isBefore = inv.cause.kind === "lifecycle" && inv.cause.hook.startsWith("before_");
     const ro = guard || isBefore;
+    if (ro && "sql" in proc.handler) throw fail("LIFECYCLE_TARGET_NOT_REF", path, "a guard or a before hook may not be an inline program", "runtime");
     let result: unknown;
     try {
       if ("ref" in proc.handler) {
-        const scoped = store.as(inv.caller);
+        const scoped = store.as(inv.caller, inv.cause); // writes chain to this invocation, so hooks they fire count toward the depth limit
         const ctx: HandlerContext = {
           caller: inv.caller, cause: inv.cause, env: args.env, waitUntil: args.waitUntil ?? (() => undefined),
           store: ro ? readOnly(scoped) : scoped,
