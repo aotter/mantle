@@ -136,7 +136,7 @@ function* find(v: any, key: string): Generator<any> {
 
 /**
  * Every name a column may have: declared fields (a geo field also as _lat and _lng), `id`, the system
- * columns, json_each's, and every output name the program gives (ORDER BY and outer queries read them).
+ * columns, json_each's, relation names and aliases, and every output name the program gives (ORDER BY and outer queries read them).
  * A name outside the set is a typo. Not per relation: a column of another table passes here.
  */
 function knownColumns(stmts: N[], ctx: Ctx): Set<string> {
@@ -144,6 +144,7 @@ function knownColumns(stmts: N[], ctx: Ctx): Set<string> {
   for (const s of Object.values(ctx.schemas))
     for (const [f, t] of Object.entries(s.fields)) (t === 'geo' ? [f, `${f}_lat`, `${f}_lng`] : [f]).forEach((c) => known.add(c));
   for (const r of find(stmts, 'ResTarget')) if (r.name) known.add(String(r.name).toLowerCase());
+  for (const r of find(stmts, 'RangeVar')) [r.relname, r.alias?.aliasname].forEach((a) => a && known.add(a.toLowerCase())); // search(<alias>, ...) names a relation
   return known;
 }
 

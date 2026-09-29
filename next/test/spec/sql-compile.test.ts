@@ -85,6 +85,7 @@ describe("compileSql", () => {
       "SELECT CAST('5' AS int), CAST(7 AS int), round(stock) FROM items",
       "SELECT id FROM events WHERE at > now() - interval '36 hours' ORDER BY id",
       "SELECT id FROM items WHERE name LIKE 'a!%' ESCAPE '!' ORDER BY id",
+      "SELECT p.id FROM posts p WHERE search(p, 'q') ORDER BY search_rank(p) LIMIT 5",
     ].map((sql) => ({ kind: "view" as Kind, sql }));
     for (const c of [...corpus, ...extra]) {
       const res = await compileSql(c.sql, ctxOf(c.kind, c.inputs));
