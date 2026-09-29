@@ -258,6 +258,7 @@ export function makeDiagnostic(
     suggestion,
     message: msg,
     ...(input.failure ? { failure: input.failure } : {}),
+    ...(input.conflict ? { conflict: input.conflict } : {}),
   };
 }
 

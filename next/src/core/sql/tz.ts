@@ -5,13 +5,21 @@
 const US = 1_000_000;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
-function offsetSeconds(timeZone: string, epochSec: number): number {
+export interface Local {
+  readonly y: number; readonly mo: number; readonly d: number; readonly h: number; readonly mi: number; readonly s: number;
+  /** UTC offset in seconds. */
+  readonly off: number;
+}
+/** Wall-clock parts of an instant (whole seconds since the epoch) in a zone. */
+export function localParts(timeZone: string, epochSec: number): Local {
   let f = formatters.get(timeZone);
   if (!f) formatters.set(timeZone, (f = new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" })));
   const p: Record<string, number> = {};
   for (const { type, value } of f.formatToParts(new Date(epochSec * 1000))) if (type !== "literal") p[type] = +value;
-  return Date.UTC(p.year!, p.month! - 1, p.day!, p.hour === 24 ? 0 : p.hour!, p.minute!, p.second!) / 1000 - epochSec;
+  const h = p.hour === 24 ? 0 : p.hour!;
+  return { y: p.year!, mo: p.month!, d: p.day!, h, mi: p.minute!, s: p.second!, off: Date.UTC(p.year!, p.month! - 1, p.day!, h, p.minute!, p.second!) / 1000 - epochSec };
 }
+const offsetSeconds = (timeZone: string, epochSec: number) => localParts(timeZone, epochSec).off;
 
 export interface TzRow {
   readonly from_us: number;
