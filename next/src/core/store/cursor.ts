@@ -14,7 +14,7 @@ export function decodeCursor(binding: string, cursor: string): unknown[] {
   try {
     if (!cursor.startsWith(PREFIX)) throw bad();
     const [b, keys] = JSON.parse(unb64(cursor.slice(PREFIX.length))) as [string, unknown[]];
-    if (b !== binding || !Array.isArray(keys)) throw bad();
+    if (b !== binding || !Array.isArray(keys) || keys.some((k) => k !== null && typeof k !== "string" && typeof k !== "number")) throw bad();
     return keys;
   } catch {
     throw bad();

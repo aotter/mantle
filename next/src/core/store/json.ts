@@ -159,7 +159,7 @@ export class StoreJson {
     const columns = q.columns
       ? [...new Set(q.columns)].map((c) => this.column(def, c, "columns", false))
       : [...Object.keys(NATIVE).filter((n) => n !== "status" || def.publishing).map((n) => this.column(def, n, "columns", false)),
-         ...Object.entries(def.fields).filter(([, t]) => t !== "geo").map(([f]) => this.column(def, def.names?.[f] ?? f, "columns", false))];
+         ...Object.entries(def.fields).filter(([f, t]) => t !== "geo" && f !== def.scope).map(([f]) => this.column(def, def.names?.[f] ?? f, "columns", false))];
     const orderBy = q.orderBy ?? { updatedAt: "desc" };
     if (typeof orderBy !== "object" || Array.isArray(orderBy) || Object.keys(orderBy).length !== 1) throw invalid("Store orderBy takes exactly one column.");
     const [sortName, dir] = Object.entries(orderBy)[0]!;
