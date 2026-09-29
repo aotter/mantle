@@ -43,20 +43,21 @@ const target = (val: N, name?: string): N => ({ ResTarget: name ? { name, val } 
 const SELECT = { limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } as const;
 
 const zods = new WeakMap<StoreSchema, { full: ZodType; partial: ZodType }>();
+const STATUSES = ["draft", "published", "archived"];
 
 /**
- * The values of a write against the Schema's JSON Schema: an insert must be complete, an update checks only what it sets. The scope
- * field is filled by Store, so it is never required of the caller. ponytail: a `publishing` Schema saves drafts incomplete and
- * validates on publish, which needs the LifecycleStateMachine wired into Store; until then its writes are checked by the database only.
+ * The values of a write against the Schema's JSON Schema. `full` must be a complete entry; `partial` checks only what is present.
+ * The scope field is filled by Store, so it is never required of the caller. An insert into a publishing Schema is a draft
+ * (partial); a publish is checked complete by the caller of this function, on the entry as it will be.
  */
-function validateValues(def: StoreSchema, values: Readonly<Record<string, unknown>>, insert: boolean): void {
-  if (!def.schema || def.publishing) return;
+export function validateValues(def: StoreSchema, values: Readonly<Record<string, unknown>>, mode: "full" | "partial"): void {
+  if (!def.schema) return;
   let z = zods.get(def);
   if (!z) {
     const required = (def.schema.required ?? []).filter((f) => f.toLowerCase() !== def.scope);
     zods.set(def, (z = { full: jsonSchemaToZod({ ...def.schema, required }), partial: jsonSchemaToZod({ ...def.schema, required: [] }) }));
   }
-  const r = (insert ? z.full : z.partial).safeParse(values);
+  const r = z[mode].safeParse(values);
   if (r.success) return;
   const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
   throw invalid(`The values do not match the Schema${instancePath ? ` at ${instancePath}` : ""}: ${message}`);
@@ -204,12 +205,12 @@ export class StoreJson {
     return typeof id === "string" || (typeof id === "object" && id !== null && typeof (id as { eq?: unknown }).eq === "string");
   }
 
-  /** The IR of one write op. Only a row op returns `id` and `version`; a set op reports how many rows it touched. */
-  write(o: StoreWriteOp): N {
+  /** The IR of one write op, and the status an update moves the entry to. Only a row op returns `id` and `version`; a set op reports how many rows it touched. */
+  write(o: StoreWriteOp): { ir: N; status?: string } {
     const returning = StoreJson.isRowOp(o) ? { exprs: [target(ref("id")), target(ref("version"))] } : undefined;
     if ("insert" in o) {
       const { name, def } = this.schema(o.insert);
-      validateValues(def, o.values, true);
+      validateValues(def, o.values, def.publishing ? "partial" : "full");
       const values = { ...o.values, ...(o.id === undefined ? {} : { id: o.id }) };
       const cols = Object.entries(values).map(([k, v]) => ({ c: k === "id" ? { col: "id", type: "text", out: "id" } : this.column(def, k, "values", false), v }));
       if (!cols.length) throw invalid("An insert names at least one column.");
@@ -223,21 +224,23 @@ export class StoreJson {
           infer: { indexElems: conflict.columns.map((k) => ({ IndexElem: { name: this.column(def, k, "onConflict.columns", true).col, ordering: "SORTBY_DEFAULT", nulls_ordering: "SORTBY_NULLS_DEFAULT" } })) },
           targetList: set };
       }
-      return { InsertStmt: { relation: table(name), cols: cols.map(({ c }) => ({ ResTarget: { name: c.col } })),
+      return { ir: { InsertStmt: { relation: table(name), cols: cols.map(({ c }) => ({ ResTarget: { name: c.col } })),
         selectStmt: { SelectStmt: { valuesLists: [{ List: { items } }], ...SELECT } },
-        ...(onConflictClause ? { onConflictClause } : {}), ...(returning ? { returningClause: returning } : {}), override: "OVERRIDING_NOT_SET" } };
+        ...(onConflictClause ? { onConflictClause } : {}), ...(returning ? { returningClause: returning } : {}), override: "OVERRIDING_NOT_SET" } } };
     }
     if ("update" in o) {
       const { name, def } = this.schema(o.update);
-      const set = Object.entries(o.set);
-      if (!set.length) throw invalid("An update sets at least one column.");
-      validateValues(def, o.set, false);
-      return { UpdateStmt: { relation: table(name),
+      const { status, ...rest } = o.set as Record<string, unknown>;
+      if (status !== undefined && (!def.publishing || !STATUSES.includes(status as string))) throw invalid(def.publishing ? `A status is one of ${STATUSES.join(", ")}.` : "This Schema has no status.");
+      const set = Object.entries(rest);
+      if (!set.length && status === undefined) throw invalid("An update sets at least one column.");
+      validateValues(def, rest, "partial");
+      return { status: status as string | undefined, ir: { UpdateStmt: { relation: table(name),
         targetList: set.map(([k, v]) => { const c = this.column(def, k, "set", false); return target(v === null ? { A_Const: { isnull: true } } : this.val(c.type, v, `'${c.out}'`), c.col); }),
-        whereClause: this.guarded(o.where, def, o.lock), ...(returning ? { returningClause: returning } : {}) } };
+        whereClause: this.guarded(o.where, def, o.lock), ...(returning ? { returningClause: returning } : {}) } } };
     }
     const { name, def } = this.schema(o.delete);
-    return { DeleteStmt: { relation: table(name), whereClause: this.guarded(o.where, def, o.lock), ...(returning ? { returningClause: returning } : {}) } };
+    return { ir: { DeleteStmt: { relation: table(name), whereClause: this.guarded(o.where, def, o.lock), ...(returning ? { returningClause: returning } : {}) } } };
   }
 
   /** `where`, with `AND version = <lock>` when the caller observed a version (OCC). */

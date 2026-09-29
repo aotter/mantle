@@ -11,7 +11,7 @@ import type { BindContext, Mode } from "../sql/compile.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
-import { StoreJson, type StoreSchemas } from "./json.js";
+import { StoreJson, validateValues, type StoreSchemas } from "./json.js";
 
 /** A compiled View: its IR and declared input types. `public` shows published rows only (ADR-0032 decision 8). */
 export interface StoreView {
@@ -81,9 +81,22 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
     write: (ops) => guard(async (): Promise<readonly StoreWriteResult[]> => {
       if (!Array.isArray(ops) || !ops.length) throw invalid("A write takes a non-empty list of operations.");
       const json = new StoreJson(deps.schemas);
-      const ir = ops.map((o) => json.write(o));
+      const built = ops.map((o) => json.write(o));
       const { mode, bind: b } = bindFor(deps.now(), caller);
-      const program: Program = { kind: "procedure", inputs: json.inputs, ir, expects: ops.map((o) => (o as { expect?: number }).expect) };
+      const program: Program = {
+        kind: "procedure", inputs: json.inputs, ir: built.map((x) => x.ir), expects: ops.map((o) => (o as { expect?: number }).expect),
+        statuses: built.map((x) => x.status),
+        // a publish must leave a complete entry: checked on the entry the lifecycle read, so it is the one the statement locks
+        checks: ops.map((o, i) => {
+          if (built[i]!.status !== "published" || !("update" in o)) return undefined;
+          const def = deps.schemas[o.update.toLowerCase()]!;
+          return (current: StoreRow) => {
+            // the row carries lower-cased columns in the database's encoding; the JSON Schema names them as declared
+            const entry = Object.fromEntries(Object.entries(current).filter(([k, v]) => def.fields[k] && v !== null).map(([k, v]) => [def.names?.[k] ?? k, decodeOutput(def.fields[k]!, v)]));
+            validateValues(def, { ...entry, ...Object.fromEntries(Object.entries(o.set).filter(([k]) => k !== "status")) }, "full");
+          };
+        }),
+      };
       let result;
       try {
         result = await runProcedure(env(mode), program, as({ ...b, input: json.values }));

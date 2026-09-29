@@ -132,9 +132,10 @@ export async function run(r: Report, driver: DatabaseDriver) {
   const odd = await runView(site(b), await program('view', 'SELECT n__q.id FROM notes AS n__q WHERE search(n__q, input.q) ORDER BY n__q.id', { q: 'text' }), caller({ q: '小籠包' }));
   r.equal('an alias containing __q is an identifier, not a placeholder: search() still works through it', odd.rows, ids('n1'));
 
-  // a Schema whose lifecycle is publishing takes row ops only
-  let setOp: unknown;
-  try { await runProcedure(site(b), await program('procedure', "UPDATE posts SET title = 'x' WHERE title = 'Hello world'"), caller()); } catch (e) { setOp = e; }
-  const rowOp = await runProcedure(site(b), await program('procedure', "UPDATE posts SET title = 'x' WHERE id = 'p1' RETURNING id"), caller());
-  r.check('a set op on a publishing Schema is refused; a row op is allowed', isRefusal(setOp, 'SQL_SHAPE') && rowOp.rows[0].length === 1, String((setOp as Error)?.message));
+  // a Schema whose lifecycle is publishing takes row ops only, and only a draft can be edited (the lifecycle rule)
+  const fail = async (sql) => { try { await runProcedure(site(b), await program('procedure', sql), caller()); } catch (e) { return e; } };
+  const setOp = await fail("UPDATE posts SET title = 'x' WHERE title = 'Hello world'");
+  const published = await fail("UPDATE posts SET title = 'x' WHERE id = 'p1'");
+  const draft = await runProcedure(site(b), await program('procedure', "UPDATE posts SET title = 'x' WHERE id = 'X_p2' RETURNING id"), caller());
+  r.check('a set op on a publishing Schema is refused; a row op edits a draft, and a published entry is CONFLICT', isRefusal(setOp, 'SQL_SHAPE') && isConflict(published) && draft.rows[0].length === 1, [String(setOp?.message), String(published?.message)]);
 }
