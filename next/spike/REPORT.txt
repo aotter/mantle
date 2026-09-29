@@ -1,0 +1,826 @@
+ADR-0034 spike report (Store authored as SQL): local D1 in workerd
+node v22.14.0, 2026-09-29. Re-run: cd next/spike && npm ci && npm run spike
+
+== Summary ==
+Spike task 1: deparser overrides
+  PASS  1. Deparser  (50/50 checks)
+  PASS  1c.  (4/4 checks)
+  PASS  1d.  (1/1 checks)
+  PASS  1e.  (38/38 checks)
+  PASS  1f.  (7/7 checks)
+  PASS  1g.  (1/1 checks)
+
+Spike task 2 and 3: the 8 conformance cases (ADR-0034 "Conformance cases")
+  PASS  Case 1:  (13/13 checks)
+  PASS  Case 2:  (13/13 checks)
+  PASS  Case 3:  (13/13 checks)
+  PASS  Case 4:  (11/11 checks)
+  PASS  Case 5:  (172/172 checks)
+  PASS  Case 6:  (96/96 checks)
+  PASS  Case 7:  (103/103 checks)
+  PASS  Case 8:  (39/39 checks)
+
+Also
+  PASS  Typecheck:  (4/4 checks)
+  PASS  Local D1 facts  (13/13 checks)
+578/578 checks pass in 17.8 s
+
+== Findings against ADR-0034 (commentary; each names the check that shows it) ==
+Decision 3 (printer). Four printer overrides, not three: ParamRef, TypeCast, A_Const, and A_Expr (x LIKE p ESCAPE e parses to
+  LIKE with pg_catalog.like_escape(p, e); SQLite has only the ESCAPE clause). Four more places rewrite the AST because SQLite lacks the
+  PostgreSQL construct (function prefix and SQL-syntax calls, btrim -> trim, = ANY (subquery) -> IN, type names). 4 + 4 is under the
+  ADR threshold of "about a dozen": Kysely is not needed. [1c, 1g]
+Decision 3 (printer). `$n` is not a syntax error on D1: SQLite reads it as a named parameter numbered by first appearance, so binds
+  shift silently when ?3 appears before ?2. Only the corpus item insert-select-input catches it. The ADR should say the ParamRef
+  override is a correctness fix, not cosmetics. [1c]
+Decision 3 (printer). Operator precedence needs no override: pgsql-deparser parenthesizes nested operators, and 400 random
+  integer/boolean trees plus the `||` cases evaluate on D1 to the tree's value. [1f]
+Decision 2 (identifiers). The keywords SQLite rejects unquoted while the printer leaves them bare are, measured against all 147:
+  add alter autoincrement commit delete drop escape index insert nothing raise set transaction update. `match` and `glob`, named in
+  the ADR, are fine. The list is a measurement of pgsql-deparser 18.3.8 and D1's SQLite: 1d fails if either changes it. [1d]
+Decision 2 (windows). "The compiler appends id to the window's ORDER BY" is wrong for anything but row_number(): the appended key makes
+  peers distinct, so rank() stops tying and a running sum stops including its peers (PostgreSQL semantics). Append only for
+  row_number(). [1 corpus: window-ties]
+Decision 2 (writes). The requisition example in the prototype and the Whiteboard names `id` in INSERT INTO orders on a scoped Schema. Decision
+  8 says a scoped Schema generates its own ids, and this is refused (SQL_WRITE). The example must not name id. [Case 5]
+Decision 4 (classification). One row of VALUES with ON CONFLICT must be a set op, or a DO NOTHING that hits the conflict fails with CONFLICT.
+  State it in the classification rule ("ON CONFLICT is a set op" appears under Writes, not under Classification). [1 corpus: upsert-nothing]
+Decision 4 (hooks). RETURNING * and most column lists carry neither id nor version, but an after hook needs both: the compiler adds hidden
+  _mantle_id and _mantle_version columns for a hooked target and the executor splits them off. State that ctx.cause.rows always carry
+  id and version. [Case 1]
+Decision 4 (before hooks). A row op whose row is not visible must fail with CONFLICT without calling the hook, or the hook can probe for
+  another owner's row. [Case 4]
+Decision 4 (counting). D1's meta.changes counts trigger writes (5 for a one-row UPDATE on a searchable row), so changes() inside the
+  batch is required, as the ADR says. RAISE(IGNORE) in a BEFORE INSERT trigger on _mantle_assert keeps no rows. [Case 8, D1 facts]
+Decision 5 (types). `? / 2`, exact sums over numeric(12,2), microsecond comparisons and date_trunc across daylight saving all give
+  PostgreSQL's results. numeric input beyond its scale is refused, not rounded. CAST(x AS int) truncates where PostgreSQL rounds
+  (2.7 gives 2; -2.7 gives -2; '12.5' gives 12): the warning is SQL_CAST_TRUNC. CAST(x AS bool) is lowered to x <> 0. A CAST of a
+  non-literal to timestamptz, date or numeric is refused: it would need the arithmetic rewrite the ADR defers. [Case 6]
+Decision 5 (time zone). Transitions generated with Intl (261 rows for New York 1970-2100, three-day scan plus bisection) match the Intl oracle
+  on 155 to 881 instants per zone (New York, Berlin, Lord Howe, Kolkata, Apia, Taipei), including every half hour within 30 h of each
+  transition and the day Apia skipped. Inside a repeated whole hour each pass truncates to its own hour start (05:30Z gives 05:00Z, 06:30Z
+  gives 06:00Z); whether PostgreSQL picks the same was not verified (no PostgreSQL here), so the ADR should not claim parity for the
+  repeated hour or for Lord Howe's half-hour gap. [Case 6]
+Decision 8 (positions). The AST does not say which keys hold a relation, so the "IR position union" is a hand-kept list. It is bound to
+  @pgsql/types (each edge is Edge<Node, KeyOf<Node>>, so a renamed key fails tsc), ALL_EDGES_REACHED fails when an edge has no position,
+  the probe list is Record<RelationPosition, Probe> `satisfies`, and the policy pass throws on a relation reached through an edge it has
+  no name for (fail closed). All three tsc failures are shown by scratch copies. Switching the visibility predicate off is caught by
+  13 of 14 probes; insert-target is protected by the scope/id fill and the scope-including unique index instead. [Case 7, Typecheck]
+Decision 8 (search and near). search() and near() need the wrapper to expose rowid as _rid; search_rank(t) needs the query of the sibling
+  search(t, q); PostgreSQL's grammar has no MATCH, so the printed form is `fts = q` (FTS5 accepts it, results identical to MATCH).
+  near() takes a literal radius and input-or-literal coordinates, because the bounding box is bound from the input at run time. [Case 8]
+Decision 9 (D1). R*Tree is refused by workerd 1.20260730 (only fts5 and fts5vocab virtual tables are authorized) and allowed by
+  1.20260903.1, the version the monorepo pins. Production D1 must be checked: production-probe.sql. [D1 facts]
+Decision 3 (diagnostics, ADR-0034 How to apply 3). Proposed codes: SQL_SYNTAX SQL_UNSUPPORTED SQL_FUNCTION SQL_RELATION SQL_COLUMN SQL_WRITE
+  SQL_SHAPE SQL_TYPE, and the warning SQL_CAST_TRUNC. libpg-query gives no location for clause keys (WITH, OFFSET, RIGHT, UNION, FOR UPDATE ...),
+  so the CLI finds the keyword in the source; the remaining refusals without a position are whole-statement ones. [Case 5]
+Decision 1 (grammar version). libpg-query 18.1.5 reports 180004, the value the plan records; the runtime refuses another. [Case 5]
+
+== Not covered by this spike ==
+Production D1 (only local; see production-probe.sql). Sequences and nextval(). Foreign-key RESTRICT triggers and the same-owner rule. The
+rule "a selected column must be grouped or aggregated" and the NULL-position rule for a nullable sort key. `ctx.store.select` / `write`
+JSON-to-AST converter and handler-built IR. Cursors over distance(), and cursors over nullable keys. A View that pages a window or a set
+op. Hooks over a scoped Schema's upserts. The Cloud plan upload (host protocol 3) and Control's JS validation of the IR. Admin's
+searchFields. Storage convergence for an existing table (every case starts from an empty D1). Hour truncation in Lord Howe (a
+half-hour gap); a zone whose day starts in a gap. The runtime runs in Node and reaches D1 through the Worker in src/worker.mjs; the compiler and
+policy pass are not bundled into a Worker here.
+
+== Evidence: every check that ran ==
+
+== Local D1 facts the design relies on ==
+workerd 1.20260903.1, miniflare 5.20260903.0-alpha, wrangler 4.129.0 (the versions pnpm-lock.yaml pins for the monorepo)
+virtual table modules: fts5_trigram allowed, rtree allowed, fts5vocab allowed, rtree_i32 allowed, geopoly refused, fts4 refused
+PASS  FTS5 with the trigram tokenizer can be created
+PASS  R*Tree can be created (workerd 1.20260730 refused it: only fts5 modules were authorized)
+PASS  bm25() and snippet() work on the trigram table
+PASS  the math functions the haversine needs are authorized (radians sin cos asin sqrt atan2)
+PASS  strftime and unixepoch are authorized in compiled output (the source refuses them)
+PASS  changes() is authorized, and RAISE(IGNORE) in a BEFORE INSERT trigger stores no row
+PASS  EXPLAIN QUERY PLAN is authorized
+PASS  generated STRICT tables are supported
+PASS  foreign keys are enforced by default
+PASS  100 bound parameters are accepted and 101 are refused
+PASS  a statement over 100 KB is refused  -> D1_ERROR: statement too long: SQLITE_TOOBIG
+PASS  the functions the ADR lists as refused are refused  -> {"sqlite_version()":false,"power(2, 3)":false,"ceiling(1.5)":false,"json_pretty('[1]')":false,"unistr('a')":false}
+PASS  D1 binds a JS number as a float (? / 2 with 5 is 2.5)  -> 2.5
+
+== 1. Deparser: every allowlisted node on local D1 ==
+PASS  corpus arith
+PASS  corpus precedence-concat
+PASS  corpus precedence-bool
+PASS  corpus case
+PASS  corpus literals
+PASS  corpus quoting
+PASS  corpus between
+PASS  corpus not-between
+PASS  corpus like
+PASS  corpus not-like
+PASS  corpus like-escape
+PASS  corpus null-tests
+PASS  corpus in-list
+PASS  corpus any-subquery
+PASS  corpus in-subquery
+PASS  corpus exists
+PASS  corpus not-exists
+PASS  corpus scalar-subquery
+PASS  corpus input-param
+PASS  corpus aggregates
+PASS  corpus windows
+PASS  corpus order-nulls
+PASS  corpus order-nulls-first
+PASS  corpus window-ties
+PASS  corpus distinct
+PASS  corpus limit-input
+PASS  corpus inner-join
+PASS  corpus left-join
+PASS  corpus self-join
+PASS  corpus from-subquery
+PASS  corpus json-each
+PASS  corpus json-exists
+PASS  corpus scalar-functions
+PASS  corpus json-functions
+PASS  corpus casts
+PASS  corpus literal-casts
+PASS  corpus mantle-refs
+PASS  corpus date-trunc
+PASS  corpus extract
+PASS  corpus insert-values
+PASS  corpus insert-string-escapes
+PASS  corpus insert-select-input
+PASS  corpus insert-select
+PASS  corpus insert-returning-star
+PASS  corpus update-set
+PASS  corpus update-row
+PASS  corpus delete
+PASS  corpus upsert-nothing
+PASS  corpus upsert-update
+corpus: 49 items, 49 pass with SqliteDeparser
+whitelist: 31 node types, 92 (type, key) pairs, 40 enum values
+PASS  every node type in the whitelist is printed by the corpus  -> []
+(type, key) pairs the corpus does not reach: none
+enum values the corpus does not reach: RangeVar.mantle=cte
+physical AST after policy (what the printer actually saw): 31 node types: A_Const A_Expr A_Star Alias BoolExpr CaseExpr CaseWhen CoalesceExpr ColumnRef DeleteStmt FuncCall IndexElem InferClause InsertStmt JoinExpr List NullTest OnConflictClause RangeFunction RangeSubselect RangeVar ResTarget ReturningClause SelectStmt SortBy String SubLink TypeCast TypeName UpdateStmt WindowDef
+
+== 1c. Overrides: what each one is for ==
+vanilla pgsql-deparser: 5 of 49 corpus items fail on D1
+PASS  override ParamRef is needed (without it: 1 items fail)  -> insert-select-input
+PASS  override TypeCast is needed (without it: 2 items fail)  -> casts, extract
+PASS  override A_Const is needed (without it: 2 items fail)  -> literals, insert-string-escapes
+PASS  override A_Expr is needed (without it: 1 items fail)  -> like-escape
+OVERRIDES (4): ParamRef, TypeCast, A_Const, A_Expr
+  vanilla fails literals: D1_ERROR: near "AS": syntax error at offset 33: SQLITE_ERROR
+  vanilla fails like-escape: D1_ERROR: no such function: like_escape at offset 196: SQLITE_ERROR
+  vanilla fails casts: D1_ERROR: unrecognized token: ":" at offset 12: SQLITE_ERROR
+  vanilla fails extract: D1_ERROR: unrecognized token: ":" at offset 301: SQLITE_ERROR
+  vanilla fails insert-string-escapes: D1_ERROR: near "'it''s a \\ back\\slash'": syntax error at offset 126: SQLITE_ERROR
+
+== 1d. Identifiers: SQLite keywords the printer would not quote ==
+147 SQLite keywords tested as a column, an alias and a table name; 14 are printed bare and refused by SQLite: add alter autoincrement commit delete drop escape index insert nothing raise set transaction update
+PASS  validate.ts SQLITE_ONLY_KEYWORDS equals the measurement  -> ["add","alter","autoincrement","commit","delete","drop","escape","index","insert","nothing","raise","set","transaction","update"]
+
+== 1e. Function allowlist on local D1 ==
+PASS  function count is authorized
+PASS  function sum is authorized
+PASS  function min is authorized
+PASS  function max is authorized
+PASS  function avg is authorized
+PASS  function json_group_array is authorized
+PASS  function json_group_object is authorized
+PASS  function lower is authorized
+PASS  function upper is authorized
+PASS  function length is authorized
+PASS  function abs is authorized
+PASS  function round is authorized
+PASS  function substr is authorized
+PASS  function replace is authorized
+PASS  function trim is authorized
+PASS  function ltrim is authorized
+PASS  function rtrim is authorized
+PASS  function instr is authorized
+PASS  function typeof is authorized
+PASS  function hex is authorized
+PASS  function json_extract is authorized
+PASS  function json_set is authorized
+PASS  function json_insert is authorized
+PASS  function json_remove is authorized
+PASS  function json_array_length is authorized
+PASS  function strftime is authorized
+PASS  function unixepoch is authorized
+PASS  function changes is authorized
+PASS  function randomblob is authorized
+PASS  function asin is authorized
+PASS  function sqrt is authorized
+PASS  function sin is authorized
+PASS  function cos is authorized
+PASS  function radians is authorized
+PASS  function min2 is authorized
+PASS  function coalesce is authorized
+PASS  function nullif is authorized
+PASS  function length_text is authorized
+  power(2, 3): refused by D1 (not authorized to use function)
+  ceiling(1.5): refused by D1 (not authorized to use function)
+  sqlite_version(): refused by D1 (not authorized to use function)
+  json_pretty('[1]'): refused by D1 (not authorized to use function)
+  unistr('a'): refused by D1 (not authorized to use function)
+  random(): allowed
+  printf('%d', 1): allowed
+  concat('a', 'b'): allowed
+
+== 1f. Operator precedence: random expression trees, printed then evaluated by D1 ==
+PASS  400 random int/boolean trees (depth 4): printed SQL evaluates on D1 to the tree's value
+PASS  || precedence: SELECT 2 * 3 || 4 = 64  -> printed: SELECT (2 * 3) || 4 AS x FROM ( SELECT i ... => 64
+PASS  || precedence: SELECT 1 + 2 || 3 = 33  -> printed: SELECT (1 + 2) || 3 AS x FROM ( SELECT i ... => 33
+PASS  || precedence: SELECT 'x' || 1 + 1 = x2  -> printed: SELECT 'x' || (1 + 1) AS x FROM ( SELECT ... => x2
+PASS  || precedence: SELECT (2 || 3) * 4 = 92  -> printed: SELECT (2 || 3) * 4 AS x FROM ( SELECT i ... => 92
+PASS  || precedence: SELECT 2 || 3 * 4 = 212  -> printed: SELECT 2 || (3 * 4) AS x FROM ( SELECT i ... => 212
+PASS  || precedence: SELECT - 2 || 3 = -23  -> printed: SELECT -2 || 3 AS x FROM ( SELECT id, ve ... => -23
+
+== 1g. Where the printed text differs from what PostgreSQL prints ==
+printer overrides (subclass methods of pgsql-deparser's Deparser): 4
+  - ParamRef: PostgreSQL prints $n; SQLite reads $n as a NAMED parameter numbered by first appearance, so binds silently shift when ?3 appears before ?2
+  - TypeCast: PostgreSQL prints x::type; SQLite has only CAST(x AS type)
+  - A_Const: PostgreSQL prints E'..' for a string containing a backslash; SQLite has no E'' strings
+  - A_Expr: x LIKE p ESCAPE e parses to LIKE with pg_catalog.like_escape(p, e); SQLite has no such function, its syntax is the ESCAPE clause
+AST rewrites in policy.ts because SQLite lacks the PostgreSQL construct (not printer methods): 4
+  - FuncCall: strip pg_catalog., print SQL-syntax calls (TRIM(BOTH FROM x), EXTRACT(.. FROM ..)) as plain calls
+  - FuncCall: btrim(x) (how PostgreSQL parses trim(x)) -> trim(x)
+  - SubLink: x = ANY (subquery) -> x IN (subquery)
+  - TypeCast: type names to SQLite storage classes (int4/int8 -> integer, float8 -> real, bool -> x <> 0, text -> text)
+Mantle constructs lowered to plain SQLite (features, not PostgreSQL differences): 7
+  - input.<name> -> CAST(?n AS <declared type>), auth.uid()/auth.role()/now() -> numbered binds
+  - interval 'N second|minute|hour' -> a microsecond integer constant; calendar units refused
+  - timestamptz / date / numeric(p, s) literal casts -> their integer encodings, folded at compile time
+  - date_trunc(unit, ts) and extract(field FROM ts) -> arithmetic and strftime over the _mantle_tz offset table
+  - search(t, q) / search_rank(t) -> FTS5 trigram MATCH on a quoted phrase, LIKE under three characters, bm25
+  - near(t.f, lat, lng, m) / distance(...) -> R*Tree bounding box plus haversine
+  - a Schema reference -> (SELECT <declared columns> FROM t WHERE scope AND ttl AND published) AS alias
+PASS  ADR threshold: overrides (4) stay under "about a dozen" (12), so Kysely is not needed
+
+== Case 1: requisition ==
+PASS  approve r1: RETURNING of the UPDATE and of the conditional INSERT  -> [[{"id":"r1","state":"approved"}],[{"item_id":"a","qty":2,"total":null}]]
+PASS  approve r1: the row op persisted  -> "approved"
+PASS  approve r1: the after hook ran once, with ctx.cause.rows holding the one written row  -> 1
+PASS  approve r1: the hook row carries id and version although RETURNING * names neither  -> [{"item_id":"a","qty":2,"total":null,"id":"f47b32a4a44e254faf63409f9c2d1a33","version":1}]
+PASS  reject r2: the UPDATE returns the rejected row, the conditional INSERT writes nothing  -> [[{"id":"r2","state":"rejected"}],[]]
+PASS  reject r2: no order row, and the hook was not called  -> {"orders":4,"calls":1}
+PASS  approve r1 again: CONFLICT with opIndex 0  -> Error: CONFLICT op=0
+PASS  approve r1 again: the batch wrote nothing and called no hook  -> {"orders":4,"calls":1}
+PASS  another owner's requisition: CONFLICT op=0, indistinguishable from a missing row  -> Error: CONFLICT op=0
+PASS  another owner's requisition: unchanged  -> "pending"
+PASS  two row ops, the second matches nothing: CONFLICT with opIndex 1  -> Error: CONFLICT op=1
+PASS  two row ops: the first one was rolled back (stock of a is still 5)  -> 5
+PASS  a row op bumps version  -> {"stock":4,"version":2}
+
+== Case 2: stock ==
+PASS  take 3 of a (stock 5): RETURNING shows 2  -> [[{"id":"a","stock":2}]]
+PASS  oversell b (stock 2, qty 10): CheckViolation naming the check  -> CHECK items: stock >= 0
+PASS  oversell b: stock is unchanged  -> 2
+PASS  two updates, the second oversells: the batch fails with the check  -> CHECK items: stock >= 0
+PASS  two updates: a keeps its stock (rolled back)  -> 2
+PASS  set op, one row would go negative: the check fails  -> CHECK items: stock >= 0
+PASS  set op: no row changed  -> [2,2,7]
+PASS  insert with stock -1: CheckViolation  -> CHECK items: stock >= 0
+PASS  CHECK (stock >= 0) passes for NULL  -> null
+PASS  X_z1 (another owner's / expired) with qty 1000: CONFLICT, not a check error  -> CONFLICT op=0
+PASS  X_e1 (another owner's / expired) with qty 1000: CONFLICT, not a check error  -> CONFLICT op=0
+PASS  their stock is unchanged  -> [50,100]
+PASS  taking the last 2 leaves 0, which the check allows  -> 0
+
+== Case 3: report View (join, GROUP BY/HAVING, cursor) ==
+PASS  o1's report: apple has its two visible orders; the other owner's order for apple (99) and the order on the expired item are not counted  -> [{"name":"apple","n":2,"total":4},{"name":"berry","n":0,"total":0},{"name":"cherry","n":0,"total":0},{"name":"date","n":0,"total":0}]
+PASS  no other owner's or expired row in the report
+PASS  HAVING binds an input: min = 1 keeps only apple  -> [{"name":"apple","n":2,"total":4}]
+PASS  o2's report sees only o2's rows  -> ["LEAK-zeta","LEAK-zulu"]
+PASS  items is wrapped: scope and TTL
+PASS  orders is wrapped: scope
+PASS  the caller and now() bind once each, however many references are wrapped  -> true
+PASS  LEFT JOIN kept its rows without a match
+PASS  cursor: pages of 2 cover the report in order, without repeats or gaps  -> [[{"name":"apple","n":2,"total":4},{"name":"berry","n":0,"total":0}],[{"name":"cherry","n":0,"total":0},{"name":"date","n":0,"total":0}]]
+PASS  cursor: the last page has no next cursor  -> 2
+PASS  a forged cursor value only filters the caller's own rows  -> [{"name":"berry","n":0,"total":0},{"name":"cherry","n":0,"total":0},{"name":"date","n":0,"total":0}]
+PASS  cursor inside a run of equal totals continues after the given name  -> ["cherry","date"]
+PASS  EXPLAIN QUERY PLAN uses the scope index on both wrapped Schemas
+
+== Case 4: before hooks ==
+PASS  no concurrent write: the row op commits and bumps version  -> [[{"id":"a","stock":9,"version":2}]]
+PASS  the hook saw the row before the change (ctx.cause.rows holds that one row)  -> {"id":"a","version":1,"name":"apple","cat":"x","stock":5,"tags":"[\"red\",\"big\"]","note":null}
+PASS  the statement carries the version the hook saw  -> L OR items.expires_at > ?4)) AND items.version = ?5 RETURNING id, stock, version
+PASS  row changed between the hook and the commit: CONFLICT op=0  -> CONFLICT op=0
+PASS  the concurrent write is not overwritten  -> {"stock":99,"version":2}
+PASS  a throwing hook stops the statement  -> hook says no
+PASS  and nothing was written  -> 7
+PASS  another owner's row: CONFLICT, and the hook was never called (it cannot probe for the row)  -> CONFLICT op=0
+PASS  a set op on items (before update hook) is refused  -> a set op on items is refused: items has a before update hook, and before hooks take row ops only
+PASS  set ops stay legal where no before hook exists  -> 2
+PASS  a before-update hook does not run for insert  -> [[{"name":"n"}]]
+
+== Case 5: dialect (refusals with a position) ==
+PASS  refused: SELECT id FROM items OFFSET 2
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items OFFSET 2  -> SQL_UNSUPPORTED
+PASS  refused: SELECT sqlite_version()
+PASS    runtime validator on the bare IR refuses it too: SELECT sqlite_version()  -> SQL_FUNCTION
+PASS  refused: SELECT id FROM items WHERE id = $1
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items WHERE id = $1  -> SQL_UNSUPPORTED
+PASS  refused: SELECT a.id FROM items a RIGHT JOIN orders o ON o.item_id = a.id
+PASS    runtime validator on the bare IR refuses it too: SELECT a.id FROM items a RIGHT JOIN orders o ON o.  -> SQL_UNSUPPORTED
+PASS  refused: UPDATE items SET stock = 1 FROM orders WHERE items.id = orders.item_id
+PASS    runtime validator on the bare IR refuses it too: UPDATE items SET stock = 1 FROM orders WHERE items  -> SQL_UNSUPPORTED
+PASS  refused: SELECT CURRENT_TIMESTAMP
+PASS    runtime validator on the bare IR refuses it too: SELECT CURRENT_TIMESTAMP  -> SQL_UNSUPPORTED
+PASS  refused: SELECT id FROM nope
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM nope  -> SQL_RELATION
+PASS  refused: SELECT id FROM _mantle_tz
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM _mantle_tz  -> SQL_RELATION
+PASS  refused: SELECT a.id FROM items a FULL JOIN orders o ON o.item_id = a.id
+PASS    runtime validator on the bare IR refuses it too: SELECT a.id FROM items a FULL JOIN orders o ON o.i  -> SQL_UNSUPPORTED
+PASS  refused: SELECT a.id FROM items a CROSS JOIN orders o
+PASS    runtime validator on the bare IR refuses it too: SELECT a.id FROM items a CROSS JOIN orders o  -> SQL_SHAPE
+PASS  refused: SELECT a.id FROM items a, orders o
+PASS    runtime validator on the bare IR refuses it too: SELECT a.id FROM items a, orders o  -> SQL_SHAPE
+PASS  refused: SELECT a.id FROM items a NATURAL JOIN orders o
+PASS    runtime validator on the bare IR refuses it too: SELECT a.id FROM items a NATURAL JOIN orders o  -> SQL_UNSUPPORTED
+PASS  refused: SELECT a.id FROM items a JOIN orders o USING (id)
+PASS    runtime validator on the bare IR refuses it too: SELECT a.id FROM items a JOIN orders o USING (id)  -> SQL_UNSUPPORTED
+PASS  refused: SELECT id FROM items GROUP BY GROUPING SETS ((id), ())
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items GROUP BY GROUPING SETS ((id),  -> SQL_UNSUPPORTED
+PASS  refused: WITH x AS (SELECT 1 AS a) SELECT a FROM x
+PASS    runtime validator on the bare IR refuses it too: WITH x AS (SELECT 1 AS a) SELECT a FROM x  -> SQL_UNSUPPORTED
+PASS  refused: WITH RECURSIVE x(a) AS (SELECT 1 UNION ALL SELECT a + 1 FROM x) SELECT
+PASS    runtime validator on the bare IR refuses it too: WITH RECURSIVE x(a) AS (SELECT 1 UNION ALL SELECT   -> SQL_UNSUPPORTED
+PASS  refused: WITH d AS (DELETE FROM items RETURNING id) INSERT INTO orders (item_id
+PASS    runtime validator on the bare IR refuses it too: WITH d AS (DELETE FROM items RETURNING id) INSERT   -> SQL_UNSUPPORTED
+PASS  refused: SELECT id FROM items UNION SELECT id FROM orders
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items UNION SELECT id FROM orders  -> SQL_UNSUPPORTED
+PASS  refused: SELECT id FROM items INTERSECT SELECT id FROM orders
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items INTERSECT SELECT id FROM orde  -> SQL_UNSUPPORTED
+PASS  refused: SELECT id FROM items FOR UPDATE
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items FOR UPDATE  -> SQL_UNSUPPORTED
+PASS  refused: SELECT id INTO t FROM items
+PASS    runtime validator on the bare IR refuses it too: SELECT id INTO t FROM items  -> SQL_UNSUPPORTED
+PASS  refused: SELECT id FROM main.items
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM main.items  -> SQL_UNSUPPORTED
+PASS  refused: DELETE FROM items USING orders WHERE items.id = orders.item_id
+PASS    runtime validator on the bare IR refuses it too: DELETE FROM items USING orders WHERE items.id = or  -> SQL_UNSUPPORTED
+PASS  refused: INSERT INTO orders (item_id) VALUES ('a'), ('b')
+PASS    runtime validator on the bare IR refuses it too: INSERT INTO orders (item_id) VALUES ('a'), ('b')  -> SQL_SHAPE
+PASS  refused: SELECT x.a FROM (VALUES (1), (2)) x(a)
+PASS    runtime validator on the bare IR refuses it too: SELECT x.a FROM (VALUES (1), (2)) x(a)  -> SQL_SHAPE
+PASS  refused: SELECT sum(stock) OVER (ORDER BY id ROWS 2 PRECEDING) FROM items
+PASS    runtime validator on the bare IR refuses it too: SELECT sum(stock) OVER (ORDER BY id ROWS 2 PRECEDI  -> SQL_UNSUPPORTED
+PASS  refused: SELECT id FROM items WHERE name ILIKE 'a'
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items WHERE name ILIKE 'a'  -> SQL_UNSUPPORTED
+PASS  refused: SELECT id FROM items WHERE name ~ 'a'
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items WHERE name ~ 'a'  -> SQL_UNSUPPORTED
+PASS  refused: SELECT tags -> 0 FROM items
+PASS    runtime validator on the bare IR refuses it too: SELECT tags -> 0 FROM items  -> SQL_UNSUPPORTED
+PASS  refused: SELECT id FROM items LIMIT 2
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items LIMIT 2  -> SQL_SHAPE
+PASS  refused: SELECT DISTINCT cat FROM items ORDER BY cat
+PASS    runtime validator on the bare IR refuses it too: SELECT DISTINCT cat FROM items ORDER BY cat  -> SQL_SHAPE
+PASS  refused: SELECT DISTINCT ON (cat) cat FROM items ORDER BY cat
+PASS    runtime validator on the bare IR refuses it too: SELECT DISTINCT ON (cat) cat FROM items ORDER BY c  -> SQL_UNSUPPORTED
+PASS  refused: SELECT rowid FROM items
+PASS    runtime validator on the bare IR refuses it too: SELECT rowid FROM items  -> SQL_COLUMN
+PASS  refused: SELECT id FROM items WHERE owner = 'o2'
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items WHERE owner = 'o2'  -> SQL_COLUMN
+PASS  refused: SELECT id FROM items WHERE expires_at > 0
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items WHERE expires_at > 0  -> SQL_COLUMN
+PASS  refused: SELECT id FROM items WHERE stock = input.nope
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM items WHERE stock = input.nope  -> SQL_COLUMN
+PASS  refused: SELECT 1 FROM items input
+PASS    runtime validator on the bare IR refuses it too: SELECT 1 FROM items input  -> SQL_RELATION
+PASS  refused: SELECT id AS "index" FROM items
+PASS    runtime validator on the bare IR refuses it too: SELECT id AS "index" FROM items  -> SQL_UNSUPPORTED
+PASS  refused: SELECT strftime('%Y', 0, 'unixepoch')
+PASS    runtime validator on the bare IR refuses it too: SELECT strftime('%Y', 0, 'unixepoch')  -> SQL_FUNCTION
+PASS  refused: SELECT date('now')
+PASS    runtime validator on the bare IR refuses it too: SELECT date('now')  -> SQL_FUNCTION
+PASS  refused: SELECT unixepoch(0)
+PASS    runtime validator on the bare IR refuses it too: SELECT unixepoch(0)  -> SQL_FUNCTION
+PASS  refused: SELECT printf('%1000000d', 1)
+PASS    runtime validator on the bare IR refuses it too: SELECT printf('%1000000d', 1)  -> SQL_FUNCTION
+PASS  refused: SELECT zeroblob(1000000)
+PASS    runtime validator on the bare IR refuses it too: SELECT zeroblob(1000000)  -> SQL_FUNCTION
+PASS  refused: SELECT randomblob(1000000)
+PASS    runtime validator on the bare IR refuses it too: SELECT randomblob(1000000)  -> SQL_FUNCTION
+PASS  refused: SELECT last_insert_rowid()
+PASS    runtime validator on the bare IR refuses it too: SELECT last_insert_rowid()  -> SQL_FUNCTION
+PASS  refused: SELECT changes()
+PASS    runtime validator on the bare IR refuses it too: SELECT changes()  -> SQL_FUNCTION
+PASS  refused: SELECT nextval('seq')
+PASS    runtime validator on the bare IR refuses it too: SELECT nextval('seq')  -> SQL_FUNCTION
+PASS  refused: SELECT * FROM json_tree('[1]')
+PASS    runtime validator on the bare IR refuses it too: SELECT * FROM json_tree('[1]')  -> SQL_FUNCTION
+PASS  refused: SELECT interval '1 day'
+PASS    runtime validator on the bare IR refuses it too: SELECT interval '1 day'  -> SQL_TYPE
+PASS  refused: SELECT interval '1 month'
+PASS    runtime validator on the bare IR refuses it too: SELECT interval '1 month'  -> SQL_TYPE
+PASS  refused: SELECT interval '1 week'
+PASS    runtime validator on the bare IR refuses it too: SELECT interval '1 week'  -> SQL_TYPE
+PASS  refused: SELECT interval '1 year'
+PASS    runtime validator on the bare IR refuses it too: SELECT interval '1 year'  -> SQL_TYPE
+PASS  refused: SELECT date_trunc('century', now())
+PASS    runtime validator on the bare IR refuses it too: SELECT date_trunc('century', now())  -> SQL_TYPE
+PASS  refused: SELECT extract(epoch FROM now())
+PASS    runtime validator on the bare IR refuses it too: SELECT extract(epoch FROM now())  -> SQL_TYPE
+PASS  refused: SELECT CAST(stock AS varchar) FROM items
+PASS    runtime validator on the bare IR refuses it too: SELECT CAST(stock AS varchar) FROM items  -> SQL_TYPE
+PASS  refused: SELECT CAST(note AS timestamptz) FROM items
+PASS    runtime validator on the bare IR refuses it too: SELECT CAST(note AS timestamptz) FROM items  -> SQL_TYPE
+PASS  refused: SELECT '1.234'::numeric(16, 2)
+PASS    runtime validator on the bare IR refuses it too: SELECT '1.234'::numeric(16, 2)  -> SQL_TYPE
+PASS  refused: SELECT stock::numeric(12, 2) FROM items
+PASS    runtime validator on the bare IR refuses it too: SELECT stock::numeric(12, 2) FROM items  -> SQL_TYPE
+PASS  refused: SELECT id FROM places WHERE near(places.loc, 25.0, 121.5, 60000)
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM places WHERE near(places.loc, 25.0,  -> SQL_FUNCTION
+PASS  refused: SELECT id FROM places WHERE near(places.loc, 25.0, 121.5, input.r)
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM places WHERE near(places.loc, 25.0,  -> SQL_FUNCTION
+PASS  refused: SELECT id FROM places ORDER BY distance(places.loc, 25.0, 121.5) LIMIT
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM places ORDER BY distance(places.loc  -> SQL_SHAPE
+PASS  refused: SELECT id FROM places ORDER BY distance(places.loc, 25.0, 121.5)
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM places ORDER BY distance(places.loc  -> SQL_SHAPE
+PASS  refused: SELECT id FROM notes WHERE search(notes)
+PASS    runtime validator on the bare IR refuses it too: SELECT id FROM notes WHERE search(notes)  -> SQL_FUNCTION
+PASS  refused: UPDATE items SET owner = 'o2' WHERE id = 'a'
+PASS    runtime validator on the bare IR refuses it too: UPDATE items SET owner = 'o2' WHERE id = 'a'  -> SQL_WRITE
+PASS  refused: INSERT INTO settings (owner, key) VALUES ('o2', 'x')
+PASS    runtime validator on the bare IR refuses it too: INSERT INTO settings (owner, key) VALUES ('o2', 'x  -> SQL_WRITE
+PASS  refused: UPDATE items SET version = 9 WHERE id = 'a'
+PASS    runtime validator on the bare IR refuses it too: UPDATE items SET version = 9 WHERE id = 'a'  -> SQL_WRITE
+PASS  refused: UPDATE items SET id = 'z' WHERE id = 'a'
+PASS    runtime validator on the bare IR refuses it too: UPDATE items SET id = 'z' WHERE id = 'a'  -> SQL_WRITE
+PASS  refused: INSERT INTO orders (id, item_id) VALUES ('x', 'a')
+PASS    runtime validator on the bare IR refuses it too: INSERT INTO orders (id, item_id) VALUES ('x', 'a')  -> SQL_WRITE
+PASS  refused: INSERT INTO settings (key, value) VALUES ('k', 'v') ON CONFLICT (key) 
+PASS    runtime validator on the bare IR refuses it too: INSERT INTO settings (key, value) VALUES ('k', 'v'  -> SQL_WRITE
+PASS  refused: INSERT INTO items VALUES ('x')
+PASS    runtime validator on the bare IR refuses it too: INSERT INTO items VALUES ('x')  -> SQL_WRITE
+PASS  refused: UPDATE items SET nope = 1 WHERE id = 'a'
+PASS    runtime validator on the bare IR refuses it too: UPDATE items SET nope = 1 WHERE id = 'a'  -> SQL_WRITE
+PASS  refused: UPDATE items SET stock = 1 WHERE id = 'a'; SELECT 1
+PASS    runtime validator on the bare IR refuses it too: UPDATE items SET stock = 1 WHERE id = 'a'; SELECT   -> SQL_SHAPE
+PASS  refused: UPDATE items SET stock = 1 WHERE id = 'a'
+PASS    runtime validator on the bare IR refuses it too: UPDATE items SET stock = 1 WHERE id = 'a'  -> SQL_SHAPE
+PASS  refused: CREATE TABLE t (a int)
+PASS    runtime validator on the bare IR refuses it too: CREATE TABLE t (a int)  -> SQL_UNSUPPORTED
+PASS  refused: DROP TABLE items
+PASS    runtime validator on the bare IR refuses it too: DROP TABLE items  -> SQL_UNSUPPORTED
+PASS  refused: BEGIN
+PASS    runtime validator on the bare IR refuses it too: BEGIN  -> SQL_UNSUPPORTED
+PASS  refused: INSERT INTO settings (key) VALUES ('x') ON CONFLICT ON CONSTRAINT nope
+PASS    runtime validator on the bare IR refuses it too: INSERT INTO settings (key) VALUES ('x') ON CONFLIC  -> SQL_UNSUPPORTED
+PASS  refused: SELEC id FROM items
+PASS  refused: SELECT 'unterminated FROM items
+PASS  refused: INSERT OR REPLACE INTO settings (key) VALUES ('x')
+diagnostic table (80 refusals):
+SELECT id FROM items OFFSET 2                                    -> SQL_UNSUPPORTED 1:22 'OFFSET' SelectStmt.limitOffset is not in the subset
+SELECT sqlite_version()                                          -> SQL_FUNCTION 1:8 'sqlite_version' function sqlite_version is not on the allowlist
+SELECT id FROM items WHERE id = $1                               -> SQL_UNSUPPORTED 1:33 '$1' ParamRef is not in the subset
+SELECT a.id FROM items a RIGHT JOIN orders o ON o.item_id = a.id -> SQL_UNSUPPORTED 1:26 'RIGHT' JoinExpr.jointype = "JOIN_RIGHT" is refused
+UPDATE items SET stock = 1 FROM orders WHERE items.id = orders.i -> SQL_UNSUPPORTED 1:28 'FROM' UpdateStmt.fromClause is not in the subset
+SELECT CURRENT_TIMESTAMP                                         -> SQL_UNSUPPORTED 1:8 'CURRENT_TIMESTAMP' SQLValueFunction is not in the subset
+SELECT id FROM nope                                              -> SQL_RELATION 1:16 'nope' nope is not a declared Schema
+SELECT id FROM _mantle_tz                                        -> SQL_RELATION 1:16 '_mantle_tz' _mantle_tz is not a declared Schema
+SELECT a.id FROM items a FULL JOIN orders o ON o.item_id = a.id  -> SQL_UNSUPPORTED 1:26 'FULL' JoinExpr.jointype = "JOIN_FULL" is refused
+SELECT a.id FROM items a CROSS JOIN orders o                     -> SQL_SHAPE 1:26 'CROSS JOIN' a JOIN needs ON
+SELECT a.id FROM items a, orders o                               -> SQL_SHAPE 1:8 'a.id' a comma join is refused (except json_each)
+SELECT a.id FROM items a NATURAL JOIN orders o                   -> SQL_UNSUPPORTED 1:26 'NATURAL' JoinExpr.isNatural is not in the subset
+SELECT a.id FROM items a JOIN orders o USING (id)                -> SQL_UNSUPPORTED 1:40 'USING' JoinExpr.usingClause is not in the subset
+SELECT id FROM items GROUP BY GROUPING SETS ((id), ())           -> SQL_UNSUPPORTED 1:31 'GROUPING SETS' GroupingSet is not in the subset
+WITH x AS (SELECT 1 AS a) SELECT a FROM x                        -> SQL_UNSUPPORTED 1:1 'WITH' SelectStmt.withClause is not in the subset
+WITH RECURSIVE x(a) AS (SELECT 1 UNION ALL SELECT a + 1 FROM x)  -> SQL_UNSUPPORTED 1:1 'WITH' SelectStmt.withClause is not in the subset
+WITH d AS (DELETE FROM items RETURNING id) INSERT INTO orders (i -> SQL_UNSUPPORTED 1:1 'WITH' InsertStmt.withClause is not in the subset
+SELECT id FROM items UNION SELECT id FROM orders                 -> SQL_UNSUPPORTED 1:22 'UNION' SelectStmt.op = "SETOP_UNION" is refused
+SELECT id FROM items INTERSECT SELECT id FROM orders             -> SQL_UNSUPPORTED 1:22 'INTERSECT' SelectStmt.op = "SETOP_INTERSECT" is refused
+SELECT id FROM items FOR UPDATE                                  -> SQL_UNSUPPORTED 1:22 'FOR UPDATE' SelectStmt.lockingClause is not in the subset
+SELECT id INTO t FROM items                                      -> SQL_UNSUPPORTED 1:11 'INTO' SelectStmt.intoClause is not in the subset
+SELECT id FROM main.items                                        -> SQL_UNSUPPORTED 1:16 'main.items' RangeVar.schemaname is not in the subset
+DELETE FROM items USING orders WHERE items.id = orders.item_id   -> SQL_UNSUPPORTED 1:19 'USING' DeleteStmt.usingClause is not in the subset
+INSERT INTO orders (item_id) VALUES ('a'), ('b')                 -> SQL_SHAPE 1:38 ''a'' VALUES is one row, in INSERT only
+SELECT x.a FROM (VALUES (1), (2)) x(a)                           -> SQL_SHAPE 1:26 '1' VALUES is one row, in INSERT only
+SELECT sum(stock) OVER (ORDER BY id ROWS 2 PRECEDING) FROM items -> SQL_UNSUPPORTED 1:37 'ROWS' WindowDef.frameOptions = 3077 is refused
+SELECT id FROM items WHERE name ILIKE 'a'                        -> SQL_UNSUPPORTED 1:33 'ILIKE' A_Expr.kind = "AEXPR_ILIKE" is refused
+SELECT id FROM items WHERE name ~ 'a'                            -> SQL_UNSUPPORTED 1:33 '~' operator ~ is refused
+SELECT tags -> 0 FROM items                                      -> SQL_UNSUPPORTED 1:13 '-' operator -> is refused
+SELECT id FROM items LIMIT 2                                     -> SQL_SHAPE 1:28 '2' LIMIT needs an ORDER BY
+SELECT DISTINCT cat FROM items ORDER BY cat                      -> SQL_SHAPE 1:17 'cat' DISTINCT with ORDER BY is refused: the appended id key would change wh
+SELECT DISTINCT ON (cat) cat FROM items ORDER BY cat             -> SQL_UNSUPPORTED 1:8 'DISTINCT ON' DISTINCT ON is refused
+SELECT rowid FROM items                                          -> SQL_COLUMN 1:8 'rowid' rowid is not addressable
+SELECT id FROM items WHERE owner = 'o2'                          -> SQL_COLUMN 1:28 'owner' owner: the scope and TTL columns are not addressable
+SELECT id FROM items WHERE expires_at > 0                        -> SQL_COLUMN 1:28 'expires_at' expires_at: the scope and TTL columns are not addressable
+SELECT id FROM items WHERE stock = input.nope                    -> SQL_COLUMN 1:36 'input.nope' input.nope is not a declared input
+SELECT 1 FROM items input                                        -> SQL_RELATION 1:15 'items' input is a reserved alias
+SELECT id AS "index" FROM items                                  -> SQL_UNSUPPORTED 1:8 'id' index is an SQLite keyword: the printer would not quote it
+SELECT strftime('%Y', 0, 'unixepoch')                            -> SQL_FUNCTION 1:8 'strftime' function strftime is not on the allowlist
+SELECT date('now')                                               -> SQL_FUNCTION 1:8 'date' function date is not on the allowlist
+SELECT unixepoch(0)                                              -> SQL_FUNCTION 1:8 'unixepoch' function unixepoch is not on the allowlist
+SELECT printf('%1000000d', 1)                                    -> SQL_FUNCTION 1:8 'printf' function printf is not on the allowlist
+SELECT zeroblob(1000000)                                         -> SQL_FUNCTION 1:8 'zeroblob' function zeroblob is not on the allowlist
+SELECT randomblob(1000000)                                       -> SQL_FUNCTION 1:8 'randomblob' function randomblob is not on the allowlist
+SELECT last_insert_rowid()                                       -> SQL_FUNCTION 1:8 'last_insert_rowid' function last_insert_rowid is not on the allowlist
+SELECT changes()                                                 -> SQL_FUNCTION 1:8 'changes' function changes is not on the allowlist
+SELECT nextval('seq')                                            -> SQL_FUNCTION 1:8 'nextval' function nextval is not on the allowlist
+SELECT * FROM json_tree('[1]')                                   -> SQL_FUNCTION 1:8 '*' only json_each() is allowed in FROM
+SELECT interval '1 day'                                          -> SQL_TYPE 1:23 ''' interval unit 'day' is a calendar unit (a day is 23 or 25 hours across
+SELECT interval '1 month'                                        -> SQL_TYPE 1:25 ''' interval unit 'month' is a calendar unit (a day is 23 or 25 hours acro
+SELECT interval '1 week'                                         -> SQL_TYPE 1:24 ''' interval unit 'week' is a calendar unit (a day is 23 or 25 hours acros
+SELECT interval '1 year'                                         -> SQL_TYPE 1:24 ''' interval unit 'year' is a calendar unit (a day is 23 or 25 hours acros
+SELECT date_trunc('century', now())                              -> SQL_TYPE 1:8 'date_trunc' date_trunc takes hour, day, week, month, year as a literal first argum
+SELECT extract(epoch FROM now())                                 -> SQL_TYPE 1:8 'extract' extract takes year, month, day, dow, hour
+SELECT CAST(stock AS varchar) FROM items                         -> SQL_TYPE 1:8 'CAST' CAST to varchar is refused
+SELECT CAST(note AS timestamptz) FROM items                      -> SQL_TYPE 1:8 'CAST' CAST to timestamptz takes a literal (the compiler folds it to its inte
+SELECT '1.234'::numeric(16, 2)                                   -> SQL_TYPE 1:15 ':' numeric(16, 2) is refused: precision is at most 15, scale at most prec
+SELECT stock::numeric(12, 2) FROM items                          -> SQL_TYPE 1:13 ':' CAST to numeric takes a literal: numeric columns are integer counts of
+SELECT id FROM places WHERE near(places.loc, 25.0, 121.5, 60000) -> SQL_FUNCTION 1:29 'near' near() radius is at most 50000 m
+SELECT id FROM places WHERE near(places.loc, 25.0, 121.5, input. -> SQL_FUNCTION 1:29 'near' near() needs a literal radius in meters
+SELECT id FROM places ORDER BY distance(places.loc, 25.0, 121.5) -> SQL_SHAPE 1:32 'distance' a query ordered by distance() needs a literal LIMIT of at most 100
+SELECT id FROM places ORDER BY distance(places.loc, 25.0, 121.5) -> SQL_SHAPE 1:32 'distance' a query ordered by distance() needs a literal LIMIT of at most 100
+SELECT id FROM notes WHERE search(notes)                         -> SQL_FUNCTION 1:28 'search' search(<alias>, <query>)
+UPDATE items SET owner = 'o2' WHERE id = 'a'                     -> SQL_WRITE 1:18 'owner' owner is filled by Mantle and cannot be written
+INSERT INTO settings (owner, key) VALUES ('o2', 'x')             -> SQL_WRITE 1:23 'owner' owner is filled by Mantle and cannot be written
+UPDATE items SET version = 9 WHERE id = 'a'                      -> SQL_WRITE 1:18 'version' version is filled by Mantle and cannot be written
+UPDATE items SET id = 'z' WHERE id = 'a'                         -> SQL_WRITE 1:18 'id' id is filled by Mantle and cannot be written
+INSERT INTO orders (id, item_id) VALUES ('x', 'a')               -> SQL_WRITE 1:21 'id' id is filled by Mantle and cannot be written (a scoped Schema generate
+INSERT INTO settings (key, value) VALUES ('k', 'v') ON CONFLICT  -> SQL_WRITE 1:85 'owner' owner is filled by Mantle and cannot be written
+INSERT INTO items VALUES ('x')                                   -> SQL_WRITE 1:13 'items' INSERT needs a column list
+UPDATE items SET nope = 1 WHERE id = 'a'                         -> SQL_WRITE 1:18 'nope' items has no field nope
+UPDATE items SET stock = 1 WHERE id = 'a'; SELECT 1              -> SQL_SHAPE 1:44 'SELECT' a Procedure statement is a write
+UPDATE items SET stock = 1 WHERE id = 'a'                        -> SQL_SHAPE (no position) a View is exactly one SELECT
+CREATE TABLE t (a int)                                           -> SQL_UNSUPPORTED 1:14 't' statement CreateStmt is refused
+DROP TABLE items                                                 -> SQL_UNSUPPORTED (no position) statement DropStmt is refused
+BEGIN                                                            -> SQL_UNSUPPORTED (no position) statement TransactionStmt is refused
+INSERT INTO settings (key) VALUES ('x') ON CONFLICT ON CONSTRAIN -> SQL_UNSUPPORTED 1:53 'ON CONSTRAINT' InferClause.conname is not in the subset
+SELEC id FROM items                                              -> SQL_SYNTAX 1:1 'SELEC' syntax error at or near "SELEC"
+SELECT 'unterminated FROM items                                  -> SQL_SYNTAX 1:8 ''' unterminated quoted string at or near "'unterminated FROM items"
+INSERT OR REPLACE INTO settings (key) VALUES ('x')               -> SQL_SYNTAX 1:8 'OR' syntax error at or near "OR"
+PASS  accepted: SELECT id FROM items ORDER BY id LIMIT 2
+PASS  accepted: SELECT id FROM items WHERE cat IS DISTINCT FROM 'q' ORDER BY id LIMIT 
+PASS  accepted: UPDATE items SET stock = stock - 1 WHERE id = 'a' RETURNING *
+PASS  accepted: SELECT id FROM places ORDER BY distance(places.loc, 25.0, 121.5) LIMIT
+77 of 80 refusals carry a line, column and token. The AST has no location for a clause key, so the CLI finds its keyword in the source (WITH, OFFSET, RIGHT, UNION, FOR UPDATE ...); 3 have none (interval literal, DROP, BEGIN, a whole-statement shape).
+PASS  crafted IR: an unknown key on a known node is refused, never skipped  -> SQL_UNSUPPORTED: SelectStmt.foo is not in the subset
+PASS  crafted IR: an unknown node type is refused  -> SQL_UNSUPPORTED: Bogus is not in the subset
+PASS  crafted IR: a cte reference carrying a Schema's name (SQLite would resolve it to the unwrapped table)  -> SQL_RELATION: items: a cte reference is not defined in scope
+PASS  crafted IR: a cte reference that is not defined in scope  -> SQL_RELATION: nowhere: a cte reference is not defined in scope
+PASS  crafted IR: the physical `system` tag cannot be supplied by an IR author  -> SQL_UNSUPPORTED: RangeVar.mantle = "system" is refused
+PASS  crafted IR: an enum value outside the subset  -> SQL_UNSUPPORTED: SelectStmt.op = "SETOP_UNION" is refused
+PASS  an untagged relation is refused by the policy pass, not printed bare  -> items: a cte reference is not defined in scope
+PASS  a RangeVar reached through an unclassified edge: refused by the policy pass (fail closed)  -> internal: a relation reached through ResTarget.val, which has no position: refused (fail closed)
+PASS  the grammar version libpg-query 18 reports matches the constant the plan records  -> 180004
+PASS  a plan built with PostgreSQL grammar 170004 is refused by the runtime  -> Error: plan was compiled with PostgreSQL grammar 170004, this runtime reads 180004
+PASS  a plan built with the recorded grammar passes
+
+== Case 6: types (integer division, numeric, microseconds, dates, CAST) ==
+D1 binds a JavaScript number as a floating-point value:
+PASS    raw D1: ?1 / 2 with 5 is 2.5 (not PostgreSQL's 2)  -> 2.5
+PASS    raw D1: CAST(?1 AS integer) / 2 with 5 is 2  -> 2
+PASS  input.n / 2 with n = 5 (int8) is 2, like PostgreSQL integer division  -> [{"h":2,"m":1,"t":15}]
+PASS  and truncates toward zero for a negative input, like PostgreSQL  -> [{"h":-2,"m":-1}]
+PASS  a float8 input keeps its fraction: 5 / 2 = 2.5  -> [{"h":2.5}]
+PASS  a text input stays text through the CAST (leading zeros kept)  -> [{"s":"007"}]
+PASS  a bool input binds as 1  -> [{"b":1}]
+PASS  the printed SQL carries CAST(?n AS integer)  -> SELECT CAST(?1 AS integer) / 2 AS h FROM ( SELECT id, versio
+PASS  an integer input past 2^53 is refused before it can be rounded  -> 9007199254740992 is not a safe integer: D1 rounds integers past 2^53
+PASS  a non-integer for an int8 input is refused
+PASS  D1 itself rounds integers past 2^53 without an error  -> 9007199254740992
+PASS  stored as integers: 0.10, 0.20, -0.05 are 10, 20, -5  -> [10,20,-5]
+PASS  sum(amount) of 0.10 + 0.20 + 0.10 is exactly 40 cents  -> {"s":40,"lo":10,"hi":20}
+PASS  decoded at the boundary: 0.40, 0.10, 0.20  -> ["0.40","0.10","0.20"]
+PASS  the same sum in REAL is not exact: 0.1 + 0.2 on D1  -> 0.30000000000000004
+PASS  a comparison against an input is exact: amount > 0.10  -> ["b"]
+PASS  integer arithmetic on the smallest unit is exact: amount * 3  -> 60
+PASS  the author writes the rounding for a fraction: round(amount * 1.5)  -> 30
+PASS  numeric input '0.123' is refused (more fractional digits than the scale)  -> 0.123 has more than 2 fractional digits
+PASS  numeric input '12345678901.00' is refused (more digits than the precision)  -> 12345678901.00 does not fit numeric(12, 2)
+PASS  numeric input 'abc' is refused (not a number)  -> abc is not a decimal number
+PASS  numeric round trip: -0.05 -> -5 -> "-0.05"  -> "-0.05"
+PASS  numeric(16, 2) is refused: 10^16 is past 2^53
+PASS  now() is the invocation time in microseconds, bound without loss  -> 1790640000000000
+PASS  at > now() - interval '36 hours': the row 1 microsecond inside the window is in, the row exactly on the edge is out  -> ["edge+1us","frac","in"]
+PASS  at >= now() - interval '36 hours' includes the edge  -> ["edge","edge+1us","frac","in"]
+PASS  a timestamp with 6 fractional digits round-trips exactly  -> "2026-09-27T12:00:00.123456Z"
+PASS  ts - ts is microseconds: 'in' minus 'out' is 2 hours  -> 7200000000
+PASS  interval arithmetic: now() - interval '90 minutes' + interval '30 minutes'  -> 1790636400000000
+PASS  2^53 - 1 microseconds (year 2255) is stored and read back exactly  -> 9007199254740991
+PASS    that instant is  -> "2255-06-05"
+PASS  a timestamp input without an explicit offset is refused: 2026-09-27T12:00:00  -> '2026-09-27T12:00:00' is not a timestamp with an explicit offset
+PASS  a timestamp input without an explicit offset is refused: 2026-09-27  -> '2026-09-27' is not a timestamp with an explicit offset
+PASS  a timestamp input without an explicit offset is refused: not a time  -> 'not a time' is not a timestamp with an explicit offset
+PASS  interval '1 day' is refused, and the diagnostic says to bind the boundary as an input  -> interval unit 'day' is a calendar unit (a day is 23 or 25 hours across daylight saving): bind the boundary as an input instead
+PASS  2026-03-08 is stored as day 20520, 1969-12-31 as -1  -> [20520,-1]
+PASS  day = date '2026-03-08' matches by the folded literal  -> ["d1"]
+PASS  day + 1 is integer day arithmetic  -> 20521
+PASS  day - day is a day count  -> 1
+PASS  decode(day) = 2026-03-09  -> "2026-03-09"
+PASS  '2026-02-30' is refused
+PASS  SQLite: CAST(2.7 AS integer)=2, CAST(-2.7 ...)=-2, CAST('12.5' ...)=12; PostgreSQL gives 3, -3 and an error. round(2.7) is 3.0  -> {"a":2,"b":-2,"c":12,"d":3,"e":"5","f":"2.5"}
+PASS  CAST to int warns SQL_CAST_TRUNC with a position and the advice to round first
+PASS  an integer literal or a CAST to text does not warn
+PASS  CAST('12.34' AS numeric(12, 2)) folds to 1234 at compile time  -> 1234
+--- date_trunc / extract in the site time zone (offsets from Intl.DateTimeFormat into _mantle_tz) ---
+PASS  America/New_York: date_trunc('hour') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  America/New_York: date_trunc('day') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  America/New_York: date_trunc('week') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  America/New_York: date_trunc('month') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  America/New_York: date_trunc('year') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  America/New_York: date_trunc(extract) matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  America/New_York: date_trunc('day', 2026-03-08T15:00:00Z) = 2026-03-08T05:00:00.000Z (PostgreSQL's value)  -> 2026-03-08T05:00:00.000Z
+PASS  America/New_York: date_trunc('day', 2026-03-09T15:00:00Z) = 2026-03-09T04:00:00.000Z (PostgreSQL's value)  -> 2026-03-09T04:00:00.000Z
+PASS  America/New_York: date_trunc('day', 2026-11-01T15:00:00Z) = 2026-11-01T04:00:00.000Z (PostgreSQL's value)  -> 2026-11-01T04:00:00.000Z
+PASS  America/New_York: date_trunc('day', 2026-11-02T15:00:00Z) = 2026-11-02T05:00:00.000Z (PostgreSQL's value)  -> 2026-11-02T05:00:00.000Z
+PASS  America/New_York: date_trunc('week', 2026-03-08T15:00:00Z) = 2026-03-02T05:00:00.000Z (PostgreSQL's value)  -> 2026-03-02T05:00:00.000Z
+PASS  America/New_York: date_trunc('week', 2026-03-11T15:00:00Z) = 2026-03-09T04:00:00.000Z (PostgreSQL's value)  -> 2026-03-09T04:00:00.000Z
+PASS  America/New_York: date_trunc('month', 2026-03-15T15:00:00Z) = 2026-03-01T05:00:00.000Z (PostgreSQL's value)  -> 2026-03-01T05:00:00.000Z
+PASS  America/New_York: date_trunc('month', 2026-11-15T15:00:00Z) = 2026-11-01T04:00:00.000Z (PostgreSQL's value)  -> 2026-11-01T04:00:00.000Z
+PASS  America/New_York: date_trunc('year', 2026-07-01T15:00:00Z) = 2026-01-01T05:00:00.000Z (PostgreSQL's value)  -> 2026-01-01T05:00:00.000Z
+PASS  New York: the day of the spring change is 23 hours long, the day of the fall change 25  -> [23,25]
+PASS  truncating on UTC arithmetic instead would be wrong here (that is why _mantle_tz exists)  -> UTC day start 2026-03-08T00:00:00.000Z vs local 2026-03-08T05:00:00.000Z
+PASS  _mantle_tz for New York: 2026-03-08T07:00Z goes -5h to -4h, 2026-11-01T06:00Z goes back  -> [-14400000000,-18000000000]
+  _mantle_tz rows for New York 1970-2100: 261; Berlin 241; Lord Howe 239
+PASS  negative control: with an empty _mantle_tz the oracle check finds 881 of 881 day truncations wrong, so it can fail
+PASS  Europe/Berlin: date_trunc('hour') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Europe/Berlin: date_trunc('day') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Europe/Berlin: date_trunc('week') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Europe/Berlin: date_trunc('month') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Europe/Berlin: date_trunc('year') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Europe/Berlin: date_trunc(extract) matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Europe/Berlin: date_trunc('day', 2026-03-29T12:00:00Z) = 2026-03-28T23:00:00.000Z (PostgreSQL's value)  -> 2026-03-28T23:00:00.000Z
+PASS  Europe/Berlin: date_trunc('day', 2026-10-25T12:00:00Z) = 2026-10-24T22:00:00.000Z (PostgreSQL's value)  -> 2026-10-24T22:00:00.000Z
+PASS  Australia/Lord_Howe: date_trunc('day') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Australia/Lord_Howe: date_trunc('week') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Australia/Lord_Howe: date_trunc('month') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Australia/Lord_Howe: date_trunc('year') matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Australia/Lord_Howe: date_trunc(extract) matches the Intl oracle on 881 instants (6 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Kolkata: date_trunc('hour') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Kolkata: date_trunc('day') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Kolkata: date_trunc('week') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Kolkata: date_trunc('month') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Kolkata: date_trunc('year') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Kolkata: date_trunc(extract) matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Kolkata: date_trunc('day', 2026-06-01T12:00:00Z) = 2026-05-31T18:30:00.000Z (PostgreSQL's value)  -> 2026-05-31T18:30:00.000Z
+PASS  Pacific/Apia: date_trunc('hour') matches the Intl oracle on 159 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Pacific/Apia: date_trunc('day') matches the Intl oracle on 159 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Pacific/Apia: date_trunc('week') matches the Intl oracle on 159 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Pacific/Apia: date_trunc('month') matches the Intl oracle on 159 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Pacific/Apia: date_trunc('year') matches the Intl oracle on 159 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Pacific/Apia: date_trunc(extract) matches the Intl oracle on 159 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Taipei: date_trunc('hour') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Taipei: date_trunc('day') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Taipei: date_trunc('week') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Taipei: date_trunc('month') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Taipei: date_trunc('year') matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+PASS  Asia/Taipei: date_trunc(extract) matches the Intl oracle on 155 instants (0 transitions in 2025-2027)  -> 0 wrong, e.g. undefined
+Not covered: hour truncation in Lord Howe (a half-hour gap has no single answer) and in a repeated half-hour zone; a zone whose day starts in a gap (midnight DST) is untested. In a repeated whole hour each pass truncates to its own start (05:30Z -> 05:00Z and 06:30Z -> 06:00Z in New York); whether PostgreSQL picks the same was not verified, there is no PostgreSQL here.
+
+== Case 7: policy probe (every relation position, another owner / expired / unpublished rows) ==
+PASS  the probe list covers all 14 positions of the IR union (and `satisfies` makes that a typecheck error when it does not)
+PASS  conflict-update #1: INSERT INTO settings (key, value) VALUES ('theme', 'pwn') ON CONFLICT   -> undefined
+PASS  conflict-update #1: no LEAK and no X_ row in the result  -> [[{"id":"s1","value":"pwn"}]]
+PASS  conflict-update #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"s1","value":"pwn"}]]
+PASS  conflict-update #1: other owner's, expired and unpublished rows are unchanged
+PASS  conflict-update #2: INSERT INTO notes (title, body) VALUES ('LEAK 小籠包 hello apple', 'reviv  -> undefined
+PASS  conflict-update #2: no LEAK and no X_ row in the result  -> [[]]
+PASS  conflict-update #2: the caller's own rows are all there (the probe is not vacuous)  -> [[]]
+PASS  conflict-update #2: other owner's, expired and unpublished rows are unchanged
+PASS  conflict-update: the policy pass printed a wrapper (or emitted a system relation) at this position  -> insert-target, conflict-update
+PASS  delete-target #1: DELETE FROM requisitions WHERE state = 'pending' RETURNING id  -> undefined
+PASS  delete-target #1: no LEAK and no X_ row in the result  -> [[{"id":"r1"},{"id":"r2"}]]
+PASS  delete-target #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"r1"},{"id":"r2"}]]
+PASS  delete-target #1: other owner's, expired and unpublished rows are unchanged
+PASS  delete-target #2: DELETE FROM requisitions WHERE id = 'X_rz' -> CONFLICT (an invisible row is a missing row)  -> Error: CONFLICT op=0
+PASS  delete-target #2: other owner's, expired and unpublished rows are unchanged
+PASS  delete-target: the policy pass printed a wrapper (or emitted a system relation) at this position  -> delete-target
+PASS  from #1: SELECT id, name FROM items ORDER BY id  -> undefined
+PASS  from #1: no LEAK and no X_ row in the result  -> [[{"id":"a","name":"apple"},{"id":"b","name":"berry"},{"id":"c","name":"cherry"},{"id":"d","name":"date"}]]
+PASS  from #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"a","name":"apple"},{"id":"b","name":"berry"},{"id":"c","name":"cherry"},{"id":"d","name":"date"}]]
+PASS  from #1: other owner's, expired and unpublished rows are unchanged
+PASS  from: the policy pass printed a wrapper (or emitted a system relation) at this position  -> from
+PASS  from-subquery #1: SELECT s.id FROM (SELECT id FROM items) s ORDER BY s.id  -> undefined
+PASS  from-subquery #1: no LEAK and no X_ row in the result  -> [[{"id":"a"},{"id":"b"},{"id":"c"},{"id":"d"}]]
+PASS  from-subquery #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"a"},{"id":"b"},{"id":"c"},{"id":"d"}]]
+PASS  from-subquery #1: other owner's, expired and unpublished rows are unchanged
+PASS  from-subquery: the policy pass printed a wrapper (or emitted a system relation) at this position  -> from-subquery
+PASS  insert-select #1: INSERT INTO orders (item_id, qty) SELECT id, 1 FROM items RETURNING it  -> undefined
+PASS  insert-select #1: no LEAK and no X_ row in the result  -> [[{"item_id":"a"},{"item_id":"b"},{"item_id":"c"},{"item_id":"d"}]]
+PASS  insert-select #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"item_id":"a"},{"item_id":"b"},{"item_id":"c"},{"item_id":"d"}]]
+PASS  insert-select #1: other owner's, expired and unpublished rows are unchanged
+PASS  insert-select: the policy pass printed a wrapper (or emitted a system relation) at this position  -> insert-target, insert-select
+PASS  insert-target #1: INSERT INTO settings (key, value) VALUES ('lang', 'yy') RETURNING key,  -> undefined
+PASS  insert-target #1: no LEAK and no X_ row in the result  -> [[{"key":"lang","value":"yy"}]]
+PASS  insert-target #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"key":"lang","value":"yy"}]]
+PASS  insert-target #1: other owner's, expired and unpublished rows are unchanged
+PASS  insert-target #2: INSERT INTO settings (key, value) VALUES ('t', 'v') ON CONFLICT (key)   -> undefined
+PASS  insert-target #2: no LEAK and no X_ row in the result  -> [[{"key":"t"}]]
+PASS  insert-target #2: the caller's own rows are all there (the probe is not vacuous)  -> [[{"key":"t"}]]
+PASS  insert-target #2: other owner's, expired and unpublished rows are unchanged
+PASS  insert-target: the policy pass printed a wrapper (or emitted a system relation) at this position  -> insert-target
+PASS  join.left #1: SELECT a.id AS aid, o.id AS oid FROM items a JOIN orders o ON o.item_i  -> undefined
+PASS  join.left #1: no LEAK and no X_ row in the result  -> [[{"aid":"a","oid":"oa"},{"aid":"a","oid":"ob"}]]
+PASS  join.left #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"aid":"a","oid":"oa"},{"aid":"a","oid":"ob"}]]
+PASS  join.left #1: other owner's, expired and unpublished rows are unchanged
+PASS  join.left: the policy pass printed a wrapper (or emitted a system relation) at this position  -> join.left, join.right
+PASS  join.right #1: SELECT o.id AS oid, i.name AS name FROM orders o LEFT JOIN items i ON   -> undefined
+PASS  join.right #1: no LEAK and no X_ row in the result  -> [[{"oid":"oa","name":"apple"},{"oid":"ob","name":"apple"},{"oid":"oe","name":null}]]
+PASS  join.right #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"oid":"oa","name":"apple"},{"oid":"ob","name":"apple"},{"oid":"oe","name":null}]]
+PASS  join.right #1: other owner's, expired and unpublished rows are unchanged
+PASS  join.right: the policy pass printed a wrapper (or emitted a system relation) at this position  -> join.left, join.right
+PASS  json_each #1: SELECT j.value AS v FROM items i, json_each(i.tags) j ORDER BY i.id, j  -> undefined
+PASS  json_each #1: no LEAK and no X_ row in the result  -> [[{"v":"red"},{"v":"big"},{"v":"blue"},{"v":"red"},{"v":"red"}]]
+PASS  json_each #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"v":"red"},{"v":"big"},{"v":"blue"},{"v":"red"},{"v":"red"}]]
+PASS  json_each #1: other owner's, expired and unpublished rows are unchanged
+PASS  json_each: the policy pass printed a wrapper (or emitted a system relation) at this position  -> json_each
+PASS  near #1: SELECT id FROM places WHERE near(places.loc, input.lat, input.lng, 500  -> undefined
+PASS  near #1: no LEAK and no X_ row in the result  -> [[{"id":"pl1200"},{"id":"pl300"},{"id":"pl4900"}]]
+PASS  near #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"pl1200"},{"id":"pl300"},{"id":"pl4900"}]]
+PASS  near #1: other owner's, expired and unpublished rows are unchanged
+PASS  near: the policy pass printed a wrapper (or emitted a system relation) at this position  -> from, near
+PASS  search #1: SELECT id FROM notes WHERE search(notes, input.q) ORDER BY id  -> undefined
+PASS  search #1: no LEAK and no X_ row in the result  -> [[{"id":"n1"}]]
+PASS  search #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"n1"}]]
+PASS  search #1: other owner's, expired and unpublished rows are unchanged
+PASS  search: the policy pass printed a wrapper (or emitted a system relation) at this position  -> from, search
+PASS  sublink #1: SELECT id FROM orders WHERE item_id IN (SELECT id FROM items) ORDER BY  -> undefined
+PASS  sublink #1: no LEAK and no X_ row in the result  -> [[{"id":"oa"},{"id":"ob"}]]
+PASS  sublink #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"oa"},{"id":"ob"}]]
+PASS  sublink #1: other owner's, expired and unpublished rows are unchanged
+PASS  sublink #2: SELECT id FROM requisitions WHERE EXISTS (SELECT 1 FROM items WHERE na  -> undefined
+PASS  sublink #2: no LEAK and no X_ row in the result  -> [[]]
+PASS  sublink #2: the caller's own rows are all there (the probe is not vacuous)  -> [[]]
+PASS  sublink #2: other owner's, expired and unpublished rows are unchanged
+PASS  sublink #3: SELECT id FROM requisitions WHERE EXISTS (SELECT 1 FROM items WHERE na  -> undefined
+PASS  sublink #3: no LEAK and no X_ row in the result  -> [[{"id":"r1"},{"id":"r2"}]]
+PASS  sublink #3: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"r1"},{"id":"r2"}]]
+PASS  sublink #3: other owner's, expired and unpublished rows are unchanged
+PASS  sublink #4: SELECT (SELECT count(*) FROM items) AS n, (SELECT max(stock) FROM item  -> undefined
+PASS  sublink #4: no LEAK and no X_ row in the result  -> [[{"n":4,"mx":9}]]
+PASS  sublink #4: the caller's own rows are all there (the probe is not vacuous)  -> [[{"n":4,"mx":9}]]
+PASS  sublink #4: other owner's, expired and unpublished rows are unchanged
+PASS  sublink: the policy pass printed a wrapper (or emitted a system relation) at this position  -> from, sublink
+PASS  update-target #1: UPDATE items SET stock = 0 WHERE cat = 'x' RETURNING id  -> undefined
+PASS  update-target #1: no LEAK and no X_ row in the result  -> [[{"id":"a"},{"id":"b"},{"id":"d"}]]
+PASS  update-target #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"a"},{"id":"b"},{"id":"d"}]]
+PASS  update-target #1: other owner's, expired and unpublished rows are unchanged
+PASS  update-target #2: UPDATE items SET stock = 0 WHERE id = 'X_z1' -> CONFLICT (an invisible row is a missing row)  -> Error: CONFLICT op=0
+PASS  update-target #2: other owner's, expired and unpublished rows are unchanged
+PASS  update-target #3: UPDATE items SET stock = 0 WHERE id = 'X_e1' -> CONFLICT (an invisible row is a missing row)  -> Error: CONFLICT op=0
+PASS  update-target #3: other owner's, expired and unpublished rows are unchanged
+PASS  update-target: the policy pass printed a wrapper (or emitted a system relation) at this position  -> update-target
+PASS  window #1: SELECT x.id, x.rn FROM (SELECT id, row_number() OVER (ORDER BY id) AS   -> undefined
+PASS  window #1: no LEAK and no X_ row in the result  -> [[{"id":"a","rn":1},{"id":"b","rn":2},{"id":"c","rn":3},{"id":"d","rn":4}]]
+PASS  window #1: the caller's own rows are all there (the probe is not vacuous)  -> [[{"id":"a","rn":1},{"id":"b","rn":2},{"id":"c","rn":3},{"id":"d","rn":4}]]
+PASS  window #1: other owner's, expired and unpublished rows are unchanged
+PASS  window: the policy pass printed a wrapper (or emitted a system relation) at this position  -> window
+PASS  all positions were reached by at least one probe at run time
+PASS  negative control: with the visibility predicate off, 13 of 14 positions are caught by their probes  -> missed: insert-target
+  not caught by this switch: insert-target (insert-target is protected by the scope and id fill and the scope-including unique index, which the switch leaves on; the check is its owner/id assertion below)
+PASS  an insert is owned by the caller, stamped with now(), and gets a generated id  -> {"owner":"o1","created_at":1790640000000000,"idlen":32}
+PASS  another owner's 'lang' setting was not touched by the same-key insert  -> "xx"
+PASS  public caller: only the published, unexpired post  -> [{"id":"p1"}]
+PASS  trusted runtime.store: no scope, but the expired row is still hidden  -> [{"id":"X_z1"},{"id":"X_z2"},{"id":"a"},{"id":"b"},{"id":"c"},{"id":"d"}]
+
+== Case 8: search and places ==
+PASS  a three-character Chinese query matches by substring (小籠包)  -> ["n1"]
+PASS  FTS5 trigram itself matches nothing under three characters (raw query for 小籠)  -> 0
+PASS  search() falls back to LIKE for a two-character query and finds it (小籠)  -> ["n1"]
+PASS  and for a one-character query (包)  -> ["n1"]
+PASS  ASCII is case-insensitive: HELLO finds Hello World, hello there and title:hello OR world  -> ["n2","n4","n5"]
+PASS  a word inside the body matches: xiaolongbao  -> ["n1"]
+PASS  "hello OR world" is one literal phrase, not two terms (no note contains it, "title:hello OR world" does contain "hello OR world")  -> ["n5"]
+PASS  column filter syntax is literal: title:hello matches only the note containing the text title:hello  -> ["n5"]
+PASS  NEAR( and * and - are literal characters  -> [[],[],[]]
+PASS  a double quote in the query cannot end the phrase (say "hi")  -> []
+PASS  an FTS5 syntax error is impossible: an unbalanced quote  -> []
+PASS  LIKE fallback escapes % literally: "5%" matches only the note containing 5%  -> ["n4"]
+PASS  LIKE fallback escapes _ literally: "_b" matches a_b only  -> ["n4"]
+PASS  'a_' (fallback) is not a wildcard pattern: 'apple pie' would match a_ if it were, only 'a_b literal' has the literal  -> ["n4"]
+PASS  another owner's and expired notes containing LEAK are absent from search()  -> []
+PASS  the same query as the other owner finds their own note, not o1's  -> ["X_n1"]
+PASS  search_rank orders by bm25: the note with the most occurrences of apple first  -> ["n3","n2"]
+PASS  search_rank never ranks a hidden row
+PASS  search() in a public View of a publishing Schema sees only the published, unexpired post  -> []
+PASS    and finds the visible one  -> ["p1"]
+PASS  UPDATE on a searchable row: search finds the new text, not the old  -> [["n3"],false]
+PASS  D1's meta.changes for a one-row UPDATE on a table with FTS triggers counts the trigger's writes (so it is not 1); changes() inside the batch is what decides CONFLICT  -> meta.changes = 5
+PASS  the row op still passed its count check (changes() = 1)  -> [[{"id":"n3"}]]
+PASS  DELETE removes the row from the index  -> []
+PASS  INSERT adds it  -> 1
+PASS  near 5 km: the three places inside, not the two outside, in an independent haversine  -> ["pl1200","pl300","pl4900"]
+PASS  near 5 km returns exactly pl300, pl1200, pl4900  -> ["pl1200","pl300","pl4900"]
+PASS  near 1 km: only the 300 m place  -> ["pl300"]
+PASS  near 20 km: all five  -> ["pl10000","pl1200","pl300","pl4900","pl5200"]
+PASS  the edge is decided by haversine, not by the box: 4900 m in, 5200 m out of a 5000 m radius  -> [true,false]
+PASS  another owner's place and an expired one at the same spot (300 m) never appear
+PASS  closest K = 3, in order of distance  -> ["pl300","pl1200","pl4900"]
+PASS  distance() agrees with an independent haversine to under 1 m  -> max error 9.09e-13 m
+PASS  the seeded distances are what the fixtures say (1 degree of latitude = 111195 m)  -> 111195.08023353292
+PASS  moving a place updates the R*Tree: pl10000 is now the closest  -> ["pl10000","pl300"]
+PASS  deleting a place removes it from the R*Tree  -> ["pl10000"]
+PASS  inserting adds it  -> 2
+PASS  a box across the antimeridian is refused at run time  -> Error: near(): a box that crosses the antimeridian or a pole is refused
+PASS  a box across a pole is refused at run time  -> Error: near(): a box that crosses the antimeridian or a pole is refused
+
+== Typecheck: the probe list is bound to the IR position union by `satisfies` ==
+PASS  tsc --noEmit passes on the spike (strict, erasable syntax only)
+PASS  a new position without a probe: tsc fails (cases/policy.ts has no probe for it)
+PASS  a new relation edge no position reaches: tsc fails (ALL_EDGES_REACHED is `never`)  -> .neg/src/positions.ts(61,14): error TS2322: Type 'true' is not assignable to type 'never'.
+PASS  an edge naming a key that @pgsql/types does not have: tsc fails (the key is checked against the real node type)

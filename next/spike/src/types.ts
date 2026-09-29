@@ -49,9 +49,12 @@ export type Code = (typeof CODES)[number];
 export class Refused extends Error {
   code: Code;
   offset?: number;
-  constructor(code: Code, message: string, offset?: number) {
+  /** the keyword the refusal is about; the parser gives no position for a clause key, so the CLI finds this in the source */
+  keyword?: RegExp;
+  constructor(code: Code, message: string, offset?: number, keyword?: RegExp) {
     super(message);
     this.code = code;
     this.offset = offset;
+    this.keyword = keyword;
   }
 }

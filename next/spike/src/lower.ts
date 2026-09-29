@@ -9,6 +9,11 @@ import { stripLocations, tagRelations, validateProgram } from './validate.ts';
 /** the PostgreSQL grammar version the plan records (libpg-query 18: PG 18.0.4) */
 export const PG_GRAMMAR = 180004;
 
+/** The runtime refuses a plan built by another PostgreSQL grammar: the AST changes between majors. */
+export function assertGrammar(plan: { grammar: number }) {
+  if (plan.grammar !== PG_GRAMMAR) throw new Refused('SQL_UNSUPPORTED', `plan was compiled with PostgreSQL grammar ${plan.grammar}, this runtime reads ${PG_GRAMMAR}`);
+}
+
 export type Lowered = { stmts: N[]; warnings: Diagnostic[] };
 
 /** UTF-8 byte offset (what libpg-query reports) -> line, column (1-based) and the token there. */
@@ -22,6 +27,8 @@ export function locate(source: string, byteOffset: number): Pick<Diagnostic, 'of
 }
 
 export function toDiagnostic(e: Refused, source: string): Diagnostic {
+  const at = e.keyword?.exec(source); // a clause the AST gives no position: point at its keyword
+  if (at) return { code: e.code, message: e.message, ...locate(source, Buffer.byteLength(source.slice(0, at.index))), token: at[0] };
   return { code: e.code, message: e.message, ...(e.offset === undefined ? {} : locate(source, e.offset)) };
 }
 
@@ -34,7 +41,7 @@ function castWarnings(raw: N[], source: string): Diagnostic[] {
     const t = v.TypeCast;
     if (t) {
       const name = t.typeName.names.at(-1).String.sval;
-      if ((name === 'int4' || name === 'int8') && !t.arg?.A_Const)
+      if ((name === 'int4' || name === 'int8') && !t.arg?.A_Const?.ival)
         out.push({ code: 'SQL_CAST_TRUNC', message: `CAST to ${name} truncates toward zero in SQLite; PostgreSQL rounds (2.7 gives 2 here, 3 there). Write round(x) first if you mean PostgreSQL's result`, ...locate(source, t.location ?? 0) });
     }
     Object.values(v).forEach(visit);

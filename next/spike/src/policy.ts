@@ -30,6 +30,8 @@ export type PolicyOpts = {
   lockVersion?: boolean;
   /** schemas that have an after hook: their writes get RETURNING */
   returning?: Set<string>;
+  /** NEGATIVE CONTROL ONLY: print no visibility predicate, so a probe that cannot fail is caught */
+  unsafeNoVisibility?: boolean;
   /** records every relation position the pass printed a wrapper for (the probe checks it is complete) */
   seen?: Set<RelationPosition>;
 };
@@ -132,9 +134,10 @@ function param$(c: C, spec: BindSpec): N {
 /** The ONE place a Schema's visibility rule is spelled. `a` is the alias (or table) the predicate reads through. */
 function visible(s: SchemaDef, a: string, c: C): N | undefined {
   const mode = c.mode ?? 'caller';
+  if (c.unsafeNoVisibility) return undefined;
   return and(
-    mode !== 'trusted' && s.scope && op('=', col(a, s.scope), param$(c, { k: 'uid' })),
-    s.ttl && or({ NullTest: { arg: col(a, s.ttl), nulltesttype: 'IS_NULL' } }, op('>', col(a, s.ttl), param$(c, { k: 'now' }))),
+    mode !== 'trusted' && !!s.scope && op('=', col(a, s.scope), param$(c, { k: 'uid' })),
+    !!s.ttl && or({ NullTest: { arg: col(a, s.ttl), nulltesttype: 'IS_NULL' } }, op('>', col(a, s.ttl), param$(c, { k: 'now' }))),
     mode === 'public' && s.publishing && op('=', col(a, 'status'), { A_Const: { sval: { sval: 'published' } } }),
   );
 }
@@ -157,7 +160,8 @@ function wrap(rv: N, c: C): N {
   if (!s) throw new Refused('SQL_RELATION', `${rv.relname} is not a declared Schema`);
   if (rv.mantle === 'system') return { RangeVar: rv };
   if (rv.mantle !== 'table') throw new Refused('SQL_RELATION', `${rv.relname}: a cte reference is not defined in scope`);
-  c.seen?.add(positionOf(c));
+  const position = positionOf(c); // computed even when nothing records it: an unclassified edge must fail closed
+  c.seen?.add(position);
   const a = rv.alias?.aliasname ?? rv.relname;
   const targets = readable(s).map((f) => res(col(f)));
   if (needsRid(s)) targets.push(res(col('rowid'), '_rid'));
@@ -243,11 +247,11 @@ function lowerFunc(n: N, c: C): N | undefined {
       c.seen?.add('search');
       const fts = q(`_mantle_fts_${schema}`), a = q(alias);
       const query = tx(f === 'search' ? args[1] : info.searchQ.get(alias) ?? (() => { throw new Refused('SQL_FUNCTION', `search_rank(${alias}) needs a search(${alias}, ...) in the same query`); })(), c);
-      const phrase = `'"' || replace(__q, '"', '""') || '"'`; // a quoted phrase: FTS5 operators in the query are literal
-      if (f === 'search_rank') return sql(`coalesce((SELECT bm25(${fts}) FROM ${fts} WHERE ${fts} MATCH ${phrase} AND rowid = ${a}._rid), 0)`, { __q: query });
+      const phrase = `'"' || replace(__q, '"', '""') || '"'`; // a quoted phrase: FTS5 operators in the query are literal. `fts = q` is FTS5's spelling of `fts MATCH q`; PostgreSQL's grammar has no MATCH
+      if (f === 'search_rank') return sql(`coalesce((SELECT bm25(${fts}) FROM ${fts} WHERE ${fts} = ${phrase} AND rowid = ${a}._rid), 0)`, { __q: query });
       const like = def.search.map((fld) => `${a}.${q(fld)} LIKE '%' || replace(replace(replace(__q, '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!'`).join(' OR ');
       // trigram cannot match under three characters: fall back to LIKE over the same fields
-      return sql(`CASE WHEN length(__q) >= 3 THEN ${a}._rid IN (SELECT rowid FROM ${fts} WHERE ${fts} MATCH ${phrase}) ELSE (${like}) END`, { __q: query });
+      return sql(`CASE WHEN length(__q) >= 3 THEN ${a}._rid IN (SELECT rowid FROM ${fts} WHERE ${fts} = ${phrase}) ELSE (${like}) END`, { __q: query });
     }
     case 'near': case 'distance': {
       const [ref, latN, lngN] = args;

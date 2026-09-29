@@ -71,9 +71,19 @@ export const SYSTEM = new Set(['version', 'status', 'authorid', 'created_at', 'u
 
 const sv = (list: N[]) => list.map((n) => n.String?.sval ?? (n.A_Star ? '*' : no('SQL_UNSUPPORTED', 'a name part that is not an identifier'))).join('.');
 const fname = (n: N) => sv(n.funcname).replace(/^pg_catalog\./, '');
-function no(code: Code, message: string, offset?: number): never {
-  throw new Refused(code, message, offset);
+function no(code: Code, message: string, offset?: number, keyword?: RegExp): never {
+  throw new Refused(code, message, offset, keyword);
 }
+
+/** structural refusals name a key or an enum value; these find the keyword in the source text (the AST carries no location for them) */
+const KEYWORD: Record<string, RegExp> = {
+  'SelectStmt.withClause': /\bWITH\b/i, 'InsertStmt.withClause': /\bWITH\b/i, 'UpdateStmt.withClause': /\bWITH\b/i, 'DeleteStmt.withClause': /\bWITH\b/i,
+  'SelectStmt.limitOffset': /\bOFFSET\b/i, 'SelectStmt.lockingClause': /\bFOR\s+(NO\s+KEY\s+)?(UPDATE|SHARE|KEY\s+SHARE)\b/i, 'SelectStmt.intoClause': /\bINTO\b/i,
+  'SelectStmt.op': /\b(UNION|INTERSECT|EXCEPT)\b/i, 'UpdateStmt.fromClause': /\bFROM\b/i, 'DeleteStmt.usingClause': /\bUSING\b/i,
+  'JoinExpr.jointype': /\b(RIGHT|FULL)\b/i, 'JoinExpr.isNatural': /\bNATURAL\b/i, 'JoinExpr.usingClause': /\bUSING\b/i,
+  'WindowDef.frameOptions': /\b(ROWS|RANGE|GROUPS)\b/i, 'A_Expr.kind': /\bILIKE\b/i, 'InferClause.conname': /\bON\s+CONSTRAINT\b/i,
+  'SelectStmt.distinctClause': /\bDISTINCT\s+ON\b/i, GroupingSet: /\bGROUPING\s+SETS\b/i,
+};
 
 /** first source offset found in a subtree, so a refusal about a key can still point somewhere */
 function firstLoc(v: any): number | undefined {
@@ -106,15 +116,20 @@ export function validateProgram(stmts: N[], ctx: Ctx, locs: (number | undefined)
 
 function walk(type: string, node: N, w: Walk, path: string[], loc: number | undefined): void {
   if (++w.budget.n > MAX_NODES) no('SQL_SHAPE', 'statement too large', loc);
-  const keys = KEYS[type] ?? no('SQL_UNSUPPORTED', `${type} is not in the subset`, loc);
   const here = typeof node.location === 'number' ? node.location : loc;
+  const keys = KEYS[type] ?? no('SQL_UNSUPPORTED', `${type} is not in the subset`, here, KEYWORD[type]);
   for (const [k, v] of Object.entries(node)) {
     if (k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end') continue; // source positions, not structure
-    if (!keys.has(k)) no('SQL_UNSUPPORTED', `${type}.${k} is not in the subset`, firstLoc(v) ?? here);
+    if (!keys.has(k)) no('SQL_UNSUPPORTED', `${type}.${k} is not in the subset`, firstLoc(v) ?? here, KEYWORD[`${type}.${k}`]);
     const e = ENUM[`${type}.${k}`];
-    if (e && !e.includes(v as any)) no('SQL_UNSUPPORTED', `${type}.${k} = ${JSON.stringify(v)} is refused`, firstLoc(node) ?? here);
+    if (e && !e.includes(v as any)) no('SQL_UNSUPPORTED', `${type}.${k} = ${JSON.stringify(v)} is refused`, firstLoc(node) ?? here, KEYWORD[`${type}.${k}`]);
   }
-  check[type]?.(node, w.ctx, path, here);
+  try {
+    check[type]?.(node, w.ctx, path, here);
+  } catch (e) {
+    if (e instanceof Refused && e.offset === undefined && !e.keyword) e.offset = here; // a helper (interval, numeric) refused without knowing where
+    throw e;
+  }
   for (const [k, v] of Object.entries(node)) {
     if (type === 'A_Const' || k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end') continue;
     if (BARE[k]) walk(BARE[k], v as N, w, [...path, BARE[k]], here);
@@ -191,7 +206,7 @@ const check: Record<string, Checker> = {
     const op = sv(n.name);
     if (n.kind === 'AEXPR_OP' && !OPS.has(op)) no('SQL_UNSUPPORTED', `operator ${op} is refused`, at);
     if (n.kind === 'AEXPR_IN' && !['=', '<>'].includes(op)) no('SQL_UNSUPPORTED', 'a bad IN', at);
-    if (n.kind === 'AEXPR_LIKE' && !['~~', '!~~'].includes(op)) no('SQL_UNSUPPORTED', 'ILIKE and regular expressions are refused', at);
+    if (n.kind === 'AEXPR_LIKE' && !['~~', '!~~'].includes(op)) no('SQL_UNSUPPORTED', 'ILIKE and regular expressions are refused', at, /\bILIKE\b/i);
   },
   TypeCast: (n, _c, _p, at) => {
     const t = sv(n.typeName.names).replace('pg_catalog.', '');
@@ -216,7 +231,7 @@ const check: Record<string, Checker> = {
     if (n.subLinkType === 'ANY_SUBLINK' && n.operName && sv(n.operName) !== '=') no('SQL_UNSUPPORTED', 'only IN (subquery)', at);
   },
   JoinExpr: (n, _c, _p, at) => {
-    if (!n.quals) no('SQL_SHAPE', 'a JOIN needs ON', at);
+    if (!n.quals) no('SQL_SHAPE', 'a JOIN needs ON', at, /\bCROSS\s+JOIN\b|\bJOIN\b/i);
   },
   RangeFunction: (n, _c, _p, at) => {
     const fs: N[] = n.functions;
@@ -228,7 +243,7 @@ const check: Record<string, Checker> = {
   },
   SelectStmt: (n, _c, path, at) => {
     if (n.limitCount && !n.sortClause) no('SQL_SHAPE', 'LIMIT needs an ORDER BY', firstLoc(n.limitCount) ?? at);
-    if (n.distinctClause && (n.distinctClause.length !== 1 || Object.keys(n.distinctClause[0]).length)) no('SQL_UNSUPPORTED', 'DISTINCT ON is refused', at);
+    if (n.distinctClause && (n.distinctClause.length !== 1 || Object.keys(n.distinctClause[0]).length)) no('SQL_UNSUPPORTED', 'DISTINCT ON is refused', at, /\bDISTINCT\s+ON\b/i);
     if (n.distinctClause && n.sortClause) no('SQL_SHAPE', 'DISTINCT with ORDER BY is refused: the appended id key would change what is distinct', at);
     if (n.valuesLists && (path.at(-2) !== 'InsertStmt' || n.valuesLists.length !== 1)) no('SQL_SHAPE', 'VALUES is one row, in INSERT only', firstLoc(n.valuesLists) ?? at);
     if ((n.fromClause ?? []).slice(1).some((f: N) => !f.RangeFunction)) no('SQL_SHAPE', 'a comma join is refused (except json_each)', at);

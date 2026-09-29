@@ -16,7 +16,7 @@ export type Hooks = {
   before?: Record<string, Partial<Record<Verb, (cause: { row: any }) => unknown>>>;
   after?: Record<string, Partial<Record<Verb, (cause: { rows: [any, ...any[]] }) => unknown>>>;
 };
-export type Site = { printer?: typeof Deparser; d1: LocalD1; schemas: Schemas; hooks?: Hooks; mode?: Mode; seen?: Set<RelationPosition> };
+export type Site = { unsafeNoVisibility?: boolean; printer?: typeof Deparser; d1: LocalD1; schemas: Schemas; hooks?: Hooks; mode?: Mode; seen?: Set<RelationPosition> };
 export type Program = { kind: 'view' | 'procedure'; inputs: Record<string, string>; ir: N[] };
 export type Runtime = { uid: string; now: number; role?: string; input?: Record<string, unknown> };
 
@@ -56,7 +56,7 @@ export function bindValues(binds: BindSpec[], rt: Runtime, extra: { version?: un
 /** Compile every statement of a program. Runs `validateProgram` again: the runtime never trusts an IR. */
 export function compileProgram(site: Site, p: Program, opts: { lockVersion?: boolean } = {}): Compiled[] {
   validateProgram(p.ir, { schemas: site.schemas, inputs: p.inputs, kind: p.kind });
-  const out = p.ir.map((stmt) => applyPolicy(stmt, { schemas: site.schemas, inputs: p.inputs, mode: site.mode, returning: hookedSchemas(site.hooks), seen: site.seen, ...opts }));
+  const out = p.ir.map((stmt) => applyPolicy(stmt, { schemas: site.schemas, inputs: p.inputs, mode: site.mode, returning: hookedSchemas(site.hooks), seen: site.seen, unsafeNoVisibility: site.unsafeNoVisibility, ...opts }));
   for (const c of out) {
     // a set op on a Schema with a before hook for that verb is refused (ADR-0034 decision 4)
     if (c.kind === 'set' && c.schema && c.verb && site.hooks?.before?.[c.schema]?.[c.verb])

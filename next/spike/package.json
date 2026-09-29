@@ -4,7 +4,7 @@
   "type": "module",
   "description": "ADR-0034 spike: SQL -> libpg-query AST -> policy -> pgsql-deparser -> local D1 (workerd).",
   "scripts": {
-    "spike": "node run.mjs",
+    "spike": "node --experimental-strip-types --no-warnings run.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
