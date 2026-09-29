@@ -7,6 +7,10 @@ process.env.WRANGLER_SEND_METRICS ??= 'false';
 
 const cases: Record<string, () => Promise<{ run: (r: Report) => Promise<unknown> }>> = {
   deparser: () => import('./cases/deparser.ts'),
+  requisition: () => import('./cases/requisition.ts'),
+  stock: () => import('./cases/stock.ts'),
+  'report-view': () => import('./cases/report-view.ts'),
+  'before-hook': () => import('./cases/before-hook.ts'),
 };
 
 const only = process.argv.slice(2);

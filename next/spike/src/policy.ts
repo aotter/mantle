@@ -19,6 +19,8 @@ export type BindSpec =
   | { k: 'version' }
   | { k: 'cursor'; i: number };
 
+export const HIDDEN_ID = '_mantle_id';
+export const HIDDEN_VERSION = '_mantle_version';
 export type Mode = 'caller' | 'public' | 'trusted';
 export type PolicyOpts = {
   schemas: Schemas;
@@ -38,6 +40,8 @@ export type Compiled = {
   schema?: string;
   verb?: 'insert' | 'update' | 'delete';
   returns: boolean;
+  /** an after hook exists for the target: RETURNING carries id and version in hidden columns the executor splits off */
+  hooked: boolean;
   /** the rowid of a row op's target is not needed; kept for hooks: does the statement return rows to the hook? */
 };
 
@@ -401,7 +405,10 @@ const alias$ = (rel: N) => rel.alias?.aliasname ?? rel.relname;
 function returning(rc: N | undefined, s: SchemaDef, schema: string, c: C): N | undefined {
   if (!rc && c.returning?.has(schema)) return { exprs: readable(s).map((f) => res(col(f))) };
   if (!rc) return undefined;
-  return { exprs: rc.exprs.flatMap((e: N) => (e.ResTarget.val?.ColumnRef?.fields?.[0]?.A_Star ? starCols(s).map((f) => res(col(f))) : [e])) };
+  const exprs = rc.exprs.flatMap((e: N) => (e.ResTarget.val?.ColumnRef?.fields?.[0]?.A_Star ? starCols(s).map((f) => res(col(f))) : [e]));
+  // `RETURNING *` and most column lists leave out id and version, but an after hook needs them: carry them in hidden columns
+  if (c.returning?.has(schema)) exprs.push(res(col('id'), HIDDEN_ID), res(col('version'), HIDDEN_VERSION));
+  return { exprs };
 }
 function dmlScope(rel: N, c: C) {
   c.sel.push({ container: 'from', hasWindow: false, hasJsonEach: false, scope: new Map([[alias$(rel), rel.relname]]), searchQ: new Map() });
@@ -479,5 +486,5 @@ export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const t = Object.keys(stmt)[0];
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
   const schema = verb ? stmt[t].relation.relname : undefined;
-  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, returns: t === 'SelectStmt' || !!ast[t].returningClause };
+  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, returns: t === 'SelectStmt' || !!ast[t].returningClause, hooked: !!schema && !!opts.returning?.has(schema) };
 }

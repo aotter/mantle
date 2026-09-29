@@ -1,12 +1,11 @@
 // Spike task 1: print every allowlisted node with pgsql-deparser, run it on local D1, count overrides.
 import { Deparser } from 'pgsql-deparser';
 import type { Report } from '../src/report.ts';
-import { boot, caller, program, schemas, seed, site } from '../src/fixtures.ts';
+import { boot, caller, program, reset, site } from '../src/fixtures.ts';
 import { bindValues, compileProgram, runProcedure, runView, render } from '../src/exec.ts';
 import { OVERRIDES, OVERRIDE_WHY, SqliteDeparser, VanillaDeparser, print } from '../src/print.ts';
 import { MANTLE_LOWERINGS, PG_ONLY_REWRITES } from '../src/policy.ts';
 import { BARE, ENUM, KEYS, SQLITE_ONLY_KEYWORDS } from '../src/validate.ts';
-import { storageDdl } from '../src/storage.ts';
 import type { N } from '../src/types.ts';
 import { corpus } from './corpus.ts';
 import type { Item } from './corpus.ts';
@@ -24,18 +23,13 @@ function without(skip: string | undefined): typeof Deparser {
   return Ablated;
 }
 
-async function reset(b: { d1: any }) {
-  for (const t of Object.keys(schemas)) await b.d1.exec([`DELETE FROM ${t}`]);
-  await b.d1.exec(seed);
-}
-
 async function runItem(b: Awaited<ReturnType<typeof boot>>, item: Item, printer: typeof Deparser): Promise<{ outcome: Outcome; rows?: unknown[][]; ast?: N[] }> {
   const s = { ...site(b), printer };
   const rt = { ...caller(item.input), role: 'staff' };
   try {
     const p = await program(item.kind, item.sql, item.inputs ?? {});
     const ast = compileProgram({ ...s }, p).map((c) => c.ast);
-    if (item.kind === 'procedure') await reset(b);
+    if (item.kind === 'procedure') await reset(b.d1);
     const rows = item.kind === 'view' ? [(await runView(s, p, rt)).rows] : (await runProcedure(s, p, rt)).rows;
     return { outcome: { id: item.id, ok: true }, rows, ast };
   } catch (e: any) {
@@ -68,7 +62,6 @@ export async function run(r: Report) {
   const results = new Map<string, Outcome[]>();
 
   // 1a. the full printer passes the whole corpus with the results PostgreSQL semantics give
-  const full = await Promise.all([]).then(() => null); void full;
   const irAst: N[] = [];
   const irNodes = new Set<string>(), irKeys = new Set<string>(), enumSeen = new Set<string>();
   const outs: Outcome[] = [];
@@ -113,8 +106,6 @@ export async function run(r: Report) {
   for (const item of corpus) vanilla.push((await runItem(b, item, VanillaDeparser)).outcome);
   const vf = vanilla.filter((o) => !o.ok);
   r.note(`vanilla pgsql-deparser: ${vf.length} of ${corpus.length} corpus items fail on D1`);
-  const wrongOnly = vf.filter((o) => !o.error);
-  void wrongOnly;
   const need: Record<string, string[]> = {};
   for (const name of OVERRIDES) {
     const ab: Outcome[] = [];
@@ -229,4 +220,3 @@ export async function run(r: Report) {
   await b.d1.dispose();
   return { overrides: OVERRIDES, need, gap, vanillaFailures: vf.length };
 }
-void storageDdl; void render;

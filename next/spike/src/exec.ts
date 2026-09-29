@@ -3,7 +3,7 @@
 import type { N, Schemas } from './types.ts';
 import { Refused } from './types.ts';
 import type { BindSpec, Compiled, Mode } from './policy.ts';
-import { applyPolicy } from './policy.ts';
+import { HIDDEN_ID, HIDDEN_VERSION, applyPolicy } from './policy.ts';
 import { print } from './print.ts';
 import type { Deparser } from 'pgsql-deparser';
 import { validateProgram } from './validate.ts';
@@ -96,6 +96,7 @@ export async function runProcedure(site: Site, p: Program, rt: Runtime): Promise
       const rc = applyPolicy(read, { schemas: site.schemas, inputs: p.inputs, mode: site.mode, seen: site.seen });
       row = (await site.d1.all(render(rc, site.printer), bindValues(rc.binds, rt)))[0] ?? null;
     }
+    if (c.verb !== 'insert' && !row) throw new Conflict(i); // no visible row: fail closed, and the hook never learns whether it exists
     await hook({ row });
     hookCalls.push(`before ${c.verb} ${c.schema}`);
     versions[i] = row?.version;
@@ -118,12 +119,16 @@ export async function runProcedure(site: Site, p: Program, rt: Runtime): Promise
   } catch (e) {
     return mapError(e);
   }
-  const rows = plan.map((_c, i) => res[at[i]].rows);
+  const raw = plan.map((_c, i) => res[at[i]].rows);
+  // the caller sees the author's RETURNING; the hook additionally gets id and version
+  const strip = (row: any) => Object.fromEntries(Object.entries(row).filter(([k]) => k !== HIDDEN_ID && k !== HIDDEN_VERSION));
+  const rows = raw.map((rs, i) => (plan[i].hooked ? rs.map(strip) : rs));
   for (const [i, c] of plan.entries()) {
     const hook = c.schema && c.verb && site.hooks?.after?.[c.schema]?.[c.verb];
-    if (hook && rows[i].length) { // one call per statement and Trigger; a statement that writes no row calls no hook
-      await hook({ rows: rows[i] as [any, ...any[]] });
-      hookCalls.push(`after ${c.verb} ${c.schema} (${rows[i].length})`);
+    if (hook && raw[i].length) { // one call per statement and Trigger; a statement that writes no row calls no hook
+      const cause = raw[i].map((row) => (HIDDEN_ID in row ? { ...strip(row), id: row[HIDDEN_ID], version: row[HIDDEN_VERSION] } : row));
+      await hook({ rows: cause as [any, ...any[]] });
+      hookCalls.push(`after ${c.verb} ${c.schema} (${cause.length})`);
     }
   }
   return { rows, batch, hookCalls };
