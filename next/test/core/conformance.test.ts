@@ -4,12 +4,8 @@
  */
 import { describe, it } from "vitest";
 
-// Covered elsewhere: hooks, OCC, rollback and after-hook failure (test/core/runtime.test.ts, the before-hook case), Views and
+// Covered elsewhere: an inline hook target is rejected (test/spec/compile-plan.test.ts, and at boot in runtime.test.ts); hooks, OCC, rollback and after-hook failure (test/core/runtime.test.ts, the before-hook case), Views and
 // pagination (the store case, which also classifies row and set ops and the lock/expect reasons), invocation, auth predicates and depth, plan and boot (test/core/runtime.test.ts).
-
-describe("ADR-0032: atomicity and hooks", () => {
-  it.todo("a hook target with an inline program is rejected");
-});
 
 describe("ADR-0032: row-op classification", () => {
   it.todo("Procedure.target inference agrees with Store in every case");
