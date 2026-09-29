@@ -3,12 +3,13 @@
  * (`json.ts`), and run by the same runner as a manifest's Procedure or View, so policy, hooks and OCC
  * have one implementation.
  */
-import { DiagnosticError, runtimeDiagnostic, SqlRefusal, type SqlNode as N } from "../../spec/index.js";
+import { DiagnosticError, runtimeDiagnostic, SqlRefusal, type AuthorizationRequirements, type SqlNode as N } from "../../spec/index.js";
 import type { Caller } from "../caller.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";
 import { decodeOutput } from "../sql/codec.js";
 import type { BindContext, Mode } from "../sql/compile.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv } from "../sql/run.js";
+import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
 import { StoreJson, type StoreSchemas } from "./json.js";
 
@@ -17,6 +18,8 @@ export interface StoreView {
   readonly ir: readonly N[];
   readonly inputs: Readonly<Record<string, string>>;
   readonly public?: boolean;
+  /** Checked against a caller-bound Store (the host's own `runtime.store` is trusted and skips it). */
+  readonly requires?: AuthorizationRequirements;
 }
 
 export interface StoreDeps {
@@ -48,8 +51,7 @@ function decode(row: StoreRow, types: ReadonlyMap<string, string>): StoreRow {
 }
 
 /** `caller` undefined is the host (trusted): no scope, TTL still applies. */
-function bind(deps: StoreDeps, caller: Caller | undefined): { mode: Mode; bind: BindContext } {
-  const now = deps.now();
+export function bindFor(now: number, caller: Caller | undefined): { mode: Mode; bind: BindContext } {
   if (!caller || caller.kind === "system") return { mode: "trusted", bind: { uid: caller ? `system:${caller.reason}` : null, now } };
   if (caller.kind === "anonymous") return { mode: "caller", bind: { uid: null, now } };
   return { mode: "caller", bind: { uid: caller.subject, now, role: caller.role } };
@@ -68,7 +70,7 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
       const json = new StoreJson(deps.schemas);
       const s = json.select(q);
       const binding = `${s.from}:${s.order.column.col}:${s.order.dir}`;
-      const { mode, bind: b } = bind(deps, caller);
+      const { mode, bind: b } = bindFor(deps.now(), caller);
       const cursor = q.cursor === undefined ? undefined : decodeCursor(binding, q.cursor);
       const program: Program = { kind: "view", inputs: json.inputs, ir: [s.ir] };
       const page = await runView(env(mode), program, as({ ...b, input: json.values }), { pageSize: s.pageSize, ...(cursor ? { cursor } : {}) });
@@ -80,7 +82,7 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
       if (!Array.isArray(ops) || !ops.length) throw invalid("A write takes a non-empty list of operations.");
       const json = new StoreJson(deps.schemas);
       const ir = ops.map((o) => json.write(o));
-      const { mode, bind: b } = bind(deps, caller);
+      const { mode, bind: b } = bindFor(deps.now(), caller);
       const program: Program = { kind: "procedure", inputs: json.inputs, ir, expects: ops.map((o) => (o as { expect?: number }).expect) };
       let result;
       try {
@@ -100,9 +102,11 @@ function make(deps: StoreDeps, caller: Caller | undefined): CallerStore {
     view: (name, options = {}) => guard(async () => {
       const v = deps.views[name];
       if (!v) throw invalid(`Unknown View '${name}'.`);
+      const denial = caller && evaluateAuthAll(v.requires, caller, `manifest:View/${name}`);
+      if (denial) throw new DiagnosticError(denial);
       const limit = options.limit ?? 50;
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");
-      const { mode, bind: b } = bind(deps, caller);
+      const { mode, bind: b } = bindFor(deps.now(), caller);
       const cursor = options.cursor === undefined ? undefined : decodeCursor(`view:${name}`, options.cursor);
       const page = await runView(env(v.public ? "public" : mode), { kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: options.input ?? {} }), { pageSize: limit, ...(cursor ? { cursor } : {}) });
       return { rows: page.rows as never, ...(page.next ? { nextCursor: encodeCursor(`view:${name}`, page.next) } : {}) };
