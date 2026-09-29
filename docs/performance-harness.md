@@ -82,7 +82,7 @@ Timing always reports p50/p95/max. A test-only Worker wrapper may also return
 `x-mantle-query-count` and `x-mantle-rows-read`; those become distributions in
 the same report. Do not expose these diagnostic headers in production.
 
-The path-scoped Cloudflare benchmark workflow runs `pnpm bench:wrangler`
+The manual (`workflow_dispatch`) Cloudflare benchmark workflow runs `pnpm bench:wrangler`
 against real Wrangler-local D1, Worker HTTP routing, View execution, and origin
 page rendering. It compares 100 and 10,000 row fixtures and gates row-read
 scaling plus endpoint query budgets, not absolute milliseconds. It is separate
