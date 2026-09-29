@@ -12,7 +12,8 @@ const PARSER = join(SRC, "spec/infrastructure/sql/PgQueryParser.ts");
 const VALIDATOR = join(SRC, "spec/domain/service/SqlIrValidator.ts");
 
 function walk(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith(".ts") ? [join(dir, e.name)] : []));
+  // dot folders are tool scratch (wrangler bundles a Worker into .wrangler/tmp while other suites run), never source
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.name.startsWith(".") ? [] : e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith(".ts") ? [join(dir, e.name)] : []));
 }
 
 const importsOf = (file: string): string[] =>

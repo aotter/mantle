@@ -27,10 +27,19 @@ export class LocalD1 {
   }
 
   private async send(mode: "batch" | "exec", stmts: readonly D1Statement[]): Promise<D1Result[]> {
-    const res = await this.worker.fetch("http://local-d1/", { method: "POST", body: JSON.stringify({ mode, stmts }) });
-    const reply = (await res.json()) as Reply;
-    if (!reply.ok) throw new Error(reply.error);
-    return reply.results;
+    // workerd answers a plain-text "Network connection lost" when the machine is loaded (several suites start workers at once); the
+    // statements did not run then, so a resend is safe
+    for (let attempt = 0; ; attempt++) {
+      const res = await this.worker.fetch("http://local-d1/", { method: "POST", body: JSON.stringify({ mode, stmts }) });
+      const text = await res.text();
+      let reply: Reply;
+      try { reply = JSON.parse(text) as Reply; } catch {
+        if (attempt < 3) continue;
+        throw new Error(`local D1 answered ${text.slice(0, 80)}`);
+      }
+      if (!reply.ok) throw new Error(reply.error);
+      return reply.results;
+    }
   }
 
   /** One D1 batch: applied in order, all or nothing. Throws D1's error text when a statement fails. */
