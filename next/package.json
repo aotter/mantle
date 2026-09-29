@@ -11,13 +11,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@pgsql/types": "18.0.0",
     "libpg-query": "18.1.5",
+    "pgsql-deparser": "18.3.8",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
+    "wrangler": "4.126.0",
     "zod": "catalog:"
   }
 }
