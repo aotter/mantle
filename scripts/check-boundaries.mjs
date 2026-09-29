@@ -254,7 +254,7 @@ function checkPackageDirection() {
 /** next/src/core imports only next/src/spec (next/README.md); a package or a sibling folder is refused. */
 function checkNextCoreImports() {
   for (const file of listFiles(join(ROOT, "next/src/core"), (p) => p.endsWith(".ts"))) {
-    for (const [, spec] of readFileSync(file, "utf8").matchAll(/\bfrom\s+"([^"]+)"/g)) {
+    for (const [, spec] of readFileSync(file, "utf8").matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
       if (!spec.startsWith("./") && !spec.startsWith("../spec/") && !spec.startsWith("node:")) {
         fail(file, `next core may import only spec: '${spec}'`);
       }
