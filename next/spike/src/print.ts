@@ -32,6 +32,12 @@ export class SqliteDeparser extends Deparser {
 }
 // Further overrides, if `cases/deparser.ts` finds any, are added above with the case that needs them.
 
+export const OVERRIDE_WHY: Record<string, string> = {
+  ParamRef: 'PostgreSQL prints $n; SQLite reads $n as a NAMED parameter numbered by first appearance, so binds silently shift when ?3 appears before ?2',
+  TypeCast: 'PostgreSQL prints x::type; SQLite has only CAST(x AS type)',
+  A_Const: "PostgreSQL prints E'..' for a string containing a backslash; SQLite has no E'' strings",
+  A_Expr: "x LIKE p ESCAPE e parses to LIKE with pg_catalog.like_escape(p, e); SQLite has no such function, its syntax is the ESCAPE clause",
+};
 export const OVERRIDES = Object.getOwnPropertyNames(SqliteDeparser.prototype).filter((k) => k !== 'constructor');
 
 export function print(ast: N, Printer: typeof Deparser = SqliteDeparser): string {

@@ -13,7 +13,7 @@ export const KEYS_SRC: Record<string, string> = {
   UpdateStmt: 'relation targetList whereClause returningClause',
   DeleteStmt: 'relation whereClause returningClause',
   ReturningClause: 'exprs', ResTarget: 'name val', ColumnRef: 'fields', String: 'sval', A_Star: '',
-  A_Const: 'ival fval sval boolval isnull', A_Expr: 'kind name lexpr rexpr rexpr_list_start rexpr_list_end',
+  A_Const: 'ival fval sval boolval isnull', A_Expr: 'kind name lexpr rexpr',
   BoolExpr: 'boolop args', NullTest: 'arg nulltesttype', CaseExpr: 'arg args defresult', CaseWhen: 'expr result',
   CoalesceExpr: 'args', TypeCast: 'arg typeName', TypeName: 'names typemod typmods',
   FuncCall: 'funcname args agg_star agg_distinct over funcformat', WindowDef: 'partitionClause orderClause frameOptions',
@@ -25,7 +25,7 @@ export const KEYS_SRC: Record<string, string> = {
 export const KEYS = Object.fromEntries(Object.entries(KEYS_SRC).map(([k, v]) => [k, new Set(v.split(' ').filter(Boolean))]));
 
 /** keys whose value is one node with the type key omitted (libpg-query prints nothing for it) */
-const BARE: Record<string, string> = { alias: 'Alias', typeName: 'TypeName', infer: 'InferClause', returningClause: 'ReturningClause', relation: 'RangeVar', over: 'WindowDef', onConflictClause: 'OnConflictClause' };
+export const BARE: Record<string, string> = { alias: 'Alias', typeName: 'TypeName', infer: 'InferClause', returningClause: 'ReturningClause', relation: 'RangeVar', over: 'WindowDef', onConflictClause: 'OnConflictClause' };
 
 export const ENUM: Record<string, (string | number | boolean)[]> = {
   'SelectStmt.op': ['SETOP_NONE'], 'SelectStmt.limitOption': ['LIMIT_OPTION_DEFAULT', 'LIMIT_OPTION_COUNT'],
@@ -44,7 +44,8 @@ const OPS = new Set(['=', '<>', '!=', '<', '>', '<=', '>=', '+', '-', '*', '/', 
 /** scalar and aggregate functions. `pg_catalog.` is stripped before the lookup. */
 export const FUNCS = new Set([
   'count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object', 'row_number', 'rank',
-  'lower', 'upper', 'length', 'abs', 'round', 'substr', 'replace', 'trim', 'ltrim', 'rtrim', 'instr', 'typeof', 'hex',
+  'lower', 'upper', 'length', 'abs', 'round', 'substr', 'replace', 'btrim', 'ltrim', 'rtrim', 'instr', 'typeof', 'hex', // btrim is what PostgreSQL parses trim(x) to
+ 
   'json_extract', 'json_set', 'json_insert', 'json_remove', 'json_array_length',
   'now', 'auth.uid', 'auth.role', 'date_trunc', 'extract', 'like_escape',
   'search', 'search_rank', 'near', 'distance',
@@ -63,10 +64,7 @@ const MAX_NODES = 2000;
  * Measured on local D1 by `cases/deparser.ts` (it fails if this list drifts from the measurement).
  */
 export const SQLITE_ONLY_KEYWORDS = new Set([
-  'abort', 'action', 'after', 'always', 'analyze', 'attach', 'autoincrement', 'before', 'conflict', 'database', 'deferred', 'detach', 'each', 'exclusive',
-  'explain', 'fail', 'generated', 'glob', 'if', 'ignore', 'immediate', 'index', 'indexed', 'initially', 'instead', 'isnull', 'match', 'materialized',
-  'no', 'notnull', 'of', 'plan', 'pragma', 'query', 'raise', 'reindex', 'release', 'rename', 'replace', 'restrict', 'row', 'savepoint', 'temp',
-  'trigger', 'vacuum', 'view', 'virtual', 'without',
+  'add', 'alter', 'autoincrement', 'commit', 'delete', 'drop', 'escape', 'index', 'insert', 'nothing', 'raise', 'set', 'transaction', 'update',
 ]);
 
 export const SYSTEM = new Set(['version', 'status', 'authorid', 'created_at', 'updated_at']);
@@ -111,14 +109,14 @@ function walk(type: string, node: N, w: Walk, path: string[], loc: number | unde
   const keys = KEYS[type] ?? no('SQL_UNSUPPORTED', `${type} is not in the subset`, loc);
   const here = typeof node.location === 'number' ? node.location : loc;
   for (const [k, v] of Object.entries(node)) {
-    if (k === 'location') continue;
+    if (k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end') continue; // source positions, not structure
     if (!keys.has(k)) no('SQL_UNSUPPORTED', `${type}.${k} is not in the subset`, firstLoc(v) ?? here);
     const e = ENUM[`${type}.${k}`];
     if (e && !e.includes(v as any)) no('SQL_UNSUPPORTED', `${type}.${k} = ${JSON.stringify(v)} is refused`, firstLoc(node) ?? here);
   }
   check[type]?.(node, w.ctx, path, here);
   for (const [k, v] of Object.entries(node)) {
-    if (type === 'A_Const' || k === 'location') continue;
+    if (type === 'A_Const' || k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end') continue;
     if (BARE[k]) walk(BARE[k], v as N, w, [...path, BARE[k]], here);
     else if (Array.isArray(v)) v.forEach((c) => child(c, w, path, k, here));
     else if (v && typeof v === 'object') child(v as N, w, path, k, here);
@@ -167,7 +165,7 @@ const check: Record<string, Checker> = {
     const args: N[] = n.args ?? [];
     const str = (a?: N) => a?.A_Const?.sval?.sval as string | undefined;
     switch (f) {
-      case 'like_escape': if (path.at(-1) !== 'A_Expr') no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at); break;
+      case 'like_escape': if (path.at(-2) !== 'A_Expr') no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at); break;
       case 'date_trunc': if (args.length !== 2 || !TRUNC_UNITS.has(str(args[0]) ?? '')) no('SQL_TYPE', `date_trunc takes ${[...TRUNC_UNITS].join(', ')} as a literal first argument`, at); break;
       case 'extract': if (args.length !== 2 || !EXTRACT_FIELDS.has(str(args[0]) ?? '')) no('SQL_TYPE', `extract takes ${[...EXTRACT_FIELDS].join(', ')}`, at); break;
       case 'now': case 'auth.uid': case 'auth.role': if (args.length) no('SQL_FUNCTION', `${f}() takes no arguments`, at); break;
@@ -210,6 +208,9 @@ const check: Record<string, Checker> = {
       parseNumeric(`numeric(${p}, ${s})`);
       if (!lit) no('SQL_TYPE', 'CAST to numeric takes a literal: numeric columns are integer counts of the smallest unit', at);
     }
+  },
+  ResTarget: (n, _c, _p, at) => {
+    if (n.name && SQLITE_ONLY_KEYWORDS.has(n.name)) no('SQL_UNSUPPORTED', `${n.name} is an SQLite keyword: the printer would not quote it`, at);
   },
   SubLink: (n, _c, _p, at) => {
     if (n.subLinkType === 'ANY_SUBLINK' && n.operName && sv(n.operName) !== '=') no('SQL_UNSUPPORTED', 'only IN (subquery)', at);

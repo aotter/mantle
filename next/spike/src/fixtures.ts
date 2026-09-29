@@ -12,7 +12,7 @@ export const NOW = encodeTimestamptz('2026-09-29T00:00:00Z'); // microseconds
 export const caller = (input: Record<string, unknown> = {}, uid = 'o1'): Runtime => ({ uid, now: NOW, input });
 
 export const schemas: Schemas = {
-  items: { scope: 'owner', ttl: 'expires_at', fields: { name: 'text', cat: 'text', stock: 'integer', tags: 'json' }, checks: ['stock >= 0'] },
+  items: { scope: 'owner', ttl: 'expires_at', fields: { name: 'text', cat: 'text', stock: 'integer', tags: 'json', note: 'text' }, checks: ['stock >= 0'] },
   requisitions: { scope: 'owner', fields: { item_id: 'text', qty: 'integer', state: 'text' } },
   orders: { scope: 'owner', fields: { item_id: 'text', qty: 'integer', total: 'numeric(12,2)' } },
   settings: { scope: 'owner', fields: { key: 'text', value: 'text' }, unique: [['key']] },
@@ -25,15 +25,15 @@ export const schemas: Schemas = {
 const FUTURE = NOW + 1_000_000_000_000;
 const EXPIRED = 1;
 export const seed = [
-  `INSERT INTO items (id, owner, created_at, expires_at, name, cat, stock, tags) VALUES
-    ('a','o1',0,NULL,'apple','x',5,'["red","big"]'), ('b','o1',0,NULL,'berry','x',2,'["blue"]'),
-    ('c','o1',0,${FUTURE},'cherry','y',9,'["red"]'), ('d','o1',0,NULL,'date','x',7,'["red"]'),
-    ('e1','o1',0,${EXPIRED},'expired','x',100,'["red"]'),
-    ('z1','o2',0,NULL,'zeta','x',50,'["red"]'), ('z2','o2',0,NULL,'zulu','y',60,'["red"]')`,
+  `INSERT INTO items (id, owner, created_at, expires_at, name, cat, stock, tags, note) VALUES
+    ('a','o1',0,NULL,'apple','x',5,'["red","big"]',NULL), ('b','o1',0,NULL,'berry','x',2,'["blue"]',NULL),
+    ('c','o1',0,${FUTURE},'cherry','y',9,'["red"]','nc'), ('d','o1',0,NULL,'date','x',7,'["red"]','nd'),
+    ('e1','o1',0,${EXPIRED},'expired','x',100,'["red"]',NULL),
+    ('z1','o2',0,NULL,'zeta','x',50,'["red"]',NULL), ('z2','o2',0,NULL,'zulu','y',60,'["red"]',NULL)`,
   `INSERT INTO requisitions (id, owner, created_at, item_id, qty, state) VALUES ('r1','o1',0,'a',2,'pending'), ('r2','o1',0,'b',1,'pending'), ('rz','o2',0,'z1',1,'pending')`,
   `INSERT INTO orders (id, owner, created_at, item_id, qty, total) VALUES
     ('oa','o1',0,'a',3,1050), ('ob','o1',0,'a',1,350), ('oe','o1',0,'e1',9,900), ('oz','o2',0,'a',99,9900), ('oz2','o2',0,'z1',5,500)`,
-  `INSERT INTO settings (id, owner, created_at, key, value) VALUES ('sz','o2',0,'theme','dark')`,
+  `INSERT INTO settings (id, owner, created_at, key, value) VALUES ('sz','o2',0,'theme','dark'), ('s1','o1',0,'theme','dark')`,
 ];
 
 export async function boot(extraSeed: string[] = [], only?: string[]): Promise<{ d1: LocalD1; schemas: Schemas }> {

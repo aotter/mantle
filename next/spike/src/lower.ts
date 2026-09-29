@@ -49,7 +49,7 @@ export async function lower(sql: string, ctx: Omit<Ctx, 'source'>): Promise<Lowe
   try {
     tree = await parse(sql);
   } catch (e: any) {
-    throw new Refused('SQL_SYNTAX', String(e.message).replace(/^.*?:\s*/, ''), typeof e.cursorPosition === 'number' && e.cursorPosition >= 0 ? Buffer.byteLength(sql.slice(0, Math.max(0, e.cursorPosition - 1))) : undefined);
+    throw new Refused('SQL_SYNTAX', String(e.message).replace(/^.*?:\s*/, ''), typeof e.sqlDetails?.cursorPosition === 'number' ? e.sqlDetails.cursorPosition : undefined);
   }
   const raw = tree.stmts.map((s: N) => s.stmt);
   const locs = tree.stmts.map((s: N) => s.stmt_location);

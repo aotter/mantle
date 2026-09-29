@@ -5,6 +5,7 @@ import { Refused } from './types.ts';
 import type { BindSpec, Compiled, Mode } from './policy.ts';
 import { applyPolicy } from './policy.ts';
 import { print } from './print.ts';
+import type { Deparser } from 'pgsql-deparser';
 import { validateProgram } from './validate.ts';
 import { encodeInput } from './codec.ts';
 import type { LocalD1, Stmt } from './d1.ts';
@@ -15,7 +16,7 @@ export type Hooks = {
   before?: Record<string, Partial<Record<Verb, (cause: { row: any }) => unknown>>>;
   after?: Record<string, Partial<Record<Verb, (cause: { rows: [any, ...any[]] }) => unknown>>>;
 };
-export type Site = { d1: LocalD1; schemas: Schemas; hooks?: Hooks; mode?: Mode; seen?: Set<RelationPosition> };
+export type Site = { printer?: typeof Deparser; d1: LocalD1; schemas: Schemas; hooks?: Hooks; mode?: Mode; seen?: Set<RelationPosition> };
 export type Program = { kind: 'view' | 'procedure'; inputs: Record<string, string>; ir: N[] };
 export type Runtime = { uid: string; now: number; role?: string; input?: Record<string, unknown> };
 
@@ -63,7 +64,7 @@ export function compileProgram(site: Site, p: Program, opts: { lockVersion?: boo
   }
   return out;
 }
-export const render = (c: Compiled) => print(c.ast);
+export const render = (c: Compiled, printer?: typeof Deparser) => print(c.ast, printer);
 
 function mapError(e: any): never {
   const m = /CONFLICT op=(\d+)/.exec(e.message);
@@ -93,7 +94,7 @@ export async function runProcedure(site: Site, p: Program, rt: Runtime): Promise
         whereClause: { A_Expr: { kind: 'AEXPR_OP', name: [{ String: { sval: '=' } }], lexpr: { ColumnRef: { fields: [{ String: { sval: 't' } }, { String: { sval: 'id' } }] } }, rexpr: idExpr } },
         limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } };
       const rc = applyPolicy(read, { schemas: site.schemas, inputs: p.inputs, mode: site.mode, seen: site.seen });
-      row = (await site.d1.all(render(rc), bindValues(rc.binds, rt)))[0] ?? null;
+      row = (await site.d1.all(render(rc, site.printer), bindValues(rc.binds, rt)))[0] ?? null;
     }
     await hook({ row });
     hookCalls.push(`before ${c.verb} ${c.schema}`);
@@ -107,7 +108,7 @@ export async function runProcedure(site: Site, p: Program, rt: Runtime): Promise
   const at: number[] = [];
   plan.forEach((c, i) => {
     at[i] = batch.length;
-    batch.push({ sql: render(c), binds: bindValues(c.binds, rt, { version: versions[i] }) });
+    batch.push({ sql: render(c, site.printer), binds: bindValues(c.binds, rt, { version: versions[i] }) });
     // a row op must affect exactly one row: count with SQLite's changes(), not D1's meta.changes (which includes trigger writes)
     if (c.kind === 'row') batch.push({ sql: `INSERT INTO _mantle_assert (op, ok) SELECT ${i}, changes() = 1` });
   });
@@ -156,7 +157,7 @@ export type Page = { rows: any[]; next?: unknown[] };
  */
 export async function runView(site: Site, p: Program, rt: Runtime, opts: { cursor?: unknown[]; pageSize?: number } = {}): Promise<Page> {
   const [c] = compileProgram(site, p);
-  if (!opts.pageSize) return { rows: await site.d1.all(render(c), bindValues(c.binds, rt)) };
+  if (!opts.pageSize) return { rows: await site.d1.all(render(c, site.printer), bindValues(c.binds, rt)) };
   const sel = structuredClone(c.ast.SelectStmt) as N;
   const keys: N[] = sel.sortClause;
   if (!keys?.length) throw new Refused('SQL_SHAPE', 'a cursor needs an ORDER BY');
@@ -186,7 +187,7 @@ export async function runView(site: Site, p: Program, rt: Runtime, opts: { curso
     whereClause: after,
     sortClause: keys.map((k, i) => ({ SortBy: { node: ref(`_k${i}`), sortby_dir: k.SortBy.sortby_dir, sortby_nulls: k.SortBy.sortby_nulls } })),
     limitCount: { A_Const: { ival: { ival: opts.pageSize + 1 } } }, limitOption: 'LIMIT_OPTION_COUNT', op: 'SETOP_NONE' } };
-  const rows = await site.d1.all(print(outer), bindValues([...c.binds, ...cursorBinds], rt, { cursor: opts.cursor }));
+  const rows = await site.d1.all(print(outer, site.printer),bindValues([...c.binds, ...cursorBinds], rt, { cursor: opts.cursor }));
   const more = rows.length > opts.pageSize;
   const page = rows.slice(0, opts.pageSize);
   const next = more ? keys.map((_k, i) => page.at(-1)[`_k${i}`]) : undefined;

@@ -41,6 +41,24 @@ export type Compiled = {
   /** the rowid of a row op's target is not needed; kept for hooks: does the statement return rows to the hook? */
 };
 
+/** where the PostgreSQL parse tree has a construct SQLite lacks: rewritten in the AST, so the printer stays stock */
+export const PG_ONLY_REWRITES = [
+  'FuncCall: strip pg_catalog., print SQL-syntax calls (TRIM(BOTH FROM x), EXTRACT(.. FROM ..)) as plain calls',
+  'FuncCall: btrim(x) (how PostgreSQL parses trim(x)) -> trim(x)',
+  'SubLink: x = ANY (subquery) -> x IN (subquery)',
+  'TypeCast: type names to SQLite storage classes (int4/int8 -> integer, float8 -> real, bool -> x <> 0, text -> text)',
+];
+/** Mantle's own SQL constructs, lowered to SQLite expressions */
+export const MANTLE_LOWERINGS = [
+  'input.<name> -> CAST(?n AS <declared type>), auth.uid()/auth.role()/now() -> numbered binds',
+  "interval 'N second|minute|hour' -> a microsecond integer constant; calendar units refused",
+  "timestamptz / date / numeric(p, s) literal casts -> their integer encodings, folded at compile time",
+  'date_trunc(unit, ts) and extract(field FROM ts) -> arithmetic and strftime over the _mantle_tz offset table',
+  'search(t, q) / search_rank(t) -> FTS5 trigram MATCH on a quoted phrase, LIKE under three characters, bm25',
+  'near(t.f, lat, lng, m) / distance(...) -> R*Tree bounding box plus haversine',
+  'a Schema reference -> (SELECT <declared columns> FROM t WHERE scope AND ttl AND published) AS alias',
+];
+
 // ---- AST builders -------------------------------------------------------------------------------
 const S = (s: string) => ({ String: { sval: s } });
 const col = (...p: string[]): N => ({ ColumnRef: { fields: p.map(S) } });
@@ -163,6 +181,14 @@ const hasFunc = (v: any, pred: (name: string, n: N) => boolean): boolean => {
 // ---- expression lowering (Mantle SQL -> SQLite) -----------------------------------------------------
 const OFF = (x: string) => `coalesce((SELECT offset_us FROM _mantle_tz WHERE from_us <= ${x} ORDER BY from_us DESC LIMIT 1), 0)`;
 const FD = (a: string, b: number) => `((${a} - ((${a} % ${b}) + ${b}) % ${b}) / ${b})`; // exact integer floor division
+/** A function that survives lowering prints as a plain call: no `pg_catalog.` prefix, no SQL-syntax form (TRIM(BOTH FROM x)). */
+function plainCall(n: N, c: C): N {
+  const out = deep(n, c, 'FuncCall');
+  if (out.funcname[0].String.sval === 'pg_catalog') out.funcname = out.funcname.slice(1);
+  if (out.funcname.length === 1 && out.funcname[0].String.sval === 'btrim') out.funcname = [S('trim')]; // PostgreSQL's spelling of trim(x)
+  out.funcformat = 'COERCE_EXPLICIT_CALL';
+  return { FuncCall: out };
+}
 const LOCAL = `(__ts + ${OFF('__ts')})`; // wall-clock microseconds in the site time zone, read as if UTC
 const DAY = 86_400_000_000;
 const TRUNC: Record<string, string> = {
@@ -251,7 +277,8 @@ function lowerCast(n: N, c: C): N {
     parseNumeric(`numeric(${p}, ${s})`);
     return num(encodeNumeric(litStr!, p, s));
   }
-  const target = t === 'int4' || t === 'int8' || t === 'bool' ? 'integer' : t === 'float8' ? 'real' : 'text';
+  if (t === 'bool') return op('<>', tx(n.arg, c), num(0)); // PostgreSQL: any non-zero is true, NULL stays NULL
+  const target = t === 'int4' || t === 'int8' ? 'integer' : t === 'float8' ? 'real' : 'text';
   return cast(tx(n.arg, c), target);
 }
 
@@ -263,7 +290,12 @@ const H: Record<string, (n: N, c: C) => N> = {
     const type = c.inputs[f[1]];
     return cast(param$(c, { k: 'input', name: f[1], type }), sqliteType(type)); // decision 5: every bind is CAST to its declared type
   },
-  FuncCall: (n, c) => lowerFunc(n, c) ?? { FuncCall: deep(n, c, 'FuncCall') },
+  FuncCall: (n, c) => lowerFunc(n, c) ?? plainCall(n, c),
+  SubLink: (n, c) => {
+    const out = deep(n, c, 'SubLink');
+    if (out.subLinkType === 'ANY_SUBLINK') delete out.operName; // `x = ANY (subquery)` is `x IN (subquery)`; SQLite has no ANY
+    return { SubLink: out };
+  },
   TypeCast: (n, c) => lowerCast(n, c),
   RangeVar: (n, c) => wrap(n, c),
   SelectStmt: (n, c) => select(n, c),
@@ -328,18 +360,23 @@ function select(n: N, c: C): N {
   const firstAlias = first?.RangeVar ? (first.RangeVar.alias?.aliasname ?? first.RangeVar.relname) : first?.RangeSubselect?.alias?.aliasname;
   const aggregate = !n.groupClause && hasFunc(n.targetList, (f, fc) => ['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object'].includes(f) && !fc.over);
   if (out.sortClause && !aggregate) {
-    if (n.groupClause) out.sortClause = [...out.sortClause, ...tx(n.groupClause, c).map(sort)];
+    const have = new Set(out.sortClause.map((k: N) => JSON.stringify(k.SortBy.node)));
+    if (n.groupClause) out.sortClause = [...out.sortClause, ...tx(n.groupClause, c).filter((g: N) => !have.has(JSON.stringify(g))).map(sort)];
     else if (firstAlias) {
       if (first.RangeSubselect && !first.RangeSubselect.subquery.SelectStmt.targetList.some((t: N) => (t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === 'id'))
         throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a subquery in FROM, needs the subquery to output id`);
-      out.sortClause = [...out.sortClause, sort(col(firstAlias, 'id'))];
+      const extra = [col(firstAlias, 'id')];
       const je = (n.fromClause ?? []).find((f: N) => f.RangeFunction);
-      if (je?.RangeFunction.alias) out.sortClause.push(sort(col(je.RangeFunction.alias.aliasname, 'id')));
+      if (je?.RangeFunction.alias) extra.push(col(je.RangeFunction.alias.aliasname, 'id'));
+      out.sortClause = [...out.sortClause, ...extra.filter((e) => !have.has(JSON.stringify(e))).map(sort)];
     }
   }
+  // ADR-0034 says every window's ORDER BY gets the id key. The spike found that wrong for anything but
+  // row_number(): an appended key makes peers distinct, so rank() stops tying and a running sum stops
+  // including its peers, which is not what PostgreSQL returns. Only row_number() is made deterministic.
   if (firstAlias && !n.groupClause) for (const t of out.targetList ?? []) {
-    const w = t.ResTarget.val?.FuncCall?.over;
-    if (w) w.orderClause = [...(w.orderClause ?? []), sort(col(firstAlias, 'id'))]; // a window's ORDER BY gets the id key too
+    const fc = t.ResTarget.val?.FuncCall;
+    if (fc?.over && fc.funcname.at(-1).String.sval === 'row_number') fc.over.orderClause = [...(fc.over.orderClause ?? []), sort(col(firstAlias, 'id'))];
   }
   return { SelectStmt: out };
 }
@@ -429,7 +466,7 @@ const isIdCol = (n: N) => n.ColumnRef && n.ColumnRef.fields.at(-1)?.String?.sval
 /** ADR-0034 decision 4: `WHERE ... id = <scalar>` or a one-row INSERT is a row op; every other write is a set op. */
 export function classify(stmt: N): 'read' | 'row' | 'set' {
   if (stmt.SelectStmt) return 'read';
-  if (stmt.InsertStmt) return stmt.InsertStmt.selectStmt?.SelectStmt?.valuesLists?.length === 1 ? 'row' : 'set';
+  if (stmt.InsertStmt) return stmt.InsertStmt.selectStmt?.SelectStmt?.valuesLists?.length === 1 && !stmt.InsertStmt.onConflictClause ? 'row' : 'set'; // ON CONFLICT is a set op (ADR-0034 decision 2)
   const w = (stmt.UpdateStmt ?? stmt.DeleteStmt).whereClause;
   const row = conjuncts(w).some((x) => x.A_Expr?.kind === 'AEXPR_OP' && x.A_Expr.name[0].String.sval === '=' &&
     ((isIdCol(x.A_Expr.lexpr) && isScalar(x.A_Expr.rexpr)) || (isIdCol(x.A_Expr.rexpr) && isScalar(x.A_Expr.lexpr))));
