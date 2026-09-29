@@ -58,7 +58,7 @@ kind: Trigger
 metadata: { name: product-created }
 spec:
   source: { kind: lifecycle, schema: products, on: [after_create] }
-  target: { procedure: create-product }
+  target: { procedure: allow-product }
 `));
 
     if (!linked.ok) throw new Error("expected valid linked graph");
@@ -66,7 +66,7 @@ spec:
     expect(linked.value.views[0]?.guard?.manifest.metadata.name).toBe("allow-product");
     expect(linked.value.procedures[1]?.collectionActionSchema?.manifest.metadata.name)
       .toBe("products");
-    expect(linked.value.triggers[0]?.target.manifest.metadata.name).toBe("create-product");
+    expect(linked.value.triggers[0]?.target.manifest.metadata.name).toBe("allow-product");
     expect(linked.value.triggers[0]?.lifecycleSchema?.manifest.metadata.name).toBe("products");
     expect(Object.isFrozen(linked.value)).toBe(true);
   });

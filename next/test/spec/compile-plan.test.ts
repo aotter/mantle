@@ -87,4 +87,16 @@ describe("compilePlan", () => {
     if (res.ok) throw new Error("accepted");
     expect(res.diagnostics[0]?.message).toContain("mantle-update");
   });
+
+  it("refuses an inline program as a lifecycle hook target (it would write inside a before hook)", async () => {
+    const trigger = `---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: audit }
+spec: { source: { kind: lifecycle, schema: notes, on: [before_update] }, target: { procedure: p } }
+`;
+    const res = await compile(SCHEMA + procedure("INSERT INTO notes (body) VALUES (input.text)") + trigger);
+    if (res.ok) throw new Error("accepted an inline hook target");
+    expect(res.diagnostics[0]).toMatchObject({ code: "LIFECYCLE_TARGET_NOT_REF" });
+  });
 });

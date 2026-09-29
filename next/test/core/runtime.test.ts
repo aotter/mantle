@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
-import { compilePlan, DiagnosticError, type RuntimePlan } from "../../src/spec/index.js";
+import { compilePlan, DiagnosticError, planFingerprint, type RuntimePlan } from "../../src/spec/index.js";
 import { createMantle, createMantleRuntime, systemCaller, type Caller, type HandlerContext, type Invocation, type MantleHandlers, type MantleRuntime } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/core/sql/adapter.js";
 
@@ -111,6 +111,26 @@ metadata: { name: nightly-run }
 spec: { source: { kind: schedule, cron: "0 3 * * *" }, target: { procedure: nightly } }
 ---
 apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: recurse }
+spec: { input: { type: object }, output: { type: object }, handler: { ref: recurse } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: recurse-create }
+spec: { source: { kind: lifecycle, schema: items, on: [after_create] }, target: { procedure: recurse } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: star-items }
+spec: { surface: internal, sql: "SELECT * FROM items ORDER BY id" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: guarded-items }
+spec: { surface: internal, requires: { guard: { procedure: guard-office } }, sql: "SELECT id FROM items ORDER BY id" }
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: my-items }
 spec:
@@ -149,6 +169,14 @@ const handlers: MantleHandlers<never> = {
   staffOnly: (input: { n?: number }) => ({ n: (input.n ?? 0) + 1 }),
   chain: async (input: { depth?: number }, ctx: HandlerContext) => (input.depth === 0 ? {} : ctx.invoke("chain", { depth: (input.depth ?? 99) - 1 })),
   nightly: (_i: unknown, ctx: HandlerContext) => { calls.push({ name: "nightly", ctx, input: _i }); return {}; },
+  // a hook that writes again: every level is one deeper in the cause chain, so the depth limit ends it
+  recurse: async (_i: unknown, ctx: HandlerContext) => {
+    const row = ctx.cause.kind === "lifecycle" ? ctx.cause.rows[0] : undefined;
+    if (!String(row?.name).startsWith("rec")) return {};
+    calls.push({ name: "recurse", ctx, input: _i });
+    await ctx.store.write([{ insert: "items", values: { name: `rec${calls.length}`, stock: 1 } }, { insert: "items", values: { name: `rec-twin${calls.length}`, stock: 1 } }]);
+    return {};
+  },
 } as never;
 
 beforeAll(async () => {
@@ -171,6 +199,13 @@ describe("boot", () => {
     expect((await failure(boot({ handlers: missing as never })))?.diagnostic).toMatchObject({ code: "HANDLER_NOT_REGISTERED", candidates: expect.any(Array) });
     expect((await failure(boot({ handlers: { ...handlers, extra: () => ({}) } as never })))?.diagnostic.code).toBe("HANDLER_NOT_DECLARED");
     expect((await failure(boot({ schedules: false })))?.diagnostic.code).toBe("SCHEDULE_NOT_WIRED");
+  });
+
+  it("refuses a re-sealed plan whose hook target or guard is an inline program (defence in depth: mantle validate refuses it first)", async () => {
+    const { fingerprint: _f, ...body } = plan;
+    const patched = { ...body, procedures: { ...plan.procedures, audit: { ...plan.procedures.audit!, handler: plan.procedures["add-item"]!.handler } } };
+    const sealed = { ...patched, fingerprint: await planFingerprint(patched) } as RuntimePlan;
+    expect((await failure(boot({ plan: sealed, handlers: Object.fromEntries(Object.entries(handlers).filter(([k]) => k !== "audit")) as never })))?.diagnostic.code).toBe("LIFECYCLE_TARGET_NOT_REF");
   });
 
   it("refuses to serve while storage has a blocked change, and reports the fingerprint it booted", async () => {
@@ -237,6 +272,32 @@ describe("invokeProcedure", () => {
     expect((await rt.store.as(user("o8")).select({ from: "items", columns: ["id"], where: { id } })).rows).toEqual([]);
   });
 
+  it("hooks a handler's writes fire chain to its invocation: the depth limit ends a recursive hook, and event ids are unique per write", async () => {
+    calls.length = 0;
+    await add("o1", "rec0", 1);
+    const levels = calls.filter((c) => c.name === "recurse");
+    const depth = (c: { ctx: HandlerContext }) => { let n = 0; for (let p: { parent?: unknown } | undefined = c.ctx.cause; p; p = p.parent as never) n++; return n; };
+    expect(levels.length).toBeGreaterThan(1);
+    expect(Math.max(...levels.map(depth))).toBeLessThanOrEqual(9);
+    const ids = levels.map((l) => (l.ctx.cause as { id: string }).id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("SELECT * never reads the scope column, and the default Store projection omits it", async () => {
+    const id = await add("o1", "star", 1);
+    const star = (await rt.store.as(user("o1")).view("star-items", { limit: 500 })).rows.find((r) => r.name === "star")!;
+    expect(Object.keys(star)).not.toContain("owner");
+    const [row] = (await rt.store.as(user("o1")).select({ from: "items", where: { id } })).rows;
+    expect(row).toMatchObject({ id, name: "star" });
+    expect(Object.keys(row!)).not.toContain("owner");
+    expect(Object.keys((await rt.store.select({ from: "items", where: { id } })).rows[0]!)).not.toContain("owner");
+  });
+
+  it("a View's guard runs before the View", async () => {
+    expect((await failure(rt.store.as(user("mallory")).view("guarded-items")))?.diagnostic.message).toBe("not the boss");
+    expect((await rt.store.as(user("boss")).view("guarded-items")).rows).toEqual([]); // the guard passes; boss owns no items
+  });
+
   it("runs a guard first with the validated input, read-only, and stops the target when it throws", async () => {
     const boss: Caller = { ...(user("boss", "owner") as Extract<Caller, { kind: "user" }>) };
     expect(await rt.invokeProcedure(inv("staff-only", { n: 1 }, boss))).toEqual({ n: 2 });
@@ -271,6 +332,9 @@ describe("createMantle", () => {
     expect(calls.map((c) => c.name)).toEqual(["audit"]);
     expect((await failure(m.runDeferredHook({ procedure: "audit" }, {})))?.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
     expect((await failure(m.runDeferredHook({ ...audit, cause: { ...audit.cause, hook: "before_create" } }, {})))?.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
+    // a message is honoured only for what a Trigger of the plan would have run, and never as the system caller
+    const forged = [{ ...audit, caller: systemCaller("forged") }, { ...audit, procedure: "take" }, { ...audit, cause: { ...audit.cause, trigger: "nope" } }, { ...audit, cause: { ...audit.cause, schema: "other" } }];
+    for (const f of forged) expect((await failure(m.runDeferredHook(f, {})))?.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
   });
 
   it("retries a failed boot on the next request", async () => {
