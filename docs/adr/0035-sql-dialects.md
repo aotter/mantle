@@ -63,7 +63,7 @@ The CLI front end is shared and dialect-free. It parses, links, and refuses what
 
 ### 7. `StoreSelect.search` (new)
 
-- `StoreSelect` gains `search?: string`: rows whose declared `searchableFields`, or `id`, contain the text, under the caller's visibility like any `select`. Ordering stays `orderBy`. Each dialect's executor implements it; D1 uses its FTS5 trigram table, so Chinese substrings of three characters or more match, and a shorter query falls back to a scan.
+- `StoreSelect` gains `search?: string`: rows whose declared `searchableFields` contain the text, or whose `id` is the text, under the caller's visibility like any `select`. Ordering stays `orderBy`. Each dialect's executor implements it; D1 uses its FTS5 trigram table, so Chinese substrings of three characters or more match, and a shorter query falls back to a scan.
 - Admin's collection search box sends `search` instead of building `like` conditions itself.
 - The manifest key is `searchableFields`; ADR-0034 decision 9 wrote `search`, and the plan stores it as `search`.
 

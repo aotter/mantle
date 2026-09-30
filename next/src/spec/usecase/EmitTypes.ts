@@ -75,13 +75,6 @@ function docText(value: string): string {
   return value.replaceAll("*/", "*\\/").replace(/[\r\n]+/g, " ");
 }
 
-/**
- * Emit a top-level declaration. Object schemas become an `interface`
- * (with a brace body); any non-object top-level (array / primitive /
- * union / enum) becomes a `type` alias — `interface X string[]` is a
- * TypeScript syntax error that would silently break the consumer's
- * generated .d.ts. (#394)
- */
 interface RenderContext {
   readonly root: JsonSchema;
   readonly definitionNames: ReadonlyMap<string, string>;
@@ -99,6 +92,13 @@ function renderContext(name: string, schema: JsonSchema): RenderContext {
   };
 }
 
+/**
+ * Emit a top-level declaration. Object schemas become an `interface`
+ * (with a brace body); any non-object top-level (array / primitive /
+ * union / enum) becomes a `type` alias — `interface X string[]` is a
+ * TypeScript syntax error that would silently break the consumer's
+ * generated .d.ts. (#394)
+ */
 function declarationLines(name: string, schema: JsonSchema, preferInterface = true): string[] {
   const context = renderContext(name, schema);
   const lines = Object.entries(schema.$defs ?? {}).map(([definition, child]) =>

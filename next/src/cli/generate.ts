@@ -223,6 +223,8 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   const validation = ValidateManifestsUseCase.run({ parsed: parsed.value });
   const errors = validation.diagnostics.filter((d) => d.severity === "error");
   if (errors.length || !validation.linked) return (print(errors), 1);
+  // warnings (MCP input shapes, missing tool descriptions) are advice: printed, never a failure
+  for (const d of validation.diagnostics) if (d.severity === "warning") stderr.write(`warning: ${d.code} ${d.path}: ${d.message}\n`);
   const compiled = await compileLinkedPlan(validation.linked, dialect);
   // the Cloudflare preset and the storage dry-run are D1's; another dialect's host preset ships with it (ADR-0035 decision 5)
   const builtIn = dialect === d1;

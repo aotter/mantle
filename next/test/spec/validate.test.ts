@@ -433,6 +433,7 @@ spec:
     ["non-array", "orderNumber", "INVALID_MANIFEST_ENVELOPE"],
     ["unknown field", "[missing]", "SCHEMA_SEARCH_FIELD_UNKNOWN"],
     ["non-string property", "[placedAt]", "SCHEMA_SEARCH_INVALID"],
+    ["date-time string, stored as a number", "[shippedAt]", "SCHEMA_SEARCH_INVALID"],
     ["duplicate field", "[orderNumber, orderNumber]", "SCHEMA_SEARCH_INVALID"],
   ])("rejects %s", (_label, searchableFields, code) => {
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
@@ -445,6 +446,7 @@ spec:
     properties:
       orderNumber: { type: string }
       placedAt: { type: integer }
+      shippedAt: { type: string, format: date-time }
   searchableFields: ${searchableFields}
 `);
 

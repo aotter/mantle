@@ -209,6 +209,18 @@ describe("mantle generate", () => {
     expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/d1", version: "1" });
   });
 
+  it("prints manifest warnings (advice for an MCP tool) and still generates", async () => {
+    const dir = await project();
+    await writeFile(join(dir, "manifests", "mcp.yaml"), `apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: note-tool }
+spec: { source: { kind: mcp, surface: public }, target: { procedure: note } }
+`);
+    const r = await gen(CUSTOM, dir);
+    expect(r.code).toBe(0);
+    expect(r.err).toMatch(/^warning: MCP_TOOL_DESCRIPTION_MISSING /m);
+  });
+
   it("names mantle-update for a v1 manifest and a v1 config", async () => {
     const v1 = await project();
     await writeFile(join(v1, "manifests/items.yaml"), (await read(v1, "manifests/items.yaml")).replace("cms.mantle.aotter.net/v2", "cms.mantle.aotter.net/v1"));

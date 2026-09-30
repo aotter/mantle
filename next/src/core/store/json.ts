@@ -28,7 +28,6 @@ const NATIVE: Readonly<Record<string, { col: string; type: string }>> = {
   id: { col: "id", type: "text" }, status: { col: "status", type: "text" }, version: { col: "version", type: "integer" },
   createdAt: { col: "created_at", type: "integer" }, updatedAt: { col: "updated_at", type: "integer" }, authorId: { col: "author_id", type: "text" },
 };
-const NATIVE_ID: Column = { col: "id", type: "text", out: "id" };
 const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "like", "in", "notIn", "isNull"]);
 const SCALAR = new Set(["text", "integer", "real", "bool", "timestamptz", "date"]);
 
@@ -173,10 +172,10 @@ export class StoreJson {
       ...(sub.where === undefined ? {} : { whereClause: this.where(sub.where, inner.def, depth + 1) }), ...SELECT } } } };
   }
 
-  /** `mantle.search` over the declared search fields, or the id containing the text: the dialect lowers the first (D1: FTS5 trigram). */
+  /** `mantle.search` over the declared search fields, or the id itself: the dialect lowers the first (D1: FTS5 trigram). */
   private search(text: unknown, name: string, def: StoreSchema): N {
     if (typeof text !== "string" || !text.trim()) throw invalid("Store search takes a non-empty string.");
-    const id = this.compare("like", ref("id"), NATIVE_ID, `%${text}%`);
+    const id = op("=", ref("id"), this.val("text", text, "search"));
     if (!def.search?.length) return id;
     const call: N = { FuncCall: { funcname: [S("mantle"), S("search")], args: [ref(name), this.val("text", text, "search")], funcformat: "COERCE_EXPLICIT_CALL" } };
     return bool("OR_EXPR", [call, id]);
