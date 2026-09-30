@@ -86,6 +86,13 @@ describe("site", () => {
     expect((await call("GET", "/admin/api/site", owner)).body).toMatchObject({ title: "Acme Daily", publicUrl: "https://acme.test" });
     expect((await call("GET", "/admin/api/site-settings", owner, undefined, { runtime: bare })).status).toBe(404);
   });
+
+  it("a stored origin that is not a URL does not take /site down: the request origin stands in", async () => {
+    await d1.exec("UPDATE site_config SET value = 'not a url' WHERE key = 'origin'");
+    try {
+      expect((await call("GET", "/admin/api/site", contributor)).body).toMatchObject({ publicUrl: "http://admin.test", mcpEndpoints: { public: "http://admin.test/mcp" } });
+    } finally { await d1.exec("UPDATE site_config SET value = 'https://acme.test' WHERE key = 'origin'"); }
+  });
 });
 
 describe("media", () => {
@@ -112,6 +119,9 @@ describe("media", () => {
       [{ variants: variants(500, 900) }, "MEDIA_VARIANTS_SUSPICIOUS_SIZE"],
       [{ variants: [{ mimeType: "image/jpeg", byteSize: 0, role: "primary" }] }, "INPUT_VALIDATION_FAILED"],
       [{ filename: 3 }, "INPUT_VALIDATION_FAILED"],
+      [{ filename: `${"f".repeat(252)}.jpg` }, "INPUT_VALIDATION_FAILED"],
+      [{ alt: "a".repeat(1001) }, "INPUT_VALIDATION_FAILED"],
+      [{ caption: "c".repeat(1001) }, "INPUT_VALIDATION_FAILED"],
     ];
     for (const [body, code] of cases) {
       const r = await upload(body);
@@ -129,8 +139,10 @@ describe("media", () => {
       { mimeType: "image/webp", role: "alternate", method: "PUT", uploadUrl: `https://s3.test/${uploadGroupId}/alternate?sig`, requiredHeaders: { "Content-Type": "image/webp" } },
     ]);
     expect(expiresAt - Date.now()).toBeGreaterThan(14 * 60_000);
-    // nothing was PUT yet: storage refuses, and the group stays open for a retry
+    // nothing was PUT yet: storage refuses, every object of the group is deleted (a PUT is not trusted), and a re-PUT may retry
+    calls.length = 0;
     expect((await call("POST", `/admin/api/media/uploads/${uploadGroupId}/commit`, editor, {})).body.error.code).toBe("MEDIA_OBJECT_NOT_FOUND");
+    expect(calls).toEqual([["deleteObject", `${uploadGroupId}/primary`], ["deleteObject", `${uploadGroupId}/alternate`]]);
     stored.set(`${uploadGroupId}/primary`, { mime: "image/jpeg", size: 900 }).set(`${uploadGroupId}/alternate`, { mime: "image/webp", size: 500 });
     const committed = await call("POST", `/admin/api/media/uploads/${uploadGroupId}/commit`, editor, { caption: "at commit" });
     expect(committed.body).toMatchObject({ id: uploadGroupId, alt: "at create", caption: "at commit", variants: [{ role: "primary", byteSize: 900 }, { role: "alternate" }] });
@@ -141,6 +153,7 @@ describe("media", () => {
     expect((await call("GET", "/admin/api/media?search=nothing", editor)).body.items).toEqual([]);
     expect((await call("GET", `/admin/api/media/${uploadGroupId}`, editor)).body).toMatchObject(item);
     expect((await call("PATCH", `/admin/api/media/${uploadGroupId}`, editor, { alt: 3 })).status).toBe(400);
+    expect((await call("PATCH", `/admin/api/media/${uploadGroupId}`, editor, { caption: "c".repeat(1001) })).status).toBe(400);
     expect((await call("PATCH", `/admin/api/media/${uploadGroupId}`, editor, { alt: "" })).body).toMatchObject({ alt: "", caption: "at commit" });
 
     calls.length = 0;
@@ -153,10 +166,12 @@ describe("media", () => {
 
   it("an unknown or expired group is MEDIA_UPLOAD_EXPIRED, and the expired record is dropped", async () => {
     expect((await call("POST", "/admin/api/media/uploads/nope/commit", editor, {})).status).toBe(410);
-    await d1.exec(`INSERT INTO pending_media_uploads (id, record, expires_at) VALUES ('old', '{"expiresAt":1,"variants":[]}', 1)`);
+    await d1.exec(`INSERT INTO pending_media_uploads (id, record, expires_at) VALUES ('old', '{"expiresAt":1,"variants":[{"storageKey":"old/primary"}]}', 1)`);
+    calls.length = 0;
     const r = await call("POST", "/admin/api/media/uploads/old/commit", editor, {});
     expect([r.status, r.body.error.code]).toEqual([410, "MEDIA_UPLOAD_EXPIRED"]);
     expect(await d1.all("SELECT id FROM pending_media_uploads WHERE id = 'old'")).toEqual([]);
+    expect(calls).toEqual([["deleteObject", "old/primary"]]);
   });
 
   it("pages newest first with the cursor it returned, and refuses any other", async () => {

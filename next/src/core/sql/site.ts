@@ -1,6 +1,7 @@
 /**
  * `site_config` over a SQLite-family driver, and the canonical migrations of Core's product tables. The DDL and the migration
- * ids are 0.1.x's, so an upgraded database's ledger already proves it owns them.
+ * ids are 0.1.x's; ownership is proven by next's own `_mantle_migrations` ledger. Upgrading a 0.1.x database in place is a
+ * separate step, not built yet. A new id is never purely numeric (`0004-…`): 0.1.x ledgers already hold those.
  *
  * Operator fields (`brand`, `title`, `description`) are seeded once: the database wins once a row exists, so a later code
  * edit never overwrites what the owner set in Admin. Deployment fields (`origin`, icons, `locales`, media purposes) have no

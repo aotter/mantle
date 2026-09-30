@@ -29,10 +29,12 @@ interface Pending {
 }
 
 const obj = (v: unknown): Record<string, unknown> => (v !== null && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {});
-/** `alt` and `caption`: absent, or a string. */
+const MAX_TEXT = 1000;
+const MAX_FILENAME = 255;
+/** `alt` and `caption`: absent, or a string of at most 1000 characters. */
 function texts(body: unknown) {
   const b = obj(body);
-  for (const k of ["alt", "caption"]) if (b[k] !== undefined && typeof b[k] !== "string") throw bad("{ alt?: string, caption?: string }");
+  for (const k of ["alt", "caption"]) if (b[k] !== undefined && (typeof b[k] !== "string" || b[k].length > MAX_TEXT)) throw bad(`{ alt?: string, caption?: string }, each at most ${MAX_TEXT} characters`);
   return { ...(typeof b["alt"] === "string" ? { alt: b["alt"] } : {}), ...(typeof b["caption"] === "string" ? { caption: b["caption"] } : {}) } as { alt?: string; caption?: string };
 }
 
@@ -65,8 +67,7 @@ function assetOf(r: Record<string, unknown>): MediaAsset {
   };
 }
 const save = (a: MediaAsset) => ({
-  sql: `INSERT INTO media_assets (id, created_at, owner_id, alt, caption, variants, metadata) VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6)
-    ON CONFLICT(id) DO UPDATE SET alt = excluded.alt, caption = excluded.caption, variants = excluded.variants, metadata = excluded.metadata`,
+  sql: "INSERT INTO media_assets (id, created_at, owner_id, alt, caption, variants, metadata) VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6)",
   binds: [a.id, a.createdAt, a.alt ?? null, a.caption ?? null, JSON.stringify(a.variants), a.metadata ? JSON.stringify(a.metadata) : null],
 });
 
@@ -82,10 +83,11 @@ export function mediaLibrary(driver: DatabaseDriver, storage: MediaStorage, purp
     async createUpload(request) {
       const b = obj(request);
       const variants = Array.isArray(b["variants"]) ? b["variants"].map(obj) : null;
-      if (typeof b["filename"] !== "string" || typeof b["purpose"] !== "string" || !variants?.length
+      if (typeof b["filename"] !== "string" || b["filename"].length > MAX_FILENAME || typeof b["purpose"] !== "string" || !variants?.length
         || variants.some((v) => typeof v["mimeType"] !== "string" || !Number.isSafeInteger(v["byteSize"]) || (v["byteSize"] as number) <= 0 || !ROLES.has(v["role"])))
-        throw bad("{ filename: string, purpose: string, variants: [{ mimeType: string, byteSize: positive integer, role: 'primary'|'alternate'|'fallback' }] }");
+        throw bad("{ filename: string of at most 255 characters, purpose: string, variants: [{ mimeType: string, byteSize: positive integer, role: 'primary'|'alternate'|'fallback' }] }");
       const { filename, purpose } = b as { filename: string; purpose: string };
+      const described = texts(b);
       const declared = await purposes();
       const policy = declared.find((p) => p.name === purpose);
       if (!policy) throw fail("MEDIA_PURPOSE_REJECTED", `purpose '${purpose}' is not declared`, { candidates: declared.map((p) => p.name) });
@@ -98,7 +100,7 @@ export function mediaLibrary(driver: DatabaseDriver, storage: MediaStorage, purp
       const specs = asked.map(({ mimeType, byteSize, role }) => ({ mimeType, byteSize, role, maxBytes: policy.maxBytes[mimeType]! }));
       const { capabilities } = await storage.createUpload({ uploadGroupId, purpose, filename, variants: specs, now: at, expiresAt });
       const record: Pending = {
-        purpose, filename, ...texts(b), expiresAt, createdAt: at,
+        purpose, filename, ...described, expiresAt, createdAt: at,
         variants: capabilities.map((c, i) => ({ mimeType: c.mimeType, role: c.role, storageKey: c.storageKey, expectedSize: specs[i]!.byteSize, maxBytes: specs[i]!.maxBytes })),
       };
       await driver.batch([
@@ -112,8 +114,10 @@ export function mediaLibrary(driver: DatabaseDriver, storage: MediaStorage, purp
       const patch = texts(request);
       const row = await one("SELECT record FROM pending_media_uploads WHERE id = ?1", [uploadGroupId]);
       const record = row ? JSON.parse(String(row.record)) as Pending : null;
+      // a rejected group's objects are deleted: an upload URL takes any type and size, so what was PUT is not trusted
+      const discard = () => Promise.allSettled((record?.variants ?? []).map((v) => storage.deleteObject({ storageKey: v.storageKey })));
       if (!record || record.expiresAt <= now()) {
-        if (record) await driver.batch([{ sql: "DELETE FROM pending_media_uploads WHERE id = ?1", binds: [uploadGroupId] }]);
+        if (record) { await discard(); await driver.batch([{ sql: "DELETE FROM pending_media_uploads WHERE id = ?1", binds: [uploadGroupId] }]); }
         throw fail("MEDIA_UPLOAD_EXPIRED", `upload group '${uploadGroupId}' is unknown or expired; create a new upload`);
       }
       const asset = await storage.commitUpload({
@@ -122,7 +126,7 @@ export function mediaLibrary(driver: DatabaseDriver, storage: MediaStorage, purp
         variants: record.variants.map((v) => ({ mimeType: v.mimeType, role: v.role, storageKey: v.storageKey, maxBytes: Math.min(v.maxBytes, v.expectedSize) })),
         ...((patch.alt ?? record.alt) !== undefined ? { alt: patch.alt ?? record.alt } : {}),
         ...((patch.caption ?? record.caption) !== undefined ? { caption: patch.caption ?? record.caption } : {}),
-      });
+      }).catch(async (e) => { await discard(); throw e; });
       await driver.batch([save(asset), { sql: "DELETE FROM pending_media_uploads WHERE id = ?1", binds: [uploadGroupId] }]);
       return asset;
     },
@@ -141,10 +145,12 @@ export function mediaLibrary(driver: DatabaseDriver, storage: MediaStorage, purp
     get,
 
     async update(id, request) {
-      const patch = texts(request);
-      const next = { ...await get(id), ...patch };
-      await driver.batch([save(next)]);
-      return next;
+      const patch = Object.entries(texts(request));
+      if (!patch.length) return get(id);
+      // only the patched columns, and only a row that still exists: a concurrent delete or edit of the other field stands
+      const [r] = (await driver.batch([{ sql: `UPDATE media_assets SET ${patch.map(([k], i) => `${k} = ?${i + 2}`).join(", ")} WHERE id = ?1 RETURNING ${COLUMNS}`, binds: [id, ...patch.map(([, v]) => v)] }]))[0]!.rows;
+      if (!r) throw fail("MEDIA_ASSET_NOT_FOUND", `no media asset '${id}'`);
+      return assetOf(r);
     },
 
     async delete(id) {

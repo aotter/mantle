@@ -1,19 +1,23 @@
 /**
- * `MediaStorage` on R2, public bucket only. The binding reads, rewrites and deletes objects; it cannot presign, so the PUT
+ * `MediaStorage` on R2, public bucket only. The binding reads, copies and deletes objects; it cannot presign, so the PUT
  * URLs are SigV4 query-signed by the host's S3 client (`new AwsClient({ accessKeyId, secretAccessKey, region: "auto", service: "s3" })` from `aws4fetch`).
  * Reads bypass the Worker: `publicBase` is the bucket's custom domain or `pub-<hash>.r2.dev`.
+ *
+ * A presigned PUT binds neither the type nor the size, and it stays usable until it expires. So uploads land under `uploads/`,
+ * commit checks each object through the binding and copies it to its public key, which no upload URL names, and a rejected
+ * group is deleted by the use case (`deleteObject` on each upload key).
  */
 import { DiagnosticError, makeDiagnostic, type DiagnosticCode } from "../spec/index.js";
 import type { MediaStorage, MediaVariant } from "../core/site.js";
 
-interface R2Object {
+interface R2Head {
   readonly size: number;
-  readonly body: ReadableStream;
   readonly httpMetadata?: { contentType?: string };
   readonly customMetadata?: Record<string, string>;
 }
 interface R2Bucket {
-  get(key: string): Promise<R2Object | null>;
+  head(key: string): Promise<R2Head | null>;
+  get(key: string): Promise<(R2Head & { readonly body: ReadableStream }) | null>;
   put(key: string, body: ReadableStream, options: { httpMetadata: { contentType: string }; customMetadata: Record<string, string> }): Promise<unknown>;
   delete(key: string): Promise<void>;
 }
@@ -31,6 +35,7 @@ export interface R2MediaStorageOptions {
 }
 
 const EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/avif": "avif", "image/gif": "gif" };
+const UPLOADS = "uploads/";
 const fail = (code: DiagnosticCode, message: string, value?: unknown) =>
   new DiagnosticError(makeDiagnostic({ code, phase: "runtime", severity: "error", path: "media/r2", message, ...(value === undefined ? {} : { value }) }));
 
@@ -44,35 +49,42 @@ export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2Media
       return {
         capabilities: await Promise.all(variants.map(async (v) => {
           // server-made keys, one directory per asset so its variants list together
-          const storageKey = `${purpose}/${uploadGroupId}/${v.role}.${EXT[v.mimeType] ?? "bin"}`;
+          const storageKey = `${UPLOADS}${purpose}/${uploadGroupId}/${v.role}.${EXT[v.mimeType] ?? "bin"}`;
           const target = new URL(`${s3}/${storageKey}`);
           target.searchParams.set("X-Amz-Expires", String(ttl));
           const { url } = await signer.sign(target.href, { method: "PUT", aws: { signQuery: true, service: "s3" } });
-          // the type and size are checked again at commit: a browser may not set Content-Length, and a signature cannot hold it
           return { mimeType: v.mimeType, role: v.role, method: "PUT" as const, uploadUrl: url, storageKey, requiredHeaders: { "Content-Type": v.mimeType } };
         })),
       };
     },
 
     async commitUpload({ uploadGroupId, filename, variants, alt, caption, now }) {
-      const out: MediaVariant[] = [];
+      // every variant is checked before any is published, so a rejected group publishes nothing
+      const heads = [];
       for (const spec of variants) {
-        const o = await bucket.get(spec.storageKey);
+        const o = await bucket.head(spec.storageKey);
         if (!o) throw fail("MEDIA_OBJECT_NOT_FOUND", `variant ${spec.role} of '${uploadGroupId}' was not uploaded`, uploadGroupId);
-        try {
-          const mime = o.httpMetadata?.contentType ?? "application/octet-stream";
-          if (mime !== spec.mimeType) throw fail("MEDIA_MIME_REJECTED", `the stored ${spec.role} is ${mime}, not ${spec.mimeType}`, mime);
-          if (o.size > spec.maxBytes) throw fail("MEDIA_VARIANT_SIZE_EXCEEDED", `the stored ${spec.role} is ${o.size} bytes, more than ${spec.maxBytes}`, o.size);
-          // R2 has no metadata-only update: the object streams back into itself with the commit stamped on
-          await bucket.put(spec.storageKey, o.body, {
-            httpMetadata: { contentType: mime },
-            customMetadata: { ...o.customMetadata, committedAt: String(now), role: spec.role, uploadGroupId, filename, ...(alt ? { alt } : {}), ...(caption ? { caption } : {}) },
-          });
-        } catch (e) {
-          await o.body.cancel().catch(() => undefined);
-          throw e;
+        const mime = o.httpMetadata?.contentType ?? "application/octet-stream";
+        if (mime !== spec.mimeType) throw fail("MEDIA_MIME_REJECTED", `the stored ${spec.role} is ${mime}, not ${spec.mimeType}`, mime);
+        if (o.size > spec.maxBytes) throw fail("MEDIA_VARIANT_SIZE_EXCEEDED", `the stored ${spec.role} is ${o.size} bytes, more than ${spec.maxBytes}`, o.size);
+        heads.push(o);
+      }
+      const out: MediaVariant[] = [];
+      for (const [i, spec] of variants.entries()) {
+        const key = spec.storageKey.slice(UPLOADS.length);
+        const o = await bucket.get(spec.storageKey);
+        // an upload URL may PUT again between the check and the copy: the copy must be what was checked
+        if (!o || o.size !== heads[i]!.size || o.httpMetadata?.contentType !== spec.mimeType) {
+          await o?.body.cancel().catch(() => undefined);
+          await Promise.allSettled(out.map((v) => bucket.delete(v.storageKey)));
+          throw fail("MEDIA_OBJECT_NOT_FOUND", `variant ${spec.role} of '${uploadGroupId}' changed during commit`, uploadGroupId);
         }
-        out.push({ mimeType: spec.mimeType, publicUrl: `${base}/${spec.storageKey}`, storageKey: spec.storageKey, byteSize: o.size, role: spec.role });
+        await bucket.put(key, o.body, {
+          httpMetadata: { contentType: spec.mimeType },
+          customMetadata: { ...o.customMetadata, committedAt: String(now), role: spec.role, uploadGroupId, filename, ...(alt ? { alt } : {}), ...(caption ? { caption } : {}) },
+        });
+        await bucket.delete(spec.storageKey);
+        out.push({ mimeType: spec.mimeType, publicUrl: `${base}/${key}`, storageKey: key, byteSize: o.size, role: spec.role });
       }
       return { id: uploadGroupId, variants: out, createdAt: now, metadata: { filename }, ...(alt !== undefined ? { alt } : {}), ...(caption !== undefined ? { caption } : {}) };
     },

@@ -256,8 +256,11 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
   - `MantleSite` has `read()`, `updateSettings(SiteSettings)` and `media(storage: MediaStorage): MediaLibrary`.
   - `MediaStorage` is the port with `createUpload`, `commitUpload` and `deleteObject`, which uses `MediaAsset`, `MediaVariant` and `MediaVariantRole`. `r2MediaStorage({ bucket, signer, endpoint, publicBase })` in `@aotter/mantle/cloudflare` implements it. `R2MediaStorageOptions` is its option type, and the host supplies the S3 signer.
   - A `Migration` may name the product `tables` it creates. If one of those tables exists without the migration's ledger row, boot stops with `STORAGE_TABLE_NOT_OWNED`, as decision 11 says.
-  - The migration ids and DDL are 0.1.x's (`0001-init`, `0002-media-assets`, `0003-pending-media-uploads`), so an upgraded database's ledger already proves ownership.
+  - The migration ids and DDL are 0.1.x's (`0001-init`, `0002-media-assets`, `0003-pending-media-uploads`). Ownership is proven by next's own `_mantle_migrations` ledger. Upgrading a 0.1.x database in place is a separate step that is not built yet: its legacy `_migrations` ledger is not backfilled, and its `_mantle_boot_state` has another shape.
+  - Hazard: a new migration id must not be purely numeric like `0004-…`, because 0.1.x ledgers already hold ids of that form.
+  - Uploads go to an upload-only key. Commit checks each object's type and size through the storage itself, then publishes it under a key that no upload URL reaches. A rejected group's objects are deleted.
   - `createAdminSurface` gains `site?: { mcpEndpoints? }` and `media?: MediaStorage`. Without both `media` and `runtime.site`, every media route answers 501 `MEDIA_NOT_CONFIGURED`. Without `runtime.site`, `/site-settings` does not exist.
+  - `/site` drops the deprecated `mcpUrl` alias, and `mcpEndpoints` defaults to `null`, not `/mcp` and `/mcp/staff`. Both are deliberate: the service decides which surfaces it mounts.
   - Per decision 11, `sites_users` leaves `RESERVED_TABLES`.
 - **2026-09-30, staff MCP in Admin, the tool catalog, and the auth routes.**
   - `mcpTools(plan, surface, locale?)` returns the `McpTool` list (name, title, description, inputSchema, outputSchema, annotations, `requires`, and the `kind` and `source` Procedure or View it comes from). `createMcpSurface` registers exactly these. It lives in `@aotter/mantle/spec` rather than `/mcp`, because `/admin` may not import `/mcp` (decision 13: `/admin` must not load the MCP SDK).
