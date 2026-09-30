@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-/** The `mantle` bin (ADR-0032 amendment "mantle generate"): `generate` here, the manifest commands from spec. */
+/** The `mantle` bin (ADR-0032 amendment "mantle generate"): one command, `generate`; `generate --check` is the validation gate. */
 import { argv, exit, stderr, stdout } from "node:process";
-import { runEmitOpenapi, runEmitTypes, runIntrospect, runValidate } from "../spec/infrastructure/cli/index.js";
 import { runGenerate } from "./generate.js";
 
 const COMMANDS: Record<string, (args: readonly string[]) => Promise<number>> = {
-  generate: runGenerate, validate: runValidate, introspect: runIntrospect, "emit-openapi": runEmitOpenapi, "emit-types": runEmitTypes,
+  generate: runGenerate,
 };
 
 const sub = argv[2];

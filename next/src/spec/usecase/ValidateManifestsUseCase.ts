@@ -23,9 +23,6 @@ export class ValidateManifestsUseCase {
         siteLocales: request.siteLocales,
       }));
     }
-    if (linked.ok && request.handlerSource !== undefined) {
-      diagnostics.push(...checkHandlerRefsInSource(linked.value, request.handlerSource));
-    }
     if (linked.ok && request.mcpInput !== false) {
       diagnostics.push(...checkMcpToolInputShapes(linked.value, request.mcpInput ?? {}));
     }
@@ -41,32 +38,6 @@ export class ValidateManifestsUseCase {
   static run(request: ValidateManifestsRequest): ValidateManifestsResponse {
     return new ValidateManifestsUseCase().execute(request);
   }
-}
-
-function checkHandlerRefsInSource(
-  linked: LinkedManifestSet,
-  sourceText: string,
-): Diagnostic[] {
-  const out: Diagnostic[] = [];
-  for (const procedure of linked.procedures) {
-    const handler = procedure.manifest.spec.handler;
-    if (!("ref" in handler)) continue;
-    const escaped = handler.ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const quoted = new RegExp(`["'\`]${escaped}["'\`]`);
-    const propertyKey = new RegExp(`(?:^|[\\s{,;])${escaped}\\s*:`, "m");
-    if (quoted.test(sourceText) || propertyKey.test(sourceText)) continue;
-    const path = "/spec/handler/ref";
-    out.push(validateDiagnostic({
-      code: "HANDLER_NOT_REGISTERED",
-      severity: "warning",
-      path,
-      source: { ...procedure.source, path },
-      value: handler.ref,
-      expected: `'${handler.ref}' to appear in the handlers map as an object-property key`,
-      message: `Procedure '${procedure.manifest.metadata.name}' handler.ref '${handler.ref}' was not found in any handler source file.`,
-    }));
-  }
-  return out;
 }
 
 /**

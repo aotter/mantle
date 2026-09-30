@@ -38,7 +38,6 @@ export function parseManifests(input: string | readonly string[]): TestParseResu
 
 export function validateManifests(request: {
   readonly manifests: readonly Manifest[];
-  readonly handlerSource?: string;
   readonly siteLocales?: readonly string[];
 }) {
   const parsed = parseManifestSources({
@@ -59,7 +58,6 @@ export function validateManifests(request: {
   }
   return ValidateManifestsUseCase.run({
     parsed: parsed.value,
-    handlerSource: request.handlerSource,
     siteLocales: request.siteLocales,
   });
 }
