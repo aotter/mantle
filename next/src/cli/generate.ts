@@ -118,33 +118,20 @@ function readConfig(text: string): { config: MantleConfig; raw: Record<string, u
   return { config: { version: 2, identity: v.identity as Identity, features, ...(typeof v.dialect === "string" ? { dialect: v.dialect } : {}) }, raw: v };
 }
 
-/**
- * A module as `import` resolves it from the project. Node's own resolution first (it knows Yarn PnP), then the package's
- * `exports` entry for `import`, which `require.resolve` does not read: an ESM-only package has no other.
- */
-async function resolveImport(root: string, specifier: string): Promise<string> {
-  try {
-    return createRequire(join(root, "package.json")).resolve(specifier);
-  } catch (err) {
-    const parts = specifier.split("/");
-    const pkg = parts.slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
-    const manifest = findUp(root, join("node_modules", pkg, "package.json"));
-    let entry: unknown = manifest && (JSON.parse(await readFile(manifest, "utf8")) as { exports?: Record<string, unknown> }).exports?.[`./${parts.slice(pkg.split("/").length).join("/")}`];
-    while (entry && typeof entry === "object") entry = (entry as Record<string, unknown>).import ?? (entry as Record<string, unknown>).default;
-    if (typeof entry !== "string") throw err;
-    return join(dirname(manifest!), entry);
-  }
-}
-
 /** The dialect's compile side: `<dialect>/compile`, resolved from the project as a bundler would, or the built-in D1. */
 async function loadDialect(root: string, dialect: string | undefined): Promise<SqlDialect> {
   if (dialect === undefined || dialect === d1.name) return d1;
-  let mod: Partial<SqlDialect>;
+  // a package name, never a path: the config must not make generate run a file outside node_modules
+  if (!/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*(\/[a-z0-9-._~]+)*$/.test(dialect) || dialect.split("/").some((p) => p === "." || p === ".."))
+    throw new Error(`${CONFIG} "dialect" must be a package name, such as "${d1.name}"; got ${JSON.stringify(dialect)}.`);
+  let path: string;
   try {
-    mod = await import(pathToFileURL(await resolveImport(root, `${dialect}/compile`)).href) as Partial<SqlDialect>;
+    // the package's exports must give <dialect>/compile a `default` (or `require`) condition, which require.resolve reads
+    path = createRequire(join(root, "package.json")).resolve(`${dialect}/compile`);
   } catch (err) {
-    throw new Error(`${CONFIG} names the dialect ${dialect}, and ${dialect}/compile cannot be loaded (${(err as NodeJS.ErrnoException).code ?? "error"}). Install it; mantle generate never installs packages.`);
+    throw new Error(`${CONFIG} names the dialect ${dialect}, and ${dialect}/compile cannot be found (${(err as NodeJS.ErrnoException).code ?? "error"}). Install it; mantle generate never installs packages.`);
   }
+  const mod = await import(pathToFileURL(path).href) as Partial<SqlDialect>;
   if (mod.name !== dialect || typeof mod.version !== "string" || typeof mod.accepts !== "function")
     throw new Error(`${dialect}/compile is not a dialect's compile side: it must export name "${dialect}", a version string and accepts().`);
   return mod as SqlDialect;

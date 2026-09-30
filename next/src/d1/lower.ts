@@ -2,7 +2,7 @@
 // in SQLite. Casts become the storage encodings, Mantle's functions become FTS5, R*Tree and `_mantle_tz` lookups, and a
 // surviving function prints as a plain call. Runs in the tenant Worker: AST in, AST out, no parser.
 import { SqlRefusal as Refused, intervalMicros, parseNumeric, type SqlNode as N } from '../spec/domain/index.js';
-import { S, num } from '../core/sql/ast.js';
+import { S, num, ref as col, target as res } from '../core/sql/ast.js';
 import type { BindContext } from '../core/sql/compile.js';
 import type { PolicyLowering, LoweringScope } from '../core/sql/policy.js';
 import { runtimeDiagnostic, DiagnosticError } from '../spec/kernel/index.js';
@@ -15,8 +15,6 @@ type BoxBind = { k: 'dialect'; box: 'minLat' | 'maxLat' | 'minLng' | 'maxLng'; l
 
 const fn = (f: string, ...args: N[]): N => ({ FuncCall: { funcname: [S(f)], args, funcformat: 'COERCE_EXPLICIT_CALL' } });
 const cast = (x: N, t: string): N => ({ TypeCast: { arg: x, typeName: { names: [S(t)], typemod: -1 } } });
-const res = (val: N, name?: string): N => ({ ResTarget: name ? { name, val } : { val } });
-const col = (...f: string[]): N => ({ ColumnRef: { fields: f.map(S) } });
 const clone = <T,>(x: T): T => structuredClone(x);
 
 /**
