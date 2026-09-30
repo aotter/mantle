@@ -3,7 +3,8 @@
  * converter, not a second query path. Values never appear in the IR: each becomes a typed `input.vN`, so they
  * are bound and CAST like any input, and the result goes through the same validation and policy.
  */
-import { DiagnosticError, runtimeDiagnostic, type SqlNode as N } from "../../spec/index.js";
+import { DiagnosticError, firstZodIssueAsJsonPointer, jsonSchemaToZod, runtimeDiagnostic, type JsonSchema, type SqlNode as N } from "../../spec/index.js";
+import type { ZodType } from "zod";
 import { encodeInput } from "../sql/codec.js";
 import type { StorageSchema } from "../sql/storage.js";
 import type { StoreScalar, StoreSelect, StoreWhere, StoreWriteOp } from "../store.js";
@@ -11,6 +12,8 @@ import type { StoreScalar, StoreSelect, StoreWhere, StoreWriteOp } from "../stor
 /** A Schema as the Store sees it: `names` maps a lower-cased column to the name its JSON Schema declares. */
 export interface StoreSchema extends StorageSchema {
   readonly names?: Readonly<Record<string, string>>;
+  /** The JSON Schema every written value is checked against. */
+  readonly schema?: JsonSchema;
 }
 export type StoreSchemas = Readonly<Record<string, StoreSchema>>;
 
@@ -38,6 +41,26 @@ const bool = (boolop: string, args: N[]): N => ({ BoolExpr: { boolop, args } });
 const nullTest = (arg: N, t: "IS_NULL" | "IS_NOT_NULL"): N => ({ NullTest: { arg, nulltesttype: t } });
 const target = (val: N, name?: string): N => ({ ResTarget: name ? { name, val } : { val } });
 const SELECT = { limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } as const;
+
+const zods = new WeakMap<StoreSchema, { full: ZodType; partial: ZodType }>();
+
+/**
+ * The values of a write against the Schema's JSON Schema: an insert must be complete, an update checks only what it sets. The scope
+ * field is filled by Store, so it is never required of the caller. ponytail: a `publishing` Schema saves drafts incomplete and
+ * validates on publish, which needs the LifecycleStateMachine wired into Store; until then its writes are checked by the database only.
+ */
+function validateValues(def: StoreSchema, values: Readonly<Record<string, unknown>>, insert: boolean): void {
+  if (!def.schema || def.publishing) return;
+  let z = zods.get(def);
+  if (!z) {
+    const required = (def.schema.required ?? []).filter((f) => f.toLowerCase() !== def.scope);
+    zods.set(def, (z = { full: jsonSchemaToZod({ ...def.schema, required }), partial: jsonSchemaToZod({ ...def.schema, required: [] }) }));
+  }
+  const r = (insert ? z.full : z.partial).safeParse(values);
+  if (r.success) return;
+  const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
+  throw invalid(`The values do not match the Schema${instancePath ? ` at ${instancePath}` : ""}: ${message}`);
+}
 
 /** Builds IR for one or more operations that share one input namespace, so a batch binds each value once. */
 export class StoreJson {
@@ -189,6 +212,7 @@ export class StoreJson {
       : undefined;
     if ("insert" in o) {
       const { name, def } = this.schema(o.insert);
+      validateValues(def, o.values, true);
       const values = { ...o.values, ...(o.id === undefined ? {} : { id: o.id }) };
       const cols = Object.entries(values).map(([k, v]) => ({ c: k === "id" ? { col: "id", type: "text", out: "id" } : this.column(def, k, "values", false), v }));
       if (!cols.length) throw invalid("An insert names at least one column.");
@@ -210,6 +234,7 @@ export class StoreJson {
       const { name, def } = this.schema(o.update);
       const set = Object.entries(o.set);
       if (!set.length) throw invalid("An update sets at least one column.");
+      validateValues(def, o.set, false);
       return { UpdateStmt: { relation: table(name),
         targetList: set.map(([k, v]) => { const c = this.column(def, k, "set", false); return target(v === null ? { A_Const: { isnull: true } } : this.val(c.type, v, `'${c.out}'`), c.col); }),
         whereClause: this.guarded(o.where, def, o.lock), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}) } };

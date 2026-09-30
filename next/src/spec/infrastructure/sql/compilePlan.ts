@@ -52,6 +52,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
       ...(scope ? { scope } : {}),
       ...(m.spec.ttl ? { ttl: m.spec.ttl.field.toLowerCase() } : {}),
       publishing: m.spec.lifecycle === "publishing",
+      schema: m.spec.schema,
       fields: typesOf(m.spec.schema),
       names: Object.fromEntries(Object.keys(props).map((n) => [n.toLowerCase(), n])),
       ...(m.spec.searchableFields?.length ? { search: lower(m.spec.searchableFields) } : {}),
