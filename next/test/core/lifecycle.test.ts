@@ -16,6 +16,30 @@ spec:
     properties: { title: { type: string, minLength: 3 }, body: { type: string } }
 ---
 apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: pages }
+spec:
+  title: Pages
+  lifecycle: publishing
+  schema:
+    type: object
+    required: [slug, headline]
+    properties: { slug: { type: string }, headline: { type: string } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: page-translations }
+spec:
+  title: Page translations
+  lifecycle: publishing
+  localized: true
+  translates: { parent: pages, on: slug }
+  schema:
+    type: object
+    required: [slug, locale, headline]
+    properties: { slug: { type: string }, locale: { type: string }, headline: { type: string } }
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: edit-article }
 spec:
@@ -146,4 +170,17 @@ it("a status change carries no other values, so no edit can hide inside a publis
   const id = await draft({ title: "bundle", body: "b" });
   expect((await failure(store().write([{ update: "articles", set: { status: "published", title: "changed" }, where: { id } }])))?.diagnostic.message).toMatch(/status change carries no other values/);
   expect(await status(id)).toBe("draft");
+});
+
+it("a translation publishes only after its parent (translates)", async () => {
+  const w = async (from: string, values: Record<string, unknown>) => ((await store().write([{ insert: from, values }]))[0] as { id: string }).id;
+  const publish = (from: string, id: string) => store().write([{ update: from, set: { status: "published" }, where: { id } }]);
+  const tr = await w("page-translations", { slug: "about", locale: "zh-TW", headline: "關於" });
+  const orphan = await failure(publish("page-translations", tr));
+  expect(orphan?.diagnostic).toMatchObject({ code: "CONFLICT", message: expect.stringContaining("publish the pages entry with the same slug first") });
+  const parent = await w("pages", { slug: "about", headline: "About" });
+  expect((await failure(publish("page-translations", tr)))?.diagnostic.code).toBe("CONFLICT"); // the parent is still a draft
+  await publish("pages", parent);
+  await publish("page-translations", tr);
+  expect((await store().select({ from: "page-translations", columns: ["status"], where: { id: tr } })).rows).toEqual([{ status: "published" }]);
 });

@@ -3,14 +3,14 @@
  * a View is one read with keyset paging (ADR-0032 decisions 2 and 3, ADR-0034 decision 4). Store and
  * `invokeProcedure` both run through here; nothing else reaches the executor.
  */
-import { DiagnosticError, decideLifecycleWrite, runtimeDiagnostic, type ContentState, type SqlNode as N } from "../../spec/index.js";
+import { DiagnosticError, decideLifecycleWrite, isIdCol, runtimeDiagnostic, type ContentState, type SqlNode as N } from "../../spec/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
 import { S, op, ref } from "./ast.js";
 import { decodeOutput } from "./codec.js";
-import { applyPolicy, isIdCol, HIDDEN_ID, HIDDEN_VERSION, type BindSpec, type Compiled } from "./policy.js";
+import { applyPolicy, HIDDEN_ID, HIDDEN_VERSION, type BindSpec, type Compiled } from "./policy.js";
 
 export interface Program {
   readonly kind: "view" | "procedure";
@@ -21,7 +21,7 @@ export interface Program {
   /** Per statement: the status an update moves the entry to. Only Store sets it; the lifecycle decides whether it is legal. */
   readonly statuses?: readonly (string | undefined)[];
   /** Per statement: called with the entry the lifecycle just read, before the write, to check the result (a publish must leave a complete entry). */
-  readonly checks?: readonly (((current: StoreRow) => void) | undefined)[];
+  readonly checks?: readonly (((current: StoreRow) => void | Promise<void>) | undefined)[];
 }
 
 /** Which (schema, operation) pairs have a lifecycle Trigger, as `schema.insert|update|delete` keys. */
@@ -138,7 +138,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
       const from = row.status as ContentState;
       const d = decideLifecycleWrite({ spec: { lifecycle: "publishing" } }, c.verb === "delete" ? { op: "delete", from } : { op: "update", from, ...(to ? { to } : {}), data: (stmt.UpdateStmt?.targetList?.length ?? 0) > 0 });
       if (!d.allowed) throw new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: `CONFLICT: ${c.schema} entry is ${from}; ${NOT_ALLOWED[d.reason]}.` }));
-      p.checks?.[i]?.(row);
+      await p.checks?.[i]?.(row);
     }
     if (hooked) await lc!.dispatcher.before([event(i, `before_${HOOK[verbOf(c)]}`, c.schema, [row])]);
     versions[i] = row.version;

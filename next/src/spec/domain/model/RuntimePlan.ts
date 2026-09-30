@@ -21,6 +21,8 @@ export interface PlanSchema {
   readonly schema: JsonSchema;
   /** Boolean expressions over the row's own columns, as IR. */
   readonly checks?: readonly SqlNode[];
+  /** A translation publishes only once the parent entry that shares `on` is published (ADR-0010). Names as declared. */
+  readonly translates?: { readonly parent: string; readonly on: string };
   readonly search?: readonly string[];
   readonly unique?: readonly (readonly string[])[];
   readonly indexes?: readonly (readonly string[])[];

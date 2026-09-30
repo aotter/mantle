@@ -98,7 +98,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
         checks: ops.map((o, i) => {
           if (built[i]!.status !== "published" || !("update" in o)) return undefined;
           const def = deps.schemas[o.update.toLowerCase()]!;
-          return (current: StoreRow) => {
+          return async (current: StoreRow) => {
             // the row carries lower-cased columns in the database's encoding; the JSON Schema names them as declared
             const props = def.schema?.properties ?? {};
             const nullable = (name: string) => [props[name]?.type].flat().includes("null");
@@ -111,6 +111,13 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
               else if (v === null && nullable(name)) entry[name] = null; // a NULL is "absent" unless the field says null is a value
             }
             validateValues(def, { ...entry, ...Object.fromEntries(Object.entries(o.set).filter(([k]) => k !== "status")) }, "full");
+            if (def.translates) {
+              const { parent: parentSchema, on } = def.translates;
+              const key = entry[on];
+              const found = key === undefined ? [] : (await make(deps, caller, parent).select({ from: parentSchema, columns: ["status"], where: { [on]: key as string }, limit: 1 })).rows;
+              if (found[0]?.status !== "published")
+                throw new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: `CONFLICT: publish the ${parentSchema} entry with the same ${on} first; a translation publishes only after its parent.` }));
+            }
           };
         }),
       };
