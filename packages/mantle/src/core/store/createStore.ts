@@ -9,7 +9,7 @@ import type { Caller } from "../caller.js";
 import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";
 import type { MantleDialect } from "../dialect.js";
-import type { BindContext, Mode } from "../sql/compile.js";
+import { sqlInput, type BindContext, type Mode } from "../sql/compile.js";
 import { num, op, ref, table } from "../sql/ast.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
@@ -163,7 +163,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");
       const { mode, bind: b } = bindFor(deps.now(), caller);
       const cursor = options.cursor === undefined ? undefined : decodeCursor(`view:${name}`, options.cursor);
-      const page = await runView(env(v.public ? "public" : mode), { kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: options.input ?? {} }), { pageSize: limit, ...(cursor ? { cursor } : {}) });
+      const page = await runView(env(v.public ? "public" : mode), { kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: sqlInput(v.input, options.input) }), { pageSize: limit, ...(cursor ? { cursor } : {}) });
       const decodeView = (row: StoreRow) => Object.fromEntries(Object.entries(row).map(([k, value]) => {
         const c = v.columns && Object.hasOwn(v.columns, k) ? v.columns[k]! : undefined;
         const def = c && deps.schemas[c.schema];

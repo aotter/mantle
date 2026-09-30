@@ -7,6 +7,7 @@ import { RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, jsonSchem
 import type { ZodType } from "zod";
 import { systemCaller } from "../caller.js";
 import { MAX_INVOCATION_DEPTH, type HandlerContext, type Invocation, type InvocationCause, type LifecycleDispatcher, type LifecycleEvent, type MantleHandlers } from "../invocation.js";
+import { sqlInput } from "../sql/compile.js";
 import { runProcedure, type LifecycleHooks, type RunEnv } from "../sql/run.js";
 import { bindFor, createStore } from "../store/createStore.js";
 import type { CallerStore } from "../store.js";
@@ -163,7 +164,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
       } else {
         const { mode, bind } = bindFor(now(), inv.caller);
         const env: RunEnv = { executor, dialect, schemas: plan.schemas, mode, lifecycle };
-        const ran = await runProcedure(env, { kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: input as Record<string, unknown> } });
+        const ran = await runProcedure(env, { kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: sqlInput(proc.input, input) } });
         result = { results: ran.rows };
       }
     } catch (e) {

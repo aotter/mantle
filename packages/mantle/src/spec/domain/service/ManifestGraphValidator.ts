@@ -31,7 +31,7 @@ export function validateManifestGraph(
   diags.push(...checkDuplicates("Procedure", partitioned.procedures, filePaths));
   diags.push(...checkDuplicates("Trigger", partitioned.triggers, filePaths));
   diags.push(...checkSchemaReservedWireNames(partitioned.schemas, filePaths));
-  diags.push(...checkCaseCollisions(partitioned.schemas, filePaths));
+  diags.push(...checkCaseCollisions(partitioned.schemas, [...partitioned.views, ...partitioned.procedures], filePaths));
 
   diags.push(...checkTranslatesReferences(partitioned.schemas, "validate", filePaths));
   diags.push(...checkSchemaNavTargetsGraph(partitioned.schemas, schemasByName, filePaths));
@@ -211,10 +211,10 @@ function checkSchemaReservedWireNames(
 }
 
 /**
- * SQL resolves identifiers case-insensitively (ADR-0034 decision 2) and the plan keys Schemas and fields by their lower-case
- * name, so two names that differ only by case would silently become one table or one column.
+ * SQL resolves identifiers case-insensitively (ADR-0034 decision 2) and the plan keys Schemas, fields and inputs by their lower-case
+ * name, so two names that differ only by case would silently become one table, one column or one input.
  */
-function checkCaseCollisions(schemas: readonly SchemaManifest[], filePaths?: ManifestFilePaths): Diagnostic[] {
+function checkCaseCollisions(schemas: readonly SchemaManifest[], programs: readonly (ViewManifest | ProcedureManifest)[], filePaths?: ManifestFilePaths): Diagnostic[] {
   const out: Diagnostic[] = [];
   const collide = (names: readonly string[], report: (name: string, other: string) => void) => {
     const first = new Map<string, string>();
@@ -232,6 +232,12 @@ function checkCaseCollisions(schemas: readonly SchemaManifest[], filePaths?: Man
     collide(Object.keys(s.spec.schema.properties ?? {}), (name, other) => out.push(validateDiagnostic({
       code: "FIELD_NAME_CASE_COLLISION", severity: "error", path: manifestPath("Schema", s.metadata.name, `/spec/schema/properties/${pointerSegment(name)}`, filePaths), value: name,
       message: `Schema '${s.metadata.name}' declares '${name}' and '${other}', which differ only by case; SQL names them the same column. Rename one.`,
+    })));
+  // `input.itemId` and `input.ItemId` are one name in SQL, so a statement could not tell the two inputs apart
+  for (const m of programs)
+    collide(Object.keys(m.spec.input?.properties ?? {}), (name, other) => out.push(validateDiagnostic({
+      code: "FIELD_NAME_CASE_COLLISION", severity: "error", path: manifestPath(m.kind, m.metadata.name, `/spec/input/properties/${pointerSegment(name)}`, filePaths), value: name,
+      message: `${m.kind} '${m.metadata.name}' declares the inputs '${name}' and '${other}', which differ only by case; SQL names them the same input. Rename one.`,
     })));
   return out;
 }
