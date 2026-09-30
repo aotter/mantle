@@ -1,5 +1,6 @@
-import { makeDiagnostic, redactForWire, type DiagnosticCode } from "../spec/index.js";
-import type { CallerResolver, Surface } from "../core/index.js";
+import { makeDiagnostic, redactForWire, type DiagnosticCode } from "../spec/kernel/index.js";
+import type { CallerResolver } from "./caller.js";
+import type { Surface } from "./service.js";
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 

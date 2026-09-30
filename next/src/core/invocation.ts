@@ -1,5 +1,5 @@
 /** Invocation, the handler contract and the lifecycle port (ADR-0032 decisions 3 and 7, ADR-0034 decision 4). */
-import type { LifecycleHook } from "../spec/index.js";
+import type { LifecycleHook } from "../spec/domain/index.js";
 import type { Caller } from "./caller.js";
 import type { CallerStore, StoreRow } from "./store.js";
 

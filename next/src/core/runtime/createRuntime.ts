@@ -2,10 +2,8 @@
  * `createMantleRuntime`: boots one sealed plan into a running runtime (ADR-0032 decisions 3, 7 and 10).
  * Boot checks the plan, the handlers and the storage; `invokeProcedure` is the one path every source runs through.
  */
-import {
-  DiagnosticError, RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, jsonSchemaToZod, makeDiagnostic, planFingerprint, readJsonPointer,
-  type Diagnostic, type DiagnosticCode, type LifecycleHook, type RuntimePlan,
-} from "../../spec/index.js";
+import { DiagnosticError, makeDiagnostic, readJsonPointer, type Diagnostic, type DiagnosticCode } from "../../spec/kernel/index.js";
+import { RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, jsonSchemaToZod, planFingerprint, type LifecycleHook, type RuntimePlan } from "../../spec/domain/index.js";
 import type { ZodType } from "zod";
 import { systemCaller } from "../caller.js";
 import { MAX_INVOCATION_DEPTH, type HandlerContext, type Invocation, type InvocationCause, type LifecycleDispatcher, type LifecycleEvent, type MantleHandlers } from "../invocation.js";

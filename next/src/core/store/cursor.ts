@@ -1,5 +1,5 @@
 /** The one cursor format (ADR-0032 decision 1): opaque, versioned, bound to the query it came from. */
-import { DiagnosticError, runtimeDiagnostic } from "../../spec/index.js";
+import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
 
 const PREFIX = "v1.";
 const bad = () => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: "The cursor does not belong to this query." }));

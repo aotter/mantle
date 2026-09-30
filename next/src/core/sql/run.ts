@@ -3,7 +3,8 @@
  * a View is one read with keyset paging (ADR-0032 decisions 2 and 3, ADR-0034 decision 4). Store and
  * `invokeProcedure` both run through here; nothing else reaches the executor.
  */
-import { DiagnosticError, decideLifecycleWrite, isIdCol, pinnedTarget, runtimeDiagnostic, type ContentState, type SqlNode as N } from "../../spec/index.js";
+import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
+import { decideLifecycleWrite, isIdCol, pinnedTarget, type ContentState, type SqlNode as N } from "../../spec/domain/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";

@@ -3,7 +3,7 @@
  * each HTTP Trigger is its own method and path (which the grammar requires to start with `/api/`), with path params
  * bound to the Procedure's input.
  */
-import type { JsonSchema } from "../spec/index.js";
+import type { JsonSchema } from "../spec/domain/index.js";
 import type { MantleRuntime, Surface } from "../core/index.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
 

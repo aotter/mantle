@@ -4,7 +4,7 @@
  * "no credential presented" is anonymous. The role is read fresh on every request so a revoked staff role cannot linger in a
  * session snapshot.
  */
-import { STAFF_ROLES, type StaffRole } from "../spec/index.js";
+import { STAFF_ROLES, type StaffRole } from "../spec/domain/index.js";
 import type { OAuthAccessTokenVerification } from "./createMantleAuth.js";
 import type { Caller, CallerResolver, CredentialKind } from "../core/index.js";
 

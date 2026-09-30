@@ -1,5 +1,6 @@
 /** The MantleStorageAdapter of the SQLite family: converge storage to the plan, then run on one driver (ADR-0033, ADR-0034 decision 6). */
-import { DiagnosticError, makeDiagnostic, type SiteDefaults } from "../../spec/index.js";
+import { DiagnosticError, makeDiagnostic } from "../../spec/kernel/index.js";
+import type { SiteDefaults } from "../../spec/domain/index.js";
 import type { DatabaseDriver } from "../driver.js";
 import type { MantleStorageAdapter } from "../service.js";
 import { SqliteStoreExecutor } from "./executor.js";

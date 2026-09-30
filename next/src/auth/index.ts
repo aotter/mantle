@@ -1,5 +1,4 @@
 export * from "./callerResolver.js";
-export * from "./withCaller.js";
 export * from "./createAuthRoutes.js";
 export * from "./createMantleAuth.js";
 export { ConsoleEmailSender } from "./ConsoleEmailSender.js";

@@ -2,7 +2,8 @@
  * The media use cases over `media_assets` and `pending_media_uploads`. Optimization runs where the bytes are made (the agent,
  * the SPA); the Worker only enforces the purpose's policy and never transforms bytes. Times are milliseconds, as in 0.1.x rows.
  */
-import { DiagnosticError, expandPolicyRequired, makeDiagnostic, type Diagnostic, type DiagnosticCode, type MediaPurposePolicy } from "../../spec/index.js";
+import { DiagnosticError, makeDiagnostic, type Diagnostic, type DiagnosticCode } from "../../spec/kernel/index.js";
+import { expandPolicyRequired, type MediaPurposePolicy } from "../../spec/domain/index.js";
 import type { DatabaseDriver } from "../driver.js";
 import type { MediaAsset, MediaLibrary, MediaStorage, MediaVariantRole } from "../site.js";
 

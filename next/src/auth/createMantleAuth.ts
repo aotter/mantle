@@ -43,7 +43,7 @@ import { dbOf } from "./db.js";
 import type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, StaffUserInfo } from "../admin/identity.js";
 export type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, MemberUserInfo, StaffUserInfo } from "../admin/identity.js";
 import { signInCodeEmail, signInLinkEmail, staffInvitationEmail } from "./emailTemplates.js";
-import { STAFF_ROLES, type StaffRole } from "../spec/index.js";
+import { STAFF_ROLES, type StaffRole } from "../spec/domain/index.js";
 
 // Better Auth 1.7.2 initializes its shared stores asynchronously. Seed them
 // before any request can be canceled; the accessor-identity regression test
