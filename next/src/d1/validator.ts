@@ -57,7 +57,7 @@ export const FUNCS = new Set([
  
   'json_extract', 'json_set', 'json_insert', 'json_remove', 'json_array_length',
   'now', 'auth.uid', 'auth.role', 'date_trunc', 'extract', 'like_escape',
-  'search', 'search_rank', 'near', 'distance',
+  'mantle.search', 'mantle.search_rank', 'mantle.near', 'mantle.distance',
 ]);
 const WINDOW = new Set(['row_number', 'rank', 'sum', 'count']);
 const AGG = new Set(['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object']);
@@ -144,7 +144,7 @@ function knownColumns(stmts: N[], ctx: Ctx): Set<string> {
   for (const s of Object.values(ctx.schemas))
     for (const [f, t] of Object.entries(s.fields)) (t === 'geo' ? [f, `${f}_lat`, `${f}_lng`] : [f]).forEach((c) => known.add(c));
   for (const r of find(stmts, 'ResTarget')) if (r.name) known.add(String(r.name).toLowerCase());
-  for (const r of find(stmts, 'RangeVar')) [r.relname, r.alias?.aliasname].forEach((a) => a && known.add(a.toLowerCase())); // search(<alias>, ...) names a relation
+  for (const r of find(stmts, 'RangeVar')) [r.relname, r.alias?.aliasname].forEach((a) => a && known.add(a.toLowerCase())); // mantle.search(<alias>, ...) names a relation
   return known;
 }
 
@@ -232,18 +232,18 @@ const check: Record<string, Checker> = {
       case 'date_trunc': if (args.length !== 2 || !TRUNC_UNITS.has(str(args[0]) ?? '')) no('SQL_TYPE', `date_trunc takes ${[...TRUNC_UNITS].join(', ')} as a literal first argument`, at); break;
       case 'extract': if (args.length !== 2 || !EXTRACT_FIELDS.has(str(args[0]) ?? '')) no('SQL_TYPE', `extract takes ${[...EXTRACT_FIELDS].join(', ')}`, at); break;
       case 'now': case 'auth.uid': case 'auth.role': if (args.length) no('SQL_FUNCTION', `${f}() takes no arguments`, at); break;
-      case 'search': case 'search_rank':
-        if (args.length !== (f === 'search' ? 2 : 1) || args[0]?.ColumnRef?.fields?.length !== 1) no('SQL_FUNCTION', f === 'search' ? 'search(<alias>, <query>)' : 'search_rank(<alias>)', at);
+      case 'mantle.search': case 'mantle.search_rank':
+        if (args.length !== (f === 'mantle.search' ? 2 : 1) || args[0]?.ColumnRef?.fields?.length !== 1) no('SQL_FUNCTION', f === 'mantle.search' ? 'mantle.search(<alias>, <query>)' : 'mantle.search_rank(<alias>)', at);
         break;
-      case 'near': case 'distance': {
-        const want = f === 'near' ? 4 : 3;
+      case 'mantle.near': case 'mantle.distance': {
+        const want = f === 'mantle.near' ? 4 : 3;
         const fld = args[0]?.ColumnRef?.fields;
-        if (args.length !== want || fld?.length !== 2) no('SQL_FUNCTION', `${f}(<alias>.<geo field>, lat, lng${f === 'near' ? ', meters' : ''})`, at);
+        if (args.length !== want || fld?.length !== 2) no('SQL_FUNCTION', `${f}(<alias>.<geo field>, lat, lng${f === 'mantle.near' ? ', meters' : ''})`, at);
         for (const a of args.slice(1, 3)) if (!isConst(a) && !isInputRef(a)) no('SQL_FUNCTION', `${f}: latitude and longitude are a literal or input.<name>`, at);
-        if (f === 'near') {
+        if (f === 'mantle.near') {
           const m = args[3]?.A_Const?.ival?.ival ?? args[3]?.A_Const?.fval?.fval;
-          if (m === undefined) no('SQL_FUNCTION', 'near() needs a literal radius in meters', at);
-          if (Number(m) > MAX_RADIUS_M || Number(m) <= 0) no('SQL_FUNCTION', `near() radius is at most ${MAX_RADIUS_M} m`, at);
+          if (m === undefined) no('SQL_FUNCTION', 'mantle.near() needs a literal radius in meters', at);
+          if (Number(m) > MAX_RADIUS_M || Number(m) <= 0) no('SQL_FUNCTION', `mantle.near() radius is at most ${MAX_RADIUS_M} m`, at);
         }
         break;
       }
@@ -299,11 +299,11 @@ const check: Record<string, Checker> = {
     if (n.distinctClause && n.sortClause) no('SQL_SHAPE', 'DISTINCT with ORDER BY is refused: the appended id key would change what is distinct', at);
     if (n.valuesLists && (path.at(-2) !== 'InsertStmt' || n.valuesLists.length !== 1)) no('SQL_SHAPE', 'VALUES is one row, in INSERT only', firstLoc(n.valuesLists) ?? at);
     if ((n.fromClause ?? []).slice(1).some((f: N) => !f.RangeFunction)) no('SQL_SHAPE', 'a comma join is refused (except json_each)', at);
-    // near()/distance(): a query ordered by distance() needs a LIMIT of at most MAX_NEAR_K
+    // mantle.near()/mantle.distance(): a query ordered by mantle.distance() needs a LIMIT of at most MAX_NEAR_K
     const byDistance = JSON.stringify(n.sortClause ?? []).includes('"distance"');
     if (byDistance) {
       const k = n.limitCount?.A_Const?.ival?.ival;
-      if (k === undefined || k > MAX_NEAR_K) no('SQL_SHAPE', `a query ordered by distance() needs a literal LIMIT of at most ${MAX_NEAR_K}`, firstLoc(n.sortClause) ?? at);
+      if (k === undefined || k > MAX_NEAR_K) no('SQL_SHAPE', `a query ordered by mantle.distance() needs a literal LIMIT of at most ${MAX_NEAR_K}`, firstLoc(n.sortClause) ?? at);
     }
   },
   UpdateStmt: (n, ctx) => writeList(n.targetList, ctx, n.relation, false),

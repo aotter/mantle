@@ -34,6 +34,7 @@ const REFUSED: Refusal[] = [
   ["SELECT id FROM items WHERE id = $1", "SQL_UNSUPPORTED", "$1", /ParamRef/],
   ["CREATE TABLE t (a int)", "SQL_UNSUPPORTED", undefined, /CreateStmt/],
   ["SELECT sqlite_version()", "SQL_FUNCTION", "sqlite_version"],
+  ["SELECT id FROM posts p WHERE search(p, 'q')", "SQL_FUNCTION", "search", /search is not on the allowlist/], // ADR-0035: only mantle.search is Mantle's
   ["SELECT id FROM items WHERE name = like_escape('a', '!')", "SQL_FUNCTION", undefined, /ESCAPE of a LIKE/],
   ["SELECT id FROM _mantle_tz", "SQL_RELATION", "_mantle_tz"],
   ["SELECT id FROM items WHERE owner = 'o2'", "SQL_COLUMN", "owner", /scope column/],
@@ -85,7 +86,7 @@ describe("compileSql", () => {
       "SELECT CAST('5' AS int), CAST(7 AS int), round(stock) FROM items",
       "SELECT id FROM events WHERE at > now() - interval '36 hours' ORDER BY id",
       "SELECT id FROM items WHERE name LIKE 'a!%' ESCAPE '!' ORDER BY id",
-      "SELECT p.id FROM posts p WHERE search(p, 'q') ORDER BY search_rank(p) LIMIT 5",
+      "SELECT p.id FROM posts p WHERE mantle.search(p, 'q') ORDER BY mantle.search_rank(p) LIMIT 5",
     ].map((sql) => ({ kind: "view" as Kind, sql }));
     for (const c of [...corpus, ...extra]) {
       const res = await compileSql(c.sql, ctxOf(c.kind, c.inputs));
