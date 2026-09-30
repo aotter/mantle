@@ -202,6 +202,9 @@ export interface SchemaManifestSpec {
   /** Admin-only presentation. Closed Schema roots: `fields`, `list`,
    *  `nav`. Optional. */
   readonly uiSchema?: Record<string, unknown>;
+  /** Boolean SQL expressions over this Schema's own columns, enforced by triggers on every insert and update
+   *  (ADR-0034). No subqueries. Example: `stock >= 0`. */
+  readonly checks?: readonly string[];
   /** Composite unique-index declarations, e.g. `[[slug, locale]]`. */
   readonly uniqueIndexes?: ReadonlyArray<ReadonlyArray<string>>;
   /** Ordered composite non-unique indexes over top-level scalar fields. */

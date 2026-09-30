@@ -1,5 +1,5 @@
 /** The application-owned service, the runtime and `createMantle` (ADR-0032 decisions 4, 6, 9 and 10). */
-import type { CompiledPlan } from "../spec/index.js";
+import type { RuntimePlan } from "../spec/index.js";
 import type { Caller } from "./caller.js";
 import type { Invocation, MantleHandlers } from "./invocation.js";
 import type { MantleStore, StoreExecutor } from "./store.js";
@@ -7,11 +7,8 @@ import type { MantleStore, StoreExecutor } from "./store.js";
 /** A surface is a Fetch function, created with its base path (`createMcpSurface(runtime, { basePath })`). */
 export type Surface = (request: Request, caller: Caller) => Promise<Response>;
 
-/** The sealed plan (version 6): the compiled IR plus its SHA-256 fingerprint. Manifest-derived fields land in step 3. */
-export interface RuntimePlan extends CompiledPlan {
-  readonly version: 6;
-  readonly fingerprint: string;
-}
+/** The sealed plan (version 6), compiled by the CLI: see `RuntimePlan` in spec. */
+export type { RuntimePlan };
 
 export interface MantleBootReport {
   readonly fingerprint: string;

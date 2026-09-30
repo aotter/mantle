@@ -16,6 +16,8 @@ export interface StorageSchema extends SqlSchemaDef {
   readonly search?: readonly string[];
   /** Unique constraints; on a scoped Schema the scope column is added. */
   readonly unique?: readonly (readonly string[])[];
+  /** Ordered composite non-unique indexes. */
+  readonly indexes?: readonly (readonly string[])[];
 }
 
 export interface StorageChange {
@@ -84,8 +86,8 @@ function desired(name: string, s: StorageSchema): Desired {
   ];
   const indexes = [
     ...(s.scope ? [{ name: `_mantle_scope_${name}`, unique: false, columns: [s.scope] }] : []),
-
     ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })), // the grammar already starts a scoped unique index with the scope
+    ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: cols })),
   ].map((i) => ({ ...i, sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX ${q(i.name)} ON ${t} (${i.columns.map(q).join(", ")})` }));
 
   const triggers: { name: string; sql: string }[] = [];

@@ -40,8 +40,23 @@ describe("compilePlan", () => {
     const res = await compile(fixture);
     if (!res.ok) throw new Error(JSON.stringify(res.diagnostics));
     expect(Object.keys(res.plan.views)).toEqual(["open-orders"]);
-    expect(Object.keys(res.plan.procedures)).toEqual(["cancel-order"]);
     expect(res.plan.views["open-orders"]).toMatchObject({ grammar: PG_GRAMMAR, stmts: [{ SelectStmt: expect.any(Object) }] });
+    expect(res.plan.procedures["cancel-order"]!.handler).toMatchObject({ sql: { grammar: PG_GRAMMAR } });
+    expect(res.plan).toMatchObject({ version: 6, fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) });
+  });
+
+  it("carries Schema checks as IR, and the fingerprint follows the plan", async () => {
+    const withCheck = (c: string) => SCHEMA.replace("  lifecycle: operational", `  lifecycle: operational\n  checks: ["${c}"]`);
+    const a = await compile(withCheck("length(body) > 0"));
+    const same = await compile(withCheck("length(body) > 0"));
+    const other = await compile(withCheck("length(body) > 1"));
+    if (!a.ok || !same.ok || !other.ok) throw new Error("did not compile");
+    expect(a.plan.schemas["notes"]!.checks).toHaveLength(1);
+    expect(a.plan.schemas["notes"]!.checks![0]).toHaveProperty("A_Expr");
+    expect([a.plan.fingerprint === same.plan.fingerprint, a.plan.fingerprint === other.plan.fingerprint]).toEqual([true, false]);
+    const sub = await compile(withCheck("body IN (SELECT body FROM notes)"));
+    if (sub.ok) throw new Error("accepted a subquery in a check");
+    expect(sub.diagnostics[0]).toMatchObject({ code: "SQL_SHAPE", source: { path: "/spec/checks/0" } });
   });
 
   // ponytail: one row per way the context reaches the SQL compiler; the dialect itself is tested in sql-compile.
@@ -71,5 +86,17 @@ describe("compilePlan", () => {
     const res = await compile(SCHEMA.replace("/v2", "/v1"));
     if (res.ok) throw new Error("accepted");
     expect(res.diagnostics[0]?.message).toContain("mantle-update");
+  });
+
+  it("refuses an inline program as a lifecycle hook target (it would write inside a before hook)", async () => {
+    const trigger = `---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: audit }
+spec: { source: { kind: lifecycle, schema: notes, on: [before_update] }, target: { procedure: p } }
+`;
+    const res = await compile(SCHEMA + procedure("INSERT INTO notes (body) VALUES (input.text)") + trigger);
+    if (res.ok) throw new Error("accepted an inline hook target");
+    expect(res.diagnostics[0]).toMatchObject({ code: "LIFECYCLE_TARGET_NOT_REF" });
   });
 });
