@@ -26,7 +26,8 @@ export function withCaller(resolve: CallerResolver, surface: Surface, options: W
       if (r.caller.kind === "user" && r.caller.credential === "session" && !SAFE.has(request.method)) {
         const site = request.headers.get("sec-fetch-site");
         const origin = request.headers.get("origin");
-        if ((site && site !== "same-origin" && site !== "none") || (origin && origin !== new URL(request.url).origin))
+        // neither header is what Better Auth refuses too: every browser sends one of them on a mutation
+        if ((!site && !origin) || (site && site !== "same-origin" && site !== "none") || (origin && origin !== new URL(request.url).origin))
           return refuse(403, "AUTH_DENIED", "Cross-origin session mutation rejected.", "request:origin");
       }
       return surface(request, r.caller);

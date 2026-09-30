@@ -3,7 +3,7 @@
  * Every API route needs a staff caller. Reads and runs go through `store.as(caller)` and `invokeProcedure`, so Admin sees what the
  * caller's scope sees and nothing wider. Routes of an `AdminIdentity` facet that is absent do not exist.
  */
-import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, makeDiagnostic, meetsRole, redactForWire, resolveMantleRef, type JsonSchema, type PlanSchema, type StaffRole } from "../spec/index.js";
+import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, makeDiagnostic, meetsRole, redactForWire, resolveMantleRef, type JsonSchema, type McpTool, type PlanSchema, type StaffRole } from "../spec/index.js";
 import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
 import { siteConfigOf } from "../core/sql/site.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
@@ -22,6 +22,11 @@ export interface AdminSurfaceOptions {
   readonly site?: { readonly mcpEndpoints?: { readonly public: string | null; readonly staff: string | null } };
   /** Media objects; the media routes also need `runtime.site`, which owns the tables, and answer 501 without either. */
   readonly media?: MediaStorage;
+  /**
+   * The staff MCP surface, answered at `{basePath}/api/mcp` behind Admin's session gate: `createMcpSurface(runtime, { basePath:
+   * `${basePath}/api/mcp`, surface: "staff" })`. With it, `/webmcp` publishes the tools it registered; without it, neither route exists.
+   */
+  readonly staffMcp?: Surface & { readonly tools: readonly McpTool[] };
 }
 
 type Staff = Extract<Caller, { kind: "user" }> & { readonly role: StaffRole };
@@ -171,6 +176,40 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     return { userId: caller.subject, role: caller.role, login: u ? u.githubLogin || u.name || u.email || null : null, image: u?.image ?? null };
   };
 
+  // the tools the staff MCP surface registered, and each tool's page: a Procedure's target Schema, or the View
+  const staffTools = options.staffMcp?.tools ?? [];
+  const webmcp = options.staffMcp ? {
+    tools: staffTools.map(({ name, title, description, inputSchema, outputSchema, annotations }) => ({ name, ...(title ? { title } : {}), description, inputSchema, ...(outputSchema ? { outputSchema } : {}), ...(annotations ? { annotations } : {}) })),
+    routes: Object.fromEntries(staffTools.flatMap((t) => {
+      if (t.kind === "view") return [[t.name, { path: `${base}/views/${encodeURIComponent(t.source)}` }]];
+      const target = plan.procedures[t.source]!.target;
+      return target ? [[t.name, { path: `${base}/c/${encodeURIComponent(plan.schemas[target.schema.toLowerCase()]?.name ?? target.schema)}`, entry: true }]] : [];
+    })),
+  } : null;
+  // the program as the plan holds it: Views and inline Procedures are IR, which the console draws (ADR-0034); no run is observed (G7)
+  const developerConsole = {
+    dataModel: {
+      schemas: schemas.map((s) => ({
+        name: s.name, title: s.title ?? s.name, lifecycle: s.publishing ? "publishing" : "operational", localized: s.localized === true, translates: s.translates ?? null,
+        scope: s.scope ?? null, schema: s.schema, uniqueIndexes: s.unique ?? [], indexes: s.indexes ?? [], searchableFields: s.search ?? [],
+      })),
+      views: Object.entries(plan.views).filter(([, v]) => v.surface !== "internal").map(([name, v]) => ({
+        name, title: v.title ?? null, surface: v.surface, input: v.input ?? null, requires: v.requires ?? null, sql: { grammar: v.grammar, stmts: v.stmts },
+      })),
+    },
+    logic: {
+      procedures: Object.entries(plan.procedures).map(([name, p]) => ({
+        name, title: p.title ?? null, description: p.description ?? null, input: p.input, output: p.output, requires: p.requires ?? null, target: p.target ?? null, handler: p.handler,
+      })),
+      triggers: Object.entries(plan.triggers).map(([name, t]) => ({ name, procedure: t.procedure, source: t.source })),
+    },
+    operations: {
+      schedules: Object.entries(plan.triggers).flatMap(([id, { procedure, source }]) => (source.kind === "schedule" ? [{ id, procedure, cron: source.cron, enabled: source.enabled ?? true, registration: "not-observed" }] : [])),
+      ttlPolicies: schemas.filter((s) => s.ttl).map((s) => ({ schema: s.name, field: s.names[s.ttl!] ?? s.ttl, seconds: s.ttlSeconds ?? null, sweepObservation: "unavailable" })),
+      observationAvailability: "unavailable", runs: [], latestRuns: [],
+    },
+  };
+
   // ---- entries: every read and write is the caller's own Store, so a scoped Schema shows the caller's rows only (G2b)
   const schemaOf = (name: unknown) => {
     if (typeof name !== "string" || !name) throw bad("a `collection` naming a Schema is required");
@@ -305,12 +344,20 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     { method: "GET", path: "/me", role: "contributor", run: ({ caller }) => me(caller) },
     {
       method: "GET", path: "/bootstrap", role: "contributor", run: async ({ caller, url, url: { searchParams: q } }) => ({
-        me: await me(caller), site: await site(url), collections, operations: operations(caller), views: views(caller),
+        me: await me(caller), site: await site(url), collections, operations: operations(caller), views: views(caller), webmcp,
         // the first page of the collection the SPA opens on
         ...(q.get("collection") ? { entries: await list(caller, q) } : {}),
       }),
     },
     { method: "GET", path: "/collections", role: "contributor", run: async () => ({ collections }) },
+    {
+      // creation statistics are an optional storage capability that 0.2.0 storage does not have (G7); the SPA hides the card on 501
+      method: "GET", path: "/collections/{name}/statistics", role: "contributor", run: async ({ params: { name } }) => {
+        schemaOf(name);
+        return json({ error: { code: "STATISTICS_UNAVAILABLE", message: "Statistics are unavailable for this storage adapter." } }, 501, NO_STORE);
+      },
+    },
+    { method: "GET", path: "/developer-console", role: "owner", run: async () => developerConsole },
     { method: "GET", path: "/site", role: "contributor", run: ({ url }) => site(url) },
     // the bytes go straight to the bucket: create, PUT each variant to its uploadUrl, commit
     { method: "POST", path: "/media/uploads", role: "editor", run: async ({ request }) => media().createUpload(await readJsonObject(request, P)) },
@@ -422,6 +469,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       },
     },
   );
+  if (webmcp) routes.push({ method: "GET", path: "/webmcp", role: "contributor", run: async () => webmcp });
   if (directory) routes.push(
     { method: "GET", path: "/staff", role: "owner", run: async () => ({ users: (await directory.listUsers()).map(staffInfo) }) },
     {
@@ -475,6 +523,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     // Admin acts as the person: a token or key minted for something narrower (an MCP client, a script) is not a sign-in
     if (caller.credential !== "session") throw wireError("AUTH_DENIED", "Admin needs a signed-in session.", P);
     const staff = caller as Staff;
+    // any method: the MCP transport answers GET and DELETE itself
+    if (options.staffMcp && url.pathname.replace(/\/+$/, "") === `${base}/api/mcp`) return options.staffMcp(request, staff);
     for (const route of routes) {
       const params = route.method === request.method ? match(`${base}/api${route.path}`, url.pathname) : null;
       if (!params) continue;

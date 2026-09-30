@@ -3,9 +3,9 @@
  * Trigger) and Views, never from a Schema. A Procedure's tool is `invokeProcedure`; a View's tool is `store.as(caller).view`, so both
  * run the same auth, guard and validation as every other source.
  */
-import { McpServer, createMcpHandler, fromJsonSchema, isJsonContentType, readRequestBody, type AuthInfo, type CallToolResult, type JsonSchemaType, type JsonSchemaValidator, type StandardSchemaWithJSON, type ToolAnnotations, type jsonSchemaValidator } from "@modelcontextprotocol/server";
+import { McpServer, createMcpHandler, fromJsonSchema, isJsonContentType, readRequestBody, type AuthInfo, type CallToolResult, type JsonSchemaType, type JsonSchemaValidator, type StandardSchemaWithJSON, type jsonSchemaValidator } from "@modelcontextprotocol/server";
 import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from "@modelcontextprotocol/ext-apps/server";
-import { DiagnosticError, makeDiagnostic, mcpToolNameSegment, redactForWire, resolveLocalizedText, type AuthPredicate, type AuthorizationRequirements, type Diagnostic, type JsonSchema, type LocalizedText, type PlanProcedure, type PlanView } from "../spec/index.js";
+import { DiagnosticError, makeDiagnostic, mcpTools, redactForWire, type AuthPredicate, type AuthorizationRequirements, type Diagnostic, type JsonSchema, type McpTool } from "../spec/index.js";
 import { evaluateAuthAll, type Caller, type MantleRuntime, type Surface } from "../core/index.js";
 import { appHtml, appMeta, clientUiSupport, linkApps, type ClientUiSupport, type McpApps } from "./apps.js";
 
@@ -24,18 +24,6 @@ export interface McpSurfaceOptions {
   readonly locale?: string;
 }
 
-interface Tool {
-  readonly name: string;
-  readonly kind: "procedure" | "view";
-  readonly source: string;
-  readonly title?: string;
-  readonly description: string;
-  readonly inputSchema: JsonSchema;
-  readonly outputSchema?: JsonSchema;
-  readonly annotations?: ToolAnnotations;
-  readonly requires: AuthorizationRequirements | undefined;
-}
-
 const CONTEXT_KEY = "mantle.caller";
 const UI_KEY = "mantle.clientUi";
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -43,40 +31,6 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 /** The SDK advertises each schema and accepts the value as given: the runtime validates once, so every source reports the same Diagnostic. */
 const PASS_THROUGH: jsonSchemaValidator = { getValidator<T>(): JsonSchemaValidator<T> { return (input) => ({ valid: true, data: input as T, errorMessage: undefined }); } };
 const schemaOf = (s: JsonSchema) => fromJsonSchema(s as JsonSchemaType, PASS_THROUGH) as StandardSchemaWithJSON;
-
-function toolsOf(runtime: MantleRuntime, surface: "public" | "staff", locale: string): Tool[] {
-  const { plan } = runtime;
-  const text = (t: LocalizedText | undefined) => resolveLocalizedText(t, locale, "en") ?? undefined;
-  const tools = new Map<string, Tool>();
-  const add = (tool: Tool) => {
-    const prior = tools.get(tool.name);
-    if (prior && (prior.kind !== tool.kind || prior.source !== tool.source)) throw new TypeError(`MCP tool '${tool.name}' comes from both '${prior.source}' and '${tool.source}'.`);
-    tools.set(tool.name, tool);
-  };
-  const procedure = (name: string, p: PlanProcedure) => {
-    const title = text(p.title);
-    add({
-      name: mcpToolNameSegment(name), kind: "procedure", source: name, ...(title ? { title } : {}),
-      description: text(p.description) ?? title ?? name, inputSchema: p.input,
-      // structuredContent must be an object
-      ...(p.output.type === "object" ? { outputSchema: p.output } : {}),
-      ...(p.mcp ? { annotations: p.mcp } : {}), requires: p.requires,
-    });
-  };
-  for (const t of Object.values(plan.triggers)) if (t.source.kind === "mcp" && t.source.surface === surface) procedure(t.procedure, plan.procedures[t.procedure]!);
-  for (const [name, v] of Object.entries(plan.views)) {
-    if (v.surface !== surface) continue;
-    const props = (v.input?.properties ?? {}) as Record<string, JsonSchema>;
-    if ("limit" in props || "cursor" in props) throw new TypeError(`View '${name}' declares an input named limit or cursor; the MCP tool reserves both for paging.`);
-    const title = text(v.title);
-    add({
-      name: mcpToolNameSegment(name), kind: "view", source: name, ...(title ? { title } : {}), description: text(v.description) ?? title ?? name,
-      inputSchema: { type: "object", properties: { ...props, limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: { type: "string" } }, ...(v.input?.required ? { required: v.input.required } : {}) } as JsonSchema,
-      annotations: { readOnlyHint: true }, requires: v.requires,
-    });
-  }
-  return [...tools.values()];
-}
 
 const scopesOf = (r: AuthorizationRequirements | undefined) => (r?.auth?.all ?? []).flatMap((p: AuthPredicate) => (typeof p === "object" && "ctx.auth.scope" in p ? [p["ctx.auth.scope"]] : []));
 
@@ -87,10 +41,13 @@ const failure = (d: Diagnostic, hasOutputSchema: boolean): CallToolResult => {
   return { isError: true, content: [{ type: "text", text: JSON.stringify(payload) }], ...(hasOutputSchema ? {} : { structuredContent: payload }) };
 };
 
-export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOptions): Surface {
+/** The surface and the tools it registers for a client without MCP Apps, in its locale: what Admin's `/webmcp` publishes. */
+export type McpSurface = Surface & { readonly tools: readonly McpTool[] };
+
+export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOptions): McpSurface {
   const base = options.basePath.replace(/\/+$/, "") || "/";
   const maxBody = options.maxRequestBodySize ?? 1024 * 1024;
-  const tools = toolsOf(runtime, options.surface, options.locale ?? "en");
+  const tools = mcpTools(runtime.plan, options.surface, options.locale ?? "en");
   const byName = new Map(tools.map((t) => [t.name, t]));
   const apps = linkApps(options.apps, new Set(tools.map((t) => t.name)), new Set(tools.filter((t) => t.kind === "view").map((t) => t.name)));
   const serverInfo = { name: "aotter.mantle", version: "0.2.0", ...options.serverInfo };
@@ -141,7 +98,7 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     return build(c ?? { kind: "anonymous" }, ui === "supported" || ui === "unsupported" ? ui : "unknown");
   }, { legacy: "stateless", maxRequestBodySize: maxBody, maxSubscriptions: 32, onerror: (e) => console.error("[mantle mcp] request failed", e) });
 
-  return async (request, caller) => {
+  const surface: Surface = async (request, caller) => {
     const url = new URL(request.url);
     if ((url.pathname.replace(/\/+$/, "") || "/") !== base) return Response.json({ error: { code: "NOT_FOUND", message: "no such route" } }, { status: 404 });
     if (caller.kind !== "user" && caller.kind !== "anonymous") return challenge(403, undefined, true);
@@ -176,4 +133,5 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     }
     return sdk.fetch(request, { authInfo, parsedBody: message });
   };
+  return Object.assign(surface, { tools: tools.filter((t) => registers(t.name, "unsupported")) });
 }
