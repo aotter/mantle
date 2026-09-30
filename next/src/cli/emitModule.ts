@@ -2,66 +2,51 @@
  * `.mantle/generated/mantle.ts` (ADR-0032 amendment "mantle generate"): the plan from `plan.json`, the `emit-types`
  * namespace, and a typed Store and `MantleHandlers` over exactly this plan. Types only, apart from the `plan` import.
  */
-import { emitTypesFromManifests, manifestTypeIdentifier, type LinkedManifestSet, type PlanSchema, type PlanView, type RuntimePlan } from "../spec/index.js";
+import { emitTypesFromManifests, manifestTypeIdentifier, viewOutputs, type LinkedManifestSet, type PlanSchema, type PlanView, type RuntimePlan } from "../spec/index.js";
 
 const NS = "Mantle";
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const key = (s: string) => JSON.stringify(s);
 
-/** What `SELECT *` expands to (policy's `starCols`): the declared fields but the scope field, a geo field as its two columns. */
-const starCols = (s: PlanSchema) => Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, t]) => (t === "geo" ? [`${f}_lat`, `${f}_lng`] : [f]));
+/**
+ * A View row, read off the compiled SELECT (`viewOutputs`): an output that is a Schema field read unchanged comes back decoded
+ * and under the declared name, so it takes that field's type; any other output is `unknown`. Undefined (the row stays
+ * `unknown`) when an output has no name, or a `*` reads a subquery or `json_each`.
+ */
+function viewRow(view: PlanView, schemas: RuntimePlan["schemas"]): string | undefined {
+  const { keys, columns } = viewOutputs(view, schemas);
+  if (!keys) return undefined;
+  const fields = keys.map((k) => {
+    const c = Object.hasOwn(columns, k) ? columns[k] : undefined;
+    const s = c && schemas[c.schema]!;
+    const declared = s ? s.names[c.field] ?? c.field : undefined;
+    return s ? `readonly ${key(k === c.field ? declared! : k)}: NonNullable<Entry_${manifestTypeIdentifier(s.name)}[${key(declared!)}]> | null;` : `readonly ${key(k)}: unknown;`;
+  });
+  return `{ ${fields.join(" ")} }`;
+}
 
 /**
- * A View row's keys, read off the compiled SELECT: an output's `AS` name, else its column's name, and `*` as the Schema's
- * declared fields. Values stay `unknown`: `store.view` returns the storage encoding (lower-case keys, 0/1 booleans, JSON
- * text, microsecond timestamps), not the Schema's JSON shape. Undefined (the row stays `unknown`) when an output has
- * no name, or a `*` reads a subquery or `json_each`.
+ * `values` of an insert: what the Schema requires, defaults optional, and never the scope field, which Store fills. An insert
+ * into a publishing Schema is a draft, so everything is optional there.
  */
-function viewRowKeys(view: PlanView, schemas: RuntimePlan["schemas"]): string[] | undefined {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sel: any = view.stmts[0]?.SelectStmt;
-  if (!sel?.targetList) return undefined;
-  const rels = new Map<string, PlanSchema | undefined>();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const walk = (n: any): void => {
-    if (n.JoinExpr) return (walk(n.JoinExpr.larg), walk(n.JoinExpr.rarg));
-    const v = n.RangeVar;
-    if (v) rels.set(v.alias?.aliasname ?? v.relname, v.mantle === "table" ? schemas[String(v.relname).toLowerCase()] : undefined);
-    else rels.set((n.RangeSubselect ?? n.RangeFunction)?.alias?.aliasname ?? "", undefined);
-  };
-  for (const f of sel.fromClause ?? []) walk(f);
-  const keys: string[] = [];
-  for (const { ResTarget: r } of sel.targetList) {
-    const fields = r.val?.ColumnRef?.fields;
-    if (!r.name && fields?.at(-1)?.A_Star) {
-      const from = fields.length > 1 ? [rels.get(fields[0].String.sval)] : [...rels.values()];
-      if (from.some((s) => !s)) return undefined;
-      for (const s of from) keys.push(...starCols(s!));
-      continue;
-    }
-    const name: string | undefined = r.name ?? fields?.at(-1)?.String?.sval;
-    if (!name) return undefined;
-    keys.push(name);
-  }
-  return [...new Set(keys)];
-}
-
-/** `values` of an insert: what the Schema requires, defaults optional, and never the scope field, which Store fills. */
 function insertValues(s: PlanSchema): string {
   const props = Object.keys(s.schema.properties ?? {}).filter((p) => p.toLowerCase() !== s.scope);
-  const defaults = props.filter((p) => Object.hasOwn(s.schema.properties![p]!, "default"));
-  const rest = props.filter((p) => !defaults.includes(p));
+  const optional = s.publishing ? props : props.filter((p) => Object.hasOwn(s.schema.properties![p]!, "default"));
+  const rest = props.filter((p) => !optional.includes(p));
   const pick = (ks: string[]) => `Pick<Schemas[${key(s.name)}], ${ks.map(key).join(" | ")}>`;
-  const value = [...(rest.length ? [pick(rest)] : []), ...(defaults.length ? [`Partial<${pick(defaults)}>`] : [])].join(" & ") || "{}";
+  const value = [...(rest.length ? [pick(rest)] : []), ...(optional.length ? [`Partial<${pick(optional)}>`] : [])].join(" & ") || "{}";
   return `  readonly ${key(s.name)}: ${value};`;
 }
+
+/** An update sets values, or on a publishing Schema moves the status alone. */
+const updateSet = (s: PlanSchema) => `  readonly ${key(s.name)}: Partial<InsertValues[${key(s.name)}]>${s.publishing ? " | { readonly status: ContentState }" : ""};`;
 
 export function emitMantleModule(plan: RuntimePlan, linked: LinkedManifestSet): string {
   const schemas = Object.values(plan.schemas).sort((a, b) => byName(a.name, b.name));
   const views = Object.entries(plan.views).sort(([a], [b]) => byName(a, b));
   const rows = Object.fromEntries(views.flatMap(([name, v]) => {
-    const keys = viewRowKeys(v, plan.schemas);
-    return keys ? [[name, `{ ${keys.map((k) => `readonly ${key(k)}: unknown;`).join(" ")} }`]] : [];
+    const row = viewRow(v, plan.schemas);
+    return row ? [[name, row]] : [];
   }));
   const types = emitTypesFromManifests({
     schemas: linked.schemas.map((x) => x.manifest), procedures: linked.procedures.map((x) => x.manifest), views: linked.views.map((x) => x.manifest), namespace: NS, rows,
@@ -72,7 +57,7 @@ export function emitMantleModule(plan: RuntimePlan, linked: LinkedManifestSet): 
   return [
     "// Generated by `mantle generate`. Do not edit by hand.",
     'import type { Caller, HandlerContext, InvocationCause, MantleStore, StoreDelete, StoreInsert, StoreRow, StoreSelect, StoreSelectResult, StoreUpdate, StoreWriteResult } from "@aotter/mantle";',
-    'import type { RuntimePlan } from "@aotter/mantle/spec";',
+    'import type { ContentState, RuntimePlan } from "@aotter/mantle/spec";',
     'import planFile from "./plan.json" with { type: "json" };',
     "",
     "/** The sealed plan, for `createMantle(service, { plan })`. */",
@@ -88,6 +73,9 @@ export function emitMantleModule(plan: RuntimePlan, linked: LinkedManifestSet): 
     "type InsertValues = {",
     ...schemas.map(insertValues),
     "};",
+    "type UpdateSet = {",
+    ...schemas.map(updateSet),
+    "};",
     "",
     "export interface Views {",
     ...views.map(([name, v]) => {
@@ -101,7 +89,7 @@ export function emitMantleModule(plan: RuntimePlan, linked: LinkedManifestSet): 
     '  (Views[N]["input"] extends undefined ? {} : Views[N]["required"] extends true ? { readonly input: Views[N]["input"] } : { readonly input?: Views[N]["input"] });',
     "type Write = { [N in keyof Schemas & string]:",
     '  | (Omit<StoreInsert, "insert" | "values"> & { readonly insert: N; readonly values: InsertValues[N] })',
-    '  | (Omit<StoreUpdate, "update" | "set"> & { readonly update: N; readonly set: Partial<InsertValues[N]> })',
+    '  | (Omit<StoreUpdate, "update" | "set"> & { readonly update: N; readonly set: UpdateSet[N] })',
     '  | (Omit<StoreDelete, "delete"> & { readonly delete: N })',
     "}[keyof Schemas & string];",
     "",

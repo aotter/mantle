@@ -4,9 +4,10 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { cwd as processCwd, stderr, stdout } from "node:process";
+import process, { cwd as processCwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
 import type { DatabaseDriver } from "../core/driver.js";
 import { planStorageChanges } from "../core/sql/storage.js";
@@ -39,13 +40,11 @@ export interface GenerateDeps {
   readonly driver?: DatabaseDriver;
 }
 
-/** Object keys sorted, arrays in order: identical input gives identical bytes. */
-function sorted(v: unknown): unknown {
-  if (Array.isArray(v)) return v.map(sorted);
-  if (!v || typeof v !== "object") return v;
-  return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted((v as Record<string, unknown>)[k])]));
-}
-const json = (v: unknown) => `${JSON.stringify(sorted(v), null, 2)}\n`;
+/** compilePlan's key order is already deterministic, and a JSON Schema's `properties` order is what Admin and MCP show. */
+const json = (v: unknown) => `${JSON.stringify(v, null, 2)}\n`;
+/** A BOM or CRLF line endings (a Windows checkout) are not a different source. */
+const normalize = (text: string) => text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+const readText = (path: string) => readFile(path, "utf8").then(normalize, () => undefined);
 
 function findUp(root: string, rel: string): string | undefined {
   for (let dir = root; ; dir = dirname(dir)) {
@@ -54,17 +53,38 @@ function findUp(root: string, rel: string): string | undefined {
   }
 }
 
+const LOCKFILES = ["pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", "package-lock.json"];
+
+/** The nearest directory with a lockfile decides the package manager. */
 function installCommand(root: string, packages: readonly string[]): string {
-  const lock = ["pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", "package-lock.json"].find((f) => findUp(root, f));
+  let lock: string | undefined;
+  for (let dir = root; !lock; dir = dirname(dir)) {
+    lock = LOCKFILES.find((f) => existsSync(join(dir, f)));
+    if (dirname(dir) === dir) break;
+  }
   const add = lock === "pnpm-lock.yaml" ? "pnpm add" : lock === "yarn.lock" ? "yarn add" : lock?.startsWith("bun") ? "bun add" : "npm install";
   return `${add} ${packages.join(" ")}`;
+}
+
+/**
+ * A `node_modules` walk, the layout bundlers resolve from. Under Yarn PnP there is no `node_modules`, so Node's own resolution
+ * decides; elsewhere it is not used, because it also honours `NODE_PATH`, which a bundler does not.
+ */
+function installed(root: string, name: string): boolean {
+  if (!process.versions.pnp) return !!findUp(root, join("node_modules", name, "package.json"));
+  try {
+    createRequire(join(root, "package.json")).resolve(`${name}/package.json`);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ERR_PACKAGE_PATH_NOT_EXPORTED"; // found, it just does not export package.json
+  }
 }
 
 /** Each selected feature (and the identity) whose packages are not installed, and `admin` without an identity. */
 function featureDiagnostics(root: string, config: MantleConfig): Diagnostic[] {
   const out: Diagnostic[] = [];
   const need = (what: string, packages: readonly string[]) => {
-    const missing = packages.filter((p) => !findUp(root, join("node_modules", p, "package.json")));
+    const missing = packages.filter((p) => !installed(root, p));
     if (missing.length)
       out.push(validateDiagnostic({ code: "GENERATE_FEATURE_DEPENDENCY_MISSING", severity: "error", path: what, message: `${what} needs ${missing.join(", ")}, which ${missing.length > 1 ? "are" : "is"} not installed. Run \`${installCommand(root, missing)}\`; mantle generate never installs packages.` }));
   };
@@ -76,13 +96,19 @@ function featureDiagnostics(root: string, config: MantleConfig): Diagnostic[] {
   return out;
 }
 
-function readConfig(text: string): MantleConfig {
-  const v = JSON.parse(text) as Record<string, unknown>;
+function readConfig(text: string): { config: MantleConfig; raw: Record<string, unknown> } {
+  let v: Record<string, unknown>;
+  try {
+    v = JSON.parse(text) as Record<string, unknown>;
+  } catch (err) {
+    throw new Error(`${CONFIG} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error(`${CONFIG} must be a JSON object.`);
   if (v.version === 1 || "host" in v) throw new Error(`${CONFIG} is a 0.1.x selection (version 1, with a host): run mantle-update to move it to version 2.`);
   const features = v.features as Feature[];
   if (v.version !== 2 || !IDENTITIES.includes(v.identity as Identity) || !Array.isArray(features) || FEATURES.filter((f) => features.includes(f)).join() !== features.join())
     throw new Error(`${CONFIG} must be { "version": 2, "identity": ${IDENTITIES.map((i) => `"${i}"`).join(" | ")}, "features": a subset of ${FEATURES.join(", ")} in that order }.`);
-  return { version: 2, identity: v.identity as Identity, features };
+  return { config: { version: 2, identity: v.identity as Identity, features }, raw: v };
 }
 
 /** The selection: saved config, then flags. An explicit `--features` without `--identity` means `none` (decision 12). */
@@ -98,14 +124,21 @@ function select(saved: MantleConfig | undefined, features: string | undefined, i
 
 /** Every `.yaml`/`.yml` file directly in the manifest directory, by name. */
 async function readManifests(dir: string): Promise<{ name: string; text: string }[]> {
-  const names = (await readdir(dir)).filter((n) => /\.ya?ml$/i.test(n)).sort();
-  return Promise.all(names.map(async (name) => ({ name, text: await readFile(join(dir, name), "utf8") })));
+  const names = (await readdir(dir, { withFileTypes: true })).filter((d) => !d.isDirectory() && /\.ya?ml$/i.test(d.name)).map((d) => d.name).sort();
+  return Promise.all(names.map(async (name) => ({ name, text: normalize(await readFile(join(dir, name), "utf8")) })));
 }
 
+/** `node:sqlite` on Node 22 binds only anonymous `?`, so a numbered `?N` becomes `?` with its value in the order it appears. */
 async function openSqliteFile(path: string): Promise<DatabaseDriver> {
   const { DatabaseSync } = await import("node:sqlite");
   const db = new DatabaseSync(path, { readOnly: true });
-  return { batch: async (stmts) => stmts.map((s) => ({ rows: db.prepare(s.sql).all(...((s.binds ?? []) as never[])) as Record<string, unknown>[] })) };
+  return {
+    batch: async (stmts) => stmts.map((s) => {
+      const binds: unknown[] = [];
+      const sql = s.sql.replace(/\?(\d+)/g, (_, n: string) => (binds.push(s.binds![Number(n) - 1]), "?"));
+      return { rows: db.prepare(sql).all(...(binds as never[])) as Record<string, unknown>[] };
+    }),
+  };
 }
 
 const print = (ds: readonly Diagnostic[]) => ds.forEach((d) => stderr.write(`${d.code} ${d.path}: ${d.message}\n`));
@@ -138,23 +171,24 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   if (values.database !== undefined && !check) return (stderr.write("--database is read only with --check.\n"), 2);
 
   let config: MantleConfig;
-  let savedText: string | undefined;
+  let saved: ReturnType<typeof readConfig> | undefined;
   try {
-    savedText = await readFile(join(root, CONFIG), "utf8").catch((e: NodeJS.ErrnoException) => (e.code === "ENOENT" ? undefined : Promise.reject(e)));
-    config = select(savedText === undefined ? undefined : readConfig(savedText), values.features, values.identity);
+    const savedText = await readFile(join(root, CONFIG), "utf8").catch((e: NodeJS.ErrnoException) => (e.code === "ENOENT" ? undefined : Promise.reject(e)));
+    saved = savedText === undefined ? undefined : readConfig(savedText);
+    config = select(saved?.config, values.features, values.identity);
   } catch (err) {
     stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 2;
   }
 
-  const dir = resolve(root, values.manifests ?? "manifests");
+  const manifests = values.manifests ?? "manifests";
   let files: { name: string; text: string }[];
   try {
-    files = await readManifests(dir);
+    files = await readManifests(resolve(root, manifests));
   } catch (err) {
-    return (stderr.write(`MANIFEST_ROOT_NOT_FOUND ${dir}: ${err instanceof Error ? err.message : String(err)}\n`), 1);
+    return (stderr.write(`MANIFEST_ROOT_NOT_FOUND ${manifests}: cannot read the manifest directory (${(err as NodeJS.ErrnoException).code ?? "error"})\n`), 1);
   }
-  if (!files.length) return (stderr.write(`MANIFEST_ROOT_NOT_FOUND ${dir}: no .yaml or .yml manifest files\n`), 1);
+  if (!files.length) return (stderr.write(`MANIFEST_ROOT_NOT_FOUND ${manifests}: no .yaml or .yml manifest files\n`), 1);
   const parsed = parseManifestSources({ sources: files.map((f) => ({ sourceId: f.name, text: f.text })) });
   if (!parsed.ok) return (print(parsed.diagnostics), 1);
   const validation = ValidateManifestsUseCase.run({ parsed: parsed.value });
@@ -171,12 +205,18 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   const outputs: [string, string][] = [
     [join(OUT, "plan.json"), json({ sourceHash, plan: compiled.plan })],
     [join(OUT, "mantle.ts"), emitMantleModule(compiled.plan, validation.linked)],
-    [CONFIG, json(config)],
   ];
+  // the config is rewritten only when the selection changes, and keeps whatever else it holds
+  if (!saved || saved.config.identity !== config.identity || saved.config.features.join() !== config.features.join())
+    outputs.push([CONFIG, json({ ...saved?.raw, version: 2, identity: config.identity, features: config.features })]);
 
   if (!check) {
+    for (const d of [".mantle", OUT]) {
+      const st = await lstat(join(root, d)).catch(() => undefined);
+      if (st?.isSymbolicLink()) return (stderr.write(`Refusing to write through the symlink ${d}; generated files live in a real directory.\n`), 2);
+    }
     for (const [path, text] of outputs) {
-      if ((await readFile(join(root, path), "utf8").catch(() => undefined)) === text) continue;
+      if ((await readText(join(root, path))) === text) continue;
       await mkdir(dirname(join(root, path)), { recursive: true });
       await writeFile(join(root, path), text, "utf8");
     }
@@ -186,24 +226,26 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
 
   let code = 0;
   for (const [path, text] of outputs) {
-    if ((await readFile(join(root, path), "utf8").catch(() => undefined)) === text) continue;
+    if ((await readText(join(root, path))) === text) continue;
     stderr.write(`stale: ${path}\n`);
     code = 1;
   }
   if (code) stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
 
-  let driver = deps.driver;
+  if (!deps.driver && values.database === undefined) return code;
   try {
-    if (!driver && values.database !== undefined) driver = await openSqliteFile(resolve(root, values.database));
-  } catch (err) {
-    return (stderr.write(`--database ${values.database}: ${err instanceof Error ? err.message : String(err)}\n`), 2);
-  }
-  if (driver) {
-    const storage = await planStorageChanges(driver, compiled.plan.schemas);
-    stdout.write(`-- The SQL storage convergence would run on this database (nothing was applied):\n${storage.sql.map((s) => `${s};\n`).join("")}`);
+    const storage = await planStorageChanges(deps.driver ?? (await openSqliteFile(resolve(root, values.database!))), compiled.plan.schemas, { fingerprint: compiled.plan.fingerprint });
     for (const u of storage.undeclared) stdout.write(`-- ${u.code} ${u.schema}: ${u.message}\n`);
-    for (const b of storage.blocked) stderr.write(`${b.code} ${b.schema}: ${b.message}\n`);
-    if (storage.blocked.length) code = 1;
+    if (storage.skipped) stdout.write("-- Storage: this database already booted this plan's fingerprint; boot applies nothing.\n");
+    else if (storage.blocked.length) {
+      for (const b of storage.blocked) stderr.write(`${b.code} ${b.schema}: ${b.message}\n`);
+      stderr.write("Storage convergence is blocked: boot refuses to serve until the changes above are made.\n");
+      code = 1;
+    } else if (!storage.sql.length) stdout.write("-- Storage: nothing to do.\n");
+    else stdout.write(`-- The SQL storage convergence would run on this database (nothing was applied):\n${storage.sql.map((q) => `${q};\n`).join("")}`);
+  } catch (err) {
+    // a missing, corrupt, locked or non-file database: say which, without a stack or the absolute path
+    return (stderr.write(`--database ${values.database}: ${(err instanceof Error ? err.message : String(err)).replaceAll(root, ".")}\n`), 2);
   }
   return code;
 }

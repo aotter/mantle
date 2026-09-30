@@ -74,7 +74,7 @@ export function emitTypesFromManifests(request: {
       }
       // The row shape is the SELECT's own output, known only to the SQL compiler.
       out.push(`  /** Row shape returned by View '${docText(v.metadata.name)}' */`);
-      out.push(`  export type ViewRow_${manifestTypeIdentifier(v.metadata.name)} = ${request.rows?.[v.metadata.name] ?? "unknown"};`);
+      out.push(`  export type ViewRow_${manifestTypeIdentifier(v.metadata.name)} = ${request.rows && Object.hasOwn(request.rows, v.metadata.name) ? request.rows[v.metadata.name] : "unknown"};`);
       out.push("");
     }
 

@@ -192,13 +192,20 @@ const RESERVED_TABLES = new Set([
 
 /**
  * What `convergeStorage` would apply to this database now, applying nothing (`mantle generate --check`, ADR-0033 decision 3).
- * The SQL replays: system DDL is `IF NOT EXISTS`, `ADD COLUMN` comes from the current state, binds are inlined. The boot state
- * and time zone rows are left to boot.
+ * `skipped` when the database already booted this fingerprint, as boot would. The SQL replays: system DDL (only where Mantle
+ * never booted) is `IF NOT EXISTS`, `ADD COLUMN` comes from the current state, binds are inlined. The boot state and time
+ * zone rows are left to boot.
  */
-export async function planStorageChanges(driver: DatabaseDriver, plan: Readonly<Record<string, StorageSchema>>): Promise<{ sql: string[]; blocked: readonly StorageChange[]; undeclared: readonly StorageChange[] }> {
+export async function planStorageChanges(driver: DatabaseDriver, plan: Readonly<Record<string, StorageSchema>>, options: { fingerprint?: string } = {}): Promise<{ skipped: boolean; sql: string[]; blocked: readonly StorageChange[]; undeclared: readonly StorageChange[] }> {
+  const [sys] = await driver.batch([{ sql: "SELECT name FROM sqlite_schema WHERE name IN ('_mantle_boot_state', '_mantle_schema_tables')" }]);
+  const have = new Set(sys!.rows.map((r) => r.name));
+  if (options.fingerprint !== undefined && have.has("_mantle_boot_state")) {
+    const [b] = await driver.batch([{ sql: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" }]);
+    if (String(b!.rows[0]?.value ?? "").startsWith(`${options.fingerprint}|`)) return { skipped: true, sql: [], blocked: [], undeclared: [] };
+  }
   const { statements, blocked, undeclared } = await diff(driver, plan);
   const inline = (s: SqlStatement) => (s.binds ? s.sql.replace(/\?(\d+)/g, (_, n: string) => lit(String(s.binds![Number(n) - 1]))) : s.sql);
-  return { sql: [...SYSTEM_DDL, ...statements.map(inline)], blocked, undeclared };
+  return { skipped: false, sql: [...(have.has("_mantle_schema_tables") ? [] : SYSTEM_DDL), ...statements.map(inline)], blocked, undeclared };
 }
 
 async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, StorageSchema>>) {

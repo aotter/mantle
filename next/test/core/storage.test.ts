@@ -101,10 +101,18 @@ it("planStorageChanges prints what convergence would apply, as replayable SQL, a
   expect(fresh.sql).toContain("INSERT OR IGNORE INTO _mantle_schema_tables (name) VALUES ('items')");
   // replaying the printed SQL converges the tables, so boot then applies no Schema change
   for (const sql of fresh.sql) await d1.exec(sql);
-  expect((await planStorageChanges(d1, { items })).sql.filter((q) => !q.includes("IF NOT EXISTS"))).toEqual([]);
+  expect((await planStorageChanges(d1, { items })).sql).toEqual([]);
 
   const before = await schema();
   const added = await planStorageChanges(d1, { items: { ...items, fields: { ...items.fields, sku: "text" } } });
-  expect(added.sql.filter((q) => !q.includes("IF NOT EXISTS"))).toEqual(['ALTER TABLE "items" ADD COLUMN "sku" TEXT']);
+  expect(added.sql).toEqual(['ALTER TABLE "items" ADD COLUMN "sku" TEXT']);
   expect(await schema()).toEqual(before);
+});
+
+it("planStorageChanges skips a database that already booted the fingerprint, as boot does", async () => {
+  const d1 = await db();
+  await run(d1, { items }, "f1");
+  const changed = { items: { ...items, fields: { ...items.fields, sku: "text" } } };
+  expect(await planStorageChanges(d1, changed, { fingerprint: "f1" })).toEqual({ skipped: true, sql: [], blocked: [], undeclared: [] });
+  expect((await planStorageChanges(d1, changed, { fingerprint: "f2" })).sql).toEqual(['ALTER TABLE "items" ADD COLUMN "sku" TEXT']);
 });

@@ -111,3 +111,13 @@ spec: { source: { kind: lifecycle, schema: notes, on: [before_update] }, target:
     expect(res.diagnostics[0]).toMatchObject({ code: "LIFECYCLE_TARGET_NOT_REF" });
   });
 });
+
+describe("names that differ only by case", () => {
+  const codes = async (text: string) => { const r = await compile(text); return r.ok ? [] : r.diagnostics.map((d) => d.code); };
+  it("two fields are FIELD_NAME_CASE_COLLISION, not one column", async () => {
+    expect(await codes(SCHEMA.replace("body: { type: string } }", "body: { type: string }, Body: { type: integer } }"))).toEqual(["FIELD_NAME_CASE_COLLISION"]);
+  });
+  it("two Schemas are SCHEMA_NAME_CASE_COLLISION, not one table", async () => {
+    expect(await codes(`${SCHEMA}---\n${SCHEMA.replace("name: notes", "name: Notes")}`)).toEqual(["SCHEMA_NAME_CASE_COLLISION"]);
+  });
+});

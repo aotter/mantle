@@ -23,3 +23,14 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: all-items }
 spec: { surface: internal, sql: "SELECT * FROM items ORDER BY id" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  lifecycle: publishing
+  schema:
+    type: object
+    required: [title, body]
+    properties: { zeta: { type: string }, title: { type: string }, body: { type: string }, alpha: { type: boolean }, mid: { type: string, format: date-time } }

@@ -58,6 +58,8 @@ export const DIAGNOSTIC_CODES = [
   "SCHEMA_SEARCH_FIELD_UNKNOWN",
   "SCHEMA_TTL_INVALID",
   "SCHEMA_UI_INVALID",
+  "SCHEMA_NAME_CASE_COLLISION",
+  "FIELD_NAME_CASE_COLLISION",
   "MANIFEST_ROOT_NOT_FOUND",
   "MANIFEST_READ_FAILED",
   // `mantle generate` (ADR-0032 decision 12): a selected feature's package is not installed, or it needs an identity.
