@@ -9,6 +9,13 @@ export const RUNTIME_PLAN_VERSION = 6 as const;
 
 /** A Schema as storage and Store see it. Keys of `fields` and `names` are lower case: SQL folds unquoted identifiers. */
 export interface PlanSchema {
+  /** The name as declared: the key of `schemas` is lower case. */
+  readonly name: string;
+  readonly title?: LocalizedText;
+  readonly description?: LocalizedText;
+  /** Admin-only presentation, opaque to Core. */
+  readonly uiSchema?: Readonly<Record<string, unknown>>;
+  readonly localized?: boolean;
   readonly scope?: string;
   readonly ttl?: string;
   readonly ttlSeconds?: number;
@@ -31,6 +38,7 @@ export interface PlanSchema {
 export interface PlanView extends SqlPlan {
   readonly title?: LocalizedText;
   readonly description?: LocalizedText;
+  readonly uiSchema?: Readonly<Record<string, unknown>>;
   /** input property -> Mantle type */
   readonly inputs: Readonly<Record<string, string>>;
   readonly input?: JsonSchema;
@@ -41,6 +49,7 @@ export interface PlanView extends SqlPlan {
 export interface PlanProcedure {
   readonly title?: LocalizedText;
   readonly description?: LocalizedText;
+  readonly uiSchema?: Readonly<Record<string, unknown>>;
   readonly input: JsonSchema;
   readonly output: JsonSchema;
   /** input property -> Mantle type, for an inline `sql` handler */

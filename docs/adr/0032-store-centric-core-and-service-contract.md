@@ -248,6 +248,11 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 3. New code uses only the identifiers named here. A new public name needs an amendment to this ADR.
 4. `mantle validate` diagnostics listed here are added with the grammar slice; the runtime codes with the Store and invocation slices.
 
+## Amendments
+
+- **2026-09-30, plan presentation metadata.** The sealed plan carries what Admin and the MCP surface show, as optional fields copied unchanged from the manifests: `PlanSchema.name` (the declared name; the map key is lower case), `title`, `description`, `uiSchema`, `localized`; `PlanView` and `PlanProcedure` gain `uiSchema` (and `title`, `description`). They change the fingerprint and nothing else: no Store, storage or policy behavior reads them. Without them `createAdminSurface` could not name a collection, and a tool would have no description.
+- **2026-09-30, MCP tools come from Views and Procedures only.** `createMcpSurface(runtime, { basePath, surface, resourceMetadata?, apps? })` lists a tool for each Procedure bound by an `mcp` Trigger of its surface and each View of its surface; a Schema is never a tool. `store.view` checks the call's input against the View's input schema, as `invokeProcedure` does for a Procedure.
+
 ## Implementation status
 
 Proposed. Nothing in decisions 1–13 is implemented beyond the ADR-0030 slices already on `develop`.
