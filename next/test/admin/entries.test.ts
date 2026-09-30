@@ -205,7 +205,7 @@ describe("Admin entries: the list", () => {
     expect(items.map((i: any) => [i.id === a.id ? "loc" : "none", [...i.translation_locales].sort()]).sort()).toEqual([["loc", [...locales].sort()], ["none", []]]);
   });
 
-  it("search is like over the searchable fields and the id; filter and status narrow; the title comes from the entry", async () => {
+  it("search goes to Store (the searchable fields, or the id); filter and status narrow; the title comes from the entry", async () => {
     const a = await create("articles", { slug: "s1", title: "Haystack", body: "a needle inside", rank: 7 });
     const ids = async (q: string) => (await call("GET", `/admin/api/entries?collection=articles&${q}`, editor)).body.items.map((i: any) => i.id);
     expect(await ids("search=NEEDLE")).toEqual([a.id]);

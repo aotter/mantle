@@ -48,6 +48,8 @@ export interface StoreSelect {
   readonly limit?: number;
   /** One opaque, versioned format bound to `from` and `orderBy` (ADR-0032 decision 1). */
   readonly cursor?: string;
+  /** Rows whose declared `searchableFields`, or `id`, contain this text (ADR-0035 decision 7). Ordering stays `orderBy`. */
+  readonly search?: string;
 }
 
 /** A flat row: native columns next to Schema fields. */
