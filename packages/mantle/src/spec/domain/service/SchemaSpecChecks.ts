@@ -1,5 +1,5 @@
 /** Schema.spec: its JSON Schema subset, local refs, indexes, search and Admin UI. */
-import { MANTLE_BIND_KEYWORD, MANTLE_BIND_VALUES, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
+import { MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
 import { ManifestParseError, V01_LIFECYCLE_MODES, escapeJsonPointerSegment, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
 import { checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes, schemaIndexDiagnosticCode } from "./SchemaIndexChecker.js";
@@ -121,9 +121,6 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
       ![...(m.spec.uniqueIndexes ?? []), ...(m.spec.indexes ?? [])].some((index) => index[0] === field)) {
       throw new ManifestParseError("Schema.spec.scope requires a required string field with a leftmost index and the exact auth.uid() reference", idx, "/spec/scope");
     }
-    if (property[MANTLE_BIND_KEYWORD] !== undefined && property[MANTLE_BIND_KEYWORD] !== "ctx.user") {
-      throw new ManifestParseError("Schema.spec.scope field cannot be stamped from a different identity", idx, `/spec/schema/properties/${field}/${MANTLE_BIND_KEYWORD}`);
-    }
     if ((m.spec.uniqueIndexes ?? []).some((index) => index[0] !== field)) {
       throw new ManifestParseError("Scoped Schema unique indexes must begin with the scope field", idx, "/spec/uniqueIndexes");
     }
@@ -175,18 +172,12 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
   if (properties && typeof properties === "object" && !Array.isArray(properties)) {
     for (const [propertyName, property] of Object.entries(properties)) {
       if (!property || typeof property !== "object" || Array.isArray(property)) continue;
-      const bind = (property as Record<string, unknown>)["x-mantle-bind"];
-      if (typeof bind === "string" && !(MANTLE_BIND_VALUES as readonly string[]).includes(bind)) {
+      // 0.1.x stamped the field on write; 0.2.0 stamps nothing from it, so accepting it would leave the field caller-supplied
+      if (MANTLE_BIND_KEYWORD in property) {
         throw new ManifestParseError(
-          `Schema '${m.metadata.name}' property '${propertyName}' has illegal x-mantle-bind value.`,
+          `Schema '${m.metadata.name}' property '${propertyName}': x-mantle-bind is removed. Use spec.scope for the caller's own field, or set it in the Procedure's SQL (auth.uid(), now()).`,
           idx,
-          `/spec/schema/properties/${propertyName}/x-mantle-bind`,
-          "BIND_VALUE_NOT_IN_ENUM",
-          {
-            value: bind,
-            expected: `one of ${MANTLE_BIND_VALUES.join(", ")}`,
-            candidates: [...MANTLE_BIND_VALUES],
-          },
+          `/spec/schema/properties/${propertyName}/${MANTLE_BIND_KEYWORD}`,
         );
       }
     }
