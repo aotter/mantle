@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import type { DatabaseDriver } from "../../src/core/index.js";
-import { createMantleAuth, type CreateMantleAuthOptions } from "../../src/auth/createMantleAuth.js";
+import { createMantleAuth, type CreateMantleAuthOptions } from "../../src/auth/index.js";
 
 /**
  * Better Auth and Mantle over one real SQLite database, as a Worker has them over one D1: Better Auth gets the D1 shape the

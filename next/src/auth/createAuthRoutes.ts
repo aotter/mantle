@@ -6,7 +6,7 @@
  */
 import type { CallerResolver, Surface } from "../core/index.js";
 import type { OAuthConsentInfo, OAuthConsentRequest } from "../admin/consent.js";
-import type { MantleAuth, MantleAuthRequestContext } from "./createMantleAuth.js";
+import type { MantleAuth, MantleAuthRequestContext } from "./types.js";
 import { withCaller } from "../core/withCaller.js";
 
 export type AuthRoutesAuth = Pick<MantleAuth, "basePath" | "handler" | "methods" | "getOAuthConsentRequest" | "completeOAuthConsent" | "listOAuthConsents" | "revokeOAuthConsent">;
