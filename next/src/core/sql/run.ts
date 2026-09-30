@@ -14,6 +14,8 @@ export interface Program {
   readonly kind: "view" | "procedure";
   readonly inputs: Readonly<Record<string, string>>;
   readonly ir: readonly N[];
+  /** A write's own `expect` count, by statement; a row op without one must affect exactly one row. */
+  readonly expects?: readonly (number | undefined)[];
 }
 
 /** Which (schema, operation) pairs have a lifecycle Trigger, as `schema.insert|update|delete` keys. */
@@ -116,8 +118,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
   const res = await env.executor.apply(plan.map((c, i) => ({
     ir: c.ast,
     binds: bindValues(c.binds, as.bind, { version: versions[i] }),
-    // a row op must affect exactly one row
-    ...(c.kind === "row" ? { expect: 1 } : {}),
+    ...((p.expects?.[i] ?? (c.kind === "row" ? 1 : undefined)) === undefined ? {} : { expect: p.expects?.[i] ?? 1 }),
   })));
 
   const rows = res.map((r, i) => (plan[i]!.hooked ? r.rows.map(strip) : r.rows));

@@ -76,7 +76,7 @@ export const SQLITE_ONLY_KEYWORDS = new Set([
   'add', 'alter', 'autoincrement', 'commit', 'delete', 'drop', 'escape', 'index', 'insert', 'nothing', 'raise', 'set', 'transaction', 'update',
 ]);
 
-export const SYSTEM = new Set(['version', 'status', 'authorid', 'created_at', 'updated_at']);
+export const SYSTEM = new Set(['version', 'status', 'author_id', 'created_at', 'updated_at']);
 
 const sv = (list: N[]) => list.map((n) => n.String?.sval ?? (n.A_Star ? '*' : no('SQL_UNSUPPORTED', 'a name part that is not an identifier'))).join('.');
 const fname = (n: N) => sv(n.funcname).replace(/^pg_catalog\./, '');
