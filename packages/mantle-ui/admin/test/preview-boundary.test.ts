@@ -15,7 +15,7 @@ it("keeps the built preview on its bridge, including search and downloads, while
         return;
       }
       if (url.pathname === "/preview" || url.pathname === "/canonical") {
-        const document = await readFile(resolve("dist", url.pathname === "/preview" ? "preview.html" : "index.html"), "utf8");
+        const document = await readFile(resolve(import.meta.dirname, "../../dist/admin", url.pathname === "/preview" ? "preview.html" : "index.html"), "utf8");
         const route = url.searchParams.get("route") ?? "/admin/sign-in";
         // Deliberately incomplete consumer bridge: unknown requests fall through
         // to native fetch. The SDK must still prevent live API access.
@@ -47,8 +47,8 @@ it("keeps the built preview on its bridge, including search and downloads, while
         res.end(document.replace("</head>", `${bridge}</head>`));
         return;
       }
-      if (url.pathname.startsWith("/_mantle/admin/")) {
-        const file = resolve("dist", url.pathname.slice("/_mantle/admin/".length));
+      if (/^\/admin\/.+\.[a-z0-9]+$/i.test(url.pathname)) { // a static file of the SPA; any other /admin path is a route
+        const file = resolve(import.meta.dirname, "../../dist/admin", url.pathname.slice("/admin/".length));
         res.setHeader("content-type", file.endsWith(".js") ? "application/javascript" : file.endsWith(".css") ? "text/css" : "image/svg+xml");
         res.end(await readFile(file));
         return;

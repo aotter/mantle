@@ -38,7 +38,8 @@
     "./mcp-app": {
       "types": "./dist/mcp-app/index.d.ts",
       "import": "./dist/mcp-app/index.js"
-    }
+    },
+    "./admin/index.html": "./dist/admin/index.html"
   },
   "files": [
     "dist",
@@ -46,8 +47,8 @@
   ],
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json && vite build --config vite.kit.config.ts && node scripts/emit-kit-styles.mjs && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.lib.json && tsc -p tsconfig.mcp-app.json",
+    "build": "tsc -b tsconfig.lib.json && vite build --config vite.kit.config.ts && node scripts/emit-kit-styles.mjs && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json && tsc -p tsconfig.mcp-app.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "vitest run"
   },
   "peerDependencies": {
@@ -91,21 +92,32 @@
     }
   },
   "devDependencies": {
+    "@aotter/mantle": "workspace:*",
+    "@dagrejs/dagre": "^3.1.1",
     "@modelcontextprotocol/client": "2.1.0",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-query": "^5.102.8",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
     "@types/node": "catalog:",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "@xyflow/react": "^12.11.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
     "input-otp": "^1.5.0",
     "lucide-react": "^1.41.0",
+    "playwright": "catalog:",
     "radix-ui": "^1.6.7",
     "react": "^19.2.8",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
     "shadcn": "^4.19.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0",

@@ -69,14 +69,14 @@ it("loads live model data only on demand through the existing guarded paths", as
         res.end(JSON.stringify(body));
         return;
       }
-      if (path.startsWith("/_mantle/admin/")) {
-        const file = resolve("dist", path.slice("/_mantle/admin/".length));
+      if (/^\/admin\/.+\.[a-z0-9]+$/i.test(path)) { // a static file of the SPA; any other /admin path is a route
+        const file = resolve(import.meta.dirname, "../../dist/admin", path.slice("/admin/".length));
         res.setHeader("content-type", file.endsWith(".js") ? "application/javascript" : file.endsWith(".css") ? "text/css" : "image/svg+xml");
         res.end(await readFile(file));
         return;
       }
       res.setHeader("content-type", "text/html");
-      res.end((await readFile(resolve("dist/index.html"), "utf8")).replace("<head>", "<head><script>localStorage.setItem('cms.preference.language','en')</script>"));
+      res.end((await readFile(resolve(import.meta.dirname, "../../dist/admin/index.html"), "utf8")).replace("<head>", "<head><script>localStorage.setItem('cms.preference.language','en')</script>"));
     } catch (error) { res.statusCode = 500; res.end(String(error)); }
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));

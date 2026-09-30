@@ -194,7 +194,7 @@ async function bootAdmin(args: { operations: unknown[]; conflictCode?: string; f
   release: () => void;
   close: () => Promise<void>;
 }> {
-  const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   const page = await browser.newPage();
@@ -289,7 +289,7 @@ async function bootAdmin(args: { operations: unknown[]; conflictCode?: string; f
     }
     return route.fulfill({ json: {} });
   });
-  await page.goto(new URL("/_mantle/admin/", server.resolvedUrls!.local[0]!).href);
+  await page.goto(new URL("/admin/", server.resolvedUrls!.local[0]!).href);
   await page.getByRole("heading", { name: "Organizations" }).waitFor();
   return {
     page,

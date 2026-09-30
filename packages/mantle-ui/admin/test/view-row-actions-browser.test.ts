@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 /** ADR-0029: a View row runs its staff operation through the shared controller over staff MCP. */
 it("runs a View row action with the reviewed version and asks for a review when the entry moved", async () => {
-  const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {
@@ -55,7 +55,7 @@ it("runs a View row action with the reviewed version and asks for a review when 
         : {};
       return route.fulfill({ json });
     });
-    await page.goto(new URL("/_mantle/admin/", server.resolvedUrls!.local[0]!).href);
+    await page.goto(new URL("/admin/", server.resolvedUrls!.local[0]!).href);
     await page.getByRole("cell", { name: "Laptops" }).waitFor();
 
     await page.getByRole("button", { name: "Row actions" }).click();

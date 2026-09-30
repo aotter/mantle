@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogDescription } from "@aotter/mantle-ui/kit";
 import { CollapsibleDescription, PageHeader } from "../src/ui/page";
 
 it("keeps primary descriptions readable in dark mode without changing light or metadata colors", async () => {
-  const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {
@@ -28,7 +28,7 @@ it("keeps primary descriptions readable in dark mode without changing light or m
       h("small", { className: "text-muted-foreground" }, "Updated yesterday"),
     ));
     await page.route("**/contrast-test", route => route.fulfill({ contentType: "text/html", body:
-      '<link rel="stylesheet" href="/_mantle/admin/src/styles/global.css?direct">' + markup }));
+      '<link rel="stylesheet" href="/admin/src/styles/global.css?direct">' + markup }));
     await page.goto(new URL("/contrast-test", server.resolvedUrls!.local[0]!).href);
     for (const dark of [false, true]) {
       await page.evaluate(dark => document.documentElement.classList.toggle("dark", dark), dark);

@@ -12,7 +12,7 @@ import {
   SignInButton,
   claimInFlight,
 } from "../src/features/auth/auth-views";
-import { SignInFlow, SIGN_IN_FLOW_INITIAL, signInFlowReducer } from "../src/kit";
+import { SignInFlow, SIGN_IN_FLOW_INITIAL, signInFlowReducer } from "@aotter/mantle-ui/kit";
 import { signOut } from "../src/lib/auth";
 import { PreferencesProvider, resolveTheme } from "../src/app/preferences";
 
@@ -40,7 +40,7 @@ describe("signOut", () => {
 
 describe("sign-in", () => {
   it("renders no Admin UI in an iframe, including direct static asset URLs", () => {
-    for (const pathname of ["/_mantle/admin/index.html", "/admin", "/admin/sign-in", "/oauth/consent"]) {
+    for (const pathname of ["/admin/index.html", "/admin", "/admin/sign-in", "/oauth/consent"]) {
       vi.stubGlobal("window", { self: {}, top: {}, location: { pathname, search: "" } });
       expect(renderToStaticMarkup(createElement(AdminRouterProvider, null, createElement(AdminApp)))).toBe("");
     }

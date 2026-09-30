@@ -4,7 +4,7 @@ import { createServer } from "vite";
 import { resolve } from "node:path";
 
 it("discovers global operations, never retries an uncertain write and reuses its idempotency key", async () => {
-  const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {
@@ -28,7 +28,7 @@ it("discovers global operations, never retries an uncertain write and reuses its
       }
       return route.fulfill({ json: data });
     });
-    await page.goto(new URL("/_mantle/admin/", server.resolvedUrls!.local[0]!).href);
+    await page.goto(new URL("/admin/", server.resolvedUrls!.local[0]!).href);
     await page.getByRole("link", { name: "Operations", exact: true }).click();
     await page.getByRole("button", { name: "Run", exact: true }).click();
     const dialog = page.getByRole("dialog");

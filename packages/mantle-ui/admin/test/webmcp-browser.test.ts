@@ -4,7 +4,7 @@ import { createServer } from "vite";
 import { resolve } from "node:path";
 
 it("hides unsupported WebMCP and binds staff tools, navigation and localized prompt when supported", async () => {
-  const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {
@@ -52,11 +52,11 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
         : path === "/webmcp" ? { tools: [staffTool], routes: { query_view_report: { path: "/admin/views/report" } } }
         : path === "/views/report" ? { ok: true, data: { rows: [], page: 1, show: 50, hasMore: false } } : {} });
     });
-    await page.goto(new URL("/_mantle/admin/", server.resolvedUrls!.local[0]!).href);
+    await page.goto(new URL("/admin/", server.resolvedUrls!.local[0]!).href);
     await page.locator("header").waitFor();
     expect(await page.getByRole("button", { name: "與 AI agent 一起操作" }).count()).toBe(0);
     await page.evaluate(() => sessionStorage.setItem("webmcp", "1"));
-    await page.goto(new URL("/_mantle/admin/", server.resolvedUrls!.local[0]!).href);
+    await page.goto(new URL("/admin/", server.resolvedUrls!.local[0]!).href);
     await page.getByRole("button", { name: "與 AI agent 一起操作" }).click();
     expect(await page.getByText("3 WebMCP tools").isVisible()).toBe(true);
     await page.getByRole("button", { name: "複製提示詞" }).click();
