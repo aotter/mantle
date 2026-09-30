@@ -104,8 +104,10 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
     const id = pinned && declared(pinned.id);
     const schema = pinned && declaredSchema.get(pinned.schema.toLowerCase());
     // the same shape an explicit target must have: a required string id (PROCEDURE_TARGET_INVALID otherwise)
-    if (!pinned || !id || !schema || !p.spec.input.required?.includes(id) || ![p.spec.input.properties![id]!.type].flat().includes("string")) return undefined;
+    if (!pinned || !id || !schema || !p.spec.input.required?.includes(id) || p.spec.input.properties![id]!.type !== "string") return undefined;
     const version = pinned.version && declared(pinned.version);
+    // the same shapes an explicit target must have: a numeric version, or none at all
+    if (version && !["number", "integer"].includes(String(p.spec.input.properties![version]!.type))) return undefined;
     return { schema, id, ...(version ? { version } : {}) };
   };
   for (const { manifest: p, source } of linked.procedures) {

@@ -23,7 +23,8 @@ describe("Procedure.target inference agrees with Store (ADR-0032 decision 2)", (
     ["a one-row insert", "INSERT INTO notes (title) VALUES (input.t)", { insert: "notes", values: { title: "x" } }],
     ["an upsert", "INSERT INTO notes (title) VALUES (input.t) ON CONFLICT (title) DO NOTHING", { insert: "notes", values: { title: "x" }, onConflict: "ignore" }],
   ])("%s", async (_name, sql, op) => {
-    expect(await classOf(sql)).toBe(StoreJson.isRowOp(op) ? "row" : "set");
+    const viaStore = new StoreJson({ notes: { ...SCHEMAS.notes, fields: { ...SCHEMAS.notes.fields } } } as never).write(op);
+    expect([await classOf(sql), viaStore.row ? "row" : "set"]).toEqual([expect.any(String), await classOf(sql)]); // Store's class is the compiled statement's
   });
 
   it("an input named id is a value, not the entry's id, in both readings", async () => {
@@ -88,5 +89,19 @@ describe("a text literal in a typed column", () => {
       expect(r.diagnostics[0]).toMatchObject({ code: "SQL_TYPE" });
     }
     expect((await plan(procedure("ok", "INSERT INTO notes (at, title) VALUES (CAST('2026-01-01T00:00:00Z' AS timestamptz), 'x')"))).procedures["ok"]).toBeDefined();
+  });
+});
+
+describe("stricter than it looked (Opus audit)", () => {
+  it("a target is inferred only in the shapes an explicit one allows, and a numeric-looking text literal is not refused", async () => {
+    const p = await plan(
+      procedure("string-version", "UPDATE notes SET title = input.t WHERE id = input.id AND version = input.t")
+      + procedure("numeric-text", "UPDATE notes SET title = input.t WHERE id = input.id")
+      + procedure("plain-int", "INSERT INTO notes (title) VALUES ('5')"),
+    );
+    expect(p.procedures["string-version"]!.target).toBeUndefined();
+    expect(p.procedures["numeric-text"]!.target).toEqual({ schema: "notes", id: "id" });
+    const ok = await compilePlan({ sources: [{ sourceId: "memory:t", text: MANIFEST.replace("title: { type: string }", "title: { type: string }, n: { type: integer }") + procedure("five", "UPDATE notes SET n = '5' WHERE id = input.id") }] });
+    expect(ok.ok).toBe(true);
   });
 });

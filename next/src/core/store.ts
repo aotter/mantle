@@ -127,7 +127,7 @@ export interface MantleStore {
 export type CallerStore = Omit<MantleStore, "as" | "sweepExpired">;
 
 /** One compiled statement: validated IR with policy already injected, and numbered binds `?1`, `?2`. */
-interface StoreStatement {
+export interface StoreStatement {
   readonly ir: SqlNode;
   readonly binds: readonly unknown[];
   /** Checked inside the batch with `changes()`; a mismatch is `CONFLICT` naming this statement. */
@@ -135,7 +135,7 @@ interface StoreStatement {
 }
 
 /** What one applied statement did. `rows` are its RETURNING rows, hidden `_mantle_id` / `_mantle_version` included. */
-interface StoreApplied {
+export interface StoreApplied {
   readonly affected: number;
   readonly rows: readonly StoreRow[];
 }

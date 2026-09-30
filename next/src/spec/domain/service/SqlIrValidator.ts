@@ -327,7 +327,7 @@ function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean, values?: N[]) {
     // a bare text literal in a column stored as a number: SQLite's STRICT table would fail it at run time, so refuse it here
     const type = s?.fields[name];
     const literal = (insert ? values?.[i] : r.val)?.A_Const?.sval?.sval;
-    if (literal !== undefined && type && !['text', 'json'].includes(type)) no('SQL_TYPE', `'${literal}' is text and ${r.name} is ${type}: write CAST('${literal}' AS ${type === 'integer' ? 'int8' : type === 'real' ? 'float8' : type}), or bind it as an input`, at);
+    if (literal !== undefined && type && !['text', 'json'].includes(type) && !/^-?\d+(\.\d+)?$/.test(literal)) no('SQL_TYPE', `'${literal}' is text and ${r.name} is ${type}: write CAST('${literal}' AS ${type === 'integer' ? 'int8' : type === 'real' ? 'float8' : type}), or bind it as an input`, at);
   }
 }
 

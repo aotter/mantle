@@ -3,7 +3,7 @@
  * a View is one read with keyset paging (ADR-0032 decisions 2 and 3, ADR-0034 decision 4). Store and
  * `invokeProcedure` both run through here; nothing else reaches the executor.
  */
-import { DiagnosticError, decideLifecycleWrite, isIdCol, runtimeDiagnostic, type ContentState, type SqlNode as N } from "../../spec/index.js";
+import { DiagnosticError, decideLifecycleWrite, isIdCol, pinnedTarget, runtimeDiagnostic, type ContentState, type SqlNode as N } from "../../spec/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
@@ -146,11 +146,24 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
     if (c.verb !== "insert") plan[i] = compileProgram([p.ir[i]!], { ...base, lockVersion: true, statuses: [p.statuses?.[i]] })[0]!;
   }
 
+  // a row op that matched nothing is `lock` when the entry is visible at another version than the one `version = input.x` asked for
+  // (ADR-0032 decision 2), and `expect` otherwise: an invisible entry is a missing one
+  const lockReason = async (e: unknown): Promise<unknown> => {
+    if (!(e instanceof DiagnosticError) || e.diagnostic.conflict?.reason !== "expect") return e;
+    const i = e.diagnostic.conflict.opIndex;
+    const c = i === undefined ? undefined : plan[i];
+    const asked = c && c.kind === "row" && c.verb !== "insert" ? pinnedTarget(p.ir[i!]!)?.version : undefined;
+    const expected = asked === undefined ? undefined : as.bind.input?.[asked];
+    if (expected === undefined) return e;
+    const row = await preRead(env, p, i!, c!, as).catch(() => undefined);
+    if (!row || row.version === expected) return e;
+    return new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: e.message, conflict: { opIndex: i!, reason: "lock" } }));
+  };
   const res = await env.executor.apply(plan.map((c, i) => ({
     ir: c.ast,
     binds: bindValues(c.binds, as.bind, { version: versions[i] }),
     ...((p.expects?.[i] ?? (c.kind === "row" ? 1 : undefined)) === undefined ? {} : { expect: p.expects?.[i] ?? 1 }),
-  })));
+  }))).catch(async (e) => { throw await lockReason(e); });
 
   const rows = res.map((r, i) => (plan[i]!.hooked ? r.rows.map(strip) : r.rows));
   if (lc) for (const [i, c] of plan.entries()) {
