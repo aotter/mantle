@@ -42,7 +42,7 @@ describe("compilePlan", () => {
     expect(Object.keys(res.plan.views)).toEqual(["open-orders"]);
     expect(res.plan.views["open-orders"]).toMatchObject({ grammar: PG_GRAMMAR, stmts: [{ SelectStmt: expect.any(Object) }] });
     expect(res.plan.procedures["cancel-order"]!.handler).toMatchObject({ sql: { grammar: PG_GRAMMAR } });
-    expect(res.plan).toMatchObject({ version: 8, dialect: { name: "@aotter/mantle/d1", version: "1" }, fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(res.plan).toMatchObject({ version: 6, dialect: { name: "@aotter/mantle/d1", version: "1" }, fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) });
   });
 
   it("carries Schema checks as IR, and the fingerprint follows the plan", async () => {

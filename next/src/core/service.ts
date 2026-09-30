@@ -9,7 +9,7 @@ import type { MantleStore, StoreExecutor } from "./store.js";
 /** A surface is a Fetch function, created with its base path (`createMcpSurface(runtime, { basePath })`). */
 export type Surface = (request: Request, caller: Caller) => Promise<Response>;
 
-/** The sealed plan (version 7), compiled by the CLI: see `RuntimePlan` in spec. */
+/** The sealed plan (version 6), compiled by the CLI: see `RuntimePlan` in spec. */
 export type { RuntimePlan };
 
 export interface MantleBootReport {

@@ -53,7 +53,7 @@ The CLI front end is shared and dialect-free. It parses, links, and refuses what
 ### 5. Choosing a dialect (amends ADR-0032 decision 12)
 
 - `mantle.config.json` version 2 gains `dialect`, an npm module name. Absent, it is the built-in D1 dialect, so existing projects do not change. There is no CLI flag and no `host` field.
-- The plan (version 8) records the dialect's name and version, and both are part of the fingerprint. Boot refuses a plan compiled for another dialect. Cloud Control (ADR-0034 decision 7) accepts only D1 plans.
+- The plan records the dialect's name and version, and both are part of the fingerprint. Boot refuses a plan compiled for another dialect. Cloud Control (ADR-0034 decision 7) accepts only D1 plans.
 - A dialect and a host are different things. The dialect is the engine and is a public interface; the host is the platform entry (a Worker, `Bun.serve`, scheduling, media), which stays an application-owned preset. The open-source generator writes the Cloudflare preset only (ADR-0032 decision 6); another host's preset belongs with whoever ships it.
 
 ### 6. The D1 dialect (amends ADR-0034 decisions 5, 6 and 8)
@@ -95,7 +95,7 @@ The CLI front end is shared and dialect-free. It parses, links, and refuses what
 ## How to apply
 
 1. This ADR, then the moves with no behavior change: the shared front end out of the SQL compiler, the D1 subset check, rendering, policy lowering and convergence into `@aotter/mantle/d1`, and the interface types.
-2. `mantle.*` names, plan version 8 with the dialect recorded, and `dialect` in the config.
+2. `mantle.*` names, the dialect recorded in the plan, and `dialect` in the config.
 3. `StoreSelect.search`, and Admin's search box on it.
 4. `createMantleAuth`'s SQL onto Better Auth's Kysely instance.
 5. The compliance suite over the dialect interface, run on the D1 dialect.
@@ -120,7 +120,7 @@ Proposed.
 
 > **Amendment (How to apply 2, 2026-09-30):** The names, the plan record and the config key.
 > - Mantle's functions are spelled `mantle.search`, `mantle.search_rank`, `mantle.near` and `mantle.distance` everywhere: manifests, the D1 allowlist and its lowering. An unqualified `search(…)` is refused as an unsupported function.
-> - The plan is version 8 and records `dialect: { name, version }`, inside the fingerprint. The D1 dialect is `{ name: "@aotter/mantle/d1", version: "1" }`; its version changes when what a D1 plan means changes. `dialect` moves from `PreparedMantleStorage` to `MantleStorageAdapter`, and the runtime's `MantleDialect` gains `name` and `version`, so boot compares them with the plan before it converges anything and refuses a mismatch with `PLAN_FINGERPRINT_MISMATCH`, as it refuses another plan version.
+> - The plan records `dialect: { name, version }`, inside the fingerprint. Its version is 6 for all of 0.2.0: the plan version changes only between released formats (0.1.x shipped 5), never within an unreleased one, because no plan of an unreleased shape exists to refuse. Development had moved it to 7 and 8; both are gone. The D1 dialect is `{ name: "@aotter/mantle/d1", version: "1" }`; its version changes when what a D1 plan means changes. `dialect` moves from `PreparedMantleStorage` to `MantleStorageAdapter`, and the runtime's `MantleDialect` gains `name` and `version`, so boot compares them with the plan before it converges anything and refuses a mismatch with `PLAN_FINGERPRINT_MISMATCH`, as it refuses another plan version.
 > - `@aotter/mantle/d1/compile` exports `name`, `version` and `accepts`. `@aotter/mantle/spec` exports `SqlDialect`, the compile side's type, and `compileSql`, `compileLinkedPlan` and `compilePlan` take one as their last argument, D1 when omitted.
 > - `mantle.config.json` version 2 takes an optional `dialect`, a module name. `mantle generate` imports `<dialect>/compile` from the project and compiles with it; absent, or `@aotter/mantle/d1`, it is the built-in dialect. The config's other keys are unchanged.
 > - The shared front end refuses decision 4's list before `accepts`: statements other than `SELECT`, `INSERT`, `UPDATE`, `DELETE` and `MERGE`; a relation that is not a declared Schema or a CTE of the statement, or that names a schema; an undeclared `input.<name>`; a `mantle.*` or `auth.*` function that decision 2 does not define; and the session, server and outside-access functions (`set_config`, `current_setting`, advisory locks, file and large-object access, `dblink`, backend signals, `pg_reload_conf`).
