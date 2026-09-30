@@ -5,11 +5,8 @@
  * session snapshot.
  */
 import { STAFF_ROLES, type StaffRole } from "../spec/index.js";
+import type { OAuthAccessTokenVerification } from "./createMantleAuth.js";
 import type { Caller, CallerResolver, CredentialKind } from "../core/index.js";
-
-export type OAuthAccessTokenVerification =
-  | { readonly ok: true; readonly userId: string; readonly clientId: string | null; readonly credentialId: string | null; readonly scopes: readonly string[] }
-  | { readonly ok: false; readonly status: 401 | 403; readonly reason: "invalid-token" | "invalid-dpop-proof" | "insufficient-scope"; readonly missingScopes?: readonly string[] };
 
 /** The three things the resolver needs of a Better Auth facade; a custom facade only has to provide these. */
 export interface AuthLike {

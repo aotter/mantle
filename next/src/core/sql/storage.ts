@@ -183,6 +183,13 @@ export async function convergeStorage(
   }
 }
 
+/** Tables the platform creates itself (Better Auth, media, site config); a Schema may not take these names. */
+const RESERVED_TABLES = new Set([
+  "entries", "_migrations", "d1_migrations", "site_config", "sites_users", "user", "session", "account", "verification", "jwks",
+  "oauthclient", "oauthresource", "oauthclientresource", "oauthrefreshtoken", "oauthaccesstoken", "oauthconsent", "oauthclientassertion",
+  "media_assets", "pending_media_uploads",
+]);
+
 async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, StorageSchema>>) {
   const statements: SqlStatement[] = [];
   const blocked: StorageChange[] = [];
@@ -194,14 +201,19 @@ async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, Storag
     { sql: "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\'" },
     { sql: "SELECT name FROM _mantle_schema_tables" },
   ]);
-  const byName = new Map<string, Row>(objects!.rows.map((r) => [String(r.name), r]));
-  const ownedNames = new Set(owned!.rows.map((r) => String(r.name)));
+  // SQLite identifiers are case-insensitive, so ownership and lookup are too.
+  const byName = new Map<string, Row>(objects!.rows.map((r) => [String(r.name).toLowerCase(), r]));
+  const ownedNames = new Set(owned!.rows.map((r) => String(r.name).toLowerCase()));
 
   for (const [name, schema] of Object.entries(plan)) {
     const d = desired(name, schema);
     const t = q(name);
-    const existing = byName.get(name);
-    if (existing && !ownedNames.has(name)) {
+    if (RESERVED_TABLES.has(name.toLowerCase()) || name.toLowerCase().startsWith("_mantle_")) {
+      block(name, `table name ${name} is reserved for Mantle and Better Auth`, "STORAGE_TABLE_NOT_OWNED");
+      continue;
+    }
+    const existing = byName.get(name.toLowerCase());
+    if (existing && !ownedNames.has(name.toLowerCase())) {
       block(name, `table ${name} exists and Mantle did not create it, so it is not read or written`, "STORAGE_TABLE_NOT_OWNED");
       continue;
     }

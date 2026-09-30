@@ -15,12 +15,21 @@
     "libpg-query": "18.1.5",
     "pgsql-deparser": "18.3.8",
     "yaml": "^2.9.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/mcp": "catalog:",
+    "@better-auth/oauth-provider": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "4.126.0"
+    "wrangler": "4.126.0",
+    "better-auth": "catalog:",
+    "@better-auth/core": "catalog:",
+    "@better-auth/utils": "catalog:"
+  },
+  "peerDependencies": {
+    "better-auth": "catalog:peer"
   }
 }
