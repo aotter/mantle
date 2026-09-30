@@ -1,8 +1,7 @@
 /** Graph checks across Triggers, Procedures and Views: targets, guards, sql handlers, and MCP tool names. */
 import { validateDiagnostic, type Diagnostic } from "../../kernel/diagnostic.js";
-import { resolveLocalizedText, type ProcedureManifest, type SchemaManifest, type TriggerManifest, type ViewManifest } from "../model/ManifestGrammar.js";
+import { resolveLocalizedText, type ProcedureManifest, type SchemaManifest, type TriggerManifest, type ViewManifest, type JsonSchema } from "../model/ManifestGrammar.js";
 import { jsonSchemaToZod } from "./JsonSchemaToZod.js";
-import { hasType } from "./ManifestGraphValidator.js";
 import { bestMatch, manifestPath, type ManifestFilePaths } from "./ManifestPathDiagnoser.js";
 import { mcpToolNameSegment } from "./McpToolNaming.js";
 
@@ -385,4 +384,10 @@ export function checkMcpToolNameCollisions(
     }
   }
   return out;
+}
+
+function hasType(schema: JsonSchema | undefined, types: readonly string[]): boolean {
+  const declared = schema?.type;
+  const list = Array.isArray(declared) ? declared : declared === undefined ? [] : [declared];
+  return list.length > 0 && list.every((type) => types.includes(type) || type === "null") && list.some((type) => types.includes(type));
 }

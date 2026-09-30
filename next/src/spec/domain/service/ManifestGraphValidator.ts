@@ -176,12 +176,6 @@ function entryKeyFields(schema: SchemaManifest): string[] {
   return ["id", ...new Set(unique)];
 }
 
-export function hasType(schema: JsonSchema | undefined, types: readonly string[]): boolean {
-  const declared = schema?.type;
-  const list = Array.isArray(declared) ? declared : declared === undefined ? [] : [declared];
-  return list.length > 0 && list.every((type) => types.includes(type) || type === "null") && list.some((type) => types.includes(type));
-}
-
 function pointerSegment(value: string): string {
   return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }
