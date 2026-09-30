@@ -6,3 +6,4 @@ export * from "./runtime/createRuntime.js";
 export * from "./service.js";
 export * from "./store.js";
 export { sqliteStorage } from "./sql/adapter.js";
+export { readStoreInstanceId, runMigrations, type Migration } from "./sql/migrations.js";
