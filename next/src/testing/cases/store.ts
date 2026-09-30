@@ -70,6 +70,13 @@ export async function run(r: Report, driver: DatabaseDriver) {
   const wrong = await fail(() => me.write([{ update: 'items', set: { stock: 1 }, where: { id: 'a' } }, { delete: 'items', where: { cat: 'x' }, expect: 2 }]));
   r.equal('expect that does not hold fails the whole write with CONFLICT naming that op, and the first op is rolled back', [conflict(wrong), (await stock('a')).stock], [{ opIndex: 1, reason: 'expect' }, 5]);
 
+  const classes = await me.write([
+    { update: 'items', set: { note: 'c' }, where: { id: 'a', stock: { gte: 0 } } }, { update: 'items', set: { note: 'c' }, where: { id: { eq: 'b' } } }, { update: 'items', set: { note: 'c' }, where: { cat: 'x' } },
+  ]);
+  r.equal('classification: { id } alone, with more conditions, or as { eq } is a row op ({ id, version }); { cat } is a set op ({ affected }); a scoped rewrite does not change the class', classes.map((x) => ('version' in x ? 'row' : 'set')), ['row', 'row', 'set']);
+  const noMatch = await fail(() => me.write([{ update: 'items', set: { note: 'c' }, where: { id: 'a', stock: { gte: 9999 } } }]));
+  r.equal('a row op whose other conditions fail matches nothing: CONFLICT reason "expect"', conflict(noMatch), { opIndex: 0, reason: 'expect' });
+
   const noRow = await me.write([{ update: 'items', set: { note: 'c' }, where: { id: 'X_z1' }, expect: 0 }]);
   r.equal("expect: 0 on a row op that matches nothing (another owner's row) succeeds with { affected: 0 }", noRow, [{ affected: 0 }]);
 

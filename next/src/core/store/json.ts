@@ -43,7 +43,8 @@ const SELECT = { limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } as cons
 export class StoreJson {
   readonly inputs: Record<string, string> = {};
   readonly values: Record<string, unknown> = {};
-  constructor(private readonly schemas: StoreSchemas) {}
+  /** `wantRow` says whether a Schema has an after hook: its writes then return the whole entry, which the hook receives (ADR-0032 decision 3). */
+  constructor(private readonly schemas: StoreSchemas, private readonly wantRow: (schema: string) => boolean = () => false) {}
 
   private schema(name: unknown): { name: string; def: StoreSchema } {
     const def = typeof name === "string" ? this.schemas[name.toLowerCase()] : undefined;
@@ -183,7 +184,9 @@ export class StoreJson {
 
   /** The IR of one write op. Only a row op returns `id` and `version`; a set op reports how many rows it touched. */
   write(o: StoreWriteOp): N {
-    const returning = StoreJson.isRowOp(o) ? { exprs: [target(ref("id")), target(ref("version"))] } : undefined;
+    const returningFor = (schema: string) => StoreJson.isRowOp(o)
+      ? { exprs: [...(this.wantRow(schema) ? [target({ ColumnRef: { fields: [{ A_Star: {} }] } })] : []), target(ref("id")), target(ref("version"))] }
+      : undefined;
     if ("insert" in o) {
       const { name, def } = this.schema(o.insert);
       const values = { ...o.values, ...(o.id === undefined ? {} : { id: o.id }) };
@@ -201,7 +204,7 @@ export class StoreJson {
       }
       return { InsertStmt: { relation: table(name), cols: cols.map(({ c }) => ({ ResTarget: { name: c.col } })),
         selectStmt: { SelectStmt: { valuesLists: [{ List: { items } }], ...SELECT } },
-        ...(onConflictClause ? { onConflictClause } : {}), ...(returning ? { returningClause: returning } : {}), override: "OVERRIDING_NOT_SET" } };
+        ...(onConflictClause ? { onConflictClause } : {}), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}), override: "OVERRIDING_NOT_SET" } };
     }
     if ("update" in o) {
       const { name, def } = this.schema(o.update);
@@ -209,10 +212,10 @@ export class StoreJson {
       if (!set.length) throw invalid("An update sets at least one column.");
       return { UpdateStmt: { relation: table(name),
         targetList: set.map(([k, v]) => { const c = this.column(def, k, "set", false); return target(v === null ? { A_Const: { isnull: true } } : this.val(c.type, v, `'${c.out}'`), c.col); }),
-        whereClause: this.guarded(o.where, def, o.lock), ...(returning ? { returningClause: returning } : {}) } };
+        whereClause: this.guarded(o.where, def, o.lock), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}) } };
     }
     const { name, def } = this.schema(o.delete);
-    return { DeleteStmt: { relation: table(name), whereClause: this.guarded(o.where, def, o.lock), ...(returning ? { returningClause: returning } : {}) } };
+    return { DeleteStmt: { relation: table(name), whereClause: this.guarded(o.where, def, o.lock), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}) } };
   }
 
   /** `where`, with `AND version = <lock>` when the caller observed a version (OCC). */

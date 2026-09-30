@@ -27,4 +27,4 @@ export type Caller =
 export type CallerResolver = (request: Request) => Promise<{ readonly caller: Caller } | { readonly invalid: true; readonly challenge?: string }>;
 
 /** Host code only; no wire produces one. Satisfies no `requires.auth` predicate, bypasses caller scope and nothing else. */
-export declare function systemCaller(reason: string): Caller;
+export const systemCaller = (reason: string): Caller => ({ kind: "system", reason });

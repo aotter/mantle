@@ -41,27 +41,3 @@ export interface PreparedMantleStorage {
 export interface MantleStorageAdapter {
   prepare(plan: RuntimePlan): Promise<PreparedMantleStorage>;
 }
-
-interface WaitUntil {
-  waitUntil(promise: Promise<unknown>): void;
-}
-
-/** Refuses to boot on an `expectedFingerprint` mismatch (`PLAN_FINGERPRINT_MISMATCH`). */
-export declare function createMantleRuntime(args: {
-  readonly plan: RuntimePlan;
-  readonly handlers: MantleHandlers<never>;
-  readonly storage: MantleStorageAdapter;
-  readonly expectedFingerprint?: string;
-  /** Boot fails for any enabled schedule unless the entry wires schedules. */
-  readonly schedules?: boolean;
-}): Promise<MantleRuntime>;
-
-/** The one host-neutral entry. Boots lazily from `storage(env)`; the host's native entry is 1 to 3 generated lines. */
-export declare function createMantle<Env>(
-  service: MantleService<Env>,
-  options: { readonly storage: (env: Env) => MantleStorageAdapter; readonly schedules?: boolean },
-): {
-  fetch(request: Request, env: Env, ctx?: WaitUntil): Promise<Response>;
-  invokeSchedule(cron: string, scheduledTime: number, env: Env, ctx?: WaitUntil): Promise<void>;
-  runDeferredHook(message: unknown, env: Env, ctx?: WaitUntil): Promise<void>;
-};
