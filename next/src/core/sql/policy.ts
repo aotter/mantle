@@ -46,7 +46,7 @@ export interface LoweringScope {
   param(spec: BindSpec): N;
   /** rewrite a sub-tree (policy and lowering apply inside it) */
   tx(node: N | undefined): N;
-  /** the Schema an alias in scope reads, and the query of its `search(alias, q)` in the same select */
+  /** the Schema an alias in scope reads, and the query of its `mantle.search(alias, q)` in the same select */
   alias(name: string): { schema: string; def: SchemaDef; searchQuery?: N };
   /** record a relation position the lowering reaches (the position probe checks the list is complete) */
   seen(position: RelationPosition): void;
@@ -185,7 +185,7 @@ function lookupAlias(c: C, alias: string): { schema: string; def: SchemaDef; sea
     const name = info.scope.get(alias);
     if (name) return { schema: name, def: c.schemas[name]!, searchQuery: info.searchQ.get(alias) };
   }
-  throw new Refused('SQL_FUNCTION', `${alias} is not a Schema in scope: search() and near() take a Schema alias`);
+  throw new Refused('SQL_FUNCTION', `${alias} is not a Schema in scope: mantle.search() and mantle.near() take a Schema alias`);
 }
 const scopeOf = (c: C): LoweringScope => ({
   inputs: c.inputs, param: (spec) => param$(c, spec), tx: (node) => tx(node, c), alias: (name) => lookupAlias(c, name), seen: (p) => c.seen?.add(p),
@@ -256,12 +256,12 @@ function select(n: N, c: C): N {
     scope: new Map(rels.filter((r) => r.RangeVar).map((r) => [r.RangeVar.alias?.aliasname ?? r.RangeVar.relname, r.RangeVar.relname])),
     searchQ: new Map(),
   };
-  // search_rank(t) reads the query of the search(t, q) in the same select
+  // mantle.search_rank(t) reads the query of the mantle.search(t, q) in the same select
   const findSearch = (v: any) => {
     if (Array.isArray(v)) return v.forEach(findSearch);
     if (!v || typeof v !== 'object') return;
     const f = v.FuncCall;
-    if (f && f.funcname.at(-1).String.sval === 'search') info.searchQ.set(f.args[0].ColumnRef.fields[0].String.sval, f.args[1]);
+    if (f && f.funcname.map((x: N) => x.String.sval).join('.') === 'mantle.search') info.searchQ.set(f.args[0].ColumnRef.fields[0].String.sval, f.args[1]);
     Object.values(v).forEach(findSearch);
   };
   findSearch(n.whereClause);

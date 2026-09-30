@@ -72,20 +72,20 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
       const ts = scope.tx(args[1]);
       return sql(`CAST(strftime('${EXTRACT[strConst(args[0]!)!]}', ${FD(LOCAL, 1_000_000)}, 'unixepoch') AS INTEGER)`, { __ts: ts });
     }
-    case 'search': case 'search_rank': {
+    case 'mantle.search': case 'mantle.search_rank': {
       const alias = args[0]!.ColumnRef.fields[0].String.sval;
       const { schema, def, searchQuery } = scope.alias(alias);
       if (!def.search?.length) throw new Refused('SQL_FUNCTION', `${schema} declares no search fields`);
       scope.seen('search');
       const fts = q(`_mantle_fts_${schema}`), a = q(alias);
-      const query = scope.tx(f === 'search' ? args[1] : searchQuery ?? (() => { throw new Refused('SQL_FUNCTION', `search_rank(${alias}) needs a search(${alias}, ...) in the same query`); })());
+      const query = scope.tx(f === 'mantle.search' ? args[1] : searchQuery ?? (() => { throw new Refused('SQL_FUNCTION', `mantle.search_rank(${alias}) needs a mantle.search(${alias}, ...) in the same query`); })());
       const phrase = `'"' || replace(__q, '"', '""') || '"'`; // a quoted phrase: FTS5 operators in the query are literal. `fts = q` is FTS5's spelling of `fts MATCH q`; PostgreSQL's grammar has no MATCH
-      if (f === 'search_rank') return sql(`coalesce((SELECT bm25(${fts}) FROM ${fts} WHERE ${fts} = ${phrase} AND rowid = ${a}._rid), 0)`, { __q: query });
+      if (f === 'mantle.search_rank') return sql(`coalesce((SELECT bm25(${fts}) FROM ${fts} WHERE ${fts} = ${phrase} AND rowid = ${a}._rid), 0)`, { __q: query });
       const like = def.search.map((fld) => `${a}.${q(fld)} LIKE '%' || replace(replace(replace(__q, '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!'`).join(' OR ');
       // trigram cannot match under three characters: fall back to LIKE over the same fields
       return sql(`CASE WHEN length(__q) >= 3 THEN ${a}._rid IN (SELECT rowid FROM ${fts} WHERE ${fts} = ${phrase}) ELSE (${like}) END`, { __q: query });
     }
-    case 'near': case 'distance': {
+    case 'mantle.near': case 'mantle.distance': {
       const [ref, latN, lngN] = args;
       const alias = ref!.ColumnRef.fields[0].String.sval, fld = ref!.ColumnRef.fields[1].String.sval;
       const { schema, def } = scope.alias(alias);
@@ -93,7 +93,7 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
       const a = q(alias);
       const dist = HAV(`${a}.${q(fld + '_lat')}`, `${a}.${q(fld + '_lng')}`);
       const sub = { __lat: scope.tx(latN), __lng: scope.tx(lngN) };
-      if (f === 'distance') return sql(dist, sub);
+      if (f === 'mantle.distance') return sql(dist, sub);
       scope.seen('near');
       const meters = Number(args[3]!.A_Const.ival?.ival ?? args[3]!.A_Const.fval?.fval);
       const b = (which: BoxBind['box']) => scope.param({ k: 'dialect', box: which, lat: argOf(latN!, scope), lng: argOf(lngN!, scope), meters } satisfies BoxBind);
@@ -129,7 +129,7 @@ function box(which: BoxBind['box'], lat: number, lng: number, meters: number): n
   const dLng = meters / (111_320 * Math.max(Math.cos((lat * Math.PI) / 180), 1e-9));
   const pad = 1e-4;
   if (Math.abs(lat) + dLat >= 90 || Math.abs(lng) + dLng >= 180)
-    throw new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: "near(): a box that crosses the antimeridian or a pole is refused" }));
+    throw new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: "mantle.near(): a box that crosses the antimeridian or a pole is refused" }));
   return { minLat: lat - dLat - pad, maxLat: lat + dLat + pad, minLng: lng - dLng - pad, maxLng: lng + dLng + pad }[which];
 }
 

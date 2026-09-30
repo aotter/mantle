@@ -173,6 +173,36 @@ describe("mantle generate", () => {
     expect((await gen(CUSTOM, dir)).err).toContain("Run `pnpm add @aotter/mantle`");
   });
 
+  it("compiles with the config's dialect, records it in the plan, and leaves the Cloudflare preset to the built-in dialect", async () => {
+    const dir = await project();
+    const mod = join(dir, "node_modules", "@acme", "dialect");
+    await mkdir(mod, { recursive: true });
+    await writeFile(join(mod, "package.json"), JSON.stringify({ name: "@acme/dialect", type: "module", exports: { "./compile": "./compile.js" } }));
+    await writeFile(join(mod, "compile.js"), 'export const name = "@acme/dialect"; export const version = "9"; export function accepts() { globalThis.acmeAccepted = (globalThis.acmeAccepted ?? 0) + 1; }');
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "@acme/dialect" }));
+    await rm(join(dir, "src/service.ts")); // with no service, the built-in dialect would write the preset
+    const r = await gen([], dir);
+    expect([r.code, r.err]).toEqual([0, ""]);
+    expect(r.out).toContain("dialect @acme/dialect");
+    expect((globalThis as { acmeAccepted?: number }).acmeAccepted).toBeGreaterThan(0);
+    expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@acme/dialect", version: "9" });
+    for (const f of ["wrangler.jsonc", "src/service.ts"]) await expect(read(dir, f)).rejects.toThrow();
+    expect(JSON.parse(await read(dir, "mantle.config.json")).dialect).toBe("@acme/dialect");
+    expect((await gen(["--check", "--database", "x.db"], dir)).code).toBe(2);
+
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "@acme/missing" }));
+    expect(await gen([], dir)).toMatchObject({ code: 2, err: expect.stringContaining("@acme/missing/compile cannot be found") });
+    for (const path of ["../evil", "/tmp/evil", "./x", "@acme/../evil"]) {
+      await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: path }));
+      expect(await gen([], dir), path).toMatchObject({ code: 2, err: expect.stringContaining("must be a package name") });
+    }
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "" }));
+    expect(await gen([], dir)).toMatchObject({ code: 2, err: expect.stringContaining('"dialect" must be a module name') });
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "@aotter/mantle/d1" }));
+    expect((await gen([], dir)).code).toBe(0);
+    expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/d1", version: "1" });
+  });
+
   it("names mantle-update for a v1 manifest and a v1 config", async () => {
     const v1 = await project();
     await writeFile(join(v1, "manifests/items.yaml"), (await read(v1, "manifests/items.yaml")).replace("cms.mantle.aotter.net/v2", "cms.mantle.aotter.net/v1"));

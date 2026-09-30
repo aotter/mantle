@@ -11,7 +11,8 @@ import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import type { SqlContext, SqlDiagnostic, SqlNode, SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
-import { compileSql } from "./compileSql.js";
+import * as d1 from "../../../d1/compile/index.js";
+import { compileSql, type SqlDialect } from "./compileSql.js";
 
 export type CompilePlanResult =
   | { readonly ok: true; readonly plan: RuntimePlan }
@@ -83,7 +84,7 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
 }
 
 /** Compile a linked manifest set to the sealed plan. Every refusal is reported, one per SQL source. */
-export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<CompilePlanResult> {
+export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlDialect = d1): Promise<CompilePlanResult> {
   const schemas: Record<string, PlanSchema> = {};
   for (const { manifest: m } of linked.schemas) {
     const scope = Object.keys(m.spec.scope ?? {})[0]?.toLowerCase();
@@ -110,7 +111,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
   const diagnostics: Diagnostic[] = [];
   const ctxOf = (kind: SqlContext["kind"], input: JsonSchema | undefined, isPublic = false): SqlContext => ({ schemas, inputs: typesOf(input), kind, public: isPublic });
   const compile = async (kind: SqlContext["kind"], sql: string, input: JsonSchema | undefined, source: SourceLocation, pointer: string, isPublic = false) => {
-    const res = await compileSql(sql, ctxOf(kind, input, isPublic));
+    const res = await compileSql(sql, ctxOf(kind, input, isPublic), dialect);
     if (res.ok) return res.plan;
     diagnostics.push(toDiagnostic(res.diagnostic, source, pointer));
   };
@@ -121,7 +122,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
     const checks: SqlNode[] = [];
     for (const [i, text] of (m.spec.checks ?? []).entries()) {
       const pointer = `/spec/checks/${i}`;
-      const res = await compileSql(`SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${text}`, { schemas, inputs: {}, kind: "view" });
+      const res = await compileSql(`SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${text}`, { schemas, inputs: {}, kind: "view" }, dialect);
       if (!res.ok) { diagnostics.push(toDiagnostic(res.diagnostic, source, pointer)); continue; }
       const where: SqlNode | undefined = res.plan.stmts[0]?.SelectStmt?.whereClause;
       if (!where || JSON.stringify(where).includes('"SubLink"')) {
@@ -165,14 +166,14 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
   }
   if (diagnostics.length) return { ok: false, diagnostics };
   const triggers: Record<string, PlanTrigger> = Object.fromEntries(linked.triggers.map(({ manifest: t }) => [t.metadata.name, { source: t.spec.source, procedure: t.spec.target.procedure }]));
-  const sealed = { version: RUNTIME_PLAN_VERSION, schemas, views, procedures, triggers };
+  const sealed = { version: RUNTIME_PLAN_VERSION, dialect: { name: dialect.name, version: dialect.version }, schemas, views, procedures, triggers };
   return { ok: true, plan: { ...sealed, fingerprint: await planFingerprint(sealed) } };
 }
 
 /** The plugin's contract: parse, link and compile manifest sources in one call. */
-export async function compilePlan(sources: ManifestSourceSet): Promise<CompilePlanResult> {
+export async function compilePlan(sources: ManifestSourceSet, dialect: SqlDialect = d1): Promise<CompilePlanResult> {
   const parsed = parseManifestSources(sources);
   if (!parsed.ok) return parsed;
   const linked = linkManifestSet(parsed.value);
-  return linked.ok ? compileLinkedPlan(linked.value) : linked;
+  return linked.ok ? compileLinkedPlan(linked.value, dialect) : linked;
 }

@@ -66,8 +66,8 @@ export const PROBES = {
     // an expired row of the caller's own is not revived by an upsert: DO UPDATE ... WHERE carries the TTL
     w("INSERT INTO notes (title, body) VALUES ('LEAK 小籠包 hello apple', 'revived') ON CONFLICT (title) DO UPDATE SET body = excluded.body RETURNING id", [[]]),
   ] },
-  search: { steps: [v('SELECT id FROM notes WHERE search(notes, input.q) ORDER BY id', ids('n1'), { q: 'text' }, { q: '小籠包' })] },
-  near: { steps: [v('SELECT id FROM places WHERE near(places.loc, input.lat, input.lng, 5000) ORDER BY id', ids('pl1200', 'pl300', 'pl4900'), { lat: 'float8', lng: 'float8' }, { lat: CENTER.lat, lng: CENTER.lng })] },
+  search: { steps: [v('SELECT id FROM notes WHERE mantle.search(notes, input.q) ORDER BY id', ids('n1'), { q: 'text' }, { q: '小籠包' })] },
+  near: { steps: [v('SELECT id FROM places WHERE mantle.near(places.loc, input.lat, input.lng, 5000) ORDER BY id', ids('pl1200', 'pl300', 'pl4900'), { lat: 'float8', lng: 'float8' }, { lat: CENTER.lat, lng: CENTER.lng })] },
 } satisfies Record<RelationPosition, Probe>;
 
 /** every row that must never change: another owner's, expired and unpublished rows all have an `X_` id */
@@ -125,7 +125,7 @@ export async function run(r: Report, driver: DatabaseDriver) {
     [(await runView({ ...site(b), mode: 'public' }, posts, caller())).rows, (await runView({ ...site(b), mode: 'trusted' }, all, caller())).rows], [ids('p1'), ids('X_z1', 'X_z2', 'a', 'b', 'c', 'd')]);
 
   // an alias that spells one of the lowering placeholders is only an identifier (it must not be spliced into)
-  const odd = await runView(site(b), await program('view', 'SELECT n__q.id FROM notes AS n__q WHERE search(n__q, input.q) ORDER BY n__q.id', { q: 'text' }), caller({ q: '小籠包' }));
+  const odd = await runView(site(b), await program('view', 'SELECT n__q.id FROM notes AS n__q WHERE mantle.search(n__q, input.q) ORDER BY n__q.id', { q: 'text' }), caller({ q: '小籠包' }));
   r.equal('an alias containing __q is an identifier, not a placeholder: search() still works through it', odd.rows, ids('n1'));
 
   // a Schema whose lifecycle is publishing takes row ops only, and only a draft can be edited (the lifecycle rule)

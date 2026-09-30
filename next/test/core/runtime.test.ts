@@ -208,6 +208,18 @@ describe("boot", () => {
     expect((await failure(boot({ plan: sealed, handlers: Object.fromEntries(Object.entries(handlers).filter(([k]) => k !== "audit")) as never })))?.diagnostic.code).toBe("LIFECYCLE_TARGET_NOT_REF");
   });
 
+  it("refuses a plan compiled for another dialect before it touches storage (ADR-0035 decision 5)", async () => {
+    const { fingerprint: _f, ...body } = plan;
+    for (const dialect of [{ ...plan.dialect, name: "@acme/postgres" }, { ...plan.dialect, version: "0" }]) {
+      const other = { ...body, dialect };
+      let prepared = false;
+      const storage = { ...sqliteStorage(d1), prepare: async () => { prepared = true; throw new Error("unreachable"); } };
+      expect((await failure(boot({ plan: { ...other, fingerprint: await planFingerprint(other) } as RuntimePlan, storage })))?.diagnostic)
+        .toMatchObject({ code: "PLAN_FINGERPRINT_MISMATCH", message: expect.stringContaining("compiled for dialect") });
+      expect(prepared).toBe(false);
+    }
+  });
+
   it("refuses to serve while storage has a blocked change, and reports the fingerprint it booted", async () => {
     const other = await LocalD1.create();
     await other.exec("CREATE TABLE items (id TEXT)");

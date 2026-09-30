@@ -27,6 +27,9 @@ export interface StoreCodec {
 
 /** Core's policy rewriter adds visibility and ownership to every relation position; the dialect spells the rest (`lowering`). */
 export interface MantleDialect {
+  /** What a plan compiled for this dialect records (`RuntimePlan.dialect`); boot refuses any other. */
+  readonly name: string;
+  readonly version: string;
   readonly codec: StoreCodec;
   /** The dialect's refusals of a program's IR. Run on every program: the runtime never trusts an IR. */
   check(plan: SqlPlan, context: SqlContext): readonly SqlDiagnostic[];
