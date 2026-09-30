@@ -8,7 +8,7 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { readStoreInstanceId } from "../core/index.js";
+import { readStoreInstanceId } from "../d1/index.js";
 import { STAFF_ROLES } from "../spec/domain/index.js";
 import { dbOf } from "./db.js";
 

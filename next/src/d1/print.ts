@@ -4,7 +4,7 @@
  * without it. Runs in the Worker: AST in, SQL text out, no parser.
  */
 import { Deparser } from "pgsql-deparser";
-import type { SqlNode } from "../../spec/domain/index.js";
+import type { SqlNode } from "../spec/domain/index.js";
 
 /** A pre-lowered SQLite expression: strings print as they are, nodes print as the deparser would, always in parentheses. */
 export interface RawExpr {

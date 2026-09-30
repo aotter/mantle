@@ -2,7 +2,7 @@
 //   timestamptz -> INTEGER microseconds since the epoch (exact to 2255: 2^53 us)
 //   date        -> INTEGER days since 1970-01-01
 //   numeric(p,s)-> INTEGER scaled by 10^s, p <= 15 (D1 rounds integers past 2^53)
-import { SqlRefusal as Refused, parseNumeric } from '../../spec/domain/index.js';
+import { SqlRefusal as Refused, parseNumeric } from '../spec/domain/index.js';
 
 const US_PER_DAY = 86_400_000_000;
 

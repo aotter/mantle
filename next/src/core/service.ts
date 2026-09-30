@@ -2,6 +2,7 @@
 import type { RuntimePlan } from "../spec/domain/index.js";
 import type { Caller } from "./caller.js";
 import type { Invocation, MantleHandlers } from "./invocation.js";
+import type { MantleDialect } from "./dialect.js";
 import type { MantleSite } from "./site.js";
 import type { MantleStore, StoreExecutor } from "./store.js";
 
@@ -40,6 +41,8 @@ export interface MantleService<Env = unknown> {
 
 export interface PreparedMantleStorage {
   readonly executor: StoreExecutor;
+  /** The engine's dialect: Store checks, rewrites and encodes through it (ADR-0035 decision 3). */
+  readonly dialect: MantleDialect;
   readonly site?: MantleSite;
 }
 

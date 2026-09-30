@@ -7,10 +7,10 @@
  * Pure JavaScript. This file must never import the parser: the runtime imports it, and the parser
  * declares a 128 MiB WASM memory, which is a Worker's whole isolate limit.
  */
-import type { SqlContext, SqlDiagnostic, SqlDiagnosticCode, SqlNode as N, SqlPlan, SqlSchemaDef } from "../model/SqlIr.js";
-import { PG_GRAMMAR } from "../model/SqlIr.js";
-import { SqlRefusal } from "./SqlRefusal.js";
-import { intervalMicros, parseNumeric } from "./SqlTypes.js";
+import type { SqlContext, SqlDiagnostic, SqlDiagnosticCode, SqlNode as N, SqlPlan, SqlSchemaDef } from "../spec/domain/model/SqlIr.js";
+import { PG_GRAMMAR } from "../spec/domain/model/SqlIr.js";
+import { SqlRefusal } from "../spec/domain/service/SqlRefusal.js";
+import { intervalMicros, parseNumeric } from "../spec/domain/service/SqlTypes.js";
 
 type Code = SqlDiagnosticCode;
 type Ctx = SqlContext & { source?: string; known?: Set<string> };

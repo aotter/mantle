@@ -7,8 +7,8 @@ import { compileSql as tryLower, SqlRefusal as Refused } from '../../spec/index.
 import type { DatabaseDriver } from '../../core/driver.js';
 import { NOW, boot, caller, program, site } from '../harness.js';
 import { compileProgram, render, runProcedure, runView } from '../harness.js';
-import { decodeDate, decodeNumeric, decodeOutput, encodeDate, encodeInput, encodeTimestamptz } from '../../core/sql/codec.js';
-import { localParts, transitions, tzStatements } from '../../core/sql/tz.js';
+import { decodeDate, decodeNumeric, decodeOutput, encodeDate, encodeInput, encodeTimestamptz } from '../../d1/codec.js';
+import { localParts, transitions, tzStatements } from '../../d1/tz.js';
 
 import { schemas } from '../harness.js';
 

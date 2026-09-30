@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
-import { readStoreInstanceId, runMigrations } from "../../src/core/index.js";
-import { splitSqlStatements } from "../../src/core/sql/migrations.js";
-import { convergeStorage } from "../../src/core/sql/storage.js";
+import { readStoreInstanceId, runMigrations } from "../../src/d1/index.js";
+import { splitSqlStatements } from "../../src/d1/migrations.js";
+import { convergeStorage } from "../../src/d1/storage.js";
 
 let d1: LocalD1;
 beforeAll(async () => { d1 = await LocalD1.create(); }, 60_000);

@@ -10,7 +10,6 @@ import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
 import { S, op, ref } from "./ast.js";
-import { decodeOutput } from "./codec.js";
 import { applyPolicy, HIDDEN_ID, HIDDEN_VERSION, type BindSpec, type Compiled } from "./policy.js";
 
 export interface Program {
@@ -32,7 +31,7 @@ export interface LifecycleHooks {
   readonly after: ReadonlySet<string>;
 }
 
-export interface RunEnv extends Pick<CompileContext, "schemas" | "mode" | "seen"> {
+export interface RunEnv extends Pick<CompileContext, "dialect" | "schemas" | "mode" | "seen"> {
   readonly executor: StoreExecutor;
   readonly lifecycle?: LifecycleHooks;
   /** NEGATIVE CONTROL ONLY: print no visibility predicate, so a probe that cannot fail is caught. */
@@ -52,7 +51,7 @@ const refuse = (message: string) => new DiagnosticError(runtimeDiagnostic({ code
 const conflict = (opIndex: number) => new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: `CONFLICT op=${opIndex}`, conflict: { opIndex, reason: "expect" } }));
 
 const ctxOf = (env: RunEnv, p: Program, extra: Partial<CompileContext> = {}): CompileContext => ({
-  schemas: env.schemas, inputs: p.inputs, kind: p.kind, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility, ...extra,
+  dialect: env.dialect, schemas: env.schemas, inputs: p.inputs, kind: p.kind, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility, ...extra,
 });
 
 const select = (targetList: N[], from?: N, where?: N): N => ({
@@ -101,8 +100,8 @@ async function preRead(env: RunEnv, p: Program, i: number, c: Compiled, as: RunA
       { A_Expr: { kind: "AEXPR_OP", name: [S("=")], lexpr: t("id"), rexpr: idOf(stmt) } },
     );
   }
-  const rc = applyPolicy(read, { schemas: env.schemas, inputs: p.inputs, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility });
-  const [row] = await env.executor.select({ ir: rc.ast, binds: bindValues(rc.binds, as.bind) });
+  const rc = applyPolicy(read, { schemas: env.schemas, inputs: p.inputs, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility, lower: env.dialect.lowering });
+  const [row] = await env.executor.select({ ir: rc.ast, binds: bindValues(env.dialect, rc.binds, as.bind) });
   if (c.verb !== "insert" && !row) throw conflict(i); // no visible row: fail closed, and the hook never learns whether it exists
   return row ?? {};
 }
@@ -119,7 +118,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
   // a hook receives the entry as its JSON Schema declares it (declared names, decoded values), not the storage encoding
   const entry = (schema: string, row: StoreRow): StoreRow => {
     const def = env.schemas[schema];
-    return Object.fromEntries(Object.entries(row).map(([k, v]) => (def?.fields[k] && def.fields[k] !== "geo" ? [(def as { names?: Record<string, string> }).names?.[k] ?? k, decodeOutput(def.fields[k]!, v)] : [k, v])));
+    return Object.fromEntries(Object.entries(row).map(([k, v]) => (def?.fields[k] && def.fields[k] !== "geo" ? [(def as { names?: Record<string, string> }).names?.[k] ?? k, env.dialect.codec.decode(def.fields[k]!, v)] : [k, v])));
   };
   const event = (i: number, hook: string, schema: string, rows: [StoreRow, ...StoreRow[]]) => ({
     id: `${as.seq ?? as.cause.id}:${i}:${hook}`, schema, hook: hook as never, rows: rows.map((r) => entry(schema, r)) as unknown as [StoreRow, ...StoreRow[]], caller: as.caller, parent: as.cause,
@@ -162,7 +161,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
   };
   const res = await env.executor.apply(plan.map((c, i) => ({
     ir: c.ast,
-    binds: bindValues(c.binds, as.bind, { version: versions[i] }),
+    binds: bindValues(env.dialect, c.binds, as.bind, { version: versions[i] }),
     ...((p.expects?.[i] ?? (c.kind === "row" ? 1 : undefined)) === undefined ? {} : { expect: p.expects?.[i] ?? 1 }),
   }))).catch(async (e) => { throw await lockReason(e); });
 
@@ -192,7 +191,7 @@ export interface ViewPage {
  */
 export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor?: readonly unknown[]; pageSize?: number } = {}): Promise<ViewPage> {
   const [c] = compileProgram(p.ir, ctxOf(env, p));
-  if (!opts.pageSize) return { rows: await env.executor.select({ ir: c!.ast, binds: bindValues(c!.binds, as.bind) }) };
+  if (!opts.pageSize) return { rows: await env.executor.select({ ir: c!.ast, binds: bindValues(env.dialect, c!.binds, as.bind) }) };
   const sel = structuredClone(c!.ast.SelectStmt) as N;
   const keys: N[] = sel.sortClause;
   if (!keys?.length) throw refuse("SQL_SHAPE: a cursor needs an ORDER BY");
@@ -221,7 +220,7 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
     whereClause: after,
     sortClause: keys.map((k, i) => ({ SortBy: { node: col(`_k${i}`), sortby_dir: k.SortBy.sortby_dir, sortby_nulls: k.SortBy.sortby_nulls } })),
     limitCount: { A_Const: { ival: { ival: opts.pageSize + 1 } } }, limitOption: "LIMIT_OPTION_COUNT", op: "SETOP_NONE" } };
-  const rows = await env.executor.select({ ir: outer, binds: bindValues([...c!.binds, ...cursorBinds], as.bind, { cursor: opts.cursor }) });
+  const rows = await env.executor.select({ ir: outer, binds: bindValues(env.dialect, [...c!.binds, ...cursorBinds], as.bind, { cursor: opts.cursor }) });
   const page = rows.slice(0, opts.pageSize);
   const next = rows.length > opts.pageSize ? keys.map((_k, i) => page.at(-1)![`_k${i}`]) : undefined;
   return { rows: page.map((r) => Object.fromEntries(visible.map((n) => [n, r[n]]))), ...(next ? { next } : {}) };

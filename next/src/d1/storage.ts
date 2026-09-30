@@ -4,21 +4,13 @@
  * are reported and never dropped. STRICT tables, checks as triggers, and the FTS5 / R*Tree tables that back
  * `search` and `format: geo` are Mantle's own and are rebuilt when their declaration changes.
  */
-import { parseNumeric, type SqlNode, type SqlSchemaDef } from "../../spec/domain/index.js";
-import type { DatabaseDriver, SqlStatement } from "../driver.js";
+import { parseNumeric, type SqlNode } from "../spec/domain/index.js";
+import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
+import type { StorageSchema } from "../core/dialect.js";
 import { print } from "./print.js";
 import { transitions, tzStatements } from "./tz.js";
 
-export interface StorageSchema extends SqlSchemaDef {
-  /** Boolean expressions over the row's own columns (IR), enforced by triggers that only RAISE. */
-  readonly checks?: readonly SqlNode[];
-  /** Fields indexed by FTS5 (trigram). */
-  readonly search?: readonly string[];
-  /** Unique constraints; on a scoped Schema the scope column is added. */
-  readonly unique?: readonly (readonly string[])[];
-  /** Ordered composite non-unique indexes. */
-  readonly indexes?: readonly (readonly string[])[];
-}
+export type { StorageSchema };
 
 export interface StorageChange {
   readonly schema: string;

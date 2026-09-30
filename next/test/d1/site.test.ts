@@ -1,8 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { DiagnosticError, type SiteDefaults } from "../../src/spec/index.js";
-import { prepareSite } from "../../src/core/sql/site.js";
-import { convergeStorage } from "../../src/core/sql/storage.js";
+import { prepareSite } from "../../src/d1/site.js";
+import { convergeStorage } from "../../src/d1/storage.js";
 
 const open: LocalD1[] = [];
 const db = async () => { const d1 = await LocalD1.create(); open.push(d1); return d1; };

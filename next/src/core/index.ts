@@ -7,7 +7,5 @@ export * from "./service.js";
 export * from "./withCaller.js";
 export * from "./site.js";
 export * from "./store.js";
-export { sqliteStorage } from "./sql/adapter.js";
-export { readStoreInstanceId, runMigrations, type Migration } from "./sql/migrations.js";
 export * from "./email.js";
 export * from "./runtime/auth.js";

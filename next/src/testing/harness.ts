@@ -8,13 +8,14 @@
  */
 import { compileSql, DiagnosticError, type SqlNode } from "../spec/index.js";
 import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
-import { encodeTimestamptz } from "../core/sql/codec.js";
+import { encodeTimestamptz } from "../d1/codec.js";
 import { bindValues, compileProgram as compileIr, type BindContext, type Compiled, type Mode } from "../core/sql/compile.js";
-import { SqliteStoreExecutor } from "../core/sql/executor.js";
-import { print } from "../core/sql/print.js";
+import { SqliteStoreExecutor } from "../d1/executor.js";
+import { print } from "../d1/print.js";
 import type { RelationPosition } from "../core/sql/positions.js";
 import { runProcedure as run, runView as runV, type LifecycleHooks, type Program } from "../core/sql/run.js";
-import { convergeStorage, type StorageSchema } from "../core/sql/storage.js";
+import { convergeStorage, type StorageSchema } from "../d1/storage.js";
+import { d1Dialect } from "../d1/dialect.js";
 
 export type { Program } from "../core/sql/run.js";
 
@@ -150,7 +151,7 @@ class Recording extends SqliteStoreExecutor {
   }
 }
 const envOf = (s: Site, executor = new Recording(s.d1.driver)) => ({
-  executor, schemas: s.schemas, mode: s.mode, seen: s.seen, unsafeNoVisibility: s.unsafeNoVisibility, lifecycle: lifecycleOf(s.hooks),
+  executor, dialect: d1Dialect, schemas: s.schemas, mode: s.mode, seen: s.seen, unsafeNoVisibility: s.unsafeNoVisibility, lifecycle: lifecycleOf(s.hooks),
 });
 const asOf = (bind: BindContext) => ({
   bind,
@@ -167,7 +168,7 @@ export async function runView(s: Site, p: Program, bind: BindContext, opts: { cu
   return runV(envOf(s), p, asOf(bind), opts);
 }
 export const compileProgram = (s: Site, p: Program): Compiled[] =>
-  compileIr(p.ir, { schemas: s.schemas, inputs: p.inputs, kind: p.kind, mode: s.mode, seen: s.seen, unsafeNoVisibility: s.unsafeNoVisibility });
+  compileIr(p.ir, { dialect: d1Dialect, schemas: s.schemas, inputs: p.inputs, kind: p.kind, mode: s.mode, seen: s.seen, unsafeNoVisibility: s.unsafeNoVisibility });
 export const render = (c: Compiled) => print(c.ast);
 export { bindValues };
 

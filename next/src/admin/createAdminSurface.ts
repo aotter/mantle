@@ -6,7 +6,7 @@
 import { makeDiagnostic, redactForWire } from "../spec/kernel/index.js";
 import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, resolveMantleRef, type JsonSchema, type McpTool, type PlanSchema, type StaffRole } from "../spec/domain/index.js";
 import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
-import { siteConfigOf } from "../core/sql/site.js";
+import { siteConfigOf } from "../core/siteConfig.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
 import { decodeMemberCursor } from "./consent.js";
 import type { AdminIdentity, MemberUserInfo, StaffUserInfo } from "./identity.js";

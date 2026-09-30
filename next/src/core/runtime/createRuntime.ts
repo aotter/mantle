@@ -71,7 +71,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     if (g && inline(g)) throw fail("GUARD_PROCEDURE_NOT_REF", `${at}#/views/${name}`, `View '${name}' is guarded by '${g}', which is an inline program`);
   }
 
-  const { executor, site } = await args.storage.prepare(plan);
+  const { executor, dialect, site } = await args.storage.prepare(plan);
 
   // ---- lifecycle: Store hands mutations to this dispatcher; Procedures are only reached through invokeProcedure ---------------
   const byHook = new Map<string, [string, string][]>();
@@ -105,7 +105,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
 
   const now = args.now ?? (() => Date.now() * 1000);
   const store = createStore({
-    executor, schemas: plan.schemas, lifecycle, now,
+    executor, dialect, schemas: plan.schemas, lifecycle, now,
     newId: args.newId ?? (() => crypto.randomUUID().replaceAll("-", "")),
     views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input } : {}), ...(v.columns ? { columns: v.columns } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}) }])),
     guardView: async (procedure, caller, input, cause) => { await invoke({ procedure, input, caller, cause: child(cause, procedure) }, true); },
@@ -158,7 +158,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
         result = await (args.handlers[proc.handler.ref] as (i: unknown, c: HandlerContext) => unknown)(input, ctx);
       } else {
         const { mode, bind } = bindFor(now(), inv.caller);
-        const env: RunEnv = { executor, schemas: plan.schemas, mode, lifecycle };
+        const env: RunEnv = { executor, dialect, schemas: plan.schemas, mode, lifecycle };
         const ran = await runProcedure(env, { kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: input as Record<string, unknown> } });
         result = { results: ran.rows };
       }

@@ -2,7 +2,7 @@ import { getMigrations } from "better-auth/db/migration";
 import { createDpopReplayStore, type DpopReplayStore } from "better-auth/oauth2";
 import { decodeMemberCursor, encodeMemberCursor } from "../admin/consent.js";
 import type { StaffUserInfo } from "../admin/identity.js";
-import { runMigrations } from "../core/index.js";
+import { runMigrations } from "../d1/index.js";
 import { STAFF_ROLES, type StaffRole } from "../spec/domain/index.js";
 import { dbOf } from "./db.js";
 import { staffInvitationEmail } from "./emailTemplates.js";

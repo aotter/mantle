@@ -7,9 +7,10 @@
  * edit never overwrites what the owner set in Admin. Deployment fields (`origin`, icons, `locales`, media purposes) have no
  * edit path but code, so every boot syncs them, writing only what changed. A blank default is skipped (#441).
  */
-import { DEFAULT_SITE_ICONS, assertSiteDefaultsCanonical, type MediaPurposePolicy, type SiteConfig, type SiteDefaults, type SiteIcon } from "../../spec/domain/index.js";
-import type { DatabaseDriver, SqlStatement } from "../driver.js";
-import type { MantleSite } from "../site.js";
+import { DEFAULT_SITE_ICONS, assertSiteDefaultsCanonical, type SiteDefaults } from "../spec/domain/index.js";
+import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
+import type { MantleSite } from "../core/site.js";
+import { siteConfigOf } from "../core/siteConfig.js";
 import { mediaLibrary } from "./media.js";
 import { runMigrations, type Migration } from "./migrations.js";
 
@@ -29,23 +30,6 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
 ];
 
 const nonBlank = (v: string | undefined) => (v ? v : undefined);
-const parse = <T>(raw: string | undefined, fallback: T): T => { try { return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; } };
-
-/** The stored rows as the runtime reads them; no rows is every default. */
-export function siteConfigOf(rows: readonly Record<string, unknown>[]): SiteConfig {
-  const m = new Map(rows.map((r) => [String(r.key), String(r.value)]));
-  const locales = (m.get("locales") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  const purposes = parse<unknown>(m.get("mediaPurposes"), []);
-  const icons = m.get("faviconUrl");
-  // 0.1 alphas stored one plain favicon URL
-  const parsedIcons = parse<unknown>(icons, icons ? [{ src: icons }] : DEFAULT_SITE_ICONS);
-  return {
-    title: m.get("title") ?? "CMS", description: m.get("description") ?? "", origin: m.get("origin") ?? "",
-    locales, canonicalLocale: locales[0] ?? null, brand: m.get("brand") ?? "AotterMantle",
-    icons: Array.isArray(parsedIcons) && parsedIcons.length ? parsedIcons as SiteIcon[] : DEFAULT_SITE_ICONS,
-    media: { purposes: Array.isArray(purposes) ? purposes as MediaPurposePolicy[] : [] },
-  };
-}
 
 const upsert = (key: string, value: string): SqlStatement => ({ sql: "INSERT INTO site_config (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value", binds: [key, value] });
 

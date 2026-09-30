@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { classify, compilePlan, compileSql, type SqlNode } from "../../src/spec/index.js";
 import { StoreJson } from "../../src/core/store/json.js";
+import { d1Dialect } from "../../src/d1/dialect.js";
 import type { StoreWriteOp } from "../../src/core/store.js";
 
 const SCHEMAS = { notes: { scope: "owner", fields: { title: "text", n: "integer", at: "timestamptz" } } };
@@ -23,7 +24,7 @@ describe("Procedure.target inference agrees with Store (ADR-0032 decision 2)", (
     ["a one-row insert", "INSERT INTO notes (title) VALUES (input.t)", { insert: "notes", values: { title: "x" } }],
     ["an upsert", "INSERT INTO notes (title) VALUES (input.t) ON CONFLICT (title) DO NOTHING", { insert: "notes", values: { title: "x" }, onConflict: "ignore" }],
   ])("%s", async (_name, sql, op) => {
-    const viaStore = new StoreJson({ notes: { ...SCHEMAS.notes, fields: { ...SCHEMAS.notes.fields } } } as never).write(op);
+    const viaStore = new StoreJson({ notes: { ...SCHEMAS.notes, fields: { ...SCHEMAS.notes.fields } } } as never, d1Dialect.codec).write(op);
     expect([await classOf(sql), viaStore.row ? "row" : "set"]).toEqual([expect.any(String), await classOf(sql)]); // Store's class is the compiled statement's
   });
 

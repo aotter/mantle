@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, DiagnosticError } from "../../src/spec/index.js";
-import { createMantleRuntime, sqliteStorage, type MantleRuntime } from "../../src/core/index.js";
+import { createMantleRuntime, type MantleRuntime } from "../../src/core/index.js";
+import { sqliteStorage } from "../../src/d1/index.js";
 
 const M = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema

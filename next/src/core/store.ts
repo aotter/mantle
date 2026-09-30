@@ -141,8 +141,8 @@ export interface StoreApplied {
 }
 
 /**
- * The storage port. The only implementation is SqliteStoreExecutor over a DatabaseDriver (ADR-0034 decision 6);
- * it implements the whole IR, so there are no capability flags.
+ * The storage port. Each dialect has one; D1's is SqliteStoreExecutor over a DatabaseDriver (ADR-0035 decision 6).
+ * It runs whatever its dialect accepted, so there are no capability flags.
  */
 export interface StoreExecutor {
   /** Bind limit per statement, read by the one Core validator (100 on D1). */
