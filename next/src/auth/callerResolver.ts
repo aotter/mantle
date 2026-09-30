@@ -5,7 +5,7 @@
  * session snapshot.
  */
 import { STAFF_ROLES, type StaffRole } from "../spec/domain/index.js";
-import type { OAuthAccessTokenVerification } from "./createMantleAuth.js";
+import type { OAuthAccessTokenVerification } from "./types.js";
 import type { Caller, CallerResolver, CredentialKind } from "../core/index.js";
 
 /** The three things the resolver needs of a Better Auth facade; a custom facade only has to provide these. */

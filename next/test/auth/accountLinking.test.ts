@@ -24,7 +24,7 @@ vi.mock("better-auth", async (importOriginal) => {
   };
 });
 
-const { createMantleAuth } = await import("../../src/auth/createMantleAuth.js");
+const { createMantleAuth } = await import("../../src/auth/index.js");
 type CreateMantleAuthOptions = Parameters<typeof createMantleAuth>[0];
 
 function fakeBetterAuthDatabase(): CreateMantleAuthOptions["database"] {

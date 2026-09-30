@@ -9,7 +9,7 @@ import {
   resolveClientIpHeaders,
   type AuthMethodConfig,
   type CreateMantleAuthOptions,
-} from "../../src/auth/createMantleAuth.js";
+} from "../../src/auth/index.js";
 
 const GITHUB_METHOD = {
   kind: "social",
