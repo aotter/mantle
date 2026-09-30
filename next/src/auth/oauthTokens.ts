@@ -75,9 +75,9 @@ export async function assertActiveUserGrant(
   ) {
     throw new Error("OAuth token is not bound to a user session.");
   }
-  const result = await db.first<{ resources: string | null; scopes: string }>("SELECT c.resources, c.scopes FROM oauthConsent AS c " +
-        "JOIN session AS s ON s.id = ? AND s.userId = c.userId AND s.expiresAt > ? " +
-        "WHERE c.id = ? AND c.userId = ? AND c.clientId = ?", sessionId, new Date().toISOString(), consentId, userId, clientId);
+  const result = await db.first<{ resources: string | null; scopes: string }>('SELECT c.resources, c.scopes FROM "oauthConsent" AS c ' +
+        'JOIN session AS s ON s.id = ? AND s."userId" = c."userId" AND s."expiresAt" > ? ' +
+        'WHERE c.id = ? AND c."userId" = ? AND c."clientId" = ?', sessionId, new Date().toISOString(), consentId, userId, clientId);
   const tokenScopes = scopesFromClaim(claims["scope"]);
   const resources = parseStoredStringArray(result?.resources);
   const scopes = parseStoredStringArray(result?.scopes);

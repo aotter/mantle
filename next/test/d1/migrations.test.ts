@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
-import { readStoreInstanceId, runMigrations } from "../../src/d1/index.js";
+import { runMigrations } from "../../src/d1/migrations.js";
+import { readStoreInstanceId } from "../../src/auth/db.js";
 import { splitSqlStatements } from "../../src/d1/migrations.js";
 import { convergeStorage } from "../../src/d1/storage.js";
 

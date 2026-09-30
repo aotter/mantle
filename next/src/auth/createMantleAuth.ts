@@ -2,7 +2,6 @@ import { getMigrations } from "better-auth/db/migration";
 import { createDpopReplayStore, type DpopReplayStore } from "better-auth/oauth2";
 import { decodeMemberCursor, encodeMemberCursor } from "../admin/consent.js";
 import type { StaffUserInfo } from "../admin/identity.js";
-import { runMigrations } from "../d1/index.js";
 import { STAFF_ROLES, type StaffRole } from "../spec/domain/index.js";
 import { dbOf } from "./db.js";
 import { staffInvitationEmail } from "./emailTemplates.js";
@@ -25,21 +24,20 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
   // Keep schema work lazy: static/plan-only routes must not prepare tables.
   let schemaReady: Promise<void> | null = null;
   const prepareAuth = (): Promise<void> => schemaReady ??= (async () => {
+    // Better Auth converges its own tables on whatever engine it speaks; the role index is the one Mantle adds. A database that
+    // already holds this schema (its digest in Mantle's boot state) skips the introspection, so a warm isolate reads one row.
     const context = await auth.$context;
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(context.tables)));
-    const id = `auth-schema:1:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("")}`;
-    try {
-      const applied = await db.first<{ id: string }>("SELECT id FROM _mantle_migrations WHERE id = ?1", id);
-      if (applied?.id === id) return;
-    } catch (error) {
-      // A new, auth-only or pre-#1150 database has no ledger yet; the runner creates it.
-      if (!/no such table: _mantle_migrations/i.test(String(error))) throw error;
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(context.tables)))), (b) => b.toString(16).padStart(2, "0")).join("");
+    const done = await db.first<{ value: string }>("SELECT value FROM _mantle_boot_state WHERE key = 'auth-schema'").catch(() => null);
+    if (done?.value === digest) return;
+    const migrate = async () => (await getMigrations(context.options)).runMigrations();
+    // Better Auth's statements are not idempotent: an isolate racing another retries until the other has finished its tables
+    for (let attempt = 1; ; attempt++) {
+      try { await migrate(); break; } catch (error) { if (attempt === 5) throw error; await new Promise((r) => setTimeout(r, 50 * attempt)); }
     }
-    const { compileMigrations } = await getMigrations(context.options);
-    await runMigrations(config.driver, [{
-      id,
-      sql: `${await compileMigrations()}\nCREATE INDEX IF NOT EXISTS user_role_idx ON user (role) WHERE role IS NOT NULL;`,
-    }]);
+    await db.batch([{ sql: 'CREATE INDEX IF NOT EXISTS user_role_idx ON "user" (role) WHERE role IS NOT NULL' }]);
+    // a store Mantle has not converged has no boot state: the next isolate introspects again
+    await db.batch([{ sql: "INSERT INTO _mantle_boot_state (key, value) VALUES ('auth-schema', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", binds: [digest] }]).catch(() => undefined);
   })().catch(error => { schemaReady = null; throw error; });
 
   const basePath = normalizeAuthBasePath(config.basePath);
@@ -78,7 +76,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     // Set before awaiting so concurrent OAuth requests do not fan out writes.
     nextDcrCleanupAt = now + LEGACY_DCR_CLEANUP_INTERVAL_MS;
     try {
-      await db.run("DELETE FROM oauthClient WHERE clientDiscoveryId IS NULL AND userId IS NULL AND referenceId IS NULL AND createdAt < ?", new Date(now - LEGACY_DCR_TTL_MS).toISOString());
+      await db.batch([{ sql: 'DELETE FROM "oauthClient" WHERE "clientDiscoveryId" IS NULL AND "userId" IS NULL AND "referenceId" IS NULL AND "createdAt" < ?', binds: [new Date(now - LEGACY_DCR_TTL_MS).toISOString()] }]);
     } catch (error) {
       // Cleanup is bounded storage hygiene, not an authorization decision.
       console.error("[better-auth] legacy DCR cleanup failed", error);
@@ -87,7 +85,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
 
   const readUserRole = async (userId: string): Promise<string | null> => {
     await prepareAuth();
-    const row = await db.first<{ role: string | null }>("SELECT role FROM user WHERE id = ? LIMIT 1", userId);
+    const row = await db.first<{ role: string | null }>('SELECT role FROM "user" WHERE id = ? LIMIT 1', userId);
     return row?.role ?? null;
   };
   // A session user is a fresh database read unless a KV session cache or a
@@ -168,9 +166,9 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
           image: string | null;
           role: string | null;
           githubLogin: string | null;
-          emailVerified: number;
-          createdAt: string;
-        }>("SELECT id, email, name, image, role, githubLogin, emailVerified, createdAt FROM user WHERE id = ? LIMIT 1", userId);
+          emailVerified: number | boolean;
+          createdAt: string | Date;
+        }>('SELECT id, email, name, image, role, "githubLogin", "emailVerified", "createdAt" FROM "user" WHERE id = ? LIMIT 1', userId);
       if (!row) return null;
       const createdAt = new Date(row.createdAt);
       if (Number.isNaN(createdAt.getTime())) {
@@ -183,7 +181,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
         image: row.image,
         role: row.role,
         githubLogin: row.githubLogin,
-        emailVerified: row.emailVerified !== 0,
+        emailVerified: Boolean(row.emailVerified),
         createdAt,
       };
     },
@@ -192,7 +190,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       const session = await api.getSession({ headers: request.headers });
       const userId = session?.user?.id;
       const account = userId
-        ? await db.first<{ id: string }>("SELECT id FROM account WHERE userId = ? AND providerId = ? LIMIT 1", userId, providerId)
+        ? await db.first<{ id: string }>('SELECT id FROM account WHERE "userId" = ? AND "providerId" = ? LIMIT 1', userId, providerId)
         : null;
       if (!account) {
         throw new Error(`getProviderAccessToken: provider '${providerId}' is not linked to the current user.`);
@@ -273,13 +271,13 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
                 clientId: string;
                 clientName: string;
                 scopes: string;
-              }>(`SELECT consent.id, consent.clientId,
-                        COALESCE(client.name, consent.clientId) AS clientName,
+              }>(`SELECT consent.id, consent."clientId" AS "clientId",
+                        COALESCE(client.name, consent."clientId") AS "clientName",
                         consent.scopes
-                   FROM oauthConsent AS consent
-                   LEFT JOIN oauthClient AS client ON client.clientId = consent.clientId
-                  WHERE consent.userId = ?
-                  ORDER BY consent.updatedAt DESC, consent.id ASC`, userId);
+                   FROM "oauthConsent" AS consent
+                   LEFT JOIN "oauthClient" AS client ON client."clientId" = consent."clientId"
+                  WHERE consent."userId" = ?
+                  ORDER BY consent."updatedAt" DESC, consent.id ASC`, userId);
             return result.map((row) => ({
               id: row.id,
               clientId: row.clientId,
@@ -289,18 +287,26 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
           },
           revokeOAuthConsent: async (userId: string, consentId: string) => {
             await prepareAuth();
-            const consent = await db.first<{ clientId: string }>("SELECT clientId FROM oauthConsent WHERE id = ? AND userId = ? LIMIT 1", consentId, userId);
+            const consent = await db.first<{ clientId: string }>('SELECT "clientId" FROM "oauthConsent" WHERE id = ? AND "userId" = ? LIMIT 1', consentId, userId);
             if (!consent) return false;
+            // the consent and its tokens go first, in one batch: without the consent no new code is issued without a prompt
             const revokedAt = new Date().toISOString();
             await db.batch([
-              { sql: "UPDATE oauthRefreshToken SET revoked = ? WHERE userId = ? AND clientId = ? AND revoked IS NULL", binds: [revokedAt, userId, consent.clientId] },
-              { sql: "UPDATE oauthAccessToken SET revoked = ? WHERE userId = ? AND clientId = ? AND revoked IS NULL", binds: [revokedAt, userId, consent.clientId] },
-              { sql: `DELETE FROM verification
-                    WHERE CASE WHEN json_valid(value) THEN json_extract(value, '$.type') END = 'authorization_code'
-                      AND CASE WHEN json_valid(value) THEN json_extract(value, '$.userId') END = ?
-                      AND CASE WHEN json_valid(value) THEN json_extract(value, '$.query.client_id') END = ?`, binds: [userId, consent.clientId] },
-              { sql: "DELETE FROM oauthConsent WHERE userId = ? AND clientId = ?", binds: [userId, consent.clientId] },
+              { sql: 'DELETE FROM "oauthConsent" WHERE "userId" = ? AND "clientId" = ?', binds: [userId, consent.clientId] },
+              { sql: 'UPDATE "oauthRefreshToken" SET revoked = ? WHERE "userId" = ? AND "clientId" = ? AND revoked IS NULL', binds: [revokedAt, userId, consent.clientId] },
+              { sql: 'UPDATE "oauthAccessToken" SET revoked = ? WHERE "userId" = ? AND "clientId" = ? AND revoked IS NULL', binds: [revokedAt, userId, consent.clientId] },
             ]);
+            // then every pending code of the grant, paged past the rows it keeps (other clients' codes, other verifications)
+            const { adapter } = await auth.$context;
+            const code = (v: string) => { try { const x = JSON.parse(v); return x?.type === "authorization_code" && x.userId === userId && x.query?.client_id === consent.clientId; } catch { return false; } };
+            const where = [{ field: "value", operator: "contains" as const, value: JSON.stringify(userId) }, { field: "value", operator: "contains" as const, value: JSON.stringify(consent.clientId) }];
+            for (let offset = 0; ;) {
+              const page = await adapter.findMany<{ id: string; value: string }>({ model: "verification", where, limit: 100, offset, sortBy: { field: "id", direction: "asc" } });
+              const ids = page.filter((v) => code(v.value)).map((v) => v.id);
+              if (ids.length) await adapter.deleteMany({ model: "verification", where: [{ field: "id", operator: "in", value: ids }] });
+              if (page.length < 100) break;
+              offset += page.length - ids.length;
+            }
             return true;
           },
         }
@@ -326,9 +332,9 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
           id: string;
           providerId: string;
           accountId: string;
-          createdAt: string;
-          updatedAt: string;
-        }>("SELECT id, providerId, accountId, createdAt, updatedAt FROM account WHERE userId = ? ORDER BY createdAt ASC, id ASC", userId);
+          createdAt: string | Date;
+          updatedAt: string | Date;
+        }>('SELECT id, "providerId", "accountId", "createdAt", "updatedAt" FROM account WHERE "userId" = ? ORDER BY "createdAt" ASC, id ASC', userId);
       return result.map((row) => ({
         id: row.id,
         providerId: row.providerId,
@@ -339,8 +345,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     },
     unlinkAccount: async (userId, providerId) => {
       await prepareAuth();
-      const result = await db.run("DELETE FROM account WHERE userId = ? AND providerId = ?", userId, providerId);
-      return (result.meta?.changes ?? 0) > 0;
+      return (await db.all('DELETE FROM account WHERE "userId" = ? AND "providerId" = ? RETURNING id', userId, providerId)).length > 0;
     },
     listUsers: async (request) => {
       await prepareAuth();
@@ -367,7 +372,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       }
       if (parsedCursor) {
         const operator = backward ? "<" : ">";
-        conditions.push(`(createdAt ${operator} ? OR (createdAt = ? AND id ${operator} ?))`);
+        conditions.push(`("createdAt" ${operator} ? OR ("createdAt" = ? AND id ${operator} ?))`);
         bindings.push(parsedCursor[0], parsedCursor[0], parsedCursor[1]);
       }
       bindings.push(limit + 1);
@@ -375,16 +380,16 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
           id: string;
           email: string;
           name: string;
-          emailVerified: number;
+          emailVerified: number | boolean;
           createdAt: string;
-        }>(`SELECT id, email, name, emailVerified, createdAt FROM user WHERE ${conditions.join(" AND ")} ORDER BY createdAt ${backward ? "DESC" : "ASC"}, id ${backward ? "DESC" : "ASC"} LIMIT ?`, ...bindings);
+        }>(`SELECT id, email, name, "emailVerified", "createdAt" FROM "user" WHERE ${conditions.join(" AND ")} ORDER BY "createdAt" ${backward ? "DESC" : "ASC"}, id ${backward ? "DESC" : "ASC"} LIMIT ?`, ...bindings);
       const rows = result.slice(0, limit);
       if (backward) rows.reverse();
       const items = rows.map((row) => ({
         id: row.id,
         email: row.email,
         name: row.name,
-        emailVerified: row.emailVerified !== 0,
+        emailVerified: Boolean(row.emailVerified),
         createdAt: new Date(row.createdAt),
       }));
       const hasMore = result.length > limit;
@@ -440,8 +445,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     } : {}),
     revokeInvite: async (userId) => {
       await prepareAuth();
-      const result = await db.run("DELETE FROM user WHERE id = ? AND emailVerified = 0 AND NOT EXISTS (SELECT 1 FROM account WHERE account.userId = user.id)", userId);
-      return (result.meta?.changes ?? 0) > 0;
+      return (await db.all('DELETE FROM "user" WHERE id = ? AND NOT "emailVerified" AND NOT EXISTS (SELECT 1 FROM account WHERE account."userId" = "user".id) RETURNING id', userId)).length > 0;
     },
     deleteUser: async (userId) => {
       await prepareAuth();
