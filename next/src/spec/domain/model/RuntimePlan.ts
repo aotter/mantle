@@ -5,7 +5,7 @@
 import type { AuthorizationRequirements, JsonSchema, LocalizedText, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
 import type { SqlNode, SqlPlan } from "./SqlIr.js";
 
-export const RUNTIME_PLAN_VERSION = 6 as const;
+export const RUNTIME_PLAN_VERSION = 7 as const;
 
 /** A Schema as storage and Store see it. Keys of `fields` and `names` are lower case: SQL folds unquoted identifiers. */
 export interface PlanSchema {
