@@ -160,7 +160,7 @@ export async function convergeStorage(
 ): Promise<StorageReport> {
   const timeZone = options.timeZone ?? "UTC";
   const state = `${options.fingerprint}|${timeZone}`;
-  await driver.batch(SYSTEM_DDL.map((sql) => ({ sql })));
+  await driver.batch([...SYSTEM_DDL.map((sql) => ({ sql })), { sql: "INSERT OR IGNORE INTO _mantle_boot_state (key, value) VALUES ('instance', ?1)", binds: [crypto.randomUUID()] }]);
   const [stored] = await driver.batch([{ sql: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" }]);
   if (stored!.rows[0]?.value === state) return { skipped: true, blocked: [], undeclared: [] };
 
