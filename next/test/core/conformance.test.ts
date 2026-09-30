@@ -1,6 +1,6 @@
 /**
- * The Step 2 contract as unimplemented cases (next/README.md). Step 3 moves each group into
- * `runStorageConformance({ create })` in src/testing and fills it in. Group titles cite their source.
+ * The Step 2 contract cases still unimplemented (next/README.md). Step 3 moves each group into
+ * `runStorageConformance({ create })` in src/testing as it is implemented. Group titles cite their source.
  */
 import { describe, it } from "vitest";
 
@@ -28,16 +28,9 @@ describe("ADR-0032: caller identity", () => {
   it.todo("a no-identity service boots with no auth package and no auth tables");
 });
 
-describe("ADR-0034", () => {
-  it.todo("1. requisition: CASE value, RETURNING, WHERE id AND cond fails CONFLICT, conditional INSERT SELECT calls the after hook only when it writes");
-  it.todo("2. stock: SET stock = stock - input.qty with checks fails oversell through the check trigger");
-  it.todo("3. report View: join, GROUP BY/HAVING and a cursor, scope and TTL injected into every joined Schema");
-  it.todo("4. before hooks: a row changing between hook and commit is CONFLICT; a set op on a Schema with a before hook is refused");
-  it.todo("5. dialect: unknown AST key, OFFSET, non-allowlisted function, $1, RIGHT JOIN, UPDATE FROM, CURRENT_TIMESTAMP, undeclared table, cte named like a Schema and _mantle_* are refused with a source position");
-  it.todo("6. types: integer division, numeric sum, microsecond timestamp vs interval, date_trunc across DST match PostgreSQL; non-literal CAST and interval '1 day' are refused");
-  it.todo("7. policy: every relation position of the IR hides or protects another owner's, expired and unpublished rows");
-  it.todo("8. search and places: trigram and two-character fallback, FTS5 operators matched literally, other owners absent, near() closest K in order");
-});
+// ADR-0034's eight cases run in `runStorageConformance` (src/testing/cases, run on local D1 by
+// test/cloudflare/conformance.test.ts): 1 requisition, 2 stock, 3 report-view, 4 before-hook, 6 types,
+// 7 policy, 8 search-places. Case 5 (the dialect refusals) is test/spec/sql-compile.test.ts.
 
 describe("README contract sources not covered by an ADR list", () => {
   it.todo("Views and pagination: one opaque cursor bound to from and orderBy; limit default 50, max 500");
