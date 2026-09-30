@@ -82,6 +82,17 @@ describe("compilePlan", () => {
     expect(res.diagnostics[0]!.message).toMatch(/^SQL \d+:\d+/);
   });
 
+  it("carries what Admin and MCP show, unchanged, and a plan without it is unchanged", async () => {
+    const plain = await compilePlan({ sources: [{ sourceId: "m", text: SCHEMA + view("SELECT id FROM notes") }] });
+    const rich = await compilePlan({ sources: [{ sourceId: "m", text: SCHEMA.replace("title: Notes", "title: { en: Notes, zh-TW: 筆記 }\n  description: My notes\n  localized: false\n  uiSchema: { list: { columns: [body] } }") + view("SELECT id FROM notes").replace("surface: staff,", "surface: staff, title: Mine, description: Mine only, uiSchema: { list: { columns: [id] } },") }] });
+    if (!plain.ok || !rich.ok) throw new Error("compile");
+    expect(plain.plan.schemas.notes).toMatchObject({ name: "notes", title: "Notes" });
+    expect(plain.plan.schemas.notes).not.toHaveProperty("uiSchema");
+    expect(rich.plan.schemas.notes).toMatchObject({ name: "notes", title: { en: "Notes", "zh-TW": "筆記" }, description: "My notes", uiSchema: { list: { columns: ["body"] } } });
+    expect(rich.plan.views.v).toMatchObject({ title: "Mine", description: "Mine only", uiSchema: { list: { columns: ["id"] } } });
+    expect(rich.plan.fingerprint).not.toBe(plain.plan.fingerprint);
+  });
+
   it("returns manifest diagnostics before compiling; a 0.1.x manifest names mantle-update", async () => {
     const res = await compile(SCHEMA.replace("/v2", "/v1"));
     if (res.ok) throw new Error("accepted");
