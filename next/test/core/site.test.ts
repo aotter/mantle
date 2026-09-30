@@ -20,17 +20,17 @@ it("creates the three product tables once, each with its 0.1.x ledger id, and tw
     .toEqual([{ name: "media_assets" }, { name: "pending_media_uploads" }, { name: "site_config" }]);
 });
 
-it("refuses a product table Mantle did not create, and takes one a 0.1.x ledger row proves", async () => {
+it("refuses a product table Mantle did not create, and takes one its own _mantle_migrations ledger row proves", async () => {
   const foreign = await db();
   await foreign.exec("CREATE TABLE Media_Assets (id TEXT)");
   expect(await codes(prepareSite(foreign, {}))).toEqual([["STORAGE_TABLE_NOT_OWNED", "storage:Media_Assets"]]);
   expect(await foreign.all("SELECT id FROM _mantle_migrations WHERE id = '0002-media-assets'")).toEqual([]);
 
-  const upgraded = await db();
-  await upgraded.exec("CREATE TABLE _mantle_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)");
-  await upgraded.exec("CREATE TABLE site_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
-  await upgraded.exec("INSERT INTO site_config VALUES ('title', 'Old'); INSERT INTO _mantle_migrations VALUES ('0001-init', 0)");
-  expect(await (await prepareSite(upgraded, { title: "New" })).read()).toMatchObject({ title: "Old" });
+  const owned = await db();
+  await owned.exec("CREATE TABLE _mantle_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)");
+  await owned.exec("CREATE TABLE site_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+  await owned.exec("INSERT INTO site_config VALUES ('title', 'Old'); INSERT INTO _mantle_migrations VALUES ('0001-init', 0)");
+  expect(await (await prepareSite(owned, { title: "New" })).read()).toMatchObject({ title: "Old" });
 });
 
 it("a Schema may not take a product table's name", async () => {
@@ -54,4 +54,6 @@ it("seeds operator fields once and syncs deployment fields every boot, skipping 
   await prepareSite(d1, { origin: "", locales: [] });
   expect(await site.read()).toMatchObject({ origin: "https://b.test", locales: ["en"] });
   await expect(prepareSite(d1, { locales: ["zh-Hant"] })).rejects.toThrow(/locale/);
+  for (const origin of ["https://a.test/", "https://a.test/blog", "ftp://a.test", "a.test"]) await expect(prepareSite(d1, { origin })).rejects.toThrow(/absolute http\(s\) origin/);
+  expect(await site.read()).toMatchObject({ origin: "https://b.test" });
 });

@@ -52,7 +52,10 @@ export interface MediaStorage {
   }): Promise<{
     readonly capabilities: readonly { readonly mimeType: string; readonly role: MediaVariantRole; readonly method: "PUT"; readonly uploadUrl: string; readonly storageKey: string; readonly requiredHeaders?: Readonly<Record<string, string>> }[];
   }>;
-  /** Checks every stored object's type and size (`MEDIA_OBJECT_NOT_FOUND`, `MEDIA_MIME_REJECTED`, `MEDIA_VARIANT_SIZE_EXCEEDED`), all or nothing. */
+  /**
+   * Checks every uploaded object's type and size (`MEDIA_OBJECT_NOT_FOUND`, `MEDIA_MIME_REJECTED`, `MEDIA_VARIANT_SIZE_EXCEEDED`), all or
+   * nothing, and publishes it under a key no upload URL reaches. On a rejection the caller deletes the upload keys.
+   */
   commitUpload(args: {
     readonly uploadGroupId: string;
     readonly filename: string;

@@ -20,9 +20,10 @@ import {
  * declared `media.purposes` entry's `name` fails the slug pattern,
  * its `required` mime list is empty, or its `maxBytes` map is
  * missing entries for any required mime. Throws `InvalidSiteIconsError`
- * when a declared site icon cannot be served safely. Brand / title /
- * description / origin are not validated — only the fields whose values
- * carry semantics the runtime depends on.
+ * when a declared site icon cannot be served safely, and an `Error` when
+ * `origin` is not an absolute http(s) origin. Brand / title / description
+ * are not validated — only the fields whose values carry semantics the
+ * runtime depends on.
  *
  * Lives in spec (not runtime) because it's pure validation against
  * the `SiteConfig` contract — no env, no DB. Runtime calls this during
@@ -116,6 +117,10 @@ export function assertSiteDefaultsCanonical(
       throw new InvalidSiteIconsError(invalid.length > 0 ? invalid : defaults.icons);
     }
   }
+  // canonical and public URLs are built on it: an absolute http(s) origin, no path and no trailing slash
+  const origin = defaults?.origin;
+  if (origin && !(URL.canParse(origin) && /^https?:$/.test(new URL(origin).protocol) && new URL(origin).origin === origin))
+    throw new Error(`siteDefaults.origin '${origin}' must be an absolute http(s) origin such as 'https://example.com', with no path or trailing slash.`);
   const purposes = defaults?.media?.purposes;
   if (purposes && purposes.length > 0) {
     const issues = collectMediaPurposeIssues(purposes);

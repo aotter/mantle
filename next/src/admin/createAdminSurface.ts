@@ -155,7 +155,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   const memberInfo = ({ id, email, name, emailVerified, createdAt }: MemberUserInfo) => ({ id, email, name, emailVerified, createdAt });
   const site = async (url: URL) => {
     const { origin, ...config } = runtime.site ? await runtime.site.read() : siteConfigOf([]);
-    const publicUrl = origin || url.origin;
+    // boot refuses a bad origin; a row edited by hand still must not take /site down
+    const publicUrl = URL.canParse(origin) ? origin : url.origin;
     const at = (p: string | null | undefined) => (p ? new URL(p, publicUrl).href : null);
     const mcp = options.site?.mcpEndpoints;
     return { ...config, publicUrl, mcpEndpoints: { public: at(mcp?.public), staff: at(mcp?.staff) } };
