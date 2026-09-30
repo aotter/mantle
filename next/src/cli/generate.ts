@@ -7,11 +7,13 @@ import { existsSync } from "node:fs";
 import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import process, { cwd as processCwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
 import type { DatabaseDriver } from "../core/driver.js";
 import { planStorageChanges } from "../d1/storage.js";
-import { compileLinkedPlan, parseManifestSources, validateDiagnostic, ValidateManifestsUseCase, type Diagnostic } from "../spec/index.js";
+import { compileLinkedPlan, parseManifestSources, validateDiagnostic, ValidateManifestsUseCase, type Diagnostic, type SqlDialect } from "../spec/index.js";
+import * as d1 from "../d1/compile/index.js";
 import { translateParseArgsError } from "../spec/infrastructure/cli/parseArgsError.js";
 import { emitMantleModule } from "./emitModule.js";
 import { toCloudflareCron } from "../spec/domain/service/CloudflareCron.js";
@@ -26,6 +28,8 @@ interface MantleConfig {
   readonly version: 2;
   readonly identity: Identity;
   readonly features: readonly Feature[];
+  /** The SQL dialect's module (ADR-0035 decision 5); absent is the built-in D1 dialect. */
+  readonly dialect?: string;
 }
 
 const CONFIG = "mantle.config.json";
@@ -110,7 +114,22 @@ function readConfig(text: string): { config: MantleConfig; raw: Record<string, u
   const features = v.features as Feature[];
   if (v.version !== 2 || !IDENTITIES.includes(v.identity as Identity) || !Array.isArray(features) || FEATURES.filter((f) => features.includes(f)).join() !== features.join())
     throw new Error(`${CONFIG} must be { "version": 2, "identity": ${IDENTITIES.map((i) => `"${i}"`).join(" | ")}, "features": a subset of ${FEATURES.join(", ")} in that order }.`);
-  return { config: { version: 2, identity: v.identity as Identity, features }, raw: v };
+  if ("dialect" in v && (typeof v.dialect !== "string" || !v.dialect)) throw new Error(`${CONFIG} "dialect" must be a module name, such as "${d1.name}".`);
+  return { config: { version: 2, identity: v.identity as Identity, features, ...(typeof v.dialect === "string" ? { dialect: v.dialect } : {}) }, raw: v };
+}
+
+/** The dialect's compile side: `<dialect>/compile`, resolved from the project as a bundler would, or the built-in D1. */
+async function loadDialect(root: string, dialect: string | undefined): Promise<SqlDialect> {
+  if (dialect === undefined || dialect === d1.name) return d1;
+  let mod: Partial<SqlDialect>;
+  try {
+    mod = await import(pathToFileURL(createRequire(join(root, "package.json")).resolve(`${dialect}/compile`)).href) as Partial<SqlDialect>;
+  } catch (err) {
+    throw new Error(`${CONFIG} names the dialect ${dialect}, and ${dialect}/compile cannot be loaded (${(err as NodeJS.ErrnoException).code ?? "error"}). Install it; mantle generate never installs packages.`);
+  }
+  if (mod.name !== dialect || typeof mod.version !== "string" || typeof mod.accepts !== "function")
+    throw new Error(`${dialect}/compile is not a dialect's compile side: it must export name "${dialect}", a version string and accepts().`);
+  return mod as SqlDialect;
 }
 
 /** The selection: saved config, then flags. An explicit `--features` without `--identity` means `none` (decision 12). */
@@ -121,7 +140,7 @@ function select(saved: MantleConfig | undefined, features: string | undefined, i
   const picked = features === undefined ? saved?.features ?? FEATURES : features.split(",").map((f) => f.trim()).filter(Boolean);
   const unknown = picked.filter((f) => !FEATURES.includes(f as Feature));
   if (unknown.length) throw new Error(`--features accepts only ${FEATURES.join(", ")}; got ${unknown.join(", ")}`);
-  return { version: 2, identity: (identity ?? saved?.identity ?? (features === undefined ? "mantle" : "none")) as Identity, features: FEATURES.filter((f) => picked.includes(f)) };
+  return { version: 2, identity: (identity ?? saved?.identity ?? (features === undefined ? "mantle" : "none")) as Identity, features: FEATURES.filter((f) => picked.includes(f)), ...(saved?.dialect ? { dialect: saved.dialect } : {}) };
 }
 
 /** Every `.yaml`/`.yml` file directly in the manifest directory, by name. */
@@ -175,10 +194,12 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
 
   let config: MantleConfig;
   let saved: ReturnType<typeof readConfig> | undefined;
+  let dialect: SqlDialect;
   try {
     const savedText = await readFile(join(root, CONFIG), "utf8").catch((e: NodeJS.ErrnoException) => (e.code === "ENOENT" ? undefined : Promise.reject(e)));
     saved = savedText === undefined ? undefined : readConfig(savedText);
     config = select(saved?.config, values.features, values.identity);
+    dialect = await loadDialect(root, config.dialect);
   } catch (err) {
     stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 2;
@@ -197,14 +218,17 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   const validation = ValidateManifestsUseCase.run({ parsed: parsed.value });
   const errors = validation.diagnostics.filter((d) => d.severity === "error");
   if (errors.length || !validation.linked) return (print(errors), 1);
-  const compiled = await compileLinkedPlan(validation.linked);
+  const compiled = await compileLinkedPlan(validation.linked, dialect);
+  // the Cloudflare preset and the storage dry-run are D1's; another dialect's host preset ships with it (ADR-0035 decision 5)
+  const builtIn = dialect === d1;
+  if (!builtIn && values.database !== undefined) return (stderr.write(`--database is a SQLite file for the built-in dialect; ${dialect.name} plans its own storage.\n`), 2);
   if (!compiled.ok) return (print(compiled.diagnostics), 1);
 
   const missing = featureDiagnostics(root, config);
   if (missing.length) return (print(missing), 1);
   // the grammar has no rule across cron fields, so the Cloudflare preset's refusals come before anything is written
   const unmappable = Object.entries(compiled.plan.triggers).flatMap(([name, t]) => {
-    if (t.source.kind !== "schedule" || t.source.enabled === false) return [];
+    if (!builtIn || t.source.kind !== "schedule" || t.source.enabled === false) return [];
     try {
       return (toCloudflareCron(t.source.cron), []);
     } catch (err) {
@@ -233,7 +257,8 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
       await mkdir(dirname(join(root, path)), { recursive: true });
       await writeFile(join(root, path), text, "utf8");
     }
-    stdout.write(`Generated ${OUT}/plan.json and ${OUT}/mantle.ts (fingerprint ${compiled.plan.fingerprint.slice(0, 12)}; identity ${config.identity}; features ${config.features.join(", ") || "none"}).\n`);
+    stdout.write(`Generated ${OUT}/plan.json and ${OUT}/mantle.ts (fingerprint ${compiled.plan.fingerprint.slice(0, 12)}; identity ${config.identity}; features ${config.features.join(", ") || "none"}${builtIn ? "" : `; dialect ${dialect.name}`}).\n`);
+    if (!builtIn) return 0;
     let preset: string[];
     try {
       preset = await writePreset(root, config, compiled.plan);
@@ -254,7 +279,7 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   }
   if (code) stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
 
-  if (!deps.driver && values.database === undefined) return code;
+  if (!builtIn || (!deps.driver && values.database === undefined)) return code;
   try {
     const storage = await planStorageChanges(deps.driver ?? (await openSqliteFile(resolve(root, values.database!))), compiled.plan.schemas, { fingerprint: compiled.plan.fingerprint });
     for (const u of storage.undeclared) stdout.write(`-- ${u.code} ${u.schema}: ${u.message}\n`);
