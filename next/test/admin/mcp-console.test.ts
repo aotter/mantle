@@ -161,7 +161,7 @@ describe("Admin: developer console and statistics", () => {
     expect(body.logic.triggers).toContainEqual({ name: "nightly-run", procedure: "nightly", source: { kind: "schedule", cron: "0 3 * * *" } });
     expect(body.operations).toEqual({
       schedules: [{ id: "nightly-run", procedure: "nightly", cron: "0 3 * * *", enabled: true, registration: "not-observed" }],
-      ttlPolicies: [{ schema: "visits", field: "seenat", seconds: 60, sweepObservation: "unavailable" }],
+      ttlPolicies: [{ schema: "visits", field: "seenAt", seconds: 60, sweepObservation: "unavailable" }],
       observationAvailability: "unavailable", runs: [], latestRuns: [],
     });
   });

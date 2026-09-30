@@ -205,7 +205,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     },
     operations: {
       schedules: Object.entries(plan.triggers).flatMap(([id, { procedure, source }]) => (source.kind === "schedule" ? [{ id, procedure, cron: source.cron, enabled: source.enabled ?? true, registration: "not-observed" }] : [])),
-      ttlPolicies: schemas.filter((s) => s.ttl).map((s) => ({ schema: s.name, field: s.ttl, seconds: s.ttlSeconds ?? null, sweepObservation: "unavailable" })),
+      ttlPolicies: schemas.filter((s) => s.ttl).map((s) => ({ schema: s.name, field: s.names[s.ttl!] ?? s.ttl, seconds: s.ttlSeconds ?? null, sweepObservation: "unavailable" })),
       observationAvailability: "unavailable", runs: [], latestRuns: [],
     },
   };
