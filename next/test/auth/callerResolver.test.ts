@@ -78,3 +78,24 @@ describe("withCaller", () => {
     expect(seen).toHaveLength(1); // no surface ran for either refusal
   });
 });
+
+describe("withCaller: CSRF and resource metadata", () => {
+  const session = auth({ getSession: async () => ({ session: { id: "s" }, user: { id: "u" } }) });
+  const run = (headers: Record<string, string>, method = "POST") => withCaller(createCallerResolver(session), (async () => new Response("ok")) as never)(new Request("https://x/api", { method, headers }));
+  it("refuses a cookie session that mutates across origins, admits same-origin and safe methods, and holds no bearer token to it", async () => {
+    expect((await run({ "sec-fetch-site": "cross-site" })).status).toBe(403);
+    expect((await run({ origin: "https://evil.example" })).status).toBe(403);
+    expect((await run({ "sec-fetch-site": "same-origin", origin: "https://x" })).status).toBe(200);
+    expect((await run({ "sec-fetch-site": "cross-site" }, "GET")).status).toBe(200);
+    const bearer = withCaller(createCallerResolver(auth({ verifyOAuthAccessToken: async () => okToken }), { jwtBearer: { audience: "a" } }), (async () => new Response("ok")) as never);
+    expect((await bearer(new Request("https://x/api", { method: "POST", headers: { authorization: "Bearer t", "sec-fetch-site": "cross-site" } }))).status).toBe(200);
+  });
+
+  it("puts the protected-resource metadata URL in every challenge, so an MCP client can find the authorization server", async () => {
+    const opts = { resourceMetadata: "https://x/.well-known/oauth-protected-resource" };
+    const bad = withCaller(createCallerResolver(auth(), { jwtBearer: { audience: "a" } }), (async () => new Response("ok")) as never, opts);
+    expect((await bad(req({ authorization: "Bearer nope" }))).headers.get("www-authenticate")).toBe('Bearer error="invalid_token", resource_metadata="https://x/.well-known/oauth-protected-resource"');
+    const none = withCaller(async () => ({ invalid: true }), (async () => new Response("ok")) as never, opts);
+    expect((await none(req())).headers.get("www-authenticate")).toBe('Bearer resource_metadata="https://x/.well-known/oauth-protected-resource"');
+  });
+});
