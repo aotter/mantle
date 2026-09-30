@@ -24,10 +24,20 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
   // Keep schema work lazy: static/plan-only routes must not prepare tables.
   let schemaReady: Promise<void> | null = null;
   const prepareAuth = (): Promise<void> => schemaReady ??= (async () => {
-    // Better Auth converges its own tables on whatever engine it speaks; the role index is the one Mantle adds
-    const { runMigrations } = await getMigrations((await auth.$context).options);
-    await runMigrations();
+    // Better Auth converges its own tables on whatever engine it speaks; the role index is the one Mantle adds. A database that
+    // already holds this schema (its digest in Mantle's boot state) skips the introspection, so a warm isolate reads one row.
+    const context = await auth.$context;
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(context.tables)))), (b) => b.toString(16).padStart(2, "0")).join("");
+    const done = await db.first<{ value: string }>("SELECT value FROM _mantle_boot_state WHERE key = 'auth-schema'").catch(() => null);
+    if (done?.value === digest) return;
+    const migrate = async () => (await getMigrations(context.options)).runMigrations();
+    // Better Auth's statements are not idempotent: an isolate racing another retries until the other has finished its tables
+    for (let attempt = 1; ; attempt++) {
+      try { await migrate(); break; } catch (error) { if (attempt === 5) throw error; await new Promise((r) => setTimeout(r, 50 * attempt)); }
+    }
     await db.batch([{ sql: 'CREATE INDEX IF NOT EXISTS user_role_idx ON "user" (role) WHERE role IS NOT NULL' }]);
+    // a store Mantle has not converged has no boot state: the next isolate introspects again
+    await db.batch([{ sql: "INSERT INTO _mantle_boot_state (key, value) VALUES ('auth-schema', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", binds: [digest] }]).catch(() => undefined);
   })().catch(error => { schemaReady = null; throw error; });
 
   const basePath = normalizeAuthBasePath(config.basePath);
@@ -279,21 +289,24 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
             await prepareAuth();
             const consent = await db.first<{ clientId: string }>('SELECT "clientId" FROM "oauthConsent" WHERE id = ? AND "userId" = ? LIMIT 1', consentId, userId);
             if (!consent) return false;
-            // the grant's pending authorization codes go first, so a failure after them leaves nothing that can still be exchanged
-            const { adapter } = await auth.$context;
-            const code = (v: string) => { try { const x = JSON.parse(v); return x?.type === "authorization_code" && x.userId === userId && x.query?.client_id === consent.clientId; } catch { return false; } };
-            for (;;) {
-              const page = await adapter.findMany<{ id: string; value: string }>({ model: "verification", where: [{ field: "value", operator: "contains", value: JSON.stringify(userId) }], limit: 100 });
-              const ids = page.filter((v) => code(v.value)).map((v) => v.id);
-              if (ids.length) await adapter.deleteMany({ model: "verification", where: [{ field: "id", operator: "in", value: ids }] });
-              if (page.length < 100 || !ids.length) break;
-            }
+            // the consent and its tokens go first, in one batch: without the consent no new code is issued without a prompt
             const revokedAt = new Date().toISOString();
             await db.batch([
+              { sql: 'DELETE FROM "oauthConsent" WHERE "userId" = ? AND "clientId" = ?', binds: [userId, consent.clientId] },
               { sql: 'UPDATE "oauthRefreshToken" SET revoked = ? WHERE "userId" = ? AND "clientId" = ? AND revoked IS NULL', binds: [revokedAt, userId, consent.clientId] },
               { sql: 'UPDATE "oauthAccessToken" SET revoked = ? WHERE "userId" = ? AND "clientId" = ? AND revoked IS NULL', binds: [revokedAt, userId, consent.clientId] },
-              { sql: 'DELETE FROM "oauthConsent" WHERE "userId" = ? AND "clientId" = ?', binds: [userId, consent.clientId] },
             ]);
+            // then every pending code of the grant, paged past the rows it keeps (other clients' codes, other verifications)
+            const { adapter } = await auth.$context;
+            const code = (v: string) => { try { const x = JSON.parse(v); return x?.type === "authorization_code" && x.userId === userId && x.query?.client_id === consent.clientId; } catch { return false; } };
+            const where = [{ field: "value", operator: "contains" as const, value: JSON.stringify(userId) }, { field: "value", operator: "contains" as const, value: JSON.stringify(consent.clientId) }];
+            for (let offset = 0; ;) {
+              const page = await adapter.findMany<{ id: string; value: string }>({ model: "verification", where, limit: 100, offset, sortBy: { field: "id", direction: "asc" } });
+              const ids = page.filter((v) => code(v.value)).map((v) => v.id);
+              if (ids.length) await adapter.deleteMany({ model: "verification", where: [{ field: "id", operator: "in", value: ids }] });
+              if (page.length < 100) break;
+              offset += page.length - ids.length;
+            }
             return true;
           },
         }
@@ -332,7 +345,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     },
     unlinkAccount: async (userId, providerId) => {
       await prepareAuth();
-      return (await db.count('DELETE FROM account WHERE "userId" = ? AND "providerId" = ? RETURNING id', userId, providerId)) > 0;
+      return (await db.all('DELETE FROM account WHERE "userId" = ? AND "providerId" = ? RETURNING id', userId, providerId)).length > 0;
     },
     listUsers: async (request) => {
       await prepareAuth();
@@ -432,7 +445,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     } : {}),
     revokeInvite: async (userId) => {
       await prepareAuth();
-      return (await db.count('DELETE FROM "user" WHERE id = ? AND NOT "emailVerified" AND NOT EXISTS (SELECT 1 FROM account WHERE account."userId" = "user".id) RETURNING id', userId)) > 0;
+      return (await db.all('DELETE FROM "user" WHERE id = ? AND NOT "emailVerified" AND NOT EXISTS (SELECT 1 FROM account WHERE account."userId" = "user".id) RETURNING id', userId)).length > 0;
     },
     deleteUser: async (userId) => {
       await prepareAuth();
