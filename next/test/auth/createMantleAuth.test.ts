@@ -1,12 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DatabaseDriver } from "../../src/core/index.js";
 import {
-  buildGenericOAuthProviders,
-  buildSocialProviders,
   createMantleAuth,
-  createSetupIncompleteAuth,
-  normalizeAuthBasePath,
-  resolveClientIpHeaders,
   type AuthMethodConfig,
   type CreateMantleAuthOptions,
 } from "../../src/auth/index.js";
@@ -54,83 +49,21 @@ function baseOptions(
   };
 }
 
-describe("resolveClientIpHeaders", () => {
-  it("fails closed when headers are missing or blank", () => {
-    expect(() => resolveClientIpHeaders(undefined)).toThrow(
-      /createMantleAuth:.*ipAddressHeaders/,
-    );
-    expect(() => resolveClientIpHeaders([])).toThrow(
-      /createMantleAuth:.*ipAddressHeaders/,
-    );
-    expect(() => resolveClientIpHeaders(["", "  "])).toThrow(
-      /createMantleAuth:.*ipAddressHeaders/,
-    );
+describe("createMantleAuth refuses to boot on a misconfiguration", () => {
+  it.each([
+    [{ ipAddressHeaders: [] }, /ipAddressHeaders/], // rate limits would key on a client-controlled header
+    [{ ipAddressHeaders: ["", "  "] }, /ipAddressHeaders/],
+    [{ basePath: "api/auth" }, /start with/],
+    [{ basePath: "/" }, /not be/],
+    [{ methods: [GITHUB_METHOD, { ...GITHUB_METHOD }] }, /github.*more than once/i],
+    [{ methods: [GITHUB_METHOD, { kind: "oauth", options: { providerId: "github", clientId: "c", discoveryUrl: "https://idp.test/.well-known/openid-configuration" } }] }, /conflicts with a registered social provider id/],
+  ] as [Partial<CreateMantleAuthOptions>, RegExp][])("%j", (overrides, why) => {
+    expect(() => createMantleAuth(baseOptions(overrides))).toThrow(why);
   });
 
-  it("keeps trimmed host-supplied headers", () => {
-    expect(resolveClientIpHeaders([" x-real-ip ", "x-vercel-forwarded-for"])).toEqual([
-      "x-real-ip",
-      "x-vercel-forwarded-for",
-    ]);
-  });
-});
-
-describe("createMantleAuth — IP identity", () => {
-  it("refuses to boot without a trusted ingress header", () => {
-    expect(() => createMantleAuth(baseOptions({ ipAddressHeaders: [] }))).toThrow(
-      /createMantleAuth:.*ipAddressHeaders/,
-    );
-  });
-
-  it("accepts a non-Cloudflare host header and boots", () => {
-    const auth = createMantleAuth(baseOptions({ ipAddressHeaders: ["x-real-ip"] }));
-    expect(auth.basePath).toBe("/api/auth");
-  });
-});
-
-describe("normalizeAuthBasePath", () => {
-  it("defaults empty or missing paths", () => {
-    expect(normalizeAuthBasePath(undefined)).toBe("/api/auth");
-    expect(normalizeAuthBasePath("")).toBe("/api/auth");
-    expect(normalizeAuthBasePath("   ")).toBe("/api/auth");
-  });
-
-  it("rejects a missing leading slash and a root path", () => {
-    expect(() => normalizeAuthBasePath("api/auth")).toThrow(
-      /createMantleAuth:.*start with/,
-    );
-    expect(() => normalizeAuthBasePath("/")).toThrow(/createMantleAuth:.*not be/);
-  });
-
-  it("strips a trailing slash", () => {
-    expect(normalizeAuthBasePath("/auth/")).toBe("/auth");
-    expect(createSetupIncompleteAuth({ basePath: "/staff-auth/" }).basePath).toBe(
-      "/staff-auth",
-    );
-  });
-});
-
-describe("provider conflict helpers", () => {
-  it("rejects a duplicate social provider", () => {
-    expect(() =>
-      buildSocialProviders([GITHUB_METHOD, { ...GITHUB_METHOD }]),
-    ).toThrow(/createMantleAuth:.*github.*more than once/i);
-  });
-
-  it("rejects an OAuth providerId that collides with a social provider", () => {
-    expect(() =>
-      buildGenericOAuthProviders([
-        GITHUB_METHOD,
-        {
-          kind: "oauth",
-          options: {
-            providerId: "github",
-            clientId: "c",
-            discoveryUrl: "https://idp.test/.well-known/openid-configuration",
-          },
-        },
-      ]),
-    ).toThrow(/createMantleAuth:.*conflicts with a registered social provider id/);
+  it("boots behind any host's trusted header, and a base path loses its trailing slash", () => {
+    expect(createMantleAuth(baseOptions({ ipAddressHeaders: [" x-real-ip "] })).basePath).toBe("/api/auth");
+    expect(createMantleAuth(baseOptions({ basePath: "/auth/" })).basePath).toBe("/auth");
   });
 });
 

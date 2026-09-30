@@ -2,12 +2,6 @@
 
 import { normalizeAuthBasePath } from "./methods.js";
 import type { MantleAuth } from "./types.js";
-const SETUP_INCOMPLETE_AUTHS = new WeakSet<MantleAuth>();
-
-/** True only for the fail-closed facade returned by createSetupIncompleteAuth. */
-export function isSetupIncompleteAuth(auth: MantleAuth): boolean {
-  return SETUP_INCOMPLETE_AUTHS.has(auth);
-}
 
 export interface SetupIncompleteAuthOptions {
   readonly basePath?: string;
@@ -66,7 +60,6 @@ export function createSetupIncompleteAuth(
       throw new Error(message);
     },
   };
-  SETUP_INCOMPLETE_AUTHS.add(auth);
   return auth;
 }
 
