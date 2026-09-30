@@ -60,12 +60,11 @@
   },
   "files": [
     "dist",
-    "docs",
-    "skills"
+    "docs"
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "next",
+    "tag": "alpha",
     "registry": "https://registry.npmjs.org"
   },
   "scripts": {
@@ -81,25 +80,50 @@
     "libpg-query": "18.1.5",
     "pgsql-deparser": "18.3.8",
     "yaml": "^2.9.0",
-    "zod": "catalog:",
-    "@better-auth/cimd": "catalog:",
-    "@modelcontextprotocol/ext-apps": "2.0.0",
-    "@modelcontextprotocol/server": "2.1.0",
-    "@better-auth/mcp": "catalog:",
-    "@better-auth/oauth-provider": "catalog:"
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/core": "catalog:",
+    "@better-auth/mcp": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "@better-auth/utils": "catalog:",
+    "@modelcontextprotocol/client": "2.1.0",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@modelcontextprotocol/server": "2.1.0",
     "@types/node": "catalog:",
+    "better-auth": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "4.126.0",
-    "better-auth": "catalog:",
-    "@better-auth/core": "catalog:",
-    "@better-auth/utils": "catalog:",
-    "@modelcontextprotocol/client": "2.1.0"
+    "wrangler": "4.126.0"
   },
   "peerDependencies": {
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/mcp": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@modelcontextprotocol/server": "2.1.0",
     "better-auth": "catalog:peer"
+  },
+  "peerDependenciesMeta": {
+    "@better-auth/cimd": {
+      "optional": true
+    },
+    "@better-auth/mcp": {
+      "optional": true
+    },
+    "@better-auth/oauth-provider": {
+      "optional": true
+    },
+    "@modelcontextprotocol/ext-apps": {
+      "optional": true
+    },
+    "@modelcontextprotocol/server": {
+      "optional": true
+    },
+    "better-auth": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=22"

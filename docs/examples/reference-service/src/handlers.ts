@@ -16,15 +16,17 @@ export const handlers: MantleHandlers = {
 
   // an after hook gets every row the statement touched: loop, never rows[0]
   recordOrders: async (_input, ctx) => {
-    if (ctx.cause.kind !== "lifecycle") return {};
-    await ctx.store.write(ctx.cause.rows.map((row) => ({
+    const cause = ctx.cause;
+    if (cause.kind !== "lifecycle") return {};
+    await ctx.store.write(cause.rows.map((row) => ({
       insert: "activity" as const,
-      values: { kind: ctx.cause.kind === "lifecycle" ? ctx.cause.hook : "", subject: String(row.id), detail: `${String(row.orderStatus)} x${String(row.qty)}` },
+      values: { kind: cause.hook, subject: String(row.id), detail: `${String(row.orderStatus)} x${String(row.qty)}` },
     })));
     return {};
   },
 
-  // a schedule runs as the system caller: no scope, and no requires.auth predicate holds for it
+  // a schedule runs as the system caller: no scope, and no requires.auth predicate holds for it. One page of up to 500 orders
+  // keeps the example short; a digest over more would page with nextCursor.
   weeklyDigest: async (_input, ctx) => {
     const { rows } = await ctx.store.select({ from: "orders", columns: ["qty"], where: { orderStatus: "placed" }, limit: 500 });
     const units = rows.reduce((sum, row) => sum + Number(row.qty), 0);

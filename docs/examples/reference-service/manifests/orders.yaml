@@ -1,5 +1,5 @@
-# A Procedure written as SQL: its statements apply together or not at all, and the stock check
-# on items fails the whole program when stock would go negative.
+# A Procedure written as SQL: its statements apply together or not at all. The order is written
+# first, so when the stock check on items fails the second statement, the order is rolled back too.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: place-order }
@@ -16,10 +16,10 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      UPDATE items SET stock = stock - input.qty WHERE id = input.itemId;
       INSERT INTO orders (itemId, qty, orderStatus, placedAt)
       SELECT id, input.qty, 'placed', now() FROM items WHERE id = input.itemId
-      RETURNING id, qty, orderStatus
+      RETURNING id, qty, orderStatus;
+      UPDATE items SET stock = stock - input.qty WHERE id = input.itemId
 ---
 # Optimistic concurrency: the caller sends the version it saw.
 apiVersion: cms.mantle.aotter.net/v2

@@ -1,5 +1,5 @@
 {
-  "sourceHash": "969c2f1d1470c7cf774323d8ffcdfdad1077f6c265dd2e9fccbd6b747d5e2a33",
+  "sourceHash": "1809b63f0db4db6fe5b2ed25716183ef0fe356eb37e96aca492f705d13f3a189",
   "plan": {
     "version": 6,
     "dialect": {
@@ -1242,101 +1242,6 @@
             "grammar": 180004,
             "stmts": [
               {
-                "UpdateStmt": {
-                  "relation": {
-                    "relname": "items",
-                    "inh": true,
-                    "relpersistence": "p",
-                    "mantle": "table"
-                  },
-                  "targetList": [
-                    {
-                      "ResTarget": {
-                        "name": "stock",
-                        "val": {
-                          "A_Expr": {
-                            "kind": "AEXPR_OP",
-                            "name": [
-                              {
-                                "String": {
-                                  "sval": "-"
-                                }
-                              }
-                            ],
-                            "lexpr": {
-                              "ColumnRef": {
-                                "fields": [
-                                  {
-                                    "String": {
-                                      "sval": "stock"
-                                    }
-                                  }
-                                ]
-                              }
-                            },
-                            "rexpr": {
-                              "ColumnRef": {
-                                "fields": [
-                                  {
-                                    "String": {
-                                      "sval": "input"
-                                    }
-                                  },
-                                  {
-                                    "String": {
-                                      "sval": "qty"
-                                    }
-                                  }
-                                ]
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ],
-                  "whereClause": {
-                    "A_Expr": {
-                      "kind": "AEXPR_OP",
-                      "name": [
-                        {
-                          "String": {
-                            "sval": "="
-                          }
-                        }
-                      ],
-                      "lexpr": {
-                        "ColumnRef": {
-                          "fields": [
-                            {
-                              "String": {
-                                "sval": "id"
-                              }
-                            }
-                          ]
-                        }
-                      },
-                      "rexpr": {
-                        "ColumnRef": {
-                          "fields": [
-                            {
-                              "String": {
-                                "sval": "input"
-                              }
-                            },
-                            {
-                              "String": {
-                                "sval": "itemid"
-                              }
-                            }
-                          ]
-                        }
-                      }
-                    }
-                  }
-                }
-              },
-              {
                 "InsertStmt": {
                   "relation": {
                     "relname": "orders",
@@ -1535,6 +1440,101 @@
                     ]
                   },
                   "override": "OVERRIDING_NOT_SET"
+                }
+              },
+              {
+                "UpdateStmt": {
+                  "relation": {
+                    "relname": "items",
+                    "inh": true,
+                    "relpersistence": "p",
+                    "mantle": "table"
+                  },
+                  "targetList": [
+                    {
+                      "ResTarget": {
+                        "name": "stock",
+                        "val": {
+                          "A_Expr": {
+                            "kind": "AEXPR_OP",
+                            "name": [
+                              {
+                                "String": {
+                                  "sval": "-"
+                                }
+                              }
+                            ],
+                            "lexpr": {
+                              "ColumnRef": {
+                                "fields": [
+                                  {
+                                    "String": {
+                                      "sval": "stock"
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "rexpr": {
+                              "ColumnRef": {
+                                "fields": [
+                                  {
+                                    "String": {
+                                      "sval": "input"
+                                    }
+                                  },
+                                  {
+                                    "String": {
+                                      "sval": "qty"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "whereClause": {
+                    "A_Expr": {
+                      "kind": "AEXPR_OP",
+                      "name": [
+                        {
+                          "String": {
+                            "sval": "="
+                          }
+                        }
+                      ],
+                      "lexpr": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "id"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "rexpr": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "input"
+                              }
+                            },
+                            {
+                              "String": {
+                                "sval": "itemid"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
                 }
               }
             ]
@@ -1906,6 +1906,6 @@
         "procedure": "weekly-digest"
       }
     },
-    "fingerprint": "15d86f986f76d91bb791e91023811b76b8fdd87de57ae29a0e6efc09fec5af96"
+    "fingerprint": "be76fb3597217078a7bfa93c9b7b51ca2a31ed48070b6b1633ae049627dbfe91"
   }
 }

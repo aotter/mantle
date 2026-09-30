@@ -34,7 +34,7 @@ writeFileSync(resolve(dir, "index.d.ts"), `/** The Mantle MCP App, one self-cont
 export declare const interactionAppHtml: string;
 /** Resource URI the App is registered under by default. */
 export declare const INTERACTION_APP_URI = "ui://mantle/interaction";
-/** The fields of an \`@aotter/mantle-mcp\` App resource this helper fills. */
+/** The fields of an \`@aotter/mantle/mcp\` App resource this helper fills. */
 export interface InteractionAppResource {
   readonly uri: string;
   readonly name: string;

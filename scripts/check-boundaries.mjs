@@ -32,6 +32,21 @@ function fail(path, message) {
   failures.push(`${rel(path)}: ${message}`);
 }
 
+/** The browser package stays host- and framework-neutral where it promises to (ADR-0029). */
+function checkUiTokens() {
+  const rules = [
+    ["packages/mantle-ui/src/controller", ["window.", "document.", "localStorage", "sessionStorage"], "ui controller must stay framework- and host-free"],
+    ["packages/mantle-ui/src/react", ["@aotter/mantle/admin", "@tanstack/", "@modelcontextprotocol/", "fetch(", "location.", "localStorage", "document.cookie"], "ui components must not depend on Admin, a query cache, a transport or host globals"],
+    ["packages/mantle-ui/src/kit", ["@aotter/", "@tanstack/", "@modelcontextprotocol/", "fetch(", "localStorage", '"@/'], "ui kit must stay domain-neutral: no Mantle packages, query cache, transport, storage or Admin aliases"],
+  ];
+  for (const [dir, forbidden, message] of rules) {
+    for (const file of listFiles(join(ROOT, dir), (p) => p.endsWith(".ts") || p.endsWith(".tsx"))) {
+      const source = stripComments(readFileSync(file, "utf8"));
+      for (const token of forbidden) if (source.includes(token)) fail(file, `${message}: '${token}'`);
+    }
+  }
+}
+
 /** Core holds no engine or platform code (ADR-0035 decision 3): no Cloudflare primitive appears in `src/core`. */
 function checkCoreCloudflareFree() {
   for (const file of listFiles(join(ROOT, "packages/mantle/src/core"), (p) => p.endsWith(".ts"))) {
@@ -52,15 +67,19 @@ function checkNextFolderImports() {
   // dialect's compile side), `cloudflare` and `cli` reach it. `testing` runs over the dialect interface.
   const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1"] };
   const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec", "pgsql-deparser": "d1" };
+  const NODE_ALLOWED = { auth: ["node:async_hooks"], testing: ["node:util"] };
   const root = join(ROOT, "packages/mantle/src");
   for (const [folder, reach] of Object.entries(folders)) {
     for (const file of listFiles(join(root, folder), (p) => p.endsWith(".ts") || p.endsWith(".tsx"))) {
-      for (const [, spec] of readFileSync(file, "utf8").matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
+      for (const [, spec] of readFileSync(file, "utf8").matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
         if (spec.startsWith(".")) {
           const path = relative(root, join(dirname(file), spec)).split(sep);
           const target = path[0];
           if (target !== folder && !reach.some((r) => r.split("/").every((part, i) => path[i] === part))) fail(file, `src/${folder} may reach only ${[folder, ...reach].join(", ")}: '${spec}'`);
           else if (folder === "spec" && target === "d1" && !relative(root, file).startsWith(`spec${sep}infrastructure${sep}`)) fail(file, `only the CLI front end (src/spec/infrastructure) may reach src/d1/compile: '${spec}'`);
+        } else if (spec.startsWith("node:")) {
+          // Workers run a subset of Node: only the CLI is Node, plus the two built-ins workerd provides that auth and the suite use
+          if (folder !== "cli" && !(NODE_ALLOWED[folder] ?? []).includes(spec)) fail(file, `src/${folder} may not import '${spec}': only the CLI runs on Node`);
         } else {
           for (const [prefix, owner] of Object.entries(libs)) {
             if ((spec === prefix || spec.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)) && owner !== folder) fail(file, `only src/${owner} may import '${spec}'`);
@@ -237,6 +256,7 @@ function checkRepositoryGuidance() {
 }
 
 checkCoreCloudflareFree();
+checkUiTokens();
 checkNextFolderImports();
 checkUiControllerImports();
 checkSkillDocsVersioned();

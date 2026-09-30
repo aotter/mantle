@@ -58,6 +58,7 @@ try {
     if (attempt > 240) throw new Error("the Worker did not start");
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
+  assert.deepEqual((await call("GET", "/api/views/catalog")).body.rows, []);
   step("boot converges a fresh D1 to the plan; the public catalog is empty");
 
   const staff = await signIn(owner);
@@ -83,9 +84,10 @@ try {
   step("a signed-in buyer (not staff) orders 2: stock 8 -> 6 in one program");
 
   const tooMany = await call("POST", "/api/orders", { cookie: buyer, body: { itemId, qty: 99 } });
-  assert.equal(tooMany.status >= 400 && tooMany.status < 500, true, JSON.stringify(tooMany.body));
+  assert.equal(tooMany.status, 400, JSON.stringify(tooMany.body));
+  assert.match(tooMany.body.error.message, /CHECK items: stock >= 0/);
   assert.equal(await stockOf(), 6);
-  step(`ordering 99 fails the stock >= 0 check (${tooMany.status}) and applies nothing`);
+  step("ordering 99 fails the stock >= 0 check in the second statement, and the order the first wrote is rolled back");
 
   const mine = (await call("GET", "/api/views/my-orders", { cookie: buyer })).body.rows;
   assert.deepEqual(mine.map(({ qty, orderStatus, item }) => ({ qty, orderStatus, item })), [{ qty: 2, orderStatus: "placed", item: "Oolong tea" }]);
@@ -104,7 +106,7 @@ try {
   step("search-items: mantle.search over searchableFields");
 
   const sales = await call("GET", "/admin/api/views/sales-by-item", { cookie: staff });
-  assert.equal(sales.status, 200, JSON.stringify(sales.body));
+  assert.deepEqual(sales.body.rows, [{ name: "Oolong tea", orders: 0, units: 0 }], JSON.stringify(sales.body));
   assert.equal((await call("GET", "/admin/api/views/sales-by-item", { cookie: buyer })).status, 403);
   step("sales-by-item (GROUP BY over a LEFT JOIN) is staff-only through Admin's API");
 
@@ -113,8 +115,10 @@ try {
   step("public MCP lists place_order and not the staff restock");
 
   assert.equal((await fetch(`${origin}/__scheduled?cron=${encodeURIComponent("0 3 * * 1")}`)).status, 200);
-  const kinds = (await call("GET", "/admin/api/views/recent-activity", { cookie: staff })).body.rows.map((r) => r.kind).sort();
-  assert.deepEqual(kinds, ["after_create", "after_update", "weekly-digest"]);
+  const activity = (await call("GET", "/admin/api/views/recent-activity", { cookie: staff })).body.rows;
+  assert.deepEqual(activity.map((r) => r.kind).sort(), ["after_create", "after_update", "weekly-digest"]);
+  // the one order was cancelled, and the digest counts placed orders only
+  assert.equal(activity.find((r) => r.kind === "weekly-digest").detail, "0 orders, 0 units");
   step("the after hooks recorded the order rows, and Cloudflare's Monday-numbered cron ran the POSIX Sunday digest");
 
   const version = JSON.parse(readFileSync("node_modules/@aotter/mantle/package.json", "utf8")).version;

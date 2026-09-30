@@ -29,5 +29,5 @@ cp .dev.vars.example .dev.vars  # set ADMIN_EMAIL and a random BETTER_AUTH_SECRE
 pnpm dev                        # sign-in codes are printed to this log
 ```
 
-The `latest` specifiers in `package.json` are placeholders. The release gate
-installs the exact tarballs it just packed in their place.
+The release gate installs the exact tarballs it just packed in place of the
+pinned versions.

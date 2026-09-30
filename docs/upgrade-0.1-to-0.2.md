@@ -22,7 +22,8 @@ one project by hand with this guide. When it and ADR-0032 to ADR-0035
 
 | 0.1.x | 0.2.0 |
 |---|---|
-| `@aotter/mantle` and `@aotter/mantle-spec`, `-runtime`, `-cloudflare`, `-auth`, `-admin`, `-mcp`, `-web`, `-bun`, `-vercel`, `-indexeddb`, `-admin-ui`, `-host` | `@aotter/mantle` (subpaths `/spec`, `/d1`, `/cloudflare`, `/auth`, `/admin`, `/mcp`, `/web`, `/testing`) and `@aotter/mantle-ui` |
+| `@aotter/mantle` and `@aotter/mantle-spec`, `-runtime`, `-cloudflare`, `-auth`, `-admin`, `-mcp`, `-web`, `-bun`, `-vercel`, `-indexeddb`, `-host` | `@aotter/mantle` (subpaths `/spec`, `/d1`, `/cloudflare`, `/auth`, `/admin`, `/mcp`, `/web`, `/testing`) |
+| `@aotter/mantle-ui`, `@aotter/mantle-admin-ui` | the same packages at the same version. The 0.2.0 preset serves Admin's API but not yet the Admin console |
 
 Remove every old package and install `@aotter/mantle` at the exact target
 version. `mantle generate` names any other package it needs, with the install
