@@ -2,24 +2,27 @@
 // Conformance case 6: types. `? / 2` with an integer input, `sum` over numeric(12, 2), a microsecond
 // timestamp against `now() - interval '36 hours'`, and `date_trunc('day', ts)` on a daylight-saving day
 // in the site time zone give PostgreSQL's results on D1; `interval '1 day'` is refused.
-import type { Report } from '../report.js';
-import { compileSql as tryLower, SqlRefusal as Refused } from '../../spec/index.js';
-import type { DatabaseDriver } from '../../core/driver.js';
-import { NOW, boot, caller, program, site } from '../harness.js';
-import { compileProgram, render, runProcedure, runView } from '../harness.js';
-import { decodeDate, decodeNumeric, decodeOutput, encodeDate, encodeInput, encodeTimestamptz } from '../../d1/codec.js';
-import { localParts, transitions, tzStatements } from '../../d1/tz.js';
+import type { Report } from '../../../src/testing/report.js';
+import { compileSql as tryLower, SqlRefusal as Refused } from '../../../src/spec/index.js';
+import type { Engine } from '../../../src/testing/harness.js';
+import { NOW, boot, caller, program, site } from '../../../src/testing/harness.js';
+import { compileProgram, runProcedure, runView } from '../../../src/testing/harness.js';
+import { decodeDate, decodeNumeric, decodeOutput, encodeDate, encodeInput, encodeTimestamptz } from '../../../src/d1/codec.js';
+import { print } from '../../../src/d1/print.js';
+import { localParts, transitions, tzStatements } from '../../../src/d1/tz.js';
 
-import { schemas } from '../harness.js';
+import { schemas } from '../../../src/testing/harness.js';
+
+const render = (c: { ast: unknown }) => print(c.ast as never);
 
 
 const HOUR = 3_600_000_000;
 const WHOLE_HOUR = new Set(['America/New_York', 'Europe/Berlin', 'Pacific/Apia', 'Asia/Taipei']);
 const refuses = (f: () => unknown) => { try { f(); return false; } catch (e) { return e instanceof Refused; } };
 
-export async function run(r: Report, driver: DatabaseDriver) {
+export async function run(r: Report, engine: Engine) {
   r.section('Case 6: types (integer division, numeric, microseconds, dates, CAST)');
-  const b = await boot(driver);
+  const b = await boot(engine);
   const s = site(b);
   const view = async (sql: string, inputs: Record<string, string> = {}, input: Record<string, unknown> = {}) =>
     (await runView(s, await program('view', sql, inputs), caller(input))).rows;

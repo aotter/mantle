@@ -2,11 +2,9 @@
 // The Store (ADR-0032 decision 1): JSON select and write through the same policy, OCC and hooks as SQL; row and set
 // ops, `lock` and `expect`, one opaque cursor, scope and TTL, `as(caller)`, the TTL sweep, and refusals.
 import type { Report } from '../report.js';
-import type { DatabaseDriver } from '../../core/driver.js';
+import type { Engine } from '../harness.js';
 import { createStore } from '../../core/store/createStore.js';
 import { encodeCursor } from '../../core/store/cursor.js';
-import { SqliteStoreExecutor } from '../../d1/executor.js';
-import { d1Dialect } from '../../d1/dialect.js';
 import { NOW, boot, program, schemas } from '../harness.js';
 
 const user = (subject) => ({ kind: 'user', subject, role: null, scopes: [], credential: 'session', credentialId: null, clientId: null });
@@ -14,12 +12,12 @@ const fail = async (f) => { try { await f(); return undefined; } catch (e) { ret
 const conflict = (e) => e?.diagnostic?.code === 'CONFLICT' ? e.diagnostic.conflict : undefined;
 const invalid = (e) => e?.diagnostic?.code === 'INPUT_VALIDATION_FAILED';
 
-export async function run(r: Report, driver: DatabaseDriver) {
+export async function run(r: Report, engine: Engine) {
   r.section('Store: JSON select and write, OCC, set ops, cursor, scope, TTL');
-  const b = await boot(driver);
+  const b = await boot(engine);
   const view = await program('view', 'SELECT id, name FROM items ORDER BY name', {});
   let n = 0;
-  const store = createStore({ executor: new SqliteStoreExecutor(driver), dialect: d1Dialect, schemas, views: { names: { ir: view.ir, inputs: {} } }, now: () => NOW, newId: () => `id${++n}` });
+  const store = createStore({ executor: b.executor, dialect: b.dialect, schemas, views: { names: { ir: view.ir, inputs: {} } }, now: () => NOW, newId: () => `id${++n}` });
   const me = store.as(user('o1'));
   const stock = async (id) => (await b.d1.all('SELECT stock, version FROM items WHERE id = ?1', [id]))[0];
 

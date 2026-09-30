@@ -257,9 +257,9 @@ function checkPackageDirection() {
  * `auth` may not import Better Auth, one that is not `mcp` may not import the MCP SDK, and so on.
  */
 function checkNextFolderImports() {
-  // Core holds no engine code (ADR-0035 decision 3): SQLite lives in `d1`. `spec` reaches only the built-in dialect's compile
-  // side; `testing` reaches `d1` until it runs over the dialect interface (ADR-0035, How to apply 5).
-  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], testing: ["core", "spec", "d1"], cloudflare: ["core", "spec", "d1"], bun: ["core", "spec"], vercel: ["core", "spec"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1"] };
+  // Core holds no engine code (ADR-0035 decision 3): SQLite lives in `d1`, and only `spec`'s front end (the built-in
+  // dialect's compile side), `cloudflare` and `cli` reach it. `testing` runs over the dialect interface.
+  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], bun: ["core", "spec"], vercel: ["core", "spec"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1"] };
   const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec", "pgsql-deparser": "d1" };
   const root = join(ROOT, "next/src");
   for (const [folder, reach] of Object.entries(folders)) {

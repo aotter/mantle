@@ -2,13 +2,13 @@
 // Conformance case 2: stock. `SET stock = stock - input.qty` with checks: ["stock >= 0"], where an
 // oversell fails through the check trigger.
 import type { Report } from '../report.js';
-import type { DatabaseDriver } from '../../core/driver.js';
+import type { Engine } from '../harness.js';
 import { boot, caller, program, site } from '../harness.js';
 import { isCheck, isConflict, runProcedure } from '../harness.js';
 
-export async function run(r: Report, driver: DatabaseDriver) {
+export async function run(r: Report, engine: Engine) {
   r.section('Case 2: stock');
-  const b = await boot(driver);
+  const b = await boot(engine);
   const s = site(b);
   const stock = async (id: string) => (await b.d1.all('SELECT stock FROM items WHERE id = ?1', [id]))[0]?.stock;
   const take = await program('procedure', 'UPDATE items SET stock = stock - input.qty WHERE id = input.id RETURNING id, stock', { id: 'text', qty: 'int8' });

@@ -3,7 +3,7 @@
 // precondition that fails with CONFLICT, and a conditional INSERT ... SELECT ... WHERE that writes zero
 // or one row and calls an after hook only when it writes.
 import type { Report } from '../report.js';
-import type { DatabaseDriver } from '../../core/driver.js';
+import type { Engine } from '../harness.js';
 import { boot, caller, program, site } from '../harness.js';
 import { isConflict, opIndexOf, runProcedure } from '../harness.js';
 import type { Hooks } from '../harness.js';
@@ -14,9 +14,9 @@ const PROGRAM = `
   INSERT INTO orders (item_id, qty) SELECT r.item_id, r.qty FROM requisitions r
     WHERE r.id = input.id AND r.state = 'approved' RETURNING *;`;
 
-export async function run(r: Report, driver: DatabaseDriver) {
+export async function run(r: Report, engine: Engine) {
   r.section('Case 1: requisition');
-  const b = await boot(driver);
+  const b = await boot(engine);
   const calls: unknown[] = [];
   const hooks: Hooks = { after: { orders: { insert: ({ rows }) => { calls.push(rows); } } } };
   const s = site(b, hooks);

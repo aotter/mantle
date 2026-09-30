@@ -4,7 +4,7 @@
 // and near() returning the closest K in order.
 import type { Report } from '../report.js';
 import { compileSql as tryLower, SqlRefusal as Refused } from '../../spec/index.js';
-import type { DatabaseDriver } from '../../core/driver.js';
+import type { Engine } from '../harness.js';
 import { CENTER, boot, caller, isRefusal, north, program, site } from '../harness.js';
 import { runProcedure, runView } from '../harness.js';
 
@@ -16,19 +16,18 @@ const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 };
 
-export async function run(r: Report, driver: DatabaseDriver) {
+export async function run(r: Report, engine: Engine) {
   r.section('Case 8: search and places');
-  const b = await boot(driver);
+  const b = await boot(engine);
   const s = site(b);
   const search = async (q: string, caller_ = 'o1') =>
     (await runView(s, await program('view', 'SELECT id FROM notes WHERE mantle.search(notes, input.q) ORDER BY id', { q: 'text' }), caller({ q }, caller_))).rows.map((x: any) => x.id as string);
-  const raw = async (q: string) => (await b.d1.all('SELECT rowid FROM "_mantle_fts_notes" WHERE "_mantle_fts_notes" = ?1', [q])).length;
 
   // ---- full-text: trigram, with a LIKE fallback under three characters -------------------------------------------------
-  r.equal('trigram: 小籠包 matches by substring; raw FTS5 matches nothing for 小籠, so search() falls back to LIKE (小籠, 包); ASCII is case-insensitive',
-    [await search('小籠包'), await raw('"小籠"'), await search('小籠'), await search('包'), await search('HELLO')], [['n1'], 0, ['n1'], ['n1'], ['n2', 'n4', 'n5']]);
+  r.equal('substrings match, including two- and one-character Chinese ones; ASCII is case-insensitive',
+    [await search('小籠包'), await search('小籠'), await search('包'), await search('HELLO')], [['n1'], ['n1'], ['n1'], ['n2', 'n4', 'n5']]);
   // the query is bound as a quoted phrase, never as FTS5 syntax; the fallback escapes LIKE wildcards
-  r.equal('FTS5 syntax is literal (OR, title:, NEAR(, *, -, a quote, an unbalanced quote) and LIKE wildcards are escaped (5%, _b, a_)',
+  r.equal('query syntax is literal (OR, title:, NEAR(, *, -, a quote, an unbalanced quote) and wildcards are literal (5%, _b, a_)',
     [await search('hello OR world'), await search('title:hello'), await Promise.all(['NEAR(a b)', 'hel*', '-hello', 'say "hi"', '"unbalanced'].map((q) => search(q))), await search('5%'), await search('_b'), await search('a_')],
     [['n5'], ['n5'], [[], [], [], [], []], ['n4'], ['n4'], ['n4']]);
 
@@ -37,17 +36,15 @@ export async function run(r: Report, driver: DatabaseDriver) {
   const pub = async (q: string) => (await runView({ ...s, mode: 'public' }, await program('view', 'SELECT id FROM posts WHERE mantle.search(posts, input.q) ORDER BY id', { q: 'text' }), caller({ q }))).rows.map((x: any) => x.id);
   r.equal("another owner's and expired rows are absent from search(), mantle.search_rank() and a public View; the other owner finds their own",
     [await search('LEAK'), (await runView(s, rank, caller({ q: 'LEAK' }))).rows, await pub('LEAK'), await pub('public'), await search('小籠包', 'o2')], [[], [], [], ['p1'], ['X_n1']]);
-  r.equal('search_rank orders by bm25: the note with the most occurrences of apple first', (await runView(s, rank, caller({ q: 'apple' }))).rows.map((x: any) => x.id), ['n3', 'n2']);
+  r.equal('mantle.search_rank orders by relevance: the note with the most occurrences of apple first', (await runView(s, rank, caller({ q: 'apple' }))).rows.map((x: any) => x.id), ['n3', 'n2']);
 
   // ---- triggers keep the index in step; D1's meta.changes counts them, changes() does not -------------------------------------
   const res = await runProcedure(s, await program('procedure', "UPDATE notes SET title = 'renamed zebra' WHERE id = 'n3' RETURNING id", {}), caller());
   const afterUpdate = [await search('zebra'), (await search('apple apple')).includes('n3')];
-  const changes = (await b.d1.batch([{ sql: "UPDATE notes SET title = 'renamed zebra again' WHERE id = 'n3'" }]))[0].changes;
   await runProcedure(s, await program('procedure', "DELETE FROM notes WHERE id = 'n3'"), caller());
   const afterDelete = await search('zebra');
   await runProcedure(s, await program('procedure', "INSERT INTO notes (title, body) VALUES ('fresh mango note', 'x')"), caller());
   r.equal('the FTS index follows UPDATE (new text found, old not), DELETE and INSERT; the row op still passed its count check', [afterUpdate, afterDelete, (await search('mango')).length, res.rows], [[['n3'], false], [], 1, [[{ id: 'n3' }]]]);
-  r.check("D1's meta.changes for a one-row UPDATE on a table with FTS triggers counts the trigger's writes (not 1), so changes() inside the batch is what decides CONFLICT", changes !== 1, `meta.changes = ${changes}`);
 
   // ---- places: R*Tree + haversine -----------------------------------------------------------------------------------
   const near = async (meters: number, extra = '') => (await runView(s, await program('view', `SELECT id FROM places WHERE mantle.near(places.loc, input.lat, input.lng, ${meters}) ${extra} ORDER BY id`, { lat: 'float8', lng: 'float8' }), caller({ lat: CENTER.lat, lng: CENTER.lng }))).rows.map((x: any) => x.id as string);

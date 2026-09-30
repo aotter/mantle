@@ -2,15 +2,15 @@
 // Conformance case 4: before hooks. A row op whose row changes between the hook and the commit fails
 // with CONFLICT; a set op on a Schema with a before hook is refused.
 import type { Report } from '../report.js';
-import type { DatabaseDriver } from '../../core/driver.js';
+import type { Engine } from '../harness.js';
 import { boot, caller, program, site } from '../harness.js';
 import { isConflict, opIndexOf, isRefusal, runProcedure } from '../harness.js';
 import type { Hooks } from '../harness.js';
 
 
-export async function run(r: Report, driver: DatabaseDriver) {
+export async function run(r: Report, engine: Engine) {
   r.section('Case 4: before hooks');
-  const b = await boot(driver);
+  const b = await boot(engine);
   const seen: any[] = [];
   let concurrent: (() => Promise<void>) | undefined;
   let veto = false;
@@ -27,7 +27,7 @@ export async function run(r: Report, driver: DatabaseDriver) {
   // the hook reads the one visible row, then the statement carries the version the hook saw
   const ok = await runProcedure(s, set, caller({ id: 'a', s: 9 }));
   r.check('no concurrent write: commits and bumps version; the hook saw the one row before the change; the statement carries the version it saw',
-    JSON.stringify(ok.rows) === '[[{"id":"a","stock":9,"version":2}]]' && seen.length === 1 && seen[0].id === 'a' && seen[0].stock === 5 && seen[0].version === 1 && ok.batch[0].sql.includes('version = ?') && ok.batch[0].binds!.includes(1), seen[0]);
+    JSON.stringify(ok.rows) === '[[{"id":"a","stock":9,"version":2}]]' && seen.length === 1 && seen[0].id === 'a' && seen[0].stock === 5 && seen[0].version === 1 && JSON.stringify(ok.batch[0].ir.UpdateStmt.whereClause).includes('"sval":"version"') && ok.batch[0].binds!.includes(1), seen[0]);
 
   // the row changes between the hook and the commit: CONFLICT, and the concurrent write survives
   concurrent = async () => { await b.d1.exec(["UPDATE items SET stock = 99, version = version + 1 WHERE id = 'b'"]); };

@@ -5,7 +5,7 @@
 // Each probe seeds a second owner's rows, an expired one and an unpublished one (`X_` ids, `LEAK` text)
 // and asserts none of them appears in a result or changes.
 import type { Report } from '../report.js';
-import type { DatabaseDriver } from '../../core/driver.js';
+import type { Engine } from '../harness.js';
 import { CENTER, NOW, boot, caller, program, reset, site } from '../harness.js';
 import { isConflict, isRefusal, runProcedure, runView } from '../harness.js';
 import type { Site } from '../harness.js';
@@ -77,9 +77,9 @@ async function protectedRows(d1: { all: (sql: string) => Promise<any[]> }) {
   return out;
 }
 
-export async function run(r: Report, driver: DatabaseDriver) {
+export async function run(r: Report, engine: Engine) {
   r.section('Case 7: policy probe (every relation position, another owner / expired / unpublished rows)');
-  const b = await boot(driver);
+  const b = await boot(engine);
   const positions = Object.keys(PROBES) as RelationPosition[];
   r.equal(`the probe list covers all ${ALL_POSITIONS.length} positions of the IR union (and \`satisfies\` makes that a typecheck error when it does not)`, [...positions].sort(), [...ALL_POSITIONS].sort());
 
