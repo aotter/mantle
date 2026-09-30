@@ -65,7 +65,7 @@ export async function run(r: Report, engine: Engine) {
   // ---- row ops: insert, update with lock, delete ---------------------------------------------------------------------------
   const [ins] = await me.write([{ insert: 'items', values: { name: 'elder', cat: 'z', stock: 1, tags: ['x'] } }]);
   r.check('insert returns { id, version: 1 } with a generated id (a scoped Schema generates its own), owned by the caller and stamped with author', /^[0-9a-f]{32}$/.test(ins.id) && ins.version === 1
-    && JSON.stringify((await b.d1.all('SELECT owner, author_id, updated_at FROM items WHERE id = ?1', [ins.id]))[0]) === JSON.stringify({ owner: 'o1', author_id: 'o1', updated_at: NOW }), ins);
+    && ((x) => JSON.stringify({ ...x, updated_at: Date.parse(b.dialect.codec.decode('timestamptz', x.updated_at)) * 1000 }))((await b.d1.all('SELECT owner, author_id, updated_at FROM items WHERE id = ?1', [ins.id]))[0]) === JSON.stringify({ owner: 'o1', author_id: 'o1', updated_at: NOW }), ins);
   const [upd] = await me.write([{ update: 'items', set: { stock: 9 }, where: { id: ins.id }, lock: 1 }]);
   r.equal('update with the observed version: { id, version: 2 }', [upd.version, (await stock(ins.id)).stock], [2, 9]);
   const stale = await fail(() => me.write([{ update: 'items', set: { stock: 0 }, where: { id: ins.id }, lock: 1 }]));

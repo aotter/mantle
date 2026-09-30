@@ -2,7 +2,8 @@
  * `@aotter/mantle/testing`: the dialect compliance suite (ADR-0035 decision 8). A dialect author calls
  * `runStorageConformance({ create, compile })` with their dialect's storage adapter on a real engine and asserts `report.ok`;
  * no test framework is imported. Behavior runs through the dialect (convergence, executor, policy, codec); fixtures are
- * seeded and read with plain SQL. A case the compile side refuses passes by that refusal. The cases compile their SQL
+ * seeded and read with plain SQL, typed values through the dialect's codec. A printer-corpus item the compile side refuses as
+ * unsupported passes by that refusal; in every other case a refusal fails the case. The cases compile their SQL
  * with the CLI's parser, so they run in Node, not in a Worker.
  */
 import type { DatabaseDriver } from "../core/driver.js";
@@ -51,16 +52,20 @@ const CASES: readonly [string, { run(r: Report, engine: Engine): Promise<unknown
 export async function runStorageConformance(options: StorageConformanceOptions): Promise<StorageConformanceReport> {
   const r = new Report();
   useCompileSide(options.compile);
-  for (const [name, c] of CASES) {
-    const fixture = await options.create();
-    try {
-      await c.run(r, fixture);
-    } catch (e) {
-      r.section(`${name} (crashed)`);
-      r.check("case ran to the end", false, e instanceof Error ? (e.stack ?? e.message) : String(e));
-    } finally {
-      await fixture.cleanup();
+  try {
+    for (const [name, c] of CASES) {
+      const fixture = await options.create();
+      try {
+        await c.run(r, fixture);
+      } catch (e) {
+        r.section(`${name} (crashed)`);
+        r.check("case ran to the end", false, e instanceof Error ? (e.stack ?? e.message) : String(e));
+      } finally {
+        await fixture.cleanup();
+      }
     }
+  } finally {
+    useCompileSide(undefined);
   }
   return {
     ok: r.failed.length === 0,
