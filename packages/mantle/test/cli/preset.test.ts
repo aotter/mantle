@@ -89,6 +89,10 @@ async function project(args: readonly string[], before: Record<string, string> =
     await mkdir(join(dir, "node_modules", p), { recursive: true });
     await writeFile(join(dir, "node_modules", p, "package.json"), `{ "name": "${p}" }`);
   }
+  // a stand-in for the built Admin SPA, where the preset's wrangler.jsonc binds it
+  await mkdir(join(dir, "node_modules/@aotter/mantle-ui/dist/admin/assets"), { recursive: true });
+  await writeFile(join(dir, "node_modules/@aotter/mantle-ui/dist/admin/index.html"), "<!doctype html><title>Mantle Admin</title>");
+  await writeFile(join(dir, "node_modules/@aotter/mantle-ui/dist/admin/assets/app.js"), "export {};");
   const r = await generate(dir, args);
   expect(r.code, r.out).toBe(0);
   return dir;
@@ -247,6 +251,15 @@ describe("the service preset", () => {
       expect(await methods.json()).toEqual({ methods: [expect.objectContaining({ kind: "email-otp" })] });
       expect(await rows(worker)).toEqual([]);
       expect((await get(worker, "/admin/api/me")).status).toBe(401);
+      // the SPA from @aotter/mantle-ui/admin: the shell for any route, with Admin's frame refusal; a file by name; no missing file
+      for (const path of ["/admin", "/admin/c/items"]) {
+        const shell = await get(worker, path);
+        expect([shell.status, await shell.text(), shell.headers.get("x-frame-options")]).toEqual([200, "<!doctype html><title>Mantle Admin</title>", "DENY"]);
+      }
+      expect(await (await get(worker, "/admin/assets/app.js")).text()).toBe("export {};");
+      expect((await get(worker, "/admin/assets/missing.js")).status).toBe(404);
+      // the Worker answers first: the files are not served at their bare paths
+      expect((await get(worker, "/index.html")).status).toBe(404);
     } finally {
       await worker.dispose();
     }

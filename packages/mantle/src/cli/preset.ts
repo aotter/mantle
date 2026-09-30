@@ -24,9 +24,10 @@ function service({ identity, features }: PresetSelection): string {
   const mcp = features.includes("mcp");
   const admin = features.includes("admin");
   const mantle = identity === "mantle";
+  const withEnv = mantle || admin;
   const core = ["createMantle", ...(identity === "none" ? [] : ["withCaller"]), "type MantleRuntime", "type MantleService", "type Surface"];
   const auth = mantle ? ["ConsoleEmailSender", "createAuthRoutes", "createCallerResolver", "createMantleAuth", "createSetupIncompleteAuth", "type MantleAuth"] : [];
-  const env = ["  readonly DB: D1Database;", ...(mantle ? ["  readonly BETTER_AUTH_SECRET?: string;", "  readonly PUBLIC_ORIGIN?: string;", "  readonly ADMIN_EMAIL?: string;"] : [])];
+  const env = ["  readonly DB: D1Database;", ...(admin ? ["  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */", "  readonly ASSETS: Fetcher;"] : []), ...(mantle ? ["  readonly BETTER_AUTH_SECRET?: string;", "  readonly PUBLIC_ORIGIN?: string;", "  readonly ADMIN_EMAIL?: string;"] : [])];
   const origin = mantle ? ["  const origin = env.PUBLIC_ORIGIN?.replace(/\\/+$/, \"\") ?? \"http://127.0.0.1:8787\";", "  const auth = createAuth(env, origin);"] : [];
   const caller = mantle
     ? [`  const resolver = createCallerResolver(auth${mcp ? ", { jwtBearer: { audience: `${origin}/mcp` } }" : ""});`, "  const authRoutes = createAuthRoutes(auth, { resolver });", "  const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);"]
@@ -36,6 +37,7 @@ function service({ identity, features }: PresetSelection): string {
   const meta = mantle && mcp ? ["  const resourceMetadata = `${origin}/.well-known/oauth-protected-resource/mcp`;"] : [];
   const adminOptions = [
     'basePath: "/admin"',
+    "assets: (path) => adminAsset(env.ASSETS, path)",
     ...(mantle ? ["identity: { directory: auth, roles: auth, deleteUser: auth.deleteUser }"] : []),
     ...(mcp ? ['staffMcp: createMcpSurface(runtime, { basePath: "/admin/api/mcp", surface: "staff" })', 'site: { mcpEndpoints: { public: "/mcp", staff: null } }'] : []),
   ];
@@ -92,7 +94,15 @@ function service({ identity, features }: PresetSelection): string {
       "}",
       "",
     ] : []),
-    `function mount(runtime: MantleRuntime${mantle ? ", env: Env" : ""}) {`,
+    ...(admin ? [
+      "/** A file of the Admin SPA, or null when it has none by that path. */",
+      "async function adminAsset(assets: Fetcher, path: string): Promise<Response | null> {",
+      '  const response = await assets.fetch(new URL(path, "http://assets/"));',
+      "  return response.ok ? response : null;",
+      "}",
+      "",
+    ] : []),
+    `function mount(runtime: MantleRuntime${withEnv ? ", env: Env" : ""}) {`,
     ...origin, ...caller, ...meta, ...surfaces, ...route,
     "}",
     "",
@@ -101,7 +111,9 @@ function service({ identity, features }: PresetSelection): string {
     "  handlers,",
     mantle
       ? "  fetch: (request, env, { runtime, waitUntil }) => (routes ??= mount(runtime, env))(request, waitUntil),"
-      : "  fetch: (request, _env, { runtime }) => (routes ??= mount(runtime))(request),",
+      : withEnv
+        ? "  fetch: (request, env, { runtime }) => (routes ??= mount(runtime, env))(request),"
+        : "  fetch: (request, _env, { runtime }) => (routes ??= mount(runtime))(request),",
     "};",
     "",
     "export const mantle = createMantle(service, { plan, storage: (env) => d1Storage(env.DB), schedules: true });",
@@ -170,12 +182,17 @@ export default {
 } satisfies ExportedHandler<Env>;
 `;
 
-function wrangler(root: string, plan: RuntimePlan): string {
+/** Where the Admin SPA's files are once `@aotter/mantle-ui` is installed. */
+const ADMIN_FILES = "node_modules/@aotter/mantle-ui/dist/admin";
+
+function wrangler(root: string, plan: RuntimePlan, admin: boolean): string {
   const name = basename(root).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "").slice(0, 63).replace(/-+$/, "") || "mantle-app";
   const crons = [...new Set(Object.values(plan.triggers).flatMap((t) => (t.source.kind === "schedule" && t.source.enabled !== false ? [toCloudflareCron(t.source.cron)] : [])))].sort();
   return json({
     $schema: "node_modules/wrangler/config-schema.json", name, main: "src/index.ts", compatibility_date: "2026-09-01", compatibility_flags: ["nodejs_compat"],
     d1_databases: [{ binding: "DB", database_name: name }],
+    // the Worker answers every request (Admin serves the shell with its own headers); `none` keeps index.html fetchable by name
+    ...(admin ? { assets: { directory: ADMIN_FILES, binding: "ASSETS", run_worker_first: true, html_handling: "none" } } : {}),
     ...(crons.length ? { triggers: { crons } } : {}),
   });
 }
@@ -201,7 +218,7 @@ export function presetFiles(root: string, selection: PresetSelection, plan: Runt
     ["src/handlers.ts", handlers(plan)],
     ...(selection.identity === "custom" ? [["src/identity.ts", IDENTITY] as [string, string]] : []),
     ["src/index.ts", ENTRY],
-    ...(["wrangler.jsonc", "wrangler.json", "wrangler.toml"].some((f) => existsSync(join(root, f))) ? [] : [["wrangler.jsonc", wrangler(root, plan)] as [string, string]]),
+    ...(["wrangler.jsonc", "wrangler.json", "wrangler.toml"].some((f) => existsSync(join(root, f))) ? [] : [["wrangler.jsonc", wrangler(root, plan, selection.features.includes("admin"))] as [string, string]]),
     ["tsconfig.json", TSCONFIG],
     ...(selection.identity === "mantle" ? [[".dev.vars.example", DEV_VARS] as [string, string]] : []),
     [".gitignore", "node_modules/\n.wrangler/\n.dev.vars\n"],
