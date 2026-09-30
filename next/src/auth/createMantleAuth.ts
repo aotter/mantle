@@ -1209,7 +1209,7 @@ export interface MantleAuth {
   /** List only users with a staff role, ordered by `createdAt`
    *  ascending. End-user identities stay outside the team-management
    *  surface. Owner-only enforcement is the mount layer's job. */
-  readonly listUsers: () => Promise<readonly StaffUserInfo[]>;
+  readonly listUsers: (request: Request) => Promise<readonly StaffUserInfo[]>;
   /** List non-staff identities for the member-management surface. */
   readonly listMembers: (args: ListMembersArgs) => Promise<MemberListResult>;
   /** Assign or clear a user's staff role. `null` revokes staff access
@@ -1220,6 +1220,7 @@ export interface MantleAuth {
    *  guard self-demotion; that's session-aware and lives in the mount
    *  layer. */
   readonly setUserRole: (
+    request: Request,
     userId: string,
     role: StaffRole | null,
   ) => Promise<boolean>;
@@ -1237,6 +1238,7 @@ export interface MantleAuth {
    *  lowercase). Returns `exists` instead of throwing when the email
    *  already has a row. */
   readonly inviteUser: (
+    request: Request,
     email: string,
     role: StaffRole,
   ) => Promise<InviteUserResult>;
@@ -1595,27 +1597,14 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       const result = await db.run("DELETE FROM account WHERE userId = ? AND providerId = ?", userId, providerId);
       return (result.meta?.changes ?? 0) > 0;
     },
-    listUsers: async () => {
+    listUsers: async (request) => {
       await prepareAuth();
-      const placeholders = STAFF_ROLES.map(() => "?").join(",");
-      const result = await db.all<{
-          id: string;
-          email: string;
-          name: string;
-          role: string | null;
-          githubLogin: string | null;
-          emailVerified: number;
-          createdAt: string;
-        }>(`SELECT id, email, name, role, githubLogin, emailVerified, createdAt FROM user WHERE role IN (${placeholders}) ORDER BY createdAt ASC, id ASC`, ...STAFF_ROLES);
-      return result.map((row) => ({
-        id: row.id,
-        email: row.email,
-        name: row.name,
-        role: row.role,
-        githubLogin: row.githubLogin,
-        emailVerified: row.emailVerified !== 0,
-        createdAt: new Date(row.createdAt),
-      }));
+      const query = { filterField: "role", filterOperator: "in", filterValue: [...STAFF_ROLES], sortBy: "createdAt", sortDirection: "asc" } as const;
+      type Page = { users: StaffUserInfo[]; total: number };
+      let { users, total } = await api.listUsers({ headers: request.headers, query }) as Page;
+      // Better Auth returns 100 users unless given a limit: ask once more for all of them, in one ordered read
+      if (users.length < total) ({ users } = await api.listUsers({ headers: request.headers, query: { ...query, limit: total } }) as Page);
+      return users.map(({ id, email, name, role, githubLogin, emailVerified, createdAt }) => ({ id, email, name, role, githubLogin: githubLogin ?? null, emailVerified, createdAt: new Date(createdAt) }));
     },
     listMembers: async ({ search, cursor, cursorDirection = "forward", limit }) => {
       await prepareAuth();
@@ -1666,36 +1655,32 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
             : null,
       };
     },
-    setUserRole: async (userId, role) => {
+    setUserRole: async (request, userId, role) => {
       if (role !== null && !STAFF_ROLE_SET.has(role)) {
         throw new Error(`setUserRole: '${role}' is not a staff role — expected one of [${STAFF_ROLES.join(", ")}] or null.`);
       }
       await prepareAuth();
-      if (config.sessionCache) {
-        const context = await auth.$context;
-        return !!await context.internalAdapter.updateUser(userId, {
-          role,
-          updatedAt: new Date(),
-        });
+      try {
+        // Better Auth's default role is not staff, so it is what revoking stores
+        await api.setRole({ headers: request.headers, body: { userId, role: role ?? "user" } });
+        return true;
+      } catch (error) {
+        if ((error as { status?: unknown }).status === "NOT_FOUND") return false;
+        throw error;
       }
-      const result = await db.run("UPDATE user SET role = ?, updatedAt = ? WHERE id = ?", role, new Date().toISOString(), userId);
-      return (result.meta?.changes ?? 0) > 0;
     },
-    inviteUser: async (email, role) => {
+    inviteUser: async (request, email, role) => {
       if (!STAFF_ROLE_SET.has(role)) {
         throw new Error(`inviteUser: '${role}' is not a staff role — expected one of [${STAFF_ROLES.join(", ")}].`);
       }
       await prepareAuth();
       const normalized = email.trim().toLowerCase();
-      const existing = await db.first<{ id: string }>("SELECT id FROM user WHERE email = ? LIMIT 1", normalized);
-      if (existing) return { kind: "exists", id: existing.id };
-      const id = generateUserId();
-      const now = new Date().toISOString();
-      // `name` defaults to the address's local part — Better Auth
-      // requires NOT NULL, and the invitee's real display name arrives
-      // with their first sign-in (social) or stays editable later.
-      await db.run("INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt, role) VALUES (?, ?, ?, 0, ?, ?, ?)", id, normalized.split("@")[0] ?? normalized, normalized, now, now, role);
-      return { kind: "created", id };
+      const headers = request.headers;
+      const { users } = await api.listUsers({ headers, query: { filterField: "email", filterValue: normalized, limit: 1 } }) as { users: { id: string }[] };
+      if (users[0]) return { kind: "exists", id: users[0].id };
+      // `name` is the address's local part until the invitee's first sign-in brings a real one; the row starts unverified
+      const { user } = await api.createUser({ headers, body: { email: normalized, name: normalized.split("@")[0] || normalized, role } }) as { user: { id: string } };
+      return { kind: "created", id: user.id };
     },
     ...(config.staffInvitationSender ? {
       sendStaffInvitation: async (email: string, role: StaffRole) => {
@@ -1715,15 +1700,11 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     },
     deleteUser: async (userId) => {
       await prepareAuth();
-      if (config.sessionCache) {
-        // The session cache holds copies a raw DELETE cannot reach; Better Auth's own delete clears them.
-        const context = await auth.$context;
-        if (!await context.internalAdapter.findUserById(userId)) return false;
-        await context.internalAdapter.deleteUser(userId);
-        return true;
-      }
-      const result = await db.run("DELETE FROM user WHERE id = ?", userId);
-      return (result.meta?.changes ?? 0) > 0;
+      // no session to act as, so Better Auth's own delete, which also clears cached sessions
+      const context = await auth.$context;
+      if (!await context.internalAdapter.findUserById(userId)) return false;
+      await context.internalAdapter.deleteUser(userId);
+      return true;
     },
     registerOAuthClient: async (input) => {
       if (!config.oauthProvider) {

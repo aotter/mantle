@@ -105,8 +105,8 @@ const identity: AdminIdentity = {
     listMembers: async (args) => { calls.push(["listMembers", args]); return { items: [], previousCursor: null, nextCursor: null }; },
   },
   roles: {
-    setUserRole: async (id, role) => { calls.push(["setUserRole", id, role]); return id !== "ghost"; },
-    inviteUser: async (email) => (email === "o@x.test" ? { kind: "exists", id: "u-owner" } : email === "e@x.test" ? { kind: "exists", id: "u-editor" } : { kind: "created", id: "u-new" }),
+    setUserRole: async (request, id, role) => { calls.push(["setUserRole", id, role, request.headers.get("cookie")]); return id !== "ghost"; },
+    inviteUser: async (_request, email) => (email === "o@x.test" ? { kind: "exists", id: "u-owner" } : email === "e@x.test" ? { kind: "exists", id: "u-editor" } : { kind: "created", id: "u-new" }),
     revokeInvite: async (id) => id === "u-new",
   },
 };
@@ -129,7 +129,7 @@ afterAll(() => d1.dispose());
 
 const call = async (method: string, path: string, caller: Caller, body?: unknown, opts: { identity?: AdminIdentity | null } = {}) => {
   const surface = createAdminSurface(rt, { basePath: "/admin", ...(opts.identity === null ? {} : { identity: opts.identity ?? identity }), assets });
-  const res = await surface(new Request(`http://x${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), caller);
+  const res = await surface(new Request(`http://x${path}`, { method, headers: { cookie: "s=owner" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), caller);
   const text = await res.text();
   let json: any;
   try { json = JSON.parse(text); } catch { json = text; }
@@ -267,7 +267,7 @@ describe("Admin surface: staff and members", () => {
 
   it("changes a role, but an owner cannot change their own, by id or by inviting their own email", async () => {
     expect((await call("PATCH", "/admin/api/staff/u-editor/role", owner, { role: null })).body).toEqual({ ok: true });
-    expect(calls.at(-1)).toEqual(["setUserRole", "u-editor", null]);
+    expect(calls.at(-1)).toEqual(["setUserRole", "u-editor", null, "s=owner"]);
     expect((await call("PATCH", "/admin/api/staff/u-owner/role", owner, { role: "editor" })).status).toBe(403);
     expect((await call("POST", "/admin/api/staff/invitations", owner, { email: "o@x.test", role: "editor" })).status).toBe(403);
     expect((await call("PATCH", "/admin/api/staff/ghost/role", owner, { role: "editor" })).status).toBe(404);
@@ -277,7 +277,7 @@ describe("Admin surface: staff and members", () => {
   it("invites (re-roling an existing user) and revokes only a never-used invitation", async () => {
     expect((await call("POST", "/admin/api/staff/invitations", owner, { email: " N@x.test ", role: "editor" })).body).toEqual({ ok: true, userId: "u-new", emailSent: false });
     expect((await call("POST", "/admin/api/staff/invitations", owner, { email: "e@x.test", role: "contributor" })).body.userId).toBe("u-editor");
-    expect(calls.at(-1)).toEqual(["setUserRole", "u-editor", "contributor"]);
+    expect(calls.at(-1)).toEqual(["setUserRole", "u-editor", "contributor", "s=owner"]);
     expect((await call("POST", "/admin/api/staff/invitations", owner, { email: "nope", role: "editor" })).status).toBe(400);
     expect((await call("DELETE", "/admin/api/staff/invitations/u-new", owner)).body).toEqual({ ok: true });
     expect((await call("DELETE", "/admin/api/staff/invitations/u-editor", owner)).status).toBe(409);
