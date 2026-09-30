@@ -190,6 +190,15 @@ describe("mantle generate", () => {
     expect(JSON.parse(await read(dir, "mantle.config.json")).dialect).toBe("@acme/dialect");
     expect((await gen(["--check", "--database", "x.db"], dir)).code).toBe(2);
 
+    // an ESM-only package: its exports have only an import condition, which require.resolve does not read
+    const esm = join(dir, "node_modules", "@acme", "esm");
+    await mkdir(esm, { recursive: true });
+    await writeFile(join(esm, "package.json"), JSON.stringify({ name: "@acme/esm", type: "module", exports: { "./compile": { import: { types: "./compile.d.ts", default: "./compile.js" } } } }));
+    await writeFile(join(esm, "compile.js"), 'export const name = "@acme/esm"; export const version = "2"; export function accepts() {}');
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "@acme/esm" }));
+    expect((await gen([], dir)).code).toBe(0);
+    expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@acme/esm", version: "2" });
+
     await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "@acme/missing" }));
     expect(await gen([], dir)).toMatchObject({ code: 2, err: expect.stringContaining("@acme/missing/compile cannot be loaded") });
     await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "" }));

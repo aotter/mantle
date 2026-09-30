@@ -19,7 +19,8 @@ const no = (code: ConstructorParameters<typeof SqlRefusal>[0], message: string, 
 function* nodes(v: unknown): Generator<[string, N]> {
   if (Array.isArray(v)) for (const x of v) yield* nodes(x);
   else if (v && typeof v === "object") for (const [k, c] of Object.entries(v)) {
-    if (c && typeof c === "object" && !Array.isArray(c) && /^[A-Z]/.test(k)) yield [k, c as N];
+    // a write's target is a RangeVar without its type key
+    if (c && typeof c === "object" && !Array.isArray(c) && (/^[A-Z]/.test(k) || k === "relation")) yield [k === "relation" ? "RangeVar" : k, c as N];
     yield* nodes(c);
   }
 }

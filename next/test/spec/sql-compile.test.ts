@@ -65,6 +65,8 @@ describe("the shared front end (ADR-0035 decision 4)", () => {
     ["SELECT id FROM _mantle_tz", "SQL_RELATION", "_mantle_tz"],
     ['SELECT (SELECT email FROM "user" LIMIT 1) AS e FROM items', "SQL_RELATION", '"user"'],
     ["SELECT id FROM public.items", "SQL_RELATION", "public.items", /schema-qualified/],
+    ["INSERT INTO _mantle_boot (id) VALUES ('x')", "SQL_RELATION", "_mantle_boot"],
+    ['DELETE FROM "user" WHERE id = \'x\'', "SQL_RELATION", '"user"'],
     ["SELECT id FROM items WHERE name = input.nope", "SQL_COLUMN", "input.nope"],
     ["SELECT mantle.nope(items) FROM items", "SQL_FUNCTION", "mantle.nope"],
     ["SELECT auth.email()", "SQL_FUNCTION", "auth.email"],
