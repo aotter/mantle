@@ -8,3 +8,4 @@ export * from "./store.js";
 export { sqliteStorage } from "./sql/adapter.js";
 export { readStoreInstanceId, runMigrations, type Migration } from "./sql/migrations.js";
 export * from "./email.js";
+export * from "./runtime/auth.js";

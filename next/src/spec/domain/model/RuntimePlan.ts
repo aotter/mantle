@@ -2,7 +2,7 @@
  * The sealed plan (ADR-0032 decision 5, ADR-0034): what the CLI compiles from the manifests and Core executes.
  * Every SQL source is already IR here, so no Worker parses SQL. Pure types and constants.
  */
-import type { AuthorizationRequirements, JsonSchema, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
+import type { AuthorizationRequirements, JsonSchema, LocalizedText, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
 import type { SqlNode, SqlPlan } from "./SqlIr.js";
 
 export const RUNTIME_PLAN_VERSION = 6 as const;
@@ -29,6 +29,8 @@ export interface PlanSchema {
 }
 
 export interface PlanView extends SqlPlan {
+  readonly title?: LocalizedText;
+  readonly description?: LocalizedText;
   /** input property -> Mantle type */
   readonly inputs: Readonly<Record<string, string>>;
   readonly input?: JsonSchema;
@@ -37,6 +39,8 @@ export interface PlanView extends SqlPlan {
 }
 
 export interface PlanProcedure {
+  readonly title?: LocalizedText;
+  readonly description?: LocalizedText;
   readonly input: JsonSchema;
   readonly output: JsonSchema;
   /** input property -> Mantle type, for an inline `sql` handler */
