@@ -10,7 +10,7 @@ import {
   type SqlNode,
 } from "../../src/spec/index.js";
 import { parsePgSql } from "../../src/spec/infrastructure/sql/PgQueryParser.js";
-import { validateIr } from "../../src/d1/index.js";
+import { validateIr } from "../../src/d1/validator.js";
 
 const SQL_DIAGNOSTIC_CODES = DIAGNOSTIC_CODES.filter((c): c is SqlDiagnosticCode => c.startsWith("SQL_"));
 
@@ -71,6 +71,17 @@ describe("the shared front end (ADR-0035 decision 4)", () => {
     ["SELECT mantle.nope(items) FROM items", "SQL_FUNCTION", "mantle.nope"],
     ["SELECT auth.email()", "SQL_FUNCTION", "auth.email"],
     ["WITH gone AS (DELETE FROM items RETURNING id) SELECT id FROM gone", "SQL_SHAPE", undefined, /reads only/],
+    // review: spellings that must not slip past, and SQL text run by a function
+    ["SELECT postgres.pg_catalog.set_config('mantle.uid', 'o2', false)", "SQL_FUNCTION", undefined, /set_config/],
+    ["SELECT set_config('MANTLE.uid', 'o2', false)", "SQL_FUNCTION", "set_config"],
+    ["SELECT db.mantle.evil(1)", "SQL_FUNCTION", undefined, /not one of Mantle's functions/],
+    ["SELECT query_to_xml('select * from users', true, false, '')", "SQL_FUNCTION", "query_to_xml"],
+    ["SELECT * FROM ts_stat('select v from users')", "SQL_FUNCTION", "ts_stat"],
+    ["SELECT nextval('s')", "SQL_FUNCTION", "nextval"],
+    ["SELECT id INTO t FROM items", "SQL_UNSUPPORTED", undefined, /INTO/],
+    ["SELECT a.id FROM (WITH users AS (SELECT id FROM items) SELECT id FROM users) a, users", "SQL_RELATION", undefined, /users is not a declared Schema/],
+    ["WITH users AS (SELECT id FROM users) SELECT id FROM users", "SQL_RELATION", undefined, /users is not a declared Schema/],
+    ['SELECT id FROM "Items"', "SQL_RELATION", '"Items"'],
   ];
   it("refuses what no dialect may run, with a position, whatever the dialect accepts", async () => {
     for (const [sql, code, token, msg] of refused) {
@@ -81,7 +92,7 @@ describe("the shared front end (ADR-0035 decision 4)", () => {
     }
   });
   it("leaves the rest to the dialect: a CTE of the statement, a setting outside mantle.*, MERGE", async () => {
-    for (const sql of ["WITH x AS (SELECT id FROM items) SELECT id FROM x", "SELECT current_setting('timezone')", "MERGE INTO items USING orders o ON items.id = o.item_id WHEN MATCHED THEN DELETE"])
+    for (const sql of ["WITH x AS (SELECT id FROM items) SELECT id FROM x", "WITH RECURSIVE x AS (SELECT id FROM items UNION ALL SELECT id FROM x) SELECT id FROM x", "SELECT current_setting('timezone')", "MERGE INTO items USING orders o ON items.id = o.item_id WHEN MATCHED THEN DELETE"])
       expect(await compileSql(sql, ctxOf(/^\s*(SELECT|WITH)/i.test(sql) ? "view" : "procedure"), anything), sql).toMatchObject({ ok: true });
   });
 });

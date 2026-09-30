@@ -2,7 +2,7 @@
 import type { MantleDialect } from "../core/dialect.js";
 import { decodeOutput, encodeInput } from "./codec.js";
 import { bindBox, d1Lowering } from "./lower.js";
-import { name, version } from "./name.js";
+import { name, version } from "./compile/index.js";
 import { validateIr } from "./validator.js";
 
 export const d1Dialect: MantleDialect = {
