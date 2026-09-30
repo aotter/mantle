@@ -4,12 +4,11 @@
  */
 import { describe, it } from "vitest";
 
-// Covered elsewhere: Procedure.target inference agrees with Store (test/core/target-inference.test.ts), an inline hook target is rejected (test/spec/compile-plan.test.ts, and at boot in runtime.test.ts); hooks, OCC, rollback and after-hook failure (test/core/runtime.test.ts, the before-hook case), Views and
+// Covered elsewhere: an invalid credential is 401, never anonymous (test/auth/callerResolver.test.ts), Procedure.target inference agrees with Store (test/core/target-inference.test.ts), an inline hook target is rejected (test/spec/compile-plan.test.ts, and at boot in runtime.test.ts); hooks, OCC, rollback and after-hook failure (test/core/runtime.test.ts, the before-hook case), Views and
 // pagination (the store case, which also classifies row and set ops and the lock/expect reasons), invocation, auth predicates and depth, plan and boot (test/core/runtime.test.ts).
 
 describe("ADR-0032: caller identity", () => {
   it.todo("two callers with the same upstream id from different issuers cannot read each other's scoped rows");
-  it.todo("an invalid credential is 401, never anonymous");
 });
 
 // ADR-0034's eight cases run in `runStorageConformance` (src/testing/cases, run on local D1 by

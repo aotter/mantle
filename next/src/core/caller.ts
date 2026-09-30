@@ -24,7 +24,7 @@ export type Caller =
  * Resolves the Caller once per request, at the service's entry. `invalid` is answered 401 before any
  * surface runs and is never anonymous; only "no credential presented" is.
  */
-export type CallerResolver = (request: Request) => Promise<{ readonly caller: Caller } | { readonly invalid: true; readonly challenge?: string }>;
+export type CallerResolver = (request: Request) => Promise<{ readonly caller: Caller } | { readonly invalid: true; readonly challenge?: string; /** 403 for a valid token that lacks a scope (RFC 6750 insufficient_scope); 401 otherwise. */ readonly status?: 401 | 403 }>;
 
 /** Host code only; no wire produces one. Satisfies no `requires.auth` predicate, bypasses caller scope and nothing else. */
 export const systemCaller = (reason: string): Caller => ({ kind: "system", reason });
