@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle",
-  "version": "0.1.5-alpha.1",
-  "description": "Embeddable Mantle Core umbrella with Spec and Runtime; Web, Admin, Auth, Bun, Vercel, Cloudflare, and Admin UI are optional peer packages.",
+  "version": "0.2.0-alpha.1",
+  "description": "Mantle: a manifest-driven service core. Store authored as SQL, surfaces as Fetch functions, and the mantle CLI.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -11,164 +11,119 @@
   },
   "type": "module",
   "sideEffects": false,
-  "main": "./dist/spec.js",
-  "types": "./dist/spec.d.ts",
-  "bin": {
-    "mantle": "./dist/cli/main.js",
-    "mantle-harness": "./dist/cli/harness.js"
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./spec": {
+      "types": "./dist/spec/index.d.ts",
+      "import": "./dist/spec/index.js"
+    },
+    "./d1": {
+      "types": "./dist/d1/index.d.ts",
+      "import": "./dist/d1/index.js"
+    },
+    "./d1/compile": {
+      "types": "./dist/d1/compile/index.d.ts",
+      "import": "./dist/d1/compile/index.js",
+      "default": "./dist/d1/compile/index.js"
+    },
+    "./cloudflare": {
+      "types": "./dist/cloudflare/index.d.ts",
+      "import": "./dist/cloudflare/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js"
+    },
+    "./admin": {
+      "types": "./dist/admin/index.d.ts",
+      "import": "./dist/admin/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp/index.js"
+    },
+    "./web": {
+      "types": "./dist/web/index.d.ts",
+      "import": "./dist/web/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./package.json": "./package.json"
   },
+  "bin": {
+    "mantle": "./dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "docs"
+  ],
   "publishConfig": {
     "access": "public",
     "tag": "alpha",
     "registry": "https://registry.npmjs.org"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/spec.d.ts",
-      "import": "./dist/spec.js"
-    },
-    "./spec": {
-      "types": "./dist/spec.d.ts",
-      "import": "./dist/spec.js"
-    },
-    "./runtime": {
-      "types": "./dist/runtime.d.ts",
-      "import": "./dist/runtime.js"
-    },
-    "./runtime/testing": {
-      "types": "./dist/runtime-testing.d.ts",
-      "import": "./dist/runtime-testing.js"
-    },
-    "./codegen": {
-      "types": "./dist/codegen.d.ts",
-      "import": "./dist/codegen.js"
-    },
-    "./web": {
-      "types": "./dist/web.d.ts",
-      "import": "./dist/web.js"
-    },
-    "./mcp": {
-      "types": "./dist/mcp.d.ts",
-      "import": "./dist/mcp.js"
-    },
-    "./admin": {
-      "types": "./dist/admin.d.ts",
-      "import": "./dist/admin.js"
-    },
-    "./auth": {
-      "types": "./dist/auth.d.ts",
-      "import": "./dist/auth.js"
-    },
-    "./bun": {
-      "types": "./dist/bun.d.ts",
-      "import": "./dist/bun.js"
-    },
-    "./vercel": {
-      "types": "./dist/vercel.d.ts",
-      "import": "./dist/vercel.js"
-    },
-    "./vercel/libsql": {
-      "types": "./dist/vercel-libsql.d.ts",
-      "import": "./dist/vercel-libsql.js"
-    },
-    "./cloudflare": {
-      "types": "./dist/cloudflare.d.ts",
-      "import": "./dist/cloudflare.js"
-    },
-    "./admin-ui": {
-      "types": "./dist/admin-ui.d.ts",
-      "import": "./dist/admin-ui.js"
-    }
-  },
-  "files": [
-    "dist",
-    "docs",
-    "skills",
-    "templates",
-    "README.md"
-  ],
-  "dependencies": {
-    "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*"
-  },
-  "peerDependencies": {
-    "@aotter/mantle-admin": "workspace:*",
-    "@aotter/mantle-admin-ui": "workspace:*",
-    "@aotter/mantle-auth": "workspace:*",
-    "@aotter/mantle-bun": "workspace:*",
-    "@aotter/mantle-cloudflare": "workspace:*",
-    "@aotter/mantle-mcp": "workspace:*",
-    "@aotter/mantle-vercel": "workspace:*",
-    "@aotter/mantle-web": "workspace:*",
-    "aws4fetch": "catalog:peer",
-    "better-auth": "catalog:peer",
-    "hono": "catalog:peer",
-    "@libsql/client": "catalog:peer",
-    "zod": "catalog:peer"
-  },
-  "peerDependenciesMeta": {
-    "@aotter/mantle-admin": {
-      "optional": true
-    },
-    "@aotter/mantle-admin-ui": {
-      "optional": true
-    },
-    "@aotter/mantle-auth": {
-      "optional": true
-    },
-    "@aotter/mantle-bun": {
-      "optional": true
-    },
-    "@aotter/mantle-cloudflare": {
-      "optional": true
-    },
-    "@aotter/mantle-mcp": {
-      "optional": true
-    },
-    "@aotter/mantle-vercel": {
-      "optional": true
-    },
-    "@aotter/mantle-web": {
-      "optional": true
-    },
-    "aws4fetch": {
-      "optional": true
-    },
-    "better-auth": {
-      "optional": true
-    },
-    "hono": {
-      "optional": true
-    },
-    "@libsql/client": {
-      "optional": true
-    }
-  },
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
     "build": "tsc -b tsconfig.lib.json",
-    "typecheck": "tsc --noEmit -p tsconfig.lib.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "prepack": "node ../../scripts/sync-package-docs.mjs .",
     "postpack": "node ../../scripts/sync-package-docs.mjs . --clean"
   },
+  "dependencies": {
+    "@pgsql/types": "18.0.0",
+    "libpg-query": "18.1.5",
+    "pgsql-deparser": "18.3.8",
+    "yaml": "^2.9.0",
+    "zod": "catalog:"
+  },
   "devDependencies": {
-    "@aotter/mantle-admin": "workspace:*",
-    "@aotter/mantle-admin-ui": "workspace:*",
-    "@aotter/mantle-auth": "workspace:*",
-    "@aotter/mantle-bun": "workspace:*",
-    "@aotter/mantle-cloudflare": "workspace:*",
-    "@aotter/mantle-mcp": "workspace:*",
-    "@aotter/mantle-vercel": "workspace:*",
-    "@aotter/mantle-web": "workspace:*",
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/core": "catalog:",
+    "@better-auth/mcp": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "@better-auth/utils": "catalog:",
+    "@modelcontextprotocol/client": "2.1.0",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@modelcontextprotocol/server": "2.1.0",
     "@types/node": "catalog:",
-    "aws4fetch": "catalog:",
     "better-auth": "catalog:",
-    "hono": "catalog:",
-    "@libsql/client": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "catalog:"
+    "wrangler": "4.126.0"
+  },
+  "peerDependencies": {
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/mcp": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@modelcontextprotocol/server": "2.1.0",
+    "better-auth": "catalog:peer"
+  },
+  "peerDependenciesMeta": {
+    "@better-auth/cimd": {
+      "optional": true
+    },
+    "@better-auth/mcp": {
+      "optional": true
+    },
+    "@better-auth/oauth-provider": {
+      "optional": true
+    },
+    "@modelcontextprotocol/ext-apps": {
+      "optional": true
+    },
+    "@modelcontextprotocol/server": {
+      "optional": true
+    },
+    "better-auth": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=22"

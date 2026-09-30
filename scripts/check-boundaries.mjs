@@ -32,248 +32,57 @@ function fail(path, message) {
   failures.push(`${rel(path)}: ${message}`);
 }
 
-function propertyNameText(name) {
-  if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return name.text;
-  if (ts.isComputedPropertyName(name) && ts.isStringLiteralLike(name.expression)) {
-    return name.expression.text;
-  }
-  return undefined;
-}
-
-function hasDatabasePropertyAccess(source, fileName = "boundary-fixture.ts") {
-  const sourceFile = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  let found = false;
-
-  function visit(node) {
-    if (
-      (ts.isPropertyAccessExpression(node) && node.name.text === "db") ||
-      (ts.isElementAccessExpression(node) &&
-        node.argumentExpression !== undefined &&
-        ts.isStringLiteralLike(node.argumentExpression) &&
-        node.argumentExpression.text === "db") ||
-      (ts.isBindingElement(node) &&
-        ts.isObjectBindingPattern(node.parent) &&
-        propertyNameText(node.propertyName ?? node.name) === "db")
-    ) {
-      found = true;
-      return;
-    }
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-  return found;
-}
-
-function checkDatabasePropertyDetector() {
-  const fixtures = [
-    ["property access", "const raw = runtime.db;", true],
-    ["element access", 'const raw = runtime["db"];', true],
-    ["destructuring", "const { db: raw } = runtime;", true],
-    ["string literal", 'const note = "runtime.db";', false],
-  ];
-  for (const [name, source, expected] of fixtures) {
-    if (hasDatabasePropertyAccess(source) !== expected) {
-      throw new Error(`Database boundary detector failed its ${name} fixture`);
-    }
-  }
-}
-
-function checkRuntimeCloudflareFree() {
-  const forbidden = [
-    "@cloudflare/",
-    "@cloudflare/workers-types",
-    "D1Database",
-    "KVNamespace",
-    "Fetcher",
-    "ExecutionContext",
-  ];
-  const files = listFiles(join(ROOT, "packages/mantle-runtime/src"), (p) =>
-    p.endsWith(".ts"),
-  );
-  for (const file of files) {
-    const source = stripComments(readFileSync(file, "utf8"));
-    for (const token of forbidden) {
-      const pattern = token.startsWith("@")
-        ? token
-        : new RegExp(`\\b${token}\\b`);
-      if (
-        typeof pattern === "string"
-          ? source.includes(pattern)
-          : pattern.test(source)
-      ) {
-        fail(file, `runtime must not reference Cloudflare primitive '${token}'`);
-      }
-    }
-  }
-}
-
-function checkHostRulesBoundary() {
-  for (const dir of ["packages/mantle-spec", "packages/mantle-runtime", "packages/adapters"]) {
-    for (const file of listFiles(join(ROOT, dir), (path) => /\.(?:ts|mts|mjs|json)$/.test(path))) {
-      if (readFileSync(file, "utf8").includes("@aotter/mantle-host")) {
-        fail(file, "Spec, Runtime and adapters must not import mantle-host");
-      }
-    }
-  }
-}
-
-function checkPackageDirection() {
+/** The browser package stays host- and framework-neutral where it promises to (ADR-0029). */
+function checkUiTokens() {
   const rules = [
-    {
-      dir: "packages/mantle-spec/src",
-      forbidden: [
-        "@aotter/mantle-runtime",
-        "@aotter/mantle-cloudflare",
-        "@aotter/mantle-web",
-        "@aotter/mantle-admin",
-        "@aotter/mantle-admin-ui",
-        "@aotter/mantle-auth",
-        "@aotter/mantle-bun",
-        "@aotter/mantle-vercel",
-        "@aotter/mantle-mcp",
-        "@modelcontextprotocol/",
-      ],
-      message: "spec must not import runtime, optional product, or adapter packages",
-    },
-    {
-      dir: "packages/mantle-runtime/src",
-      forbidden: [
-        "@aotter/mantle-cloudflare",
-        "@aotter/mantle-admin-ui",
-        "@aotter/mantle-web",
-        "@aotter/mantle-admin",
-        "@aotter/mantle-auth",
-        "@aotter/mantle-admin-ui",
-        "@aotter/mantle-bun",
-        "@aotter/mantle-vercel",
-        "@aotter/mantle-mcp",
-        "@modelcontextprotocol/",
-      ],
-      message: "runtime must not import optional product or adapter packages, or the MCP SDK",
-    },
-    {
-      dir: "packages/mantle-mcp/src",
-      forbidden: [
-        "@aotter/mantle-cloudflare",
-        "@aotter/mantle-admin",
-        "@aotter/mantle-auth",
-        "@aotter/mantle-web",
-        "@aotter/mantle-bun",
-        "@aotter/mantle-vercel",
-        "@aotter/mantle-indexeddb",
-        '"@aotter/mantle"',
-        'from "react',
-        "D1Database",
-        "KVNamespace",
-        "ExecutionContext",
-      ],
-      message: "mcp must not import platform, product, or UI packages",
-    },
-    {
-      dir: "packages/mantle-ui/src/controller",
-      forbidden: ["window.", "document.", "localStorage", "sessionStorage"],
-      message: "ui controller must stay framework- and host-free",
-    },
-    {
-      dir: "packages/mantle-ui/src/react",
-      forbidden: ["@aotter/mantle-admin", "@tanstack/", "@modelcontextprotocol/", "fetch(", "location.", "localStorage", "document.cookie"],
-      message: "ui components must not depend on Admin, a query cache, a transport or host globals",
-    },
-    {
-      dir: "packages/mantle-ui/src/kit",
-      forbidden: ["@aotter/", "@tanstack/", "@modelcontextprotocol/", "fetch(", "localStorage", '"@/'],
-      message: "ui kit must stay domain-neutral: no Mantle packages, query cache, transport, storage or Admin aliases",
-    },
-    {
-      dir: "packages/mantle-web/src",
-      forbidden: [
-        "@aotter/mantle-cloudflare",
-        "@aotter/mantle-admin",
-        "@aotter/mantle-admin-ui",
-        "@aotter/mantle-auth",
-        "@aotter/mantle-bun",
-        "@aotter/mantle-vercel",
-        "D1Database",
-        "KVNamespace",
-        "ExecutionContext",
-      ],
-      message: "web must not import platform or admin packages and types",
-    },
-    {
-      dir: "packages/mantle-admin/src",
-      forbidden: [
-        "@aotter/mantle-cloudflare",
-        "@aotter/mantle-auth",
-        "@aotter/mantle-bun",
-        "@aotter/mantle-vercel",
-        "D1Database",
-        "KVNamespace",
-        "ExecutionContext",
-      ],
-      message: "admin must not import platform packages and types",
-    },
-    {
-      dir: "packages/mantle-auth/src",
-      forbidden: [
-        "@aotter/mantle-cloudflare",
-        "@aotter/mantle-bun",
-        "@aotter/mantle-vercel",
-        "@aotter/mantle-admin-ui",
-        "@aotter/mantle-web",
-        "D1Database",
-        "KVNamespace",
-        "ExecutionContext",
-        "@cloudflare/",
-        "cf-connecting-ip",
-        "CF-Connecting-IP",
-      ],
-      message: "auth must not import platform packages, Cloudflare types, or a Cloudflare IP-header default",
-    },
+    ["packages/mantle-ui/src/controller", ["window.", "document.", "localStorage", "sessionStorage"], "ui controller must stay framework- and host-free"],
+    ["packages/mantle-ui/src/react", ["@aotter/mantle/admin", "@tanstack/", "@modelcontextprotocol/", "fetch(", "location.", "localStorage", "document.cookie"], "ui components must not depend on Admin, a query cache, a transport or host globals"],
+    ["packages/mantle-ui/src/kit", ["@aotter/", "@tanstack/", "@modelcontextprotocol/", "fetch(", "localStorage", '"@/'], "ui kit must stay domain-neutral: no Mantle packages, query cache, transport, storage or Admin aliases"],
   ];
-
-  for (const rule of rules) {
-    const files = listFiles(join(ROOT, rule.dir), (p) => p.endsWith(".ts") || p.endsWith(".tsx"));
-    for (const file of files) {
+  for (const [dir, forbidden, message] of rules) {
+    for (const file of listFiles(join(ROOT, dir), (p) => p.endsWith(".ts") || p.endsWith(".tsx"))) {
       const source = stripComments(readFileSync(file, "utf8"));
-      for (const token of rule.forbidden) {
-        if (source.includes(token)) {
-          fail(file, `${rule.message}: '${token}'`);
-        }
-      }
+      for (const token of forbidden) if (source.includes(token)) fail(file, `${message}: '${token}'`);
+    }
+  }
+}
+
+/** Core holds no engine or platform code (ADR-0035 decision 3): no Cloudflare primitive appears in `src/core`. */
+function checkCoreCloudflareFree() {
+  for (const file of listFiles(join(ROOT, "packages/mantle/src/core"), (p) => p.endsWith(".ts"))) {
+    const source = stripComments(readFileSync(file, "utf8"));
+    for (const token of ["@cloudflare/", "cloudflare:", "D1Database", "KVNamespace", "R2Bucket", "ExecutionContext"]) {
+      if (source.includes(token)) fail(file, `core must not reference Cloudflare primitive '${token}'`);
     }
   }
 }
 
 /**
- * next/README.md: every folder of next/src is one subpath and reaches only the folders it needs, and a heavy library belongs to the one
+ * packages/mantle/README.md: every folder of src is one subpath and reaches only the folders it needs, and a heavy library belongs to the one
  * folder that is its integration (ADR-0032 decision 13, enforced per module now that there is one package): a folder that is not
  * `auth` may not import Better Auth, one that is not `mcp` may not import the MCP SDK, and so on.
  */
 function checkNextFolderImports() {
   // Core holds no engine code (ADR-0035 decision 3): SQLite lives in `d1`, and only `spec`'s front end (the built-in
   // dialect's compile side), `cloudflare` and `cli` reach it. `testing` runs over the dialect interface.
-  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], bun: ["core", "spec"], vercel: ["core", "spec"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1"] };
+  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1"] };
   const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec", "pgsql-deparser": "d1" };
-  const root = join(ROOT, "next/src");
+  const NODE_ALLOWED = { auth: ["node:async_hooks"], testing: ["node:util"] };
+  const root = join(ROOT, "packages/mantle/src");
   for (const [folder, reach] of Object.entries(folders)) {
-    if (!existsSync(join(root, folder))) continue; // a folder that is not built yet
     for (const file of listFiles(join(root, folder), (p) => p.endsWith(".ts") || p.endsWith(".tsx"))) {
-      for (const [, spec] of readFileSync(file, "utf8").matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
+      for (const [, spec] of readFileSync(file, "utf8").matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
         if (spec.startsWith(".")) {
           const path = relative(root, join(dirname(file), spec)).split(sep);
           const target = path[0];
-          if (target !== folder && !reach.some((r) => r.split("/").every((part, i) => path[i] === part))) fail(file, `next/${folder} may reach only ${[folder, ...reach].join(", ")}: '${spec}'`);
-          else if (folder === "spec" && target === "d1" && !relative(root, file).startsWith(`spec${sep}infrastructure${sep}`)) fail(file, `only the CLI front end (next/spec/infrastructure) may reach next/d1/compile: '${spec}'`);
+          if (target !== folder && !reach.some((r) => r.split("/").every((part, i) => path[i] === part))) fail(file, `src/${folder} may reach only ${[folder, ...reach].join(", ")}: '${spec}'`);
+          else if (folder === "spec" && target === "d1" && !relative(root, file).startsWith(`spec${sep}infrastructure${sep}`)) fail(file, `only the CLI front end (src/spec/infrastructure) may reach src/d1/compile: '${spec}'`);
+        } else if (spec.startsWith("node:")) {
+          // Workers run a subset of Node: only the CLI is Node, plus the two built-ins workerd provides that auth and the suite use
+          if (folder !== "cli" && !(NODE_ALLOWED[folder] ?? []).includes(spec)) fail(file, `src/${folder} may not import '${spec}': only the CLI runs on Node`);
         } else {
           for (const [prefix, owner] of Object.entries(libs)) {
-            if ((spec === prefix || spec.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)) && owner !== folder) fail(file, `only next/${owner} may import '${spec}'`);
+            if ((spec === prefix || spec.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)) && owner !== folder) fail(file, `only src/${owner} may import '${spec}'`);
           }
         }
       }
@@ -303,388 +112,6 @@ function checkUiControllerImports() {
     for (const specifier of specifiers.filter((value) => !value.startsWith("."))) {
       fail(file, `ui controller must not import '${specifier}'`);
     }
-  }
-}
-
-function checkEntryReadOwnership() {
-  const runtimeReadDirs = [
-    "packages/mantle-runtime/src/domain/service/io",
-    "packages/mantle-web/src/usecase",
-  ];
-  for (const dir of runtimeReadDirs) {
-    const files = listFiles(join(ROOT, dir), (path) => path.endsWith(".ts"));
-    for (const file of files) {
-      if (/\bDatabaseDriver\b/.test(stripComments(readFileSync(file, "utf8")))) {
-        fail(file, "entry/render reads must depend on EntryReader, not DatabaseDriver");
-      }
-    }
-  }
-
-  const adapterFiles = listFiles(
-    join(ROOT, "packages/adapters/cloudflare/src"),
-    (path) => path.endsWith(".ts"),
-  );
-  const mantleTableSql =
-    /\b(?:FROM|INTO|UPDATE|DELETE\s+FROM)\s+(?:entries|site_config)\b/i;
-  for (const file of adapterFiles) {
-    const source = stripComments(readFileSync(file, "utf8"));
-    if (mantleTableSql.test(source)) {
-      fail(file, "Cloudflare routes must not own Mantle entries/site_config SQL");
-    }
-  }
-
-  const mountDir = join(ROOT, "packages/adapters/cloudflare/src/mount");
-  const mountFiles = listFiles(
-    mountDir,
-    (path) => path.endsWith(".ts") && !path.endsWith("bootRuntimeOnce.ts"),
-  );
-  for (const file of mountFiles) {
-    if (hasDatabasePropertyAccess(readFileSync(file, "utf8"), file)) {
-      fail(file, "Cloudflare route mounts must not access a raw database property");
-    }
-  }
-}
-
-function checkWebPackageBoundary() {
-  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
-  const webPath = join(ROOT, "packages/mantle-web/package.json");
-  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
-  const web = JSON.parse(readFileSync(webPath, "utf8"));
-  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
-  if (runtimeDeps["@aotter/mantle-web"]) {
-    fail(runtimePath, "runtime must stay installable without Mantle Web");
-  }
-  if (!web.dependencies?.["@aotter/mantle-runtime"]) {
-    fail(webPath, "Mantle Web must depend downstream on Mantle Runtime");
-  }
-  const runtimeSource = listFiles(
-    join(ROOT, "packages/mantle-runtime/src"),
-    (path) => path.endsWith(".ts"),
-  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
-  for (const token of [
-    "TemplateRegistry",
-    "PublicPathResolver",
-    "renderEntryHtml",
-    "serializeEntryAsMarkdown",
-    "composePageSeoMeta",
-  ]) {
-    if (runtimeSource.includes(token)) {
-      fail(runtimePath, `Web-owned surface leaked back into runtime: '${token}'`);
-    }
-  }
-}
-
-function checkAdminPackageBoundary() {
-  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
-  const adminPath = join(ROOT, "packages/mantle-admin/package.json");
-  const cloudflarePath = join(ROOT, "packages/adapters/cloudflare/package.json");
-  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
-  const admin = JSON.parse(readFileSync(adminPath, "utf8"));
-  const cloudflare = JSON.parse(readFileSync(cloudflarePath, "utf8"));
-  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
-  if (runtimeDeps["@aotter/mantle-admin"] || runtimeDeps["@aotter/mantle-admin-ui"]) {
-    fail(runtimePath, "runtime must stay installable without Mantle Admin or its UI");
-  }
-  if (!admin.dependencies?.["@aotter/mantle-runtime"]) {
-    fail(adminPath, "Mantle Admin must compose downstream from Runtime");
-  }
-  if (admin.dependencies?.["@aotter/mantle-admin-ui"]) {
-    fail(adminPath, "Mantle Admin API must stay installable without the Admin UI");
-  }
-  if (!cloudflare.dependencies?.["@aotter/mantle-admin"]) {
-    fail(cloudflarePath, "Cloudflare must select Mantle Admin explicitly");
-  }
-  if (!cloudflare.dependencies?.["@aotter/mantle-auth"]) {
-    fail(cloudflarePath, "Cloudflare must select Mantle Auth explicitly");
-  }
-  if (cloudflare.dependencies?.["@aotter/mantle-admin-ui"]) {
-    fail(cloudflarePath, "Cloudflare must select Mantle Admin, not depend on its UI directly");
-  }
-  const runtimeSource = listFiles(
-    join(ROOT, "packages/mantle-runtime/src"),
-    (path) => path.endsWith(".ts"),
-  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
-  if (/from\s+["'][^"']*mantle-admin(?:-ui)?[^"']*["']/.test(runtimeSource)) {
-    fail(runtimePath, "runtime source cannot import Mantle Admin or its UI");
-  }
-  const adminSource = listFiles(
-    join(ROOT, "packages/mantle-admin/src"),
-    (path) => path.endsWith(".ts"),
-  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
-  if (/from\s+["'][^"']*mantle-(?:auth|cloudflare|bun|vercel)[^"']*["']/.test(adminSource) ||
-      /\b(?:D1Database|ExecutionContext)\b/.test(adminSource)) {
-    fail(adminPath, "Mantle Admin cannot import platform packages or types");
-  }
-}
-
-function checkAuthPackageBoundary() {
-  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
-  const authPath = join(ROOT, "packages/mantle-auth/package.json");
-  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
-  const auth = JSON.parse(readFileSync(authPath, "utf8"));
-  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
-  if (runtimeDeps["@aotter/mantle-auth"]) {
-    fail(runtimePath, "runtime must stay installable without Mantle Auth");
-  }
-  if (!auth.dependencies?.["@aotter/mantle-admin"] ||
-      !auth.dependencies?.["@aotter/mantle-runtime"] ||
-      !auth.dependencies?.["@aotter/mantle-spec"]) {
-    fail(authPath, "Mantle Auth must compose downstream from Admin, Runtime, and Spec");
-  }
-  for (const dependency of [
-    "@aotter/mantle-admin-ui",
-    "@aotter/mantle-bun",
-    "@aotter/mantle-cloudflare",
-    "@aotter/mantle-vercel",
-    "@aotter/mantle-web",
-  ]) {
-    if (auth.dependencies?.[dependency]) {
-      fail(authPath, `Auth must not depend on platform or optional package '${dependency}'`);
-    }
-  }
-}
-
-function checkUmbrellaPackageBoundary() {
-  const path = join(ROOT, "packages/mantle/package.json");
-  const manifest = JSON.parse(readFileSync(path, "utf8"));
-  const direct = Object.keys(manifest.dependencies ?? {}).sort();
-  const expected = ["@aotter/mantle-runtime", "@aotter/mantle-spec"];
-  if (JSON.stringify(direct) !== JSON.stringify(expected)) {
-    fail(path, `umbrella direct dependencies must be Core-only: ${expected.join(", ")}`);
-  }
-  for (const name of [
-    "@aotter/mantle-admin",
-    "@aotter/mantle-admin-ui",
-    "@aotter/mantle-auth",
-    "@aotter/mantle-bun",
-    "@aotter/mantle-cloudflare",
-    "@aotter/mantle-vercel",
-    "@aotter/mantle-web",
-  ]) {
-    if (!manifest.peerDependenciesMeta?.[name]?.optional) {
-      fail(path, `${name} must be an optional umbrella peer`);
-    }
-  }
-}
-
-function checkLegacyStackDeleted() {
-  const roots = [
-    "packages/mantle-runtime/src",
-    "packages/mantle/src",
-    "packages/mantle-admin/src",
-    "packages/mantle-web/src",
-    "packages/mantle-auth/src",
-    "packages/adapters/bun/src",
-    "packages/adapters/vercel/src",
-    "packages/adapters/cloudflare/src",
-  ];
-  const forbidden = [
-    "createCmsRuntime",
-    "CmsRuntime",
-    "bindMantleSite",
-    "MantleSite",
-    "mountServerEndpoints",
-    "createCmsRef",
-    "CmsConfig",
-  ];
-  for (const root of roots) {
-    for (const file of listFiles(join(ROOT, root), (path) => path.endsWith(".ts"))) {
-      const source = stripComments(readFileSync(file, "utf8"));
-      for (const token of forbidden) {
-        if (new RegExp(`\\b${token}\\b`).test(source)) {
-          fail(file, `legacy runtime stack token remains: '${token}'`);
-        }
-      }
-    }
-  }
-  const parser = readFileSync(
-    join(ROOT, "packages/mantle-spec/src/domain/service/ManifestParser.ts"),
-    "utf8",
-  );
-  if (/export function parseManifests(?:OrThrow)?\b/.test(parser)) {
-    fail(join(ROOT, "packages/mantle-spec/src/domain/service/ManifestParser.ts"),
-      "raw parser compatibility export remains");
-  }
-  if (existsSync(join(ROOT, "packages/mantle-runtime/src/runtime.ts"))) {
-    fail(join(ROOT, "packages/mantle-runtime/src/runtime.ts"), "legacy facade file remains");
-  }
-}
-
-function checkBunPackageBoundary() {
-  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
-  const bunPath = join(ROOT, "packages/adapters/bun/package.json");
-  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
-  const bun = JSON.parse(readFileSync(bunPath, "utf8"));
-  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
-  if (runtimeDeps["@aotter/mantle-bun"] || runtimeDeps["@types/bun"]) {
-    fail(runtimePath, "runtime must stay installable without Bun");
-  }
-  if (!bun.dependencies?.["@aotter/mantle-runtime"] ||
-      !bun.dependencies?.["@aotter/mantle-spec"]) {
-    fail(bunPath, "Bun must compose downstream from Runtime and Spec");
-  }
-  for (const dependency of [
-    "@aotter/mantle-admin",
-    "@aotter/mantle-admin-ui",
-    "@aotter/mantle-cloudflare",
-    "@aotter/mantle-vercel",
-    "@aotter/mantle-web",
-    "hono",
-  ]) {
-    if (bun.dependencies?.[dependency]) {
-      fail(bunPath, `Bun must not depend on optional or platform package '${dependency}'`);
-    }
-  }
-  for (const dependency of Object.keys(bun.dependencies ?? {})) {
-    if (dependency.startsWith("@cloudflare/") || dependency.startsWith("@vercel/")) {
-      fail(bunPath, `Bun must not depend on platform package '${dependency}'`);
-    }
-  }
-
-  const runtimeSource = listFiles(
-    join(ROOT, "packages/mantle-runtime/src"),
-    (path) => path.endsWith(".ts"),
-  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
-  if (runtimeSource.includes("bun:sqlite") || /\bBun\./.test(runtimeSource)) {
-    fail(runtimePath, "runtime source cannot import or call Bun primitives");
-  }
-
-  const bunSource = listFiles(
-    join(ROOT, "packages/adapters/bun/src"),
-    (path) => path.endsWith(".ts"),
-  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
-  if (/from\s+["'][^"']*mantle-(?:admin|cloudflare|vercel|web)[^"']*["']/.test(bunSource) ||
-      /\b(?:D1Database|ExecutionContext)\b/.test(bunSource)) {
-    fail(bunPath, "Bun cannot import optional products or another platform adapter");
-  }
-  if (/\bBun\.serve\s*\(|\.close\s*\(/.test(bunSource)) {
-    fail(bunPath, "Bun adapter must not own the host server or database lifecycle");
-  }
-}
-
-function checkVercelPackageBoundary() {
-  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
-  const vercelPath = join(ROOT, "packages/adapters/vercel/package.json");
-  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
-  const vercel = JSON.parse(readFileSync(vercelPath, "utf8"));
-  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
-  if (runtimeDeps["@aotter/mantle-vercel"] || runtimeDeps["@vercel/functions"]) {
-    fail(runtimePath, "runtime must stay installable without Vercel");
-  }
-  if (!vercel.dependencies?.["@aotter/mantle-runtime"] ||
-      !vercel.dependencies?.["@vercel/functions"]) {
-    fail(vercelPath, "Vercel must compose downstream from Runtime and its lifecycle API");
-  }
-  for (const dependency of [
-    "@aotter/mantle-admin",
-    "@aotter/mantle-admin-ui",
-    "@aotter/mantle-bun",
-    "@aotter/mantle-cloudflare",
-    "@aotter/mantle-web",
-    "hono",
-  ]) {
-    if (vercel.dependencies?.[dependency]) {
-      fail(vercelPath, `Vercel must not depend on optional or platform package '${dependency}'`);
-    }
-  }
-
-  const runtimeSource = listFiles(
-    join(ROOT, "packages/mantle-runtime/src"),
-    (path) => path.endsWith(".ts"),
-  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
-  if (runtimeSource.includes("@vercel/") || /\bVERCEL_/.test(runtimeSource)) {
-    fail(runtimePath, "runtime source cannot import or assume Vercel primitives");
-  }
-
-  const vercelSource = listFiles(
-    join(ROOT, "packages/adapters/vercel/src"),
-    (path) => path.endsWith(".ts"),
-  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
-  if (/from\s+["'][^"']*mantle-(?:admin|bun|cloudflare|web)[^"']*["']/.test(vercelSource) ||
-      /\b(?:D1Database|ExecutionContext|Bun\.serve)\b/.test(vercelSource)) {
-    fail(vercelPath, "Vercel cannot import optional products or another platform adapter");
-  }
-  if (/from\s+["']node:fs["']|["']\/tmp(?:\/|["'])|\bcreateClient\s*\(|\.close\s*\(/.test(vercelSource)) {
-    fail(vercelPath, "Vercel adapter cannot own local durable state or client lifecycle");
-  }
-  const main = stripComments(readFileSync(
-    join(ROOT, "packages/adapters/vercel/src/index.ts"),
-    "utf8",
-  ));
-  if (main.includes("libsql")) {
-    fail(vercelPath, "the default Vercel entry must not select optional libSQL");
-  }
-
-  const fixtureFiles = listFiles(
-    join(ROOT, "packages/adapters/vercel/test/fixtures/live-node/api"),
-    (path) => path.endsWith(".ts"),
-  );
-  for (const file of fixtureFiles) {
-    const source = stripComments(readFileSync(file, "utf8"));
-    if (/["']file:|["']\/tmp(?:\/|["'])/.test(source)) {
-      fail(file, "Vercel live fixture cannot select function-local canonical storage");
-    }
-  }
-}
-
-function checkViewExecutionBoundary() {
-  const file = join(
-    ROOT,
-    "packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts",
-  );
-  const source = stripComments(readFileSync(file, "utf8"));
-  for (const token of ["DatabaseDriver", "ViewSqlCompiler", "compileView", "lowerView"]) {
-    if (source.includes(token)) {
-      fail(file, `View invocation must depend on ViewQueryExecutor, not '${token}'`);
-    }
-  }
-}
-
-function checkMantleRuntimeBoundary() {
-  const file = join(ROOT, "packages/mantle-runtime/src/MantleRuntime.ts");
-  const source = stripComments(readFileSync(file, "utf8"));
-  for (const token of ["DatabaseDriver", "AssetServer", "TemplateRegistry", "bootInit"]) {
-    if (source.includes(token)) {
-      fail(file, `MantleRuntime must bind prepared Core ports, not '${token}'`);
-    }
-  }
-  if (/\b(?:manifests?|sources?)\s*:\s*readonly\b/.test(source)) {
-    fail(file, "MantleRuntime cannot accept raw manifests or authored sources");
-  }
-  if (/from\s+["'][^"']*(?:mantle-web|mantle-admin|mantle-auth|mantle-bun|mantle-cloudflare|mantle-vercel)[^"']*["']/.test(source)) {
-    fail(file, "MantleRuntime cannot import Web, Admin, Auth, or platform packages");
-  }
-}
-
-function checkCodegenBoundary() {
-  const file = join(ROOT, "packages/mantle/src/codegen/emitMantleModule.ts");
-  const source = stripComments(readFileSync(file, "utf8"));
-  for (const token of ["node:", "mantle-admin", "mantle-auth", "mantle-cloudflare", "mantle-web"]) {
-    if (source.includes(token)) {
-      fail(file, `the pure codegen emitter cannot reference '${token}'`);
-    }
-  }
-}
-
-function checkNodeTestingBoundary() {
-  const root = join(ROOT, "packages/mantle-runtime/src");
-  const files = listFiles(root, (path) => path.endsWith(".ts"));
-  for (const file of files) {
-    const source = stripComments(readFileSync(file, "utf8"));
-    if (
-      source.includes("node:sqlite") &&
-      !file.includes(`${sep}infrastructure${sep}testing${sep}`)
-    ) {
-      fail(file, "node:sqlite belongs only in the explicit runtime/testing subpath");
-    }
-  }
-  const main = join(root, "index.ts");
-  if (/testing(?:\/index)?\.js/.test(stripComments(readFileSync(main, "utf8")))) {
-    fail(main, "the Worker-safe runtime entry must not re-export the Node testing harness");
-  }
-  const specMain = join(ROOT, "packages/mantle-spec/src/index.ts");
-  if (/from\s+["']\.\/infrastructure\/cli/.test(stripComments(readFileSync(specMain, "utf8")))) {
-    fail(specMain, "the pure spec entry must not re-export its Node CLI subpath");
   }
 }
 
@@ -737,8 +164,8 @@ function checkRepositoryGuidance() {
       fail(contributingPath, `contributor authority is missing '${text}'`);
     }
   }
-  if (!releaseSkill.includes("All fourteen npmjs artifacts")) {
-    fail(releaseSkillPath, "canonical release skill must match the fourteen-package topology");
+  if (!releaseSkill.includes("All three npmjs artifacts")) {
+    fail(releaseSkillPath, "canonical release skill must match the three-package topology");
   }
   if (!claudeRelease.includes("../../../.agents/skills/mantle-release/SKILL.md") ||
       claudeRelease.split("\n").length > 8 ||
@@ -828,31 +255,16 @@ function checkRepositoryGuidance() {
   }
 }
 
-checkDatabasePropertyDetector();
-checkRuntimeCloudflareFree();
-checkHostRulesBoundary();
-checkPackageDirection();
-checkUiControllerImports();
+checkCoreCloudflareFree();
+checkUiTokens();
 checkNextFolderImports();
-checkEntryReadOwnership();
-checkWebPackageBoundary();
-checkAdminPackageBoundary();
-checkAuthPackageBoundary();
-checkUmbrellaPackageBoundary();
-checkBunPackageBoundary();
-checkVercelPackageBoundary();
-checkViewExecutionBoundary();
-checkMantleRuntimeBoundary();
-checkCodegenBoundary();
-checkNodeTestingBoundary();
+checkUiControllerImports();
 checkSkillDocsVersioned();
 checkRepositoryGuidance();
-checkLegacyStackDeleted();
 
-if (failures.length > 0) {
+if (failures.length) {
   console.error("Boundary check failed:");
-  for (const failure of failures) console.error(`- ${failure}`);
+  for (const f of failures) console.error(`  ${f}`);
   process.exit(1);
 }
-
 console.log("Boundary check passed.");

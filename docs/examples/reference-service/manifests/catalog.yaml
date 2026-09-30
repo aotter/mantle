@@ -1,0 +1,101 @@
+# A small shop: a public catalog, orders that only their owner sees, and staff tools.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: items }
+spec:
+  title: Items
+  lifecycle: operational
+  schema:
+    type: object
+    required: [sku, name, stock]
+    properties:
+      sku: { type: string }
+      name: { type: string }
+      priceCents: { type: integer, minimum: 0 }
+      stock: { type: integer, default: 0 }
+  checks: ["stock >= 0"]
+  uniqueIndexes: [[sku]]
+  searchableFields: [name, sku]
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  lifecycle: operational
+  scope: { owner: auth.uid() }
+  indexes: [[owner]]
+  schema:
+    type: object
+    required: [owner, itemId, qty, orderStatus]
+    properties:
+      owner: { type: string }
+      itemId: { type: string }
+      qty: { type: integer, minimum: 1 }
+      orderStatus: { type: string, enum: [placed, cancelled] }
+      placedAt: { type: string, format: date-time }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: activity }
+spec:
+  title: Activity
+  lifecycle: operational
+  schema:
+    type: object
+    required: [kind, subject]
+    properties:
+      kind: { type: string }
+      subject: { type: string }
+      detail: { type: string }
+---
+# Views are one SELECT; `input` is their parameters.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: catalog }
+spec:
+  surface: public
+  sql: SELECT id, sku, name, priceCents, stock FROM items ORDER BY name
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: search-items }
+spec:
+  surface: public
+  input: { type: object, required: [q], properties: { q: { type: string, minLength: 1 } } }
+  sql: |
+    SELECT i.id, i.name, i.stock FROM items i
+    WHERE mantle.search(i, input.q)
+    ORDER BY mantle.search_rank(i), i.name
+---
+# Scope is injected into every Schema reference: this join only ever sees the caller's orders.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: my-orders }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  sql: |
+    SELECT o.id, o.qty, o.orderStatus, i.name AS item, o.version
+    FROM orders o JOIN items i ON i.id = o.itemId
+    ORDER BY o.created_at DESC
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: sales-by-item }
+spec:
+  surface: staff
+  requires: { auth: { all: [{ ctx.staff: [owner, editor] }] } }
+  sql: |
+    SELECT i.name, count(o.id) AS orders, coalesce(sum(o.qty), 0) AS units
+    FROM items i LEFT JOIN orders o ON o.itemId = i.id AND o.orderStatus = 'placed'
+    GROUP BY i.name
+    ORDER BY units DESC, i.name
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: recent-activity }
+spec:
+  surface: staff
+  requires: { auth: { all: [{ ctx.staff: [owner, editor] }] } }
+  sql: SELECT kind, subject, detail FROM activity ORDER BY created_at DESC LIMIT 50

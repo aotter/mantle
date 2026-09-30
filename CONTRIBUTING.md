@@ -30,19 +30,9 @@ The package topology is:
 
 | Package | Responsibility |
 |---|---|
-| `@aotter/mantle-spec` | Pure manifest grammar, parse, link, diagnostics, and authoring CLI. |
-| `@aotter/mantle-runtime` | Adapter-neutral plan compilation, semantic storage ports, preparation, and runtime invocation. |
-| `@aotter/mantle-mcp` | Optional MCP surface: registers the runtime capability catalog on the official MCP SDK (ADR-0029). |
+| `@aotter/mantle` | One package, one folder of `src/` per subpath (ADR-0032 decision 13): Core (`.`), the grammar and compiler (`/spec`), the D1 dialect (`/d1`, `/d1/compile`), Cloudflare bindings (`/cloudflare`), Auth, Admin, MCP and REST surfaces (`/auth`, `/admin`, `/mcp`, `/web`), the dialect compliance suite (`/testing`) and the `mantle` CLI. `check:boundaries` enforces what each folder may import. |
 | `@aotter/mantle-ui` | Optional shared UI (ADR-0029): the framework-free interaction controller (`/controller`), React interaction components (`/`), the UI kit (`/kit`, libraries as optional peers) and the MCP App (`/mcp-app`). Admin and MCP Apps both use it. |
-| `@aotter/mantle` | Core umbrella, code generation, and authoring CLI; optional packages are peers. |
-| `@aotter/mantle-web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition. |
-| `@aotter/mantle-admin` | Optional Admin API, auth, and static-asset composition. |
-| `@aotter/mantle-auth` | Optional Better Auth identity, staff roles, and OAuth 2.1 / MCP authorization. Adapters own IP headers and storage bindings. |
-| `@aotter/mantle-admin-ui` | Optional pre-built Admin SPA. |
-| `@aotter/mantle-bun` | Bun adapter over caller-owned `bun:sqlite`. |
-| `@aotter/mantle-vercel` | Vercel Functions adapter over injected durable storage; optional libSQL subpath. |
-| `@aotter/mantle-cloudflare` | Cloudflare Workers adapter over D1 and selected platform services. |
-| `@aotter/mantle-host` | Optional hosting upload rules and the plugin script source; Runtime and Spec do not import it. |
+| `@aotter/mantle-admin-ui` | Optional pre-built Admin SPA; it folds into `@aotter/mantle-ui/admin`. |
 
 `skills/*` are versioned consumer product artifacts. Maintainer instructions
 live at the repository root and in `.agents/skills`; do not merge the two
@@ -50,32 +40,31 @@ audiences or copy maintainer policy into shipped skills.
 
 ## Hard invariants
 
-- `@aotter/mantle-spec` stays environment- and adapter-free and retains
-  `sideEffects: false`.
-- `@aotter/mantle-runtime` must not import Cloudflare, Bun, Vercel, SQL-client,
-  or other platform-specific types. Concrete adapters bind Core ports.
-- Storage is semantic at the Core boundary. SQLite/D1 is an official adapter,
-  not the Runtime contract; Postgres, MongoDB, or application-owned tables may
-  implement the same semantic ports directly.
+- `src/spec` stays environment- and adapter-free; only the CLI runs on Node.
+- `src/core` holds no engine or platform code: no Cloudflare primitive, no
+  SQLite. A dialect (ADR-0035) and a storage adapter bind Core's ports.
+- Store is authored as SQL in PostgreSQL syntax (ADR-0034). D1 is the built-in
+  dialect, not the contract; another engine implements `MantleDialect` and
+  passes `@aotter/mantle/testing`'s compliance suite.
 - Web, Admin, Admin UI, Auth, and every platform adapter remain optional. Core must
   not require routes, HTML, static assets, auth, or an Admin surface.
 - Runtime input is a sealed `RuntimePlan`, never raw manifests. Deployment
   preparation owns migrations, indexes, native query lowering, and readiness.
-- Manifest grammar is locked for v0.1. New keys and closed-enum members require
-  grammar-revise work before implementation. Atom names remain Schema, View,
+- The manifest grammar is v2 (`cms.mantle.aotter.net/v2`). New keys and
+  closed-enum members need an ADR amendment before implementation. Atom names remain Schema, View,
   Procedure, and Trigger.
 - Trust-boundary input fails with structured diagnostics or stable transport
   errors. Never simplify away validation, authorization, data-loss protection,
   or accessibility basics.
 - Auth is a selected product/platform contract, not a Runtime port. The
-  portable surface lives in `@aotter/mantle-auth`; adapters own host wiring
+  portable surface lives in `@aotter/mantle/auth`; the preset owns host wiring
   (trusted IP headers, D1/KV). Better Auth is the default implementation, not
   an option pass-through API; see
   [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md).
 
 ### Clean architecture
 
-`mantle-spec` and `mantle-runtime` follow:
+`src/spec` follows:
 
 ```text
 kernel <- domain (model + port + service) <- usecase <- infrastructure
@@ -88,7 +77,7 @@ kernel <- domain (model + port + service) <- usecase <- infrastructure
   infrastructure or downstream adapters.
 - Use cases accept request DTOs and explicit dependencies. Infrastructure is
   thin envelope handling and delegation.
-- `MantleRuntime.ts` assembles prepared ports and use cases. It must not regain
+- `src/core/runtime/createRuntime.ts` assembles the runtime. It must not regain
   database, Web, Admin, or platform ownership.
 - A new top-level folder under `domain/`, `usecase/`, or `infrastructure/`
   needs an ADR-lite rationale in the PR description.

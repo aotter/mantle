@@ -156,37 +156,22 @@ when your app needs it.
 
 | Start with | Add when you need |
 |---|---|
-| [Spec](docs/spec-only-host-adoption.md) | Manifest parsing, validation, and introspection in an existing system. |
-| [Runtime + typed APIs](packages/mantle/README.md) | Queries and actions backed by your storage and handlers. |
-| [A host adapter](docs/adapter-guide.md) | HTTP and other supported transports on your chosen platform. |
-| [Web](packages/mantle-web/README.md) | Public HTML, Markdown, localization, and discovery metadata. |
-| [Admin](docs/handbook/guides/admin-ui.md) | A staff API and prebuilt console with Manifest-driven rendering. |
-| [Auth](packages/mantle-auth/README.md) | Identity, staff roles, and OAuth / MCP authorization. |
+| [`@aotter/mantle`](packages/mantle/README.md) | Manifests, Store authored as SQL, the runtime and the `mantle` CLI. |
+| `@aotter/mantle/cloudflare` and the generated preset | A Worker on D1 with REST, MCP and Admin. |
+| `@aotter/mantle/auth` | Sign-in, staff roles, and OAuth for MCP. |
+| [The reference service](docs/examples/reference-service/README.md) | A whole service to read and run. |
 
-Cloudflare is the supported host for the integrated Auth, Admin, and MCP
-experience. Bun and Vercel adapters are experimental; they support public Views
-and HTTP Triggers, with authentication and CSRF owned by the host.
-[Compare adapters](docs/adapter-guide.md).
+Cloudflare D1 is the built-in dialect and the one preset. Upgrading from 0.1.x:
+[the upgrade guide](docs/upgrade-0.1-to-0.2.md).
 
 <details>
 <summary>Package reference</summary>
 
 | Package | Purpose |
 |---|---|
-| `@aotter/mantle` | Core umbrella, CLI, and code generation. |
-| `@aotter/mantle-spec` | Manifest parsing, validation, and introspection. |
-| `@aotter/mantle-runtime` | Runtime execution and storage ports. |
-| `@aotter/mantle-mcp` | MCP surface on the official MCP SDK. |
+| `@aotter/mantle` | Core, the manifest compiler, the D1 dialect, the Cloudflare driver, Auth, Admin, MCP and REST surfaces, the compliance suite, and the `mantle` CLI, as subpaths. |
 | `@aotter/mantle-ui` | Shared UI for Admin and MCP Apps: interaction controller, components, the UI kit and the MCP App. |
-| `@aotter/mantle-web` | Public rendering and discovery metadata. |
-| `@aotter/mantle-admin` | Admin API and session integration. |
 | `@aotter/mantle-admin-ui` | Prebuilt staff console and Developer UI. |
-| `@aotter/mantle-auth` | Identity, roles, and OAuth authorization. |
-| `@aotter/mantle-indexeddb` | Browser-local storage. |
-| `@aotter/mantle-cloudflare` | Workers, D1, and integrated surfaces. |
-| `@aotter/mantle-host` | Mantle Cloud upload rules and source for the plugin script. |
-| `@aotter/mantle-bun` | Experimental Bun adapter. |
-| `@aotter/mantle-vercel` | Experimental Vercel adapter. |
 
 </details>
 
@@ -195,8 +180,8 @@ and HTTP Triggers, with authentication and CSRF owned by the host.
 - [Handbook](docs/handbook/start/overview.md) — concepts, setup, and task guides.
 - [Manifest feature reference](docs/handbook/reference/features.md) — capabilities and their authoring fields.
 - [SDK and package API](packages/mantle/README.md) — installation, typed bindings, and optional modules.
-- [CLI guide](docs/handbook/start/project-and-cli.md) — validate, generate, and maintain a project.
-- [Examples](docs/examples/README.md) — complete Manifests and runnable hosts.
+- [Examples](docs/examples/README.md) — the runnable reference service.
+- [Upgrading from 0.1.x](docs/upgrade-0.1-to-0.2.md) — for a coding agent doing the move.
 - [Releases](https://github.com/aotter/mantle/releases) — changes and upgrade notes.
 
 ## Contributing

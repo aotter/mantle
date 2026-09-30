@@ -14,9 +14,7 @@ Prepare a same-repository release PR: prove the new version/tag unused,
 preview native release notes and correct PR metadata, align package/plugin
 versions (the consumer cold-start commands stay untagged — see
 docs/release-process.md step 2), inspect the packed docs/skills payload, run `pnpm check` and review
-its exact SHA. After changing package versions, regenerate
-`skills/mantle-host/scripts/mantle-host.mjs` with
-`pnpm --filter @aotter/mantle-host build`. The reference consumer gate runs
+its exact SHA. The reference consumer gate runs
 from packed packages outside workspace links. Merge into develop for every
 version. Beta, RC and stable then follow "Promote to main" in
 docs/release-process.md: pin
@@ -30,7 +28,7 @@ Dispatch the controller from the reviewed release merge with the version
 without v. Watch all gates, not only publication:
 
 1. Core tag resolves to that canonical merge.
-2. All fourteen npmjs artifacts exist with matching integrity and no workspace:*.
+2. All three npmjs artifacts exist with matching integrity and no workspace:*.
 3. GitHub Packages mirrors verify the same candidate.
 4. The reference Worker installs exact public packages, generates/types/checks
    successfully and serves its declared HTTP route before channel promotion.

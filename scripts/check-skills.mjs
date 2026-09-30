@@ -15,9 +15,9 @@ const failures = [];
 const fail = (where, message) => failures.push(`${where}: ${message}`);
 
 // ponytail: front matter here is a fixed flat shape, so one regex beats a YAML
-// dependency in a repo-root script. `projectionScopes` in
-// packages/mantle/src/cli/skills.ts reads the same field the same way — keep the
-// two expressions identical if either changes.
+// dependency in a repo-root script. (The 0.1.x `mantle skills` projection that
+// read the same field is gone with 0.2.0; these skills are not shipped in the
+// package until they are ported.)
 function frontMatter(text) {
   const match = /^---\n([\s\S]*?)\n---\n/.exec(text);
   if (!match) return null;
@@ -86,7 +86,7 @@ for (const skill of skills) {
   } else {
     const unknown = scopes.filter((scope) => !SCOPES.has(scope));
     if (unknown.length > 0) fail(where, `unknown projection scope: ${unknown.join(", ")}`);
-    // `mantle skills` projects from the npm package, which carries no plugin skill.
+    // a project skill never carried a plugin skill.
     if (pluginSkills.has(skill) && scopes.join() !== "plugin") fail(where, "a plugin skill declares projection `plugin` only");
     // The skills CLI hides internal skills from `npx skills add aotter/mantle`,
     // which must keep installing only the bootstrap skill; `--skill <name>` still works.
