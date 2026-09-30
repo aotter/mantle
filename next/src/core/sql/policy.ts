@@ -254,7 +254,7 @@ function lowerFunc(n: N, c: C): N | undefined {
       c.seen?.add('near');
       const meters = Number(args[3]!.A_Const.ival?.ival ?? args[3]!.A_Const.fval?.fval);
       const b = (which: 'minLat' | 'maxLat' | 'minLng' | 'maxLng') => param$(c, { k: 'box', which, lat: argOf(latN!, c), lng: argOf(lngN!, c), meters });
-      const geo = q(`_mantle_geo_${schema}`);
+      const geo = q(`_mantle_geo_${schema}_${fld}`);
       return sql(`(${a}._rid IN (SELECT id FROM ${geo} WHERE minLat >= __b0 AND maxLat <= __b1 AND minLng >= __b2 AND maxLng <= __b3) AND ${dist} <= ${meters})`,
         { ...sub, __b0: b('minLat'), __b1: b('maxLat'), __b2: b('minLng'), __b3: b('maxLng') });
     }

@@ -5,6 +5,7 @@
  */
 import { DiagnosticError, firstZodIssueAsJsonPointer, jsonSchemaToZod, runtimeDiagnostic, type JsonSchema, type SqlNode as N } from "../../spec/index.js";
 import type { ZodType } from "zod";
+import { classify } from "../../spec/index.js";
 import { S, op, ref, table, target } from "../sql/ast.js";
 import { encodeInput } from "../sql/codec.js";
 import type { StorageSchema } from "../sql/storage.js";
@@ -197,18 +198,23 @@ export class StoreJson {
     return { ir, columns, order, pageSize: q.limit ?? 50, from: name };
   }
 
-  /** A row op pins `id` at the top level of `where` (ADR-0032 decision 2); a one-row insert without `onConflict` is one too. */
-  static isRowOp(o: StoreWriteOp): boolean {
-    if ("insert" in o) return !o.onConflict;
-    const id = (o.where as Record<string, unknown>).id;
-    return typeof id === "string" || (typeof id === "object" && id !== null && typeof (id as { eq?: unknown }).eq === "string");
+  /**
+   * The IR of one write op, whether it is a row op, and the status an update moves the entry to. The class is the compiled statement's
+   * (`classify`, the rule the runner and the CLI use), never a second reading of the JSON. Only a row op returns `id` and `version`
+   * (plus the whole entry when the Schema has an after hook); a set op reports how many rows it touched.
+   */
+  write(o: StoreWriteOp): { ir: N; row: boolean; status?: string } {
+    const built = this.statement(o);
+    const row = classify(built.ir) === "row";
+    if (row) {
+      const body = built.ir.InsertStmt ?? built.ir.UpdateStmt ?? built.ir.DeleteStmt;
+      const name = body.relation.relname as string;
+      body.returningClause = { exprs: [...(this.wantRow(name) ? [target({ ColumnRef: { fields: [{ A_Star: {} }] } })] : []), target(ref("id")), target(ref("version"))] };
+    }
+    return { ...built, row };
   }
 
-  /** The IR of one write op, and the status an update moves the entry to. Only a row op returns `id` and `version`; a set op reports how many rows it touched. */
-  write(o: StoreWriteOp): { ir: N; status?: string } {
-    const returningFor = (schema: string) => StoreJson.isRowOp(o)
-      ? { exprs: [...(this.wantRow(schema) ? [target({ ColumnRef: { fields: [{ A_Star: {} }] } })] : []), target(ref("id")), target(ref("version"))] }
-      : undefined;
+  private statement(o: StoreWriteOp): { ir: N; status?: string } {
     if ("insert" in o) {
       const { name, def } = this.schema(o.insert);
       validateValues(def, o.values, def.publishing ? "partial" : "full");
@@ -227,7 +233,7 @@ export class StoreJson {
       }
       return { ir: { InsertStmt: { relation: table(name), cols: cols.map(({ c }) => ({ ResTarget: { name: c.col } })),
         selectStmt: { SelectStmt: { valuesLists: [{ List: { items } }], ...SELECT } },
-        ...(onConflictClause ? { onConflictClause } : {}), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}), override: "OVERRIDING_NOT_SET" } } };
+        ...(onConflictClause ? { onConflictClause } : {}), override: "OVERRIDING_NOT_SET" } } };
     }
     if ("update" in o) {
       const { name, def } = this.schema(o.update);
@@ -239,10 +245,10 @@ export class StoreJson {
       validateValues(def, rest, "partial");
       return { status: status as string | undefined, ir: { UpdateStmt: { relation: table(name),
         targetList: set.map(([k, v]) => { const c = this.column(def, k, "set", false); return target(v === null ? { A_Const: { isnull: true } } : this.val(c.type, v, `'${c.out}'`), c.col); }),
-        whereClause: this.guarded(o.where, def, o.lock), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}) } } };
+        whereClause: this.guarded(o.where, def, o.lock) } } };
     }
     const { name, def } = this.schema(o.delete);
-    return { ir: { DeleteStmt: { relation: table(name), whereClause: this.guarded(o.where, def, o.lock), ...(returningFor(name) ? { returningClause: returningFor(name) } : {}) } } };
+    return { ir: { DeleteStmt: { relation: table(name), whereClause: this.guarded(o.where, def, o.lock) } } };
   }
 
   /** `where`, with `AND version = <lock>` when the caller observed a version (OCC). */

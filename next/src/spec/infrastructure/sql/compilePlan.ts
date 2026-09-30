@@ -76,7 +76,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
     const checks: SqlNode[] = [];
     for (const [i, text] of (m.spec.checks ?? []).entries()) {
       const pointer = `/spec/checks/${i}`;
-      const res = await compileSql(`SELECT 1 FROM ${name} WHERE ${text}`, { schemas, inputs: {}, kind: "view" });
+      const res = await compileSql(`SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${text}`, { schemas, inputs: {}, kind: "view" });
       if (!res.ok) { diagnostics.push(toDiagnostic(res.diagnostic, source, pointer)); continue; }
       const where: SqlNode | undefined = res.plan.stmts[0]?.SelectStmt?.whereClause;
       if (!where || JSON.stringify(where).includes('"SubLink"')) {
@@ -104,8 +104,10 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
     const id = pinned && declared(pinned.id);
     const schema = pinned && declaredSchema.get(pinned.schema.toLowerCase());
     // the same shape an explicit target must have: a required string id (PROCEDURE_TARGET_INVALID otherwise)
-    if (!pinned || !id || !schema || !p.spec.input.required?.includes(id) || ![p.spec.input.properties![id]!.type].flat().includes("string")) return undefined;
+    if (!pinned || !id || !schema || !p.spec.input.required?.includes(id) || p.spec.input.properties![id]!.type !== "string") return undefined;
     const version = pinned.version && declared(pinned.version);
+    // the same shapes an explicit target must have: a numeric version, or none at all
+    if (version && !["number", "integer"].includes(String(p.spec.input.properties![version]!.type))) return undefined;
     return { schema, id, ...(version ? { version } : {}) };
   };
   for (const { manifest: p, source } of linked.procedures) {

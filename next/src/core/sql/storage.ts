@@ -88,13 +88,13 @@ function desired(name: string, s: StorageSchema): Desired {
     ...(s.scope ? [{ name: `_mantle_scope_${name}`, unique: false, columns: [s.scope] }] : []),
     ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })), // the grammar already starts a scoped unique index with the scope
     ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: cols })),
-  ].map((i) => ({ ...i, sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX ${q(i.name)} ON ${t} (${i.columns.map(q).join(", ")})` }));
+  ].map((i) => ({ ...i, sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(i.name)} ON ${t} (${i.columns.map(q).join(", ")})` }));
 
   const triggers: { name: string; sql: string }[] = [];
   (s.checks ?? []).forEach((c, i) => {
     const e = checkText(c);
     for (const ev of ["INSERT", "UPDATE"])
-      triggers.push({ name: `_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`, sql: `CREATE TRIGGER ${q(`_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`)} BEFORE ${ev} ON ${t} WHEN NOT (${e}) BEGIN SELECT RAISE(ABORT, ${lit(`CHECK ${name}: ${e.replace(/\bnew\./g, "")}`)}); END` });
+      triggers.push({ name: `_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`, sql: `CREATE TRIGGER ${q(`_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`)} BEFORE ${ev} ON ${t} WHEN NOT (${e}) BEGIN SELECT RAISE(ABORT, ${lit(`MANTLE_CHECK ${name}: ${e.replace(/\bnew\./g, "")}`)}); END` });
   });
   const virtuals: Desired["virtuals"][number][] = [];
   if (s.search?.length) {
@@ -109,16 +109,18 @@ function desired(name: string, s: StorageSchema): Desired {
       { name: `_mantle_fts_${name}_u`, sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_u`)} AFTER UPDATE OF ${f} ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END` },
     );
   }
-  const geo = Object.entries(s.fields).find(([, ty]) => ty === "geo")?.[0];
-  if (geo) {
-    const g = q(`_mantle_geo_${name}`);
+  // one R*Tree per geo field: near() reads the tree of the field it names
+  for (const [geo, ty] of Object.entries(s.fields)) {
+    if (ty !== "geo") continue;
+    const tree = `_mantle_geo_${name}_${geo}`;
+    const g = q(tree);
     const la = q(`${geo}_lat`);
     const ln = q(`${geo}_lng`);
-    virtuals.push({ name: `_mantle_geo_${name}`, sql: `CREATE VIRTUAL TABLE ${g} USING rtree(id, minLat, maxLat, minLng, maxLng)`, rebuild: `INSERT INTO ${g} SELECT _rid, ${la}, ${la}, ${ln}, ${ln} FROM ${t} WHERE ${la} IS NOT NULL AND ${ln} IS NOT NULL` });
+    virtuals.push({ name: tree, sql: `CREATE VIRTUAL TABLE ${g} USING rtree(id, minLat, maxLat, minLng, maxLng)`, rebuild: `INSERT INTO ${g} SELECT _rid, ${la}, ${la}, ${ln}, ${ln} FROM ${t} WHERE ${la} IS NOT NULL AND ${ln} IS NOT NULL` });
     triggers.push(
-      { name: `_mantle_geo_${name}_i`, sql: `CREATE TRIGGER ${q(`_mantle_geo_${name}_i`)} AFTER INSERT ON ${t} WHEN new.${la} IS NOT NULL AND new.${ln} IS NOT NULL BEGIN INSERT INTO ${g} VALUES (new._rid, new.${la}, new.${la}, new.${ln}, new.${ln}); END` },
-      { name: `_mantle_geo_${name}_d`, sql: `CREATE TRIGGER ${q(`_mantle_geo_${name}_d`)} AFTER DELETE ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; END` },
-      { name: `_mantle_geo_${name}_u`, sql: `CREATE TRIGGER ${q(`_mantle_geo_${name}_u`)} AFTER UPDATE OF ${la}, ${ln} ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; INSERT INTO ${g} SELECT new._rid, new.${la}, new.${la}, new.${ln}, new.${ln} WHERE new.${la} IS NOT NULL AND new.${ln} IS NOT NULL; END` },
+      { name: `${tree}_i`, sql: `CREATE TRIGGER ${q(`${tree}_i`)} AFTER INSERT ON ${t} WHEN new.${la} IS NOT NULL AND new.${ln} IS NOT NULL BEGIN INSERT INTO ${g} VALUES (new._rid, new.${la}, new.${la}, new.${ln}, new.${ln}); END` },
+      { name: `${tree}_d`, sql: `CREATE TRIGGER ${q(`${tree}_d`)} AFTER DELETE ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; END` },
+      { name: `${tree}_u`, sql: `CREATE TRIGGER ${q(`${tree}_u`)} AFTER UPDATE OF ${la}, ${ln} ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; INSERT INTO ${g} SELECT new._rid, new.${la}, new.${la}, new.${ln}, new.${ln} WHERE new.${la} IS NOT NULL AND new.${ln} IS NOT NULL; END` },
     );
   }
   return { table: name, columns, indexes, triggers, virtuals };
@@ -136,7 +138,7 @@ function createTable(d: Desired): string {
     return `${q(c.name)} ${c.type}${c.native && c.type === "TEXT" ? " NOT NULL" : ""}`;
   });
   // `_rid` aliases rowid: FTS5's content_rowid and the R*Tree key on it, and an unaliased rowid may change on VACUUM
-  return `CREATE TABLE ${q(d.table)} (${cols.join(", ")}) STRICT`;
+  return `CREATE TABLE IF NOT EXISTS ${q(d.table)} (${cols.join(", ")}) STRICT`;
 }
 
 /** System tables every site has. `_mantle_assert` turns a wrong `changes()` into `CONFLICT op=k` and keeps no rows. */
@@ -173,7 +175,7 @@ export async function convergeStorage(
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       // a concurrent cold start applied the same ADD COLUMN: introspect again and let the diff decide
-      if (/duplicate column name/i.test(message) && attempt < 2) continue;
+      if (/duplicate column name|already exists/i.test(message) && attempt < 2) continue;
       if (/UNIQUE constraint failed/i.test(message) && uniques.length)
         return { skipped: false, blocked: uniques.map((u) => ({ schema: u.schema, code: "STORAGE_CHANGE_BLOCKED", message: `unique index ${u.index} cannot be created: existing rows break it (${message}); dedupe the data, then rerun` })), undeclared };
       throw e;
@@ -208,23 +210,26 @@ async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, Storag
       if (d.indexes.some((i) => i.unique)) for (const i of d.indexes) if (i.unique) uniques.push({ schema: name, index: i.name });
     } else {
       const [info, idx] = await driver.batch([
-        { sql: "SELECT name, type FROM pragma_table_info(?1)", binds: [name] },
-        { sql: "SELECT il.name AS name, il.\"unique\" AS uniq, il.origin AS origin, ii.name AS col FROM pragma_index_list(?1) il, pragma_index_info(il.name) ii ORDER BY il.name, ii.seqno", binds: [name] },
+        { sql: "SELECT name, type, pk FROM pragma_table_info(?1)", binds: [name] },
+        { sql: "SELECT il.name AS name, il.\"unique\" AS uniq, il.origin AS origin, il.partial AS partial, ii.name AS col FROM pragma_index_list(?1) il, pragma_index_info(il.name) ii ORDER BY il.name, ii.seqno", binds: [name] },
       ]);
       const have = new Map(info!.rows.map((r) => [String(r.name), String(r.type).toUpperCase()]));
+      const pk = new Map(info!.rows.map((r) => [String(r.name), Number(r.pk)]));
       for (const c of d.columns) {
         const actual = have.get(c.name);
         if (actual === undefined) {
-          if (c.native) block(name, `${name} lacks the native column ${c.name}; add it, or copy the data into a table Mantle creates`);
+          if (c.name === "_rid") block(name, `${name} has no _rid, which must be the table's INTEGER PRIMARY KEY (the rowid alias FTS5 and the R*Tree key on) and cannot be added to a table; copy the data into a table Mantle creates`);
+          else if (c.native) block(name, `${name} lacks the native column ${c.name}; add it, or copy the data into a table Mantle creates`);
           else statements.push({ sql: `ALTER TABLE ${t} ADD COLUMN ${q(c.name)} ${c.type}` });
-        } else if (actual !== c.type && !(c.name === "_rid" && actual === "INTEGER")) block(name, `${name}.${c.name} is ${actual}, the plan says ${c.type}; a column's type is never altered`);
+        } else if (c.name === "_rid" && pk.get("_rid") !== 1) block(name, `${name}._rid is not the table's INTEGER PRIMARY KEY, so it does not alias the rowid; copy the data into a table Mantle creates`);
+        else if (actual !== c.type && !(c.name === "_rid" && actual === "INTEGER")) block(name, `${name}.${c.name} is ${actual}, the plan says ${c.type}; a column's type is never altered`);
       }
       const declared = new Set(d.columns.map((c) => c.name));
       for (const c of have.keys()) if (!declared.has(c)) undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_COLUMN", message: `${name}.${c} is in the database and not in the plan; it is kept` });
 
-      const actualIdx = new Map<string, { unique: boolean; cols: string[]; origin: string }>();
+      const actualIdx = new Map<string, { unique: boolean; cols: string[]; origin: string; partial: boolean }>();
       for (const r of idx!.rows) {
-        const e = actualIdx.get(String(r.name)) ?? { unique: r.uniq === 1, cols: [], origin: String(r.origin) };
+        const e = actualIdx.get(String(r.name)) ?? { unique: r.uniq === 1, cols: [], origin: String(r.origin), partial: r.partial === 1 };
         e.cols.push(String(r.col));
         actualIdx.set(String(r.name), e);
       }
@@ -233,11 +238,13 @@ async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, Storag
         if (!a) {
           statements.push({ sql: i.sql });
           if (i.unique) uniques.push({ schema: name, index: i.name });
-        } else if (a.unique !== i.unique || a.cols.join() !== i.columns.join()) block(name, `index ${i.name} exists with other columns or uniqueness; drop it and rerun`);
+        } else if (a.unique !== i.unique || a.partial || a.cols.join() !== i.columns.join()) block(name, `index ${i.name} exists with other columns, uniqueness or a WHERE; drop it and rerun`);
       }
       const declaredIdx = new Set(d.indexes.map((i) => i.name));
       for (const [n, a] of actualIdx) {
-        if (declaredIdx.has(n) || a.origin !== "c") continue; // sqlite_autoindex and primary keys are not ours to judge
+        // a column UNIQUE is a constraint too, and it would leak across owners; only the `id` UNIQUE (ours) and primary keys pass
+        if (a.origin === "u" && a.unique && a.cols.join() !== "id") block(name, `${name} has a UNIQUE constraint on ${a.cols.join(", ")} that Mantle did not declare; it still constrains writes`);
+        if (declaredIdx.has(n) || a.origin !== "c") continue;
         if (a.unique) block(name, `undeclared unique index ${n} still constrains writes; drop it or declare it`);
         else undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_INDEX", message: `index ${n} is in the database and not in the plan; it is kept` });
       }
@@ -245,12 +252,13 @@ async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, Storag
     // Mantle's own triggers and search / geo tables: rebuilt when their declaration changes, dropped when it goes away
     const wantTriggers = new Set(d.triggers.map((x) => x.name));
     for (const r of byName.values())
-      if (r.type === "trigger" && r.tbl_name === name && String(r.name).startsWith("_mantle_") && !wantTriggers.has(String(r.name))) statements.push({ sql: `DROP TRIGGER IF EXISTS ${q(String(r.name))}` });
-    const wantVirtual = new Set(d.virtuals.map((v) => v.name));
-    for (const prefix of ["_mantle_fts_", "_mantle_geo_"]) {
-      const n = `${prefix}${name}`;
-      if (byName.has(n) && !wantVirtual.has(n)) statements.push({ sql: `DROP TABLE IF EXISTS ${q(n)}` });
-    }
+      if (r.type === "trigger" && r.tbl_name === name && String(r.name).startsWith("_mantle_") && !wantTriggers.has(String(r.name))) {
+        statements.push({ sql: `DROP TRIGGER IF EXISTS ${q(String(r.name))}` });
+        // the insert trigger of a search or geo table names it: a declaration that went away takes its table with it (a name
+        // alone is not evidence, an FTS5 or R*Tree shadow table of another Schema can look the same)
+        const tree = /^(_mantle_(?:fts|geo)_.+)_i$/.exec(String(r.name));
+        if (tree && byName.get(tree[1]!)?.sql?.toString().startsWith("CREATE VIRTUAL TABLE")) statements.push({ sql: `DROP TABLE IF EXISTS ${q(tree[1]!)}` });
+      }
     for (const v of d.virtuals) {
       const cur = byName.get(v.name);
       if (cur?.sql === v.sql) continue;

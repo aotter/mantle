@@ -90,6 +90,13 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       if (!Array.isArray(ops) || !ops.length) throw invalid("A write takes a non-empty list of operations.");
       const json = new StoreJson(deps.schemas, (schema) => [...(deps.lifecycle?.after ?? [])].some((k) => k.startsWith(`${schema}.`)));
       const built = ops.map((o) => json.write(o));
+      // the parent is read before the batch, so one write may not publish a translation and move its parent too
+      built.forEach((x, i) => {
+        const o = ops[i]!;
+        const tr = x.status === "published" && "update" in o ? deps.schemas[o.update.toLowerCase()]?.translates : undefined;
+        if (tr && ops.some((y) => "update" in y && y.update.toLowerCase() === tr.parent.toLowerCase() && "status" in y.set))
+          throw invalid(`A write that publishes a translation may not also change the status of its ${tr.parent} parent: do that in its own write.`);
+      });
       const { mode, bind: b } = bindFor(deps.now(), caller);
       const program: Program = {
         kind: "procedure", inputs: json.inputs, ir: built.map((x) => x.ir), expects: ops.map((o) => (o as { expect?: number }).expect),
@@ -114,21 +121,17 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
             if (def.translates) {
               const { parent: parentSchema, on } = def.translates;
               const key = entry[on];
-              const found = key === undefined ? [] : (await make(deps, caller, parent).select({ from: parentSchema, columns: ["status"], where: { [on]: key as string }, limit: 1 })).rows;
-              if (found[0]?.status !== "published")
+              // the parent counts when any entry sharing the key is published (nothing makes `on` unique on the parent)
+              const found = key === undefined ? [] : (await make(deps, caller, parent).select({ from: parentSchema, columns: ["id"], where: { [on]: key as string, status: "published" }, limit: 1 })).rows;
+              if (!found.length)
                 throw new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: `CONFLICT: publish the ${parentSchema} entry with the same ${on} first; a translation publishes only after its parent.` }));
             }
           };
         }),
       };
-      let result;
-      try {
-        result = await runProcedure(env(mode), program, as({ ...b, input: json.values }));
-      } catch (e) {
-        throw await refine(e, ops);
-      }
-      return ops.map((o, i) => {
-        const row = StoreJson.isRowOp(o) ? result.rows[i]![0] : undefined;
+      const result = await runProcedure(env(mode), program, as({ ...b, input: json.values }));
+      return ops.map((_o, i) => {
+        const row = built[i]!.row ? result.rows[i]![0] : undefined;
         if (row) return { id: String(row.id), version: Number(row.version) };
         return { affected: result.affected[i]! };
       });
@@ -150,19 +153,6 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
 
     id: deps.newId,
   };
-
-  /** A row op that matched nothing is `lock` when the row is visible at another version, `expect` otherwise (ADR-0032 decision 2). */
-  async function refine(e: unknown, ops: readonly import("../store.js").StoreWriteOp[]): Promise<unknown> {
-    if (!(e instanceof DiagnosticError) || e.diagnostic.conflict?.reason !== "expect") return e;
-    const i = e.diagnostic.conflict.opIndex;
-    const op = i === undefined ? undefined : ops[i];
-    if (!op || !("update" in op || "delete" in op) || op.lock === undefined) return e;
-    const from = "update" in op ? op.update : op.delete;
-    const id = (op.where as { id?: unknown }).id;
-    const [row] = (await make(deps, caller).select({ from, columns: ["version"], where: { id: (typeof id === "object" ? (id as { eq: string }).eq : id) as string }, limit: 1 })).rows;
-    if (!row || row.version === op.lock) return e;
-    return new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: e.message, conflict: { opIndex: i!, reason: "lock" } }));
-  }
 }
 
 export function createStore(deps: StoreDeps): MantleStore {

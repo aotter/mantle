@@ -36,7 +36,7 @@ export type RelationPosition =
   | 'delete-target'
   | 'conflict-update' // ON CONFLICT ... DO UPDATE: the row being overwritten
   | 'search' // _mantle_fts_<schema>, emitted by the compiler for search()
-  | 'near'; // _mantle_geo_<schema>, emitted by the compiler for near()
+  | 'near'; // _mantle_geo_<schema>_<field>, emitted by the compiler for near()
 
 export const POSITION_EDGE = {
   from: 'SelectStmt.fromClause',

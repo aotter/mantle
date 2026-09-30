@@ -39,15 +39,20 @@ export function decodeNumeric(n: number, s: number): string {
 /** ISO-8601 with an explicit offset (or Z) -> microseconds. Refuses a zone-less timestamp. */
 export function encodeTimestamptz(v: string | Date | number): number {
   if (v instanceof Date) return v.getTime() * 1000;
-  if (typeof v === 'number') return v;
+  if (typeof v === 'number') {
+    if (!Number.isSafeInteger(v)) throw new Refused('SQL_TYPE', `${v} is not a whole number of microseconds within 2^53`);
+    return v;
+  }
   const m = /^(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d(?::\d\d)?)(?:\.(\d{1,6}))?(Z|[+-]\d\d(?::?\d\d)?)$/.exec(v.trim());
   if (!m) throw new Refused('SQL_TYPE', `'${v}' is not a timestamp with an explicit offset`);
   const [, day, time, fraction, offset] = m as unknown as string[];
   const frac = (fraction ?? '').padEnd(6, '0');
   const zone = offset === 'Z' ? 'Z' : offset!.length === 3 ? `${offset}:00` : offset!.includes(':') ? offset! : `${offset!.slice(0, 3)}:${offset!.slice(3)}`;
   const secs = Date.parse(`${day}T${time!.length === 5 ? time + ':00' : time}${zone}`);
-  if (Number.isNaN(secs)) throw new Refused('SQL_TYPE', `'${v}' is not a valid timestamp`);
-  return secs * 1000 + Number(frac);
+  encodeDate(day!); // Date.parse rolls 2026-02-30 over to March; a day that does not exist is refused
+  const micros = secs * 1000 + Number(frac);
+  if (Number.isNaN(secs) || !Number.isSafeInteger(micros)) throw new Refused('SQL_TYPE', `'${v}' is not a valid timestamp`);
+  return micros;
 }
 export function decodeTimestamptz(us: number): string {
   const ms = Math.floor(us / 1000), rest = us - ms * 1000;
@@ -57,8 +62,10 @@ export function encodeDate(v: string | Date): number {
   const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(typeof v === 'string' ? v : v.toISOString().slice(0, 10));
   if (!m) throw new Refused('SQL_TYPE', `'${v}' is not a date`);
   const [, y, mo, d] = m as unknown as string[];
-  const days = Date.UTC(+y!, +mo! - 1, +d!) / (US_PER_DAY / 1000);
-  if (new Date(days * 86_400_000).getUTCDate() !== +d!) throw new Refused('SQL_TYPE', `'${v}' is not a valid date`);
+  const dt = new Date(0);
+  dt.setUTCFullYear(+y!, +mo! - 1, +d!); // Date.UTC would read years 0 to 99 as 1900 to 1999
+  const days = dt.getTime() / (US_PER_DAY / 1000);
+  if (dt.getUTCDate() !== +d!) throw new Refused('SQL_TYPE', `'${v}' is not a valid date`);
   return days;
 }
 export const decodeDate = (days: number) => new Date(days * 86_400_000).toISOString().slice(0, 10);
