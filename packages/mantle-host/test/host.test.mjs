@@ -501,6 +501,28 @@ for (const mode of ['sources', 'bundle']) describe(`refusals (${mode})`, () => {
     } finally { await cloud.close(); await rm(root, { recursive: true, force: true }) }
   })
 
+  test('a frontend-only commit before the static stage resumes at the new HEAD; a manifest change does not', async () => {
+    const cloud = await fakeCloud(), root = await project()
+    try {
+      const first = await run(root, ['save', '--json'])
+      const grant = cloud.mcp.backendUpload({ ...last(first).nextAction.arguments, expectedVersion: 1 })
+      assert.equal((await run(root, ['save', '--resume', '--grant', '-', '--json'], { stdin: JSON.stringify(grant) })).code, 0)
+      await writeDist(root)
+      await writeFile(join(root, 'src/page.txt'), 'frontend\n'); git(root, 'add', '-A'); git(root, 'commit', '-q', '-m', 'frontend')
+      const head = git(root, 'rev-parse', 'HEAD').trim()
+      const built = await run(root, ['save', '--resume', '--json'])
+      assert.equal(built.code, 0, built.text)
+      assert.equal(last(built).commit, head)
+      assert.equal(new TextDecoder().decode(new Uint8Array(await readFile(join(root, '.mantle/host/out/production/source.zip')))).includes('page.txt'), true)
+      await writeFile(join(root, 'manifests/site.yaml'), `${await readFile(join(root, 'manifests/site.yaml'), 'utf8')}# changed\n`)
+      git(root, 'commit', '-qam', 'manifest')
+      const state = JSON.parse(await readFile(join(root, '.mantle/host/state.json'), 'utf8'))
+      state.targets.production.pending.stage = 'build'
+      await writeFile(join(root, '.mantle/host/state.json'), JSON.stringify(state))
+      assert.equal((await refuse(root, ['save', '--resume'], 'head_changed')).nextAction.command.includes('--restart'), true)
+    } finally { await cloud.close(); await rm(root, { recursive: true, force: true }) }
+  })
+
   test('--grant-file is bounded and must be a regular file', async () => {
     const root = await project()
     try {
