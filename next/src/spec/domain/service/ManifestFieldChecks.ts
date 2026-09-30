@@ -78,7 +78,7 @@ export function validateLocalizedText(
 }
 
 /**
- * Day-1 envelope-and-shape parser. Loop 1 (`mantle validate`) does
+ * Day-1 envelope-and-shape parser. The linker (`mantle generate`) does
  * the cross-manifest checks (Trigger.target.procedure exists, View.from
  * is a Schema, etc.) — see ADR-0007 and `docs/handbook/reference/manifest.md`.
  *

@@ -1,5 +1,5 @@
 /**
- * `.mantle/generated/mantle.ts` (ADR-0032 amendment "mantle generate"): the plan from `plan.json`, the `emit-types`
+ * `.mantle/generated/mantle.ts` (ADR-0032 amendment "mantle generate"): the plan from `plan.json`, the manifest types (`emitTypesFromManifests`)
  * namespace, and a typed Store and `MantleHandlers` over exactly this plan. Types only, apart from the `plan` import.
  */
 import { emitTypesFromManifests, manifestTypeIdentifier, viewOutputs, type LinkedManifestSet, type PlanSchema, type PlanView, type RuntimePlan } from "../spec/index.js";
