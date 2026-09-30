@@ -116,6 +116,7 @@ export function resolveMantleRef(property: unknown): MantleRefTarget | null {
     : null;
 }
 export const MCP_HINT_KEYWORD = "x-mcp-hint" as const;
+/** A 0.1.x Schema-property keyword; 0.2.0 refuses it (Schema.spec.scope and a Procedure's SQL replace it). */
 export const MANTLE_BIND_KEYWORD = "x-mantle-bind" as const;
 
 /**
@@ -197,7 +198,7 @@ export interface SchemaManifestSpec {
   /** Same string-or-locale-map shape as `title`. Optional. */
   readonly description?: LocalizedText;
   /** JSON Schema Draft 2020-12 describing per-entry data. May carry the
-   *  v0.1 property extensions: `x-mantle-bind`, `x-mantle-ref`, `x-mcp-hint`. */
+   *  property extensions `x-mantle-ref` and `x-mcp-hint`. */
   readonly schema: JsonSchema;
   /** Admin-only presentation. Closed Schema roots: `fields`, `list`,
    *  `nav`. Optional. */
@@ -518,11 +519,6 @@ export type HttpMethod = "POST" | "PUT" | "PATCH" | "DELETE";
 /* ─── Union ─── */
 
 export type Manifest = SchemaManifest | ViewManifest | ProcedureManifest | TriggerManifest;
-
-/** v0.1 closed enum for `x-mantle-bind` Schema-property values. New entries
- *  require an explicit grammar-revise round (see ADR-0002). */
-export const MANTLE_BIND_VALUES = ["ctx.user", "ctx.staff", "now"] as const;
-export type MantleBindValue = (typeof MANTLE_BIND_VALUES)[number];
 
 /** Storage-row metadata columns reserved across every Schema. Used by
  *  the View SQL compiler (to project them as native columns rather

@@ -82,6 +82,14 @@ function trigger(name: string, procedureName: string): TriggerManifest {
 }
 
 describe("validateManifests()", () => {
+  it("refuses x-mantle-bind, which 0.2.0 no longer stamps, with the replacement in the message", () => {
+    for (const bind of ["ctx.user", "ctx.staff", "now"]) {
+      const s = schema("notes", { schema: { type: "object", properties: { by: { type: "string", "x-mantle-bind": bind } } } });
+      const r = validateManifests({ manifests: [s] });
+      expect(r.diagnostics.map((d) => d.message).join()).toMatch(/x-mantle-bind is removed\. Use spec\.scope/);
+    }
+  });
+
   it("requires scope to bind one required, indexed string field to auth.uid()", () => {
     const scoped = schema("sessions", {
       schema: { type: "object", properties: { ownerId: { type: "string" }, slug: { type: "string" } }, required: ["ownerId"] },
