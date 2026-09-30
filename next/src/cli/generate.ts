@@ -29,7 +29,8 @@ const CONFIG = "mantle.config.json";
 const OUT = ".mantle/generated";
 /** The packages a selection needs in the project; `@aotter/mantle` itself is always one. */
 const PACKAGES: Readonly<Record<Feature | Identity, readonly string[]>> = {
-  mcp: ["@modelcontextprotocol/server"], admin: ["@aotter/mantle-ui"], web: [], mantle: ["better-auth"], custom: [], none: [],
+  mcp: ["@modelcontextprotocol/server", "@modelcontextprotocol/ext-apps"], admin: ["@aotter/mantle-ui"], web: [],
+  mantle: ["better-auth", "@better-auth/oauth-provider", "@better-auth/mcp", "@better-auth/cimd"], custom: [], none: [],
 };
 
 export interface GenerateDeps {
@@ -65,7 +66,7 @@ function featureDiagnostics(root: string, config: MantleConfig): Diagnostic[] {
   const need = (what: string, packages: readonly string[]) => {
     const missing = packages.filter((p) => !findUp(root, join("node_modules", p, "package.json")));
     if (missing.length)
-      out.push(validateDiagnostic({ code: "GENERATE_FEATURE_DEPENDENCY_MISSING", severity: "error", path: what, message: `${what} needs ${missing.join(", ")}, which is not installed. Run \`${installCommand(root, missing)}\`; mantle generate never installs packages.` }));
+      out.push(validateDiagnostic({ code: "GENERATE_FEATURE_DEPENDENCY_MISSING", severity: "error", path: what, message: `${what} needs ${missing.join(", ")}, which ${missing.length > 1 ? "are" : "is"} not installed. Run \`${installCommand(root, missing)}\`; mantle generate never installs packages.` }));
   };
   need("@aotter/mantle", ["@aotter/mantle"]);
   need(`identity '${config.identity}'`, PACKAGES[config.identity]);

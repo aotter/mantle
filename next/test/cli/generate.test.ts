@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { runGenerate } from "../../src/cli/generate.js";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import type { DatabaseDriver } from "../../src/core/driver.js";
+import { createMantleRuntime, sqliteStorage } from "../../src/core/index.js";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/app", import.meta.url));
 const SRC = fileURLToPath(new URL("../../src", import.meta.url));
@@ -91,8 +92,8 @@ describe("mantle generate", () => {
     const dir = await project(["@aotter/mantle"], "pnpm-lock.yaml");
     const r = await gen([], dir);
     expect(r.code).toBe(1);
-    expect(r.err).toContain("GENERATE_FEATURE_DEPENDENCY_MISSING identity 'mantle': identity 'mantle' needs better-auth, which is not installed. Run `pnpm add better-auth`");
-    expect(r.err).toContain("feature 'mcp' needs @modelcontextprotocol/server, which is not installed. Run `pnpm add @modelcontextprotocol/server`");
+    expect(r.err).toContain("GENERATE_FEATURE_DEPENDENCY_MISSING identity 'mantle': identity 'mantle' needs better-auth, @better-auth/oauth-provider, @better-auth/mcp, @better-auth/cimd, which are not installed. Run `pnpm add better-auth @better-auth/oauth-provider @better-auth/mcp @better-auth/cimd`");
+    expect(r.err).toContain("feature 'mcp' needs @modelcontextprotocol/server, @modelcontextprotocol/ext-apps, which are not installed. Run `pnpm add @modelcontextprotocol/server @modelcontextprotocol/ext-apps`");
     expect(r.err).toContain("feature 'admin' needs @aotter/mantle-ui");
     await expect(read(dir, ".mantle/generated/plan.json")).rejects.toThrow();
     // an explicit --features without --identity is `none`, and admin then needs an identity: never re-added, never installed
@@ -101,7 +102,8 @@ describe("mantle generate", () => {
     expect(none.err).toContain("feature 'admin' needs a caller identity, and identity is 'none'");
     const npm = await gen([], await project([]));
     expect(npm.err).toContain("Run `npm install @aotter/mantle`");
-    expect((await gen([], await project(["@aotter/mantle", "better-auth", "@modelcontextprotocol/server", "@aotter/mantle-ui"]))).code).toBe(0);
+    const all = ["@aotter/mantle", "better-auth", "@better-auth/oauth-provider", "@better-auth/mcp", "@better-auth/cimd", "@modelcontextprotocol/server", "@modelcontextprotocol/ext-apps", "@aotter/mantle-ui"];
+    expect((await gen([], await project(all))).code).toBe(0);
   });
 
   it("refuses to switch identity on a rerun", async () => {
@@ -191,6 +193,24 @@ describe("mantle generate --check storage dry-run", () => {
     expect(r.out).toContain('CREATE TABLE IF NOT EXISTS "items" (');
     expect(r.out).toContain("INSERT OR IGNORE INTO _mantle_schema_tables (name) VALUES ('items');");
     expect(await objects()).toEqual(before);
+  });
+
+  it("Core boots the written plan.json, and View rows have the keys the module names", async () => {
+    const dir = await project();
+    await gen(CUSTOM, dir);
+    const { plan } = JSON.parse(await read(dir, ".mantle/generated/plan.json"));
+    const mod = await read(dir, ".mantle/generated/mantle.ts");
+    const keys = (view: string) => [...new RegExp(`ViewRow_${view} = \\{([^}]*)\\}`).exec(mod)![1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    const rt = await createMantleRuntime({ plan, handlers: { audit: async () => ({}), note: async () => ({ ok: true }) }, storage: sqliteStorage(d1) });
+    const store = rt.store.as({ kind: "user", subject: "o1", role: null, scopes: [], credential: "session", credentialId: null, clientId: null });
+    await store.write([{ insert: "items", values: { name: "a", stock: 3 } }]);
+    for (const [view, id, input] of [["all-items", "all_u002d_items", undefined], ["my-items", "my_u002d_items", { min: 1 }]] as const) {
+      for (const limit of [undefined, 10]) {
+        const { rows } = await store.view(view, { ...(input ? { input } : {}), ...(limit ? { limit } : {}) });
+        expect(rows.length).toBe(1);
+        expect(Object.keys(rows[0]!)).toEqual(keys(id));
+      }
+    }
   });
 
   it("reads a SQLite file read-only with --database", async () => {

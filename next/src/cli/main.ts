@@ -9,7 +9,7 @@ const COMMANDS: Record<string, (args: readonly string[]) => Promise<number>> = {
 };
 
 const sub = argv[2];
-const command = sub ? COMMANDS[sub] : undefined;
+const command = sub && Object.hasOwn(COMMANDS, sub) ? COMMANDS[sub] : undefined;
 if (!command) {
   (sub && sub !== "--help" && sub !== "-h" ? stderr : stdout).write(`${sub && sub !== "--help" && sub !== "-h" ? `Unknown subcommand: ${sub}\n\n` : ""}Usage: mantle <${Object.keys(COMMANDS).join(" | ")}> [options]
 

@@ -290,12 +290,13 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
     `mantle.ts` imports only types, from `@aotter/mantle` and `@aotter/mantle/spec`.
   - **`ViewRow_<name>`.**
     - Its keys come from the compiled `SELECT`: an output's `AS` name, else its column's name, and `*` as the Schema's declared fields without the scope field. It falls back to `unknown` when an output has no name, or a `*` reads a subquery or `json_each`.
+    - `emitTypesFromManifests` gains the option `rows` (View name to row type), which the generator passes. `mantle emit-types` has no plan, so its rows stay `unknown`.
     - Its values are `unknown`, because `store.view` returns rows in the storage encoding: lower-case keys, `0`/`1` for booleans, JSON as text and timestamps in microseconds. `store.select` returns the Schema's declared names and decoded values. Typing View values waits until View rows are decoded the same way.
   - **`mantle.config.json` v2** is `{ "version": 2, "identity": "mantle" | "custom" | "none", "features": [...] }`. `host` and `output` are removed. `features` is a subset of `mcp`, `admin`, `web`, in that order.
-    - `mcp` needs `@modelcontextprotocol/server`.
+    - `mcp` needs `@modelcontextprotocol/server` and `@modelcontextprotocol/ext-apps`.
     - `admin` needs `@aotter/mantle-ui`, for the Admin SPA, and an identity other than `none`.
     - `web` is `@aotter/mantle/web`. It needs no peer and today serves `createRestSurface`; `createWebSurface` is not ported yet.
-    - Identity `mantle` needs `better-auth`. Every selection needs `@aotter/mantle`.
+    - Identity `mantle` needs `better-auth`, `@better-auth/oauth-provider`, `@better-auth/mcp` and `@better-auth/cimd`, the packages `@aotter/mantle/auth` imports. Every selection needs `@aotter/mantle`.
 
     Without a config or flags, the selection is identity `mantle` and every feature. An explicit `--features` without `--identity` means `none` (decision 12). A rerun keeps the saved identity, and asking for another one is refused (exit 2), never a table drop. A changed `--features` rewrites the config.
   - **`GENERATE_FEATURE_DEPENDENCY_MISSING`** (validate phase) is raised for:
