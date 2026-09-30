@@ -39,19 +39,20 @@ export interface AuthUserInfo extends StaffUserInfo {
 /** `exists` carries the prior row's id, so Admin can point at the existing user instead of failing bare. */
 export type InviteUserResult = { readonly kind: "created"; readonly id: string } | { readonly kind: "exists"; readonly id: string };
 
+/** Members that take the `Request` act as the signed-in owner who sent it, so the identity provider authorizes them too. */
 export interface AdminIdentity {
   readonly directory?: {
     getUser?(userId: string): Promise<AuthUserInfo | null>;
     /** Only users with a staff role, oldest first. */
-    listUsers(): Promise<readonly StaffUserInfo[]>;
+    listUsers(request: Request): Promise<readonly StaffUserInfo[]>;
     /** Everyone else, for the member-management surface. */
     listMembers(args: ListMembersArgs): Promise<MemberListResult>;
   };
   readonly roles?: {
     /** `null` revokes staff access (the user can still sign in, but every staff-gated surface refuses). False when no row matched. */
-    setUserRole(userId: string, role: "owner" | "editor" | "contributor" | null): Promise<boolean>;
+    setUserRole(request: Request, userId: string, role: "owner" | "editor" | "contributor" | null): Promise<boolean>;
     /** Pre-creates an unverified user that already holds the role, so the invitee's first sign-in lands with it. */
-    inviteUser(email: string, role: "owner" | "editor" | "contributor"): Promise<InviteUserResult>;
+    inviteUser(request: Request, email: string, role: "owner" | "editor" | "contributor"): Promise<InviteUserResult>;
     /** Only an invitation nobody ever signed in to; a real user is never deleted through it. */
     revokeInvite(userId: string): Promise<boolean>;
     sendStaffInvitation?(email: string, role: "owner" | "editor" | "contributor"): Promise<void>;

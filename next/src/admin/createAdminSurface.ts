@@ -472,7 +472,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   );
   if (webmcp) routes.push({ method: "GET", path: "/webmcp", role: "contributor", run: async () => webmcp });
   if (directory) routes.push(
-    { method: "GET", path: "/staff", role: "owner", run: async () => ({ users: (await directory.listUsers()).map(staffInfo) }) },
+    { method: "GET", path: "/staff", role: "owner", run: async ({ request }) => ({ users: (await directory.listUsers(request)).map(staffInfo) }) },
     {
       method: "GET", path: "/members", role: "editor", run: async ({ url: { searchParams: q } }) => {
         const limit = Number(q.get("limit") ?? 50);
@@ -491,7 +491,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         if (role !== null && !(typeof role === "string" && isStaffRole(role))) throw bad(`role must be one of ${STAFF_ROLES.join(", ")}, or null to revoke`);
         // demoting the only owner would lock everyone out of staff management
         if (id === caller.subject) throw wireError("AUTH_DENIED", "You cannot change your own role.", P);
-        if (!await roles.setUserRole(id!, role)) throw wireError("NOT_FOUND", "no user with that id", P);
+        if (!await roles.setUserRole(request, id!, role)) throw wireError("NOT_FOUND", "no user with that id", P);
         return { ok: true };
       },
     },
@@ -501,10 +501,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         const email = typeof body["email"] === "string" ? body["email"].trim().toLowerCase() : "";
         const role = body["role"];
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !(typeof role === "string" && isStaffRole(role))) throw bad(`an invitation needs an email and a role in ${STAFF_ROLES.join(", ")}`);
-        const r = await roles.inviteUser(email, role);
+        const r = await roles.inviteUser(request, email, role);
         if (r.kind === "exists") {
           if (r.id === caller.subject) throw wireError("AUTH_DENIED", "You cannot change your own role.", P);
-          await roles.setUserRole(r.id, role);
+          await roles.setUserRole(request, r.id, role);
         }
         await roles.sendStaffInvitation?.(email, role);
         return { ok: true, userId: r.id, emailSent: roles.sendStaffInvitation !== undefined };
