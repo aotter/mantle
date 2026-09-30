@@ -19,8 +19,9 @@ export type SqlDiagnosticCode = Extract<DiagnosticCode, `SQL_${string}`>;
 export interface SqlSchemaDef {
   /** column that holds the owner; every read and write is filtered on it */
   readonly scope?: string;
-  /** column holding an expiry in microseconds; expired rows are invisible */
+  /** a declared timestamptz field the author writes; a row is invisible once it is `ttlSeconds` old (a NULL never expires) */
   readonly ttl?: string;
+  readonly ttlSeconds?: number;
   /** lifecycle `publishing`: a public caller sees only published rows */
   readonly publishing?: boolean;
   /** declared fields and their Mantle types: text integer real bool json timestamptz date numeric(p,s) geo */

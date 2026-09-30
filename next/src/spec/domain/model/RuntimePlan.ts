@@ -11,6 +11,7 @@ export const RUNTIME_PLAN_VERSION = 6 as const;
 export interface PlanSchema {
   readonly scope?: string;
   readonly ttl?: string;
+  readonly ttlSeconds?: number;
   readonly publishing?: boolean;
   /** column -> Mantle type: text integer real bool json timestamptz date numeric(p,s) geo */
   readonly fields: Readonly<Record<string, string>>;

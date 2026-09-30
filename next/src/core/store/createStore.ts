@@ -154,7 +154,7 @@ const ref = (...f: string[]): N => ({ ColumnRef: { fields: f.map(S) } });
 async function sweepExpired(deps: StoreDeps, request: import("../store.js").SweepExpiredRequest): Promise<import("../store.js").SweepExpiredResult> {
   const name = String(request.collection).toLowerCase();
   const def = deps.schemas[name];
-  if (!def?.ttl) throw invalid(`Schema '${request.collection}' has no ttl.`);
+  if (!def?.ttl || def.ttlSeconds === undefined) throw invalid(`Schema '${request.collection}' has no ttl.`);
   const limit = request.limit ?? 500;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("Sweep limit must be an integer from 1 to 500.");
   const after = request.cursor === undefined ? undefined : Number(decodeCursor(`sweep:${name}`, request.cursor)[0]);
@@ -168,7 +168,7 @@ async function sweepExpired(deps: StoreDeps, request: import("../store.js").Swee
   const pick = (): N => ({ SelectStmt: { targetList: [{ ResTarget: { val: ref("_rid") } }], fromClause: [rel()], whereClause: expired(),
     sortClause: [{ SortBy: { node: ref("_rid"), sortby_dir: "SORTBY_ASC", sortby_nulls: "SORTBY_NULLS_DEFAULT" } }],
     limitCount: num(limit), limitOption: "LIMIT_OPTION_COUNT", op: "SETOP_NONE" } });
-  const binds = [deps.now()];
+  const binds = [deps.now() - def.ttlSeconds * 1_000_000];
   const statements = [{ ir: pick(), binds }];
   if (request.delete !== false) {
     statements.push({ ir: { DeleteStmt: { relation: rel().RangeVar, whereClause: { SubLink: { subLinkType: "ANY_SUBLINK", testexpr: ref("_rid"), subselect: pick() } } } }, binds });

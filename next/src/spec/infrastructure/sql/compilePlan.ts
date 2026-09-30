@@ -50,7 +50,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
     const lower = (xs: readonly string[]) => xs.map((x) => x.toLowerCase());
     schemas[m.metadata.name.toLowerCase()] = {
       ...(scope ? { scope } : {}),
-      ...(m.spec.ttl ? { ttl: m.spec.ttl.field.toLowerCase() } : {}),
+      ...(m.spec.ttl ? { ttl: m.spec.ttl.field.toLowerCase(), ttlSeconds: m.spec.ttl.expireAfterSeconds } : {}),
       publishing: m.spec.lifecycle === "publishing",
       schema: m.spec.schema,
       fields: typesOf(m.spec.schema),

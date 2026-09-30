@@ -212,7 +212,7 @@ const check: Record<string, Checker> = {
     const f = sv(n.fields), last = f.split('.').pop()!.toLowerCase();
     if (n.fields.length > 2) no('SQL_COLUMN', `${f}: at most alias.column`, at);
     if (['rowid', 'oid', '_rowid_', '_rid'].includes(last)) no('SQL_COLUMN', `${last} is not addressable`, at);
-    if (Object.values(ctx.schemas).some((s) => s.scope === last || s.ttl === last)) no('SQL_COLUMN', `${f}: the scope and TTL columns are not addressable`, at);
+    if (Object.values(ctx.schemas).some((s) => s.scope === last)) no('SQL_COLUMN', `${f}: the scope column is not addressable`, at);
     if (f.startsWith('input.') && !(last in ctx.inputs)) no('SQL_COLUMN', `${f} is not a declared input`, at);
     if (SQLITE_ONLY_KEYWORDS.has(last)) no('SQL_UNSUPPORTED', `${last} is an SQLite keyword: the printer would not quote it`, at);
     if (last !== '*' && !f.startsWith('input.') && !ctx.known!.has(last)) no('SQL_COLUMN', `${f} is not a declared field`, at);
@@ -320,7 +320,7 @@ function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean) {
     const at = firstLoc(r) ?? firstLoc(rel);
     const name = String(r.name).toLowerCase();
     const scopedId = insert && name === 'id' && s?.scope;
-    if (name === s?.scope || name === s?.ttl || SYSTEM.has(name) || (!insert && name === 'id') || scopedId)
+    if (name === s?.scope || SYSTEM.has(name) || (!insert && name === 'id') || scopedId)
       no('SQL_WRITE', `${r.name} is filled by Mantle and cannot be written${scopedId ? ' (a scoped Schema generates its ids)' : ''}`, at);
     const cols = Object.entries(s?.fields ?? {}).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
     if (name !== 'id' && !cols.includes(name)) no('SQL_WRITE', `${rel.relname} has no field ${r.name}`, at);
