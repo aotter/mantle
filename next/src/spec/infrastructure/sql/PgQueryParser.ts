@@ -3,7 +3,8 @@
  * `libpg-query` declares a 128 MiB minimum WASM memory, which is a Cloudflare Worker's whole
  * isolate limit, so no Worker may load it. The import is dynamic so that even a bundle that
  * re-exports the compiler does not instantiate the WASM until something compiles SQL.
- * `test/spec/sql-boundary.test.ts` fails when any other file names the package.
+ * `check:boundaries` fails when a file outside `spec` names the package, and the preset test bundles a
+ * generated Worker and fails if the package is in it.
  */
 import type { SqlNode } from "../../domain/model/SqlIr.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
