@@ -228,6 +228,15 @@ describe("Admin entries: the list", () => {
     expect((await call("GET", `${q}&cursor=${encodeURIComponent(p1.next_cursor)}&cursor_direction=backward`, editor)).status).toBe(400);
   });
 
+  it("translation keys of a long page go in chunks under the bind limit", async () => {
+    for (let i = 0; i < 120; i += 20) await rt.store.write(Array.from({ length: 20 }, (_, k) => ({ insert: "articles", values: { slug: `bulk-${i + k}`, title: "Bulk", body: "b" } })));
+    await create("article-translations", { slug: "bulk-7", locale: "it", title: "Sette" });
+    const r = await call("GET", "/admin/api/entries?collection=articles&search=bulk&limit=120", editor);
+    expect(r.status).toBe(200);
+    expect(r.body.items).toHaveLength(120);
+    expect(r.body.items.filter((i: any) => i.translation_locales.length).map((i: any) => i.translation_locales)).toEqual([["it"]]);
+  });
+
   it("bootstrap carries the first page when a collection is named", async () => {
     const b = (await call("GET", "/admin/api/bootstrap?collection=metrics&limit=1", editor)).body;
     expect(b.entries.items).toHaveLength(1);
@@ -266,10 +275,11 @@ describe("Admin entries: CSV", () => {
   });
 
   it("exports a staff View with its declared columns, and hides a non-staff View", async () => {
+    for (let i = 120; i < 520; i += 20) await rt.store.write(Array.from({ length: 20 }, (_, k) => ({ insert: "metrics", values: { name: `bulk-${i + k}`, value: 0 } })));
     const res = await createAdminSurface(rt, { basePath: "/admin" })(new Request("http://x/admin/api/views/metric-list/export"), contributor);
     const lines = rows(await res.text());
     expect(lines[0]).toBe("name,note");
-    expect(lines.filter((l) => l.startsWith("bulk-"))).toHaveLength(120);
+    expect(lines.filter((l) => l.startsWith("bulk-"))).toHaveLength(520); // crosses the 500-row View page
     expect((await call("GET", "/admin/api/views/metric-hidden/export", owner)).status).toBe(404);
   });
 });
