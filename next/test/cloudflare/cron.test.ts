@@ -33,6 +33,16 @@ it.each([
   ["0 0 * * 5-7", "weekday 7 is not POSIX"],
   ["0 0 1 * 1", "not both"],
   ["0 0 */2 * MON", "not both"],
+  ["01 0 * * *", "leading zero"],
+  ["0 0 * * 01", "leading zero"],
+  ["60 0 * * *", "minute 60 is outside 0-59"],
+  ["0 24 * * *", "hour 24 is outside 0-23"],
+  ["0 0 0 * *", "day of month 0 is outside 1-31"],
+  ["0 0 * 13 *", "month 13 is outside 1-12"],
+  ["0 0 * * 5-1", "runs backwards"],
+  ["0 0 * * MON/2", "name with a step"],
+  ["0 0 * * */0", "step of '0'"],
+  ["0 0 * FOO *", "not a valid month"],
 ])("refuses %s", (cron, why) => {
   expect(() => toCloudflareCron(cron)).toThrow(`Cannot map the cron '${cron}' to Cloudflare:`);
   expect(() => toCloudflareCron(cron)).toThrow(why);

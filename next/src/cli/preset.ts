@@ -3,7 +3,7 @@
  * writes once and never again. Nothing here is compared by `--check`.
  */
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { RuntimePlan } from "../spec/index.js";
 import { toCloudflareCron } from "../spec/domain/service/CloudflareCron.js";
@@ -17,7 +17,8 @@ export interface PresetSelection {
 const MODULE = "../.mantle/generated/mantle.js";
 const OWNED = "// Written once by `mantle generate`; this file is yours now.";
 const json = (v: unknown) => `${JSON.stringify(v, null, 2)}\n`;
-const key = (s: string) => (/^[A-Za-z_$][\w$]*$/.test(s) ? s : JSON.stringify(s));
+/** `__proto__: fn` in an object literal sets the prototype instead of a handler, so it is computed. */
+const key = (s: string) => (s === "__proto__" ? '["__proto__"]' : /^[A-Za-z_$][\w$]*$/.test(s) ? s : JSON.stringify(s));
 
 function service({ identity, features }: PresetSelection): string {
   const mcp = features.includes("mcp");
@@ -48,7 +49,11 @@ function service({ identity, features }: PresetSelection): string {
     `  return async (request: Request${mantle ? ", waitUntil: (promise: Promise<unknown>) => void" : ""}): Promise<Response> => {`,
     "    const { pathname } = new URL(request.url);",
     "    const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);",
-    ...(mantle ? ["    await auth.ready; // Better Auth's context is per isolate: the request that starts it waits for it, or the next one hangs on it", "    const owned = await authRoutes(request, { waitUntil });", "    if (owned) return owned;"] : []),
+    ...(mantle ? ["    // Better Auth's context is per isolate: the request that starts it waits for it, or the next one hangs on it; a failed start is mounted again",
+      "    await auth.ready?.catch((error) => {",
+      "      routes = undefined;",
+      "      throw error;",
+      "    });", "    const owned = await authRoutes(request, { waitUntil });", "    if (owned) return owned;"] : []),
     ...(admin ? ['    if (under("/admin")) return admin(request);'] : []),
     ...(mcp ? ['    if (under("/mcp")) return mcp(request);'] : []),
     "    return rest(request);",
@@ -73,7 +78,8 @@ function service({ identity, features }: PresetSelection): string {
     ...(mantle ? [
       "/** One-time codes printed to the log are for local development: a deployed service picks its own sign-in method and sender. */",
       "function createAuth(env: Env, origin: string): MantleAuth {",
-      "  const local = /^http:\\/\\/(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?$/.test(origin);",
+      "  // an unset PUBLIC_ORIGIN is not local: the fallback origin below is only for URLs, never for deciding to print codes",
+      "  const local = env.PUBLIC_ORIGIN !== undefined && /^http:\\/\\/(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?$/.test(origin);",
       "  if (!local || !env.BETTER_AUTH_SECRET || !env.ADMIN_EMAIL)",
       '    return createSetupIncompleteAuth({ message: "Sign-in is not configured: copy .dev.vars.example to .dev.vars locally, or choose a sign-in method in src/service.ts." });',
       "  return createMantleAuth({",
@@ -135,17 +141,31 @@ import { toCloudflareCron } from "@aotter/mantle/cloudflare";
 import { plan } from "${MODULE}";
 import { mantle, type Env } from "./service.js";
 
-// Cloudflare names a cron as wrangler.jsonc spells it; the plan's schedule Triggers are POSIX
-const crons = new Map(Object.values(plan.triggers).flatMap((t) => (t.source.kind === "schedule" && t.source.enabled !== false ? [[toCloudflareCron(t.source.cron), t.source.cron] as const] : [])));
+// Cloudflare names a cron as wrangler.jsonc spells it; the plan's schedule Triggers are POSIX, and several spellings can share one
+const crons = new Map<string, string[]>();
+for (const t of Object.values(plan.triggers)) {
+  if (t.source.kind !== "schedule" || t.source.enabled === false) continue;
+  const cf = toCloudflareCron(t.source.cron);
+  const posix = crons.get(cf) ?? [];
+  if (!posix.includes(t.source.cron)) crons.set(cf, [...posix, t.source.cron]);
+}
 // not bound to one request, so a handler's ctx.waitUntil never lands on another request's finished context
 const ctx = { waitUntil };
 
 export default {
   fetch: (request, env) => mantle.fetch(request, env, ctx),
-  scheduled(controller, env) {
-    const cron = crons.get(controller.cron);
-    if (cron === undefined) throw new Error(\`No schedule Trigger runs on the Cloudflare cron '\${controller.cron}'\`);
-    return mantle.invokeSchedule(cron, controller.scheduledTime, env, ctx);
+  async scheduled(controller, env) {
+    const posix = crons.get(controller.cron);
+    if (posix === undefined) throw new Error(\`No schedule Trigger runs on the Cloudflare cron '\${controller.cron}'\`);
+    const errors: unknown[] = [];
+    for (const cron of posix) {
+      try {
+        await mantle.invokeSchedule(cron, controller.scheduledTime, env, ctx);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length) throw new AggregateError(errors, \`\${errors.length} cron spelling(s) failed for '\${controller.cron}'\`);
   },
 } satisfies ExportedHandler<Env>;
 `;
@@ -178,7 +198,6 @@ BETTER_AUTH_SECRET=replace-with-a-random-32-byte-secret
 /** The preset's files for this selection, by path. */
 export function presetFiles(root: string, selection: PresetSelection, plan: RuntimePlan): [string, string][] {
   return [
-    ["src/service.ts", service(selection)],
     ["src/handlers.ts", handlers(plan)],
     ...(selection.identity === "custom" ? [["src/identity.ts", IDENTITY] as [string, string]] : []),
     ["src/index.ts", ENTRY],
@@ -186,6 +205,8 @@ export function presetFiles(root: string, selection: PresetSelection, plan: Runt
     ["tsconfig.json", TSCONFIG],
     ...(selection.identity === "mantle" ? [[".dev.vars.example", DEV_VARS] as [string, string]] : []),
     [".gitignore", "node_modules/\n.wrangler/\n.dev.vars\n"],
+    // last: its existence is what marks the preset as written, so a write that failed midway is completed by the rerun
+    ["src/service.ts", service(selection)],
   ];
 }
 
@@ -197,13 +218,30 @@ export async function writePreset(root: string, selection: PresetSelection, plan
   if (existsSync(join(root, "src/service.ts"))) return [];
   const written: string[] = [];
   for (const [path, text] of presetFiles(root, selection, plan)) {
-    await mkdir(dirname(join(root, path)), { recursive: true });
     try {
+      await mkdir(dirname(join(root, path)), { recursive: true });
       await writeFile(join(root, path), text, { flag: "wx" });
       written.push(path);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") throw new Error(`cannot write ${path} (${code ?? "error"})`);
     }
   }
   return written;
+}
+
+/** What the application-owned files may have drifted from: never written, only reported. */
+export async function presetWarnings(root: string, selection: PresetSelection, selectionChanged: boolean, plan: RuntimePlan): Promise<string[]> {
+  if (!existsSync(join(root, "src/service.ts"))) return [];
+  const out: string[] = [];
+  if (selectionChanged) out.push(`the selection changed but src/service.ts already exists and is yours: update its composition to identity '${selection.identity}' and features ${selection.features.join(", ") || "none"}`);
+  const wrangler = await readFile(join(root, "wrangler.jsonc"), "utf8").catch(() => undefined);
+  if (wrangler !== undefined) {
+    const declared = new Set([...(/"crons"\s*:\s*\[([^\]]*)\]/.exec(wrangler)?.[1] ?? "").matchAll(/"([^"]*)"/g)].map((m) => m[1]!));
+    const wanted = new Set(Object.values(plan.triggers).flatMap((t) => (t.source.kind === "schedule" && t.source.enabled !== false ? [toCloudflareCron(t.source.cron)] : [])));
+    const missing = [...wanted].filter((c) => !declared.has(c));
+    const extra = [...declared].filter((c) => !wanted.has(c));
+    if (missing.length || extra.length) out.push(`wrangler.jsonc triggers.crons does not match the plan's schedule Triggers${missing.length ? `; add ${missing.map((c) => `"${c}"`).join(", ")}` : ""}${extra.length ? `; nothing runs on ${extra.map((c) => `"${c}"`).join(", ")}` : ""}`);
+  }
+  return out;
 }

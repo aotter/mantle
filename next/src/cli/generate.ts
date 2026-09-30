@@ -15,7 +15,7 @@ import { compileLinkedPlan, parseManifestSources, validateDiagnostic, ValidateMa
 import { translateParseArgsError } from "../spec/infrastructure/cli/parseArgsError.js";
 import { emitMantleModule } from "./emitModule.js";
 import { toCloudflareCron } from "../spec/domain/service/CloudflareCron.js";
-import { writePreset } from "./preset.js";
+import { presetWarnings, writePreset } from "./preset.js";
 
 const FEATURES = ["mcp", "admin", "web"] as const;
 const IDENTITIES = ["mantle", "custom", "none"] as const;
@@ -234,7 +234,14 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
       await writeFile(join(root, path), text, "utf8");
     }
     stdout.write(`Generated ${OUT}/plan.json and ${OUT}/mantle.ts (fingerprint ${compiled.plan.fingerprint.slice(0, 12)}; identity ${config.identity}; features ${config.features.join(", ") || "none"}).\n`);
-    const preset = await writePreset(root, config, compiled.plan);
+    let preset: string[];
+    try {
+      preset = await writePreset(root, config, compiled.plan);
+    } catch (err) {
+      return (stderr.write(`${err instanceof Error ? err.message : String(err)}; rerun mantle generate to finish the preset.\n`), 2);
+    }
+    const selectionChanged = !!saved && (saved.config.identity !== config.identity || saved.config.features.join() !== config.features.join());
+    for (const w of await presetWarnings(root, config, selectionChanged, compiled.plan)) stderr.write(`warning: ${w}\n`);
     if (preset.length) stdout.write(`Wrote the service preset, which is yours to edit: ${preset.join(", ")}.\n`);
     return 0;
   }

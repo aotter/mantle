@@ -5,7 +5,7 @@
  */
 import { execFile } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -254,4 +254,45 @@ describe("the service preset", () => {
     // ADR-0034 decision 3: only the CLI parses SQL, so the Worker bundle has no compiler
     expect((await bundle(dir)).filter((p) => /libpg-query|spec\/infrastructure/.test(p))).toEqual([]);
   }, 180_000);
+
+  it("an unset PUBLIC_ORIGIN is not local: a forged loopback Origin gets no one-time code", async () => {
+    const dir = await project([]);
+    await writeFile(join(dir, ".dev.vars"), "BETTER_AUTH_SECRET=0123456789abcdef0123456789abcdef\nADMIN_EMAIL=owner@example.com\n");
+    const worker = await boot(dir);
+    try {
+      const res = await worker.fetch("http://127.0.0.1:8787/api/auth/email-otp/send-verification-otp", {
+        method: "POST", headers: { "content-type": "application/json", origin: "http://127.0.0.1:8787" }, body: JSON.stringify({ email: "owner@example.com", type: "sign-in" }),
+      });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(await res.text()).toContain("not configured");
+    } finally {
+      await worker.dispose();
+    }
+  }, 180_000);
+
+  it("generate warns, and never writes, when wrangler.jsonc crons or the selection drift from the plan", async () => {
+    const dir = await project(["--features", ""]);
+    const service = await read(dir, "src/service.ts");
+    await writeFile(join(dir, "wrangler.jsonc"), (await read(dir, "wrangler.jsonc")).replace(/"crons": \[[^\]]*\]/, '"crons": ["5 5 * * *"]'));
+    const before = await read(dir, "wrangler.jsonc");
+    const r = await generate(dir, ["--features", "mcp"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("warning: wrangler.jsonc triggers.crons does not match");
+    expect(r.out).toContain("warning: the selection changed but src/service.ts already exists");
+    expect(await read(dir, "wrangler.jsonc")).toBe(before);
+    expect(await read(dir, "src/service.ts")).toBe(service);
+  }, 60_000);
+
+  it("a write that fails midway exits 2 and the rerun finishes the preset", async () => {
+    const dir = await project([]);
+    await rm(join(dir, "src/service.ts"));
+    await rm(join(dir, "wrangler.jsonc"));
+    await chmod(dir, 0o555);
+    const r = await generate(dir, []).finally(() => chmod(dir, 0o755));
+    expect(r.code).toBe(2);
+    expect(r.out).toContain("cannot write wrangler.jsonc (EACCES)");
+    expect(await exists(dir, "src/service.ts")).toBe(false);
+    expect((await generate(dir, [])).code).toBe(0);
+    expect(await exists(dir, "src/service.ts")).toBe(true);
+  }, 60_000);
 });
