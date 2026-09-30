@@ -7,9 +7,6 @@ import { STAFF_ROLES, type StaffRole } from "../spec/domain/index.js";
 import { dbOf } from "./db.js";
 import { staffInvitationEmail } from "./emailTemplates.js";
 
-export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, MemberUserInfo, StaffUserInfo } from "../admin/identity.js";
-
 import { backgroundTaskRetention, buildAuth } from "./buildAuth.js";
 import { normalizeAuthBasePath, normalizeAuthResponseCookies } from "./methods.js";
 import { assertActiveUserGrant, getProviderAccessTokenForRequest, mapRegisteredOAuthClient, parseStoredStringArray, verifyOAuthJwt, verifyOAuthJwtWithLocalJwks } from "./oauthTokens.js";

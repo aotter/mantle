@@ -12,9 +12,6 @@ import { readStoreInstanceId } from "../core/index.js";
 import { STAFF_ROLES } from "../spec/domain/index.js";
 import { dbOf } from "./db.js";
 
-export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, MemberUserInfo, StaffUserInfo } from "../admin/identity.js";
-
 import { type AuthHookContext, buildEmailOTPPlugin, buildGenericOAuthProviders, buildMagicLinkPlugin, buildOAuthProviderOptions, buildSocialProviders, buildTrustedOriginsFor, guardGithubLoginProfile, hasEmailAuthSurface, methodsRequireSameSiteNone, normalizeAuthBasePath, normalizeAuthErrorURL, pickSingleton, resolveClientIpHeaders, shouldPromoteToOwner, validateBootstrap } from "./methods.js";
 import type { BackgroundTaskRetainer, CreateMantleAuthOptions } from "./types.js";
 // Better Auth 1.7.2 initializes its shared stores asynchronously. Seed them
@@ -67,7 +64,6 @@ const userAc = ac.newRole({
   user: [],
   session: [],
 });
-
 
 export function buildAuth(config: CreateMantleAuthOptions) {
   const db = dbOf(config.driver);
