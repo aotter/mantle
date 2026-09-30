@@ -243,7 +243,7 @@ export function buildAuth(config: CreateMantleAuthOptions) {
     // can't both win: the loser's UPDATE finds a staff user in the
     // subquery and silently writes zero rows.
     const placeholders = STAFF_ROLES.map(() => "?").join(",");
-    const promoted = await db.count(`UPDATE "user" SET role = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM "user" WHERE role IN (${placeholders})) RETURNING id`, "owner", u.id, ...STAFF_ROLES);
+    const promoted = (await db.all(`UPDATE "user" SET role = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM "user" WHERE role IN (${placeholders})) RETURNING id`, "owner", u.id, ...STAFF_ROLES)).length;
     if (promoted === 0) {
       // Operator-visible signal that the rule matched but a prior
       // staff user already exists — otherwise the silent no-op makes a

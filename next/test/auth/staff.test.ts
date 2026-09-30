@@ -127,13 +127,35 @@ it("the statements Better Auth has no call for run on a real database: members, 
   const code = (client: string, user = "m1") => JSON.stringify({ type: "authorization_code", userId: user, query: { client_id: client } });
   for (const [id, value] of [["v1", code("c1")], ["v2", code("c2")], ["v3", code("c1", "m2")], ["v4", '{"otp":"123456","userId":"m1"}']] as const)
     await sql("INSERT INTO verification (id, identifier, value, \"expiresAt\", \"createdAt\", \"updatedAt\") VALUES (?1, ?1, ?2, ?3, ?3, ?3)", id, value, at(9));
+  // 120 rows that match the scan but are not a code of this grant sort before it: the sweep pages past them
+  for (let i = 0; i < 120; i++)
+    await sql("INSERT INTO verification (id, identifier, value, \"expiresAt\", \"createdAt\", \"updatedAt\") VALUES (?1, ?1, ?2, ?3, ?3, ?3)", `p${String(i).padStart(3, "0")}`, JSON.stringify({ type: "other", userId: "m1", query: { client_id: "c1" } }), at(9));
   expect(await auth.listOAuthConsents!("m1")).toEqual([
     { id: "k1", clientId: "c1", clientName: "Client One", scopes: ["mcp"] }, { id: "k2", clientId: "c2", clientName: "c2", scopes: ["mcp"] },
   ].sort((a, b) => (a.id < b.id ? -1 : 1)));
   expect([await auth.revokeOAuthConsent!("m2", "k1"), await auth.revokeOAuthConsent!("m1", "k1")]).toEqual([false, true]);
   const col = async (s: string) => (await sql(s))[0]!.rows.map((r) => Object.values(r).join(":"));
   expect(await col('SELECT id FROM "oauthConsent" ORDER BY id')).toEqual(["k2"]);
-  expect(await col("SELECT id FROM verification ORDER BY id")).toEqual(["v2", "v3", "v4"]);
+  expect(await col("SELECT id FROM verification WHERE id LIKE 'v%' ORDER BY id")).toEqual(["v2", "v3", "v4"]);
+  expect(await col("SELECT count(*) FROM verification WHERE id LIKE 'p%'")).toEqual(["120"]);
   expect(await col('SELECT id, revoked IS NOT NULL FROM "oauthAccessToken" ORDER BY id')).toEqual(["t1:1", "t2:0"]);
   expect(await col('SELECT id, revoked IS NOT NULL FROM "oauthRefreshToken" ORDER BY id')).toEqual(["rt1:1", "rt2:0"]);
+});
+
+it("two isolates preparing a fresh database at once both succeed; a prepared one skips Better Auth's introspection", async () => {
+  const { d1, driver } = sqlite();
+  let statements = 0;
+  const counted: typeof driver = { batch: async (s) => ((statements += s.length), driver.batch(s)) };
+  // every statement yields first, so the two isolates' introspection and table creation interleave
+  type St = { bind: (...b: unknown[]) => St; all: () => Promise<unknown> };
+  const slowSt = (st: St): St => ({ bind: (...b) => slowSt(st.bind(...b)), all: async () => (await new Promise((r) => setTimeout(r, 2)), st.all()) });
+  const raw = d1 as unknown as { prepare: (sql: string) => St; batch: (x: St[]) => Promise<unknown> };
+  const slow = { ...raw, prepare: (sql: string) => slowSt(raw.prepare(sql)), batch: (x: St[]) => Promise.all(x.map((st) => st.all())) } as unknown as typeof d1;
+  const make = () => createMantleAuth({ database: slow, driver: counted, baseURL: "http://localhost", secret: "x".repeat(40), ipAddressHeaders: ["x-real-ip"], methods: [{ kind: "email-otp", sender: { send: async () => {} } }] });
+  await driver.batch([{ sql: "CREATE TABLE _mantle_boot_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)" }]);
+  const settled = await Promise.allSettled([make().listMembers({ limit: 1 }), make().listMembers({ limit: 1 })]);
+  expect(settled.map((r) => (r.status === "rejected" ? String(r.reason) : r.status))).toEqual(["fulfilled", "fulfilled"]);
+  statements = 0;
+  await make().listMembers({ limit: 1 });
+  expect(statements).toBe(2); // the digest read, then the members query
 });
