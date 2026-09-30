@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, DiagnosticError, type Diagnostic } from "../../src/spec/index.js";
-import { createMantleRuntime, MAX_INVOCATION_DEPTH, sqliteStorage, systemCaller, type Caller, type DatabaseDriver, type HandlerContext, type InvocationCause, type MantleHandlers, type MantleRuntime } from "../../src/core/index.js";
+import { sqliteStorage } from "../../src/d1/index.js";
+import { createMantleRuntime, MAX_INVOCATION_DEPTH, systemCaller, type Caller, type DatabaseDriver, type HandlerContext, type InvocationCause, type MantleHandlers, type MantleRuntime } from "../../src/core/index.js";
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema

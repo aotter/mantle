@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, compileSql, DiagnosticError } from "../../src/spec/index.js";
-import { convergeStorage, type StorageSchema } from "../../src/core/sql/storage.js";
-import { decodeDate, encodeDate, encodeTimestamptz } from "../../src/core/sql/codec.js";
-import { print } from "../../src/core/sql/print.js";
-import { transitions } from "../../src/core/sql/tz.js";
+import { convergeStorage, type StorageSchema } from "../../src/d1/storage.js";
+import { decodeDate, encodeDate, encodeTimestamptz } from "../../src/d1/codec.js";
+import { print } from "../../src/d1/print.js";
+import { transitions } from "../../src/d1/tz.js";
 import { createMantleRuntime, type Caller } from "../../src/core/index.js";
-import { sqliteStorage } from "../../src/core/sql/adapter.js";
+import { sqliteStorage } from "../../src/d1/index.js";
 
 const open: LocalD1[] = [];
 const db = async () => { const d = await LocalD1.create(); open.push(d); return d; };

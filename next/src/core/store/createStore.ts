@@ -8,7 +8,7 @@ import { firstZodIssueAsJsonPointer, jsonSchemaToZod, SqlRefusal, type Authoriza
 import type { Caller } from "../caller.js";
 import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";
-import { decodeOutput } from "../sql/codec.js";
+import type { MantleDialect } from "../dialect.js";
 import type { BindContext, Mode } from "../sql/compile.js";
 import { num, op, ref, table } from "../sql/ast.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv } from "../sql/run.js";
@@ -33,6 +33,7 @@ export interface StoreView {
 
 export interface StoreDeps {
   readonly executor: StoreExecutor;
+  readonly dialect: MantleDialect;
   readonly schemas: StoreSchemas;
   readonly views: Readonly<Record<string, StoreView>>;
   readonly lifecycle?: LifecycleHooks;
@@ -56,9 +57,9 @@ async function guard<T>(f: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Decode what SQLite stores back to the declared JSON type (timestamps, dates, numerics, booleans, json). */
-function decode(row: StoreRow, types: ReadonlyMap<string, string>): StoreRow {
-  return Object.fromEntries(Object.entries(row).map(([k, v]) => [k, types.has(k) ? decodeOutput(types.get(k)!, v) : v]));
+/** Decode what the engine stores back to the declared JSON type (timestamps, dates, numerics, booleans, json). */
+function decode(dialect: MantleDialect, row: StoreRow, types: ReadonlyMap<string, string>): StoreRow {
+  return Object.fromEntries(Object.entries(row).map(([k, v]) => [k, types.has(k) ? dialect.codec.decode(types.get(k)!, v) : v]));
 }
 
 /** `caller` undefined is the host (trusted): no scope, TTL still applies. */
@@ -70,7 +71,7 @@ export function bindFor(now: number, caller: Caller | undefined): { mode: Mode; 
 
 /** `parent` is the invocation this Store serves: hooks it fires chain to it, so the depth limit and cause ids hold across writes. */
 function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCause): CallerStore {
-  const env = (mode: Mode): RunEnv => ({ executor: deps.executor, schemas: deps.schemas, mode, lifecycle: deps.lifecycle });
+  const env = (mode: Mode): RunEnv => ({ executor: deps.executor, dialect: deps.dialect, schemas: deps.schemas, mode, lifecycle: deps.lifecycle });
   let writes = 0;
   const as = (bound: BindContext) => ({
     bind: bound,
@@ -81,7 +82,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
 
   return {
     select: (q) => guard(async (): Promise<StoreSelectResult> => {
-      const json = new StoreJson(deps.schemas);
+      const json = new StoreJson(deps.schemas, deps.dialect.codec);
       const s = json.select(q);
       const binding = `${s.from}:${s.order.column.col}:${s.order.dir}`;
       const { mode, bind: b } = bindFor(deps.now(), caller);
@@ -89,12 +90,12 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       const program: Program = { kind: "view", inputs: json.inputs, ir: [s.ir] };
       const page = await runView(env(mode), program, as({ ...b, input: json.values }), { pageSize: s.pageSize, ...(cursor ? { cursor } : {}) });
       const types = new Map(s.columns.map((c) => [c.out, c.type]));
-      return { rows: page.rows.map((r) => decode(r, types)), ...(page.next ? { nextCursor: encodeCursor(binding, page.next) } : {}) };
+      return { rows: page.rows.map((r) => decode(deps.dialect, r, types)), ...(page.next ? { nextCursor: encodeCursor(binding, page.next) } : {}) };
     }),
 
     write: (ops) => guard(async (): Promise<readonly StoreWriteResult[]> => {
       if (!Array.isArray(ops) || !ops.length) throw invalid("A write takes a non-empty list of operations.");
-      const json = new StoreJson(deps.schemas, (schema) => [...(deps.lifecycle?.after ?? [])].some((k) => k.startsWith(`${schema}.`)));
+      const json = new StoreJson(deps.schemas, deps.dialect.codec, (schema) => [...(deps.lifecycle?.after ?? [])].some((k) => k.startsWith(`${schema}.`)));
       const built = ops.map((o) => json.write(o));
       // the parent is read before the batch, so one write may not publish a translation and move its parent too
       built.forEach((x, i) => {
@@ -120,7 +121,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
               const name = def.names?.[k] ?? k;
               if (type === "geo") { if (current[`${k}_lat`] != null && current[`${k}_lng`] != null) entry[name] = { lat: current[`${k}_lat`], lng: current[`${k}_lng`] }; continue; }
               const v = current[k];
-              if (v !== null && v !== undefined) entry[name] = decodeOutput(type, v);
+              if (v !== null && v !== undefined) entry[name] = deps.dialect.codec.decode(type, v);
               else if (v === null && nullable(name)) entry[name] = null; // a NULL is "absent" unless the field says null is a value
             }
             validateValues(def, { ...entry, ...Object.fromEntries(Object.entries(o.set).filter(([k]) => k !== "status")) }, "full");
@@ -166,7 +167,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       const decodeView = (row: StoreRow) => Object.fromEntries(Object.entries(row).map(([k, value]) => {
         const c = v.columns && Object.hasOwn(v.columns, k) ? v.columns[k]! : undefined;
         const def = c && deps.schemas[c.schema];
-        return def ? [k === c.field ? def.names?.[c.field] ?? k : k, decodeOutput(def.fields[c.field]!, value)] : [k, value];
+        return def ? [k === c.field ? def.names?.[c.field] ?? k : k, deps.dialect.codec.decode(def.fields[c.field]!, value)] : [k, value];
       }));
       return { rows: (v.columns ? page.rows.map(decodeView) : page.rows) as never, ...(page.next ? { nextCursor: encodeCursor(`view:${name}`, page.next) } : {}) };
     }),

@@ -1,7 +1,7 @@
 /** SqliteStoreExecutor: the only StoreExecutor (ADR-0034 decision 6). Prints IR and runs it on a DatabaseDriver. */
-import { DiagnosticError, runtimeDiagnostic, type Diagnostic } from "../../spec/kernel/index.js";
-import type { DatabaseDriver, SqlStatement } from "../driver.js";
-import type { StoreExecutor, StoreRow } from "../store.js";
+import { DiagnosticError, runtimeDiagnostic, type Diagnostic } from "../spec/kernel/index.js";
+import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
+import type { StoreExecutor, StoreRow } from "../core/store.js";
 import { print } from "./print.js";
 
 type Statement = Parameters<StoreExecutor["select"]>[0];

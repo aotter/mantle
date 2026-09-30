@@ -2,7 +2,7 @@
  * Store SQL and its IR (ADR-0034). The IR is libpg-query's parse tree for the
  * supported subset, with source locations stripped and every relation tagged
  * `table` or `cte`. Mantle designs no node types, so nodes are typed loosely on
- * purpose: the allowlist in `SqlIrValidator`, not a TypeScript type, constrains
+ * purpose: the dialect's allowlist (D1: `next/src/d1/validator.ts`), not a TypeScript type, constrains
  * them.
  *
  * Pure types and constants only. Nothing here imports the parser.

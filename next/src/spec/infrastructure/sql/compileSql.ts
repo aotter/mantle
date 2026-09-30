@@ -1,12 +1,12 @@
 /**
- * CLI side of ADR-0034: SQL text to IR. The parser reads the text; the allowlist runs on the raw
- * AST (so a refusal has a source offset); then locations are stripped and every relation is tagged.
- * Nothing in a Worker imports this module.
+ * The shared front end (ADR-0035 decision 4): SQL text to IR. The parser reads the text and every relation is tagged;
+ * the dialect's `accepts` runs on the raw AST (so a refusal has a source offset); then locations are stripped.
+ * The one dialect is D1 until `mantle.config.json` names one (ADR-0035 decision 5). Nothing in a Worker imports this module.
  */
 import type { SqlContext, SqlDiagnostic, SqlNode, SqlPlan } from "../../domain/model/SqlIr.js";
 import { PG_GRAMMAR } from "../../domain/model/SqlIr.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
-import { validateProgram } from "../../domain/service/SqlIrValidator.js";
+import { accepts } from "../../../d1/compile/index.js";
 import { parsePgSql } from "./PgQueryParser.js";
 
 export type CompileSqlResult = { readonly ok: true; readonly plan: SqlPlan } | { readonly ok: false; readonly diagnostic: SqlDiagnostic };
@@ -51,7 +51,7 @@ export async function compileSql(sql: string, ctx: SqlContext): Promise<CompileS
   try {
     const parsed = await parsePgSql(sql);
     const tagged = tagRelations(parsed.stmts) as SqlNode[];
-    validateProgram(tagged, { ...ctx, source: sql }, parsed.locations);
+    accepts(tagged, { ...ctx, source: sql }, parsed.locations);
     return { ok: true, plan: { grammar: PG_GRAMMAR, stmts: stripLocations(tagged) } };
   } catch (e) {
     if (e instanceof SqlRefusal) return { ok: false, diagnostic: toDiagnostic(e, sql) };

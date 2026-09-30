@@ -1,4 +1,5 @@
-import { createMantle, sqliteStorage, type MantleService } from "@aotter/mantle";
+import { createMantle, type MantleService } from "@aotter/mantle";
+import { sqliteStorage } from "@aotter/mantle/d1";
 import { plan } from "../.mantle/generated/mantle.js";
 import { handlers } from "./handlers.js";
 

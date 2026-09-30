@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import type { DatabaseDriver, MediaStorage } from "../../src/core/index.js";
-import { mediaLibrary } from "../../src/core/sql/media.js";
-import { prepareSite } from "../../src/core/sql/site.js";
+import { mediaLibrary } from "../../src/d1/media.js";
+import { prepareSite } from "../../src/d1/site.js";
 import { DiagnosticError } from "../../src/spec/index.js";
 
 let d1: LocalD1;

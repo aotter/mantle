@@ -4,12 +4,12 @@ import {
   DIAGNOSTIC_CODES,
   PG_GRAMMAR,
   compileSql,
-  validateIr,
   type SqlContext,
   type SqlDiagnosticCode,
   type SqlNode,
 } from "../../src/spec/index.js";
 import { parsePgSql } from "../../src/spec/infrastructure/sql/PgQueryParser.js";
+import { validateIr } from "../../src/d1/validator.js";
 
 const SQL_DIAGNOSTIC_CODES = DIAGNOSTIC_CODES.filter((c): c is SqlDiagnosticCode => c.startsWith("SQL_"));
 

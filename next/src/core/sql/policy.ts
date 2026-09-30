@@ -1,21 +1,20 @@
-// Runtime side (ADR-0034 decision 8): validated IR -> physical AST with policy injected and Mantle's
-// SQL functions lowered to plain SQLite. The result is still libpg-query's shape, so pgsql-deparser
-// prints it. Runs in the tenant Worker: no parser, only AST -> AST (the `sql()` templates are parsed
-// once by libpg-query's sync build here in the spike; production would ship them pre-parsed).
-import { KEYS, SqlRefusal as Refused, intervalMicros, parseNumeric, type SqlNode as N } from '../../spec/domain/index.js';
-import { encodeDate, encodeNumeric, encodeTimestamptz, sqliteType } from './codec.js';
+// The policy rewriter (ADR-0034 decision 8, ADR-0035 decision 3): validated IR -> physical AST with visibility, scope,
+// system columns and deterministic order injected. A dialect whose policy is "inject" supplies a PolicyLowering for what
+// only it can spell (casts, Mantle's functions, generated ids). The result is still libpg-query's shape.
+import { SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/index.js';
 import type { RelationPosition } from './positions.js';
-import type { StorageSchema as SchemaDef } from './storage.js';
+import type { StorageSchema as SchemaDef } from '../dialect.js';
 import { classify } from '../../spec/domain/index.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
 
 type Schemas = Record<string, SchemaDef>;
 
-export type Arg = { input: string; type: string } | { const: number };
+/** A bind a dialect's lowering adds; the dialect resolves it (`MantleDialect.bind`). */
+export type DialectBind = { readonly k: 'dialect'; readonly [key: string]: unknown };
 export type BindSpec =
   | { k: 'uid' } | { k: 'now' } | { k: 'role' } | { k: 'cutoff'; seconds: number } | { k: 'const'; value: unknown }
   | { k: 'input'; name: string; type: string }
-  | { k: 'box'; which: 'minLat' | 'maxLat' | 'minLng' | 'maxLng'; lat: Arg; lng: Arg; meters: number }
+  | DialectBind
   | { k: 'version' }
   | { k: 'cursor'; i: number };
 
@@ -36,7 +35,40 @@ export type PolicyOpts = {
   unsafeNoVisibility?: boolean;
   /** records every relation position the pass printed a wrapper for (the probe checks it is complete) */
   seen?: Set<RelationPosition>;
+  /** what the dialect spells itself */
+  lower: PolicyLowering;
 };
+
+/** What a lowering reads of the statement being rewritten. */
+export interface LoweringScope {
+  readonly inputs: Readonly<Record<string, string>>;
+  /** a bind, numbered once per distinct spec */
+  param(spec: BindSpec): N;
+  /** rewrite a sub-tree (policy and lowering apply inside it) */
+  tx(node: N | undefined): N;
+  /** the Schema an alias in scope reads, and the query of its `search(alias, q)` in the same select */
+  alias(name: string): { schema: string; def: SchemaDef; searchQuery?: N };
+  /** record a relation position the lowering reaches (the position probe checks the list is complete) */
+  seen(position: RelationPosition): void;
+}
+
+/** The pieces of a physical statement only the dialect can spell. Each takes the node already rewritten by Core, except where noted. */
+export interface PolicyLowering {
+  /** `input.<name>`: the bind, as the engine reads a value of this Mantle type */
+  input(param: N, type: string): N;
+  /** A function call, before rewriting (`f` is its name without `pg_catalog.`): its lowering, or undefined to keep it a call. */
+  func(f: string, n: N, scope: LoweringScope): N | undefined;
+  /** A call that is kept, with its arguments rewritten. */
+  call(out: N): N;
+  /** A cast, before rewriting. */
+  cast(n: N, scope: LoweringScope): N;
+  /** A subquery link, with its subquery rewritten. */
+  sublink(out: N): N;
+  /** A new entry id, for an insert that names none. */
+  newId(): N;
+  /** Extra columns a Schema's read wrapper exposes (the dialect's own index joins). */
+  columns(s: SchemaDef): N[];
+}
 export type Compiled = {
   ast: N;
   binds: BindSpec[];
@@ -58,45 +90,17 @@ const and = (...args: (N | undefined | false)[]): N | undefined => {
   return a.length === 0 ? undefined : a.length === 1 ? a[0] : { BoolExpr: { boolop: 'AND_EXPR', args: a } };
 };
 const or = (...a: N[]): N => ({ BoolExpr: { boolop: 'OR_EXPR', args: a } });
-const fn = (f: string, ...args: N[]): N => ({ FuncCall: { funcname: [S(f)], args, funcformat: 'COERCE_EXPLICIT_CALL' } });
-const cast = (x: N, t: string): N => ({ TypeCast: { arg: x, typeName: { names: [S(t)], typemod: -1 } } });
 const bump = (): N => res(op('+', col('version'), num(1)), 'version');
 const touch = (c: C): N => res(param$(c, { k: 'now' }), 'updated_at');
 const sort = (node: N): N => ({ SortBy: { node, sortby_dir: 'SORTBY_DEFAULT', sortby_nulls: 'SORTBY_NULLS_DEFAULT' } });
-const newId = (): N => fn('lower', fn('hex', fn('randomblob', num(16))));
-const clone = <T,>(x: T): T => structuredClone(x);
-
-/**
- * A lowering written as SQLite text. `__name` splices a (cloned) sub-AST, in parentheses; everything else is
- * emitted as written. The printer prints a `Raw` node as a parenthesized expression, so the runtime parses nothing.
- */
-const TOKEN = /"(?:[^"]|"")*"|'(?:[^']|'')*'|__\w+/g;
-function sql(text: string, subst: Record<string, N> = {}): N {
-  const parts: (string | N)[] = [];
-  let last = 0;
-  // a placeholder is only ever unquoted: a quoted identifier or string is text, so a user's alias `n__q` cannot be spliced into
-  for (const m of text.matchAll(TOKEN)) {
-    if (!m[0].startsWith('__')) continue;
-    const node = subst[m[0]];
-    if (!node) throw new Error(`lowering template names ${m[0]} but was not given it`);
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    parts.push('(', clone(node), ')');
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return { Raw: { parts } };
-}
-const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
 
 // ---- Schema helpers -------------------------------------------------------------------------------
-const geoFields = (s: SchemaDef) => Object.entries(s.fields).filter(([, t]) => t === 'geo').map(([f]) => f);
 // the scope column is never read back, not even by `SELECT *`: it is the caller's own subject key
 const declaredCols = (s: SchemaDef) => Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
 /** what the wrapper exposes: the declared fields plus the columns policy and hooks read */
 const readable = (s: SchemaDef) => ['id', 'version', 'created_at', 'updated_at', 'author_id', ...(s.publishing ? ['status'] : []), ...declaredCols(s)];
 /** what `SELECT *` and `RETURNING *` expand to: declared fields only, never scope or system columns */
 const starCols = (s: SchemaDef) => declaredCols(s);
-const needsRid = (s: SchemaDef) => !!s.search?.length || geoFields(s).length > 0;
 
 // ---- policy ---------------------------------------------------------------------------------------
 type SelInfo = { container: RelationPosition; hasWindow: boolean; hasJsonEach: boolean; scope: Map<string, string>; searchQ: Map<string, N> };
@@ -153,7 +157,7 @@ function wrap(rv: N, c: C): N {
   c.seen?.add(position);
   const a = rv.alias?.aliasname ?? rv.relname;
   const targets = readable(s).map((f) => res(col(f)));
-  if (needsRid(s)) targets.push(res(col('rowid'), '_rid'));
+  targets.push(...c.lower.columns(s));
   return {
     RangeSubselect: {
       alias: { aliasname: a },
@@ -175,109 +179,26 @@ const hasFunc = (v: any, pred: (name: string, n: N) => boolean): boolean => {
   return Object.values(v).some((x) => hasFunc(x, pred));
 };
 
-// ---- expression lowering (Mantle SQL -> SQLite) -----------------------------------------------------
-const OFF = (x: string) => `coalesce((SELECT offset_us FROM _mantle_tz WHERE from_us <= ${x} ORDER BY from_us DESC LIMIT 1), 0)`;
-const FD = (a: string, b: number) => `((${a} - ((${a} % ${b}) + ${b}) % ${b}) / ${b})`; // exact integer floor division
-/** A function that survives lowering prints as a plain call: no `pg_catalog.` prefix, no SQL-syntax form (TRIM(BOTH FROM x)). */
-function plainCall(n: N, c: C): N {
-  const out = deep(n, c, 'FuncCall');
-  if (out.funcname[0].String.sval === 'pg_catalog') out.funcname = out.funcname.slice(1);
-  if (out.funcname.length === 1 && out.funcname[0].String.sval === 'btrim') out.funcname = [S('trim')]; // PostgreSQL's spelling of trim(x)
-  out.funcformat = 'COERCE_EXPLICIT_CALL';
-  return { FuncCall: out };
-}
-const LOCAL = `(__ts + ${OFF('__ts')})`; // wall-clock microseconds in the site time zone, read as if UTC
-const DAY = 86_400_000_000;
-const TRUNC: Record<string, string> = {
-  hour: `(${FD(LOCAL, 3_600_000_000)} * 3600000000)`,
-  day: `(${FD(LOCAL, DAY)} * ${DAY})`,
-  week: `((${FD(LOCAL, DAY)} - (((${FD(LOCAL, DAY)} + 3) % 7 + 7) % 7)) * ${DAY})`, // 1970-01-01 is a Thursday; ISO weeks start on Monday
-  month: `(unixepoch(strftime('%Y-%m-01 00:00:00', ${FD(LOCAL, 1_000_000)}, 'unixepoch')) * 1000000)`,
-  year: `(unixepoch(strftime('%Y-01-01 00:00:00', ${FD(LOCAL, 1_000_000)}, 'unixepoch')) * 1000000)`,
-};
-const EXTRACT: Record<string, string> = { year: '%Y', month: '%m', day: '%d', hour: '%H', dow: '%w' };
-const HAV = (lat1: string, lng1: string) =>
-  `(2 * 6371008.8 * asin(min(1.0, sqrt(sin(radians(__lat - ${lat1}) / 2) * sin(radians(__lat - ${lat1}) / 2) + cos(radians(${lat1})) * cos(radians(__lat)) * sin(radians(__lng - ${lng1}) / 2) * sin(radians(__lng - ${lng1}) / 2)))))`;
-
-const strConst = (n: N) => n?.A_Const?.sval?.sval as string | undefined;
-const argOf = (n: N, c: C): Arg => {
-  const k = n.ColumnRef?.fields?.length === 2 ? n.ColumnRef.fields[1].String.sval : undefined;
-  if (k) return { input: k, type: c.inputs[k]! };
-  return { const: Number(n.A_Const?.ival?.ival ?? n.A_Const?.fval?.fval) };
-};
-
-function lookupAlias(c: C, alias: string): { schema: string; def: SchemaDef; info: SelInfo } {
+// ---- lowering: Core's own functions, then the dialect's -------------------------------------------------
+function lookupAlias(c: C, alias: string): { schema: string; def: SchemaDef; searchQuery?: N } {
   for (const info of [...c.sel].reverse()) {
     const name = info.scope.get(alias);
-    if (name) return { schema: name, def: c.schemas[name]!, info };
+    if (name) return { schema: name, def: c.schemas[name]!, searchQuery: info.searchQ.get(alias) };
   }
   throw new Refused('SQL_FUNCTION', `${alias} is not a Schema in scope: search() and near() take a Schema alias`);
 }
+const scopeOf = (c: C): LoweringScope => ({
+  inputs: c.inputs, param: (spec) => param$(c, spec), tx: (node) => tx(node, c), alias: (name) => lookupAlias(c, name), seen: (p) => c.seen?.add(p),
+});
 
-function lowerFunc(n: N, c: C): N | undefined {
+function lowerFunc(n: N, c: C): N {
   const f = n.funcname.map((x: N) => x.String.sval).join('.').replace(/^pg_catalog\./, '');
-  const args: N[] = n.args ?? [];
   switch (f) {
     case 'auth.uid': return param$(c, { k: 'uid' });
     case 'auth.role': return param$(c, { k: 'role' });
     case 'now': return param$(c, { k: 'now' });
-    case 'date_trunc': {
-      const ts = tx(args[1], c);
-      return sql(`(${TRUNC[strConst(args[0]!)!]}) - ${OFF(`(${TRUNC[strConst(args[0]!)!]}) - ${OFF('__ts')}`)}`, { __ts: ts });
-    }
-    case 'extract': {
-      const ts = tx(args[1], c);
-      return sql(`CAST(strftime('${EXTRACT[strConst(args[0]!)!]}', ${FD(LOCAL, 1_000_000)}, 'unixepoch') AS INTEGER)`, { __ts: ts });
-    }
-    case 'search': case 'search_rank': {
-      const alias = args[0]!.ColumnRef.fields[0].String.sval;
-      const { schema, def, info } = lookupAlias(c, alias);
-      if (!def.search?.length) throw new Refused('SQL_FUNCTION', `${schema} declares no search fields`);
-      c.seen?.add('search');
-      const fts = q(`_mantle_fts_${schema}`), a = q(alias);
-      const query = tx(f === 'search' ? args[1] : info.searchQ.get(alias) ?? (() => { throw new Refused('SQL_FUNCTION', `search_rank(${alias}) needs a search(${alias}, ...) in the same query`); })(), c);
-      const phrase = `'"' || replace(__q, '"', '""') || '"'`; // a quoted phrase: FTS5 operators in the query are literal. `fts = q` is FTS5's spelling of `fts MATCH q`; PostgreSQL's grammar has no MATCH
-      if (f === 'search_rank') return sql(`coalesce((SELECT bm25(${fts}) FROM ${fts} WHERE ${fts} = ${phrase} AND rowid = ${a}._rid), 0)`, { __q: query });
-      const like = def.search.map((fld) => `${a}.${q(fld)} LIKE '%' || replace(replace(replace(__q, '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!'`).join(' OR ');
-      // trigram cannot match under three characters: fall back to LIKE over the same fields
-      return sql(`CASE WHEN length(__q) >= 3 THEN ${a}._rid IN (SELECT rowid FROM ${fts} WHERE ${fts} = ${phrase}) ELSE (${like}) END`, { __q: query });
-    }
-    case 'near': case 'distance': {
-      const [ref, latN, lngN] = args;
-      const alias = ref!.ColumnRef.fields[0].String.sval, fld = ref!.ColumnRef.fields[1].String.sval;
-      const { schema, def } = lookupAlias(c, alias);
-      if (def.fields[fld] !== 'geo') throw new Refused('SQL_FUNCTION', `${schema}.${fld} is not a geo field`);
-      const a = q(alias);
-      const dist = HAV(`${a}.${q(fld + '_lat')}`, `${a}.${q(fld + '_lng')}`);
-      const sub = { __lat: tx(latN, c), __lng: tx(lngN, c) };
-      if (f === 'distance') return sql(dist, sub);
-      c.seen?.add('near');
-      const meters = Number(args[3]!.A_Const.ival?.ival ?? args[3]!.A_Const.fval?.fval);
-      const b = (which: 'minLat' | 'maxLat' | 'minLng' | 'maxLng') => param$(c, { k: 'box', which, lat: argOf(latN!, c), lng: argOf(lngN!, c), meters });
-      const geo = q(`_mantle_geo_${schema}_${fld}`);
-      return sql(`(${a}._rid IN (SELECT id FROM ${geo} WHERE minLat >= __b0 AND maxLat <= __b1 AND minLng >= __b2 AND maxLng <= __b3) AND ${dist} <= ${meters})`,
-        { ...sub, __b0: b('minLat'), __b1: b('maxLat'), __b2: b('minLng'), __b3: b('maxLng') });
-    }
   }
-  return undefined;
-}
-
-function lowerCast(n: N, c: C): N {
-  const t = n.typeName.names.at(-1).String.sval as string;
-  const lit = n.arg?.A_Const;
-  const litStr = lit?.sval?.sval ?? lit?.fval?.fval ?? (lit?.ival?.ival !== undefined ? String(lit.ival.ival) : undefined);
-  if (t === 'interval') return num(intervalMicros(lit.sval.sval, n.typeName.typmods?.[0]?.A_Const?.ival?.ival));
-  if (t === 'timestamptz') return num(encodeTimestamptz(litStr!));
-  if (t === 'date') return num(encodeDate(litStr!));
-  if (t === 'numeric') {
-    const [p, s] = n.typeName.typmods.map((m: N) => m.A_Const.ival.ival);
-    parseNumeric(`numeric(${p}, ${s})`);
-    return num(encodeNumeric(litStr!, p, s));
-  }
-  // PostgreSQL: a number is true when non-zero, text by its spelling; NULL stays NULL. A bare `x <> 0` is always true for text in SQLite ('false' <> 0 is 1)
-  if (t === 'bool') return sql(`CASE WHEN typeof(__x) = 'text' THEN lower(__x) IN ('t', 'true', 'y', 'yes', 'on', '1') WHEN __x IS NULL THEN NULL ELSE __x <> 0 END`, { __x: tx(n.arg, c) });
-  const target = t === 'int4' || t === 'int8' ? 'integer' : t === 'float8' ? 'real' : 'text';
-  return cast(tx(n.arg, c), target);
+  return c.lower.func(f, n, scopeOf(c)) ?? c.lower.call(deep(n, c, 'FuncCall'));
 }
 
 // ---- traversal --------------------------------------------------------------------------------------
@@ -286,15 +207,11 @@ const H: Record<string, (n: N, c: C) => N> = {
     const f = n.fields.map((x: N) => x.String?.sval);
     if (f[0] !== 'input' || f.length !== 2) return { ColumnRef: n };
     const type = c.inputs[f[1]]!;
-    return cast(param$(c, { k: 'input', name: f[1], type }), sqliteType(type)); // decision 5: every bind is CAST to its declared type
+    return c.lower.input(param$(c, { k: 'input', name: f[1], type }), type);
   },
-  FuncCall: (n, c) => lowerFunc(n, c) ?? plainCall(n, c),
-  SubLink: (n, c) => {
-    const out = deep(n, c, 'SubLink');
-    if (out.subLinkType === 'ANY_SUBLINK') delete out.operName; // `x = ANY (subquery)` is `x IN (subquery)`; SQLite has no ANY
-    return { SubLink: out };
-  },
-  TypeCast: (n, c) => lowerCast(n, c),
+  FuncCall: (n, c) => lowerFunc(n, c),
+  SubLink: (n, c) => c.lower.sublink(deep(n, c, 'SubLink')),
+  TypeCast: (n, c) => c.lower.cast(n, scopeOf(c)),
   RangeVar: (n, c) => wrap(n, c),
   SelectStmt: (n, c) => select(n, c),
   UpdateStmt: (n, c) => update(n, c),
@@ -322,8 +239,8 @@ export function tx(v: any, c: C): any {
   const ks = Object.keys(v);
   const k0 = ks[0]!;
   if (ks.length === 1 && H[k0]) return H[k0]!(v[k0], c);
-  // `{ NodeType: body }` is a node; anything else (WindowDef's body, `{ items }`, `{ ival }`) is a bare body
-  if (ks.length === 1 && KEYS[k0]) {
+  // `{ NodeType: body }` is a node (node types are capitalized); anything else (WindowDef's body, `{ items }`, `{ ival }`) is a bare body
+  if (ks.length === 1 && /^[A-Z]/.test(k0)) {
     const body = v[k0];
     return { [k0]: body && typeof body === 'object' && !Array.isArray(body) ? deep(body, c, k0) : body };
   }
@@ -441,7 +358,7 @@ function insert(n: N, c: C): N {
     ['updated_at', param$(c, { k: 'now' })],
     ['author_id', param$(c, { k: 'uid' })],
     // a scoped Schema always gets a generated id: a caller-chosen id would collide with (and reveal) another owner's row
-    ...(named('id') && !s.scope ? [] : [['id', newId()] as [string, N]]),
+    ...(named('id') && !s.scope ? [] : [['id', c.lower.newId()] as [string, N]]),
   ];
   out.cols = [...out.cols, ...fill.map(([name]) => ({ ResTarget: { name } }))];
   // The user's VALUES/SELECT becomes a derived table so the fills never interact with its DISTINCT or

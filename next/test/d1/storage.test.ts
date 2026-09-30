@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, expect, it } from "vitest";
 import { loadModule, parseSync } from "libpg-query";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
-import { convergeStorage, planStorageChanges, type StorageSchema } from "../../src/core/sql/storage.js";
+import { convergeStorage, planStorageChanges, type StorageSchema } from "../../src/d1/storage.js";
 
 const expr = (text: string) => (parseSync(`SELECT 1 WHERE ${text}`) as any).stmts[0].stmt.SelectStmt.whereClause;
 beforeAll(() => loadModule());

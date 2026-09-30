@@ -1,6 +1,6 @@
 /** `@aotter/mantle/cloudflare`: the D1 driver. Structural types, so this needs no `@cloudflare/workers-types`. */
 import type { DatabaseDriver } from "../core/driver.js";
-import { sqliteStorage } from "../core/sql/adapter.js";
+import { sqliteStorage } from "../d1/index.js";
 import type { SiteDefaults } from "../spec/domain/index.js";
 
 interface D1PreparedStatement { bind(...values: unknown[]): D1PreparedStatement }

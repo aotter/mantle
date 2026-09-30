@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import process, { cwd as processCwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
 import type { DatabaseDriver } from "../core/driver.js";
-import { planStorageChanges } from "../core/sql/storage.js";
+import { planStorageChanges } from "../d1/storage.js";
 import { compileLinkedPlan, parseManifestSources, validateDiagnostic, ValidateManifestsUseCase, type Diagnostic } from "../spec/index.js";
 import { translateParseArgsError } from "../spec/infrastructure/cli/parseArgsError.js";
 import { emitMantleModule } from "./emitModule.js";

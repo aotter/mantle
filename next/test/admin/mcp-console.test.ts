@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, type StaffRole } from "../../src/spec/index.js";
 import { createMantleRuntime, type Caller, type MantleRuntime } from "../../src/core/index.js";
-import { sqliteStorage } from "../../src/core/sql/adapter.js";
+import { sqliteStorage } from "../../src/d1/index.js";
 import { createAdminSurface } from "../../src/admin/index.js";
 import { CLIENT_CAPABILITIES_META_KEY } from "@modelcontextprotocol/server";
 import { createMcpSurface, type McpApps } from "../../src/mcp/index.js";

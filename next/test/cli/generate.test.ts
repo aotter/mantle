@@ -8,8 +8,9 @@ import { runGenerate } from "../../src/cli/generate.js";
 import { emitTypesFromManifests, type ViewManifest } from "../../src/spec/index.js";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import type { DatabaseDriver } from "../../src/core/driver.js";
-import { createMantleRuntime, sqliteStorage } from "../../src/core/index.js";
-import { convergeStorage } from "../../src/core/sql/storage.js";
+import { createMantleRuntime } from "../../src/core/index.js";
+import { sqliteStorage } from "../../src/d1/index.js";
+import { convergeStorage } from "../../src/d1/storage.js";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/app", import.meta.url));
 const SRC = fileURLToPath(new URL("../../src", import.meta.url));
@@ -196,7 +197,7 @@ describe("the generated module type-checks against Core", () => {
     const program = ts.createProgram([join(dir, "src/service.ts")], {
       strict: true, noEmit: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler,
       lib: ["lib.es2023.d.ts"], types: ["node"], typeRoots: [TYPES], resolveJsonModule: true, skipLibCheck: true, noUncheckedIndexedAccess: true,
-      paths: { "@aotter/mantle": [join(SRC, "core/index.ts")], "@aotter/mantle/spec": [join(SRC, "spec/index.ts")] },
+      paths: { "@aotter/mantle": [join(SRC, "core/index.ts")], "@aotter/mantle/d1": [join(SRC, "d1/index.ts")], "@aotter/mantle/spec": [join(SRC, "spec/index.ts")] },
     });
     return ts.getPreEmitDiagnostics(program).map((d) => `${d.file ? d.file.fileName.slice(dir.length) : ""}: ${ts.flattenDiagnosticMessageText(d.messageText, "\n")}`);
   };

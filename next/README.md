@@ -12,10 +12,10 @@ next/src/spec/         → @aotter/mantle/spec       next/src/admin/   → @aott
 next/src/testing/      → @aotter/mantle/testing    next/src/mcp/     → @aotter/mantle/mcp
 next/src/cloudflare/   → @aotter/mantle/cloudflare next/src/web/     → @aotter/mantle/web
 next/src/bun/          → @aotter/mantle/bun        next/src/cli/     → bin: mantle
-next/src/vercel/       → @aotter/mantle/vercel
+next/src/vercel/       → @aotter/mantle/vercel     next/src/d1/      → @aotter/mantle/d1 (and /d1/compile)
 ```
 
-`core` imports only `spec`; no folder imports `admin`, `web`, `auth` or a platform folder unless it is one of them. `check:boundaries` enforces this. The browser package, `@aotter/mantle-ui`, stays in `packages/mantle-ui` and absorbs `mantle-admin-ui` at the swap.
+`core` imports only `spec` and holds no engine code: SQLite lives in `d1`, the built-in dialect (ADR-0035). No folder imports `admin`, `web`, `auth` or a platform folder unless it is one of them. `check:boundaries` enforces this. The browser package, `@aotter/mantle-ui`, stays in `packages/mantle-ui` and absorbs `mantle-admin-ui` at the swap.
 
 ## Rules
 

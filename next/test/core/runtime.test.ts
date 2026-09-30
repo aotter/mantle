@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, DiagnosticError, planFingerprint, type RuntimePlan } from "../../src/spec/index.js";
 import { createMantle, createMantleRuntime, systemCaller, type Caller, type HandlerContext, type Invocation, type MantleHandlers, type MantleRuntime } from "../../src/core/index.js";
-import { sqliteStorage } from "../../src/core/sql/adapter.js";
+import { sqliteStorage } from "../../src/d1/index.js";
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema

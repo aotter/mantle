@@ -8,8 +8,7 @@ import { firstZodIssueAsJsonPointer, jsonSchemaToZod, type JsonSchema, type SqlN
 import type { ZodType } from "zod";
 import { classify } from "../../spec/domain/index.js";
 import { S, op, ref, table, target } from "../sql/ast.js";
-import { encodeInput } from "../sql/codec.js";
-import type { StorageSchema } from "../sql/storage.js";
+import type { StorageSchema, StoreCodec } from "../dialect.js";
 import type { StoreScalar, StoreSelect, StoreWhere, StoreWriteOp } from "../store.js";
 
 /** A Schema as the Store sees it: `names` maps a lower-cased column to the name its JSON Schema declares. */
@@ -68,7 +67,7 @@ export class StoreJson {
   readonly inputs: Record<string, string> = {};
   readonly values: Record<string, unknown> = {};
   /** `wantRow` says whether a Schema has an after hook: its writes then return the whole entry, which the hook receives (ADR-0032 decision 3). */
-  constructor(private readonly schemas: StoreSchemas, private readonly wantRow: (schema: string) => boolean = () => false) {}
+  constructor(private readonly schemas: StoreSchemas, private readonly codec: StoreCodec, private readonly wantRow: (schema: string) => boolean = () => false) {}
 
   private schema(name: unknown): { name: string; def: StoreSchema } {
     const def = typeof name === "string" ? this.schemas[name.toLowerCase()] : undefined;
@@ -94,7 +93,7 @@ export class StoreJson {
     const ok = type === "bool" ? typeof v === "boolean" : type === "text" || type === "date" ? typeof v === "string"
       : type.startsWith("numeric(") || type === "json" ? true : typeof v === "number" && Number.isFinite(v) || (type === "timestamptz" && typeof v === "string");
     if (!ok) throw invalid(`${what} expects a value of type ${type}.`);
-    try { encodeInput(type, v); } catch (e) { throw invalid(`${what}: ${e instanceof Error ? e.message : String(e)}`); }
+    try { this.codec.encode(type, v); } catch (e) { throw invalid(`${what}: ${e instanceof Error ? e.message : String(e)}`); }
     const name = `v${Object.keys(this.inputs).length}`;
     this.inputs[name] = type;
     this.values[name] = v;
