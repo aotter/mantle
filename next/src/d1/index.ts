@@ -3,4 +3,3 @@
  * rendering and codec, FTS5 and R*Tree lowering, and trigger-based convergence, over any SQLite-family `DatabaseDriver`.
  */
 export { sqliteStorage } from "./adapter.js";
-export { readStoreInstanceId, runMigrations, type Migration } from "./migrations.js";

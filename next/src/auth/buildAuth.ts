@@ -8,9 +8,8 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { readStoreInstanceId } from "../d1/index.js";
 import { STAFF_ROLES } from "../spec/domain/index.js";
-import { dbOf } from "./db.js";
+import { dbOf, readStoreInstanceId } from "./db.js";
 
 import { type AuthHookContext, buildEmailOTPPlugin, buildGenericOAuthProviders, buildMagicLinkPlugin, buildOAuthProviderOptions, buildSocialProviders, buildTrustedOriginsFor, guardGithubLoginProfile, hasEmailAuthSurface, methodsRequireSameSiteNone, normalizeAuthBasePath, normalizeAuthErrorURL, pickSingleton, resolveClientIpHeaders, shouldPromoteToOwner, validateBootstrap } from "./methods.js";
 import type { BackgroundTaskRetainer, CreateMantleAuthOptions } from "./types.js";
@@ -244,8 +243,8 @@ export function buildAuth(config: CreateMantleAuthOptions) {
     // can't both win: the loser's UPDATE finds a staff user in the
     // subquery and silently writes zero rows.
     const placeholders = STAFF_ROLES.map(() => "?").join(",");
-    const result = await db.run(`UPDATE user SET role = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM user WHERE role IN (${placeholders}))`, "owner", u.id, ...STAFF_ROLES);
-    if ((result.meta?.changes ?? 0) === 0) {
+    const promoted = await db.count(`UPDATE "user" SET role = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM "user" WHERE role IN (${placeholders})) RETURNING id`, "owner", u.id, ...STAFF_ROLES);
+    if (promoted === 0) {
       // Operator-visible signal that the rule matched but a prior
       // staff user already exists — otherwise the silent no-op makes a
       // misconfigured bootstrap rule indistinguishable from a working
@@ -279,7 +278,7 @@ export function buildAuth(config: CreateMantleAuthOptions) {
           }
           if (value?.type !== "authorization_code" || typeof value.userId !== "string" ||
               typeof value.query?.client_id !== "string") return;
-          const consent = await db.first<{ id: string }>("SELECT id FROM oauthConsent WHERE userId = ? AND clientId = ? LIMIT 1", value.userId, value.query.client_id);
+          const consent = await db.first<{ id: string }>('SELECT id FROM "oauthConsent" WHERE "userId" = ? AND "clientId" = ? LIMIT 1', value.userId, value.query.client_id);
           // Better Auth carries referenceId from this code through every
           // refresh rotation. Never rebind an old lineage to a new consent.
           return { data: { value: JSON.stringify({ ...value, referenceId: consent?.id ?? "" }) } };

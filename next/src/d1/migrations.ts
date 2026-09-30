@@ -43,13 +43,6 @@ export async function runMigrations(driver: DatabaseDriver, migrations: readonly
   }
 }
 
-/** Identity minted by the store itself when it was first converged; derivative caches use it as a namespace. */
-export async function readStoreInstanceId(driver: DatabaseDriver): Promise<string> {
-  const id = (await driver.batch([{ sql: "SELECT value FROM _mantle_boot_state WHERE key = 'instance'" }]).catch((e) => { if (/no such table/i.test(String(e))) return undefined; throw e; }))?.[0]?.rows[0]?.value;
-  if (typeof id !== "string") throw new Error("Mantle storage must be converged before using derivative storage.");
-  return id;
-}
-
 /** A migration is SQL text with several statements; D1 takes one per prepared statement. Splits at `;` outside strings, identifiers and comments. */
 export function splitSqlStatements(sql: string): string[] {
   const out: string[] = [];

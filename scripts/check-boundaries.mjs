@@ -258,9 +258,8 @@ function checkPackageDirection() {
  */
 function checkNextFolderImports() {
   // Core holds no engine code (ADR-0035 decision 3): SQLite lives in `d1`. `spec` reaches only the built-in dialect's compile
-  // side; `auth` reaches `d1` until its SQL moves to Better Auth's Kysely, and `testing` until it runs over the dialect interface
-  // (ADR-0035, How to apply 4 and 5).
-  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], testing: ["core", "spec", "d1"], cloudflare: ["core", "spec", "d1"], bun: ["core", "spec"], vercel: ["core", "spec"], auth: ["core", "spec", "admin", "d1"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1"] };
+  // side; `testing` reaches `d1` until it runs over the dialect interface (ADR-0035, How to apply 5).
+  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], testing: ["core", "spec", "d1"], cloudflare: ["core", "spec", "d1"], bun: ["core", "spec"], vercel: ["core", "spec"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1"] };
   const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec", "pgsql-deparser": "d1" };
   const root = join(ROOT, "next/src");
   for (const [folder, reach] of Object.entries(folders)) {

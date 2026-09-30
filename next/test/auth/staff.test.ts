@@ -84,3 +84,56 @@ it("staff management acts as the signed-in owner through Better Auth's admin API
   expect(await auth.deleteUser(invited.id)).toBe(true);
   expect(await auth.deleteUser(invited.id)).toBe(false);
 });
+
+it("the statements Better Auth has no call for run on a real database: members, invites, linked accounts, consents", async () => {
+  const { d1, driver } = sqlite();
+  const auth = createMantleAuth({
+    database: d1, driver, baseURL: "http://localhost", secret: "x".repeat(40), ipAddressHeaders: ["x-real-ip"],
+    methods: [{ kind: "email-otp", sender: { send: async () => {} } }],
+    oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/oauth/consent", scopes: ["mcp"], mcpResource: "http://localhost/mcp" },
+  });
+  await auth.listOAuthConsents!("u"); // prepares Better Auth's tables
+  const at = (d: number) => new Date(Date.UTC(2026, 0, d)).toISOString();
+  const sql = (s: string, ...binds: unknown[]) => driver.batch([{ sql: s, binds }]);
+  const user = (id: string, email: string, verified: number, role: string | null, day: number) =>
+    sql('INSERT INTO "user" (id, name, email, "emailVerified", role, "createdAt", "updatedAt") VALUES (?1, ?1, ?2, ?3, ?4, ?5, ?5)', id, email, verified, role, at(day));
+  await user("boss", "boss@x.test", 1, "owner", 1);
+  await user("m1", "one@x.test", 1, null, 2);
+  await user("m2", "two@x.test", 1, "user", 3);
+  await user("inv", "inv@x.test", 0, "editor", 4);
+  await sql('INSERT INTO account (id, "accountId", "providerId", "userId", issuer, "createdAt", "updatedAt") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)', "a1", "gh1", "github", "m1", "https://github.com", at(5));
+
+  // members: everyone but staff, in creation order, searched and paged by cursor
+  const page1 = await auth.listMembers({ limit: 1 });
+  expect([page1.items.map((m) => m.email), page1.items[0]!.emailVerified]).toEqual([["one@x.test"], true]);
+  expect((await auth.listMembers({ limit: 1, cursor: page1.nextCursor! })).items.map((m) => m.email)).toEqual(["two@x.test"]);
+  expect((await auth.listMembers({ limit: 10, search: "TWO" })).items.map((m) => m.id)).toEqual(["m2"]);
+  expect(await auth.getUser("m1")).toMatchObject({ email: "one@x.test", emailVerified: true, githubLogin: null });
+
+  // linked accounts, and an invite that nobody signed in to is the only user revokeInvite deletes
+  expect((await auth.listLinkedAccounts("m1")).map((a) => a.providerId)).toEqual(["github"]);
+  expect([await auth.unlinkAccount("m1", "google"), await auth.unlinkAccount("m1", "github"), await auth.listLinkedAccounts("m1")]).toEqual([false, true, []]);
+  expect([await auth.revokeInvite("m1"), await auth.revokeInvite("inv"), await auth.getUser("inv")]).toEqual([false, true, null]);
+
+  // a consent: its tokens are revoked, its pending codes and the consent deleted; another client's and an OTP stay
+  for (const [id, client, name] of [["cl1", "c1", "Client One"], ["cl2", "c2", null]] as const)
+    await sql('INSERT INTO "oauthClient" (id, "clientId", name, "redirectUris") VALUES (?1, ?2, ?3, ?4)', id, client, name, "[]");
+  for (const [id, client] of [["k1", "c1"], ["k2", "c2"]] as const)
+    await sql('INSERT INTO "oauthConsent" (id, "clientId", "userId", scopes, "createdAt", "updatedAt") VALUES (?1, ?2, ?3, ?4, ?5, ?5)', id, client, "m1", '["mcp"]', at(6));
+  for (const [id, client] of [["t1", "c1"], ["t2", "c2"]] as const) {
+    await sql('INSERT INTO "oauthAccessToken" (id, token, "clientId", "userId", "expiresAt", "createdAt", scopes) VALUES (?1, ?1, ?2, ?3, ?4, ?4, ?5)', id, client, "m1", at(9), '["mcp"]');
+    await sql('INSERT INTO "oauthRefreshToken" (id, token, "clientId", "userId", "expiresAt", "createdAt", scopes) VALUES (?1, ?1, ?2, ?3, ?4, ?4, ?5)', `r${id}`, client, "m1", at(9), '["mcp"]');
+  }
+  const code = (client: string, user = "m1") => JSON.stringify({ type: "authorization_code", userId: user, query: { client_id: client } });
+  for (const [id, value] of [["v1", code("c1")], ["v2", code("c2")], ["v3", code("c1", "m2")], ["v4", '{"otp":"123456","userId":"m1"}']] as const)
+    await sql("INSERT INTO verification (id, identifier, value, \"expiresAt\", \"createdAt\", \"updatedAt\") VALUES (?1, ?1, ?2, ?3, ?3, ?3)", id, value, at(9));
+  expect(await auth.listOAuthConsents!("m1")).toEqual([
+    { id: "k1", clientId: "c1", clientName: "Client One", scopes: ["mcp"] }, { id: "k2", clientId: "c2", clientName: "c2", scopes: ["mcp"] },
+  ].sort((a, b) => (a.id < b.id ? -1 : 1)));
+  expect([await auth.revokeOAuthConsent!("m2", "k1"), await auth.revokeOAuthConsent!("m1", "k1")]).toEqual([false, true]);
+  const col = async (s: string) => (await sql(s))[0]!.rows.map((r) => Object.values(r).join(":"));
+  expect(await col('SELECT id FROM "oauthConsent" ORDER BY id')).toEqual(["k2"]);
+  expect(await col("SELECT id FROM verification ORDER BY id")).toEqual(["v2", "v3", "v4"]);
+  expect(await col('SELECT id, revoked IS NOT NULL FROM "oauthAccessToken" ORDER BY id')).toEqual(["t1:1", "t2:0"]);
+  expect(await col('SELECT id, revoked IS NOT NULL FROM "oauthRefreshToken" ORDER BY id')).toEqual(["rt1:1", "rt2:0"]);
+});
