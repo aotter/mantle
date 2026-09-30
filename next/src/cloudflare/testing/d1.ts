@@ -21,7 +21,7 @@ export class LocalD1 {
   private constructor(private readonly worker: Awaited<ReturnType<typeof unstable_startWorker>>) {}
 
   static async create(): Promise<LocalD1> {
-    const worker = await unstable_startWorker({ config: CONFIG, dev: { persist: false, logLevel: "error", watch: false } });
+    const worker = await unstable_startWorker({ config: CONFIG, dev: { persist: false, logLevel: "error", watch: false, inspector: false, server: { port: 0 } } });
     await worker.ready;
     return new LocalD1(worker);
   }
