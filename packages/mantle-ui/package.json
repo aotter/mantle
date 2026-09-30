@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-ui",
-  "version": "0.1.5-alpha.1",
+  "version": "0.2.0-alpha.1",
   "description": "Shared interaction UI for Mantle Admin and MCP Apps: a framework-free controller (/controller), React components on top of it, the UI kit (/kit) and the MCP App (/mcp-app).",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
@@ -91,9 +91,6 @@
     }
   },
   "devDependencies": {
-    "@aotter/mantle-mcp": "workspace:*",
-    "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*",
     "@modelcontextprotocol/client": "2.1.0",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@tailwindcss/vite": "^4.3.3",

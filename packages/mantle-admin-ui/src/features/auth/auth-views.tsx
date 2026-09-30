@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { OAuthConsentInfo, OAuthConsentRequest } from "@aotter/mantle-admin";
+import type { OAuthConsentInfo, OAuthConsentRequest } from "@aotter/mantle/admin";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, LogOut } from "lucide-react";
 import { Button } from "@aotter/mantle-ui/kit";

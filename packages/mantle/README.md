@@ -1,320 +1,127 @@
-# @aotter/mantle
+# `next/`: the Mantle 0.2.0 construction zone
 
-Umbrella entry for the embeddable Mantle SDK — a manifest-driven application
-engine built around a 4-atom YAML model (Schema / View / Procedure / Trigger)
-where agents write config and the runtime carries the complexity.
+0.2.0 (ADR-0032, ADR-0033) is built here as one private package, next to the shipped ones. Nothing under `packages/` changes while this is built, so `develop` can still ship 0.1.x fixes. At the end, `next/` becomes `@aotter/mantle` in one change.
 
-> Mantle's first stable release is `0.1.2`. Use this package's `package.json`
-> as the exact installed version.
+## Layout
 
-## Install
+`next/` is a single private package, `@aotter/mantle-next` until the swap (the workspace already has `@aotter/mantle`). Areas are folders, and each folder is one subpath (ADR-0032 decision 13):
 
-An agent can install the small bootstrap skill:
-
-```sh
-npx skills add aotter/mantle
+```
+next/src/core/         → @aotter/mantle            next/src/auth/    → @aotter/mantle/auth
+next/src/spec/         → @aotter/mantle/spec       next/src/admin/   → @aotter/mantle/admin
+next/src/testing/      → @aotter/mantle/testing    next/src/mcp/     → @aotter/mantle/mcp
+next/src/cloudflare/   → @aotter/mantle/cloudflare next/src/web/     → @aotter/mantle/web
+next/src/bun/          → @aotter/mantle/bun        next/src/cli/     → bin: mantle
+next/src/vercel/       → @aotter/mantle/vercel     next/src/d1/      → @aotter/mantle/d1 (and /d1/compile)
 ```
 
-For a new application, resolve one published stable version and install it
-exactly. `mantle generate` will declare matching selected packages:
+`core` imports only `spec` and holds no engine code: SQLite lives in `d1`, the built-in dialect (ADR-0035). No folder imports `admin`, `web`, `auth` or a platform folder unless it is one of them. `check:boundaries` enforces this. The browser package, `@aotter/mantle-ui`, stays in `packages/mantle-ui` and absorbs `mantle-admin-ui` at the swap.
 
-```bash
-MANTLE_VERSION=$(npm view @aotter/mantle@latest version)
-npm install --save-exact "@aotter/mantle@$MANTLE_VERSION"
-```
+## Rules
 
-## What's inside
+- `next/` depends only on external libraries and never imports `packages/*`. Code that carries over is **copied** and then changed, so the old package stays intact until the swap.
+- Every public name comes from ADR-0032 or ADR-0033. A new one needs an ADR amendment first.
+- Old tests are the source of the contract. A rule is ported as a failing conformance case before the code that satisfies it is written.
+- Each step below is one reviewed PR, with a Whiteboard.
 
-The umbrella provides Spec and Runtime by default. Install an optional package
-before importing its matching Web, MCP, Admin, Auth, Bun, Vercel, Cloudflare, or Admin UI
-subpath. Every sub-package also remains directly installable.
+## Steps
 
-| Subpath | Re-exports |
+| Step | Output | Review focus |
+|---|---|---|
+| 0 | This scope map | Is the scope right? |
+| 1 | `next/src/spec`: the manifest grammar with Store authored as SQL, `compilePlan` (SQL to IR, ADR-0034), the validator; example manifests as fixtures | The grammar and the SQL subset |
+| 2 | `next/src/core`: interfaces only (Store, StoreExecutor, Caller, Invocation, HandlerContext, MantleService, `createMantle`, surface signatures), plus the conformance suite as listed, unimplemented cases | **Architecture and method definitions: the main gate** |
+| 3 | Implementation against the contract: SqliteStoreExecutor (the only executor, ADR-0034), then the ported drivers, auth and surfaces | PRs, not every line |
+| 4 | Delete the old packages, move `next/` to `packages/mantle`, fold `mantle-admin-ui` into `mantle-ui`, move the plugin's helper scripts, ship `docs/upgrade-0.1-to-0.2.md` (no codemod, ADR-0032 amendment) | The swap |
+
+## Package map
+
+**Rewrite**: new design, written fresh against the ADRs. **Port**: existing, proven logic copied and moved onto the new interfaces. **Delete**: removed with no replacement, or replaced by something listed under Rewrite.
+
+| Today (npm) | 0.2.0 | Action |
+|---|---|---|
+| `@aotter/mantle-spec` (9.0k src) | `next/src/spec` | Rewrite the grammar; port the checkers and the tooling |
+| `@aotter/mantle-runtime` (13.6k) | `next/src/core` | Rewrite Store, invocation and identity; port the rest |
+| `@aotter/mantle-cloudflare` (4.1k) | `next/src/cloudflare` | Port the bindings and driver; delete the Worker composition |
+| `@aotter/mantle-bun` (0.1k) | `next/src/bun` | Port the driver only; experimental |
+| `@aotter/mantle-vercel` (0.1k) | `next/src/vercel` | Port the driver only; experimental |
+| `@aotter/mantle-indexeddb` (0.7k) | none | Delete: one SQLite executor, tested on workerd and local D1 (ADR-0034) |
+| `@aotter/mantle-auth` (2.4k) | `next/src/auth` | Port behind `CallerResolver` and `AdminIdentity` |
+| `@aotter/mantle-admin` (3.2k) | `next/src/admin` | Port into `createAdminSurface` |
+| `@aotter/mantle-mcp` (0.7k) | `next/src/mcp` | Port into `createMcpSurface` |
+| `@aotter/mantle-web` (2.1k) | `next/src/web` | Port into `createWebSurface` and `createRestSurface` |
+| `@aotter/mantle` (1.6k CLI, codegen) | `next/src/cli` | Rewrite `generate` and codegen |
+| `@aotter/mantle-ui` (4.9k) | `packages/mantle-ui` | Stays the browser package; gains `/admin` |
+| `@aotter/mantle-admin-ui` (18.2k) | `@aotter/mantle-ui/admin` | Port at the swap: pagination, base path, drop `/kit` and `rowBindings` |
+| `@aotter/mantle-host` (never published) | the plugin | Its source becomes the plugin's Cloud helper scripts; the name disappears |
+
+Only `next/src/spec` and `next/src/core` are built before the step 2 review. The other folders start in step 3.
+
+### `next/src/spec`, from `@aotter/mantle-spec`
+
+| Action | Modules |
 |---|---|
-| `@aotter/mantle/spec` (or root) | Manifest grammar, validators, JSON-Schema→Zod, diagnostic catalog (no env / no IO) |
-| `@aotter/mantle/runtime` | Hexagonal runtime: domain ports, use cases, infrastructure helpers (no adapter deps) |
-| `@aotter/mantle/runtime/testing` | Node-only crowded SQLite planner and HTTP sampling helpers |
-| `@aotter/mantle/codegen` | Pure linked manifests or compiled plan → typed runtime module emitter (no IO) |
-| `@aotter/mantle/web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition (no routes or platform deps) |
-| `@aotter/mantle/mcp` | Optional MCP server over the official SDK: one capability surface per handler |
-| `@aotter/mantle/admin` | Optional Admin API, auth routes, and static-asset composition |
-| `@aotter/mantle/auth` | Optional host-neutral Better Auth identity; adapters own IP headers and storage bindings |
-| `@aotter/mantle/bun` | Bun adapter — caller-owned `bun:sqlite` and Web-standard View/Trigger transport |
-| `@aotter/mantle/vercel` | Vercel Functions adapter — injected durable storage and platform `waitUntil` |
-| `@aotter/mantle/vercel/libsql` | Optional application-owned Turso/libSQL driver |
-| `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, Workers Cache, R2, and Better Auth 1.7 MCP/CIMD |
-| `@aotter/mantle/admin-ui` | Pre-built React 19 admin SPA bundle |
+| Rewrite | `ManifestGrammar` (Store authored as SQL: a View is one `SELECT`, a Procedure is write statements, `input`, POSIX cron, no `errorPolicy`), `ManifestParser` (1.9k), `ManifestGraphValidator` (1.5k); new `compilePlan` (SQL to IR with `libpg-query`, CLI only; the IR validator is plain JS the runtime shares, ADR-0034) |
+| Port | `kernel/diagnostic` (+ `conflict`), `LifecycleStateMachine` (+ `decideLifecycleWrite` from the parked `refactor/20260927-lifecycle-decision`), `EntryDataValidator`, `JsonSchemaToZod`, `LocaleCanonicalizer`, `SiteConfig`, `SiteDefaultsValidator`, `SchemaIndexChecker`, `SchemaAdminUiChecker`, `SchemaSearchChecker`, `CrossSchemaChecker`, `ManifestLinker`, `ManifestPartition`, `ManifestLocaleTrimmer`, `ManifestPathDiagnoser`, `McpToolNaming`, `StaffRoleHierarchy`, `MediaMimeAccept`, manifest validation and type emission (the `validate`, `introspect`, `emit-openapi` and `emit-types` commands are gone: `generate` covers them, ADR-0032 amendment) |
+| Delete | `BUILTIN_OPS`, `HandlerBuiltinBinding`, the Filter AST (`FILTER_COMPARISON_OPS`), `VIEW_PARAMS_RESERVED`, `$param` and `{"$ctx.user": …}`, `HookErrorPolicy` |
 
-```ts
-import { linkManifestSet, parseManifestSources } from "@aotter/mantle/spec";
-import { bootMantleRuntime, compileRuntimePlan } from "@aotter/mantle/runtime";
-import { createMantleWeb } from "@aotter/mantle/web";
-import { mountRuntimeEndpoints } from "@aotter/mantle/cloudflare";
-```
+### `next/src/core`, from `@aotter/mantle-runtime`
 
-The umbrella installs only Spec and Runtime. Web, Admin, Auth, Admin UI, Bun,
-Vercel, and Cloudflare are optional peers; install only the subpaths selected
-by the application.
-
-The package also installs `mantle` and `mantle-harness`:
-
-```bash
-pnpm exec mantle generate
-pnpm exec mantle generate --check
-pnpm exec mantle skills
-pnpm exec mantle skills --check
-pnpm exec mantle-harness indexes --require-public
-pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
-```
-
-`mantle generate --host cf` or `--host chatgpt-sites` assembles a new blank
-app with Spec, Runtime, API, MCP, Admin and Web by default. Use `--features`
-to select a smaller set, including host-free Spec-only. The first run declares
-matching optional dependencies; install them, then rerun. In an existing
-direct-authored app, `generate` keeps its compile behavior: validate
-`./manifests/` and write `.mantle/generated/mantle.ts`. Selected Admin syncs
-its prebuilt SPA to `public/_mantle/admin/`. Generation does not deploy.
-The same pure emitter is available from `@aotter/mantle/codegen` when a host
-wants to own parsing and filesystem IO. TypeScript-authored manifests can pass
-their already-compiled `plan` directly:
-
-```ts
-import { emitMantleModule } from "@aotter/mantle/codegen";
-
-const emitted = emitMantleModule({ plan });
-if (!emitted.ok) throw new Error(emitted.diagnostics.map(({ message }) => message).join("\n"));
-```
-
-```ts
-import { bootMantleRuntime } from "@aotter/mantle/runtime";
-import { plan } from "../.mantle/generated/mantle.js";
-import type { Store, MantleHandlers } from "../.mantle/generated/mantle.js";
-
-const typedHandlers: MantleHandlers<typeof env> = handlers;
-const runtime = await bootMantleRuntime({ plan, storage, handlers: typedHandlers, ports });
-const store = runtime.store as Store;
-const notes = await store.view("published-notes");
-await store.write([{ insert: "orders", values: data }]);
-await runtime.invokeProcedure({
-  procedure: "expire-order", input: { orderId },
-  ctx: { user: null, staff: null, env },
-});
-```
-
-Generated type maps use the authored wire names. The generated module has no
-per-Schema or per-View runtime wrappers; the host owns boot, caching and retry.
-For a caller-authenticated View, pass the verified context through
-`runtime.store.as(ctx).view(view, options)`.
-
-Start with [Project layout and CLI](docs/handbook/start/project-and-cli.md).
-The [local Admin OTP](docs/handbook/start/quickstart-admin.md) tutorial remains
-for apps that own their Worker entry. Generated apps start with an editable
-blank home and no invented business Schema.
-
-`mantle skills` copies every skill the installed package marks
-`projection: project` in its front matter into matching
-`.agents/skills/mantle-*` and `.claude/skills/mantle-*` paths — no list of
-skill names is maintained anywhere else. Skills that act destructively or
-target one platform stay out of that set and are opt-in. Both tool layouts
-receive identical bytes; `--check` detects drift without writing. An older
-project may also carry `.agent/skills/`, which is left untouched. Manifest
-generation never rewrites agent instructions.
-
-SDK upgrades use the package manager and the version-matched update skill.
-For npm peer-resolution troubleshooting, see [the authoring guide](docs/handbook/start/project-and-cli.md).
-See [Releases](docs/handbook/releases/index.md) for what each stable version
-contains and what it requires.
-
-## Conventional Cloudflare Worker
-
-The normal Worker entry delegates Core-owned assembly to the SDK:
-
-```ts
-import { createMantleWorker } from "@aotter/mantle/cloudflare";
-import { plan } from "../.mantle/generated/mantle.js";
-
-export default createMantleWorker({ plan });
-```
-
-`createMantleWorker` owns conventional D1/assets bindings, Auth, Admin,
-manifest REST/HTTP routes, OAuth, MCP, cache safety, and rejection-safe
-per-isolate boot. Use its single `extend` seam for application handlers and
-new Hono routes; use the public low-level exports when the deployment does not
-fit the conventional binding or lifecycle contract.
-
-Conventional Auth requires an explicit `MANTLE_AUTH_MODE`: `self-managed`
-uses the site's GitHub OAuth credentials, while `hosted` uses a same-origin
-Mantle Hosted Auth PKCE client. Missing, invalid, partial, or mixed-mode
-configuration keeps public routes available but returns `503 setup_incomplete`
-from Auth-owned private routes. Pass `auth: (env) => Auth` only when the site
-needs to replace this conventional factory; Core still owns the Auth routes.
-The exact bindings and validation rules are in the
-`node_modules/@aotter/mantle-cloudflare/README.md`, under “Conventional Auth”
-(path relative to the application root).
-
-Extensions may add routes but may not replace Core surfaces. These paths are
-reserved:
-
-- `/admin` and `/admin/*`
-- `/_mantle` and `/_mantle/*`
-- `/api/auth` and `/api/auth/*`
-- `/api/views` and `/api/views/*`
-- `/oauth` and `/oauth/*`
-- `/mcp` and `/mcp/*`
-- `/.well-known/oauth*`
-- global `*` and `/*` handlers
-
-A custom Auth factory's `basePath` and exact manifest-owned method/path pairs
-are also reserved at assembly. Static literal conflicts fail TypeScript during
-the consumer build. Computed paths cannot be proven statically, so the facade
-checks Hono's assembled route table and fails closed before serving requests.
-There is no standard-route override option.
-
-Cloudflare projects may expose an independently installed Admin bundle and the
-application's own frontend assets through one native binding:
-
-```toml
-[assets]
-directory = "./public"
-binding = "ASSETS"
-```
-
-Declare browser, Admin, and MCP identity once. Multiple renditions are allowed;
-keep SVG as the source and add PNG renditions when a target MCP client requires
-the baseline raster formats:
-
-```ts
-siteDefaults: {
-  icons: [
-    { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
-    { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
-  ],
-}
-```
-
-Keep both files in the project's `public/` directory. They are one site
-identity reused by browser favicons, Admin chrome, and MCP `serverInfo.icons`;
-PNG is the compatibility rendition and SVG remains the editable source.
-
-For an uncommon deployment that must own the top-level assembly, use the
-embedded [`docs/handbook/cloudflare/low-level-composition.md`](docs/handbook/cloudflare/low-level-composition.md)
-fixture. It composes the same public primitives without importing package
-internals or rebuilding Mantle's adapters.
-
-## Getting started
-
-Cold start from GitHub or a marketplace host:
-
-```sh
-npx skills add aotter/mantle
-```
-
-That skill interviews, pins this package, then uses the CLI and the
-[direct-authoring guide](docs/handbook/start/project-and-cli.md).
-The owner or agent writes the application's manifests, entry and configuration;
-`generate` compiles them and `skills` projects the version-matched instructions.
-The [minimal Worker reference](docs/examples/host-minimal-worker/README.md) is
-the embed / adapter path without Admin. The
-[local Admin OTP reference](docs/examples/host-local-admin-otp/README.md) is the
-opt-in Dev UI path. Neither is a scaffold command. Admin is optional.
-
-## Agent marketplace install
-
-Install the Mantle Core skill bundle before authoring or maintaining a
-consumer application. The canonical command is:
-
-```sh
-npx skills add aotter/mantle
-```
-
-Claude Code and Codex can install the plugin, then run that skill:
-
-```bash
-# Claude Code
-/plugin marketplace add aotter/mantle
-/plugin install mantle@mantle
-
-# Codex
-codex plugin marketplace add aotter/mantle
-codex plugin add mantle@mantle
-```
-
-Cursor and VS Code Copilot can auto-discover the GitHub repo through
-`.cursor-plugin/plugin.json` and `.copilot-plugin/plugin.json` after the repo
-is cloned or opened. Still start from the `npx skills add` sentence (or open
-`skills/install/SKILL.md`). Untagged `aotter/mantle` resolves to `main`, which
-can contain a source-only hotfix ahead of the latest npm release. Add
-`@vX.Y.Z` only to reproduce an older project; never point a consumer at
-`develop` or another moving branch.
-
-## Marketplace capability installs
-
-In a consumer application, tell your coding agent:
-
-```txt
-Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
-Use repo-local mantle:plugin to update <plugin id> in this repo.
-Use repo-local mantle:plugin to remove <plugin id> from this repo.
-```
-
-Mantle marketplace entries are agent-installable recipes. They declare the
-plugin source, Mantle version range, files/atoms/routes/tools, adapter
-requirements, secrets, and checks. The agent applies the recipe through the
-Core-owned `mantle:plugin` skill and records it in `.mantle/plugins.json` plus
-`.mantle/plugins.lock.json`. There is no `mantle plugin add` CLI yet.
-
-## Adapter targets
-
-| Adapter | Status |
+| Action | Modules |
 |---|---|
-| Bun | ✅ shipping |
-| Vercel Functions (Node.js) | ✅ shipping |
-| Cloudflare Workers | ✅ shipping |
+| Rewrite | `domain/model/Store` and `usecase/store/*` (Store over the IR with policy rewrites); `HandlerContext` into `Caller`, `Invocation`, `InvocationCause` and `HandlerContext`; `MantleRuntime.ts` into `createMantleRuntime` and `createMantle`; `InvokeProcedureUseCase` (one path for every `Invocation`, `ctx.invoke`, depth limit); `RunLifecycleHooksUseCase` and `RunDeferredHookUseCase` into the `LifecycleDispatcher`; `RuntimePlanCompiler` (plan v6, SHA-256 fingerprint, handler bijection); the `StoreExecutor` port; `SqliteStoreExecutor` (from `SqliteStoreQuery` and the write half of `DatabaseEntryRepository`); storage convergence (ADR-0033) in place of the ledger path in `SqliteSchemaTables` |
+| Port | `AuthPredicateEvaluator` (against `Caller`), `CapabilityCatalog`, `CallableCapabilityProjector`, `InvokeCapabilityUseCase`, `bindCapabilities`, `InteractionCompiler`, `StandardOutputSchema`, `PathMatcher`, `TriggerIndex`, `LocaleNegotiator`, `ViewParamCoercer` (as View `input` coercion), `EntryWriteGuard` (into Store validation), `EntryMutationDiagnostics`; media (`usecase/media/*`, `MediaStorage`, `DatabaseMediaAssetRepository`, `DatabasePendingUploadRepository`); site config (`DatabaseSiteConfigRepository`, `UpdateSiteSettingsUseCase`); boot (`SqliteMigrationRunner`, `canonicalMigrations` without the auth DDL, `bootState`, `ValidateBootUseCase`); ports `DatabaseDriver`, `Clock`, `IdGenerator`, `EmailSender`, `AuditSink`, `RunObservationStore`; `createMantleRequestHandler` and `readJsonBody`; `infrastructure/testing` (`StorageConformance` becomes the executor conformance suite; the benchmark and index-coverage harnesses) |
+| Delete | ports `EntryRepository`, `EntryReader`, `AtomicEntryWriter`, `ExpirySweeper`, `DeferredHookDispatcher`, `HandlerRegistry`; `DatabaseEntryRepository` (read half), `LifecycleHookingEntryRepository`, `JoinedEntryReader`, `BuiltinProjector`, `InvokeBuiltinUseCase`, every `usecase/content/*` use case, the declarative path of `ExecuteViewUseCase` and `SqliteViewCompiler`, `SqliteMigrationArtifact`, the managed mode of `SqliteMantleStorageAdapter`, the three cursor formats, `Pagination` (`page`/`show`) |
 
-The `mantle-runtime` package never imports platform-specific types — adapters
-bind concrete storage and lifecycle primitives to Core ports, so adding a new
-adapter is a port-implementation exercise, not a runtime refactor.
+### Other packages
 
-## Documentation
+| Package | Port | Delete |
+|---|---|---|
+| cloudflare | `D1DatabaseDriver`, `KvSiteConfigRepository`, `R2MediaStorage`, `WorkersQueueHookDispatcher` (as `runDeferredHook` delivery), `handlers/turnstile`, `oauth/cachePolicy`; new `toCloudflareCron` | `createMantleWorker`, `bootRuntimeOnce`, `mountPublicRoutes` (to REST and Web surfaces), `mountMcp` (to `createMcpSurface`), `resolveCaller` (to mantle-auth's `CallerResolver`), `conventionalAuth` and `createAuth` (to mantle-auth and the preset) |
+| bun, vercel | `BunDatabaseDriver`, the libSQL driver | `createBunMantle`, `createVercelMantle` |
+| indexeddb | none | the package: `IndexedDbEntryRepository`, `IndexedDbViewQueryExecutor` (ADR-0034) |
+| auth | `createMantleAuth` (Better Auth wiring, OAuth provider, `appleClientSecret`, email templates); its tables only through Better Auth's `getMigrations`; the #1152 hardening; Better Auth past 1.7.2 (#1189) | the `MantleAuth` shape as the adapter's required type; `getUserRole` as a surface dependency |
+| admin | `mountMantleAdmin` (2.8k) into `createAdminSurface`, reading through Store, facets from `AdminIdentity`; `mountMantleOAuth` into mantle-auth's routes; `staffMcp` into the MCP surface | `AdminAuth`; the session-shape dependency |
+| mcp | `createMantleMcpServer`, `createMantleMcpHandler`, `apps` into `createMcpSurface` | bearer verification inside the surface |
+| web | SEO, sitemap, markdown and HTML rendering, `webmcp`, the frontend client, into `createWebSurface` and `createRestSurface` over Store | `EntryReader` reads |
+| mantle | `skills`, `harness` | `--host`, `generate-sites.ts`, `generate-cloudflare.ts` (into the one Cloudflare preset), per-name codegen, dependency closure |
+| mantle-host | the `mantle-host` script source and tests, as the plugin's Cloud helper scripts that orchestrate `https://cloud.mantle.tools/mcp` | the npm package, the `mantle-host` skill and name (the plugin keeps one `mantle` skill) |
 
-- The handbook is the user documentation and ships inside this npm package:
-  `node_modules/@aotter/mantle/docs/handbook/` (start, concepts, Cloudflare
-  guides, example redirects, reference; `navigation.json` lists every page in order).
-  Worked Manifests live in `node_modules/@aotter/mantle/docs/examples/`
-  ([index](docs/examples/README.md)).
-  The copy in `node_modules` describes the installed release.
-- Embedded docs and agent skills ship inside this npm package for
-  agents working from the installed package:
-  - `node_modules/@aotter/mantle/docs/handbook/reference/manifest.md`
-  - `node_modules/@aotter/mantle/docs/examples/cf-primitives-guarded-api.md` (anonymous,
-    API-key, paid guard, personal-token, OAuth, REST, and MCP examples)
-  - `node_modules/@aotter/mantle/docs/handbook/cloudflare/media-r2.md` (Cloudflare R2 adapter recipe)
-  - `node_modules/@aotter/mantle/docs/handbook/cloudflare/deferred-hooks-queues.md` (versioned
-    Queue wiring, retry/DLQ, idempotency, and delivery guarantees)
-  - `node_modules/@aotter/mantle/docs/handbook/reference/schema.md` (Schema grammar,
-    ordered composite JSON-field indexes and the safe Procedure SQL helper)
-  - `node_modules/@aotter/mantle/docs/performance-harness.md` (crowded SQLite,
-    Wrangler-local D1 origin paths and coding-agent guardrails)
-  - `node_modules/@aotter/mantle/docs/adr/`
-  - `node_modules/@aotter/mantle/skills/develop/SKILL.md`
-  - `node_modules/@aotter/mantle/skills/plugin/SKILL.md`
-  - `node_modules/@aotter/mantle/skills/theme/SKILL.md`
-  - `node_modules/@aotter/mantle/skills/update/SKILL.md`
-  - `node_modules/@aotter/mantle/skills/install/SKILL.md`
-  - `node_modules/@aotter/mantle/skills/provision/SKILL.md`
-- [4-atom manifest model (ADR-0001)](docs/adr/0001-four-atom-manifest-model.md)
-- [API and MCP authorization](docs/examples/cf-primitives-guarded-api.md)
-- [Deferred lifecycle Queues](docs/handbook/cloudflare/deferred-hooks-queues.md)
-- [Schema indexes on D1](docs/handbook/reference/schema.md)
-- [Release process](docs/release-process.md)
-- [Source repository](https://github.com/aotter/mantle)
-- [Issues](https://github.com/aotter/mantle/issues)
+## Concept map
 
-## License
+| 0.1.x | 0.2.0 |
+|---|---|
+| builtin ops, `ctx.writeAtomically`, `runtime.entries`, `runtime.executeView`, `bindMantle` | `ctx.store` / `runtime.store`: `select`, `view`, `write`, `id` |
+| `handler: { kind: builtin, op, schema, match }` | a Procedure written as SQL (`INSERT`, `UPDATE`, `DELETE`, `ON CONFLICT`), compiled to IR by the CLI |
+| View `from` / `filter` / `fields` / `orderBy` / `limit`, `params`, `$param` | a View written as one SQL `SELECT`, `input`, `input.x` |
+| `page` / `show` | `limit` / `cursor` |
+| `ctx.user`, `ctx.staff`, `ctx.auth` | `ctx.caller` (`Caller`) |
+| `ctx.event`, `ctx.schedule` | `ctx.cause` (`InvocationCause`) |
+| `getRuntime` closures | `ctx.invoke`, `MantleServiceContext.runtime` |
+| `createMantleWorker`, `createBunMantle`, `createVercelMantle`, `extend` | `createMantle(service, { storage })` and the generated preset |
+| `--host cf \| chatgpt-sites` | no `--host`; the Cloudflare preset; Sites is an example |
+| `errorPolicy` | before hooks fail closed; after hooks best effort |
+| Cloudflare cron (1 = Sunday), required `cloudflare` host | POSIX cron (0 = Sunday), `schedules: true` |
+| auth tables in `0001-init` | Better Auth's `getMigrations` in mantle-auth |
+| fourteen npm packages, a `mantle-host` skill | `@aotter/mantle` and `@aotter/mantle-ui`; one plugin with one `mantle` skill and Cloud helper scripts |
+| per-column ledger ids, `drizzle/` artifacts, managed boot | boot converges by introspection; `generate --check` prints replayable SQL |
 
-Apache-2.0
+## Contract sources
 
-Pure extension routes do not await content preparation. Before an extension
-uses Mantle data or database-backed Auth, await its supplied `getRuntime()`
-(or `ref.get()`). Standard protected routes establish this readiness themselves;
-queue/scheduled handlers continue to use `worker.getRuntime(env)`.
+These existing tests become conformance cases in steps 2 and 3. Each rule is ported, not each test.
+
+| Contract | Existing tests (`packages/mantle-runtime/test/` unless named) |
+|---|---|
+| Lifecycle | `content-ops` (already ported in the parked branch), `builtin-op`, `entry-writer` |
+| Store reads and writes, scope, OCC, TTL | `store-select`, `store-write`, `http-builtin-upsert-occ`, `schema-index-query-plan`, `infrastructure/testing/StorageConformance` |
+| Views and pagination | `view`, `view-param-coercer`, `joined-entry-reader` (translation fallback) |
+| Hooks | `lifecycle-hooks` |
+| Invocation and auth predicates | `dispatcher-invoke`, `dispatcher-boot`, `dispatcher-match`, `bind-capabilities`, `invoke-capability`, `interactions` |
+| Plan and boot | `runtime-plan`, `storage-preparation`, `sqlite-migration-runner`, `canonical-migrations` |
+| Media and site config | `media`, `site-settings` |
+| Surfaces | `packages/mantle-mcp/test`, `packages/mantle-admin/test`, `packages/adapters/cloudflare/test` (13k lines; most of it tests the deleted Worker composition, so only its rules are kept) |
+| Identity | `packages/mantle-auth/test`, plus ADR-0032's same-id, different-issuer case |
+
+## Not in 0.2.0
+
+Reliable delivery (outbox), the typed frontend client, a raw-body HTTP Trigger, Bun and Vercel presets, and a rename of Mantle's product tables. Each is additive later, or recorded as rejected in ADR-0032 and ADR-0033.
