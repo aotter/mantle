@@ -71,7 +71,11 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     if (g && inline(g)) throw fail("GUARD_PROCEDURE_NOT_REF", `${at}#/views/${name}`, `View '${name}' is guarded by '${g}', which is an inline program`);
   }
 
-  const { executor, dialect, site } = await args.storage.prepare(plan);
+  // a plan is dialect-specific: checked before storage converges to it
+  const { dialect } = args.storage;
+  if (plan.dialect?.name !== dialect.name || plan.dialect.version !== dialect.version)
+    throw fail("PLAN_FINGERPRINT_MISMATCH", at, `the plan was compiled for dialect ${plan.dialect?.name}@${plan.dialect?.version}; this storage runs ${dialect.name}@${dialect.version}`);
+  const { executor, site } = await args.storage.prepare(plan);
 
   // ---- lifecycle: Store hands mutations to this dispatcher; Procedures are only reached through invokeProcedure ---------------
   const byHook = new Map<string, [string, string][]>();

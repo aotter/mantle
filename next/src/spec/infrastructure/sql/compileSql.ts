@@ -1,13 +1,21 @@
 /**
  * The shared front end (ADR-0035 decision 4): SQL text to IR. The parser reads the text and every relation is tagged;
  * the dialect's `accepts` runs on the raw AST (so a refusal has a source offset); then locations are stripped.
- * The one dialect is D1 until `mantle.config.json` names one (ADR-0035 decision 5). Nothing in a Worker imports this module.
+ * The dialect is D1 unless the caller passes another (`mantle.config.json`'s `dialect`, ADR-0035 decision 5). Nothing in a Worker imports this module.
  */
 import type { SqlContext, SqlDiagnostic, SqlNode, SqlPlan } from "../../domain/model/SqlIr.js";
 import { PG_GRAMMAR } from "../../domain/model/SqlIr.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
-import { accepts } from "../../../d1/compile/index.js";
+import * as d1 from "../../../d1/compile/index.js";
 import { parsePgSql } from "./PgQueryParser.js";
+
+/** A dialect's compile side, as `<dialect>/compile` exports it (ADR-0035 decision 3). */
+export interface SqlDialect {
+  readonly name: string;
+  readonly version: string;
+  /** Throws the first refusal as a `SqlRefusal` with its source offset. */
+  accepts(stmts: SqlNode[], context: SqlContext & { source: string }, locations: (number | undefined)[]): void;
+}
 
 export type CompileSqlResult = { readonly ok: true; readonly plan: SqlPlan } | { readonly ok: false; readonly diagnostic: SqlDiagnostic };
 
@@ -47,11 +55,11 @@ function stripLocations(v: unknown): SqlNode[] {
  * Compile one SQL source (a View's `sql`, or a Procedure's statements) to a plan, or say why not.
  * The first refusal is returned: the compiler stops at the first thing it cannot accept.
  */
-export async function compileSql(sql: string, ctx: SqlContext): Promise<CompileSqlResult> {
+export async function compileSql(sql: string, ctx: SqlContext, dialect: SqlDialect = d1): Promise<CompileSqlResult> {
   try {
     const parsed = await parsePgSql(sql);
     const tagged = tagRelations(parsed.stmts) as SqlNode[];
-    accepts(tagged, { ...ctx, source: sql }, parsed.locations);
+    dialect.accepts(tagged, { ...ctx, source: sql }, parsed.locations);
     return { ok: true, plan: { grammar: PG_GRAMMAR, stmts: stripLocations(tagged) } };
   } catch (e) {
     if (e instanceof SqlRefusal) return { ok: false, diagnostic: toDiagnostic(e, sql) };

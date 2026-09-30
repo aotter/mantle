@@ -5,7 +5,7 @@
 import type { AuthorizationRequirements, JsonSchema, LocalizedText, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
 import type { SqlNode, SqlPlan } from "./SqlIr.js";
 
-export const RUNTIME_PLAN_VERSION = 7 as const;
+export const RUNTIME_PLAN_VERSION = 8 as const;
 
 /** A Schema as storage and Store see it. Keys of `fields` and `names` are lower case: SQL folds unquoted identifiers. */
 export interface PlanSchema {
@@ -69,6 +69,8 @@ export interface PlanTrigger {
 
 export interface RuntimePlan {
   readonly version: typeof RUNTIME_PLAN_VERSION;
+  /** The dialect the SQL was compiled for (ADR-0035 decision 5); boot refuses a storage of another. */
+  readonly dialect: { readonly name: string; readonly version: string };
   /** SHA-256 of the plan without this field (`planFingerprint`). */
   readonly fingerprint: string;
   readonly schemas: Readonly<Record<string, PlanSchema>>;

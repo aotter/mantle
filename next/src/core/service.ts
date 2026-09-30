@@ -41,12 +41,12 @@ export interface MantleService<Env = unknown> {
 
 export interface PreparedMantleStorage {
   readonly executor: StoreExecutor;
-  /** The engine's dialect: Store checks, rewrites and encodes through it (ADR-0035 decision 3). */
-  readonly dialect: MantleDialect;
   readonly site?: MantleSite;
 }
 
 /** Converges storage to the plan (ADR-0033) and returns the executor for it. */
 export interface MantleStorageAdapter {
+  /** The engine's dialect: boot checks the plan was compiled for it, and Store checks, rewrites and encodes through it (ADR-0035). */
+  readonly dialect: MantleDialect;
   prepare(plan: RuntimePlan): Promise<PreparedMantleStorage>;
 }
