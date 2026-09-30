@@ -3,7 +3,7 @@
  * Every API route needs a staff caller. Reads and runs go through `store.as(caller)` and `invokeProcedure`, so Admin sees what the
  * caller's scope sees and nothing wider. Routes of an `AdminIdentity` facet that is absent do not exist.
  */
-import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, makeDiagnostic, mcpTools, meetsRole, redactForWire, resolveMantleRef, type JsonSchema, type PlanSchema, type StaffRole } from "../spec/index.js";
+import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, makeDiagnostic, meetsRole, redactForWire, resolveMantleRef, type JsonSchema, type McpTool, type PlanSchema, type StaffRole } from "../spec/index.js";
 import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
 import { siteConfigOf } from "../core/sql/site.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
@@ -24,9 +24,9 @@ export interface AdminSurfaceOptions {
   readonly media?: MediaStorage;
   /**
    * The staff MCP surface, answered at `{basePath}/api/mcp` behind Admin's session gate: `createMcpSurface(runtime, { basePath:
-   * `${basePath}/api/mcp`, surface: "staff" })`. With it, `/webmcp` publishes that surface's tools; without it, neither route exists.
+   * `${basePath}/api/mcp`, surface: "staff" })`. With it, `/webmcp` publishes the tools it registered; without it, neither route exists.
    */
-  readonly staffMcp?: Surface;
+  readonly staffMcp?: Surface & { readonly tools: readonly McpTool[] };
 }
 
 type Staff = Extract<Caller, { kind: "user" }> & { readonly role: StaffRole };
@@ -176,8 +176,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     return { userId: caller.subject, role: caller.role, login: u ? u.githubLogin || u.name || u.email || null : null, image: u?.image ?? null };
   };
 
-  // the same catalog `createMcpSurface` registers, and each tool's page: a Procedure's target Schema, or the View
-  const staffTools = mcpTools(plan, "staff");
+  // the tools the staff MCP surface registered, and each tool's page: a Procedure's target Schema, or the View
+  const staffTools = options.staffMcp?.tools ?? [];
   const webmcp = options.staffMcp ? {
     tools: staffTools.map(({ name, title, description, inputSchema, outputSchema, annotations }) => ({ name, ...(title ? { title } : {}), description, inputSchema, ...(outputSchema ? { outputSchema } : {}), ...(annotations ? { annotations } : {}) })),
     routes: Object.fromEntries(staffTools.flatMap((t) => {

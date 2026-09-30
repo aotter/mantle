@@ -23,6 +23,8 @@ export interface AuthRoutesOptions {
 }
 
 const PRIVATE = { "cache-control": "private, no-store" };
+const CONSENT = new Set(["GET /oauth/consent", "GET /oauth/consent/data", "POST /oauth/consent"]);
+const CONSENTS = new Set(["GET /oauth/consents", "GET /oauth/consents/data", "POST /oauth/consents/revoke"]);
 const WELL_KNOWN = /^\/\.well-known\/(oauth-authorization-server|oauth-protected-resource)(\/|$)/;
 
 /** The service's auth entry: a Response for a path it owns, `null` for any other. */
@@ -33,8 +35,9 @@ export function createAuthRoutes(auth: AuthRoutesAuth, options: AuthRoutesOption
     const { pathname } = new URL(request.url);
     if (pathname === `${base}/methods` && request.method === "GET") return Response.json({ methods: auth.methods }, { headers: { "cache-control": "no-store" } });
     if (pathname.startsWith(`${base}/`) || WELL_KNOWN.test(pathname)) return auth.handler(request, context);
-    if (pathname.startsWith("/oauth/")) return consent(request);
-    return null;
+    // only an owned route resolves a caller: `/oauth/callback/github` and the rest are the service's, whatever they carry
+    const route = `${request.method} ${pathname}`;
+    return CONSENT.has(route) || (CONSENTS.has(route) && auth.listOAuthConsents && auth.revokeOAuthConsent) ? consent(request) : null;
   };
 }
 
@@ -62,8 +65,10 @@ function consentSurface(auth: AuthRoutesAuth, options: AuthRoutesOptions): Surfa
       if (decision !== "approve" && decision !== "deny") return new Response("invalid consent decision", { status: 400 });
       // the redirect is the one Better Auth validated against the client's registration; nothing in the request names it
       const location = await auth.completeOAuthConsent(new Request(request, { body }), decision === "approve").catch(() => null);
-      if (!location || !URL.canParse(location) || /^(javascript|data|vbscript|blob):$/i.test(new URL(location).protocol)) return new Response("invalid authorization request", { status: 400 });
-      return new Response(null, { status: 302, headers: { location, ...PRIVATE } });
+      const target = location && URL.canParse(location) ? new URL(location) : null;
+      if (!target || /^(javascript|data|vbscript|blob):$/i.test(target.protocol)) return new Response("invalid authorization request", { status: 400 });
+      // the parsed form, so a browser cannot read `https:\\evil.test` differently from the check
+      return new Response(null, { status: 302, headers: { location: target.href, ...PRIVATE } });
     }
     if (!list || !revoke) return new Response("not found", { status: 404 });
     if (route === "GET /oauth/consents") {
@@ -105,13 +110,13 @@ const T = {
   en: {
     lang: "en", title: "Authorize", eyebrow: "Connect an MCP client", heading: (c: string) => `Connect ${c}?`,
     body: (c: string) => `${c} will be able to use this site's tools through MCP. What it can view or change is still limited by your account permissions.`,
-    approve: "Connect", deny: "Cancel", invalid: "Invalid authorization request", invalidBody: "Missing or malformed consent payload. Return to your MCP client and try again.",
+    returnsTo: "Returns to", scopes: "Requested access", approve: "Connect", deny: "Cancel", invalid: "Invalid authorization request", invalidBody: "Missing or malformed consent payload. Return to your MCP client and try again.",
     apps: "MCP connections", appsBody: "These MCP clients can use this site's tools. Every action is still checked against your current account permissions.", empty: "No MCP clients are connected.", revoke: "Disconnect",
   },
   "zh-TW": {
     lang: "zh-Hant-TW", title: "授權", eyebrow: "連結 MCP 客戶端", heading: (c: string) => `要連結 ${c} 嗎？`,
     body: (c: string) => `${c} 將能透過 MCP 使用這個網站提供的工具；它能查看或變更哪些內容，仍會依照你的帳號權限決定。`,
-    approve: "連結", deny: "取消", invalid: "無效的授權請求", invalidBody: "缺少或格式錯誤的授權資訊，請返回 MCP 客戶端重試。",
+    returnsTo: "完成後返回", scopes: "要求的權限", approve: "連結", deny: "取消", invalid: "無效的授權請求", invalidBody: "缺少或格式錯誤的授權資訊，請返回 MCP 客戶端重試。",
     apps: "MCP 連線", appsBody: "這些 MCP 客戶端可以使用網站提供的工具；每次操作仍會依照你當下的帳號權限檢查。", empty: "目前沒有已連結的 MCP 客戶端。", revoke: "中斷連線",
   },
 } as const;
@@ -126,7 +131,10 @@ function consentHtml(l: Locale, model: OAuthConsentRequest | null): string {
   const t = T[l];
   if (!model) return page(l, t.title, `<p>${t.eyebrow}</p><h1>${t.invalid}</h1><p>${t.invalidBody}</p>`);
   const client = esc(model.clientName);
-  return page(l, t.title, `<p>${t.eyebrow}</p><h1>${t.heading(client)}</h1><p>${t.body(client)}</p><form method="post" action="/oauth/consent">` +
+  // where the answer goes and what is asked, so a look-alike client name cannot hide either
+  const host = URL.canParse(model.redirectUri) ? new URL(model.redirectUri).host || new URL(model.redirectUri).protocol : model.redirectUri;
+  return page(l, t.title, `<p>${t.eyebrow}</p><h1>${t.heading(client)}</h1><p>${t.body(client)}</p>` +
+    `<p>${t.returnsTo} <code>${esc(host)}</code></p><p>${t.scopes}</p><ul>${model.scopes.map((sc) => `<li><code>${esc(sc)}</code></li>`).join("")}</ul><form method="post" action="/oauth/consent">` +
     `<input type="hidden" name="oauth_query" value="${esc(model.oauthQuery)}"/><button type="submit" name="decision" value="approve">${t.approve}</button> ` +
     `<button type="submit" name="decision" value="deny">${t.deny}</button></form>`);
 }

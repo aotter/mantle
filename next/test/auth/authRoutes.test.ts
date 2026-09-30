@@ -6,6 +6,7 @@ const complete = vi.fn(async (request: Request, accept: boolean) => {
   const q = (await request.formData()).get("oauth_query");
   if (q === "throw") throw new Error("bad signature");
   if (q === "js") return "javascript:alert(1)";
+  if (q === "backslash") return "https:\\\\evil.test";
   return accept ? `${REDIRECT}?code=c1&state=${q}` : `${REDIRECT}?error=access_denied&state=${q}`;
 });
 const revoke = vi.fn(async (_user: string, id: string) => id === "c-1");
@@ -16,7 +17,7 @@ const auth: AuthRoutesAuth = {
   methods: [{ kind: "email-otp" }, { kind: "social", provider: "github" }],
   getOAuthConsentRequest: async (request) => {
     const q = new URL(request.url).searchParams;
-    return q.get("client_id") ? { clientName: q.get("client_id") === "evil" ? "<b>Evil</b>" : "Claude", redirectUri: REDIRECT, scopes: ["mcp"], oauthQuery: new URL(request.url).search.slice(1) } : null;
+    return q.get("client_id") ? { clientName: q.get("client_id") === "evil" ? "<b>Evil</b>" : "Claude", redirectUri: REDIRECT, scopes: q.get("scope")?.split(" ") ?? ["mcp"], oauthQuery: new URL(request.url).search.slice(1) } : null;
   },
   completeOAuthConsent: complete,
   listOAuthConsents: async (user) => [{ id: "c-1", clientId: "claude", clientName: `Claude for ${user}`, scopes: ["mcp"] }],
@@ -36,7 +37,8 @@ const ORIGIN = "https://svc.test";
 const req = (path: string, init: RequestInit & { session?: string } = {}) => {
   const headers = new Headers(init.headers);
   if (init.session) headers.set("cookie", `s=${init.session}`);
-  if (init.method === "POST") headers.set("content-type", "application/x-www-form-urlencoded");
+  // a browser's same-origin form post; a test that means cross-site overrides it
+  if (init.method === "POST") { headers.set("content-type", "application/x-www-form-urlencoded"); if (!headers.has("sec-fetch-site")) headers.set("sec-fetch-site", "same-origin"); }
   return routes(new Request(`${ORIGIN}${path}`, { ...init, headers }));
 };
 const form = (fields: Record<string, string>) => new URLSearchParams(fields).toString();
@@ -57,6 +59,12 @@ describe("createAuthRoutes: what goes to Better Auth", () => {
     }
     expect(await req("/.well-known/security.txt")).toBeNull();
     expect(await req("/admin")).toBeNull();
+    // an /oauth path it does not own is the service's, and no caller is resolved for it, so a junk token is not refused here
+    expect(await req("/oauth/callback/github?code=x")).toBeNull();
+    expect(await req("/oauth/callback/github", { headers: { authorization: "Bearer junk" } })).toBeNull();
+    expect(await req("/oauth/consent", { method: "PUT" })).toBeNull();
+    const noList = createAuthRoutes({ ...auth, listOAuthConsents: undefined }, { resolver });
+    expect(await noList(new Request(`${ORIGIN}/oauth/consents/data`))).toBeNull();
   });
 
   it("Better Auth serves both metadata documents natively, so Mantle writes none", async () => {
@@ -93,7 +101,10 @@ describe("createAuthRoutes: consent", () => {
     expect(approve.headers.get("location")).toBe(`${REDIRECT}?code=c1&state=q1`);
     const deny = (await req("/oauth/consent", { method: "POST", session: "alice", body: form({ decision: "deny", oauth_query: "q2" }) }))!;
     expect(deny.headers.get("location")).toBe(`${REDIRECT}?error=access_denied&state=q2`);
-    expect(complete.mock.calls.map((c) => c[1])).toEqual([true, false]);
+    // the parsed form goes out: a backslash authority cannot mean one host to the check and another to the browser
+    const slash = (await req("/oauth/consent", { method: "POST", session: "alice", body: form({ decision: "approve", oauth_query: "backslash" }) }))!;
+    expect(slash.headers.get("location")).toBe("https://evil.test/");
+    expect(complete.mock.calls.map((c) => c[1])).toEqual([true, false, true]);
   });
 
   it("refuses a bad decision, a failed or unsafe redirect, a key, and a cross-site post", async () => {
@@ -122,12 +133,16 @@ describe("createAuthRoutes: consent", () => {
   });
 
   it("without Admin the pages are plain HTML; with Admin the connected-apps page is Admin's", async () => {
-    const page = (await req("/oauth/consent?client_id=evil", { headers: { "accept-language": "zh-TW" } }))!;
+    const page = (await req(`/oauth/consent?client_id=evil&scope=${encodeURIComponent("mcp <i>all</i>")}`, { headers: { "accept-language": "zh-TW" } }))!;
     expect(page.headers.get("content-security-policy")).toContain("form-action 'self' https://client.test;");
     const html = await page.text();
     expect(html).toContain("&#60;b&#62;Evil&#60;/b&#62;");
     expect(html).toContain('lang="zh-Hant-TW"');
-    expect(html).toContain('name="oauth_query" value="client_id=evil"');
+    expect(html).toContain('name="oauth_query" value="client_id=evil&#38;scope=mcp%20%3Ci%3Eall%3C%2Fi%3E"');
+    // the redirect host and each requested scope sit beside the name, escaped
+    expect(html).toContain("<code>client.test</code>");
+    expect(html).toContain("<li><code>mcp</code></li><li><code>&#60;i&#62;all&#60;/i&#62;</code></li>");
+    expect(html).not.toContain("<i>all</i>");
     expect((await req("/oauth/consent"))!.status).toBe(400);
     expect(await (await req("/oauth/consents", { session: "alice" }))!.text()).toContain('name="consent_id" value="c-1"');
     const withAdmin = createAuthRoutes(auth, { resolver, connectedAppsPage: "/admin/connected-apps" });

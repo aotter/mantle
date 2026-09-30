@@ -87,6 +87,11 @@ describe("withCaller: CSRF and resource metadata", () => {
     expect((await run({ origin: "https://evil.example" })).status).toBe(403);
     expect((await run({ "sec-fetch-site": "same-origin", origin: "https://x" })).status).toBe(200);
     expect((await run({ "sec-fetch-site": "cross-site" }, "GET")).status).toBe(200);
+    // a mutation with neither Origin nor Sec-Fetch-Site is refused; a single same-origin signal admits it
+    expect((await run({})).status).toBe(403);
+    expect((await run({ origin: "https://x" })).status).toBe(200);
+    expect((await run({ "sec-fetch-site": "same-origin" })).status).toBe(200);
+    expect((await run({}, "GET")).status).toBe(200);
     const bearer = withCaller(createCallerResolver(auth({ verifyOAuthAccessToken: async () => okToken }), { jwtBearer: { audience: "a" } }), (async () => new Response("ok")) as never);
     expect((await bearer(new Request("https://x/api", { method: "POST", headers: { authorization: "Bearer t", "sec-fetch-site": "cross-site" } }))).status).toBe(200);
   });

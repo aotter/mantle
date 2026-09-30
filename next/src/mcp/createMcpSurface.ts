@@ -5,7 +5,7 @@
  */
 import { McpServer, createMcpHandler, fromJsonSchema, isJsonContentType, readRequestBody, type AuthInfo, type CallToolResult, type JsonSchemaType, type JsonSchemaValidator, type StandardSchemaWithJSON, type jsonSchemaValidator } from "@modelcontextprotocol/server";
 import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from "@modelcontextprotocol/ext-apps/server";
-import { DiagnosticError, makeDiagnostic, mcpTools, redactForWire, type AuthPredicate, type AuthorizationRequirements, type Diagnostic, type JsonSchema } from "../spec/index.js";
+import { DiagnosticError, makeDiagnostic, mcpTools, redactForWire, type AuthPredicate, type AuthorizationRequirements, type Diagnostic, type JsonSchema, type McpTool } from "../spec/index.js";
 import { evaluateAuthAll, type Caller, type MantleRuntime, type Surface } from "../core/index.js";
 import { appHtml, appMeta, clientUiSupport, linkApps, type ClientUiSupport, type McpApps } from "./apps.js";
 
@@ -41,7 +41,10 @@ const failure = (d: Diagnostic, hasOutputSchema: boolean): CallToolResult => {
   return { isError: true, content: [{ type: "text", text: JSON.stringify(payload) }], ...(hasOutputSchema ? {} : { structuredContent: payload }) };
 };
 
-export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOptions): Surface {
+/** The surface and the tools it registers for a client without MCP Apps, in its locale: what Admin's `/webmcp` publishes. */
+export type McpSurface = Surface & { readonly tools: readonly McpTool[] };
+
+export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOptions): McpSurface {
   const base = options.basePath.replace(/\/+$/, "") || "/";
   const maxBody = options.maxRequestBodySize ?? 1024 * 1024;
   const tools = mcpTools(runtime.plan, options.surface, options.locale ?? "en");
@@ -95,7 +98,7 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     return build(c ?? { kind: "anonymous" }, ui === "supported" || ui === "unsupported" ? ui : "unknown");
   }, { legacy: "stateless", maxRequestBodySize: maxBody, maxSubscriptions: 32, onerror: (e) => console.error("[mantle mcp] request failed", e) });
 
-  return async (request, caller) => {
+  const surface: Surface = async (request, caller) => {
     const url = new URL(request.url);
     if ((url.pathname.replace(/\/+$/, "") || "/") !== base) return Response.json({ error: { code: "NOT_FOUND", message: "no such route" } }, { status: 404 });
     if (caller.kind !== "user" && caller.kind !== "anonymous") return challenge(403, undefined, true);
@@ -130,4 +133,5 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     }
     return sdk.fetch(request, { authInfo, parsedBody: message });
   };
+  return Object.assign(surface, { tools: tools.filter((t) => registers(t.name, "unsupported")) });
 }
