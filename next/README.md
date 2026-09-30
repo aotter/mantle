@@ -32,7 +32,7 @@ next/src/vercel/       → @aotter/mantle/vercel     next/src/d1/      → @aott
 | 1 | `next/src/spec`: the manifest grammar with Store authored as SQL, `compilePlan` (SQL to IR, ADR-0034), the validator; example manifests as fixtures | The grammar and the SQL subset |
 | 2 | `next/src/core`: interfaces only (Store, StoreExecutor, Caller, Invocation, HandlerContext, MantleService, `createMantle`, surface signatures), plus the conformance suite as listed, unimplemented cases | **Architecture and method definitions: the main gate** |
 | 3 | Implementation against the contract: SqliteStoreExecutor (the only executor, ADR-0034), then the ported drivers, auth and surfaces | PRs, not every line |
-| 4 | Delete the old packages, move `next/` to `packages/mantle`, fold `mantle-admin-ui` into `mantle-ui`, move the plugin's helper scripts, ship the `mantle-update` codemod | The swap |
+| 4 | Delete the old packages, move `next/` to `packages/mantle`, fold `mantle-admin-ui` into `mantle-ui`, move the plugin's helper scripts, ship `docs/upgrade-0.1-to-0.2.md` (no codemod, ADR-0032 amendment) | The swap |
 
 ## Package map
 
@@ -50,7 +50,7 @@ next/src/vercel/       → @aotter/mantle/vercel     next/src/d1/      → @aott
 | `@aotter/mantle-admin` (3.2k) | `next/src/admin` | Port into `createAdminSurface` |
 | `@aotter/mantle-mcp` (0.7k) | `next/src/mcp` | Port into `createMcpSurface` |
 | `@aotter/mantle-web` (2.1k) | `next/src/web` | Port into `createWebSurface` and `createRestSurface` |
-| `@aotter/mantle` (1.6k CLI, codegen) | `next/src/cli` | Rewrite `generate` and codegen; add `mantle-update` |
+| `@aotter/mantle` (1.6k CLI, codegen) | `next/src/cli` | Rewrite `generate` and codegen |
 | `@aotter/mantle-ui` (4.9k) | `packages/mantle-ui` | Stays the browser package; gains `/admin` |
 | `@aotter/mantle-admin-ui` (18.2k) | `@aotter/mantle-ui/admin` | Port at the swap: pagination, base path, drop `/kit` and `rowBindings` |
 | `@aotter/mantle-host` (never published) | the plugin | Its source becomes the plugin's Cloud helper scripts; the name disappears |
@@ -84,7 +84,7 @@ Only `next/src/spec` and `next/src/core` are built before the step 2 review. The
 | admin | `mountMantleAdmin` (2.8k) into `createAdminSurface`, reading through Store, facets from `AdminIdentity`; `mountMantleOAuth` into mantle-auth's routes; `staffMcp` into the MCP surface | `AdminAuth`; the session-shape dependency |
 | mcp | `createMantleMcpServer`, `createMantleMcpHandler`, `apps` into `createMcpSurface` | bearer verification inside the surface |
 | web | SEO, sitemap, markdown and HTML rendering, `webmcp`, the frontend client, into `createWebSurface` and `createRestSurface` over Store | `EntryReader` reads |
-| mantle | `skills`, `harness` | `--host`, `generate-sites.ts`, `generate-cloudflare.ts` (into the one Cloudflare preset), per-name codegen, dependency closure; new `mantle-update` |
+| mantle | `skills`, `harness` | `--host`, `generate-sites.ts`, `generate-cloudflare.ts` (into the one Cloudflare preset), per-name codegen, dependency closure |
 | mantle-host | the `mantle-host` script source and tests, as the plugin's Cloud helper scripts that orchestrate `https://cloud.mantle.tools/mcp` | the npm package, the `mantle-host` skill and name (the plugin keeps one `mantle` skill) |
 
 ## Concept map

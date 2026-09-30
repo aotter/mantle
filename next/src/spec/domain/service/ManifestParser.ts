@@ -259,7 +259,7 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
   if (m["apiVersion"] !== API_VERSION) {
     throw new ManifestParseError(
       `apiVersion must be "${API_VERSION}"; got ${JSON.stringify(m["apiVersion"])}` +
-        (m["apiVersion"] === "cms.mantle.aotter.net/v1" ? " (a 0.1.x manifest: run mantle-update)" : ""),
+        (m["apiVersion"] === "cms.mantle.aotter.net/v1" ? " (a 0.1.x manifest: follow node_modules/@aotter/mantle/docs/upgrade-0.1-to-0.2.md)" : ""),
       docIndex,
       "/apiVersion",
     );

@@ -24,7 +24,7 @@ import type { SchemaManifest } from "../model/ManifestGrammar.js";
  * plain object tree and runs them through its interpreter at parse
  * time — no codegen, Workers-safe.
  *
- * The `x-mantle-ref`, `x-mcp-hint`, `x-mantle-bind` extension keywords
+ * The `x-mantle-ref` and `x-mcp-hint` extension keywords
  * are tolerated (the converter ignores unknown keywords; they pass
  * through unmodified).
  *
