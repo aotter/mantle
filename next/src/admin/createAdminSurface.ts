@@ -91,7 +91,7 @@ const ms = (us: unknown) => (typeof us === "number" ? Math.floor(us / 1000) : nu
 /** RFC 4180 quoting, and a text that a spreadsheet would run as a formula gets a leading `'`. */
 function csvCell(v: unknown): string {
   const t = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
-  const safe = typeof v === "string" && /^[\s\u0000-\u001f]*[=+@-]/u.test(t) ? `'${t}` : t;
+  const safe = typeof v === "string" && /^[\s\u0000-\u001f]*[=+@-]|^[\t\r]/u.test(t) ? `'${t}` : t;
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
@@ -111,7 +111,13 @@ async function csv(name: string, read: (cursor?: string) => Promise<StoreSelectR
   const it = lines();
   const enc = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
-    async pull(c) { const n = await it.next(); if (n.done) c.close(); else c.enqueue(enc.encode(n.value)); },
+    async pull(c) {
+      try { const n = await it.next(); if (n.done) c.close(); else c.enqueue(enc.encode(n.value)); } catch (e) {
+        // the status line is gone once a page has streamed: end the download as failed, and leave a trace
+        console.error("[mantle admin] export failed mid-stream", e);
+        c.error(e);
+      }
+    },
     async cancel() { await it.return(undefined); },
   });
   return new Response(body, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${name}.csv"`, ...NO_STORE } });
@@ -342,7 +348,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         const query = listQuery(s, q);
         const store = runtime.store.as(caller);
         const columns = ["id", ...(s.publishing ? ["status"] : []), "version", "updated_at", ...Object.keys(propsOf(s.schema)).filter((f) => f.toLowerCase() !== s.scope && s.fields[f.toLowerCase()] !== "geo")];
-        return csv(s.name, (cursor) => store.select({ ...query, limit: 100, ...(cursor ? { cursor } : {}) }), () => columns, (row, c) => (c === "updated_at" ? ms(row["updatedAt"]) : row[c]));
+        return csv(s.name, (cursor) => store.select({ ...query, limit: 500, ...(cursor ? { cursor } : {}) }), () => columns, (row, c) => (c === "updated_at" ? ms(row["updatedAt"]) : row[c]));
       },
     },
     {

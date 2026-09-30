@@ -82,7 +82,7 @@ export class StoreJson {
       if (name === "status" && !def.publishing) throw invalid(`This Schema has no column 'status'.`);
       return { ...native, out: name };
     }
-    const type = def.fields[name.toLowerCase()];
+    const type = Object.hasOwn(def.fields, name.toLowerCase()) ? def.fields[name.toLowerCase()] : undefined;
     if (!type) throw invalid(`Schema has no column '${name}'.`);
     if (scalar && !SCALAR.has(type) && !type.startsWith("numeric(")) throw invalid(`Column '${name}' is not a scalar and cannot be used in ${purpose}.`);
     return { col: name.toLowerCase(), type, out: def.names?.[name.toLowerCase()] ?? name };
