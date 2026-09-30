@@ -117,6 +117,12 @@ describe("names that differ only by case", () => {
   it("two fields are FIELD_NAME_CASE_COLLISION, not one column", async () => {
     expect(await codes(SCHEMA.replace("body: { type: string } }", "body: { type: string }, Body: { type: integer } }"))).toEqual(["FIELD_NAME_CASE_COLLISION"]);
   });
+  it("two inputs of a Procedure are FIELD_NAME_CASE_COLLISION, not one input", async () => {
+    const text = SCHEMA + procedure("INSERT INTO notes (body) VALUES (input.text)").replace("text: { type: string }", "text: { type: string }, Text: { type: string }");
+    expect(await codes(text)).toEqual(["FIELD_NAME_CASE_COLLISION"]);
+    // a ref handler reads the JS object, where they are two keys
+    expect(await codes(text.replace('handler: { sql: "INSERT INTO notes (body) VALUES (input.text)" }', "handler: { ref: p }"))).toEqual([]);
+  });
   it("two Schemas are SCHEMA_NAME_CASE_COLLISION, not one table", async () => {
     expect(await codes(`${SCHEMA}---\n${SCHEMA.replace("name: notes", "name: Notes")}`)).toEqual(["SCHEMA_NAME_CASE_COLLISION"]);
   });

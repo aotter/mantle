@@ -2,7 +2,7 @@
  * IR -> physical statements: validate (the runtime never trusts an IR), inject policy, resolve binds.
  * Everything a Store does per statement before the executor runs it (ADR-0034 decisions 3 and 8).
  */
-import { PG_GRAMMAR, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
+import { PG_GRAMMAR, type JsonSchema, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
 import { runtimeDiagnostic, DiagnosticError } from "../../spec/kernel/index.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
 import { applyPolicy, type BindSpec, type Compiled, type Mode, type PolicyOpts } from "./policy.js";
@@ -17,6 +17,15 @@ export interface BindContext {
   readonly now: number;
   readonly role?: string | null;
   readonly input?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * The input as a statement binds it. SQL folds an unquoted `input.itemId` to `itemid`, so the statement names the folded name. Only
+ * declared properties are keyed: a key the caller added that folds the same (`ITEMID`) skipped the schema's checks and is never read.
+ */
+export function sqlInput(schema: JsonSchema | undefined, input: unknown): Record<string, unknown> {
+  const given = (input ?? {}) as Record<string, unknown>;
+  return Object.fromEntries(Object.keys(schema?.properties ?? {}).map((name) => [name.toLowerCase(), Object.hasOwn(given, name) ? given[name] : undefined]));
 }
 
 export interface CompileContext {
