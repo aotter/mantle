@@ -6,9 +6,6 @@ import { emailOTP, magicLink, type GenericOAuthConfig } from "better-auth/plugin
 import type { SocialProviders } from "better-auth/social-providers";
 import { signInCodeEmail, signInLinkEmail } from "./emailTemplates.js";
 
-export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, MemberUserInfo, StaffUserInfo } from "../admin/identity.js";
-
 import type { AuthMethodConfig, BootstrapOwnerRule, OAuthProviderConfig, SocialProviderId } from "./types.js";
 export function normalizeAuthBasePath(basePath: string | undefined): string {
   if (basePath === undefined) return "/api/auth";
@@ -69,7 +66,6 @@ export function normalizeAuthResponseCookies(response: Response): Response {
     headers,
   });
 }
-
 
 type GithubSocialOptions = Exclude<
   NonNullable<SocialProviders["github"]>,

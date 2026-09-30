@@ -3,9 +3,6 @@ import { enforceDpopBinding, isDpopBindingError, parseAccessTokenAuthorization, 
 import type { DatabaseDriver } from "../core/index.js";
 import { dbOf } from "./db.js";
 
-export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, MemberUserInfo, StaffUserInfo } from "../admin/identity.js";
-
 import type { OAuthAccessTokenVerification, ProviderAccessToken, RegisteredOAuthClient } from "./types.js";
 export async function getProviderAccessTokenForRequest(
   api: {
