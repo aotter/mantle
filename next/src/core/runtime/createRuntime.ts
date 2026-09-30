@@ -109,7 +109,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   const store = createStore({
     executor, schemas: plan.schemas, lifecycle, now,
     newId: args.newId ?? (() => crypto.randomUUID().replaceAll("-", "")),
-    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}) }])),
+    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}) }])),
     guardView: async (procedure, caller, input, cause) => { await invoke({ procedure, input, caller, cause: child(cause, procedure) }, true); },
   });
 
@@ -122,7 +122,8 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
     throw new DiagnosticError(makeDiagnostic({
       code: kind === "input" ? "INPUT_VALIDATION_FAILED" : "OUTPUT_VALIDATION_FAILED", phase: "runtime", severity: "error", path: `${path}#/${kind}${instancePath}`,
-      value: readJsonPointer(value, instancePath), expected: message,
+      // an output value is handler data the schema did not expect: it may hold what the schema meant to exclude, so it never reaches a wire
+      ...(kind === "input" ? { value: readJsonPointer(value, instancePath) } : {}), expected: message,
       ...(kind === "output" ? { message: `Procedure '${name}' returned a value that does not match its declared output schema. This is a handler bug.` } : {}),
     }));
   };

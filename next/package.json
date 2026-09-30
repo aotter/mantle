@@ -17,6 +17,8 @@
     "yaml": "^2.9.0",
     "zod": "catalog:",
     "@better-auth/cimd": "catalog:",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@modelcontextprotocol/server": "2.1.0",
     "@better-auth/mcp": "catalog:",
     "@better-auth/oauth-provider": "catalog:"
   },
@@ -27,7 +29,8 @@
     "wrangler": "4.126.0",
     "better-auth": "catalog:",
     "@better-auth/core": "catalog:",
-    "@better-auth/utils": "catalog:"
+    "@better-auth/utils": "catalog:",
+    "@modelcontextprotocol/client": "2.1.0"
   },
   "peerDependencies": {
     "better-auth": "catalog:peer"

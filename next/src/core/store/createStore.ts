@@ -3,7 +3,7 @@
  * (`json.ts`), and run by the same runner as a manifest's Procedure or View, so policy, hooks and OCC
  * have one implementation.
  */
-import { DiagnosticError, runtimeDiagnostic, SqlRefusal, type AuthorizationRequirements, type SqlNode as N } from "../../spec/index.js";
+import { DiagnosticError, firstZodIssueAsJsonPointer, jsonSchemaToZod, runtimeDiagnostic, SqlRefusal, type AuthorizationRequirements, type JsonSchema, type SqlNode as N } from "../../spec/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";
@@ -19,6 +19,8 @@ import { StoreJson, validateValues, type StoreSchemas } from "./json.js";
 export interface StoreView {
   readonly ir: readonly N[];
   readonly inputs: Readonly<Record<string, string>>;
+  /** The View's input JSON Schema: a call's input is checked against it (required, unknown keys, types) before it runs. */
+  readonly input?: JsonSchema;
   readonly public?: boolean;
   /** Checked against a caller-bound Store (the host's own `runtime.store` is trusted and skips it). */
   readonly requires?: AuthorizationRequirements;
@@ -38,6 +40,7 @@ export interface StoreDeps {
   readonly guardView?: (procedure: string, caller: Caller, input: Readonly<Record<string, unknown>>, cause: InvocationCause) => Promise<void>;
 }
 
+const viewInputs = new WeakMap<StoreView, ReturnType<typeof jsonSchemaToZod>>();
 const invalid = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
 
 /** A refusal thrown while binding (a value the declared type cannot hold) is the caller's input error. */
@@ -142,6 +145,15 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       if (!v) throw invalid(`Unknown View '${name}'.`);
       const denial = caller && evaluateAuthAll(v.requires, caller, `manifest:View/${name}`);
       if (denial) throw new DiagnosticError(denial);
+      if (v.input) {
+        let z = viewInputs.get(v);
+        if (!z) viewInputs.set(v, (z = jsonSchemaToZod(v.input)));
+        const r = z.safeParse(options.input ?? {});
+        if (!r.success) {
+          const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
+          throw invalid(`View '${name}' input does not match its schema${instancePath ? ` at ${instancePath}` : ""}: ${message}`);
+        }
+      }
       if (caller && v.guard) await deps.guardView?.(v.guard, caller, options.input ?? {}, parent ?? { kind: "internal", id: `store:${deps.newId()}` });
       const limit = options.limit ?? 50;
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");

@@ -91,7 +91,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
   const views: Record<string, PlanView> = {};
   for (const { manifest: v, source } of linked.views) {
     const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
-    if (plan) views[v.metadata.name] = { ...plan, inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
+    if (plan) views[v.metadata.name] = { ...plan, ...(v.spec.title ? { title: v.spec.title } : {}), ...(v.spec.description ? { description: v.spec.description } : {}), inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
   }
   const procedures: Record<string, PlanProcedure> = {};
   const declaredSchema = new Map(linked.schemas.map((x) => [x.manifest.metadata.name.toLowerCase(), x.manifest.metadata.name]));
@@ -111,7 +111,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
     return { schema, id, ...(version ? { version } : {}) };
   };
   for (const { manifest: p, source } of linked.procedures) {
-    const common = { input: p.spec.input, output: p.spec.output, inputs: typesOf(p.spec.input), ...(p.spec.requires ? { requires: p.spec.requires } : {}), ...(p.spec.mcp ? { mcp: p.spec.mcp } : {}) };
+    const common = { ...(p.spec.title ? { title: p.spec.title } : {}), ...(p.spec.description ? { description: p.spec.description } : {}), input: p.spec.input, output: p.spec.output, inputs: typesOf(p.spec.input), ...(p.spec.requires ? { requires: p.spec.requires } : {}), ...(p.spec.mcp ? { mcp: p.spec.mcp } : {}) };
     if ("ref" in p.spec.handler) { procedures[p.metadata.name] = { ...common, ...(p.spec.target ? { target: p.spec.target } : {}), handler: { ref: p.spec.handler.ref } }; continue; }
     const plan = await compile("procedure", p.spec.handler.sql, p.spec.input, source, "/spec/handler/sql");
     const target = p.spec.target ?? (plan ? inferTarget(p, plan.stmts) : undefined);

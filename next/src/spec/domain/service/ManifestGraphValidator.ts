@@ -26,8 +26,6 @@ import {
 } from "./ManifestPathDiagnoser.js";
 import {
   mcpToolNameSegment,
-  RESERVED_MCP_GENERIC_TOOL_NAMES,
-  RESERVED_MCP_TOOL_PREFIXES,
 } from "./McpToolNaming.js";
 
 /**
@@ -82,7 +80,6 @@ export function validateManifestGraph(
 
   diags.push(...checkTriggerRefs(partitioned.triggers, proceduresByName, filePaths, schemasByName));
   diags.push(...checkMcpToolNameCollisions(
-    partitioned.schemas,
     partitioned.views,
     partitioned.procedures,
     partitioned.triggers,
@@ -592,82 +589,46 @@ function checkTriggerRefs(
   return out;
 }
 
-interface ToolNameOwner {
-  readonly kind: "Schema" | "View" | "Procedure";
-  readonly name: string;
-}
-
+/**
+ * MCP tools come only from Views and Procedures (ADR-0032): a View's tool and a Procedure's tool share one namespace, named by the
+ * manifest name with kebab folded to snake. Internal Views are never tools.
+ */
 function checkMcpToolNameCollisions(
-  schemas: readonly SchemaManifest[],
   views: readonly ViewManifest[],
   procedures: readonly ProcedureManifest[],
   triggers: readonly TriggerManifest[],
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
-  const seen = new Map<string, ToolNameOwner>();
+  const seen = new Map<string, string>();
   const out: Diagnostic[] = [];
-  for (const schema of schemas) {
-    const segment = mcpToolNameSegment(schema.metadata.name);
-    const prior = seen.get(segment);
-    if (prior && !sameOwner(prior, "Schema", schema.metadata.name)) {
+  const exposed = new Set(triggers.flatMap((t) => (t.spec.source.kind === "mcp" ? [t.spec.target.procedure] : [])));
+  const claim = (kind: "View" | "Procedure", name: string) => {
+    const segment = mcpToolNameSegment(name);
+    if ((kind === "View" || exposed.has(name)) && (segment.length > 128 || !/^[A-Za-z0-9_.-]+$/.test(segment))) {
       out.push(validateDiagnostic({
         code: "MCP_TOOL_NAME_COLLISION",
         severity: "error",
-        path: manifestPath("Schema", schema.metadata.name, "/metadata/name", filePaths),
+        path: manifestPath(kind, name, "/metadata/name", filePaths),
         value: segment,
-        expected: `Schema name unique after kebab→snake mangling (collides with '${prior.name}')`,
-        message: `Schema '${schema.metadata.name}' mangles to MCP tool suffix '${segment}', which already comes from Schema '${prior.name}'.`,
+        expected: "an MCP tool name of at most 128 characters from [A-Za-z0-9_.-]",
+        message: `${kind} '${name}' cannot be an MCP tool name: it must be at most 128 characters from [A-Za-z0-9_.-].`,
       }));
-    } else if (!prior) {
-      seen.set(segment, { kind: "Schema", name: schema.metadata.name });
+      return;
     }
-  }
-  const viewNames = new Map<string, string>();
-  for (const view of views) {
-    if (view.spec.surface === "internal") continue;
-    const segment = mcpToolNameSegment(view.metadata.name);
-    const prior = viewNames.get(segment);
-    if (prior && prior !== view.metadata.name) {
+    const prior = seen.get(segment);
+    if (prior && prior !== `${kind} ${name}`) {
       out.push(validateDiagnostic({
         code: "MCP_TOOL_NAME_COLLISION",
         severity: "error",
-        path: manifestPath("View", view.metadata.name, "/metadata/name", filePaths),
-        value: `query_view_${segment}`,
-        expected: `View name unique after kebab→snake mangling (collides with '${prior}')`,
-        message: `View '${view.metadata.name}' mangles to MCP tool name 'query_view_${segment}', which already comes from View '${prior}'.`,
+        path: manifestPath(kind, name, "/metadata/name", filePaths),
+        value: segment,
+        expected: `${kind} name unique after kebab→snake mangling (collides with ${prior})`,
+        message: `${kind} '${name}' mangles to MCP tool name '${segment}', which already comes from ${prior}.`,
       }));
-    } else if (!prior) {
-      viewNames.set(segment, view.metadata.name);
-    }
-  }
-  for (const procedure of procedures) {
-    const name = mcpToolNameSegment(procedure.metadata.name);
-    let conflict: string | null = null;
-    if (RESERVED_MCP_GENERIC_TOOL_NAMES.has(name)) {
-      conflict = `built-in MCP tool '${name}'`;
-    } else {
-      const prefix = RESERVED_MCP_TOOL_PREFIXES.find((candidate) => name.startsWith(candidate));
-      if (prefix) conflict = `reserved tool-name prefix '${prefix}' (used by Schema / View tools)`;
-      else {
-        const prior = seen.get(name);
-        if (prior && !sameOwner(prior, "Procedure", procedure.metadata.name)) {
-          conflict = `${prior.kind} '${prior.name}'`;
-        }
-      }
-    }
-    if (conflict) {
-      out.push(validateDiagnostic({
-        code: "MCP_TOOL_NAME_COLLISION",
-        severity: "error",
-        path: manifestPath("Procedure", procedure.metadata.name, "/metadata/name", filePaths),
-        value: name,
-        expected: `Procedure name unique after kebab→snake mangling (collides with ${conflict})`,
-        message: `Procedure '${procedure.metadata.name}' mangles to MCP tool name '${name}', which collides with ${conflict}.`,
-      }));
-      continue;
-    }
-    seen.set(name, { kind: "Procedure", name: procedure.metadata.name });
-  }
+    } else if (!prior) seen.set(segment, `${kind} ${name}`);
+  };
+  for (const view of views) if (view.spec.surface !== "internal") claim("View", view.metadata.name);
+  for (const procedure of procedures) claim("Procedure", procedure.metadata.name);
   const mcpTriggers = new Map<string, string>();
   for (const trigger of triggers) {
     const source = trigger.spec.source;
@@ -691,10 +652,3 @@ function checkMcpToolNameCollisions(
   return out;
 }
 
-function sameOwner(
-  prior: ToolNameOwner,
-  kind: ToolNameOwner["kind"],
-  name: string,
-): boolean {
-  return prior.kind === kind && prior.name === name;
-}
