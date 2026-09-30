@@ -36,7 +36,7 @@ export interface MantleRuntimeArgs {
 const fail = (code: DiagnosticCode, path: string, message: string, phase: Diagnostic["phase"] = "boot", extra: Partial<Diagnostic> = {}) =>
   new DiagnosticError(makeDiagnostic({ code, phase, severity: "error", path, message, ...extra }));
 
-const VERB = { create: "insert", update: "update", delete: "delete" } as const;
+const VERB = { create: "insert", update: "update", delete: "delete", publish: "publish" } as const;
 const depthOf = (c: InvocationCause | undefined): number => (c ? 1 + depthOf(c.parent) : 0);
 const child = (parent: InvocationCause, procedure: string): InvocationCause => ({ kind: "internal", id: `${parent.id}>${procedure}`, parent });
 
@@ -59,8 +59,6 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   const triggers = Object.entries(plan.triggers).sort(([a], [b]) => (a < b ? -1 : 1));
   if (!args.schedules && triggers.some(([, t]) => t.source.kind === "schedule" && t.source.enabled !== false))
     throw fail("SCHEDULE_NOT_WIRED", at, "the plan has an enabled schedule Trigger and this entry does not wire schedules (pass schedules: true)");
-  for (const [name, t] of triggers)
-    if (t.source.kind === "lifecycle" && t.source.on.some((h) => h.endsWith("_publish"))) throw fail("DISPATCHER_NOT_BUILT", `${at}#/triggers/${name}`, "publish lifecycle hooks are not wired yet: status transitions are not part of the Store");
 
   // hook targets and guards are consumer code: an inline program would write inside a before hook or a guard, which fails open
   const inline = (name: string) => !("ref" in (plan.procedures[name]?.handler ?? { ref: "" }));

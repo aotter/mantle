@@ -3,7 +3,7 @@
  * a View is one read with keyset paging (ADR-0032 decisions 2 and 3, ADR-0034 decision 4). Store and
  * `invokeProcedure` both run through here; nothing else reaches the executor.
  */
-import { DiagnosticError, runtimeDiagnostic, type SqlNode as N } from "../../spec/index.js";
+import { DiagnosticError, decideLifecycleWrite, runtimeDiagnostic, type ContentState, type SqlNode as N } from "../../spec/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
@@ -16,6 +16,10 @@ export interface Program {
   readonly ir: readonly N[];
   /** A write's own `expect` count, by statement; a row op without one must affect exactly one row. */
   readonly expects?: readonly (number | undefined)[];
+  /** Per statement: the status an update moves the entry to. Only Store sets it; the lifecycle decides whether it is legal. */
+  readonly statuses?: readonly (string | undefined)[];
+  /** Per statement: called with the entry the lifecycle just read, before the write, to check the result (a publish must leave a complete entry). */
+  readonly checks?: readonly (((current: StoreRow) => void) | undefined)[];
 }
 
 /** Which (schema, operation) pairs have a lifecycle Trigger, as `schema.insert|update|delete` keys. */
@@ -68,11 +72,18 @@ function idOf(stmt: N): N {
   throw new Error("not a row op");
 }
 
-const key = (schema: string | undefined, verb: string | undefined) => `${schema}.${verb}`;
-const HOOK = { insert: "create", update: "update", delete: "delete" } as const;
+/** A publish fires publish hooks instead of update hooks; the key is `schema.<insert|update|delete|publish>`. */
+const verbOf = (c: Compiled) => (c.publish ? "publish" : c.verb!);
+const key = (c: Compiled) => `${c.schema}.${verbOf(c)}`;
+const HOOK = { insert: "create", update: "update", delete: "delete", publish: "publish" } as const;
+const NOT_ALLOWED = {
+  transition: "that status change is not allowed from the entry's current status",
+  "not-editable": "only a draft can be edited: unpublish or restore the entry first",
+  "published-protected": "a published entry cannot be deleted: unpublish or archive it first",
+} as const;
 
-/** The row a before hook sees: the visible current row of an update or delete, or the values an insert supplies. */
-async function beforeRow(env: RunEnv, p: Program, i: number, c: Compiled, as: RunAs): Promise<StoreRow> {
+/** The row a before hook or the lifecycle sees: the visible current row of an update or delete, or the values an insert supplies. */
+async function preRead(env: RunEnv, p: Program, i: number, c: Compiled, as: RunAs): Promise<StoreRow> {
   const stmt = p.ir[i]!;
   let read: N;
   if (c.verb === "insert") {
@@ -84,7 +95,7 @@ async function beforeRow(env: RunEnv, p: Program, i: number, c: Compiled, as: Ru
   } else {
     const t = (f: string) => ref("t", f);
     read = select(
-      [{ ResTarget: { val: ref("t", "id") } }, { ResTarget: { val: ref("t", "version") } }, { ResTarget: { val: { ColumnRef: { fields: [S("t"), { A_Star: {} }] } } } }],
+      [{ ResTarget: { val: ref("t", "id") } }, { ResTarget: { val: ref("t", "version") } }, ...(env.schemas[c.schema!]?.publishing ? [{ ResTarget: { val: ref("t", "status") } }] : []), { ResTarget: { val: { ColumnRef: { fields: [S("t"), { A_Star: {} }] } } } }],
       { RangeVar: { relname: c.schema, alias: { aliasname: "t" }, inh: true, relpersistence: "p", mantle: "table" } },
       { A_Expr: { kind: "AEXPR_OP", name: [S("=")], lexpr: t("id"), rexpr: idOf(stmt) } },
     );
@@ -101,7 +112,7 @@ const strip = (row: StoreRow): StoreRow => Object.fromEntries(Object.entries(row
 export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<{ readonly rows: readonly (readonly StoreRow[])[]; readonly affected: readonly number[] }> {
   const lc = env.lifecycle;
   const afterSchemas = new Set([...(lc?.after ?? [])].map((k) => k.split(".")[0]!));
-  const base = ctxOf(env, p, { returning: afterSchemas });
+  const base = ctxOf(env, p, { returning: afterSchemas, statuses: p.statuses });
   const plan = compileProgram(p.ir, base);
   const versions: Record<number, unknown> = {};
   const event = (i: number, hook: string, schema: string, rows: [StoreRow, ...StoreRow[]]) => ({
@@ -109,12 +120,25 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
   });
 
   for (const [i, c] of plan.entries()) {
-    if (!lc || !c.schema || !c.verb || !lc.before.has(key(c.schema, c.verb))) continue;
-    if (c.kind !== "row") throw refuse(`SQL_SHAPE: a set op on ${c.schema} is refused: ${c.schema} has a before ${c.verb} hook, and before hooks take row ops only`);
-    const row = await beforeRow(env, p, i, c, as);
-    await lc.dispatcher.before([event(i, `before_${HOOK[c.verb]}`, c.schema, [row])]);
+    if (!c.schema || !c.verb) continue;
+    const hooked = !!lc?.before.has(key(c));
+    // a publishing Schema drafts, protects what is published and moves through statuses by one rule (ADR-0032 decision 1)
+    const lifecycle = !!env.schemas[c.schema]?.publishing && c.kind === "row" && c.verb !== "insert";
+    if (hooked && c.kind !== "row") throw refuse(`SQL_SHAPE: a set op on ${c.schema} is refused: ${c.schema} has a before ${verbOf(c)} hook, and before hooks take row ops only`);
+    if (!hooked && !lifecycle) continue;
+    const row = await preRead(env, p, i, c, as);
+    if (lifecycle) {
+      const to = p.statuses?.[i] as ContentState | undefined;
+      const stmt = p.ir[i]!;
+      const from = row.status as ContentState;
+      const d = decideLifecycleWrite({ spec: { lifecycle: "publishing" } }, c.verb === "delete" ? { op: "delete", from } : { op: "update", from, ...(to ? { to } : {}), data: (stmt.UpdateStmt?.targetList?.length ?? 0) > 0 });
+      if (!d.allowed) throw new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: `CONFLICT: ${c.schema} entry is ${from}; ${NOT_ALLOWED[d.reason]}.` }));
+      p.checks?.[i]?.(row);
+    }
+    if (hooked) await lc!.dispatcher.before([event(i, `before_${HOOK[verbOf(c)]}`, c.schema, [row])]);
     versions[i] = row.version;
-    if (c.verb !== "insert") plan[i] = compileProgram([p.ir[i]!], { ...base, lockVersion: true })[0]!; // the statement carries the version the hook saw
+    // the statement carries the version it was decided on, so a change in between is CONFLICT
+    if (c.verb !== "insert") plan[i] = compileProgram([p.ir[i]!], { ...base, lockVersion: true, statuses: [p.statuses?.[i]] })[0]!;
   }
 
   const res = await env.executor.apply(plan.map((c, i) => ({
@@ -125,10 +149,10 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
 
   const rows = res.map((r, i) => (plan[i]!.hooked ? r.rows.map(strip) : r.rows));
   if (lc) for (const [i, c] of plan.entries()) {
-    if (!c.schema || !c.verb || !lc.after.has(key(c.schema, c.verb)) || !res[i]!.rows.length) continue; // a statement that writes no row calls no hook
+    if (!c.schema || !c.verb || !lc.after.has(key(c)) || !res[i]!.rows.length) continue; // a statement that writes no row calls no hook
     const cause = res[i]!.rows.map((row) => ({ ...strip(row), id: row[HIDDEN_ID], version: row[HIDDEN_VERSION] })) as unknown as [StoreRow, ...StoreRow[]];
     // a failure of an after hook never changes the committed result (ADR-0032 decision 3); the dispatcher reports its own failures
-    await lc.dispatcher.after([event(i, `after_${HOOK[c.verb]}`, c.schema, cause)]).catch(() => undefined);
+    await lc.dispatcher.after([event(i, `after_${HOOK[verbOf(c)]}`, c.schema, cause)]).catch(() => undefined);
   }
   return { rows, affected: res.map((r) => r.affected) };
 }

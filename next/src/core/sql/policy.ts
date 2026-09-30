@@ -26,6 +26,8 @@ export type PolicyOpts = {
   mode?: Mode;
   /** add `AND version = ?` (the version the before hook saw) to a row op's WHERE */
   lockVersion?: boolean;
+  /** the status an update moves the entry to (the lifecycle decided it is legal); SQL cannot write `status` */
+  status?: string;
   /** schemas that have an after hook: their writes get RETURNING */
   returning?: Set<string>;
   /** NEGATIVE CONTROL ONLY: print no visibility predicate, so a probe that cannot fail is caught */
@@ -42,6 +44,8 @@ export type Compiled = {
   returns: boolean;
   /** an after hook exists for the target: RETURNING carries id and version in hidden columns the executor splits off */
   hooked: boolean;
+  /** the update publishes the entry: publish hooks fire instead of update hooks */
+  publish: boolean;
   /** the rowid of a row op's target is not needed; kept for hooks: does the statement return rows to the hook? */
 };
 
@@ -433,7 +437,7 @@ function update(n: N, c: C): N {
   dmlScope(n.relation, c);
   const out = deep(n, c, 'UpdateStmt');
   c.sel.pop();
-  out.targetList.push(bump(), touch(c));
+  out.targetList.push(bump(), touch(c), ...(c.status ? [res(param$(c, { k: 'const', value: c.status }), 'status')] : []));
   out.whereClause = and(out.whereClause, visible(s, a, c), c.lockVersion && op('=', col(a, 'version'), param$(c, { k: 'version' })));
   out.returningClause = returning(out.returningClause, s, n.relation.relname, c);
   return { UpdateStmt: out };
@@ -501,5 +505,5 @@ export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const t = Object.keys(stmt)[0]!;
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
   const schema = verb ? stmt[t].relation.relname : undefined;
-  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, returns: t === 'SelectStmt' || !!ast[t].returningClause, hooked: !!schema && !!opts.returning?.has(schema) };
+  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, returns: t === 'SelectStmt' || !!ast[t].returningClause, hooked: !!schema && !!opts.returning?.has(schema), publish: opts.status === 'published' };
 }

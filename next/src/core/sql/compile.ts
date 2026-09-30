@@ -30,6 +30,8 @@ export interface CompileContext {
   readonly returning?: ReadonlySet<string>;
   /** Add `AND version = ?` (the version the before hook saw) to a row op. */
   readonly lockVersion?: boolean;
+  /** Per statement: the status an update moves the entry to (Store's `set: { status }`). */
+  readonly statuses?: readonly (string | undefined)[];
   /** Records every relation position the policy printed a wrapper for (the position probe checks it is complete). */
   readonly seen?: Set<RelationPosition>;
   /** NEGATIVE CONTROL ONLY (see RunEnv). */
@@ -42,8 +44,8 @@ export function compileProgram(stmts: readonly SqlNode[], ctx: CompileContext): 
   if (diagnostics.length)
     throw new DiagnosticError(diagnostics.map((d) => runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `${d.code}: ${d.message}` })));
   const opts: PolicyOpts = { schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, lockVersion: ctx.lockVersion, returning: ctx.returning as Set<string> | undefined, seen: ctx.seen, unsafeNoVisibility: ctx.unsafeNoVisibility };
-  return stmts.map((stmt) => {
-    const c = applyPolicy(stmt, opts);
+  return stmts.map((stmt, i) => {
+    const c = applyPolicy(stmt, { ...opts, status: ctx.statuses?.[i] });
     // a Schema whose published entries are protected takes row ops only (ADR-0032 decision 2, ADR-0034 decision 4)
     if (c.kind === "set" && c.schema && ctx.schemas[c.schema]?.publishing)
       throw new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `SQL_SHAPE: a set op on ${c.schema} is refused: its lifecycle is publishing, so published entries are protected and writes take row ops only` }));
