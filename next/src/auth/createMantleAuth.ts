@@ -1246,7 +1246,7 @@ export interface MantleAuth {
    *  user with sessions/accounts can never be cascade-deleted through
    *  this path. Returns false when the row didn't match the guard. */
   readonly revokeInvite: (userId: string) => Promise<boolean>;
-  /** Delete a user; Better Auth's foreign keys cascade its sessions and accounts. A service stops running raw SQL against auth tables. */
+  /** Delete a user; sessions and accounts cascade, and cached sessions are cleared when a session cache is configured. A service stops running raw SQL against auth tables. */
   readonly deleteUser: (userId: string) => Promise<boolean>;
   /** Register an OAuth/OIDC client when `oauthProvider` is configured.
    *  Uses Better Auth's own provider plugin endpoint and returns the
@@ -1285,7 +1285,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       const applied = await db.first<{ id: string }>("SELECT id FROM _mantle_migrations WHERE id = ?1", id);
       if (applied?.id === id) return;
     } catch (error) {
-      // A new, auth-only or pre-#1150 database has no ledger yet; the runner creates and backfills it.
+      // A new, auth-only or pre-#1150 database has no ledger yet; the runner creates it.
       if (!/no such table: _mantle_migrations/i.test(String(error))) throw error;
     }
     const { compileMigrations } = await getMigrations(context.options);
@@ -1715,6 +1715,13 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     },
     deleteUser: async (userId) => {
       await prepareAuth();
+      if (config.sessionCache) {
+        // The session cache holds copies a raw DELETE cannot reach; Better Auth's own delete clears them.
+        const context = await auth.$context;
+        if (!await context.internalAdapter.findUserById(userId)) return false;
+        await context.internalAdapter.deleteUser(userId);
+        return true;
+      }
       const result = await db.run("DELETE FROM user WHERE id = ?", userId);
       return (result.meta?.changes ?? 0) > 0;
     },

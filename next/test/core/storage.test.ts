@@ -83,3 +83,11 @@ it("rebuilds the search table when its fields change and drops it when search go
   expect(await names(d1, "table")).not.toContain("_mantle_fts_notes");
   expect((await names(d1, "trigger")).filter((n) => n.startsWith("_mantle_fts_"))).toEqual([]);
 });
+
+it("refuses Schema names the platform owns, in any letter case, and never adopts a foreign table by case", async () => {
+  const d1 = await db();
+  await d1.exec("CREATE TABLE user (id TEXT PRIMARY KEY, email TEXT)");
+  const r = await run(d1, { User: { fields: {} }, session: { fields: {} }, _mantle_x: { fields: {} } });
+  expect(r.blocked.map((b) => [b.schema, b.code])).toEqual([["User", "STORAGE_TABLE_NOT_OWNED"], ["session", "STORAGE_TABLE_NOT_OWNED"], ["_mantle_x", "STORAGE_TABLE_NOT_OWNED"]]);
+  expect(await d1.all("SELECT name FROM _mantle_schema_tables")).toEqual([]);
+});
