@@ -255,9 +255,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       if (field) where.push({ [field]: coerce(value!, propsOf(s.schema)[field], field, P) as StoreScalar });
     }
     const search = q.get("search")?.trim();
-    // `like` over the declared searchable text fields and the id (Store has no full-text search, G4)
-    if (search) where.push({ or: ["id", ...(s.search ?? []).filter((f) => s.fields[f] === "text")].map((f) => ({ [f]: { like: `%${search}%` } })) });
-    return { from: s.name, ...(where.length ? { where: { and: where } } : {}), orderBy: { [q.get("sort") || "updatedAt"]: q.get("direction") === "asc" ? "asc" : "desc" } };
+    return { from: s.name, ...(where.length ? { where: { and: where } } : {}), ...(search ? { search } : {}), orderBy: { [q.get("sort") || "updatedAt"]: q.get("direction") === "asc" ? "asc" : "desc" } };
   };
   const everyPage = async (store: CallerStore, q: StoreSelect) => {
     const rows: StoreRow[] = [];

@@ -41,6 +41,18 @@ export async function run(r: Report, driver: DatabaseDriver) {
     ]).then((x) => x.map((y) => y.rows.map((z) => z.id))),
     [['c'], ['d'], ['a'], ['b'], ['a', 'c'], ['oa', 'ob']]);
 
+  // ---- search (ADR-0035 decision 7): the declared search fields through mantle.search, or the id --------------------------
+  r.equal("search: a three-character Chinese substring through the trigram index, a two-character one by scan, an exact id, and the id alone on a Schema with no search fields; another owner's and the expired notes are absent",
+    await Promise.all([
+      me.select({ from: 'notes', columns: ['id'], search: '小籠包', orderBy: { id: 'asc' } }),
+      me.select({ from: 'notes', columns: ['id'], search: '小籠', orderBy: { id: 'asc' } }),
+      me.select({ from: 'notes', columns: ['id'], search: 'n4', orderBy: { id: 'asc' } }),
+      me.select({ from: 'items', columns: ['id'], search: 'a', orderBy: { id: 'asc' } }),
+    ]).then((x) => x.map((y) => y.rows.map((z) => z.id))),
+    [['n1'], ['n1'], ['n4'], ['a']]);
+  r.equal('search matches an id exactly: a LIKE wildcard or a prefix of an id matches nothing', await Promise.all(['%', '_', 'n'].map(async (q) => (await me.select({ from: 'items', columns: ['id'], search: q })).rows)), [[], [], []]);
+  r.check('search takes a non-empty string', invalid(await fail(() => me.select({ from: 'notes', search: ' ' }))) && invalid(await fail(() => me.select({ from: 'notes', search: 3 }))));
+
   // ---- cursor: one opaque format, bound to the query ----------------------------------------------------------------------
   const p1 = await me.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 3 });
   const p2 = await me.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 3, cursor: p1.nextCursor });

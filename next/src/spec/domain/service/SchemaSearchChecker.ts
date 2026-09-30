@@ -67,7 +67,7 @@ export function checkSchemaSearchableFields(
         category: "invalid",
         pointer,
         value,
-        expected: "a top-level string property, optionally nullable",
+        expected: "a top-level string property, optionally nullable, not a date or date-time",
         message: `Schema '${manifest.metadata.name}' searchable field '${value}' is not a string property.`,
       });
     }
@@ -78,6 +78,8 @@ export function checkSchemaSearchableFields(
 function isStringProperty(property: unknown): boolean {
   if (!property || typeof property !== "object" || Array.isArray(property)) return false;
   const rawType = (property as Record<string, unknown>)["type"];
+  // a date or a timestamp is stored as a number (ADR-0034 decision 5), so its text is not what search would match
+  if (["date", "date-time"].includes(String((property as Record<string, unknown>)["format"]))) return false;
   if (rawType === "string") return true;
   return Array.isArray(rawType) &&
     rawType.length > 0 &&

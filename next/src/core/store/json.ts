@@ -172,10 +172,19 @@ export class StoreJson {
       ...(sub.where === undefined ? {} : { whereClause: this.where(sub.where, inner.def, depth + 1) }), ...SELECT } } } };
   }
 
+  /** `mantle.search` over the declared search fields, or the id itself: the dialect lowers the first (D1: FTS5 trigram). */
+  private search(text: unknown, name: string, def: StoreSchema): N {
+    if (typeof text !== "string" || !text.trim()) throw invalid("Store search takes a non-empty string.");
+    const id = op("=", ref("id"), this.val("text", text, "search"));
+    if (!def.search?.length) return id;
+    const call: N = { FuncCall: { funcname: [S("mantle"), S("search")], args: [ref(name), this.val("text", text, "search")], funcformat: "COERCE_EXPLICIT_CALL" } };
+    return bool("OR_EXPR", [call, id]);
+  }
+
   /** A select: the projection names every output column, so it can be paged. */
   select(q: StoreSelect): { ir: N; columns: readonly Column[]; order: { column: Column; dir: "asc" | "desc" }; pageSize: number; from: string } {
     if (typeof q !== "object" || q === null || Array.isArray(q)) throw invalid("Store select takes an object.");
-    const bad = Object.keys(q).find((k) => !["from", "columns", "where", "orderBy", "limit", "cursor"].includes(k));
+    const bad = Object.keys(q).find((k) => !["from", "columns", "where", "orderBy", "limit", "cursor", "search"].includes(k));
     if (bad) throw invalid(`Unknown Store select key '${bad}'.`);
     if (Object.hasOwn(q, "where") && q.where === undefined) throw invalid("Store where is undefined; omit it or provide a condition.");
     const { name, def } = this.schema(q.from);
@@ -191,9 +200,10 @@ export class StoreJson {
     const order = { column: this.column(def, sortName, "orderBy", true), dir };
     if (q.limit !== undefined && (!Number.isSafeInteger(q.limit) || q.limit < 1 || q.limit > 500)) throw invalid("Store limit must be an integer from 1 to 500.");
     if (q.cursor !== undefined && typeof q.cursor !== "string") throw invalid("Store cursor must be a string.");
+    const where = [...(q.where === undefined ? [] : [this.where(q.where, def)]), ...(q.search === undefined ? [] : [this.search(q.search, name, def)])];
     const ir: N = { SelectStmt: {
       targetList: columns.map((c) => target(ref(c.col), c.out)), fromClause: [{ RangeVar: table(name) }],
-      ...(q.where === undefined ? {} : { whereClause: this.where(q.where, def) }),
+      ...(where.length ? { whereClause: where.length === 1 ? where[0] : bool("AND_EXPR", where) } : {}),
       sortClause: [{ SortBy: { node: ref(order.column.col), sortby_dir: dir === "asc" ? "SORTBY_ASC" : "SORTBY_DESC", sortby_nulls: "SORTBY_NULLS_DEFAULT" } }], ...SELECT } };
     return { ir, columns, order, pageSize: q.limit ?? 50, from: name };
   }
