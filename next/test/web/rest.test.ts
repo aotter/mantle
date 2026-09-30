@@ -75,6 +75,29 @@ spec:
   sql: "SELECT id, title, rank FROM notes WHERE rank >= coalesce(input.min, 0) ORDER BY rank, title"
 ---
 apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: retitle }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object, required: [noteId, newTitle], properties: { noteId: { type: string }, newTitle: { type: string, minLength: 2 } } }
+  output: { type: object, required: [results] }
+  handler: { sql: "UPDATE notes SET title = input.newTitle WHERE id = input.noteId RETURNING id, title" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: retitle-it }
+spec: { source: { kind: http, method: PUT, path: /api/retitle }, target: { procedure: retitle } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: ranked-from }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object, required: [minRank], properties: { minRank: { type: integer } } }
+  sql: "SELECT title FROM notes WHERE rank >= input.minRank ORDER BY title"
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: hidden }
 spec: { surface: internal, sql: "SELECT id FROM notes ORDER BY id" }
@@ -104,6 +127,15 @@ describe("REST surface", () => {
     const id = a.body.results[0][0].id;
     expect((await call("PATCH", `/api/notes/${id}/rank`, user("o1"), { rank: 9 })).body).toEqual({ results: [[{ id, rank: 9 }]] });
     expect((await call("PATCH", `/api/notes/${id}/rank`, user("o2"), { rank: 1 })).status).toBe(409); // another owner's row is a missing row
+  });
+
+  it("binds a camelCase input, which SQL folds to lower case, by its declared name; a key that only folds the same is never read", async () => {
+    const id = (await call("POST", "/api/notes", user("o9"), { title: "before", rank: 4 })).body.results[0][0].id;
+    expect((await call("PUT", "/api/retitle", user("o9"), { noteId: id, newTitle: "after" })).body).toEqual({ results: [[{ id, title: "after" }]] });
+    // NEWTITLE skipped the schema (minLength 2); only the declared newTitle binds
+    expect((await call("PUT", "/api/retitle", user("o9"), { noteId: id, newTitle: "kept", NEWTITLE: "x" })).body).toEqual({ results: [[{ id, title: "kept" }]] });
+    expect((await call("GET", "/api/views/ranked-from?minRank=4", user("o9"))).body.rows).toEqual([{ title: "kept" }]);
+    expect((await call("GET", "/api/views/ranked-from?minRank=5", user("o9"))).body.rows).toEqual([]);
   });
 
   it("serves a public View with coerced query params and one opaque cursor; an internal View is not routed", async () => {
