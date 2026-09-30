@@ -8,6 +8,7 @@ import { PG_GRAMMAR } from "../../domain/model/SqlIr.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
 import * as d1 from "../../../d1/compile/index.js";
 import { parsePgSql } from "./PgQueryParser.js";
+import { refuseForEveryDialect } from "./frontEnd.js";
 
 /** A dialect's compile side, as `<dialect>/compile` exports it (ADR-0035 decision 3). */
 export interface SqlDialect {
@@ -59,6 +60,7 @@ export async function compileSql(sql: string, ctx: SqlContext, dialect: SqlDiale
   try {
     const parsed = await parsePgSql(sql);
     const tagged = tagRelations(parsed.stmts) as SqlNode[];
+    refuseForEveryDialect(tagged, ctx, parsed.locations);
     dialect.accepts(tagged, { ...ctx, source: sql }, parsed.locations);
     return { ok: true, plan: { grammar: PG_GRAMMAR, stmts: stripLocations(tagged) } };
   } catch (e) {

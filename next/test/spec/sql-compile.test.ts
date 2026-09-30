@@ -5,6 +5,7 @@ import {
   PG_GRAMMAR,
   compileSql,
   type SqlContext,
+  type SqlDialect,
   type SqlDiagnosticCode,
   type SqlNode,
 } from "../../src/spec/index.js";
@@ -48,6 +49,40 @@ const REFUSED: Refusal[] = [
   ["SELECT interval '1 ms'", "SQL_TYPE", undefined, /not supported/],
   ["SELEC id FROM items", "SQL_SYNTAX", "SELEC"],
 ];
+
+describe("the shared front end (ADR-0035 decision 4)", () => {
+  // a dialect that accepts everything: whatever is still refused, the front end refused
+  const anything: SqlDialect = { name: "test/anything", version: "0", accepts: () => undefined };
+  const refused: Refusal[] = [
+    ["CREATE TABLE t (a int)", "SQL_UNSUPPORTED", undefined, /CreateStmt/],
+    ["SET search_path = x", "SQL_UNSUPPORTED", undefined, /VariableSetStmt/],
+    ["BEGIN", "SQL_UNSUPPORTED", undefined, /TransactionStmt/],
+    ["COPY items TO STDOUT", "SQL_UNSUPPORTED", undefined, /CopyStmt/],
+    ["DO $$ BEGIN END $$", "SQL_UNSUPPORTED", undefined, /DoStmt/],
+    ["SELECT set_config('mantle.uid', 'o2', false)", "SQL_FUNCTION", "set_config"],
+    ["SELECT current_setting(input.k)", "SQL_FUNCTION", "current_setting"],
+    ["SELECT pg_advisory_lock(1)", "SQL_FUNCTION", "pg_advisory_lock"],
+    ["SELECT id FROM _mantle_tz", "SQL_RELATION", "_mantle_tz"],
+    ['SELECT (SELECT email FROM "user" LIMIT 1) AS e FROM items', "SQL_RELATION", '"user"'],
+    ["SELECT id FROM public.items", "SQL_RELATION", "public.items", /schema-qualified/],
+    ["SELECT id FROM items WHERE name = input.nope", "SQL_COLUMN", "input.nope"],
+    ["SELECT mantle.nope(items) FROM items", "SQL_FUNCTION", "mantle.nope"],
+    ["SELECT auth.email()", "SQL_FUNCTION", "auth.email"],
+    ["WITH gone AS (DELETE FROM items RETURNING id) SELECT id FROM gone", "SQL_SHAPE", undefined, /reads only/],
+  ];
+  it("refuses what no dialect may run, with a position, whatever the dialect accepts", async () => {
+    for (const [sql, code, token, msg] of refused) {
+      const res = await compileSql(sql, ctxOf(/^\s*(SELECT|WITH)/i.test(sql) ? "view" : "procedure"), anything);
+      if (res.ok) throw new Error(`accepted: ${sql}`);
+      expect(res.diagnostic, sql).toMatchObject({ code, ...(token ? { token } : {}) });
+      if (msg) expect(res.diagnostic.message, sql).toMatch(msg);
+    }
+  });
+  it("leaves the rest to the dialect: a CTE of the statement, a setting outside mantle.*, MERGE", async () => {
+    for (const sql of ["WITH x AS (SELECT id FROM items) SELECT id FROM x", "SELECT current_setting('timezone')", "MERGE INTO items USING orders o ON items.id = o.item_id WHEN MATCHED THEN DELETE"])
+      expect(await compileSql(sql, ctxOf(/^\s*(SELECT|WITH)/i.test(sql) ? "view" : "procedure"), anything), sql).toMatchObject({ ok: true });
+  });
+});
 
 describe("compileSql", () => {
   it("refuses outside the subset with a code and a position; the runtime validator refuses the same IR", async () => {
