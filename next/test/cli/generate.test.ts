@@ -17,8 +17,8 @@ const SRC = fileURLToPath(new URL("../../src", import.meta.url));
 const TYPES = fileURLToPath(new URL("../../node_modules/@types", import.meta.url));
 
 /** A copy of the fixture with the named packages "installed" (a package.json under node_modules is what generate looks for). */
-async function project(packages: readonly string[] = ["@aotter/mantle"], lockfile?: string): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "mantle-generate-"));
+async function project(packages: readonly string[] = ["@aotter/mantle"], lockfile?: string, prefix = "mantle-generate-"): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
   await cp(FIXTURE, dir, { recursive: true });
   for (const p of packages) {
     await mkdir(join(dir, "node_modules", p), { recursive: true });
@@ -71,6 +71,12 @@ describe("mantle generate", () => {
     await writeFile(join(b, "manifests/items.yaml"), `\uFEFF${lf.replace(/\n/g, "\r\n")}`);
     await writeFile(join(b, ".mantle/generated/mantle.ts"), (await read(b, ".mantle/generated/mantle.ts")).replace(/\n/g, "\r\n"));
     expect((await gen(["--check"], b)).code).toBe(0);
+  });
+
+  it("generates in a project whose path has spaces and non-ASCII characters (a Windows user folder)", async () => {
+    const dir = await project(undefined, undefined, "mantle Windows 曾 project ");
+    expect((await gen(CUSTOM, dir)).code).toBe(0);
+    expect((await gen([...CUSTOM, "--check"], dir)).code).toBe(0);
   });
 
   it("--check exits 1 on stale output and writes nothing, and 0 once generated", async () => {
