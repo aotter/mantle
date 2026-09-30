@@ -149,6 +149,8 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       if (!v) throw invalid(`Unknown View '${name}'.`);
       const denial = caller && evaluateAuthAll(v.requires, caller, `manifest:View/${name}`);
       if (denial) throw new DiagnosticError(denial);
+      // the input as its schema reads it (defaults filled), as a Procedure binds it
+      let input: unknown = options.input;
       if (v.input) {
         let z = viewInputs.get(v);
         if (!z) viewInputs.set(v, (z = jsonSchemaToZod(v.input)));
@@ -157,13 +159,14 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
           const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
           throw invalid(`View '${name}' input does not match its schema${instancePath ? ` at ${instancePath}` : ""}: ${message}`);
         }
+        input = r.data;
       }
       if (caller && v.guard) await deps.guardView?.(v.guard, caller, options.input ?? {}, parent ?? { kind: "internal", id: `store:${deps.newId()}` });
       const limit = options.limit ?? 50;
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");
       const { mode, bind: b } = bindFor(deps.now(), caller);
       const cursor = options.cursor === undefined ? undefined : decodeCursor(`view:${name}`, options.cursor);
-      const page = await runView(env(v.public ? "public" : mode), { kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: sqlInput(v.input, options.input) }), { pageSize: limit, ...(cursor ? { cursor } : {}) });
+      const page = await runView(env(v.public ? "public" : mode), { kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: sqlInput(v.input, input) }), { pageSize: limit, ...(cursor ? { cursor } : {}) });
       const decodeView = (row: StoreRow) => Object.fromEntries(Object.entries(row).map(([k, value]) => {
         const c = v.columns && Object.hasOwn(v.columns, k) ? v.columns[k]! : undefined;
         const def = c && deps.schemas[c.schema];

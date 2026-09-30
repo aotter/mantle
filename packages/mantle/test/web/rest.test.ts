@@ -89,6 +89,29 @@ metadata: { name: retitle-it }
 spec: { source: { kind: http, method: PUT, path: /api/retitle }, target: { procedure: retitle } }
 ---
 apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: retitle-at }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object, required: [noteId, newTitle, expectedVersion], properties: { noteId: { type: string }, newTitle: { type: string }, expectedVersion: { type: integer } } }
+  output: { type: object, required: [results] }
+  handler: { sql: "UPDATE notes SET title = input.newTitle WHERE id = input.noteId AND version = input.expectedVersion RETURNING id" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: retitle-at-it }
+spec: { source: { kind: http, method: PUT, path: /api/retitle-at }, target: { procedure: retitle-at } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: ranked-by-default }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object, properties: { minRank: { type: integer, default: 4 } } }
+  sql: "SELECT title FROM notes WHERE rank >= input.minRank ORDER BY title"
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: ranked-from }
 spec:
@@ -133,9 +156,15 @@ describe("REST surface", () => {
     const id = (await call("POST", "/api/notes", user("o9"), { title: "before", rank: 4 })).body.results[0][0].id;
     expect((await call("PUT", "/api/retitle", user("o9"), { noteId: id, newTitle: "after" })).body).toEqual({ results: [[{ id, title: "after" }]] });
     // NEWTITLE skipped the schema (minLength 2); only the declared newTitle binds
-    expect((await call("PUT", "/api/retitle", user("o9"), { noteId: id, newTitle: "kept", NEWTITLE: "x" })).body).toEqual({ results: [[{ id, title: "kept" }]] });
+    for (const extra of ["NEWTITLE", "newtitle"])
+      expect((await call("PUT", "/api/retitle", user("o9"), { noteId: id, newTitle: "kept", [extra]: "x" })).body).toEqual({ results: [[{ id, title: "kept" }]] });
     expect((await call("GET", "/api/views/ranked-from?minRank=4", user("o9"))).body.rows).toEqual([{ title: "kept" }]);
     expect((await call("GET", "/api/views/ranked-from?minRank=5", user("o9"))).body.rows).toEqual([]);
+    // a View binds its input as the schema reads it: the default fills an absent value
+    expect((await call("GET", "/api/views/ranked-by-default", user("o9"))).body.rows).toEqual([{ title: "kept" }]);
+    // a camelCase version input: a stale one is CONFLICT reason lock, not a missing row
+    const stale = await call("PUT", "/api/retitle-at", user("o9"), { noteId: id, newTitle: "late", expectedVersion: 1 });
+    expect(stale).toMatchObject({ status: 409, body: { error: { conflict: { reason: "lock" } } } });
   });
 
   it("serves a public View with coerced query params and one opaque cursor; an internal View is not routed", async () => {

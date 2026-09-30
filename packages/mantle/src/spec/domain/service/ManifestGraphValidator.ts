@@ -233,8 +233,9 @@ function checkCaseCollisions(schemas: readonly SchemaManifest[], programs: reado
       code: "FIELD_NAME_CASE_COLLISION", severity: "error", path: manifestPath("Schema", s.metadata.name, `/spec/schema/properties/${pointerSegment(name)}`, filePaths), value: name,
       message: `Schema '${s.metadata.name}' declares '${name}' and '${other}', which differ only by case; SQL names them the same column. Rename one.`,
     })));
-  // `input.itemId` and `input.ItemId` are one name in SQL, so a statement could not tell the two inputs apart
-  for (const m of programs)
+  // `input.itemId` and `input.ItemId` are one name in SQL, so a statement could not tell the two inputs apart; a `ref` handler reads
+  // the JS object, where they are two keys
+  for (const m of programs.filter((p) => p.kind === "View" || "sql" in p.spec.handler))
     collide(Object.keys(m.spec.input?.properties ?? {}), (name, other) => out.push(validateDiagnostic({
       code: "FIELD_NAME_CASE_COLLISION", severity: "error", path: manifestPath(m.kind, m.metadata.name, `/spec/input/properties/${pointerSegment(name)}`, filePaths), value: name,
       message: `${m.kind} '${m.metadata.name}' declares the inputs '${name}' and '${other}', which differ only by case; SQL names them the same input. Rename one.`,
