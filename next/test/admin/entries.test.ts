@@ -255,12 +255,36 @@ describe("Admin entries: the list", () => {
   });
 });
 
+describe("Admin entries: names a client chooses", () => {
+  it("a prototype name as a filter, scope, sort or data key is a 400, never a 500", async () => {
+    for (const q of ["filter_field=constructor&filter_value=x", "filter_field=__proto__&filter_value=x", "scope_field=constructor&scope_value=x", "sort=constructor", "sort=__proto__"])
+      expect([q, (await call("GET", `/admin/api/entries?collection=metrics&${q}`, contributor)).status]).toEqual([q, 400]);
+    for (const data of [{ constructor: "x" }, JSON.parse('{"__proto__":"x","name":"p"}')]) {
+      expect((await call("POST", "/admin/api/entries", editor, { collection: "metrics", data })).status).toBe(400);
+    }
+  });
+});
+
 describe("Admin entries: CSV", () => {
   const rows = (text: string) => text.replace(/^﻿/, "").split("\r\n").filter(Boolean);
 
+  it("a page that fails after the download began ends it as failed, with a trace", async () => {
+    const store = rt.store.as(editor);
+    let n = 0;
+    const flaky = { ...rt, store: { ...rt.store, as: () => ({ ...store, select: async (q: never) => (++n > 1 ? Promise.reject(new Error("D1 limit")) : { ...(await store.select(q)), nextCursor: "more" }) }) } } as unknown as MantleRuntime;
+    const log = console.error;
+    const seen: unknown[][] = [];
+    console.error = (...a: unknown[]) => void seen.push(a);
+    try {
+      const res = await createAdminSurface(flaky, { basePath: "/admin" })(new Request("http://x/admin/api/entries/export?collection=metrics&limit=1"), editor);
+      await expect(res.text()).rejects.toThrow("D1 limit");
+    } finally { console.error = log; }
+    expect(seen.some((a) => String(a[0]).includes("export failed"))).toBe(true);
+  });
+
   it("exports every page, quotes, and defuses formula prefixes", async () => {
-    const tricky = ['say "hi", then\nleave', "=SUM(A1)", "+1", "-2", "@cmd", " \t=x"];
-    for (let i = 0; i < 120; i += 20) await rt.store.write(Array.from({ length: 20 }, (_, k) => i + k).map((n) => ({ insert: "metrics", values: { name: `bulk-${String(n).padStart(3, "0")}`, value: -n, ...(n < tricky.length ? { note: tricky[n] } : {}) } })));
+    const tricky = ['say "hi", then\nleave', "=SUM(A1)", "+1", "-2", "@cmd", " \t=x", "\tTAB", "\rCR"];
+    for (let i = 0; i < 600; i += 20) await rt.store.write(Array.from({ length: 20 }, (_, k) => i + k).map((n) => ({ insert: "metrics", values: { name: `bulk-${String(n).padStart(3, "0")}`, value: -n, ...(n < tricky.length ? { note: tricky[n] } : {}) } })));
     const r = await call("GET", "/admin/api/entries/export?collection=metrics&filter_field=name&filter_value=", editor);
     expect(r.status).toBe(400); // a bad query is JSON before the download starts
     const res = await createAdminSurface(rt, { basePath: "/admin" })(new Request("http://x/admin/api/entries/export?collection=metrics&sort=name&direction=asc"), editor);
@@ -268,18 +292,17 @@ describe("Admin entries: CSV", () => {
     const text = await res.text();
     const lines = rows(text);
     expect(lines[0]).toBe("id,version,updated_at,name,value,note");
-    expect(lines.filter((l) => l.includes(",bulk-"))).toHaveLength(120); // crosses the 100-row export page
+    expect(lines.filter((l) => l.includes(",bulk-"))).toHaveLength(600); // crosses the 500-row export page
     expect(text).toContain(',"say ""hi"", then\nleave"\r\n');
-    for (const cell of ["'=SUM(A1)", "'+1", "'-2", "'@cmd", "' \t=x"]) expect(text).toContain(`,${cell}\r\n`);
+    for (const cell of ["'=SUM(A1)", "'+1", "'-2", "'@cmd", "' \t=x", "'\tTAB"]) expect(text).toContain(`,${cell}\r\n`);
     expect(lines[3]).toMatch(/,-2,'\+1$/); // a negative number is a number, not a formula
   });
 
   it("exports a staff View with its declared columns, and hides a non-staff View", async () => {
-    for (let i = 120; i < 520; i += 20) await rt.store.write(Array.from({ length: 20 }, (_, k) => ({ insert: "metrics", values: { name: `bulk-${i + k}`, value: 0 } })));
     const res = await createAdminSurface(rt, { basePath: "/admin" })(new Request("http://x/admin/api/views/metric-list/export"), contributor);
     const lines = rows(await res.text());
     expect(lines[0]).toBe("name,note");
-    expect(lines.filter((l) => l.startsWith("bulk-"))).toHaveLength(520); // crosses the 500-row View page
+    expect(lines.filter((l) => l.startsWith("bulk-"))).toHaveLength(600); // crosses the 500-row View page
     expect((await call("GET", "/admin/api/views/metric-hidden/export", owner)).status).toBe(404);
   });
 });
