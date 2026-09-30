@@ -1,21 +1,15 @@
 /** Sign-in methods to Better Auth options: providers, email plugins, the bootstrap owner rule, trusted origins, paths and cookies. */
 import { oauthProvider } from "@better-auth/oauth-provider";
-import {
-type BetterAuthOptions
-} from "better-auth";
+import type { BetterAuthOptions } from "better-auth";
 import { splitSetCookieHeader } from "better-auth/cookies";
-import {
-emailOTP,
-magicLink,
-type GenericOAuthConfig
-} from "better-auth/plugins";
+import { emailOTP, magicLink, type GenericOAuthConfig } from "better-auth/plugins";
 import type { SocialProviders } from "better-auth/social-providers";
-import { signInCodeEmail,signInLinkEmail } from "./emailTemplates.js";
+import { signInCodeEmail, signInLinkEmail } from "./emailTemplates.js";
 
 export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo,InviteUserResult,ListMembersArgs,MemberListResult,MemberUserInfo,StaffUserInfo } from "../admin/identity.js";
+export type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, MemberUserInfo, StaffUserInfo } from "../admin/identity.js";
 
-import { AuthMethodConfig,BootstrapOwnerRule,OAuthProviderConfig,SocialProviderId } from "./types.js";
+import type { AuthMethodConfig, BootstrapOwnerRule, OAuthProviderConfig, SocialProviderId } from "./types.js";
 export function normalizeAuthBasePath(basePath: string | undefined): string {
   if (basePath === undefined) return "/api/auth";
   const trimmed = basePath.trim();

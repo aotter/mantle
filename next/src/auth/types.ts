@@ -1,27 +1,15 @@
 /** The auth contract: options for `createMantleAuth`, its sign-in methods, and the `MantleAuth` facade. */
-import { type OAuthProviderExtension,type Scope } from "@better-auth/oauth-provider";
-import {
-type BetterAuthOptions,
-type BetterAuthPlugin
-} from "better-auth";
-import {
-type EmailOTPOptions,
-type GenericOAuthConfig,
-type MagicLinkOptions
-} from "better-auth/plugins";
+import type { OAuthProviderExtension, Scope } from "@better-auth/oauth-provider";
+import type { BetterAuthOptions, BetterAuthPlugin } from "better-auth";
+import type { EmailOTPOptions, GenericOAuthConfig, MagicLinkOptions } from "better-auth/plugins";
 import type { SocialProviders } from "better-auth/social-providers";
-import {
-decodeMemberCursor,
-encodeMemberCursor,
-type OAuthConsentInfo,
-type OAuthConsentRequest,
-} from "../admin/consent.js";
-import type { AuthUserInfo,InviteUserResult,ListMembersArgs,MemberListResult,StaffUserInfo } from "../admin/identity.js";
-import { type DatabaseDriver,type EmailSender } from "../core/index.js";
-import { STAFF_ROLES,type StaffRole } from "../spec/domain/index.js";
+import { decodeMemberCursor, encodeMemberCursor, type OAuthConsentInfo, type OAuthConsentRequest } from "../admin/consent.js";
+import type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, StaffUserInfo } from "../admin/identity.js";
+import type { DatabaseDriver, EmailSender } from "../core/index.js";
+import { STAFF_ROLES, type StaffRole } from "../spec/domain/index.js";
 
 export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo,InviteUserResult,ListMembersArgs,MemberListResult,MemberUserInfo,StaffUserInfo } from "../admin/identity.js";
+export type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, MemberUserInfo, StaffUserInfo } from "../admin/identity.js";
 
 
 export type BackgroundTaskRetainer = (promise: Promise<unknown>) => void;
@@ -33,7 +21,7 @@ export interface MantleAuthRequestContext {
 }
 
 
-export type { OAuthConsentInfo,OAuthConsentRequest } from "../admin/consent.js";
+export type { OAuthConsentInfo, OAuthConsentRequest } from "../admin/consent.js";
 export { decodeMemberCursor,encodeMemberCursor,STAFF_ROLES,type StaffRole };
 /**
  * Set lookup for "is this role string a staff role?" — handlers/MCP
