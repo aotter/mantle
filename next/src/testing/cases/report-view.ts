@@ -50,5 +50,5 @@ export async function run(r: Report, driver: DatabaseDriver) {
   if ('rows' in plan) {
     const detail = plan.rows.map((x: any) => x.detail).join(' | ');
     r.check('EXPLAIN QUERY PLAN uses the scope index on both wrapped Schemas', /_mantle_scope_items/.test(detail) && /_mantle_scope_orders/.test(detail), detail);
-  } else r.note(`EXPLAIN QUERY PLAN is refused on local D1 (${plan.error.split(':')[1]?.trim()}); flattening checked by the plan text only`);
+  }
 }

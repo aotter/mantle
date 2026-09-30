@@ -7,7 +7,6 @@ export interface SqlStatement {
 
 export interface SqlResult {
   readonly rows: readonly Record<string, unknown>[];
-  readonly changes: number;
 }
 
 export interface DatabaseDriver {

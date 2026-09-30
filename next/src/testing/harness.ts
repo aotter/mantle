@@ -17,7 +17,6 @@ import { runProcedure as run, runView as runV, type LifecycleHooks, type Program
 import { convergeStorage, type StorageSchema } from "../core/sql/storage.js";
 
 export type { Program } from "../core/sql/run.js";
-export const facts = { trees: 40, dstMin: 0, dstMax: 0, caught: 0, positions: 0 };
 
 /** `stock >= 0` as IR, compiled the way the CLI compiles a Schema check (`compilePlan` will emit it). */
 const ITEM_FIELDS = { name: "text", cat: "text", stock: "integer", tags: "json", note: "text" };

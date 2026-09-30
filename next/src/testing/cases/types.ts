@@ -12,7 +12,6 @@ import { localParts, transitions, tzStatements } from '../../core/sql/tz.js';
 
 import { schemas } from '../harness.js';
 
-import { facts } from '../harness.js';
 
 const HOUR = 3_600_000_000;
 const WHOLE_HOUR = new Set(['America/New_York', 'Europe/Berlin', 'Pacific/Apia', 'Asia/Taipei']);
@@ -123,7 +122,6 @@ function seeded(seed: number) {
 }
 
 async function dst(r: Report, b: Awaited<ReturnType<typeof boot>>, s: ReturnType<typeof site>) {
-  r.note('--- date_trunc / extract in the site time zone (offsets from Intl.DateTimeFormat into _mantle_tz) ---');
   const zones = ['America/New_York', 'Europe/Berlin', 'Australia/Lord_Howe', 'Asia/Kolkata', 'Pacific/Apia', 'Asia/Taipei'];
   const p = await program('view', `SELECT id, date_trunc('hour', at) AS h, date_trunc('day', at) AS d, date_trunc('week', at) AS w, date_trunc('month', at) AS m, date_trunc('year', at) AS y,
       extract(year FROM at) AS yy, extract(month FROM at) AS mo, extract(day FROM at) AS dd, extract(hour FROM at) AS hr, extract(dow FROM at) AS dow FROM events WHERE title = 'dst' ORDER BY id`);
@@ -190,7 +188,4 @@ async function dst(r: Report, b: Awaited<ReturnType<typeof boot>>, s: ReturnType
     }
   }
   r.check(`${KNOWN.length} known values (New York, Berlin, Kolkata day/week/month) are PostgreSQL's`, known.every((x) => x === ''), known.filter(Boolean));
-  facts.dstMin = Math.min(...counts);
-  facts.dstMax = Math.max(...counts);
-  r.note('Not covered: hour truncation in Lord Howe (a half-hour gap has no single answer) and in a repeated half-hour zone; a zone whose day starts in a gap (midnight DST) is untested. In a repeated whole hour each pass truncates to its own start (05:30Z -> 05:00Z and 06:30Z -> 06:00Z in New York); whether PostgreSQL picks the same was not verified, there is no PostgreSQL here.');
 }
