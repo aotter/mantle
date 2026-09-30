@@ -1,0 +1,36 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: items }
+spec:
+  title: Items
+  lifecycle: operational
+  scope: { owner: auth.uid() }
+  indexes: [[owner]]
+  schema:
+    type: object
+    required: [owner, name]
+    properties: { owner: { type: string }, name: { type: string }, stock: { type: integer, default: 0 } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: my-items }
+spec:
+  surface: internal
+  input: { type: object, required: [min], properties: { min: { type: integer } } }
+  sql: "SELECT i.id, i.name AS label, i.stock FROM items i WHERE i.stock >= input.min ORDER BY i.name"
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: all-items }
+spec: { surface: internal, sql: "SELECT * FROM items ORDER BY id" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  lifecycle: publishing
+  schema:
+    type: object
+    required: [title, body]
+    properties: { zeta: { type: string }, title: { type: string }, body: { type: string }, alpha: { type: boolean }, mid: { type: string, format: date-time } }

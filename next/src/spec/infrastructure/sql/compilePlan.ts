@@ -42,6 +42,46 @@ function toDiagnostic(d: SqlDiagnostic, source: SourceLocation, pointer: string)
   });
 }
 
+/** What `SELECT *` expands to (the policy's `starCols`): the declared fields but the scope field, a geo field as its two columns. */
+const starCols = (s: PlanSchema) => Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, t]) => (t === "geo" ? [`${f}_lat`, `${f}_lng`] : [f]));
+
+/**
+ * A View's outputs, read off its compiled SELECT: `keys` are the row's keys in order (undefined when an output has no name or
+ * a `*` reads a subquery or `json_each`), `columns` the outputs that are a Schema field read unchanged.
+ */
+export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>): { keys?: string[]; columns: Record<string, { schema: string; field: string }> } {
+  const columns: Record<string, { schema: string; field: string }> = {};
+  const sel = view.stmts[0]?.SelectStmt;
+  if (!sel?.targetList) return { columns };
+  const rels = new Map<string, string | undefined>();
+  const walk = (n: SqlNode): void => {
+    if (n.JoinExpr) return (walk(n.JoinExpr.larg), walk(n.JoinExpr.rarg));
+    const v = n.RangeVar;
+    if (v) rels.set(v.alias?.aliasname ?? v.relname, v.mantle === "table" && schemas[String(v.relname).toLowerCase()] ? String(v.relname).toLowerCase() : undefined);
+    else rels.set((n.RangeSubselect ?? n.RangeFunction)?.alias?.aliasname ?? "", undefined);
+  };
+  for (const f of sel.fromClause ?? []) walk(f);
+  const field = (schema: string | undefined, col: string) => (schema && schemas[schema]!.fields[col] && schemas[schema]!.fields[col] !== "geo" ? { schema, field: col } : undefined);
+  let keys: string[] | undefined = [];
+  for (const { ResTarget: r } of sel.targetList) {
+    const refs = r.val?.ColumnRef?.fields;
+    if (!r.name && refs?.at(-1)?.A_Star) {
+      const from = refs.length > 1 ? [rels.get(refs[0].String.sval)] : [...rels.values()];
+      if (from.some((s) => !s)) { keys = undefined; continue; }
+      for (const s of from as string[]) for (const c of starCols(schemas[s]!)) { keys?.push(c); const f = field(s, c); if (f) columns[c] = f; }
+      continue;
+    }
+    const col: string | undefined = refs?.at(-1)?.String?.sval;
+    const name: string | undefined = r.name ?? col;
+    if (!name) { keys = undefined; continue; }
+    keys?.push(name);
+    const rel = refs?.length === 2 ? rels.get(refs[0].String.sval) : refs?.length === 1 && rels.size === 1 ? [...rels.values()][0] : undefined;
+    const f = col ? field(rel, col) : undefined;
+    if (f) columns[name] = f;
+  }
+  return { ...(keys ? { keys: [...new Set(keys)] } : {}), columns };
+}
+
 /** Compile a linked manifest set to the sealed plan. Every refusal is reported, one per SQL source. */
 export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<CompilePlanResult> {
   const schemas: Record<string, PlanSchema> = {};
@@ -96,7 +136,8 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
   const views: Record<string, PlanView> = {};
   for (const { manifest: v, source } of linked.views) {
     const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
-    if (plan) views[v.metadata.name] = { ...plan, ...(v.spec.title ? { title: v.spec.title } : {}), ...(v.spec.description ? { description: v.spec.description } : {}), ...(v.spec.uiSchema ? { uiSchema: v.spec.uiSchema } : {}), inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
+    const columns = plan ? viewOutputs(plan, schemas).columns : {};
+    if (plan) views[v.metadata.name] = { ...plan, ...(Object.keys(columns).length ? { columns } : {}), ...(v.spec.title ? { title: v.spec.title } : {}), ...(v.spec.description ? { description: v.spec.description } : {}), ...(v.spec.uiSchema ? { uiSchema: v.spec.uiSchema } : {}), inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
   }
   const procedures: Record<string, PlanProcedure> = {};
   const declaredSchema = new Map(linked.schemas.map((x) => [x.manifest.metadata.name.toLowerCase(), x.manifest.metadata.name]));

@@ -26,6 +26,8 @@ export interface StoreView {
   readonly requires?: AuthorizationRequirements;
   /** The Procedure `requires.guard` names, run before the View on a caller-bound Store. */
   readonly guard?: string;
+  /** Outputs that read a Schema field unchanged: decoded and named as `select` returns them. */
+  readonly columns?: Readonly<Record<string, { readonly schema: string; readonly field: string }>>;
 }
 
 export interface StoreDeps {
@@ -141,7 +143,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
     }),
 
     view: (name, options = {}) => guard(async () => {
-      const v = deps.views[name];
+      const v = Object.hasOwn(deps.views, name) ? deps.views[name] : undefined;
       if (!v) throw invalid(`Unknown View '${name}'.`);
       const denial = caller && evaluateAuthAll(v.requires, caller, `manifest:View/${name}`);
       if (denial) throw new DiagnosticError(denial);
@@ -160,7 +162,12 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       const { mode, bind: b } = bindFor(deps.now(), caller);
       const cursor = options.cursor === undefined ? undefined : decodeCursor(`view:${name}`, options.cursor);
       const page = await runView(env(v.public ? "public" : mode), { kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: options.input ?? {} }), { pageSize: limit, ...(cursor ? { cursor } : {}) });
-      return { rows: page.rows as never, ...(page.next ? { nextCursor: encodeCursor(`view:${name}`, page.next) } : {}) };
+      const decodeView = (row: StoreRow) => Object.fromEntries(Object.entries(row).map(([k, value]) => {
+        const c = v.columns && Object.hasOwn(v.columns, k) ? v.columns[k]! : undefined;
+        const def = c && deps.schemas[c.schema];
+        return def ? [k === c.field ? def.names?.[c.field] ?? k : k, decodeOutput(def.fields[c.field]!, value)] : [k, value];
+      }));
+      return { rows: (v.columns ? page.rows.map(decodeView) : page.rows) as never, ...(page.next ? { nextCursor: encodeCursor(`view:${name}`, page.next) } : {}) };
     }),
 
     id: deps.newId,

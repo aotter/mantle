@@ -44,6 +44,8 @@ export interface PlanView extends SqlPlan {
   readonly input?: JsonSchema;
   readonly surface: "public" | "staff" | "internal";
   readonly requires?: AuthorizationRequirements;
+  /** Output name -> the Schema field it reads unchanged (`SELECT t.f`, `t.f AS f`, `*`); the Store decodes these as `select` does. */
+  readonly columns?: Readonly<Record<string, { readonly schema: string; readonly field: string }>>;
 }
 
 export interface PlanProcedure {

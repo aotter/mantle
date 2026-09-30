@@ -52,6 +52,7 @@ export function validateManifestGraph(
   diags.push(...checkDuplicates("Procedure", partitioned.procedures, filePaths));
   diags.push(...checkDuplicates("Trigger", partitioned.triggers, filePaths));
   diags.push(...checkSchemaReservedWireNames(partitioned.schemas, filePaths));
+  diags.push(...checkCaseCollisions(partitioned.schemas, filePaths));
 
   diags.push(...checkTranslatesReferences(partitioned.schemas, "validate", filePaths));
   diags.push(...checkSchemaNavTargetsGraph(partitioned.schemas, schemasByName, filePaths));
@@ -267,6 +268,32 @@ function checkSchemaReservedWireNames(
       );
     }
   }
+  return out;
+}
+
+/**
+ * SQL resolves identifiers case-insensitively (ADR-0034 decision 2) and the plan keys Schemas and fields by their lower-case
+ * name, so two names that differ only by case would silently become one table or one column.
+ */
+function checkCaseCollisions(schemas: readonly SchemaManifest[], filePaths?: ManifestFilePaths): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  const collide = (names: readonly string[], report: (name: string, other: string) => void) => {
+    const first = new Map<string, string>();
+    for (const n of names) {
+      const seen = first.get(n.toLowerCase());
+      if (seen === undefined) first.set(n.toLowerCase(), n);
+      else if (seen !== n) report(n, seen); // an exact repeat is DUPLICATE_NAME
+    }
+  };
+  collide(schemas.map((s) => s.metadata.name), (name, other) => out.push(validateDiagnostic({
+    code: "SCHEMA_NAME_CASE_COLLISION", severity: "error", path: manifestPath("Schema", name, "/metadata/name", filePaths), value: name,
+    message: `Schema '${name}' and Schema '${other}' differ only by case; SQL names them the same table. Rename one.`,
+  })));
+  for (const s of schemas)
+    collide(Object.keys(s.spec.schema.properties ?? {}), (name, other) => out.push(validateDiagnostic({
+      code: "FIELD_NAME_CASE_COLLISION", severity: "error", path: manifestPath("Schema", s.metadata.name, `/spec/schema/properties/${pointerSegment(name)}`, filePaths), value: name,
+      message: `Schema '${s.metadata.name}' declares '${name}' and '${other}', which differ only by case; SQL names them the same column. Rename one.`,
+    })));
   return out;
 }
 

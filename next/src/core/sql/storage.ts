@@ -190,6 +190,24 @@ const RESERVED_TABLES = new Set([
   "media_assets", "pending_media_uploads",
 ]);
 
+/**
+ * What `convergeStorage` would apply to this database now, applying nothing (`mantle generate --check`, ADR-0033 decision 3).
+ * `skipped` when the database already booted this fingerprint, as boot would. The SQL replays: system DDL (only where Mantle
+ * never booted) is `IF NOT EXISTS`, `ADD COLUMN` comes from the current state, binds are inlined. The boot state and time
+ * zone rows are left to boot.
+ */
+export async function planStorageChanges(driver: DatabaseDriver, plan: Readonly<Record<string, StorageSchema>>, options: { fingerprint?: string } = {}): Promise<{ skipped: boolean; sql: string[]; blocked: readonly StorageChange[]; undeclared: readonly StorageChange[] }> {
+  const [sys] = await driver.batch([{ sql: "SELECT name FROM sqlite_schema WHERE name IN ('_mantle_boot_state', '_mantle_schema_tables')" }]);
+  const have = new Set(sys!.rows.map((r) => r.name));
+  if (options.fingerprint !== undefined && have.has("_mantle_boot_state")) {
+    const [b] = await driver.batch([{ sql: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" }]);
+    if (String(b!.rows[0]?.value ?? "").startsWith(`${options.fingerprint}|`)) return { skipped: true, sql: [], blocked: [], undeclared: [] };
+  }
+  const { statements, blocked, undeclared } = await diff(driver, plan);
+  const inline = (s: SqlStatement) => (s.binds ? s.sql.replace(/\?(\d+)/g, (_, n: string) => lit(String(s.binds![Number(n) - 1]))) : s.sql);
+  return { skipped: false, sql: [...(have.has("_mantle_schema_tables") ? [] : SYSTEM_DDL), ...statements.map(inline)], blocked, undeclared };
+}
+
 async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, StorageSchema>>) {
   const statements: SqlStatement[] = [];
   const blocked: StorageChange[] = [];
@@ -197,13 +215,12 @@ async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, Storag
   const uniques: { schema: string; index: string }[] = [];
   const block = (schema: string, message: string, code: StorageChange["code"] = "STORAGE_CHANGE_BLOCKED") => blocked.push({ schema, code, message });
 
-  const [objects, owned] = await driver.batch([
-    { sql: "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\'" },
-    { sql: "SELECT name FROM _mantle_schema_tables" },
-  ]);
+  const [objects] = await driver.batch([{ sql: "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\'" }]);
   // SQLite identifiers are case-insensitive, so ownership and lookup are too.
   const byName = new Map<string, Row>(objects!.rows.map((r) => [String(r.name).toLowerCase(), r]));
-  const ownedNames = new Set(owned!.rows.map((r) => String(r.name).toLowerCase()));
+  // a dry run creates nothing, so on a database Mantle never booted the registry does not exist yet
+  const owned = !byName.has("_mantle_schema_tables") ? [] : (await driver.batch([{ sql: "SELECT name FROM _mantle_schema_tables" }]))[0]!.rows;
+  const ownedNames = new Set(owned.map((r) => String(r.name).toLowerCase()));
 
   for (const [name, schema] of Object.entries(plan)) {
     const d = desired(name, schema);
