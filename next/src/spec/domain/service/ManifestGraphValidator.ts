@@ -601,8 +601,20 @@ function checkMcpToolNameCollisions(
 ): Diagnostic[] {
   const seen = new Map<string, string>();
   const out: Diagnostic[] = [];
+  const exposed = new Set(triggers.flatMap((t) => (t.spec.source.kind === "mcp" ? [t.spec.target.procedure] : [])));
   const claim = (kind: "View" | "Procedure", name: string) => {
     const segment = mcpToolNameSegment(name);
+    if ((kind === "View" || exposed.has(name)) && (segment.length > 128 || !/^[A-Za-z0-9_.-]+$/.test(segment))) {
+      out.push(validateDiagnostic({
+        code: "MCP_TOOL_NAME_COLLISION",
+        severity: "error",
+        path: manifestPath(kind, name, "/metadata/name", filePaths),
+        value: segment,
+        expected: "an MCP tool name of at most 128 characters from [A-Za-z0-9_.-]",
+        message: `${kind} '${name}' cannot be an MCP tool name: it must be at most 128 characters from [A-Za-z0-9_.-].`,
+      }));
+      return;
+    }
     const prior = seen.get(segment);
     if (prior && prior !== `${kind} ${name}`) {
       out.push(validateDiagnostic({

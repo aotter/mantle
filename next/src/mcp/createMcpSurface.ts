@@ -95,10 +95,10 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
   const apps = linkApps(options.apps, new Set(tools.map((t) => t.name)), new Set(tools.filter((t) => t.kind === "view").map((t) => t.name)));
   const serverInfo = { name: "aotter.mantle", version: "0.2.0", ...options.serverInfo };
 
-  const challenge = (status: 401 | 403, error?: { code: string; scope?: string }) => {
-    const parts = [...(error ? [`error="${error.code}"`, ...(error.scope ? [`scope="${error.scope}"`] : [])] : []), ...(options.resourceMetadata ? [`resource_metadata="${options.resourceMetadata}"`] : [])];
+  const challenge = (status: 401 | 403, error?: { code?: string; scope?: string }, bare = false) => {
+    const parts = [...(error?.code ? [`error="${error.code}"`] : []), ...(error?.scope ? [`scope="${error.scope}"`] : []), ...(options.resourceMetadata ? [`resource_metadata="${options.resourceMetadata}"`] : [])];
     const code = status === 401 ? "UNAUTHENTICATED" : "AUTH_DENIED";
-    return Response.json({ error: redactForWire(makeDiagnostic({ code, phase: "runtime", severity: "error", path: "mcp", message: status === 401 ? "Authentication is required." : "The credential does not allow this." })) }, { status, headers: { "www-authenticate": `Bearer${parts.length ? " " + parts.join(", ") : ""}` } });
+    return Response.json({ error: redactForWire(makeDiagnostic({ code, phase: "runtime", severity: "error", path: "mcp", message: status === 401 ? "Authentication is required." : "The credential does not allow this." })) }, { status, headers: bare ? {} : { "www-authenticate": `Bearer${parts.length ? " " + parts.join(", ") : ""}` } });
   };
 
   const registers = (name: string, ui: ClientUiSupport) => byName.has(name) && !(apps.appOnly.has(name) && (ui === "unsupported" || apps.resources.length === 0));
@@ -119,7 +119,7 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
         try {
           if (tool.kind === "procedure") return result(await runtime.invokeProcedure({ procedure: tool.source, input, caller, cause }));
           const { limit, cursor, ...rest } = input;
-          return result(await runtime.store.as(caller, cause).view(tool.source, { input: rest, ...(typeof limit === "number" ? { limit } : {}), ...(typeof cursor === "string" ? { cursor } : {}) }));
+          return result(await runtime.store.as(caller, cause).view(tool.source, { input: rest, ...(limit !== undefined ? { limit: limit as number } : {}), ...(cursor !== undefined ? { cursor: cursor as string } : {}) }));
         } catch (e) {
           if (e instanceof DiagnosticError) return failure(e.diagnostic, tool.outputSchema !== undefined);
           console.error(`[mantle mcp ${tool.name}] unhandled failure`, e);
@@ -144,11 +144,11 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
   return async (request, caller) => {
     const url = new URL(request.url);
     if ((url.pathname.replace(/\/+$/, "") || "/") !== base) return Response.json({ error: { code: "NOT_FOUND", message: "no such route" } }, { status: 404 });
-    if (caller.kind !== "user" && caller.kind !== "anonymous") return challenge(403);
+    if (caller.kind !== "user" && caller.kind !== "anonymous") return challenge(403, undefined, true);
     // the staff surface is closed to everyone but staff, for listing as much as for calling
     if (options.surface === "staff") {
       if (caller.kind === "anonymous") return challenge(401);
-      if (caller.role === null) return challenge(403);
+      if (caller.role === null) return challenge(403, undefined, true); // a role is not a scope: no challenge, or a client would re-authorize in a loop
     }
     const authInfo: AuthInfo = { token: "", clientId: caller.kind === "user" ? caller.clientId ?? "" : "", scopes: caller.kind === "user" ? [...caller.scopes] : [], extra: { [CONTEXT_KEY]: caller } };
     if (request.method.toUpperCase() !== "POST" || !isJsonContentType(request.headers.get("content-type"))) return sdk.fetch(request, { authInfo });
@@ -167,7 +167,7 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     for (const name of calls) {
       const tool = registers(name, ui) ? byName.get(name) : undefined;
       if (!tool) continue;
-      if (caller.kind === "anonymous" && (tool.requires?.auth?.all.length ?? 0) > 0) return challenge(401);
+      if (caller.kind === "anonymous" && (tool.requires?.auth?.all.length ?? 0) > 0) return challenge(401, scopesOf(tool.requires).length ? { scope: scopesOf(tool.requires).join(" ") } : undefined);
       // only an OAuth token can be re-issued with more scopes; a session or key gets the runtime's denial
       if (caller.kind === "user" && caller.credential === "oauth") {
         const missing = scopesOf(tool.requires).filter((s) => !caller.scopes.includes(s));

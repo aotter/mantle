@@ -115,6 +115,27 @@ spec: { source: { kind: mcp, surface: public }, target: { procedure: scoped-add 
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
+metadata: { name: ranked }
+spec:
+  surface: public
+  input: { type: object, required: [min], properties: { min: { type: integer } } }
+  sql: "SELECT id FROM notes WHERE rank >= input.min ORDER BY id"
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: leaky }
+spec:
+  input: { type: object }
+  output: { type: object, additionalProperties: false, properties: { ok: { type: boolean } } }
+  handler: { ref: leak }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: mcp-leaky }
+spec: { source: { kind: mcp, surface: public }, target: { procedure: leaky } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
 metadata: { name: staff-notes }
 spec: { surface: staff, description: Every note, sql: "SELECT id, title FROM notes ORDER BY id" }
 `;
@@ -127,7 +148,7 @@ beforeAll(async () => {
   const res = await compilePlan({ sources: [{ sourceId: "memory:mcp", text: MANIFESTS }] });
   if (!res.ok) throw new Error(JSON.stringify(res.diagnostics));
   d1 = await LocalD1.create();
-  rt = await createMantleRuntime({ plan: res.plan, handlers: {}, storage: sqliteStorage(d1) });
+  rt = await createMantleRuntime({ plan: res.plan, handlers: { leak: () => ({ ok: true, secret: "s3cr3t-hash" }) }, storage: sqliteStorage(d1) });
 }, 60_000);
 afterAll(() => d1.dispose());
 
@@ -143,7 +164,7 @@ const names = async (surface: "public" | "staff", caller: Caller) => ((await rpc
 
 describe("MCP surface", () => {
   it("lists only Procedure and View tools of the surface; an internal View and every Schema are absent", async () => {
-    expect(await names("public", user("a"))).toEqual(["add_note", "my_notes", "scoped_add"]);
+    expect(await names("public", user("a"))).toEqual(["add_note", "leaky", "my_notes", "ranked", "scoped_add"]);
     expect(await names("staff", user("a", { role: "owner" }))).toEqual(["staff_notes", "staff_wipe"]);
   });
 
@@ -203,6 +224,29 @@ describe("MCP surface", () => {
     expect(session.data.result.isError).toBe(true);
     expect(JSON.parse(session.data.result.content[0].text).diagnostics[0].code).toBe("AUTH_DENIED");
     expect((await rpc("public", user("m5", { credential: "oauth", scopes: ["notes:write"] }), "tools/call", call)).data.result.isError).toBeUndefined();
+  });
+
+  it("checks a View's input against its schema, and reports a wrong limit or cursor instead of dropping it", async () => {
+    const o = user("m6");
+    const code = async (name: string, args: unknown) => JSON.parse((await rpc("public", o, "tools/call", { name, arguments: args })).data.result.content[0].text).diagnostics?.[0]?.code;
+    expect(await code("ranked", {})).toBe("INPUT_VALIDATION_FAILED");
+    expect(await code("ranked", { min: "abc" })).toBe("INPUT_VALIDATION_FAILED");
+    expect(await code("my_notes", { limit: "2" })).toBe("INPUT_VALIDATION_FAILED");
+    expect(await code("my_notes", { cursor: 5 })).toBe("INPUT_VALIDATION_FAILED");
+    expect((await rpc("public", o, "tools/call", { name: "ranked", arguments: { min: 0 } })).data.result.isError).toBeUndefined();
+  });
+
+  it("never sends handler output that broke its schema to the client", async () => {
+    const r = (await rpc("public", user("m7"), "tools/call", { name: "leaky", arguments: {} })).data.result;
+    expect(r.isError).toBe(true);
+    expect(JSON.stringify(r)).not.toContain("s3cr3t-hash");
+    expect(JSON.parse(r.content[0].text).diagnostics[0].code).toBe("OUTPUT_VALIDATION_FAILED");
+  });
+
+  it("puts the needed scope in a 401 challenge, and gives a non-staff caller a 403 with no challenge", async () => {
+    const r = await rpc("public", anon, "tools/call", { name: "scoped_add", arguments: { title: "s" } });
+    expect(r.headers.get("www-authenticate")).toBe(`Bearer scope="notes:write", resource_metadata="${RM}"`);
+    expect((await rpc("staff", user("m8"), "tools/list")).headers.get("www-authenticate")).toBeNull();
   });
 
   it("refuses a whole batch when one call in it needs identity", async () => {
