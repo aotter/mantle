@@ -9,7 +9,6 @@ import type { DatabaseDriver } from '../../core/driver.js';
 import { CENTER, NOW, boot, caller, program, reset, site } from '../harness.js';
 import { isConflict, isRefusal, runProcedure, runView } from '../harness.js';
 import type { Site } from '../harness.js';
-import { facts } from '../harness.js';
 import type { Mode } from '../../core/sql/policy.js';
 import { ALL_POSITIONS } from '../../core/sql/positions.js';
 import type { RelationPosition } from '../../core/sql/positions.js';
@@ -110,10 +109,7 @@ export async function run(r: Report, driver: DatabaseDriver) {
   // negative control: with the visibility predicate switched off, every read/write position must be caught by its probe
   const missed: string[] = [];
   for (const pos of positions) if (!(await probe(pos, { unsafeNoVisibility: true })).length) missed.push(pos);
-  facts.caught = positions.length - missed.length;
-  facts.positions = positions.length;
   r.check(`negative control: with the visibility predicate off, ${positions.length - missed.length} of ${positions.length} positions are caught by their probes`, missed.length <= 1, `missed: ${missed.join(', ') || 'none'}`);
-  r.note(`  not caught by this switch: ${missed.join(', ') || 'none'} (insert-target is protected by the scope and id fill and the scope-including unique index, which the switch leaves on; the check is its owner/id assertion below)`);
 
   // what the ADR says about the write path, on top of the positions
   await reset(b.d1);

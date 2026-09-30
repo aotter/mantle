@@ -43,7 +43,6 @@ export type Compiled = {
   kind: 'read' | 'row' | 'set';
   schema?: string;
   verb?: 'insert' | 'update' | 'delete';
-  returns: boolean;
   /** an after hook exists for the target: RETURNING carries id and version in hidden columns the executor splits off */
   hooked: boolean;
   /** the update publishes the entry: publish hooks fire instead of update hooks */
@@ -51,23 +50,6 @@ export type Compiled = {
   /** the rowid of a row op's target is not needed; kept for hooks: does the statement return rows to the hook? */
 };
 
-/** where the PostgreSQL parse tree has a construct SQLite lacks: rewritten in the AST, so the printer stays stock */
-export const PG_ONLY_REWRITES = [
-  'FuncCall: strip pg_catalog., print SQL-syntax calls (TRIM(BOTH FROM x), EXTRACT(.. FROM ..)) as plain calls',
-  'FuncCall: btrim(x) (how PostgreSQL parses trim(x)) -> trim(x)',
-  'SubLink: x = ANY (subquery) -> x IN (subquery)',
-  'TypeCast: type names to SQLite storage classes (int4/int8 -> integer, float8 -> real, text -> text); bool -> x <> 0 for a number, the PostgreSQL spellings for text',
-];
-/** Mantle's own SQL constructs, lowered to SQLite expressions */
-export const MANTLE_LOWERINGS = [
-  'input.<name> -> CAST(?n AS <declared type>), auth.uid()/auth.role()/now() -> numbered binds',
-  "interval 'N second|minute|hour' -> a microsecond integer constant; calendar units refused",
-  "timestamptz / date / numeric(p, s) literal casts -> their integer encodings, folded at compile time",
-  'date_trunc(unit, ts) and extract(field FROM ts) -> arithmetic and strftime over the _mantle_tz offset table',
-  'search(t, q) / search_rank(t) -> FTS5 trigram MATCH on a quoted phrase, LIKE under three characters, bm25',
-  'near(t.f, lat, lng, m) / distance(...) -> R*Tree bounding box plus haversine',
-  'a Schema reference -> (SELECT <declared columns> FROM t WHERE scope AND ttl AND published) AS alias',
-];
 
 // ---- AST builders -------------------------------------------------------------------------------
 const param = (n: number): N => ({ ParamRef: { number: n } });
@@ -488,5 +470,5 @@ export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const t = Object.keys(stmt)[0]!;
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
   const schema = verb ? stmt[t].relation.relname : undefined;
-  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, returns: t === 'SelectStmt' || !!ast[t].returningClause, hooked: !!schema && !!opts.returning?.has(schema), publish: opts.status === 'published' };
+  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked: !!schema && !!opts.returning?.has(schema), publish: opts.status === 'published' };
 }
