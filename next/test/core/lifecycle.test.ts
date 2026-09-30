@@ -26,6 +26,15 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
+metadata: { name: edit-reversed }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object, required: [id, title], properties: { id: { type: string }, title: { type: string } } }
+  output: { type: object }
+  handler: { sql: "UPDATE articles SET title = input.title WHERE input.id = id RETURNING id" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
 metadata: { name: gate }
 spec: { input: { type: object }, output: { type: object }, handler: { ref: gate } }
 ---
@@ -120,4 +129,21 @@ it("a public View shows published entries only", async () => {
   expect(live).toContain("hello");
   expect(live).not.toContain("veto");
   expect(live).not.toContain("reopened");
+});
+
+it("an input named id is a value, not the target: a reversed comparison edits the entry it names, and the lifecycle decides on that entry", async () => {
+  const published = await draft({ title: "live", body: "b" });
+  await store().write([{ update: "articles", set: { status: "published" }, where: { id: published } }]);
+  const other = await draft({ title: "wip", body: "b" });
+  const edit = (id: string) => rt.invokeProcedure({ procedure: "edit-reversed", input: { id, title: "HACKED" }, caller: user, cause: { kind: "http", id: "r" } });
+  expect((await failure(edit(published)))?.diagnostic.code).toBe("CONFLICT");
+  expect((await store().select({ from: "articles", columns: ["title"], where: { id: published } })).rows).toEqual([{ title: "live" }]);
+  await edit(other);
+  expect((await store().select({ from: "articles", columns: ["title"], where: { id: other } })).rows).toEqual([{ title: "HACKED" }]);
+});
+
+it("a status change carries no other values, so no edit can hide inside a publish", async () => {
+  const id = await draft({ title: "bundle", body: "b" });
+  expect((await failure(store().write([{ update: "articles", set: { status: "published", title: "changed" }, where: { id } }])))?.diagnostic.message).toMatch(/status change carries no other values/);
+  expect(await status(id)).toBe("draft");
 });

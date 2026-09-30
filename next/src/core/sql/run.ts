@@ -8,7 +8,9 @@ import type { Caller } from "../caller.js";
 import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
-import { applyPolicy, HIDDEN_ID, HIDDEN_VERSION, type BindSpec, type Compiled } from "./policy.js";
+import { S, op, ref } from "./ast.js";
+import { decodeOutput } from "./codec.js";
+import { applyPolicy, isIdCol, HIDDEN_ID, HIDDEN_VERSION, type BindSpec, type Compiled } from "./policy.js";
 
 export interface Program {
   readonly kind: "view" | "procedure";
@@ -52,8 +54,6 @@ const ctxOf = (env: RunEnv, p: Program, extra: Partial<CompileContext> = {}): Co
   schemas: env.schemas, inputs: p.inputs, kind: p.kind, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility, ...extra,
 });
 
-const S = (s: string) => ({ String: { sval: s } });
-const ref = (...f: string[]): N => ({ ColumnRef: { fields: f.map(S) } });
 const select = (targetList: N[], from?: N, where?: N): N => ({
   SelectStmt: { targetList, ...(from ? { fromClause: [from] } : {}), ...(where ? { whereClause: where } : {}), limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" },
 });
@@ -66,8 +66,8 @@ function idOf(stmt: N): N {
   for (const x of conjuncts((stmt.UpdateStmt ?? stmt.DeleteStmt).whereClause)) {
     const e = x.A_Expr;
     if (e?.kind !== "AEXPR_OP" || e.name[0].String.sval !== "=") continue;
-    if (e.lexpr.ColumnRef?.fields.at(-1)?.String?.sval === "id") return e.rexpr;
-    if (e.rexpr.ColumnRef?.fields.at(-1)?.String?.sval === "id") return e.lexpr;
+    if (isIdCol(e.lexpr)) return e.rexpr;
+    if (isIdCol(e.rexpr)) return e.lexpr;
   }
   throw new Error("not a row op");
 }
@@ -115,8 +115,13 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
   const base = ctxOf(env, p, { returning: afterSchemas, statuses: p.statuses });
   const plan = compileProgram(p.ir, base);
   const versions: Record<number, unknown> = {};
+  // a hook receives the entry as its JSON Schema declares it (declared names, decoded values), not the storage encoding
+  const entry = (schema: string, row: StoreRow): StoreRow => {
+    const def = env.schemas[schema];
+    return Object.fromEntries(Object.entries(row).map(([k, v]) => (def?.fields[k] && def.fields[k] !== "geo" ? [(def as { names?: Record<string, string> }).names?.[k] ?? k, decodeOutput(def.fields[k]!, v)] : [k, v])));
+  };
   const event = (i: number, hook: string, schema: string, rows: [StoreRow, ...StoreRow[]]) => ({
-    id: `${as.seq ?? as.cause.id}:${i}:${hook}`, schema, hook: hook as never, rows, caller: as.caller, parent: as.cause,
+    id: `${as.seq ?? as.cause.id}:${i}:${hook}`, schema, hook: hook as never, rows: rows.map((r) => entry(schema, r)) as unknown as [StoreRow, ...StoreRow[]], caller: as.caller, parent: as.cause,
   });
 
   for (const [i, c] of plan.entries()) {
@@ -190,7 +195,6 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
   const base = c!.binds.length;
   const cursorBinds: BindSpec[] = opts.cursor ? keys.map((_k, i) => ({ k: "cursor", i })) : [];
   const col = (n: string): N => ref("_p", n);
-  const op = (o: string, l: N, r: N): N => ({ A_Expr: { kind: "AEXPR_OP", name: [S(o)], lexpr: l, rexpr: r } });
   const after = opts.cursor
     ? { BoolExpr: { boolop: "OR_EXPR", args: keys.map((k, i) => ({ BoolExpr: { boolop: "AND_EXPR", args: [
         ...keys.slice(0, i).map((_x, j) => op("=", col(`_k${j}`), { ParamRef: { number: base + j + 1 } })),

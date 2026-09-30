@@ -9,6 +9,7 @@ import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";
 import { decodeOutput } from "../sql/codec.js";
 import type { BindContext, Mode } from "../sql/compile.js";
+import { num, op, ref, table } from "../sql/ast.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
@@ -99,7 +100,16 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
           const def = deps.schemas[o.update.toLowerCase()]!;
           return (current: StoreRow) => {
             // the row carries lower-cased columns in the database's encoding; the JSON Schema names them as declared
-            const entry = Object.fromEntries(Object.entries(current).filter(([k, v]) => def.fields[k] && v !== null).map(([k, v]) => [def.names?.[k] ?? k, decodeOutput(def.fields[k]!, v)]));
+            const props = def.schema?.properties ?? {};
+            const nullable = (name: string) => [props[name]?.type].flat().includes("null");
+            const entry: Record<string, unknown> = {};
+            for (const [k, type] of Object.entries(def.fields)) {
+              const name = def.names?.[k] ?? k;
+              if (type === "geo") { if (current[`${k}_lat`] != null && current[`${k}_lng`] != null) entry[name] = { lat: current[`${k}_lat`], lng: current[`${k}_lng`] }; continue; }
+              const v = current[k];
+              if (v !== null && v !== undefined) entry[name] = decodeOutput(type, v);
+              else if (v === null && nullable(name)) entry[name] = null; // a NULL is "absent" unless the field says null is a value
+            }
             validateValues(def, { ...entry, ...Object.fromEntries(Object.entries(o.set).filter(([k]) => k !== "status")) }, "full");
           };
         }),
@@ -157,8 +167,6 @@ export function createStore(deps: StoreDeps): MantleStore {
 }
 
 // ---- TTL sweep ---------------------------------------------------------------------------------------------------
-const S = (s: string) => ({ String: { sval: s } });
-const ref = (...f: string[]): N => ({ ColumnRef: { fields: f.map(S) } });
 
 /**
  * Physical statements built by hand: the sweep is the one path that sees expired rows and addresses `_rid`, so it
@@ -170,10 +178,9 @@ async function sweepExpired(deps: StoreDeps, request: import("../store.js").Swee
   if (!def?.ttl || def.ttlSeconds === undefined) throw invalid(`Schema '${request.collection}' has no ttl.`);
   const limit = request.limit ?? 500;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("Sweep limit must be an integer from 1 to 500.");
-  const after = request.cursor === undefined ? undefined : Number(decodeCursor(`sweep:${name}`, request.cursor)[0]);
-  const rel = (): N => ({ RangeVar: { relname: name, inh: true, relpersistence: "p", mantle: "system" } });
-  const num = (n: number): N => ({ A_Const: { ival: { ival: n } } });
-  const op = (o: string, l: N, r: N): N => ({ A_Expr: { kind: "AEXPR_OP", name: [S(o)], lexpr: l, rexpr: r } });
+  const after = request.cursor === undefined ? undefined : (decodeCursor(`sweep:${name}`, request.cursor)[0] as number);
+  if (after !== undefined && !Number.isSafeInteger(after)) throw invalid("The cursor does not belong to this query.");
+  const rel = (): N => ({ RangeVar: table(name, "system") });
   const expired = (): N => ({ BoolExpr: { boolop: "AND_EXPR", args: [
     { NullTest: { arg: ref(def.ttl!), nulltesttype: "IS_NOT_NULL" } }, op("<=", ref(def.ttl!), { ParamRef: { number: 1 } }),
     ...(after === undefined ? [] : [op(">", ref("_rid"), num(after))]),

@@ -47,6 +47,25 @@ metadata: { name: rank-it }
 spec: { source: { kind: http, method: PATCH, path: "/api/notes/{id}/rank" }, target: { procedure: rank-note } }
 ---
 apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: a-by-id }
+spec: { source: { kind: http, method: POST, path: "/api/notes/{id}" }, target: { procedure: rank-note } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: search-notes }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object }
+  output: { type: object, required: [results] }
+  handler: { sql: "INSERT INTO notes (title) VALUES ('searched') RETURNING title" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: b-search }
+spec: { source: { kind: http, method: POST, path: /api/notes/search }, target: { procedure: search-notes } }
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: my-notes }
 spec:
@@ -107,5 +126,9 @@ describe("REST surface", () => {
     expect((await call("GET", "/api/nope", user("o1"))).status).toBe(404);
     expect((await call("GET", "/elsewhere/notes", user("o1"))).status).toBe(404);
     expect((await call("PATCH", "/api/notes/x/rank", user("o1"), { rank: "high" })).status).toBe(400);
+  });
+
+  it("a literal route is not shadowed by a parameter route declared before it", async () => {
+    expect((await call("POST", "/api/notes/search", user("o5"), {})).body).toEqual({ results: [[{ title: "searched" }]] });
   });
 });
