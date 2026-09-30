@@ -2,11 +2,9 @@
 // The Store (ADR-0032 decision 1): JSON select and write through the same policy, OCC and hooks as SQL; row and set
 // ops, `lock` and `expect`, one opaque cursor, scope and TTL, `as(caller)`, the TTL sweep, and refusals.
 import type { Report } from '../report.js';
-import type { DatabaseDriver } from '../../core/driver.js';
+import type { Engine } from '../harness.js';
 import { createStore } from '../../core/store/createStore.js';
 import { encodeCursor } from '../../core/store/cursor.js';
-import { SqliteStoreExecutor } from '../../d1/executor.js';
-import { d1Dialect } from '../../d1/dialect.js';
 import { NOW, boot, program, schemas } from '../harness.js';
 
 const user = (subject) => ({ kind: 'user', subject, role: null, scopes: [], credential: 'session', credentialId: null, clientId: null });
@@ -14,12 +12,12 @@ const fail = async (f) => { try { await f(); return undefined; } catch (e) { ret
 const conflict = (e) => e?.diagnostic?.code === 'CONFLICT' ? e.diagnostic.conflict : undefined;
 const invalid = (e) => e?.diagnostic?.code === 'INPUT_VALIDATION_FAILED';
 
-export async function run(r: Report, driver: DatabaseDriver) {
+export async function run(r: Report, engine: Engine) {
   r.section('Store: JSON select and write, OCC, set ops, cursor, scope, TTL');
-  const b = await boot(driver);
+  const b = await boot(engine);
   const view = await program('view', 'SELECT id, name FROM items ORDER BY name', {});
   let n = 0;
-  const store = createStore({ executor: new SqliteStoreExecutor(driver), dialect: d1Dialect, schemas, views: { names: { ir: view.ir, inputs: {} } }, now: () => NOW, newId: () => `id${++n}` });
+  const store = createStore({ executor: b.executor, dialect: b.dialect, schemas, views: { names: { ir: view.ir, inputs: {} } }, now: () => NOW, newId: () => `id${++n}` });
   const me = store.as(user('o1'));
   const stock = async (id) => (await b.d1.all('SELECT stock, version FROM items WHERE id = ?1', [id]))[0];
 
@@ -67,7 +65,7 @@ export async function run(r: Report, driver: DatabaseDriver) {
   // ---- row ops: insert, update with lock, delete ---------------------------------------------------------------------------
   const [ins] = await me.write([{ insert: 'items', values: { name: 'elder', cat: 'z', stock: 1, tags: ['x'] } }]);
   r.check('insert returns { id, version: 1 } with a generated id (a scoped Schema generates its own), owned by the caller and stamped with author', /^[0-9a-f]{32}$/.test(ins.id) && ins.version === 1
-    && JSON.stringify((await b.d1.all('SELECT owner, author_id, updated_at FROM items WHERE id = ?1', [ins.id]))[0]) === JSON.stringify({ owner: 'o1', author_id: 'o1', updated_at: NOW }), ins);
+    && ((x) => JSON.stringify({ ...x, updated_at: Date.parse(b.dialect.codec.decode('timestamptz', x.updated_at)) * 1000 }))((await b.d1.all('SELECT owner, author_id, updated_at FROM items WHERE id = ?1', [ins.id]))[0]) === JSON.stringify({ owner: 'o1', author_id: 'o1', updated_at: NOW }), ins);
   const [upd] = await me.write([{ update: 'items', set: { stock: 9 }, where: { id: ins.id }, lock: 1 }]);
   r.equal('update with the observed version: { id, version: 2 }', [upd.version, (await stock(ins.id)).stock], [2, 9]);
   const stale = await fail(() => me.write([{ update: 'items', set: { stock: 0 }, where: { id: ins.id }, lock: 1 }]));

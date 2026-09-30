@@ -5,7 +5,7 @@
 // Each probe seeds a second owner's rows, an expired one and an unpublished one (`X_` ids, `LEAK` text)
 // and asserts none of them appears in a result or changes.
 import type { Report } from '../report.js';
-import type { DatabaseDriver } from '../../core/driver.js';
+import type { Engine } from '../harness.js';
 import { CENTER, NOW, boot, caller, program, reset, site } from '../harness.js';
 import { isConflict, isRefusal, runProcedure, runView } from '../harness.js';
 import type { Site } from '../harness.js';
@@ -77,9 +77,9 @@ async function protectedRows(d1: { all: (sql: string) => Promise<any[]> }) {
   return out;
 }
 
-export async function run(r: Report, driver: DatabaseDriver) {
+export async function run(r: Report, engine: Engine) {
   r.section('Case 7: policy probe (every relation position, another owner / expired / unpublished rows)');
-  const b = await boot(driver);
+  const b = await boot(engine);
   const positions = Object.keys(PROBES) as RelationPosition[];
   r.equal(`the probe list covers all ${ALL_POSITIONS.length} positions of the IR union (and \`satisfies\` makes that a typecheck error when it does not)`, [...positions].sort(), [...ALL_POSITIONS].sort());
 
@@ -87,7 +87,7 @@ export async function run(r: Report, driver: DatabaseDriver) {
   const probe = async (pos: RelationPosition, opts: Partial<Site>) => {
     const problems: string[] = [];
     for (const [n, step] of PROBES[pos].steps.entries()) {
-      await reset(b.d1);
+      await reset(b);
       const before = JSON.stringify(await protectedRows(b.d1));
       const p = await program(step.kind, step.sql, step.inputs ?? {});
       const s = { ...site(b), ...opts, mode: step.mode };
@@ -112,11 +112,11 @@ export async function run(r: Report, driver: DatabaseDriver) {
   r.check(`negative control: with the visibility predicate off, ${positions.length - missed.length} of ${positions.length} positions are caught by their probes`, missed.length <= 1, `missed: ${missed.join(', ') || 'none'}`);
 
   // what the ADR says about the write path, on top of the positions
-  await reset(b.d1);
+  await reset(b);
   const { rows } = await runProcedure(site(b), await program('procedure', "INSERT INTO settings (key, value) VALUES ('lang', 'yy') RETURNING id"), caller());
   const mine = (await b.d1.all('SELECT owner, created_at, length(id) AS idlen FROM settings WHERE id = ?1', [(rows[0][0] as any).id]))[0];
   r.equal("an insert is owned by the caller, stamped with now(), gets a generated id, and does not touch another owner's same-key row",
-    [mine, (await b.d1.all("SELECT value FROM settings WHERE id = 'X_sz2'"))[0].value], [{ owner: 'o1', created_at: NOW, idlen: 32 }, 'xx']);
+    [{ ...mine, created_at: Date.parse(b.dialect.codec.decode('timestamptz', mine.created_at)) * 1000 }, (await b.d1.all("SELECT value FROM settings WHERE id = 'X_sz2'"))[0].value], [{ owner: 'o1', created_at: NOW, idlen: 32 }, 'xx']);
 
   // modes: public reads see published, unexpired rows only; trusted (runtime.store) sees every owner but TTL still applies
   const posts = await program('view', 'SELECT id FROM posts ORDER BY id');
