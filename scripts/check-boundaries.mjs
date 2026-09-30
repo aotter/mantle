@@ -251,14 +251,28 @@ function checkPackageDirection() {
   }
 }
 
-/** next/src/core reaches only itself and next/src/spec (next/README.md); a sibling folder or packages/* is refused. */
-function checkNextCoreImports() {
-  const allowed = [join(ROOT, "next/src/core") + "/", join(ROOT, "next/src/spec") + "/"];
-  for (const file of listFiles(join(ROOT, "next/src/core"), (p) => p.endsWith(".ts"))) {
-    for (const [, spec] of readFileSync(file, "utf8").matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
-      if (!spec.startsWith(".")) continue; // a library
-      const target = join(dirname(file), spec);
-      if (!allowed.some((dir) => target.startsWith(dir))) fail(file, `next core may reach only core and spec: '${spec}'`);
+/**
+ * next/README.md: every folder of next/src is one subpath and reaches only the folders it needs, and a heavy library belongs to the one
+ * folder that is its integration (ADR-0032 decision 13, enforced per module now that there is one package): a folder that is not
+ * `auth` may not import Better Auth, one that is not `mcp` may not import the MCP SDK, and so on.
+ */
+function checkNextFolderImports() {
+  const folders = { core: ["spec"], spec: [], testing: ["core", "spec"], cloudflare: ["core", "spec"], bun: ["core", "spec"], vercel: ["core", "spec"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec"] };
+  const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec" };
+  const root = join(ROOT, "next/src");
+  for (const [folder, reach] of Object.entries(folders)) {
+    if (!existsSync(join(root, folder))) continue; // a folder that is not built yet
+    for (const file of listFiles(join(root, folder), (p) => p.endsWith(".ts") || p.endsWith(".tsx"))) {
+      for (const [, spec] of readFileSync(file, "utf8").matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
+        if (spec.startsWith(".")) {
+          const target = relative(root, join(dirname(file), spec)).split(sep)[0];
+          if (target !== folder && !reach.includes(target)) fail(file, `next/${folder} may reach only ${[folder, ...reach].join(", ")}: '${spec}'`);
+        } else {
+          for (const [prefix, owner] of Object.entries(libs)) {
+            if ((spec === prefix || spec.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)) && owner !== folder) fail(file, `only next/${owner} may import '${spec}'`);
+          }
+        }
+      }
     }
   }
 }
@@ -815,7 +829,7 @@ checkRuntimeCloudflareFree();
 checkHostRulesBoundary();
 checkPackageDirection();
 checkUiControllerImports();
-checkNextCoreImports();
+checkNextFolderImports();
 checkEntryReadOwnership();
 checkWebPackageBoundary();
 checkAdminPackageBoundary();
