@@ -7,7 +7,7 @@ import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, makeDiagnos
 import { evaluateAuthAll, type Caller, type MantleRuntime, type Surface } from "../core/index.js";
 import { failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
 import { decodeMemberCursor } from "./consent.js";
-import type { AdminIdentity } from "./identity.js";
+import type { AdminIdentity, MemberUserInfo, StaffUserInfo } from "./identity.js";
 
 /** The built SPA: `path` is relative to the base path (`index.html` is the shell). `null` is a missing file. */
 export type AdminAssets = (path: string) => Response | null | Promise<Response | null>;
@@ -82,6 +82,9 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     const list = (v.uiSchema?.["list"] ?? {}) as Record<string, string[] | undefined>;
     return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [], searchFields: list["searchFields"] ?? [], filterFields: list["filterFields"] ?? [] } };
   });
+  // a custom directory may return more than it declares: only the declared fields reach the wire
+  const staffInfo = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: StaffUserInfo) => ({ id, email, name, role, githubLogin, emailVerified, createdAt });
+  const memberInfo = ({ id, email, name, emailVerified, createdAt }: MemberUserInfo) => ({ id, email, name, emailVerified, createdAt });
   const me = async (caller: Staff) => {
     const u = await directory?.getUser?.(caller.subject);
     return { userId: caller.subject, role: caller.role, login: u ? u.githubLogin || u.name || u.email || null : null, image: u?.image ?? null };
@@ -95,7 +98,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     {
       method: "GET", path: "/views/{name}", role: "contributor", run: ({ caller, params: { name }, url }) => {
         const v = plan.views[name!];
-        if (!v || v.surface !== "staff") throw wireError("NOT_FOUND", `no staff View '${name}'`, P);
+        // a View the caller cannot see is not there for them, so its name and its rule cannot be probed
+        if (!v || v.surface !== "staff" || !sees(v.requires, caller as Staff)) throw wireError("NOT_FOUND", `no staff View '${name}'`, P);
         return runtime.store.as(caller).view(name!, viewQuery(name!, v, url.searchParams, P));
       },
     },
@@ -110,7 +114,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     },
   ];
   if (directory) routes.push(
-    { method: "GET", path: "/staff", role: "owner", run: async () => ({ users: await directory.listUsers() }) },
+    { method: "GET", path: "/staff", role: "owner", run: async () => ({ users: (await directory.listUsers()).map(staffInfo) }) },
     {
       method: "GET", path: "/members", role: "editor", run: async ({ url: { searchParams: q } }) => {
         const limit = Number(q.get("limit") ?? 50);
@@ -118,7 +122,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         const search = q.get("search")?.trim() || undefined;
         if (!Number.isInteger(limit) || limit < 1 || limit > 100 || (cursor && !decodeMemberCursor(cursor)) || (search?.length ?? 0) > 200) throw bad("limit must be 1..100, the cursor one this list returned, and search at most 200 characters");
         const r = await directory.listMembers({ limit, ...(search ? { search } : {}), ...(cursor ? { cursor } : {}), cursorDirection: q.get("cursor_direction") === "backward" ? "backward" : "forward" });
-        return { items: r.items, previous_cursor: r.previousCursor, next_cursor: r.nextCursor };
+        return { items: r.items.map(memberInfo), previous_cursor: r.previousCursor, next_cursor: r.nextCursor };
       },
     },
   );
@@ -159,6 +163,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   const api = async (request: Request, url: URL, caller: Caller): Promise<Response> => {
     if (caller.kind === "anonymous") throw wireError("UNAUTHENTICATED", "Sign in to use Admin.", P);
     if (caller.kind !== "user" || caller.role === null) throw wireError("AUTH_DENIED", "This account is not on the staff list.", P);
+    // Admin acts as the person: a token or key minted for something narrower (an MCP client, a script) is not a sign-in
+    if (caller.credential !== "session") throw wireError("AUTH_DENIED", "Admin needs a signed-in session.", P);
     const staff = caller as Staff;
     for (const route of routes) {
       const params = route.method === request.method ? match(`${base}/api${route.path}`, url.pathname) : null;
@@ -173,10 +179,13 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   };
 
   const shell = async (request: Request, rel: string): Promise<Response> => {
-    const file = rel.split("/").pop()!.includes(".");
-    const res = request.method === "GET" && options.assets ? await options.assets(file ? rel : "index.html") : null;
+    // the path reaches `assets` as the client sent it, so a traversal or an encoded separator stops here
+    if (request.method !== "GET" || !options.assets || /(^|\/)\.\.(\/|$)|%2f|%5c|\\/i.test(rel)) throw wireError("NOT_FOUND", "no such route", P);
+    const file = rel.split("/").pop()!.includes(".") ? await options.assets(rel) : null;
+    // an unknown path is a client-side route (`/members/a.b@x.test` too), which the shell answers
+    const res = file ?? (rel.startsWith("assets/") ? null : await options.assets("index.html"));
     if (!res) throw wireError("NOT_FOUND", "no such route", P);
-    if (file) return res;
+    if (file && rel !== "index.html") return res;
     const headers = new Headers(res.headers);
     // appended, so a policy the asset already carries stays in force
     headers.append("content-security-policy", "frame-ancestors 'none'");

@@ -228,6 +228,24 @@ describe("Admin surface: operations", () => {
   });
 });
 
+describe("Admin surface: who may use it", () => {
+  it("needs a signed-in session: an owner's OAuth token or API key is not a sign-in", async () => {
+    for (const credential of ["oauth", "api-key", "personal-token"] as const) {
+      const r = await call("PATCH", "/admin/api/staff/u-editor/role", { ...(owner as object), credential, scopes: ["mcp:read"] } as Caller, { role: "owner" });
+      expect([credential, r.status]).toEqual([credential, 403]);
+    }
+  });
+
+  it("a staff View the caller's requires rules out is 404, the same as one that does not exist; a directory's extra fields stay off the wire", async () => {
+    const hidden = await call("GET", "/admin/api/views/owner-posts", staff("c", "contributor"));
+    const absent = await call("GET", "/admin/api/views/nope", staff("c", "contributor"));
+    expect([hidden.status, hidden.body]).toEqual([absent.status, { error: expect.objectContaining({ code: "NOT_FOUND" }) }]);
+    const leaky: AdminIdentity = { directory: { listUsers: async () => [{ id: "u", email: "e", name: "n", role: "owner", githubLogin: null, emailVerified: true, createdAt: new Date(0), passwordHash: "h" } as never], listMembers: async () => ({ items: [{ id: "m", email: "e", name: "n", emailVerified: true, createdAt: new Date(0), banReason: "b" } as never], previousCursor: null, nextCursor: null }) } };
+    expect(JSON.stringify((await call("GET", "/admin/api/staff", owner, undefined, { identity: leaky })).body)).not.toContain("passwordHash");
+    expect(JSON.stringify((await call("GET", "/admin/api/members", owner, undefined, { identity: leaky })).body)).not.toContain("banReason");
+  });
+});
+
 describe("Admin surface: staff and members", () => {
   it("hides the routes of a missing facet", async () => {
     const onlyDirectory: AdminIdentity = { directory: identity.directory! };
@@ -281,6 +299,13 @@ describe("Admin surface: the SPA shell", () => {
     expect((await call("POST", "/admin/c/posts", owner)).status).toBe(404);
     expect((await call("GET", "/elsewhere", owner)).status).toBe(404);
     expect((await call("GET", "/administrator", owner)).status).toBe(404);
+  });
+
+  it("index.html, a dotted deep link and a traversal attempt: the shell headers always, the shell for a client route, 404 for a traversal", async () => {
+    const r = await call("GET", "/admin/index.html", anon);
+    expect([r.status, r.headers.get("content-security-policy"), r.headers.get("x-frame-options"), r.headers.get("cache-control")]).toEqual([200, "frame-ancestors 'none'", "DENY", "no-store"]);
+    expect((await call("GET", "/admin/members/a.b@x.test", anon)).body).toBe("<!doctype html><div id=root></div>");
+    for (const path of ["/admin/..%2f..%2fsecret.txt", "/admin/x%5cy.txt"]) expect([path, (await call("GET", path, anon)).status]).toEqual([path, 404]);
   });
 
   it("has no shell without assets", async () => {
