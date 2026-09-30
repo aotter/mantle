@@ -24,10 +24,14 @@ export async function run(r: Report, engine: Engine) {
   const fails = async (input: Record<string, unknown>) => { try { await runProcedure(s, set, caller(input)); return undefined; } catch (e) { return e as Error; } };
   const item = async (id: string) => (await b.d1.all('SELECT stock, version FROM items WHERE id = ?1', [id]))[0];
 
-  // the hook reads the one visible row, then the statement carries the version the hook saw
+  // the hook reads the one visible row, then the statement carries the version the hook saw: `version = <bind>`, bound to it
+  const versionBound = ({ ir, binds }) => {
+    const n = JSON.stringify(ir.UpdateStmt.whereClause).match(/"sval":"version"\}\}\]\}\},"rexpr":\{"ParamRef":\{"number":(\d+)\}/)?.[1];
+    return n === undefined ? undefined : binds[Number(n) - 1];
+  };
   const ok = await runProcedure(s, set, caller({ id: 'a', s: 9 }));
   r.check('no concurrent write: commits and bumps version; the hook saw the one row before the change; the statement carries the version it saw',
-    JSON.stringify(ok.rows) === '[[{"id":"a","stock":9,"version":2}]]' && seen.length === 1 && seen[0].id === 'a' && seen[0].stock === 5 && seen[0].version === 1 && JSON.stringify(ok.batch[0].ir.UpdateStmt.whereClause).includes('"sval":"version"') && ok.batch[0].binds!.includes(1), seen[0]);
+    JSON.stringify(ok.rows) === '[[{"id":"a","stock":9,"version":2}]]' && seen.length === 1 && seen[0].id === 'a' && seen[0].stock === 5 && seen[0].version === 1 && versionBound(ok.batch[0]) === 1, seen[0]);
 
   // the row changes between the hook and the commit: CONFLICT, and the concurrent write survives
   concurrent = async () => { await b.d1.exec(["UPDATE items SET stock = 99, version = version + 1 WHERE id = 'b'"]); };

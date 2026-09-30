@@ -6,9 +6,9 @@
  * Every row the caller must never see has an id starting `X_` and text containing `LEAK`, so a probe can
  * assert "no result contains LEAK" without knowing what it queried.
  */
-import { compileSql, DiagnosticError, type RuntimePlan, type SqlDialect, type SqlNode } from "../spec/index.js";
+import { compileSql, DiagnosticError, RUNTIME_PLAN_VERSION, type RuntimePlan, type SqlDialect, type SqlNode } from "../spec/index.js";
 import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
-import type { MantleDialect, StorageSchema } from "../core/dialect.js";
+import type { MantleDialect, StorageSchema, StoreCodec } from "../core/dialect.js";
 import type { MantleStorageAdapter } from "../core/service.js";
 import type { StoreExecutor } from "../core/store.js";
 import { compileProgram as compileIr, type BindContext, type Compiled, type Mode } from "../core/sql/compile.js";
@@ -66,31 +66,42 @@ export const CENTER = { lat: 25.033, lng: 121.5654 };
 const METERS_PER_DEGREE_LAT = (2 * Math.PI * 6_371_008.8) / 360;
 export const north = (m: number) => CENTER.lat + m / METERS_PER_DEGREE_LAT;
 
-const FUTURE = NOW + 1_000_000_000_000;
-const EXPIRED = 1;
-export const seed = [
-  `INSERT INTO items (id, owner, created_at, expires_at, name, cat, stock, tags, note) VALUES
-    ('a','o1',0,NULL,'apple','x',5,'["red","big"]',NULL), ('b','o1',0,NULL,'berry','x',2,'["blue"]',NULL),
-    ('c','o1',0,${FUTURE},'cherry','y',9,'["red"]','nc'), ('d','o1',0,NULL,'date','x',7,'["red"]','nd'),
-    ('X_e1','o1',0,${EXPIRED},'LEAK-expired','x',100,'["LEAK-tag"]',NULL),
-    ('X_z1','o2',0,NULL,'LEAK-zeta','x',50,'["LEAK-tag"]',NULL), ('X_z2','o2',0,NULL,'LEAK-zulu','y',60,'["LEAK-tag"]',NULL)`,
-  `INSERT INTO requisitions (id, owner, created_at, item_id, qty, state) VALUES ('r1','o1',0,'a',2,'pending'), ('r2','o1',0,'b',1,'pending'), ('X_rz','o2',0,'X_z1',1,'pending')`,
-  `INSERT INTO orders (id, owner, created_at, item_id, qty, total) VALUES
-    ('oa','o1',0,'a',3,1050), ('ob','o1',0,'a',1,350), ('oe','o1',0,'X_e1',9,900), ('X_oz','o2',0,'a',99,9900), ('X_oz2','o2',0,'X_z1',5,500)`,
-  `INSERT INTO settings (id, owner, created_at, key, value) VALUES ('s1','o1',0,'theme','dark'), ('X_sz','o2',0,'theme','dark'), ('X_sz2','o2',0,'lang','xx')`,
-  `INSERT INTO posts (id, created_at, expires_at, status, title, body) VALUES
-    ('p1',0,NULL,'published','Hello world','a public post'), ('X_p2',0,NULL,'draft','LEAK-draft','not yet'), ('X_p3',0,${EXPIRED},'published','LEAK-expired-post','gone')`,
-  `INSERT INTO notes (id, owner, created_at, expires_at, title, body) VALUES
-    ('n1','o1',0,NULL,'台北小籠包推薦','best xiaolongbao in town'), ('n2','o1',0,NULL,'Hello World','apple pie recipe'),
-    ('n3','o1',0,NULL,'apple apple apple','apple'), ('n4','o1',0,NULL,'hello there','5% off, a_b literal'),
-    ('n5','o1',0,NULL,'title:hello OR world','operators are literal'),
-    ('X_n1','o2',0,NULL,'LEAK 小籠包 hello apple','LEAK'), ('X_n2','o1',0,${EXPIRED},'LEAK 小籠包 hello apple','LEAK')`,
-  `INSERT INTO places (id, owner, created_at, expires_at, name, loc_lat, loc_lng) VALUES
-    ('pl300','o1',0,NULL,'near300',${north(300)},${CENTER.lng}), ('pl1200','o1',0,NULL,'near1200',${north(1200)},${CENTER.lng}),
-    ('pl4900','o1',0,NULL,'near4900',${north(4900)},${CENTER.lng}), ('pl5200','o1',0,NULL,'near5200',${north(5200)},${CENTER.lng}),
-    ('pl10000','o1',0,NULL,'near10000',${north(10000)},${CENTER.lng}),
-    ('X_pl1','o2',0,NULL,'LEAK-other-owner',${north(300)},${CENTER.lng}), ('X_pl2','o1',0,${EXPIRED},'LEAK-expired',${north(300)},${CENTER.lng})`,
-];
+/** An instant as the wire gives it; the fixture encodes it through the dialect's codec. */
+export const iso = (us: number) => new Date(us / 1000).toISOString();
+const FUTURE = iso(NOW + 1_000_000_000_000);
+const T0 = iso(0);
+const EXPIRED = T0;
+/** Fixture SQL whose `${values}` become numbered binds. */
+const q = (strings: TemplateStringsArray, ...binds: unknown[]): SqlStatement => ({ sql: strings.reduce((a, s, i) => `${a}?${i}${s}`), binds });
+/** The fixture rows, typed values in the dialect's own storage encoding (the codec), so the seed is plain SQL on any engine. */
+export const seed = ({ encode }: StoreCodec): SqlStatement[] => {
+  const [t0, future, expired] = [T0, FUTURE, EXPIRED].map((v) => encode("timestamptz", v));
+  const tags = (...t: string[]) => encode("json", t);
+  const cents = (v: string) => encode("numeric(12,2)", v);
+  return [
+    q`INSERT INTO items (id, owner, created_at, expires_at, name, cat, stock, tags, note) VALUES
+    ('a','o1',${t0},NULL,'apple','x',5,${tags("red", "big")},NULL), ('b','o1',${t0},NULL,'berry','x',2,${tags("blue")},NULL),
+    ('c','o1',${t0},${future},'cherry','y',9,${tags("red")},'nc'), ('d','o1',${t0},NULL,'date','x',7,${tags("red")},'nd'),
+    ('X_e1','o1',${t0},${expired},'LEAK-expired','x',100,${tags("LEAK-tag")},NULL),
+    ('X_z1','o2',${t0},NULL,'LEAK-zeta','x',50,${tags("LEAK-tag")},NULL), ('X_z2','o2',${t0},NULL,'LEAK-zulu','y',60,${tags("LEAK-tag")},NULL)`,
+    q`INSERT INTO requisitions (id, owner, created_at, item_id, qty, state) VALUES ('r1','o1',${t0},'a',2,'pending'), ('r2','o1',${t0},'b',1,'pending'), ('X_rz','o2',${t0},'X_z1',1,'pending')`,
+    q`INSERT INTO orders (id, owner, created_at, item_id, qty, total) VALUES
+    ('oa','o1',${t0},'a',3,${cents("10.50")}), ('ob','o1',${t0},'a',1,${cents("3.50")}), ('oe','o1',${t0},'X_e1',9,${cents("9.00")}), ('X_oz','o2',${t0},'a',99,${cents("99.00")}), ('X_oz2','o2',${t0},'X_z1',5,${cents("5.00")})`,
+    q`INSERT INTO settings (id, owner, created_at, key, value) VALUES ('s1','o1',${t0},'theme','dark'), ('X_sz','o2',${t0},'theme','dark'), ('X_sz2','o2',${t0},'lang','xx')`,
+    q`INSERT INTO posts (id, created_at, expires_at, status, title, body) VALUES
+    ('p1',${t0},NULL,'published','Hello world','a public post'), ('X_p2',${t0},NULL,'draft','LEAK-draft','not yet'), ('X_p3',${t0},${expired},'published','LEAK-expired-post','gone')`,
+    q`INSERT INTO notes (id, owner, created_at, expires_at, title, body) VALUES
+    ('n1','o1',${t0},NULL,'台北小籠包推薦','best xiaolongbao in town'), ('n2','o1',${t0},NULL,'Hello World','apple pie recipe'),
+    ('n3','o1',${t0},NULL,'apple apple apple','apple'), ('n4','o1',${t0},NULL,'hello there','5% off, a_b literal'),
+    ('n5','o1',${t0},NULL,'title:hello OR world','operators are literal'),
+    ('X_n1','o2',${t0},NULL,'LEAK 小籠包 hello apple','LEAK'), ('X_n2','o1',${t0},${expired},'LEAK 小籠包 hello apple','LEAK')`,
+    q`INSERT INTO places (id, owner, created_at, expires_at, name, loc_lat, loc_lng) VALUES
+    ('pl300','o1',${t0},NULL,'near300',${north(300)},${CENTER.lng}), ('pl1200','o1',${t0},NULL,'near1200',${north(1200)},${CENTER.lng}),
+    ('pl4900','o1',${t0},NULL,'near4900',${north(4900)},${CENTER.lng}), ('pl5200','o1',${t0},NULL,'near5200',${north(5200)},${CENTER.lng}),
+    ('pl10000','o1',${t0},NULL,'near10000',${north(10000)},${CENTER.lng}),
+    ('X_pl1','o2',${t0},NULL,'LEAK-other-owner',${north(300)},${CENTER.lng}), ('X_pl2','o1',${t0},${expired},'LEAK-expired',${north(300)},${CENTER.lng})`,
+  ];
+};
 
 
 /** What the engine under test is: its storage adapter (the dialect's runtime side) and a driver for fixture SQL. */
@@ -103,17 +114,21 @@ export type Booted = { d1: Db; schemas: Record<string, StorageSchema>; executor:
 /** Converge the fixture Schemas through the dialect, then seed them with plain SQL. */
 export async function boot(engine: Engine): Promise<Booted> {
   const d1 = new Db(engine.driver);
-  const { executor } = await engine.storage.prepare({ schemas, fingerprint: "conformance" } as unknown as RuntimePlan);
-  await d1.exec(seed);
+  const { name, version } = engine.storage.dialect;
+  // a whole plan, so a dialect that reads more of it than the Schemas sees one; the fixture declares no Views or Procedures
+  const plan: RuntimePlan = { version: RUNTIME_PLAN_VERSION, dialect: { name, version }, fingerprint: "conformance", views: {}, procedures: {}, triggers: {},
+    schemas: Object.fromEntries(Object.entries(schemas).map(([n, d]) => [n, { ...d, name: n, names: {}, schema: { type: "object" } }])) };
+  const { executor } = await engine.storage.prepare(plan);
+  await d1.exec(seed(engine.storage.dialect.codec));
   return { d1, schemas, executor, dialect: engine.storage.dialect };
 }
 
 /** The compile side the cases compile with; the suite sets it from its options (D1 when unset). */
 let compileSide: SqlDialect | undefined;
 export const useCompileSide = (dialect: SqlDialect | undefined) => { compileSide = dialect; };
-export async function reset(d1: Db) {
-  for (const t of Object.keys(schemas)) await d1.exec([`DELETE FROM ${t}`]);
-  await d1.exec(seed);
+export async function reset(b: Booted) {
+  for (const t of Object.keys(schemas)) await b.d1.exec([`DELETE FROM ${t}`]);
+  await b.d1.exec(seed(b.dialect.codec));
 }
 
 // ---- hooks: the cases write plain callbacks; the runner sees a LifecycleDispatcher -----------------------------------------
@@ -135,11 +150,7 @@ function lifecycleOf(h: Hooks | undefined): LifecycleHooks | undefined {
   return { dispatcher: { before: (e) => call("before", e), after: (e) => call("after", e) }, before: keys(h.before), after: keys(h.after) };
 }
 
-export type Site = {
-  d1: Db;
-  schemas: Record<string, StorageSchema>;
-  executor: StoreExecutor;
-  dialect: MantleDialect;
+export type Site = Booted & {
   hooks?: Hooks;
   mode?: Mode;
   seen?: Set<RelationPosition>;

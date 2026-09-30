@@ -11,19 +11,20 @@ export async function run(r: Report, engine: Engine) {
   const b = await boot(engine);
   const s = site(b);
   const bad: string[] = [];
-  let refused = 0;
+  const refused: string[] = [];
   for (const item of corpus) {
     const rt = { ...caller(item.input), role: 'staff' };
-    // a construct the dialect's compile side refuses passes by that refusal (ADR-0035 decision 8)
-    const p = await program(item.kind, item.sql, item.inputs ?? {}).catch((e) => (/^SQL_/.test(e.message) ? undefined : Promise.reject(e)));
-    if (!p) { refused++; continue; }
+    // a construct the dialect's compile side refuses as unsupported passes by that refusal (ADR-0035 decision 8); any other
+    // refusal (syntax, a column, a relation) is the corpus item failing
+    const p = await program(item.kind, item.sql, item.inputs ?? {}).catch((e) => (/^SQL_(UNSUPPORTED|FUNCTION|TYPE):/.test(e.message) ? undefined : Promise.reject(e)));
+    if (!p) { refused.push(item.id); continue; }
     try {
-      if (item.kind === 'procedure') await reset(b.d1);
+      if (item.kind === 'procedure') await reset(b);
       const rows = item.kind === 'view' ? [(await runView(s, p, rt)).rows] : (await runProcedure(s, p, rt)).rows;
       if (JSON.stringify(rows) !== JSON.stringify(item.expect)) bad.push(`${item.id}: expected ${JSON.stringify(item.expect)} got ${JSON.stringify(rows)}`);
     } catch (e) {
       bad.push(`${item.id}: ${String(e.message).split('\n')[0].slice(0, 200)}`);
     }
   }
-  r.check(`all ${corpus.length - refused} corpus items the dialect accepts (of ${corpus.length}) give the rows PostgreSQL semantics give`, bad.length === 0, bad.join('; '));
+  r.check(`all ${corpus.length - refused.length} corpus items the dialect accepts (of ${corpus.length}) give the rows PostgreSQL semantics give; refused as unsupported: ${refused.join(', ') || 'none'}`, bad.length === 0, bad.join('; '));
 }

@@ -87,7 +87,7 @@ export async function run(r: Report, engine: Engine) {
   const probe = async (pos: RelationPosition, opts: Partial<Site>) => {
     const problems: string[] = [];
     for (const [n, step] of PROBES[pos].steps.entries()) {
-      await reset(b.d1);
+      await reset(b);
       const before = JSON.stringify(await protectedRows(b.d1));
       const p = await program(step.kind, step.sql, step.inputs ?? {});
       const s = { ...site(b), ...opts, mode: step.mode };
@@ -112,11 +112,11 @@ export async function run(r: Report, engine: Engine) {
   r.check(`negative control: with the visibility predicate off, ${positions.length - missed.length} of ${positions.length} positions are caught by their probes`, missed.length <= 1, `missed: ${missed.join(', ') || 'none'}`);
 
   // what the ADR says about the write path, on top of the positions
-  await reset(b.d1);
+  await reset(b);
   const { rows } = await runProcedure(site(b), await program('procedure', "INSERT INTO settings (key, value) VALUES ('lang', 'yy') RETURNING id"), caller());
   const mine = (await b.d1.all('SELECT owner, created_at, length(id) AS idlen FROM settings WHERE id = ?1', [(rows[0][0] as any).id]))[0];
   r.equal("an insert is owned by the caller, stamped with now(), gets a generated id, and does not touch another owner's same-key row",
-    [mine, (await b.d1.all("SELECT value FROM settings WHERE id = 'X_sz2'"))[0].value], [{ owner: 'o1', created_at: NOW, idlen: 32 }, 'xx']);
+    [{ ...mine, created_at: Date.parse(b.dialect.codec.decode('timestamptz', mine.created_at)) * 1000 }, (await b.d1.all("SELECT value FROM settings WHERE id = 'X_sz2'"))[0].value], [{ owner: 'o1', created_at: NOW, idlen: 32 }, 'xx']);
 
   // modes: public reads see published, unexpired rows only; trusted (runtime.store) sees every owner but TTL still applies
   const posts = await program('view', 'SELECT id FROM posts ORDER BY id');
