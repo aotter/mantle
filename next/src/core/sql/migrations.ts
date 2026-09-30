@@ -3,7 +3,7 @@
  * tables of an optional package (Better Auth's) change with Mantle releases and sometimes need data moves, so they are versioned
  * in `_mantle_migrations`, never converged. Schema tables are the plan's and go through `convergeStorage`.
  */
-import { DiagnosticError, makeDiagnostic } from "../../spec/index.js";
+import { DiagnosticError, makeDiagnostic } from "../../spec/kernel/index.js";
 import type { DatabaseDriver } from "../driver.js";
 
 export interface Migration {

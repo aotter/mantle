@@ -7,7 +7,7 @@
  * edit never overwrites what the owner set in Admin. Deployment fields (`origin`, icons, `locales`, media purposes) have no
  * edit path but code, so every boot syncs them, writing only what changed. A blank default is skipped (#441).
  */
-import { DEFAULT_SITE_ICONS, assertSiteDefaultsCanonical, type MediaPurposePolicy, type SiteConfig, type SiteDefaults, type SiteIcon } from "../../spec/index.js";
+import { DEFAULT_SITE_ICONS, assertSiteDefaultsCanonical, type MediaPurposePolicy, type SiteConfig, type SiteDefaults, type SiteIcon } from "../../spec/domain/index.js";
 import type { DatabaseDriver, SqlStatement } from "../driver.js";
 import type { MantleSite } from "../site.js";
 import { mediaLibrary } from "./media.js";

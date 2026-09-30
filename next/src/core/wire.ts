@@ -1,5 +1,6 @@
 /** HTTP plumbing shared by the REST and Admin surfaces: path matching, query coercion, JSON bodies and the error envelope. Not a public name. */
-import { DiagnosticError, httpStatusFor, makeDiagnostic, redactForWire, type Diagnostic, type JsonSchema, type PlanView } from "../spec/index.js";
+import { DiagnosticError, httpStatusFor, makeDiagnostic, redactForWire, type Diagnostic } from "../spec/kernel/index.js";
+import type { JsonSchema, PlanView } from "../spec/domain/index.js";
 
 export const wireError = (code: Diagnostic["code"], message: string, path: string) => new DiagnosticError(makeDiagnostic({ code, phase: "runtime", severity: "error", path, message }));
 

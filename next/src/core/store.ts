@@ -3,7 +3,7 @@
  * `select` and `write` keep ADR-0030's JSON shape; the runtime turns it into the same SQL IR
  * as a manifest's SQL, injects scope, TTL, published-only and OCC, then hands it to a StoreExecutor.
  */
-import type { SqlNode } from "../spec/index.js";
+import type { SqlNode } from "../spec/domain/index.js";
 import type { Caller } from "./caller.js";
 import type { InvocationCause } from "./invocation.js";
 

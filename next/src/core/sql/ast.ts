@@ -1,5 +1,5 @@
 /** Builders for the IR nodes Core writes itself (policy fills, Store's JSON converter, the runner's pre-reads, the TTL sweep). */
-import type { SqlNode as N } from "../../spec/index.js";
+import type { SqlNode as N } from "../../spec/domain/index.js";
 
 export const S = (s: string) => ({ String: { sval: s } });
 /** `ref("t", "id")` is `t.id`. */

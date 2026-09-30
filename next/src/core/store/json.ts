@@ -3,9 +3,10 @@
  * converter, not a second query path. Values never appear in the IR: each becomes a typed `input.vN`, so they
  * are bound and CAST like any input, and the result goes through the same validation and policy.
  */
-import { DiagnosticError, firstZodIssueAsJsonPointer, jsonSchemaToZod, runtimeDiagnostic, type JsonSchema, type SqlNode as N } from "../../spec/index.js";
+import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
+import { firstZodIssueAsJsonPointer, jsonSchemaToZod, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
 import type { ZodType } from "zod";
-import { classify } from "../../spec/index.js";
+import { classify } from "../../spec/domain/index.js";
 import { S, op, ref, table, target } from "../sql/ast.js";
 import { encodeInput } from "../sql/codec.js";
 import type { StorageSchema } from "../sql/storage.js";

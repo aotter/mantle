@@ -1,5 +1,6 @@
 /** `requires.auth` evaluated against the Caller only (ADR-0032 decision 8); the grammar is unchanged. */
-import { makeDiagnostic, type AuthPredicate, type AuthorizationRequirements, type Diagnostic } from "../../spec/index.js";
+import { makeDiagnostic, type Diagnostic } from "../../spec/kernel/index.js";
+import type { AuthPredicate, AuthorizationRequirements } from "../../spec/domain/index.js";
 import type { Caller } from "../caller.js";
 
 export function evaluatePredicate(pred: AuthPredicate, caller: Caller): boolean {

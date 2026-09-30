@@ -3,7 +3,8 @@
  * (`json.ts`), and run by the same runner as a manifest's Procedure or View, so policy, hooks and OCC
  * have one implementation.
  */
-import { DiagnosticError, firstZodIssueAsJsonPointer, jsonSchemaToZod, runtimeDiagnostic, SqlRefusal, type AuthorizationRequirements, type JsonSchema, type SqlNode as N } from "../../spec/index.js";
+import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
+import { firstZodIssueAsJsonPointer, jsonSchemaToZod, SqlRefusal, type AuthorizationRequirements, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";

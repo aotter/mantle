@@ -4,7 +4,7 @@
  * are reported and never dropped. STRICT tables, checks as triggers, and the FTS5 / R*Tree tables that back
  * `search` and `format: geo` are Mantle's own and are rebuilt when their declaration changes.
  */
-import { parseNumeric, type SqlNode, type SqlSchemaDef } from "../../spec/index.js";
+import { parseNumeric, type SqlNode, type SqlSchemaDef } from "../../spec/domain/index.js";
 import type { DatabaseDriver, SqlStatement } from "../driver.js";
 import { print } from "./print.js";
 import { transitions, tzStatements } from "./tz.js";

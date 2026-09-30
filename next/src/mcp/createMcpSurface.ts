@@ -5,7 +5,8 @@
  */
 import { McpServer, createMcpHandler, fromJsonSchema, isJsonContentType, readRequestBody, type AuthInfo, type CallToolResult, type JsonSchemaType, type JsonSchemaValidator, type StandardSchemaWithJSON, type jsonSchemaValidator } from "@modelcontextprotocol/server";
 import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from "@modelcontextprotocol/ext-apps/server";
-import { DiagnosticError, makeDiagnostic, mcpTools, redactForWire, type AuthPredicate, type AuthorizationRequirements, type Diagnostic, type JsonSchema, type McpTool } from "../spec/index.js";
+import { DiagnosticError, makeDiagnostic, redactForWire, type Diagnostic } from "../spec/kernel/index.js";
+import { mcpTools, type AuthPredicate, type AuthorizationRequirements, type JsonSchema, type McpTool } from "../spec/domain/index.js";
 import { evaluateAuthAll, type Caller, type MantleRuntime, type Surface } from "../core/index.js";
 import { appHtml, appMeta, clientUiSupport, linkApps, type ClientUiSupport, type McpApps } from "./apps.js";
 

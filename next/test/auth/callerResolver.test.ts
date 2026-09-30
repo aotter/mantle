@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createCallerResolver, withCaller, type AuthLike, type OAuthAccessTokenVerification } from "../../src/auth/index.js";
+import { withCaller } from "../../src/core/index.js";
+import { createCallerResolver, type AuthLike, type OAuthAccessTokenVerification } from "../../src/auth/index.js";
 
 const req = (headers: Record<string, string> = {}) => new Request("https://x/api", { headers });
 const auth = (over: Partial<AuthLike> = {}): AuthLike => ({

@@ -2,11 +2,11 @@
 // SQL functions lowered to plain SQLite. The result is still libpg-query's shape, so pgsql-deparser
 // prints it. Runs in the tenant Worker: no parser, only AST -> AST (the `sql()` templates are parsed
 // once by libpg-query's sync build here in the spike; production would ship them pre-parsed).
-import { KEYS, SqlRefusal as Refused, intervalMicros, parseNumeric, type SqlNode as N } from '../../spec/index.js';
+import { KEYS, SqlRefusal as Refused, intervalMicros, parseNumeric, type SqlNode as N } from '../../spec/domain/index.js';
 import { encodeDate, encodeNumeric, encodeTimestamptz, sqliteType } from './codec.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from './storage.js';
-import { classify } from '../../spec/index.js';
+import { classify } from '../../spec/domain/index.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
 
 type Schemas = Record<string, SchemaDef>;

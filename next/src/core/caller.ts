@@ -1,5 +1,5 @@
 /** Caller identity (ADR-0032 decision 8). Mantle never owns the user or the auth; a resolver produces the Caller. */
-import type { StaffRole } from "../spec/index.js";
+import type { StaffRole } from "../spec/domain/index.js";
 
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
 

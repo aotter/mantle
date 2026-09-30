@@ -14,6 +14,8 @@ import { planStorageChanges } from "../core/sql/storage.js";
 import { compileLinkedPlan, parseManifestSources, validateDiagnostic, ValidateManifestsUseCase, type Diagnostic } from "../spec/index.js";
 import { translateParseArgsError } from "../spec/infrastructure/cli/parseArgsError.js";
 import { emitMantleModule } from "./emitModule.js";
+import { toCloudflareCron } from "../spec/domain/service/CloudflareCron.js";
+import { presetWarnings, writePreset } from "./preset.js";
 
 const FEATURES = ["mcp", "admin", "web"] as const;
 const IDENTITIES = ["mantle", "custom", "none"] as const;
@@ -143,7 +145,8 @@ async function openSqliteFile(path: string): Promise<DatabaseDriver> {
 
 const print = (ds: readonly Diagnostic[]) => ds.forEach((d) => stderr.write(`${d.code} ${d.path}: ${d.message}\n`));
 
-const HELP = `mantle generate — compile manifests to .mantle/generated/plan.json and mantle.ts
+const HELP = `mantle generate — compile manifests to .mantle/generated/plan.json and mantle.ts, and write the
+service preset (src/service.ts, src/index.ts, wrangler.jsonc, ...) once, when src/service.ts does not exist
 
 Usage: mantle generate [options]
 
@@ -199,6 +202,16 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
 
   const missing = featureDiagnostics(root, config);
   if (missing.length) return (print(missing), 1);
+  // the grammar has no rule across cron fields, so the Cloudflare preset's refusals come before anything is written
+  const unmappable = Object.entries(compiled.plan.triggers).flatMap(([name, t]) => {
+    if (t.source.kind !== "schedule" || t.source.enabled === false) return [];
+    try {
+      return (toCloudflareCron(t.source.cron), []);
+    } catch (err) {
+      return [`Trigger ${name}: ${(err as Error).message}\n`];
+    }
+  });
+  if (unmappable.length) return (unmappable.forEach((m) => stderr.write(m)), 1);
 
   // the source hash is the manifests as authored, keyed by name so the project's location never enters it
   const sourceHash = createHash("sha256").update(JSON.stringify(files.map((f) => [f.name, f.text]))).digest("hex");
@@ -221,6 +234,15 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
       await writeFile(join(root, path), text, "utf8");
     }
     stdout.write(`Generated ${OUT}/plan.json and ${OUT}/mantle.ts (fingerprint ${compiled.plan.fingerprint.slice(0, 12)}; identity ${config.identity}; features ${config.features.join(", ") || "none"}).\n`);
+    let preset: string[];
+    try {
+      preset = await writePreset(root, config, compiled.plan);
+    } catch (err) {
+      return (stderr.write(`${err instanceof Error ? err.message : String(err)}; rerun mantle generate to finish the preset.\n`), 2);
+    }
+    const selectionChanged = !!saved && (saved.config.identity !== config.identity || saved.config.features.join() !== config.features.join());
+    for (const w of await presetWarnings(root, config, selectionChanged, compiled.plan)) stderr.write(`warning: ${w}\n`);
+    if (preset.length) stdout.write(`Wrote the service preset, which is yours to edit: ${preset.join(", ")}.\n`);
     return 0;
   }
 

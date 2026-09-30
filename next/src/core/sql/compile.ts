@@ -2,8 +2,8 @@
  * IR -> physical statements: validate (the runtime never trusts an IR), inject policy, resolve binds.
  * Everything a Store does per statement before the executor runs it (ADR-0034 decisions 3 and 8).
  */
-import { PG_GRAMMAR, validateIr, type SqlNode, type SqlPlan } from "../../spec/index.js";
-import { runtimeDiagnostic, DiagnosticError } from "../../spec/index.js";
+import { PG_GRAMMAR, validateIr, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
+import { runtimeDiagnostic, DiagnosticError } from "../../spec/kernel/index.js";
 import { encodeInput } from "./codec.js";
 import { applyPolicy, type Arg, type BindSpec, type Compiled, type Mode, type PolicyOpts } from "./policy.js";
 import type { RelationPosition } from "./positions.js";

@@ -2,7 +2,7 @@
  * Site config and media: the runtime's one optional capability over Core's product tables `site_config`, `media_assets` and
  * `pending_media_uploads` (ADR-0032 decision 11). A storage adapter given `site` defaults returns it; a runtime without it boots.
  */
-import type { SiteConfig } from "../spec/index.js";
+import type { SiteConfig } from "../spec/domain/index.js";
 
 /** What the Admin settings page edits. An omitted field is unchanged; an empty string clears it. */
 export interface SiteSettings {

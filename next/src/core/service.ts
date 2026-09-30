@@ -1,5 +1,5 @@
 /** The application-owned service, the runtime and `createMantle` (ADR-0032 decisions 4, 6, 9 and 10). */
-import type { RuntimePlan } from "../spec/index.js";
+import type { RuntimePlan } from "../spec/domain/index.js";
 import type { Caller } from "./caller.js";
 import type { Invocation, MantleHandlers } from "./invocation.js";
 import type { MantleSite } from "./site.js";

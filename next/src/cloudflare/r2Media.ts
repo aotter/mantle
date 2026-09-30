@@ -7,7 +7,7 @@
  * commit checks each object through the binding and copies it to its public key, which no upload URL names, and a rejected
  * group is deleted by the use case (`deleteObject` on each upload key).
  */
-import { DiagnosticError, makeDiagnostic, type DiagnosticCode } from "../spec/index.js";
+import { DiagnosticError, makeDiagnostic, type DiagnosticCode } from "../spec/kernel/index.js";
 import type { MediaStorage, MediaVariant } from "../core/site.js";
 
 interface R2Head {

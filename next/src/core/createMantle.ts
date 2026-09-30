@@ -3,7 +3,8 @@
  * hands it to `service.fetch`, and turns a schedule or a deferred-hook message into an Invocation. The host's own entry
  * is one to three generated lines; Core absorbs no platform event types.
  */
-import { DiagnosticError, makeDiagnostic, type RuntimePlan } from "../spec/index.js";
+import { DiagnosticError, makeDiagnostic } from "../spec/kernel/index.js";
+import type { RuntimePlan } from "../spec/domain/index.js";
 import { systemCaller } from "./caller.js";
 import type { Invocation } from "./invocation.js";
 import { createMantleRuntime } from "./runtime/createRuntime.js";
