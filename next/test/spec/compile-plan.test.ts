@@ -93,10 +93,10 @@ describe("compilePlan", () => {
     expect(rich.plan.fingerprint).not.toBe(plain.plan.fingerprint);
   });
 
-  it("returns manifest diagnostics before compiling; a 0.1.x manifest names mantle-update", async () => {
+  it("returns manifest diagnostics before compiling; a 0.1.x manifest names the upgrade guide", async () => {
     const res = await compile(SCHEMA.replace("/v2", "/v1"));
     if (res.ok) throw new Error("accepted");
-    expect(res.diagnostics[0]?.message).toContain("mantle-update");
+    expect(res.diagnostics[0]?.message).toContain("upgrade-0.1-to-0.2.md");
   });
 
   it("refuses an inline program as a lifecycle hook target (it would write inside a before hook)", async () => {

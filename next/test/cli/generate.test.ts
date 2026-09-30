@@ -221,17 +221,17 @@ spec: { source: { kind: mcp, surface: public }, target: { procedure: note } }
     expect(r.err).toMatch(/^warning: MCP_TOOL_DESCRIPTION_MISSING /m);
   });
 
-  it("names mantle-update for a v1 manifest and a v1 config", async () => {
+  it("names the upgrade guide for a v1 manifest and a v1 config", async () => {
     const v1 = await project();
     await writeFile(join(v1, "manifests/items.yaml"), (await read(v1, "manifests/items.yaml")).replace("cms.mantle.aotter.net/v2", "cms.mantle.aotter.net/v1"));
     const m = await gen(CUSTOM, v1);
     expect(m.code).toBe(1);
-    expect(m.err).toContain("run mantle-update");
+    expect(m.err).toContain("upgrade-0.1-to-0.2.md");
     const c = await project();
     await writeFile(join(c, "mantle.config.json"), JSON.stringify({ version: 1, host: "cf", features: ["spec", "runtime"] }));
     const r = await gen([], c);
     expect(r.code).toBe(2);
-    expect(r.err).toContain("run mantle-update");
+    expect(r.err).toContain("upgrade-0.1-to-0.2.md");
   });
 });
 

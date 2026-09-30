@@ -110,7 +110,7 @@ function readConfig(text: string): { config: MantleConfig; raw: Record<string, u
     throw new Error(`${CONFIG} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
   }
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error(`${CONFIG} must be a JSON object.`);
-  if (v.version === 1 || "host" in v) throw new Error(`${CONFIG} is a 0.1.x selection (version 1, with a host): run mantle-update to move it to version 2.`);
+  if (v.version === 1 || "host" in v) throw new Error(`${CONFIG} is a 0.1.x selection (version 1, with a host): move it to version 2 as node_modules/@aotter/mantle/docs/upgrade-0.1-to-0.2.md describes.`);
   const features = v.features as Feature[];
   if (v.version !== 2 || !IDENTITIES.includes(v.identity as Identity) || !Array.isArray(features) || FEATURES.filter((f) => features.includes(f)).join() !== features.join())
     throw new Error(`${CONFIG} must be { "version": 2, "identity": ${IDENTITIES.map((i) => `"${i}"`).join(" | ")}, "features": a subset of ${FEATURES.join(", ")} in that order }.`);
