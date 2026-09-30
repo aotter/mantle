@@ -10,7 +10,7 @@ import {
   type SqlNode,
 } from "../../src/spec/index.js";
 import { parsePgSql } from "../../src/spec/infrastructure/sql/PgQueryParser.js";
-import { validateIr } from "../../src/d1/index.js";
+import { validateIr } from "../../src/d1/validator.js";
 
 const SQL_DIAGNOSTIC_CODES = DIAGNOSTIC_CODES.filter((c): c is SqlDiagnosticCode => c.startsWith("SQL_"));
 

@@ -4,4 +4,3 @@
  */
 export { sqliteStorage } from "./adapter.js";
 export { readStoreInstanceId, runMigrations, type Migration } from "./migrations.js";
-export { validateIr } from "./validator.js";
