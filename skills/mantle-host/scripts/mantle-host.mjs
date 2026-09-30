@@ -4598,11 +4598,34 @@ async function startSave(ctx, flags) {
   ctx.emit({ ok: true, stage: "contract", state: "pending", commit: snap.commit, nextAction: contractNext(ctx) });
   return 0;
 }
+async function followHead(ctx, pending) {
+  try {
+    return await cleanHead(ctx.project, pending.commit);
+  } catch (error) {
+    if (error.code !== "head_changed" || pending.stage !== "build") throw error;
+  }
+  const commit = await cleanHead(ctx.project);
+  const snap = await snapshot(ctx, { ...pending, commit });
+  const again = await packBackendSnapshot({
+    esbuild: projectEsbuild(ctx.appRoot),
+    top: snap.top,
+    appRoot: ctx.appRoot,
+    entry: ctx.link.entry.handlers,
+    files: snap.files,
+    git: true,
+    omit: pending.omitted,
+    cliVersion: `${hostName}@${cliVersion}`,
+    core: pending.core
+  });
+  if (again.sha256 !== pending.backend.contentHash) throw fail("head_changed", `HEAD is ${commit} and its manifests or handlers differ from the uploaded backend`);
+  pending.commit = commit;
+  await saveState(ctx.project, ctx.state);
+}
 async function resumeSave(ctx, readGrant) {
   const pending = ctx.targetState.pending;
   if (!pending) throw fail("nothing_pending", "run save first");
   if (pending.linkHash !== ctx.link.hash) throw fail("link_changed", `${ctx.linkFile} changed during this save`);
-  if (pending.mode === "git") await cleanHead(ctx.project, pending.commit);
+  if (pending.mode === "git") await followHead(ctx, pending);
   if (pending.stage !== "contract" && !parseCorePin(pending.core)) throw fail("cli_core_mismatch", "this save predates Cloud Core negotiation", 409);
   if (pending.stage === "contract") return resumeContract(ctx, pending, await readGrant());
   if (pending.stage === "backend") return resumeBackend(ctx, pending, await readGrant());
