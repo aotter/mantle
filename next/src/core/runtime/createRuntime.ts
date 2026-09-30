@@ -175,6 +175,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   }
 
   return {
+    plan,
     store,
     invokeProcedure: (invocation) => invoke(invocation),
     bootReport: (): MantleBootReport => ({ fingerprint, coreVersion: CORE_VERSION }),
