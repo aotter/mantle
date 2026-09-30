@@ -4,7 +4,8 @@
  * caller's scope sees and nothing wider. Routes of an `AdminIdentity` facet that is absent do not exist.
  */
 import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, makeDiagnostic, meetsRole, redactForWire, resolveMantleRef, type JsonSchema, type PlanSchema, type StaffRole } from "../spec/index.js";
-import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
+import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
+import { siteConfigOf } from "../core/sql/site.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
 import { decodeMemberCursor } from "./consent.js";
 import type { AdminIdentity, MemberUserInfo, StaffUserInfo } from "./identity.js";
@@ -17,6 +18,10 @@ export interface AdminSurfaceOptions {
   readonly basePath: string;
   readonly identity?: AdminIdentity;
   readonly assets?: AdminAssets;
+  /** The MCP surfaces the service mounted, as paths or URLs; `/site` resolves them against the public URL. */
+  readonly site?: { readonly mcpEndpoints?: { readonly public: string | null; readonly staff: string | null } };
+  /** Media objects; the media routes also need `runtime.site`, which owns the tables, and answer 501 without either. */
+  readonly media?: MediaStorage;
 }
 
 type Staff = Extract<Caller, { kind: "user" }> & { readonly role: StaffRole };
@@ -65,6 +70,17 @@ function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
     list: { primaryField: (list["primaryField"] as string | undefined) ?? null, columns: (list["columns"] as string[] | undefined) ?? [] },
     nav: navField && navParent ? { standalone: true, parentField: navField, parentCollection: navParent.schema } : null,
   };
+}
+
+/** The settings page's fields and their longest value; the old surface had no limit. */
+const SETTINGS = { brand: 80, title: 200, description: 1000 } as const;
+
+/** A committed asset with its primary variant lifted, so the library grid renders without deriving it. */
+const settingsOf = ({ brand, title, description }: SiteSettings) => ({ brand, title, description });
+
+function mediaItem(a: MediaAsset) {
+  const primary = a.variants.find((v) => v.role === "primary") ?? a.variants[0];
+  return { id: a.id, variants: a.variants, primaryUrl: primary?.publicUrl ?? null, mime: primary?.mimeType ?? null, byteSize: primary?.byteSize ?? null, alt: a.alt ?? null, caption: a.caption ?? null, createdAt: a.createdAt };
 }
 
 /** Store's native columns: `data` never sets them (status moves by publish and unpublish). */
@@ -137,6 +153,19 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   // a custom directory may return more than it declares: only the declared fields reach the wire
   const staffInfo = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: StaffUserInfo) => ({ id, email, name, role, githubLogin, emailVerified, createdAt });
   const memberInfo = ({ id, email, name, emailVerified, createdAt }: MemberUserInfo) => ({ id, email, name, emailVerified, createdAt });
+  const site = async (url: URL) => {
+    const { origin, ...config } = runtime.site ? await runtime.site.read() : siteConfigOf([]);
+    // boot refuses a bad origin; a row edited by hand still must not take /site down
+    const publicUrl = URL.canParse(origin) ? origin : url.origin;
+    const at = (p: string | null | undefined) => (p ? new URL(p, publicUrl).href : null);
+    const mcp = options.site?.mcpEndpoints;
+    return { ...config, publicUrl, mcpEndpoints: { public: at(mcp?.public), staff: at(mcp?.staff) } };
+  };
+  const library = options.media && runtime.site?.media(options.media);
+  const media = () => {
+    if (!library) throw wireError("MEDIA_NOT_CONFIGURED", "Media is not enabled on this deployment: give the storage adapter site defaults and createAdminSurface a MediaStorage.", P);
+    return library;
+  };
   const me = async (caller: Staff) => {
     const u = await directory?.getUser?.(caller.subject);
     return { userId: caller.subject, role: caller.role, login: u ? u.githubLogin || u.name || u.email || null : null, image: u?.image ?? null };
@@ -275,13 +304,28 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   const routes: Route[] = [
     { method: "GET", path: "/me", role: "contributor", run: ({ caller }) => me(caller) },
     {
-      method: "GET", path: "/bootstrap", role: "contributor", run: async ({ caller, url: { searchParams: q } }) => ({
-        me: await me(caller), collections, operations: operations(caller), views: views(caller),
+      method: "GET", path: "/bootstrap", role: "contributor", run: async ({ caller, url, url: { searchParams: q } }) => ({
+        me: await me(caller), site: await site(url), collections, operations: operations(caller), views: views(caller),
         // the first page of the collection the SPA opens on
         ...(q.get("collection") ? { entries: await list(caller, q) } : {}),
       }),
     },
     { method: "GET", path: "/collections", role: "contributor", run: async () => ({ collections }) },
+    { method: "GET", path: "/site", role: "contributor", run: ({ url }) => site(url) },
+    // the bytes go straight to the bucket: create, PUT each variant to its uploadUrl, commit
+    { method: "POST", path: "/media/uploads", role: "editor", run: async ({ request }) => media().createUpload(await readJsonObject(request, P)) },
+    { method: "POST", path: "/media/uploads/{groupId}/commit", role: "editor", run: async ({ request, params: { groupId } }) => media().commitUpload(groupId!, await readJsonObject(request, P)) },
+    {
+      method: "GET", path: "/media", role: "editor", run: async ({ url: { searchParams: q } }) => {
+        const limit = q.get("limit");
+        // the callee first: an unconfigured library is 501 before the query is read
+        const r = await media().list({ ...(limit ? { limit: coerce(limit, { type: "integer" }, "limit", P) as number } : {}), ...(q.get("cursor") ? { cursor: q.get("cursor")! } : {}), ...(q.get("search")?.trim() ? { search: q.get("search")!.trim() } : {}) });
+        return { items: r.rows.map(mediaItem), next_cursor: r.nextCursor ?? null };
+      },
+    },
+    { method: "GET", path: "/media/{id}", role: "editor", run: async ({ params: { id } }) => mediaItem(await media().get(id!)) },
+    { method: "PATCH", path: "/media/{id}", role: "editor", run: async ({ request, params: { id } }) => mediaItem(await media().update(id!, await readJsonObject(request, P))) },
+    { method: "DELETE", path: "/media/{id}", role: "editor", run: async ({ params: { id } }) => media().delete(id!) },
     { method: "GET", path: "/views-manifest", role: "contributor", run: async ({ caller }) => ({ views: views(caller) }) },
     {
       method: "GET", path: "/views/{name}", role: "contributor", run: ({ caller, params: { name }, url }) =>
@@ -361,6 +405,23 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       },
     },
   ];
+  const siteStore = runtime.site;
+  if (siteStore) routes.push(
+    { method: "GET", path: "/site-settings", role: "owner", run: async () => settingsOf(await siteStore.read()) },
+    {
+      method: "PATCH", path: "/site-settings", role: "owner", run: async ({ request }) => {
+        const body = await readJsonObject(request, P);
+        const values: Record<string, string> = {};
+        for (const [k, max] of Object.entries(SETTINGS)) {
+          const v = body[k];
+          if (v === undefined) continue;
+          if (typeof v !== "string" || v.length > max) throw bad(`'${k}' must be a string of at most ${max} characters`);
+          values[k] = v;
+        }
+        return settingsOf(await siteStore.updateSettings(values as SiteSettings));
+      },
+    },
+  );
   if (directory) routes.push(
     { method: "GET", path: "/staff", role: "owner", run: async () => ({ users: (await directory.listUsers()).map(staffInfo) }) },
     {

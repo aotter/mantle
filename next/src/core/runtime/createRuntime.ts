@@ -73,7 +73,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     if (g && inline(g)) throw fail("GUARD_PROCEDURE_NOT_REF", `${at}#/views/${name}`, `View '${name}' is guarded by '${g}', which is an inline program`);
   }
 
-  const { executor } = await args.storage.prepare(plan);
+  const { executor, site } = await args.storage.prepare(plan);
 
   // ---- lifecycle: Store hands mutations to this dispatcher; Procedures are only reached through invokeProcedure ---------------
   const byHook = new Map<string, [string, string][]>();
@@ -178,6 +178,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     store,
     invokeProcedure: (invocation) => invoke(invocation),
     bootReport: (): MantleBootReport => ({ fingerprint, coreVersion: CORE_VERSION }),
+    ...(site ? { site } : {}),
   };
 }
 

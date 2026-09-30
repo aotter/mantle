@@ -3,11 +3,14 @@
  * tables of an optional package (Better Auth's) change with Mantle releases and sometimes need data moves, so they are versioned
  * in `_mantle_migrations`, never converged. Schema tables are the plan's and go through `convergeStorage`.
  */
+import { DiagnosticError, makeDiagnostic } from "../../spec/index.js";
 import type { DatabaseDriver } from "../driver.js";
 
 export interface Migration {
   readonly id: string;
   readonly sql: string;
+  /** The product tables it creates (ADR-0032 decision 11): one that exists before its ledger row is someone else's, and boot stops. */
+  readonly tables?: readonly string[];
 }
 
 const LEDGER = "_mantle_migrations";
@@ -19,6 +22,16 @@ export async function runMigrations(driver: DatabaseDriver, migrations: readonly
   const seen = new Set(applied!.rows.map((r) => String(r.id)));
   for (const m of migrations) {
     if (seen.has(m.id)) continue;
+    if (m.tables?.length) {
+      const [found, won] = await driver.batch([
+        { sql: `SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) IN (${m.tables.map((_, i) => `?${i + 1}`).join(", ")})`, binds: m.tables.map((t) => t.toLowerCase()) },
+        { sql: `SELECT id FROM ${LEDGER} WHERE id = ?1`, binds: [m.id] },
+      ]);
+      // the migration and its ledger row land in one batch, so a table without the row was never ours
+      if (won!.rows.length) { seen.add(m.id); continue; }
+      if (found!.rows.length)
+        throw new DiagnosticError(found!.rows.map((r) => makeDiagnostic({ code: "STORAGE_TABLE_NOT_OWNED", phase: "boot", severity: "error", path: `storage:${String(r.name)}`, message: `table ${String(r.name)} exists and Mantle's migration ${m.id} did not create it, so it is not read or written; rename it or move it away` })));
+    }
     try {
       await driver.batch([...splitSqlStatements(m.sql).map((sql) => ({ sql })), { sql: `INSERT INTO ${LEDGER} (id, applied_at) VALUES (?1, ?2)`, binds: [m.id, Date.now()] }]);
     } catch (error) {

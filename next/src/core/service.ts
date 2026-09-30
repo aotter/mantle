@@ -2,6 +2,7 @@
 import type { RuntimePlan } from "../spec/index.js";
 import type { Caller } from "./caller.js";
 import type { Invocation, MantleHandlers } from "./invocation.js";
+import type { MantleSite } from "./site.js";
 import type { MantleStore, StoreExecutor } from "./store.js";
 
 /** A surface is a Fetch function, created with its base path (`createMcpSurface(runtime, { basePath })`). */
@@ -22,6 +23,8 @@ export interface MantleRuntime {
   /** The one path for every Invocation: auth, guard, input, handler, output. */
   invokeProcedure(invocation: Invocation): Promise<unknown>;
   bootReport(): MantleBootReport;
+  /** Site config and media, when the storage adapter was given site defaults. */
+  readonly site?: MantleSite;
 }
 
 export interface MantleServiceContext {
@@ -37,6 +40,7 @@ export interface MantleService<Env = unknown> {
 
 export interface PreparedMantleStorage {
   readonly executor: StoreExecutor;
+  readonly site?: MantleSite;
 }
 
 /** Converges storage to the plan (ADR-0033) and returns the executor for it. */

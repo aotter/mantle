@@ -203,9 +203,9 @@ describe("Admin surface: reads", () => {
     expect((await call("GET", "/admin/api/views/pub", owner)).status).toBe(404);
   });
 
-  it("bootstrap folds me, collections, operations and views into one answer", async () => {
+  it("bootstrap folds me, site, collections, operations and views into one answer", async () => {
     const b = (await call("GET", "/admin/api/bootstrap", editor)).body;
-    expect(Object.keys(b).sort()).toEqual(["collections", "me", "operations", "views"]);
+    expect(Object.keys(b).sort()).toEqual(["collections", "me", "operations", "site", "views"]);
     expect(b.me.userId).toBe("u-editor");
   });
 });
