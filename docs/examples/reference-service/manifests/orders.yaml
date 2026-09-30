@@ -1,0 +1,120 @@
+# A Procedure written as SQL: its statements apply together or not at all, and the stock check
+# on items fails the whole program when stock would go negative.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: place-order }
+spec:
+  title: Place an order
+  description: Order one item for the signed-in caller; the stock check fails the whole order when stock runs out.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [itemId, qty]
+    properties:
+      itemId: { type: string }
+      qty: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE items SET stock = stock - input.qty WHERE id = input.itemId;
+      INSERT INTO orders (itemId, qty, orderStatus, placedAt)
+      SELECT id, input.qty, 'placed', now() FROM items WHERE id = input.itemId
+      RETURNING id, qty, orderStatus
+---
+# Optimistic concurrency: the caller sends the version it saw.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: cancel-order }
+spec:
+  title: Cancel an order
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [orderId, expectedVersion]
+    properties:
+      orderId: { type: string }
+      expectedVersion: { type: integer }
+  output: { type: object }
+  handler: { ref: cancelOrder }
+---
+# An upsert keyed by a unique index.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: restock }
+spec:
+  title: Restock an item
+  description: Add stock to an item by SKU, creating the item if it is new.
+  requires: { auth: { all: [{ ctx.staff: [owner, editor] }] } }
+  input:
+    type: object
+    required: [sku, name, qty]
+    properties:
+      sku: { type: string }
+      name: { type: string }
+      qty: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO items (sku, name, stock) VALUES (input.sku, input.name, input.qty)
+      ON CONFLICT (sku) DO UPDATE SET stock = items.stock + EXCLUDED.stock
+      RETURNING id, sku, stock
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: record-orders }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { ref: recordOrders }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: weekly-digest }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { ref: weeklyDigest }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: place-order-http }
+spec:
+  source: { kind: http, method: POST, path: /api/orders }
+  target: { procedure: place-order }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: place-order-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: place-order }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: cancel-order-http }
+spec:
+  source: { kind: http, method: POST, path: /api/orders/cancel }
+  target: { procedure: cancel-order }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: restock-mcp }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: restock }
+---
+# After hooks get every row one statement touched.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: orders-recorded }
+spec:
+  source: { kind: lifecycle, schema: orders, on: [after_create, after_update] }
+  target: { procedure: record-orders }
+---
+# POSIX cron, UTC: Sundays at 03:00.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: weekly-digest }
+spec:
+  source: { kind: schedule, cron: "0 3 * * 0" }
+  target: { procedure: weekly-digest }

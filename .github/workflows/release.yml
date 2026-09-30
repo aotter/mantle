@@ -44,23 +44,12 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Single source of truth for the fourteen public packages, in dependency order.
+    # Single source of truth for the three public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       PKG_DIRS: >-
-        packages/mantle-spec
         packages/mantle-ui
         packages/mantle-admin-ui
-        packages/mantle-runtime
-        packages/mantle-mcp
-        packages/adapters/indexeddb
-        packages/mantle-web
-        packages/mantle-admin
-        packages/mantle-auth
-        packages/adapters/bun
-        packages/adapters/vercel
-        packages/adapters/cloudflare
-        packages/mantle-host
         packages/mantle
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,8 +64,6 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Resolve release state
         id: ver
