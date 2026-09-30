@@ -2,14 +2,8 @@
 import { cimd } from "@better-auth/cimd";
 import { mcp } from "@better-auth/mcp";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import {
-betterAuth,
-type BetterAuthOptions
-} from "better-auth";
-import {
-admin,
-jwt
-} from "better-auth/plugins";
+import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { admin, jwt } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
@@ -18,11 +12,8 @@ import { readStoreInstanceId } from "../core/index.js";
 import { STAFF_ROLES } from "../spec/domain/index.js";
 import { dbOf } from "./db.js";
 
-export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo,InviteUserResult,ListMembersArgs,MemberListResult,MemberUserInfo,StaffUserInfo } from "../admin/identity.js";
-
-import { AuthHookContext,buildEmailOTPPlugin,buildGenericOAuthProviders,buildMagicLinkPlugin,buildOAuthProviderOptions,buildSocialProviders,buildTrustedOriginsFor,guardGithubLoginProfile,hasEmailAuthSurface,methodsRequireSameSiteNone,normalizeAuthBasePath,normalizeAuthErrorURL,pickSingleton,resolveClientIpHeaders,shouldPromoteToOwner,validateBootstrap } from "./methods.js";
-import { BackgroundTaskRetainer,CreateMantleAuthOptions } from "./types.js";
+import { type AuthHookContext, buildEmailOTPPlugin, buildGenericOAuthProviders, buildMagicLinkPlugin, buildOAuthProviderOptions, buildSocialProviders, buildTrustedOriginsFor, guardGithubLoginProfile, hasEmailAuthSurface, methodsRequireSameSiteNone, normalizeAuthBasePath, normalizeAuthErrorURL, pickSingleton, resolveClientIpHeaders, shouldPromoteToOwner, validateBootstrap } from "./methods.js";
+import type { BackgroundTaskRetainer, CreateMantleAuthOptions } from "./types.js";
 // Better Auth 1.7.2 initializes its shared stores asynchronously. Seed them
 // before any request can be canceled; the accessor-identity regression test
 // pins this version-specific integration to the stores Better Auth uses.
@@ -73,7 +64,6 @@ const userAc = ac.newRole({
   user: [],
   session: [],
 });
-
 
 export function buildAuth(config: CreateMantleAuthOptions) {
   const db = dbOf(config.driver);

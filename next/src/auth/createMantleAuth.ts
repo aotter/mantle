@@ -1,25 +1,16 @@
 import { getMigrations } from "better-auth/db/migration";
-import {
-createDpopReplayStore,
-type DpopReplayStore
-} from "better-auth/oauth2";
-import {
-decodeMemberCursor,
-encodeMemberCursor
-} from "../admin/consent.js";
+import { createDpopReplayStore, type DpopReplayStore } from "better-auth/oauth2";
+import { decodeMemberCursor, encodeMemberCursor } from "../admin/consent.js";
 import type { StaffUserInfo } from "../admin/identity.js";
 import { runMigrations } from "../core/index.js";
-import { STAFF_ROLES,type StaffRole } from "../spec/domain/index.js";
+import { STAFF_ROLES, type StaffRole } from "../spec/domain/index.js";
 import { dbOf } from "./db.js";
 import { staffInvitationEmail } from "./emailTemplates.js";
 
-export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo,InviteUserResult,ListMembersArgs,MemberListResult,MemberUserInfo,StaffUserInfo } from "../admin/identity.js";
-
-import { backgroundTaskRetention,buildAuth } from "./buildAuth.js";
-import { normalizeAuthBasePath,normalizeAuthResponseCookies } from "./methods.js";
-import { assertActiveUserGrant,getProviderAccessTokenForRequest,mapRegisteredOAuthClient,parseStoredStringArray,verifyOAuthJwt,verifyOAuthJwtWithLocalJwks } from "./oauthTokens.js";
-import { AuthMethodInfo,CreateMantleAuthOptions,MantleAuth,STAFF_ROLE_SET } from "./types.js";
+import { backgroundTaskRetention, buildAuth } from "./buildAuth.js";
+import { normalizeAuthBasePath, normalizeAuthResponseCookies } from "./methods.js";
+import { assertActiveUserGrant, getProviderAccessTokenForRequest, mapRegisteredOAuthClient, parseStoredStringArray, verifyOAuthJwt, verifyOAuthJwtWithLocalJwks } from "./oauthTokens.js";
+import { type AuthMethodInfo, type CreateMantleAuthOptions, type MantleAuth, STAFF_ROLE_SET } from "./types.js";
 const LEGACY_DCR_TTL_MS = 90 * 24 * 60 * 60 * 1_000;
 const LEGACY_DCR_CLEANUP_INTERVAL_MS = 60 * 60 * 1_000;
 
