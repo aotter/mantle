@@ -76,6 +76,11 @@ it("staff management acts as the signed-in owner through Better Auth's admin API
   await expect(auth.listUsers(new Request("http://localhost/"))).rejects.toMatchObject({ status: "UNAUTHORIZED" });
   await expect(auth.inviteUser(member, "x@x.test", "owner")).rejects.toMatchObject({ status: "FORBIDDEN" });
 
+  // Better Auth pages 100 users at a time; the staff list is every one of them
+  const at = new Date(Date.UTC(2026, 0, 1)).toISOString();
+  await driver.batch(Array.from({ length: 120 }, (_, i) => ({ sql: "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt, role) VALUES (?1, ?1, ?2, 0, ?3, ?3, 'contributor')", binds: [`bulk${i}`, `bulk${i}@x.test`, at] })));
+  expect(await auth.listUsers(owner)).toHaveLength(121);
+
   expect(await auth.deleteUser(invited.id)).toBe(true);
   expect(await auth.deleteUser(invited.id)).toBe(false);
 });

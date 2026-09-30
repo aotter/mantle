@@ -1599,10 +1599,11 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     },
     listUsers: async (request) => {
       await prepareAuth();
-      const { users } = await api.listUsers({
-        headers: request.headers,
-        query: { filterField: "role", filterOperator: "in", filterValue: [...STAFF_ROLES], sortBy: "createdAt", sortDirection: "asc" },
-      }) as { users: StaffUserInfo[] };
+      const query = { filterField: "role", filterOperator: "in", filterValue: [...STAFF_ROLES], sortBy: "createdAt", sortDirection: "asc" } as const;
+      type Page = { users: StaffUserInfo[]; total: number };
+      let { users, total } = await api.listUsers({ headers: request.headers, query }) as Page;
+      // Better Auth returns 100 users unless given a limit: ask once more for all of them, in one ordered read
+      if (users.length < total) ({ users } = await api.listUsers({ headers: request.headers, query: { ...query, limit: total } }) as Page);
       return users.map(({ id, email, name, role, githubLogin, emailVerified, createdAt }) => ({ id, email, name, role, githubLogin: githubLogin ?? null, emailVerified, createdAt: new Date(createdAt) }));
     },
     listMembers: async ({ search, cursor, cursorDirection = "forward", limit }) => {
