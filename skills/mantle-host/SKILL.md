@@ -41,7 +41,12 @@ publishing. Cloud checks deploy access, so there is no extra confirmation.
    --dist --spa --build`). Commit `.mantle/hosting.json`.
 2. Commit your changes; `save` reads HEAD, not the working tree.
 3. `save`, then follow each `nextAction` until the version is saved. The frontend
-   build step follows the kit's `AGENT.md`.
+   build step follows the kit's `AGENT.md`. After reading the kit you may edit
+   and commit the frontend, then `save --resume`; changing manifests or handlers
+   needs `save --restart`.
+   Frontend mode: content only, static files; SEO pages for published entries,
+   add `dist/templates.mjs` (source outside dist); app-like navigation, spa. They
+   combine (Cloud routes static file, then templates, then SPA fallback).
 4. `deploy <versionId>`: pipe `cloud_paired_review` to `--review -`, call
    `cloud_publish_paired_release` as printed, pipe its result to `--release -`.
 5. Repeat the identical publish call while the script says `wait`. Only a final
