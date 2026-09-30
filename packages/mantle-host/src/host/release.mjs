@@ -1,14 +1,17 @@
 // link, status, deploy and rollback. Deploy and rollback only ever print the
 // literal Cloud MCP call for a deployer to make after review: this script
-// never publishes, and there is no one-step upload-and-publish.
-import { randomUUID } from 'node:crypto'
-import { hex64, unwrapResult } from './cloud.mjs'
-import { appendInside, readInside } from './files.mjs'
+// never publishes, and there is no one-step upload-and-publish. `open` restores the live source.
+import { createHash, randomUUID } from 'node:crypto'
+import { readdir } from 'node:fs/promises'
+import { unzipSync } from 'fflate'
+import { grantUrl, hex64, unwrapResult, uuid } from './cloud.mjs'
+import { appendInside, readInside, safeRelative, writeAtomic } from './files.mjs'
 import { linkFile, readLink, validateLink, writeLink } from './link.mjs'
 import { fail } from './output.mjs'
 import { saveState } from './state.mjs'
 import { backendNext, contractNext, staticNext } from './save.mjs'
 import { parseCorePin } from '../protocol.mjs'
+import { sourceArchiveLimit, sourceEntryLimit, sourceExpandedLimit } from '../source-zip.mjs'
 
 const versionRule = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/
 
@@ -92,6 +95,7 @@ export async function deploy(ctx, positional, flags, readInput) {
   const { entry } = ctx.link
   const version = parseVersion(positional)
   const again = [...flags['dry-run'] ? ['--dry-run'] : []]
+  if (flags.release) return await released(ctx, version, flags, readInput)
   if (!flags.review) {
     ctx.emit({ ok: true, stage: 'deploy', state: 'review-needed', versionId: version.versionId, commit: null, nextAction: { kind: 'mcp', tool: 'cloud-paired-review',
       arguments: { projectId: entry.projectId, staticUploadId: version.staticUploadId }, command: ctx.line('deploy', version.versionId, ...ctx.targetArgs, '--review', '-', ...again),
@@ -129,9 +133,57 @@ export async function deploy(ctx, positional, flags, readInput) {
   ts.deploys[version.versionId] = { operationId, expectedActiveRevision: active }
   await saveState(ctx.project, ctx.state)
   ctx.emit({ ok: true, stage: 'deploy', state: 'reviewed', versionId: version.versionId, commit, review: summary, notes,
-    nextAction: { kind: 'mcp', tool: 'cloud-publish-paired-release', arguments: { projectId: entry.projectId, candidateId: version.candidateId,
-      staticUploadId: version.staticUploadId, expectedActiveRevision: active, operationId, ...active === null && review.live?.kind === 'none' ? { slug: entry.slug } : {} },
-      reason: 'Show this review to the deployer and publish only after they confirm. Repeat the identical call while release.nextAction is retry_same_operation; report the site only after release.active and a live check.' } })
+    nextAction: publishNext(ctx, version, { operationId, expectedActiveRevision: active }, 'Publish now (Cloud checks deploy access). Repeat the identical call while the result is not serving.') })
+  return 0
+}
+
+const publishNext = (ctx, version, { operationId, expectedActiveRevision }, reason) => ({ kind: 'mcp', tool: 'cloud-publish-paired-release',
+  arguments: { projectId: ctx.link.entry.projectId, candidateId: version.candidateId, staticUploadId: version.staticUploadId, expectedActiveRevision, operationId,
+    ...expectedActiveRevision === null ? { slug: ctx.link.entry.slug } : {} },
+  command: ctx.line('deploy', version.versionId, ...ctx.targetArgs, '--release', '-'), reason })
+
+/** Reads the publish result: a serving URL ends the deploy; anything else repeats the same operation. */
+async function released(ctx, version, flags, readInput) {
+  if (flags.release !== '-') throw fail('usage', 'pass --release - and pipe the cloud_publish_paired_release result on stdin')
+  const saved = ctx.targetState.deploys[version.versionId]
+  if (!saved?.operationId) throw fail('nothing_to_publish', 'run deploy for this versionId first')
+  const raw = await readInput(), release = unwrapResult(raw, 'release')?.release
+  // A business failure is an MCP isError result: {diagnostics:[{code, value?: {code, retryable, retryAfter}}]} in its text block.
+  const diagnostic = release ? null : unwrapResult(raw, 'diagnostics')?.diagnostics?.[0]
+  const problem = diagnostic ? { error: String(diagnostic.value?.code ?? diagnostic.code).toLowerCase(), ...diagnostic.value } : null
+  const wait = (reason) => ctx.emit({ ok: true, stage: 'deploy', state: 'publishing', versionId: version.versionId, commit: null, nextAction: { ...publishNext(ctx, version, saved, reason), kind: 'wait' } })
+  if (problem?.error === 'media_domain_not_ready' && problem.retryable) wait(`The site address is not ready. Wait ${Number(problem.retryAfter) || 30} seconds, then repeat this identical call.`)
+  else if (problem) throw fail(/^[a-z0-9_]{1,100}$/.test(problem.error) ? problem.error : 'publish_failed')
+  else if (!release) throw fail('release_invalid', 'pipe the cloud_publish_paired_release result')
+  else if (release.active && release.serving && /^https:\/\/[^\s]+$/.test(release.url ?? '')) {
+    ctx.emit({ ok: true, stage: 'deploy', state: 'serving', versionId: version.versionId, commit: null, url: release.url, nextAction: null })
+  } else wait('Not serving yet. Repeat this identical call (same operation); it finishes the publish. Do not report a URL until it is serving.')
+  return 0
+}
+
+/** Restores the live source ZIP into an empty directory: discover (no staticUploadId) → download → sha256 → extract. */
+export async function open(ctx, flags, readInput) {
+  if (!uuid.test(flags.project ?? '')) throw fail('usage', 'pass --project <id>')
+  if ((await readdir(ctx.project)).length) throw fail('directory_not_empty', 'open restores into an empty directory only')
+  if (flags.discover !== '-') {
+    ctx.emit({ ok: true, stage: 'open', state: 'discover-needed', commit: null, nextAction: { kind: 'mcp', tool: 'cloud-static-source-discover', arguments: { projectId: flags.project },
+      command: ctx.line('open', '--project', flags.project, '--discover', '-'), reason: 'Call the tool with these arguments (no staticUploadId: it returns the live source), then pipe its result to the command.' } })
+    return 0
+  }
+  const found = unwrapResult(await readInput(), 'downloadUrl')
+  if (!found || !hex64.test(found.sourceHash ?? '')) throw fail('discover_invalid', 'pipe the cloud_static_source_discover result')
+  ctx.output.remember(found.downloadUrl)
+  const zip = await ctx.cloud.bytes(grantUrl(found.downloadUrl, undefined, { query: true }), { limit: sourceArchiveLimit, timeout: 120_000 })
+  if (createHash('sha256').update(zip).digest('hex') !== found.sourceHash) throw fail('source_checksum_mismatch')
+  let count = 0, size = 0
+  const files = unzipSync(zip, { filter: file => {
+    size += file.originalSize
+    if (++count > sourceEntryLimit || size > sourceExpandedLimit || !safeRelative(file.name)) throw fail('source_archive_invalid', file.name)
+    return true
+  } })
+  for (const [name, bytes] of Object.entries(files)) await writeAtomic(ctx.project, name, bytes)
+  ctx.emit({ ok: true, stage: 'open', state: 'restored', commit: null, verified: { contentHash: null, sourceHash: found.sourceHash, contractHash: null }, notes: [`${count} files`],
+    nextAction: { kind: 'fix', reason: 'Source restored. Edit it, then commit it with Git (save reads HEAD; git init first if needed) or use save --no-git. If .mantle/hosting.json is missing, run link.' } })
   return 0
 }
 

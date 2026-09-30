@@ -35,11 +35,11 @@ export function decodeInput(bytes) {
   return new TextDecoder('utf-8').decode(view).replace(/^﻿/, '')
 }
 
-/** A grant URL on an allowed origin with exactly `path`; `query` allows a signed query (kit only). */
+/** A grant URL on an allowed origin with exactly `path` (any path when omitted); `query` allows a signed query (kit only). */
 export function grantUrl(raw, path, { origin, query = false } = {}) {
   let url
   try { url = new URL(raw) } catch { throw fail('grant_url_invalid') }
-  if ((!cloudOrigins.includes(url.origin) && !loopback(url)) || url.username || url.password || url.hash || url.pathname !== path ||
+  if ((!cloudOrigins.includes(url.origin) && !loopback(url)) || url.username || url.password || url.hash || (path !== undefined && url.pathname !== path) ||
     (!query && url.search) || (origin && url.origin !== origin)) throw fail('grant_url_invalid', origin && url.origin !== origin ? 'grant URLs name different origins' : undefined)
   return url
 }
