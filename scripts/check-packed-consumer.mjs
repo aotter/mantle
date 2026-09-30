@@ -18,7 +18,7 @@ import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const packages = JSON.parse(execFileSync(
   "pnpm",
-  ["--filter", "@aotter/mantle...", "list", "--depth", "-1", "--json"],
+  ["--filter", "@aotter/mantle*", "list", "--depth", "-1", "--json"],
   { cwd: root, encoding: "utf8" },
 )).filter((pkg) => !pkg.private).map((pkg) => [pkg.name, pkg.path]);
 const separator = process.argv.indexOf("--");
