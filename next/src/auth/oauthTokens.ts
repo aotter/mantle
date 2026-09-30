@@ -1,18 +1,12 @@
 /** OAuth access tokens: JWT and DPoP verification, provider tokens, and the registered-client projection. */
-import {
-enforceDpopBinding,
-isDpopBindingError,
-parseAccessTokenAuthorization,
-verifyJwsAccessToken,
-type DpopReplayStore
-} from "better-auth/oauth2";
-import { type DatabaseDriver } from "../core/index.js";
+import { enforceDpopBinding, isDpopBindingError, parseAccessTokenAuthorization, verifyJwsAccessToken, type DpopReplayStore } from "better-auth/oauth2";
+import type { DatabaseDriver } from "../core/index.js";
 import { dbOf } from "./db.js";
 
 export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo,InviteUserResult,ListMembersArgs,MemberListResult,MemberUserInfo,StaffUserInfo } from "../admin/identity.js";
+export type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, MemberUserInfo, StaffUserInfo } from "../admin/identity.js";
 
-import { OAuthAccessTokenVerification,ProviderAccessToken,RegisteredOAuthClient } from "./types.js";
+import type { OAuthAccessTokenVerification, ProviderAccessToken, RegisteredOAuthClient } from "./types.js";
 export async function getProviderAccessTokenForRequest(
   api: {
     getAccessToken(input: {

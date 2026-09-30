@@ -1,10 +1,10 @@
 /** The fail-closed `MantleAuth` for a service whose sign-in is not configured yet. */
 
 export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
-export type { AuthUserInfo,InviteUserResult,ListMembersArgs,MemberListResult,MemberUserInfo,StaffUserInfo } from "../admin/identity.js";
+export type { AuthUserInfo, InviteUserResult, ListMembersArgs, MemberListResult, MemberUserInfo, StaffUserInfo } from "../admin/identity.js";
 
 import { normalizeAuthBasePath } from "./methods.js";
-import { MantleAuth } from "./types.js";
+import type { MantleAuth } from "./types.js";
 
 export interface SetupIncompleteAuthOptions {
   readonly basePath?: string;
