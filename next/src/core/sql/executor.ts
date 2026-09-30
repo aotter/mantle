@@ -13,8 +13,10 @@ function mapError(e: unknown): never {
   const message = e instanceof Error ? e.message : String(e);
   const op = /CONFLICT op=(\d+)/.exec(message);
   if (op) throw fail("CONFLICT", `CONFLICT op=${op[1]}: the write matched a different number of rows than it expected`, { opIndex: Number(op[1]), reason: "expect" });
-  const check = /(CHECK \w+: [^:]*?)(?: at offset|: SQLITE|$)/.exec(message);
-  if (check) throw fail("INPUT_VALIDATION_FAILED", check[1]!);
+  // the trigger's marker, then "<schema>: <expression>" up to the engine's own suffix (the expression may hold colons)
+  const check = /MANTLE_CHECK (.*?): SQLITE_CONSTRAINT/s.exec(message);
+  if (check) throw fail("INPUT_VALIDATION_FAILED", `CHECK ${check[1]}`);
+  if (/cannot store \w+ value in \w+ column/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "A value does not fit its column's type.");
   // the driver's own text names tables and columns, so it stays out of the Diagnostic
   if (/UNIQUE constraint failed/.test(message)) throw fail("CONFLICT", "A unique constraint of the Schema was violated.", { reason: "unique" });
   if (/ON CONFLICT clause does not match/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "onConflict.columns must match a unique index of the Schema.");

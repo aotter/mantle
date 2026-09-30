@@ -26,8 +26,10 @@ export class SqliteDeparser extends Deparser {
   }
   /** `x LIKE p ESCAPE e` parses to LIKE with pg_catalog.like_escape(p, e), which SQLite has no function for. */
   override A_Expr(n: SqlNode, ctx: any) {
-    if (n.kind === "AEXPR_LIKE" && n.rexpr?.FuncCall) {
-      const [pat, esc] = n.rexpr.FuncCall.args;
+    const fc = n.rexpr?.FuncCall;
+    // only the parser's own like_escape(p, e); any other function on the right of LIKE is an ordinary pattern expression
+    if (n.kind === "AEXPR_LIKE" && fc?.funcname?.at(-1)?.String?.sval === "like_escape" && fc.args?.length === 2) {
+      const [pat, esc] = fc.args;
       const not = n.name[0].String.sval === "!~~" ? "NOT " : "";
       return `${this.visit(n.lexpr as never, ctx)} ${not}LIKE ${this.visit(pat as never, ctx)} ESCAPE ${this.visit(esc as never, ctx)}`;
     }

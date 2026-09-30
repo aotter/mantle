@@ -28,7 +28,7 @@ it("creates STRICT tables, indexes, check triggers, FTS5, R*Tree and the time zo
   await expect(d1.exec("INSERT INTO items (id, created_at, owner, name, stock) VALUES ('a', 0, 'o', 'x', -1)")).rejects.toThrow(/CHECK items: stock >= 0/);
   await d1.exec("INSERT INTO notes (id, created_at, owner, title, body, loc_lat, loc_lng) VALUES ('n', 0, 'o', '台北小籠包', 'x', 25, 121)");
   expect(await d1.all(`SELECT id FROM notes WHERE _rid IN (SELECT rowid FROM _mantle_fts_notes WHERE _mantle_fts_notes = '"小籠包"')`)).toEqual([{ id: "n" }]);
-  expect(await d1.all("SELECT count(*) AS c FROM _mantle_geo_notes")).toEqual([{ c: 1 }]);
+  expect(await d1.all("SELECT count(*) AS c FROM _mantle_geo_notes_loc")).toEqual([{ c: 1 }]);
   expect(((await d1.all("SELECT count(*) AS c FROM _mantle_tz"))[0] as any).c).toBeGreaterThan(0);
 });
 

@@ -76,7 +76,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
     const checks: SqlNode[] = [];
     for (const [i, text] of (m.spec.checks ?? []).entries()) {
       const pointer = `/spec/checks/${i}`;
-      const res = await compileSql(`SELECT 1 FROM ${name} WHERE ${text}`, { schemas, inputs: {}, kind: "view" });
+      const res = await compileSql(`SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${text}`, { schemas, inputs: {}, kind: "view" });
       if (!res.ok) { diagnostics.push(toDiagnostic(res.diagnostic, source, pointer)); continue; }
       const where: SqlNode | undefined = res.plan.stmts[0]?.SelectStmt?.whereClause;
       if (!where || JSON.stringify(where).includes('"SubLink"')) {

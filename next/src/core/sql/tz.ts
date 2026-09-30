@@ -27,7 +27,7 @@ export interface TzRow {
 }
 
 /** Rows `{ from_us, offset_us }`: from `from_us` on, local = UTC + offset_us. The first row starts at the beginning of time. */
-export function transitions(timeZone: string, fromYear = 1970, toYear = 2100): TzRow[] {
+export function transitions(timeZone: string, fromYear = 1900, toYear = 2200): TzRow[] {
   const start = Date.UTC(fromYear, 0, 1) / 1000;
   const end = Date.UTC(toYear, 0, 1) / 1000;
   const step = 3 * 86400;
