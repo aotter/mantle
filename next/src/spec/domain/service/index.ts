@@ -21,3 +21,4 @@ export * from "./SqlRefusal.js";
 export * from "./SqlTypes.js";
 export * from "./SqlIrValidator.js";
 export * from "./PlanFingerprint.js";
+export * from "./SqlClassify.js";

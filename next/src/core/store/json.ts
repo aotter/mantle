@@ -15,6 +15,8 @@ export interface StoreSchema extends StorageSchema {
   readonly names?: Readonly<Record<string, string>>;
   /** The JSON Schema every written value is checked against. */
   readonly schema?: JsonSchema;
+  /** A translation publishes only once its parent is published. */
+  readonly translates?: { readonly parent: string; readonly on: string };
 }
 export type StoreSchemas = Readonly<Record<string, StoreSchema>>;
 

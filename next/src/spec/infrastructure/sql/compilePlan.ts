@@ -4,8 +4,9 @@
  * declarations. Like `compileSql`, only the CLI and the plugin's helper scripts import this.
  */
 import { validateDiagnostic, type Diagnostic, type SourceLocation } from "../../kernel/diagnostic.js";
-import type { JsonSchema } from "../../domain/model/ManifestGrammar.js";
+import type { JsonSchema, ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
 import { RUNTIME_PLAN_VERSION, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
+import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import type { SqlContext, SqlDiagnostic, SqlNode, SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
@@ -53,6 +54,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
       ...(m.spec.ttl ? { ttl: m.spec.ttl.field.toLowerCase(), ttlSeconds: m.spec.ttl.expireAfterSeconds } : {}),
       publishing: m.spec.lifecycle === "publishing",
       schema: m.spec.schema,
+      ...(m.spec.translates ? { translates: { parent: m.spec.translates.parent, on: m.spec.translates.on } } : {}),
       fields: typesOf(m.spec.schema),
       names: Object.fromEntries(Object.keys(props).map((n) => [n.toLowerCase(), n])),
       ...(m.spec.searchableFields?.length ? { search: lower(m.spec.searchableFields) } : {}),
@@ -92,11 +94,26 @@ export async function compileLinkedPlan(linked: LinkedManifestSet): Promise<Comp
     if (plan) views[v.metadata.name] = { ...plan, inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
   }
   const procedures: Record<string, PlanProcedure> = {};
+  const declaredSchema = new Map(linked.schemas.map((x) => [x.manifest.metadata.name.toLowerCase(), x.manifest.metadata.name]));
+  /** ADR-0032 decision 2: a program with exactly one row op that pins `id` to an input gets that target, by the rule Store classifies with. */
+  const inferTarget = (p: ProcedureManifest, stmts: readonly SqlNode[]) => {
+    const rows = stmts.filter((s) => classify(s) === "row");
+    const pinned = rows.length === 1 ? pinnedTarget(rows[0]!) : undefined;
+    const props = Object.keys(p.spec.input.properties ?? {});
+    const declared = (lower: string) => props.find((k) => k.toLowerCase() === lower);
+    const id = pinned && declared(pinned.id);
+    const schema = pinned && declaredSchema.get(pinned.schema.toLowerCase());
+    // the same shape an explicit target must have: a required string id (PROCEDURE_TARGET_INVALID otherwise)
+    if (!pinned || !id || !schema || !p.spec.input.required?.includes(id) || ![p.spec.input.properties![id]!.type].flat().includes("string")) return undefined;
+    const version = pinned.version && declared(pinned.version);
+    return { schema, id, ...(version ? { version } : {}) };
+  };
   for (const { manifest: p, source } of linked.procedures) {
-    const common = { input: p.spec.input, output: p.spec.output, inputs: typesOf(p.spec.input), ...(p.spec.requires ? { requires: p.spec.requires } : {}), ...(p.spec.target ? { target: p.spec.target } : {}), ...(p.spec.mcp ? { mcp: p.spec.mcp } : {}) };
-    if ("ref" in p.spec.handler) { procedures[p.metadata.name] = { ...common, handler: { ref: p.spec.handler.ref } }; continue; }
+    const common = { input: p.spec.input, output: p.spec.output, inputs: typesOf(p.spec.input), ...(p.spec.requires ? { requires: p.spec.requires } : {}), ...(p.spec.mcp ? { mcp: p.spec.mcp } : {}) };
+    if ("ref" in p.spec.handler) { procedures[p.metadata.name] = { ...common, ...(p.spec.target ? { target: p.spec.target } : {}), handler: { ref: p.spec.handler.ref } }; continue; }
     const plan = await compile("procedure", p.spec.handler.sql, p.spec.input, source, "/spec/handler/sql");
-    if (plan) procedures[p.metadata.name] = { ...common, handler: { sql: plan } };
+    const target = p.spec.target ?? (plan ? inferTarget(p, plan.stmts) : undefined);
+    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan } };
   }
   if (diagnostics.length) return { ok: false, diagnostics };
   const triggers: Record<string, PlanTrigger> = Object.fromEntries(linked.triggers.map(({ manifest: t }) => [t.metadata.name, { source: t.spec.source, procedure: t.spec.target.procedure }]));

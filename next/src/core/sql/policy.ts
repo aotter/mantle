@@ -6,6 +6,7 @@ import { KEYS, SqlRefusal as Refused, intervalMicros, parseNumeric, type SqlNode
 import { encodeDate, encodeNumeric, encodeTimestamptz, sqliteType } from './codec.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from './storage.js';
+import { classify } from '../../spec/index.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
 
 type Schemas = Record<string, SchemaDef>;
@@ -480,24 +481,7 @@ function insert(n: N, c: C): N {
   return { InsertStmt: out };
 }
 
-// ---- classification and entry point -----------------------------------------------------------------
-const conjuncts = (w: N | undefined): N[] => (w?.BoolExpr?.boolop === 'AND_EXPR' ? w.BoolExpr.args.flatMap(conjuncts) : w ? [w] : []);
-const isScalar = (n: N) => !!n.A_Const || (n.ColumnRef?.fields?.length === 2 && n.ColumnRef.fields[0].String?.sval === 'input');
-/** The entry's own `id` column (`id` or `alias.id`), never `input.id`: an input that happens to be named id is a value, not the target. */
-export const isIdCol = (n: N): boolean => {
-  const f = n.ColumnRef?.fields;
-  return !!f && f.at(-1)?.String?.sval === 'id' && (f.length === 1 || (f.length === 2 && f[0].String?.sval !== 'input'));
-};
-/** ADR-0034 decision 4: `WHERE ... id = <scalar>` or a one-row INSERT is a row op; every other write is a set op. */
-export function classify(stmt: N): 'read' | 'row' | 'set' {
-  if (stmt.SelectStmt) return 'read';
-  if (stmt.InsertStmt) return stmt.InsertStmt.selectStmt?.SelectStmt?.valuesLists?.length === 1 && !stmt.InsertStmt.onConflictClause ? 'row' : 'set'; // ON CONFLICT is a set op (ADR-0034 decision 2)
-  const w = (stmt.UpdateStmt ?? stmt.DeleteStmt).whereClause;
-  const row = conjuncts(w).some((x) => x.A_Expr?.kind === 'AEXPR_OP' && x.A_Expr.name[0].String.sval === '=' &&
-    ((isIdCol(x.A_Expr.lexpr) && isScalar(x.A_Expr.rexpr)) || (isIdCol(x.A_Expr.rexpr) && isScalar(x.A_Expr.lexpr))));
-  return row ? 'row' : 'set';
-}
-
+// ---- entry point -------------------------------------------------------------------------------------
 export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const c: C = { ...opts, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [] };
   const ast = tx(stmt, c);

@@ -308,15 +308,15 @@ const check: Record<string, Checker> = {
   },
   UpdateStmt: (n, ctx) => writeList(n.targetList, ctx, n.relation, false),
   InsertStmt: (n, ctx, _p, at) => {
-    writeList(n.cols ?? no('SQL_WRITE', 'INSERT needs a column list', at), ctx, n.relation, true);
+    writeList(n.cols ?? no('SQL_WRITE', 'INSERT needs a column list', at), ctx, n.relation, true, n.selectStmt?.SelectStmt?.valuesLists?.[0]?.List?.items);
     if (n.onConflictClause?.action === 'ONCONFLICT_UPDATE') writeList(n.onConflictClause.targetList, ctx, n.relation, false);
   },
 };
 
 /** A write may not name the scope field or a system column; `id` is never writable on update, and on a scoped Schema never on insert. */
-function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean) {
+function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean, values?: N[]) {
   const s: SqlSchemaDef | undefined = ctx.schemas[rel.relname.toLowerCase()];
-  for (const { ResTarget: r } of list) {
+  for (const [i, { ResTarget: r }] of list.entries()) {
     const at = firstLoc(r) ?? firstLoc(rel);
     const name = String(r.name).toLowerCase();
     const scopedId = insert && name === 'id' && s?.scope;
@@ -324,6 +324,10 @@ function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean) {
       no('SQL_WRITE', `${r.name} is filled by Mantle and cannot be written${scopedId ? ' (a scoped Schema generates its ids)' : ''}`, at);
     const cols = Object.entries(s?.fields ?? {}).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
     if (name !== 'id' && !cols.includes(name)) no('SQL_WRITE', `${rel.relname} has no field ${r.name}`, at);
+    // a bare text literal in a column stored as a number: SQLite's STRICT table would fail it at run time, so refuse it here
+    const type = s?.fields[name];
+    const literal = (insert ? values?.[i] : r.val)?.A_Const?.sval?.sval;
+    if (literal !== undefined && type && !['text', 'json'].includes(type)) no('SQL_TYPE', `'${literal}' is text and ${r.name} is ${type}: write CAST('${literal}' AS ${type === 'integer' ? 'int8' : type === 'real' ? 'float8' : type}), or bind it as an input`, at);
   }
 }
 
