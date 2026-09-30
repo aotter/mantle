@@ -185,7 +185,7 @@ export async function convergeStorage(
 
 /** Tables the platform creates itself (Better Auth, media, site config); a Schema may not take these names. */
 const RESERVED_TABLES = new Set([
-  "entries", "_migrations", "d1_migrations", "site_config", "sites_users", "user", "session", "account", "verification", "jwks",
+  "entries", "_migrations", "d1_migrations", "site_config", "user", "session", "account", "verification", "jwks",
   "oauthclient", "oauthresource", "oauthclientresource", "oauthrefreshtoken", "oauthaccesstoken", "oauthconsent", "oauthclientassertion",
   "media_assets", "pending_media_uploads",
 ]);

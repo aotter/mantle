@@ -1,6 +1,7 @@
 /** `@aotter/mantle/cloudflare`: the D1 driver. Structural types, so this needs no `@cloudflare/workers-types`. */
 import type { DatabaseDriver } from "../core/driver.js";
 import { sqliteStorage } from "../core/sql/adapter.js";
+import type { SiteDefaults } from "../spec/index.js";
 
 interface D1PreparedStatement { bind(...values: unknown[]): D1PreparedStatement }
 interface D1Database {
@@ -18,4 +19,5 @@ export function d1Driver(db: D1Database): DatabaseDriver {
 }
 
 /** D1 storage for `createMantle`: `storage: (env) => d1Storage(env.DB)`. */
-export const d1Storage = (db: D1Database, options?: { timeZone?: string }) => sqliteStorage(d1Driver(db), { ...options, maxBindings: 100 });
+export const d1Storage = (db: D1Database, options?: { timeZone?: string; site?: SiteDefaults }) => sqliteStorage(d1Driver(db), { ...options, maxBindings: 100 });
+export { r2MediaStorage, type R2MediaStorageOptions } from "./r2Media.js";
