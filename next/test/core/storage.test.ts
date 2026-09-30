@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, expect, it } from "vitest";
 import { loadModule, parseSync } from "libpg-query";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
-import { convergeStorage, type StorageSchema } from "../../src/core/sql/storage.js";
+import { convergeStorage, planStorageChanges, type StorageSchema } from "../../src/core/sql/storage.js";
 
 const expr = (text: string) => (parseSync(`SELECT 1 WHERE ${text}`) as any).stmts[0].stmt.SelectStmt.whereClause;
 beforeAll(() => loadModule());
@@ -90,4 +90,21 @@ it("refuses Schema names the platform owns, in any letter case, and never adopts
   const r = await run(d1, { User: { fields: {} }, session: { fields: {} }, _mantle_x: { fields: {} } });
   expect(r.blocked.map((b) => [b.schema, b.code])).toEqual([["User", "STORAGE_TABLE_NOT_OWNED"], ["session", "STORAGE_TABLE_NOT_OWNED"], ["_mantle_x", "STORAGE_TABLE_NOT_OWNED"]]);
   expect(await d1.all("SELECT name FROM _mantle_schema_tables")).toEqual([]);
+});
+
+it("planStorageChanges prints what convergence would apply, as replayable SQL, and applies nothing", async () => {
+  const d1 = await db();
+  const schema = () => d1.all("SELECT type, name, sql FROM sqlite_schema WHERE name NOT LIKE '\\_cf\\_%' ESCAPE '\\' ORDER BY name");
+  // a database Mantle never booted: no registry to read, and none is created
+  const fresh = await planStorageChanges(d1, { items });
+  expect(await schema()).toEqual([]);
+  expect(fresh.sql).toContain("INSERT OR IGNORE INTO _mantle_schema_tables (name) VALUES ('items')");
+  // replaying the printed SQL converges the tables, so boot then applies no Schema change
+  for (const sql of fresh.sql) await d1.exec(sql);
+  expect((await planStorageChanges(d1, { items })).sql.filter((q) => !q.includes("IF NOT EXISTS"))).toEqual([]);
+
+  const before = await schema();
+  const added = await planStorageChanges(d1, { items: { ...items, fields: { ...items.fields, sku: "text" } } });
+  expect(added.sql.filter((q) => !q.includes("IF NOT EXISTS"))).toEqual(['ALTER TABLE "items" ADD COLUMN "sku" TEXT']);
+  expect(await schema()).toEqual(before);
 });

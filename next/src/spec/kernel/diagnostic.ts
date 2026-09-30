@@ -60,6 +60,8 @@ export const DIAGNOSTIC_CODES = [
   "SCHEMA_UI_INVALID",
   "MANIFEST_ROOT_NOT_FOUND",
   "MANIFEST_READ_FAILED",
+  // `mantle generate` (ADR-0032 decision 12): a selected feature's package is not installed, or it needs an identity.
+  "GENERATE_FEATURE_DEPENDENCY_MISSING",
   // Store SQL compile (ADR-0034): raised by the CLI compiler and, for the
   // shared allowlist, by the runtime's plan validation.
   "SQL_SYNTAX",

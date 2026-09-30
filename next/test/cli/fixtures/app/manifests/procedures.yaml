@@ -1,0 +1,29 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: add-item }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object, required: [name], properties: { name: { type: string } } }
+  output: { type: object, required: [results] }
+  handler: { sql: "INSERT INTO items (name) VALUES (input.name) RETURNING id" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: audit }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { ref: audit }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: note }
+spec:
+  input: { type: object, required: [text], properties: { text: { type: string } } }
+  output: { type: object, required: [ok], properties: { ok: { type: boolean } } }
+  handler: { ref: note }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: audit-create }
+spec: { source: { kind: lifecycle, schema: items, on: [after_create] }, target: { procedure: audit } }

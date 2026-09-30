@@ -272,6 +272,43 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
     - It hands the rest of `{auth.basePath}/*`, `/.well-known/oauth-authorization-server/*` and `/.well-known/oauth-protected-resource[/*]` to `auth.handler` without resolving a caller. Better Auth serves both metadata documents natively (`oauthProvider` and `@better-auth/mcp`), so Mantle writes none; the protected-resource document exists for the one `mcpResource`, at `/.well-known/oauth-protected-resource` and that resource's path.
     - It runs `/oauth/consent[/data]` and `/oauth/consents[/data|/revoke]` behind `withCaller(resolver, …)`, so a cross-site session POST is refused there. Only a `session` credential may read, give or revoke a consent. The consent redirect is only what `completeOAuthConsent` returns, and one that does not parse, or is `javascript:`, `data:`, `vbscript:` or `blob:`, is 400.
     - Admin is an optional subpath (decision 13), so `GET /oauth/consent` and `GET /oauth/consents` answer plain HTML pages. With Admin, `oauthProvider.consentPage` points at Admin's page, and `connectedAppsPage` redirects the list there.
+- **2026-09-30, `mantle generate`, the plan file and the generated module** (decisions 6, 7, 12 and 13; ADR-0033 decision 3; ADR-0034 decision 7).
+  - **The bin.** `@aotter/mantle` declares one bin, `mantle` (`src/cli/main.ts`). Its commands are `generate` (with `--check`) and the manifest commands `validate`, `introspect`, `emit-openapi` and `emit-types`. `mantle-update` is a separate bin, added with the codemod.
+  - **`mantle generate [--manifests <dir>] [--features <list>] [--identity <kind>]`.**
+    - It reads every `.yaml` and `.yml` file directly in the manifest directory (default `./manifests`) and runs parse, validate and `compileLinkedPlan`.
+    - It writes `.mantle/generated/plan.json` and `.mantle/generated/mantle.ts`, and writes `mantle.config.json` at the project root when the selection changes.
+    - It writes no application-owned file yet, so an existing application keeps its own entry. The service preset (`src/service.ts`, the host entry) is a later step.
+  - **`plan.json`** is the one copy of the plan: `{ "sourceHash": <hex>, "plan": <RuntimePlan> }`, with object keys sorted, arrays in order, two-space indentation and a trailing newline, so identical input gives identical bytes.
+    - `sourceHash` is ADR-0034 decision 7's source hash. It is the SHA-256 of the JSON array `[[name, text], …]` of the manifest files, sorted by file name, so the project's location never enters it. Host protocol 3 uploads this file.
+    - The hash sits beside the plan, not in it, so it is **not part of the fingerprint**. Reformatting a manifest changes `sourceHash`, but not the fingerprint Cloud and boot compare.
+  - **`mantle.ts`** imports `./plan.json` (`with { type: "json" }`) and exports:
+    - `plan` (the `RuntimePlan`, for `createMantle`) and `sourceHash`;
+    - the `emit-types` namespace `Mantle`;
+    - `Schemas`, `Views`, `ViewOptions` (`limit`, `cursor` and the View's `input`, required when the View requires any), and `Store` and `CallerStore` typed over them. `select` has one overload per Schema, and an insert's `values` or an update's `set` never names the scope field, which Store fills (ADR-0034 decision 8);
+    - `Handler<I, O, Env>`, whose `ctx.store` is that `CallerStore`, and `MantleHandlers<Env>`. `MantleHandlers` has exactly the plan's refs, so a missing or an extra handler is a `tsc` error; a plan without refs takes no handler. It stays assignable to Core's `MantleService.handlers` without a cast.
+
+    `mantle.ts` imports only types, from `@aotter/mantle` and `@aotter/mantle/spec`.
+  - **`ViewRow_<name>`.**
+    - Its keys come from the compiled `SELECT`: an output's `AS` name, else its column's name, and `*` as the Schema's declared fields without the scope field. It falls back to `unknown` when an output has no name, or a `*` reads a subquery or `json_each`.
+    - Its values are `unknown`, because `store.view` returns rows in the storage encoding: lower-case keys, `0`/`1` for booleans, JSON as text and timestamps in microseconds. `store.select` returns the Schema's declared names and decoded values. Typing View values waits until View rows are decoded the same way.
+  - **`mantle.config.json` v2** is `{ "version": 2, "identity": "mantle" | "custom" | "none", "features": [...] }`. `host` and `output` are removed. `features` is a subset of `mcp`, `admin`, `web`, in that order.
+    - `mcp` needs `@modelcontextprotocol/server`.
+    - `admin` needs `@aotter/mantle-ui`, for the Admin SPA, and an identity other than `none`.
+    - `web` is `@aotter/mantle/web`. It needs no peer and today serves `createRestSurface`; `createWebSurface` is not ported yet.
+    - Identity `mantle` needs `better-auth`. Every selection needs `@aotter/mantle`.
+
+    Without a config or flags, the selection is identity `mantle` and every feature. An explicit `--features` without `--identity` means `none` (decision 12). A rerun keeps the saved identity, and asking for another one is refused (exit 2), never a table drop. A changed `--features` rewrites the config.
+  - **`GENERATE_FEATURE_DEPENDENCY_MISSING`** (validate phase) is raised for:
+    - a selected feature or identity whose package is not installed, found as `node_modules/<name>/package.json` from the project root upward;
+    - `admin` with identity `none`.
+
+    The message carries the exact install command, chosen by the lockfile: `pnpm add`, `yarn add`, `bun add` or `npm install`. Generate fails before it writes anything. It never installs, never edits `package.json`, and never adds a feature back (amends ADR-0026).
+  - **0.1.x input.** A `cms.mantle.aotter.net/v1` manifest fails with the parser's apiVersion diagnostic. A `mantle.config.json` with `version: 1` or a `host` fails with exit 2. Both messages name `mantle-update`.
+  - **`mantle generate --check [--database <file>]`** writes nothing. It exits 1 when `plan.json`, `mantle.ts` or `mantle.config.json` differs from what generate would write, or a dependency is missing.
+    - With `--database`, it also prints the SQL storage convergence would run on that database. The file is a SQLite file, such as Wrangler's local D1 under `.wrangler/state/v3/d1/`, opened read-only with `node:sqlite` (Node 22.13 or later).
+    - The SQL comes from `planStorageChanges(driver, schemas)` in Core's storage module, which shares convergence's one `diff` and applies nothing. It prints the system DDL (`IF NOT EXISTS`) and the Schema changes, with binds inlined as literals, so the SQL replays. The fingerprint and time zone rows are left to boot.
+    - Undeclared differences are printed as comments. A blocked difference fails the check with exit 1.
+    - Without `--database`, no database is read. ADR-0034 decision 6's "`node:sqlite` is not used" concerns the storage test line, and still holds.
 
 ## Implementation status
 

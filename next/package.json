@@ -6,6 +6,9 @@
   "exports": {
     "./spec": "./src/spec/index.ts"
   },
+  "bin": {
+    "mantle": "./src/cli/main.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
