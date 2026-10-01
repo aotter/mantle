@@ -71,7 +71,7 @@ kind: View
 metadata: { name: all-posts }
 spec:
   surface: staff
-  uiSchema: { list: { columns: [slug] } }
+  uiSchema: { list: { columns: [slug], searchFields: [slug], filterFields: [sortKey] } }
   input: { type: object, properties: { min: { type: integer } } }
   sql: "SELECT id, slug, sortKey FROM posts WHERE sortKey >= coalesce(input.min, 0) ORDER BY sortKey"
 ---
@@ -194,7 +194,7 @@ describe("Admin surface: reads", () => {
     const names = async (c: Caller) => (await call("GET", "/admin/api/views-manifest", c)).body.views.map((v: any) => v.name);
     expect(await names(owner)).toEqual(["all-posts", "owner-posts"]);
     expect(await names(editor)).toEqual(["all-posts"]);
-    expect((await call("GET", "/admin/api/views-manifest", owner)).body.views[0]).toMatchObject({ list: { columns: ["slug"] }, input: { properties: { min: { type: "integer" } } }, columns: { slug: { schema: "posts", field: "slug" }, sortKey: { schema: "posts", field: "sortKey" } } });
+    expect((await call("GET", "/admin/api/views-manifest", owner)).body.views[0]).toMatchObject({ list: { columns: ["slug"], searchFields: ["slug"], filterFields: ["sortKey"] }, input: { properties: { min: { type: "integer" } } }, columns: { slug: { schema: "posts", field: "slug" }, sortKey: { schema: "posts", field: "sortKey" } } });
   });
 
   it("pages a staff View by limit and cursor, coerces its input, and serves no internal or public View", async () => {
@@ -205,6 +205,26 @@ describe("Admin surface: reads", () => {
     expect((await call("GET", "/admin/api/views/all-posts?min=abc", contributor)).status).toBe(400);
     expect((await call("GET", "/admin/api/views/hidden", owner)).status).toBe(404);
     expect((await call("GET", "/admin/api/views/pub", owner)).status).toBe(404);
+  });
+
+  it("compiles searchFields to LIKE and filterFields to = on the View's outputs, with input and cursor (ADR-0032 decision 5)", async () => {
+    const slugs = async (q: string) => (await call("GET", `/admin/api/views/all-posts?${q}`, contributor)).body.rows.map((r: any) => r.slug);
+    expect(await slugs("search=P3")).toEqual(["p3"]); // LIKE is case-insensitive
+    expect(await slugs("search=%25")).toEqual([]); // % is matched literally, not as a wildcard
+    expect(await slugs("filter.sortKey=4")).toEqual(["p4"]);
+    expect(await slugs("search=p&filter.sortKey=2")).toEqual(["p2"]);
+    expect(await slugs("search=p&min=4")).toEqual(["p4", "p5"]);
+    const first = await call("GET", "/admin/api/views/all-posts?search=p&limit=2", contributor);
+    expect(first.body.rows.map((r: any) => r.slug)).toEqual(["p1", "p2"]);
+    expect(await slugs(`search=p&limit=2&cursor=${encodeURIComponent(first.body.nextCursor)}`)).toEqual(["p3", "p4"]);
+    expect((await call("GET", "/admin/api/views/all-posts?filter.sortKey=x", contributor)).status).toBe(400);
+    const csv = await createAdminSurface(rt, { basePath: "/admin" })(new Request("http://x/admin/api/views/all-posts/export?search=p5"), contributor);
+    expect((await csv.text()).trim().split(/\r?\n/)).toEqual(["slug", "p5"]);
+  });
+
+  it("Store refuses a search or filter the View does not declare", async () => {
+    await expect(rt.store.view("owner-posts", { search: "p" })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+    await expect(rt.store.view("all-posts", { filters: { title: "t1" } })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
   });
 
   it("bootstrap folds me, site, collections, operations, views and the WebMCP catalog into one answer", async () => {

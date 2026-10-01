@@ -276,9 +276,10 @@ export interface ViewManifestSpec {
    *  (ADR-0029). Projected into the View's MCP tool description; absent
    *  keeps the generated "Query <surface> View '<name>'." text. */
   readonly description?: LocalizedText;
-  /** Admin-only presentation/query affordances for `surface: staff`
-   *  Views. v0.1 supports `uiSchema.list.columns`, `searchFields`, and
-   *  `filterFields`; public REST and MCP semantics stay unchanged. */
+  /** Admin's list for a `surface: staff` View: `uiSchema.list.columns`, and
+   *  `searchFields` / `filterFields`, which Store compiles to `LIKE` and `=`
+   *  conditions on the View's outputs for Admin's search box and filters
+   *  (ADR-0032 decision 5). REST and MCP are unchanged. */
   readonly uiSchema?: Record<string, unknown>;
   /** One read-only `SELECT` over declared Schemas (ADR-0034). It reads the
    *  declared `input` as `input.<name>` and the caller as `auth.uid()` /

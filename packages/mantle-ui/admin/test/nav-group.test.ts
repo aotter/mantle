@@ -64,7 +64,7 @@ describe("member navigation", () => {
   });
 
   it("lists every View of the manifest under Reports: the server lists staff Views only", () => {
-    const view = (name: string): ViewManifestInfo => ({ name, title: null, description: null, input: null, list: { columns: [] }, columns: {} });
+    const view = (name: string): ViewManifestInfo => ({ name, title: null, description: null, input: null, list: { columns: [], searchFields: [], filterFields: [] }, columns: {} });
     const groups = buildNavGroups([], [view("staff-queue"), view("sales")], "en", null, "owner");
     expect(groups.find(({ title }) => title === "Reports")?.items).toEqual([
       expect.objectContaining({ url: "/admin/views/staff-queue" }),

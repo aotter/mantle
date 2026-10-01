@@ -90,11 +90,20 @@ REST coerces each `input` query parameter to its declared type.
 
 ## `uiSchema` (staff Views)
 
-`list.columns` names the View's outputs, in order; the console shows them and
-CSV export uses them. A search or filter is a declared `input` the SQL reads,
-which the console renders as the report's form. `list.searchFields` and
-`list.filterFields` are still accepted but the 0.2 console ignores them. Other
-keys are refused (`VIEW_UI_INVALID`).
+| Key | Effect |
+|---|---|
+| `list.columns` | the outputs the console shows, in order; CSV export uses them |
+| `list.searchFields` | outputs the console's search box matches: one case-insensitive `LIKE '%text%'` per output, ORed, with `%`, `_` and `\` in the text matched literally |
+| `list.filterFields` | outputs the console offers as filters: one `=` each, the value coerced to the output's field type |
+
+Each name must be one of the View's outputs (`VIEW_UI_INVALID` otherwise).
+The conditions wrap the View's own query, after its `WHERE` and the injected
+policy and before paging, so they narrow what the caller may already see and
+the cursor stays valid. Over HTTP they are Admin's `search` and
+`filter.<output>` query parameters on `/admin/api/views/<name>` and its
+`/export`; in code, `store.view(name, { search, filters })`. A declared
+`input` remains the way to parameterize the query itself. Other keys are
+refused (`VIEW_UI_INVALID`).
 
 ## `cache`
 

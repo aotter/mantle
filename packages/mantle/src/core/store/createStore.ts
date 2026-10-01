@@ -7,11 +7,11 @@ import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
 import { firstZodIssueAsJsonPointer, jsonSchemaToZod, SqlRefusal, type AuthorizationRequirements, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause } from "../invocation.js";
-import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreWriteResult } from "../store.js";
+import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreViewOptions, StoreWriteResult } from "../store.js";
 import type { MantleDialect } from "../dialect.js";
 import { sqlInput, type BindContext, type Mode } from "../sql/compile.js";
 import { num, op, ref, table } from "../sql/ast.js";
-import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv } from "../sql/run.js";
+import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv, type ViewMatch } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
 import { StoreJson, validateValues, type StoreSchemas } from "./json.js";
@@ -29,6 +29,9 @@ export interface StoreView {
   readonly guard?: string;
   /** Outputs that read a Schema field unchanged: decoded and named as `select` returns them. */
   readonly columns?: Readonly<Record<string, { readonly schema: string; readonly field: string }>>;
+  /** `uiSchema.list.searchFields` and `filterFields`: the outputs `search` and `filters` may match (ADR-0032 decision 5). */
+  readonly searchFields?: readonly string[];
+  readonly filterFields?: readonly string[];
 }
 
 export interface StoreDeps {
@@ -46,6 +49,17 @@ export interface StoreDeps {
 
 const viewInputs = new WeakMap<StoreView, ReturnType<typeof jsonSchemaToZod>>();
 const invalid = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
+
+/** `search` and `filters` as the View declares them; a filter on an output the View did not declare is refused. */
+function viewMatch(name: string, v: StoreView, options: StoreViewOptions, encode: (column: string, value: unknown) => unknown): ViewMatch | undefined {
+  const search = options.search?.trim();
+  const filters = Object.entries(options.filters ?? {});
+  if (search && !v.searchFields?.length) throw invalid(`View '${name}' declares no uiSchema.list.searchFields to search.`);
+  const undeclared = filters.find(([f]) => !v.filterFields?.includes(f));
+  if (undeclared) throw invalid(`View '${name}' has no filter '${undeclared[0]}'; its uiSchema.list.filterFields are ${JSON.stringify(v.filterFields ?? [])}.`);
+  if (!search && !filters.length) return undefined;
+  return { ...(search ? { search: { columns: v.searchFields!, text: search } } : {}), eq: filters.map(([column, value]) => ({ column, value: encode(column, value) })) };
+}
 
 /** A refusal thrown while binding (a value the declared type cannot hold) is the caller's input error. */
 async function guard<T>(f: () => Promise<T>): Promise<T> {
@@ -166,7 +180,12 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");
       const { mode, bind: b } = bindFor(deps.now(), caller);
       const cursor = options.cursor === undefined ? undefined : decodeCursor(`view:${name}`, options.cursor);
-      const page = await runView(env(v.public ? "public" : mode), { kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: sqlInput(v.input, input) }), { pageSize: limit, ...(cursor ? { cursor } : {}) });
+      const page = await runView(env(v.public ? "public" : mode), { kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: sqlInput(v.input, input) }), { pageSize: limit, ...(cursor ? { cursor } : {}), match: viewMatch(name, v, options, (column, value) => {
+        // an output that reads a Schema field compares in that field's storage encoding (a boolean is 0/1, a date-time microseconds)
+        const c = v.columns?.[column] ?? v.columns?.[column.toLowerCase()];
+        const def = c && deps.schemas[c.schema];
+        return def ? deps.dialect.codec.encode(def.fields[c.field]!, value) : value;
+      }) });
       const decodeView = (row: StoreRow) => Object.fromEntries(Object.entries(row).map(([k, value]) => {
         const c = v.columns && Object.hasOwn(v.columns, k) ? v.columns[k]! : undefined;
         const def = c && deps.schemas[c.schema];

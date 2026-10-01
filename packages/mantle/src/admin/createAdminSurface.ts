@@ -4,7 +4,7 @@
  * caller's scope sees and nothing wider. Routes of an `AdminIdentity` facet that is absent do not exist.
  */
 import { makeDiagnostic, redactForWire } from "../spec/kernel/index.js";
-import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, resolveMantleRef, type JsonSchema, type McpTool, type PlanSchema, type StaffRole } from "../spec/domain/index.js";
+import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, resolveMantleRef, type JsonSchema, type McpTool, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
 import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
 import { siteConfigOf } from "../core/siteConfig.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
@@ -165,8 +165,23 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       const field = s.names?.[c.field] ?? c.field;
       return [k === c.field ? field : k, { schema: s.name, field }];
     }));
-    return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [] }, columns };
+    return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [], searchFields: list["searchFields"] ?? [], filterFields: list["filterFields"] ?? [] }, columns };
   });
+  // `search` and `filter.<output>` from the query string, for the outputs the View's uiSchema.list declares (ADR-0032 decision 5).
+  // A filter value is coerced to the field the output reads, as a View's input is.
+  const viewMatch = (v: PlanView, q: URLSearchParams): { search?: string; filters?: Record<string, string | number | boolean> } => {
+    const list = (v.uiSchema?.["list"] ?? {}) as Record<string, string[] | undefined>;
+    const search = q.get("search")?.trim();
+    const filters: Record<string, string | number | boolean> = {};
+    for (const f of list["filterFields"] ?? []) {
+      const raw = q.get(`filter.${f}`);
+      if (raw === null || raw === "") continue;
+      const c = v.columns?.[f] ?? v.columns?.[f.toLowerCase()];
+      const schema = c ? propsOf(plan.schemas[c.schema]!.schema)[plan.schemas[c.schema]!.names?.[c.field] ?? c.field] : undefined;
+      filters[f] = coerce(raw, schema as JsonSchema | undefined, `filter.${f}`, P) as string | number | boolean;
+    }
+    return { ...(search && list["searchFields"]?.length ? { search } : {}), ...(Object.keys(filters).length ? { filters } : {}) };
+  };
   // a custom directory may return more than it declares: only the declared fields reach the wire
   const staffInfo = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: StaffUserInfo) => ({ id, email, name, role, githubLogin, emailVerified, createdAt });
   const memberInfo = ({ id, email, name, emailVerified, createdAt }: MemberUserInfo) => ({ id, email, name, emailVerified, createdAt });
@@ -364,7 +379,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     { method: "GET", path: "/views-manifest", role: "contributor", run: async ({ caller }) => ({ views: views(caller) }) },
     {
       method: "GET", path: "/views/{name}", role: "contributor", run: ({ caller, params: { name }, url }) =>
-        runtime.store.as(caller).view(name!, viewQuery(name!, staffView(name!, caller), url.searchParams, P)),
+        runtime.store.as(caller).view(name!, { ...viewQuery(name!, staffView(name!, caller), url.searchParams, P), ...viewMatch(staffView(name!, caller), url.searchParams) }),
     },
     {
       method: "GET", path: "/views/{name}/export", role: "contributor", run: ({ caller, params: { name }, url }) => {
@@ -372,7 +387,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         const { input } = viewQuery(name!, v, url.searchParams, P);
         const declared = ((v.uiSchema?.["list"] ?? {}) as Record<string, string[] | undefined>)["columns"] ?? [];
         const store = runtime.store.as(caller);
-        return csv(name!, (cursor) => store.view(name!, { input, limit: 500, ...(cursor ? { cursor } : {}) }),
+        const matched = viewMatch(v, url.searchParams);
+        return csv(name!, (cursor) => store.view(name!, { input, ...matched, limit: 500, ...(cursor ? { cursor } : {}) }),
           (rows) => (declared.length ? declared : [...new Set(rows.flatMap((r) => Object.keys(r)))]), (row, c) => row[c]);
       },
     },

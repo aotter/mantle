@@ -30,7 +30,7 @@ selected and `wrangler.jsonc` binds no `ASSETS`. Sign in at `/admin/sign-in`.
 | Search | Schema `searchableFields` | Full-text search over those string fields, plus `id` |
 | Related records | a required property with `x-mantle-ref` | Children fold under their parent |
 | A folded child in navigation too | Schema `uiSchema.nav.standalone: true`, optional `parentField` | Its own list with a parent filter |
-| A read-only report with CSV | a View with `surface: staff`, `title`, `uiSchema.list.columns` | `columns` names the View's outputs; a search or filter is a declared `input`. `GET /admin/api/views/<name>/export` returns every matching row |
+| A read-only report with CSV | a View with `surface: staff`, `title`, `uiSchema.list` | `columns`, `searchFields` and `filterFields` name the View's outputs; the search box and filters become `LIKE` and `=` on them. `GET /admin/api/views/<name>/export` returns every matching row |
 | An operation | a Procedure bound by a Trigger with `source: { kind: mcp, surface: staff }` | Listed at `/admin/api/operations` for staff its `requires` admits, and run with `POST /admin/api/operations/<name>` |
 | A row operation | that Procedure's `target` (declared or inferred from `WHERE id = … AND version = …`) | Bound to the row's `id`, and its version when the target names one |
 | A list-level operation | Procedure `uiSchema.collectionAction: <schema>` | Shown on that collection |
@@ -77,20 +77,15 @@ spec:
   uiSchema:
     list:
       columns: [subject, ticketState, created_at]
-  input:
-    type: object
-    properties:
-      ticketState: { type: string, enum: [open, waiting, closed] }
-  sql: |
-    SELECT id, subject, ticketState, created_at FROM "support-tickets"
-    WHERE input.ticketState IS NULL OR ticketState = input.ticketState
-    ORDER BY created_at DESC
+      searchFields: [subject]
+      filterFields: [ticketState]
+  sql: SELECT id, subject, ticketState, created_at FROM "support-tickets" ORDER BY created_at DESC
 ```
 
 Schema `uiSchema.list` and View `uiSchema.list` are different contracts; do
-not copy keys between them. The console lists a staff View's `input` as its
-form, so a search or filter is a declared input the SQL reads, and pages it by
-cursor.
+not copy keys between them. The report's search box matches `subject`
+(`LIKE`), its filter is `ticketState` (`=`), and a declared `input` would add
+a form above them; all of them keep cursor paging.
 
 ## Roles
 

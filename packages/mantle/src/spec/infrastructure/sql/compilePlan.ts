@@ -137,7 +137,14 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   const views: Record<string, PlanView> = {};
   for (const { manifest: v, source } of linked.views) {
     const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
-    const columns = plan ? viewOutputs(plan, schemas).columns : {};
+    const outputs = plan ? viewOutputs(plan, schemas) : undefined;
+    const columns = outputs?.columns ?? {};
+    // searchFields and filterFields become conditions on the View's outputs (ADR-0032 decision 5), so each must name one
+    const list = (v.spec.uiSchema?.["list"] ?? {}) as Record<string, string[] | undefined>;
+    for (const key of ["searchFields", "filterFields"] as const) for (const [i, f] of (list[key] ?? []).entries()) {
+      if (!outputs?.keys || outputs.keys.some((k) => k === f || k === f.toLowerCase())) continue;
+      diagnostics.push(validateDiagnostic({ code: "VIEW_UI_INVALID", severity: "error", path: `${source.sourceId}#/${source.documentIndex}/spec/uiSchema/list/${key}/${i}`, source: { ...source, path: `/spec/uiSchema/list/${key}/${i}` }, value: f, expected: `one of the View's outputs: ${outputs.keys.join(", ")}`, message: `View '${v.metadata.name}' uiSchema.list.${key} names '${f}', which the View's SELECT does not output.` }));
+    }
     if (plan) views[v.metadata.name] = { ...plan, ...(Object.keys(columns).length ? { columns } : {}), ...(v.spec.title ? { title: v.spec.title } : {}), ...(v.spec.description ? { description: v.spec.description } : {}), ...(v.spec.uiSchema ? { uiSchema: v.spec.uiSchema } : {}), inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), source: v.spec.sql, surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
   }
   const procedures: Record<string, PlanProcedure> = {};

@@ -277,7 +277,8 @@ export interface ViewManifestInfo {
   title: LocalizedText | null;
   description: LocalizedText | null;
   input: JsonSchema | null;
-  list: { columns: string[] };
+  /** `searchFields` and `filterFields` are the outputs the View's search box and filters match (ADR-0032 decision 5). */
+  list: { columns: string[]; searchFields: string[]; filterFields: string[] };
   columns: Record<string, { schema: string; field: string }>;
 }
 

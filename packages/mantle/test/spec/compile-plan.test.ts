@@ -99,6 +99,14 @@ describe("compilePlan", () => {
     expect(res.diagnostics[0]?.message).toContain("upgrade-0.1-to-0.2.md");
   });
 
+  it("refuses a uiSchema.list.searchFields or filterFields name the View's SELECT does not output (ADR-0032 decision 5)", async () => {
+    const withList = (list: string) => SCHEMA + view("SELECT id, body AS text FROM notes ORDER BY id").replace("surface: staff,", `surface: staff, uiSchema: { list: { ${list} } },`);
+    expect((await compile(withList("searchFields: [text], filterFields: [ID]"))).ok).toBe(true);
+    const bad = await compile(withList("searchFields: [body], filterFields: [ownerId]"));
+    expect(bad.ok).toBe(false);
+    expect(!bad.ok && bad.diagnostics.map((d) => [d.code, d.value])).toEqual([["VIEW_UI_INVALID", "body"], ["VIEW_UI_INVALID", "ownerId"]]);
+  });
+
   it("refuses an inline program as a lifecycle hook target (it would write inside a before hook)", async () => {
     const trigger = `---
 apiVersion: cms.mantle.aotter.net/v2
