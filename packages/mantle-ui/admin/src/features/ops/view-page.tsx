@@ -33,19 +33,13 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@aotter/mantle-ui/kit";
-import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 
 const VIEW_PAGE_SIZE = 50;
 
+/** One page of a View: its rows and the cursor to the next page, if there is one (ADR-0032 decision 5). */
 interface ViewQueryResult {
-  ok: true;
-  data: {
-    rows: Array<Record<string, unknown>>;
-    page: number;
-    show: number;
-    hasMore: boolean;
-    nextCursor?: string;
-  };
+  rows: Array<Record<string, unknown>>;
+  nextCursor?: string;
 }
 
 /** Fetch a staff View while preserving its declared query parameters. */
@@ -63,11 +57,8 @@ export async function fetchView(
     credentials: "same-origin",
     headers: { Accept: "application/json" },
   });
-  const body = (await res.json()) as ViewQueryResult | { ok: false; diagnostic: { message: string } };
-  if (!res.ok || !body.ok) {
-    const message = "diagnostic" in body ? body.diagnostic.message : `${res.status} ${res.statusText}`;
-    throw new Error(message);
-  }
+  const body = (await res.json().catch(() => null)) as ViewQueryResult | { error?: { message?: string } } | null;
+  if (!res.ok || !body || !("rows" in body)) throw new Error(body && "error" in body && body.error?.message ? body.error.message : `${res.status} ${res.statusText}`);
   return body;
 }
 
@@ -78,7 +69,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   const location = useAdminLocation();
   const exportFile = useMutation({ mutationFn: downloadAdminFile });
   const urlParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const currentPage = positiveInt(urlParams.get("page")) ?? 1;
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
@@ -95,22 +85,26 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
 
   const view = viewsQuery.data?.find((v) => v.name === name);
+  // an output that reads a Schema field unchanged is labelled and formatted as that field
+  const columnSchema = (column: string) => {
+    const source = view?.columns?.[column];
+    return source ? collectionsQuery.data?.find((c) => c.name === source.schema)?.schema?.properties?.[source.field] : undefined;
+  };
   const sourceSchema = collectionsQuery.data?.find((c) => c.name === view?.from)?.schema;
 
   const [params, setParams] = React.useState<Record<string, unknown>>({});
   React.useEffect(() => {
-    setParams(readViewParams(view?.params, urlParams));
-  }, [view?.name, view?.params, location.search]);
-  const canQuery = hasRequiredViewParams(view?.params, urlParams);
+    setParams(readViewParams(view?.input, urlParams));
+  }, [view?.name, view?.input, location.search]);
+  const canQuery = hasRequiredViewParams(view?.input, urlParams);
 
   const query = useQuery<ViewQueryResult>({
     queryKey: ["view", name, location.search],
     queryFn: () =>
       fetchView(name, {
         ...Object.fromEntries(urlParams),
-        ...(view?.select ? { cursor: urlParams.getAll("cursor").slice(-1)[0], limit: VIEW_PAGE_SIZE } : {
-          page: currentPage, show: VIEW_PAGE_SIZE,
-        }),
+        cursor: urlParams.getAll("cursor").slice(-1)[0],
+        limit: VIEW_PAGE_SIZE,
       }),
     enabled: !!view && canQuery,
   });
@@ -129,18 +123,18 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     );
   }
 
-  const rows = query.data?.data.rows ?? [];
+  const rows = query.data?.rows ?? [];
   const columns = viewColumns(view, rows);
   const rowActions = view.from ? runnableRowActions(view.rowActions, operationsQuery.data) : [];
   const viewTitle = resolveLocalizedText(view.title, language, canonical) ?? fieldLabel(view.name);
-  const exportHref = viewExportHref(name, urlParams, !!view.select);
+  const exportHref = viewExportHref(name, urlParams);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={<div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{t(language, view.surface === "public" ? "views.publicService" : "views.staffReport")}</Badge>{view.surface === "public" ? <code className="text-xs">/api/views/{view.name}</code> : null}</div>}
+        eyebrow={<Badge variant="secondary">{t(language, "views.staffReport")}</Badge>}
         title={viewTitle}
-        description={t(language, view.surface === "public" ? "views.publicBody" : "views.page.body", { schema: view.from ?? view.name })}
+        description={resolveLocalizedText(view.description, language, canonical) ?? t(language, "views.page.body", { schema: view.name })}
         actions={
           <Button
             type="button"
@@ -156,11 +150,11 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
 
       {exportFile.isError ? <ErrorBox error={exportFile.error} /> : null}
 
-      {view.params ? (
+      {view.input ? (
         <SectionCard className="space-y-4">
           <h2 className="text-sm font-semibold">{t(language, "views.params.title")}</h2>
           <SchemaFields
-            schema={view.params}
+            schema={view.input}
             value={params}
             path={[]}
             onChange={setParams}
@@ -171,38 +165,13 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           />
           <Button
             type="button"
-            onClick={() => { navigate(viewParamsHref(name, urlParams, view.params!, params)); }}
+            onClick={() => { navigate(viewParamsHref(name, urlParams, view.input!, params)); }}
             disabled={query.isFetching}
           >
             <Search className="size-4" aria-hidden />
             {query.isFetching ? t(language, "views.running") : t(language, "views.run")}
           </Button>
         </SectionCard>
-      ) : null}
-
-      {(view.list.searchFields.length > 0 || view.list.filterFields.length > 0) ? (
-        <ListQueryToolbar
-          key={location.search}
-          language={language}
-          searchable={view.list.searchFields.length > 0}
-          searchValue={urlParams.get("search") ?? ""}
-          filters={view.list.filterFields.map((field) => ({
-            name: field,
-            label: fieldLabel(field),
-            value: urlParams.get(`filter.${field}`) ?? "",
-          }))}
-          onSubmit={({ search, filters }) => {
-            const next = new URLSearchParams(urlParams);
-            setOrDelete(next, "search", search);
-            for (const field of view.list.filterFields) {
-              setOrDelete(next, `filter.${field}`, filters[field] ?? "");
-            }
-            next.delete("page");
-            next.delete("show");
-            if (view.select) next.delete("cursor");
-            navigate(viewHref(name, next));
-          }}
-        />
       ) : null}
 
       {query.isError ? <ErrorBox error={query.error} /> : null}
@@ -218,7 +187,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
             <TableRow>
               {columns.map((col) => (
                 <TableHead key={col}>
-                  {propertyLabel(col, sourceSchema?.properties?.[col], language, canonical)}
+                  {propertyLabel(col, columnSchema(col), language, canonical)}
                 </TableHead>
               ))}
               {rowActions.length > 0 ? <TableHead><span className="sr-only">{t(language, "interaction.rowActions")}</span></TableHead> : null}
@@ -228,7 +197,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
             {rows.map((row, index) => (
               <TableRow key={typeof row["id"] === "string" ? row["id"] : index}>
                 {columns.map((col) => {
-                  const schema = sourceSchema?.properties?.[col];
+                  const schema = columnSchema(col);
                   const value = row[col];
                   return (
                     <TableCell key={col} className="text-muted-foreground">
@@ -257,40 +226,17 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
         </Table>
       ) : null}
       {query.data ? (
-        <ViewPagination
-          name={name}
-          query={urlParams}
-          page={query.data.data.page}
-          hasMore={query.data.data.hasMore}
-          nextCursor={query.data.data.nextCursor}
-          select={!!view.select}
-          language={language}
-        />
+        <ViewPagination name={name} query={urlParams} nextCursor={query.data.nextCursor} language={language} />
       ) : null}
     </div>
   );
 }
 
-function ViewPagination({
-  name,
-  query,
-  page,
-  hasMore,
-  nextCursor,
-  select,
-  language,
-}: {
-  name: string;
-  query: URLSearchParams;
-  page: number;
-  hasMore: boolean;
-  nextCursor?: string;
-  select: boolean;
-  language: AdminLanguage;
-}): React.ReactElement | null {
-  if (select ? !query.has("cursor") && !nextCursor : page <= 1 && !hasMore) return null;
-  const previousHref = select ? viewCursorHref(name, query, undefined) : page > 1 ? viewPageHref(name, query, page - 1) : undefined;
-  const nextHref = select ? nextCursor ? viewCursorHref(name, query, nextCursor) : undefined : hasMore ? viewPageHref(name, query, page + 1) : undefined;
+/** Cursor paging: the URL keeps the stack of cursors, so Previous drops the last one. */
+function ViewPagination({ name, query, nextCursor, language }: { name: string; query: URLSearchParams; nextCursor?: string; language: AdminLanguage }): React.ReactElement | null {
+  if (!query.has("cursor") && !nextCursor) return null;
+  const previousHref = viewCursorHref(name, query, undefined);
+  const nextHref = nextCursor ? viewCursorHref(name, query, nextCursor) : undefined;
   return (
     <Pagination className="mt-4 justify-end" aria-label={t(language, "collection.pagination")}>
       <PaginationContent>
@@ -353,17 +299,8 @@ function viewParamsHref(
     const value = values[field];
     if (value !== undefined && value !== null && value !== "") next.set(field, String(value));
   }
-  next.delete("page");
-  next.delete("show");
-  if (!Object.prototype.hasOwnProperty.call(schema.properties ?? {}, "cursor")) next.delete("cursor");
-  return viewHref(name, next);
-}
-
-function viewPageHref(name: string, query: URLSearchParams, page: number): string {
-  const next = new URLSearchParams(query);
-  if (page > 1) next.set("page", String(page));
-  else next.delete("page");
-  next.delete("show");
+  // new input starts from the first page
+  next.delete("cursor");
   return viewHref(name, next);
 }
 
@@ -373,16 +310,13 @@ function viewCursorHref(name: string, query: URLSearchParams, nextCursor?: strin
   const next = new URLSearchParams(query);
   next.delete("cursor");
   for (const cursor of nextCursor ? [...cursors, nextCursor] : cursors.slice(0, -1)) next.append("cursor", cursor);
-  next.delete("page");
-  next.delete("show");
   return viewHref(name, next);
 }
 
-function viewExportHref(name: string, query: URLSearchParams, select: boolean): string {
+/** The export runs the View with the same input, from the first row. */
+function viewExportHref(name: string, query: URLSearchParams): string {
   const next = new URLSearchParams(query);
-  next.delete("page");
-  next.delete("show");
-  if (select) next.delete("cursor");
+  next.delete("cursor");
   const suffix = next.toString();
   return `/admin/api/views/${encodeURIComponent(name)}/export${suffix ? `?${suffix}` : ""}`;
 }
@@ -392,22 +326,9 @@ function viewHref(name: string, query: URLSearchParams): string {
   return `/admin/views/${encodeURIComponent(name)}${suffix ? `?${suffix}` : ""}`;
 }
 
-function setOrDelete(query: URLSearchParams, name: string, value: string): void {
-  if (value) query.set(name, value);
-  else query.delete(name);
-}
-
-function positiveInt(raw: string | null): number | undefined {
-  if (!raw) return undefined;
-  const value = Number.parseInt(raw, 10);
-  return Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-/** Prefer explicit Admin columns, then the legacy View projection,
- *  then the first-seen row shape for old SQL Views. */
+/** The View's `uiSchema.list.columns` when it declares them, else the columns its rows carry, in order. */
 function viewColumns(view: ViewManifestInfo, rows: ReadonlyArray<Record<string, unknown>>): string[] {
   if (view.list.columns.length > 0) return [...view.list.columns];
-  if (view.fields && view.fields.length > 0) return [...view.fields];
   const seen = new Set<string>();
   for (const row of rows) {
     for (const key of Object.keys(row)) seen.add(key);

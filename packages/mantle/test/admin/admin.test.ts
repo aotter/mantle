@@ -190,7 +190,7 @@ describe("Admin surface: reads", () => {
     const names = async (c: Caller) => (await call("GET", "/admin/api/views-manifest", c)).body.views.map((v: any) => v.name);
     expect(await names(owner)).toEqual(["all-posts", "owner-posts"]);
     expect(await names(editor)).toEqual(["all-posts"]);
-    expect((await call("GET", "/admin/api/views-manifest", owner)).body.views[0]).toMatchObject({ list: { columns: ["slug"], searchFields: [], filterFields: [] }, input: { properties: { min: { type: "integer" } } } });
+    expect((await call("GET", "/admin/api/views-manifest", owner)).body.views[0]).toMatchObject({ list: { columns: ["slug"] }, input: { properties: { min: { type: "integer" } } }, columns: { slug: { schema: "posts", field: "slug" } } });
   });
 
   it("pages a staff View by limit and cursor, coerces its input, and serves no internal or public View", async () => {

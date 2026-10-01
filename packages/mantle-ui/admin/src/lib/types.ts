@@ -272,16 +272,16 @@ export interface StaffOperation {
 }
 
 /** Read-only View projection exposed by the Admin API. */
+/** A staff View as `/admin/api/views-manifest` lists it: its declared input, and the outputs that read a Schema field unchanged. */
 export interface ViewManifestInfo {
   name: string;
-  select?: boolean;
   title: LocalizedText | null;
-  surface: "public" | "staff";
-  from: string | null;
-  params: JsonSchema | null;
-  fields: string[] | null;
-  list: { columns: string[]; searchFields: string[]; filterFields: string[] };
-  /** Staff operations a row feeds (ADR-0029); absent from older servers. */
+  description: LocalizedText | null;
+  input: JsonSchema | null;
+  list: { columns: string[] };
+  columns: Record<string, { schema: string; field: string }>;
+  /** Staff operations a row feeds (ADR-0029); the 0.2 surface sends none yet. */
+  from?: string;
   rowActions?: ViewRowActionInfo[];
 }
 

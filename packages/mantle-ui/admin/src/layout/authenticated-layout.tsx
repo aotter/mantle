@@ -235,8 +235,8 @@ export function buildNavGroups(
         }
       : null;
 
-  // Public/member Views belong to the application surface, not Staff Admin.
-  const staffViews = views.filter((view) => view.surface === "staff");
+  // the manifest lists staff Views only: public and member Views belong to the application surface
+  const staffViews = views;
   const reportsGroup: NavGroupData | null =
     staffViews.length > 0
       ? {

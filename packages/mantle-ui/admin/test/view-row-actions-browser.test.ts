@@ -46,12 +46,12 @@ it("runs a View row action with the reviewed version and asks for a review when 
           } },
         }] }
         : path === "/views-manifest" ? { views: [{
-          name: "pending", title: "Pending approvals", surface: "staff", from: "requisitions",
-          params: { type: "object", properties: { q: { type: "string" } } },
-          fields: ["id", "version", "item"], list: { columns: ["item"], searchFields: [], filterFields: [] },
+          name: "pending", title: "Pending approvals", description: null, from: "requisitions",
+          input: { type: "object", properties: { q: { type: "string" } } },
+          list: { columns: ["item"] }, columns: { item: { schema: "requisitions", field: "item" } },
           rowActions: [{ capability: "review_requisition", procedure: "review-requisition", bind: [{ input: "id", field: "id" }], version: "expectedVersion", mutates: true }],
         }] }
-        : path === "/views/pending" ? (viewFetches++, { ok: true, data: { rows: [{ id: "r1", version: readVersion, item: "Laptops" }], page: 1, show: 50, hasMore: false } })
+        : path === "/views/pending" ? (viewFetches++, { rows: [{ id: "r1", version: readVersion, item: "Laptops" }] })
         : {};
       return route.fulfill({ json });
     });

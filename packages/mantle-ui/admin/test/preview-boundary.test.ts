@@ -36,9 +36,9 @@ it("keeps the built preview on its bridge, including search and downloads, while
               if (path === '/admin/api/site') return Response.json({brand:'Sandbox',icons:[],locales:['en'],canonicalLocale:'en'});
               if (path === '/admin/api/collections') return Response.json({collections:[]});
               if (path === '/admin/api/operations') return Response.json({operations:[]});
-              if (path === '/admin/api/views-manifest') return Response.json({views:[{name:'report',title:'Report',surface:'staff',from:null,params:null,fields:['name'],list:{columns:['name'],searchFields:['name'],filterFields:[]}}]});
+              if (path === '/admin/api/views-manifest') return Response.json({views:[{name:'report',title:'Report',description:null,input:{type:'object',properties:{q:{type:'string'}}},list:{columns:['name']},columns:{}}]});
               if (path === '/admin/api/views/report/export') return new Response('name\\nAda', {headers:{'content-type':'text/csv','content-disposition':'attachment; filename="report.csv"'}});
-              if (path === '/admin/api/views/report') return Response.json({ok:true,data:{rows:[{name:'Ada'}],page:1,show:50,hasMore:false}});
+              if (path === '/admin/api/views/report') return Response.json({rows:[{name:'Ada'}]});
               return nativeFetch(input, init);
             };
             window.__MANTLE_ADMIN_PREVIEW__ = {fetch:window.fetch};
@@ -75,9 +75,10 @@ it("keeps the built preview on its bridge, including search and downloads, while
     }));
     expect(tools).toMatchObject({ok:true,result:{tools:expect.arrayContaining([expect.objectContaining({name:"admin_navigate"})])}});
 
-    await frame.getByRole("search").getByRole("textbox").fill("Ada");
-    await frame.getByRole("search").getByRole("button", {name:"Search",exact:true}).click();
-    await expect.poll(() => frame.url()).toContain("search=Ada");
+    // a View's search is its declared input
+    await frame.getByLabel("q").fill("Ada");
+    await frame.getByRole("button", {name:"Query",exact:true}).click();
+    await expect.poll(() => frame.url()).toContain("q=Ada");
     const [download] = await Promise.all([
       page.waitForEvent("download"),
       frame.getByRole("button", {name:"Export CSV",exact:true}).click(),
@@ -100,7 +101,7 @@ it("keeps the built preview on its bridge, including search and downloads, while
     expect(result.blocked).toEqual([true,true,true,true]);
     expect(result.xhrBlocked).toBe(true);
     // Browsers may report an accepted beacon even when CSP blocks transmission.
-    expect(result.bridged).toContain("/admin/api/views/report/export?search=Ada");
+    expect(result.bridged).toContain("/admin/api/views/report/export?q=Ada");
     await page.goto(`${origin}/host?route=/admin/connected-apps`);
     await page.frames()[1]!.getByRole("heading", {name:"Sandbox preview"}).waitFor();
     expect(network).toEqual([]);

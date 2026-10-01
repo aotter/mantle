@@ -63,8 +63,8 @@ it("loads live model data only on demand through the existing guarded paths", as
           reads.push(url.href);
           if (url.searchParams.get("sku") === "denied") {
             res.statusCode = 403;
-            body = { ok: false, diagnostic: { message: "View access denied" } };
-          } else body = { ok: true, data: { rows: [{ sku: url.searchParams.get("sku"), title: "Found" }], page: 1, show: 20, hasMore: false } };
+            body = { error: { code: "AUTH_DENIED", message: "View access denied" } };
+          } else body = { rows: [{ sku: url.searchParams.get("sku"), title: "Found" }] };
         }
         res.end(JSON.stringify(body));
         return;

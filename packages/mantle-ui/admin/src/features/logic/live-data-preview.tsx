@@ -103,12 +103,12 @@ export function ViewDataPreview({ model }: { model: DeveloperViewModel }): React
   const canRun = (schema?.required ?? []).every((name) => params[name] !== undefined && params[name] !== null && params[name] !== "");
   const query = useQuery({
     queryKey: ["developer-view-preview", model.name, submitted, run],
-    queryFn: () => fetchView(model.name, { ...submitted, page: 1, show: PREVIEW_SIZE }),
+    queryFn: () => fetchView(model.name, { ...submitted, limit: PREVIEW_SIZE }),
     enabled: submitted !== null,
     retry: false,
     staleTime: 0,
   });
-  const rows = query.data?.data.rows ?? [];
+  const rows = query.data?.rows ?? [];
   const fields = [...new Set(rows.flatMap((row) => Object.keys(row)))];
   return (
     <div className="space-y-4 p-5">

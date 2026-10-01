@@ -63,12 +63,12 @@ describe("member navigation", () => {
     ]);
   });
 
-  it("keeps public/member views out of Staff Admin", () => {
-    const view = (name: string, surface: ViewManifestInfo["surface"]): ViewManifestInfo => ({ name, surface, title: null, from: null, params: null, fields: null, list: { columns: [], searchFields: [], filterFields: [] } });
-    const groups = buildNavGroups([], [view("public-catalog", "public"), view("staff-queue", "staff")], "en", null, "owner");
-    expect(JSON.stringify(groups)).not.toContain("public-catalog");
+  it("lists every View of the manifest under Reports: the server lists staff Views only", () => {
+    const view = (name: string): ViewManifestInfo => ({ name, title: null, description: null, input: null, list: { columns: [] }, columns: {} });
+    const groups = buildNavGroups([], [view("staff-queue"), view("sales")], "en", null, "owner");
     expect(groups.find(({ title }) => title === "Reports")?.items).toEqual([
       expect.objectContaining({ url: "/admin/views/staff-queue" }),
+      expect.objectContaining({ url: "/admin/views/sales" }),
     ]);
   });
 

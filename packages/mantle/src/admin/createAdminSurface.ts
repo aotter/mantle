@@ -155,7 +155,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   };
   const views = (caller: Staff) => Object.entries(plan.views).filter(([, v]) => v.surface === "staff" && sees(v.requires, caller)).map(([name, v]) => {
     const list = (v.uiSchema?.["list"] ?? {}) as Record<string, string[] | undefined>;
-    return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [], searchFields: list["searchFields"] ?? [], filterFields: list["filterFields"] ?? [] } };
+    // `columns`: the output that reads a Schema field unchanged, so Admin labels and formats it as that field
+    return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [] }, columns: v.columns ?? {} };
   });
   // a custom directory may return more than it declares: only the declared fields reach the wire
   const staffInfo = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: StaffUserInfo) => ({ id, email, name, role, githubLogin, emailVerified, createdAt });
