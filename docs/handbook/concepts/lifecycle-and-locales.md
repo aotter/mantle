@@ -47,8 +47,11 @@ host-only step:
 await runtime.store.sweepExpired({ collection: "sessions", limit: 500 }); // { scanned, removed, nextCursor? }
 ```
 
-Run it from a schedule Trigger's `ref` handler, or from your own maintenance
-code. `delete: false` counts without deleting. A translation Schema may not
+Run it from a schedule Trigger's `ref` handler, where the system caller's
+`ctx.store` has it (`await ctx.store.sweepExpired?.({ collection: "sessions" })`;
+a member's `ctx.store` does not), or from your own maintenance code.
+`delete: false` counts without deleting. Until it runs, an expired row still
+holds its unique keys: an insert that reuses one is `CONFLICT` (`unique`). A translation Schema may not
 declare `ttl`.
 
 ## Localized Schemas

@@ -80,8 +80,9 @@ The cron in the URL is the Cloudflare spelling.
 ## Expired rows
 
 TTL hides expired rows at once. To delete them, call
-`runtime.store.sweepExpired({ collection, limit })` from a schedule Trigger's
-`ref` handler or your own maintenance route, page with `nextCursor`, and use
+`ctx.store.sweepExpired({ collection, limit })` in a schedule Trigger's `ref`
+handler (the system caller's Store has it), or `runtime.store.sweepExpired` from
+your own maintenance route, page with `nextCursor`, and use
 `delete: false` to count first.
 
 ## The boot handshake

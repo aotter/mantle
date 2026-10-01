@@ -162,7 +162,9 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     let result: unknown;
     try {
       if ("ref" in proc.handler) {
-        const scoped = store.as(inv.caller, inv.cause); // writes chain to this invocation, so hooks they fire count toward the depth limit
+        const bound = store.as(inv.caller, inv.cause); // writes chain to this invocation, so hooks they fire count toward the depth limit
+        // only the system caller reaches TTL maintenance: no request can produce one (ADR-0032 decision 8)
+        const scoped = inv.caller.kind === "system" && !ro ? { ...bound, sweepExpired: store.sweepExpired } : bound;
         const ctx: HandlerContext = {
           caller: inv.caller, cause: inv.cause, env: args.env, waitUntil: args.waitUntil ?? (() => undefined),
           store: ro ? readOnly(scoped) : scoped,

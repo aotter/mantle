@@ -58,13 +58,21 @@ Put them in the function `mount` returns, where they belong in the order:
 ```ts
 return async (request, waitUntil) => {
   const { pathname } = new URL(request.url);
-  if (pathname === "/healthz") return new Response("ok");            // before everything, no caller
+  await auth.ready?.catch((error) => { routes = undefined; throw error; }); // first, before any route answers
+  if (pathname === "/healthz") return new Response("ok");            // no caller
   if (pathname === "/payments/callback") return handleCallback(request, runtime, env);
   const owned = await authRoutes(request, { waitUntil });
   if (owned) return owned;
   …
 };
 ```
+
+- With identity `mantle`, keep `await auth.ready` above every route. `mount`
+  starts Better Auth inside an isolate's first request, and Workers cancels I/O
+  that a finished request started: a route that answers that first request
+  before `auth.ready` settles leaves the context pending for ever, and every
+  later request waits on it (under `wrangler dev` too). The wait costs only the
+  isolate's first request.
 
 - A route that acts for a caller resolves it the same way:
   `withCaller(resolver, (request, caller) => …)` gives you the caller, the 401

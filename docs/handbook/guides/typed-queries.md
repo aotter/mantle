@@ -110,20 +110,27 @@ await ctx.store.write([
 ```
 
 - `insert` with `values`, optional client `id` (`ctx.store.id()`) and
-  `onConflict: "ignore" | { columns, update }`.
+  `onConflict: "ignore" | { columns, update }`. A scoped Schema refuses a
+  client `id`, because a chosen id could collide with another owner's row and
+  reveal it: give such rows a field of your own that is unique with the scope
+  field (`uniqueIndexes: [[owner, clientKey]]`) when other rows of the same
+  write must point at them, or when a retry must find them.
 - `update` with `set` and `where`; `delete` with `where`. A `where` that pins
   `id` is a row op: it may carry `lock` (the version the caller saw), and
   writing no row is `CONFLICT`.
 - A result is `{ id, version }` for a row op and `{ affected }` for a set op.
 - `set` and `values` never name the scope field or a native column (except
   `status` on a `publishing` Schema, below); Store
-  fills them. A `null` clears a field the Schema does not require; for a
-  required field it is refused. On a `publishing` Schema, `set: { status }` is how a `ref`
+  fills them. A `null` leaves empty, or clears, a field the Schema does not
+  require (the generated `values` and `set` types accept it); for a required
+  field it is refused. On a `publishing` Schema, `set: { status }` is how a `ref`
   handler publishes, unpublishes or archives.
 
 Failures throw `DiagnosticError` with `INPUT_VALIDATION_FAILED` (including a
 failed `check`), `CONFLICT` (`conflict.reason` is `lock`, `expect` or
-`unique`, and `conflict.opIndex` names the operation), `RESOURCE_UNAVAILABLE`
+`unique`, and `conflict.opIndex` names the operation; for `unique` it is
+present when exactly one operation of the write targets the violated Schema,
+since the engine names the table and not the statement), `RESOURCE_UNAVAILABLE`
 or `OUTCOME_UNKNOWN`. Nothing is written on any failure. After
 `OUTCOME_UNKNOWN`, retry with the same client ids and locks: a replayed insert
 conflicts on its id, a replayed update on its lock.
