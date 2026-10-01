@@ -27,6 +27,10 @@ The App shows a View's rows with Admin's value renderers and opens one row
 operation at a time through the controller and `OperationPanel`. Every read
 and write is a tool call through the host; it holds no credentials.
 
+An App of your own reuses the same pieces from the root: `readCatalog`,
+`toolOf`, `outputOf`, `rowsOf`, `invokeTool` and `actionsFor` read the catalog
+and tool results as Mantle's App does (the `develop` skill's MCP App recipe).
+
 ## Controller
 
 The `/controller` subpath takes one operation opened from one

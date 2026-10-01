@@ -85,6 +85,15 @@ Reach data from service code through `runtime.store.as(caller)` or
 is a route in the service's `fetch` that verifies the raw body, then invokes
 a Procedure as `systemCaller(...)`.
 
+## MCP
+
+With feature `mcp`, the preset mounts `/mcp` (public tools) and, with an
+identity, `/mcp/staff` (staff tools for a staff role; with identity `mantle`,
+the same OAuth token as `/mcp`). `/mcp/staff` serves
+Mantle's MCP App: a host that renders MCP Apps shows each staff View's rows and
+the operations on one row. A member-facing App on `/mcp` is the application's
+to build when the product asks for one: follow [the recipe](mcp-app.md).
+
 ## Loop
 
 ```bash
@@ -110,7 +119,7 @@ Check the stored rows, not only a 200. Before deploying a Schema change, run
 - Do not commit secrets (`.dev.vars`, provider keys).
 - Every 0.1.x term is gone: builtin handlers, `from`/`filter`, `params`,
   `$ctx`, `x-mantle-bind`, `--host`, `mantle validate`, `mantle skills`,
-  `createMantleWorker`, `/mcp/staff` as the default staff MCP.
+  `createMantleWorker`.
 
 ## When you are done
 
