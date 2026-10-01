@@ -38,8 +38,9 @@ export function SettingsView(): React.ReactElement {
     },
   });
 
-  if (query.isLoading || !form) return <Skeleton className="h-64 w-full" />;
+  // an error first: a failed read leaves no form, which is not still loading
   if (query.isError) return <ErrorBox error={query.error} />;
+  if (query.isLoading || !form) return <Skeleton className="h-64 w-full" />;
   const dirty = !sameSettings(form, query.data);
   const saved = save.isSuccess && !dirty;
 

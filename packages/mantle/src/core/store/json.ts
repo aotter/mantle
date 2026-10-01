@@ -46,7 +46,7 @@ const STATUSES = ["draft", "published", "archived"];
 
 /**
  * The values of a write against the Schema's JSON Schema. `full` must be a complete entry; `partial` checks only what is present.
- * The scope field is filled by Store, so it is never required of the caller. An insert into a publishing Schema is a draft
+ * The scope field is filled by Store, so it is never required of the caller. A null clears a field that is not required. An insert into a publishing Schema is a draft
  * (partial); a publish is checked complete by the caller of this function, on the entry as it will be.
  */
 export function validateValues(def: StoreSchema, values: Readonly<Record<string, unknown>>, mode: "full" | "partial"): void {
@@ -56,7 +56,9 @@ export function validateValues(def: StoreSchema, values: Readonly<Record<string,
     const required = (def.schema.required ?? []).filter((f) => f.toLowerCase() !== def.scope);
     zods.set(def, (z = { full: jsonSchemaToZod({ ...def.schema, required }), partial: jsonSchemaToZod({ ...def.schema, required: [] }) }));
   }
-  const r = z[mode].safeParse(values);
+  // null clears a field the Schema does not require: it is stored as NULL and read back as null, so it is checked as absent
+  const required = new Set(def.schema.required ?? []);
+  const r = z[mode].safeParse(Object.fromEntries(Object.entries(values).filter(([k, v]) => v !== null || required.has(k))));
   if (r.success) return;
   const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
   throw invalid(`The values do not match the Schema${instancePath ? ` at ${instancePath}` : ""}: ${message}`);

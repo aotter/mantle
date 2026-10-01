@@ -431,9 +431,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       },
     },
   ];
-  const siteStore = runtime.site;
-  if (siteStore) routes.push(
-    { method: "GET", path: "/site-settings", role: "owner", run: async () => settingsOf(await siteStore.read()) },
+  // without the site tables the routes still answer, so Admin's Settings page can say what is missing
+  const siteStore = () => runtime.site ?? (() => { throw wireError("SITE_NOT_CONFIGURED", "Site settings need the site tables: give the storage adapter site defaults (d1Storage(db, { site })).", P); })();
+  routes.push(
+    { method: "GET", path: "/site-settings", role: "owner", run: async () => settingsOf(await siteStore().read()) },
     {
       method: "PATCH", path: "/site-settings", role: "owner", run: async ({ request }) => {
         const body = await readJsonObject(request, P);
@@ -444,7 +445,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
           if (typeof v !== "string" || v.length > max) throw bad(`'${k}' must be a string of at most ${max} characters`);
           values[k] = v;
         }
-        return settingsOf(await siteStore.updateSettings(values as SiteSettings));
+        return settingsOf(await siteStore().updateSettings(values as SiteSettings));
       },
     },
   );

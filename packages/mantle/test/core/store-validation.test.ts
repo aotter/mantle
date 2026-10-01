@@ -58,3 +58,15 @@ it("a publishing Schema is not checked yet: drafts save incomplete, validated on
   const [row] = await rt.store.as(user).write([{ insert: "pages", values: { body: "just a sketch" } }]);
   expect(row).toMatchObject({ version: 1 });
 });
+
+it("null clears a field the Schema does not require, and stays refused for one it requires", async () => {
+  const s = rt.store.as(user);
+  const [row] = await s.write([{ insert: "tickets", values: { subject: "toner", priority: "low", due: null } }]);
+  const id = (row as { id: string }).id;
+  await s.write([{ update: "tickets", set: { due: "2026-10-02T00:00:00Z" }, where: { id } }]);
+  // a row read back and written whole, as an editor does: the unset field comes back null and goes back null
+  await s.write([{ update: "tickets", set: { due: null, subject: "toner cartridge" }, where: { id } }]);
+  expect((await s.select({ from: "tickets", columns: ["subject", "due"], where: { id } })).rows).toEqual([{ subject: "toner cartridge", due: null }]);
+  expect(await message(s.write([{ update: "tickets", set: { subject: null }, where: { id } }]))).toMatch(/subject/);
+  expect(await message(s.write([{ insert: "tickets", values: { subject: "x-ray", priority: null } }]))).toMatch(/priority/);
+});
