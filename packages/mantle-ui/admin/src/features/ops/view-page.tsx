@@ -90,6 +90,12 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     return source ? withNativeSchema(source.field, collectionsQuery.data?.find((c) => c.name === source.schema)?.schema?.properties?.[source.field]) : undefined;
   };
 
+  // a field's title names only an output under the field's own name: `sum(price) AS total` reads as Total, formatted as a price
+  const labelSchema = (column: string) => {
+    const schema = columnSchema(column);
+    return schema && view?.columns?.[column]?.field !== column ? { ...schema, title: undefined } : schema;
+  };
+
   const [params, setParams] = React.useState<Record<string, unknown>>({});
   React.useEffect(() => {
     setParams(readViewParams(view?.input, urlParams));
@@ -177,7 +183,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           searchValue={urlParams.get("search") ?? ""}
           filters={view.list.filterFields.map((field) => ({
             name: field,
-            label: propertyLabel(field, columnSchema(field), language, canonical),
+            label: propertyLabel(field, labelSchema(field), language, canonical),
             value: urlParams.get(`filter.${field}`) ?? "",
           }))}
           onSubmit={({ search, filters }) => {
@@ -207,7 +213,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
             <TableRow>
               {columns.map((col) => (
                 <TableHead key={col}>
-                  {propertyLabel(col, columnSchema(col), language, canonical)}
+                  {propertyLabel(col, labelSchema(col), language, canonical)}
                 </TableHead>
               ))}
             </TableRow>

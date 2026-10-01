@@ -25,8 +25,8 @@ export function renderDataValue(schema: JsonSchema | undefined, value: unknown, 
     const formatted = formatTimestampMs(Date.parse(value));
     if (formatted) return <time dateTime={value}>{formatted}</time>;
   }
-  if (typeof value === "string" && enumOptions(schema)) return optionLabel(schema, value, language);
   if (value == null || value === "") return <span className="text-muted-foreground">-</span>;
+  if (typeof value === "string" && enumOptions(schema)) return optionLabel(schema, value, language);
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }

@@ -59,9 +59,12 @@ function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
   const list = ui["list"] ?? {};
   const nav = ui["nav"];
   const filterField = list["filterField"] as string | undefined;
-  // a required reference is composition: the child sits under its parent in the sidebar, by `id` or by the unique field it names
-  const parentField = Object.keys(props).find((f) => required.has(f) && names.has(resolveMantleRef(props[f])?.schema ?? ""));
-  const navField = nav?.["standalone"] === true ? (nav["parentField"] as string | undefined) ?? parentField : undefined;
+  // a required reference is composition: the child sits under its parent, an `id` reference first, else one by a unique field
+  const refs = Object.keys(props).filter((f) => required.has(f) && names.has(resolveMantleRef(props[f])?.schema ?? ""));
+  const byId = refs.find((f) => resolveMantleRef(props[f])!.field === "id");
+  const parentField = byId ?? refs[0];
+  // a standalone list's parent picker scopes by the parent's entry id, so only an `id` reference composes there (the checker agrees)
+  const navField = nav?.["standalone"] === true ? (nav["parentField"] as string | undefined) ?? byId : undefined;
   const navParent = navField ? resolveMantleRef(props[navField]) : null;
   const children = schemas.filter((c) => c.translates?.parent === s.name);
   return {

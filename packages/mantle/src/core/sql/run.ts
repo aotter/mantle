@@ -9,6 +9,7 @@ import type { Caller } from "../caller.js";
 import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
+import { NATIVE } from "../store/json.js";
 import { S, op, ref } from "./ast.js";
 import { applyPolicy, HOOK_PREFIX, type Compiled } from "./policy.js";
 
@@ -107,10 +108,8 @@ async function preRead(env: RunEnv, p: Program, i: number, c: Compiled, as: RunA
   return row ?? {};
 }
 
-/** A native column as Store names it, and the type it decodes as. */
-const HOOK_NATIVE: Readonly<Record<string, readonly [string, string?]>> = {
-  id: ["id"], version: ["version"], status: ["status"], author_id: ["authorId"], created_at: ["createdAt", "timestamptz"], updated_at: ["updatedAt", "timestamptz"],
-};
+/** A native column by its physical name: the name Store gives it and the type it decodes as (Store's own table, inverted). */
+const BY_COLUMN = new Map(Object.entries(NATIVE).map(([name, { col, type }]) => [col, { name, type }]));
 
 /** A returned row split into what the statement's own RETURNING asked for and the row its after hook receives. */
 function split(row: StoreRow): { result: StoreRow; hook: StoreRow } {
@@ -131,8 +130,8 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
     const def = env.schemas[schema]!;
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(row)) {
-      const native = HOOK_NATIVE[k];
-      if (native) out[native[0]] = native[1] ? env.dialect.codec.decode(native[1], v) : v;
+      const native = BY_COLUMN.get(k);
+      if (native) out[native.name] = env.dialect.codec.decode(native.type, v);
       else if (def.fields[k] && def.fields[k] !== "geo") out[(def as { names?: Record<string, string> }).names?.[k] ?? k] = env.dialect.codec.decode(def.fields[k]!, v);
       else if (!/_(lat|lng)$/.test(k) || def.fields[k.slice(0, -4)] !== "geo") out[k] = v;
     }
@@ -185,11 +184,12 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
     ...((p.expects?.[i] ?? (c.kind === "row" ? 1 : undefined)) === undefined ? {} : { expect: p.expects?.[i] ?? 1 }),
   }))).catch(async (e) => { throw await lockReason(e); });
 
+  const parts = res.map((r, i) => (plan[i]!.hooked ? r.rows.map(split) : undefined));
   // a statement without RETURNING returns no rows, whatever its hook was given
-  const rows = res.map((r, i) => (!plan[i]!.hooked ? r.rows : p.ir[i]![Object.keys(p.ir[i]!)[0]!].returningClause ? r.rows.map((row) => split(row).result) : []));
+  const rows = res.map((r, i) => (!parts[i] ? r.rows : p.ir[i]![Object.keys(p.ir[i]!)[0]!].returningClause ? parts[i]!.map((x) => x.result) : []));
   if (lc) for (const [i, c] of plan.entries()) {
     if (!c.schema || !c.verb || !lc.after.has(key(c)) || !res[i]!.rows.length) continue; // a statement that writes no row calls no hook
-    const cause = res[i]!.rows.map((row) => split(row).hook) as unknown as [StoreRow, ...StoreRow[]];
+    const cause = parts[i]!.map((x) => x.hook) as unknown as [StoreRow, ...StoreRow[]];
     // a failure of an after hook never changes the committed result (ADR-0032 decision 3); the dispatcher reports its own failures
     await lc.dispatcher.after([event(i, `after_${HOOK[verbOf(c)]}`, c.schema, cause)]).catch(() => undefined);
   }

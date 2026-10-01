@@ -1,4 +1,4 @@
-import { resolveMantleRef, type SchemaManifest, type ViewManifest } from "../model/ManifestGrammar.js";
+import { enumOptions, resolveMantleRef, type SchemaManifest, type ViewManifest } from "../model/ManifestGrammar.js";
 import type { SchemaListFilter, SchemaListPresentation, SchemaNavPresentation, ViewListPresentation } from "./SchemaAdminUiChecker.js";
 
 /** Read descriptors from an already parsed and linked manifest; no authoring checks at request time. */
@@ -18,7 +18,7 @@ export function projectSchemaAdminUi(schema: SchemaManifest): {
     : undefined;
   const parent = parentField && resolveMantleRef(schema.spec.schema.properties?.[parentField]);
   return {
-    filter: field ? { field, values: schema.spec.schema.properties?.[field]?.enum as readonly string[] } : null,
+    filter: field ? { field, values: enumOptions(schema.spec.schema.properties?.[field])?.map((o) => o.value) ?? [] } : null,
     list: { primaryField: (list["primaryField"] as string | undefined) ?? null, columns: (list["columns"] as readonly string[] | undefined) ?? [] },
     nav: nav?.["standalone"] === true && parentField && parent
       ? { standalone: true, parentField, parentCollection: parent.schema } : null,

@@ -41,6 +41,20 @@ spec:
       item: { type: string }
 ---
 apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: line-notes }
+spec:
+  title: Notes
+  lifecycle: operational
+  uiSchema: { nav: { standalone: true } }
+  schema:
+    type: object
+    required: [requestNumber, lineId]
+    properties:
+      requestNumber: { type: string, x-mantle-ref: { schema: requests, field: requestNumber } }
+      lineId: { type: string, x-mantle-ref: request-lines }
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: approve }
 spec:
@@ -136,10 +150,14 @@ describe("Admin", () => {
 
   it("relates lines to their request by a unique-field reference, both ways", async () => {
     const entry = await (await admin(`/entries/${ids[0]}?collection=requests`)).json();
-    expect(entry.related.map((r: { relationship: { parentField: string; childField: string }; entries: unknown[] }) => [r.relationship.parentField, r.relationship.childField, r.entries.length])).toEqual([["requestNumber", "requestNumber", 1]]);
+    expect(entry.related.map((r: { relationship: { parentField: string; childField: string }; entries: unknown[] }) => [r.relationship.parentField, r.relationship.childField, r.entries.length])).toEqual([["requestNumber", "requestNumber", 1], ["requestNumber", "requestNumber", 0]]);
     const collections = (await (await admin("/collections")).json()).collections;
     expect(collections.find((c: { name: string }) => c.name === "request-lines").parent).toEqual({ collection: "requests", parentField: "requestNumber", childField: "requestNumber" });
     expect(collections.find((c: { name: string }) => c.name === "requests").filter).toEqual({ field: "requestStatus", values: ["submitted", "approved"] });
+    // an id reference is the parent even when a unique-field reference is declared first; a standalone list scopes by id only
+    const notes = collections.find((c: { name: string }) => c.name === "line-notes");
+    expect(notes.parent).toEqual({ collection: "request-lines", parentField: "id", childField: "lineId" });
+    expect(notes.nav).toEqual({ standalone: true, parentField: "lineId", parentCollection: "request-lines" });
   });
 });
 

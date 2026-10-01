@@ -24,7 +24,7 @@ export type StoreSchemas = Readonly<Record<string, StoreSchema>>;
 const invalid = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
 
 /** Native columns as JSON names them, with the physical column and its Mantle type. */
-const NATIVE: Readonly<Record<string, { col: string; type: string }>> = {
+export const NATIVE: Readonly<Record<string, { col: string; type: string }>> = {
   id: { col: "id", type: "text" }, status: { col: "status", type: "text" }, version: { col: "version", type: "integer" },
   createdAt: { col: "created_at", type: "timestamptz" }, updatedAt: { col: "updated_at", type: "timestamptz" }, authorId: { col: "author_id", type: "text" },
 };

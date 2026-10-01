@@ -184,12 +184,12 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
         // an output that reads a Schema field compares in that field's storage encoding (a boolean is 0/1, a date-time microseconds)
         const c = v.columns?.[column] ?? v.columns?.[column.toLowerCase()];
         const def = c && deps.schemas[c.schema];
-        return def ? deps.dialect.codec.encode(def.fields[c.field] ?? NATIVE_OUTPUT_TYPES[c.field]!, value) : value;
+        return def ? deps.dialect.codec.encode((Object.hasOwn(def.fields, c.field) ? def.fields[c.field] : NATIVE_OUTPUT_TYPES[c.field])!, value) : value;
       }) });
       const decodeView = (row: StoreRow) => Object.fromEntries(Object.entries(row).map(([k, value]) => {
         const c = v.columns && Object.hasOwn(v.columns, k) ? v.columns[k]! : undefined;
         const def = c && deps.schemas[c.schema];
-        return def ? [k === c.field ? def.names?.[c.field] ?? k : k, deps.dialect.codec.decode(def.fields[c.field] ?? NATIVE_OUTPUT_TYPES[c.field]!, value)] : [k, value];
+        return def ? [k === c.field ? def.names?.[c.field] ?? k : k, deps.dialect.codec.decode((Object.hasOwn(def.fields, c.field) ? def.fields[c.field] : NATIVE_OUTPUT_TYPES[c.field])!, value)] : [k, value];
       }));
       return { rows: (v.columns ? page.rows.map(decodeView) : page.rows) as never, ...(page.next ? { nextCursor: encodeCursor(`view:${name}`, page.next) } : {}) };
     }),

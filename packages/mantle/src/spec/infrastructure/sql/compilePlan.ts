@@ -67,7 +67,7 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
     else rels.set((n.RangeSubselect ?? n.RangeFunction)?.alias?.aliasname ?? "", undefined);
   };
   for (const f of sel.fromClause ?? []) walk(f);
-  const typeOf = (schema: string, col: string) => schemas[schema]!.fields[col] ?? NATIVE_OUTPUT_TYPES[col];
+  const typeOf = (schema: string, col: string) => schemas[schema]!.fields[col] ?? (Object.hasOwn(NATIVE_OUTPUT_TYPES, col) ? NATIVE_OUTPUT_TYPES[col] : undefined);
   const field = (schema: string | undefined, col: string) => (schema && typeOf(schema, col) && typeOf(schema, col) !== "geo" ? { schema, field: col } : undefined);
   let keys: string[] | undefined = [];
   for (const { ResTarget: r } of sel.targetList) {

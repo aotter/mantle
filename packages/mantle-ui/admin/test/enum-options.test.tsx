@@ -17,6 +17,7 @@ describe("enum options", () => {
     expect(optionLabel(status, "submitted", "zh-TW")).toBe("已送出");
     expect(optionLabel(status, "approved", "zh-TW")).toBe("Approved");
     expect(renderToStaticMarkup(<>{renderDataValue(status, "submitted", "zh-TW")}</>)).toBe("已送出");
+    expect(renderToStaticMarkup(<>{renderDataValue(status, "", "zh-TW")}</>)).toContain(">-<");
   });
 });
 
