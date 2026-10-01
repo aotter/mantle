@@ -1,7 +1,7 @@
 # Examples hub
 
 Every page is a whole service in the 0.2.0 grammar: its manifests compile with
-`mantle generate` (`pnpm check` compiles each one). Copy the shape you need into
+`mantle generate` (the SDK repository compiles each one in its checks). Copy the shape you need into
 your project's `manifests/`; none is a template to copy wholesale.
 
 | Example | What it shows | Handler code |

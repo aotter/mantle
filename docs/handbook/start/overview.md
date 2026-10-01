@@ -10,8 +10,8 @@ schedule. Views and Procedures are SQL in PostgreSQL syntax.
 
 `mantle generate` compiles the manifests into a sealed plan and a typed module.
 The runtime serves the plan through one **Store**, which adds each caller's
-scope, TTL visibility, publishing state and optimistic locks to every
-statement. Your service owns its entry, its users and its frontend; Mantle
+scope, TTL visibility and publishing state to every statement, and an
+optimistic lock where the caller passes one. Your service owns its entry, its users and its frontend; Mantle
 adds tables, surfaces and typed access to them.
 
 This handbook ships inside `@aotter/mantle` at
@@ -46,8 +46,10 @@ are your files.
 | See whole services | [Examples](../examples/hub.md) and the runnable reference service |
 | Move a 0.1.x project | `docs/upgrade-0.1-to-0.2.md` in the installed package |
 
-The decisions behind 0.2.0 are ADR-0032 to ADR-0035 in `docs/adr/`. When this
-handbook and an ADR disagree, the ADR wins.
+The decisions behind 0.2.0 are ADR-0032 to ADR-0035 in `docs/adr/`. The ADRs
+record decisions and may describe work not built yet; the installed code is the
+authority. When an ADR and this handbook disagree, follow this handbook and
+check the code.
 
 ## What 0.2.0 does not have yet
 

@@ -3,8 +3,8 @@ description: Index of the Mantle 0.2.0 examples — whole services in the v2 gra
 ---
 # Examples
 
-Each example is a whole service: its manifests compile with `mantle generate`,
-and its handlers typecheck against the generated types. They live beside this
+Each example is a whole service whose manifests compile with `mantle generate`;
+its handlers are written against the generated types. They live beside this
 handbook in [`docs/examples/`](../../examples/README.md).
 
 | Example | Shows |

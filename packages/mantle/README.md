@@ -37,7 +37,7 @@ packages. It names each missing package together with the install command.
 
 ## Start
 
-Read [the reference service](../../docs/examples/reference-service/README.md).
+Read [the reference service](docs/examples/reference-service/README.md).
 It is a whole service with its smoke test. The installed docs are under
 `node_modules/@aotter/mantle/docs/`: the handbook (`handbook/start/overview.md`),
 the examples, the agent workflow skills (`skills/`), and

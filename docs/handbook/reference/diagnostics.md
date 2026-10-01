@@ -1,5 +1,5 @@
 ---
-description: The structured Diagnostic shape, the wire error envelope, HTTP statuses, and every diagnostic code Mantle 0.2.0 raises from mantle generate, boot and run time.
+description: The structured Diagnostic shape, the wire error envelope, HTTP statuses, and the diagnostic codes Mantle 0.2.0 raises from mantle generate, boot and run time.
 ---
 # Diagnostics
 
@@ -44,7 +44,7 @@ Handler code catches `DiagnosticError` and reads `error.diagnostic.code`.
 | `INVOCATION_DEPTH_EXCEEDED` | 500 | more than 8 nested invocations (hooks and `ctx.invoke`) |
 | `PROCEDURE_NOT_FOUND` | 500 | `invokeProcedure` with a name the plan lacks |
 | `SITE_NOT_CONFIGURED` | 501 | Admin's `/site-settings` on a runtime without site defaults |
-| `MEDIA_*` | 400, 404, 409, 410, 501 | media uploads: `MEDIA_NOT_CONFIGURED` (501) without media storage and site defaults, `MEDIA_UPLOAD_EXPIRED` (410), `MEDIA_ASSET_NOT_FOUND` (404), `MEDIA_OBJECT_NOT_FOUND` (409), and 400 for a refused type, size, purpose or variant set |
+| `MEDIA_*` | 400, 404, 409, 410, 501 | media uploads: `MEDIA_NOT_CONFIGURED` (501) without media storage and site defaults, `MEDIA_UPLOAD_EXPIRED` (410), `MEDIA_ASSET_NOT_FOUND` (404), `MEDIA_OBJECT_NOT_FOUND` and `MEDIA_CHECKSUM_MISMATCH` (409), and 400 for a refused type, size, purpose or variant set |
 
 Admin's statistics route answers 501 with the wire code
 `STATISTICS_UNAVAILABLE`, which is not a `DiagnosticCode`.
@@ -58,12 +58,13 @@ Admin's statistics route answers 501 with the wire code
 | `SCHEDULE_NOT_WIRED` | an enabled schedule Trigger without `schedules: true` |
 | `STORAGE_CHANGE_BLOCKED` | storage has a difference boot will not change; the message names it and hints SQL |
 | `STORAGE_TABLE_NOT_OWNED` | a table Mantle would create exists and is not Mantle's |
+| `INVALID_LOCALE`, `SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES` | a site `locales` entry that is not a language with an optional 2-letter region, or a `localized` Schema without site `locales` |
 
 ## `mantle generate`
 
 | Codes | About |
 |---|---|
-| `INVALID_MANIFEST_ENVELOPE`, `DUPLICATE_NAME`, `MANIFEST_ROOT_NOT_FOUND`, `MANIFEST_READ_FAILED` | files and the envelope; a `v1` apiVersion and `x-mantle-bind` fail here and name the upgrade guide |
+| `INVALID_MANIFEST_ENVELOPE`, `DUPLICATE_NAME`, `MANIFEST_ROOT_NOT_FOUND`, `MANIFEST_READ_FAILED` | files and the envelope; a `v1` apiVersion fails here and names the upgrade guide; `x-mantle-bind` fails and names its replacements (`spec.scope`, `auth.uid()`, `now()`) |
 | `REQUIRED_FIELD_UNKNOWN`, `INVALID_PATTERN`, `JSON_SCHEMA_UNSUPPORTED`, `JSON_SCHEMA_REF_INVALID`, `JSON_SCHEMA_LIMIT_EXCEEDED` | JSON Schemas |
 | `SCHEMA_INDEX_INVALID`, `SCHEMA_INDEX_FIELD_UNKNOWN`, `UNIQUE_INDEX_FIELD_UNKNOWN`, `SCHEMA_SEARCH_INVALID`, `SCHEMA_SEARCH_FIELD_UNKNOWN`, `SCHEMA_TTL_INVALID`, `SCHEMA_TTL_TRANSLATION_UNSUPPORTED`, `SCHEMA_UI_INVALID`, `SCHEMA_NAME_CASE_COLLISION`, `FIELD_NAME_CASE_COLLISION`, `MANTLE_REF_INVALID` | Schemas |
 | `TRANSLATES_PARENT_UNKNOWN`, `TRANSLATES_REQUIRES_LOCALIZED`, `TRANSLATES_REQUIRES_CONTENT_FIELD`, `TRANSLATES_FIELD_NOT_IN_PARENT`, `TRANSLATES_FIELD_NOT_IN_CHILD`, `TRANSLATES_PARENT_IS_LOCALIZED` | `translates` |

@@ -28,7 +28,8 @@ guide for moving a project by hand.
   handlers, the Filter AST, `params`, `$ctx` references and `x-mantle-bind` are
   gone; Schemas gain `checks`, and `searchableFields` becomes full-text search.
 - **One Store.** Every read and write goes through Store, which adds caller
-  scope, TTL, published-only and optimistic locks to every statement; a write
+  scope, TTL and published-only to every statement, and an optimistic lock
+  where the caller passes one; a write
   is all or nothing.
 - **The service is the application's.** `createMantle(service, …)` replaces
   `createMantleWorker`, and the first `mantle generate` writes the Cloudflare

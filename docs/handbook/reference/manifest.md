@@ -44,7 +44,7 @@ JSON Schema properties, take a string or a locale map:
 title: { en: Products, zh-TW: 商品 }
 ```
 
-Admin and MCP choose the viewer's locale, then `en`, then the first entry.
+Admin chooses the viewer's locale and MCP the surface's `locale` option (default `en`), then `en`, then the first entry.
 
 ## SQL conventions
 
