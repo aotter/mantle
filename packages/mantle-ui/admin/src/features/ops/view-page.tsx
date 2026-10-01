@@ -25,6 +25,7 @@ import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
 import { IdValue, isIdField } from "../../ui/id-value";
 import { cn } from "../../lib/utils";
+import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import {
   Pagination,
   PaginationContent,
@@ -166,6 +167,31 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
             {query.isFetching ? t(language, "views.running") : t(language, "views.run")}
           </Button>
         </SectionCard>
+      ) : null}
+
+      {(view.list.searchFields.length > 0 || view.list.filterFields.length > 0) ? (
+        <ListQueryToolbar
+          key={location.search}
+          language={language}
+          searchable={view.list.searchFields.length > 0}
+          searchValue={urlParams.get("search") ?? ""}
+          filters={view.list.filterFields.map((field) => ({
+            name: field,
+            label: propertyLabel(field, columnSchema(field), language, canonical),
+            value: urlParams.get(`filter.${field}`) ?? "",
+          }))}
+          onSubmit={({ search, filters }) => {
+            // a new search starts from the first page: the cursors belong to the old one
+            const next = new URLSearchParams(urlParams);
+            next.delete("cursor");
+            if (search) next.set("search", search); else next.delete("search");
+            for (const field of view.list.filterFields) {
+              const value = filters[field] ?? "";
+              if (value) next.set(`filter.${field}`, value); else next.delete(`filter.${field}`);
+            }
+            navigate(viewHref(name, next));
+          }}
+        />
       ) : null}
 
       {query.isError ? <ErrorBox error={query.error} /> : null}

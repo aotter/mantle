@@ -176,6 +176,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
 }
 
 // ---- Views and cursors --------------------------------------------------------------------------------
+const refuseOutput = (name: string): never => { throw refuse(`SQL_SHAPE: the View has no output named '${name}'`); };
 const outName = (t: N) => t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval;
 
 export interface ViewPage {
@@ -189,7 +190,19 @@ export interface ViewPage {
  * become hidden `_k<i>` columns; the cursor is the last row's keys and the next page filters on them.
  * Keys must be non-null (a nullable key states its NULL position; not implemented).
  */
-export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor?: readonly unknown[]; pageSize?: number } = {}): Promise<ViewPage> {
+/**
+ * Conditions on a paged View's outputs (ADR-0032 decision 5): Admin's `searchFields` become one `LIKE` per output, ORed, and
+ * `filterFields` one `=` each. Values are bound; the output names come from the plan's uiSchema, never from the request.
+ */
+export interface ViewMatch {
+  readonly search?: { readonly columns: readonly string[]; readonly text: string };
+  readonly eq?: readonly { readonly column: string; readonly value: unknown }[];
+}
+
+/** `%text%` with the LIKE metacharacters escaped, so a search matches what was typed. */
+const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor?: readonly unknown[]; pageSize?: number; match?: ViewMatch } = {}): Promise<ViewPage> {
   const [c] = compileProgram(p.ir, ctxOf(env, p));
   if (!opts.pageSize) return { rows: await env.executor.select({ ir: c!.ast, binds: bindValues(env.dialect, c!.binds, as.bind) }) };
   const sel = structuredClone(c!.ast.SelectStmt) as N;
@@ -214,13 +227,25 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
         op(k.SortBy.sortby_dir === "SORTBY_DESC" ? "<" : ">", col(`_k${i}`), { ParamRef: { number: base + i + 1 } }),
       ] } })) } }
     : undefined;
+  // an output by the name SQL gave it: an unquoted alias or column folds to lower case
+  const output = (name: string) => visible.find((n) => n === name) ?? visible.find((n) => n === name.toLowerCase()) ?? refuseOutput(name);
+  const matchBinds: unknown[] = [];
+  const param = (value: unknown): N => (matchBinds.push(value), { ParamRef: { number: base + cursorBinds.length + matchBinds.length } });
+  const conditions: N[] = after ? [after] : [];
+  const search = opts.match?.search;
+  if (search?.text) {
+    const pattern = likePattern(search.text);
+    conditions.push({ BoolExpr: { boolop: "OR_EXPR", args: search.columns.map((c) => ({ A_Expr: { kind: "AEXPR_LIKE", name: [{ String: { sval: "~~" } }], lexpr: col(output(c)),
+      rexpr: { FuncCall: { funcname: [{ String: { sval: "like_escape" } }], args: [param(pattern), { A_Const: { sval: { sval: "\\" } } }], funcformat: "COERCE_EXPLICIT_CALL" } } } })) } });
+  }
+  for (const { column, value } of opts.match?.eq ?? []) conditions.push(op("=", col(output(column)), param(value)));
   const outer: N = { SelectStmt: {
     targetList: [...visible.map((n) => ({ ResTarget: { val: col(n), name: n } })), ...keys.map((_k, i) => ({ ResTarget: { val: col(`_k${i}`), name: `_k${i}` } }))],
     fromClause: [{ RangeSubselect: { subquery: { SelectStmt: inner }, alias: { aliasname: "_p" } } }],
-    whereClause: after,
+    whereClause: conditions.length > 1 ? { BoolExpr: { boolop: "AND_EXPR", args: conditions } } : conditions[0],
     sortClause: keys.map((k, i) => ({ SortBy: { node: col(`_k${i}`), sortby_dir: k.SortBy.sortby_dir, sortby_nulls: k.SortBy.sortby_nulls } })),
     limitCount: { A_Const: { ival: { ival: opts.pageSize + 1 } } }, limitOption: "LIMIT_OPTION_COUNT", op: "SETOP_NONE" } };
-  const rows = await env.executor.select({ ir: outer, binds: bindValues(env.dialect, [...c!.binds, ...cursorBinds], as.bind, { cursor: opts.cursor }) });
+  const rows = await env.executor.select({ ir: outer, binds: [...bindValues(env.dialect, [...c!.binds, ...cursorBinds], as.bind, { cursor: opts.cursor }), ...matchBinds] });
   const page = rows.slice(0, opts.pageSize);
   const next = rows.length > opts.pageSize ? keys.map((_k, i) => page.at(-1)![`_k${i}`]) : undefined;
   return { rows: page.map((r) => Object.fromEntries(visible.map((n) => [n, r[n]]))), ...(next ? { next } : {}) };

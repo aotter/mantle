@@ -52,6 +52,17 @@ export interface StoreSelect {
   readonly search?: string;
 }
 
+/** How `store.view` runs a View. `search` and `filters` match only the outputs the View's `uiSchema.list.searchFields` and `filterFields` name (ADR-0032 decision 5). */
+export interface StoreViewOptions {
+  readonly input?: Readonly<Record<string, unknown>>;
+  readonly limit?: number;
+  readonly cursor?: string;
+  /** Text an output in `searchFields` contains (case-insensitive `LIKE`). */
+  readonly search?: string;
+  /** Output name to the value it equals; each name is one of `filterFields`. */
+  readonly filters?: Readonly<Record<string, StoreScalar>>;
+}
+
 /** A flat row: native columns next to Schema fields. */
 export type StoreRow = Readonly<Record<string, unknown>>;
 
@@ -118,7 +129,7 @@ export interface MantleStore {
   /** Apply every operation or none, in order, as one storage transaction. Results follow operation order. */
   write(ops: readonly StoreWriteOp[]): Promise<readonly StoreWriteResult[]>;
   /** Run a named View as REST and MCP would. `input` is the View's declared `input`. */
-  view<R = StoreRow>(name: string, options?: { readonly input?: Readonly<Record<string, unknown>>; readonly limit?: number; readonly cursor?: string }): Promise<StoreSelectResult<R>>;
+  view<R = StoreRow>(name: string, options?: StoreViewOptions): Promise<StoreSelectResult<R>>;
   /** Host-only maintenance; the only path that sees expired rows. */
   sweepExpired(request: SweepExpiredRequest): Promise<SweepExpiredResult>;
   /** A new entry id from the runtime's id generator. */

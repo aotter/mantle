@@ -16,6 +16,12 @@ import { evaluateAuthAll } from "./auth.js";
 
 export const CORE_VERSION = "0.2.0";
 
+/** A staff View's `uiSchema.list.searchFields` and `filterFields`, which Store's `search` and `filters` match (ADR-0032 decision 5). */
+function listFields(uiSchema: Readonly<Record<string, unknown>> | undefined): { searchFields?: string[]; filterFields?: string[] } {
+  const list = (uiSchema?.["list"] ?? {}) as { searchFields?: string[]; filterFields?: string[] };
+  return { ...(list.searchFields?.length ? { searchFields: list.searchFields } : {}), ...(list.filterFields?.length ? { filterFields: list.filterFields } : {}) };
+}
+
 export interface MantleRuntimeArgs {
   readonly plan: RuntimePlan;
   readonly handlers: MantleHandlers<never>;
@@ -112,7 +118,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   const store = createStore({
     executor, dialect, schemas: plan.schemas, lifecycle, now,
     newId: args.newId ?? (() => crypto.randomUUID().replaceAll("-", "")),
-    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input } : {}), ...(v.columns ? { columns: v.columns } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}) }])),
+    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input } : {}), ...(v.columns ? { columns: v.columns } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
     guardView: async (procedure, caller, input, cause) => { await invoke({ procedure, input, caller, cause: child(cause, procedure) }, true); },
   });
 
