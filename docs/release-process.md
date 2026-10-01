@@ -109,9 +109,8 @@ dist-tag DELETE only added failure and re-run state, and Actions
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
-   `skills/mantle-host/scripts/mantle-host.mjs` is frozen at its 0.1.x build:
-   its source package is gone with 0.2.0, and it is not rebuilt until the
-   plugin's Cloud helper scripts are ported (ADR-0032 decision 13).
+   The plugin's Cloud helper, `skills/mantle/scripts/mantle-cloud.mjs`, is
+   plain source with no build; it ships with the plugin version above.
 
    Leave the consumer cold-start entry **untagged**: `npx skills add
    aotter/mantle`, `/plugin marketplace add aotter/mantle`,

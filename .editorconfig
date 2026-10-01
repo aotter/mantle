@@ -10,12 +10,3 @@ insert_final_newline = true
 
 [*.md]
 trim_trailing_whitespace = false
-
-# Byte-exact generated host script; editors must not reformat it.
-[skills/mantle-host/scripts/mantle-host.mjs]
-charset = unset
-end_of_line = unset
-indent_style = unset
-indent_size = unset
-trim_trailing_whitespace = unset
-insert_final_newline = unset
