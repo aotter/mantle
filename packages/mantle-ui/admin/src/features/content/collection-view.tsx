@@ -1076,7 +1076,7 @@ function EntryRowDisplay({
                   className="block truncate font-medium hover:underline"
                   title={itemName}
                 >
-                  {renderDataValue(primarySchema, primaryValue, language)}
+                  {renderDataValue(primarySchema, primaryValue, language, canonical)}
                 </a>
           ) : editing ? (
             <div className="flex items-center gap-1">
@@ -1132,7 +1132,7 @@ function EntryRowDisplay({
             <TableCell key={name} className="text-muted-foreground">
               {isIdField(name, schema) && typeof value === "string"
                 ? <IdValue value={value} language={language} />
-                : renderDataValue(schema, value, language)}
+                : renderDataValue(schema, value, language, canonical)}
             </TableCell>
           );
         })

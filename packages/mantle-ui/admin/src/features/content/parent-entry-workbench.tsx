@@ -14,7 +14,7 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Tabs, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { propertyLabel } from "../../lib/field-label";
-import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
+import { renderDataValue } from "../../lib/render-data-value";
 import { CollectionView } from "./collection-view";
 import { entryTitle } from "./entry-edit-view";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
@@ -58,8 +58,8 @@ export function ParentEntryWorkbench({
     isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
   );
   const selected = children.find((section) => section.collection.name === childParam) ?? children[0];
-  // the list's own columns: the primary field is already the title, and the entry payload carries no native timestamps
-  const summary = (payload.collection.list?.columns ?? []).filter((f) => f !== payload.collection.list?.primaryField && f !== "createdAt" && f !== "updatedAt");
+  // the list's own data columns: the primary field is already the title, and the entry payload carries no native column
+  const summary = (payload.collection.list?.columns ?? []).filter((f) => f !== payload.collection.list?.primaryField && !!payload.collection.schema?.properties?.[f]);
 
   return (
     <div className="flex min-h-full flex-col gap-6">
@@ -97,8 +97,8 @@ export function ParentEntryWorkbench({
           <dl className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-6 gap-y-3 text-sm">
             {summary.map((field) => (
               <div key={field} className="min-w-0">
-                <dt className="text-xs text-muted-foreground">{propertyLabel(field, withNativeSchema(field, payload.collection.schema?.properties?.[field]), language, canonical)}</dt>
-                <dd className="truncate">{renderDataValue(withNativeSchema(field, payload.collection.schema?.properties?.[field]), payload.entry.data[field], language)}</dd>
+                <dt className="text-xs text-muted-foreground">{propertyLabel(field, payload.collection.schema?.properties?.[field], language, canonical)}</dt>
+                <dd className="truncate">{renderDataValue(payload.collection.schema?.properties?.[field], payload.entry.data[field], language, canonical)}</dd>
               </div>
             ))}
           </dl>

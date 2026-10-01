@@ -588,6 +588,7 @@ function SchemaField({
   const setValue = (next: unknown): void => onChange(writePath(rootValue, path, next));
   // The runtime owns bound values, so the form keeps them read-only.
   const readOnly = isMantleBoundField(schema);
+  const nullable = schema.nullable === true || (schema.enum ?? []).includes(null) || [schema.type].flat().includes("null");
 
   return (
     <div className="space-y-2">
@@ -607,15 +608,15 @@ function SchemaField({
         </p>
       ) : schema.enum || enumOptions(schema) ? (
         <Select
-          // a required field has no empty choice: it starts unchosen and the person picks one
-          value={stringForInput(value) || (required ? "" : "__empty__")}
+          // a required field has no empty choice unless null is one of its values: it starts unchosen and the person picks one
+          value={stringForInput(value) || (required && !nullable ? "" : "__empty__")}
           onValueChange={(next) => setValue(next === "__empty__" ? "" : next)}
         >
           <SelectTrigger className="w-full" aria-label={label}>
             <SelectValue placeholder={t(language, "entryEdit.chooseOption")} />
           </SelectTrigger>
           <SelectContent>
-            {required ? null : <SelectItem value="__empty__">{t(language, "entryEdit.emptyOption")}</SelectItem>}
+            {required && !nullable ? null : <SelectItem value="__empty__">{t(language, "entryEdit.emptyOption")}</SelectItem>}
             {(enumOptions(schema) ?? schema.enum!.filter((v) => v !== null).map((v) => ({ value: String(v) }))).map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {optionLabel(schema, option.value, language)}

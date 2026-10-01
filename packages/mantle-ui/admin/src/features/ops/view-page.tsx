@@ -240,7 +240,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                     <TableCell key={col} className="text-muted-foreground">
                       {isIdField(col, schema) && typeof value === "string"
                         ? <IdValue value={value} language={language} />
-                        : renderDataValue(schema, value, language)}
+                        : renderDataValue(schema, value, language, canonical)}
                     </TableCell>
                   );
                 })}

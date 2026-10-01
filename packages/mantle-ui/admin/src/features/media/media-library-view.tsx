@@ -4,7 +4,7 @@ import { Check, Copy, ExternalLink, Images, Search, Trash2, Upload, type LucideI
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { t } from "../../app/i18n";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
-import { api, ApiError } from "../../lib/api";
+import { api, ApiError, refusalOf } from "../../lib/api";
 import type {
   MediaLibraryItem,
   MediaLibraryListResult,
@@ -283,8 +283,7 @@ function MediaSetupState({ language }: { language: AdminLanguage }): React.React
 
 export function isMediaNotConfigured(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 501) return false;
-  const body = error.body as { diagnostic?: { code?: unknown } } | null;
-  return body?.diagnostic?.code === "MEDIA_NOT_CONFIGURED";
+  return refusalOf(error.body)?.code === "MEDIA_NOT_CONFIGURED";
 }
 
 function MediaTile({

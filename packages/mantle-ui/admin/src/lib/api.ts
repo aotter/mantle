@@ -13,6 +13,14 @@ export class ApiError extends Error {
   }
 }
 
+/** The server's refusal in a response body: Admin's routes answer `{ error }`, an operation's result `{ diagnostic }`. */
+export function refusalOf(body: unknown): { code?: string; message?: string } | undefined {
+  const b = body as { error?: { code?: string; message?: string }; diagnostic?: { code?: string; message?: string } } | null;
+  return b?.error ?? b?.diagnostic ?? undefined;
+}
+
+const statusLine = (res: Response, body: unknown) => refusalOf(body)?.message || `${res.status} ${res.statusText}`;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "same-origin",
@@ -29,9 +37,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!res.ok) {
-    // the server's diagnostic says what is wrong; the status line is the fallback
-    const message = (body as { error?: { message?: unknown } } | null)?.error?.message;
-    throw new ApiError(typeof message === "string" && message ? message : `${res.status} ${res.statusText}`, res.status, body);
+    // the server's refusal says what is wrong; the status line is the fallback
+    throw new ApiError(statusLine(res, body), res.status, body);
   }
   return body as T;
 }
@@ -57,7 +64,12 @@ export async function downloadAdminFile(path: string): Promise<void> {
     return;
   }
   const response = await fetch(url, { credentials: "same-origin" });
-  if (!response.ok) throw new ApiError(`${response.status} ${response.statusText}`, response.status, await response.text());
+  if (!response.ok) {
+    const text = await response.text();
+    let body: unknown = text;
+    try { body = JSON.parse(text); } catch { /* not JSON: the status line explains it */ }
+    throw new ApiError(statusLine(response, body), response.status, body);
+  }
   const objectUrl = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = objectUrl;

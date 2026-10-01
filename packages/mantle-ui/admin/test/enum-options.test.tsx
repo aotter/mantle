@@ -40,7 +40,10 @@ describe("labels and errors", () => {
 
   it("reports the server's message, not the status line", async () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { code: "SITE_NOT_CONFIGURED", message: "Site settings need the site tables." } }), { status: 501, statusText: "Not Implemented" }));
-    await expect(api.get("/site-settings")).rejects.toThrow("Site settings need the site tables.");
-    vi.unstubAllGlobals();
+    try {
+      await expect(api.get("/site-settings")).rejects.toThrow("Site settings need the site tables.");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

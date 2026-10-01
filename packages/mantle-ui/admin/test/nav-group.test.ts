@@ -43,11 +43,11 @@ describe("member navigation", () => {
     expect(urlsFor("contributor")).not.toContain("/admin/members");
   });
 
-  it("hides media and settings a deployment did not turn on, and keeps them for an older server that says nothing", () => {
+  it("hides settings a deployment did not turn on, and keeps Media, whose page is the setup guide", () => {
     const urls = (capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean }) =>
       buildNavGroups([], [], "en", null, "owner", false, capabilities).flatMap(({ items }) => items).flatMap((item) => "url" in item ? [item.url] : []);
-    expect(urls({ siteSettings: false, media: false, invitationEmail: false, statistics: false })).not.toEqual(expect.arrayContaining(["/admin/media"]));
     expect(urls({ siteSettings: false, media: false, invitationEmail: false, statistics: false })).not.toContain("/admin/settings");
+    expect(urls({ siteSettings: false, media: false, invitationEmail: false, statistics: false })).toContain("/admin/media");
     expect(urls()).toEqual(expect.arrayContaining(["/admin/media", "/admin/settings"]));
   });
 

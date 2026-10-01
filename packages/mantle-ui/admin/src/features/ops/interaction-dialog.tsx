@@ -196,7 +196,7 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
   const schema = operationFormSchema(operation.input, hidden);
   const fieldSchema = (field: string) => operation.input.properties?.[field] ?? sourceSchema?.properties?.[field];
   const fieldLabel = (field: string) => propertyLabel(field, fieldSchema(field), language, canonical);
-  const fieldValue = (field: string, value: unknown) => renderDataValue(fieldSchema(field), value, language);
+  const fieldValue = (field: string, value: unknown) => renderDataValue(fieldSchema(field), value, language, canonical);
   return (
     <OperationPanel
       controller={controller}

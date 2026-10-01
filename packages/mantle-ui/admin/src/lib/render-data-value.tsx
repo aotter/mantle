@@ -12,7 +12,7 @@ export function withNativeSchema(name: string, property: JsonSchema | undefined)
   return property ?? NATIVE[name];
 }
 
-export function renderDataValue(schema: JsonSchema | undefined, value: unknown, language = "en"): React.ReactNode {
+export function renderDataValue(schema: JsonSchema | undefined, value: unknown, language = "en", canonical: string | null = null): React.ReactNode {
   if (moneyMinorHint(schema)) {
     const formatted = formatMoneyMinor(value, undefined);
     if (formatted) return formatted;
@@ -26,7 +26,7 @@ export function renderDataValue(schema: JsonSchema | undefined, value: unknown, 
     if (formatted) return <time dateTime={value}>{formatted}</time>;
   }
   if (value == null || value === "") return <span className="text-muted-foreground">-</span>;
-  if (typeof value === "string" && enumOptions(schema)) return optionLabel(schema, value, language);
+  if (typeof value === "string" && enumOptions(schema)) return optionLabel(schema, value, language, canonical);
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }

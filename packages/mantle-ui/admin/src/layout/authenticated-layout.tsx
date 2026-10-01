@@ -257,7 +257,8 @@ export function buildNavGroups(
     items: [
       ...(role === "owner" || role === "editor"
         ? [
-            ...(capabilities?.media === false ? [] : [{ title: t(language, "nav.media"), url: "/admin/media", icon: Images }]),
+            // Media stays when it is off: its page is the setup guide
+            { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
             { title: t(language, "nav.members"), url: "/admin/members", icon: ContactRound },
           ]
         : []),
