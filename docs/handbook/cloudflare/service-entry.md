@@ -20,7 +20,7 @@ file, unchanged):
 ```ts
 function mount(runtime: MantleRuntime, env: Env) {
   const auth = createAuth(env, origin);                       // createMantleAuth, or a setup-incomplete stub
-  const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp` } });
+  const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } });
   const authRoutes = createAuthRoutes(auth, { resolver });
   const guard = (surface, options?) => withCaller(resolver, surface, options);
   const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { … }, staffMcp: createMcpSurface(runtime, { basePath: "/admin/api/mcp", surface: "staff" }), site: { mcpEndpoints: { public: "/mcp", staff: null } } }));

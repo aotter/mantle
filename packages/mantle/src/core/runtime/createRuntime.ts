@@ -92,13 +92,15 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     if (t.source.kind !== "lifecycle") continue;
     for (const hook of t.source.on) {
       const [stage, op] = hook.split("_") as ["before" | "after", keyof typeof VERB];
-      (stage === "before" ? before : after).add(`${t.source.schema}.${VERB[op]}`);
-      const key = `${t.source.schema}|${hook}`;
+      // a statement names its table the way SQL folds it, so hooks are keyed by the lower-cased Schema name
+      const schema = t.source.schema.toLowerCase();
+      (stage === "before" ? before : after).add(`${schema}.${VERB[op]}`);
+      const key = `${schema}|${hook}`;
       byHook.set(key, [...(byHook.get(key) ?? []), [name, t.procedure]]);
     }
   }
   const fire = (e: LifecycleEvent, [trigger, procedure]: [string, string]) =>
-    invoke({ procedure, input: {}, caller: e.caller, cause: { kind: "lifecycle", id: `${e.id}:${trigger}`, ...(e.parent ? { parent: e.parent } : {}), trigger, hook: e.hook as LifecycleHook, schema: e.schema, rows: e.rows } });
+    invoke({ procedure, input: {}, caller: e.caller, cause: { kind: "lifecycle", id: `${e.id}:${trigger}`, ...(e.parent ? { parent: e.parent } : {}), trigger, hook: e.hook as LifecycleHook, schema: plan.schemas[e.schema]?.name ?? e.schema, rows: e.rows } });
   const dispatcher: LifecycleDispatcher = {
     // a before hook that throws rejects the mutation: it fails closed
     async before(events) {

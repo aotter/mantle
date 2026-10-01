@@ -31,10 +31,27 @@ const NATIVE: Readonly<Record<string, { col: string; type: string }>> = {
 const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "like", "in", "notIn", "isNull"]);
 const SCALAR = new Set(["text", "integer", "real", "bool", "timestamptz", "date"]);
 
-interface Column {
+export interface Column {
   /** physical column */ readonly col: string;
   readonly type: string;
   /** the name a row carries */ readonly out: string;
+}
+
+/** The physical columns of a field: a geo field is stored as `<field>_lat` and `<field>_lng`. */
+const physical = (c: Column) => (c.type === "geo" ? [`${c.col}_lat`, `${c.col}_lng`] : [c.col]);
+/** The hidden output a select reads one half of a geo field under. */
+export const geoKey = (out: string, half: "lat" | "lng") => `_geo_${half}_${out}`;
+/** A selected row with each geo field's two halves joined back into `{ lat, lng }`, or null when either is missing. */
+export function geoValue(row: Readonly<Record<string, unknown>>, columns: readonly Column[]): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...row };
+  for (const c of columns) {
+    if (c.type !== "geo") continue;
+    const lat = out[geoKey(c.out, "lat")], lng = out[geoKey(c.out, "lng")];
+    delete out[geoKey(c.out, "lat")];
+    delete out[geoKey(c.out, "lng")];
+    out[c.out] = lat == null || lng == null ? null : { lat, lng };
+  }
+  return out;
 }
 
 const bool = (boolop: string, args: N[]): N => ({ BoolExpr: { boolop, args } });
@@ -69,6 +86,15 @@ export function validateValues(def: StoreSchema, values: Readonly<Record<string,
   if (r.success) return;
   const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
   throw invalid(`The values do not match the Schema${instancePath ? ` at ${instancePath}` : ""}: ${message}`);
+}
+
+/** An insert's values with each top-level JSON Schema `default` filled where the caller named no value (the scope field is Store's). */
+function withDefaults(def: StoreSchema, values: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const named = new Set(Object.keys(values).map((k) => k.toLowerCase()));
+  const out: Record<string, unknown> = { ...values };
+  for (const [name, p] of Object.entries(def.schema?.properties ?? {}))
+    if (p.default !== undefined && !named.has(name.toLowerCase()) && name.toLowerCase() !== def.scope) out[name] = structuredClone(p.default);
+  return out;
 }
 
 /** Builds IR for one or more operations that share one input namespace, so a batch binds each value once. */
@@ -107,6 +133,17 @@ export class StoreJson {
     this.inputs[name] = type;
     this.values[name] = v;
     return ref("input", name);
+  }
+
+  /** The physical columns a write of one value sets, with what each is set to: a geo field is its two columns. */
+  private assign(c: Column, v: unknown): [string, N][] {
+    const NULL: N = { A_Const: { isnull: true } };
+    if (c.type !== "geo") return [[c.col, v === null ? NULL : this.val(c.type, v, `'${c.out}'`)]];
+    if (v === null) return [[`${c.col}_lat`, NULL], [`${c.col}_lng`, NULL]];
+    const g = v as { lat?: unknown; lng?: unknown };
+    const ok = (x: unknown, max: number) => typeof x === "number" && Number.isFinite(x) && Math.abs(x) <= max;
+    if (typeof v !== "object" || Array.isArray(v) || !ok(g.lat, 90) || !ok(g.lng, 180)) throw invalid(`'${c.out}' expects { lat, lng }: a latitude from -90 to 90 and a longitude from -180 to 180.`);
+    return [[`${c.col}_lat`, this.val("real", g.lat, `'${c.out}.lat'`)], [`${c.col}_lng`, this.val("real", g.lng, `'${c.out}.lng'`)]];
   }
 
   private budget = 0;
@@ -201,7 +238,7 @@ export class StoreJson {
     const columns = q.columns
       ? [...new Set(q.columns)].map((c) => this.column(def, c, "columns", false))
       : [...Object.keys(NATIVE).filter((n) => n !== "status" || def.publishing).map((n) => this.column(def, n, "columns", false)),
-         ...Object.entries(def.fields).filter(([f, t]) => t !== "geo" && f !== def.scope).map(([f]) => this.column(def, def.names?.[f] ?? f, "columns", false))];
+         ...Object.entries(def.fields).filter(([f]) => f !== def.scope).map(([f]) => this.column(def, def.names?.[f] ?? f, "columns", false))];
     const orderBy = q.orderBy ?? { updatedAt: "desc" };
     if (typeof orderBy !== "object" || Array.isArray(orderBy) || Object.keys(orderBy).length !== 1) throw invalid("Store orderBy takes exactly one column.");
     const [sortName, dir] = Object.entries(orderBy)[0]!;
@@ -211,7 +248,8 @@ export class StoreJson {
     if (q.cursor !== undefined && typeof q.cursor !== "string") throw invalid("Store cursor must be a string.");
     const where = [...(q.where === undefined ? [] : [this.where(q.where, def)]), ...(q.search === undefined ? [] : [this.search(q.search, name, def)])];
     const ir: N = { SelectStmt: {
-      targetList: columns.map((c) => target(ref(c.col), c.out)), fromClause: [{ RangeVar: table(name) }],
+      // a geo field is two columns, read under hidden names and joined back into `{ lat, lng }` by `geoValue`
+      targetList: columns.flatMap((c) => (c.type === "geo" ? [target(ref(`${c.col}_lat`), geoKey(c.out, "lat")), target(ref(`${c.col}_lng`), geoKey(c.out, "lng"))] : [target(ref(c.col), c.out)])), fromClause: [{ RangeVar: table(name) }],
       ...(where.length ? { whereClause: where.length === 1 ? where[0] : bool("AND_EXPR", where) } : {}),
       sortClause: [{ SortBy: { node: ref(order.column.col), sortby_dir: dir === "asc" ? "SORTBY_ASC" : "SORTBY_DESC", sortby_nulls: "SORTBY_NULLS_DEFAULT" } }], ...SELECT } };
     return { ir, columns, order, pageSize: q.limit ?? 50, from: name };
@@ -236,22 +274,22 @@ export class StoreJson {
   private statement(o: StoreWriteOp): { ir: N; status?: string } {
     if ("insert" in o) {
       const { name, def } = this.schema(o.insert);
-      validateValues(def, o.values, def.publishing ? "partial" : "full");
-      const values = { ...o.values, ...(o.id === undefined ? {} : { id: o.id }) };
+      const filled = withDefaults(def, o.values);
+      validateValues(def, filled, def.publishing ? "partial" : "full");
+      const values = { ...filled, ...(o.id === undefined ? {} : { id: o.id }) };
       const cols = Object.entries(values).map(([k, v]) => ({ c: k === "id" ? { col: "id", type: "text", out: "id" } : this.column(def, k, "values", false), v }));
-      if (!cols.length) throw invalid("An insert names at least one column.");
-      const items = cols.map(({ c, v }) => (v === null ? { A_Const: { isnull: true } } : this.val(c.type === "json" ? "json" : c.type, v, `'${c.out}'`)));
+      const items = cols.flatMap(({ c, v }) => this.assign(c, v).map(([, x]) => x));
       const conflict = o.onConflict;
       let onConflictClause: N | undefined;
       if (conflict === "ignore") onConflictClause = { action: "ONCONFLICT_NOTHING" };
       else if (conflict) {
         validateValues(def, conflict.update, "partial");
-        const set = Object.entries(conflict.update).map(([k, v]) => { const c = this.column(def, k, "onConflict.update", false); return target(v === null ? { A_Const: { isnull: true } } : this.val(c.type, v, `'${c.out}'`), c.col); });
+        const set = Object.entries(conflict.update).flatMap(([k, v]) => this.assign(this.column(def, k, "onConflict.update", false), v).map(([col, x]) => target(x, col)));
         onConflictClause = { action: "ONCONFLICT_UPDATE",
           infer: { indexElems: conflict.columns.map((k) => ({ IndexElem: { name: this.column(def, k, "onConflict.columns", true).col, ordering: "SORTBY_DEFAULT", nulls_ordering: "SORTBY_NULLS_DEFAULT" } })) },
           targetList: set };
       }
-      return { ir: { InsertStmt: { relation: table(name), cols: cols.map(({ c }) => ({ ResTarget: { name: c.col } })),
+      return { ir: { InsertStmt: { relation: table(name), cols: cols.flatMap(({ c }) => physical(c).map((col) => ({ ResTarget: { name: col } }))),
         selectStmt: { SelectStmt: { valuesLists: [{ List: { items } }], ...SELECT } },
         ...(onConflictClause ? { onConflictClause } : {}), override: "OVERRIDING_NOT_SET" } } };
     }
@@ -264,7 +302,7 @@ export class StoreJson {
       if (!set.length && status === undefined) throw invalid("An update sets at least one column.");
       validateValues(def, rest, "partial");
       return { status: status as string | undefined, ir: { UpdateStmt: { relation: table(name),
-        targetList: set.map(([k, v]) => { const c = this.column(def, k, "set", false); return target(v === null ? { A_Const: { isnull: true } } : this.val(c.type, v, `'${c.out}'`), c.col); }),
+        targetList: set.flatMap(([k, v]) => this.assign(this.column(def, k, "set", false), v).map(([col, x]) => target(x, col))),
         whereClause: this.guarded(o.where, def, o.lock) } } };
     }
     const { name, def } = this.schema(o.delete);

@@ -30,7 +30,7 @@ function service({ identity, features }: PresetSelection): string {
   const env = ["  readonly DB: D1Database;", ...(admin ? ["  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */", "  readonly ASSETS: Fetcher;"] : []), ...(mantle ? ["  readonly BETTER_AUTH_SECRET?: string;", "  readonly PUBLIC_ORIGIN?: string;", "  readonly ADMIN_EMAIL?: string;"] : [])];
   const origin = mantle ? ["  const origin = env.PUBLIC_ORIGIN?.replace(/\\/+$/, \"\") ?? \"http://127.0.0.1:8787\";", "  const auth = createAuth(env, origin);"] : [];
   const caller = mantle
-    ? [`  const resolver = createCallerResolver(auth${mcp ? ", { jwtBearer: { audience: `${origin}/mcp` } }" : ""});`, "  const authRoutes = createAuthRoutes(auth, { resolver });", "  const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);"]
+    ? [`  const resolver = createCallerResolver(auth${mcp ? ", { jwtBearer: { audience: `${origin}/mcp`, scopes: [\"mcp\"] } }" : ""});`, "  const authRoutes = createAuthRoutes(auth, { resolver });", "  const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);"]
     : identity === "custom"
       ? ["  const guard = (surface: Surface) => withCaller(resolveCaller, surface);"]
       : ["  // no identity: every caller is anonymous", "  const guard = (surface: Surface) => (request: Request) => surface(request, { kind: \"anonymous\" });"];

@@ -50,9 +50,13 @@ again.
 {PUBLIC_ORIGIN}/mcp`. An MCP client discovers it from the 401 challenge's
 `resource_metadata` (`/.well-known/oauth-protected-resource/mcp`), registers,
 sends the user through sign-in and consent (`/oauth/consent`), and calls `/mcp`
-with the token. The resolver (`createCallerResolver(auth, { jwtBearer: { audience } })`)
+with the token. The resolver (`createCallerResolver(auth, { jwtBearer: { audience, scopes: ["mcp"] } })`)
 verifies it on every request and reads the user's current role; nothing is
-cached. When an OAuth token lacks a scope a tool's `requires` names, the call
+cached. Every MCP surface also keeps the scope floor (ADR-0014): a credential
+other than a cookie session (an OAuth token, an API key, a personal token)
+must carry `mcp` before any tool is listed or called, or the request is HTTP
+403 `insufficient_scope`; `createMcpSurface`'s `requiredScopes` changes the
+floor. When an OAuth token lacks a scope a tool's `requires` names, the call
 is HTTP 403 with an `insufficient_scope` challenge naming the scopes to ask
 for.
 

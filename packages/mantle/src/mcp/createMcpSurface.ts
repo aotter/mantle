@@ -23,6 +23,11 @@ export interface McpSurfaceOptions {
   readonly maxRequestBodySize?: number;
   /** Language tried first when a description is localized. Defaults to `en`. */
   readonly locale?: string;
+  /**
+   * The scope floor (ADR-0014): every presented credential but a cookie session must carry these before any tool is listed or called,
+   * so a token minted for a narrow integration never reaches a tool. Defaults to the one compatibility scope, `["mcp"]`.
+   */
+  readonly requiredScopes?: readonly string[];
 }
 
 const CONTEXT_KEY = "mantle.caller";
@@ -48,6 +53,7 @@ export type McpSurface = Surface & { readonly tools: readonly McpTool[] };
 export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOptions): McpSurface {
   const base = options.basePath.replace(/\/+$/, "") || "/";
   const maxBody = options.maxRequestBodySize ?? 1024 * 1024;
+  const requiredScopes = options.requiredScopes ?? ["mcp"];
   const tools = mcpTools(runtime.plan, options.surface, options.locale ?? "en");
   const byName = new Map(tools.map((t) => [t.name, t]));
   const apps = linkApps(options.apps, new Set(tools.map((t) => t.name)), new Set(tools.filter((t) => t.kind === "view").map((t) => t.name)));
@@ -103,6 +109,9 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     const url = new URL(request.url);
     if ((url.pathname.replace(/\/+$/, "") || "/") !== base) return Response.json({ error: { code: "NOT_FOUND", message: "no such route" } }, { status: 404 });
     if (caller.kind !== "user" && caller.kind !== "anonymous") return challenge(403, undefined, true);
+    // a cookie session carries no scopes and is the browser identity Admin trusts; anonymous presents nothing and each tool decides
+    if (caller.kind === "user" && caller.credential !== "session" && requiredScopes.some((s) => !caller.scopes.includes(s)))
+      return challenge(403, { code: "insufficient_scope", scope: [...new Set([...caller.scopes, ...requiredScopes])].join(" ") });
     // the staff surface is closed to everyone but staff, for listing as much as for calling
     if (options.surface === "staff") {
       if (caller.kind === "anonymous") return challenge(401);

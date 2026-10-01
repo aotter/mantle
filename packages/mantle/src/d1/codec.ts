@@ -70,6 +70,12 @@ export function encodeDate(v: string | Date): number {
 }
 export const decodeDate = (days: number) => new Date(days * 86_400_000).toISOString().slice(0, 10);
 
+/** A json column's text as its value. Text that is not JSON (a bare string a SQL literal wrote) reads back as that string, never a throw. */
+function decodeJson(v: unknown): unknown {
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v); } catch { return v; }
+}
+
 /** JS value -> the value bound for an input of this declared type. */
 export function encodeInput(type: string, v: any): unknown {
   if (v === null || v === undefined) return null;
@@ -82,7 +88,8 @@ export function encodeInput(type: string, v: any): unknown {
     case 'float8': case 'real': return v;
     case 'bool': return v ? 1 : 0;
     case 'text': return String(v);
-    case 'json': return typeof v === 'string' ? v : JSON.stringify(v);
+    // every value is stored as its JSON text, a string included, so decodeOutput reads back what was written
+    case 'json': return JSON.stringify(v);
     case 'timestamptz': return encodeTimestamptz(v);
     case 'date': return encodeDate(v);
   }
@@ -96,7 +103,7 @@ export function decodeOutput(type: string, v: any): unknown {
     case 'bool': return v === 1;
     case 'timestamptz': return decodeTimestamptz(v);
     case 'date': return decodeDate(v);
-    case 'json': return JSON.parse(v);
+    case 'json': return decodeJson(v);
   }
   return v;
 }
