@@ -24,7 +24,7 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
 import { atomKindLabel, atomKindTone, audienceLabel, focusSlice, traceAtomIds } from "./atom-graph";
-import { CodeTab, FactGrid, flattenSchemaFields } from "./data-model-view";
+import { CodeBlock, CodeTab, FactGrid, flattenSchemaFields } from "./data-model-view";
 import { DeveloperExplorer } from "./developer-explorer";
 import { developerDetailHref, developerSelectionHref } from "./developer-route";
 
@@ -132,8 +132,8 @@ function LogicDefinition({ item, snapshot, tab, manifestFocus, onTabChange, onNa
   const atom = snapshot.graph.atoms.find(({ id }) => id === item.id);
   const summary = description || (item.kind === "Trigger"
     ? t(language, "developer.graph.summary.trigger", { audience: audienceLabel(language, item.model.audience), transport: triggerChannel(item.model.source), target: item.model.target })
-    : item.model.handler.kind === "builtin"
-    ? t(language, "developer.graph.summary.builtin", { op: item.model.handler.op, schema: item.model.handler.schema })
+    : item.model.handler.kind === "sql"
+    ? t(language, "developer.sqlProcedure")
     : t(language, "developer.graph.summary.ref", { ref: item.model.handler.ref }));
   return (
     <>
@@ -152,6 +152,7 @@ function LogicDefinition({ item, snapshot, tab, manifestFocus, onTabChange, onNa
         <TabsContent value="overview" className="space-y-6 p-5">
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{summary}</p>
           {item.kind === "Procedure" && item.model.handler.kind === "ref" ? <p className="text-sm text-muted-foreground">{t(language, "developer.unknownEffects")}</p> : null}
+          {item.kind === "Procedure" && item.model.handler.kind === "sql" ? <CodeBlock value={item.model.handler.statement} /> : null}
           {atom ? <ExecutionStrip selectedId={item.id} graph={snapshot.graph} onNavigate={onNavigate} /> : null}
           <section className="space-y-3">
             <h2 className="text-sm font-medium">{t(language, "logic.configuration")}</h2>
@@ -248,7 +249,7 @@ function triggerFacts(language: ReturnType<typeof usePreferences>["language"], m
     [t(language, "developer.operations.cronUtc"), model.source.cron],
     [t(language, "developer.operations.activation"), t(language, model.source.enabled === false ? "developer.operations.disabled" : "developer.operations.enabled")],
   ];
-  return [...base, [t(language, "developer.graph.fact.schema"), model.source.schema], [t(language, "logic.hooks"), model.source.on.join(", ")], [t(language, "logic.errorPolicy"), model.source.errorPolicy ?? "—"]];
+  return [...base, [t(language, "developer.graph.fact.schema"), model.source.schema], [t(language, "logic.hooks"), model.source.on.join(", ")]];
 }
 
 export function triggerChannel(source: DeveloperTriggerSource): "MCP" | "HTTP" | "SYSTEM" | "SCHEDULE" {
@@ -258,14 +259,9 @@ export function triggerChannel(source: DeveloperTriggerSource): "MCP" | "HTTP" |
 function procedureFacts(language: ReturnType<typeof usePreferences>["language"], model: DeveloperProcedureModel): Array<[string, string]> {
   const base: Array<[string, string]> = [
     [t(language, "developer.graph.fact.audience"), audienceLabel(language, model.audience)],
-    [t(language, "developer.graph.fact.handler"), model.handler.kind === "builtin" ? t(language, "developer.graph.builtin") : model.handler.ref],
+    [t(language, "developer.graph.fact.handler"), model.handler.kind === "sql" ? "SQL" : model.handler.ref],
   ];
-  return model.handler.kind === "builtin" ? [
-    ...base,
-    [t(language, "developer.graph.fact.operation"), model.handler.op],
-    [t(language, "developer.graph.fact.schema"), model.handler.schema],
-    [t(language, "developer.graph.fact.match"), model.handler.match?.join(" + ") ?? "—"],
-  ] : base;
+  return base;
 }
 
 function formatPredicate(predicate: unknown): string {

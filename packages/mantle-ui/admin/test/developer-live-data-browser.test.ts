@@ -23,7 +23,7 @@ it("loads live model data only on demand through the existing guarded paths", as
       schemas: [schema("articles"), schema("empty"), schema("news", "publishing")],
       views: [{
         name: "lookup", title: "Lookup", surface: "staff", authorization: [], guard: null,
-        query: { kind: "declarative", from: "articles", orderBy: [], params: {
+        query: { kind: "sql", statement: "SELECT sku, title FROM articles WHERE sku = input.sku ORDER BY sku", params: {
           type: "object", properties: { sku: { type: "string" } }, required: ["sku"],
         } },
         manifest: {},

@@ -521,7 +521,7 @@ function GraphHud({ atom, graph, atomsById, traceAtoms, onClose, onSelect, onOpe
 function hudSummary(language: AdminLanguage, atom: DeveloperAtom, outgoing: readonly DeveloperAtomRelation[], incoming: readonly DeveloperAtomRelation[], atomsById: ReadonlyMap<string, DeveloperAtom>): string {
   const target = outgoing[0] ? atomsById.get(outgoing[0].targetId)?.name : null;
   if (atom.kind === "Trigger") return t(language, "developer.graph.summary.trigger", { audience: audienceLabel(language, atom.audience ?? "public"), transport: atom.transport?.toUpperCase() ?? "manifest", target: target ?? "—" });
-  if (atom.kind === "Procedure" && atom.handler?.kind === "builtin") return t(language, "developer.graph.summary.builtin", { op: atom.handler.op, schema: atom.handler.schema });
+  if (atom.kind === "Procedure" && atom.handler?.kind === "sql") return t(language, "developer.sqlProcedure");
   if (atom.kind === "Procedure" && atom.handler?.kind === "ref") return t(language, "developer.graph.summary.ref", { ref: atom.handler.ref });
   if (atom.kind === "View") return t(language, "developer.graph.summary.view", { audience: audienceLabel(language, atom.audience ?? "public"), target: target ?? "—" });
   return t(language, "developer.graph.summary.schema", { incoming: String(incoming.length), outgoing: String(outgoing.length) });
@@ -531,12 +531,7 @@ function hudFacts(language: AdminLanguage, atom: DeveloperAtom): Array<{ label: 
   const facts: Array<{ label: string; value: string }> = [];
   if (atom.transport) facts.push({ label: t(language, "developer.graph.fact.transport"), value: atom.transport.toUpperCase() });
   if (atom.handler?.kind === "ref") facts.push({ label: t(language, "developer.graph.fact.handler"), value: atom.handler.ref });
-  if (atom.handler?.kind === "builtin") {
-    facts.push({ label: t(language, "developer.graph.fact.handler"), value: t(language, "developer.graph.builtin") });
-    facts.push({ label: t(language, "developer.graph.fact.operation"), value: atom.handler.op });
-    facts.push({ label: t(language, "developer.graph.fact.schema"), value: atom.handler.schema });
-    if (atom.handler.match?.length) facts.push({ label: t(language, "developer.graph.fact.match"), value: atom.handler.match.join(" + ") });
-  }
+  if (atom.handler?.kind === "sql") facts.push({ label: t(language, "developer.graph.fact.handler"), value: "SQL" });
   return facts;
 }
 

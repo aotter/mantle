@@ -307,23 +307,12 @@ export interface DeveloperSchemaModel {
   manifest: unknown;
 }
 
-export type DeveloperViewQuery =
-  | {
-      kind: "declarative";
-      from: string;
-      fields?: string[];
-      filter?: unknown;
-      orderBy: Array<{ field: string; direction: "asc" | "desc" }>;
-      limit?: number;
-      params?: JsonSchema;
-    }
-  | {
-      kind: "native";
-      dialect: "sqlite";
-      statement: string;
-      limit?: number;
-      params?: JsonSchema;
-    };
+/** A View is one SELECT as authored (ADR-0034); `params` is its declared input. */
+export interface DeveloperViewQuery {
+  kind: "sql";
+  statement: string;
+  params?: JsonSchema;
+}
 
 export interface DeveloperViewModel {
   name: string;
@@ -339,8 +328,9 @@ export type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
 export type DeveloperAudience = "public" | "members" | "staff" | "system" | "api-clients";
 export type DeveloperTransport = "http" | "mcp" | "lifecycle" | "schedule";
 
+/** An inline program's SQL as authored, or a registered code handler. */
 export type DeveloperProcedureHandler =
-  | { kind: "builtin"; op: "create" | "update" | "upsert" | "delete" | "archive"; schema: string; match?: readonly string[] }
+  | { kind: "sql"; statement: string }
   | { kind: "ref"; ref: string };
 
 export interface DeveloperProcedureModel {
@@ -359,7 +349,7 @@ export interface DeveloperProcedureModel {
 export type DeveloperTriggerSource =
   | { kind: "http"; method: string; path: string }
   | { kind: "mcp"; surface: "public" | "staff" }
-  | { kind: "lifecycle"; schema: string; on: string[]; errorPolicy?: string }
+  | { kind: "lifecycle"; schema: string; on: string[] }
   | { kind: "schedule"; cron: string; enabled?: boolean };
 
 export interface DeveloperTriggerModel {

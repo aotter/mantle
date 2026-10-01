@@ -10,6 +10,7 @@ import { siteConfigOf } from "../core/siteConfig.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
 import { decodeMemberCursor } from "./consent.js";
 import type { AdminIdentity, MemberUserInfo, StaffUserInfo } from "./identity.js";
+import { developerConsole } from "./developerConsole.js";
 
 /** The built SPA: `path` is relative to the base path (`index.html` is the shell). `null` is a missing file. */
 export type AdminAssets = (path: string) => Response | null | Promise<Response | null>;
@@ -187,29 +188,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       return target ? [[t.name, { path: `${base}/c/${encodeURIComponent(plan.schemas[target.schema.toLowerCase()]?.name ?? target.schema)}`, entry: true }]] : [];
     })),
   } : null;
-  // the program as the plan holds it: Views and inline Procedures are IR, which the console draws (ADR-0034); no run is observed (G7)
-  const developerConsole = {
-    dataModel: {
-      schemas: schemas.map((s) => ({
-        name: s.name, title: s.title ?? s.name, lifecycle: s.publishing ? "publishing" : "operational", localized: s.localized === true, translates: s.translates ?? null,
-        scope: s.scope ?? null, schema: s.schema, uniqueIndexes: s.unique ?? [], indexes: s.indexes ?? [], searchableFields: s.search ?? [],
-      })),
-      views: Object.entries(plan.views).filter(([, v]) => v.surface !== "internal").map(([name, v]) => ({
-        name, title: v.title ?? null, surface: v.surface, input: v.input ?? null, requires: v.requires ?? null, sql: { grammar: v.grammar, stmts: v.stmts },
-      })),
-    },
-    logic: {
-      procedures: Object.entries(plan.procedures).map(([name, p]) => ({
-        name, title: p.title ?? null, description: p.description ?? null, input: p.input, output: p.output, requires: p.requires ?? null, target: p.target ?? null, handler: p.handler,
-      })),
-      triggers: Object.entries(plan.triggers).map(([name, t]) => ({ name, procedure: t.procedure, source: t.source })),
-    },
-    operations: {
-      schedules: Object.entries(plan.triggers).flatMap(([id, { procedure, source }]) => (source.kind === "schedule" ? [{ id, procedure, cron: source.cron, enabled: source.enabled ?? true, registration: "not-observed" }] : [])),
-      ttlPolicies: schemas.filter((s) => s.ttl).map((s) => ({ schema: s.name, field: s.names[s.ttl!] ?? s.ttl, seconds: s.ttlSeconds ?? null, sweepObservation: "unavailable" })),
-      observationAvailability: "unavailable", runs: [], latestRuns: [],
-    },
-  };
+  const developer = developerConsole(plan);
 
   // ---- entries: every read and write is the caller's own Store, so a scoped Schema shows the caller's rows only (G2b)
   const schemaOf = (name: unknown) => {
@@ -356,7 +335,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         return json({ error: { code: "STATISTICS_UNAVAILABLE", message: "Statistics are unavailable for this storage adapter." } }, 501, NO_STORE);
       },
     },
-    { method: "GET", path: "/developer-console", role: "owner", run: async () => developerConsole },
+    { method: "GET", path: "/developer-console", role: "owner", run: async () => developer },
     { method: "GET", path: "/site", role: "contributor", run: ({ url }) => site(url) },
     // the bytes go straight to the bucket: create, PUT each variant to its uploadUrl, commit
     { method: "POST", path: "/media/uploads", role: "editor", run: async ({ request }) => media().createUpload(await readJsonObject(request, P)) },

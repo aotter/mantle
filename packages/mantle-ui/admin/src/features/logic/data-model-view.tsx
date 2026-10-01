@@ -276,19 +276,7 @@ function ViewDefinition({ model, tab, manifestFocus, onTabChange }: { model: Dev
       <DefinitionHeader name={model.name} title={resolveLocalizedText(model.title, language)} />
       <DefinitionTabs definitionLabel={t(language, "model.queryKind")} rawLabel={t(language, "model.rawQuery")} rawValue={query} manifestValue={model.manifest} tab={tab} manifestFocus={manifestFocus} onTabChange={onTabChange} data={<ViewDataPreview key={model.name} model={model} />}>
         <div className="space-y-5 p-5">
-          <FactGrid entries={query.kind === "declarative" ? [
-            [t(language, "model.queryKind"), query.kind],
-            [t(language, "model.source"), query.from],
-            [t(language, "model.fields"), query.fields?.join(", ") ?? t(language, "model.allFields")],
-            [t(language, "model.order"), query.orderBy.length ? query.orderBy.map(({ field, direction }) => `${field} ${direction}`).join(", ") : "—"],
-            [t(language, "model.limit"), query.limit?.toString() ?? "—"],
-          ] : [
-            [t(language, "model.queryKind"), query.kind],
-            [t(language, "model.dialect"), query.dialect],
-            [t(language, "model.limit"), query.limit?.toString() ?? "—"],
-          ]} />
-          {query.kind === "native" ? <><p className="text-sm text-muted-foreground">{t(language, "developer.nativeUnknown")}</p><CodeBlock value={query.statement} /></> : null}
-          {query.kind === "declarative" && query.filter ? <RawSection label={t(language, "model.filter")} value={query.filter} /> : null}
+          <CodeBlock value={query.statement} />
           {query.params ? <RawSection label={t(language, "model.params")} value={query.params} /> : null}
         </div>
       </DefinitionTabs>
@@ -351,6 +339,6 @@ function RawSection({ label, value }: { label: string; value: unknown }): React.
   return <section><h3 className="mb-2 text-sm font-medium">{label}</h3><CodeBlock value={JSON.stringify(value, null, 2) ?? ""} /></section>;
 }
 
-function CodeBlock({ value, className }: { value: string; className?: string }): React.ReactElement {
+export function CodeBlock({ value, className }: { value: string; className?: string }): React.ReactElement {
   return <pre className={cn("max-h-72 overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-[11px] leading-5", className)}><code>{value}</code></pre>;
 }

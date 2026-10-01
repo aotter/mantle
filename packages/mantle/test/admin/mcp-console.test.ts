@@ -165,22 +165,27 @@ describe("Admin: developer console and statistics", () => {
     expect(r.body.minimumRole).toBe("owner");
   });
 
-  it("projects the plan: IR for Views and inline Procedures, triggers, schedules and TTL, and no observed run", async () => {
+  it("projects the plan as the console reads it: SQL as authored, the graph from the IR, interfaces, schedules and TTL, no observed run", async () => {
     const { status, body } = await get("/admin/api/developer-console", user("owner"));
     expect(status).toBe(200);
     expect(body.dataModel.schemas.map((s: { name: string }) => s.name)).toEqual(["posts", "visits"]);
     expect(body.dataModel.views.map((v: { name: string }) => v.name)).toEqual(["all-posts", "picker", "pub"]);
-    const view = body.dataModel.views[0];
-    expect(view.sql.stmts).toEqual(rt.plan.views["all-posts"]!.stmts);
-    expect(view.sql.stmts[0]).toHaveProperty("SelectStmt");
+    expect(body.dataModel.views[0]).toMatchObject({ surface: "staff", query: { kind: "sql", statement: "SELECT id, slug FROM posts ORDER BY slug" }, authorization: [], guard: null });
+    expect(JSON.stringify(body)).not.toContain("SelectStmt"); // the IR stays on the server
     const procs = Object.fromEntries(body.logic.procedures.map((p: { name: string }) => [p.name, p]));
-    expect(procs.retitle.handler.sql.stmts[0]).toHaveProperty("UpdateStmt");
-    expect(procs.retitle.target).toEqual({ schema: "posts", id: "id" });
-    expect(procs.nightly.handler).toEqual({ ref: "nightly" });
-    expect(body.logic.triggers).toContainEqual({ name: "nightly-run", procedure: "nightly", source: { kind: "schedule", cron: "0 3 * * *" } });
+    expect(procs.retitle.handler).toEqual({ kind: "sql", statement: "UPDATE posts SET title = input.title WHERE id = input.id RETURNING title" });
+    expect(procs.nightly.handler).toEqual({ kind: "ref", ref: "nightly" });
+    expect(body.logic.triggers).toContainEqual(expect.objectContaining({ name: "nightly-run", target: "nightly", audience: "system", source: { kind: "schedule", cron: "0 3 * * *" } }));
+    expect(body.logic.triggers).toContainEqual(expect.objectContaining({ name: "t-retitle", target: "retitle", audience: "staff" }));
+    const edges = body.graph.relations.map((r: { kind: string; sourceId: string; targetId: string }) => `${r.kind} ${r.sourceId} ${r.targetId}`);
+    // read from the IR: a View's sources, a Procedure's writes (the DELETE too); a ref handler's declared nothing
+    expect(edges).toEqual(expect.arrayContaining(["view-source View:all-posts Schema:posts", "procedure-schema Procedure:retitle Schema:posts", "procedure-schema Procedure:purge Schema:posts", "trigger-target Trigger:nightly-run Procedure:nightly"]));
+    expect(edges.filter((e: string) => e.startsWith("procedure-schema Procedure:nightly"))).toEqual([]);
+    expect(body.graph.atoms.map((a: { id: string }) => a.id)).toEqual(expect.arrayContaining(["Schema:posts", "View:all-posts", "Procedure:retitle", "Trigger:nightly-run"]));
+    expect(body.interfaces.callable).toContainEqual(expect.objectContaining({ kind: "procedure", name: "purge", target: "purge", surface: "public", trigger: "t-public" }));
     expect(body.operations).toEqual({
       schedules: [{ id: "nightly-run", procedure: "nightly", cron: "0 3 * * *", enabled: true, registration: "not-observed" }],
-      ttlPolicies: [{ schema: "visits", field: "seenAt", seconds: 60, sweepObservation: "unavailable" }],
+      ttlPolicies: [{ schema: "visits", field: "seenAt", expireAfterSeconds: 60, sweepObservation: "unavailable" }],
       observationAvailability: "unavailable", runs: [], latestRuns: [],
     });
   });
