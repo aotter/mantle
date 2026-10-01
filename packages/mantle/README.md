@@ -39,7 +39,8 @@ packages. It names each missing package together with the install command.
 
 Read [the reference service](../../docs/examples/reference-service/README.md).
 It is a whole service with its smoke test. The installed docs are under
-`node_modules/@aotter/mantle/docs/`, including `upgrade-0.1-to-0.2.md` for
-projects on 0.1.x.
+`node_modules/@aotter/mantle/docs/`: the handbook (`handbook/start/overview.md`),
+the examples, the agent workflow skills (`skills/`), and
+`upgrade-0.1-to-0.2.md` for projects on 0.1.x.
 
 The decisions behind the design are ADR-0032 to ADR-0035 in `docs/adr/`.
