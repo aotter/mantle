@@ -120,8 +120,9 @@ caller are not scoped. See [Authorization](../concepts/authorization.md).
 
 `{ field, expireAfterSeconds }`: `field` is a top-level `date-time` field. A
 row is invisible to every read and write from `field + expireAfterSeconds`;
-`runtime.store.sweepExpired({ collection })` removes expired rows. Not allowed
-on a translation Schema.
+`runtime.store.sweepExpired({ collection })` (or a schedule handler's
+`ctx.store.sweepExpired`) removes expired rows; until then an expired row
+still holds its unique keys. Not allowed on a translation Schema.
 
 ## `localized` and `translates`
 

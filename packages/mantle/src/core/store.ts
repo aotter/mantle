@@ -136,8 +136,11 @@ export interface MantleStore {
   id(): string;
 }
 
-/** Procedure-facing Store. Guard Procedures and before hooks get one whose `write` fails. */
-export type CallerStore = Omit<MantleStore, "as" | "sweepExpired">;
+/**
+ * Procedure-facing Store. Guard Procedures and before hooks get one whose `write` fails. `sweepExpired` is present only
+ * for the system caller (a schedule Trigger's handler, host code): it is the one path that sees expired rows.
+ */
+export type CallerStore = Omit<MantleStore, "as" | "sweepExpired"> & { readonly sweepExpired?: MantleStore["sweepExpired"] };
 
 /** One compiled statement: validated IR with policy already injected, and numbered binds `?1`, `?2`. */
 export interface StoreStatement {

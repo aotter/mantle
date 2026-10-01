@@ -122,10 +122,12 @@ export interface Schemas {
   readonly "items": Mantle.Entry_items;
   readonly "orders": Mantle.Entry_orders;
 }
+/** Optional fields: omitted, a value, or `null` to leave or make them empty. */
+type Nullable<T> = { readonly [K in keyof T]?: T[K] | null };
 type InsertValues = {
-  readonly "activity": Pick<Schemas["activity"], "kind" | "subject" | "detail">;
-  readonly "items": Pick<Schemas["items"], "sku" | "name" | "priceCents"> & Partial<Pick<Schemas["items"], "stock">>;
-  readonly "orders": Pick<Schemas["orders"], "itemId" | "qty" | "orderStatus" | "placedAt">;
+  readonly "activity": Pick<Schemas["activity"], "kind" | "subject"> & Nullable<Pick<Schemas["activity"], "detail">>;
+  readonly "items": Pick<Schemas["items"], "sku" | "name"> & Partial<Pick<Schemas["items"], "stock">> & Nullable<Pick<Schemas["items"], "priceCents">>;
+  readonly "orders": Pick<Schemas["orders"], "itemId" | "qty" | "orderStatus"> & Nullable<Pick<Schemas["orders"], "placedAt">>;
 };
 type UpdateSet = {
   readonly "activity": Partial<InsertValues["activity"]>;
@@ -159,8 +161,8 @@ export type Store = Omit<MantleStore, "as" | "select" | "write" | "view"> & {
   write(ops: readonly Write[]): Promise<readonly StoreWriteResult[]>;
   view<N extends keyof Views & string>(name: N, ...options: Views[N]["required"] extends true ? [ViewOptions<N>] : [ViewOptions<N>?]): Promise<StoreSelectResult<Views[N]["row"]>>;
 };
-/** `ctx.store`: scope follows the caller. */
-export type CallerStore = Omit<Store, "as" | "sweepExpired">;
+/** `ctx.store`: scope follows the caller. `sweepExpired` is present only for the system caller (a schedule Trigger). */
+export type CallerStore = Omit<Store, "as" | "sweepExpired"> & { readonly sweepExpired?: Store["sweepExpired"] };
 
 /** A handler receives this plan's typed `ctx.store`. */
 export type Handler<I, O, Env = unknown> = (input: I, ctx: Omit<HandlerContext<Env>, "store"> & { readonly store: CallerStore }) => O | Promise<O>;

@@ -371,7 +371,9 @@ function insert(n: N, c: C): N {
     whereClause: { A_Const: { boolval: { boolval: true } } }, limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } };
   const oc = out.onConflictClause;
   if (oc) {
-    if (s.scope && oc.infer) oc.infer.indexElems.unshift({ IndexElem: { name: s.scope, ordering: 'SORTBY_DEFAULT', nulls_ordering: 'SORTBY_NULLS_DEFAULT' } });
+    // every unique index of a scoped Schema leads with the scope field: an author may name it in the target or leave it out
+    const named = (oc.infer?.indexElems ?? []).some((e: N) => String(e.IndexElem?.name ?? '').toLowerCase() === s.scope);
+    if (s.scope && oc.infer && !named) oc.infer.indexElems.unshift({ IndexElem: { name: s.scope, ordering: 'SORTBY_DEFAULT', nulls_ordering: 'SORTBY_NULLS_DEFAULT' } });
     if (oc.action === 'ONCONFLICT_UPDATE') {
       c.seen?.add('conflict-update');
       oc.targetList.push(bump(), touch(c));

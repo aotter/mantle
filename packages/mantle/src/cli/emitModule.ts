@@ -28,14 +28,18 @@ function viewRow(view: PlanView, schemas: RuntimePlan["schemas"]): string | unde
 
 /**
  * `values` of an insert: what the Schema requires, defaults optional, and never the scope field, which Store fills. An insert
- * into a publishing Schema is a draft, so everything is optional there.
+ * into a publishing Schema is a draft, so everything is optional there. A field the Schema does not require also takes
+ * `null`, which leaves it empty on insert and clears it on update; a required field never does.
  */
 function insertValues(s: PlanSchema): string {
   const props = Object.keys(s.schema.properties ?? {}).filter((p) => p.toLowerCase() !== s.scope);
-  const optional = s.publishing ? props : props.filter((p) => Object.hasOwn(s.schema.properties![p]!, "default"));
-  const rest = props.filter((p) => !optional.includes(p));
+  const required = new Set(s.schema.required ?? []);
+  const nullable = props.filter((p) => !required.has(p));
+  const defaulted = props.filter((p) => required.has(p) && (s.publishing || Object.hasOwn(s.schema.properties![p]!, "default")));
+  const rest = props.filter((p) => required.has(p) && !defaulted.includes(p));
   const pick = (ks: string[]) => `Pick<Schemas[${key(s.name)}], ${ks.map(key).join(" | ")}>`;
-  const value = [...(rest.length ? [pick(rest)] : []), ...(optional.length ? [`Partial<${pick(optional)}>`] : [])].join(" & ") || "{}";
+  const value = [...(rest.length ? [pick(rest)] : []), ...(defaulted.length ? [`Partial<${pick(defaulted)}>`] : []),
+    ...(nullable.length ? [`Nullable<${pick(nullable)}>`] : [])].join(" & ") || "{}";
   return `  readonly ${key(s.name)}: ${value};`;
 }
 
@@ -71,6 +75,8 @@ export function emitMantleModule(plan: RuntimePlan, linked: LinkedManifestSet): 
     "export interface Schemas {",
     ...schemas.map((s) => `  readonly ${key(s.name)}: ${NS}.Entry_${manifestTypeIdentifier(s.name)};`),
     "}",
+    "/** Optional fields: omitted, a value, or `null` to leave or make them empty. */",
+    "type Nullable<T> = { readonly [K in keyof T]?: T[K] | null };",
     "type InsertValues = {",
     ...schemas.map(insertValues),
     "};",
@@ -102,8 +108,8 @@ export function emitMantleModule(plan: RuntimePlan, linked: LinkedManifestSet): 
     "  write(ops: readonly Write[]): Promise<readonly StoreWriteResult[]>;",
     '  view<N extends keyof Views & string>(name: N, ...options: Views[N]["required"] extends true ? [ViewOptions<N>] : [ViewOptions<N>?]): Promise<StoreSelectResult<Views[N]["row"]>>;',
     "};",
-    "/** `ctx.store`: scope follows the caller. */",
-    'export type CallerStore = Omit<Store, "as" | "sweepExpired">;',
+    '/** `ctx.store`: scope follows the caller. `sweepExpired` is present only for the system caller (a schedule Trigger). */',
+    'export type CallerStore = Omit<Store, "as" | "sweepExpired"> & { readonly sweepExpired?: Store["sweepExpired"] };',
     "",
     "/** A handler receives this plan's typed `ctx.store`. */",
     'export type Handler<I, O, Env = unknown> = (input: I, ctx: Omit<HandlerContext<Env>, "store"> & { readonly store: CallerStore }) => O | Promise<O>;',

@@ -9,11 +9,18 @@ type Statement = Parameters<StoreExecutor["select"]>[0];
 const fail = (code: Diagnostic["code"], message: string, conflict?: Diagnostic["conflict"]) =>
   new DiagnosticError(runtimeDiagnostic({ code, severity: "error", path: "store", message, ...(conflict ? { conflict } : {}) }));
 
-function mapError(kind: "select" | "apply") {
-  return (e: unknown): never => mapped(e, kind);
+function mapError(kind: "select" | "apply", writes: readonly (string | undefined)[] = []) {
+  return (e: unknown): never => mapped(e, kind, writes);
 }
 
-function mapped(e: unknown, kind: "select" | "apply"): never {
+/** The table a statement writes, lower-cased, or undefined for a read. */
+function writeTarget(ir: Statement["ir"]): string | undefined {
+  const node = (ir as Record<string, { relation?: { relname?: string } }>);
+  const stmt = node.InsertStmt ?? node.UpdateStmt ?? node.DeleteStmt;
+  return stmt?.relation?.relname?.toLowerCase();
+}
+
+function mapped(e: unknown, kind: "select" | "apply", writes: readonly (string | undefined)[] = []): never {
   const message = e instanceof Error ? e.message : String(e);
   const op = /CONFLICT op=(\d+)/.exec(message);
   if (op) throw fail("CONFLICT", `CONFLICT op=${op[1]}: the write matched a different number of rows than it expected`, { opIndex: Number(op[1]), reason: "expect" });
@@ -22,7 +29,13 @@ function mapped(e: unknown, kind: "select" | "apply"): never {
   if (check) throw fail("INPUT_VALIDATION_FAILED", `CHECK ${check[1]}`);
   if (/cannot store \w+ value in \w+ column/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "A value does not fit its column's type.");
   // the driver's own text names tables and columns, so it stays out of the Diagnostic
-  if (/UNIQUE constraint failed/.test(message)) throw fail("CONFLICT", "A unique constraint of the Schema was violated.", { reason: "unique" });
+  const unique = /UNIQUE constraint failed: "?(\w+)"?\./.exec(message);
+  if (unique || /UNIQUE constraint failed/.test(message)) {
+    // the engine names the table, never the statement: the op is known when exactly one statement of the batch writes that table
+    const table = unique?.[1]?.toLowerCase();
+    const ops = table ? writes.flatMap((t, i) => (t === table ? [i] : [])) : [];
+    throw fail("CONFLICT", "A unique constraint of the Schema was violated.", { reason: "unique", ...(ops.length === 1 ? { opIndex: ops[0]! } : {}) });
+  }
   if (/ON CONFLICT clause does not match/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "onConflict.columns must match a unique index of the Schema.");
   if (/NOT NULL constraint failed/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "A required column has no value; a scoped Schema needs a caller identity.");
   // the engine answered and refused (a constraint, a type, a syntax problem): the write did not happen
@@ -54,7 +67,7 @@ export class SqliteStoreExecutor implements StoreExecutor {
       sent.push({ sql: "SELECT changes() AS n" });
       if (s.expect !== undefined) sent.push({ sql: `INSERT INTO _mantle_assert (op, ok) SELECT ${i}, changes() = ${Number(s.expect)}` });
     });
-    const res = await this.driver.batch(sent).catch(mapError("apply"));
+    const res = await this.driver.batch(sent).catch(mapError("apply", batch.map((s) => writeTarget(s.ir))));
     return batch.map((_s, i) => ({ affected: Number(res[at[i]! + 1]!.rows[0]!.n), rows: res[at[i]!]!.rows }));
   }
 }
