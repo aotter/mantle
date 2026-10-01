@@ -462,7 +462,7 @@ than is available fails the `available >= 0` check, also HTTP 400 (`CHECK
 inventory: available >= 0`), and writes nothing. Two guests racing for one
 row: one succeeds, the other gets `CONFLICT` and retries.
 
-Staff, on `/admin/api/mcp`: `adjust_inventory` (Admin generates the
+Staff, on `/mcp/staff`: `adjust_inventory` (Admin generates the
 `operationId`), `fulfill_order` and `picking_list`. Fire the schedule locally
 with `curl 'http://127.0.0.1:8787/__scheduled?cron=*/5+*+*+*+*'` under
 `wrangler dev --test-scheduled`.

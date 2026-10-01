@@ -30,18 +30,10 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
     const calls: unknown[] = [];
     await page.route("**/admin/api/**", async route => {
       const path = new URL(route.request().url()).pathname.replace("/admin/api", "");
-      if (path === "/mcp") {
-        // A minimal Streamable HTTP server: the official client initializes,
-        // notifies, then calls; it may also probe the standalone GET stream.
-        if (route.request().method() !== "POST") return route.fulfill({ status: 405 });
-        const message = route.request().postDataJSON() as { id?: number; method: string; params?: { protocolVersion?: string } };
-        if (message.id === undefined) return route.fulfill({ status: 202 });
-        if (message.method === "initialize") return route.fulfill({ json: { jsonrpc: "2.0", id: message.id, result: {
-          protocolVersion: message.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "test", version: "1.0.0" },
-        } } });
-        calls.push(message);
-        const text = fail ? JSON.stringify({ diagnostics: [{ code: "CONFLICT", message: "Stale version" }] }) : '{"rows":[]}';
-        return route.fulfill({ json: { jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text }], ...(fail ? { isError: true } : {}) } } });
+      // the tool runs on Admin's tool route, its input the JSON body
+      if (path === "/webmcp/query_view_report") {
+        calls.push(route.request().postDataJSON());
+        return fail ? route.fulfill({ status: 409, json: { error: { code: "CONFLICT", message: "Stale version" } } }) : route.fulfill({ json: { output: { rows: [] } } });
       }
       return route.fulfill({ json: path === "/me" ? { role: "owner", login: "owner" }
         : path === "/site" ? { brand: "WebMCP test", icons: [], canonicalLocale: "en" }
@@ -69,13 +61,13 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
       catch (error) { return { ok: false, message: (error as Error).message }; }
     }, { name, input });
     expect(await page.evaluate(() => (window as unknown as { testTools: Map<string, { description: string }> }).testTools.get("query_view_report")!.description)).toBe(staffTool.description);
-    expect((await invoke("query_view_report")).ok).toBe(true);
+    expect(await invoke("query_view_report", { region: "north" })).toMatchObject({ ok: true, result: { structuredContent: { rows: [] } } });
     expect(new URL(page.url()).pathname).toBe("/admin/views/report");
     await invoke("admin_navigate", { path: "/admin" });
     fail = true;
-    expect(await invoke("query_view_report")).toMatchObject({ result: { isError: true, structuredContent: { diagnostic: { code: "CONFLICT" } } } });
+    expect(await invoke("query_view_report", { region: "north" })).toMatchObject({ result: { isError: true, structuredContent: { diagnostic: { code: "CONFLICT" } } } });
     expect(new URL(page.url()).pathname).toBe("/admin");
-    expect(calls).toHaveLength(2);
+    expect(calls).toEqual([{ region: "north" }, { region: "north" }]);
     expect(await invoke("admin_navigate", { path: "https://evil.test" })).toMatchObject({ result: { isError: true } });
     await invoke("admin_navigate", { path: "/admin/dev/docs/webmcp" });
     await page.getByText(staffTool.description).last().waitFor({ state: "visible" });

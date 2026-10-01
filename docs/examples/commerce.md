@@ -220,7 +220,7 @@ curl -sS -X POST http://127.0.0.1:8787/api/commerce/orders \
   -d '{"orderNumber":"MNT-20261001-1","currency":"TWD","totalMinor":2400,"customerName":"Ada","customerEmail":"ada@example.test","shippingAddress":"1 Shell Lane","items":[{"productSlug":"notebook","title":"Notebook","quantity":2,"unitPriceMinor":1200,"lineTotalMinor":2400}]}'
 ```
 
-A duplicate `orderNumber` is HTTP 409 `CONFLICT`. Staff, on `/admin/api/mcp`,
+A duplicate `orderNumber` is HTTP 409 `CONFLICT`. Staff, on `/mcp/staff`,
 call `submitted_orders` and then:
 
 ```json
@@ -237,8 +237,8 @@ contributor gets `AUTH_DENIED`.
 |---|---|---|
 | `/mcp` | `public_products` | the public View |
 | `/mcp` | `place_order` | the `place-order-mcp` Trigger |
-| `/admin/api/mcp` | `submitted_orders` | the staff View |
-| `/admin/api/mcp` | `review_order` | the `review-order-mcp` Trigger |
+| `/mcp/staff` | `submitted_orders` | the staff View |
+| `/mcp/staff` | `review_order` | the `review-order-mcp` Trigger |
 
 ## What this leaves out
 

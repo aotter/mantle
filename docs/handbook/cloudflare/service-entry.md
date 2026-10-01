@@ -23,13 +23,15 @@ function mount(runtime: MantleRuntime, env: Env) {
   const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } });
   const authRoutes = createAuthRoutes(auth, { resolver });
   const guard = (surface, options?) => withCaller(resolver, surface, options);
-  const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { … }, staffMcp: createMcpSurface(runtime, { basePath: "/admin/api/mcp", surface: "staff" }), site: { mcpEndpoints: { public: "/mcp", staff: null } } }));
+  const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { … }, site: { mcpEndpoints: { public: "/mcp", staff: "/mcp/staff" } } }));
   const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
+  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", resourceMetadata }), { resourceMetadata });
   const rest = guard(createRestSurface(runtime, { basePath: "/api" }));
   return async (request, waitUntil) => {
     const owned = await authRoutes(request, { waitUntil });
     if (owned) return owned;
     if (under("/admin")) return admin(request);
+    if (under("/mcp/staff")) return staffMcp(request);
     if (under("/mcp")) return mcp(request);
     return rest(request);
   };

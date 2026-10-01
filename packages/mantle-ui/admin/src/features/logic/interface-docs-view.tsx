@@ -17,10 +17,6 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { atomKindLabel, audienceLabel } from "./atom-graph";
 import { developerDetailHref } from "./developer-route";
 
-const WEBMCP_SNIPPET = `import { bindWebMcp } from "@aotter/mantle-web/webmcp";
-
-const binding = await bindWebMcp();`;
-
 export function InterfaceDocsView(): React.ReactElement {
   const { language } = usePreferences();
   const location = useAdminLocation();
@@ -41,7 +37,6 @@ export function InterfaceDocsView(): React.ReactElement {
   const httpTriggers = http.filter((operation) => operation.kind === "procedure" && matches([operation.method, operation.path, operation.name, operation.description, operation.target]));
   const matchedCallable = callable.filter((capability) => matches([capability.name, capability.description, capability.target, capability.trigger, capability.surface, capability.audience]));
   const filteredCallable = matchedCallable.filter((capability) => site.data?.mcpEndpoints?.[capability.surface]);
-  const webMcp = matchedCallable.filter((capability) => capability.surface === "public" && capability.kind === "view");
   return (
     <section className="h-full min-h-0 overflow-y-auto" aria-label={t(language, "docs.title")}>
       {page === "api" ? (
@@ -69,12 +64,6 @@ export function InterfaceDocsView(): React.ReactElement {
               {adminWebMcp.data ? <OperationList>{adminWebMcp.data.tools.filter((tool) => matches([tool.name, tool.description])).map(tool => <AdminToolOperation key={tool.name} tool={tool} />)}</OperationList> : null}
               {adminWebMcp.isLoading ? <Skeleton className="h-32 w-full" /> : null}
               {adminWebMcp.isError ? <ErrorBox error={adminWebMcp.error} /> : null}
-            </section>
-            <section className="space-y-3"><div className="flex flex-wrap items-center gap-3"><h2 className="me-auto text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t(language, "docs.publicEndpoint")} WebMCP</h2><Endpoint label={t(language, "docs.catalogEndpoint")} value="/api/views" /></div>
-            <pre className="overflow-x-auto rounded-xl border bg-muted/40 p-4 text-xs leading-6"><code>{WEBMCP_SNIPPET}</code></pre>
-            <p className="text-sm text-muted-foreground">{t(language, "docs.webmcpNote")}</p>
-            <OperationList>{webMcp.map((capability) => <CapabilityOperation key={capability.name} capability={capability} webMcp />)}</OperationList>
-            {!webMcp.length ? <EmptyDocs /> : null}
             </section>
           </DocSection>
       ) : null}
@@ -119,10 +108,10 @@ function HttpOperation({ operation }: { operation: DeveloperHttpOperation }): Re
   );
 }
 
-function CapabilityOperation({ capability, webMcp = false }: { capability: DeveloperCallableCapability; webMcp?: boolean }): React.ReactElement {
+function CapabilityOperation({ capability }: { capability: DeveloperCallableCapability }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <Operation summary={<><Badge variant="secondary">{atomKindLabel(language, capability.kind === "view" ? "View" : "Procedure")}</Badge><code className="font-semibold">{capability.name}</code><Badge variant="outline">{audienceLabel(language, capability.surface)}</Badge>{webMcp ? <Badge variant="outline">{t(language, "docs.readOnly")}</Badge> : null}</>} description={capability.description}>
+    <Operation summary={<><Badge variant="secondary">{atomKindLabel(language, capability.kind === "view" ? "View" : "Procedure")}</Badge><code className="font-semibold">{capability.name}</code><Badge variant="outline">{audienceLabel(language, capability.surface)}</Badge></>} description={capability.description}>
       <div className="space-y-3">
         <a href={developerDetailHref(`${capability.kind === "view" ? "View" : "Procedure"}:${capability.target}`)} className="inline-block font-mono text-sm font-semibold hover:underline">{capability.target}</a>
         <div className="flex flex-wrap gap-2"><Badge variant="outline">{t(language, "docs.target")}: {capability.target}</Badge>{capability.trigger ? <Badge variant="outline"><a className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={developerDetailHref(`Trigger:${capability.trigger}`)}>{atomKindLabel(language, "Trigger")}: {capability.trigger}</a></Badge> : null}</div>

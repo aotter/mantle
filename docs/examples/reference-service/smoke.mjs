@@ -66,7 +66,7 @@ try {
   step("console email OTP signs in; ADMIN_EMAIL becomes the owner");
 
   for (const qty of [5, 3]) {
-    const restocked = await mcp("/admin/api/mcp", staff, "restock", { sku: "TEA-1", name: "Oolong tea", qty });
+    const restocked = await mcp("/mcp/staff", staff, "restock", { sku: "TEA-1", name: "Oolong tea", qty });
     assert.equal(restocked.body.result.isError, undefined, JSON.stringify(restocked.body));
   }
   assert.equal(await stockOf(), 8);

@@ -118,7 +118,7 @@ rows as CSV.
 | MCP surface | Tool | From |
 |---|---|---|
 | `/mcp` | `submit_reservation` | the `submit-reservation-mcp` Trigger |
-| `/admin/api/mcp` | `reservation_queue` | the staff View |
+| `/mcp/staff` | `reservation_queue` | the staff View |
 
 ## What this leaves out
 

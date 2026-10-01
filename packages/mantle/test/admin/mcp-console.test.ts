@@ -4,8 +4,7 @@ import { compilePlan, type StaffRole } from "../../src/spec/index.js";
 import { createMantleRuntime, type Caller, type MantleRuntime } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
 import { createAdminSurface } from "../../src/admin/index.js";
-import { CLIENT_CAPABILITIES_META_KEY } from "@modelcontextprotocol/server";
-import { createMcpSurface, type McpApps } from "../../src/mcp/index.js";
+import { createMcpSurface } from "../../src/mcp/index.js";
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -103,47 +102,35 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => d1.dispose());
 
-type Mcp = boolean | { locale: string; apps: McpApps };
-const admin = (mcp: Mcp = true) => createAdminSurface(rt, { basePath: "/admin", ...(mcp ? { staffMcp: createMcpSurface(rt, { basePath: "/admin/api/mcp", surface: "staff", ...(mcp === true ? {} : mcp) }) } : {}) });
-const get = async (path: string, caller: Caller, mcp: Mcp = true) => {
-  const res = await admin(mcp)(new Request(`http://x${path}`), caller);
+const admin = () => createAdminSurface(rt, { basePath: "/admin" });
+const get = async (path: string, caller: Caller) => {
+  const res = await admin()(new Request(`http://x${path}`), caller);
   return { status: res.status, body: await res.json() as any };
 };
-const rpc = async (caller: Caller, method: string, mcp: Mcp = true, params: unknown = {}) => {
-  const res = await admin(mcp)(new Request("http://x/admin/api/mcp", { method: "POST", headers: MCP_HEADERS, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), caller);
+// the service's own staff MCP mount, for a client with a token
+const rpc = async (caller: Caller, method: string, params: unknown = {}) => {
+  const res = await createMcpSurface(rt, { basePath: "/mcp/staff", surface: "staff" })(new Request("http://x/mcp/staff", { method: "POST", headers: MCP_HEADERS, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), caller);
   const text = await res.text();
   const line = text.split("\n").find((l) => l.startsWith("data:"));
   return { status: res.status, data: line ? JSON.parse(line.slice(5)) : text ? JSON.parse(text) : null };
 };
 
-describe("Admin: the staff MCP mount", () => {
-  it("answers staff sessions only: anonymous 401, no role 403, a token 403", async () => {
-    expect((await rpc({ kind: "anonymous" }, "tools/list")).status).toBe(401);
-    expect((await rpc(user(null), "tools/list")).status).toBe(403);
-    // Admin acts as the signed-in person; an MCP client with a token uses the service's own staff MCP mount
-    expect((await rpc(user("owner", "oauth"), "tools/list")).status).toBe(403);
-    const ok = await rpc(user("contributor"), "tools/list");
-    expect(ok.status).toBe(200);
-    expect(ok.data.result.tools.map((t: { name: string }) => t.name).sort()).toEqual(["all_posts", "picker", "purge", "retitle"]);
+describe("Admin: WebMCP's staff tools", () => {
+  it("Admin answers no MCP itself: the browser's tools run on Admin's own routes", async () => {
+    expect((await get("/admin/api/mcp", user("owner"))).status).toBe(404);
   });
 
-  it("/webmcp publishes exactly what tools/list lists", async () => {
+  it("the staff MCP mount answers staff only: anonymous 401, no role 403", async () => {
+    expect((await rpc({ kind: "anonymous" }, "tools/list")).status).toBe(401);
+    expect((await rpc(user(null), "tools/list")).status).toBe(403);
+    expect((await rpc(user("contributor"), "tools/list")).data.result.tools.map((t: { name: string }) => t.name).sort()).toEqual(["all_posts", "picker", "purge", "retitle"]);
+  });
+
+  it("/webmcp publishes exactly what the staff MCP surface lists", async () => {
     const listed = (await rpc(user("editor"), "tools/list")).data.result.tools;
     const { status, body } = await get("/admin/api/webmcp", user("editor"));
     expect(status).toBe(200);
     expect(body.tools).toEqual(listed);
-  });
-
-  it("/webmcp is the tools the surface registered: its locale, and app-only tools hidden from a client without MCP Apps", async () => {
-    const mcp = { locale: "zh-TW", apps: { resources: [{ uri: "ui://posts", name: "posts", html: "<p></p>", renders: ["retitle"], appOnly: ["picker"] }] } };
-    const pick = (ts: { name: string; title?: string }[]) => ts.map(({ name, title }) => ({ name, title }));
-    // Admin's page is not an MCP Apps host: it declares capabilities without the UI extension
-    const listed = (await rpc(user("editor"), "tools/list", mcp, { _meta: { [CLIENT_CAPABILITIES_META_KEY]: {} } })).data.result.tools;
-    const { body } = await get("/admin/api/webmcp", user("editor"), mcp);
-    expect(pick(body.tools)).toEqual(pick(listed));
-    expect(pick(body.tools)).toContainEqual({ name: "all_posts", title: "全部文章" });
-    expect(body.tools.map((t: { name: string }) => t.name)).not.toContain("picker");
-    expect(body.routes).not.toHaveProperty("picker");
   });
 
   it("routes come only from a Procedure's target Schema and from Views", async () => {
@@ -153,10 +140,21 @@ describe("Admin: the staff MCP mount", () => {
     expect((await get("/admin/api/bootstrap", user("contributor"))).body.webmcp).toEqual(body);
   });
 
-  it("without a staff MCP surface neither route exists", async () => {
-    expect((await get("/admin/api/webmcp", user("owner"), false)).status).toBe(404);
-    expect((await rpc(user("owner"), "tools/list", false)).status).toBe(404);
-    expect((await get("/admin/api/bootstrap", user("owner"), false)).body.webmcp).toBeNull();
+  const call = async (name: string, input: unknown, caller: Caller = user("contributor")) => {
+    const res = await admin()(new Request(`http://x/admin/api/webmcp/${name}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) }), caller);
+    return { status: res.status, body: await res.json() as any };
+  };
+
+  it("a tool call on Admin's tool route answers what the staff MCP surface answers, paging included", async () => {
+    for (const [name, input] of [["all_posts", { limit: 1 }], ["purge", {}]] as const) {
+      const tool = (await rpc(user("contributor"), "tools/call", { name, arguments: input })).data.result.structuredContent;
+      expect((await call(name, input)).body).toEqual({ output: tool });
+    }
+  });
+
+  it("a tool call is the session's: an unknown tool is 404 and a token is refused", async () => {
+    expect((await call("nope", {})).status).toBe(404);
+    expect((await call("all_posts", {}, user("owner", "oauth"))).status).toBe(403);
   });
 });
 

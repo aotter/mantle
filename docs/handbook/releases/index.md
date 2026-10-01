@@ -42,8 +42,9 @@ guide for moving a project by hand.
   changes are refused with a diagnostic, nothing is dropped, and there are no
   migration files.
 - **Schedules are POSIX cron**; `toCloudflareCron` translates them for Wrangler.
-- **MCP tools come from Views and Procedures only.** Staff MCP moved into Admin
-  at `/admin/api/mcp`.
+- **MCP tools come from Views and Procedures only.** Staff tools are at
+  `/mcp/staff` for an OAuth client; Admin's WebMCP runs the same tools on
+  Admin's own routes.
 - **The CLI is `mantle generate`** and `mantle generate --check`. `validate`,
   `emit-openapi`, `skills` and `mantle-harness` are removed.
 - **The Admin console** moves to `@aotter/mantle-ui/admin`, served at `/admin`

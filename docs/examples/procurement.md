@@ -187,7 +187,7 @@ curl -sS -X POST http://127.0.0.1:8787/api/requisitions \
 ```
 
 A duplicate `requestNumber` is HTTP 409 `CONFLICT`. Staff call
-`pending_approvals` on `/admin/api/mcp`, then:
+`pending_approvals` on `/mcp/staff`, then:
 
 ```json
 {

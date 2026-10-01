@@ -77,7 +77,7 @@ must join them by an explicit condition, or validation refuses it.
 | `surface` | Served at |
 |---|---|
 | `public` | `GET /api/views/<name>` (REST) and a tool on the public MCP surface (`/mcp`) |
-| `staff` | `GET /admin/api/views/<name>`, with CSV at `/export`, and a tool on the staff MCP surface (`/admin/api/mcp`) |
+| `staff` | `GET /admin/api/views/<name>`, with CSV at `/export`, and a tool on the staff MCP surface (`/mcp/staff`) |
 | `internal` | no surface: `ctx.store.view(...)` and `runtime.store` only |
 
 `requires` gates every path: an anonymous caller is 401 `UNAUTHENTICATED`, a

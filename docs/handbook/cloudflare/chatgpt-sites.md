@@ -98,8 +98,8 @@ site defaults ([Media uploads with R2](./media-r2.md)).
 Try `/mcp` first. If the Site does not route it to the Worker, mount the
 public surface at another path you own (`createMcpSurface(runtime, { basePath:
 "/agent/mcp", surface: "public" })`) and report the real paths through
-`createAdminSurface`'s `site: { mcpEndpoints }`. The staff surface inside Admin
-(`/admin/api/mcp`) works with the Sites session. A remote staff MCP client
+`createAdminSurface`'s `site: { mcpEndpoints }`. Admin and its browser tools
+work with the Sites session. A remote staff MCP client (`/mcp/staff`)
 needs a real OAuth authorization server and bearer verification in your
 resolver; a forwarded identity header is not one.
 

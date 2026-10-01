@@ -45,8 +45,9 @@ function mount(runtime: MantleRuntime, env: Env) {
   const authRoutes = createAuthRoutes(auth, { resolver });
   const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);
   const resourceMetadata = `${origin}/.well-known/oauth-protected-resource/mcp`;
-  const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { directory: auth, roles: auth, deleteUser: auth.deleteUser }, staffMcp: createMcpSurface(runtime, { basePath: "/admin/api/mcp", surface: "staff" }), site: { mcpEndpoints: { public: "/mcp", staff: null } } }));
+  const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { directory: auth, roles: auth, deleteUser: auth.deleteUser }, site: { mcpEndpoints: { public: "/mcp", staff: "/mcp/staff" } } }));
   const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
+  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", resourceMetadata }), { resourceMetadata });
   // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers
   const rest = guard(createRestSurface(runtime, { basePath: "/api" }));
   return async (request: Request, waitUntil: (promise: Promise<unknown>) => void): Promise<Response> => {
@@ -60,6 +61,7 @@ function mount(runtime: MantleRuntime, env: Env) {
     const owned = await authRoutes(request, { waitUntil });
     if (owned) return owned;
     if (under("/admin")) return admin(request);
+    if (under("/mcp/staff")) return staffMcp(request);
     if (under("/mcp")) return mcp(request);
     return rest(request);
   };
