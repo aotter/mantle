@@ -245,7 +245,7 @@ function ViewPagination({ name, query, nextCursor, language }: { name: string; q
   );
 }
 
-function readViewParams(
+export function readViewParams(
   schema: JsonSchema | null | undefined,
   query: URLSearchParams,
 ): Record<string, unknown> {
@@ -253,8 +253,10 @@ function readViewParams(
   for (const [name, property] of Object.entries(schema?.properties ?? {})) {
     const raw = query.get(name);
     if (raw === null) continue;
-    if (property.type === "integer" || property.type === "number") values[name] = Number(raw);
-    else if (property.type === "boolean") values[name] = raw === "true";
+    // `type: ["integer", "null"]` is an integer that may be left out
+    const type = [property.type].flat().find((t) => t !== "null");
+    if (type === "integer" || type === "number") values[name] = Number(raw);
+    else if (type === "boolean") values[name] = raw === "true";
     else values[name] = raw;
   }
   return values;
