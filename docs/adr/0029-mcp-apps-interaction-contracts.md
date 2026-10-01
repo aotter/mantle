@@ -147,6 +147,16 @@ mantle-spec ◄── mantle-runtime ◄── mantle-mcp ◄── adapters, ma
 
 - Arrows point from consumer to dependency. Server packages never depend on
   UI packages; `mantle-mcp` receives MCP App HTML as injected bytes.
+
+> **Amendment (0.2.0):** results carry no `_meta` interaction description.
+> `planApp(plan, { surface, html })` (`@aotter/mantle/mcp`) embeds the plan's
+> catalog (each View tool's columns as the fields they read, and the
+> Procedure tools whose `target` is the one Schema the View reads) as a JSON
+> script in the injected HTML, and renders every View tool of the surface. A
+> rendered result names its tool in `_meta["net.aotter.mantle/tool"]`. The App
+> (`mantleAppHtml` from `@aotter/mantle-ui/mcp-app`) re-reads a row for a
+> version lock by calling its View tool again. The preset serves it on
+> `/mcp/staff`; a member-facing App is the application's own.
 - `@aotter/mantle-admin-ui/kit` re-exports from `@aotter/mantle-ui` for one
   minor release, then is removed.
 - No exported UI module depends on Admin's router, global API client, query

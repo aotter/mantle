@@ -78,7 +78,7 @@ Two npm packages, always published together at one version.
 | `@aotter/mantle/mcp` | `createMcpSurface` |
 | `@aotter/mantle/web` | `createRestSurface` |
 | `@aotter/mantle/testing` | `runStorageConformance`, the dialect compliance suite |
-| `@aotter/mantle-ui` | `/controller`, `/kit`, `/mcp-app`, and the prebuilt Admin console in `dist/admin` (exported as `./admin/index.html`), which the preset serves at `/admin` |
+| `@aotter/mantle-ui` | `/controller`, `/kit`, `/mcp-app` (`mantleAppHtml`, the App `planApp` serves), and the prebuilt Admin console in `dist/admin` (exported as `./admin/index.html`), which the preset serves at `/admin` |
 
 A subpath that is not imported is never loaded: a service with identity
 `none` bundles no Better Auth, and no Worker bundles the SQL parser.

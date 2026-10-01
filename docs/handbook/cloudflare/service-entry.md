@@ -25,7 +25,8 @@ function mount(runtime: MantleRuntime, env: Env) {
   const guard = (surface, options?) => withCaller(resolver, surface, options);
   const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { … }, site: { mcpEndpoints: { public: "/mcp", staff: "/mcp/staff" } } }));
   const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
-  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", resourceMetadata }), { resourceMetadata });
+  // MCP Apps hosts render each staff View's rows, and the operations on one row, in the chat
+  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }, resourceMetadata }), { resourceMetadata });
   const rest = guard(createRestSurface(runtime, { basePath: "/api" }));
   return async (request, waitUntil) => {
     const owned = await authRoutes(request, { waitUntil });

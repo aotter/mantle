@@ -47,6 +47,9 @@ const failure = (d: Diagnostic, hasOutputSchema: boolean): CallToolResult => {
   return { isError: true, content: [{ type: "text", text: JSON.stringify(payload) }], ...(hasOutputSchema ? {} : { structuredContent: payload }) };
 };
 
+/** The result `_meta` key naming the tool, on results an App renders. */
+export const APP_TOOL_META_KEY = "net.aotter.mantle/tool";
+
 /** The surface and the tools it registers for a client without MCP Apps, in its locale. */
 export type McpSurface = Surface & { readonly tools: readonly McpTool[] };
 
@@ -77,7 +80,10 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     }
     for (const tool of tools) {
       if (!registers(tool.name, ui)) continue;
-      const run = async (args: unknown): Promise<CallToolResult> => {
+      // an App renders results of several tools, so each result it renders names its tool
+      const renderedBy = withApps && apps.rendersIn.has(tool.name) ? { _meta: { [APP_TOOL_META_KEY]: tool.name } } : {};
+      const run = async (args: unknown): Promise<CallToolResult> => ({ ...(await execute(args)), ...renderedBy });
+      const execute = async (args: unknown): Promise<CallToolResult> => {
         const input = isRecord(args) ? args : {};
         const cause = { kind: "mcp" as const, id: crypto.randomUUID() };
         try {
