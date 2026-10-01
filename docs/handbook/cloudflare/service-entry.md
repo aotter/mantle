@@ -23,7 +23,7 @@ function mount(runtime: MantleRuntime, env: Env) {
   const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp` } });
   const authRoutes = createAuthRoutes(auth, { resolver });
   const guard = (surface, options?) => withCaller(resolver, surface, options);
-  const admin = guard(createAdminSurface(runtime, { basePath: "/admin", identity: { … }, staffMcp: createMcpSurface(runtime, { basePath: "/admin/api/mcp", surface: "staff" }), site: { mcpEndpoints: { public: "/mcp", staff: null } } }));
+  const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { … }, staffMcp: createMcpSurface(runtime, { basePath: "/admin/api/mcp", surface: "staff" }), site: { mcpEndpoints: { public: "/mcp", staff: null } } }));
   const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
   const rest = guard(createRestSurface(runtime, { basePath: "/api" }));
   return async (request, waitUntil) => {
@@ -92,7 +92,18 @@ export default {
 
 ## Bindings
 
-`wrangler.jsonc` starts with `DB` (D1) and `triggers.crons`. Add the rest:
+`wrangler.jsonc` starts with `DB` (D1), `triggers.crons`, and with feature
+`admin` the console's files:
+
+```jsonc
+"assets": { "directory": "node_modules/@aotter/mantle-ui/dist/admin", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none" }
+```
+
+`run_worker_first` sends every request through the Worker, so Admin answers
+every `/admin` path and nothing is served at the files' bare paths; keep it
+when you add assets of your own (serve those through the same binding or a
+route). `mantle generate` warns when `admin` is selected and no `ASSETS` is
+bound. Add the rest:
 
 | Need | `wrangler.jsonc` | Code |
 |---|---|---|

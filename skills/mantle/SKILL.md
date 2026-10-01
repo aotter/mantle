@@ -56,8 +56,8 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
    `mantle generate --check` and `tsc --noEmit`.
 7. With identity `mantle`: `cp .dev.vars.example .dev.vars`, set
    `ADMIN_EMAIL` and a random `BETTER_AUTH_SECRET`, run `wrangler dev --local`,
-   sign in with the one-time code printed to the log, and check
-   `GET /admin/api/me`. Exercise the REST routes and `/mcp` `tools/list`.
+   sign in at `/admin/sign-in` with the one-time code printed to the log, and
+   check that the console loads and `GET /admin/api/me` is `owner`. Exercise the REST routes and `/mcp` `tools/list`.
 
 Do not push, deploy or configure providers during a cold start.
 

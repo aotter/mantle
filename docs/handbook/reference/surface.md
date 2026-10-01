@@ -11,7 +11,7 @@ description: Every HTTP route the generated Mantle 0.2.0 service mounts (REST, a
 | Path | Surface | Mounted when |
 |---|---|---|
 | `/api/auth/*`, `/.well-known/oauth-authorization-server/*`, `/.well-known/oauth-protected-resource[/*]`, `/oauth/consent[/data]`, `/oauth/consents[/data\|/revoke]` | `createAuthRoutes` | identity `mantle` |
-| `/admin/*` | `createAdminSurface` | feature `admin` |
+| `/admin/*` | `createAdminSurface`: the console (from `ASSETS`) and `/admin/api/*` | feature `admin` |
 | `/mcp` | `createMcpSurface`, `surface: public` | feature `mcp` |
 | everything else | `createRestSurface` at `/api` | always |
 
@@ -54,10 +54,10 @@ Every route needs a staff caller; the column names the least role.
 | `GET /admin/api/entries?collection=`, `GET …/entries/export`, `GET …/entries/{id}` | contributor | list (with `search`, `limit`, `cursor`), CSV, one row |
 | `POST /admin/api/entries`, `PATCH …/entries/{id}` (with `expectedVersion`) | contributor | create, edit (contributors: drafts only) |
 | `POST …/entries/{id}/publish`, `…/unpublish`, `DELETE …/entries/{id}` | editor | |
-| `GET /admin/api/views-manifest`, `GET …/views/{name}`, `GET …/views/{name}/export` | contributor | staff Views and CSV |
+| `GET /admin/api/views-manifest`, `GET …/views/{name}`, `GET …/views/{name}/export` | contributor | staff Views (`{ name, title, description, input, list: { columns }, columns }`), rows by cursor, CSV |
 | `GET /admin/api/operations`, `POST …/operations/{name}` | contributor | Procedures bound to the staff MCP surface |
 | `GET /admin/api/site` | contributor | site metadata and `mcpEndpoints` |
-| `GET`, `PATCH /admin/api/site-settings` | owner | with `runtime.site` |
+| `GET`, `PATCH /admin/api/site-settings` | owner | 501 `SITE_NOT_CONFIGURED` without `runtime.site` |
 | `POST /admin/api/media/uploads`, `POST …/media/uploads/{groupId}/commit`, `GET …/media`, `GET`, `PATCH`, `DELETE …/media/{id}` | editor | with `media` and `runtime.site` |
 | `GET /admin/api/webmcp` | contributor | with `staffMcp`: `{ tools, routes }` |
 | `GET /admin/api/staff`, `PATCH …/staff/{id}/role`, `POST …/staff/invitations`, `DELETE …/staff/invitations/{id}` | owner | with an `AdminIdentity` that has `directory` / `roles` |
@@ -66,7 +66,7 @@ Every route needs a staff caller; the column names the least role.
 
 ## Packages
 
-Three npm packages, always published together at one version.
+Two npm packages, always published together at one version.
 
 | Import | Exports |
 |---|---|
@@ -79,8 +79,7 @@ Three npm packages, always published together at one version.
 | `@aotter/mantle/mcp` | `createMcpSurface` |
 | `@aotter/mantle/web` | `createRestSurface` |
 | `@aotter/mantle/testing` | `runStorageConformance`, the dialect compliance suite |
-| `@aotter/mantle-ui` | `/controller`, `/kit`, `/mcp-app` |
-| `@aotter/mantle-admin-ui` | the prebuilt Admin console; the 0.2.0 preset does not serve it yet |
+| `@aotter/mantle-ui` | `/controller`, `/kit`, `/mcp-app`, and `/admin`, the prebuilt Admin console the preset serves at `/admin` |
 
 A subpath that is not imported is never loaded: a service with identity
 `none` bundles no Better Auth, and no Worker bundles the SQL parser.

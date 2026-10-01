@@ -10,10 +10,11 @@ open; installing one means choosing an exact version, not a channel.
 [GitHub Releases](https://github.com/aotter/mantle/releases) is the canonical
 change history; this page is the narrative one.
 
-From 0.2.0, Mantle is three packages, `@aotter/mantle`, `@aotter/mantle-ui`
-and `@aotter/mantle-admin-ui`, published together at one version: the 0.1.x
-`-spec`, `-runtime`, `-cloudflare`, `-auth`, `-admin`, `-mcp`, `-web` and other
-packages fold into subpaths of `@aotter/mantle`. Pin every one you use to the
+From 0.2.0, Mantle is two packages, `@aotter/mantle` and `@aotter/mantle-ui`,
+published together at one version: the 0.1.x `-spec`, `-runtime`,
+`-cloudflare`, `-auth`, `-admin`, `-mcp`, `-web` and other packages fold into
+subpaths of `@aotter/mantle`, and `@aotter/mantle-admin-ui` into
+`@aotter/mantle-ui/admin`. Pin every one you use to the
 same exact version and upgrade them together.
 
 ## 0.2.0 — in preparation
@@ -44,8 +45,10 @@ guide for moving a project by hand.
   at `/admin/api/mcp`.
 - **The CLI is `mantle generate`** and `mantle generate --check`. `validate`,
   `emit-openapi`, `skills` and `mantle-harness` are removed.
-- **Not yet in 0.2.0:** the browser Admin console in the preset, Mantle-rendered
-  public pages, and deploying to Mantle Cloud.
+- **The Admin console** moves to `@aotter/mantle-ui/admin`, served at `/admin`
+  by the preset through the Worker's `ASSETS` binding.
+- **Not yet in 0.2.0:** Mantle-rendered public pages, the MCP interaction App
+  tools, and deploying to Mantle Cloud.
 
 ## 0.1.4 — 2026-09-24
 

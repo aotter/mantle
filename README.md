@@ -81,9 +81,9 @@ the owning definitions.
 *Developer UI rendered locally from the intake example. The graph describes
 compiled declarations; it does not certify runtime or deployment health.*
 
-In 0.2.0 the generated service serves Admin's API, including the owner-only
-`GET /admin/api/developer-console` that this view draws from; the preset does
-not serve the console's assets yet.
+The generated service serves the console at `/admin` from
+`@aotter/mantle-ui/admin`; this view draws from the owner-only
+`GET /admin/api/developer-console`.
 
 | Interface | Integration guide |
 |---|---|

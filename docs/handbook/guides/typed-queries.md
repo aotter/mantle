@@ -113,7 +113,8 @@ await ctx.store.write([
   writing no row is `CONFLICT`.
 - A result is `{ id, version }` for a row op and `{ affected }` for a set op.
 - `set` and `values` never name the scope field or a native column; Store
-  fills them. On a `publishing` Schema, `set: { status }` is how a `ref`
+  fills them. A `null` clears a field the Schema does not require; for a
+  required field it is refused. On a `publishing` Schema, `set: { status }` is how a `ref`
   handler publishes, unpublishes or archives.
 
 Failures throw `DiagnosticError` with `INPUT_VALIDATION_FAILED` (including a

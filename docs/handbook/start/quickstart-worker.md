@@ -129,8 +129,10 @@ log, and that email becomes the owner. Codes in the log are for local
 development only; [Authentication](../cloudflare/authentication.md) covers
 production sign-in.
 
-Then Admin's API answers at `/admin/api/*`, the public MCP surface at `/mcp`,
-and the staff MCP surface at `/admin/api/mcp`. The
+Or open `/admin/sign-in` in a browser: the console is served at `/admin` from
+`@aotter/mantle-ui/admin`, which the generated `wrangler.jsonc` binds as the
+Worker's `ASSETS`. Admin's API answers at `/admin/api/*`, the public MCP
+surface at `/mcp`, and the staff MCP surface at `/admin/api/mcp`. The
 [reference service](../../examples/reference-service/README.md) is this
 selection with a smoke test that signs in and drives every surface.
 

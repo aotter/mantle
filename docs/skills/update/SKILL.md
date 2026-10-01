@@ -22,8 +22,9 @@ Upgrade deliberately; never overwrite application-owned code.
    `node_modules/@aotter/mantle/docs/upgrade-0.1-to-0.2.md` after installing
    the target. There is no codemod and no in-place database upgrade: the
    project moves by hand, to a new database.
-4. Set `@aotter/mantle`, and `@aotter/mantle-ui` and `@aotter/mantle-admin-ui`
-   where present, to the same exact version, and update the lockfile with the
+4. Set `@aotter/mantle`, and `@aotter/mantle-ui` where present, to the same
+   exact version (`@aotter/mantle-admin-ui` is gone: the console is
+   `@aotter/mantle-ui/admin`), and update the lockfile with the
    package manager. Review the dependency diff and any peer changes
    `mantle generate` names.
 5. Regenerate and check:

@@ -90,10 +90,11 @@ REST coerces each `input` query parameter to its declared type.
 
 ## `uiSchema` (staff Views)
 
-`list.columns`, `list.searchFields` and `list.filterFields` name the View's
-outputs. Admin shows the columns, turns `searchFields` into `LIKE` conditions
-and `filterFields` into equality conditions, and CSV export uses `columns`.
-Other keys are refused (`VIEW_UI_INVALID`).
+`list.columns` names the View's outputs, in order; the console shows them and
+CSV export uses them. A search or filter is a declared `input` the SQL reads,
+which the console renders as the report's form. `list.searchFields` and
+`list.filterFields` are still accepted but the 0.2 console ignores them. Other
+keys are refused (`VIEW_UI_INVALID`).
 
 ## `cache`
 

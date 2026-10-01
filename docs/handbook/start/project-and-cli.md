@@ -38,7 +38,7 @@ its composition. To get a fresh preset, move the old file aside and rerun.
 |---|---|---|
 | `version` | `2` | `1`, or any `host` key, is a 0.1.x config and fails with exit 2 |
 | `identity` | `mantle`, `custom`, `none` | who the callers are. `mantle`: `@aotter/mantle/auth` (Better Auth sign-in, staff roles, OAuth for MCP). `custom`: your `src/identity.ts` maps your own sessions to callers. `none`: every caller is anonymous |
-| `features` | a subset of `mcp`, `admin`, `web`, in that order | `mcp`: the public MCP surface at `/mcp` (and staff MCP inside Admin). `admin`: Admin's API at `/admin`, which needs an identity. `web`: reserved for public pages; REST at `/api` is always mounted |
+| `features` | a subset of `mcp`, `admin`, `web`, in that order | `mcp`: the public MCP surface at `/mcp` (and staff MCP inside Admin). `admin`: the Admin console and its API at `/admin`, which needs an identity. `web`: reserved for public pages; REST at `/api` is always mounted |
 | `dialect` | an npm package name, optional | the SQL dialect; absent is the built-in D1 dialect (`@aotter/mantle/d1`) |
 
 Without a config or flags, the selection is identity `mantle` and every
@@ -55,7 +55,7 @@ package manager. It never installs anything.
 | always | `@aotter/mantle` |
 | identity `mantle` | `better-auth`, `@better-auth/oauth-provider`, `@better-auth/mcp`, `@better-auth/cimd` |
 | feature `mcp` | `@modelcontextprotocol/server`, `@modelcontextprotocol/ext-apps` |
-| feature `admin` | `@aotter/mantle-ui` |
+| feature `admin` | `@aotter/mantle-ui` (its `dist/admin` is the console, bound as `ASSETS` in `wrangler.jsonc`) |
 
 The project also installs `wrangler`, `@cloudflare/workers-types` and
 `@types/node` itself.

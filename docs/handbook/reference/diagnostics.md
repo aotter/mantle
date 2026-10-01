@@ -43,6 +43,7 @@ Handler code catches `DiagnosticError` and reads `error.diagnostic.code`.
 | `RESOURCE_EXHAUSTED` | 507 | |
 | `INVOCATION_DEPTH_EXCEEDED` | 500 | more than 8 nested invocations (hooks and `ctx.invoke`) |
 | `PROCEDURE_NOT_FOUND` | 500 | `invokeProcedure` with a name the plan lacks |
+| `SITE_NOT_CONFIGURED` | 501 | Admin's `/site-settings` on a runtime without site defaults |
 | `MEDIA_*` | 400, 404, 409, 410, 501 | media uploads: `MEDIA_NOT_CONFIGURED` (501) without media storage and site defaults, `MEDIA_UPLOAD_EXPIRED` (410), `MEDIA_ASSET_NOT_FOUND` (404), `MEDIA_OBJECT_NOT_FOUND` (409), and 400 for a refused type, size, purpose or variant set |
 
 Admin's statistics route answers 501 with the wire code

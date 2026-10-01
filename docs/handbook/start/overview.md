@@ -51,8 +51,6 @@ handbook and an ADR disagree, the ADR wins.
 
 ## What 0.2.0 does not have yet
 
-- **The Admin console in the browser.** `createAdminSurface` serves Admin's
-  API; the generated preset does not pass the console's assets yet.
 - **Mantle-rendered public pages.** `createWebSurface` is not ported. Render
   pages from your own `fetch` or frontend over the REST surface.
 - **A preset for any host but Cloudflare.** `@aotter/mantle/d1` runs on other

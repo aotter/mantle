@@ -9,9 +9,12 @@ Every route reads and writes through `runtime.store.as(caller)` and
 see. What Admin shows is derived from the compiled plan: labels, forms, list
 columns, reports and operations are manifest edits.
 
-> **0.2.0:** the generated preset serves Admin's API only. It passes no Admin
-> assets yet (`assets` is unset), so `/admin` in a browser is 404. Everything
-> below is already in the API's metadata.
+With feature `admin`, the generated preset also serves the console, the
+prebuilt SPA in `@aotter/mantle-ui/admin`, at `/admin`: `wrangler.jsonc` binds
+`node_modules/@aotter/mantle-ui/dist/admin` as the Worker's `ASSETS`
+(`run_worker_first`), and `src/service.ts` passes `createAdminSurface` an
+`assets` function that reads from it. `mantle generate` warns when `admin` is
+selected and `wrangler.jsonc` binds no `ASSETS`. Sign in at `/admin/sign-in`.
 
 ## Manifest to Admin
 
@@ -27,7 +30,7 @@ columns, reports and operations are manifest edits.
 | Search | Schema `searchableFields` | Full-text search over those string fields, plus `id` |
 | Related records | a required property with `x-mantle-ref` | Children fold under their parent |
 | A folded child in navigation too | Schema `uiSchema.nav.standalone: true`, optional `parentField` | Its own list with a parent filter |
-| A read-only report with CSV | a View with `surface: staff`, `title`, `uiSchema.list` | `columns`, `searchFields`, `filterFields` name the View's outputs. `GET /admin/api/views/<name>/export` returns every matching row |
+| A read-only report with CSV | a View with `surface: staff`, `title`, `uiSchema.list.columns` | `columns` names the View's outputs; a search or filter is a declared `input`. `GET /admin/api/views/<name>/export` returns every matching row |
 | An operation | a Procedure bound by a Trigger with `source: { kind: mcp, surface: staff }` | Listed at `/admin/api/operations` for staff its `requires` admits, and run with `POST /admin/api/operations/<name>` |
 | A row operation | that Procedure's `target` (declared or inferred from `WHERE id = … AND version = …`) | Bound to the row's `id`, and its version when the target names one |
 | A list-level operation | Procedure `uiSchema.collectionAction: <schema>` | Shown on that collection |
@@ -74,14 +77,20 @@ spec:
   uiSchema:
     list:
       columns: [subject, ticketState, created_at]
-      searchFields: [subject]
-      filterFields: [ticketState]
-  sql: SELECT id, subject, ticketState, created_at FROM "support-tickets" ORDER BY created_at DESC
+  input:
+    type: object
+    properties:
+      ticketState: { type: string, enum: [open, waiting, closed] }
+  sql: |
+    SELECT id, subject, ticketState, created_at FROM "support-tickets"
+    WHERE input.ticketState IS NULL OR ticketState = input.ticketState
+    ORDER BY created_at DESC
 ```
 
 Schema `uiSchema.list` and View `uiSchema.list` are different contracts; do
-not copy keys between them. A staff View's `searchFields` and `filterFields`
-become `LIKE` and equality conditions on its outputs.
+not copy keys between them. The console lists a staff View's `input` as its
+form, so a search or filter is a declared input the SQL reads, and pages it by
+cursor.
 
 ## Roles
 
@@ -95,9 +104,9 @@ console. Operations and staff Views are further limited by their own
 
 1. Run `mantle generate`, then `mantle generate --check`.
 2. Restart `wrangler dev` so the runtime loads the new plan.
-3. With a staff session, read `GET /admin/api/bootstrap`: it carries the
-   collections, Views, operations and site the console renders. Run an
-   operation with `POST /admin/api/operations/<name>`.
+3. Open `/admin` with a staff session and check the affected list, form,
+   report or operation. `GET /admin/api/bootstrap` carries the collections,
+   Views, operations and site the console renders.
 
 `uiSchema` keys are closed. Schema takes `fields`, `list` and `nav`;
 Procedure takes `collectionAction` and `fields`; a staff View takes `list`. No
