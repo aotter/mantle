@@ -118,7 +118,8 @@ tool call under the caller's own token. A rendered result names its tool in
 `_meta["net.aotter.mantle/tool"]`.
 
 On the public surface, a member-facing App is the application's to build; the
-SDK attaches none.
+SDK attaches none. The `develop` skill's
+[MCP App recipe](../../skills/develop/mcp-app.md) lists the pieces.
 
 ## Further reading
 
