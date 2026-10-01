@@ -26,6 +26,10 @@ function mantleType(p: JsonSchema): string {
   return ({ integer: "integer", number: "real", boolean: "bool" } as Record<string, string>)[String(t)] ?? "json";
 }
 
+/** The physical columns of the native entry fields an index may name (SchemaIndexChecker); a declared field is its lower-cased name. */
+const NATIVE_COLUMNS: Readonly<Record<string, string>> = { id: "id", status: "status", version: "version", createdAt: "created_at", updatedAt: "updated_at", authorId: "author_id" };
+const indexColumn = (field: string) => (Object.hasOwn(NATIVE_COLUMNS, field) ? NATIVE_COLUMNS[field]! : field.toLowerCase());
+
 /** SQL folds unquoted identifiers to lower case, so the context is keyed the way the parser reads names. */
 function typesOf(schema: JsonSchema | undefined): Record<string, string> {
   return Object.fromEntries(Object.entries(schema?.properties ?? {}).map(([name, p]) => [name.toLowerCase(), mantleType(p)]));
@@ -105,7 +109,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       names: Object.fromEntries(Object.keys(props).map((n) => [n.toLowerCase(), n])),
       ...(m.spec.searchableFields?.length ? { search: lower(m.spec.searchableFields) } : {}),
       ...(m.spec.uniqueIndexes?.length ? { unique: m.spec.uniqueIndexes.map(lower) } : {}),
-      ...(m.spec.indexes?.length ? { indexes: m.spec.indexes.map(lower) } : {}),
+      ...(m.spec.indexes?.length ? { indexes: m.spec.indexes.map((cols) => cols.map(indexColumn)) } : {}),
     };
   }
   const diagnostics: Diagnostic[] = [];

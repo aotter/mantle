@@ -28,7 +28,7 @@ createMantleAuth({
 });
 ```
 
-then `createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp` } })`,
+then `createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } })`,
 `createAuthRoutes(auth, { resolver })` and an `AdminIdentity` over the auth's
 own methods.
 

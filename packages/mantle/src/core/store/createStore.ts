@@ -14,7 +14,7 @@ import { num, op, ref, table } from "../sql/ast.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv, type ViewMatch } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
-import { StoreJson, validateValues, type StoreSchemas } from "./json.js";
+import { StoreJson, geoValue, validateValues, type StoreSchemas } from "./json.js";
 
 /** A compiled View: its IR and declared input types. `public` shows published rows only (ADR-0032 decision 8). */
 export interface StoreView {
@@ -104,7 +104,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       const program: Program = { kind: "view", inputs: json.inputs, ir: [s.ir] };
       const page = await runView(env(mode), program, as({ ...b, input: json.values }), { pageSize: s.pageSize, ...(cursor ? { cursor } : {}) });
       const types = new Map(s.columns.map((c) => [c.out, c.type]));
-      return { rows: page.rows.map((r) => decode(deps.dialect, r, types)), ...(page.next ? { nextCursor: encodeCursor(binding, page.next) } : {}) };
+      return { rows: page.rows.map((r) => decode(deps.dialect, geoValue(r, s.columns), types)), ...(page.next ? { nextCursor: encodeCursor(binding, page.next) } : {}) };
     }),
 
     write: (ops) => guard(async (): Promise<readonly StoreWriteResult[]> => {

@@ -217,13 +217,24 @@ describe("MCP surface", () => {
 
   it("asks an OAuth caller for the missing scope (403 insufficient_scope) and leaves a session to the runtime denial", async () => {
     const call = { name: "scoped_add", arguments: { title: "s" } };
-    const oauth = await rpc("public", user("m5", { credential: "oauth", scopes: ["openid"] }), "tools/call", call);
+    const oauth = await rpc("public", user("m5", { credential: "oauth", scopes: ["mcp", "openid"] }), "tools/call", call);
     expect(oauth.status).toBe(403);
-    expect(oauth.headers.get("www-authenticate")).toBe(`Bearer error="insufficient_scope", scope="openid notes:write", resource_metadata="${RM}"`);
+    expect(oauth.headers.get("www-authenticate")).toBe(`Bearer error="insufficient_scope", scope="mcp openid notes:write", resource_metadata="${RM}"`);
     const session = await rpc("public", user("m5"), "tools/call", call);
     expect(session.data.result.isError).toBe(true);
     expect(JSON.parse(session.data.result.content[0].text).diagnostics[0].code).toBe("AUTH_DENIED");
-    expect((await rpc("public", user("m5", { credential: "oauth", scopes: ["notes:write"] }), "tools/call", call)).data.result.isError).toBeUndefined();
+    expect((await rpc("public", user("m5", { credential: "oauth", scopes: ["mcp", "notes:write"] }), "tools/call", call)).data.result.isError).toBeUndefined();
+  });
+
+  it("refuses every credential but a session that lacks the mcp scope, before any tool runs (ADR-0014 scope floor)", async () => {
+    const call = { name: "scoped_add", arguments: { title: "floor" } };
+    for (const credential of ["oauth", "api-key", "personal-token"] as const) {
+      const res = await rpc("public", user("m9", { credential, scopes: ["notes:write"] }), "tools/call", call);
+      expect(res.status).toBe(403);
+      expect(res.headers.get("www-authenticate")).toBe(`Bearer error="insufficient_scope", scope="notes:write mcp", resource_metadata="${RM}"`);
+      expect((await rpc("public", user("m9", { credential, scopes: ["notes:write"] }), "tools/list")).status).toBe(403);
+    }
+    expect((await d1.all("SELECT count(*) AS c FROM notes WHERE title = 'floor'"))[0]).toEqual({ c: 0 });
   });
 
   it("checks a View's input against its schema, and reports a wrong limit or cursor instead of dropping it", async () => {

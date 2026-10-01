@@ -250,8 +250,9 @@ const check: Record<string, Checker> = {
     }
     if (AGG.has(f) && n.args?.length === 0 && !n.agg_star) no('SQL_FUNCTION', `${f} needs an argument`, at);
   },
-  A_Expr: (n, _c, _p, at) => {
+  A_Expr: (n, ctx, _p, at) => {
     const op = sv(n.name);
+    bareLiteralCompare(n, ctx, at);
     if (n.kind === 'AEXPR_OP' && !OPS.has(op)) no('SQL_UNSUPPORTED', `operator ${op} is refused`, at);
     if (n.kind === 'AEXPR_IN' && !['=', '<>'].includes(op)) no('SQL_UNSUPPORTED', 'a bad IN', at);
     if (n.kind === 'AEXPR_LIKE' && !['~~', '!~~'].includes(op)) no('SQL_UNSUPPORTED', 'ILIKE and regular expressions are refused', at, /\bILIKE\b/i);
@@ -312,6 +313,35 @@ const check: Record<string, Checker> = {
     if (n.onConflictClause?.action === 'ONCONFLICT_UPDATE') writeList(n.onConflictClause.targetList, ctx, n.relation, false);
   },
 };
+
+/** Columns stored as integers that PostgreSQL compares with a string literal by casting it: the system timestamps and these types. */
+const STORED_AS_NUMBER = new Set(['timestamptz', 'date', 'bool']);
+const SYSTEM_TIMES = new Set(['created_at', 'updated_at']);
+
+/** The type a column name has in every Schema that declares it, or undefined when none does or they disagree. */
+function columnType(ctx: Ctx, name: string): string | undefined {
+  if (SYSTEM_TIMES.has(name)) return 'timestamptz';
+  const types = new Set(Object.values(ctx.schemas).flatMap((s: SqlSchemaDef) => (Object.hasOwn(s.fields, name) ? [s.fields[name]!] : [])));
+  return types.size === 1 ? [...types][0] : undefined;
+}
+
+/**
+ * PostgreSQL reads `startsAt > '2020-01-01'` by casting the literal to the column's type; SQLite compares the stored integer with
+ * text and the condition is silently false. A bare string literal against a date-time, date or boolean column is refused.
+ */
+function bareLiteralCompare(n: N, ctx: Ctx, at: number | undefined) {
+  const compares = n.kind === 'AEXPR_OP' ? ['=', '<>', '!=', '<', '>', '<=', '>='].includes(sv(n.name)) : ['AEXPR_IN', 'AEXPR_BETWEEN', 'AEXPR_NOT_BETWEEN', 'AEXPR_DISTINCT', 'AEXPR_NOT_DISTINCT'].includes(n.kind);
+  if (!compares) return;
+  const typeOf = (x: N | undefined) => { const f = x?.ColumnRef?.fields; const name = f?.at(-1)?.String?.sval; return name && !(f.length === 2 && f[0].String?.sval === 'input') ? columnType(ctx, String(name).toLowerCase()) : undefined; };
+  const literals = (x: N | undefined): string[] => (x?.List ? x.List.items.flatMap(literals) : x?.A_Const?.sval ? [x.A_Const.sval.sval] : []);
+  for (const [colSide, other] of [[n.lexpr, n.rexpr], [n.rexpr, n.lexpr]] as const) {
+    const type = typeOf(colSide);
+    if (!type || !STORED_AS_NUMBER.has(type)) continue;
+    const text = literals(other)[0];
+    if (text !== undefined)
+      no('SQL_TYPE', `'${text}' is text and the column is ${type}, which is stored as a number: ${type === 'bool' ? 'write true or false' : `write CAST('${text}' AS ${type})`}, or bind it as an input`, at);
+  }
+}
 
 /** A write may not name the scope field or a system column; `id` is never writable on update, and on a scoped Schema never on insert. */
 function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean, values?: N[]) {

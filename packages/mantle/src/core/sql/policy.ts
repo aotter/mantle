@@ -79,6 +79,8 @@ export type Compiled = {
   hooked: boolean;
   /** the update publishes the entry: publish hooks fire instead of update hooks */
   publish: boolean;
+  /** the statement had no RETURNING and got one only for its after hook: its rows go to the hook, never to the result */
+  injected: boolean;
   /** the rowid of a row op's target is not needed; kept for hooks: does the statement return rows to the hook? */
 };
 
@@ -303,10 +305,13 @@ function expandStar(n: N, info: SelInfo, c: C): N {
   const list = n.targetList.flatMap((t: N) => {
     const f = t.ResTarget.val?.ColumnRef?.fields;
     if (!f?.at(-1)?.A_Star) return [t];
+    // a bare `*` over anything but Schemas (a FROM subquery, json_each, a CTE) has no declared columns to expand to: refused, not emptied
+    if (f.length !== 2 && (n.fromClause ?? []).some((x: N) => relsOf(x).some((r) => !r.RangeVar || !c.schemas[r.RangeVar.relname] || r.RangeVar.mantle !== 'table')))
+      throw new Refused('SQL_SHAPE', 'SELECT * reads a subquery, json_each or a CTE: name the columns');
     const aliases = f.length === 2 ? [f[0].String.sval] : [...info.scope.keys()];
     return aliases.flatMap((a) => {
       const sc = info.scope.get(a);
-      if (!sc) throw new Refused('SQL_SHAPE', `${a}.* needs a Schema alias`);
+      if (!sc || !c.schemas[sc]) throw new Refused('SQL_SHAPE', `${a}.* needs a Schema alias`);
       return starCols(c.schemas[sc]!).map((cn) => res(col(a, cn)));
     });
   });
@@ -315,7 +320,8 @@ function expandStar(n: N, info: SelInfo, c: C): N {
 
 const alias$ = (rel: N) => rel.alias?.aliasname ?? rel.relname;
 function returning(rc: N | undefined, s: SchemaDef, schema: string, c: C): N | undefined {
-  if (!rc && c.returning?.has(schema)) return { exprs: readable(s).map((f) => res(col(f))) };
+  // a statement with no RETURNING still hands its rows to the after hook; the runner keeps them from the result (`injected`)
+  if (!rc && c.returning?.has(schema)) return { exprs: [...readable(s).map((f) => res(col(f))), res(col('id'), HIDDEN_ID), res(col('version'), HIDDEN_VERSION)] };
   if (!rc) return undefined;
   const exprs = rc.exprs.flatMap((e: N) => (e.ResTarget.val?.ColumnRef?.fields?.[0]?.A_Star ? starCols(s).map((f) => res(col(f))) : [e]));
   // `RETURNING *` and most column lists leave out id and version, but an after hook needs them: carry them in hidden columns
@@ -363,9 +369,11 @@ function insert(n: N, c: C): N {
   out.cols = [...out.cols, ...fill.map(([name]) => ({ ResTarget: { name } }))];
   // The user's VALUES/SELECT becomes a derived table so the fills never interact with its DISTINCT or
   // GROUP BY; `WHERE true` is SQLite's disambiguator for INSERT ... SELECT ... ON CONFLICT.
+  // an insert that names no column (a new draft) is the fills alone: there is no VALUES row to select from
+  const empty = !n.cols.length;
   out.selectStmt = { SelectStmt: {
-    targetList: [res({ ColumnRef: { fields: [S('_v'), { A_Star: {} }] } }), ...fill.map(([, v]) => res(v))],
-    fromClause: [{ RangeSubselect: { subquery: out.selectStmt, alias: { aliasname: '_v' } } }],
+    targetList: [...(empty ? [] : [res({ ColumnRef: { fields: [S('_v'), { A_Star: {} }] } })]), ...fill.map(([, v]) => res(v))],
+    ...(empty ? {} : { fromClause: [{ RangeSubselect: { subquery: out.selectStmt, alias: { aliasname: '_v' } } }] }),
     whereClause: { A_Const: { boolval: { boolval: true } } }, limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } };
   const oc = out.onConflictClause;
   if (oc) {
@@ -387,5 +395,6 @@ export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const t = Object.keys(stmt)[0]!;
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
   const schema = verb ? stmt[t].relation.relname : undefined;
-  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked: !!schema && !!opts.returning?.has(schema), publish: opts.status === 'published' };
+  const hooked = !!schema && !!opts.returning?.has(schema);
+  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked, injected: hooked && !stmt[t].returningClause, publish: opts.status === 'published' };
 }

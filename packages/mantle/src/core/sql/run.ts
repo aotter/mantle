@@ -10,7 +10,7 @@ import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
 import { S, op, ref } from "./ast.js";
-import { applyPolicy, HIDDEN_ID, HIDDEN_VERSION, type BindSpec, type Compiled } from "./policy.js";
+import { applyPolicy, HIDDEN_ID, HIDDEN_VERSION, type Compiled } from "./policy.js";
 
 export interface Program {
   readonly kind: "view" | "procedure";
@@ -91,6 +91,7 @@ async function preRead(env: RunEnv, p: Program, i: number, c: Compiled, as: RunA
     const values: N[] = stmt.InsertStmt.selectStmt.SelectStmt.valuesLists[0].List.items;
     // the hook sees these values in a read of its own, so they must not depend on data that can change before the commit
     if (JSON.stringify(values).includes('"SubLink"')) throw refuse(`SQL_SHAPE: an insert into ${c.schema}, which has a before create hook, may not read data in its VALUES`);
+    if (!values.length) return {}; // an insert that names no column: the hook sees an empty entry
     read = select(values.map((val, k) => ({ ResTarget: { name: cols[k]!.ResTarget.name, val } })));
   } else {
     const t = (f: string) => ref("t", f);
@@ -165,7 +166,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
     ...((p.expects?.[i] ?? (c.kind === "row" ? 1 : undefined)) === undefined ? {} : { expect: p.expects?.[i] ?? 1 }),
   }))).catch(async (e) => { throw await lockReason(e); });
 
-  const rows = res.map((r, i) => (plan[i]!.hooked ? r.rows.map(strip) : r.rows));
+  const rows = res.map((r, i) => (plan[i]!.injected ? [] : plan[i]!.hooked ? r.rows.map(strip) : r.rows));
   if (lc) for (const [i, c] of plan.entries()) {
     if (!c.schema || !c.verb || !lc.after.has(key(c)) || !res[i]!.rows.length) continue; // a statement that writes no row calls no hook
     const cause = res[i]!.rows.map((row) => ({ ...strip(row), id: row[HIDDEN_ID], version: row[HIDDEN_VERSION] })) as unknown as [StoreRow, ...StoreRow[]];
@@ -186,11 +187,6 @@ export interface ViewPage {
 }
 
 /**
- * Keyset pagination over a View. The sort keys (the author's plus the compiler's appended id or group key)
- * become hidden `_k<i>` columns; the cursor is the last row's keys and the next page filters on them.
- * Keys must be non-null (a nullable key states its NULL position; not implemented).
- */
-/**
  * Conditions on a paged View's outputs (ADR-0032 decision 5): Admin's `searchFields` become one `LIKE` per output, ORed, and
  * `filterFields` one `=` each. Values are bound; the output names come from the plan's uiSchema, never from the request.
  */
@@ -202,36 +198,70 @@ export interface ViewMatch {
 /** `%text%` with the LIKE metacharacters escaped, so a search matches what was typed. */
 const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
+/**
+ * Keyset pagination over a View. The sort keys (the author's plus the compiler's appended id or group key)
+ * become hidden `_k<i>` columns; the cursor is the last row's keys and the next page filters on them. A NULL key
+ * sorts by the page's own NULLS rule (stated on every key, so the cursor and the order agree).
+ *
+ * A View's own LIMIT bounds every page together. A View without ORDER BY (a DISTINCT, a GROUP BY or an aggregate) cannot
+ * be paged: it returns its rows when they fit one page and is refused when they do not.
+ */
 export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor?: readonly unknown[]; pageSize?: number; match?: ViewMatch } = {}): Promise<ViewPage> {
   const [c] = compileProgram(p.ir, ctxOf(env, p));
   if (!opts.pageSize) return { rows: await env.executor.select({ ir: c!.ast, binds: bindValues(env.dialect, c!.binds, as.bind) }) };
   const sel = structuredClone(c!.ast.SelectStmt) as N;
-  const keys: N[] = sel.sortClause;
-  if (!keys?.length) throw refuse("SQL_SHAPE: a cursor needs an ORDER BY");
-  const visible: string[] = sel.targetList.map(outName);
+  const keys: N[] = sel.sortClause ?? [];
+  if (opts.cursor && !keys.length) throw refuse("SQL_SHAPE: this View has no ORDER BY, so it is one page and takes no cursor");
+  const visible: (string | undefined)[] = sel.targetList.map(outName);
+  if (!keys.length && !opts.match?.search?.text && !opts.match?.eq?.length) {
+    // nothing to wrap: the View's own statement, one row past the page to tell whether it fits
+    const rows = await env.executor.select({ ir: { SelectStmt: { ...sel, limitCount: { A_Const: { ival: { ival: opts.pageSize + 1 } } }, limitOption: "LIMIT_OPTION_COUNT" } }, binds: bindValues(env.dialect, c!.binds, as.bind) });
+    if (rows.length > opts.pageSize) throw refuse(`SQL_SHAPE: this View has more than ${opts.pageSize} rows and no ORDER BY to page them by: add an ORDER BY`);
+    return { rows };
+  }
   if (visible.some((n) => !n)) throw refuse("SQL_SHAPE: a paged View names every output column");
+  const names = visible as string[];
   const aliasVal = new Map<string, N>(sel.targetList.map((t: N) => [outName(t), t.ResTarget.val]));
   const hidden = keys.map((k, i) => {
     const node = k.SortBy.node;
     const f = node.ColumnRef?.fields;
-    const val = f?.length === 1 && aliasVal.has(f[0].String.sval) ? aliasVal.get(f[0].String.sval)! : node; // an ORDER BY alias is its select-list expression
+    const position = node.A_Const?.ival ? Number(node.A_Const.ival.ival) : undefined;
+    // an ORDER BY alias or position is its select-list expression; a bare constant would sort nothing
+    const val = position !== undefined ? sel.targetList[position - 1]?.ResTarget.val ?? refuseOutput(String(position))
+      : f?.length === 1 && aliasVal.has(f[0].String.sval) ? aliasVal.get(f[0].String.sval)! : node;
     return { ResTarget: { name: `_k${i}`, val } };
   });
-  const inner: N = { ...sel, targetList: [...sel.targetList, ...hidden], sortClause: undefined, limitCount: undefined, limitOption: "LIMIT_OPTION_DEFAULT" };
+  // SQLite's own rule, stated: ascending puts NULL first, descending last
+  const desc = (k: N) => k.SortBy.sortby_dir === "SORTBY_DESC";
+  const nullsFirst = (k: N) => (k.SortBy.sortby_nulls === "SORTBY_NULLS_FIRST" ? true : k.SortBy.sortby_nulls === "SORTBY_NULLS_LAST" ? false : !desc(k));
+  // an authored LIMIT bounds the whole result: the View's own ORDER BY and LIMIT pick its rows, and the pages run through those
+  const inner: N = sel.limitCount
+    ? { ...sel, targetList: [...sel.targetList, ...hidden] }
+    : { ...sel, targetList: [...sel.targetList, ...hidden], sortClause: undefined, limitCount: undefined, limitOption: "LIMIT_OPTION_DEFAULT" };
   const base = c!.binds.length;
-  const cursorBinds: BindSpec[] = opts.cursor ? keys.map((_k, i) => ({ k: "cursor", i })) : [];
+  const extra: unknown[] = [];
+  const param = (value: unknown): N => (extra.push(value), { ParamRef: { number: base + extra.length } });
   const col = (n: string): N => ref("_p", n);
-  const after = opts.cursor
-    ? { BoolExpr: { boolop: "OR_EXPR", args: keys.map((k, i) => ({ BoolExpr: { boolop: "AND_EXPR", args: [
-        ...keys.slice(0, i).map((_x, j) => op("=", col(`_k${j}`), { ParamRef: { number: base + j + 1 } })),
-        op(k.SortBy.sortby_dir === "SORTBY_DESC" ? "<" : ">", col(`_k${i}`), { ParamRef: { number: base + i + 1 } }),
-      ] } })) } }
-    : undefined;
+  const isNull = (n: N, t: "IS_NULL" | "IS_NOT_NULL"): N => ({ NullTest: { arg: n, nulltesttype: t } });
+  const conditions: N[] = [];
+  if (opts.cursor) {
+    const cur = opts.cursor;
+    const same = (j: number) => (cur[j] === null ? isNull(col(`_k${j}`), "IS_NULL") : op("=", col(`_k${j}`), param(cur[j])));
+    // the rows after the cursor's key i: past a NULL comes every value when NULL sorts first, nothing when it sorts last
+    const past = (k: N, i: number): N | undefined => {
+      const at = col(`_k${i}`);
+      if (cur[i] === null) return nullsFirst(k) ? isNull(at, "IS_NOT_NULL") : undefined;
+      const beyond = op(desc(k) ? "<" : ">", at, param(cur[i]));
+      return nullsFirst(k) ? beyond : { BoolExpr: { boolop: "OR_EXPR", args: [beyond, isNull(at, "IS_NULL")] } };
+    };
+    const args = keys.flatMap((k, i) => {
+      const last = past(k, i);
+      return last ? [{ BoolExpr: { boolop: "AND_EXPR", args: [...keys.slice(0, i).map((_x, j) => same(j)), last] } }] : [];
+    });
+    conditions.push(args.length ? { BoolExpr: { boolop: "OR_EXPR", args } } : { A_Const: { boolval: { boolval: false } } });
+  }
   // an output by the name SQL gave it: an unquoted alias or column folds to lower case
-  const output = (name: string) => visible.find((n) => n === name) ?? visible.find((n) => n === name.toLowerCase()) ?? refuseOutput(name);
-  const matchBinds: unknown[] = [];
-  const param = (value: unknown): N => (matchBinds.push(value), { ParamRef: { number: base + cursorBinds.length + matchBinds.length } });
-  const conditions: N[] = after ? [after] : [];
+  const output = (name: string) => names.find((n) => n === name) ?? names.find((n) => n === name.toLowerCase()) ?? refuseOutput(name);
   const search = opts.match?.search;
   if (search?.text) {
     const pattern = likePattern(search.text);
@@ -240,13 +270,14 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
   }
   for (const { column, value } of opts.match?.eq ?? []) conditions.push(op("=", col(output(column)), param(value)));
   const outer: N = { SelectStmt: {
-    targetList: [...visible.map((n) => ({ ResTarget: { val: col(n), name: n } })), ...keys.map((_k, i) => ({ ResTarget: { val: col(`_k${i}`), name: `_k${i}` } }))],
+    targetList: [...names.map((n) => ({ ResTarget: { val: col(n), name: n } })), ...keys.map((_k, i) => ({ ResTarget: { val: col(`_k${i}`), name: `_k${i}` } }))],
     fromClause: [{ RangeSubselect: { subquery: { SelectStmt: inner }, alias: { aliasname: "_p" } } }],
     whereClause: conditions.length > 1 ? { BoolExpr: { boolop: "AND_EXPR", args: conditions } } : conditions[0],
-    sortClause: keys.map((k, i) => ({ SortBy: { node: col(`_k${i}`), sortby_dir: k.SortBy.sortby_dir, sortby_nulls: k.SortBy.sortby_nulls } })),
+    sortClause: keys.map((k, i) => ({ SortBy: { node: col(`_k${i}`), sortby_dir: k.SortBy.sortby_dir, sortby_nulls: nullsFirst(k) ? "SORTBY_NULLS_FIRST" : "SORTBY_NULLS_LAST" } })),
     limitCount: { A_Const: { ival: { ival: opts.pageSize + 1 } } }, limitOption: "LIMIT_OPTION_COUNT", op: "SETOP_NONE" } };
-  const rows = await env.executor.select({ ir: outer, binds: [...bindValues(env.dialect, [...c!.binds, ...cursorBinds], as.bind, { cursor: opts.cursor }), ...matchBinds] });
+  const rows = await env.executor.select({ ir: outer, binds: [...bindValues(env.dialect, c!.binds, as.bind), ...extra] });
+  if (!keys.length && rows.length > opts.pageSize) throw refuse(`SQL_SHAPE: this View has more than ${opts.pageSize} matching rows and no ORDER BY to page them by: add an ORDER BY`);
   const page = rows.slice(0, opts.pageSize);
-  const next = rows.length > opts.pageSize ? keys.map((_k, i) => page.at(-1)![`_k${i}`]) : undefined;
-  return { rows: page.map((r) => Object.fromEntries(visible.map((n) => [n, r[n]]))), ...(next ? { next } : {}) };
+  const next = keys.length && rows.length > opts.pageSize ? keys.map((_k, i) => page.at(-1)![`_k${i}`]) : undefined;
+  return { rows: page.map((r) => Object.fromEntries(names.map((n) => [n, r[n]]))), ...(next ? { next } : {}) };
 }

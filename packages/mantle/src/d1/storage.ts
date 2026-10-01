@@ -153,13 +153,16 @@ export async function convergeStorage(
   const timeZone = options.timeZone ?? "UTC";
   const state = `${options.fingerprint}|${timeZone}`;
   await driver.batch([...SYSTEM_DDL.map((sql) => ({ sql })), { sql: "INSERT OR IGNORE INTO _mantle_boot_state (key, value) VALUES ('instance', ?1)", binds: [crypto.randomUUID()] }]);
-  const [stored] = await driver.batch([{ sql: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" }]);
-  if (stored!.rows[0]?.value === state) return { skipped: true, blocked: [], undeclared: [] };
+  const [stored] = await driver.batch([{ sql: "SELECT key, value FROM _mantle_boot_state WHERE key IN ('fingerprint', 'timezone')" }]);
+  const booted = new Map(stored!.rows.map((r) => [r.key, r.value]));
+  if (booted.get("fingerprint") === state) return { skipped: true, blocked: [], undeclared: [] };
+  // the zone's transitions cost hundreds of milliseconds of CPU to compute: only a changed zone rewrites them, not every plan change
+  const tz = booted.get("timezone") === timeZone ? [] : [...tzStatements(transitions(timeZone)).map((sql) => ({ sql })), { sql: "INSERT OR REPLACE INTO _mantle_boot_state (key, value) VALUES ('timezone', ?1)", binds: [timeZone] }];
 
   for (let attempt = 0; ; attempt++) {
     const { statements, blocked, undeclared, uniques } = await diff(driver, plan);
     if (blocked.length) return { skipped: false, blocked, undeclared };
-    statements.push(...tzStatements(transitions(timeZone)).map((sql) => ({ sql })));
+    statements.push(...tz);
     statements.push({ sql: "INSERT OR REPLACE INTO _mantle_boot_state (key, value) VALUES ('fingerprint', ?1)", binds: [state] });
     try {
       await driver.batch(statements);
