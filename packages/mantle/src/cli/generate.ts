@@ -97,6 +97,9 @@ function featureDiagnostics(root: string, config: MantleConfig): Diagnostic[] {
   need("@aotter/mantle", ["@aotter/mantle"]);
   need(`identity '${config.identity}'`, PACKAGES[config.identity]);
   for (const f of config.features) need(`feature '${f}'`, PACKAGES[f]);
+  // a preset written now serves the staff MCP App, which @aotter/mantle-ui builds; a service already written is the application's
+  const writesPreset = (config.dialect === undefined || config.dialect === d1.name) && !existsSync(join(root, "src/service.ts"));
+  if (writesPreset && config.features.includes("mcp") && config.identity !== "none" && !config.features.includes("admin")) need("the staff MCP App", ["@aotter/mantle-ui"]);
   if (config.features.includes("admin") && config.identity === "none")
     out.push(validateDiagnostic({ code: "GENERATE_FEATURE_DEPENDENCY_MISSING", severity: "error", path: "feature 'admin'", message: "feature 'admin' needs a caller identity, and identity is 'none'. Pass --identity mantle or --identity custom, or leave admin out of --features." }));
   return out;

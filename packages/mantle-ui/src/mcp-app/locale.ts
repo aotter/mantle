@@ -8,9 +8,6 @@ export interface AppLabels {
   readonly viewFailed: string;
   readonly viewCancelled: string;
   readonly refreshFailed: string;
-  readonly preview: string;
-  readonly previewLoading: string;
-  readonly sitePreview: string;
 }
 
 const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
@@ -49,9 +46,6 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "These results could not be shown.",
     viewCancelled: "The request was cancelled.",
     refreshFailed: "The list could not be refreshed. It may be out of date.",
-    preview: "Preview page",
-    previewLoading: "Loading preview…",
-    sitePreview: "Site preview",
   },
   "zh-TW": {
     interaction: {
@@ -88,9 +82,6 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "無法顯示這些結果。",
     viewCancelled: "請求已取消。",
     refreshFailed: "無法重新整理清單，內容可能不是最新的。",
-    preview: "預覽頁面",
-    previewLoading: "正在載入預覽…",
-    sitePreview: "網站預覽",
   },
   "zh-CN": {
     interaction: {
@@ -127,9 +118,6 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "无法显示这些结果。",
     viewCancelled: "请求已取消。",
     refreshFailed: "无法刷新列表，内容可能不是最新的。",
-    preview: "预览页面",
-    previewLoading: "正在加载预览…",
-    sitePreview: "网站预览",
   },
 };
 

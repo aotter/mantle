@@ -95,9 +95,30 @@ resources beside the tools. Each resource names the tools whose results it
 client without MCP Apps support never sees app-only tools. The HTML is a static
 asset; caller data travels only in tool results.
 
-0.2.0 ships no built-in App for this option. The 0.1.x interaction App in
-`@aotter/mantle-ui/mcp-app` was built for the 0.1.x tools and is not wired to
-0.2.0 surfaces.
+The preset serves Mantle's App on `/mcp/staff`:
+
+```ts
+import { planApp } from "@aotter/mantle/mcp";
+import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";
+
+createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }, resourceMetadata });
+```
+
+`planApp` renders every View tool of the surface and embeds the plan's catalog
+in the HTML once: each View's columns as the Schema fields they read (so a
+value is labelled and formatted as Admin shows it), and, for a View that reads
+one table and outputs its `id`, the Procedure tools whose `target` is that
+Schema. A host that renders MCP Apps shows a View's rows in the chat; a row
+with an `id` (and a `version`, for an operation that locks one) offers those
+operations through the same review-and-submit panel Admin uses. The row as
+listed is what the person reviews: a version that moved since is the server's
+`CONFLICT`. The catalog is the plan's, not the caller's, so an operation the
+caller's role cannot run is offered and then refused. Every read and write is a
+tool call under the caller's own token. A rendered result names its tool in
+`_meta["net.aotter.mantle/tool"]`.
+
+On the public surface, a member-facing App is the application's to build; the
+SDK attaches none.
 
 ## Further reading
 

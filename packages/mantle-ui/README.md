@@ -13,6 +13,20 @@ Nothing imports it: `mantle generate`'s Cloudflare preset binds
 built for that path, so `createAdminSurface` refuses `assets` under any other
 `basePath`. Its source is `admin/`.
 
+## MCP App
+
+`/mcp-app` exports `mantleAppHtml`, one self-contained HTML document. Give it
+to `planApp` from `@aotter/mantle/mcp`, which embeds the plan's catalog of
+Views and row operations and renders every View tool of a surface:
+
+```ts
+apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }
+```
+
+The App shows a View's rows with Admin's value renderers and opens one row
+operation at a time through the controller and `OperationPanel`. Every read
+and write is a tool call through the host; it holds no credentials.
+
 ## Controller
 
 The `/controller` subpath takes one operation opened from one

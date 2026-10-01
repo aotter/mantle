@@ -1,30 +1,38 @@
-import type { EntrySnapshot, InteractionDiagnostic, InvokeOutcome } from "../controller/index.js";
+import type { InteractionDiagnostic, InvokeOutcome } from "../controller/index.js";
 import type { FormSchema } from "../react/schema-form.js";
+import type { FieldSchema, LocalizedText } from "../react/values.js";
 
-/** Result `_meta` key the Mantle MCP server fills for App-linked Views. */
-export const INTERACTION_META_KEY = "net.aotter.mantle/interaction";
+/** Result `_meta` key naming the tool, on results an App renders (`@aotter/mantle/mcp`'s `APP_TOOL_META_KEY`). */
+export const APP_TOOL_META_KEY = "net.aotter.mantle/tool";
+/** The element the host embeds the catalog in (`@aotter/mantle/mcp`'s `APP_CATALOG_ID`). */
+export const APP_CATALOG_ID = "mantle-catalog";
 
-/** A row action as the server describes it in `_meta`. */
+/** A Procedure tool that acts on one row, as `@aotter/mantle/mcp`'s `appCatalog` describes it. */
 export interface AppRowAction {
   readonly capability: string;
-  readonly title?: string;
+  readonly title?: LocalizedText;
   readonly inputSchema: FormSchema;
   readonly bind: readonly { readonly input: string; readonly field: string }[];
   readonly version?: string;
   readonly mutates: boolean;
 }
 
-export interface AppView {
-  /** Tool that produced the rows, called again to refresh them. */
-  readonly view: string;
-  readonly collection: string | null;
-  /** Tool that reads one entry of the collection; absent on surfaces without one. */
-  readonly read: string | null;
-  readonly rows: readonly Readonly<Record<string, unknown>>[];
-  readonly rowActions: readonly AppRowAction[];
-  /** Tool that renders a row's site page, when the site offers previews. */
-  readonly preview?: string;
+export interface AppCatalogView {
+  readonly title?: LocalizedText;
+  readonly columns: Readonly<Record<string, FieldSchema>>;
+  readonly list: { readonly columns: readonly string[] };
+  /** The `actions` a row of this View can open. */
+  readonly actions: readonly string[];
 }
+
+/** What the server embedded in the App's HTML: View tool name → its View, Procedure tool name → how it acts on a row. */
+export interface AppCatalog {
+  readonly views: Readonly<Record<string, AppCatalogView>>;
+  readonly actions: Readonly<Record<string, AppRowAction>>;
+}
+
+/** A View the catalog does not describe: its rows as they come, nothing to open. */
+export const BARE_VIEW: AppCatalogView = { columns: {}, list: { columns: [] }, actions: [] };
 
 /** The shape every MCP tool result shares, independent of an SDK. */
 export interface ToolResult {
@@ -37,20 +45,30 @@ export interface ToolResult {
 /** Calls one server tool; the App passes `app.callServerTool`. */
 export type CallTool = (name: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<ToolResult>;
 
-/** The View a tool result describes, or null for any other result. */
-export function viewOf(result: ToolResult): AppView | null {
-  const meta = result._meta?.[INTERACTION_META_KEY];
-  if (result.isError || !isRecord(meta) || typeof meta["view"] !== "string") return null;
+type Row = Readonly<Record<string, unknown>>;
+
+/** The catalog the host embedded; none is an empty catalog. */
+export function readCatalog(doc: Pick<Document, "getElementById"> = document): AppCatalog {
+  try {
+    const parsed = JSON.parse(doc.getElementById(APP_CATALOG_ID)?.textContent ?? "") as unknown;
+    if (isRecord(parsed) && isRecord(parsed["views"]) && isRecord(parsed["actions"])) return parsed as unknown as AppCatalog;
+  } catch {
+    // no catalog: nothing to render with it
+  }
+  return { views: {}, actions: {} };
+}
+
+/** The tool a result came from: the server names it, else the host's tool info. */
+export function toolOf(result: ToolResult, hostTool?: string): string | null {
+  const named = result._meta?.[APP_TOOL_META_KEY];
+  return typeof named === "string" ? named : hostTool ?? null;
+}
+
+/** A View result's rows; null for a failure or any other result. */
+export function rowsOf(result: ToolResult): Row[] | null {
+  if (result.isError) return null;
   const output = outputOf(result);
-  const rows = isRecord(output) && Array.isArray(output["rows"]) ? output["rows"].filter(isRecord) : [];
-  return {
-    view: meta["view"],
-    collection: typeof meta["collection"] === "string" ? meta["collection"] : null,
-    read: typeof meta["read"] === "string" ? meta["read"] : null,
-    rows,
-    rowActions: Array.isArray(meta["rowActions"]) ? meta["rowActions"] as AppRowAction[] : [],
-    ...(typeof meta["preview"] === "string" ? { preview: meta["preview"] } : {}),
-  };
+  return isRecord(output) && Array.isArray(output["rows"]) ? output["rows"].filter(isRecord) : null;
 }
 
 /** The diagnostics an `isError` result carries, from either content form. */
@@ -89,43 +107,6 @@ export async function invokeTool(call: CallTool, name: string, args: Record<stri
   return { ok: false, diagnostics };
 }
 
-/** The server's entry reader (`read_entry`) for the row's entry, as the controller's snapshot. */
-export async function readEntry(call: CallTool, tool: string, collection: string, id: string, signal: AbortSignal): Promise<EntrySnapshot> {
-  const result = await call(tool, { collection, id }, signal);
-  if (result.isError) throw new Error(diagnosticsOf(result)[0]?.message ?? "The entry could not be read.");
-  const entry = outputOf(result);
-  if (!isRecord(entry) || typeof entry["id"] !== "string" || typeof entry["version"] !== "number") {
-    throw new Error(`${tool} returned no entry version.`);
-  }
-  return { id: entry["id"], version: entry["version"], data: isRecord(entry["data"]) ? entry["data"] : {} };
-}
-
-/** The site page for one entry, from the preview tool's `{ html }`. */
-export async function previewHtml(call: CallTool, tool: string, collection: string, id: string): Promise<string> {
-  const result = await call(tool, { collection, id });
-  const output = outputOf(result);
-  if (result.isError) throw new Error(diagnosticsOf(result)[0]?.message ?? "This entry has no page to preview.");
-  if (!isRecord(output) || typeof output["html"] !== "string") throw new Error("This entry has no page to preview.");
-  return output["html"];
-}
-
-/**
- * The page with navigation taken out: a preview frame with an empty sandbox
- * runs no scripts and submits no forms, but it can still follow its own
- * links or a meta refresh. Links keep their text and lose their target.
- * Parsing as `text/html` runs nothing.
- */
-export function inertPreview(html: string): string {
-  if (typeof DOMParser === "undefined") return html;
-  const page = new DOMParser().parseFromString(html, "text/html");
-  for (const link of page.querySelectorAll("a[href], area[href]")) link.removeAttribute("href");
-  for (const meta of page.querySelectorAll("meta[http-equiv]")) {
-    if (/^refresh$/iu.test(meta.getAttribute("http-equiv") ?? "")) meta.remove();
-  }
-  for (const form of page.querySelectorAll("form")) form.removeAttribute("action");
-  return `<!doctype html>${page.documentElement.outerHTML}`;
-}
-
 /** Inputs the form does not render: row bindings, the version, idempotency keys. */
 export function hiddenInputs(action: AppRowAction): string[] {
   return [
@@ -139,6 +120,15 @@ export function idempotencyInputs(action: AppRowAction): string[] {
   return Object.entries(action.inputSchema.properties ?? {})
     .filter(([, property]) => property["x-mcp-hint"] === "idempotency-key")
     .map(([name]) => name);
+}
+
+/** The row actions a row can open: it carries an id, and its version when the action locks one. */
+export function actionsFor(catalog: AppCatalog, view: AppCatalogView, row: Row): AppRowAction[] {
+  if (typeof row["id"] !== "string") return [];
+  return view.actions.flatMap((name) => {
+    const action = Object.prototype.hasOwnProperty.call(catalog.actions, name) ? catalog.actions[name]! : undefined;
+    return action && (!action.version || typeof row["version"] === "number") ? [action] : [];
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

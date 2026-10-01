@@ -12,6 +12,7 @@ description: Every HTTP route the generated Mantle 0.2.0 service mounts (REST, a
 |---|---|---|
 | `/api/auth/*`, `/.well-known/oauth-authorization-server/*`, `/.well-known/oauth-protected-resource[/*]`, `/oauth/consent[/data]`, `/oauth/consents[/data\|/revoke]` | `createAuthRoutes` | identity `mantle` |
 | `/admin/*` | `createAdminSurface`: the console (from `ASSETS`) and `/admin/api/*` | feature `admin` |
+| `/mcp/staff` | `createMcpSurface`, `surface: staff`, with `planApp`'s MCP App | feature `mcp` and an identity |
 | `/mcp` | `createMcpSurface`, `surface: public` | feature `mcp` |
 | everything else | `createRestSurface` at `/api` | always |
 
@@ -75,10 +76,10 @@ Two npm packages, always published together at one version.
 | `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |
 | `@aotter/mantle/auth` | `createMantleAuth`, `createSetupIncompleteAuth`, `createCallerResolver`, `createAuthRoutes`, `ConsoleEmailSender`, `appleClientSecret` |
 | `@aotter/mantle/admin` | `createAdminSurface`, `AdminIdentity` |
-| `@aotter/mantle/mcp` | `createMcpSurface` |
+| `@aotter/mantle/mcp` | `createMcpSurface`, `planApp` and `appCatalog` (the MCP App's catalog) |
 | `@aotter/mantle/web` | `createRestSurface` |
 | `@aotter/mantle/testing` | `runStorageConformance`, the dialect compliance suite |
-| `@aotter/mantle-ui` | `/controller`, `/kit`, `/mcp-app`, and the prebuilt Admin console in `dist/admin` (exported as `./admin/index.html`), which the preset serves at `/admin` |
+| `@aotter/mantle-ui` | `/controller`, `/kit`, `/mcp-app` (`mantleAppHtml`, the App `planApp` serves), and the prebuilt Admin console in `dist/admin` (exported as `./admin/index.html`), which the preset serves at `/admin` |
 
 A subpath that is not imported is never loaded: a service with identity
 `none` bundles no Better Auth, and no Worker bundles the SQL parser.

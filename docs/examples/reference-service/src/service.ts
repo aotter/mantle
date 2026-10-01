@@ -3,7 +3,8 @@ import { createMantle, withCaller, type MantleRuntime, type MantleService, type 
 import { createAdminSurface } from "@aotter/mantle/admin";
 import { ConsoleEmailSender, createAuthRoutes, createCallerResolver, createMantleAuth, createSetupIncompleteAuth, type MantleAuth } from "@aotter/mantle/auth";
 import { d1Driver, d1Storage } from "@aotter/mantle/cloudflare";
-import { createMcpSurface } from "@aotter/mantle/mcp";
+import { createMcpSurface, planApp } from "@aotter/mantle/mcp";
+import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";
 import { createRestSurface } from "@aotter/mantle/web";
 import { plan } from "../.mantle/generated/mantle.js";
 import { handlers } from "./handlers.js";
@@ -47,7 +48,8 @@ function mount(runtime: MantleRuntime, env: Env) {
   const resourceMetadata = `${origin}/.well-known/oauth-protected-resource/mcp`;
   const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { directory: auth, roles: auth, deleteUser: auth.deleteUser }, site: { mcpEndpoints: { public: "/mcp", staff: "/mcp/staff" } } }));
   const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
-  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", resourceMetadata }), { resourceMetadata });
+  // MCP Apps hosts render each staff View's rows, and the operations on one row, in the chat
+  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }, resourceMetadata }), { resourceMetadata });
   // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers
   const rest = guard(createRestSurface(runtime, { basePath: "/api" }));
   return async (request: Request, waitUntil: (promise: Promise<unknown>) => void): Promise<Response> => {

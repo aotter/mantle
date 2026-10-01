@@ -120,6 +120,14 @@ describe("mantle generate", () => {
     expect(npm.err).toContain("Run `npm install @aotter/mantle`");
     const all = ["@aotter/mantle", "better-auth", "@better-auth/oauth-provider", "@better-auth/mcp", "@better-auth/cimd", "@modelcontextprotocol/server", "@modelcontextprotocol/ext-apps", "@aotter/mantle-ui"];
     expect((await gen([], await project(all))).code).toBe(0);
+    // the preset's staff MCP surface serves the App @aotter/mantle-ui builds, so mcp with an identity needs it, admin or not
+    const mcp = ["--features", "mcp", "--identity", "custom"];
+    const fresh = await project(all.filter((p) => p !== "@aotter/mantle-ui"));
+    await rm(join(fresh, "src/service.ts"));
+    expect((await gen(mcp, fresh)).err).toContain("the staff MCP App needs @aotter/mantle-ui");
+    // a service already written (the fixture's) is the application's: its imports decide, not the preset
+    const written = await gen(mcp, await project(all.filter((p) => p !== "@aotter/mantle-ui")));
+    expect([written.code, written.err]).toEqual([0, ""]);
   });
 
   it("refuses to switch identity on a rerun", async () => {

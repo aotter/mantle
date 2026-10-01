@@ -93,6 +93,11 @@ async function project(args: readonly string[], before: Record<string, string> =
   await mkdir(join(dir, "node_modules/@aotter/mantle-ui/dist/admin/assets"), { recursive: true });
   await writeFile(join(dir, "node_modules/@aotter/mantle-ui/dist/admin/index.html"), "<!doctype html><title>Mantle Admin</title>");
   await writeFile(join(dir, "node_modules/@aotter/mantle-ui/dist/admin/assets/app.js"), "export {};");
+  // and for the built MCP App the staff surface serves
+  await mkdir(join(dir, "node_modules/@aotter/mantle-ui/dist/mcp-app"), { recursive: true });
+  await writeFile(join(dir, "node_modules/@aotter/mantle-ui/dist/mcp-app/index.js"), 'export const mantleAppHtml = "<html><head></head><body>app</body></html>";');
+  await writeFile(join(dir, "node_modules/@aotter/mantle-ui/dist/mcp-app/index.d.ts"), "export declare const mantleAppHtml: string;");
+  await writeFile(join(dir, "node_modules/@aotter/mantle-ui/package.json"), JSON.stringify({ name: "@aotter/mantle-ui", type: "module", exports: { "./package.json": "./package.json", "./mcp-app": { types: "./dist/mcp-app/index.d.ts", import: "./dist/mcp-app/index.js" } } }));
   const r = await generate(dir, args);
   expect(r.code, r.out).toBe(0);
   return dir;
@@ -257,6 +262,7 @@ describe("the service preset", () => {
       const staff = await mcp("/mcp/staff");
       expect([staff.status, staff.headers.get("www-authenticate")]).toEqual([401, expect.stringContaining("/.well-known/oauth-protected-resource/mcp")]);
       expect((await mcp("/mcp")).status).toBe(200);
+      expect(await read(dir, "src/service.ts")).toContain('apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }');
       // the SPA from @aotter/mantle-ui/admin: the shell for any route, with Admin's frame refusal; a file by name; no missing file
       for (const path of ["/admin", "/admin/c/items"]) {
         const shell = await get(worker, path);

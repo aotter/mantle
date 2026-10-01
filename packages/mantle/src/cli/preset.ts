@@ -47,7 +47,8 @@ function service({ identity, features }: PresetSelection): string {
     ...(admin ? [`  ${identity === "custom" ? "// no AdminIdentity: Admin hides the user facets until src/identity.ts can list and manage users\n  " : ""}const admin = guard(createAdminSurface(runtime, { ${adminOptions.join(", ")} }));`] : []),
     ...(mcp ? [`  const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public"${meta.length ? ", resourceMetadata" : ""} })${meta.length ? ", { resourceMetadata }" : ""});`] : []),
     // the staff tools for an MCP client with a token: the same audience as /mcp, and the staff surface's own role gate
-    ...(staffMcp ? [`  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff"${meta.length ? ", resourceMetadata" : ""} })${meta.length ? ", { resourceMetadata }" : ""});`] : []),
+    ...(staffMcp ? ["  // MCP Apps hosts render each staff View's rows, and the operations on one row, in the chat",
+      `  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }${meta.length ? ", resourceMetadata" : ""} })${meta.length ? ", { resourceMetadata }" : ""});`] : []),
     "  // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers",
     '  const rest = guard(createRestSurface(runtime, { basePath: "/api" }));',
   ];
@@ -72,7 +73,8 @@ function service({ identity, features }: PresetSelection): string {
     ...(admin ? ['import { createAdminSurface } from "@aotter/mantle/admin";'] : []),
     ...(auth.length ? [`import { ${auth.join(", ")} } from "@aotter/mantle/auth";`] : []),
     `import { ${mantle ? "d1Driver, " : ""}d1Storage } from "@aotter/mantle/cloudflare";`,
-    ...(mcp ? ['import { createMcpSurface } from "@aotter/mantle/mcp";'] : []),
+    ...(mcp ? [`import { createMcpSurface${staffMcp ? ", planApp" : ""} } from "@aotter/mantle/mcp";`] : []),
+    ...(staffMcp ? ['import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";'] : []),
     'import { createRestSurface } from "@aotter/mantle/web";',
     `import { plan } from "${MODULE}";`,
     'import { handlers } from "./handlers.js";',
