@@ -28,3 +28,22 @@ export {
   type FieldSchema,
   type LocalizedText,
 } from "./react/values.js";
+export {
+  APP_CATALOG_ID,
+  APP_TOOL_META_KEY,
+  BARE_VIEW,
+  actionsFor,
+  diagnosticsOf,
+  hiddenInputs,
+  idempotencyInputs,
+  invokeTool,
+  outputOf,
+  readCatalog,
+  rowsOf,
+  toolOf,
+  type AppCatalog,
+  type AppCatalogView,
+  type AppRowAction,
+  type CallTool,
+  type ToolResult,
+} from "./app/bridge.js";

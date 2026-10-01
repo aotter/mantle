@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import { useApp, useHostStyles } from "@modelcontextprotocol/ext-apps/react";
 import { MantleApp } from "./app.js";
-import { readCatalog, type CallTool, type ToolResult } from "./bridge.js";
+import { readCatalog, type CallTool, type ToolResult } from "../app/bridge.js";
 import "./styles.css";
 
 // the server embeds it once, when it builds the surface

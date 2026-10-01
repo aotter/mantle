@@ -18,7 +18,7 @@ import {
   type AppRowAction,
   type CallTool,
   type ToolResult,
-} from "./bridge.js";
+} from "../app/bridge.js";
 import { appLabels, type AppLabels } from "./locale.js";
 
 type Row = Readonly<Record<string, unknown>>;

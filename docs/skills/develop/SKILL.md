@@ -87,8 +87,9 @@ a Procedure as `systemCaller(...)`.
 
 ## MCP
 
-The preset mounts `/mcp` (public tools) and, with an identity, `/mcp/staff`
-(staff tools, the same OAuth token, a staff role). `/mcp/staff` serves
+With feature `mcp`, the preset mounts `/mcp` (public tools) and, with an
+identity, `/mcp/staff` (staff tools for a staff role; with identity `mantle`,
+the same OAuth token as `/mcp`). `/mcp/staff` serves
 Mantle's MCP App: a host that renders MCP Apps shows each staff View's rows and
 the operations on one row. A member-facing App on `/mcp` is the application's
 to build when the product asks for one: follow [the recipe](mcp-app.md).
