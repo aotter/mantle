@@ -1,124 +1,103 @@
 ---
-description: Generate a full Mantle app or select smaller modules, then safely rerun the CLI as your manifests evolve.
+description: The files of a Mantle 0.2.0 project, who owns each, mantle.config.json, and every option of mantle generate.
 ---
 # Project layout and CLI
 
-`mantle generate` can assemble a new application or compile manifests in an
-existing one. A new hosted app defaults to Spec, Runtime, API, MCP, Admin and
-an editable blank home. You can select a smaller set explicitly. It never
-invents a business Schema or publishes a deployment.
+## Files
 
-## Start a new app
-
-Choose a host before running the command. The integrated hosts are `cf` and
-`chatgpt-sites`; `--features spec` works without a host. Install one exact
-published SDK version, then let the CLI declare its matching optional packages:
-
-```sh
-mkdir my-app && cd my-app
-npm init -y
-npm pkg set type=module
-MANTLE_VERSION=$(npm view @aotter/mantle@latest version)
-npm install --save-exact "@aotter/mantle@$MANTLE_VERSION"
-npx mantle generate --host cf
-npm install
-npx mantle generate
-npm run build
-```
-
-Confirm `MANTLE_VERSION` is a stable release, without a prerelease suffix.
-Use `--host chatgpt-sites` for a Site; [its guide](../chatgpt-sites/generated-app.md)
-continues with D1 migration, owner identity and local smoke. If you already
-use pnpm, keep that one package manager and run `pnpm install` /
-`pnpm exec mantle`. The first `generate` may exit asking you to install newly
-declared packages; the second completes generation. A README or lockfile from
-bootstrapping still counts as a new app. Once choices are saved, omit flags on
-rerun.
-
-For a smaller composition, list wanted modules positively:
-
-```sh
-npx mantle generate --host cf --features spec,api
-npx mantle generate --features spec
-```
-
-Dependencies are expanded in the saved selection: `api` includes Runtime and
-Spec; `admin` includes Runtime, API and MCP. Supported features are `spec`,
-`runtime`, `api`, `mcp`, `admin`, `web`. No host is needed for Spec-only. Use an
-explicit host in automation so a terminal prompt cannot stall. The selection
-lives in `mantle.config.json`; changing it later requires a deliberate migration,
-not an accidental CLI flag.
-
-## Files and ownership
-
-| File | Owner | What happens on rerun |
+| Path | Written by | Owner |
 |---|---|---|
-| `manifests/*.yaml`, `src/handlers.ts`, `src/home.ts` | You | Preserved. Add domain behavior and edit the blank home here. |
-| `package.json`, `mantle.config.json`, `wrangler.jsonc` | Shared | Required versions and scripts are added; existing user values are preserved or conflicts reported. |
-| `.mantle/generated/*`, `src/storage-fingerprint.json` | CLI | Rebuilt from the saved selection and manifests. |
-| `drizzle/*.sql` on Sites | Review and apply | New migrations append; applied migrations are never rewritten. |
-| `public/_mantle/admin/*` | CLI | Prebuilt Admin assets copied from the selected exact package. |
-| `.openai/hosting.json` on Sites | Sites | Binding metadata is created locally; existing project metadata is preserved. |
+| `manifests/*.yaml` | you | you |
+| `mantle.config.json` | `mantle generate`, when the selection changes | you may edit it; generate keeps keys it does not know |
+| `.mantle/generated/plan.json` | every `mantle generate` | generated: never edit, commit it |
+| `.mantle/generated/mantle.ts` | every `mantle generate` | generated: never edit, commit it |
+| `src/service.ts`, `src/index.ts`, `src/handlers.ts`, `src/identity.ts` (identity `custom`) | the first `mantle generate` | yours from then on |
+| `wrangler.jsonc`, `tsconfig.json`, `.dev.vars.example`, `.gitignore` | the first `mantle generate`, each only if missing | yours |
 
-A generated Worker imports the sealed `plan`, your handler map and the selected
-modules. Generated files carry a marker so the CLI can distinguish them from
-user-owned code. A rerun refuses to replace an unmarked file. Existing
-applications without a saved selection keep their direct-authoring compile
-behavior. For integration into an independently authored application, use the
-installed `docs/skills/integrate/SKILL.md` to choose an embedding, incremental
-replacement or rebuild strategy. Generation does not verify arbitrary host
-entry points or deployment wiring.
+`mantle generate` writes each preset file only when it does not exist, and
+writes none once `src/service.ts` exists: from then on the application owns
+its composition. To get a fresh preset, move the old file aside and rerun.
 
-`generate` accepts `--manifests <dir>` (default `./manifests`), `--output <dir>`
-(default `.mantle/generated`), `--namespace <name>`, `--host cf|chatgpt-sites`,
-`--features <comma-list>` and `--check`. Check mode exits nonzero
-on drift and does not write. Sites also accepts `--review-unique-indexes` for
-an explicit, source-bound unique tuple migration and duplicate preflight;
-[review the D1 procedure](../chatgpt-sites/generated-app.md) before applying
-it. `mantle validate` checks grammar and linked
-capabilities; `--phase deploy` adds deployment checks. `mantle skills` projects
-the installed SDK's project skills into `.agents/skills/` and `.claude/skills/`;
-`mantle skills --check` detects drift. `mantle emit-openapi` describes HTTP
-Triggers and View REST routes; `mantle-harness indexes` and `http` inspect
-queries and running routes. [Command reference](../reference/surface.md).
+- `plan.json` is `{ "sourceHash": …, "plan": … }`: the sealed `RuntimePlan`
+  and the SHA-256 of the manifest sources. The plan's `fingerprint` is what
+  boot checks; reformatting a manifest changes `sourceHash` but not the
+  fingerprint.
+- `mantle.ts` exports `plan`, `sourceHash`, the `Mantle` namespace of row, input and output
+  types, `Store` and `CallerStore` typed over your Schemas and
+  Views, and `MantleHandlers`, which lists exactly the plan's `ref` handlers. A
+  missing or extra handler is a type error. See
+  [Query from TypeScript](../guides/typed-queries.md).
 
-## Verify the assembled app
+## `mantle.config.json`
 
-```sh
-npx mantle generate --check
-npx mantle skills
-npx mantle skills --check
-npm run typecheck
-npm run build
-npm run dev
+```json
+{ "version": 2, "identity": "mantle", "features": ["mcp", "admin", "web"] }
 ```
 
-Run scripts that exist in the selected project; Spec-only has no server to
-start. Run `npx mantle validate` after adding the first Manifest: the validator
-reports `MANIFEST_ROOT_NOT_FOUND` on an intentionally empty app. A full
-Cloudflare app should serve the blank home and Admin assets.
-For local CF Admin, copy `.dev.vars.example` to `.dev.vars`, replace
-`ADMIN_EMAIL` with the intended owner's address and `BETTER_AUTH_SECRET` with
-a random 32-byte secret, and keep `PUBLIC_ORIGIN` equal to the loopback URL
-wrangler prints. Open `/admin/sign-in` with that email and read the OTP in
-wrangler logs. Check that `/_mantle/admin/assets/*` loads, an anonymous
-`/admin/api/site-settings` request is denied, and the signed-in owner can read
-it. Verify anonymous staff MCP access fails before claiming it works. A full
-Site must also apply its reviewed
-D1 migration before the Worker boots. The public MCP endpoint is discoverable
-without a staff session; the staff endpoint requires the host's verified
-identity and a Mantle role. See [MCP and agents](../concepts/mcp-and-agents.md).
+| Key | Values | Meaning |
+|---|---|---|
+| `version` | `2` | `1`, or any `host` key, is a 0.1.x config and fails with exit 2 |
+| `identity` | `mantle`, `custom`, `none` | who the callers are. `mantle`: `@aotter/mantle/auth` (Better Auth sign-in, staff roles, OAuth for MCP). `custom`: your `src/identity.ts` maps your own sessions to callers. `none`: every caller is anonymous |
+| `features` | a subset of `mcp`, `admin`, `web`, in that order | `mcp`: the public MCP surface at `/mcp` (and staff MCP inside Admin). `admin`: Admin's API at `/admin`, which needs an identity. `web`: reserved for public pages; REST at `/api` is always mounted |
+| `dialect` | an npm package name, optional | the SQL dialect; absent is the built-in D1 dialect (`@aotter/mantle/d1`) |
 
-For an already installed app, confirm `node_modules/@aotter/mantle/package.json`
-and the lockfile agree. Use that package's CLI and `docs/` tree; the latest
-GitHub handbook may describe a newer release. Keep all selected
-`@aotter/mantle*` packages on one exact version. The prior direct-authoring
-contract remains valid for older installed SDKs; upgrade deliberately using
-[release notes](../releases/index.md).
+Without a config or flags, the selection is identity `mantle` and every
+feature. An explicit `--features` without `--identity` means identity `none`.
+A rerun keeps the saved identity; asking for another one is refused (exit 2),
+so switching never drops tables.
 
-## Source
+Each selection needs packages in the project. `mantle generate` checks them
+and stops before writing anything, naming the install command for your
+package manager. It never installs anything.
 
-- [Generate CLI](../../../packages/mantle/src/cli/generate.ts)
-- [Project selection and package pins](../../../packages/mantle/src/cli/generate-project.ts)
-- [Cloudflare assembly](../../../packages/mantle/src/cli/generate-cloudflare.ts)
-- [ChatGPT Sites assembly](../../../packages/mantle/src/cli/generate-sites.ts)
+| Selection | Packages |
+|---|---|
+| always | `@aotter/mantle` |
+| identity `mantle` | `better-auth`, `@better-auth/oauth-provider`, `@better-auth/mcp`, `@better-auth/cimd` |
+| feature `mcp` | `@modelcontextprotocol/server`, `@modelcontextprotocol/ext-apps` |
+| feature `admin` | `@aotter/mantle-ui` |
+
+The project also installs `wrangler`, `@cloudflare/workers-types` and
+`@types/node` itself.
+
+## `mantle generate`
+
+```sh
+mantle generate [--manifests <dir>] [--features <list>] [--identity <kind>]
+mantle generate --check [--database <file>]
+```
+
+| Option | Meaning |
+|---|---|
+| `--manifests <dir>` | the manifest directory, default `./manifests`. Every `.yaml` and `.yml` file directly in it is read |
+| `--features <list>` | comma-separated, a positive list. A missing dependency fails with `GENERATE_FEATURE_DEPENDENCY_MISSING`; an omitted feature is never added back |
+| `--identity <kind>` | `mantle`, `custom` or `none` |
+| `--check` | writes nothing. Exits 1 when `plan.json`, `mantle.ts` or `mantle.config.json` differs from what generate would write, or a package is missing |
+| `--database <file>` | with `--check`: also read a local SQLite file (Wrangler's local D1 is under `.wrangler/state/v3/d1/`) read-only, and print the SQL storage convergence would run |
+
+Exit codes: 0 success, 1 a diagnostic or a stale file, 2 a usage or file
+error. Diagnostics name the manifest file, the path in it and, for SQL, the
+position in the statement.
+
+`--check` is the gate for CI and for agents: run `mantle generate`, then
+`mantle generate --check`, then your typecheck.
+
+### Schedules and Cloudflare crons
+
+Schedule Triggers use POSIX cron. `mantle generate` translates each enabled
+one with `toCloudflareCron` and refuses (exit 1, before writing) one that
+Cloudflare cannot run the same way. It writes `triggers.crons` into a new
+`wrangler.jsonc`; once the file is yours it only warns when the crons differ
+from the plan, and you update them.
+
+### Storage SQL
+
+Boot creates what the plan adds (tables, columns, indexes, check triggers) and
+refuses what it cannot change safely. `--check --database` prints the same
+diff without applying it; see [Deploy and operate](../cloudflare/deploy-and-operate.md).
+
+## 0.1.x projects
+
+`apiVersion: cms.mantle.aotter.net/v1` manifests, `--host`, `mantle validate`,
+`mantle emit-openapi`, `mantle skills` and the `mantle-harness` bin are gone.
+`docs/upgrade-0.1-to-0.2.md` in the installed package is the guide.
