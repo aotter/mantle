@@ -17,6 +17,7 @@ export {
   fieldLabel,
   formatMoneyMinor,
   formatTimestampMs,
+  nativeTimestamp,
   moneyMinorHint,
   optionLabel,
   propertyDescription,

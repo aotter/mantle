@@ -3,6 +3,14 @@
 @source "./**/*.tsx";
 @source "../kit/**/*.tsx";
 
+/* `dark:` follows the host's theme (`data-theme`), and the system's only when the host sets none, as the palette below does */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]) *, :root:not([data-theme])) { @slot; }
+  }
+}
+
 /* Mantle tokens resolve to the host's MCP Apps style variables when the host
    provides them (useHostStyles), and to the App's own palette otherwise. The
    host's theme arrives as `data-theme` on the root; without one, the App

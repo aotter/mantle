@@ -29,14 +29,17 @@ export interface FieldSchema {
   readonly [keyword: string]: unknown;
 }
 
-/** The preferred language, then the site's canonical one, then the first given. */
+/**
+ * The preferred language (`en-US` also finds `en`, and case does not matter), then the site's canonical one, then English,
+ * then the first given.
+ */
 export function resolveLocalizedText(value: LocalizedText | null | undefined, preferred: string, canonical?: string | null): string | null {
   if (value == null) return null;
   if (typeof value === "string") return value;
-  if (Object.prototype.hasOwnProperty.call(value, preferred)) return value[preferred]!;
-  if (canonical && Object.prototype.hasOwnProperty.call(value, canonical)) return value[canonical]!;
-  const first = Object.keys(value)[0];
-  return first !== undefined ? value[first]! : null;
+  const keys = Object.keys(value);
+  const find = (tag: string | null | undefined) => (tag ? keys.find((k) => k.toLowerCase() === tag.toLowerCase()) : undefined);
+  const key = find(preferred) ?? find(preferred.split("-")[0]) ?? find(canonical) ?? find("en") ?? keys[0];
+  return key !== undefined ? value[key]! : null;
 }
 
 /** Kebab/snake/camelCase identifier to a human-readable label. */
@@ -112,6 +115,11 @@ export function dateFromFieldValue(value: unknown): Date | undefined {
   if (typeof value !== "number" && typeof value !== "string") return undefined;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+/** Which of the entry's own timestamps a column is, by its name; none of them has a Schema title. */
+export function nativeTimestamp(name: string): "created" | "updated" | undefined {
+  return name === "createdAt" || name === "created_at" ? "created" : name === "updatedAt" || name === "updated_at" ? "updated" : undefined;
 }
 
 /** The entry's own timestamps are date-times on the wire, like a `format: date-time` field. */

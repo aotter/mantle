@@ -35,6 +35,7 @@ export * from "./components/ui/textarea.js";
 export * from "./components/ui/tooltip.js";
 export {
   SchemaFields,
+  applyFieldEdits,
   defaultFieldLabels,
   stringFieldWidget,
   type FieldLabels,
