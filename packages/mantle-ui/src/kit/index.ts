@@ -33,3 +33,13 @@ export * from "./components/ui/table.js";
 export * from "./components/ui/tabs.js";
 export * from "./components/ui/textarea.js";
 export * from "./components/ui/tooltip.js";
+export {
+  SchemaFields,
+  defaultFieldLabels,
+  stringFieldWidget,
+  type FieldLabels,
+  type FieldSlot,
+  type RenderField,
+  type SchemaFieldsProps,
+  type StringWidget,
+} from "../react/fields.js";
