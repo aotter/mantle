@@ -3,10 +3,10 @@
 Status: Accepted for implementation following maintainer approval.
 
 > **Amendment (0.2.0):** Admin answers no MCP. `POST /admin/api/mcp` is
-> removed; `GET /admin/api/webmcp` adds `calls`, and the browser runs each
-> staff tool on Admin's own routes (`POST /admin/api/operations/<name>`,
-> `GET /admin/api/views/<name>`) with the session. The catalog is still the
-> staff MCP surface's; an MCP client with a token uses `/mcp/staff`.
+> removed; the browser calls a staff tool with `POST /admin/api/webmcp/<tool>`
+> and its input as JSON, which Admin runs as the staff MCP surface does, with
+> the session. The catalog is still the staff MCP surface's; an MCP client
+> with a token uses `/mcp/staff`.
 
 Admin WebMCP uses the canonical staff MCP catalog and JSON-RPC dispatcher.
 `GET /admin/api/webmcp` supplies the same tool definitions plus UI route hints;

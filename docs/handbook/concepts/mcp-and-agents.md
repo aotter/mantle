@@ -77,13 +77,15 @@ callers with a staff role, and the role is read on every request.
 
 ## WebMCP in Admin
 
-`GET /admin/api/webmcp` returns `{ tools, calls, routes }`: the staff tool
-catalog (the same list `/mcp/staff` returns from `tools/list`), what runs each
-tool (`calls`: a Procedure through `POST /admin/api/operations/<name>`, a View
-through `GET /admin/api/views/<name>`), and the Admin page each tool belongs to
-(a Procedure with a `target` maps to its collection, a View to its report). A
-browser agent in the console registers these tools and runs them on Admin's
-own routes with the signed-in session; Admin itself answers no MCP.
+`GET /admin/api/webmcp` returns `{ tools, routes }`: the staff tools (what
+`/mcp/staff` lists, in its default locale) and, for each tool, the Admin page
+it belongs to (a Procedure with a `target` maps to its collection, a View to its
+report). A browser agent in the console registers these tools and calls one
+with `POST /admin/api/webmcp/<tool>` and the input as the JSON body. Admin runs
+it as `/mcp/staff` would, with the same input, an `mcp` cause and the signed-in
+session, and answers `{ output }` or the refusal. Admin itself answers no MCP.
+An MCP App's `appOnly` tools are hidden from MCP clients only; in Admin the
+agent acts as the signed-in person, who can run every staff tool by hand.
 
 ## MCP Apps
 

@@ -8,8 +8,6 @@ export interface AdminTool {
 }
 export interface AdminToolCatalog {
   tools: AdminTool[];
-  /** What runs each staff tool: its Procedure through Admin's operation route, or its View through Admin's View route. */
-  calls: Record<string, { kind: "procedure" | "view"; source: string }>;
   routes: Record<string, { path: string; entry?: boolean }>;
 }
 export interface AdminModelContext {
@@ -39,16 +37,12 @@ export interface StaffToolResult {
   structuredContent?: Record<string, unknown>;
 }
 
-/** Call a staff tool once, on Admin's own routes with the signed-in session. A refusal keeps its Mantle diagnostic, and
- *  nothing is retried: a write whose outcome is unknown must be re-read. */
-export async function callStaffTool(catalog: AdminToolCatalog, name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ result: StaffToolResult; output: unknown }> {
-  const call = Object.prototype.hasOwnProperty.call(catalog.calls, name) ? catalog.calls[name] : undefined;
-  if (!call) throw new TypeError("Unknown staff tool.");
-  const source = encodeURIComponent(call.source);
+/** Call a staff tool once on Admin's tool route (`POST /admin/api/webmcp/{tool}`), with the signed-in session. A refusal
+ *  keeps its Mantle diagnostic, and nothing is retried: a write whose outcome is unknown must be re-read. */
+export async function callStaffTool(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ result: StaffToolResult; output: unknown }> {
   let output: unknown;
   try {
-    if (call.kind === "procedure") output = (await api.post<{ output: unknown }>(`/operations/${source}`, input, { signal })).output;
-    else output = await api.get(`/views/${source}${viewQuery(input)}`, { signal });
+    output = (await api.post<{ output: unknown }>(`/webmcp/${encodeURIComponent(name)}`, input, { signal })).output;
   } catch (error) {
     // the diagnostic is the refusal; the body stays a plain, serialisable object
     if (error instanceof ApiError) throw new ApiError(error.message, error.status, refusalOf(error.body) ?? error.body);
@@ -56,15 +50,4 @@ export async function callStaffTool(catalog: AdminToolCatalog, name: string, inp
   }
   const result: StaffToolResult = { content: [{ type: "text", text: JSON.stringify(output) }], ...(output && typeof output === "object" && !Array.isArray(output) ? { structuredContent: output as Record<string, unknown> } : {}) };
   return { result, output };
-}
-
-/** A View tool's input as the View route reads it: one query parameter each, `limit` and `cursor` included. */
-function viewQuery(input: Record<string, unknown>): string {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(input)) {
-    if (value === undefined || value === null) continue;
-    query.set(key, typeof value === "object" ? JSON.stringify(value) : String(value));
-  }
-  const text = query.toString();
-  return text ? `?${text}` : "";
 }

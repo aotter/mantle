@@ -154,6 +154,7 @@ describe("the service preset", () => {
     const service = await read(dir, "src/service.ts");
     expect(service).not.toContain("@aotter/mantle/auth");
     expect(service).not.toContain("/admin");
+    expect(service).not.toContain("/mcp/staff"); // nobody can be staff without an identity
     expect(await read(dir, "src/handlers.ts")).toContain('throw new Error("not implemented: tick")');
     const { crons } = JSON.parse(await read(dir, "wrangler.jsonc")).triggers;
     expect(crons).toEqual(["0 2 * * 2"]); // Monday: POSIX 1, Cloudflare 2
@@ -251,6 +252,11 @@ describe("the service preset", () => {
       expect(await methods.json()).toEqual({ methods: [expect.objectContaining({ kind: "email-otp" })] });
       expect(await rows(worker)).toEqual([]);
       expect((await get(worker, "/admin/api/me")).status).toBe(401);
+      // the staff MCP surface has its own mount, before /mcp: anonymous is challenged toward the /mcp resource
+      const mcp = (path: string) => worker.fetch(`http://127.0.0.1:8787${path}`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) });
+      const staff = await mcp("/mcp/staff");
+      expect([staff.status, staff.headers.get("www-authenticate")]).toEqual([401, expect.stringContaining("/.well-known/oauth-protected-resource/mcp")]);
+      expect((await mcp("/mcp")).status).toBe(200);
       // the SPA from @aotter/mantle-ui/admin: the shell for any route, with Admin's frame refusal; a file by name; no missing file
       for (const path of ["/admin", "/admin/c/items"]) {
         const shell = await get(worker, path);

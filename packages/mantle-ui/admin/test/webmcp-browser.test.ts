@@ -30,10 +30,10 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
     const calls: unknown[] = [];
     await page.route("**/admin/api/**", async route => {
       const path = new URL(route.request().url()).pathname.replace("/admin/api", "");
-      // the tool runs on Admin's own View route; the call carries its input as query parameters
-      if (path === "/views/report" && new URL(route.request().url()).searchParams.get("region") === "north") {
-        calls.push(route.request().url());
-        return fail ? route.fulfill({ status: 409, json: { error: { code: "CONFLICT", message: "Stale version" } } }) : route.fulfill({ json: { rows: [] } });
+      // the tool runs on Admin's tool route, its input the JSON body
+      if (path === "/webmcp/query_view_report") {
+        calls.push(route.request().postDataJSON());
+        return fail ? route.fulfill({ status: 409, json: { error: { code: "CONFLICT", message: "Stale version" } } }) : route.fulfill({ json: { output: { rows: [] } } });
       }
       return route.fulfill({ json: path === "/me" ? { role: "owner", login: "owner" }
         : path === "/site" ? { brand: "WebMCP test", icons: [], canonicalLocale: "en" }
@@ -41,7 +41,7 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
         : path === "/operations" ? { operations: [] }
         : path === "/views-manifest" ? { views: [] }
         : path === "/developer-console" ? { dataModel: { schemas: [], views: [] }, logic: { triggers: [], procedures: [] }, interfaces: { http: [], callable: [] }, graph: { atoms: [], relations: [] } }
-        : path === "/webmcp" ? { tools: [staffTool], calls: { query_view_report: { kind: "view", source: "report" } }, routes: { query_view_report: { path: "/admin/views/report" } } }
+        : path === "/webmcp" ? { tools: [staffTool], routes: { query_view_report: { path: "/admin/views/report" } } }
         : path === "/views/report" ? { ok: true, data: { rows: [], page: 1, show: 50, hasMore: false } } : {} });
     });
     await page.goto(new URL("/admin/", server.resolvedUrls!.local[0]!).href);
@@ -67,7 +67,7 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
     fail = true;
     expect(await invoke("query_view_report", { region: "north" })).toMatchObject({ result: { isError: true, structuredContent: { diagnostic: { code: "CONFLICT" } } } });
     expect(new URL(page.url()).pathname).toBe("/admin");
-    expect(calls).toHaveLength(2);
+    expect(calls).toEqual([{ region: "north" }, { region: "north" }]);
     expect(await invoke("admin_navigate", { path: "https://evil.test" })).toMatchObject({ result: { isError: true } });
     await invoke("admin_navigate", { path: "/admin/dev/docs/webmcp" });
     await page.getByText(staffTool.description).last().waitFor({ state: "visible" });

@@ -133,17 +133,28 @@ describe("Admin: WebMCP's staff tools", () => {
     expect(body.tools).toEqual(listed);
   });
 
-  it("each tool names what runs it, and routes come only from a Procedure's target Schema and from Views", async () => {
+  it("routes come only from a Procedure's target Schema and from Views", async () => {
     const { body } = await get("/admin/api/webmcp", user("contributor"));
-    expect(body.calls).toEqual({ retitle: { kind: "procedure", source: "retitle" }, purge: { kind: "procedure", source: "purge" }, all_posts: { kind: "view", source: "all-posts" }, picker: { kind: "view", source: "picker" } });
     expect(body.routes).toEqual({ retitle: { path: "/admin/c/posts", entry: true }, all_posts: { path: "/admin/views/all-posts" }, picker: { path: "/admin/views/picker" } });
     // bootstrap carries the same catalog
     expect((await get("/admin/api/bootstrap", user("contributor"))).body.webmcp).toEqual(body);
   });
 
-  it("a View tool and its Admin route answer the same rows", async () => {
-    const tool = (await rpc(user("contributor"), "tools/call", { name: "all_posts", arguments: {} })).data.result.structuredContent;
-    expect((await get("/admin/api/views/all-posts", user("contributor"))).body).toEqual(tool);
+  const call = async (name: string, input: unknown, caller: Caller = user("contributor")) => {
+    const res = await admin()(new Request(`http://x/admin/api/webmcp/${name}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) }), caller);
+    return { status: res.status, body: await res.json() as any };
+  };
+
+  it("a tool call on Admin's tool route answers what the staff MCP surface answers, paging included", async () => {
+    for (const [name, input] of [["all_posts", { limit: 1 }], ["purge", {}]] as const) {
+      const tool = (await rpc(user("contributor"), "tools/call", { name, arguments: input })).data.result.structuredContent;
+      expect((await call(name, input)).body).toEqual({ output: tool });
+    }
+  });
+
+  it("a tool call is the session's: an unknown tool is 404 and a token is refused", async () => {
+    expect((await call("nope", {})).status).toBe(404);
+    expect((await call("all_posts", {}, user("owner", "oauth"))).status).toBe(403);
   });
 });
 

@@ -47,7 +47,7 @@ const failure = (d: Diagnostic, hasOutputSchema: boolean): CallToolResult => {
   return { isError: true, content: [{ type: "text", text: JSON.stringify(payload) }], ...(hasOutputSchema ? {} : { structuredContent: payload }) };
 };
 
-/** The surface and the tools it registers for a client without MCP Apps, in its locale: what Admin's `/webmcp` publishes. */
+/** The surface and the tools it registers for a client without MCP Apps, in its locale. */
 export type McpSurface = Surface & { readonly tools: readonly McpTool[] };
 
 export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOptions): McpSurface {

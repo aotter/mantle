@@ -58,7 +58,7 @@ Every route needs a staff caller; the column names the least role.
 | `GET /admin/api/site` | contributor | site metadata, `mcpEndpoints`, and `capabilities: { siteSettings, media, invitationEmail, statistics }` (what this deployment turned on; the console hides what is off) |
 | `GET`, `PATCH /admin/api/site-settings` | owner | 501 `SITE_NOT_CONFIGURED` without `runtime.site` |
 | `POST /admin/api/media/uploads`, `POST …/media/uploads/{groupId}/commit`, `GET …/media`, `GET`, `PATCH`, `DELETE …/media/{id}` | editor | with `media` and `runtime.site` |
-| `GET /admin/api/webmcp` | contributor | the staff tools for a browser agent: `{ tools, calls, routes }`, each run on the operation or View route |
+| `GET /admin/api/webmcp`, `POST …/webmcp/{tool}` | contributor | the staff tools for a browser agent (`{ tools, routes }`); a call runs one as `/mcp/staff` does and answers `{ output }` |
 | `GET /admin/api/staff`, `PATCH …/staff/{id}/role`, `POST …/staff/invitations`, `DELETE …/staff/invitations/{id}` | owner | with an `AdminIdentity` that has `directory` / `roles` |
 | `GET /admin/api/members` | editor | with `directory` |
 | `GET /admin/api/developer-console` | owner | the plan's data model, logic and schedules |

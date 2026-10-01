@@ -224,7 +224,7 @@ async function bootAdmin(args: { operations: unknown[]; conflictCode?: string; f
         collections: [orgCollection(), memberCollection()],
         views: [],
         operations: args.operations,
-        webmcp: { tools: [], calls: {}, routes: {} },
+        webmcp: { tools: [], routes: {} },
         entries: { items: [orgListRow(orgVersion.listed)], previous_cursor: null, next_cursor: null },
       } });
     }

@@ -204,11 +204,11 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     return { userId: caller.subject, role: caller.role, login: u ? u.githubLogin || u.name || u.email || null : null, image: u?.image ?? null };
   };
 
-  // the staff MCP surface's tools, each with the Admin route that runs it and its page: a Procedure's target Schema, or the View
+  // the staff MCP surface's tools (its default locale), each with its page: a Procedure's target Schema, or the View
   const staffTools = mcpTools(plan, "staff");
+  const staffTool = new Map(staffTools.map((t) => [t.name, t]));
   const webmcp = {
     tools: staffTools.map(({ name, title, description, inputSchema, outputSchema, annotations }) => ({ name, ...(title ? { title } : {}), description, inputSchema, ...(outputSchema ? { outputSchema } : {}), ...(annotations ? { annotations } : {}) })),
-    calls: Object.fromEntries(staffTools.map((t) => [t.name, { kind: t.kind, source: t.source }])),
     routes: Object.fromEntries(staffTools.flatMap((t) => {
       if (t.kind === "view") return [[t.name, { path: `${base}/views/${encodeURIComponent(t.source)}` }]];
       const target = plan.procedures[t.source]!.target;
@@ -478,7 +478,21 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       },
     },
   );
-  routes.push({ method: "GET", path: "/webmcp", role: "contributor", run: async () => webmcp });
+  routes.push(
+    { method: "GET", path: "/webmcp", role: "contributor", run: async () => webmcp },
+    {
+      // a browser agent's tool call, run as `/mcp/staff` runs it: the same input, an `mcp` cause, the caller's own Store
+      method: "POST", path: "/webmcp/{tool}", role: "contributor", run: async ({ caller, params: { tool: name }, request }) => {
+        const tool = staffTool.get(name!);
+        if (!tool) throw wireError("NOT_FOUND", `no staff tool '${name}'`, P);
+        const input = await readJsonObject(request, P);
+        const cause = { kind: "mcp" as const, id: crypto.randomUUID() };
+        if (tool.kind === "procedure") return { output: await runtime.invokeProcedure({ procedure: tool.source, input, caller, cause }) };
+        const { limit, cursor, ...rest } = input;
+        return { output: await runtime.store.as(caller, cause).view(tool.source, { input: rest, ...(limit !== undefined ? { limit: limit as number } : {}), ...(cursor !== undefined ? { cursor: cursor as string } : {}) }) };
+      },
+    },
+  );
   if (directory) routes.push(
     { method: "GET", path: "/staff", role: "owner", run: async ({ request }) => ({ users: (await directory.listUsers(request)).map(staffInfo) }) },
     {
