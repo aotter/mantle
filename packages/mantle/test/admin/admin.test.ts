@@ -116,6 +116,7 @@ const assets: AdminAssets = (raw) => {
   const path = raw.replace(/^\/+/, "");
   return path === "index.html" || path === "preview.html" ? new Response("<!doctype html><div id=root></div>", { headers: { "content-type": "text/html; charset=utf-8" } })
   : path === "assets/app.js" ? new Response("boot()", { headers: { "content-type": "text/javascript" } })
+  : path === "assets/gone.js" ? new Response("", { status: 404 })
   : null;
 };
 
@@ -311,8 +312,20 @@ describe("Admin surface: the SPA shell", () => {
     }
     // the preview is framed by the console itself
     expect((await call("GET", "/admin/preview.html", anon)).headers.get("x-frame-options")).toBeNull();
+    // every file is nosniff; a hashed chunk is immutable, so the browser never asks again
+    const chunk = await call("GET", "/admin/assets/app.js", anon);
+    expect([chunk.headers.get("x-content-type-options"), chunk.headers.get("cache-control"), chunk.headers.get("content-type")]).toEqual(["nosniff", "public, max-age=31536000, immutable", "text/javascript"]);
+    // a miss answered as a Response, not null, is never cached for a year
+    expect((await call("GET", "/admin/assets/gone.js", anon)).headers.get("cache-control") ?? "").not.toMatch(/immutable/);
+    for (const path of ["/admin/index.html", "/admin/members/a.b@x.test", "/admin/preview.html"]) expect([path, (await call("GET", path, anon)).headers.get("x-content-type-options")]).toEqual([path, "nosniff"]);
     expect((await call("GET", "/admin/members/a.b@x.test", anon)).body).toBe("<!doctype html><div id=root></div>");
     for (const path of ["/admin/..%2f..%2fsecret.txt", "/admin/x%5cy.txt"]) expect([path, (await call("GET", path, anon)).status]).toEqual([path, 404]);
+  });
+
+  it("serves the SPA at /admin only: it is built for that path", () => {
+    expect(() => createAdminSurface(rt, { basePath: "/console", assets })).toThrow(/at \/admin only/);
+    expect(() => createAdminSurface(rt, { basePath: "/console" })).not.toThrow();
+    expect(() => createAdminSurface(rt, { basePath: "/admin/", assets })).not.toThrow();
   });
 
   it("has no shell without assets", async () => {

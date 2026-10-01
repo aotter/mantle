@@ -19,6 +19,7 @@ export interface AdminSurfaceOptions {
   /** Where Admin answers, e.g. `/admin`; the API is `{basePath}/api`. */
   readonly basePath: string;
   readonly identity?: AdminIdentity;
+  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), which are built for `basePath: "/admin"` only. */
   readonly assets?: AdminAssets;
   /** The MCP surfaces the service mounted, as paths or URLs; `/site` resolves them against the public URL. */
   readonly site?: { readonly mcpEndpoints?: { readonly public: string | null; readonly staff: string | null } };
@@ -132,6 +133,8 @@ async function csv(name: string, read: (cursor?: string) => Promise<StoreSelectR
 
 export function createAdminSurface(runtime: MantleRuntime, options: AdminSurfaceOptions): Surface {
   const base = options.basePath.replace(/\/+$/, "");
+  // the SPA is built for /admin: its chunks, its API calls and its links name that path
+  if (options.assets && base !== "/admin") throw new Error(`createAdminSurface: the Admin SPA (assets) is served at /admin only, not '${options.basePath}'.`);
   const { plan } = runtime;
   const { directory, roles } = options.identity ?? {};
   const schemas = Object.values(plan.schemas);
@@ -531,8 +534,11 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     const res = file ?? (rel.startsWith("assets/") ? null : await options.assets("index.html"));
     if (!res) throw wireError("NOT_FOUND", "no such route", P);
     // every HTML page is the shell's but the preview, whatever path reached it (`//index.html`, an encoded name)
-    if (file && (rel === "preview.html" || !/^text\/html\b/i.test(res.headers.get("content-type") ?? ""))) return res;
     const headers = new Headers(res.headers);
+    headers.set("x-content-type-options", "nosniff");
+    // a built chunk's name carries its hash, so it never changes; a 304 is then never needed
+    if (file?.ok && rel.startsWith("assets/")) headers.set("cache-control", "public, max-age=31536000, immutable");
+    if (file && (rel === "preview.html" || !/^text\/html\b/i.test(res.headers.get("content-type") ?? ""))) return new Response(res.body, { status: res.status, headers });
     // appended, so a policy the asset already carries stays in force
     headers.append("content-security-policy", "frame-ancestors 'none'");
     headers.set("x-frame-options", "DENY");
