@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createInteractionController, type InteractionController } from "../controller/index.js";
 import { OperationPanel } from "../react/components.js";
-import { SchemaForm, schemaText } from "../react/schema-form.js";
+import { SchemaFields } from "../react/fields.js";
 import { useInteraction } from "../react/use-interaction.js";
-import { propertyLabel, renderDataValue, resolveLocalizedText } from "../react/values.js";
+import { propertyLabel, renderDataValue, resolveLocalizedText, withNativeSchema, type FieldSchema } from "../react/values.js";
 import {
   actionsFor,
   diagnosticsOf,
@@ -22,6 +22,14 @@ import {
 import { appLabels, type AppLabels } from "./locale.js";
 
 type Row = Readonly<Record<string, unknown>>;
+
+const NATIVE_LABEL: Readonly<Record<string, "created" | "updated">> = { created_at: "created", createdAt: "created", updated_at: "updated", updatedAt: "updated" };
+
+/** A field's title in the host's language; the entry's own timestamps in the App's; else the name humanized, as Admin. */
+function labelOf(name: string, schema: FieldSchema | undefined, language: string, labels: AppLabels): string {
+  if (resolveLocalizedText(schema?.title, language) == null && Object.prototype.hasOwnProperty.call(NATIVE_LABEL, name)) return labels[NATIVE_LABEL[name]!];
+  return propertyLabel(name, schema, language);
+}
 
 /**
  * The Mantle MCP App: a View tool's rows as Admin shows them, and one row action at a time through the shared controller.
@@ -106,8 +114,8 @@ export function MantleApp(props: {
               <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
                 {columns.map((field) => (
                   <div key={field} className="contents">
-                    <dt className="text-muted-foreground">{propertyLabel(field, view.columns[field], language)}</dt>
-                    <dd className="break-words">{renderDataValue(view.columns[field], row[field], language)}</dd>
+                    <dt className="text-muted-foreground">{labelOf(field, view.columns[field], language, labels)}</dt>
+                    <dd className="break-words">{renderDataValue(withNativeSchema(field, view.columns[field]), row[field], language)}</dd>
                   </div>
                 ))}
               </dl>
@@ -214,20 +222,40 @@ function RowActionPanel(props: {
     }
     props.onClose();
   };
-  const properties = action.inputSchema.properties ?? {};
-  const fieldLabel = (field: string) => schemaText(properties[field]?.title, props.locale) ?? field;
+  const language = props.locale ?? "en";
+  const properties = (action.inputSchema.properties ?? {}) as Readonly<Record<string, FieldSchema>>;
+  const fieldLabel = (field: string) => labelOf(field, properties[field], language, props.labels);
+  const fieldValue = (field: string, value: unknown) => renderDataValue(withNativeSchema(field, properties[field]), value, language);
   return (
     <div className="p-3">
       <OperationPanel
         controller={controller}
-        title={resolveLocalizedText(action.title, props.locale ?? "en") ?? action.capability}
+        title={resolveLocalizedText(action.title, language) ?? action.capability}
         labels={props.labels.interaction}
         fieldLabel={fieldLabel}
+        fieldValue={fieldValue}
         onClose={close}
         onCancel={close}
       >
-        <SchemaForm schema={action.inputSchema} controller={controller} state={state} hidden={hiddenInputs(action)} language={props.locale} />
+        {/* Admin's own form: option titles, money and date previews, a field's widget from the Procedure's uiSchema */}
+        <SchemaFields
+          schema={action.inputSchema as FieldSchema}
+          uiSchema={action.uiSchema ?? null}
+          value={state.draft}
+          onChange={(next) => applyEdits(controller, state.draft, next)}
+          language={language}
+          hiddenRootFields={hiddenInputs(action)}
+          labels={props.labels.fields}
+          propertyLabel={(name, schema) => labelOf(name, schema, language, props.labels)}
+        />
       </OperationPanel>
     </div>
   );
+}
+
+/** SchemaFields hands back a cloned value; only fields that really changed are edits, so untouched fields keep following a newer review. */
+function applyEdits(controller: InteractionController, before: Readonly<Record<string, unknown>>, next: Record<string, unknown>): void {
+  for (const [field, value] of Object.entries(next)) {
+    if (JSON.stringify(before[field]) !== JSON.stringify(value)) controller.edit(field, value);
+  }
 }

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @source "../react/**/*.tsx";
 @source "./**/*.tsx";
+@source "../kit/**/*.tsx";
 
 /* Mantle tokens resolve to the host's MCP Apps style variables when the host
    provides them (useHostStyles), and to the App's own palette otherwise. The
@@ -15,6 +16,17 @@
   --color-destructive: var(--color-text-danger, var(--mantle-app-destructive));
   --color-primary: var(--color-background-inverse, var(--mantle-app-primary));
   --color-primary-foreground: var(--color-text-inverse, var(--mantle-app-primary-foreground));
+  /* the kit's field controls (SchemaFields) read these */
+  --color-input: var(--color-border-primary, var(--mantle-app-border));
+  --color-ring: var(--color-text-secondary, var(--mantle-app-muted-foreground));
+  --color-popover: var(--color-background-primary, var(--mantle-app-background));
+  --color-popover-foreground: var(--color-text-primary, var(--mantle-app-foreground));
+  --color-accent: var(--color-background-secondary, var(--mantle-app-muted));
+  --color-accent-foreground: var(--color-text-primary, var(--mantle-app-foreground));
+  --color-secondary: var(--color-background-secondary, var(--mantle-app-muted));
+  --color-secondary-foreground: var(--color-text-primary, var(--mantle-app-foreground));
+  --color-card: var(--color-background-primary, var(--mantle-app-background));
+  --color-card-foreground: var(--color-text-primary, var(--mantle-app-foreground));
   --font-app: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
 }
 

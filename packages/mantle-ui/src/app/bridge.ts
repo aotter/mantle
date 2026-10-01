@@ -12,6 +12,7 @@ export interface AppRowAction {
   readonly capability: string;
   readonly title?: LocalizedText;
   readonly inputSchema: FormSchema;
+  readonly uiSchema?: Readonly<Record<string, unknown>>;
   readonly bind: readonly { readonly input: string; readonly field: string }[];
   readonly version?: string;
   readonly mutates: boolean;
