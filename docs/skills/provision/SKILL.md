@@ -67,8 +67,9 @@ read -rsp "GitHub client secret: " S && printf '%s' "$S" | pnpm exec wrangler se
    (`docs/handbook/cloudflare/media-r2.md`).
 6. **Deploy.** `pnpm exec wrangler deploy`. The first request creates the
    tables. Later Schema changes: run
-   `mantle generate --check --database <copy of the database>` before each
-   deploy and resolve any blocked change by hand.
+   `mantle generate --check --database <local SQLite file>` (local D1 under
+   `.wrangler/state/v3/d1/`) before each deploy and resolve any blocked change
+   by hand.
 
 Commit and push only non-secret changes.
 

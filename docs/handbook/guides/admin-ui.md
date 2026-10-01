@@ -9,10 +9,9 @@ Every route reads and writes through `runtime.store.as(caller)` and
 see. What Admin shows is derived from the compiled plan: labels, forms, list
 columns, reports and operations are manifest edits.
 
-> **0.2.0:** the generated preset serves Admin's API only. It does not pass
-> the console's assets (`assets` is unset), so `/admin` in a browser is 404
-> until `@aotter/mantle-ui/admin` ships the console for 0.2.0. Everything below
-> is already in the API's metadata.
+> **0.2.0:** the generated preset serves Admin's API only. It passes no Admin
+> assets yet (`assets` is unset), so `/admin` in a browser is 404. Everything
+> below is already in the API's metadata.
 
 ## Manifest to Admin
 

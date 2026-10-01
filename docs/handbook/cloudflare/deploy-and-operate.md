@@ -37,17 +37,16 @@ plan:
 - **Kept, with a warning**: a column or non-unique index the plan no longer
   declares. Nothing is dropped.
 
-Before deploying, see what boot will do against a copy of the database:
+Before deploying, see what boot will do against a local SQLite file, such as
+Wrangler's local D1 under `.wrangler/state/v3/d1/` after it has run the
+previous plan:
 
 ```sh
-pnpm exec wrangler d1 export my-service --remote --output prod.sql
-sqlite3 prod.sqlite < prod.sql
-pnpm exec mantle generate --check --database prod.sqlite
+pnpm exec mantle generate --check --database .wrangler/state/v3/d1/<…>.sqlite
 ```
 
 It prints the SQL boot would run, the undeclared differences as comments, or
-the blocked change (exit 1). Against local development, point `--database` at
-the file under `.wrangler/state/v3/d1/`.
+the blocked change (exit 1). It reads the file read-only.
 
 ### Resolving a blocked change
 

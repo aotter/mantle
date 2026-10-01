@@ -68,8 +68,9 @@ Boot converges Schema tables to the plan. If the Site applies schema changes
 through migration files instead of letting the Worker run DDL, deliver
 Mantle's SQL that way:
 
-1. Point `mantle generate --check --database <file>` at a copy of the Site's
-   database (or a fresh local one).
+1. Point `mantle generate --check --database <file>` at a local SQLite file
+   in the same state as the Site's database (for example local D1 under
+   `.wrangler/state/v3/d1/`, migrated the same way).
 2. Put the printed SQL into a new migration in the Site's migration directory,
    together with your own tables (`sites_users`).
 3. Publish; boot then finds the database converged and applies nothing.

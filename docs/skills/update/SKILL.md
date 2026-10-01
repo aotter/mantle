@@ -22,9 +22,10 @@ Upgrade deliberately; never overwrite application-owned code.
    `node_modules/@aotter/mantle/docs/upgrade-0.1-to-0.2.md` after installing
    the target. There is no codemod and no in-place database upgrade: the
    project moves by hand, to a new database.
-4. Set `@aotter/mantle` and `@aotter/mantle-ui` (if present) to the same exact
-   version and update the lockfile with the package manager. Review the
-   dependency diff and any peer changes `mantle generate` names.
+4. Set `@aotter/mantle`, and `@aotter/mantle-ui` and `@aotter/mantle-admin-ui`
+   where present, to the same exact version, and update the lockfile with the
+   package manager. Review the dependency diff and any peer changes
+   `mantle generate` names.
 5. Regenerate and check:
 
 ```sh
@@ -38,7 +39,7 @@ pnpm exec tsc --noEmit
    `mantle.config.json`, diff it against the project's files, and apply the
    changes that matter by hand.
 7. Run the service locally and test its real routes and sign-in. Before
-   deploying, run `mantle generate --check --database <copy of the database>`
+   deploying, run `mantle generate --check --database <local SQLite file>`
    to see what boot will change.
 
 Report the old and new versions, the checks and their results, what changed

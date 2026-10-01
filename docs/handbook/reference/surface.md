@@ -66,7 +66,7 @@ Every route needs a staff caller; the column names the least role.
 
 ## Packages
 
-Two npm packages, always at the same version.
+Three npm packages, always published together at one version.
 
 | Import | Exports |
 |---|---|
@@ -79,7 +79,8 @@ Two npm packages, always at the same version.
 | `@aotter/mantle/mcp` | `createMcpSurface` |
 | `@aotter/mantle/web` | `createRestSurface` |
 | `@aotter/mantle/testing` | `runStorageConformance`, the dialect compliance suite |
-| `@aotter/mantle-ui` | `/controller`, `/kit`, `/mcp-app`; the Admin console for 0.2.0 is not published yet |
+| `@aotter/mantle-ui` | `/controller`, `/kit`, `/mcp-app` |
+| `@aotter/mantle-admin-ui` | the prebuilt Admin console; the 0.2.0 preset does not serve it yet |
 
 A subpath that is not imported is never loaded: a service with identity
 `none` bundles no Better Auth, and no Worker bundles the SQL parser.

@@ -10,9 +10,11 @@ open; installing one means choosing an exact version, not a channel.
 [GitHub Releases](https://github.com/aotter/mantle/releases) is the canonical
 change history; this page is the narrative one.
 
-From 0.2.0, Mantle is two packages, `@aotter/mantle` and `@aotter/mantle-ui`,
-published together at one version. Pin both to the same exact version and
-upgrade them together. (0.1.x was fourteen packages on one version.)
+From 0.2.0, Mantle is three packages, `@aotter/mantle`, `@aotter/mantle-ui`
+and `@aotter/mantle-admin-ui`, published together at one version: the 0.1.x
+`-spec`, `-runtime`, `-cloudflare`, `-auth`, `-admin`, `-mcp`, `-web` and other
+packages fold into subpaths of `@aotter/mantle`. Pin every one you use to the
+same exact version and upgrade them together.
 
 ## 0.2.0 — in preparation
 

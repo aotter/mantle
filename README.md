@@ -81,11 +81,15 @@ the owning definitions.
 *Developer UI rendered locally from the intake example. The graph describes
 compiled declarations; it does not certify runtime or deployment health.*
 
-| Interface | Where to explore it | Integration guide |
-|---|---|---|
-| HTTP | Admin → Developer → API (`/admin/dev/docs/api`) | [HTTP API](docs/handbook/concepts/procedures-and-triggers.md) |
-| Remote MCP | Admin → Developer → MCP (`/admin/dev/docs/mcp`) | [Endpoints, tools, and authentication](docs/handbook/concepts/mcp-and-agents.md) |
-| Browser WebMCP | Admin → Developer → WebMCP (`/admin/dev/docs/webmcp`) | [Admin and public-page WebMCP](docs/handbook/concepts/mcp-and-agents.md#webmcp-in-admin) |
+In 0.2.0 the generated service serves Admin's API, including the owner-only
+`GET /admin/api/developer-console` that this view draws from; the preset does
+not serve the console's assets yet.
+
+| Interface | Integration guide |
+|---|---|
+| HTTP | [Writes: Procedures, Triggers and hooks](docs/handbook/concepts/procedures-and-triggers.md) |
+| Remote MCP | [Endpoints, tools, and authentication](docs/handbook/concepts/mcp-and-agents.md) |
+| Browser WebMCP | [WebMCP in Admin](docs/handbook/concepts/mcp-and-agents.md#webmcp-in-admin) |
 
 ## A Manifest in practice
 
