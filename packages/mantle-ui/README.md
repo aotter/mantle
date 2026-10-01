@@ -93,6 +93,19 @@ Styling uses Tailwind token classes (`bg-muted`, `border`, `text-destructive`,
 `@source "../node_modules/@aotter/mantle-ui/dist/**/*.js"` (adjusted to your
 stylesheet's location) so Tailwind generates the classes.
 
+## Fields and values
+
+The root also exports what Admin uses to show and edit a value, so an MCP App
+renders a field exactly as the console does:
+
+- `SchemaFields`: a form over a JSON Schema (option lists from `enum` or a
+  `oneOf` of titled `const`s, money and date previews, arrays, nested objects).
+  Strings come from `labels`; a control only one host has (Admin's media
+  library and rich text editors) comes through `renderField`, and without it
+  markdown and HTML are a textarea.
+- `renderDataValue`, `optionLabel`, `propertyLabel`, `resolveLocalizedText` and
+  the money and date formatters: how a value reads in a cell or a card.
+
 ## Kit
 
 `@aotter/mantle-ui/kit` is Admin's domain-neutral React/shadcn visual
