@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { SchemaFields, renderDataValue, type FieldSchema } from "../src/index.js";
+import { renderDataValue, type FieldSchema } from "../src/index.js";
+import { SchemaFields } from "../src/kit/index.js";
 
 const schema: FieldSchema = {
   type: "object",
@@ -39,5 +40,21 @@ describe("renderDataValue", () => {
   it("shows an option's title and a placeholder for nothing", () => {
     expect(renderToStaticMarkup(<>{renderDataValue(schema.properties!.decision, "approved", "zh-TW")}</>)).toBe("核准");
     expect(renderToStaticMarkup(<>{renderDataValue(schema.properties!.decision, "", "zh-TW")}</>)).toContain(">-<");
+  });
+});
+
+describe("the root entry", () => {
+  it("needs only React: the kit-built form lives on /kit", async () => {
+    const root = await import("../src/index.js");
+    expect(root).not.toHaveProperty("SchemaFields");
+    expect(root).toHaveProperty("renderDataValue");
+  });
+});
+
+describe("SchemaFields labels", () => {
+  it("reads a label the host resolves", () => {
+    const html = renderToStaticMarkup(<SchemaFields schema={{ type: "object", properties: { createdAt: { type: "string" } } }} value={{}} onChange={() => {}} language="en"
+      propertyLabel={(name) => (name === "createdAt" ? "Created" : name)} />);
+    expect(html).toContain("Created");
   });
 });

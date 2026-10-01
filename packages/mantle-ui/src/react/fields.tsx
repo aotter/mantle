@@ -72,6 +72,8 @@ export interface SchemaFieldsProps {
   readonly hiddenRootFields?: readonly string[];
   readonly labels?: FieldLabels;
   readonly renderField?: RenderField;
+  /** How a field's label reads; defaults to its `title`, else its name humanized. */
+  readonly propertyLabel?: (name: string, schema: FieldSchema | undefined, language: string, canonical: string | null) => string;
 }
 
 export function SchemaFields(props: SchemaFieldsProps): React.ReactElement {
@@ -109,7 +111,7 @@ function SchemaField(props: SchemaFieldsProps & {
   const rootValue = props.value;
   const value = readPath(rootValue, path);
   const type = schemaType(schema);
-  const label = propertyLabel(name, schema, language, canonical);
+  const label = (props.propertyLabel ?? propertyLabel)(name, schema, language, canonical);
   const description = propertyDescription(schema, language, canonical);
   const setValue = (next: unknown): void => props.onChange(writePath(rootValue, path, next));
   // the runtime owns bound values, so the form keeps them read-only
@@ -224,8 +226,9 @@ function DateTimePicker({ label, labels, value, onChange }: {
             disabled={!selected}
             value={selected ? `${String(selected.getHours()).padStart(2, "0")}:${String(selected.getMinutes()).padStart(2, "0")}` : ""}
             onChange={(event) => {
-              if (!selected) return;
               const [hours, minutes] = event.target.value.split(":").map(Number);
+              // a cleared time input reads "": keep the time already chosen
+              if (!selected || !Number.isFinite(hours) || !Number.isFinite(minutes)) return;
               const next = new Date(selected);
               next.setHours(hours!, minutes!, 0, 0);
               onChange(next);

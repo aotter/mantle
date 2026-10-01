@@ -1,4 +1,4 @@
-import { propertyLabel as schemaLabel } from "@aotter/mantle-ui";
+import { fieldLabel, resolveLocalizedText } from "@aotter/mantle-ui";
 import { t } from "../app/i18n";
 import type { AdminLanguage } from "../app/preferences";
 import type { JsonSchema } from "./types";
@@ -12,8 +12,7 @@ export function propertyLabel(
   language: AdminLanguage,
   canonical: string | null,
 ): string {
-  if (!schema?.title && Object.prototype.hasOwnProperty.call(NATIVE_LABEL, name)) return NATIVE_LABEL[name]!(language);
-  return schemaLabel(name, schema, language, canonical);
+  return resolveLocalizedText(schema?.title, language, canonical) ?? (Object.prototype.hasOwnProperty.call(NATIVE_LABEL, name) ? NATIVE_LABEL[name]!(language) : undefined) ?? fieldLabel(name);
 }
 
 /** The entry's own timestamps, which no JSON Schema titles, as a list or a View names them. */

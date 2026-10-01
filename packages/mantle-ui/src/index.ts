@@ -11,16 +11,6 @@ export { SchemaForm, type FormSchema } from "./react/schema-form.js";
 export { useInteraction } from "./react/use-interaction.js";
 export * from "./controller/index.js";
 export {
-  SchemaFields,
-  defaultFieldLabels,
-  stringFieldWidget,
-  type FieldLabels,
-  type FieldSlot,
-  type RenderField,
-  type SchemaFieldsProps,
-  type StringWidget,
-} from "./react/fields.js";
-export {
   NATIVE_TIMESTAMP,
   dateFromFieldValue,
   enumOptions,

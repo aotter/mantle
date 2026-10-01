@@ -1,6 +1,6 @@
 import { useAdminRouter } from "../../app/router";
-import { SchemaFields as SharedSchemaFields, type FieldLabels, type FieldSlot } from "@aotter/mantle-ui";
-export { stringFieldWidget } from "@aotter/mantle-ui";
+import { SchemaFields as SharedSchemaFields, type FieldLabels, type FieldSlot } from "@aotter/mantle-ui/kit";
+export { stringFieldWidget } from "@aotter/mantle-ui/kit";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, MoreHorizontal, Plus, RotateCcw, Save, Send } from "lucide-react";
@@ -8,6 +8,7 @@ import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { isFoldedFieldChild } from "../../lib/collection-nav";
+import { enumOptions } from "../../lib/enum-options";
 import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { entryApiPath, entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
@@ -495,18 +496,21 @@ export function SchemaFields({
     removeItem: t(language, "entryEdit.removeItem"),
     addItem: t(language, "entryEdit.addItem"),
   };
+  // only where a plain text control would go: an enum, a number, an object or a boolean keeps its own control
   const renderField = (field: FieldSlot): React.ReactNode | undefined => {
-    if (isMediaAssetRef(field.schema as JsonSchema)) {
+    const fieldSchema = field.schema as JsonSchema;
+    if (fieldSchema.enum || enumOptions(fieldSchema) || ["boolean", "number", "integer", "object"].includes(schemaType(fieldSchema))) return undefined;
+    if (isMediaAssetRef(fieldSchema)) {
       return <MediaAssetField value={field.value} path={[...field.path]} collectionName={collectionName} mediaPurposes={mediaPurposes} language={language} onChange={field.setValue} />;
     }
-    const text = typeof field.value === "string" ? field.value : field.value == null ? "" : String(field.value);
+    const text = stringForInput(field.value);
     if (field.widget === "markdown") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><MarkdownEditor value={text} onChange={field.setValue} /></React.Suspense>;
     if (field.widget === "html") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><HtmlEditor value={text} onChange={field.setValue} /></React.Suspense>;
     return undefined;
   };
   return (
     <SharedSchemaFields schema={schema} uiSchema={uiSchema} value={value} path={path} onChange={onChange} language={language}
-      canonical={canonical} hiddenRootFields={hiddenRootFields} labels={labels} renderField={renderField} />
+      canonical={canonical} hiddenRootFields={hiddenRootFields} labels={labels} renderField={renderField} propertyLabel={(name, fieldSchema, _language, fieldCanonical) => propertyLabel(name, fieldSchema as JsonSchema, language, fieldCanonical)} />
   );
 }
 
