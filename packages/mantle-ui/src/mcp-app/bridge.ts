@@ -1,4 +1,4 @@
-import type { EntrySnapshot, InteractionDiagnostic, InvokeOutcome } from "../controller/index.js";
+import type { InteractionDiagnostic, InvokeOutcome } from "../controller/index.js";
 import type { FormSchema } from "../react/schema-form.js";
 import type { FieldSchema, LocalizedText } from "../react/values.js";
 
@@ -21,13 +21,18 @@ export interface AppCatalogView {
   readonly title?: LocalizedText;
   readonly columns: Readonly<Record<string, FieldSchema>>;
   readonly list: { readonly columns: readonly string[] };
-  readonly rowActions: readonly AppRowAction[];
+  /** The `actions` a row of this View can open. */
+  readonly actions: readonly string[];
 }
 
-/** View tool name → its View: what the server embedded in the App's HTML. */
+/** What the server embedded in the App's HTML: View tool name → its View, Procedure tool name → how it acts on a row. */
 export interface AppCatalog {
   readonly views: Readonly<Record<string, AppCatalogView>>;
+  readonly actions: Readonly<Record<string, AppRowAction>>;
 }
+
+/** A View the catalog does not describe: its rows as they come, nothing to open. */
+export const BARE_VIEW: AppCatalogView = { columns: {}, list: { columns: [] }, actions: [] };
 
 /** The shape every MCP tool result shares, independent of an SDK. */
 export interface ToolResult {
@@ -46,11 +51,11 @@ type Row = Readonly<Record<string, unknown>>;
 export function readCatalog(doc: Pick<Document, "getElementById"> = document): AppCatalog {
   try {
     const parsed = JSON.parse(doc.getElementById(APP_CATALOG_ID)?.textContent ?? "") as unknown;
-    if (isRecord(parsed) && isRecord(parsed["views"])) return parsed as unknown as AppCatalog;
+    if (isRecord(parsed) && isRecord(parsed["views"]) && isRecord(parsed["actions"])) return parsed as unknown as AppCatalog;
   } catch {
     // no catalog: nothing to render with it
   }
-  return { views: {} };
+  return { views: {}, actions: {} };
 }
 
 /** The tool a result came from: the server names it, else the host's tool info. */
@@ -102,18 +107,6 @@ export async function invokeTool(call: CallTool, name: string, args: Record<stri
   return { ok: false, diagnostics };
 }
 
-/**
- * The row as it is now, for the controller's version check: the View tool is called again with the same input and the row
- * found by id. A row that left the list, or carries no version, cannot be reviewed.
- */
-export async function readRow(call: CallTool, view: string, input: Readonly<Record<string, unknown>>, id: string, signal: AbortSignal, gone: string): Promise<EntrySnapshot> {
-  const result = await call(view, { ...input }, signal);
-  if (result.isError) throw new Error(diagnosticsOf(result)[0]?.message ?? gone);
-  const row = rowsOf(result)?.find((r) => r["id"] === id);
-  if (!row || typeof row["version"] !== "number") throw new Error(gone);
-  return { id, version: row["version"], data: row };
-}
-
 /** Inputs the form does not render: row bindings, the version, idempotency keys. */
 export function hiddenInputs(action: AppRowAction): string[] {
   return [
@@ -130,9 +123,12 @@ export function idempotencyInputs(action: AppRowAction): string[] {
 }
 
 /** The row actions a row can open: it carries an id, and its version when the action locks one. */
-export function actionsFor(view: AppCatalogView, row: Row): AppRowAction[] {
+export function actionsFor(catalog: AppCatalog, view: AppCatalogView, row: Row): AppRowAction[] {
   if (typeof row["id"] !== "string") return [];
-  return view.rowActions.filter((a) => !a.version || typeof row["version"] === "number");
+  return view.actions.flatMap((name) => {
+    const action = Object.prototype.hasOwnProperty.call(catalog.actions, name) ? catalog.actions[name]! : undefined;
+    return action && (!action.version || typeof row["version"] === "number") ? [action] : [];
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

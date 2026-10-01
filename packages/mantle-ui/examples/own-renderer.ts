@@ -1,24 +1,23 @@
 /**
  * An application-owned MCP App renderer: the official `App`, the
- * framework-free controller and your own markup. Quoted in
- * docs/handbook/concepts/mcp-and-agents.md and type-checked with the package.
+ * framework-free controller and your own markup, over the catalog `planApp`
+ * embeds. Type-checked with the package.
  */
 import { App } from "@modelcontextprotocol/ext-apps";
 import {
   createInteractionController,
-  type EntrySnapshot,
   type InteractionBinding,
   type InteractionDiagnostic,
   type InteractionState,
   type InvokeOutcome,
 } from "@aotter/mantle-ui/controller";
 
-interface Interaction {
-  readonly view: string;
-  readonly collection: string | null;
-  readonly read?: string;
-  readonly rowActions: readonly (InteractionBinding & { readonly capability: string; readonly title?: string })[];
+/** What `planApp` (`@aotter/mantle/mcp`) embeds in the App's HTML: each View tool's row actions, by Procedure tool name. */
+interface Catalog {
+  readonly views: Readonly<Record<string, { readonly actions: readonly string[] }>>;
+  readonly actions: Readonly<Record<string, InteractionBinding & { readonly capability: string }>>;
 }
+const catalog = JSON.parse(document.getElementById("mantle-catalog")?.textContent ?? '{"views":{},"actions":{}}') as Catalog;
 type CallResult = Awaited<ReturnType<App["callServerTool"]>>;
 
 declare function render(state: InteractionState): void; // your own markup
@@ -32,20 +31,17 @@ function output(result: CallResult): unknown {
 
 const app = new App({ name: "my-review-app", version: "1.0.0" }, {});
 app.ontoolresult = (result) => {
-  const meta = result._meta?.["net.aotter.mantle/interaction"] as Interaction | undefined;
+  // a result planApp renders names the View tool it came from
+  const tool = result._meta?.["net.aotter.mantle/tool"];
   const rows = ((result.structuredContent as { rows?: Record<string, unknown>[] } | undefined)?.rows) ?? [];
   const [row] = rows;
-  const [action] = meta?.rowActions ?? [];
-  if (!meta || !row || !action) return;
-  const reader = meta.read;
+  const name = typeof tool === "string" ? catalog.views[tool]?.actions[0] : undefined;
+  const action = name ? catalog.actions[name] : undefined;
+  if (!row || !action) return;
   const controller = createInteractionController({
     interaction: action,
+    // the row as listed is what the person reviews; a version that moved since is the server's CONFLICT
     row,
-    // Only surfaces with an entry reader name one; otherwise the row is what the person reviews.
-    ...(reader ? {
-      read: async (signal: AbortSignal) => output(await app.callServerTool(
-        { name: reader, arguments: { collection: meta.collection, id: row["id"] } }, { signal })) as EntrySnapshot,
-    } : {}),
     invoke: async (input, signal): Promise<InvokeOutcome> => {
       const answer = await app.callServerTool({ name: action.capability, arguments: input }, { signal });
       if (!answer.isError) return { ok: true, data: output(answer) };

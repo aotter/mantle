@@ -354,6 +354,8 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
   - **Search and filters (decision 5).** A staff View's `uiSchema.list.searchFields` and `filterFields` compile to conditions on its outputs, as decision 5 says; this replaces an earlier draft of this amendment that removed them, which was never decided. `store.view(name, { search, filters })` (`StoreViewOptions`) adds, around the View's own query and inside its paging, one `LIKE` per `searchFields` output, ORed, with the text's `%`, `_` and `\` escaped, and one `=` per `filters` entry, its value encoded as the output's Schema field. Store refuses a `search` on a View without `searchFields` and a filter on an output `filterFields` does not name (`INPUT_VALIDATION_FAILED`), so a request never chooses a column. Admin's `/views/{name}` and `/export` read `search` and `filter.<output>`, coercing a filter to the output's field type, and the console's search box and filters send them. `compilePlan` refuses a name the View's `SELECT` does not output (`VIEW_UI_INVALID`). These two keys are the one part of `uiSchema` that Store reads; the rest stays presentation only.
   - **Not in 0.2.0 yet.** The ADR-0029 interaction tools (`read_entry`, `preview_entry`, View row actions) are not on `createMcpSurface`. The console keeps its optional row-action code, and the surface sends no row actions.
 
+    > **Amendment (MCP App catalog):** row actions reach an MCP App through the catalog `planApp` embeds in the App's HTML (ADR-0029 amendment), not through results; `read_entry` and `preview_entry` stay out, and a locked action reviews the row as listed.
+
 ## Implementation status
 
 Proposed. Nothing in decisions 1–13 is implemented beyond the ADR-0030 slices already on `develop`.

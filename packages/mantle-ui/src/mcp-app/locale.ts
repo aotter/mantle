@@ -8,8 +8,6 @@ export interface AppLabels {
   readonly viewFailed: string;
   readonly viewCancelled: string;
   readonly refreshFailed: string;
-  readonly rowGone: string;
-  readonly unknownView: string;
 }
 
 const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
@@ -48,8 +46,6 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "These results could not be shown.",
     viewCancelled: "The request was cancelled.",
     refreshFailed: "The list could not be refreshed. It may be out of date.",
-    rowGone: "This row is no longer in the list, so it cannot be reviewed.",
-    unknownView: "This result has no view to show it.",
   },
   "zh-TW": {
     interaction: {
@@ -86,8 +82,6 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "無法顯示這些結果。",
     viewCancelled: "請求已取消。",
     refreshFailed: "無法重新整理清單，內容可能不是最新的。",
-    rowGone: "這筆資料已不在清單中，無法檢視。",
-    unknownView: "這個結果沒有可顯示的檢視。",
   },
   "zh-CN": {
     interaction: {
@@ -124,8 +118,6 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "无法显示这些结果。",
     viewCancelled: "请求已取消。",
     refreshFailed: "无法刷新列表，内容可能不是最新的。",
-    rowGone: "这条数据已不在列表中，无法查看。",
-    unknownView: "这个结果没有可显示的视图。",
   },
 };
 

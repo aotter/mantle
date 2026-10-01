@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { MantleApp } from "../src/mcp-app/app.js";
-import { actionsFor, APP_TOOL_META_KEY, hiddenInputs, invokeTool, outputOf, readCatalog, readRow, rowsOf, toolOf, type AppCatalog, type ToolResult } from "../src/mcp-app/bridge.js";
+import { actionsFor, APP_TOOL_META_KEY, hiddenInputs, invokeTool, outputOf, readCatalog, rowsOf, toolOf, type AppCatalog, type ToolResult } from "../src/mcp-app/bridge.js";
 
 const action = {
   capability: "review_requisition",
@@ -17,9 +17,10 @@ const catalog: AppCatalog = {
       title: "Pending",
       columns: { item: { type: "string", title: { en: "Item", "zh-TW": "品項" } }, totalMinor: { type: "integer", title: { en: "Total", "zh-TW": "總額" }, "x-mcp-hint": "money-minor" }, requestStatus: { type: "string", oneOf: [{ const: "submitted", title: { en: "Submitted", "zh-TW": "已送出" } }] } },
       list: { columns: ["item", "totalMinor", "requestStatus"] },
-      rowActions: [action],
+      actions: ["review_requisition", "gone"],
     },
   },
+  actions: { review_requisition: action },
 };
 const viewResult: ToolResult = {
   content: [{ type: "text", text: "{}" }],
@@ -31,7 +32,7 @@ describe("MCP App bridge", () => {
   it("reads the embedded catalog, the tool a result came from, and its rows", () => {
     const doc = { getElementById: (id: string) => (id === "mantle-catalog" ? { textContent: JSON.stringify(catalog) } : null) } as unknown as Document;
     expect(readCatalog(doc)).toEqual(catalog);
-    expect(readCatalog({ getElementById: () => null } as unknown as Document)).toEqual({ views: {} });
+    expect(readCatalog({ getElementById: () => null } as unknown as Document)).toEqual({ views: {}, actions: {} });
     expect(toolOf(viewResult)).toBe("pending");
     expect(toolOf({}, "from_host")).toBe("from_host");
     expect(rowsOf(viewResult)).toHaveLength(2);
@@ -40,10 +41,15 @@ describe("MCP App bridge", () => {
     expect(hiddenInputs(action)).toEqual(["id", "expectedVersion", "requestId"]);
   });
 
-  it("offers a locking action only on a row carrying its version", () => {
+  it("offers a locking action only on a row carrying its version, and only actions the catalog describes", () => {
     const [r1, r2] = rowsOf(viewResult)!;
-    expect(actionsFor(catalog.views["pending"]!, r1!)).toEqual([action]);
-    expect(actionsFor(catalog.views["pending"]!, r2!)).toEqual([]);
+    expect(actionsFor(catalog, catalog.views["pending"]!, r1!)).toEqual([action]);
+    expect(actionsFor(catalog, catalog.views["pending"]!, r2!)).toEqual([]);
+  });
+
+  it("reads diagnostics from the text block of a tool with an output schema", async () => {
+    const call = vi.fn(async () => ({ isError: true, content: [{ type: "text", text: JSON.stringify({ diagnostics: [{ code: "CONFLICT", message: "Moved." }] }) }] }));
+    expect(await invokeTool(call, "x", {}, new AbortController().signal)).toEqual({ ok: false, diagnostics: [{ code: "CONFLICT", message: "Moved." }] });
   });
 
   it("maps tool answers to controller outcomes: diagnostics refuse, anything else is uncertain", async () => {
@@ -58,13 +64,6 @@ describe("MCP App bridge", () => {
     await expect(invokeTool(call, "x", {}, signal)).rejects.toThrow("Tool failed");
   });
 
-  it("re-reads a row by calling its View again with the same input", async () => {
-    const call = vi.fn(async () => viewResult);
-    const signal = new AbortController().signal;
-    expect(await readRow(call, "pending", { limit: 20 }, "r1", signal, "gone")).toMatchObject({ id: "r1", version: 3, data: { item: "Laptops" } });
-    expect(call).toHaveBeenCalledWith("pending", { limit: 20 }, signal);
-    await expect(readRow(call, "pending", {}, "r9", signal, "gone")).rejects.toThrow("gone");
-  });
 });
 
 describe("MantleApp", () => {
@@ -91,10 +90,13 @@ describe("MantleApp", () => {
     expect(render({ result: null, locale: "fr" })).toContain("Waiting for results");
   });
 
-  it("shows a failed, cancelled or unknown View instead of waiting", () => {
+  it("shows a View the catalog does not describe as its rows, and a failed or cancelled View instead of waiting", () => {
     const failed: ToolResult = { isError: true, content: [{ type: "text", text: JSON.stringify({ diagnostics: [{ code: "FORBIDDEN", message: "Not allowed." }] }) }] };
     expect(render({ result: failed })).toContain("Not allowed.");
     expect(render({ result: null, cancelled: true })).toContain("cancelled");
-    expect(render({ result: { ...viewResult, _meta: {} } })).toContain("no view");
+    const bare = render({ result: { ...viewResult, _meta: {} } });
+    expect(bare).toContain("Laptops");
+    expect(bare).toContain("123456");
+    expect(bare).not.toContain("Review requisition");
   });
 });

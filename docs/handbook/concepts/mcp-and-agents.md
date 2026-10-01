@@ -107,11 +107,14 @@ createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { re
 `planApp` renders every View tool of the surface and embeds the plan's catalog
 in the HTML once: each View's columns as the Schema fields they read (so a
 value is labelled and formatted as Admin shows it), and, for a View that reads
-one Schema, the Procedure tools whose `target` is that Schema. A host that
-renders MCP Apps shows a View's rows in the chat; a row with an `id` (and a
-`version`, for an operation that locks one) offers those operations through
-the same review-and-submit panel Admin uses. Every read and write is a tool
-call under the caller's own token. A rendered result names its tool in
+one table and outputs its `id`, the Procedure tools whose `target` is that
+Schema. A host that renders MCP Apps shows a View's rows in the chat; a row
+with an `id` (and a `version`, for an operation that locks one) offers those
+operations through the same review-and-submit panel Admin uses. The row as
+listed is what the person reviews: a version that moved since is the server's
+`CONFLICT`. The catalog is the plan's, not the caller's, so an operation the
+caller's role cannot run is offered and then refused. Every read and write is a
+tool call under the caller's own token. A rendered result names its tool in
 `_meta["net.aotter.mantle/tool"]`.
 
 On the public surface, a member-facing App is the application's to build; the

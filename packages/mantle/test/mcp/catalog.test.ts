@@ -59,6 +59,11 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: joined }
 spec: { surface: staff, sql: "SELECT n.id, r.item FROM notes n JOIN requests r ON r.item = n.item ORDER BY 1" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: aliased }
+spec: { surface: staff, sql: "SELECT item AS id, version FROM requests ORDER BY 1" }
 `;
 
 const staff: Caller = { kind: "user", subject: "s1", role: "owner", scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null };
@@ -78,25 +83,27 @@ afterAll(() => d1?.dispose());
 describe("appCatalog", () => {
   it("names each View tool's columns as the fields they read, and the Procedures that act on its row", () => {
     const catalog = appCatalog(rt.plan, "staff");
-    expect(Object.keys(catalog.views)).toEqual(["pending", "totals", "joined"]);
+    expect(Object.keys(catalog.views)).toEqual(["pending", "totals", "joined", "aliased"]);
     expect(catalog.views["pending"]).toEqual({
       title: "Pending",
       columns: { item: { type: "string", title: { en: "Item", "zh-TW": "品項" } }, totalMinor: { type: "integer", "x-mcp-hint": "money-minor" }, created_at: { type: "string", format: "date-time" } },
       list: { columns: ["item", "totalMinor"] },
-      rowActions: [{ capability: "approve", title: { en: "Approve", "zh-TW": "核准" }, inputSchema: rt.plan.procedures["approve"]!.input, bind: [{ input: "id", field: "id" }], version: "expectedVersion", mutates: true }],
+      actions: ["approve"],
     });
-    // the aggregate keeps the field it sums; its rows carry no id, so the App offers the action on none of them
-    expect(catalog.views["totals"]).toEqual({ columns: { total: { type: "integer", "x-mcp-hint": "money-minor" } }, list: { columns: [] }, rowActions: catalog.views["pending"]!.rowActions });
-    // a View that reads two Schemas: whose id a row carries is not known, so nothing acts on it
-    expect(catalog.views["joined"]!.rowActions).toEqual([]);
+    expect(catalog.actions).toEqual({ approve: { capability: "approve", title: { en: "Approve", "zh-TW": "核准" }, inputSchema: rt.plan.procedures["approve"]!.input, bind: [{ input: "id", field: "id" }], version: "expectedVersion", mutates: true } });
+    // the aggregate keeps the field it sums; it outputs no id, so nothing acts on its rows
+    expect(catalog.views["totals"]).toEqual({ columns: { total: { type: "integer", "x-mcp-hint": "money-minor" } }, list: { columns: [] }, actions: [] });
+    // a join, or an id that is another column, names no entry
+    expect(catalog.views["joined"]!.actions).toEqual([]);
+    expect(catalog.views["aliased"]!.actions).toEqual([]);
     expect(JSON.stringify(catalog)).not.toMatch(/SELECT|UPDATE/);
   });
 
   it("is embedded as JSON no value can break out of", () => {
-    const html = withCatalog("<html><head></head><body></body></html>", { views: { x: { columns: {}, list: { columns: [] }, rowActions: [], title: "</script><script>alert(1)</script>" } } });
+    const html = withCatalog("<html><head></head><body></body></html>", { views: { x: { columns: {}, list: { columns: [] }, actions: [], title: "</script><script>alert(1)</script> $$ $& $' $`" } }, actions: {} });
     expect(html).toContain('<script type="application/json" id="mantle-catalog">');
     expect(html.match(/<\/script>/g)).toHaveLength(1);
-    expect(JSON.parse(html.slice(html.indexOf(">", html.indexOf("mantle-catalog")) + 1, html.indexOf("</script>"))).views.x.title).toBe("</script><script>alert(1)</script>");
+    expect(JSON.parse(html.slice(html.indexOf(">", html.indexOf("mantle-catalog")) + 1, html.indexOf("</script>"))).views.x.title).toBe("</script><script>alert(1)</script> $$ $& $' $`");
   });
 });
 
@@ -111,10 +118,10 @@ describe("planApp on the staff surface", () => {
 
   it("renders every View tool, serves the HTML with the catalog, and each rendered result names its tool", async () => {
     const tools = (await rpc("tools/list", {})).tools as { name: string; _meta?: { ui?: { resourceUri?: string } } }[];
-    expect(Object.fromEntries(tools.map((t) => [t.name, t._meta?.ui?.resourceUri ?? null]))).toEqual({ approve: null, pending: "ui://mantle/staff", totals: "ui://mantle/staff", joined: "ui://mantle/staff" });
+    expect(Object.fromEntries(tools.map((t) => [t.name, t._meta?.ui?.resourceUri ?? null]))).toEqual({ approve: null, pending: "ui://mantle/staff", totals: "ui://mantle/staff", joined: "ui://mantle/staff", aliased: "ui://mantle/staff" });
     const [content] = (await rpc("resources/read", { uri: "ui://mantle/staff" })).contents;
     expect(content.mimeType).toBe(RESOURCE_MIME_TYPE);
-    expect(content.text).toContain('"rowActions":[{"capability":"approve"');
+    expect(content.text).toContain('"actions":{"approve":{"capability":"approve"');
     const pending = await rpc("tools/call", { name: "pending", arguments: {} });
     expect(pending._meta).toEqual({ [APP_TOOL_META_KEY]: "pending" });
     expect(pending.structuredContent.rows[0]).toMatchObject({ item: "Laptops", version: 1 });

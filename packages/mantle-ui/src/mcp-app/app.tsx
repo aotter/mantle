@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { createInteractionController, type EntrySnapshot, type InteractionController } from "../controller/index.js";
+import { createInteractionController, type InteractionController } from "../controller/index.js";
 import { OperationPanel } from "../react/components.js";
 import { SchemaForm, schemaText } from "../react/schema-form.js";
 import { useInteraction } from "../react/use-interaction.js";
@@ -10,11 +10,11 @@ import {
   hiddenInputs,
   idempotencyInputs,
   invokeTool,
-  readRow,
   rowsOf,
   toolOf,
   type AppCatalog,
   type AppCatalogView,
+  BARE_VIEW,
   type AppRowAction,
   type CallTool,
   type ToolResult,
@@ -46,7 +46,8 @@ export function MantleApp(props: {
   const labels = appLabels(props.locale);
   const language = props.locale ?? "en";
   const tool = props.result ? toolOf(props.result, props.hostTool) : null;
-  const view = tool ? props.catalog.views[tool] : undefined;
+  // a View the catalog does not describe still shows its rows, with nothing to open
+  const view = tool && Object.prototype.hasOwnProperty.call(props.catalog.views, tool) ? props.catalog.views[tool]! : BARE_VIEW;
   const [rows, setRows] = useState<Row[] | null>(() => (props.result ? rowsOf(props.result) : null));
   const [stale, setStale] = useState(false);
   const [open, setOpen] = useState<{ row: Row; action: AppRowAction } | null>(null);
@@ -76,13 +77,11 @@ export function MantleApp(props: {
       </div>
     );
   }
-  if (!tool || !view) return <p className="text-muted-foreground p-4 text-sm">{labels.unknownView}</p>;
-  if (open) {
+  if (open && tool) {
     return (
       <RowAction
         key={`${open.action.capability}:${String(open.row["id"])}`}
         call={props.call}
-        read={(id, signal) => readRow(props.call, tool, props.input ?? {}, id, signal, labels.rowGone)}
         row={open.row}
         action={open.action}
         labels={labels}
@@ -101,7 +100,7 @@ export function MantleApp(props: {
       <ul data-slot="app-rows" className="grid gap-2 p-3">
         {rows.map((row, index) => {
           const id = typeof row["id"] === "string" ? row["id"] : undefined;
-          const actions = actionsFor(view, row);
+          const actions = actionsFor(props.catalog, view, row);
           return (
             <li key={id ?? index} className="grid gap-2 rounded-md border p-3 text-sm">
               <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
@@ -147,7 +146,6 @@ function columnsOf(view: AppCatalogView, rows: readonly Row[]): string[] {
 
 function RowAction(props: {
   readonly call: CallTool;
-  readonly read: (id: string, signal: AbortSignal) => Promise<EntrySnapshot>;
   readonly row: Readonly<Record<string, unknown>>;
   readonly action: AppRowAction;
   readonly labels: AppLabels;
@@ -159,14 +157,14 @@ function RowAction(props: {
   // Created once when the action is opened, from the row as it was then: a
   // refresh of the list never rebuilds it or points it at another entry.
   const [created] = useState((): { controller: InteractionController } | { error: unknown } => {
-    const { call, read, row, action } = props;
+    const { call, row, action } = props;
     try {
       return {
         controller: createInteractionController({
           interaction: action,
           row,
-          // A locked action reviews the row as it is now: the View is read again
-          ...(action.version ? { read: (signal: AbortSignal) => read(String(row["id"]), signal) } : {}),
+          // the row as listed is the reviewed entry: a version that moved since is the server's CONFLICT, and the person
+          // reopens the action from the refreshed list
           invoke: (values, signal) => invokeTool(call, action.capability, values, signal),
           // One key per opened action, so a retry after an uncertain write reuses it.
           initialInput: Object.fromEntries(automatic.map((field) => [field, crypto.randomUUID()])),
