@@ -24,8 +24,9 @@ With `site`, boot creates Mantle's product tables (`site_config`,
 `media_assets`, `pending_media_uploads`), writes the defaults, and the runtime
 carries `runtime.site`. Without it those tables are not created,
 `runtime.site` is absent, Admin's `/site-settings` answers 501
-`SITE_NOT_CONFIGURED` and its media routes 501 `MEDIA_NOT_CONFIGURED`. The generated preset does
-not pass `site`; add it in `src/service.ts`.
+`SITE_NOT_CONFIGURED` and its media routes 501 `MEDIA_NOT_CONFIGURED`, and the
+console leaves Settings and Media out of its navigation. The generated preset
+does not pass `site`; add it in `src/service.ts`.
 
 ## `SiteDefaults`
 

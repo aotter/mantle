@@ -13,6 +13,7 @@ import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { JsonSchema, StaffOperation } from "../../lib/types";
 import { SchemaFields } from "../content/entry-edit-view";
+import { renderDataValue } from "../../lib/render-data-value";
 
 const LABEL_KEYS: Record<keyof InteractionLabels, I18nKey> = {
   submit: "interaction.submit",
@@ -193,8 +194,9 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
   };
   closeRef.current = close;
   const schema = operationFormSchema(operation.input, hidden);
-  const fieldLabel = (field: string) =>
-    propertyLabel(field, operation.input.properties?.[field] ?? sourceSchema?.properties?.[field], language, canonical);
+  const fieldSchema = (field: string) => operation.input.properties?.[field] ?? sourceSchema?.properties?.[field];
+  const fieldLabel = (field: string) => propertyLabel(field, fieldSchema(field), language, canonical);
+  const fieldValue = (field: string, value: unknown) => renderDataValue(fieldSchema(field), value, language, canonical);
   return (
     <OperationPanel
       controller={controller}
@@ -202,6 +204,7 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
       description={description}
       labels={interactionLabels(language)}
       fieldLabel={fieldLabel}
+      fieldValue={fieldValue}
       onClose={close}
       onCancel={close}
       {...(renderResult ? { renderResult } : {})}

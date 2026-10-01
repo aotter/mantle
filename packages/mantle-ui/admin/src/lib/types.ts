@@ -195,6 +195,8 @@ export interface SiteInfo {
   mcpEndpoints?: { public: string | null; staff: string | null };
   /** Deprecated staff endpoint alias. */
   mcpUrl: string | null;
+  /** What the deployment turned on; absent from an older server, which means all of it. */
+  capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean };
   media?: {
     purposes?: MediaPurposePolicy[];
   };

@@ -13,8 +13,10 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { ErrorBox, SectionCard } from "../../ui/page";
 import { STATISTICS_RANGES, STATISTICS_PREFERENCE_KEY, parseStatisticsPreferences, statisticsCsv, statisticsSeries, stackedAreas, type CollectionStatistics, type StatisticsPreferences } from "./collection-statistics";
 
-export function CollectionStatisticsCard({ collection, canonical }: {
+export function CollectionStatisticsCard({ collection, canonical, statistics = true }: {
   collection: Collection; canonical: string | null;
+  /** False when the deployment has no creation statistics: the card is a link with the collection's description. */
+  statistics?: boolean;
 }): React.ReactElement {
   const { language } = usePreferences();
   const preferenceKey = `${STATISTICS_PREFERENCE_KEY}.${collection.name}`;
@@ -33,6 +35,7 @@ export function CollectionStatisticsCard({ collection, canonical }: {
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchInterval: 60_000,
+    enabled: statistics,
   });
   const title = resolveLocalizedText(collection.title, language, canonical) ?? fieldLabel(collection.name);
   const number = new Intl.NumberFormat(language);
@@ -46,6 +49,17 @@ export function CollectionStatisticsCard({ collection, canonical }: {
     : { month: "short", day: "numeric", ...((preferences.range === "7d" || preferences.range === "24h") ? { hour: "2-digit" } as const : {}) }).format;
   const seriesLabel = (name: string | null) => name === null
     ? t(language, collection.filter ? "console.stats.other" : "console.stats.new") : fieldLabel(name);
+  if (!statistics) {
+    const description = resolveLocalizedText(collection.description, language, canonical);
+    return (
+      <SectionCard className="min-w-0 gap-2 p-4">
+        <h3 className="text-base font-semibold">
+          <a href={`/admin/c/${encodeURIComponent(collection.name)}`} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{title}</a>
+        </h3>
+        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+      </SectionCard>
+    );
+  }
   return (
     <SectionCard className="min-w-0 gap-3 p-4">
       <h3 className="flex items-baseline justify-between gap-3 text-base font-semibold">

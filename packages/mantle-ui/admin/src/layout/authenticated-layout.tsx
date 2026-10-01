@@ -121,8 +121,9 @@ export function AuthenticatedLayout({
           me.data?.role ?? null,
           (operationsQuery.data ?? []).some((operation) =>
             (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]),
+          site.data?.capabilities,
         ),
-    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.role, workspace],
+    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.role, workspace, site.data?.capabilities],
   );
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
@@ -206,6 +207,7 @@ export function buildNavGroups(
   canonical: string | null,
   role: AdminUser["role"],
   hasGlobalOperations = false,
+  capabilities?: SiteInfo["capabilities"],
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter(isPrimaryNavCollection);
   const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "operational");
@@ -255,13 +257,14 @@ export function buildNavGroups(
     items: [
       ...(role === "owner" || role === "editor"
         ? [
+            // Media stays when it is off: its page is the setup guide
             { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
             { title: t(language, "nav.members"), url: "/admin/members", icon: ContactRound },
           ]
         : []),
       ...(role === "owner"
         ? [
-            { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
+            ...(capabilities?.siteSettings === false ? [] : [{ title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon }]),
             { title: t(language, "nav.staff"), url: "/admin/staff", icon: Users },
           ]
         : []),

@@ -3,6 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { enumOptions, optionLabel } from "../src/lib/enum-options";
 import { renderDataValue, withNativeSchema } from "../src/lib/render-data-value";
 import type { JsonSchema } from "../src/lib/types";
+import { propertyLabel } from "../src/lib/field-label";
+import { api } from "../src/lib/api";
+import { vi } from "vitest";
 
 const status: JsonSchema = { type: "string", oneOf: [{ const: "submitted", title: { en: "Submitted", "zh-TW": "已送出" } }, { const: "approved" }] };
 
@@ -26,5 +29,21 @@ describe("timestamps", () => {
     const html = renderToStaticMarkup(<>{renderDataValue(withNativeSchema("createdAt", undefined), "2026-10-01T09:30:00.000000Z")}</>);
     expect(html).toMatch(/^<time dateTime="2026-10-01T09:30:00.000000Z">/);
     expect(withNativeSchema("title", undefined)).toBeUndefined();
+  });
+});
+
+describe("labels and errors", () => {
+  it("names the entry's own timestamps in the language", () => {
+    expect(propertyLabel("createdAt", undefined, "zh-TW", null)).toBe("建立時間");
+    expect(propertyLabel("updated_at", undefined, "en", null)).toBe("Updated");
+  });
+
+  it("reports the server's message, not the status line", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { code: "SITE_NOT_CONFIGURED", message: "Site settings need the site tables." } }), { status: 501, statusText: "Not Implemented" }));
+    try {
+      await expect(api.get("/site-settings")).rejects.toThrow("Site settings need the site tables.");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

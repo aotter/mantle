@@ -1,7 +1,7 @@
 import { api } from "./api";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
 import { isFoldedFieldChild } from "./collection-nav";
-import type { AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, StaffOperation, ViewManifestInfo } from "./types";
+import type { AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, StaffOperation, ViewManifestInfo } from "./types";
 
 export const COLLECTION_PAGE_SIZE = 50;
 
@@ -171,4 +171,9 @@ export function operationsQueryOptions(): {
       return res.operations;
     },
   };
+}
+
+/** The deployment's site metadata and capabilities, shared by every page under one key. */
+export function siteQueryOptions(): { queryKey: readonly ["site"]; queryFn: () => Promise<SiteInfo> } {
+  return { queryKey: ["site"], queryFn: () => api.get<SiteInfo>("/site") };
 }

@@ -56,7 +56,7 @@ Every route needs a staff caller; the column names the least role.
 | `POST …/entries/{id}/publish`, `…/unpublish`, `DELETE …/entries/{id}` | editor | |
 | `GET /admin/api/views-manifest`, `GET …/views/{name}`, `GET …/views/{name}/export` | contributor | staff Views (`{ name, title, description, input, list: { columns, searchFields, filterFields }, columns }`); rows by `limit`/`cursor` with `search` and `filter.<output>`; CSV |
 | `GET /admin/api/operations`, `POST …/operations/{name}` | contributor | Procedures bound to the staff MCP surface |
-| `GET /admin/api/site` | contributor | site metadata and `mcpEndpoints` |
+| `GET /admin/api/site` | contributor | site metadata, `mcpEndpoints`, and `capabilities: { siteSettings, media, invitationEmail, statistics }` (what this deployment turned on; the console hides what is off) |
 | `GET`, `PATCH /admin/api/site-settings` | owner | 501 `SITE_NOT_CONFIGURED` without `runtime.site` |
 | `POST /admin/api/media/uploads`, `POST …/media/uploads/{groupId}/commit`, `GET …/media`, `GET`, `PATCH`, `DELETE …/media/{id}` | editor | with `media` and `runtime.site` |
 | `GET /admin/api/webmcp` | contributor | with `staffMcp`: `{ tools, routes }` |
