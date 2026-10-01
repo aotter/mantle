@@ -170,8 +170,7 @@ Cloudflare D1 is the built-in dialect and the one preset. Upgrading from 0.1.x:
 | Package | Purpose |
 |---|---|
 | `@aotter/mantle` | Core, the manifest compiler, the D1 dialect, the Cloudflare driver, Auth, Admin, MCP and REST surfaces, the compliance suite, and the `mantle` CLI, as subpaths. |
-| `@aotter/mantle-ui` | Shared UI for Admin and MCP Apps: interaction controller, components, the UI kit and the MCP App. |
-| `@aotter/mantle-admin-ui` | Prebuilt staff console and Developer UI. |
+| `@aotter/mantle-ui` | The Admin console (`/admin`, served by the preset) and shared UI for Admin and MCP Apps: interaction controller, components, the UI kit and the MCP App. |
 
 </details>
 

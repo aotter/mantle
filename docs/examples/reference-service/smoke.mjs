@@ -110,6 +110,23 @@ try {
   assert.equal((await call("GET", "/admin/api/views/sales-by-item", { cookie: buyer })).status, 403);
   step("sales-by-item (GROUP BY over a LEFT JOIN) is staff-only through Admin's API");
 
+  // the console: @aotter/mantle-ui/admin served by Admin at /admin, its assets by name, any other path its client-side route
+  const shell = await fetch(`${origin}/admin/c/items`);
+  const html = await shell.text();
+  const script = /src="(\/admin\/assets\/[^"]+\.js)"/.exec(html)?.[1];
+  assert.equal(shell.headers.get("x-frame-options"), "DENY");
+  assert.ok(script, html.slice(0, 300));
+  assert.equal((await fetch(`${origin}${script}`)).status, 200);
+  assert.equal((await fetch(`${origin}/admin/assets/missing.js`)).status, 404);
+  // the editor's round trip: it reads the whole entry and writes it back, an unset optional field included as null
+  const [tea] = (await call("GET", "/admin/api/entries?collection=items", { cookie: staff })).body.items;
+  assert.deepEqual(tea.data_preview, { name: "Oolong tea", sku: "TEA-1", stock: 8 });
+  const { entry } = (await call("GET", `/admin/api/entries/${tea.id}?collection=items`, { cookie: staff })).body;
+  const saved = await call("PATCH", `/admin/api/entries/${tea.id}?collection=items`, { cookie: staff, body: { expectedVersion: entry.version, data: { ...entry.data, name: "Oolong tea (Taiwan)", priceCents: null } } });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal((await call("GET", "/api/views/catalog")).body.rows[0].name, "Oolong tea (Taiwan)");
+  step("Admin's console: the SPA and its assets at /admin, the list's declared columns, and an editor's save of the whole entry");
+
   const tools = (await mcp("/mcp", undefined)).body.result.tools.map((t) => t.name);
   assert.ok(tools.includes("place_order") && !tools.includes("restock"), tools.join());
   step("public MCP lists place_order and not the staff restock");

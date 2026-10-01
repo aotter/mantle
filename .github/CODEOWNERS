@@ -8,7 +8,6 @@
 # Engine packages
 /packages/mantle/               @guyspy
 /packages/mantle-ui/            @guyspy
-/packages/mantle-admin-ui/      @guyspy
 
 # Docs & governance
 /docs/adr/                      @guyspy

@@ -111,10 +111,13 @@ const identity: AdminIdentity = {
   },
 };
 
-const assets: AdminAssets = (path) =>
-  path === "index.html" ? new Response("<!doctype html><div id=root></div>", { headers: { "content-type": "text/html; charset=utf-8" } })
+// as the assets binding resolves a path: `//index.html` is `index.html`
+const assets: AdminAssets = (raw) => {
+  const path = raw.replace(/^\/+/, "");
+  return path === "index.html" || path === "preview.html" ? new Response("<!doctype html><div id=root></div>", { headers: { "content-type": "text/html; charset=utf-8" } })
   : path === "assets/app.js" ? new Response("boot()", { headers: { "content-type": "text/javascript" } })
   : null;
+};
 
 let rt: MantleRuntime;
 let d1: LocalD1;
@@ -190,7 +193,7 @@ describe("Admin surface: reads", () => {
     const names = async (c: Caller) => (await call("GET", "/admin/api/views-manifest", c)).body.views.map((v: any) => v.name);
     expect(await names(owner)).toEqual(["all-posts", "owner-posts"]);
     expect(await names(editor)).toEqual(["all-posts"]);
-    expect((await call("GET", "/admin/api/views-manifest", owner)).body.views[0]).toMatchObject({ list: { columns: ["slug"], searchFields: [], filterFields: [] }, input: { properties: { min: { type: "integer" } } } });
+    expect((await call("GET", "/admin/api/views-manifest", owner)).body.views[0]).toMatchObject({ list: { columns: ["slug"] }, input: { properties: { min: { type: "integer" } } }, columns: { slug: { schema: "posts", field: "slug" }, sortKey: { schema: "posts", field: "sortKey" } } });
   });
 
   it("pages a staff View by limit and cursor, coerces its input, and serves no internal or public View", async () => {
@@ -302,8 +305,12 @@ describe("Admin surface: the SPA shell", () => {
   });
 
   it("index.html, a dotted deep link and a traversal attempt: the shell headers always, the shell for a client route, 404 for a traversal", async () => {
-    const r = await call("GET", "/admin/index.html", anon);
-    expect([r.status, r.headers.get("content-security-policy"), r.headers.get("x-frame-options"), r.headers.get("cache-control")]).toEqual([200, "frame-ancestors 'none'", "DENY", "no-store"]);
+    for (const path of ["/admin/index.html", "/admin//index.html"]) {
+      const r = await call("GET", path, anon);
+      expect([path, r.status, r.headers.get("content-security-policy"), r.headers.get("x-frame-options"), r.headers.get("cache-control")]).toEqual([path, 200, "frame-ancestors 'none'", "DENY", "no-store"]);
+    }
+    // the preview is framed by the console itself
+    expect((await call("GET", "/admin/preview.html", anon)).headers.get("x-frame-options")).toBeNull();
     expect((await call("GET", "/admin/members/a.b@x.test", anon)).body).toBe("<!doctype html><div id=root></div>");
     for (const path of ["/admin/..%2f..%2fsecret.txt", "/admin/x%5cy.txt"]) expect([path, (await call("GET", path, anon)).status]).toEqual([path, 404]);
   });

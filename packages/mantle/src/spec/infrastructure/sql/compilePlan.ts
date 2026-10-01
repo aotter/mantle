@@ -138,7 +138,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   for (const { manifest: v, source } of linked.views) {
     const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
     const columns = plan ? viewOutputs(plan, schemas).columns : {};
-    if (plan) views[v.metadata.name] = { ...plan, ...(Object.keys(columns).length ? { columns } : {}), ...(v.spec.title ? { title: v.spec.title } : {}), ...(v.spec.description ? { description: v.spec.description } : {}), ...(v.spec.uiSchema ? { uiSchema: v.spec.uiSchema } : {}), inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
+    if (plan) views[v.metadata.name] = { ...plan, ...(Object.keys(columns).length ? { columns } : {}), ...(v.spec.title ? { title: v.spec.title } : {}), ...(v.spec.description ? { description: v.spec.description } : {}), ...(v.spec.uiSchema ? { uiSchema: v.spec.uiSchema } : {}), inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), source: v.spec.sql, surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
   }
   const procedures: Record<string, PlanProcedure> = {};
   const declaredSchema = new Map(linked.schemas.map((x) => [x.manifest.metadata.name.toLowerCase(), x.manifest.metadata.name]));
@@ -162,7 +162,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     if ("ref" in p.spec.handler) { procedures[p.metadata.name] = { ...common, ...(p.spec.target ? { target: p.spec.target } : {}), handler: { ref: p.spec.handler.ref } }; continue; }
     const plan = await compile("procedure", p.spec.handler.sql, p.spec.input, source, "/spec/handler/sql");
     const target = p.spec.target ?? (plan ? inferTarget(p, plan.stmts) : undefined);
-    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan } };
+    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan, source: p.spec.handler.sql } };
   }
   if (diagnostics.length) return { ok: false, diagnostics };
   const triggers: Record<string, PlanTrigger> = Object.fromEntries(linked.triggers.map(({ manifest: t }) => [t.metadata.name, { source: t.spec.source, procedure: t.spec.target.procedure }]));

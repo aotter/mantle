@@ -41,8 +41,8 @@ When the deployment declares no icons, the runtime stores `DEFAULT_SITE_ICONS`:
 
 ```ts
 const DEFAULT_SITE_ICONS = [
-  { src: "/_mantle/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] },
-  { src: "/_mantle/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+  { src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] },
+  { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
 ];
 ```
 

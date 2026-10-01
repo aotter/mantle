@@ -1,5 +1,5 @@
 {
-  "sourceHash": "1809b63f0db4db6fe5b2ed25716183ef0fe356eb37e96aca492f705d13f3a189",
+  "sourceHash": "6f7b8f545325b7c315f51d8a0e0b4d2ffa01132cb4e2969e47fc775f69d37010",
   "plan": {
     "version": 6,
     "dialect": {
@@ -10,6 +10,15 @@
       "items": {
         "name": "items",
         "title": "Items",
+        "uiSchema": {
+          "list": {
+            "primaryField": "name",
+            "columns": [
+              "sku",
+              "stock"
+            ]
+          }
+        },
         "publishing": false,
         "schema": {
           "type": "object",
@@ -90,6 +99,15 @@
       "orders": {
         "name": "orders",
         "title": "Orders",
+        "uiSchema": {
+          "list": {
+            "primaryField": "itemId",
+            "columns": [
+              "qty",
+              "orderStatus"
+            ]
+          }
+        },
         "scope": "owner",
         "publishing": false,
         "schema": {
@@ -314,6 +332,7 @@
           }
         },
         "inputs": {},
+        "source": "SELECT id, sku, name, priceCents, stock FROM items ORDER BY name",
         "surface": "public"
       },
       "search-items": {
@@ -532,6 +551,7 @@
             }
           }
         },
+        "source": "SELECT i.id, i.name, i.stock FROM items i\nWHERE mantle.search(i, input.q)\nORDER BY mantle.search_rank(i), i.name\n",
         "surface": "public"
       },
       "my-orders": {
@@ -759,6 +779,7 @@
           }
         },
         "inputs": {},
+        "source": "SELECT o.id, o.qty, o.orderStatus, i.name AS item, o.version\nFROM orders o JOIN items i ON i.id = o.itemId\nORDER BY o.created_at DESC\n",
         "surface": "public",
         "requires": {
           "auth": {
@@ -1062,6 +1083,7 @@
           }
         },
         "inputs": {},
+        "source": "SELECT i.name, count(o.id) AS orders, coalesce(sum(o.qty), 0) AS units\nFROM items i LEFT JOIN orders o ON o.itemId = i.id AND o.orderStatus = 'placed'\nGROUP BY i.name\nORDER BY units DESC, i.name\n",
         "surface": "staff",
         "requires": {
           "auth": {
@@ -1184,6 +1206,7 @@
           }
         },
         "inputs": {},
+        "source": "SELECT kind, subject, detail FROM activity ORDER BY created_at DESC LIMIT 50",
         "surface": "staff",
         "requires": {
           "auth": {
@@ -1538,7 +1561,8 @@
                 }
               }
             ]
-          }
+          },
+          "source": "INSERT INTO orders (itemId, qty, orderStatus, placedAt)\nSELECT id, input.qty, 'placed', now() FROM items WHERE id = input.itemId\nRETURNING id, qty, orderStatus;\nUPDATE items SET stock = stock - input.qty WHERE id = input.itemId\n"
         }
       },
       "cancel-order": {
@@ -1828,7 +1852,8 @@
                 }
               }
             ]
-          }
+          },
+          "source": "INSERT INTO items (sku, name, stock) VALUES (input.sku, input.name, input.qty)\nON CONFLICT (sku) DO UPDATE SET stock = items.stock + EXCLUDED.stock\nRETURNING id, sku, stock\n"
         }
       },
       "record-orders": {
@@ -1906,6 +1931,6 @@
         "procedure": "weekly-digest"
       }
     },
-    "fingerprint": "be76fb3597217078a7bfa93c9b7b51ca2a31ed48070b6b1633ae049627dbfe91"
+    "fingerprint": "e3e18eb517297a5fe1ed9b4ba182271694858f261e20026f22f2e8615751ce56"
   }
 }

@@ -44,12 +44,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Single source of truth for the three public packages, in dependency order.
+    # Single source of truth for the two public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       PKG_DIRS: >-
         packages/mantle-ui
-        packages/mantle-admin-ui
         packages/mantle
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

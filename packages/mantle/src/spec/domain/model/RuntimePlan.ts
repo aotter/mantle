@@ -42,6 +42,8 @@ export interface PlanView extends SqlPlan {
   /** input property -> Mantle type */
   readonly inputs: Readonly<Record<string, string>>;
   readonly input?: JsonSchema;
+  /** The SQL as authored, which Admin shows; the IR (`stmts`) is what runs. */
+  readonly source: string;
   readonly surface: "public" | "staff" | "internal";
   readonly requires?: AuthorizationRequirements;
   /** Output name -> the Schema field it reads unchanged (`SELECT t.f`, `t.f AS f`, `*`); the Store decodes these as `select` does. */
@@ -59,7 +61,8 @@ export interface PlanProcedure {
   readonly requires?: AuthorizationRequirements;
   readonly target?: ProcedureTarget;
   readonly mcp?: ProcedureMcpAnnotations;
-  readonly handler: { readonly ref: string } | { readonly sql: SqlPlan };
+  /** An inline handler carries its SQL as authored (`source`), which Admin shows; the IR is what runs. */
+  readonly handler: { readonly ref: string } | { readonly sql: SqlPlan; readonly source: string };
 }
 
 export interface PlanTrigger {
