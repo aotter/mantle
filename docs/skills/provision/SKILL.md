@@ -68,8 +68,8 @@ read -rsp "GitHub client secret: " S && printf '%s' "$S" | pnpm exec wrangler se
 6. **Deploy.** `pnpm exec wrangler deploy`. The first request creates the
    tables. Later Schema changes: run
    `mantle generate --check --database <local SQLite file>` (local D1 under
-   `.wrangler/state/v3/d1/`) before each deploy and resolve any blocked change
-   by hand.
+   `.wrangler/state/v3/d1/`, which must have run the plan now deployed) before
+   each deploy and resolve any blocked change by hand.
 
 Commit and push only non-secret changes.
 

@@ -15,7 +15,7 @@ storage: (env) => d1Storage(env.DB, {
     origin: "https://notes.example.com",
     locales: ["en", "zh-TW"],
     icons: [{ src: "/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
-    media: { purposes: [{ name: "cover", required: ["primary"], maxBytes: { primary: 2_000_000 } }] },
+    media: { purposes: [{ name: "cover", required: ["image/webp", "image/jpeg,image/png"], maxBytes: { "image/webp": 2_000_000, "image/jpeg": 2_000_000, "image/png": 2_000_000 } }] },
   },
 }),
 ```
@@ -35,7 +35,7 @@ not pass `site`; add it in `src/service.ts`.
 | `origin` | deployment | synced every boot: the canonical absolute origin, no trailing slash |
 | `locales` | deployment | synced every boot; the first is the canonical locale |
 | `icons` | deployment | synced every boot: `[{ src, mimeType?, sizes?, theme? }]`, root-relative or absolute HTTPS. Without it the defaults are `/admin/favicon.png` and `/admin/favicon.svg`, served with the Admin console |
-| `media.purposes` | deployment | synced every boot: `[{ name, required: [roles], maxBytes: { role: bytes } }]`; `name` is a lowercase slug |
+| `media.purposes` | deployment | synced every boot: `[{ name, required: [mime slots], maxBytes: { mime: bytes } }]`; `name` is a lowercase slug |
 
 A blank value is skipped, so it never clears a stored one. Boot validates the
 defaults and refuses a malformed purpose or locale.
@@ -54,8 +54,13 @@ defaults and refuses a malformed purpose or locale.
 
 ## Media purposes
 
-A purpose names a kind of upload and the variants it needs: `required` lists
-roles (`primary`, `alternate`, `fallback`), and `maxBytes` caps each role.
-An upload request names its purpose; a role it lacks or a byte size over the
-cap is refused before any upload URL is issued. See
+A purpose names a kind of upload and the variants it needs. Each `required`
+entry is one MIME slot in `<input accept>` grammar (`"image/webp"`,
+`"image/jpeg,image/png"` for either, `"webp"` for short), and an upload supplies
+one variant per slot; slots must not overlap. `maxBytes` caps each full MIME
+type and must cover every type a slot accepts. Separately, exactly one variant
+of an upload says `role: "primary"` (what `<img>` falls back to); the others are
+`alternate` or `fallback`. The accepted types are PNG, JPEG, WebP, AVIF and GIF
+(SVG is refused). An upload request names its purpose; a missing slot or a
+byte size over the cap is refused before any upload URL is issued. See
 [Media uploads with R2](../cloudflare/media-r2.md).

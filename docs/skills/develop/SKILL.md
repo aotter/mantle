@@ -59,8 +59,8 @@ Choose in this order, stopping at the first that works:
   `CURRENT_TIMESTAMP`. `CAST(x AS int)` only on an integer literal: use
   `round(x)`.
 - Unquoted aliases fold to lower case: `AS "orderCount"` keeps the case.
-- The runtime injects scope, TTL and published-only into every Schema
-  reference. Never repeat them.
+- The runtime injects scope and TTL into every Schema reference, and
+  published-only into public Views. Never repeat them.
 - `scope` hides rows from staff too. When staff must see every row, store
   `auth.uid()` in a field and filter on it instead.
 

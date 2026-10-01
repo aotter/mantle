@@ -17,6 +17,7 @@ service.fetch(request, env, { runtime, waitUntil })
 ```ts
 createMantle(service, { plan, storage: (env) => MantleStorageAdapter, schedules?, expectedFingerprint? })
 // → { fetch(request, env, ctx?), invokeSchedule(cron, scheduledTime, env, ctx?), runDeferredHook(message, env, ctx?) }
+// runDeferredHook replays an after-hook Invocation from your own queue; nothing in Mantle emits one
 ```
 
 - `service` is `{ handlers, fetch(request, env, { runtime, waitUntil }) }`, a
@@ -80,7 +81,9 @@ and converges storage.
 
 - `date-time` is stored as microseconds, `date` as days, `numeric(p, s)` as an
   integer of the smallest unit, so arithmetic is exact on D1.
-- `checks` and foreign keys are enforced by triggers; `searchableFields` uses
+- `checks` are enforced by triggers. `x-mantle-ref` is checked by
+  `mantle generate` and used by Admin; storage does not enforce it in 0.2.0.
+  `searchableFields` uses
   an FTS5 trigram index; `format: geo` uses an R*Tree.
 - `date_trunc` and `extract` compute in the site time zone
   (`d1Storage(db, { timeZone })`, default UTC).

@@ -56,8 +56,8 @@ modules you need.
 - **Publishing.** Draft/publish workflows, localized content and full-text
   search, served over REST and MCP.
   [Publishing example](docs/examples/publication.md).
-- **Embed in an existing application.** Use validation alone, connect Runtime
-  to your storage, or add Web, Admin, and a host adapter.
+- **Embed in an existing application.** Mount the REST, MCP or Admin surface
+  you need inside your own Worker entry.
   [Integration choices](#choose-how-much-to-use).
 
 ## Admin for people and agents

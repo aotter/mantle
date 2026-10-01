@@ -61,6 +61,11 @@ need from the generated `src/service.ts` into the application's own entry:
   and any other surface, mounted on paths the application does not use;
 - the `scheduled` mapping from `src/index.ts`, if the plan has schedules.
 
+Put that composition in the application's `src/service.ts` before the first
+`mantle generate` inside the application: while `src/service.ts` is missing,
+generate writes every missing preset file (`src/service.ts`, `src/index.ts`,
+`src/handlers.ts`, `tsconfig.json`, `.gitignore`, `.dev.vars.example`, and
+`wrangler.jsonc` unless a `wrangler.*` exists) beside the application's own.
 Commit `.mantle/generated/` and run `mantle generate --check` in CI.
 
 ## Moving data into a Schema

@@ -33,7 +33,7 @@ export const mantle = createMantle(service, {
   plan, schedules: true,
   storage: (env) => d1Storage(env.DB, { site: {
     title: "My site",
-    media: { purposes: [{ name: "cover", required: ["primary"], maxBytes: { primary: 2_000_000 } }] },
+    media: { purposes: [{ name: "cover", required: ["image/webp", "image/jpeg,image/png"], maxBytes: { "image/webp": 2_000_000, "image/jpeg": 2_000_000, "image/png": 2_000_000 } }] },
   } }),
 });
 
@@ -57,7 +57,7 @@ All through Admin's API, `editor` role or higher:
 
 1. `POST /admin/api/media/uploads` with
    `{ filename, purpose, variants: [{ mimeType, byteSize, role }], alt?, caption? }`.
-   The purpose's required roles and byte caps are checked here. The answer is
+   The purpose's MIME slots and per-type byte caps are checked here, and exactly one variant must be `role: "primary"`. The answer is
    `{ uploadGroupId, capabilities: [{ role, mimeType, method: "PUT", uploadUrl, requiredHeaders }], expiresAt }`.
 2. `PUT` each variant's bytes to its `uploadUrl` with its `requiredHeaders`.
 3. `POST /admin/api/media/uploads/{uploadGroupId}/commit` (optionally with

@@ -11,9 +11,9 @@ A Schema's `lifecycle` decides how its rows move. The default is
 | | `publishing` | `operational` |
 |---|---|---|
 | For | authored content: posts, products, legal text | records written by Procedures: orders, requests, audit rows |
-| A new row | is a `draft`, saved even when incomplete | is `published` (live) at once, validated in full |
+| A new row | is a `draft`, saved even when incomplete | is live at once, validated in full |
 | Editing | only drafts are editable; a published row is protected | rows edit in place |
-| Statuses | `draft` → `published` → `archived`, `published` → `draft` (unpublish), `archived` → `draft` | always `published` |
+| Statuses | `draft` → `published` → `archived`, `published` → `draft` (unpublish), `archived` → `draft` | none: no `status` column; a row is live once written |
 | Public Views | see published rows only | see every row |
 | Set ops | refused (every write pins one row) | allowed |
 
@@ -77,7 +77,7 @@ default one. A View takes the locale as `input` (see
 [Publication](../../examples/publication.md)); fallback is the reader's code.
 
 Manifest text (`title`, `description`) may be a locale map,
-`{ en: Products, zh-TW: 商品 }`. Admin and MCP pick the viewer's locale, then
+`{ en: Products, zh-TW: 商品 }`. Admin picks the viewer's locale and MCP the surface's `locale` option (default `en`), then
 `en`, then the first entry.
 
 ## Further reading

@@ -25,7 +25,7 @@ selected and `wrangler.jsonc` binds no `ASSETS`. Sign in at `/admin/sign-in`.
 | A multiline string | Schema or Procedure `uiSchema.fields.<name>.widget: textarea` | `textarea` is the only explicit widget |
 | Markdown or HTML | property `x-mcp-hint: markdown` or `html` | A rich editor |
 | A timestamp, a date or money | `format: date-time`, `format: date`; `x-mcp-hint: money-minor` on an integer | Date controls; money in minor units, with a sibling `currency` when present |
-| Columns of an operational list | Schema `uiSchema.list.primaryField`, `.columns` | `primaryField` is a scalar data field; `columns` may name native columns (`status`, `createdAt`) |
+| Columns of an operational list | Schema `uiSchema.list.primaryField`, `.columns` | `primaryField` is a scalar data field; `columns` may name native columns (`createdAt`, `updatedAt`) |
 | Business-state tabs | Schema `uiSchema.list.filterField` | Operational Schemas only; a string enum that leads an index |
 | Search | Schema `searchableFields` | Full-text search over those string fields, plus `id` |
 | Related records | a required property with `x-mantle-ref` | Children fold under their parent |

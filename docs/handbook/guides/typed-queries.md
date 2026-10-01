@@ -115,7 +115,8 @@ await ctx.store.write([
   `id` is a row op: it may carry `lock` (the version the caller saw), and
   writing no row is `CONFLICT`.
 - A result is `{ id, version }` for a row op and `{ affected }` for a set op.
-- `set` and `values` never name the scope field or a native column; Store
+- `set` and `values` never name the scope field or a native column (except
+  `status` on a `publishing` Schema, below); Store
   fills them. A `null` clears a field the Schema does not require; for a
   required field it is refused. On a `publishing` Schema, `set: { status }` is how a `ref`
   handler publishes, unpublishes or archives.

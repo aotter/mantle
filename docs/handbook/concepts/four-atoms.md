@@ -53,7 +53,7 @@ set:
 | SQL name | Store JSON name | Meaning |
 |---|---|---|
 | `id` | `id` | text id, generated unless a `ref` handler passes `ctx.store.id()` |
-| `status` | `status` | `draft`, `published` or `archived` on a `publishing` Schema; always `published` on an `operational` one |
+| `status` | `status` | `draft`, `published` or `archived`; on a `publishing` Schema only (an `operational` one has no `status` column) |
 | `version` | `version` | starts at 1, bumps on every write; the optimistic lock |
 | `created_at`, `updated_at` | `createdAt`, `updatedAt` | timestamps |
 | `author_id` | `authorId` | the subject key of the caller that created the row |
