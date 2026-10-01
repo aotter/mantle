@@ -34,7 +34,7 @@ export function WebMcpControl(): React.ReactElement | null {
           navigate(path);
           return { path };
         }
-        const { result, output } = await callStaffTool(name, input, signal);
+        const { result, output } = await callStaffTool(catalog, name, input, signal);
         await queryClient.invalidateQueries();
         const path = resultPath(catalog, name, output);
         if (navigation && path) navigate(path);

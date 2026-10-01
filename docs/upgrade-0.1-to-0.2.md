@@ -145,7 +145,8 @@ only in trusted host code.
    old Worker into the new files by hand.
 3. With `identity: mantle`, sign-in uses a console email sender locally;
    replace it with a real `EmailSender` before deploying.
-4. Staff MCP moved from `/mcp/staff` to `/admin/api/mcp`; update MCP clients.
+4. Staff MCP stays at `/mcp/staff`, behind an OAuth token with the `mcp`
+   scope and a staff role; MCP clients keep their URL.
 5. Import data into the new database through `runtime.store`. A scoped row
    goes through `runtime.store.as(<its owner's caller>)`, so the scope field is
    the owner. `status`, `created_at` and `author_id` cannot be imported:

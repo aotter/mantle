@@ -10,7 +10,7 @@ preset mounts two:
 | Mount | Surface | Who | Authenticates with |
 |---|---|---|---|
 | `/mcp` | `public` | anyone; each tool's `requires` still applies | an OAuth bearer token (identity `mantle`), or whatever your resolver accepts |
-| `/admin/api/mcp` | `staff` | staff only, behind Admin's gate | the Admin session |
+| `/mcp/staff` | `staff` | staff only | the same OAuth bearer token as `/mcp` (with identity `mantle`; any identity but `none`) |
 
 Both run behind `withCaller(resolver, …)`, so a tool sees the same
 [Caller](./authorization.md) as a REST call.
@@ -60,10 +60,11 @@ floor. When an OAuth token lacks a scope a tool's `requires` names, the call
 is HTTP 403 with an `insufficient_scope` challenge naming the scopes to ask
 for.
 
-## Staff tools for a token-holding client
+## Staff tools
 
-The staff surface inside Admin accepts the Admin session only. An MCP client
-with an OAuth token needs its own mount, which shares the `/mcp` audience:
+The preset mounts the staff surface at `/mcp/staff` whenever it mounts `/mcp`
+and has an identity. It shares the `/mcp` audience, so one token with the `mcp`
+scope reaches both:
 
 ```ts
 const staffMcp = withCaller(resolver,
@@ -72,15 +73,17 @@ const staffMcp = withCaller(resolver,
 ```
 
 `resourceMetadata` is the `/mcp` metadata URL. The staff surface admits only
-callers with a staff role.
+callers with a staff role, and the role is read on every request.
 
 ## WebMCP in Admin
 
-With `staffMcp` passed to `createAdminSurface`, `GET /admin/api/webmcp`
-returns `{ tools, routes }`: the staff tool catalog (the same list
-`tools/list` returns) and, for each tool, the Admin page it belongs to (a
-Procedure with a `target` maps to its collection, a View to its report). A
-browser agent in the console uses it to act through Admin.
+`GET /admin/api/webmcp` returns `{ tools, calls, routes }`: the staff tool
+catalog (the same list `/mcp/staff` returns from `tools/list`), what runs each
+tool (`calls`: a Procedure through `POST /admin/api/operations/<name>`, a View
+through `GET /admin/api/views/<name>`), and the Admin page each tool belongs to
+(a Procedure with a `target` maps to its collection, a View to its report). A
+browser agent in the console registers these tools and runs them on Admin's
+own routes with the signed-in session; Admin itself answers no MCP.
 
 ## MCP Apps
 

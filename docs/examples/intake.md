@@ -108,7 +108,7 @@ staff session; the response is `{ rows, nextCursor? }`.
 | MCP surface | Tool | From |
 |---|---|---|
 | `/mcp` | `submit_request` | the `submit-request-mcp` Trigger |
-| `/admin/api/mcp` | `recent_requests` | the staff View |
+| `/mcp/staff` | `recent_requests` | the staff View |
 
 A Schema is never an MCP tool. Staff edit rows in Admin's API
 (`/admin/api/entries`), not through generated record tools.

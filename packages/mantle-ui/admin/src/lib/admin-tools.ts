@@ -1,5 +1,4 @@
-import type { CallToolResult, Client } from "@modelcontextprotocol/client";
-import { ApiError } from "./api";
+import { api, ApiError, refusalOf } from "./api";
 
 export interface AdminTool {
   name: string;
@@ -9,6 +8,8 @@ export interface AdminTool {
 }
 export interface AdminToolCatalog {
   tools: AdminTool[];
+  /** What runs each staff tool: its Procedure through Admin's operation route, or its View through Admin's View route. */
+  calls: Record<string, { kind: "procedure" | "view"; source: string }>;
   routes: Record<string, { path: string; entry?: boolean }>;
 }
 export interface AdminModelContext {
@@ -32,52 +33,38 @@ export function resultPath(catalog: AdminToolCatalog, name: string, output: unkn
   const path = route.path + (route.entry && typeof row.id === "string" ? `/${encodeURIComponent(row.id)}` : "");
   return adminPath(path + (route.entry && typeof row.status === "string" ? `?status=${encodeURIComponent(row.status)}` : ""));
 }
-/** One official MCP client per page, connected on first use; a failed
- *  connection is dropped so the next call reconnects. */
-let staffClient: Promise<Client> | null = null;
-function connectStaffClient(): Promise<Client> {
-  staffClient ??= (async () => {
-    // Loaded only when a WebMCP host or the preview bridge calls a tool.
-    const { Client, StreamableHTTPClientTransport } = await import("@modelcontextprotocol/client");
-    const client = new Client({ name: "mantle-admin", version: "1.0.0" });
-    await client.connect(new StreamableHTTPClientTransport(new URL("/admin/api/mcp", location.origin), {
-      requestInit: { credentials: "same-origin" },
-    }));
-    return client;
-  })().catch((error: unknown) => {
-    staffClient = null;
-    throw error;
-  });
-  return staffClient;
+/** What a tool call answers a WebMCP host: the output as structured content when it is an object, and as JSON text. */
+export interface StaffToolResult {
+  content: { type: "text"; text: string }[];
+  structuredContent?: Record<string, unknown>;
 }
 
-/** Call a staff tool once. A tool failure keeps its Mantle diagnostic, and
+/** Call a staff tool once, on Admin's own routes with the signed-in session. A refusal keeps its Mantle diagnostic, and
  *  nothing is retried: a write whose outcome is unknown must be re-read. */
-export async function callStaffTool(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ result: unknown; output: unknown }> {
-  let result: CallToolResult;
+export async function callStaffTool(catalog: AdminToolCatalog, name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ result: StaffToolResult; output: unknown }> {
+  const call = Object.prototype.hasOwnProperty.call(catalog.calls, name) ? catalog.calls[name] : undefined;
+  if (!call) throw new TypeError("Unknown staff tool.");
+  const source = encodeURIComponent(call.source);
+  let output: unknown;
   try {
-    const client = await connectStaffClient();
-    result = await client.callTool({ name, arguments: input }, { signal });
+    if (call.kind === "procedure") output = (await api.post<{ output: unknown }>(`/operations/${source}`, input, { signal })).output;
+    else output = await api.get(`/views/${source}${viewQuery(input)}`, { signal });
   } catch (error) {
-    // Transport and protocol failures (HTTP status, JSON-RPC error) carry no
-    // Mantle diagnostic; the body stays a plain, serialisable object.
-    const status = typeof (error as { status?: unknown } | null)?.status === "number" ? (error as { status: number }).status : 0;
-    const message = error instanceof Error ? error.message : "Admin tool failed.";
-    throw new ApiError(message, status, { code: "MCP_REQUEST_FAILED", message });
+    // the diagnostic is the refusal; the body stays a plain, serialisable object
+    if (error instanceof ApiError) throw new ApiError(error.message, error.status, refusalOf(error.body) ?? error.body);
+    throw error;
   }
-  const output = toolOutput(result);
-  if (result.isError) {
-    const diagnostic = (output as { diagnostics?: readonly { message?: string }[] } | null)?.diagnostics?.[0];
-    throw new ApiError(diagnostic?.message ?? "Admin tool failed.", 0, diagnostic ?? output);
-  }
+  const result: StaffToolResult = { content: [{ type: "text", text: JSON.stringify(output) }], ...(output && typeof output === "object" && !Array.isArray(output) ? { structuredContent: output as Record<string, unknown> } : {}) };
   return { result, output };
 }
 
-/** Structured content when present, else the JSON text block, else the text
- *  itself: a server may answer with prose. */
-function toolOutput(result: CallToolResult): unknown {
-  if (result.structuredContent !== undefined) return result.structuredContent;
-  const text = result.content?.find((item) => item.type === "text");
-  if (!text || !("text" in text)) return result;
-  try { return JSON.parse(text.text) as unknown; } catch { return text.text; }
+/** A View tool's input as the View route reads it: one query parameter each, `limit` and `cursor` included. */
+function viewQuery(input: Record<string, unknown>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined || value === null) continue;
+    query.set(key, typeof value === "object" ? JSON.stringify(value) : String(value));
+  }
+  const text = query.toString();
+  return text ? `?${text}` : "";
 }

@@ -132,7 +132,7 @@ production sign-in.
 Or open `/admin/sign-in` in a browser: the console is served at `/admin` from
 `@aotter/mantle-ui/admin`, which the generated `wrangler.jsonc` binds as the
 Worker's `ASSETS`. Admin's API answers at `/admin/api/*`, the public MCP
-surface at `/mcp`, and the staff MCP surface at `/admin/api/mcp`. The
+surface at `/mcp`, and the staff MCP surface at `/mcp/staff`. The
 [reference service](../../examples/reference-service/README.md) is this
 selection with a smoke test that signs in and drives every surface.
 

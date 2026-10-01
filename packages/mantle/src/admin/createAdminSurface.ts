@@ -4,7 +4,7 @@
  * caller's scope sees and nothing wider. Routes of an `AdminIdentity` facet that is absent do not exist.
  */
 import { makeDiagnostic, redactForWire } from "../spec/kernel/index.js";
-import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, enumOptions, resolveMantleRef, type JsonSchema, type McpTool, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
+import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, enumOptions, resolveMantleRef, mcpTools, type JsonSchema, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
 import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
 import { siteConfigOf } from "../core/siteConfig.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
@@ -25,11 +25,6 @@ export interface AdminSurfaceOptions {
   readonly site?: { readonly mcpEndpoints?: { readonly public: string | null; readonly staff: string | null } };
   /** Media objects; the media routes also need `runtime.site`, which owns the tables, and answer 501 without either. */
   readonly media?: MediaStorage;
-  /**
-   * The staff MCP surface, answered at `{basePath}/api/mcp` behind Admin's session gate: `createMcpSurface(runtime, { basePath:
-   * `${basePath}/api/mcp`, surface: "staff" })`. With it, `/webmcp` publishes the tools it registered; without it, neither route exists.
-   */
-  readonly staffMcp?: Surface & { readonly tools: readonly McpTool[] };
 }
 
 type Staff = Extract<Caller, { kind: "user" }> & { readonly role: StaffRole };
@@ -209,16 +204,17 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     return { userId: caller.subject, role: caller.role, login: u ? u.githubLogin || u.name || u.email || null : null, image: u?.image ?? null };
   };
 
-  // the tools the staff MCP surface registered, and each tool's page: a Procedure's target Schema, or the View
-  const staffTools = options.staffMcp?.tools ?? [];
-  const webmcp = options.staffMcp ? {
+  // the staff MCP surface's tools, each with the Admin route that runs it and its page: a Procedure's target Schema, or the View
+  const staffTools = mcpTools(plan, "staff");
+  const webmcp = {
     tools: staffTools.map(({ name, title, description, inputSchema, outputSchema, annotations }) => ({ name, ...(title ? { title } : {}), description, inputSchema, ...(outputSchema ? { outputSchema } : {}), ...(annotations ? { annotations } : {}) })),
+    calls: Object.fromEntries(staffTools.map((t) => [t.name, { kind: t.kind, source: t.source }])),
     routes: Object.fromEntries(staffTools.flatMap((t) => {
       if (t.kind === "view") return [[t.name, { path: `${base}/views/${encodeURIComponent(t.source)}` }]];
       const target = plan.procedures[t.source]!.target;
       return target ? [[t.name, { path: `${base}/c/${encodeURIComponent(plan.schemas[target.schema.toLowerCase()]?.name ?? target.schema)}`, entry: true }]] : [];
     })),
-  } : null;
+  };
   let developer: ReturnType<typeof developerConsole> | undefined;
 
   // ---- entries: every read and write is the caller's own Store, so a scoped Schema shows the caller's rows only (G2b)
@@ -482,7 +478,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       },
     },
   );
-  if (webmcp) routes.push({ method: "GET", path: "/webmcp", role: "contributor", run: async () => webmcp });
+  routes.push({ method: "GET", path: "/webmcp", role: "contributor", run: async () => webmcp });
   if (directory) routes.push(
     { method: "GET", path: "/staff", role: "owner", run: async ({ request }) => ({ users: (await directory.listUsers(request)).map(staffInfo) }) },
     {
@@ -536,8 +532,6 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     // Admin acts as the person: a token or key minted for something narrower (an MCP client, a script) is not a sign-in
     if (caller.credential !== "session") throw wireError("AUTH_DENIED", "Admin needs a signed-in session.", P);
     const staff = caller as Staff;
-    // any method: the MCP transport answers GET and DELETE itself
-    if (options.staffMcp && url.pathname.replace(/\/+$/, "") === `${base}/api/mcp`) return options.staffMcp(request, staff);
     for (const route of routes) {
       const params = route.method === request.method ? match(`${base}/api${route.path}`, url.pathname) : null;
       if (!params) continue;

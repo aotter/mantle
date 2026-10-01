@@ -22,6 +22,8 @@ const key = (s: string) => (s === "__proto__" ? '["__proto__"]' : /^[A-Za-z_$][\
 
 function service({ identity, features }: PresetSelection): string {
   const mcp = features.includes("mcp");
+  // the staff surface needs someone to be staff, so it comes with an identity
+  const staffMcp = mcp && identity !== "none";
   const admin = features.includes("admin");
   const mantle = identity === "mantle";
   const withEnv = mantle || admin;
@@ -39,11 +41,13 @@ function service({ identity, features }: PresetSelection): string {
     'basePath: "/admin"',
     "assets: (path) => adminAsset(env.ASSETS, path)",
     ...(mantle ? ["identity: { directory: auth, roles: auth, deleteUser: auth.deleteUser }"] : []),
-    ...(mcp ? ['staffMcp: createMcpSurface(runtime, { basePath: "/admin/api/mcp", surface: "staff" })', 'site: { mcpEndpoints: { public: "/mcp", staff: null } }'] : []),
+    ...(mcp ? [`site: { mcpEndpoints: { public: "/mcp", staff: ${staffMcp ? '"/mcp/staff"' : "null"} } }`] : []),
   ];
   const surfaces = [
     ...(admin ? [`  ${identity === "custom" ? "// no AdminIdentity: Admin hides the user facets until src/identity.ts can list and manage users\n  " : ""}const admin = guard(createAdminSurface(runtime, { ${adminOptions.join(", ")} }));`] : []),
     ...(mcp ? [`  const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public"${meta.length ? ", resourceMetadata" : ""} })${meta.length ? ", { resourceMetadata }" : ""});`] : []),
+    // the staff tools for an MCP client with a token: the same audience as /mcp, and the staff surface's own role gate
+    ...(staffMcp ? [`  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff"${meta.length ? ", resourceMetadata" : ""} })${meta.length ? ", { resourceMetadata }" : ""});`] : []),
     "  // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers",
     '  const rest = guard(createRestSurface(runtime, { basePath: "/api" }));',
   ];
@@ -57,6 +61,7 @@ function service({ identity, features }: PresetSelection): string {
       "      throw error;",
       "    });", "    const owned = await authRoutes(request, { waitUntil });", "    if (owned) return owned;"] : []),
     ...(admin ? ['    if (under("/admin")) return admin(request);'] : []),
+    ...(staffMcp ? ['    if (under("/mcp/staff")) return staffMcp(request);'] : []),
     ...(mcp ? ['    if (under("/mcp")) return mcp(request);'] : []),
     "    return rest(request);",
     "  };",
