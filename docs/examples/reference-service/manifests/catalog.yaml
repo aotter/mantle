@@ -14,6 +14,7 @@ spec:
       priceCents: { type: integer, minimum: 0 }
       stock: { type: integer, default: 0 }
   checks: ["stock >= 0"]
+  uiSchema: { list: { primaryField: name, columns: [sku, stock] } }
   uniqueIndexes: [[sku]]
   searchableFields: [name, sku]
 ---
@@ -24,6 +25,7 @@ spec:
   title: Orders
   lifecycle: operational
   scope: { owner: auth.uid() }
+  uiSchema: { list: { primaryField: itemId, columns: [qty, orderStatus] } }
   indexes: [[owner]]
   schema:
     type: object

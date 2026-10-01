@@ -10,6 +10,8 @@ import { handlers } from "./handlers.js";
 
 export interface Env {
   readonly DB: D1Database;
+  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */
+  readonly ASSETS: Fetcher;
   readonly BETTER_AUTH_SECRET?: string;
   readonly PUBLIC_ORIGIN?: string;
   readonly ADMIN_EMAIL?: string;
@@ -30,6 +32,12 @@ function createAuth(env: Env, origin: string): MantleAuth {
   });
 }
 
+/** A file of the Admin SPA, or null when it has none by that path. */
+async function adminAsset(assets: Fetcher, path: string): Promise<Response | null> {
+  const response = await assets.fetch(new URL(path, "http://assets/"));
+  return response.ok ? response : null;
+}
+
 function mount(runtime: MantleRuntime, env: Env) {
   const origin = env.PUBLIC_ORIGIN?.replace(/\/+$/, "") ?? "http://127.0.0.1:8787";
   const auth = createAuth(env, origin);
@@ -37,7 +45,7 @@ function mount(runtime: MantleRuntime, env: Env) {
   const authRoutes = createAuthRoutes(auth, { resolver });
   const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);
   const resourceMetadata = `${origin}/.well-known/oauth-protected-resource/mcp`;
-  const admin = guard(createAdminSurface(runtime, { basePath: "/admin", identity: { directory: auth, roles: auth, deleteUser: auth.deleteUser }, staffMcp: createMcpSurface(runtime, { basePath: "/admin/api/mcp", surface: "staff" }), site: { mcpEndpoints: { public: "/mcp", staff: null } } }));
+  const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { directory: auth, roles: auth, deleteUser: auth.deleteUser }, staffMcp: createMcpSurface(runtime, { basePath: "/admin/api/mcp", surface: "staff" }), site: { mcpEndpoints: { public: "/mcp", staff: null } } }));
   const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
   // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers
   const rest = guard(createRestSurface(runtime, { basePath: "/api" }));

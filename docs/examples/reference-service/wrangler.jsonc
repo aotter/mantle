@@ -12,6 +12,12 @@
       "database_name": "mantle-reference"
     }
   ],
+  "assets": {
+    "directory": "node_modules/@aotter/mantle-ui/dist/admin",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none"
+  },
   "triggers": {
     "crons": [
       "0 3 * * 1"
