@@ -1,60 +1,88 @@
 ---
 name: integrate
-description: Integrate Mantle into an existing application. Use when the application has its own code, routes, storage or deployment and the owner wants to add Mantle, replace part of it, or rebuild with Mantle while migrating frontend and data.
+description: Add Mantle 0.2 to an existing application, or rebuild one on Mantle and migrate its data. Use when the application already has its own code, routes, users, storage or deployment.
 metadata:
   source: "@aotter/mantle"
   sourcePath: docs/skills/integrate/SKILL.md
-  applies_to: mantle grammar v0.1
+  applies_to: mantle 0.2
   projection: package
-  projectionReason: Existing-project migration is opt-in; a fresh generated app does not need this brief.
 ---
 
 # Integrate Mantle into an existing application
 
-Work in the target application. Read its installed `@aotter/mantle` version,
-CLI help and package-local docs before editing. If Mantle is absent, inspect
-the application first, then install an exact SDK version only after choosing an
-integration strategy. Use the installed version's contract; do not copy
-`develop` branch examples into an older consumer.
+Mantle is added to a running service; it does not replace it. The service
+keeps its entry, users, auth, tables, routes and frontend. Mantle adds its own
+`_mantle_*` tables, the Schemas it declares, and the surfaces the service
+chooses to mount. Read the installed package's
+`docs/handbook/start/overview.md` and
+`docs/handbook/concepts/authorization.md` first.
 
 ## Inspect and decide
 
-Map the actual entry points, router, frontend, auth, storage, data volume and
-relationships, deployment pipeline, URLs, background jobs and existing tests.
-Identify which behavior the owner wants Mantle to own and what must remain
-stable. Compare three approaches using the application's evidence:
+Map the application before installing anything: its entry and router, frontend,
+users and sign-in, database and data volume, deployment, background jobs and
+tests. Ask which behavior the owner wants Mantle to own. Then choose:
 
-1. **Embed selectively:** keep the host and call Mantle's parser, Runtime or
-   selected surfaces through its documented package APIs. The host owns wiring.
-2. **Replace incrementally:** move one bounded capability at a time. Define
-   where reads and writes go during coexistence and how each step is checked.
-3. **Rebuild and migrate:** create a separate new Mantle application, port the
-   frontend and business behavior, and transform/import existing data. Prefer
-   this when adapting the old structure costs more than rebuilding. Preserve
-   relevant IDs, relations, URLs and identity semantics; rehearse the data
-   transfer before a production cutover.
+1. **Embed.** Keep the application's entry. Compose Mantle into its existing
+   `fetch` (`createMantle(service, { plan, storage })`, the surfaces you want,
+   behind a `CallerResolver` over the application's own sessions). Best when
+   the application already runs on Workers with D1.
+2. **Move one capability at a time.** Give one bounded set of data (a form, a
+   catalog) a Schema, then its Views and Procedures; the rest stays. At every
+   step, each table has exactly one writer.
+3. **Rebuild and migrate.** Generate a new Mantle service in a separate
+   directory, port the frontend and business rules, and import the data. Best
+   when adapting the old structure costs more than rebuilding.
 
-Explain the chosen path and its concrete tradeoffs to the owner. A small
-prototype or read-only inventory may resolve uncertainty. Do not run a generic
-project converter or assume the current application's shape matches a
-generated Cloudflare or ChatGPT Sites skeleton.
+Explain the choice and its tradeoffs to the owner before changing code.
 
-## Implement and verify
+## Identity
 
-- For embedding, retain user-owned entry/config/build files. Use the installed
-  direct-authoring docs and CLI to validate manifests and emit bindings; wire
-  the selected Mantle capabilities into the existing host explicitly.
-- For incremental replacement, establish a clear owner for each data write
-  and request route at every stage. Verify old and new behavior together.
-- For rebuilding, generate in a **separate directory** with the installed
-  CLI, move frontend and handlers deliberately, and plan data mapping and
-  import separately. Review database migrations before application or cutover.
-- Run the application's build and representative behavior checks for the
-  changed routes, auth and data. `mantle generate --check` checks generated
-  output against its declared selection; it cannot certify host integration.
-  For live data, record migration counts and a rollback or recovery path
-  appropriate to the project.
+The application keeps its users. Pick `identity`:
 
-Leave existing data and deployment untouched until the requested migration
-and release steps are ready. Report which capabilities Mantle now owns,
-what was verified, and what remains for application deployment or cutover.
+- `custom`: write `src/identity.ts` as a `CallerResolver` over the existing
+  sessions or tokens. `subject` is the application's stable user id,
+  namespaced when there are several issuers, never an email. Map existing
+  admin roles to `owner` / `editor` / `contributor`, or leave `role` null.
+- `mantle`: only when the application has no sign-in and wants Better Auth's.
+- `none`: a public service with no signed-in callers.
+
+Switching identity later is refused; choose deliberately.
+
+## Embedding into an existing entry
+
+`mantle generate` writes the preset only where `src/service.ts` does not
+exist. For an application with its own entry, generate in a scratch
+directory with the same manifests and config, then copy the composition you
+need from the generated `src/service.ts` into the application's own entry:
+
+- the `createMantle(service, { plan, storage: (env) => d1Storage(env.DB), schedules: true })` call;
+- `withCaller(resolver, createRestSurface(runtime, { basePath: "/api" }))`
+  and any other surface, mounted on paths the application does not use;
+- the `scheduled` mapping from `src/index.ts`, if the plan has schedules.
+
+Commit `.mantle/generated/` and run `mantle generate --check` in CI.
+
+## Moving data into a Schema
+
+- Mantle never reads or writes a table it did not create. A table with a
+  Schema's name that Mantle does not own stops boot
+  (`STORAGE_TABLE_NOT_OWNED`); give the Schema a new name.
+- Import through `runtime.store` in trusted code. A scoped row goes through
+  `runtime.store.as(<its owner's caller>)`, so the owner field is right.
+  `status`, timestamps and `author_id` cannot be imported: publish with a
+  second update that sets `status`.
+- Rehearse on a copy, compare row counts, and keep the old table until the
+  owner confirms. Never touch live data before the cutover is agreed.
+
+## Verify
+
+Run the application's own build and tests, then `mantle generate --check`,
+the typecheck, and real requests against the routes Mantle now serves, as the
+right callers (owner, member, anonymous). `--check` proves the generated files;
+it does not prove the integration.
+
+## When you are done
+
+Report which capabilities Mantle now owns, the identity mapping, what moved and
+how it was verified, and what remains for cutover or deployment.

@@ -1,10 +1,10 @@
 ---
 name: media-gc
-description: Audit and safely remove stale, uncommitted public media uploads from a Mantle Cloudflare R2 bucket. Use when a Mantle operator asks to inspect or clean orphan media objects left after create_media_upload without commit_media_upload.
+description: Audit and safely remove stale, uncommitted media uploads from a Mantle 0.2 Cloudflare R2 bucket. Use when an operator asks to inspect or clean objects left under uploads/ by an upload that was created but never committed.
 metadata:
   source: "@aotter/mantle"
   sourcePath: docs/skills/media-gc/SKILL.md
-  applies_to: mantle grammar v0.1
+  applies_to: mantle 0.2
   projection: package
   projectionReason: Destructive remote object deletion and Cloudflare-specific; opt-in only.
 ---
@@ -16,26 +16,37 @@ objects approved by the user.
 
 ## Preflight
 
-1. Read the project's Wrangler config and Mantle config. Resolve the R2 bucket
-   binding, bucket name, and declared public media purpose names.
+1. Read `wrangler.jsonc` and `src/service.ts`. Resolve the R2 bucket that
+   `r2MediaStorage` uses and the media purpose names in the site defaults
+   passed to `d1Storage(db, { site })`.
 2. Confirm the exact Cloudflare account and bucket. If either is ambiguous,
    ask; never choose by name similarity.
 3. Use the Cloudflare OpenAPI search before execution to resolve the current
    R2 List Objects and Delete Objects endpoints. If the connected account lacks
    access, stop. Do not create, request, or store credentials.
-4. Stop when the project has no public R2 media binding or no declared purpose.
+4. Stop when the service passes no `r2MediaStorage` or declares no purpose.
+
+## How 0.2 lays out media
+
+`POST /admin/api/media/uploads` issues presigned PUT URLs that expire after 15
+minutes, for keys under `uploads/<purpose>/<group>/<role>.<ext>`. Commit
+copies each checked object to `<purpose>/<group>/<role>.<ext>` (with
+`committedAt` metadata) and deletes the upload key; a rejected group's upload
+keys are deleted. So an object still under `uploads/` long after its URL
+expired belongs to an upload that was never committed, and nothing can commit
+it any more. Objects outside `uploads/` are committed media: never candidates.
 
 ## Audit
 
 For each declared purpose, list up to 1,000 objects per page under the exact
-`<purpose>/` prefix. Use the API cursor until `is_truncated` is false.
+`uploads/<purpose>/` prefix. Use the API cursor until `is_truncated` is false.
 
 An object is a deletion candidate only when all conditions hold:
 
 - `last_modified` is more than 24 hours old;
 - `custom_metadata.committedAt` is absent or empty;
-- the key matches the exact Mantle layout
-  `<purpose>/<group>/(primary|alternate|fallback).(png|jpg|webp|avif|gif|svg)`,
+- the key matches the exact upload layout
+  `uploads/<purpose>/<group>/(primary|alternate|fallback).(png|jpg|webp|avif|gif|bin)`,
   where `<purpose>` is declared by this project and `<group>` contains only
   letters, digits, `_`, or `-`.
 
@@ -65,8 +76,8 @@ filenames, public URLs, signed URLs, or secrets.
 
 - Don't create a Worker, Cron Trigger, lifecycle rule, D1 table, or local script.
 - Don't use prefix deletion or empty-bucket operations.
-- Don't delete private-media buckets or objects outside declared purpose
-  prefixes.
+- Don't delete objects outside `uploads/<declared purpose>/`, and never
+  committed media.
 - Don't treat missing pagination pages, metadata, or permissions as an empty
   result.
 

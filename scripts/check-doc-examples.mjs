@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Every example page under docs/examples/ is a whole service: its ```yaml blocks are the manifests. Each page is compiled by the
-// built `mantle` CLI in a scratch project (`generate`, then `generate --check`), so a page that stops compiling, or compiles with a warning, fails `pnpm check`.
+// Every example page under docs/examples/ (and the HANDBOOK pages below) is a whole service: its ```yaml blocks are the manifests. Each page is compiled by the
+// built `mantle` CLI in a scratch project (`generate`, then `generate --check`), so a page that stops compiling, or compiles with a warning, fails `pnpm check`. Each scratch project also exercises the
+// plugin's Cloud helper (skills/mantle/scripts/mantle-cloud.mjs).
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,9 +10,15 @@ import { join, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const examples = join(root, "docs/examples");
 const cli = join(root, "packages/mantle/dist/cli/main.js");
+const cloudHelper = join(root, "skills/mantle/scripts/mantle-cloud.mjs");
+// handbook pages whose yaml blocks are a whole service too
+const HANDBOOK = ["start/quickstart-worker.md", "guides/typed-queries.md", "guides/admin-ui.md"];
 const pages = process.argv.slice(2).length
   ? process.argv.slice(2).map((path) => resolve(path))
-  : readdirSync(examples).filter((name) => name.endsWith(".md") && name !== "README.md").map((name) => join(examples, name));
+  : [
+      ...readdirSync(examples).filter((name) => name.endsWith(".md") && name !== "README.md").map((name) => join(examples, name)),
+      ...HANDBOOK.map((page) => join(root, "docs/handbook", page)),
+    ];
 
 const failures = [];
 for (const page of pages) {
@@ -28,11 +35,12 @@ for (const page of pages) {
     writeFileSync(join(project, "package.json"), '{ "type": "module" }\n');
     blocks.forEach((block, index) => writeFileSync(join(project, "manifests", `${index}.yaml`), block));
     // identity none and REST only: the page's manifests are what is checked, not the peers a fuller selection needs
-    // a warning fails too: an example teaches what a clean manifest looks like
-    for (const args of [["generate", "--identity", "none", "--features", "web"], ["generate", "--check"]]) {
-      const run = spawnSync(process.execPath, [cli, ...args], { cwd: project, encoding: "utf8" });
+    // a warning fails too: an example teaches what a clean manifest looks like. The plugin's Cloud helper must then compile the
+    // same plan through the project's installed Core and find plan.json fresh.
+    for (const args of [[cli, "generate", "--identity", "none", "--features", "web"], [cli, "generate", "--check"], [cloudHelper, "check"]]) {
+      const run = spawnSync(process.execPath, args, { cwd: project, encoding: "utf8" });
       if (run.status !== 0 || /^warning:/m.test(run.stdout + run.stderr)) {
-        failures.push(`${page}: mantle ${args.join(" ")}\n${run.stdout}${run.stderr}`);
+        failures.push(`${page}: ${args.slice(1).join(" ")}\n${run.stdout}${run.stderr}`);
         break;
       }
     }

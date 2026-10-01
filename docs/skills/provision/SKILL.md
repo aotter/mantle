@@ -1,228 +1,94 @@
 ---
 name: provision
-description: Ship a Mantle project through its selected deploy target, routing ChatGPT Sites to its integration guide, Mantle Cloud to the mantle-host skill, and conventional Cloudflare Workers to production auth and provisioning.
+description: Ship a Mantle 0.2 project to production — Cloudflare Workers with D1, production sign-in and secrets, or ChatGPT Sites through its guide — and verify the deployed service.
 metadata:
   source: "@aotter/mantle"
   sourcePath: docs/skills/provision/SKILL.md
-  applies_to: mantle grammar v0.1
+  applies_to: mantle 0.2
   projection: package
-  projectionReason: Platform-specific deploy that handles production secrets; opt-in only.
+  projectionReason: Creates remote resources and handles production secrets; opt-in only.
 ---
 
-# Provision a Mantle Project
+# Provision a Mantle project
 
-Local cold start deliberately stops before this skill. Provision only after the
-user asks to create remote resources or ship production. This flow is for
-consumer-owned Cloudflare Workers. New direct-authored apps do not need Landing
-artifacts (`.mantle/launch-state.json`, `.mantle/handoff.md`, or a hosted-auth
-allocation). Treat any Landing handoff as **legacy/optional**. For a ChatGPT
-Site, use the installed `docs/handbook/chatgpt-sites/index.md` integration guide and
-the "Publish with Sites" steps in `docs/examples/host-chatgpt-sites/README.md`:
-request D1 and R2 on the Site, set `PUBLIC_ORIGIN` and `OWNER_EMAIL` in Sites
-settings, review the migration, then save and deploy a Sites version. Do not
-run `wrangler deploy` or require R2 S3 credentials merely because Sites exposes
-an R2 binding.
+Provision only after the user asks to create remote resources or ship. Read the
+installed `docs/handbook/cloudflare/deploy-and-operate.md` and
+`docs/handbook/cloudflare/authentication.md` first.
 
-## Choose the Target
+## Choose the target
 
-Cloudflare, ChatGPT Sites and Mantle Cloud are same-level targets. Ask the
-user which one to ship to, unless the project already has a linked target in
-`.mantle/hosting.json`. Do not infer it from installed packages or other config
-files.
+Ask which target, unless the project already shows one.
 
-| Target | Config it owns | Follow |
+| Target | Config | Follow |
 |---|---|---|
-| `cloudflare` | `wrangler.jsonc` or `wrangler.toml` | the rest of this skill |
-| `chatgpt-sites` | `.openai/hosting.json` | the Sites guide and steps named above |
-| `mantle-cloud` | its `.mantle/hosting.json` target | the `mantle-host` skill |
+| Cloudflare Workers | `wrangler.jsonc` | the rest of this skill |
+| ChatGPT Sites | the Site's hosting config | installed `docs/handbook/cloudflare/chatgpt-sites.md`; publish through Sites, never `wrangler deploy` |
+| Mantle Cloud | — | not available for 0.2 services yet; the plugin's `mantle` skill says when it is |
 
-For Mantle Cloud, install the root `mantle` plugin:
-`/plugin install mantle@mantle` in Claude Code,
-`codex plugin add mantle@mantle` in Codex, or
-`npx skills add aotter/mantle --skill mantle-host` on other hosts. Then follow
-that skill. It links, saves, deploys and rolls back through Cloud MCP, and the
-sections below do not apply.
+Self-hosting is always an option; never present a hosted target as required.
 
-### Link file
-
-`.mantle/hosting.json` is the one committed deploy link file. It has
-`schemaVersion: 1` and one `targets` map. It holds no secrets and has no
-endpoint or origin override. A `cloudflare` or `chatgpt-sites` entry only
-names its own config, for example
-`{"runtime": "cloudflare", "config": "wrangler.jsonc"}` or
-`{"runtime": "chatgpt-sites", "config": ".openai/hosting.json"}`. Do not copy
-their ids into it. Worker names, D1 ids and the Sites `project_id` stay in
-`wrangler.jsonc` and `.openai/hosting.json`. The `mantle-host` script keeps
-its local state in `.mantle/host/`, which is gitignored. A project that does
-not use `mantle-host` needs no link file.
-
-## Source of Truth
-
-1. Read the actual provider config (`wrangler.jsonc` or `wrangler.toml`),
-   application entry and git remotes. Read legacy `.mantle/launch-state.json`
-   and `.mantle/handoff.md` only when present; they are optional leftovers from
-   Landing and must not be created as prerequisites for a new app.
-2. Read installed `@aotter/mantle*` versions from `package.json`.
-3. Use matching embedded docs under `node_modules/@aotter/mantle/docs/`.
-4. Never infer provider authority from launch state. Confirm the active GitHub
-   and Cloudflare accounts before changing them.
-
-Run the local gate first:
+## Local gate
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm validate
-pnpm typecheck
+pnpm exec mantle generate --check
+pnpm exec tsc --noEmit
 git status --short
 ```
 
-## Resume From Observed State
+Confirm the active Cloudflare account with the user before creating anything.
 
-Do not branch on how the project was created. Verify these facts and skip
-completed work:
+## Cloudflare
 
-1. `git remote get-url origin` confirms the GitHub repo.
-2. An HTTPS `PUBLIC_ORIGIN` that responds confirms the Cloudflare deploy.
-3. `/admin/sign-in` returning `503 setup_incomplete` means auth is not bound.
-   Use the recorded auth intent only to choose hosted or self-hosted setup;
-   live behavior is authoritative.
-
-If there is no remote, confirm the target account, create a private repo,
-commit, and push `main`. If there is no live Worker, confirm the Cloudflare
-account, prefer an available connector, or use `pnpm exec wrangler login` with
-the user's agreement, then run `pnpm deploy`.
-
-Capture the live URL in `PUBLIC_ORIGIN` and `Public site:` in `AGENTS.md`, then
-commit and push non-secret changes. Reuse any repo or Worker already created.
-Do not recreate Landing artifacts for a new direct-authored app. Workers Builds
-is optional after a direct deploy.
-
-When the owner later adopts a custom domain, update `PUBLIC_ORIGIN` and the
-provider's OAuth callback together, then redeploy. Do not patch `site_config`
-directly; boot syncs its canonical origin from `PUBLIC_ORIGIN`.
-
-## Choose Auth
-
-- **Self-hosted email OTP:** use the application's production transactional-email sender. Replace `ConsoleEmailSender`; never deploy it.
-- **Self-hosted GitHub OAuth — free fallback:** use when the application has no email provider. Configure the owner's per-site GitHub OAuth App and Worker secrets using the steps below.
-- **Mantle hosted auth — paid, legacy/optional:** use only when a **legacy
-  Landing handoff** already records a hosted allocation and client
-  configuration. New direct-authored apps do not get this from Core. Mantle
-  Platform operates the identity provider; do not ask the user for a per-site
-  GitHub OAuth App.
-
-Configure only the selected mode. Core deliberately rejects partial or mixed
-hosted/self-managed bindings with `503 setup_incomplete`.
-
-Do not claim that hosted auth can attach to an arbitrary local repo unless a
-legacy Landing handoff already supplies that configuration.
-
-For the exact boundary, read
-`node_modules/@aotter/mantle/docs/auth-hosting-model.md`.
-
-## Self-hosted email OTP
-
-Keep the application's custom `createAuth()` factory, replace
-`ConsoleEmailSender` with its production `EmailSender`, and retain
-`bootstrapOwner: { match: "email", value: <owner email> }`. Store sender
-credentials and `BETTER_AUTH_SECRET` as Worker secrets, put `PUBLIC_ORIGIN` in
-non-secret vars, deploy, then verify that the owner receives an OTP at
-`/admin/sign-in`. If there is no production email provider, use GitHub OAuth
-below instead of deploying console delivery.
-
-## Self-hosted GitHub OAuth
-
-1. Ask the user to create a GitHub OAuth App:
-
-- Homepage URL: `<worker-url>`
-- Authorization callback URL: `<worker-url>/api/auth/callback/github`
-- Device Flow: unchecked
-
-2. Put non-secret values in `wrangler.toml`:
-
-- `MANTLE_AUTH_MODE = "self-managed"`
-- `PUBLIC_ORIGIN`
-- `GITHUB_CLIENT_ID`
-- `ADMIN_GITHUB_LOGIN`
-- correct Worker `name`
-
-Remove `MANTLE_HOSTED_AUTH_ISSUER` and `MANTLE_HOSTED_AUTH_CLIENT_ID` if they
-were present for a hosted allocation.
-
-3. Keep the Client Secret out of chat. Prefer a Cloudflare connector for
-   secrets; otherwise use hidden shell input:
+1. **Database.** `pnpm exec wrangler d1 create <name>` and put the
+   `database_id` into `wrangler.jsonc`'s `d1_databases[0]`, keeping the
+   binding `DB`. An existing 0.1.x database is never reused: 0.2 starts on a
+   new one.
+2. **Origin.** Set `PUBLIC_ORIGIN` in `vars` to the deployed HTTPS origin.
+   Update it together with any OAuth callback when a custom domain is added.
+3. **Sign-in (identity `mantle`).** Choose one production method and edit
+   `src/service.ts`; never deploy `ConsoleEmailSender`:
+   - **Email OTP or magic link** with the application's own `EmailSender`
+     over its email provider, `bootstrapOwner: { match: "email", value }`.
+   - **GitHub**: `{ kind: "social", provider: "github", options: { clientId, clientSecret } }`
+     and `bootstrapOwner: { match: "github-login", value }`. The user creates a
+     GitHub OAuth App with callback `<PUBLIC_ORIGIN>/api/auth/callback/github`.
+   Remove the preset's loopback-only check once the method is real.
+4. **Secrets.** Never in chat, files or logs. Use a connector, or hidden
+   input:
 
 ```bash
-read -rsp "GitHub OAuth client secret: " MANTLE_GITHUB_CLIENT_SECRET && printf "\n"
-printf '%s' "$MANTLE_GITHUB_CLIENT_SECRET" | pnpm exec wrangler secret put GITHUB_CLIENT_SECRET
 openssl rand -hex 32 | pnpm exec wrangler secret put BETTER_AUTH_SECRET
-unset MANTLE_GITHUB_CLIENT_SECRET
+read -rsp "GitHub client secret: " S && printf '%s' "$S" | pnpm exec wrangler secret put GITHUB_CLIENT_SECRET; unset S
 ```
 
-Set `BETTER_AUTH_SECRET` once and preserve it. Rotating it invalidates existing
-sessions.
+   Set `BETTER_AUTH_SECRET` once; rotating it signs everyone out.
+5. **Optional bindings.** R2 for media only when asked
+   (`docs/handbook/cloudflare/media-r2.md`).
+6. **Deploy.** `pnpm exec wrangler deploy`. The first request creates the
+   tables. Later Schema changes: run
+   `mantle generate --check --database <copy of the database>` before each
+   deploy and resolve any blocked change by hand.
 
-4. Commit and push only non-secret config, then redeploy:
+Commit and push only non-secret changes.
 
-```bash
-git add wrangler.toml AGENTS.md
-git commit -m "mantle: wire production auth"
-git push
-pnpm deploy
-```
+## Verify the deployed service
 
-## Hosted Auth (legacy Landing)
-
-Skip this section unless a legacy Landing handoff is already present. New
-direct-authored apps use self-hosted email OTP or GitHub OAuth above.
-
-Follow that handoff and its client configuration. Hosted configuration remains
-in landing-managed Cloudflare Worker bindings. Verify:
-
-- `MANTLE_AUTH_MODE = "hosted"`;
-- `MANTLE_HOSTED_AUTH_ISSUER` is the HTTPS root issuer;
-- `MANTLE_HOSTED_AUTH_CLIENT_ID` is the same-origin `/clients/<id>` URL;
-- `PUBLIC_ORIGIN` and `ADMIN_GITHUB_LOGIN` are set;
-- `BETTER_AUTH_SECRET` exists as a Worker secret;
-- `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are absent.
-
-Hosted clients use PKCE and have no client secret. Do not write secrets into
-`wrangler.toml`.
-
-Verify that admin sign-in redirects to Mantle Hosted Auth and Staff MCP
-authenticates, then skip the self-hosted flow.
-
-## Smoke Test
-
-- public home route;
-- `/admin/sign-in`;
-- selected admin sign-in path;
-- `/mcp/staff` with an agent client when available;
-- one type-specific core workflow.
-
-Media uploads are optional. Configure R2 only when the owner asks for
-staff-managed files; then read
-`node_modules/@aotter/mantle/docs/handbook/cloudflare/media-r2.md`.
+- A public View and an HTTP Trigger answer.
+- Sign-in works with the production method; the owner gets
+  `GET /admin/api/me` → `owner`, a second account gets 403.
+- `/mcp` answers `tools/list`, and an anonymous call to a protected tool is
+  401 with a `WWW-Authenticate` challenge.
+- Every enabled schedule appears in the Worker's cron triggers.
 
 ## Handoff
 
-Return:
-
-- public URL;
-- admin sign-in URL;
-- Staff MCP URL;
-- operator setup URL:
-  `https://mantle.tools/connect?site=<url-encoded-worker-url>`;
-- remote resources created or reused;
-- auth mode and any intentionally deferred setup.
+Return the public origin, the sign-in method and who the owner is, the MCP
+URL (`<origin>/mcp`), the resources created or reused, and anything deferred.
 
 ## Don't
 
 - Don't create remote resources before the user asks to ship.
-- Don't ask for a Cloudflare API token in the base flow.
-- Don't commit provider secrets.
-- Don't require R2 for first production.
-- Don't invent a second provision orchestrator.
-- Don't put secrets, origins or endpoints in `.mantle/hosting.json`.
-- Don't use `/admin/auth/github/callback`; the callback is
-  `/api/auth/callback/github`.
+- Don't commit secrets or put them in `wrangler.jsonc` `vars`.
+- Don't point a 0.2 service at a 0.1.x database.
+- Don't patch `site_config` or `_mantle_*` tables; boot owns them.
