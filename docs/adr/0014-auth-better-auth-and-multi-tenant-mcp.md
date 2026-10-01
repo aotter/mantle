@@ -521,7 +521,7 @@ every `tools/call`. MCP does not promise to accept a raw REST API key/PAT.
 Dynamic membership, billing, and entitlement state remains consumer-owned.
 `requires.guard.procedure` orchestrates a site handler on every invocation but
 does not introduce a Policy atom or an entitlement service. See
-[`API and MCP authorization`](../api-mcp-authorization.md) for the public API
+[Guarded API access](../examples/guarded-api.md) for the public API
 and end-to-end examples.
 
 ## Amendment — 2026-08-22: Better Auth 1.7 MCP and CIMD convergence

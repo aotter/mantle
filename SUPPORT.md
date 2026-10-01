@@ -16,11 +16,10 @@ install skill, then the CLI and handbook.
 npx skills add aotter/mantle
 ```
 
-Follow [`skills/mantle/SKILL.md`](skills/mantle/SKILL.md) and
-[task-specific agent prompts](docs/agent-prompts.md). After
-`@aotter/mantle` is installed, the same files live under
-`node_modules/@aotter/mantle/`. Interview for host and surfaces before writing
-files. Authoring docs and the CLI are how you learn Mantle; a deployed
+Follow [`skills/mantle/SKILL.md`](skills/mantle/SKILL.md). After
+`@aotter/mantle` is installed, its handbook and workflow skills live under
+`node_modules/@aotter/mantle/docs/`. Interview for identity and surfaces before
+writing files. Authoring docs and the CLI are how you learn Mantle; a deployed
 `/mcp` catalog is the live app's Manifest → RuntimePlan verbs, not a second
 getting-started guide.
 

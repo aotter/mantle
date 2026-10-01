@@ -1,230 +1,54 @@
-# Adapter implementation guide
+# Running Mantle on another engine or host
 
-This guide is the fresh-developer entry point for implementing a new mantle platform adapter.
+0.1.x had per-host adapters (`@aotter/mantle-cloudflare`, `-bun`, `-vercel`,
+`-indexeddb`) built on ADR-0011's storage ports. 0.2.0 replaced them
+(ADR-0032 decision 6, ADR-0035): a service is a WinterTC `fetch`, and a host
+differs only in its storage driver and how its entry is spelled. This page
+says what to write for each.
 
-Read this with [ADR-0019](adr/0019-sealed-manifest-runtime-pipeline.md). The source of truth for TypeScript shapes is `packages/mantle-runtime/src/domain/port/`.
+## Another SQLite host (Bun, libSQL, Node)
 
-Adapter packages live under `packages/adapters/<platform>/` using a plural `adapters` bucket. The npm package names stay unchanged, for example `@aotter/mantle-cloudflare`. Keep adapters in this monorepo until the runtime/spec API is stable enough that coordinated releases across separate repositories would not create version skew for consumers.
-
-## Required storage boundary
-
-A storage adapter prepares one `RuntimePlan` into semantic ports:
-
-| Contract | Source | Cloudflare example |
-|---|---|---|
-| `MantleStorageAdapter` / `PreparedMantleStorage` | `packages/mantle-runtime/src/domain/port/MantleStorageAdapter.ts` | `SqliteMantleStorageAdapter` over `D1DatabaseDriver` |
-| `EntryRepository & EntryReader` | Existing semantic content ports | `DatabaseEntryRepository` supplied by the SQLite adapter |
-| `ViewQueryExecutor` | `packages/mantle-runtime/src/domain/port/ViewQueryExecutor.ts` | `SqliteViewQueryExecutor` |
-
-`DatabaseDriver` is only the reusable SQLite/D1 implementation seam. A
-PostgreSQL, MongoDB, or application-owned-table adapter implements the semantic
-ports directly; it does not emulate D1 and needs no mapping DSL. Platform types
-such as `D1Database`, Postgres pools, and Mongo clients remain in adapter code.
-
-## Optional capabilities
-
-Optional ports are enabled only when a feature needs them:
-
-| Contract | Source | Required when |
-|---|---|---|
-| `MediaStorage` | `packages/mantle-runtime/src/domain/port/MediaStorage.ts` | The adapter exposes admin/MCP media upload flows. |
-| `DeferredHookDispatcher` | `packages/mantle-runtime/src/domain/port/DeferredHookDispatcher.ts` | The adapter wants at-least-once queue delivery for `after_*` lifecycle hooks. |
-
-Test seams such as `Clock` and `IdGenerator` are injectable through `createMantleRuntime`, but normal adapters do not need custom implementations.
-
-Deferred delivery is an optional, versioned wire contract. Queue acceptance is
-not atomic with the entry write; adapters must preserve the supplied event id,
-validate untrusted messages before dereferencing them, surface handler failures
-to their retry mechanism, and document poison-message/DLQ behavior. See
-deferred lifecycle hooks
-for the reference implementation and exact guarantees.
-
-## Storage preparation
-
-Compile before deployment preparation, then pass only the sealed plan:
+The built-in D1 dialect runs on any SQLite-family engine through a
+`DatabaseDriver`, one method that applies statements in order, all or
+nothing:
 
 ```ts
-import {
-  bootMantleRuntime,
-  SqliteMantleStorageAdapter,
-} from "@aotter/mantle-runtime";
+import type { DatabaseDriver } from "@aotter/mantle";
+import { sqliteStorage } from "@aotter/mantle/d1";
 
-const storage = new SqliteMantleStorageAdapter(db, siteDefaults);
-const runtime = await bootMantleRuntime({
-  plan,
-  storage,
-  handlers,
-  ports,
-  deployment: {
-    reservedHttpPathPrefixes: selectedCapabilities.flatMap(
-      (capability) => capability.reservedHttpPathPrefixes,
-    ),
-  },
-});
+const driver: DatabaseDriver = { async batch(statements) { /* run each { sql, binds } in one transaction; return [{ rows }] */ } };
+const mantle = createMantle(service, { plan, storage: () => sqliteStorage(driver) });
 ```
 
-`bootMantleRuntime` performs one attempt and derives Procedure readiness from
-the supplied handlers. The platform adapter remains responsible for lazy boot,
-promise caching, retry policy, and teardown.
+Then spell the host's entry: `Bun.serve({ fetch: (r) => mantle.fetch(r, env) })`,
+a Node HTTP handler, and so on. Schedules call
+`mantle.invokeSchedule(posixCron, scheduledTime, env)` from the host's own
+scheduler, and the service passes `schedules: true`. `mantle generate` writes
+only the Cloudflare preset; adapt `src/service.ts` from it. These hosts are
+not tested end to end in 0.2.0.
 
-Hosts that need work between preparation and binding may keep the same stages
-public and explicit:
+Binds are numbered `?1`, `?2` in the order given; a driver whose engine binds
+only anonymous `?` rewrites them in order (the CLI's `node:sqlite` driver does).
 
-```ts
-const prepared = await prepareDeployment(plan, storage, {
-  handlerNames: Object.keys(handlers ?? {}),
-});
-const runtime = createMantleRuntime({ prepared, handlers, ports });
-```
+## Another engine
 
-The prepared revision carries its exact plan, but exposes both `plan` and
-`storage`; it seals the pairing invariant rather than hiding low-level host
-capabilities. Omit `handlerNames` only for a read-only embedding that never
-dispatches Procedures.
+A dialect is an npm package with a compile side (`<dialect>/compile`:
+`name`, `version`, `accepts`) and a runtime side (a `MantleStorageAdapter`
+whose executor runs the plan). Name it in `mantle.config.json` (`dialect`);
+the plan records it and boot refuses another. A dialect is supported when it
+passes `runStorageConformance` from `@aotter/mantle/testing` on a real engine.
+See ADR-0035 and [Runtime, Store and dialects](handbook/concepts/runtime-and-adapters.md).
 
-The official SQLite adapter runs canonical migrations, materializes one native
-table per Schema, prepares indexes and Views, and skips mutation for an
-unchanged storage revision. A
-custom adapter owns its own preparation and returns application-owned semantic
-ports. Unsupported native View dialects fail before the adapter mutates state.
+## Surfaces and identity
 
-### Bun embedding
+They are host-neutral Fetch functions: `createRestSurface`,
+`createMcpSurface`, `createAdminSurface` (with `assets` from
+`@aotter/mantle-ui/admin`) and `createAuthRoutes`, each behind
+`withCaller(resolver, …)`. Mount them on whatever router the host uses. See
+[The service and its entry](handbook/cloudflare/service-entry.md) and
+[Authentication](handbook/cloudflare/authentication.md).
 
-> **Experimental.** The Bun and Vercel adapters may change in a minor
-> release. They cover public Views and HTTP Triggers; the host owns
-> authentication and CSRF, and Auth, Admin and MCP are Cloudflare-only today.
-> Cloudflare is the supported host.
+## Not in 0.2.0
 
-`@aotter/mantle-bun` is the minimal SQLite reference: pass an application-owned
-`bun:sqlite` `Database` and a compiled `RuntimePlan` to `createBunMantle()`.
-Its `handle()` returns `null` for sibling routes and a Web-standard `Response`
-for manifest-declared public Views and HTTP Triggers. The host owns
-`Bun.serve`, database shutdown, authentication, and CSRF policy; the adapter
-prepares the semantic revision once and retries only after failed preparation.
-
-### Vercel Functions embedding
-
-`@aotter/mantle-vercel` accepts a compiled plan plus any application-owned
-`MantleStorageAdapter` and reuses the same public View/HTTP Trigger transport as
-Bun. It maps deferred work to Vercel Functions `waitUntil` and otherwise leaves
-the Web Handler, auth/CSRF, and route composition to the application. The
-optional `/libsql` subpath adapts a caller-owned remote Turso/libSQL client to
-the canonical SQLite chain; the default entry has no database-vendor policy.
-Vercel's read-only filesystem and writable `/tmp` are never durable state.
-
-### Browser IndexedDB embedding
-
-`@aotter/mantle-indexeddb` implements the same required semantic storage ports
-over one application-owned IndexedDB database. It keeps browser globals out of
-Runtime Core, supports declarative Views with a documented O(n) collection
-scan, and exposes `deleteDatabase()` only on the concrete adapter. The host owns
-database naming, `navigator.storage` persistence requests, active-runtime
-selection, UI invalidation, and any remote synchronization.
-
-## HTTP and MCP surfaces
-
-The runtime is a library, not an HTTP server. A new adapter must mount equivalent framework routes:
-
-| Surface | Adapter responsibility | Cloudflare reference |
-|---|---|---|
-| Runtime HTTP endpoints | Route HTTP Triggers and public View REST endpoints into runtime use cases. | `packages/adapters/cloudflare/src/mount/mountRuntimeEndpoints.ts` |
-| Optional Admin | Supply session/request context and assets to `mantle-admin`; mount only when selected. | `packages/adapters/cloudflare/src/mount/mountAdmin.ts` |
-| Auth endpoints | Own sign-in/session/OAuth metadata through the adapter's Better Auth implementation selected by Admin/OAuth surfaces. | `packages/adapters/cloudflare/src/auth/createAuth.ts` |
-| MCP endpoints | Mount `/mcp/staff` and `/mcp` behind one canonical protected resource. The adapter verifies Better Auth JWTs, normalizes the caller, re-reads the staff D1 role, then dispatches JSON-RPC. | `packages/adapters/cloudflare/src/mount/mountMcp.ts`, `auth/createAuth.ts` |
-
-Auth is not a runtime port. Per [ADR-0014](adr/0014-auth-better-auth-and-multi-tenant-mcp.md), the adapter owns Better Auth wiring and passes authenticated user/staff context into runtime dispatchers. Procedure handlers receive that data through `HandlerContext` in `packages/mantle-runtime/src/domain/model/HandlerContext.ts`.
-
-The adapter must also normalize verified credential metadata into
-`HandlerContext.auth` (`credential`, opaque `credentialId`, optional
-`clientId`, scopes). Platform-native session/OAuth verification stays in the
-adapter. A narrow adapter extension seam may let consumer code verify its own
-API-key or personal-token formats, but credential storage/issuance must not
-become a runtime port. The Cloudflare reference is
-`mount/resolveCaller.ts`; consumer usage is documented in
-[API and MCP authorization](examples/guarded-api.md).
-
-Minimum HTTP behavior for a full adapter:
-
-- Route manifest HTTP Triggers to `runtime.invokeProcedure`.
-- Route `GET /api/views/<name>` to `runtime.store.as(ctx).view`.
-- Mount admin content APIs with session/role checks before calling runtime content use cases.
-- Serve selected Admin SPA assets through `AdminAssetServer`, with an SPA catchall for client-side routes.
-- Mount public render routes and markdown mirrors when the application exposes public pages.
-- Translate runtime diagnostics and validation failures into stable HTTP JSON responses instead of throwing raw errors.
-- Evaluate target auth and dynamic guards through the runtime use cases; do
-  not duplicate guard logic in HTTP handlers.
-
-For the Cloudflare adapter, public rendering requires three matching consumer
-inputs: `mountPublicRoutes(...)` route declarations, a `TemplateRegistry`
-passed through `MantleCloudflareConfig.templates`, and a `publicPathResolver`
-passed through `MantleCloudflareConfig.publicPathResolver`. Omitting public routes is valid for a headless
-consumer; mounting every Schema automatically is not, because some collections
-are private even when they contain a slug.
-
-`TemplateRegistry` and `createPublicPathResolver` come from
-`@aotter/mantle-web`. Other adapters can call `createMantleWeb(runtime)` and map
-its document operations into their own routing and cache conventions.
-
-### HTTP cache contract
-
-Keep responses private by default. For Cloudflare, apply the final policy after
-all routes and preserve only explicit anonymous public opt-in. Follow the
-public cache contract and the
-[performance harness](performance-harness.md#cache-contract) for verification.
-
-Minimum auth/MCP behavior:
-
-- Provide Better Auth-compatible sign-in/session routes for the platform.
-- Validate `/mcp/staff` requests with the staff D1 admin role (`owner`/`editor`/`contributor`).
-- Validate `/mcp` requests with any authenticated session (D1 role check is surface-driven, not OAuth-scope-driven — claude.ai rejects colon-shaped scopes).
-- Advertise a single non-colon scope (default `["mcp"]`) in `scopes_supported`. Per-surface enforcement happens server-side in the apiHandler.
-- Serve each MCP surface with the official MCP SDK through `@aotter/mantle-mcp`:
-  `createMantleMcpHandler(bindCapabilities(runtime, plan, { surface }), options)`,
-  then pass the `HandlerContext` built from the validated caller to `fetch`. The
-  handler does not authenticate; the adapter's gate stays in front of it and
-  supplies `unauthenticated` (the 401 challenge for anonymous calls to tools that
-  need identity) and, for OAuth, `oauth.scopes`, `oauth.grantable` and
-  `resourceMetadataUrl`, so a token that lacks a tool's declared scope gets the
-  SDK's step-up challenge when the authorization server can issue that scope,
-  and the runtime's denied result when it cannot.
-- Build Procedure/View `HandlerContext` with `user`, live `staff`, normalized
-  `auth`, adapter `env`, and optional `waitUntil`.
-- Re-read mutable staff role for each protected REST/MCP invocation. Token or
-  consent-time role snapshots are not an authorization boundary.
-- Keep `tools/list` filtering as UX only; route every `tools/call` through the
-  same auth evaluator and guard runner used by REST.
-
-## Static assets
-
-`AdminAssetServer` belongs to optional `@aotter/mantle-admin`. Headless Core
-storage preparation and binding do not accept or require a static asset port.
-
-## Implementation checklist
-
-- [ ] Run `runStorageConformance` from `@aotter/mantle-runtime/testing/storage`
-      against a disposable prepared-storage factory. See the
-      [Runtime conformance guide](../packages/mantle-runtime/README.md#storage-adapter-conformance)
-      for coverage, cleanup, locale setup, and remaining adapter-specific tests.
-- [ ] Implement `MantleStorageAdapter` returning existing semantic ports, or reuse `SqliteMantleStorageAdapter` with an already-owned handle.
-- [ ] Call `bootMantleRuntime()` once per semantic revision, or explicitly prepare before binding.
-- [ ] Mount HTTP Trigger and View REST surfaces.
-- [ ] Mount admin/public render routes and admin SPA assets.
-- [ ] Provide adapter-owned Better Auth wiring and session helpers.
-- [ ] Normalize session/OAuth and any consumer credential seam into
-      `HandlerContext.auth`; never put raw credentials in runtime context.
-- [ ] Mount `/mcp/staff` and `/mcp` behind one resource-bound token verifier. Enforce the live staff role inside the apiHandler.
-- [ ] Preserve the HTTP cache contract: private by default; explicit anonymous 200 `GET`/`HEAD` public opt-in only.
-- [ ] Prove one guarded target has identical REST/MCP outcomes, including
-      mutable revocation on the next call.
-- [ ] Add optional `MediaStorage` or `DeferredHookDispatcher` only when the adapter supports those features.
-- [ ] For deferred hooks, document at-least-once delivery, idempotency,
-      message limits, retries/DLQ, and the non-transactional write-to-enqueue gap.
-- [ ] Verify the runtime package still has no platform-specific imports.
-
-## Current non-goals
-
-- Do not add `SessionRepository`, `OAuthVerifier`, `UserRepository`, or `StaffRepository` runtime ports. Those were pre-ADR-0014 concepts and are not part of the current adapter contract.
-- Do not add API-key, personal-token, transaction, billing, or entitlement
-  repositories to Core. They are consumer state behind the adapter resolver
-  and guard Procedure.
-- Do not generalize `DatabaseDriver` for PostgreSQL/MongoDB or add a mapping DSL. Implement semantic ports; SQLite/D1 alone reuse the canonical SQL chain.
+A browser or IndexedDB driver, Mantle-rendered public pages, and a generated
+preset for any host but Cloudflare.
