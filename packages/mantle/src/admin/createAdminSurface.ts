@@ -345,7 +345,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         return json({ error: { code: "STATISTICS_UNAVAILABLE", message: "Statistics are unavailable for this storage adapter." } }, 501, NO_STORE);
       },
     },
-    { method: "GET", path: "/developer-console", role: "owner", run: async () => (developer ??= developerConsole(plan, [...(options.site?.mcpEndpoints?.public ? ["public" as const] : []), ...(options.staffMcp ? ["staff" as const] : [])])) },
+    { method: "GET", path: "/developer-console", role: "owner", run: async () => (developer ??= developerConsole(plan)) },
     { method: "GET", path: "/site", role: "contributor", run: ({ url }) => site(url) },
     // the bytes go straight to the bucket: create, PUT each variant to its uploadUrl, commit
     { method: "POST", path: "/media/uploads", role: "editor", run: async ({ request }) => media().createUpload(await readJsonObject(request, P)) },
@@ -537,7 +537,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     const headers = new Headers(res.headers);
     headers.set("x-content-type-options", "nosniff");
     // a built chunk's name carries its hash, so it never changes; a 304 is then never needed
-    if (file && rel.startsWith("assets/")) headers.set("cache-control", "public, max-age=31536000, immutable");
+    if (file?.ok && rel.startsWith("assets/")) headers.set("cache-control", "public, max-age=31536000, immutable");
     if (file && (rel === "preview.html" || !/^text\/html\b/i.test(res.headers.get("content-type") ?? ""))) return new Response(res.body, { status: res.status, headers });
     // appended, so a policy the asset already carries stays in force
     headers.append("content-security-policy", "frame-ancestors 'none'");
