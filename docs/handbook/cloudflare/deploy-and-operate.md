@@ -1,104 +1,105 @@
 ---
-description: Production checklist, the check loop, deploy and post-deploy probes, day-to-day content operations, and version pins.
+description: Deploy a Mantle 0.2.0 service to Cloudflare Workers, change Schemas safely with storage convergence, resolve a blocked change, and operate schedules, expiry and the boot handshake.
 ---
 # Deploy and operate
 
-This page is the production checklist for a Mantle Worker on Cloudflare: what to pin and configure, which checks to run before `wrangler deploy`, how to verify a deployment, how content is operated afterwards, and how to move versions.
-
-## Before the first deploy
-
-- Pin every `@aotter/mantle*` package to one exact version and commit the lockfile. Install with `pnpm install --frozen-lockfile` (or `npm ci`) from then on. See [Project and CLI](../start/project-and-cli.md).
-- Set `PUBLIC_ORIGIN` to the real HTTPS origin, without a trailing slash. It drives canonical URLs, `.md` mirrors, `llms.txt`, the MCP resource and the OAuth callback. If a static documentation build also emits absolute URLs, give it the same value.
-- Set the production D1 `database_id` (and `account_id` if your deployment needs it) in `wrangler.jsonc`. A local `database_name` is not a production identifier, and local D1 is not production data.
-- Choose production Auth: a generated CF app uses `MANTLE_AUTH_MODE=self-managed` or `hosted` with `ADMIN_GITHUB_LOGIN` and the matching provider credentials. Local `local-otp` works only on loopback. If you author your own Worker Auth factory, replace console email delivery with a real `EmailSender`. Store secrets with `wrangler secret put`. See [Authentication](./authentication.md).
-- Keep `compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"]`.
-- Enable observability:
-
-```jsonc
-"observability": { "enabled": true, "logs": { "head_sampling_rate": 1 } },
-"upload_source_maps": true
-```
-
-## The check loop
-
-Run the project's `check` script before every deploy. The minimal reference chains:
+## First deploy
 
 ```sh
-mantle generate && mantle generate --check && mantle validate \
-  && mantle skills && mantle skills --check && tsc --noEmit && node smoke.mjs
+pnpm exec mantle generate --check          # nothing stale
+pnpm exec tsc --noEmit
+pnpm exec wrangler d1 create my-service     # copy database_id into wrangler.jsonc's d1_databases[0]
+pnpm exec wrangler secret put BETTER_AUTH_SECRET   # identity mantle
+pnpm exec wrangler secret put ADMIN_EMAIL
+pnpm exec wrangler deploy
 ```
 
-Add tests and the frontend build where the project has them, then confirm index coverage for every public View:
+Set `PUBLIC_ORIGIN` in `wrangler.jsonc` `vars` to the deployed origin, and
+replace the console email sender first
+([Authentication](./authentication.md#production)). The first request boots
+the runtime, which creates every table the plan needs on the empty database.
+
+Deploying anywhere is your choice: Cloudflare is the one generated preset,
+and you may always self-host. Mantle Cloud is one option, never a
+requirement.
+
+## Changing Schemas
+
+There are no migration files. Edit the manifests, run `mantle generate`, and
+deploy. The first request after a plan change compares the database with the
+plan:
+
+- **Applied**: a new Schema table, a new field column, a new index, a new
+  unique index that existing rows satisfy, new `checks` and search triggers.
+- **Blocked** (`STORAGE_CHANGE_BLOCKED`, the service refuses to serve): a
+  unique index that existing rows break, a field whose type changed, an index
+  whose columns changed under the same name, an undeclared unique index.
+- **Kept, with a warning**: a column or non-unique index the plan no longer
+  declares. Nothing is dropped.
+
+Before deploying, see what boot will do against a copy of the database:
 
 ```sh
-pnpm exec mantle-harness indexes --require-public --format text
+pnpm exec wrangler d1 export my-service --remote --output prod.sql
+sqlite3 prod.sqlite < prod.sql
+pnpm exec mantle generate --check --database prod.sqlite
 ```
 
-A required path fails on a required Schema-table scan, a temporary sort or an unindexed data-field predicate. Then dry-run and deploy:
+It prints the SQL boot would run, the undeclared differences as comments, or
+the blocked change (exit 1). Against local development, point `--database` at
+the file under `.wrangler/state/v3/d1/`.
 
-This local SQLite check intentionally runs without planner statistics. Treat it
-as a conservative preflight; use post-deploy D1 metrics for production cost and
-latency claims.
+### Resolving a blocked change
+
+Mantle verifies; you change. The diagnostic names the change and hints SQL
+that would reach the plan. For example, to make `email` unique when duplicates
+exist: remove the duplicates (with a Procedure run as the system caller, or
+`wrangler d1 execute`), then deploy again; boot creates the index. To rename a
+field: add the new field, copy the data with a Procedure or SQL, then drop the
+old field from the manifest (its column stays, unused). Never edit `_mantle_*`
+tables.
+
+### Hosts that refuse DDL from the Worker
+
+If a host applies schema changes only through its own migration mechanism,
+take the SQL `mantle generate --check --database` prints and deliver it
+through that mechanism; boot then finds the database converged.
+
+## Schedules
+
+`wrangler.jsonc` `triggers.crons` holds the Cloudflare spelling of every
+enabled schedule Trigger. `mantle generate` warns when it drifts from the plan;
+update it by hand (the file is yours). Locally:
 
 ```sh
-wrangler deploy --dry-run
-wrangler deploy
+pnpm exec wrangler dev --local --test-scheduled
+curl 'http://127.0.0.1:8787/__scheduled?cron=0+3+*+*+1'
 ```
 
-## Post-deploy verification
+The cron in the URL is the Cloudflare spelling.
 
-Probe the deployed origin, not `wrangler dev`. Run only the probes for surfaces
-the application mounts and configures:
+## Expired rows
 
-| Probe | Expect |
-|---|---|
-| `GET /api/views/<public-view>` | `200`, `{ "ok": true, "data": { "rows": [...] } }` |
-| `GET /<locale>/<segment>/<slug>` and `GET /<locale>/<segment>/<slug>.md` | `200` HTML and Markdown for a published entry |
-| `GET /llms.txt`, `GET /sitemap.xml`, `GET /robots.txt` | `200` |
-| `GET /<locale>/<segment>/does-not-exist` | `404` from your `notFoundRenderer` |
-| `POST /mcp/staff` without credentials | `401` with `WWW-Authenticate`; `GET /mcp` is `405` |
-| `GET /admin` | Sign-in page; sign in with the `ADMIN_GITHUB_LOGIN` account |
+TTL hides expired rows at once. To delete them, call
+`runtime.store.sweepExpired({ collection, limit })` from a schedule Trigger's
+`ref` handler or your own maintenance route, page with `nextCursor`, and use
+`delete: false` to count first.
 
-Then check the cache: a second anonymous `GET` of a public page should show `cf-cache-status: HIT`; publish a change in Admin and the next request should be a `MISS`. Sample latency with:
+## The boot handshake
 
-```sh
-pnpm exec mantle-harness http --base-url https://example.com \
-  --route recent=/api/views/recent-posts --route page=/en/posts/hello --rounds 20 --warmup 2
-```
+`runtime.bootReport()` returns `{ fingerprint, coreVersion }`. Pass
+`expectedFingerprint` to `createMantle` to refuse booting any plan but the one
+you built (`PLAN_FINGERPRINT_MISMATCH`). The fingerprint is in
+`.mantle/generated/plan.json`; reformatting a manifest does not change it.
 
-## Operating content
+## Mantle Cloud
 
-Sign in to Admin with a staff account. Publishing collections (`lifecycle: publishing`) follow draft, publish, verify:
+Deploying a 0.2.0 service to Mantle Cloud needs Cloud's host protocol 3, which
+uploads the compiled plan and the service entry. Mantle Cloud does not accept
+0.2.0 services yet. The plugin's `mantle` skill and its helper script check
+the plan and the installed Core version so a project is ready when it does.
 
-1. Create a draft with its title, slug, locale and body.
-2. Publish (`editor` or above). The write purges the deployment-scoped public cache tag.
-3. Open the public URL and its `.md` mirror. Drafts never appear on pages, mirrors, `llms.txt` or the sitemap; use `?preview=1` with a staff session to see one.
-4. Unpublish removes the entry from every public surface; the Admin delete action and the Staff MCP `archive_entry` tool retire it.
+## Moving data from 0.1.x
 
-Operational collections (`lifecycle: operational`) have no publish step; records are edited in place and do not purge the public cache. The same operations are available to agents through Staff MCP; see [MCP and agents](../concepts/mcp-and-agents.md).
-
-Site settings split by owner. Brand, title and description seed once from `siteDefaults` and are then edited in Admin (`owner`); each edit purges the public cache. Origin, icons, locales and media purposes are code-owned and re-sync from `siteDefaults` on every boot, so change them in the Worker and redeploy. Analytics, pixels and search-engine verification are host chrome, not Core settings; see [Site chrome](./site-chrome.md) and [Site config](../reference/site-config.md).
-
-## Changing versions
-
-Pin every selected `@aotter/mantle*` package to one exact version and keep them together. This handbook describes the snapshot in this source tree; use the docs that ship with the version you install.
-
-1. Pin the new exact release for every selected package and update the lockfile through the package manager; review peer ranges.
-2. Keep application source, Worker/D1/KV identity, origins, auth mode and secrets.
-3. Run `mantle generate`, `generate --check`, `skills`, `skills --check`, `validate`, typecheck and tests.
-4. Test local routes and authorization, then deploy.
-
-Each Manifest Schema is a native table. Safe additive storage changes deploy online. Destructive changes — including any `uniqueIndexes` tuple add, remove, reorder or rewrite — are rejected; rebuild the instance and move required data outside Mantle. There is no in-product data-move workflow.
-
-## Source
-- [`packages/mantle/README.md`](../../../packages/mantle/README.md)
-- [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
-- [`docs/direct-authoring.md`](../../../docs/direct-authoring.md)
-- [`docs/performance-harness.md`](../../../docs/performance-harness.md)
-- [`docs/examples/host-minimal-worker/README.md`](../../../docs/examples/host-minimal-worker/README.md)
-- [`docs/examples/host-minimal-worker/package.json`](../../../docs/examples/host-minimal-worker/package.json)
-- [`docs/examples/host-minimal-worker/wrangler.jsonc`](../../../docs/examples/host-minimal-worker/wrangler.jsonc)
-- [`docs/examples/host-minimal-worker/smoke.mjs`](../../../docs/examples/host-minimal-worker/smoke.mjs)
-- [`packages/mantle-spec/src/domain/model/SiteConfig.ts`](../../../packages/mantle-spec/src/domain/model/SiteConfig.ts)
-- [`packages/mantle-admin/src/mountMantleAdmin.ts`](../../../packages/mantle-admin/src/mountMantleAdmin.ts)
-- [`packages/adapters/cloudflare/src/oauth/cachePolicy.ts`](../../../packages/adapters/cloudflare/src/oauth/cachePolicy.ts)
+Give the 0.2.0 service a new D1 database and import through
+`runtime.store`; `docs/upgrade-0.1-to-0.2.md` describes the steps.

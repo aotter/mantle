@@ -117,53 +117,53 @@ input, run the guard, run the target. See the
 
 ## The caller resolver
 
-The service's entry resolves the caller once per request with a
-`CallerResolver`. This one recognizes the service's own API keys and hands
-everything else to the resolver `mantle generate` wrote (sessions and OAuth
-bearer tokens). The table is the application's; Mantle neither creates nor
-reads it.
+The service's entry resolves the caller once per request. The resolver
+`mantle generate` wrote (`createCallerResolver` from `@aotter/mantle/auth`)
+takes a `credentialResolver` for the service's own credential formats, and
+tries it before OAuth bearer tokens and sessions. The key table is the
+application's; Mantle neither creates nor reads it.
 
 ```ts
 // src/apiKeys.ts
-import type { CallerResolver } from "@aotter/mantle";
+import type { ConsumerCredentialResolution } from "@aotter/mantle/auth";
 
 interface KeyRow { readonly id: string; readonly account_id: string; readonly scopes_json: string; readonly revoked_at: string | null }
 
-export function withApiKeys(db: D1Database, next: CallerResolver): CallerResolver {
-  return async (request) => {
+export function siteApiKeys(db: D1Database) {
+  return async (request: Request): Promise<ConsumerCredentialResolution> => {
     const raw = request.headers.get("x-api-key");
-    if (raw === null) return next(request); // not ours: a session or a bearer token may still be
+    if (raw === null) return { kind: "not-handled" }; // a bearer token or a session may still be presented
     const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw)))]
       .map((b) => b.toString(16).padStart(2, "0")).join("");
     const row = await db.prepare("SELECT id, account_id, scopes_json, revoked_at FROM site_api_keys WHERE token_sha256 = ?")
       .bind(digest).first<KeyRow>();
     const scopes: unknown = row ? JSON.parse(row.scopes_json) : null;
-    // a presented but unknown or revoked key is 401, never anonymous
-    if (!row || row.revoked_at !== null || !Array.isArray(scopes)) return { invalid: true };
+    // a presented but unknown or revoked key is 401, never anonymous, and never falls back to a cookie
+    if (!row || row.revoked_at !== null || !Array.isArray(scopes)) return { kind: "invalid" };
     return {
-      caller: {
-        kind: "user",
-        subject: `account:${row.account_id}`, // namespaced, so it never collides with a signed-in user's id
-        role: null,
-        scopes: scopes.filter((s): s is string => typeof s === "string"),
+      kind: "verified",
+      credential: {
         credential: "api-key",
         credentialId: row.id, // the record id, never the raw key
-        clientId: null,
+        subject: `account:${row.account_id}`, // namespaced, so it never collides with a signed-in user's id
+        scopes: scopes.filter((s): s is string => typeof s === "string"),
       },
     };
   };
 }
 ```
 
-In `src/service.ts`, wrap the generated resolver:
+In `src/service.ts`, pass it to the generated resolver:
 
 ```ts
-const resolver = withApiKeys(env.DB, createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp` } }));
+const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp` }, credentialResolver: siteApiKeys(env.DB) });
 ```
 
-Every surface already runs behind `withCaller(resolver, …)`, so REST, both MCP
-surfaces and Admin see the same caller. A key never gets a staff role here, so
-it can never pass Admin's gate.
+The key's caller is a `user` with that subject and its scopes. Its role is
+read like any user's, and an `account:` subject has none, so a key can never
+pass Admin's gate. Every surface already runs behind
+`withCaller(resolver, …)`, so REST, both MCP surfaces and Admin see the same
+caller. With identity `custom`, do the same inside your own `src/identity.ts`.
 
 ## Handlers
 
