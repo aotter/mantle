@@ -2,7 +2,7 @@
  * `.mantle/generated/mantle.ts` (ADR-0032 amendment "mantle generate"): the plan from `plan.json`, the manifest types (`emitTypesFromManifests`)
  * namespace, and a typed Store and `MantleHandlers` over exactly this plan. Types only, apart from the `plan` import.
  */
-import { emitTypesFromManifests, manifestTypeIdentifier, viewOutputs, type LinkedManifestSet, type PlanSchema, type PlanView, type RuntimePlan } from "../spec/index.js";
+import { NATIVE_OUTPUT_TYPES, emitTypesFromManifests, manifestTypeIdentifier, viewOutputs, type LinkedManifestSet, type PlanSchema, type PlanView, type RuntimePlan } from "../spec/index.js";
 
 const NS = "Mantle";
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -20,6 +20,7 @@ function viewRow(view: PlanView, schemas: RuntimePlan["schemas"]): string | unde
     const c = Object.hasOwn(columns, k) ? columns[k] : undefined;
     const s = c && schemas[c.schema]!;
     const declared = s ? s.names[c.field] ?? c.field : undefined;
+    if (s && Object.hasOwn(NATIVE_OUTPUT_TYPES, c.field)) return `readonly ${key(k)}: string | null;`; // the entry's timestamps are ISO date-times
     return s ? `readonly ${key(k === c.field ? declared! : k)}: NonNullable<Entry_${manifestTypeIdentifier(s.name)}[${key(declared!)}]> | null;` : `readonly ${key(k)}: unknown;`;
   });
   return `{ ${fields.join(" ")} }`;

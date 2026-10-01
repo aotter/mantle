@@ -18,8 +18,8 @@ export type BindSpec =
   | { k: 'version' }
   | { k: 'cursor'; i: number };
 
-export const HIDDEN_ID = '_mantle_id';
-export const HIDDEN_VERSION = '_mantle_version';
+/** The prefix of the columns that carry an after hook's row; the runner strips them from the result. */
+export const HOOK_PREFIX = '_mantle_h_';
 export type Mode = 'caller' | 'public' | 'trusted';
 export type PolicyOpts = {
   schemas: Schemas;
@@ -75,13 +75,10 @@ export type Compiled = {
   kind: 'read' | 'row' | 'set';
   schema?: string;
   verb?: 'insert' | 'update' | 'delete';
-  /** an after hook exists for the target: RETURNING carries id and version in hidden columns the executor splits off */
+  /** an after hook exists for the target: RETURNING carries the row in `HOOK_PREFIX` columns the runner splits off */
   hooked: boolean;
   /** the update publishes the entry: publish hooks fire instead of update hooks */
   publish: boolean;
-  /** the statement had no RETURNING and got one only for its after hook: its rows go to the hook, never to the result */
-  injected: boolean;
-  /** the rowid of a row op's target is not needed; kept for hooks: does the statement return rows to the hook? */
 };
 
 
@@ -320,13 +317,10 @@ function expandStar(n: N, info: SelInfo, c: C): N {
 
 const alias$ = (rel: N) => rel.alias?.aliasname ?? rel.relname;
 function returning(rc: N | undefined, s: SchemaDef, schema: string, c: C): N | undefined {
-  // a statement with no RETURNING still hands its rows to the after hook; the runner keeps them from the result (`injected`)
-  if (!rc && c.returning?.has(schema)) return { exprs: [...readable(s).map((f) => res(col(f))), res(col('id'), HIDDEN_ID), res(col('version'), HIDDEN_VERSION)] };
-  if (!rc) return undefined;
-  const exprs = rc.exprs.flatMap((e: N) => (e.ResTarget.val?.ColumnRef?.fields?.[0]?.A_Star ? starCols(s).map((f) => res(col(f))) : [e]));
-  // `RETURNING *` and most column lists leave out id and version, but an after hook needs them: carry them in hidden columns
-  if (c.returning?.has(schema)) exprs.push(res(col('id'), HIDDEN_ID), res(col('version'), HIDDEN_VERSION));
-  return { exprs };
+  const exprs = (rc?.exprs ?? []).flatMap((e: N) => (e.ResTarget.val?.ColumnRef?.fields?.[0]?.A_Star ? starCols(s).map((f) => res(col(f))) : [e]));
+  // an after hook gets the whole row whatever the author returns: its own columns, which the result never carries (ADR-0032 decision 3)
+  if (c.returning?.has(schema)) exprs.push(...readable(s).map((f) => res(col(f), `${HOOK_PREFIX}${f}`)));
+  return exprs.length ? { exprs } : undefined;
 }
 function dmlScope(rel: N, c: C) {
   c.sel.push({ container: 'from', hasWindow: false, hasJsonEach: false, scope: new Map([[alias$(rel), rel.relname]]), searchQ: new Map() });
@@ -395,6 +389,5 @@ export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const t = Object.keys(stmt)[0]!;
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
   const schema = verb ? stmt[t].relation.relname : undefined;
-  const hooked = !!schema && !!opts.returning?.has(schema);
-  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked, injected: hooked && !stmt[t].returningClause, publish: opts.status === 'published' };
+  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked: !!schema && !!opts.returning?.has(schema), publish: opts.status === 'published' };
 }

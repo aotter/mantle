@@ -125,7 +125,10 @@ Schema with a before hook for that operation is refused. Hooks run in op order,
 and for one op in Trigger-name order.
 
 **After hooks** run only after a commit, once per statement and Trigger, with
-every row the statement wrote in `ctx.cause.rows`. Loop over them; never read
+every row the statement wrote in `ctx.cause.rows`. Each row is the whole entry
+as `ctx.store.select` returns it (`id`, `version`, `createdAt`, `updatedAt`,
+`authorId`, every declared field), whatever the statement's own `RETURNING`
+asked for: that only shapes the Procedure's result. Loop over them; never read
 only `rows[0]`. A failure is logged and never undoes the commit, and a write
 the hook makes is a new transaction. Delivery is best effort: a handler that
 must not act twice deduplicates on `ctx.cause.id`.

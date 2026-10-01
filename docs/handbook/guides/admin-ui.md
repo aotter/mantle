@@ -22,6 +22,7 @@ selected and `wrangler.jsonc` binds no `ASSETS`. Sign in at `/admin/sign-in`.
 |---|---|---|
 | Rename a collection or explain a field | Schema `title` / `description`, property `title` / `description` (a string or a locale map) | Labels and help. Stored names do not change |
 | Required fields and option lists | JSON Schema `required`, `enum`, `type` | Data contracts, checked on every write, not styling |
+| Option labels | a string property's `oneOf: [{ const: open, title: { en: Open, zh-TW: 處理中 } }, …]` instead of `enum` | Selects, filter tabs and list cells show the `title` |
 | A multiline string | Schema or Procedure `uiSchema.fields.<name>.widget: textarea` | `textarea` is the only explicit widget |
 | Markdown or HTML | property `x-mcp-hint: markdown` or `html` | A rich editor |
 | A timestamp, a date or money | `format: date-time`, `format: date`; `x-mcp-hint: money-minor` on an integer | Date controls; money in minor units, with a sibling `currency` when present |

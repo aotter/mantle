@@ -4,7 +4,7 @@
  * caller's scope sees and nothing wider. Routes of an `AdminIdentity` facet that is absent do not exist.
  */
 import { makeDiagnostic, redactForWire } from "../spec/kernel/index.js";
-import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, resolveMantleRef, type JsonSchema, type McpTool, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
+import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, enumOptions, resolveMantleRef, type JsonSchema, type McpTool, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
 import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
 import { siteConfigOf } from "../core/siteConfig.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
@@ -59,8 +59,8 @@ function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
   const list = ui["list"] ?? {};
   const nav = ui["nav"];
   const filterField = list["filterField"] as string | undefined;
-  // a required reference is composition: the child sits under its parent in the sidebar
-  const parentField = Object.keys(props).find((f) => required.has(f) && resolveMantleRef(props[f])?.field === "id" && names.has(resolveMantleRef(props[f])!.schema));
+  // a required reference is composition: the child sits under its parent in the sidebar, by `id` or by the unique field it names
+  const parentField = Object.keys(props).find((f) => required.has(f) && names.has(resolveMantleRef(props[f])?.schema ?? ""));
   const navField = nav?.["standalone"] === true ? (nav["parentField"] as string | undefined) ?? parentField : undefined;
   const navParent = navField ? resolveMantleRef(props[navField]) : null;
   const children = schemas.filter((c) => c.translates?.parent === s.name);
@@ -68,13 +68,13 @@ function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
     name: s.name, title: s.title ?? s.name, description: s.description ?? null,
     lifecycle: s.publishing ? "publishing" : "operational",
     parent: s.translates ? { collection: s.translates.parent, parentField: s.translates.on, childField: s.translates.on }
-      : parentField ? { collection: resolveMantleRef(props[parentField])!.schema, parentField: "id", childField: parentField } : null,
+      : parentField ? { collection: resolveMantleRef(props[parentField])!.schema, parentField: resolveMantleRef(props[parentField])!.field, childField: parentField } : null,
     hasTranslations: children.length > 0, localized: s.localized === true || !!s.translates, translates: s.translates ?? null,
     schema: s.schema, uiSchema: s.uiSchema ?? null,
     mediaFields: [s, ...children].flatMap((x) => Object.entries(propsOf(x.schema)).flatMap(([name, p]) => (isMediaMcpHint(p[MCP_HINT_KEYWORD]) ? [{ name, hint: p[MCP_HINT_KEYWORD] }] : []))),
     // the plan lower-cases index columns; `names` maps them back to the declared spelling
     sortableFields: [...new Set([...(s.unique ?? []), ...(s.indexes ?? [])].map((i) => s.names[i[0]!] ?? i[0]!).filter((f) => required.has(f)))],
-    filter: filterField ? { field: filterField, values: props[filterField]?.["enum"] ?? [] } : null,
+    filter: filterField ? { field: filterField, values: enumOptions(props[filterField])?.map((o) => o.value) ?? [] } : null,
     list: { primaryField: (list["primaryField"] as string | undefined) ?? null, columns: (list["columns"] as string[] | undefined) ?? [] },
     nav: navField && navParent ? { standalone: true, parentField: navField, parentCollection: navParent.schema } : null,
   };
@@ -94,7 +94,7 @@ function mediaItem(a: MediaAsset) {
 /** Store's native columns: `data` never sets them (status moves by publish and unpublish). */
 const NATIVE = ["id", "status", "version", "createdAt", "updatedAt", "authorId"];
 /** Store keeps microseconds; the Admin wire keeps the old milliseconds. */
-const ms = (us: unknown) => (typeof us === "number" ? Math.floor(us / 1000) : null);
+const ms = (iso: unknown) => (typeof iso === "string" ? Date.parse(iso) : null);
 
 /** RFC 4180 quoting, and a text that a spreadsheet would run as a formula gets a leading `'`. */
 function csvCell(v: unknown): string {
@@ -309,7 +309,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       next_cursor: page.nextCursor ?? null,
     };
   };
-  /** The editor's payload: the entry, its parent, and the related sections (translations, and Schemas that reference it by id). */
+  /** The editor's payload: the entry, its parent, and the related sections (translations, and Schemas that reference it by id or a unique field). */
   const editor = async (store: CallerStore, s: PlanSchema, row: StoreRow) => {
     const join = (v: unknown) => (v === undefined || v === "" ? null : v as StoreScalar);
     const up = projection(s).parent;
@@ -320,7 +320,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       ...(s.translates ? [{ t: s, kind: "translation", parentField: s.translates.on, childField: s.translates.on }] : []),
       ...schemas.filter((c) => c !== s).flatMap((c) => c.translates?.parent === s.name
         ? [{ t: c, kind: "translation", parentField: c.translates.on, childField: c.translates.on }]
-        : Object.entries(propsOf(c.schema)).filter(([, p]) => resolveMantleRef(p)?.schema === s.name && resolveMantleRef(p)!.field === "id").map(([f]) => ({ t: c, kind: "field", parentField: "id", childField: f }))),
+        : Object.entries(propsOf(c.schema)).flatMap(([f, p]) => { const ref = resolveMantleRef(p); return ref?.schema === s.name ? [{ t: c, kind: "field", parentField: ref.field, childField: f }] : []; })),
     ];
     const related = await Promise.all(rels.map(async ({ t, kind, parentField, childField }) => {
       const parentValue = join(row[parentField]);

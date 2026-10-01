@@ -22,7 +22,7 @@ import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Badge } from "@aotter/mantle-ui/kit";
 import { SchemaFields } from "../content/entry-edit-view";
-import { renderDataValue } from "../../lib/render-data-value";
+import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
 import { IdValue, isIdField } from "../../ui/id-value";
 import { cn } from "../../lib/utils";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
@@ -87,7 +87,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   // an output that reads a Schema field unchanged is labelled and formatted as that field
   const columnSchema = (column: string) => {
     const source = view?.columns?.[column];
-    return source ? collectionsQuery.data?.find((c) => c.name === source.schema)?.schema?.properties?.[source.field] : undefined;
+    return source ? withNativeSchema(source.field, collectionsQuery.data?.find((c) => c.name === source.schema)?.schema?.properties?.[source.field]) : undefined;
   };
 
   const [params, setParams] = React.useState<Record<string, unknown>>({});
@@ -222,7 +222,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                     <TableCell key={col} className="text-muted-foreground">
                       {isIdField(col, schema) && typeof value === "string"
                         ? <IdValue value={value} language={language} />
-                        : renderDataValue(schema, value)}
+                        : renderDataValue(schema, value, language)}
                     </TableCell>
                   );
                 })}

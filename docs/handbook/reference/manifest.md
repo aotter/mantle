@@ -61,7 +61,7 @@ Admin chooses the viewer's locale and MCP the surface's `locale` option (default
 
 | JSON Schema | On the wire |
 |---|---|
-| `format: date-time` | an ISO 8601 string |
+| `format: date-time`, and the native `createdAt` / `updatedAt` | an ISO 8601 string |
 | `format: date` | `YYYY-MM-DD` |
 | `boolean` | `true` / `false` |
 | `object`, `array` | JSON |

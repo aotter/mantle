@@ -10,7 +10,7 @@ import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
 import { S, op, ref } from "./ast.js";
-import { applyPolicy, HIDDEN_ID, HIDDEN_VERSION, type Compiled } from "./policy.js";
+import { applyPolicy, HOOK_PREFIX, type Compiled } from "./policy.js";
 
 export interface Program {
   readonly kind: "view" | "procedure";
@@ -107,7 +107,17 @@ async function preRead(env: RunEnv, p: Program, i: number, c: Compiled, as: RunA
   return row ?? {};
 }
 
-const strip = (row: StoreRow): StoreRow => Object.fromEntries(Object.entries(row).filter(([k]) => k !== HIDDEN_ID && k !== HIDDEN_VERSION));
+/** A native column as Store names it, and the type it decodes as. */
+const HOOK_NATIVE: Readonly<Record<string, readonly [string, string?]>> = {
+  id: ["id"], version: ["version"], status: ["status"], author_id: ["authorId"], created_at: ["createdAt", "timestamptz"], updated_at: ["updatedAt", "timestamptz"],
+};
+
+/** A returned row split into what the statement's own RETURNING asked for and the row its after hook receives. */
+function split(row: StoreRow): { result: StoreRow; hook: StoreRow } {
+  const result: Record<string, unknown> = {}, hook: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) if (k.startsWith(HOOK_PREFIX)) hook[k.slice(HOOK_PREFIX.length)] = v; else result[k] = v;
+  return { result, hook };
+}
 
 /** A Procedure: before hooks (row ops only), one batch applied in order and all or nothing, then after hooks. */
 export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<{ readonly rows: readonly (readonly StoreRow[])[]; readonly affected: readonly number[] }> {
@@ -116,10 +126,19 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
   const base = ctxOf(env, p, { returning: afterSchemas, statuses: p.statuses });
   const plan = compileProgram(p.ir, base);
   const versions: Record<number, unknown> = {};
-  // a hook receives the entry as its JSON Schema declares it (declared names, decoded values), not the storage encoding
+  // a hook receives the entry as Store's `select` returns it (declared names, decoded values, `{ lat, lng }`), not the storage encoding
   const entry = (schema: string, row: StoreRow): StoreRow => {
-    const def = env.schemas[schema];
-    return Object.fromEntries(Object.entries(row).map(([k, v]) => (def?.fields[k] && def.fields[k] !== "geo" ? [(def as { names?: Record<string, string> }).names?.[k] ?? k, env.dialect.codec.decode(def.fields[k]!, v)] : [k, v])));
+    const def = env.schemas[schema]!;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) {
+      const native = HOOK_NATIVE[k];
+      if (native) out[native[0]] = native[1] ? env.dialect.codec.decode(native[1], v) : v;
+      else if (def.fields[k] && def.fields[k] !== "geo") out[(def as { names?: Record<string, string> }).names?.[k] ?? k] = env.dialect.codec.decode(def.fields[k]!, v);
+      else if (!/_(lat|lng)$/.test(k) || def.fields[k.slice(0, -4)] !== "geo") out[k] = v;
+    }
+    for (const [f, t] of Object.entries(def.fields))
+      if (t === "geo" && (`${f}_lat` in row)) out[(def as { names?: Record<string, string> }).names?.[f] ?? f] = row[`${f}_lat`] == null || row[`${f}_lng`] == null ? null : { lat: row[`${f}_lat`], lng: row[`${f}_lng`] };
+    return out;
   };
   const event = (i: number, hook: string, schema: string, rows: [StoreRow, ...StoreRow[]]) => ({
     id: `${as.seq ?? as.cause.id}:${i}:${hook}`, schema, hook: hook as never, rows: rows.map((r) => entry(schema, r)) as unknown as [StoreRow, ...StoreRow[]], caller: as.caller, parent: as.cause,
@@ -166,10 +185,11 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
     ...((p.expects?.[i] ?? (c.kind === "row" ? 1 : undefined)) === undefined ? {} : { expect: p.expects?.[i] ?? 1 }),
   }))).catch(async (e) => { throw await lockReason(e); });
 
-  const rows = res.map((r, i) => (plan[i]!.injected ? [] : plan[i]!.hooked ? r.rows.map(strip) : r.rows));
+  // a statement without RETURNING returns no rows, whatever its hook was given
+  const rows = res.map((r, i) => (!plan[i]!.hooked ? r.rows : p.ir[i]![Object.keys(p.ir[i]!)[0]!].returningClause ? r.rows.map((row) => split(row).result) : []));
   if (lc) for (const [i, c] of plan.entries()) {
     if (!c.schema || !c.verb || !lc.after.has(key(c)) || !res[i]!.rows.length) continue; // a statement that writes no row calls no hook
-    const cause = res[i]!.rows.map((row) => ({ ...strip(row), id: row[HIDDEN_ID], version: row[HIDDEN_VERSION] })) as unknown as [StoreRow, ...StoreRow[]];
+    const cause = res[i]!.rows.map((row) => split(row).hook) as unknown as [StoreRow, ...StoreRow[]];
     // a failure of an after hook never changes the committed result (ADR-0032 decision 3); the dispatcher reports its own failures
     await lc.dispatcher.after([event(i, `after_${HOOK[verbOf(c)]}`, c.schema, cause)]).catch(() => undefined);
   }

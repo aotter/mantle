@@ -12,6 +12,9 @@ const fail = async (f) => { try { await f(); return undefined; } catch (e) { ret
 const conflict = (e) => e?.diagnostic?.code === 'CONFLICT' ? e.diagnostic.conflict : undefined;
 const invalid = (e) => e?.diagnostic?.code === 'INPUT_VALIDATION_FAILED';
 
+/** createdAt is a date-time on the wire, like a `format: date-time` field. */
+const EPOCH = '1970-01-01T00:00:00.000000Z';
+
 export async function run(r: Report, engine: Engine) {
   r.section('Store: JSON select and write, OCC, set ops, cursor, scope, TTL');
   const b = await boot(engine);
@@ -24,7 +27,7 @@ export async function run(r: Report, engine: Engine) {
   // ---- reads: scope, TTL, projection, decoding ---------------------------------------------------------------------
   r.equal("o1 sees its unexpired items in name order; another owner's and the expired row are absent; json decodes, native columns are named as ADR-0030 does",
     (await me.select({ from: 'items', columns: ['id', 'name', 'tags', 'createdAt'], orderBy: { name: 'asc' } })).rows,
-    [{ id: 'a', name: 'apple', tags: ['red', 'big'], createdAt: 0 }, { id: 'b', name: 'berry', tags: ['blue'], createdAt: 0 }, { id: 'c', name: 'cherry', tags: ['red'], createdAt: 0 }, { id: 'd', name: 'date', tags: ['red'], createdAt: 0 }]);
+    [{ id: 'a', name: 'apple', tags: ['red', 'big'], createdAt: EPOCH }, { id: 'b', name: 'berry', tags: ['blue'], createdAt: EPOCH }, { id: 'c', name: 'cherry', tags: ['red'], createdAt: EPOCH }, { id: 'd', name: 'date', tags: ['red'], createdAt: EPOCH }]);
   r.equal('the host store (runtime.store) sees every owner but still not the expired row; an anonymous caller sees nothing of a scoped Schema',
     [(await store.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 500 })).rows.map((x) => x.id), (await store.as({ kind: 'anonymous' }).select({ from: 'items', columns: ['id'] })).rows],
     [['X_z1', 'X_z2', 'a', 'b', 'c', 'd'], []]);
