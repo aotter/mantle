@@ -1,97 +1,55 @@
 ---
-description: Every stable Mantle release — what it contains, what it requires, and what changed since the previous stable.
+description: Every Mantle release line — what 0.2.0 changes, and what each stable 0.1.x release contained.
 ---
 # Releases
 
 Mantle publishes to npm under the `@aotter/*` scope. A **stable** release is a
-plain `X.Y.Z` version on the `latest` dist-tag; it is the only kind of release
-covered by this chapter and the only kind intended for production use.
+plain `X.Y.Z` version on the `latest` dist-tag and is the only kind intended
+for production. Prereleases (`alpha`, `rc`) let a release be prepared in the
+open; installing one means choosing an exact version, not a channel.
+[GitHub Releases](https://github.com/aotter/mantle/releases) is the canonical
+change history; this page is the narrative one.
 
-```sh
-npm install @aotter/mantle
-```
+From 0.2.0, Mantle is two packages, `@aotter/mantle` and `@aotter/mantle-ui`,
+published together at one version: the 0.1.x `-spec`, `-runtime`,
+`-cloudflare`, `-auth`, `-admin`, `-mcp`, `-web` and other packages fold into
+subpaths of `@aotter/mantle`, and `@aotter/mantle-admin-ui` into
+`@aotter/mantle-ui/admin`. Pin every one you use to the
+same exact version and upgrade them together.
 
-Prereleases exist so a stable can be prepared in the open, and they are not
-covered here: `alpha` is cut from `develop` and may break anything, `rc` is a
-stable candidate cut from `main`. Installing a prerelease means opting into an
-exact version, not a channel. [GitHub Releases](https://github.com/aotter/mantle/releases)
-is the canonical, immutable change history; this chapter is the narrative one.
+## 0.2.0 — in preparation
 
-All fourteen packages share a single version and are published together, so mixed
-versions across `@aotter/mantle*` are never a supported combination. Pin the
-version you install and upgrade the whole set at once.
+0.2.0 replaces 0.1.x's grammar and composition; no 0.1.5 was released. It
+breaks every consumer, and `docs/upgrade-0.1-to-0.2.md` in the package is the
+guide for moving a project by hand.
 
-## 0.1.5 — in preparation
-
-`mantle generate` now assembles a blank, editable full site by default for
-Cloudflare Workers or ChatGPT Sites. `--features` positively selects a smaller
-composition; Spec-only needs no host. The first run declares exact matching
-dependencies, and a second run after installation completes the project.
-Existing directly authored applications retain their compile path. Saved
-choices and user-owned files survive reruns, while `--check` reports drift
-without writing. On Sites, review and apply append-only D1 migrations before
-running code that expects the new Schema. The new Sites worker trusts identity
-only behind the Sites dispatcher and does not expose a separate `workers.dev`
-URL.
-
-Reviewed Sites unique-index tuple replacement can now generate an immutable
-SQL migration with source/target fingerprints, checksum and an explicit report.
-Local D1 duplicate preflight fails before writing files; production D1 still
-enforces the new constraint when the reviewed migration is applied. Runtime-
-managed CF boot continues to reject uniqueness changes without a reviewed
-artifact path.
-
-The owner-only Developer Console can inspect live Schema entries and run
-declared Views on demand through guarded Admin routes. Its HTTP and MCP lists
-link to the owning declarations. UI action placement is no longer shown as a
-Procedure-to-Schema execution path; custom handlers and native SQL Views state
-when their data relationships cannot be inferred from the Manifest.
-
-Ref Procedures can now group insert, update and delete operations across
-Schemas with `ctx.store.write`. D1 and Bun commit the group or roll it
-back, including when the last conditional write finds a stale version. Other
-adapters must explicitly implement the optional capability before using it.
-New entries now persist top-level Schema property defaults when the caller
-omits those fields; explicit values and server-bound fields retain precedence.
-
-Generated modules now expose wire-keyed `Schemas`, `Views`, and `Store` type
-maps alongside the sealed `plan`. Regenerate, replace `bindMantle(runtime)`
-with `runtime.store as Store` for Store operations, and call
-`runtime.invokeProcedure({ procedure, input, ctx })` for Procedures. The
-per-name Schema, View, and Procedure wrappers, `bindMantle`, and `createMantle`
-are removed; boot with
-`bootMantleRuntime({ plan, storage, handlers, ports })`. Type identifiers
-escape punctuation so distinct wire names stay distinct: for example,
-`Mantle.Entry_open_orders` becomes `Mantle.Entry_open_u002d_orders` for the
-wire name `open-orders`. Hosts using a runtime they did not boot with the
-generated `plan` must check `runtime.revision === plan.semanticFingerprint`
-before asserting the generated `Store` type.
-Lower-camel name collisions no longer produce `CODEGEN_IDENTIFIER_COLLISION`:
-wire names remain distinct keys in the generated maps.
-
-Cloudflare Cron Triggers now target ordinary Procedures through `source.kind:
-schedule`. The generated runtime plan records each schedule, while Wrangler
-registration remains application-owned. Scheduled calls have no user or staff
-authority, carry a stable retry key, and pass through Procedure validation and
-authorization. D1-backed Workers retain owner-only run observations
-for 30 days; the Console distinguishes a declaration from registration and
-observed executions. Managed SQLite hosts must apply the append-only
-`0007-schedule-run-observations` migration before boot. Other hosts do not
-register schedules.
-
-Schemas may declare a `ttl` date-time policy. D1 and Bun hide expired entries
-from semantic reads and declarative Views before any deletion. Physical cleanup
-is an explicit bounded sweep, previewed by default and resumable by cursor;
-there is no automatic bulk deletion when a policy is introduced or shortened.
-Native SQL Views and shared View caches are rejected for TTL Schemas because
-they cannot guarantee the expiry boundary. Cloudflare public routes that can
-include TTL content use `no-store` so a cached page cannot outlive its entries.
-
-Agents installed through `npx skills add aotter/mantle` must still inspect the
-target project's actual SDK version. Published 0.1.4 packages do **not**
-support the new project flags; 0.1.5-alpha.1 does. Use the installed docs and
-upgrade all selected packages together. The bootstrap skill remains a small directory,
-not a repository clone.
+- **Manifests are `cms.mantle.aotter.net/v2`.** Views are one SQL `SELECT` and
+  Procedures are SQL statements or a `ref`, in PostgreSQL syntax. The builtin
+  handlers, the Filter AST, `params`, `$ctx` references and `x-mantle-bind` are
+  gone; Schemas gain `checks`, and `searchableFields` becomes full-text search.
+- **One Store.** Every read and write goes through Store, which adds caller
+  scope, TTL and published-only to every statement, and an optimistic lock
+  where the caller passes one; a write
+  is all or nothing.
+- **The service is the application's.** `createMantle(service, …)` replaces
+  `createMantleWorker`, and the first `mantle generate` writes the Cloudflare
+  preset (`src/service.ts`, `src/index.ts`, `wrangler.jsonc`) once. `--host` is
+  gone; other hosts use `@aotter/mantle/d1` with their own driver.
+- **Mantle never owns your users.** A `CallerResolver` turns a request into a
+  `Caller`; identity is `mantle` (Better Auth), `custom` or `none`. Core creates
+  no auth tables.
+- **Storage converges to the plan** at boot: additions are applied, unsafe
+  changes are refused with a diagnostic, nothing is dropped, and there are no
+  migration files.
+- **Schedules are POSIX cron**; `toCloudflareCron` translates them for Wrangler.
+- **MCP tools come from Views and Procedures only.** Staff MCP moved into Admin
+  at `/admin/api/mcp`.
+- **The CLI is `mantle generate`** and `mantle generate --check`. `validate`,
+  `emit-openapi`, `skills` and `mantle-harness` are removed.
+- **The Admin console** moves to `@aotter/mantle-ui/admin`, served at `/admin`
+  by the preset through the Worker's `ASSETS` binding.
+- **Not yet in 0.2.0:** Mantle-rendered public pages, the MCP interaction App
+  tools, and deploying to Mantle Cloud.
 
 ## 0.1.4 — 2026-09-24
 
@@ -195,7 +153,7 @@ See [HTTP, MCP, CLI and packages](../reference/surface.md) for the full list.
 D1 and assets bindings, Better Auth 1.7 (social providers, email OTP, magic
 link, passkey), Admin, MCP, Web and R2 media uploads. The Bun and Vercel
 adapters are experimental, cover public Views and HTTP Triggers only, and leave
-authentication and CSRF to the host. [ChatGPT Sites](../chatgpt-sites/index.md) is a
+authentication and CSRF to the host. ChatGPT Sites is a
 first-class integration with a runnable reference.
 
 **Agents.** `mantle skills` projects the installed package's skills into
@@ -210,7 +168,5 @@ Bun and Vercel adapters may change in a minor release.
 
 ## Source
 
-- [`CHANGELOG.md`](../../../CHANGELOG.md)
-- [`docs/release-process.md`](../../../docs/release-process.md)
-- [`.github/workflows/release.yml`](../../../.github/workflows/release.yml)
-- [`scripts/release-tag-order.mjs`](../../../scripts/release-tag-order.mjs)
+- [GitHub Releases](https://github.com/aotter/mantle/releases)
+- [`CHANGELOG.md`](https://github.com/aotter/mantle/blob/main/CHANGELOG.md)

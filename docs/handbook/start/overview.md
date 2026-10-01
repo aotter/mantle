@@ -1,55 +1,60 @@
 ---
-description: Choose a Mantle integration, discover manifest capabilities, and find tutorials, task guides, concepts and field-level reference.
+description: What Mantle 0.2.0 is, how a service is put together, and where to read next.
 ---
 # Mantle handbook
 
-Mantle turns YAML manifests into a validated runtime plan, typed TypeScript
-bindings, and optional HTTP, MCP and Admin surfaces. Your application owns the
-host, storage and frontend. Four atoms describe the contract: **Schema** stores
-data, **View** reads it, **Procedure** acts on it, and **Trigger** binds an action
-to HTTP, MCP or lifecycle events.
+Mantle is a manifest-driven service core. A service declares four atoms in
+YAML: a **Schema** stores rows, a **View** reads them, a **Procedure** writes
+them, and a **Trigger** binds a Procedure to HTTP, MCP, a lifecycle event or a
+schedule. Views and Procedures are SQL in PostgreSQL syntax.
 
-This handbook describes the SDK snapshot that carries it. For an installed
-project, read `node_modules/@aotter/mantle/docs/handbook/`; a website or Git
-branch can describe a different version. The [release index](../releases/index.md)
-links published releases. A prerelease capability is not a promise that the
-current npm `latest` contains it.
+`mantle generate` compiles the manifests into a sealed plan and a typed module.
+The runtime serves the plan through one **Store**, which adds each caller's
+scope, TTL visibility and publishing state to every statement, and an
+optimistic lock where the caller passes one. Your service owns its entry, its users and its frontend; Mantle
+adds tables, surfaces and typed access to them.
 
-## Start with your integration
+This handbook ships inside `@aotter/mantle` at
+`node_modules/@aotter/mantle/docs/handbook/`. The installed copy matches the
+installed package; prefer it over any online copy.
 
-| Goal | Start here | Result |
-|---|---|---|
-| Understand what manifests can express | [Manifest feature reference](../reference/features.md) | A capability-to-field map across the four atoms. |
-| Validate manifests in an existing tool | [Spec-only adoption](../../spec-only-host-adoption.md) | Parse and link without Runtime, storage or a UI. |
-| Bring Mantle into an existing application | [Integration skill](../../skills/integrate/SKILL.md) | Inspect the app and choose embedding, incremental replacement or rebuilding with data migration. |
-| Embed Runtime in an existing host | [Runtime and adapters](../concepts/runtime-and-adapters.md), then [typed queries](../guides/typed-queries.md) | Bind your storage and call the generated API. |
-| Build a local Cloudflare API | [Minimal Worker tutorial](./quickstart-worker.md) | A running public View and a verified HTTP response. |
-| Add a staff console | [Local Admin tutorial](./quickstart-admin.md) | Email OTP, Admin assets and a local human workflow. |
-| Build on ChatGPT Sites | [Sites integration](../chatgpt-sites/index.md) | Host-owned sign-in and deployment with Mantle content. |
-| Work through a coding agent | [Skill installation and handoff](../guides/agent-setup.md) | Bootstrap skill, pinned package, then project-local instructions. |
+## How a service fits together
 
-Human authors can follow these pages directly; installing an agent skill is
-optional. For a new app, install an exact SDK version and run
-`mantle generate --host cf` or `--host chatgpt-sites`. The CLI assembles a blank
-site by default; add your own Manifests after generation. Use explicit
-`--features` for a smaller composition, including host-free Spec-only.
+```
+manifests/*.yaml ──mantle generate──▶ .mantle/generated/plan.json + mantle.ts
+                                          │
+src/service.ts   createMantle(service, { plan, storage, schedules })
+  ├─ handlers    the `ref` Procedures, typed by mantle.ts
+  └─ fetch       your routes, then Mantle's surfaces behind withCaller(resolver, …):
+                 auth routes · Admin at /admin · MCP at /mcp · REST at /api
+src/index.ts     the Cloudflare entry: fetch and scheduled
+```
 
-## Find the right kind of documentation
+The first `mantle generate` writes `src/service.ts`, `src/index.ts`,
+`src/handlers.ts`, `wrangler.jsonc` and `tsconfig.json` once. After that they
+are your files.
 
-- **Tutorials** walk through a running minimal service or local Admin.
-- **Task guides** explain typed queries, Admin customization and agent setup.
-- **Concepts** explain the four atoms, runtime, lifecycle, authorization and transports.
-- **Reference** lists accepted fields, defaults, restrictions and diagnostics.
-- **Host guides** cover Cloudflare and Sites wiring and operations.
-- **Examples** supply complete domain manifests and runnable host references.
+## Read next
 
-The [project and CLI guide](./project-and-cli.md) describes file ownership and
-the verification loop. The [examples hub](../examples/hub.md) helps select a
-domain model. Use the [field reference](../reference/manifest.md) when checking
-exact syntax; do not infer grammar from a UI screenshot.
+| You want to | Read |
+|---|---|
+| Start a service | [Quickstart](./quickstart-worker.md), then [Project layout and CLI](./project-and-cli.md) |
+| Learn the model | [The four atoms](../concepts/four-atoms.md), [Reads](../concepts/views.md), [Writes](../concepts/procedures-and-triggers.md), [Authorization](../concepts/authorization.md) |
+| Look up a field | [Feature table](../reference/features.md), then the [Schema](../reference/schema.md), [View](../reference/view.md), [Procedure](../reference/procedure.md) and [Trigger](../reference/trigger.md) references |
+| Wire sign-in, media or deploy | [Authentication](../cloudflare/authentication.md), [Media uploads with R2](../cloudflare/media-r2.md), [Deploy and operate](../cloudflare/deploy-and-operate.md) |
+| Run on ChatGPT Sites | [Mantle on ChatGPT Sites](../cloudflare/chatgpt-sites.md) |
+| See whole services | [Examples](../examples/hub.md) and the runnable reference service |
+| Move a 0.1.x project | `docs/upgrade-0.1-to-0.2.md` in the installed package |
 
-## Source
+The decisions behind 0.2.0 are ADR-0032 to ADR-0035 in `docs/adr/`. The ADRs
+record decisions and may describe work not built yet; the installed code is the
+authority. When an ADR and this handbook disagree, follow this handbook and
+check the code.
 
-- [Core package](../../../packages/mantle/README.md)
-- [Handbook navigation](../navigation.json)
-- [Consumer skills](../../../skills/README.md)
+## What 0.2.0 does not have yet
+
+- **Mantle-rendered public pages.** `createWebSurface` is not ported. Render
+  pages from your own `fetch` or frontend over the REST surface.
+- **A preset for any host but Cloudflare.** `@aotter/mantle/d1` runs on other
+  SQLite drivers, but `mantle generate` writes the Cloudflare entry only.
+- **Deploying to Mantle Cloud.** See [Deploy and operate](../cloudflare/deploy-and-operate.md).

@@ -1,100 +1,82 @@
 ---
-description: Trace what npx skills add installs, hand off to the pinned SDK, project version-matched skills and diagnose missing or stale instructions.
+description: Install the Mantle agent plugin or its one skill, hand off to the installed package's own docs, and diagnose missing or stale instructions.
 ---
 # Install and verify agent instructions
 
-There are two separate installations: an agent's bootstrap skill and the
-application's SDK. Installing one does not install the other.
+Two separate things are installed: the agent's `mantle` skill and the
+application's `@aotter/mantle` package. Installing one does not install the
+other, and the installed package is always the authority for the version it
+carries.
 
-## 1. Install the bootstrap skill
+## 1. Install the `mantle` skill
+
+The Mantle plugin carries one skill, `mantle`, its helper script, and the
+Mantle Cloud MCP connection (`https://cloud.mantle.tools/mcp`).
+
+```bash
+# Claude Code: two separate prompts
+/plugin marketplace add aotter/mantle
+/plugin install mantle@mantle
+
+# Codex
+codex plugin marketplace add aotter/mantle
+codex plugin add mantle@mantle
+```
+
+Cursor and GitHub Copilot read the plugin manifests from the repository.
+Without a plugin host, install the skill alone:
 
 ```sh
 npx skills add aotter/mantle
 ```
 
-The installer selects the repository's `mantle` skill. It does not install
-the Mantle Cloud deploy skill from the root plugin;
-`--skill mantle-host` installs it. Read the `mantle` skill's printed
-installation path.
-In a project-local Codex installation that is
-`.agents/skills/mantle/SKILL.md`, not `skills/install/SKILL.md` (the latter is
-its source-repository path). Other agent selections and global installation
-can use different locations.
+A skill-only install has no Cloud MCP connection; add one by hand if you need
+it. Either way, read the path the installer prints (for project-local Codex,
+`.agents/skills/mantle/SKILL.md`). The skill installs no SDK, creates no
+project and copies no handbook.
 
-The command installs the selected brief; it does not materialize a Mantle
-application, install `@aotter/mantle`, or copy `docs/`. The unqualified GitHub
-source follows its default branch, not necessarily `develop` or the npm
-version you intend to use. The skills installer's lock identifies the source
-skill; it is not the application's dependency lockfile.
+## 2. Install the SDK, then read its own docs
 
-## 2. Select the SDK version, then read its own instructions
-
-Use the version the project already pins, or resolve the requested npm channel
-once and pin every selected `@aotter/mantle*` dependency to the same exact
-version. `latest` and `alpha` can describe different capabilities. Resolve only
-requirements the user has not provided: host, storage, public API/HTML, and
-whether staff need Admin. Follow the bootstrap skill to install the selected
-packages locally.
-No matching `mantle-starters` tag or bundle is needed to create a project.
-
-Then read:
+Use the version the project already pins. For a new project, choose a 0.2.x
+version with `npm view @aotter/mantle dist-tags` and install it with an exact
+version; every `@aotter/mantle*` package stays at that same version. Then
+read, from the application:
 
 ```text
-node_modules/@aotter/mantle/skills/install/SKILL.md
+node_modules/@aotter/mantle/README.md
 node_modules/@aotter/mantle/docs/handbook/start/overview.md
 node_modules/@aotter/mantle/docs/handbook/reference/features.md
+node_modules/@aotter/mantle/docs/skills/<workflow>/SKILL.md
 ```
 
-These files are in the npm tarball. They are the version-matched authority,
-including when the bootstrap skill came from a different Git ref. Every
-`docs/...` path in the skill resolves under the installed package, not under
-`.agents/skills/mantle/`. Keep using that SDK's docs for host examples and CLI
-behavior. No local `mantle` binary is available before package installation.
+These ship in the npm tarball and match the installed code. Prefer them over
+the skill's GitHub copy and over any online handbook.
 
-## 3. Project the ongoing workflows
-
-From the application root, after installing the SDK:
-
-```sh
-pnpm exec mantle --help
-pnpm exec mantle skills
-pnpm exec mantle skills --check
-```
-
-| Artifact | What you get |
+| Package skill | Read it when |
 |---|---|
-| `.agents/skills/mantle-{develop,plugin,theme,update}/SKILL.md` | The installed package's four project-scoped workflows. |
-| `.claude/skills/mantle-{develop,plugin,theme,update}/SKILL.md` | Identical bytes for Claude compatibility. |
-| `node_modules/@aotter/mantle/skills/` | All eight shipped skills, including opt-in `mantle`, `integrate`, `provision` and `media-gc`. |
-| `node_modules/@aotter/mantle/docs/` | Handbook and examples matched to the package. |
+| `docs/skills/develop/SKILL.md` | changing manifests, handlers, the service or its surfaces |
+| `docs/skills/integrate/SKILL.md` | adding Mantle to an existing application |
+| `docs/skills/update/SKILL.md` | upgrading `@aotter/mantle`, including from 0.1.x |
+| `docs/skills/provision/SKILL.md` | deploying, with production sign-in |
+| `docs/skills/media-gc/SKILL.md` | auditing or removing stale R2 uploads |
 
-`mantle skills` overwrites these four generated projections. Keep project-specific
-instructions elsewhere. `--check` does not write: exit 0 means they match,
-1 means missing/stale projections, and 2 means a command/package error.
-`mantle generate` does not project skills. Projection does not remove an older
-bootstrap `install` or legacy `.agent/skills` copy; use the version-matched
-project skills for ongoing work.
+0.2.0 has no `mantle skills` command: nothing is copied into the project.
+An agent reads these files from `node_modules` when the task calls for them.
 
-## 4. Complete and verify the application
+## 3. Verify the application
 
-Follow a [tutorial](../start/overview.md#start-with-your-integration), then run
-its generation, validation, TypeScript checks and actual local route probes.
-Successful skill installation proves only that the instructions were copied.
-It does not prove a server, login, Admin assets or MCP connection works.
+Installing instructions proves only that they were copied. Prove the service:
+
+1. `mantle generate` and `mantle generate --check` exit 0.
+2. The project typechecks against `.mantle/generated/mantle.ts`.
+3. `wrangler dev` starts, and the routes you depend on answer: a REST View, an
+   HTTP Trigger, `/mcp` `tools/list`, and with identity `mantle` a sign-in and
+   `GET /admin/api/me`.
 
 | Symptom | Cause and next step |
 |---|---|
-| `skills/install/SKILL.md` is missing | That is source provenance. Read the installer's destination instead. |
-| `docs/...` is missing after `skills add` | The skill does not carry the handbook. Install the pinned SDK and read its embedded docs. |
-| `mantle` is missing | Install local `@aotter/mantle`; run its binary through the project package manager. |
-| `MANIFEST_ROOT_NOT_FOUND` | Check the installed CLI and saved project selection. New generated projects may start with an empty manifest set; legacy compile mode still needs the configured source. |
-| `mantle skills --check` exits 1 | Run `mantle skills`, then read the refreshed project skill. |
-| No projected integrate/provision/media-gc skill | These are intentionally opt-in. Read their installed package files when the task calls for them. |
-| A documented feature fails on an older release | Use that release's docs or explicitly upgrade; changing a skill does not change Runtime. |
-
-## Source
-
-- [Bootstrap install skill](../../../skills/install/SKILL.md)
-- [Projection implementation](../../../packages/mantle/src/cli/skills.ts)
-- [Package file list](../../../packages/mantle/package.json)
-- [Package docs and skills copying](../../../scripts/sync-package-docs.mjs)
+| `docs/...` is missing after installing the skill | The skill carries no docs. Install the SDK and read `node_modules/@aotter/mantle/docs/`. |
+| `mantle` is not found | Install `@aotter/mantle` locally and run it through the package manager (`pnpm exec mantle`). |
+| `mantle skills` or `--host` is unknown | Those are 0.1.x. Follow the installed 0.2.x docs. |
+| A v1 manifest or a `version: 1` config fails | The project is on 0.1.x. Follow `docs/upgrade-0.1-to-0.2.md`. |
+| A documented feature is missing | The installed version is older than the docs you read. Read its own docs, or upgrade deliberately. |

@@ -1,5 +1,6 @@
-# Deferred lifecycle hooks on Cloudflare Queues
+# Deferred lifecycle hooks with Queues
 
-This guide moved into the handbook: [`docs/handbook/cloudflare/deferred-hooks-queues.md`](handbook/cloudflare/deferred-hooks-queues.md).
-
-The handbook ships inside the `@aotter/mantle` package under `node_modules/@aotter/mantle/docs/handbook/` and describes the installed release.
+This 0.1.x guide was removed in 0.2.0: no Mantle path produces queue messages.
+After hooks run after the commit, best effort, with a stable `ctx.cause.id`;
+see [Writes: Procedures, Triggers and hooks](handbook/concepts/procedures-and-triggers.md#lifecycle-hooks).
+A service that needs a durable queue adds its own beside its Worker entry.

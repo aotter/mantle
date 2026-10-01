@@ -1,213 +1,101 @@
 ---
-description: Trigger field reference — http, mcp, lifecycle and schedule sources, routing rules, and delivery semantics.
+description: Trigger field reference for Mantle 0.2.0 — http, mcp, lifecycle and schedule sources, POSIX cron and its Cloudflare translation, and the diagnostics each raises.
 ---
 # Trigger
 
-A Trigger binds one source to one [Procedure](./procedure.md). Every external surface for a write — an HTTP endpoint, an MCP tool, an entry-lifecycle hook — is a Trigger, and there is no other way to expose a Procedure. This page is the field-level contract; the concepts are in [Procedures and Triggers](../concepts/procedures-and-triggers.md). Envelope rules are in [Manifest envelope and conventions](./manifest.md), and diagnostic codes are catalogued in [Diagnostics](./diagnostics.md).
-
-## Fields
-
-`spec` accepts exactly two keys.
-
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `source` | mapping | yes | Discriminated by `kind`; the accepted sibling keys depend on it. |
-| `target` | `{ procedure }` | yes | Only the key `procedure`, naming a declared Procedure (`TRIGGER_TARGET_PROCEDURE_UNKNOWN`). |
-
-| `source.kind` | Other keys | Binds |
-|---|---|---|
-| `http` | `method`, `path` | One REST endpoint under `/api/`. |
-| `mcp` | `surface` | One tool on `/mcp` or `/mcp/staff`. |
-| `lifecycle` | `schema`, `on`, `errorPolicy` | Entry-writer hooks on one Schema. |
-| `schedule` | `cron`, optional `enabled` | A Cloudflare Cron Trigger calling one Procedure. |
-
-An unknown `kind`, a missing `kind`, or a key that does not belong to the chosen kind is `INVALID_MANIFEST_ENVELOPE`. One Procedure may carry several Triggers — that is how the same handler becomes an HTTP endpoint and an MCP tool without duplicating logic.
-
-## `schedule` source
-
 ```yaml
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
-metadata: { name: nightly-cleanup }
+metadata: { name: place-order-http }
 spec:
-  source: { kind: schedule, cron: "0 2 * * *" }
-  target: { procedure: clean-expired-records }
+  source: { kind: http, method: POST, path: /api/orders }
+  target: { procedure: place-order }
 ```
 
-`cron` is a five-field Cloudflare UTC expression (minute, hour, day, month, weekday). Each field accepts `*`, a number, a range, comma-separated values, or `*/step` / `start-end/step`. Weekdays are **1 = Sunday through 7 = Saturday**; use `2-6` for Monday–Friday. Month and weekday names and provider-specific extensions are outside this subset. `enabled` defaults to `true`; a disabled schedule remains in the compiled plan but never invokes its Procedure. The target Procedure must accept `{}` as input (`SCHEDULE_INPUT_INVALID`) and have no user/staff authorization requirements (`SCHEDULE_AUTH_INVALID`). The schedule creates no public HTTP or MCP route.
+`target.procedure` names a declared Procedure
+(`TRIGGER_TARGET_PROCEDURE_UNKNOWN`). Several Triggers may target one
+Procedure; each source runs it as an `Invocation` with the same `requires`,
+guard and validation.
 
-On Cloudflare, add each enabled expression to `wrangler.jsonc` under `triggers.crons` and export the `scheduled` method returned by `createMantleWorker`. Mantle does not provision the provider trigger. A disabled expression still registered in Wrangler is ignored; an expression absent from the Mantle plan fails visibly. If the Worker also owns unrelated cron tasks, route those expressions in the application's `scheduled` export. Multiple Mantle Triggers may share one expression and run in Trigger-name order; all run even if an earlier one fails, then the event reports failure.
+## `http`
 
-Handlers receive `ctx.schedule` with `id`, `trigger`, `cron`, and `scheduledTime` (Unix milliseconds). The stable ID is `${trigger}:${scheduledTime}`. The caller is always `user: null`, `staff: null`, with no credential metadata; normal Procedure guards still apply. Cloudflare executes cron events in UTC, but its Cron Trigger documentation does not promise automatic retries. Duplicate/manual replay is still possible, so use `ctx.schedule.id` as an idempotency key for writes. A failure rejects the scheduled event; exactly-once execution is not promised. Bun, Vercel, and ChatGPT Sites do not register schedules and reject enabled schedules at boot or generation.
-
-Cloudflare's default D1 composition records each attempt under that stable run ID. The owner-only Developer Console shows declared schedules even before the first run, separately from recent observations; Wrangler registration is **not observed** by Core. Records include scheduled/start/finish times, status, attempt, duration, a diagnostic code or generic handler-error summary, and optional sweep counts. A started attempt with no finish record says **Completion not observed**, not success. Inputs, outputs, exception text, credentials and secrets are not stored. The default history retains 30 days, hides older rows on reads, and prunes them during later runs (at most once per day per runtime instance). If observation start fails, the Procedure is skipped and the scheduled event rejects; if recording completion fails, the event also rejects. Use the stable ID to make replay safe. If the host supplies custom storage without a durable observation store, the Console says **Unavailable**; it never reports a missing record as success.
-
-## `http` source
-
-```yaml
-apiVersion: cms.mantle.aotter.net/v1
-kind: Trigger
-metadata:
-  name: inventory-level-http
-spec:
-  source:
-    kind: http
-    method: PUT
-    path: /api/inventory/{sku}/level
-  target:
-    procedure: sync-inventory-level
-```
-
-| Field | Rules |
+| Field | Values |
 |---|---|
-| `method` | `POST`, `PUT`, `PATCH` or `DELETE`. |
-| `path` | Non-empty string starting with `/`. OpenAPI `{param}` syntax for path params. No optional segments. |
+| `method` | `POST`, `PUT`, `PATCH`, `DELETE` (reads are Views) |
+| `path` | starts with `/api/` (`TRIGGER_PATH_INVALID`); `{param}` segments bind to inputs of the same name, coerced to their declared types |
 
-`GET` is deliberately absent. Reads are [Views](./view.md), which mount themselves from `surface` and need no Trigger at all; a Procedure is a write.
+The REST surface answers it. The JSON body and the path parameters merge into
+the input (a path parameter wins). A `(method, path)` pair is unique
+(`TRIGGER_PATH_COLLISION`); a route with fewer parameters is tried first, so
+`/api/items/search` is not shadowed by `/api/items/{id}`. The answer is the
+Procedure's output, or `{ "error": … }`. `ctx.cause.kind` is `http`.
 
-### Path rules
+The body is parsed JSON. For a signed webhook, verify the raw body in the
+service's own `fetch` and call `runtime.invokeProcedure`.
 
-| Phase | Rule | Diagnostic |
-|---|---|---|
-| parse | `path` starts with `/`. | `INVALID_MANIFEST_ENVELOPE` |
-| validate | `path` starts with `/api/`, so adapters can route public pages and Procedure endpoints without ambiguity. | `TRIGGER_PATH_INVALID` |
-| validate | `(method, path)` is unique across every `http` Trigger. | `TRIGGER_PATH_COLLISION`, naming the Trigger that claimed it first. |
-| boot | `path` falls outside the adapter's reserved prefixes. | `TRIGGER_PATH_INVALID` |
+## `mcp`
 
-Only well-prefixed paths are tracked for collisions, so a path missing `/api/` produces one diagnostic rather than two. The Cloudflare Worker reserves `/admin`, `/_mantle`, `/api/auth`, `/api/views`, `/oauth`, `/mcp`, anything starting `/.well-known/oauth`, and the exact registrations `*` and `/*`; a prefix matches the path itself or a `/` or `{` boundary after it. See [Conventional Worker](../cloudflare/conventional-worker.md).
-
-### Routing and binding
-
-| Behavior | Detail |
+| Field | Values |
 |---|---|
-| Path params | Each `{param}` binds to the identically named field on the target Procedure's `input`, which must declare it. |
-| Precedence | The invocation merges the body first and the path params second, so **the path wins** over a same-named body field. |
-| Trailing slash | `/api/posts` and `/api/posts/` are the same route; the root `/` is preserved. |
-| Percent-encoding | Each request segment is decoded once, so `/api/by%2Dtag` matches the literal `/api/by-tag`. Malformed encoding such as `%GG` is a routing miss (404), not a 500. |
-| Body | Must be a JSON object. Anything else is `INPUT_VALIDATION_FAILED` (400) with *HTTP Trigger request body must be a JSON object*. A body over 1 MiB is the same code at 413. |
-| Empty body | A `DELETE`, or any request without a JSON content type, is treated as `{}` — bind those inputs through path params. |
+| `surface` | `public` (`/mcp`) or `staff` (the staff MCP surface; also an Admin operation) |
 
-A success is `{ "ok": true, "data": <handler result> }`; a failure is `{ "ok": false, "diagnostic": ... }` at the diagnostic's mapped status. `http` Triggers are also what the OpenAPI emitter projects into operations.
+The tool is named after the Procedure, kebab to snake case
+(`MCP_TOOL_NAME_COLLISION` when two names meet). Give the Procedure a
+`description` (`MCP_TOOL_DESCRIPTION_MISSING` warns). `ctx.cause.kind` is
+`mcp`.
 
-## `mcp` source
+## `lifecycle`
 
-```yaml
-apiVersion: cms.mantle.aotter.net/v1
-kind: Trigger
-metadata:
-  name: approve-purchase-order-mcp
-spec:
-  source:
-    kind: mcp
-    surface: staff
-  target:
-    procedure: approve-purchase-order
-```
-
-| `surface` | Endpoint | Gate |
-|---|---|---|
-| `public` | `/mcp` | Bearer token. |
-| `staff` | `/mcp/staff` | Bearer token plus a staff role read from storage on every invocation. |
-
-`surface` is **discovery only**. It decides which tools appear in `tools/list` on which endpoint; it authorizes nothing. The target Procedure's `requires.auth.all` predicates and its optional guard are re-evaluated on every `tools/call` against the authenticated caller, exactly as they are over HTTP. A `public`-surface Procedure that requires `ctx.staff` is discoverable on `/mcp` and will still be denied there.
-
-The tool name is derived from the **Procedure's** `metadata.name`, not the Trigger's: lower-cased, with `-` replaced by `_`. Only one Trigger may claim a given `(surface, tool name)` pair; a second is `MCP_TOOL_NAME_COLLISION`. The same code also fires when the mangled name hits a reserved generic tool name or prefix, or a Schema's or another Procedure's segment — see [Reserved names](./manifest.md#reserved-names). A Procedure exposed this way should carry `spec.description`; a missing one is the `MCP_TOOL_DESCRIPTION_MISSING` warning, because the catalog's generated fallback tells an agent nothing about when to call the tool. A write tool that requires `expectedVersion` also needs a View on the same surface that exposes that collection's `version`; otherwise the tool is listed but uncallable, and validation warns with `MCP_TOOL_INPUT_UNREACHABLE`.
-
-The tool carries the Procedure's `title` and `description`, with a short authorization summary appended to the description. `output` is not surfaced; MCP clients infer the response shape from the `tools/call` result. See [MCP and agents](../concepts/mcp-and-agents.md).
-
-## `lifecycle` source
-
-```yaml
-apiVersion: cms.mantle.aotter.net/v1
-kind: Trigger
-metadata:
-  name: 010-verify-purchase-token
-spec:
-  source:
-    kind: lifecycle
-    schema: purchase-orders
-    on: [before_create]
-    errorPolicy: abort
-  target:
-    procedure: verify-purchase-token
-```
-
-| Field | Type | Required | Default | Rules |
-|---|---|---|---|---|
-| `schema` | string | yes | — | A declared Schema (`LIFECYCLE_SCHEMA_UNKNOWN`). |
-| `on` | `LifecycleHook[]` | yes | — | Non-empty; every entry from the closed list below. |
-| `errorPolicy` | `abort` \| `continue` | no | `abort` for `before_*`, `continue` for `after_*` | See below. |
-
-`errorPolicy: abort` is rejected at parse time when **any** `after_*` hook appears in `on`: an `after_*` hook runs once the response has already been sent, so an abort could never reach the caller. Split the `after_*` hooks into their own Trigger, or declare `continue`.
-
-> **Info**
-> `Schema.spec.lifecycle` (`publishing` / `operational`) is a different domain that shares the word. That setting governs which states an entry may be in; a lifecycle Trigger governs what fires around a mutation. See [Schema](./schema.md#lifecycle).
-
-### Hooks
-
-| Hook | Fires |
+| Field | Values |
 |---|---|
-| `before_create` | Before the insert. |
-| `after_create` | After the insert. |
-| `before_update` | Before an update **or** any status transition whose target is not `published` — this includes unpublish and archive. |
-| `after_update` | After an update or such a transition. |
-| `before_delete` | Before the delete. |
-| `after_delete` | After the delete, only when a row was actually removed. |
-| `before_publish` | Before a transition to `published`. |
-| `after_publish` | After a transition to `published`. |
+| `schema` | the Schema watched (`LIFECYCLE_SCHEMA_UNKNOWN`) |
+| `on` | non-empty: `before_create`, `after_create`, `before_update`, `after_update`, `before_delete`, `after_delete`, `before_publish`, `after_publish` |
 
-There are no unpublish-specific or archive-specific hooks. Do not read `before_update` / `after_update` as edit-only.
+The target is a `ref` Procedure (`LIFECYCLE_TARGET_NOT_REF`). `ctx.cause` is
+`{ kind: "lifecycle", trigger, hook, schema, rows, id }`.
 
-### Error policy
+- A **before** hook runs before the batch, receives the one row (for an insert,
+  the row about to be written), reads only, and rejects by throwing; nothing is
+  applied. The write then locks the version the hook saw. Before hooks on one
+  operation run in Trigger-name order.
+- An **after** hook runs after the commit, once per statement and Trigger, with
+  every written row in `rows` (each with `id` and `version`). A failure is
+  logged and never undoes the write. `id` is stable for a replay.
 
-| Phase | Default | Behavior |
-|---|---|---|
-| `before_*` | `abort` | A throwing hook cancels the surrounding mutation and the caller receives the hook's own diagnostic. A hook that rejects a write on purpose raises `LIFECYCLE_HOOK_REJECTED` (409). Under `continue` the failure is logged and the mutation proceeds. |
-| `after_*` | `continue` | The committed mutation stands. On the inline or `waitUntil` path a failure is logged and swallowed. With a deferred dispatcher wired in, the failure reaches the delivery adapter so its at-least-once retry and dead-letter policy can run. Neither path ever rolls back. |
+A hook sees the originating caller. Any path that writes the Schema fires its
+hooks: SQL Procedures, `ctx.store`, Admin. A set op on a Schema with a before
+hook for that operation is refused.
 
-### Handler input and `ctx.event`
+## `schedule`
 
-Hook input is phase-specific.
-
-| Phase | Handler input |
+| Field | Values |
 |---|---|
-| `before_*` | The original **pre-projection** Procedure input, so a hook can read side-channel fields the row never stores — a CAPTCHA token, a client nonce. It falls back to the row's `data` when there is no caller input. |
-| `after_*` | The persisted `entry.data` only. Deferred envelopes deliberately never carry arbitrary request input. |
+| `cron` | five-field POSIX cron in UTC; weekday 0 = Sunday |
+| `enabled` | optional, default `true` |
 
-Every hook handler also receives `ctx.event`:
+The target runs as the system caller with input `{}`. It may not declare
+`requires.auth` predicates (`SCHEDULE_AUTH_INVALID`), and its input must
+accept an empty object (`SCHEDULE_INPUT_INVALID`). `ctx.cause` is
+`{ kind: "schedule", trigger, cron, scheduledTime, id: "<trigger>:<scheduledTime>" }`.
 
-| Field | Value |
+The service passes `schedules: true` to `createMantle`; without it boot
+refuses an enabled schedule (`SCHEDULE_NOT_WIRED`).
+
+### Cloudflare
+
+Cloudflare numbers weekdays 1 (Sunday) to 7. `toCloudflareCron` from
+`@aotter/mantle/cloudflare` adds one to every explicit weekday number and
+leaves `*`, names and the other fields alone:
+
+| POSIX (manifest) | Cloudflare (`wrangler.jsonc`) |
 |---|---|
-| `id` | Stable event id, unchanged across enqueue fallback and deferred retries. |
-| `trigger` | The firing Trigger's `metadata.name`. |
-| `hook` | The hook name. |
-| `schema` | The watched Schema name. |
-| `entry` | `null` only on `before_create`; the pre-mutation row for the other `before_*` hooks; the persisted post-mutation row for every `after_*`. |
+| `0 3 * * 0` | `0 3 * * 1` |
+| `0 9 * * 1-5` | `0 9 * * 2-6` |
+| `*/5 * * * *` | `*/5 * * * *` |
 
-Deferred handlers key on `${ctx.event.id}:${ctx.event.trigger}`. See [Procedure](./procedure.md#conflicts-and-idempotency).
-
-### Ordering and coverage
-
-When several lifecycle Triggers bind the same `(schema, hook)`, they fire **alphabetically by `Trigger.metadata.name`**. Choose names that sort the way you want them to run — the `010-`, `020-` convention exists for exactly this, and the code generator handles the leading digits.
-
-Hooks are wired through a repository decorator that wraps the single entry-writer chokepoint, so **Staff MCP, Admin and builtin Procedure writes all fire the same hooks**. There is no write path that bypasses them.
-
-For deferred `after_*` delivery, the ordered Trigger-name list is captured into one versioned envelope carrying the persisted row and a small identity snapshot. Every captured Trigger runs before a failure is reported back, so a retry may replay Triggers that already succeeded — hence the idempotency key. Queue acceptance is not transactional with the entry write, the `waitUntil` fallback is best-effort, and exactly-once is not promised. See [Deferred hooks on Queues](../cloudflare/deferred-hooks-queues.md).
-
-## Source
-
-- [`packages/mantle-spec/src/domain/model/ManifestGrammar.ts`](../../../packages/mantle-spec/src/domain/model/ManifestGrammar.ts)
-- [`packages/mantle-spec/src/domain/service/ManifestParser.ts`](../../../packages/mantle-spec/src/domain/service/ManifestParser.ts)
-- [`packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts`](../../../packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts)
-- [`packages/mantle-spec/src/domain/service/McpToolNaming.ts`](../../../packages/mantle-spec/src/domain/service/McpToolNaming.ts)
-- [`packages/mantle-runtime/src/domain/service/PathMatcher.ts`](../../../packages/mantle-runtime/src/domain/service/PathMatcher.ts)
-- [`packages/mantle-runtime/src/domain/service/TriggerIndex.ts`](../../../packages/mantle-runtime/src/domain/service/TriggerIndex.ts)
-- [`packages/mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.ts`](../../../packages/mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.ts)
-- [`packages/mantle-runtime/src/infrastructure/persistence/LifecycleHookingEntryRepository.ts`](../../../packages/mantle-runtime/src/infrastructure/persistence/LifecycleHookingEntryRepository.ts)
-- [`packages/mantle-runtime/src/domain/port/DeferredHookDispatcher.ts`](../../../packages/mantle-runtime/src/domain/port/DeferredHookDispatcher.ts)
-- [`packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts`](../../../packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts)
-- [`packages/mantle-runtime/src/infrastructure/http/readJsonBody.ts`](../../../packages/mantle-runtime/src/infrastructure/http/readJsonBody.ts)
-- [`packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts`](../../../packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts)
-- [`packages/mantle/src/codegen/emitMantleModule.ts`](../../../packages/mantle/src/codegen/emitMantleModule.ts)
-- [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts)
-- [`packages/adapters/cloudflare/src/mount/mountMcp.ts`](../../../packages/adapters/cloudflare/src/mount/mountMcp.ts)
+It refuses what it cannot translate faithfully: `?`, `L`, `W`, `#`, weekday
+`7`, numbers with a leading zero, a backwards range, a name with a step, and a
+day of month together with a weekday. `mantle generate` runs it on every
+enabled schedule and fails before writing on a refusal. The generated
+`src/index.ts` maps Cloudflare's cron back to every POSIX expression that
+shares it.

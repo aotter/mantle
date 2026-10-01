@@ -36,7 +36,7 @@ Deferred delivery is an optional, versioned wire contract. Queue acceptance is
 not atomic with the entry write; adapters must preserve the supplied event id,
 validate untrusted messages before dereferencing them, surface handler failures
 to their retry mechanism, and document poison-message/DLQ behavior. See
-[Deferred lifecycle hooks on Cloudflare Queues](deferred-lifecycle-queues.md)
+deferred lifecycle hooks
 for the reference implementation and exact guarantees.
 
 ## Storage preparation
@@ -141,7 +141,7 @@ adapter. A narrow adapter extension seam may let consumer code verify its own
 API-key or personal-token formats, but credential storage/issuance must not
 become a runtime port. The Cloudflare reference is
 `mount/resolveCaller.ts`; consumer usage is documented in
-[API and MCP authorization](examples/cf-primitives-guarded-api.md).
+[API and MCP authorization](examples/guarded-api.md).
 
 Minimum HTTP behavior for a full adapter:
 
@@ -169,7 +169,7 @@ its document operations into their own routing and cache conventions.
 
 Keep responses private by default. For Cloudflare, apply the final policy after
 all routes and preserve only explicit anonymous public opt-in. Follow the
-[public cache contract](handbook/cloudflare/public-web.md#cache-contract) and the
+public cache contract and the
 [performance harness](performance-harness.md#cache-contract) for verification.
 
 Minimum auth/MCP behavior:

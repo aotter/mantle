@@ -1,51 +1,48 @@
 ---
 name: update
-description: Review and upgrade Mantle SDK dependencies and project-local skills while preserving application source, provider identities and plugin lockfiles.
+description: Upgrade a Mantle project's @aotter/mantle packages to a new exact version, including the move from 0.1.x to 0.2, without overwriting application-owned code.
 metadata:
   source: "@aotter/mantle"
   sourcePath: docs/skills/update/SKILL.md
-  applies_to: mantle grammar v0.1
-  projection: project
+  applies_to: mantle 0.2
+  projection: package
 ---
 
 # Mantle Update
 
-Upgrade SDK dependencies deliberately; never overwrite application-owned code.
-The old Starter bundle comparison command `mantle update` is removed. This
-skill remains the version-matched upgrade workflow, not a replacement CLI.
+Upgrade deliberately; never overwrite application-owned code.
 
-1. Inspect git status, package.json, lockfile, actual project scripts and
-   installed versions. Preserve unrelated local changes. Read plugin locks
-   and legacy `.mantle` metadata if present; they are context, not required.
-2. Select an explicit target release and read that version's GitHub release
-   notes. Installed docs live under `node_modules/@aotter/mantle/docs/`;
-   `handbook/releases/index.md` is a stable-release index, so a prerelease
-   need not appear there. Do not use the old package's docs as the new API contract.
-   Do not resolve new Starter refs or compare the project to a baseline
-   template.
-3. Update only selected `@aotter/mantle*` dependencies to the same exact target
-   version, preserving dependency sections. Use the package manager to update
-   the lockfile; inspect the dependency diff and required peer changes.
-4. Remove scripts that invoke retired create/bundle-update commands. Keep all
-   application manifests, handlers, routes, theme, Worker/D1/KV names, origins,
-   provider bindings, secrets, and legacy metadata. Apply API migration edits
-   individually; do not copy the reference consumer over a real application.
-5. Use the upgraded package to regenerate machine-owned bindings and project
-   its skills, then run the application's validation, types and tests:
+1. Inspect `git status`, `package.json`, the lockfile and the installed
+   `@aotter/mantle` version. Keep unrelated local changes. Work on a branch.
+2. Choose an explicit target version (`npm view @aotter/mantle dist-tags`).
+   Read its release notes on GitHub and, after installing, its own
+   `node_modules/@aotter/mantle/docs/`. The old version's docs are not the new
+   contract.
+3. **From 0.1.x to 0.2:** stop here and follow
+   `node_modules/@aotter/mantle/docs/upgrade-0.1-to-0.2.md` after installing
+   the target. There is no codemod and no in-place database upgrade: the
+   project moves by hand, to a new database.
+4. Set `@aotter/mantle`, and `@aotter/mantle-ui` where present, to the same
+   exact version (`@aotter/mantle-admin-ui` is gone: the console is
+   `@aotter/mantle-ui/admin`), and update the lockfile with the
+   package manager. Review the dependency diff and any peer changes
+   `mantle generate` names.
+5. Regenerate and check:
 
 ```sh
 pnpm exec mantle generate
 pnpm exec mantle generate --check
-pnpm exec mantle skills
-pnpm exec mantle skills --check
-pnpm exec mantle validate
+pnpm exec tsc --noEmit
 ```
 
-Read the refreshed `mantle-develop` skill and the upgraded package's embedded
-docs before continuing application edits.
+6. The preset (`src/service.ts`, `src/index.ts`, `wrangler.jsonc`) is never
+   rewritten. Generate into a scratch directory with the same manifests and
+   `mantle.config.json`, diff it against the project's files, and apply the
+   changes that matter by hand.
+7. Run the service locally and test its real routes and sign-in. Before
+   deploying, run `mantle generate --check --database <local SQLite file>`
+   to see what boot will change.
 
-Start the local application and test its actual routes, including configured
-auth behavior. Review the final source/lockfile/generated diff; unexpected
-provider or user-source changes block completion. Provider credentials must
-never enter git or logs. Report exact old/new versions, checks, and remaining
-migration work. A dependency update does not authorize a production deploy.
+Report the old and new versions, the checks and their results, what changed
+in the service files, and what remains. A dependency update does not
+authorize a deploy. Never commit secrets.

@@ -50,6 +50,9 @@ jobs:
       - name: Check release controller
         run: pnpm run check:release
 
+      - name: Compile the documented examples
+        run: pnpm run check:doc-examples
+
       - name: Typecheck workspace
         run: pnpm typecheck
 

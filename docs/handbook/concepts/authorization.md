@@ -1,116 +1,126 @@
 ---
-description: One authorization pipeline for REST, MCP and Admin — identity kinds, static predicates, the dynamic guard, staff roles and 401/403/402.
+description: The Caller, the one CallerResolver at the service entry, requires predicates, guards, Schema scope and auth.uid(), and how staff roles fit.
 ---
 # Authorization
 
-Mantle has one authorization pipeline. A manifest HTTP Trigger, a View over REST, an MCP `tools/call` and an Admin operation all reach the same evaluator, so a rule written once holds on every surface. This page explains the model; the exact `requires` grammar is in the [authorization reference](../reference/authorization.md), and a worked ladder of four access levels is in [Guarded API access](../../examples/cf-primitives-guarded-api.md).
+Mantle never owns your users. The service resolves who is calling once per
+request, and Mantle enforces the manifests against that answer.
 
-## The fixed order
-
-Every protected invocation runs the same five steps:
-
-1. Verify and normalize the transport credential.
-2. Evaluate the static predicates in `requires.auth.all`, before any input-schema detail is exposed.
-3. Validate and coerce the target input, or the View params.
-4. Invoke the guard Procedure with that validated value and the same context.
-5. Invoke the target only after the guard succeeds.
-
-Static predicates run before validation so an unauthorized caller cannot probe a schema by reading its error messages. The guard runs after validation so it can decide on the actual arguments. Every stage fails closed.
-
-## Identity kinds
-
-The adapter verifies the transport, then hands the runtime normalized, non-secret metadata. Handlers see this and nothing else:
+## The Caller
 
 ```ts
-interface HandlerContext {
-  readonly user: { readonly id: string } | null;
-  readonly staff: { readonly id: string; readonly role: StaffRole } | null;
-  readonly auth?: {
-    readonly credential: "session" | "oauth" | "api-key" | "personal-token";
-    readonly credentialId: string | null;
-    readonly clientId: string | null;
-    readonly scopes: readonly string[];
-  };
-}
+type Caller =
+  | { kind: "anonymous" }
+  | { kind: "user"; subject: string; issuer?: string; role: "owner" | "editor" | "contributor" | null;
+      scopes: readonly string[]; credential: "session" | "oauth" | "api-key" | "personal-token";
+      credentialId: string | null; clientId: string | null }
+  | { kind: "system"; reason: string };
 ```
 
-Three things are distinct:
+- `subject` is the application's subject key: opaque, stable, unique across
+  every issuer, never an email. `auth.uid()`, a scope field and `author_id`
+  store it. A resolver over several identity providers namespaces it
+  (`chatgpt:<sub>`, `account:<id>`).
+- `role` is a staff role or `null`. Admin's vocabulary is `owner`, `editor`,
+  `contributor`; a resolver maps its own roles onto it, or leaves `null` and
+  uses scopes and guards.
+- The `system` caller comes only from host code (`systemCaller(reason)`):
+  schedules, maintenance, a verified webhook. No request can produce one.
 
-- **`ctx.user`** is the end-user identity: a row in the site's own Better Auth user table. A service API key may have no user at all.
-- **`ctx.staff`** is a role overlay on top of a user, not a separate account. A user with no overlay is `null` here.
-- **`ctx.auth`** is the verified credential itself, of kind `session`, `oauth`, `api-key` or `personal-token`. Raw keys, refresh tokens and cookies never enter the runtime; `credentialId` is an opaque record id.
-
-The predicate vocabulary is closed and maps onto those three: `ctx.user`, `ctx.auth`, `{ "ctx.auth.scope": "<scope>" }` (repeat it to require several), and `{ "ctx.staff": [roles] }`. There is no credential-kind predicate — a target that must reject browser sessions does so by requiring a scope no session grant carries.
-
-## Predicates versus the guard
-
-| | Static predicates | Guard Procedure |
-|---|---|---|
-| Declared as | `requires.auth.all` | `requires.guard.procedure` |
-| Answers | Is this caller of the right kind, with the right role and scopes? | Is this verified caller allowed to do this business action right now? |
-| Evaluated | Before input validation | After input validation, on every call, never cached |
-| Reads | The compiled plan only | Your tables, your provider state, `ctx.env` |
-| Typical failure | `401` or `403` | `402` |
-
-Anything that changes independently of the credential belongs in the guard: payment state, subscription or membership status, seat counts, per-tenant entitlement. A key stays valid while a subscription lapses, so the fact that a caller paid is not something a token can carry. The guard is an ordinary unguarded `handler.kind: ref` Procedure — not a fifth atom — and it throws a structured diagnostic to deny:
+## One boundary: `CallerResolver` and `withCaller`
 
 ```ts
-throw new DiagnosticError(
-  runtimeDiagnostic({
-    code: "ENTITLEMENT_REQUIRED",
-    severity: "error",
-    path: `site:membership/${ctx.user!.id}`,
-    message: "Active membership is required.",
-  }),
-);
+type CallerResolver = (request: Request) =>
+  Promise<{ caller: Caller } | { invalid: true; challenge?: string; status?: 401 | 403 }>;
 ```
 
-## 401, 403 and 402
+The generated `src/service.ts` wraps every surface in
+`withCaller(resolver, surface)`:
 
-| Status | Diagnostic | Meaning |
-|---|---|---|
-| `401` | `UNAUTHENTICATED` | No credential, or a recognized credential that is bad, revoked or expired. |
-| `403` | `AUTH_DENIED` | Verified caller, but a required predicate failed — a missing scope, a missing user subject, an insufficient staff role. |
-| `402` | `ENTITLEMENT_REQUIRED` | Verified and permitted caller whose current business state does not allow the action. |
+- A credential that was presented but fails is answered 401 before any
+  surface runs. It is never treated as anonymous; only "no credential" is.
+- A cookie session may not mutate across origins: a non-GET request with a
+  session needs a same-origin `Origin` or `Sec-Fetch-Site`, or it is 403.
+- Identity `mantle` resolves Better Auth sessions and OAuth bearer tokens;
+  identity `custom` is your `src/identity.ts`; identity `none` passes
+  `{ kind: "anonymous" }`. See [Authentication](../cloudflare/authentication.md).
 
-The split is the point: `401` says *who are you*, `403` says *you may not*, `402` says *not until you settle something*. Only the guard produces `402`, and on `402` the target handler is never invoked. See [Diagnostic codes](../reference/diagnostics.md) for the full mapping.
+## `requires`
 
-## Staff roles
+Views and Procedures take the same block:
 
-Staff roles are `owner`, `editor` and `contributor`. Owners manage staff and site settings; editors publish, approve and manage entries; contributors work on drafts.
+```yaml
+requires:
+  auth:
+    all:
+      - ctx.user
+      - { ctx.staff: [owner, editor] }
+      - { ctx.auth.scope: "exports:read" }
+  guard: { procedure: require-active-plan }
+```
 
-A manifest predicate tests **exact membership**, not rank: `{ "ctx.staff": [editor] }` admits editors and nobody else, an owner included. List every role you mean, as in `{ "ctx.staff": [owner, editor] }`. Rank ordering does exist, but only Admin's own route table uses it, which is why an owner passes an Admin route gated at editor. See [Authorization requirements](../reference/authorization.md).
-
-The role is re-read from the database on every protected REST and MCP call. A token snapshot or a consent-time role is not an authorization boundary, so demoting or revoking a user in Admin locks them out on their very next request — no token revocation, no cache flush, no waiting for expiry.
-
-## The credential resolver seam
-
-Sites that issue their own API keys or personal tokens supply one `ConsumerCredentialResolver` through the Worker's `extend` seam. It returns exactly one of three outcomes:
-
-| Outcome | Meaning |
+| Predicate | Holds when |
 |---|---|
-| `not-handled` | The request carries none of the site's credential formats. Resolution moves on. |
-| `invalid` | The request carries a recognized format that is bad, revoked or malformed. |
-| `verified` | The site's authoritative record was checked; normalized metadata is returned. |
+| `ctx.user` | the caller is a `user` |
+| `ctx.auth` | the caller is a `user` (any verified credential) |
+| `{ ctx.staff: [roles] }` | the caller's `role` is one of them |
+| `{ ctx.auth.scope: "<scope>" }` | the caller's `scopes` include it; repeat for several |
 
-Resolution precedence is site resolver, then configured OAuth bearer, then cookie session. A recognized-but-invalid credential never falls back to a valid cookie: presenting a revoked key is a failure, not an invitation to be treated as an anonymous browser. Return `not-handled`, never `invalid`, for a request your resolver simply does not recognize.
+Every predicate in `all` must hold. A system or anonymous caller satisfies
+none. A failure is 401 `UNAUTHENTICATED` for an anonymous caller and 403
+`AUTH_DENIED` for a signed-in one. The optional guard is a `ref` Procedure
+that runs next and may reject with any code, for example
+`ENTITLEMENT_REQUIRED` (402).
 
-Scopes are opaque strings the site defines and grants. Mantle compares them; it does not interpret `catalog:read`, publish a scope catalog, or infer a hierarchy. Correspondingly, Mantle issues and stores no API keys or personal tokens, and holds no payment or subscription state. Those tables, their issuance, hashing, rotation and revocation, and whatever fills them from a billing provider, are application code. Mantle owns verification, normalization and enforcement.
+`requires` is checked on every path: REST, MCP, Admin operations,
+`ctx.invoke` and `runtime.invokeProcedure`. Listing a tool is not permission
+to call it.
 
-## MCP is the same pipeline
+## Rows: scope and `auth.uid()`
 
-An MCP `tools/call` runs the identical evaluator, in the identical order, with the identical diagnostics — surfaced as `isError` tool results carrying `{ "diagnostics": [Diagnostic] }` instead of an HTTP status. An anonymous call to a tool that needs identity is refused with `401`, and an OAuth token missing a declared scope that the authorization server can issue with `403 insufficient_scope`, before the tool runs. A Trigger's `source.surface` selects which catalog lists a tool, and `tools/list` hides what the caller cannot see. That filtering is discovery UX, not enforcement: a client that guesses a tool name still meets every predicate and the guard. Discovery is never the authorization boundary. See [MCP and agents](./mcp-and-agents.md).
+`requires` decides whether a caller may run a View or Procedure. Which
+**rows** it reaches is decided in the data:
 
-## Related
+**Scope** hides rows from everyone but their owner:
 
-- [Authorization requirements](../reference/authorization.md) — the `requires` shape, predicate forms, guard rules, OpenAPI projection.
-- [Guarded API access](../../examples/cf-primitives-guarded-api.md) — a full resolver, guards and the REST/MCP outcome tables.
-- [Reads: Views, REST and MCP](./views.md) — the `$ctx.user` identity-View sentinel.
-- [Authentication](../cloudflare/authentication.md) — sessions, first owner, role management routes.
+```yaml
+kind: Schema
+metadata: { name: orders }
+spec:
+  scope: { owner: auth.uid() }
+  indexes: [[owner]]
+  schema:
+    required: [owner, …]
+```
 
-## Source
-- [`docs/adapter-guide.md`](../../../docs/adapter-guide.md)
-- [`packages/mantle-runtime/src/domain/model/HandlerContext.ts`](../../../packages/mantle-runtime/src/domain/model/HandlerContext.ts)
-- [`packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts`](../../../packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts)
-- [`packages/adapters/cloudflare/src/mount/resolveCaller.ts`](../../../packages/adapters/cloudflare/src/mount/resolveCaller.ts)
-- [`packages/mantle-spec/src/domain/service/StaffRoleHierarchy.ts`](../../../packages/mantle-spec/src/domain/service/StaffRoleHierarchy.ts)
+- The scope field is a required string, the first column of an index, and the
+  first column of every `uniqueIndexes` entry.
+- Every read and write of a user caller is limited to rows whose `owner` is its
+  subject key; an anonymous caller reaches none. Store fills `owner` on insert,
+  and no write may set it, so a row can never move to another owner.
+- Staff are user callers too: scope hides other users' rows from them as
+  well. Use scope only for rows that no one but the owner may ever see.
+- `runtime.store` and the system caller are not scoped.
+
+**`auth.uid()` in SQL** covers the rest. When staff must see every row but a
+member sees only their own, store the writer and filter on it:
+
+```sql
+INSERT INTO requisitions (requestedBy, item) VALUES (auth.uid(), input.item);
+SELECT … FROM requisitions WHERE requestedBy = auth.uid();
+```
+
+The writer comes from the caller, never from an input. See
+[Procurement approvals](../../examples/procurement.md).
+
+## Admin
+
+Admin's gate admits any staff role, and each Admin route names the least role
+it needs. Admin reads and writes through `runtime.store.as(caller)`, so scope
+and `requires` apply to staff exactly as to anyone. See
+[Customize Admin](../guides/admin-ui.md).
+
+## Further reading
+
+- [Authorization reference](../reference/authorization.md)
+- [Guarded API access](../../examples/guarded-api.md)
