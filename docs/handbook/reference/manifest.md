@@ -1,133 +1,73 @@
 ---
-description: Envelope fields, unknown-key policy, multi-document YAML, LocalizedText, naming rules and reserved names shared by every Manifest kind.
+description: The manifest envelope of Mantle 0.2.0 — apiVersion, kind, metadata, files and documents, names, localized text, and the SQL naming conventions every atom shares.
 ---
 # Manifest envelope and conventions
 
-This page covers the rules that apply to every Manifest document before kind-specific validation runs. Read it once; the four atom pages ([Schema](./schema.md), [View](./view.md), [Procedure](./procedure.md), [Trigger](./trigger.md)) assume it. Diagnostic codes named here are catalogued in [Diagnostics](./diagnostics.md).
-
-For a task-to-field table covering all four atoms, see the [Manifest feature reference](./features.md). For the resulting console, see [Customize Admin](../guides/admin-ui.md).
-
-## Envelope
-
-Every document is a YAML mapping with exactly four top-level keys.
-
 ```yaml
-apiVersion: cms.mantle.aotter.net/v1
-kind: Schema | View | Procedure | Trigger
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema            # Schema | View | Procedure | Trigger
 metadata:
-  name: posts
-spec:
-  # kind-specific
+  name: orders          # required, unique per kind
+spec: { … }             # kind-specific
 ```
 
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `apiVersion` | literal | yes | Exactly `cms.mantle.aotter.net/v1`. Anything else is `INVALID_MANIFEST_ENVELOPE` at `/apiVersion`. |
-| `kind` | enum | yes | `Schema`, `View`, `Procedure` or `Trigger`. |
-| `metadata` | mapping | yes | Only the key `name` is accepted. There is no `namespace`. |
-| `metadata.name` | string | yes | Non-empty. Unique within its kind (`DUPLICATE_NAME`, one diagnostic per occurrence). A Schema and a View may share a name. |
-| `spec` | mapping | yes | Kind-specific; see the atom pages. |
+- `apiVersion` is exactly `cms.mantle.aotter.net/v2`. A `v1` document fails
+  and names the upgrade guide.
+- `metadata` has `name` only.
+- Unknown keys anywhere in `spec` are refused, not ignored.
 
-A document that is not a mapping is rejected with `manifest must be a YAML mapping`.
+## Files
 
-## Unknown-key policy
+`mantle generate` reads every `.yaml` and `.yml` file directly in the manifest
+directory (`./manifests`, or `--manifests <dir>`), not subdirectories. A file
+may hold several documents separated by `---`. File names and order do not
+matter to the plan; they enter only `sourceHash`.
 
-The parser rejects keys outside the shipped grammar at every level it knows. The diagnostic is `INVALID_MANIFEST_ENVELOPE` with the message `<dotted.path> is not supported` and a JSON Pointer to the offending key (for example `spec.foo is not supported` at `/spec/foo`). Enum values outside the grammar are rejected the same way.
+## Names
 
-| Pointer | Allowed keys |
-|---|---|
-| `/` | `apiVersion`, `kind`, `metadata`, `spec` |
-| `/metadata` | `name` |
-| `/spec` (Schema) | `title`, `description`, `schema`, `uiSchema`, `uniqueIndexes`, `indexes`, `searchableFields`, `localized`, `translates`, `lifecycle` |
-| `/spec` (View) | `title`, `description`, `uiSchema`, `from`, `sql`, `surface`, `cache`, `requires`, `filter`, `fields`, `orderBy`, `limit`, `params` |
-| `/spec` (Procedure) | `title`, `description`, `requires`, `input`, `uiSchema`, `output`, `handler`, `mcp`, `target` |
-| `/spec` (Trigger) | `source`, `target` |
-| `/spec/translates` | `parent`, `on` |
-| `/spec/requires` | `auth`, `guard` |
-| `/spec/requires/auth` | `all` |
-| `/spec/requires/guard` | `procedure` |
-| `/spec/requires/auth/all/<i>` (object form) | exactly one of `ctx.staff`, `ctx.auth.scope` |
-| `/spec/handler` (`kind: ref`) | `kind`, `ref` |
-| `/spec/handler` (`kind: builtin`) | `kind`, `op`, `schema`, `match` |
-| `/spec/filter/<op>` | `field`, `value` |
-| `/spec/orderBy/<i>` | `field`, `direction` |
-| `/spec/cache` (View) | `sharedMaxAge` |
-| `/spec/source` (`kind: http`) | `kind`, `method`, `path` |
-| `/spec/source` (`kind: lifecycle`) | `kind`, `schema`, `on`, `errorPolicy` |
-| `/spec/source` (`kind: mcp`) | `kind`, `surface` |
-| `/spec/target` | `procedure` |
-| `/spec/uiSchema` (View) | `list` (only on `surface: staff`; violations are `VIEW_UI_INVALID`) |
-| `/spec/uiSchema/list` (View) | `columns`, `searchFields`, `filterFields` |
-| `/spec/uiSchema` (Schema) | `fields`, `list`, `nav` |
-| `/spec/uiSchema/list` (Schema) | `filterField`, `primaryField`, `columns` |
-| `/spec/uiSchema/nav` (Schema) | `standalone`, `parentField` |
-| `/spec/uiSchema` (Procedure) | `collectionAction`, `fields` |
+- Names are unique per kind (`DUPLICATE_NAME`). Two Schemas, or two fields of
+  one Schema, may not differ only in case: SQL resolves identifiers
+  case-insensitively.
+- A Schema name that is not a plain identifier (`support-tickets`) is written
+  quoted in SQL: `"support-tickets"`.
+- `input` and `auth` are reserved and cannot name a Schema or an alias. A
+  Schema or field may not be one of the 14 words SQLite refuses unquoted:
+  `add alter autoincrement commit delete drop escape index insert nothing raise set transaction update`.
+- MCP tool names are the View or Procedure name in snake case.
 
-`uiSchema` roots are closed. Schema accepts `fields`, `list`, and `nav`; Procedure accepts `collectionAction` and `fields`; View accepts `list` on `surface: staff`. Nested keys are closed. A Schema that declares `uiSchema.collectionAction` is rejected with `SCHEMA_UI_INVALID`. JSON Schema documents inside `spec.schema`, `spec.input`, `spec.output` and `spec.params` follow the [JSON Schema subset](./schema.md#json-schema-subset) instead of an allowlist.
+## Localized text
 
-## Multi-document YAML and sources
-
-The parser consumes a set of sources, each `{ sourceId, text }`. The CLI builds this set from the immediate `.yaml` and `.yml` files of the manifests directory, sorted lexicographically, with the file path as `sourceId`; an unreadable or empty directory is `MANIFEST_ROOT_NOT_FOUND`. Nested directories are not read.
-
-Within one source:
-
-- `---` separates documents. A feature commonly bundles a Procedure and its Triggers in one file.
-- YAML merge keys (`<<`) are disabled.
-- Alias expansion is capped at 100 aliases per document. Exceeding the cap is `INVALID_MANIFEST_ENVELOPE` with the message `YAML alias-expansion limit exceeded`.
-- Empty or `null` documents are skipped.
-- A YAML syntax error is `INVALID_MANIFEST_ENVELOPE` at `/`, prefixed `[doc <index>]`.
-
-Parsing is all-or-nothing. Any error-severity diagnostic in any document withholds the whole parsed set; later stages never see a partial graph. Every diagnostic carries `source: { sourceId, documentIndex, path }` plus a line and column span when the YAML node is known.
-
-## LocalizedText
-
-`Schema.spec.title` (required), `Schema.spec.description`, `View.spec.title`, `Procedure.spec.title` and `Procedure.spec.description` accept either a plain string or a locale map.
+`title` and `description` on every atom, and `title` and `description` on
+JSON Schema properties, take a string or a locale map:
 
 ```yaml
-title: Products
-# or
-title: { en: Products, "zh-TW": 商品 }
+title: { en: Products, zh-TW: 商品 }
 ```
 
-The parser rejects an empty string, an empty map `{}`, an array, an empty locale key and any non-string or empty value. JSON Schema property `title` and `description` keywords accept the same shape for Admin labels and help text; MCP tool schemas collapse them to the `en` value.
+Admin and MCP choose the viewer's locale, then `en`, then the first entry.
 
-Resolution order (`resolveLocalizedText`): the viewer's preferred locale, then the site's canonical locale, then the first key in insertion order. A value that was never set resolves to `null`.
+## SQL conventions
 
-## Naming rules for `metadata.name`
+| | |
+|---|---|
+| Syntax | PostgreSQL, parsed by PostgreSQL 18's parser; a dialect decides what runs |
+| Native columns | snake_case in SQL: `id`, `status`, `version`, `created_at`, `updated_at`, `author_id`. In `ctx.store` JSON, in `indexes` and in Schema `uiSchema`: `createdAt`, `updatedAt`, `authorId` |
+| References | `input.<name>`, `auth.uid()`, `auth.role()`, `now()` |
+| Mantle functions | `mantle.search`, `mantle.search_rank`, `mantle.near`, `mantle.distance` |
+| Literals | SQL literals; strings in single quotes |
+| Multi-line SQL | a YAML block scalar (`sql: \|`) |
 
-| Rule | Applies to | Diagnostic |
-|---|---|---|
-| Non-empty string, unique within the kind. | all kinds | `DUPLICATE_NAME` |
-| Must match `/^[A-Za-z][A-Za-z0-9_.-]*$/` when the Schema declares any `indexes` or `uniqueIndexes`. | Schema | `SCHEMA_INDEX_INVALID` at `/metadata/name` |
-| Unique after MCP mangling (`mcpToolNameSegment`: lower-case, `-` becomes `_`). Two Schemas, or two Views, that mangle to the same segment collide. | Schema, View | `MCP_TOOL_NAME_COLLISION` |
-| A Procedure's mangled name must not equal a reserved generic tool name, start with a reserved tool prefix, equal a Schema's mangled segment, or equal another Procedure's mangled name. | Procedure | `MCP_TOOL_NAME_COLLISION` |
-| One MCP Trigger per `(surface, tool name)`. | Trigger | `MCP_TOOL_NAME_COLLISION` |
+## Wire values
 
-Names containing `-` must be double-quoted when used as tables in a `sql` View (`"post-translations"`).
+| JSON Schema | On the wire |
+|---|---|
+| `format: date-time` | an ISO 8601 string |
+| `format: date` | `YYYY-MM-DD` |
+| `boolean` | `true` / `false` |
+| `object`, `array` | JSON |
 
-## Reserved names
+## Generated output
 
-| Namespace | Reserved | Effect |
-|---|---|---|
-| Entry columns | `id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId` | Native on every Schema; a data property may not reuse the name (`INVALID_MANIFEST_ENVELOPE`). Where they may appear in Views and indexes: [Schema reference](./schema.md#reserved-entry-columns) (ADR-0025). |
-| Data field | `locale` | A non-localized Schema that declares `properties.locale` is rejected; use a domain name such as `orderLocale`. On a localized Schema the runtime requires `data.locale` on writes. |
-| Data field | `expectedVersion` | Reserved Procedure OCC wire name. A Schema that declares `spec.schema.properties.expectedVersion` is `INVALID_MANIFEST_ENVELOPE` (ADR-0022). New reserved names need an ADR. |
-| View params | `page`, `show`, `cursor` | Owned by the runtime for pagination. Declaring them under `params.properties` is `VIEW_PARAMS_RESERVED_NAME`. |
-| Builtin input | `id`, `expectedVersion` | Contract fields for builtin `update`, `delete`, `archive`, and version-checked `upsert`. `expectedVersion` is the observed native `entry.version` at read time (not `version+1`). Matched upsert must declare it as a strict number and must not declare `id`. New reserved wire names need an ADR. |
-| MCP tool names | `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry`, `create_media_upload`, `commit_media_upload`, `read_entry`, `preview_entry` | A Procedure that mangles to one of these is `MCP_TOOL_NAME_COLLISION`. |
-| MCP tool prefixes | `create_draft_`, `update_draft_`, `create_record_`, `update_record_`, `query_view_` | Same as above. |
-| HTTP paths | Every `http` Trigger path must start with `/api/` (`TRIGGER_PATH_INVALID` at validate time). The Cloudflare Worker additionally reserves `/admin`, `/_mantle`, `/api/auth`, `/api/views`, `/oauth`, `/mcp`, any path starting `/.well-known/oauth`, and the exact registrations `*` and `/*`; a Trigger under one of these fails at boot with `TRIGGER_PATH_INVALID`. | See [Trigger](./trigger.md#http-source). |
-
-## Source
-
-- [`packages/mantle-spec/src/domain/model/ManifestGrammar.ts`](../../../packages/mantle-spec/src/domain/model/ManifestGrammar.ts)
-- [`packages/mantle-spec/src/domain/service/ManifestParser.ts`](../../../packages/mantle-spec/src/domain/service/ManifestParser.ts)
-- [`packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts`](../../../packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts)
-- [`packages/mantle-spec/src/domain/service/SchemaIndexChecker.ts`](../../../packages/mantle-spec/src/domain/service/SchemaIndexChecker.ts)
-- [`packages/mantle-spec/src/domain/service/SchemaAdminUiChecker.ts`](../../../packages/mantle-spec/src/domain/service/SchemaAdminUiChecker.ts)
-- [`packages/mantle-spec/src/domain/service/McpToolNaming.ts`](../../../packages/mantle-spec/src/domain/service/McpToolNaming.ts)
-- [`packages/mantle-spec/src/infrastructure/cli/loadManifests.ts`](../../../packages/mantle-spec/src/infrastructure/cli/loadManifests.ts)
-- [`packages/mantle-spec/src/kernel/diagnostic.ts`](../../../packages/mantle-spec/src/kernel/diagnostic.ts)
-- [`packages/mantle/src/codegen/emitMantleModule.ts`](../../../packages/mantle/src/codegen/emitMantleModule.ts)
-- [`packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts`](../../../packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts)
-- [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts)
+`plan.json` and `mantle.ts` under `.mantle/generated/` are rewritten by every
+`mantle generate` and compared by `--check`. Commit them; never edit them. See
+[Project layout and CLI](../start/project-and-cli.md).
