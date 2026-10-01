@@ -3,7 +3,7 @@
  * interfaces a caller reaches and the graph between them. Views and inline Procedures show their SQL as authored; the graph reads the
  * IR, so a View's sources and a Procedure's writes are the relations the runtime runs. No run is observed (G7).
  */
-import { mcpTools, resolveMantleRef, type AuthPredicate, type AuthorizationRequirements, type JsonSchema, type RuntimePlan, type SqlNode } from "../spec/index.js";
+import { mcpTools, resolveMantleRef, type AuthPredicate, type AuthorizationRequirements, type JsonSchema, type RuntimePlan, type SqlNode } from "../spec/domain/index.js";
 
 type Audience = "public" | "members" | "staff" | "system" | "api-clients";
 
