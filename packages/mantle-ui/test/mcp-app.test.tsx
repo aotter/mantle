@@ -15,8 +15,8 @@ const catalog: AppCatalog = {
   views: {
     pending: {
       title: "Pending",
-      columns: { item: { type: "string", title: { en: "Item", "zh-TW": "品項" } }, totalMinor: { type: "integer", title: { en: "Total", "zh-TW": "總額" }, "x-mcp-hint": "money-minor" }, requestStatus: { type: "string", oneOf: [{ const: "submitted", title: { en: "Submitted", "zh-TW": "已送出" } }] } },
-      list: { columns: ["item", "totalMinor", "requestStatus"] },
+      columns: { created_at: { type: "string", format: "date-time" }, item: { type: "string", title: { en: "Item", "zh-TW": "品項" } }, totalMinor: { type: "integer", title: { en: "Total", "zh-TW": "總額" }, "x-mcp-hint": "money-minor" }, requestStatus: { type: "string", oneOf: [{ const: "submitted", title: { en: "Submitted", "zh-TW": "已送出" } }] } },
+      list: { columns: ["item", "totalMinor", "requestStatus", "created_at"] },
       actions: ["review_requisition", "gone"],
     },
   },
@@ -24,7 +24,7 @@ const catalog: AppCatalog = {
 };
 const viewResult: ToolResult = {
   content: [{ type: "text", text: "{}" }],
-  structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", totalMinor: 123456, requestStatus: "submitted" }, { id: "r2", item: "Desks", totalMinor: 1, requestStatus: "submitted" }] },
+  structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", totalMinor: 123456, requestStatus: "submitted", created_at: "2026-10-01T15:20:14.841000Z" }, { id: "r2", item: "Desks", totalMinor: 1, requestStatus: "submitted" }] },
   _meta: { [APP_TOOL_META_KEY]: "pending" },
 };
 
@@ -83,6 +83,8 @@ describe("MantleApp", () => {
   it("speaks the host's locale, in its own strings and in the plan's titles", () => {
     const html = render({ locale: "zh-TW" });
     expect(html).toContain("總額");
+    // the entry's own timestamp, which no Schema titles, in the App's language
+    expect(html).toContain("建立時間");
     expect(html).toContain("品項");
     expect(html).toContain("已送出");
     expect(html).toContain("審核請購");

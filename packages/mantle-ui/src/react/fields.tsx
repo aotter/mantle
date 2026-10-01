@@ -114,21 +114,28 @@ function SchemaField(props: SchemaFieldsProps & {
   const label = (props.propertyLabel ?? propertyLabel)(name, schema, language, canonical);
   const description = propertyDescription(schema, language, canonical);
   const setValue = (next: unknown): void => props.onChange(writePath(rootValue, path, next));
-  // the runtime owns bound values, so the form keeps them read-only
-  const readOnly = typeof schema["x-mantle-bind"] === "string";
-  const nullable = schema.nullable === true || (schema.enum ?? []).includes(null) || [schema.type].flat().includes("null");
+  // the runtime owns bound values, and a readOnly property is not the client's to set: the form shows both, read-only
+  const readOnly = typeof schema["x-mantle-bind"] === "string" || schema.readOnly === true;
+  const nullable = isNullable(schema);
+  const cleared = clearedValue(schema);
+  const id = React.useId();
+  const labelId = `${id}-label`;
+  const descriptionId = `${id}-description`;
+  // the label names the control, its description describes it, and a required field says so
+  const control = { id, "aria-describedby": description ? descriptionId : undefined, "aria-required": required && !readOnly ? true : undefined } as const;
   const nested = (childSchema: FieldSchema, childPath: readonly string[]) => <SchemaFields {...props} schema={childSchema} path={childPath} />;
   const custom = readOnly ? undefined : props.renderField?.({ name, schema, path, value, label, widget: stringFieldWidget(schema, props.widget), setValue });
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+      <label id={labelId} htmlFor={id} className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
         {label}
         {required && !readOnly ? <span className="text-destructive">*</span> : null}
       </label>
-      {description ? <p className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
+      {description ? <p id={descriptionId} className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
       {custom !== undefined ? custom : readOnly ? (
         <p
+          {...control}
           role="textbox"
           aria-readonly="true"
           className="flex min-h-9 cursor-not-allowed items-center justify-between gap-3 rounded-lg border border-transparent bg-muted px-3 py-2 text-sm text-muted-foreground"
@@ -140,9 +147,10 @@ function SchemaField(props: SchemaFieldsProps & {
         <Select
           // a required field has no empty choice unless null is one of its values: it starts unchosen and the person picks one
           value={stringForInput(value) || (required && !nullable ? "" : "__empty__")}
-          onValueChange={(next) => setValue(next === "__empty__" ? "" : next)}
+          // the option's declared value, so a number stays a number
+          onValueChange={(next) => setValue(next === "__empty__" ? cleared : optionValue(schema, next))}
         >
-          <SelectTrigger className="w-full" aria-label={label}>
+          <SelectTrigger {...control} className="w-full" aria-label={label}>
             <SelectValue placeholder={labels.chooseOption} />
           </SelectTrigger>
           <SelectContent>
@@ -156,15 +164,16 @@ function SchemaField(props: SchemaFieldsProps & {
         </Select>
       ) : type === "boolean" ? (
         <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <Checkbox checked={Boolean(value)} onCheckedChange={(checked) => setValue(checked === true)} />
+          <Checkbox {...control} aria-labelledby={labelId} checked={Boolean(value)} onCheckedChange={(checked) => setValue(checked === true)} />
           {labels.boolean}
         </label>
       ) : type === "number" || type === "integer" ? (
         <div className="space-y-1">
           {timestampHint(schema) ? (
-            <DateTimePicker label={label} labels={labels} value={value} onChange={(date) => setValue(date?.getTime() ?? null)} />
+            <DateTimePicker control={control} label={label} labels={labels} value={value} onChange={(date) => setValue(date?.getTime() ?? cleared)} />
           ) : (
             <Input
+              {...control}
               type="number"
               aria-label={label}
               value={numberForInput(value)}
@@ -172,7 +181,7 @@ function SchemaField(props: SchemaFieldsProps & {
               max={schema.maximum}
               onChange={(event) => {
                 const raw = event.target.value;
-                setValue(raw === "" ? null : Number(raw));
+                setValue(raw === "" ? cleared : Number(raw));
               }}
             />
           )}
@@ -186,21 +195,23 @@ function SchemaField(props: SchemaFieldsProps & {
         <ArrayField schema={schema} value={Array.isArray(value) ? value : []} path={path} labels={labels}
           setArray={(next) => setValue(next)} nested={nested} />
       ) : (
-        <StringFieldControl schema={schema} widget={props.widget} value={value} label={label} labels={labels} onChange={setValue} />
+        <StringFieldControl control={control} schema={schema} widget={props.widget} value={value} label={label} labels={labels} onChange={setValue} />
       )}
     </div>
   );
 }
 
-function DateTimePicker({ label, labels, value, onChange }: {
-  label: string; labels: FieldLabels; value: unknown; onChange: (date: Date | undefined) => void;
+type Control = { readonly id: string; readonly "aria-describedby": string | undefined; readonly "aria-required": true | undefined };
+
+function DateTimePicker({ control, label, labels, value, onChange }: {
+  control?: Control; label: string; labels: FieldLabels; value: unknown; onChange: (date: Date | undefined) => void;
 }): React.ReactElement {
   const selected = dateFromFieldValue(value);
   const timeId = React.useId();
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" className="w-full justify-start font-normal" aria-label={label}>
+        <Button {...control} type="button" variant="outline" className="w-full justify-start font-normal" aria-label={label}>
           <CalendarIcon />
           {selected ? formatTimestampMs(selected.getTime()) : labels.dateTimeSelect}
         </Button>
@@ -310,14 +321,14 @@ function JsonEditor({ value, onChange }: { value: unknown; onChange: (value: unk
 }
 
 /** Markdown and HTML need a host's editor (`renderField`); without one they are a plain textarea. */
-function StringFieldControl({ schema, widget, value, label, labels, onChange }: {
-  schema: FieldSchema; widget: "textarea" | null; value: unknown; label: string; labels: FieldLabels; onChange: (next: unknown) => void;
+function StringFieldControl({ control, schema, widget, value, label, labels, onChange }: {
+  control: Control; schema: FieldSchema; widget: "textarea" | null; value: unknown; label: string; labels: FieldLabels; onChange: (next: unknown) => void;
 }): React.ReactElement {
   const kind = stringFieldWidget(schema, widget);
   const text = stringForInput(value);
-  if (kind !== "input") return <Textarea aria-label={label} className="min-h-24" value={text} maxLength={schema.maxLength} onChange={(event) => onChange(event.target.value)} />;
-  if (schema.format === "date-time") return <DateTimePicker label={label} labels={labels} value={value} onChange={(date) => onChange(date?.toISOString() ?? "")} />;
-  return <Input type="text" aria-label={label} value={text} onChange={(event) => onChange(event.target.value)} />;
+  if (kind !== "input") return <Textarea {...control} aria-label={label} className="min-h-24" value={text} maxLength={schema.maxLength} onChange={(event) => onChange(event.target.value)} />;
+  if (schema.format === "date-time") return <DateTimePicker control={control} label={label} labels={labels} value={value} onChange={(date) => onChange(date?.toISOString() ?? "")} />;
+  return <Input {...control} type="text" aria-label={label} value={text} onChange={(event) => onChange(event.target.value)} />;
 }
 
 /** The string widget a field asks for: its `x-mcp-hint`, else the uiSchema widget, else an input. */
@@ -398,4 +409,24 @@ function writePath(root: Readonly<Record<string, unknown>>, path: readonly strin
   if (Array.isArray(current)) current[Number(last)] = value;
   else if (typeof current === "object" && current !== null) (current as Record<string, unknown>)[last] = value;
   return clone;
+}
+
+/** The edits a SchemaFields change makes: it hands back a cloned value, and only fields that really changed are edits, so
+ *  untouched fields keep following a newer review. */
+export function applyFieldEdits(controller: { edit(field: string, value: unknown): void }, before: Readonly<Record<string, unknown>>, next: Readonly<Record<string, unknown>>): void {
+  for (const [field, value] of Object.entries(next)) {
+    if (JSON.stringify(before[field]) !== JSON.stringify(value)) controller.edit(field, value);
+  }
+}
+
+const isNullable = (schema: FieldSchema) => schema.nullable === true || (schema.enum ?? []).includes(null) || [schema.type].flat().includes("null");
+
+/** A cleared field: null where null is one of its values, else left out of the input. */
+export function clearedValue(schema: FieldSchema): null | undefined {
+  return isNullable(schema) ? null : undefined;
+}
+
+/** A chosen option as the field declares it: a Select hands back text, so `2` of `enum: [1, 2]` is the number again. */
+export function optionValue(schema: FieldSchema, chosen: string): unknown {
+  return schema.enum?.find((v) => v !== null && String(v) === chosen) ?? chosen;
 }

@@ -58,3 +58,34 @@ describe("SchemaFields labels", () => {
     expect(html).toContain("Created");
   });
 });
+
+describe("SchemaFields values and access", () => {
+  it("keeps an option's declared type, and clears to null only where null is a value", async () => {
+    const { clearedValue, optionValue } = await import("../src/react/fields.js");
+    expect(optionValue({ type: "integer", enum: [1, 2, 3] }, "2")).toBe(2);
+    expect(optionValue({ type: "string", oneOf: [{ const: "a" }] }, "a")).toBe("a");
+    expect(clearedValue({ type: "integer" })).toBeUndefined();
+    expect(clearedValue({ type: ["integer", "null"] })).toBeNull();
+    expect(clearedValue({ type: "string", enum: ["a", null] })).toBeNull();
+  });
+
+  it("shows a readOnly property read-only, and links each label to its control and description", () => {
+    const html = renderToStaticMarkup(<SchemaFields schema={{ type: "object", required: ["note"], properties: { locked: { type: "string", readOnly: true }, note: { type: "string", description: "Why" } } }} value={{ locked: "x" }} onChange={() => {}} language="en" />);
+    expect(html).toMatch(/role="textbox" aria-readonly="true"/);
+    const id = /<label id="([^"]+)-label" for="\1"[^>]*>Note/.exec(html)?.[1];
+    expect(id).toBeTruthy();
+    expect(html).toContain(`id="${id}" aria-describedby="${id}-description" aria-required="true"`);
+  });
+});
+
+describe("resolveLocalizedText", () => {
+  it("finds a region's language, ignores case, then the canonical language, then English, then the first", async () => {
+    const { resolveLocalizedText } = await import("../src/react/values.js");
+    const t = { "zh-TW": "品項", en: "Item" };
+    expect(resolveLocalizedText(t, "en-US")).toBe("Item");
+    expect(resolveLocalizedText(t, "zh-tw")).toBe("品項");
+    expect(resolveLocalizedText(t, "fr")).toBe("Item");
+    expect(resolveLocalizedText({ "zh-TW": "品項", ja: "品目" }, "fr", "ja")).toBe("品目");
+    expect(resolveLocalizedText({ "zh-TW": "品項" }, "fr")).toBe("品項");
+  });
+});

@@ -11,6 +11,8 @@ export interface AppRowAction {
   readonly capability: string;
   readonly title?: LocalizedText;
   readonly inputSchema: JsonSchema;
+  /** The Procedure's `uiSchema` (a field's `widget`), as Admin's form reads it. */
+  readonly uiSchema?: Readonly<Record<string, unknown>>;
   readonly bind: readonly { readonly input: string; readonly field: "id" }[];
   readonly version?: string;
   readonly mutates: true;
@@ -65,7 +67,7 @@ export function appCatalog(plan: RuntimePlan, surface: "public" | "staff"): AppC
   for (const t of tools) {
     const p = t.kind === "procedure" ? plan.procedures[t.source]! : undefined;
     if (!p?.target) continue;
-    actions[t.name] = { capability: t.name, ...(p.title !== undefined ? { title: p.title } : {}), inputSchema: p.input, bind: [{ input: p.target.id, field: "id" }], ...(p.target.version ? { version: p.target.version } : {}), mutates: true };
+    actions[t.name] = { capability: t.name, ...(p.title !== undefined ? { title: p.title } : {}), inputSchema: p.input, ...(p.uiSchema ? { uiSchema: p.uiSchema } : {}), bind: [{ input: p.target.id, field: "id" }], ...(p.target.version ? { version: p.target.version } : {}), mutates: true };
     const key = p.target.schema.toLowerCase();
     targets.set(key, [...(targets.get(key) ?? []), t.name]);
   }

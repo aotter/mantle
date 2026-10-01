@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createInteractionController, type InteractionController } from "../controller/index.js";
 import { OperationPanel } from "../react/components.js";
-import { SchemaForm, schemaText } from "../react/schema-form.js";
+import { SchemaFields, applyFieldEdits } from "../react/fields.js";
 import { useInteraction } from "../react/use-interaction.js";
-import { propertyLabel, renderDataValue, resolveLocalizedText } from "../react/values.js";
+import { nativeTimestamp, propertyLabel, renderDataValue, resolveLocalizedText, withNativeSchema, type FieldSchema } from "../react/values.js";
 import {
   actionsFor,
   diagnosticsOf,
@@ -22,6 +22,12 @@ import {
 import { appLabels, type AppLabels } from "./locale.js";
 
 type Row = Readonly<Record<string, unknown>>;
+
+/** A View column's label: its field's title in the host's language, the entry's own timestamps in the App's, else the name humanized, as Admin. */
+function columnLabel(name: string, schema: FieldSchema | undefined, language: string, labels: AppLabels): string {
+  const native = nativeTimestamp(name);
+  return resolveLocalizedText(schema?.title, language) == null && native ? labels[native] : propertyLabel(name, schema, language);
+}
 
 /**
  * The Mantle MCP App: a View tool's rows as Admin shows them, and one row action at a time through the shared controller.
@@ -106,8 +112,8 @@ export function MantleApp(props: {
               <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
                 {columns.map((field) => (
                   <div key={field} className="contents">
-                    <dt className="text-muted-foreground">{propertyLabel(field, view.columns[field], language)}</dt>
-                    <dd className="break-words">{renderDataValue(view.columns[field], row[field], language)}</dd>
+                    <dt className="text-muted-foreground">{columnLabel(field, view.columns[field], language, labels)}</dt>
+                    <dd className="break-words">{renderDataValue(withNativeSchema(field, view.columns[field]), row[field], language)}</dd>
                   </div>
                 ))}
               </dl>
@@ -214,19 +220,37 @@ function RowActionPanel(props: {
     }
     props.onClose();
   };
-  const properties = action.inputSchema.properties ?? {};
-  const fieldLabel = (field: string) => schemaText(properties[field]?.title, props.locale) ?? field;
+  const language = props.locale ?? "en";
+  const properties = (action.inputSchema.properties ?? {}) as Readonly<Record<string, FieldSchema>>;
+  // a Procedure's inputs are its own: a field named created_at is not the entry's timestamp
+  const fieldLabel = (field: string) => propertyLabel(field, properties[field], language);
+  const fieldValue = (field: string, value: unknown) => renderDataValue(properties[field], value, language);
+  const hidden = hiddenInputs(action);
+  const visible = Object.keys(properties).some((name) => !hidden.includes(name));
   return (
-    <div className="p-3">
+    // room for a Select's list or the date picker, which open over the panel inside the host's frame
+    <div className="min-h-[28rem] p-3">
       <OperationPanel
         controller={controller}
-        title={resolveLocalizedText(action.title, props.locale ?? "en") ?? action.capability}
+        title={resolveLocalizedText(action.title, language) ?? action.capability}
         labels={props.labels.interaction}
         fieldLabel={fieldLabel}
+        fieldValue={fieldValue}
         onClose={close}
         onCancel={close}
       >
-        <SchemaForm schema={action.inputSchema} controller={controller} state={state} hidden={hiddenInputs(action)} language={props.locale} />
+        {/* Admin's own form: option titles, money and date previews, a field's widget from the Procedure's uiSchema */}
+        {visible ? (
+          <SchemaFields
+            schema={action.inputSchema as FieldSchema}
+            uiSchema={action.uiSchema ?? null}
+            value={state.draft}
+            onChange={(next) => applyFieldEdits(controller, state.draft, next)}
+            language={language}
+            hiddenRootFields={hidden}
+            labels={props.labels.fields}
+          />
+        ) : null}
       </OperationPanel>
     </div>
   );

@@ -1,8 +1,14 @@
+import type { FieldLabels } from "../react/fields.js";
 import type { InteractionLabels } from "../react/labels.js";
 
 /** Strings the App renders around the shared components. */
 export interface AppLabels {
   readonly interaction: InteractionLabels;
+  /** The form's own strings, as Admin's. */
+  readonly fields: FieldLabels;
+  /** The entry's own timestamps, which no Schema titles. */
+  readonly created: string;
+  readonly updated: string;
   readonly waiting: string;
   readonly nothing: string;
   readonly viewFailed: string;
@@ -12,6 +18,9 @@ export interface AppLabels {
 
 const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
   "en": {
+    fields: { emptyOption: "No value", chooseOption: "Choose…", boolean: "Enabled", dateTimeSelect: "Select date and time", dateTimeTime: "Time", removeItem: "Remove item", addItem: "Add item" },
+    created: "Created",
+    updated: "Updated",
     interaction: {
       submit: "Run",
       submitting: "Running…",
@@ -48,6 +57,9 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     refreshFailed: "The list could not be refreshed. It may be out of date.",
   },
   "zh-TW": {
+    fields: { emptyOption: "無值", chooseOption: "請選擇…", boolean: "啟用", dateTimeSelect: "選擇日期與時間", dateTimeTime: "時間", removeItem: "移除項目", addItem: "新增項目" },
+    created: "建立時間",
+    updated: "更新時間",
     interaction: {
       submit: "執行",
       submitting: "執行中…",
@@ -84,6 +96,9 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     refreshFailed: "無法重新整理清單，內容可能不是最新的。",
   },
   "zh-CN": {
+    fields: { emptyOption: "无值", chooseOption: "请选择…", boolean: "启用", dateTimeSelect: "选择日期与时间", dateTimeTime: "时间", removeItem: "移除项目", addItem: "新增项目" },
+    created: "创建时间",
+    updated: "更新时间",
     interaction: {
       submit: "执行",
       submitting: "执行中…",

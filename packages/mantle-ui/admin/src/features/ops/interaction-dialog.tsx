@@ -6,7 +6,7 @@ import {
   type InteractionController,
   type InteractionLabels,
 } from "@aotter/mantle-ui";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@aotter/mantle-ui/kit";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, applyFieldEdits } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { propertyLabel } from "../../lib/field-label";
@@ -215,7 +215,7 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
           uiSchema={operation.uiSchema}
           value={state.draft}
           path={[]}
-          onChange={(next) => applyEdits(controller, state.draft, next)}
+          onChange={(next) => applyFieldEdits(controller, state.draft, next)}
           language={language}
           canonical={canonical}
           collectionName={operation.name}
@@ -226,10 +226,3 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
   );
 }
 
-/** SchemaFields hands back a cloned value object; only fields that really
- *  changed are edits, so untouched fields keep following a newer review. */
-function applyEdits(controller: InteractionController, before: Readonly<Record<string, unknown>>, next: Record<string, unknown>): void {
-  for (const [field, value] of Object.entries(next)) {
-    if (JSON.stringify(before[field]) !== JSON.stringify(value)) controller.edit(field, value);
-  }
-}
