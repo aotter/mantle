@@ -16,7 +16,7 @@ release gate runs (`scripts/check-worker-consumer.mjs`).
   preset `mantle generate` wrote once. These files are the application's own.
 - `smoke.mjs`: starts `wrangler dev` on a fresh local D1 and drives the service:
   - console email-OTP sign-in for an owner and a buyer;
-  - REST, both MCP surfaces, Admin's API and the cron;
+  - REST, both MCP surfaces, the cron, and Admin: the console from `@aotter/mantle-ui/admin` at `/admin`, its API, and an editor's save;
   - asserts scope, the stock check, locks and hooks.
 
 Outside the SDK workspace, with Node 22+ and pnpm 9+, pin every dependency to
@@ -26,7 +26,7 @@ one exact version, then:
 pnpm install
 pnpm check                      # generate, generate --check, typecheck, smoke
 cp .dev.vars.example .dev.vars  # set ADMIN_EMAIL and a random BETTER_AUTH_SECRET
-pnpm dev                        # sign-in codes are printed to this log
+pnpm dev                        # open /admin; sign-in codes are printed to this log
 ```
 
 The release gate installs the exact tarballs it just packed in place of the

@@ -15,7 +15,7 @@ No task implicitly authorizes publication; no manual package/tag writer exists.
 |---|---|---|
 | Reviewed source; unused version | Core source/packed-consumer gates, then immutable Core tag | Exact canonical merged PR SHA and version required |
 | Tag exists; registry candidates partial | Existing npm/GPR publication steps | Verify existing artifact identity; publish missing versions only |
-| Tag exists and all three npmjs packages already exist | Metadata verify, then channel promote and the GitHub release | Skip pack and immutable tarball compare. The controller tip must not rebuild published artifact identity. npm integrity metadata still has to be `sha512`. The public-registry Worker gate stays skipped |
+| Tag exists and both npmjs packages already exist | Metadata verify, then channel promote and the GitHub release | Skip pack and immutable tarball compare. The controller tip must not rebuild published artifact identity. npm integrity metadata still has to be `sha512`. The public-registry Worker gate stays skipped |
 | Tag exists on an ancestor of the dispatched tip; tip package versions still match | Resolve binds release identity to the tag SHA; later steps stay the existing writers | Controller-only recovery. Do not retag. The canonical merged-PR check uses the tag SHA. Fail when the tip version differs or the tag commit is not an ancestor |
 | Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels and `mantle-release` unchanged |
 | Consumer passes | That registry's promote step: monotonic channel add for every package | Same version is a no-op; older runs cannot move a channel backward. Public channels are only `alpha`, `beta`, `rc`, and `latest`. `mantle-release` is never removed |
@@ -134,12 +134,11 @@ dist-tag DELETE only added failure and re-run state, and Actions
    stable, continue with the promotion below. The controller refuses an
    untagged source that is no longer the expected branch tip.
 
-The three public packages, in dependency order (0.2.0 folded the other eleven
-into `@aotter/mantle`'s subpaths, ADR-0032 decision 13):
+The two public packages, in dependency order (0.2.0 folded the other twelve
+into `@aotter/mantle`'s subpaths and `@aotter/mantle-ui/admin`, ADR-0032 decision 13):
 
 1. @aotter/mantle-ui
-2. @aotter/mantle-admin-ui
-3. @aotter/mantle
+2. @aotter/mantle
 
 A `0.2.0-alpha.N` publishes on the same `alpha` channel as every alpha: the
 controller owns channels, so `publishConfig.tag` never picks one. Promoting it
@@ -215,7 +214,7 @@ tag/release and mirrors GitHub Packages. No cross-repository fanout token is
 needed. Before tagging, verify credentials and new-version absence on both
 registries. Existing artifacts on retry must have matching integrity.
 
-Completion requires the Core tag SHA, all three npmjs/GPR packages, exact
+Completion requires the Core tag SHA, both npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
 correct channel tags, and the GitHub release. Leftover `mantle-release`
 pointing at the last published candidate is expected. Retain run links and
@@ -237,7 +236,7 @@ from the source branch. Resolve recovers using the existing tag SHA when
 that commit is an ancestor of the tip and package versions on the tip still
 match. The tag owns the release SHA; the tip only carries controller fixes.
 Tagged recovery skips the Core source check because that tree was already
-released from the immutable tag. When `tag_exists` and all three npmjs
+released from the immutable tag. When `tag_exists` and both npmjs
 packages already exist at that version, that same existence check skips
 packing, immutable tarball comparison, and the public-registry Worker gate.
 The controller tip must not rebuild an artifact whose identity is already

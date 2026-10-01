@@ -73,7 +73,7 @@ describe("site", () => {
       .toMatchObject({ brand: "AotterMantle", publicUrl: "http://admin.test", mcpEndpoints: { public: null, staff: null }, media: { purposes: [] } });
   });
 
-  it("site-settings is the owner's, checks each field's type and length, and does not exist without the capability", async () => {
+  it("site-settings is the owner's, checks each field's type and length, and is 501 SITE_NOT_CONFIGURED without the capability", async () => {
     expect((await call("GET", "/admin/api/site-settings", editor)).body).toMatchObject({ minimumRole: "owner" });
     expect((await call("PATCH", "/admin/api/site-settings", editor, { title: "x" })).status).toBe(403);
     expect((await call("GET", "/admin/api/site-settings", owner)).body).toEqual({ brand: "Acme", title: "Acme News", description: "" });
@@ -84,7 +84,11 @@ describe("site", () => {
     expect((await call("PATCH", "/admin/api/site-settings", owner, { title: "Acme Daily", description: "d".repeat(1000), origin: "https://evil.test" })).body)
       .toEqual({ brand: "Acme", title: "Acme Daily", description: "d".repeat(1000) });
     expect((await call("GET", "/admin/api/site", owner)).body).toMatchObject({ title: "Acme Daily", publicUrl: "https://acme.test" });
-    expect((await call("GET", "/admin/api/site-settings", owner, undefined, { runtime: bare })).status).toBe(404);
+    // without the site tables: 501 with what is missing, which Admin's Settings page shows
+    for (const [method, body] of [["GET", undefined], ["PATCH", { title: "x" }]] as const) {
+      const r = await call(method, "/admin/api/site-settings", owner, body, { runtime: bare });
+      expect([r.status, r.body.error.code]).toEqual([501, "SITE_NOT_CONFIGURED"]);
+    }
   });
 
   it("a stored origin that is not a URL does not take /site down: the request origin stands in", async () => {

@@ -110,14 +110,23 @@ importers:
         specifier: 4.126.0
         version: 4.126.0(@cloudflare/workers-types@5.20260904.1)(@types/node@26.1.1)
 
-  packages/mantle-admin-ui:
-    dependencies:
-      '@aotter/mantle-ui':
+  packages/mantle-ui:
+    devDependencies:
+      '@aotter/mantle':
         specifier: workspace:*
-        version: link:../mantle-ui
+        version: link:../mantle
       '@dagrejs/dagre':
         specifier: ^3.1.1
         version: 3.1.1
+      '@modelcontextprotocol/client':
+        specifier: 2.1.0
+        version: 2.1.0
+      '@modelcontextprotocol/ext-apps':
+        specifier: 2.0.0
+        version: 2.0.0(@modelcontextprotocol/client@2.1.0)(@modelcontextprotocol/core@2.1.0)(@modelcontextprotocol/server@2.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@3.25.76)
+      '@tailwindcss/vite':
+        specifier: ^4.3.3
+        version: 4.3.3(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
       '@tanstack/react-query':
         specifier: ^5.102.8
         version: 5.102.8(react@19.2.8)
@@ -127,6 +136,18 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^3.31.3
         version: 3.31.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.1.1
+      '@types/react':
+        specifier: ^19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.2.7
+        version: 19.2.7(@types/react@19.2.18)
+      '@vitejs/plugin-react':
+        specifier: ^6.1.1
+        version: 6.1.1(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
       '@xyflow/react':
         specifier: ^12.11.6
         version: 12.11.6(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -145,6 +166,9 @@ importers:
       lucide-react:
         specifier: ^1.41.0
         version: 1.41.0(react@19.2.8)
+      playwright:
+        specifier: 'catalog:'
+        version: 1.62.1
       radix-ui:
         specifier: ^1.6.7
         version: 1.6.7(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -166,100 +190,6 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
-      sonner:
-        specifier: ^2.0.8
-        version: 2.0.8(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      tailwind-merge:
-        specifier: ^3.6.0
-        version: 3.6.0
-    devDependencies:
-      '@aotter/mantle':
-        specifier: workspace:*
-        version: link:../mantle
-      '@modelcontextprotocol/client':
-        specifier: 2.1.0
-        version: 2.1.0
-      '@tailwindcss/vite':
-        specifier: ^4.3.3
-        version: 4.3.3(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
-      '@types/react':
-        specifier: ^19.2.18
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: ^19.2.7
-        version: 19.2.7(@types/react@19.2.18)
-      '@vitejs/plugin-react':
-        specifier: ^6.1.1
-        version: 6.1.1(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
-      playwright:
-        specifier: 'catalog:'
-        version: 1.62.1
-      shadcn:
-        specifier: ^4.19.1
-        version: 4.19.1(typescript@6.0.3)
-      tailwindcss:
-        specifier: ^4.3.3
-        version: 4.3.3
-      tw-animate-css:
-        specifier: ^1.4.0
-        version: 1.4.0
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vite:
-        specifier: ^8.2.2
-        version: 8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.11(@types/node@26.1.1)(@vitest/browser-playwright@4.1.11)(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/mantle-ui:
-    devDependencies:
-      '@modelcontextprotocol/client':
-        specifier: 2.1.0
-        version: 2.1.0
-      '@modelcontextprotocol/ext-apps':
-        specifier: 2.0.0
-        version: 2.0.0(@modelcontextprotocol/client@2.1.0)(@modelcontextprotocol/core@2.1.0)(@modelcontextprotocol/server@2.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.5.4)
-      '@tailwindcss/vite':
-        specifier: ^4.3.3
-        version: 4.3.3(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.1.1
-      '@types/react':
-        specifier: ^19.2.18
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: ^19.2.7
-        version: 19.2.7(@types/react@19.2.18)
-      '@vitejs/plugin-react':
-        specifier: ^6.1.1
-        version: 6.1.1(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
-      class-variance-authority:
-        specifier: ^0.7.1
-        version: 0.7.1
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      input-otp:
-        specifier: ^1.5.0
-        version: 1.5.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      lucide-react:
-        specifier: ^1.41.0
-        version: 1.41.0(react@19.2.8)
-      radix-ui:
-        specifier: ^1.6.7
-        version: 1.6.7(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      react:
-        specifier: ^19.2.8
-        version: 19.2.8
-      react-day-picker:
-        specifier: ^10.0.1
-        version: 10.0.1(@types/react@19.2.18)(react@19.2.8)
-      react-dom:
-        specifier: ^19.2.8
-        version: 19.2.8(react@19.2.8)
       shadcn:
         specifier: ^4.19.1
         version: 4.19.1(typescript@6.0.3)
@@ -4929,6 +4859,17 @@ snapshots:
   '@modelcontextprotocol/core@2.1.0':
     dependencies:
       zod: 4.5.4
+
+  '@modelcontextprotocol/ext-apps@2.0.0(@modelcontextprotocol/client@2.1.0)(@modelcontextprotocol/core@2.1.0)(@modelcontextprotocol/server@2.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@3.25.76)':
+    dependencies:
+      '@modelcontextprotocol/client': 2.1.0
+      '@modelcontextprotocol/core': 2.1.0
+      '@standard-schema/spec': 1.1.0
+      zod: 3.25.76
+    optionalDependencies:
+      '@modelcontextprotocol/server': 2.1.0
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
 
   '@modelcontextprotocol/ext-apps@2.0.0(@modelcontextprotocol/client@2.1.0)(@modelcontextprotocol/core@2.1.0)(@modelcontextprotocol/server@2.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.5.4)':
     dependencies:

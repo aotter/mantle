@@ -30,7 +30,7 @@ For package README or package-local docs changes, prefer the package area label 
 | `area:spec` | `packages/mantle-spec`, manifest parsing, validation, diagnostics, CLI, spec types. |
 | `area:cf` | `packages/adapters/cloudflare`, Workers adapter, D1/KV/ASSETS wiring, Cloudflare deploy behavior. |
 | `area:skills` | `skills/*` agent briefs and install/extend/provision workflows. |
-| `area:admin-ui` | `packages/mantle-admin-ui` React admin SPA. |
+| `area:admin-ui` | `packages/mantle-ui/admin` React admin SPA. |
 | `area:docs` | Repo-wide human docs, governance docs, ADR text, release docs, root README content, and cross-cutting documentation work. |
 | `area:adapter` | Adapter boundary work spanning Cloudflare or future adapters. |
 | `area:ci` | GitHub Actions, dependency automation, and repository checks. |

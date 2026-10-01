@@ -31,8 +31,7 @@ The package topology is:
 | Package | Responsibility |
 |---|---|
 | `@aotter/mantle` | One package, one folder of `src/` per subpath (ADR-0032 decision 13): Core (`.`), the grammar and compiler (`/spec`), the D1 dialect (`/d1`, `/d1/compile`), Cloudflare bindings (`/cloudflare`), Auth, Admin, MCP and REST surfaces (`/auth`, `/admin`, `/mcp`, `/web`), the dialect compliance suite (`/testing`) and the `mantle` CLI. `check:boundaries` enforces what each folder may import. |
-| `@aotter/mantle-ui` | Optional shared UI (ADR-0029): the framework-free interaction controller (`/controller`), React interaction components (`/`), the UI kit (`/kit`, libraries as optional peers) and the MCP App (`/mcp-app`). Admin and MCP Apps both use it. |
-| `@aotter/mantle-admin-ui` | Optional pre-built Admin SPA; it folds into `@aotter/mantle-ui/admin`. |
+| `@aotter/mantle-ui` | The Admin console (`/admin`: built static files the preset binds) and optional shared UI (ADR-0029): the framework-free interaction controller (`/controller`), React interaction components (`/`), the UI kit (`/kit`, libraries as optional peers) and the MCP App (`/mcp-app`). Admin and MCP Apps both use it. |
 
 `skills/*` are versioned consumer product artifacts. Maintainer instructions
 live at the repository root and in `.agents/skills`; do not merge the two

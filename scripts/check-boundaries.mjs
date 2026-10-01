@@ -77,6 +77,8 @@ function checkNextFolderImports() {
           const target = path[0];
           if (target !== folder && !reach.some((r) => r.split("/").every((part, i) => path[i] === part))) fail(file, `src/${folder} may reach only ${[folder, ...reach].join(", ")}: '${spec}'`);
           else if (folder === "spec" && target === "d1" && !relative(root, file).startsWith(`spec${sep}infrastructure${sep}`)) fail(file, `only the CLI front end (src/spec/infrastructure) may reach src/d1/compile: '${spec}'`);
+          // ADR-0034 decision 3: only Node code compiles SQL; the spec barrel re-exports the compiler, so a Worker bundle would carry libpg-query
+          else if (target === "spec" && !["spec", "cli", "testing"].includes(folder) && (path[1] === "index.ts" || path[1] === "index.js" || path[1] === "infrastructure")) fail(file, `src/${folder} runs in the Worker: import src/spec/domain or src/spec/kernel, not '${spec}', which carries the SQL compiler`);
         } else if (spec.startsWith("node:")) {
           // Workers run a subset of Node: only the CLI is Node, plus the two built-ins workerd provides that auth and the suite use
           if (folder !== "cli" && !(NODE_ALLOWED[folder] ?? []).includes(spec)) fail(file, `src/${folder} may not import '${spec}': only the CLI runs on Node`);
@@ -164,8 +166,8 @@ function checkRepositoryGuidance() {
       fail(contributingPath, `contributor authority is missing '${text}'`);
     }
   }
-  if (!releaseSkill.includes("All three npmjs artifacts")) {
-    fail(releaseSkillPath, "canonical release skill must match the three-package topology");
+  if (!releaseSkill.includes("Both npmjs artifacts")) {
+    fail(releaseSkillPath, "canonical release skill must match the two-package topology");
   }
   if (!claudeRelease.includes("../../../.agents/skills/mantle-release/SKILL.md") ||
       claudeRelease.split("\n").length > 8 ||

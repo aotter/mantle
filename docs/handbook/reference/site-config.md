@@ -14,7 +14,7 @@ storage: (env) => d1Storage(env.DB, {
     description: "A small notebook.",
     origin: "https://notes.example.com",
     locales: ["en", "zh-TW"],
-    icons: [{ src: "/favicon.svg", type: "image/svg+xml" }],
+    icons: [{ src: "/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
     media: { purposes: [{ name: "cover", required: ["primary"], maxBytes: { primary: 2_000_000 } }] },
   },
 }),
@@ -34,7 +34,7 @@ not pass `site`; add it in `src/service.ts`.
 | `title`, `brand`, `description` | operator | written once if the row is missing; after that the database wins, so an owner's edit in Admin is never overwritten by code |
 | `origin` | deployment | synced every boot: the canonical absolute origin, no trailing slash |
 | `locales` | deployment | synced every boot; the first is the canonical locale |
-| `icons` | deployment | synced every boot: `[{ src, type?, sizes?, … }]`, root-relative or absolute HTTPS |
+| `icons` | deployment | synced every boot: `[{ src, mimeType?, sizes?, theme? }]`, root-relative or absolute HTTPS. Without it the defaults are `/admin/favicon.png` and `/admin/favicon.svg`, served with the Admin console |
 | `media.purposes` | deployment | synced every boot: `[{ name, required: [roles], maxBytes: { role: bytes } }]`; `name` is a lowercase slug |
 
 A blank value is skipped, so it never clears a stored one. Boot validates the

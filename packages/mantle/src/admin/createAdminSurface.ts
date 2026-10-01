@@ -10,6 +10,7 @@ import { siteConfigOf } from "../core/siteConfig.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
 import { decodeMemberCursor } from "./consent.js";
 import type { AdminIdentity, MemberUserInfo, StaffUserInfo } from "./identity.js";
+import { developerConsole } from "./developerConsole.js";
 
 /** The built SPA: `path` is relative to the base path (`index.html` is the shell). `null` is a missing file. */
 export type AdminAssets = (path: string) => Response | null | Promise<Response | null>;
@@ -154,7 +155,14 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   };
   const views = (caller: Staff) => Object.entries(plan.views).filter(([, v]) => v.surface === "staff" && sees(v.requires, caller)).map(([name, v]) => {
     const list = (v.uiSchema?.["list"] ?? {}) as Record<string, string[] | undefined>;
-    return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [], searchFields: list["searchFields"] ?? [], filterFields: list["filterFields"] ?? [] } };
+    // `columns`: the output that reads a Schema field unchanged, so Admin labels and formats it as that field; named as the rows and the
+    // JSON Schema name them, not by the plan's lower-cased keys
+    const columns = Object.fromEntries(Object.entries(v.columns ?? {}).map(([k, c]) => {
+      const s = plan.schemas[c.schema]!;
+      const field = s.names?.[c.field] ?? c.field;
+      return [k === c.field ? field : k, { schema: s.name, field }];
+    }));
+    return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [] }, columns };
   });
   // a custom directory may return more than it declares: only the declared fields reach the wire
   const staffInfo = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: StaffUserInfo) => ({ id, email, name, role, githubLogin, emailVerified, createdAt });
@@ -187,29 +195,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       return target ? [[t.name, { path: `${base}/c/${encodeURIComponent(plan.schemas[target.schema.toLowerCase()]?.name ?? target.schema)}`, entry: true }]] : [];
     })),
   } : null;
-  // the program as the plan holds it: Views and inline Procedures are IR, which the console draws (ADR-0034); no run is observed (G7)
-  const developerConsole = {
-    dataModel: {
-      schemas: schemas.map((s) => ({
-        name: s.name, title: s.title ?? s.name, lifecycle: s.publishing ? "publishing" : "operational", localized: s.localized === true, translates: s.translates ?? null,
-        scope: s.scope ?? null, schema: s.schema, uniqueIndexes: s.unique ?? [], indexes: s.indexes ?? [], searchableFields: s.search ?? [],
-      })),
-      views: Object.entries(plan.views).filter(([, v]) => v.surface !== "internal").map(([name, v]) => ({
-        name, title: v.title ?? null, surface: v.surface, input: v.input ?? null, requires: v.requires ?? null, sql: { grammar: v.grammar, stmts: v.stmts },
-      })),
-    },
-    logic: {
-      procedures: Object.entries(plan.procedures).map(([name, p]) => ({
-        name, title: p.title ?? null, description: p.description ?? null, input: p.input, output: p.output, requires: p.requires ?? null, target: p.target ?? null, handler: p.handler,
-      })),
-      triggers: Object.entries(plan.triggers).map(([name, t]) => ({ name, procedure: t.procedure, source: t.source })),
-    },
-    operations: {
-      schedules: Object.entries(plan.triggers).flatMap(([id, { procedure, source }]) => (source.kind === "schedule" ? [{ id, procedure, cron: source.cron, enabled: source.enabled ?? true, registration: "not-observed" }] : [])),
-      ttlPolicies: schemas.filter((s) => s.ttl).map((s) => ({ schema: s.name, field: s.names[s.ttl!] ?? s.ttl, seconds: s.ttlSeconds ?? null, sweepObservation: "unavailable" })),
-      observationAvailability: "unavailable", runs: [], latestRuns: [],
-    },
-  };
+  let developer: ReturnType<typeof developerConsole> | undefined;
 
   // ---- entries: every read and write is the caller's own Store, so a scoped Schema shows the caller's rows only (G2b)
   const schemaOf = (name: unknown) => {
@@ -356,7 +342,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         return json({ error: { code: "STATISTICS_UNAVAILABLE", message: "Statistics are unavailable for this storage adapter." } }, 501, NO_STORE);
       },
     },
-    { method: "GET", path: "/developer-console", role: "owner", run: async () => developerConsole },
+    { method: "GET", path: "/developer-console", role: "owner", run: async () => (developer ??= developerConsole(plan)) },
     { method: "GET", path: "/site", role: "contributor", run: ({ url }) => site(url) },
     // the bytes go straight to the bucket: create, PUT each variant to its uploadUrl, commit
     { method: "POST", path: "/media/uploads", role: "editor", run: async ({ request }) => media().createUpload(await readJsonObject(request, P)) },
@@ -412,7 +398,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         writable(s);
         if (caller.role === "contributor" && !s.publishing) return denied("editor", "Contributors can create drafts, not operational records.");
         const store = runtime.store.as(caller);
-        const [r] = await store.write([{ insert: s.name, values: dataOf(body) }]);
+        const [r] = await store.write([{ insert: s.name, values: Object.fromEntries(Object.entries(dataOf(body)).filter(([, v]) => v !== null)) }]);
         return editor(store, s, await current(store, s, (r as { id: string }).id));
       },
     },
@@ -426,7 +412,9 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         const body = await readJsonObject(request, P);
         const lock = body["expectedVersion"];
         if (typeof lock !== "number" || !Number.isSafeInteger(lock) || lock < 0) throw bad("`expectedVersion` (the version the editor loaded) is required");
-        await store.write([{ update: s.name, set: dataOf(body), where: { id: id! }, lock }]);
+        // the editor sends the whole entry back: a null it read stays as it is, so a draft's empty required field is no write
+        const set = Object.fromEntries(Object.entries(dataOf(body)).filter(([k, v]) => v !== null || row[k] != null));
+        if (Object.keys(set).length) await store.write([{ update: s.name, set, where: { id: id! }, lock }]);
         return editor(store, s, await current(store, s, id!));
       },
     },
@@ -451,9 +439,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       },
     },
   ];
-  const siteStore = runtime.site;
-  if (siteStore) routes.push(
-    { method: "GET", path: "/site-settings", role: "owner", run: async () => settingsOf(await siteStore.read()) },
+  // without the site tables the routes still answer, so Admin's Settings page can say what is missing
+  const siteStore = () => runtime.site ?? (() => { throw wireError("SITE_NOT_CONFIGURED", "Site settings need the site tables: give the storage adapter site defaults (d1Storage(db, { site })).", P); })();
+  routes.push(
+    { method: "GET", path: "/site-settings", role: "owner", run: async () => settingsOf(await siteStore().read()) },
     {
       method: "PATCH", path: "/site-settings", role: "owner", run: async ({ request }) => {
         const body = await readJsonObject(request, P);
@@ -464,7 +453,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
           if (typeof v !== "string" || v.length > max) throw bad(`'${k}' must be a string of at most ${max} characters`);
           values[k] = v;
         }
-        return settingsOf(await siteStore.updateSettings(values as SiteSettings));
+        return settingsOf(await siteStore().updateSettings(values as SiteSettings));
       },
     },
   );
@@ -541,7 +530,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     // an unknown path is a client-side route (`/members/a.b@x.test` too), which the shell answers
     const res = file ?? (rel.startsWith("assets/") ? null : await options.assets("index.html"));
     if (!res) throw wireError("NOT_FOUND", "no such route", P);
-    if (file && rel !== "index.html") return res;
+    // every HTML page is the shell's but the preview, whatever path reached it (`//index.html`, an encoded name)
+    if (file && (rel === "preview.html" || !/^text\/html\b/i.test(res.headers.get("content-type") ?? ""))) return res;
     const headers = new Headers(res.headers);
     // appended, so a policy the asset already carries stays in force
     headers.append("content-security-policy", "frame-ancestors 'none'");

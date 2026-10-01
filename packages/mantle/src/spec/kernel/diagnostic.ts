@@ -124,6 +124,7 @@ export const DIAGNOSTIC_CODES = [
   // Media uploads (runtime-only). Adapter signs presigned PUTs; commit
   // verifies metadata. Codes surface from Create / Commit use cases.
   "MEDIA_NOT_CONFIGURED",
+  "SITE_NOT_CONFIGURED",
   "MEDIA_UPLOAD_EXPIRED",
   "MEDIA_OBJECT_NOT_FOUND",
   "MEDIA_MIME_REJECTED",
@@ -220,6 +221,7 @@ export const HTTP_STATUS_BY_CODE: Readonly<Partial<Record<DiagnosticCode, Runtim
   // includes the failing hook's name for surfacing to the caller.
   LIFECYCLE_HOOK_REJECTED: 409,
   MEDIA_NOT_CONFIGURED: 501,
+  SITE_NOT_CONFIGURED: 501,
   MEDIA_UPLOAD_EXPIRED: 410,
   MEDIA_OBJECT_NOT_FOUND: 409,
   MEDIA_MIME_REJECTED: 400,
