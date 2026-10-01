@@ -80,8 +80,6 @@ export function relationLabel(language: AdminLanguage, kind: DeveloperRelationKi
   if (kind === "view-source") return t(language, "developer.graph.relation.viewSource");
   if (kind === "authorization-guard") return t(language, "developer.graph.relation.guard");
   if (kind === "procedure-schema") return t(language, "developer.graph.relation.procedureSchema");
-  if (kind === "collection-action") return t(language, "developer.graph.relation.collectionAction");
-  if (kind === "input-reference") return t(language, "developer.graph.relation.inputReference");
   if (kind === "trigger-target") return t(language, "developer.graph.relation.triggerTarget");
   return t(language, "developer.graph.relation.lifecycleSource");
 }
@@ -374,7 +372,7 @@ function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: M
   const layout = new dagre.graphlib.Graph({ multigraph: true }).setDefaultEdgeLabel(() => ({}));
   layout.setGraph({ rankdir: "TB", nodesep: gap, ranksep: 80, edgesep: 20 });
   graph.atoms.forEach(({ id }) => layout.setNode(id, { width: nodeWidth, height: nodeHeight }));
-  graph.relations.filter(({ kind }) => ["trigger-target", "procedure-schema", "collection-action", "view-source"].includes(kind)).forEach(({ id, sourceId, targetId }) => layout.setEdge(sourceId, targetId, {}, id));
+  graph.relations.filter(({ kind }) => ["trigger-target", "procedure-schema", "view-source"].includes(kind)).forEach(({ id, sourceId, targetId }) => layout.setEdge(sourceId, targetId, {}, id));
   dagre.layout(layout);
 
   const positions = new Map<string, { x: number; y: number }>();
@@ -418,7 +416,7 @@ function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: M
   };
   const procedureY = surfaceBottom + 64;
   const procedureHeight = pack(graph.atoms.filter(({ kind }) => kind === "Procedure"), procedureY, ["trigger-target"]);
-  pack(graph.atoms.filter(({ kind }) => kind === "Schema"), procedureY + procedureHeight + 48, ["procedure-schema", "collection-action", "view-source"]);
+  pack(graph.atoms.filter(({ kind }) => kind === "Schema"), procedureY + procedureHeight + 48, ["procedure-schema", "view-source"]);
   return { positions, groups };
 }
 
@@ -444,7 +442,7 @@ export function focusSlice(graph: DeveloperConsoleSnapshot["graph"], selectedId:
     direct.filter(({ kind }) => kind === "view-source").forEach((relation) => add(relation));
   } else if (selectedKind === "Schema") {
     direct.filter(({ sourceId, kind }) => sourceId === selectedId && ["schema-reference", "translation-parent"].includes(kind)).forEach((relation) => add(relation));
-    const upstream = direct.filter(({ targetId, kind }) => targetId === selectedId && ["procedure-schema", "input-reference", "lifecycle-source"].includes(kind));
+    const upstream = direct.filter(({ targetId, kind }) => targetId === selectedId && ["procedure-schema", "lifecycle-source"].includes(kind));
     upstream.forEach((relation) => add(relation));
     const procedureIds = new Set(upstream.filter(({ sourceId }) => sourceId.startsWith("Procedure:")).map(({ sourceId }) => sourceId));
     graph.relations.filter(({ targetId, kind }) => procedureIds.has(targetId) && kind === "trigger-target").forEach((relation) => add(relation));
@@ -462,7 +460,7 @@ export function traceAtomIds(graph: DeveloperConsoleSnapshot["graph"], nodeIds: 
 }
 
 function relationOpacity(kind: DeveloperRelationKind): number {
-  return ["schema-reference", "translation-parent", "input-reference", "authorization-guard"].includes(kind) ? 0.12 : 0.58;
+  return ["schema-reference", "translation-parent", "authorization-guard"].includes(kind) ? 0.12 : 0.58;
 }
 
 function GraphHud({ atom, graph, atomsById, traceAtoms, onClose, onSelect, onOpen }: { atom: DeveloperAtom; graph: DeveloperConsoleSnapshot["graph"]; atomsById: ReadonlyMap<string, DeveloperAtom>; traceAtoms: readonly DeveloperAtom[]; onClose: () => void; onSelect: (id: string) => void; onOpen: (atom: DeveloperAtom) => void }): React.ReactElement {

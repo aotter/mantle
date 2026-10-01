@@ -56,9 +56,16 @@ export function validateValues(def: StoreSchema, values: Readonly<Record<string,
     const required = (def.schema.required ?? []).filter((f) => f.toLowerCase() !== def.scope);
     zods.set(def, (z = { full: jsonSchemaToZod({ ...def.schema, required }), partial: jsonSchemaToZod({ ...def.schema, required: [] }) }));
   }
+  // a column is named in any case: checked under the name its JSON Schema declares, once
+  const named: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(values)) {
+    const name = def.names?.[k.toLowerCase()] ?? k;
+    if (Object.hasOwn(named, name)) throw invalid(`The values name '${name}' twice.`);
+    named[name] = v;
+  }
   // null clears a field the Schema does not require: it is stored as NULL and read back as null, so it is checked as absent
   const required = new Set(def.schema.required ?? []);
-  const r = z[mode].safeParse(Object.fromEntries(Object.entries(values).filter(([k, v]) => v !== null || required.has(k))));
+  const r = z[mode].safeParse(Object.fromEntries(Object.entries(named).filter(([k, v]) => v !== null || required.has(k))));
   if (r.success) return;
   const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
   throw invalid(`The values do not match the Schema${instancePath ? ` at ${instancePath}` : ""}: ${message}`);
@@ -238,6 +245,7 @@ export class StoreJson {
       let onConflictClause: N | undefined;
       if (conflict === "ignore") onConflictClause = { action: "ONCONFLICT_NOTHING" };
       else if (conflict) {
+        validateValues(def, conflict.update, "partial");
         const set = Object.entries(conflict.update).map(([k, v]) => { const c = this.column(def, k, "onConflict.update", false); return target(v === null ? { A_Const: { isnull: true } } : this.val(c.type, v, `'${c.out}'`), c.col); });
         onConflictClause = { action: "ONCONFLICT_UPDATE",
           infer: { indexElems: conflict.columns.map((k) => ({ IndexElem: { name: this.column(def, k, "onConflict.columns", true).col, ordering: "SORTBY_DEFAULT", nulls_ordering: "SORTBY_NULLS_DEFAULT" } })) },

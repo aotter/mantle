@@ -104,6 +104,15 @@ const create = async (collection: string, data: Record<string, unknown>, caller:
 const at = (id: string, collection: string, suffix = "") => `/admin/api/entries/${id}${suffix}?collection=${collection}`;
 
 describe("Admin entries: role rules", () => {
+  it("an incomplete draft saves whole: the editor sends its read-back nulls, and a null it read stays as it is", async () => {
+    const draft = await create("articles", { slug: "half", title: null, body: null, rank: null });
+    const loaded = (await call("GET", at(draft.id, "articles"), editor)).body.entry;
+    const saved = await call("PATCH", at(draft.id, "articles"), editor, { data: { ...loaded.data, body: "now with a body" }, expectedVersion: loaded.version });
+    expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+    expect(saved.body.entry.data).toMatchObject({ slug: "half", title: null, body: "now with a body" });
+    // a required field the entry has stays refused as null
+    expect((await call("PATCH", at(draft.id, "articles"), editor, { data: { body: null }, expectedVersion: saved.body.entry.version })).status).toBe(400);
+  });
   it("a contributor creates and edits drafts of a publishing Schema, and nothing else", async () => {
     const draft = await create("articles", { slug: "c1", title: "Draft", body: "b" }, contributor);
     expect(draft.status).toBe("draft");

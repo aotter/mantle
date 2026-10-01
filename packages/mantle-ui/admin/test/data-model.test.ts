@@ -98,7 +98,7 @@ describe("layoutComponents", () => {
       relations: [
         { id: "start-run", kind: "trigger-target", sourceId: "Trigger:start", targetId: "Procedure:run", pointer: "/spec/target", value: "run" },
         { id: "run-records", kind: "procedure-schema", sourceId: "Procedure:run", targetId: "Schema:records", pointer: "/spec/schema", value: "records" },
-        { id: "run-reference", kind: "input-reference", sourceId: "Procedure:run", targetId: "Schema:other", pointer: "/spec/input", value: "other" },
+        { id: "run-reference", kind: "schema-reference", sourceId: "Procedure:run", targetId: "Schema:other", pointer: "/spec/input", value: "other" },
         { id: "list-records", kind: "view-source", sourceId: "View:list", targetId: "Schema:records", pointer: "/spec/from", value: "records" },
       ],
     };

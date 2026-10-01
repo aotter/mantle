@@ -27,6 +27,15 @@ metadata: { name: pages }
 spec:
   title: Pages
   schema: { type: object, required: [title], properties: { title: { type: string }, body: { type: string } } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: stock }
+spec:
+  title: Stock
+  lifecycle: operational
+  uniqueIndexes: [[sku]]
+  schema: { type: object, required: [sku, qty], properties: { sku: { type: string }, qty: { type: integer, minimum: 0 } } }
 `;
 const user: Caller = { kind: "user", subject: "o1", role: null, scopes: [], credential: "session", credentialId: null, clientId: null };
 let rt: MantleRuntime;
@@ -69,4 +78,19 @@ it("null clears a field the Schema does not require, and stays refused for one i
   expect((await s.select({ from: "tickets", columns: ["subject", "due"], where: { id } })).rows).toEqual([{ subject: "toner cartridge", due: null }]);
   expect(await message(s.write([{ update: "tickets", set: { subject: null }, where: { id } }]))).toMatch(/subject/);
   expect(await message(s.write([{ insert: "tickets", values: { subject: "x-ray", priority: null } }]))).toMatch(/priority/);
+});
+
+it("a column named in another case is checked as declared, and an upsert's update is checked too", async () => {
+  const s = rt.store.as(user);
+  const [row] = await s.write([{ insert: "tickets", values: { subject: "scanner", priority: "low" } }]);
+  const id = (row as { id: string }).id;
+  expect(await message(s.write([{ update: "tickets", set: { SUBJECT: null }, where: { id } }]))).toMatch(/subject/);
+  expect(await message(s.write([{ update: "tickets", set: { Subject: "ab" }, where: { id } }]))).toMatch(/subject/);
+  expect(await message(s.write([{ insert: "tickets", values: { subject: "fax", priority: "low", Subject: null } }]))).toMatch(/twice/);
+  const upsert = (update: Record<string, unknown>) => s.write([{ insert: "stock", values: { sku: "A", qty: 1 }, onConflict: { columns: ["sku"], update } }]);
+  await upsert({ qty: 1 });
+  expect(await message(upsert({ qty: null }))).toMatch(/qty/);
+  expect(await message(upsert({ qty: -1 }))).toMatch(/qty/);
+  await upsert({ qty: 5 });
+  expect((await s.select({ from: "stock", columns: ["qty"], where: { sku: "A" } })).rows).toEqual([{ qty: 5 }]);
 });

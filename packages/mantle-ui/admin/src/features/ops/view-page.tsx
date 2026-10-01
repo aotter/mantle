@@ -5,11 +5,10 @@ import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api, downloadAdminFile } from "../../lib/api";
-import { operationsQueryOptions, viewsManifestQueryOptions } from "../../lib/queries";
+import { viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { Collection, JsonSchema, SiteInfo, StaffOperation, ViewManifestInfo } from "../../lib/types";
-import { runnableRowActions, ViewRowActions } from "./view-row-actions";
+import type { Collection, JsonSchema, SiteInfo, ViewManifestInfo } from "../../lib/types";
 import {
   Table,
   TableBody,
@@ -82,7 +81,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     queryFn: () => api.get<SiteInfo>("/site"),
   });
   const canonical = site.data?.canonicalLocale ?? null;
-  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
 
   const view = viewsQuery.data?.find((v) => v.name === name);
   // an output that reads a Schema field unchanged is labelled and formatted as that field
@@ -90,7 +88,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     const source = view?.columns?.[column];
     return source ? collectionsQuery.data?.find((c) => c.name === source.schema)?.schema?.properties?.[source.field] : undefined;
   };
-  const sourceSchema = collectionsQuery.data?.find((c) => c.name === view?.from)?.schema;
 
   const [params, setParams] = React.useState<Record<string, unknown>>({});
   React.useEffect(() => {
@@ -108,8 +105,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
       }),
     enabled: !!view && canQuery,
   });
-  const { refetch: refetchView } = query;
-  const refetchRows = React.useCallback(() => { void refetchView(); }, [refetchView]);
 
   if (viewsQuery.isLoading || collectionsQuery.isLoading) {
     return <Skeleton className="h-64 w-full" />;
@@ -125,7 +120,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
 
   const rows = query.data?.rows ?? [];
   const columns = viewColumns(view, rows);
-  const rowActions = view.from ? runnableRowActions(view.rowActions, operationsQuery.data) : [];
   const viewTitle = resolveLocalizedText(view.title, language, canonical) ?? fieldLabel(view.name);
   const exportHref = viewExportHref(name, urlParams);
 
@@ -190,7 +184,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                   {propertyLabel(col, columnSchema(col), language, canonical)}
                 </TableHead>
               ))}
-              {rowActions.length > 0 ? <TableHead><span className="sr-only">{t(language, "interaction.rowActions")}</span></TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -207,19 +200,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                     </TableCell>
                   );
                 })}
-                {rowActions.length > 0 ? (
-                  <TableCell className="w-10 text-right">
-                    <ViewRowActions
-                      collection={view.from!}
-                      row={row}
-                      actions={rowActions}
-                      language={language}
-                      canonical={canonical}
-                      sourceSchema={sourceSchema}
-                      onDone={refetchRows}
-                    />
-                  </TableCell>
-                ) : null}
               </TableRow>
             ))}
           </TableBody>

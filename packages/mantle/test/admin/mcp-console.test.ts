@@ -13,6 +13,7 @@ metadata: { name: posts }
 spec:
   title: Posts
   lifecycle: operational
+  checks: ["slug <> ''"]
   schema: { type: object, required: [slug], properties: { slug: { type: string }, title: { type: string } } }
 ---
 apiVersion: cms.mantle.aotter.net/v2
@@ -29,6 +30,7 @@ kind: Procedure
 metadata: { name: retitle }
 spec:
   title: Retitle
+  requires: { auth: { all: [ctx.user] } }
   input: { type: object, required: [id, title], properties: { id: { type: string }, title: { type: string } } }
   output: { type: object, required: [results] }
   target: { schema: posts, id: id }
@@ -171,7 +173,7 @@ describe("Admin: developer console and statistics", () => {
     expect(body.dataModel.schemas.map((s: { name: string }) => s.name)).toEqual(["posts", "visits"]);
     expect(body.dataModel.views.map((v: { name: string }) => v.name)).toEqual(["all-posts", "picker", "pub"]);
     expect(body.dataModel.views[0]).toMatchObject({ surface: "staff", query: { kind: "sql", statement: "SELECT id, slug FROM posts ORDER BY slug" }, authorization: [], guard: null });
-    expect(JSON.stringify(body)).not.toContain("SelectStmt"); // the IR stays on the server
+    expect(JSON.stringify(body)).not.toMatch(/SelectStmt|A_Expr/); // the IR (a View's, a check's) stays on the server
     const procs = Object.fromEntries(body.logic.procedures.map((p: { name: string }) => [p.name, p]));
     expect(procs.retitle.handler).toEqual({ kind: "sql", statement: "UPDATE posts SET title = input.title WHERE id = input.id RETURNING title" });
     expect(procs.nightly.handler).toEqual({ kind: "ref", ref: "nightly" });
@@ -183,6 +185,8 @@ describe("Admin: developer console and statistics", () => {
     expect(edges.filter((e: string) => e.startsWith("procedure-schema Procedure:nightly"))).toEqual([]);
     expect(body.graph.atoms.map((a: { id: string }) => a.id)).toEqual(expect.arrayContaining(["Schema:posts", "View:all-posts", "Procedure:retitle", "Trigger:nightly-run"]));
     expect(body.interfaces.callable).toContainEqual(expect.objectContaining({ kind: "procedure", name: "purge", target: "purge", surface: "public", trigger: "t-public" }));
+    // a staff tool is staff's, whatever else its Procedure requires
+    expect(body.interfaces.callable).toContainEqual(expect.objectContaining({ name: "retitle", surface: "staff", audience: "staff" }));
     expect(body.operations).toEqual({
       schedules: [{ id: "nightly-run", procedure: "nightly", cron: "0 3 * * *", enabled: true, registration: "not-observed" }],
       ttlPolicies: [{ schema: "visits", field: "seenAt", expireAfterSeconds: 60, sweepObservation: "unavailable" }],

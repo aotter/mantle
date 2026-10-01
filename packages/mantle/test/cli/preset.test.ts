@@ -296,6 +296,14 @@ describe("the service preset", () => {
     expect(await read(dir, "src/service.ts")).toBe(service);
   }, 60_000);
 
+  it("generate warns when Admin is selected and wrangler.jsonc binds no ASSETS", async () => {
+    const dir = await project([]);
+    const r0 = await generate(dir, []);
+    expect(r0.out).not.toContain("binds no ASSETS");
+    await writeFile(join(dir, "wrangler.jsonc"), (await read(dir, "wrangler.jsonc")).replace(/"binding": "ASSETS"/, '"binding": "FILES"'));
+    expect((await generate(dir, [])).out).toContain("warning: wrangler.jsonc binds no ASSETS");
+  }, 60_000);
+
   it("a write that fails midway exits 2 and the rerun finishes the preset", async () => {
     const dir = await project([]);
     await rm(join(dir, "src/service.ts"));

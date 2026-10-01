@@ -271,7 +271,6 @@ export interface StaffOperation {
   interactions: StaffOperationInteraction[];
 }
 
-/** Read-only View projection exposed by the Admin API. */
 /** A staff View as `/admin/api/views-manifest` lists it: its declared input, and the outputs that read a Schema field unchanged. */
 export interface ViewManifestInfo {
   name: string;
@@ -280,18 +279,6 @@ export interface ViewManifestInfo {
   input: JsonSchema | null;
   list: { columns: string[] };
   columns: Record<string, { schema: string; field: string }>;
-  /** Staff operations a row feeds (ADR-0029); the 0.2 surface sends none yet. */
-  from?: string;
-  rowActions?: ViewRowActionInfo[];
-}
-
-/** One row action: the staff tool, the row fields it binds and the version it locks. */
-export interface ViewRowActionInfo {
-  capability: string;
-  procedure: string;
-  bind: Array<{ input: string; field: string }>;
-  version?: string;
-  mutates: boolean;
 }
 
 export interface DeveloperSchemaModel {
@@ -366,8 +353,6 @@ export type DeveloperRelationKind =
   | "view-source"
   | "authorization-guard"
   | "procedure-schema"
-  | "collection-action"
-  | "input-reference"
   | "trigger-target"
   | "lifecycle-source";
 

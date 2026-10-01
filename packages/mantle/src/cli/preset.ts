@@ -258,6 +258,7 @@ export async function presetWarnings(root: string, selection: PresetSelection, s
     const wanted = new Set(Object.values(plan.triggers).flatMap((t) => (t.source.kind === "schedule" && t.source.enabled !== false ? [toCloudflareCron(t.source.cron)] : [])));
     const missing = [...wanted].filter((c) => !declared.has(c));
     const extra = [...declared].filter((c) => !wanted.has(c));
+    if (selection.features.includes("admin") && !/"binding"\s*:\s*"ASSETS"/.test(wrangler)) out.push('wrangler.jsonc binds no ASSETS, which src/service.ts serves the Admin console from: add "assets": { "directory": "node_modules/@aotter/mantle-ui/dist/admin", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none" }');
     if (missing.length || extra.length) out.push(`wrangler.jsonc triggers.crons does not match the plan's schedule Triggers${missing.length ? `; add ${missing.map((c) => `"${c}"`).join(", ")}` : ""}${extra.length ? `; nothing runs on ${extra.map((c) => `"${c}"`).join(", ")}` : ""}`);
   }
   return out;

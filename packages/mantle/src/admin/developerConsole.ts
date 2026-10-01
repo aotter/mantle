@@ -79,7 +79,7 @@ export function developerConsole(plan: RuntimePlan) {
   ].sort((a, b) => a.id.localeCompare(b.id));
 
   const callable = (["public", "staff"] as const).flatMap((surface) => mcpTools(plan, surface).map((tool) => ({
-    kind: tool.kind, name: tool.name, target: tool.source, surface, audience: audienceOf(tool.requires) ?? (surface === "staff" ? "staff" : "public"),
+    kind: tool.kind, name: tool.name, target: tool.source, surface, audience: surface === "staff" ? "staff" : audienceOf(tool.requires) ?? "public",
     title: tool.title ?? null, description: tool.description, input: tool.inputSchema, output: tool.outputSchema ?? null,
     trigger: tool.kind === "procedure" ? Object.entries(plan.triggers).find(([, t]) => t.procedure === tool.source && t.source.kind === "mcp" && t.source.surface === surface)?.[0] ?? null : null,
   })));
@@ -97,7 +97,7 @@ export function developerConsole(plan: RuntimePlan) {
     dataModel: {
       schemas: schemas.map((s) => ({
         name: s.name, title: s.title ?? s.name, lifecycle: s.publishing ? "publishing" : "operational", localized: s.localized === true, translates: s.translates ?? null,
-        schema: s.schema, uniqueIndexes: s.unique ?? [], indexes: s.indexes ?? [], searchableFields: s.search ?? [], manifest: s,
+        schema: s.schema, uniqueIndexes: s.unique ?? [], indexes: s.indexes ?? [], searchableFields: s.search ?? [], manifest: (({ checks: _ir, ...rest }) => rest)(s),
       })),
       views: views.map(([name, v]) => ({
         name, title: v.title ?? null, surface: v.surface, query: { kind: "sql" as const, statement: v.source, ...(v.input ? { params: v.input } : {}) },
