@@ -184,9 +184,14 @@ describe("Admin: developer console and statistics", () => {
     expect(edges).toEqual(expect.arrayContaining(["view-source View:all-posts Schema:posts", "procedure-schema Procedure:retitle Schema:posts", "procedure-schema Procedure:purge Schema:posts", "trigger-target Trigger:nightly-run Procedure:nightly"]));
     expect(edges.filter((e: string) => e.startsWith("procedure-schema Procedure:nightly"))).toEqual([]);
     expect(body.graph.atoms.map((a: { id: string }) => a.id)).toEqual(expect.arrayContaining(["Schema:posts", "View:all-posts", "Procedure:retitle", "Trigger:nightly-run"]));
-    expect(body.interfaces.callable).toContainEqual(expect.objectContaining({ kind: "procedure", name: "purge", target: "purge", surface: "public", trigger: "t-public" }));
     // a staff tool is staff's, whatever else its Procedure requires
     expect(body.interfaces.callable).toContainEqual(expect.objectContaining({ name: "retitle", surface: "staff", audience: "staff" }));
+    // a tool is callable only on a surface the service mounted: here the staff one, and no public MCP
+    expect(new Set(body.interfaces.callable.map((c: { surface: string }) => c.surface))).toEqual(new Set(["staff"]));
+    const withPublic = await createAdminSurface(rt, { basePath: "/admin", site: { mcpEndpoints: { public: "/mcp", staff: null } } })(new Request("http://x/admin/api/developer-console"), user("owner"));
+    const callable = (await withPublic.json() as any).interfaces.callable;
+    expect(callable).toContainEqual(expect.objectContaining({ kind: "procedure", name: "purge", target: "purge", surface: "public", trigger: "t-public" }));
+    expect(callable.some((c: { surface: string }) => c.surface === "staff")).toBe(false);
     expect(body.operations).toEqual({
       schedules: [{ id: "nightly-run", procedure: "nightly", cron: "0 3 * * *", enabled: true, registration: "not-observed" }],
       ttlPolicies: [{ schema: "visits", field: "seenAt", expireAfterSeconds: 60, sweepObservation: "unavailable" }],

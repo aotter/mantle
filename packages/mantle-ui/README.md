@@ -9,8 +9,9 @@ of it (React 19 is an optional peer, needed only for the root).
 `dist/admin/` is the built Admin console (a static SPA with base `/admin/`).
 Nothing imports it: `mantle generate`'s Cloudflare preset binds
 `node_modules/@aotter/mantle-ui/dist/admin` as the Worker's static assets, and
-`createAdminSurface` (`@aotter/mantle/admin`) serves it at `/admin`. Its source
-is `admin/`.
+`createAdminSurface` (`@aotter/mantle/admin`) serves it at `/admin`. It is
+built for that path, so `createAdminSurface` refuses `assets` under any other
+`basePath`. Its source is `admin/`.
 
 ## Controller
 

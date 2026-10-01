@@ -37,7 +37,8 @@ function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; writes: S
 
 const pointer = (s: string) => s.replace(/~/g, "~0").replace(/\//g, "~1");
 
-export function developerConsole(plan: RuntimePlan) {
+/** `mcp`: the MCP surfaces the service mounted; a tool is callable only on one of them. */
+export function developerConsole(plan: RuntimePlan, mcp: readonly ("public" | "staff")[]) {
   const schemaName = (key: string) => plan.schemas[key]?.name;
   const schemas = Object.values(plan.schemas).sort((a, b) => a.name.localeCompare(b.name));
   const views = Object.entries(plan.views).filter(([, v]) => v.surface !== "internal").sort(([a], [b]) => a.localeCompare(b));
@@ -78,7 +79,7 @@ export function developerConsole(plan: RuntimePlan) {
     ]),
   ].sort((a, b) => a.id.localeCompare(b.id));
 
-  const callable = (["public", "staff"] as const).flatMap((surface) => mcpTools(plan, surface).map((tool) => ({
+  const callable = mcp.flatMap((surface) => mcpTools(plan, surface).map((tool) => ({
     kind: tool.kind, name: tool.name, target: tool.source, surface, audience: surface === "staff" ? "staff" : audienceOf(tool.requires) ?? "public",
     title: tool.title ?? null, description: tool.description, input: tool.inputSchema, output: tool.outputSchema ?? null,
     trigger: tool.kind === "procedure" ? Object.entries(plan.triggers).find(([, t]) => t.procedure === tool.source && t.source.kind === "mcp" && t.source.surface === surface)?.[0] ?? null : null,

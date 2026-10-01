@@ -311,8 +311,17 @@ describe("Admin surface: the SPA shell", () => {
     }
     // the preview is framed by the console itself
     expect((await call("GET", "/admin/preview.html", anon)).headers.get("x-frame-options")).toBeNull();
+    // every file is nosniff; a hashed chunk is immutable, so the browser never asks again
+    const chunk = await call("GET", "/admin/assets/app.js", anon);
+    expect([chunk.headers.get("x-content-type-options"), chunk.headers.get("cache-control"), chunk.headers.get("content-type")]).toEqual(["nosniff", "public, max-age=31536000, immutable", "text/javascript"]);
+    expect((await call("GET", "/admin/index.html", anon)).headers.get("x-content-type-options")).toBe("nosniff");
     expect((await call("GET", "/admin/members/a.b@x.test", anon)).body).toBe("<!doctype html><div id=root></div>");
     for (const path of ["/admin/..%2f..%2fsecret.txt", "/admin/x%5cy.txt"]) expect([path, (await call("GET", path, anon)).status]).toEqual([path, 404]);
+  });
+
+  it("serves the SPA at /admin only: it is built for that path", () => {
+    expect(() => createAdminSurface(rt, { basePath: "/console", assets })).toThrow(/at \/admin only/);
+    expect(() => createAdminSurface(rt, { basePath: "/console" })).not.toThrow();
   });
 
   it("has no shell without assets", async () => {
