@@ -194,7 +194,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     const publicUrl = URL.canParse(origin) ? origin : url.origin;
     const at = (p: string | null | undefined) => (p ? new URL(p, publicUrl).href : null);
     const mcp = options.site?.mcpEndpoints;
-    return { ...config, publicUrl, mcpEndpoints: { public: at(mcp?.public), staff: at(mcp?.staff) } };
+    // what this deployment turned on, so the console does not offer a page that can only answer 501
+    // creation statistics are a storage capability 0.2.0 storage does not have (the route answers 501)
+    const capabilities = { siteSettings: runtime.site !== undefined, media: !!library, invitationEmail: !!roles?.sendStaffInvitation, statistics: false };
+    return { ...config, publicUrl, mcpEndpoints: { public: at(mcp?.public), staff: at(mcp?.staff) }, capabilities };
   };
   const library = options.media && runtime.site?.media(options.media);
   const media = () => {

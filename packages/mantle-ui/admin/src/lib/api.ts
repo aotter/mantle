@@ -29,7 +29,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!res.ok) {
-    throw new ApiError(`${res.status} ${res.statusText}`, res.status, body);
+    // the server's diagnostic says what is wrong; the status line is the fallback
+    const message = (body as { error?: { message?: unknown } } | null)?.error?.message;
+    throw new ApiError(typeof message === "string" && message ? message : `${res.status} ${res.statusText}`, res.status, body);
   }
   return body as T;
 }

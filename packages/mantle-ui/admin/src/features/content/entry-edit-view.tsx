@@ -315,6 +315,7 @@ export function EntryEditView({
           {inlineRelated.length > 0 ? (
             <RelatedSections
               sections={inlineRelated}
+              parentSchema={payload.collection.schema}
               language={language}
               canonical={canonical}
               operations={operationsQuery.data}
@@ -606,14 +607,15 @@ function SchemaField({
         </p>
       ) : schema.enum || enumOptions(schema) ? (
         <Select
-          value={stringForInput(value) || "__empty__"}
+          // a required field has no empty choice: it starts unchosen and the person picks one
+          value={stringForInput(value) || (required ? "" : "__empty__")}
           onValueChange={(next) => setValue(next === "__empty__" ? "" : next)}
         >
           <SelectTrigger className="w-full" aria-label={label}>
-            <SelectValue />
+            <SelectValue placeholder={t(language, "entryEdit.chooseOption")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__empty__">{t(language, "entryEdit.emptyOption")}</SelectItem>
+            {required ? null : <SelectItem value="__empty__">{t(language, "entryEdit.emptyOption")}</SelectItem>}
             {(enumOptions(schema) ?? schema.enum!.filter((v) => v !== null).map((v) => ({ value: String(v) }))).map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {optionLabel(schema, option.value, language)}
@@ -1043,12 +1045,14 @@ function JsonEditor({
 
 function RelatedSections({
   sections,
+  parentSchema,
   language,
   canonical,
   operations,
   onOperationSuccess,
 }: {
   sections: RelatedEntrySection[];
+  parentSchema: JsonSchema | null | undefined;
   language: AdminLanguage;
   canonical: string | null;
   /** Child rows derive their own bound operations. */
@@ -1064,8 +1068,8 @@ function RelatedSections({
             <SectionTitle
               title={resolveLocalizedText(section.collection.title, language, canonical) ?? section.collection.name}
               body={t(language, "entryEdit.relationship", {
-                child: section.relationship.childField,
-                parent: section.relationship.parentField,
+                child: propertyLabel(section.relationship.childField, section.collection.schema?.properties?.[section.relationship.childField], language, canonical),
+                parent: section.relationship.parentField === "id" ? "ID" : propertyLabel(section.relationship.parentField, parentSchema?.properties?.[section.relationship.parentField], language, canonical),
               })}
             />
             <div className="space-y-2">

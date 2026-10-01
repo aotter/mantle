@@ -23,6 +23,7 @@ import { Button } from "@aotter/mantle-ui/kit";
 import { Badge } from "@aotter/mantle-ui/kit";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
+import { enumOptions, optionLabel } from "../../lib/enum-options";
 import { IdValue, isIdField } from "../../ui/id-value";
 import { cn } from "../../lib/utils";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
@@ -181,11 +182,22 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           language={language}
           searchable={view.list.searchFields.length > 0}
           searchValue={urlParams.get("search") ?? ""}
-          filters={view.list.filterFields.map((field) => ({
-            name: field,
-            label: propertyLabel(field, labelSchema(field), language, canonical),
-            value: urlParams.get(`filter.${field}`) ?? "",
-          }))}
+          filters={view.list.filterFields.map((field) => {
+            // a filter on an output with options is tabs, as on a collection list; its links start from the first page
+            const options = enumOptions(columnSchema(field));
+            const href = (value?: string) => {
+              const next = new URLSearchParams(urlParams);
+              next.delete("cursor");
+              if (value) next.set(`filter.${field}`, value); else next.delete(`filter.${field}`);
+              return viewHref(name, next);
+            };
+            return {
+              name: field,
+              label: propertyLabel(field, labelSchema(field), language, canonical),
+              value: urlParams.get(`filter.${field}`) ?? "",
+              ...(options ? { allHref: href(), options: options.map((o) => ({ value: o.value, label: optionLabel(columnSchema(field), o.value, language, canonical), href: href(o.value) })) } : {}),
+            };
+          })}
           onSubmit={({ search, filters }) => {
             // a new search starts from the first page: the cursors belong to the old one
             const next = new URLSearchParams(urlParams);

@@ -253,7 +253,7 @@ export function HomeView(): React.ReactElement {
               <div key={group.title}>
                 {collectionGroups.length > 1 && <h3 className="mb-3 text-sm font-medium text-muted-foreground">{group.title}</h3>}
                 <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-                  {group.items.map((collection) => <CollectionStatisticsCard key={collection.name} collection={collection} canonical={canonical} />)}
+                  {group.items.map((collection) => <CollectionStatisticsCard key={collection.name} collection={collection} canonical={canonical} statistics={siteInfo?.capabilities?.statistics !== false} />)}
                 </div>
               </div>
             ))}

@@ -7,7 +7,7 @@ import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
 import { authMethodsQueryOptions } from "../../lib/queries";
-import type { AdminUser, StaffRole, StaffUser } from "../../lib/types";
+import type { AdminUser, SiteInfo, StaffRole, StaffUser } from "../../lib/types";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Badge } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
@@ -200,6 +200,7 @@ export function StaffView(): React.ReactElement {
 
 function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElement {
   const { language } = usePreferences();
+  const site = useQuery<SiteInfo>({ queryKey: ["site"], queryFn: () => api.get<SiteInfo>("/site") });
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState<StaffRole>("contributor");
 
@@ -231,7 +232,7 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
             onChange={(event) => setEmail(event.target.value)}
           />
           <span className="text-xs font-normal leading-5 text-muted-foreground">
-            {t(language, "staff.invite.hint")}
+            {t(language, site.data?.capabilities?.invitationEmail === false ? "staff.invite.hintNoEmail" : "staff.invite.hint")}
           </span>
         </label>
         <label className="grid gap-1.5 text-sm font-medium">

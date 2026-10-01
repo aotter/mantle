@@ -161,6 +161,13 @@ describe("Admin", () => {
   });
 });
 
+describe("Admin capabilities", () => {
+  it("says which optional pages this deployment turned on, so the console offers none that can only answer 501", async () => {
+    const site = await (await createAdminSurface(rt, { basePath: "/admin" })(new Request("http://x/admin/api/site"), owner)).json();
+    expect(site.capabilities).toEqual({ siteSettings: false, media: false, invitationEmail: false, statistics: false });
+  });
+});
+
 describe("compile", () => {
   const view = (columns: string, sql: string) => `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
