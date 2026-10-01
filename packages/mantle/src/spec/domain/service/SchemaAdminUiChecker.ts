@@ -1,5 +1,5 @@
 import type { JsonSchema, SchemaManifest } from "../model/ManifestGrammar.js";
-import { RESERVED_ENTRY_COLUMNS, resolveMantleRef } from "../model/ManifestGrammar.js";
+import { RESERVED_ENTRY_COLUMNS, enumOptions, resolveMantleRef } from "../model/ManifestGrammar.js";
 import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
 
 export { checkViewAdminUi } from "./ViewAdminUiChecker.js";
@@ -283,7 +283,7 @@ function checkListFilter(
     ), filter: null };
   }
   const property = schema.spec.schema.properties?.[field];
-  const values = property?.enum;
+  const values = enumOptions(property)?.map((o) => o.value);
   if (!property) {
     return { problem: problem(
       "/spec/uiSchema/list/filterField",
@@ -292,11 +292,11 @@ function checkListFilter(
       `Schema '${schema.metadata.name}' list filter references unknown field '${field}'.`,
     ), filter: null };
   }
-  if (!values?.length || !values.every((value): value is string => typeof value === "string")) {
+  if (!values?.length) {
     return { problem: problem(
       "/spec/uiSchema/list/filterField",
       field,
-      "a field with a non-empty string enum",
+      "a field with a non-empty string enum, or a oneOf of string consts",
       `Schema '${schema.metadata.name}' list filter field '${field}' must declare string enum values.`,
     ), filter: null };
   }

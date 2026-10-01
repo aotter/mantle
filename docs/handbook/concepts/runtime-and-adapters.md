@@ -79,8 +79,9 @@ The SQL language is PostgreSQL syntax, pinned to PostgreSQL 18's parser. A
 D1 cannot compute exactly, and its runtime side prints SQLite, encodes types
 and converges storage.
 
-- `date-time` is stored as microseconds, `date` as days, `numeric(p, s)` as an
-  integer of the smallest unit, so arithmetic is exact on D1.
+- `date-time` (and `created_at` / `updated_at`) is stored as microseconds,
+  `date` as days, `numeric(p, s)` as an integer of the smallest unit, so
+  arithmetic is exact on D1. On the wire a date-time is an ISO string.
 - `checks` are enforced by triggers. `x-mantle-ref` is checked by
   `mantle generate` and used by Admin; storage does not enforce it in 0.2.0.
   `searchableFields` uses

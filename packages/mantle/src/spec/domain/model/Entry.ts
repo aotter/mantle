@@ -13,8 +13,9 @@ export interface Entry<TData = Record<string, unknown>> {
   /** Optimistic-locking version. Increments on every persisted update. */
   readonly version: number;
   readonly data: TData;
-  readonly createdAt: number;
-  readonly updatedAt: number;
+  /** ISO 8601 date-times, as Store returns them. */
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }
 
 /**

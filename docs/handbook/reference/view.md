@@ -61,10 +61,14 @@ that is not a declared Schema (`_mantle_*` and auth tables included).
 - Native columns are `id`, `status`, `version`, `created_at`, `updated_at`,
   `author_id`.
 - An output that reads a Schema field unchanged comes back under the field's
-  declared name and is decoded to its type. Any other output keeps its alias
-  as SQL folded it: `AS orderCount` is `ordercount`, `AS "orderCount"` keeps the
-  case. A native column comes back in its stored encoding (timestamps are
-  microseconds).
+  declared name and is decoded to its type, and so does `created_at` or
+  `updated_at` (an ISO date-time). A `sum`, `min` or `max` of one column keeps
+  that column's type and hints (a sum of a `money-minor` field is money); a
+  `count` or an `avg` is a plain number. Any other output keeps its alias as
+  SQL folded it: `AS orderCount` is `ordercount`, `AS "orderCount"` keeps the
+  case. A staff View's `uiSchema.list.columns` must name each output as the row
+  carries it; a name that differs only by case is `VIEW_UI_INVALID`, and the
+  message says to quote the alias.
 
 ## `input`
 

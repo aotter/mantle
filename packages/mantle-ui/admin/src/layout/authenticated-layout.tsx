@@ -20,6 +20,7 @@ import { SidebarInset, SidebarProvider } from "@aotter/mantle-ui/kit";
 import { api } from "../lib/api";
 import { isPrimaryNavCollection } from "../lib/collection-nav";
 import { fieldLabel } from "../lib/field-label";
+import { optionLabel } from "../lib/enum-options";
 import { operationsQueryOptions, viewsManifestQueryOptions } from "../lib/queries";
 import { resolveLocalizedText } from "../lib/localized-text";
 import {
@@ -315,7 +316,7 @@ function collectionNavItem(c: Collection, language: AdminLanguage, canonical: st
       items: [
         { title: t(language, "collection.filter.all"), url: `/admin/c/${c.name}` },
         ...c.filter.values.map<NavLink>((value) => ({
-          title: fieldLabel(value),
+          title: optionLabel(c.schema?.properties?.[c.filter!.field], value, language, canonical),
           url: `/admin/c/${c.name}?filter_field=${encodeURIComponent(c.filter!.field)}&filter_value=${encodeURIComponent(value)}`,
         })),
       ],

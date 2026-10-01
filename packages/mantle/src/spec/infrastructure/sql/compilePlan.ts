@@ -4,8 +4,8 @@
  * declarations. Like `compileSql`, only the CLI and the plugin's helper scripts import this.
  */
 import { validateDiagnostic, type Diagnostic, type SourceLocation } from "../../kernel/diagnostic.js";
-import type { JsonSchema, ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
-import { RUNTIME_PLAN_VERSION, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
+import { enumOptions, type JsonSchema, type ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
+import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import type { SqlContext, SqlDiagnostic, SqlNode, SqlPlan } from "../../domain/model/SqlIr.js";
@@ -22,6 +22,7 @@ export type CompilePlanResult =
 function mantleType(p: JsonSchema): string {
   const t = [p.type].flat().find((x) => x !== "null");
   if (p.format === "geo") return "geo";
+  if (!t && enumOptions(p)) return "text"; // a string enum or a oneOf of string consts
   if (t === "string") return p.format === "date-time" ? "timestamptz" : p.format === "date" ? "date" : "text";
   return ({ integer: "integer", number: "real", boolean: "bool" } as Record<string, string>)[String(t)] ?? "json";
 }
@@ -66,10 +67,15 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
     else rels.set((n.RangeSubselect ?? n.RangeFunction)?.alias?.aliasname ?? "", undefined);
   };
   for (const f of sel.fromClause ?? []) walk(f);
-  const field = (schema: string | undefined, col: string) => (schema && schemas[schema]!.fields[col] && schemas[schema]!.fields[col] !== "geo" ? { schema, field: col } : undefined);
+  const typeOf = (schema: string, col: string) => schemas[schema]!.fields[col] ?? (Object.hasOwn(NATIVE_OUTPUT_TYPES, col) ? NATIVE_OUTPUT_TYPES[col] : undefined);
+  const field = (schema: string | undefined, col: string) => (schema && typeOf(schema, col) && typeOf(schema, col) !== "geo" ? { schema, field: col } : undefined);
   let keys: string[] | undefined = [];
   for (const { ResTarget: r } of sel.targetList) {
-    const refs = r.val?.ColumnRef?.fields;
+    // sum, min and max of one column keep its type (a sum of money is money); a count or an average does not
+    const agg = r.val?.FuncCall;
+    const fn = agg?.funcname?.at(-1)?.String?.sval;
+    const arg = agg && !agg.over && !agg.agg_distinct && agg.args?.length === 1 ? agg.args[0].ColumnRef?.fields : undefined;
+    const refs = r.val?.ColumnRef?.fields ?? (r.name && arg && ["sum", "min", "max"].includes(fn) ? arg : undefined);
     if (!r.name && refs?.at(-1)?.A_Star) {
       const from = refs.length > 1 ? [rels.get(refs[0].String.sval)] : [...rels.values()];
       if (from.some((s) => !s)) { keys = undefined; continue; }
@@ -82,7 +88,7 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
     keys?.push(name);
     const rel = refs?.length === 2 ? rels.get(refs[0].String.sval) : refs?.length === 1 && rels.size === 1 ? [...rels.values()][0] : undefined;
     const f = col ? field(rel, col) : undefined;
-    if (f) columns[name] = f;
+    if (f && (fn !== "sum" || r.val?.ColumnRef || ["integer", "real"].includes(typeOf(f.schema, f.field)!) || typeOf(f.schema, f.field)!.startsWith("numeric("))) columns[name] = f;
   }
   return { ...(keys ? { keys: [...new Set(keys)] } : {}), columns };
 }
@@ -148,6 +154,14 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     for (const key of ["searchFields", "filterFields"] as const) for (const [i, f] of (list[key] ?? []).entries()) {
       if (!outputs?.keys || outputs.keys.some((k) => k === f || k === f.toLowerCase())) continue;
       diagnostics.push(validateDiagnostic({ code: "VIEW_UI_INVALID", severity: "error", path: `${source.sourceId}#/${source.documentIndex}/spec/uiSchema/list/${key}/${i}`, source: { ...source, path: `/spec/uiSchema/list/${key}/${i}` }, value: f, expected: `one of the View's outputs: ${outputs.keys.join(", ")}`, message: `View '${v.metadata.name}' uiSchema.list.${key} names '${f}', which the View's SELECT does not output.` }));
+    }
+    // a column is read off the row by its exact key: a field read carries the declared name, anything else the name SQL gave it
+    const wire = (outputs?.keys ?? []).map((k) => (columns[k]?.field === k ? schemas[columns[k]!.schema]!.names?.[k] ?? k : k));
+    for (const [i, f] of (list["columns"] ?? []).entries()) {
+      if (!outputs?.keys || wire.includes(f)) continue;
+      const folded = wire.find((k) => k.toLowerCase() === f.toLowerCase());
+      diagnostics.push(validateDiagnostic({ code: "VIEW_UI_INVALID", severity: "error", path: `${source.sourceId}#/${source.documentIndex}/spec/uiSchema/list/columns/${i}`, source: { ...source, path: `/spec/uiSchema/list/columns/${i}` }, value: f, expected: `one of the View's outputs: ${wire.join(", ")}`,
+        message: folded ? `View '${v.metadata.name}' uiSchema.list.columns names '${f}', but the row carries '${folded}': an unquoted alias folds to lower case, so write AS "${f}".` : `View '${v.metadata.name}' uiSchema.list.columns names '${f}', which the View's SELECT does not output.` }));
     }
     if (plan) views[v.metadata.name] = { ...plan, ...(Object.keys(columns).length ? { columns } : {}), ...(v.spec.title ? { title: v.spec.title } : {}), ...(v.spec.description ? { description: v.spec.description } : {}), ...(v.spec.uiSchema ? { uiSchema: v.spec.uiSchema } : {}), inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), source: v.spec.sql, surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
   }

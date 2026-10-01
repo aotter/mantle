@@ -24,9 +24,9 @@ export type StoreSchemas = Readonly<Record<string, StoreSchema>>;
 const invalid = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
 
 /** Native columns as JSON names them, with the physical column and its Mantle type. */
-const NATIVE: Readonly<Record<string, { col: string; type: string }>> = {
+export const NATIVE: Readonly<Record<string, { col: string; type: string }>> = {
   id: { col: "id", type: "text" }, status: { col: "status", type: "text" }, version: { col: "version", type: "integer" },
-  createdAt: { col: "created_at", type: "integer" }, updatedAt: { col: "updated_at", type: "integer" }, authorId: { col: "author_id", type: "text" },
+  createdAt: { col: "created_at", type: "timestamptz" }, updatedAt: { col: "updated_at", type: "timestamptz" }, authorId: { col: "author_id", type: "text" },
 };
 const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "like", "in", "notIn", "isNull"]);
 const SCALAR = new Set(["text", "integer", "real", "bool", "timestamptz", "date"]);
@@ -101,8 +101,7 @@ function withDefaults(def: StoreSchema, values: Readonly<Record<string, unknown>
 export class StoreJson {
   readonly inputs: Record<string, string> = {};
   readonly values: Record<string, unknown> = {};
-  /** `wantRow` says whether a Schema has an after hook: its writes then return the whole entry, which the hook receives (ADR-0032 decision 3). */
-  constructor(private readonly schemas: StoreSchemas, private readonly codec: StoreCodec, private readonly wantRow: (schema: string) => boolean = () => false) {}
+  constructor(private readonly schemas: StoreSchemas, private readonly codec: StoreCodec) {}
 
   private schema(name: unknown): { name: string; def: StoreSchema } {
     const def = typeof name === "string" ? this.schemas[name.toLowerCase()] : undefined;
@@ -258,15 +257,14 @@ export class StoreJson {
   /**
    * The IR of one write op, whether it is a row op, and the status an update moves the entry to. The class is the compiled statement's
    * (`classify`, the rule the runner and the CLI use), never a second reading of the JSON. Only a row op returns `id` and `version`
-   * (plus the whole entry when the Schema has an after hook); a set op reports how many rows it touched.
+   * (an after hook gets the whole row through policy); a set op reports how many rows it touched.
    */
   write(o: StoreWriteOp): { ir: N; row: boolean; status?: string } {
     const built = this.statement(o);
     const row = classify(built.ir) === "row";
     if (row) {
       const body = built.ir.InsertStmt ?? built.ir.UpdateStmt ?? built.ir.DeleteStmt;
-      const name = body.relation.relname as string;
-      body.returningClause = { exprs: [...(this.wantRow(name) ? [target({ ColumnRef: { fields: [{ A_Star: {} }] } })] : []), target(ref("id")), target(ref("version"))] };
+      body.returningClause = { exprs: [target(ref("id")), target(ref("version"))] };
     }
     return { ...built, row };
   }

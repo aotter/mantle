@@ -95,6 +95,17 @@ export type JsonSchema = {
 
 export const MANTLE_REF_KEYWORD = "x-mantle-ref" as const;
 
+/**
+ * A property's string options: its `enum`, or a `oneOf` whose every branch is a string `const` (the standard way to give each
+ * option a `title`). Undefined when the property is neither.
+ */
+export function enumOptions(property: JsonSchema | undefined): { readonly value: string; readonly title?: LocalizedText }[] | undefined {
+  if (property?.enum?.length && property.enum.every((v) => typeof v === "string")) return property.enum.map((value) => ({ value: value as string }));
+  const branches = property?.oneOf;
+  if (!branches?.length || !branches.every((b) => typeof b.const === "string")) return undefined;
+  return branches.map((b) => ({ value: b.const as string, ...(b.title !== undefined ? { title: b.title } : {}) }));
+}
+
 /** Object form of `x-mantle-ref`: which Schema the value points at, and
  *  which of its fields holds the value (`id` or a single-field unique
  *  index). */

@@ -7,6 +7,7 @@ import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { propertyDescription, propertyLabel } from "../../lib/field-label";
+import { enumOptions, optionLabel } from "../../lib/enum-options";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { entryApiPath, entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import type {
@@ -603,7 +604,7 @@ function SchemaField({
           <span>{(timestampHint(schema) ? formatTimestampMs(value) : stringForInput(value)) || t(language, "entryEdit.emptyOption")}</span>
           <LockKeyhole className="size-4 shrink-0" aria-hidden="true" />
         </p>
-      ) : schema.enum ? (
+      ) : schema.enum || enumOptions(schema) ? (
         <Select
           value={stringForInput(value) || "__empty__"}
           onValueChange={(next) => setValue(next === "__empty__" ? "" : next)}
@@ -613,9 +614,9 @@ function SchemaField({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__empty__">{t(language, "entryEdit.emptyOption")}</SelectItem>
-            {schema.enum.map((option) => (
-              <SelectItem key={String(option)} value={String(option)}>
-                {String(option)}
+            {(enumOptions(schema) ?? schema.enum!.filter((v) => v !== null).map((v) => ({ value: String(v) }))).map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {optionLabel(schema, option.value, language)}
               </SelectItem>
             ))}
           </SelectContent>

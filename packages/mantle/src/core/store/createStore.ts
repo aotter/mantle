@@ -4,7 +4,7 @@
  * have one implementation.
  */
 import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
-import { firstZodIssueAsJsonPointer, jsonSchemaToZod, SqlRefusal, type AuthorizationRequirements, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
+import { firstZodIssueAsJsonPointer, jsonSchemaToZod, NATIVE_OUTPUT_TYPES, SqlRefusal, type AuthorizationRequirements, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreViewOptions, StoreWriteResult } from "../store.js";
@@ -109,7 +109,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
 
     write: (ops) => guard(async (): Promise<readonly StoreWriteResult[]> => {
       if (!Array.isArray(ops) || !ops.length) throw invalid("A write takes a non-empty list of operations.");
-      const json = new StoreJson(deps.schemas, deps.dialect.codec, (schema) => [...(deps.lifecycle?.after ?? [])].some((k) => k.startsWith(`${schema}.`)));
+      const json = new StoreJson(deps.schemas, deps.dialect.codec);
       const built = ops.map((o) => json.write(o));
       // the parent is read before the batch, so one write may not publish a translation and move its parent too
       built.forEach((x, i) => {
@@ -184,12 +184,12 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
         // an output that reads a Schema field compares in that field's storage encoding (a boolean is 0/1, a date-time microseconds)
         const c = v.columns?.[column] ?? v.columns?.[column.toLowerCase()];
         const def = c && deps.schemas[c.schema];
-        return def ? deps.dialect.codec.encode(def.fields[c.field]!, value) : value;
+        return def ? deps.dialect.codec.encode((Object.hasOwn(def.fields, c.field) ? def.fields[c.field] : NATIVE_OUTPUT_TYPES[c.field])!, value) : value;
       }) });
       const decodeView = (row: StoreRow) => Object.fromEntries(Object.entries(row).map(([k, value]) => {
         const c = v.columns && Object.hasOwn(v.columns, k) ? v.columns[k]! : undefined;
         const def = c && deps.schemas[c.schema];
-        return def ? [k === c.field ? def.names?.[c.field] ?? k : k, deps.dialect.codec.decode(def.fields[c.field]!, value)] : [k, value];
+        return def ? [k === c.field ? def.names?.[c.field] ?? k : k, deps.dialect.codec.decode((Object.hasOwn(def.fields, c.field) ? def.fields[c.field] : NATIVE_OUTPUT_TYPES[c.field])!, value)] : [k, value];
       }));
       return { rows: (v.columns ? page.rows.map(decodeView) : page.rows) as never, ...(page.next ? { nextCursor: encodeCursor(`view:${name}`, page.next) } : {}) };
     }),

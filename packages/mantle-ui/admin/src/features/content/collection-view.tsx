@@ -70,7 +70,8 @@ import {
   collectionOperationsFor,
   RowOperationsMenu,
 } from "./row-operations";
-import { renderDataValue } from "../../lib/render-data-value";
+import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
+import { optionLabel } from "../../lib/enum-options";
 import { renderTitleText } from "../../lib/entry-title";
 import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
@@ -208,7 +209,7 @@ function CollectionList({
     allHref: listHref({ searchTerm, sortField, sortDirection, filterField: undefined, filterValue: undefined }),
     options: collectionFilter.values.map((value) => ({
       value,
-      label: fieldLabel(value),
+      label: optionLabel(collection?.schema?.properties?.[collectionFilter.field], value, language, canonical),
       href: listHref({
         searchTerm,
         filterField: collectionFilter.field,
@@ -1074,7 +1075,7 @@ function EntryRowDisplay({
                   className="block truncate font-medium hover:underline"
                   title={itemName}
                 >
-                  {renderDataValue(primarySchema, primaryValue)}
+                  {renderDataValue(primarySchema, primaryValue, language)}
                 </a>
           ) : editing ? (
             <div className="flex items-center gap-1">
@@ -1124,13 +1125,13 @@ function EntryRowDisplay({
       </TableCell> : null}
       {dataColumns ? (
         dataColumns.map((name) => {
-          const schema = collection?.schema?.properties?.[name];
+          const schema = withNativeSchema(name, collection?.schema?.properties?.[name]);
           const value = row.data_preview?.[name];
           return (
             <TableCell key={name} className="text-muted-foreground">
               {isIdField(name, schema) && typeof value === "string"
                 ? <IdValue value={value} language={language} />
-                : renderDataValue(schema, value)}
+                : renderDataValue(schema, value, language)}
             </TableCell>
           );
         })
