@@ -10,6 +10,9 @@ export interface SqlResult {
 }
 
 export interface DatabaseDriver {
-  /** Every statement in order, all or nothing (a D1 `batch`). Throws the engine's error text when one fails. */
+  /**
+   * Every statement in order, all or nothing (a D1 `batch`). When one fails, rethrows the engine's error unchanged, with its
+   * code (`code` or `errcode`): the executor tells a refused statement from one that never reached the engine by it.
+   */
   batch(statements: readonly SqlStatement[]): Promise<readonly SqlResult[]>;
 }

@@ -20,12 +20,22 @@ function writeTarget(ir: Statement["ir"]): string | undefined {
   return stmt?.relation?.relname?.toLowerCase();
 }
 
+/**
+ * Whether the engine answered: D1 writes `SQLITE_…` into the message; bun:sqlite and libSQL put it in `code`, node:sqlite
+ * gives a numeric `errcode`. An error with none of these never reached the engine (a dropped connection, a timeout).
+ */
+function engineAnswered(e: unknown, message: string): boolean {
+  const { code, errcode } = (e ?? {}) as { code?: unknown; errcode?: unknown };
+  return /SQLITE_[A-Z_]+/.test(message) || (typeof code === "string" && code.startsWith("SQLITE_")) || typeof errcode === "number";
+}
+
 function mapped(e: unknown, kind: "select" | "apply", writes: readonly (string | undefined)[] = []): never {
   const message = e instanceof Error ? e.message : String(e);
   const op = /CONFLICT op=(\d+)/.exec(message);
   if (op) throw fail("CONFLICT", `CONFLICT op=${op[1]}: the write matched a different number of rows than it expected`, { opIndex: Number(op[1]), reason: "expect" });
   // the trigger's marker, then "<schema>: <expression>" up to the engine's own suffix (the expression may hold colons)
-  const check = /MANTLE_CHECK (.*?): SQLITE_CONSTRAINT/s.exec(message);
+  // D1 appends ": SQLITE_CONSTRAINT"; other drivers end the message at the check (the expression may hold colons)
+  const check = /MANTLE_CHECK (.*?)(?:: SQLITE_CONSTRAINT.*)?$/s.exec(message);
   if (check) throw fail("INPUT_VALIDATION_FAILED", `CHECK ${check[1]}`);
   if (/cannot store \w+ value in \w+ column/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "A value does not fit its column's type.");
   // the driver's own text names tables and columns, so it stays out of the Diagnostic
@@ -39,7 +49,7 @@ function mapped(e: unknown, kind: "select" | "apply", writes: readonly (string |
   if (/ON CONFLICT clause does not match/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "onConflict.columns must match a unique index of the Schema.");
   if (/NOT NULL constraint failed/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "A required column has no value; a scoped Schema needs a caller identity.");
   // the engine answered and refused (a constraint, a type, a syntax problem): the write did not happen
-  if (/SQLITE_[A-Z_]+/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "The database refused the statement.");
+  if (engineAnswered(e, message)) throw fail("INPUT_VALIDATION_FAILED", "The database refused the statement.");
   // no answer (the connection dropped, a timeout): a read can be retried, a write may or may not have landed and must be reconciled
   throw fail(kind === "apply" ? "OUTCOME_UNKNOWN" : "RESOURCE_UNAVAILABLE", kind === "apply" ? "The database did not answer; the write may or may not have been applied." : "The database did not answer.");
 }
