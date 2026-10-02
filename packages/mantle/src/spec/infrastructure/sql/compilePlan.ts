@@ -51,23 +51,34 @@ function toDiagnostic(d: SqlDiagnostic, source: SourceLocation, pointer: string)
 /** What `SELECT *` expands to (the policy's `starCols`): the declared fields but the scope field, a geo field as its two columns. */
 const starCols = (s: PlanSchema) => Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, t]) => (t === "geo" ? [`${f}_lat`, `${f}_lng`] : [f]));
 
+type Columns = Record<string, { schema: string; field: string }>;
+
 /**
  * A View's outputs, read off its compiled SELECT: `keys` are the row's keys in order (undefined when an output has no name or
  * a `*` reads a subquery or `json_each`), `columns` the outputs that are a Schema field read unchanged.
  */
-export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>): { keys?: string[]; columns: Record<string, { schema: string; field: string }> } {
-  const columns: Record<string, { schema: string; field: string }> = {};
+export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>, ctes: ReadonlyMap<string, Columns> = new Map()): { keys?: string[]; columns: Columns } {
+  const columns: Columns = {};
   const sel = view.stmts[0]?.SelectStmt;
   if (!sel?.targetList) return { columns };
+  const outputs = (stmt: SqlNode, scope: ReadonlyMap<string, Columns>) => viewOutputs({ grammar: view.grammar, stmts: [stmt] }, schemas, scope);
+  // a CTE's outputs, like a FROM subquery's, keep the Schema field they read unchanged; a body sees its earlier siblings
+  const scope = new Map(ctes);
+  for (const { CommonTableExpr: c } of sel.withClause?.ctes ?? []) {
+    const body = outputs(c.ctequery, scope);
+    const renamed: string[] | undefined = c.aliascolnames?.map((x: SqlNode) => x.String.sval);
+    scope.set(c.ctename, renamed ? Object.fromEntries(renamed.flatMap((n, i) => (body.columns[body.keys?.[i] ?? ""] ? [[n, body.columns[body.keys![i]!]!]] : []))) : body.columns);
+  }
   const rels = new Map<string, string | undefined>();
   // a FROM subquery's outputs that read a Schema field unchanged keep its type (an inlined View's, ADR-0037 decision 3)
-  const subs = new Map<string, Record<string, { schema: string; field: string }>>();
+  const subs = new Map<string, Columns>();
   const walk = (n: SqlNode): void => {
     if (n.JoinExpr) return (walk(n.JoinExpr.larg), walk(n.JoinExpr.rarg));
     const v = n.RangeVar;
     if (v) rels.set(v.alias?.aliasname ?? v.relname, v.mantle === "table" && schemas[String(v.relname).toLowerCase()] ? String(v.relname).toLowerCase() : undefined);
     else rels.set((n.RangeSubselect ?? n.RangeFunction)?.alias?.aliasname ?? "", undefined);
-    if (n.RangeSubselect?.subquery?.SelectStmt) subs.set(n.RangeSubselect.alias?.aliasname ?? "", viewOutputs({ grammar: view.grammar, stmts: [n.RangeSubselect.subquery] }, schemas).columns);
+    if (v?.mantle === "cte" && scope.has(v.relname)) subs.set(v.alias?.aliasname ?? v.relname, scope.get(v.relname)!);
+    if (n.RangeSubselect?.subquery?.SelectStmt) subs.set(n.RangeSubselect.alias?.aliasname ?? "", outputs(n.RangeSubselect.subquery, scope).columns);
   };
   for (const f of sel.fromClause ?? []) walk(f);
   const typeOf = (schema: string, col: string) => schemas[schema]!.fields[col] ?? (Object.hasOwn(NATIVE_OUTPUT_TYPES, col) ? NATIVE_OUTPUT_TYPES[col] : undefined);

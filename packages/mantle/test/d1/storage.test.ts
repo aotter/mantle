@@ -50,6 +50,14 @@ it("adds a missing field column, keeps the rows, and reports what is undeclared"
   expect(await d1.all("SELECT id, sku FROM items")).toEqual([{ id: "a", sku: null }]);
 });
 
+it("adds no index of its own for the scope, and calls one left from before redundant", async () => {
+  const d1 = await db();
+  await run(d1, { items });
+  expect(await names(d1, "index")).not.toContain("_mantle_scope_items");
+  await d1.exec("CREATE INDEX _mantle_scope_items ON items (owner)");
+  expect((await run(d1, { items }, "f2")).undeclared.map((u) => u.message)).toEqual(["index _mantle_scope_items is redundant: a declared index leads with owner; drop it by hand"]);
+});
+
 it("blocks a changed column type, an undeclared unique index and a table Mantle did not create, and applies nothing", async () => {
   const d1 = await db();
   await d1.exec("CREATE TABLE items (id TEXT, owner TEXT)", "CREATE TABLE other (id TEXT)");

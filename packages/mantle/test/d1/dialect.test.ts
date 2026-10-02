@@ -28,7 +28,7 @@ it("the types case: D1's storage encodings give PostgreSQL's results", async () 
   } finally { await e.driver.dispose(); }
 }, 120_000);
 
-it("the policy wrapper prints scope and TTL once per Schema, and SQLite's plan still uses the scope index", async () => {
+it("the policy wrapper prints scope and TTL once per Schema, and SQLite's plan still uses the index the scope leads", async () => {
   const e = await engine();
   try {
     const s = site(await boot(e));
@@ -37,8 +37,8 @@ it("the policy wrapper prints scope and TTL once per Schema, and SQLite's plan s
     expect(sql).toMatch(/FROM orders WHERE orders\.owner = \?1/);
     expect(sql).not.toMatch(/\?4/);
     const detail = (await s.d1.all(`EXPLAIN QUERY PLAN ${sql}`, ["o1", 0, 0])).map((x) => x.detail).join(" | ");
-    expect(detail).toMatch(/_mantle_scope_items/);
-    expect(detail).toMatch(/_mantle_scope_orders/);
+    expect(detail).toMatch(/_mantle_ix_items_0/);
+    expect(detail).toMatch(/_mantle_ix_orders_0/);
   } finally { await e.driver.dispose(); }
 }, 120_000);
 

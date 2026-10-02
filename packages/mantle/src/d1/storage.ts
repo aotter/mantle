@@ -77,7 +77,6 @@ function desired(name: string, s: StorageSchema): Desired {
       ty === "geo" ? [{ name: `${f}_lat`, type: "REAL", native: false }, { name: `${f}_lng`, type: "REAL", native: false }] : [{ name: f, type: colType(ty), native: false }]),
   ];
   const indexes = [
-    ...(s.scope ? [{ name: `_mantle_scope_${name}`, unique: false, columns: [s.scope] }] : []),
     ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })), // the grammar already starts a scoped unique index with the scope
     ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: cols })),
   ].map((i) => ({ ...i, sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(i.name)} ON ${t} (${i.columns.map(q).join(", ")})` }));
@@ -270,7 +269,7 @@ async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, Storag
         if (a.origin === "u" && a.unique && a.cols.join() !== "id") block(name, `${name} has a UNIQUE constraint on ${a.cols.join(", ")} that Mantle did not declare; it still constrains writes`);
         if (declaredIdx.has(n) || a.origin !== "c") continue;
         if (a.unique) block(name, `undeclared unique index ${n} still constrains writes; drop it or declare it`);
-        else undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_INDEX", message: `index ${n} is in the database and not in the plan; it is kept` });
+        else undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_INDEX", message: n === `_mantle_scope_${name}` ? `index ${n} is redundant: a declared index leads with ${schema.scope}; drop it by hand` : `index ${n} is in the database and not in the plan; it is kept` });
       }
     }
     // Mantle's own triggers and search / geo tables: rebuilt when their declaration changes, dropped when it goes away
