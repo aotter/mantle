@@ -20,13 +20,21 @@ function writeTarget(ir: Statement["ir"]): string | undefined {
   return stmt?.relation?.relname?.toLowerCase();
 }
 
+/** SQLite's primary codes that say nothing about the statement: a lock, memory, I/O, a full disk, an interrupt. */
+const TRANSIENT_CODES = new Set([5, 6, 7, 9, 10, 13]);
+const TRANSIENT = /SQLITE_(BUSY|LOCKED|NOMEM|IOERR|FULL|INTERRUPT)/;
+
 /**
- * Whether the engine answered: D1 writes `SQLITE_…` into the message; bun:sqlite and libSQL put it in `code`, node:sqlite
- * gives a numeric `errcode`. An error with none of these never reached the engine (a dropped connection, a timeout).
+ * How the engine answered. D1 writes `SQLITE_…` into the message; bun:sqlite and libSQL put an extended code in `code` (bun only
+ * for extended codes: a plain SQLITE_ERROR is a `SQLiteError` with `errno` 1), node:sqlite gives a numeric `errcode`.
+ * `transient` (busy, I/O, full) says nothing about the statement and is treated as no answer: a commit that hit it may have landed.
  */
-function engineAnswered(e: unknown, message: string): boolean {
-  const { code, errcode } = (e ?? {}) as { code?: unknown; errcode?: unknown };
-  return /SQLITE_[A-Z_]+/.test(message) || (typeof code === "string" && code.startsWith("SQLITE_")) || typeof errcode === "number";
+function engineAnswer(e: unknown, message: string): "refused" | "transient" | "none" {
+  const { code, errcode, errno, name } = (e ?? {}) as { code?: unknown; errcode?: unknown; errno?: unknown; name?: unknown };
+  const primary = typeof errcode === "number" ? errcode & 0xff : name === "SQLiteError" && typeof errno === "number" ? errno & 0xff : undefined;
+  const text = `${message} ${typeof code === "string" ? code : ""}`;
+  if ((primary !== undefined && TRANSIENT_CODES.has(primary)) || TRANSIENT.test(text)) return "transient";
+  return /SQLITE_[A-Z_]+/.test(text) || primary !== undefined ? "refused" : "none";
 }
 
 function mapped(e: unknown, kind: "select" | "apply", writes: readonly (string | undefined)[] = []): never {
@@ -49,7 +57,7 @@ function mapped(e: unknown, kind: "select" | "apply", writes: readonly (string |
   if (/ON CONFLICT clause does not match/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "onConflict.columns must match a unique index of the Schema.");
   if (/NOT NULL constraint failed/.test(message)) throw fail("INPUT_VALIDATION_FAILED", "A required column has no value; a scoped Schema needs a caller identity.");
   // the engine answered and refused (a constraint, a type, a syntax problem): the write did not happen
-  if (engineAnswered(e, message)) throw fail("INPUT_VALIDATION_FAILED", "The database refused the statement.");
+  if (engineAnswer(e, message) === "refused") throw fail("INPUT_VALIDATION_FAILED", "The database refused the statement.");
   // no answer (the connection dropped, a timeout): a read can be retried, a write may or may not have landed and must be reconciled
   throw fail(kind === "apply" ? "OUTCOME_UNKNOWN" : "RESOURCE_UNAVAILABLE", kind === "apply" ? "The database did not answer; the write may or may not have been applied." : "The database did not answer.");
 }

@@ -26,7 +26,8 @@ export function nodeSqlite(path = ":memory:"): DatabaseDriver & { db: DatabaseSy
         db.exec("COMMIT");
         return out;
       } catch (e) {
-        db.exec("ROLLBACK");
+        // SQLite has already rolled back after FULL, IOERR or an interrupt; the original error is the one to report
+        try { db.exec("ROLLBACK"); } catch {}
         throw e;
       }
     },
@@ -51,4 +52,17 @@ it("a refused write is classified by the driver's code, not by D1's message text
   await expect(ex.apply([insert(-1)])).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED", message: "CHECK t: a >= 0" } });
   await expect(ex.select({ ir: { SelectStmt: { targetList: [{ ResTarget: { val: { ColumnRef: { fields: [{ A_Star: {} }] } } } }], fromClause: [{ RangeVar: { relname: "nope", inh: true, relpersistence: "p" } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }, binds: [] }))
     .rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+});
+
+it("each driver's error shape: bun's plain SQLITE_ERROR is refused; busy, full and I/O are not the caller's input", async () => {
+  const failing = (error: Error): DatabaseDriver => ({ batch: async () => { throw error; } });
+  const select = { ir: { SelectStmt: { targetList: [{ ResTarget: { val: { A_Const: { ival: { ival: 1 } } } } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }, binds: [] };
+  const code = (error: Error) => new SqliteStoreExecutor(failing(error)).apply([select]).catch((e) => e.diagnostic.code);
+  const bun = (message: string, extra: object) => Object.assign(new Error(message), { name: "SQLiteError" }, extra);
+  expect(await code(bun("no such table: nope", { errno: 1 }))).toBe("INPUT_VALIDATION_FAILED");
+  expect(await code(bun("UNIQUE constraint failed: t.a", { errno: 2067, code: "SQLITE_CONSTRAINT_UNIQUE" }))).toBe("CONFLICT");
+  expect(await code(bun("database is locked", { errno: 5, code: "SQLITE_BUSY" }))).toBe("OUTCOME_UNKNOWN");
+  expect(await code(Object.assign(new Error("disk I/O error"), { code: "ERR_SQLITE_ERROR", errcode: 4874 }))).toBe("OUTCOME_UNKNOWN");
+  expect(await code(new Error("D1_ERROR: Network connection lost."))).toBe("OUTCOME_UNKNOWN");
+  expect(await code(new Error("D1_ERROR: no such table: nope: SQLITE_ERROR"))).toBe("INPUT_VALIDATION_FAILED");
 });
