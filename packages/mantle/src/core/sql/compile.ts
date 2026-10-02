@@ -68,8 +68,9 @@ export function bindValues(dialect: MantleDialect, binds: readonly BindSpec[], c
   return binds.map((b) => {
     switch (b.k) {
       case "uid": return ctx.uid;
-      case "now": return ctx.now;
-      case "cutoff": return ctx.now - b.seconds * 1_000_000;
+      // an instant is bound as the dialect stores one (microseconds on D1, an ISO string on PostgreSQL)
+      case "now": return dialect.codec.encode("timestamptz", ctx.now);
+      case "cutoff": return dialect.codec.encode("timestamptz", ctx.now - b.seconds * 1_000_000);
       case "const": return b.value;
       case "role": return ctx.role ?? null;
       case "input": return dialect.codec.encode(b.type, input[b.name]);

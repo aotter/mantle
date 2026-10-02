@@ -4,7 +4,7 @@
 import type { Report } from '../report.js';
 import type { Engine } from '../harness.js';
 import { boot, caller, program, reset, runProcedure, runView, site } from '../harness.js';
-import { corpus } from './corpus.js';
+import { corpus, typedRows } from './corpus.js';
 
 export async function run(r: Report, engine: Engine) {
   r.section('Printer corpus: every allowlisted node on the engine');
@@ -21,7 +21,8 @@ export async function run(r: Report, engine: Engine) {
     try {
       if (item.kind === 'procedure') await reset(b);
       const rows = item.kind === 'view' ? [(await runView(s, p, rt)).rows] : (await runProcedure(s, p, rt)).rows;
-      if (JSON.stringify(rows) !== JSON.stringify(item.expect)) bad.push(`${item.id}: expected ${JSON.stringify(item.expect)} got ${JSON.stringify(rows)}`);
+      // PostgreSQL semantics in D1's storage encoding, or as the Store's typed wire values (see `typedRows`)
+      if (![item.expect, typedRows[item.id]].some((e) => e && JSON.stringify(rows) === JSON.stringify(e))) bad.push(`${item.id}: expected ${JSON.stringify(item.expect)} got ${JSON.stringify(rows)}`);
     } catch (e) {
       bad.push(`${item.id}: ${String(e.message).split('\n')[0].slice(0, 200)}`);
     }

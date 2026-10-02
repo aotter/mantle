@@ -29,6 +29,15 @@
       "import": "./dist/d1/compile/index.js",
       "default": "./dist/d1/compile/index.js"
     },
+    "./postgres": {
+      "types": "./dist/postgres/index.d.ts",
+      "import": "./dist/postgres/index.js"
+    },
+    "./postgres/compile": {
+      "types": "./dist/postgres/compile/index.d.ts",
+      "import": "./dist/postgres/compile/index.js",
+      "default": "./dist/postgres/compile/index.js"
+    },
     "./cloudflare": {
       "types": "./dist/cloudflare/index.d.ts",
       "import": "./dist/cloudflare/index.js"
@@ -92,7 +101,9 @@
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/server": "2.1.0",
     "@types/node": "catalog:",
+    "@types/pg": "8.23.1",
     "better-auth": "catalog:",
+    "pg": "8.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "wrangler": "4.126.0"

@@ -23,6 +23,15 @@ jobs:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # the PostgreSQL dialect's tests (test/postgres) run against this server; without MANTLE_PG_URL they skip
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: mantle, POSTGRES_PASSWORD: mantle, POSTGRES_DB: mantle }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
