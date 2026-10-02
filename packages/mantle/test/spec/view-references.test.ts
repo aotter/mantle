@@ -5,6 +5,7 @@ import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan } from "../../src/spec/index.js";
 import { createMantleRuntime, type Caller } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
+import * as pgCompile from "../../src/postgres/compile/index.js";
 
 const doc = (kind: string, name: string, spec: string) => `apiVersion: cms.mantle.aotter.net/v2\nkind: ${kind}\nmetadata: { name: ${name} }\nspec:\n${spec}`;
 const NOTES = doc("Schema", "notes", `  title: Notes
@@ -46,6 +47,9 @@ describe("View references", () => {
       .toMatch(/by_title is a View with an input/);
     expect(await errors(view("a", "SELECT x.id FROM b x"), view("b", "SELECT y.id FROM a y"))).toMatch(/reads itself: a -> b -> a/);
     expect(await errors(view("open", "SELECT id FROM notes"), doc("Procedure", "p", "  input: { type: object }\n  output: { type: object }\n  handler: { sql: \"DELETE FROM open\" }"))).toMatch(/open is a View: a View is read, never written/);
+    // a CTE named like a View is the CTE, not a dependency: no false cycle
+    const ctePlan = await compilePlan({ sources: [{ sourceId: "memory:refs", text: [NOTES, view("cyc-a", "WITH cyc_b AS (SELECT id FROM notes) SELECT id FROM cyc_b"), view("cyc-b", "SELECT x.id FROM cyc_a x")].join("\n---\n") }] }, pgCompile);
+    expect(ctePlan.ok, JSON.stringify(ctePlan.diagnostics)).toBe(true);
     // a View named like a Schema is fine; the name reads the Schema
     expect((await compile(view("notes", "SELECT id FROM notes"), view("y", "SELECT n.id FROM notes n"))).ok).toBe(true);
   });

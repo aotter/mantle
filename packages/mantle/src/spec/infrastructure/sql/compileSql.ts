@@ -18,17 +18,21 @@ export interface SqlDialect {
   accepts(stmts: SqlNode[], context: SqlContext & { source: string }, locations: (number | undefined)[]): void;
 }
 
-/** The relation names a source reads (CTE names included), or none when it does not parse: the compiler orders Views by them. */
+/**
+ * The relation names a source reads, less every name it defines as a CTE, or none when it does not parse: the compiler
+ * orders Views by them. ponytail: a CTE named like a View hides that View for the whole source, not only in the CTE's scope.
+ */
 export async function relationNames(sql: string): Promise<Set<string>> {
-  const names = new Set<string>();
+  const names = new Set<string>(), ctes = new Set<string>();
   const walk = (v: any): void => {
     if (Array.isArray(v)) return v.forEach(walk);
     if (!v || typeof v !== "object") return;
     if (typeof v.relname === "string") names.add(v.relname);
+    if (typeof v.ctename === "string") ctes.add(v.ctename);
     Object.values(v).forEach(walk);
   };
   try { walk((await parsePgSql(sql)).stmts); } catch { /* compileSql reports it */ }
-  return names;
+  return new Set([...names].filter((n) => !ctes.has(n)));
 }
 
 export type CompileSqlResult = { readonly ok: true; readonly plan: SqlPlan } | { readonly ok: false; readonly diagnostic: SqlDiagnostic };

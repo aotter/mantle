@@ -6,7 +6,7 @@
 import { expect, it } from "vitest";
 import { pgDatabaseDriver, postgresStorage } from "../../src/postgres/index.js";
 import * as pgCompile from "../../src/postgres/compile/index.js";
-import { boot, caller, program, runView, site, useCompileSide } from "../../src/testing/harness.js";
+import { boot, caller, program, runProcedure, runView, site, useCompileSide } from "../../src/testing/harness.js";
 import { PG_URL, freshSchema } from "./engine.js";
 
 const VIEWS: [string, string, unknown[]][] = [
@@ -30,6 +30,9 @@ const VIEWS: [string, string, unknown[]][] = [
     [{ id: "a", s: "5", same: true }, { id: "b", s: "2", same: true }, { id: "c", s: "9", same: true }, { id: "d", s: "7", same: true }]],
   ["a bare text literal compared with a date-time column is PostgreSQL's cast", "SELECT count(*) AS n FROM items WHERE created_at > '1969-12-31'", [{ n: 4 }]],
   ["INTERSECT inside a CTE", "WITH r AS (SELECT id FROM items WHERE cat = 'x' INTERSECT SELECT id FROM items WHERE stock > 4) SELECT id FROM r ORDER BY id", [{ id: "a" }, { id: "d" }]],
+  ["a CTE named like the Schema it reads: the body reads the Schema, scoped", "WITH items AS (SELECT id, name FROM items) SELECT id FROM items ORDER BY id", [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }]],
+  ["a WITH on a set operation's branch", "SELECT u.id FROM ((WITH z AS (SELECT id FROM items) SELECT id FROM z) UNION ALL SELECT id FROM requisitions) u ORDER BY u.id",
+    [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, { id: "r1" }, { id: "r2" }]],
 ];
 
 const REFUSED: [string, string, RegExp][] = [
@@ -40,6 +43,7 @@ const REFUSED: [string, string, RegExp][] = [
   ["lag without OVER", "SELECT lag(id) AS p FROM items", /lag\(\) is a window function/],
   ["FILTER on a function that is not an aggregate", "SELECT lower(name) FILTER (WHERE true) AS l FROM items", /FILTER and ORDER BY belong to an aggregate/],
   ["generate_series", "SELECT g.id FROM generate_series(1, 3) g", /only json_each\(\) is allowed in FROM/],
+  ["lag with an offset that is not a literal", "SELECT id, lag(id, stock) OVER (ORDER BY id) AS p FROM items ORDER BY id", /lag's offset is an integer literal/],
 ];
 
 it.skipIf(!PG_URL)("the reference profile's constructs give PostgreSQL's results, under the caller's visibility", async () => {
@@ -49,6 +53,9 @@ it.skipIf(!PG_URL)("the reference profile's constructs give PostgreSQL's results
     const s = site(await boot({ storage: postgresStorage({ connect: db.connect }), driver: pgDatabaseDriver(db.connect) }));
     for (const [what, sql, rows] of VIEWS) expect((await runView(s, await program("view", sql), caller())).rows, what).toEqual(rows);
     for (const [what, sql, message] of REFUSED) await expect(program("view", sql), what).rejects.toThrow(message);
+    // INSERT ... SELECT over a set operation: the fills land in their own columns, and each branch is scoped
+    const { rows } = await runProcedure(s, await program("procedure", "INSERT INTO settings (key, value) SELECT name, cat FROM items UNION SELECT state, state FROM requisitions RETURNING key"), caller());
+    expect(rows[0].map((r) => r.key).sort()).toEqual(["apple", "berry", "cherry", "date", "pending"]);
     // a write inside WITH is refused in a Procedure too
     await expect(program("procedure", "INSERT INTO orders (item_id, qty) WITH x AS (DELETE FROM items RETURNING id) SELECT id, 1 FROM x")).rejects.toThrow(/a CTE body is a SELECT/);
   } finally { useCompileSide(undefined); await db.drop(); }
@@ -70,3 +77,27 @@ it.skipIf(!PG_URL)("a statement past statement_timeout fails as RESOURCE_UNAVAIL
     expect((await runView(s, await program("view", "SELECT id FROM items ORDER BY id"), caller())).rows).toHaveLength(4);
   } finally { useCompileSide(undefined); await db.drop(); }
 }, 60_000);
+
+it.skipIf(!PG_URL)("the runtime honors a cte tag only for a CTE in scope: a forged one never reads a table or the catalog", async () => {
+  const db = await freshSchema();
+  useCompileSide(pgCompile);
+  try {
+    const s = site(await boot({ storage: postgresStorage({ connect: db.connect }), driver: pgDatabaseDriver(db.connect) }));
+    const p = await program("view", "WITH items AS (SELECT id, name FROM items) SELECT id, name FROM items ORDER BY id");
+    expect((await runView(s, p, caller())).rows.map((r) => r.id)).toEqual(["a", "b", "c", "d"]);
+    // the CTE's body read retagged as the CTE itself: PostgreSQL would read the raw table, every owner's and expired rows
+    const forged = JSON.parse(JSON.stringify(p).replace('"relname":"items","inh":true,"relpersistence":"p","mantle":"table"', '"relname":"items","inh":true,"relpersistence":"p","mantle":"cte"'));
+    expect(JSON.stringify(forged)).not.toContain('"mantle":"table"');
+    await expect(runView(s, forged, caller())).rejects.toThrow(/cte reference is not defined in scope/);
+    // the same with a catalog view's name
+    const catalog = JSON.parse(JSON.stringify(forged).replaceAll('"items"', '"pg_tables"').replaceAll('"name"', '"tablename"'));
+    await expect(runView(s, catalog, caller())).rejects.toThrow(/cte reference is not defined in scope|not a declared/);
+  } finally { useCompileSide(undefined); await db.drop(); }
+}, 60_000);
+
+it("a public View's CTE over a publishing Schema is not read as an unpublished relation", async () => {
+  const { compileSql } = await import("../../src/spec/index.js");
+  const { schemas } = await import("../../src/testing/harness.js");
+  const r = await compileSql("WITH x AS (SELECT id, title FROM posts) SELECT id, title FROM x ORDER BY id", { schemas, inputs: {}, kind: "view", public: true }, pgCompile);
+  expect(r.ok, JSON.stringify(r)).toBe(true);
+});

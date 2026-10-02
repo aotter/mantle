@@ -14,7 +14,8 @@ import { SqlRefusal } from "../../spec/domain/service/SqlRefusal.js";
 import { intervalMicros, parseNumeric } from "../../spec/domain/service/SqlTypes.js";
 
 type Code = SqlDiagnosticCode;
-type Ctx = SqlContext & { source?: string; known?: Set<string>; p: Profile };
+/** `scope`: the CTE names in scope, innermost last, by PostgreSQL's rule (see `withScope`) */
+type Ctx = SqlContext & { source?: string; known?: Set<string>; p: Profile; scope: Set<string>[] };
 
 /** node type -> the keys it may carry */
 export const KEYS_SRC: Record<string, string> = {
@@ -99,7 +100,7 @@ const MORE_ENUM: Record<string, (string | number | boolean)[]> = {
 const MORE_OPS = ['->', '#>', '#>>', '@>', '<@', '?', '?|', '?&', '~', '~*', '!~', '!~*', '~~*', '!~~*'];
 const MORE_WINDOW = ['avg', 'min', 'max', 'lag', 'lead', 'first_value', 'last_value', 'dense_rank'];
 const MORE_AGG = ['string_agg', 'jsonb_agg', 'jsonb_object_agg'];
-const MORE_FUNCS = [...MORE_WINDOW, ...MORE_AGG, 'jsonb_build_object', 'jsonb_build_array', 'to_jsonb', 'jsonb_typeof', 'split_part', 'floor', 'ceil', 'sqrt', 'power', 'timezone'];
+const MORE_FUNCS = [...MORE_WINDOW, ...MORE_AGG, 'jsonb_build_object', 'jsonb_build_array', 'jsonb_strip_nulls', 'to_jsonb', 'jsonb_typeof', 'split_part', 'floor', 'ceil', 'sqrt', 'power', 'timezone'];
 /** frame bits a window may not set: GROUPS and every EXCLUDE (PostgreSQL's FRAMEOPTION_* in parsenodes.h) */
 export const FRAME_REFUSED = 0x8 | 0x8000 | 0x10000 | 0x20000;
 const union = <T>(a: Iterable<T>, b: Iterable<T>) => new Set([...a, ...b]);
@@ -156,7 +157,7 @@ type Walk = { ctx: Ctx; budget: Budget };
 
 /** Validate a program of statements under a profile. `stmts` are the `stmt` of each RawStmt; `locs` their offsets (CLI only). */
 export function validateProgram(stmts: N[], ctx: SqlContext & { source?: string }, locs: (number | undefined)[] = [], profile: Profile = BASE_PROFILE): void {
-  program(stmts, { ...ctx, p: profile }, locs);
+  program(stmts, { ...ctx, p: profile, scope: [] }, locs);
 }
 function program(stmts: N[], ctx: Ctx, locs: (number | undefined)[]): void {
   if (!Array.isArray(stmts) || !stmts.length) no('SQL_SHAPE', 'an empty program');
@@ -200,7 +201,8 @@ function knownColumns(stmts: N[], ctx: Ctx): Set<string> {
 
 /** ADR-0034 decision 8: a public View that joins a non-publishing Schema must tie it to a publishing one in a JOIN ... ON. */
 function publishedJoin(stmts: N[], ctx: Ctx) {
-  const rels: { alias: string; publishing: boolean }[] = [...find(stmts, 'RangeVar')].map((r) => ({
+  // a CTE reference is not a relation: the Schemas its body reads are found where they are
+  const rels: { alias: string; publishing: boolean }[] = [...find(stmts, 'RangeVar')].filter((r) => r.mantle !== 'cte').map((r) => ({
     alias: (r.alias?.aliasname ?? r.relname).toLowerCase(),
     publishing: !!ctx.schemas[r.relname.toLowerCase()]?.publishing,
   }));
@@ -211,9 +213,8 @@ function publishedJoin(stmts: N[], ctx: Ctx) {
       no('SQL_RELATION', `${r.alias} has no published state: a public View must join it to a publishing Schema in a JOIN ... ON`);
 }
 
-function walk(type: string, node: N, w: Walk, path: string[], loc: number | undefined): void {
-  if (++w.budget.n > MAX_NODES) no('SQL_SHAPE', 'statement too large', loc);
-  const here = typeof node.location === 'number' ? node.location : loc;
+/** A node's keys and enum values against the profile. */
+function shape(type: string, node: N, w: Walk, here: number | undefined): void {
   const keys = w.ctx.p.keys[type] ?? no('SQL_UNSUPPORTED', `${type} is not in the subset`, here, KEYWORD[type]);
   for (const [k, v] of Object.entries(node)) {
     if (k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end') continue; // source positions, not structure
@@ -221,19 +222,40 @@ function walk(type: string, node: N, w: Walk, path: string[], loc: number | unde
     const e = w.ctx.p.enums[`${type}.${k}`];
     if (e && !e.includes(v as any)) no('SQL_UNSUPPORTED', `${type}.${k} = ${JSON.stringify(v)} is refused`, firstLoc(node) ?? here, KEYWORD[`${type}.${k}`]);
   }
+}
+
+/** Runs `f` with these CTE names in scope. */
+function withScope(w: Walk, names: Iterable<string>, f: () => void): void {
+  w.ctx.scope.push(new Set(names));
+  try { f(); } finally { w.ctx.scope.pop(); }
+}
+
+function walk(type: string, node: N, w: Walk, path: string[], loc: number | undefined): void {
+  if (++w.budget.n > MAX_NODES) no('SQL_SHAPE', 'statement too large', loc);
+  const here = typeof node.location === 'number' ? node.location : loc;
+  shape(type, node, w, here);
   try {
     check[type]?.(node, w.ctx, path, here);
   } catch (e) {
     if (e instanceof SqlRefusal && e.offset === undefined && !e.keyword) e.offset = here; // a helper (interval, numeric) refused without knowing where
     throw e;
   }
-  for (const [k, v] of Object.entries(node)) {
-    if (type === 'A_Const' || k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end') continue;
-    const bare = BARE[`${type}.${k}`] ?? BARE[k];
-    if (bare) walk(bare, v as N, w, [...path, bare], here);
-    else if (Array.isArray(v)) v.forEach((c) => child(c, w, path, k, here));
-    else if (v && typeof v === 'object') child(v as N, w, path, k, here);
+  // PostgreSQL's CTE scope: a body sees its earlier siblings (every sibling under RECURSIVE); the SELECT's body sees them all
+  const wc: N | undefined = type === 'SelectStmt' ? node.withClause : undefined;
+  const names: string[] = (wc?.ctes ?? []).map((x: N) => String(x.CommonTableExpr?.ctename));
+  if (wc) {
+    shape('WithClause', wc, w, here);
+    (wc.ctes ?? []).forEach((x: N, j: number) => withScope(w, wc.recursive ? names : names.slice(0, j), () => child(x, w, [...path, 'WithClause'], 'ctes', here)));
   }
+  withScope(w, names, () => {
+    for (const [k, v] of Object.entries(node)) {
+      if (type === 'A_Const' || k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end' || (wc && k === 'withClause')) continue;
+      const bare = BARE[`${type}.${k}`] ?? BARE[k];
+      if (bare) walk(bare, v as N, w, [...path, bare], here);
+      else if (Array.isArray(v)) v.forEach((c) => child(c, w, path, k, here));
+      else if (v && typeof v === 'object') child(v as N, w, path, k, here);
+    }
+  });
 }
 function child(c: N, w: Walk, path: string[], k: string, loc: number | undefined) {
   const keys = Object.keys(c);
@@ -254,8 +276,8 @@ const check: Record<string, Checker> = {
     const name = (n.relname as string).toLowerCase(); // SQLite names are case-insensitive, quoted or not; the context is keyed in lower case
     if (name.startsWith('_mantle') || name === 'input' || name === 'auth') no('SQL_RELATION', `${name} is not a declared Schema`, at);
     const reference = ctx.p.name === 'reference';
-    // the front end tags a name `cte` only when a CTE of that name is in scope; base has no WITH, so a cte tag there is unresolved
-    if (n.mantle === 'cte') { if (reference) return; no('SQL_RELATION', `${name}: a cte reference is not defined in scope`, at); }
+    // a `cte` tag is honored only for a CTE in scope here (the runtime never trusts an IR's tags); base has no WITH at all
+    if (n.mantle === 'cte') { if (reference && ctx.scope.some((s) => s.has(n.relname))) return; no('SQL_RELATION', `${name}: a cte reference is not defined in scope`, at); }
     if (!ctx.schemas[name]) no('SQL_RELATION', `${name} is not a declared Schema`, at);
     if (n.mantle !== undefined && n.mantle !== 'table') no('SQL_RELATION', `${name}: relation not name-resolved`, at);
     if (n.alias && ['input', 'auth', 'excluded'].includes(n.alias.aliasname)) no('SQL_RELATION', `${n.alias.aliasname} is a reserved alias`, at);
@@ -279,6 +301,7 @@ const check: Record<string, Checker> = {
     if (!ctx.p.funcs.has(f)) no('SQL_FUNCTION', `function ${f} is not on the allowlist`, at);
     if (n.over && (ctx.kind !== 'view' || !ctx.p.window.has(f))) no('SQL_FUNCTION', `window function ${f} is refused here`, at);
     if (!n.over && WINDOW_ONLY.has(f)) no('SQL_FUNCTION', `${f}() is a window function: it needs OVER (...)`, at);
+    if ((f === 'lag' || f === 'lead') && n.args?.[1] && n.args[1].A_Const?.ival === undefined) no('SQL_FUNCTION', `${f}'s offset is an integer literal`, at);
     if ((n.agg_filter || n.agg_order) && !ctx.p.agg.has(f)) no('SQL_FUNCTION', `FILTER and ORDER BY belong to an aggregate, and ${f} is not one`, at);
     const args: N[] = n.args ?? [];
     const str = (a?: N) => a?.A_Const?.sval?.sval as string | undefined;

@@ -72,7 +72,9 @@ export function typed(ast: N, schemas: Readonly<Record<string, StorageSchema>>):
     // Core's insert shape (policy.ts): `SELECT _v.*, <fills> FROM (<the author's VALUES or SELECT>) _v`
     const k = cols.length - (list.length - 1);
     const inner = from?.subquery?.SelectStmt;
-    const width = inner?.valuesLists?.[0]?.List?.items?.length ?? inner?.targetList?.length;
+    // a set operation's width is its first branch's
+    const first = (b: N | undefined): N | undefined => (b?.op && b.op !== "SETOP_NONE" ? first(b.larg) : b);
+    const width = inner?.valuesLists?.[0]?.List?.items?.length ?? first(inner)?.targetList?.length;
     // a source wider or narrower than its columns is left as written, so PostgreSQL refuses it as SQLite does
     if (star?.length === 2 && star[1].A_Star && from?.alias?.aliasname === star[0].String?.sval && width === k) {
       from.alias.colnames = Array.from({ length: k }, (_x, i) => S(`c${i}`));

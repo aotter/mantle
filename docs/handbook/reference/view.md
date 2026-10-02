@@ -70,7 +70,7 @@ On PostgreSQL a View may also use:
 | `JOIN LATERAL (…) x ON …`, `, LATERAL (…) x` | |
 | Window frames | `ROWS`/`RANGE BETWEEN … PRECEDING AND …` with literal offsets (an integer, or an interval for `RANGE` over time); `avg`, `min`, `max`, `lag`, `lead`, `first_value`, `last_value`, `dense_rank` over a window. `GROUPS` and `EXCLUDE` are refused |
 | Aggregates | `FILTER (WHERE …)`, `ORDER BY` inside an aggregate, `string_agg`, `jsonb_agg`, `jsonb_object_agg` |
-| jsonb | `->`, `#>`, `#>>`, `@>`, `<@`, `?`, `?\|`, `?&`; `jsonb_build_object`, `jsonb_build_array`, `to_jsonb`, `jsonb_typeof`; a json field is stored as `jsonb` |
+| jsonb | `->`, `#>`, `#>>`, `@>`, `<@`, `?`, `?\|`, `?&`; `jsonb_build_object`, `jsonb_build_array`, `jsonb_strip_nulls`, `to_jsonb`, `jsonb_typeof`; a json field is stored as `jsonb` |
 | Text and numbers | `ILIKE`, `~`, `~*`, `!~`, `!~*`, `split_part`, `greatest`, `least`, `floor`, `ceil`, `sqrt`, `power` |
 | Time | `ts AT TIME ZONE 'Asia/Taipei'`; `date_trunc` adds `minute` and `quarter`; `extract` adds `minute`, `quarter`, `week`, `isoyear`, `isodow`, `doy`, `epoch` |
 | Casts | any expression to `int4`, `int8`, `numeric(p, s)`, `date`, `timestamptz`, `jsonb`; a text literal compared with a date-time column is cast, as PostgreSQL does |

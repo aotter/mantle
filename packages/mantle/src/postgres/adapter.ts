@@ -42,6 +42,8 @@ export function postgresDialect(timeZone = "UTC"): MantleDialect {
 }
 
 export function postgresStorage(options: PostgresStorageOptions): MantleStorageAdapter {
+  const ms = options.statementTimeoutMs;
+  if (ms !== undefined && !(Number.isInteger(ms) && ms >= 0)) throw new RangeError(`statementTimeoutMs must be a whole number of milliseconds (0 is no limit), not ${ms}`);
   return {
     dialect: restricted(postgresDialect(options.timeZone), options.restrict),
     async prepare(plan) {

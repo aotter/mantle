@@ -42,7 +42,8 @@ function walk(v: unknown, ctes: ReadonlySet<string>, at: number | undefined, ctx
     const here = typeof n.location === "number" ? n.location : at;
     // a write's target is a RangeVar without its type key
     if (k === "RangeVar" || k === "relation") relation(n, ctes, here, ctx, k === "relation");
-    else if (STATEMENTS.has(k)) {
+    // a set operation's branches are SELECT bodies without their type key, each with its own WITH
+    else if (STATEMENTS.has(k) || ((k === "larg" || k === "rarg") && "op" in n)) {
       if (ctx.kind === "view" && WRITES.has(k)) no("SQL_SHAPE", "a View reads only: no write in a WITH", here);
       if (n.intoClause) no("SQL_UNSUPPORTED", "SELECT ... INTO creates a table and is refused", here);
       const w = n.withClause as N | undefined;

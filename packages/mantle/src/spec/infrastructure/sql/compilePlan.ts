@@ -177,6 +177,8 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   for (const x of linked.views) visit(x, []);
   const compiled = new Map<string, SqlPlan | undefined>();
   for (const { manifest: v, source } of order) {
+    // a View that reads one that failed (or a cycle) is not compiled: the first diagnostic is the one to fix
+    if ((reads.get(v.metadata.name) ?? []).some((r) => !refs[r]?.select)) continue;
     const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
     compiled.set(v.metadata.name, plan);
     const ref = refName(v.metadata.name);

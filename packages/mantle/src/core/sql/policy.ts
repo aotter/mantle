@@ -265,10 +265,22 @@ const outputsOf = (sel: N): string[] => (sel.op && sel.op !== 'SETOP_NONE' ? out
 /** A CTE's: its column list renames its body's. */
 const cteOutputs = (cte: N): string[] => (cte.aliascolnames?.length ? cte.aliascolnames.map((x: N) => x.String.sval) : outputsOf(cte.ctequery.SelectStmt));
 
+/**
+ * PostgreSQL's CTE scope, which the front end tags by and the allowlist checks: a CTE body sees the CTEs of the statements
+ * around it and its earlier siblings (every sibling under RECURSIVE); the SELECT's own body sees all of them. A name outside
+ * that scope is never passed through: PostgreSQL would read it as the table (or the catalog view) of that name.
+ */
 function select(n: N, c: C): N {
-  const ctes = new Map<string, N>((n.withClause?.ctes ?? []).map((x: N) => [x.CommonTableExpr.ctename, x.CommonTableExpr]));
-  c.ctes.push(ctes);
-  try { return selectIn(n, c); } finally { c.ctes.pop(); }
+  const w = n.withClause;
+  const defs: N[] = (w?.ctes ?? []).map((x: N) => x.CommonTableExpr);
+  const scope = (list: N[]) => new Map<string, N>(list.map((d) => [d.ctename, d]));
+  const within = <T>(m: Map<string, N>, f: () => T): T => { c.ctes.push(m); try { return f(); } finally { c.ctes.pop(); } };
+  const withClause = w && { ...w, ctes: defs.map((d, j) => within(scope(w.recursive ? defs : defs.slice(0, j)), () => tx({ CommonTableExpr: d }, c))) };
+  return within(scope(defs), () => {
+    const out = selectIn(w ? { ...n, withClause: undefined } : n, c);
+    if (withClause) out.SelectStmt.withClause = withClause;
+    return out;
+  });
 }
 function selectIn(n: N, c: C): N {
   const rels = relsOf(n.fromClause?.[0]);

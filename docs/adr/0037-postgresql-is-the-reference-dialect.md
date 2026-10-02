@@ -46,13 +46,13 @@ Two kinds of author write Mantle SQL, and the allowlist means something differen
 
 | Construct | Rule |
 |---|---|
-| `WITH` and `WITH RECURSIVE` | Every CTE body is a `SELECT`. A data-modifying CTE (`WITH x AS (DELETE …)`) is refused. Each Schema read inside a body is wrapped like any other (relation position `cte`); a reference to the CTE is not. |
+| `WITH` and `WITH RECURSIVE` | Every CTE body is a `SELECT`. A data-modifying CTE (`WITH x AS (DELETE …)`) is refused. Each Schema read inside a body is wrapped like any other (relation position `cte`); a reference to the CTE is not. A reference is a CTE only by PostgreSQL's scope (a body sees its earlier siblings, every sibling under `RECURSIVE`); the allowlist and the rewriter both check that scope at runtime, because a `cte` tag on any other name would make PostgreSQL read the table, or the catalog view, of that name unwrapped. |
 | `UNION`, `UNION ALL`, `INTERSECT`, `EXCEPT` | Inside a CTE body or a subquery only, never a View's own top-level `SELECT`, because Core's paging and deterministic order act on that `SELECT`. Each branch is wrapped (position `setop`). |
 | `DISTINCT ON` | Inside a CTE body or a subquery only, for the same reason: Core's paging rewrites the top-level order, which decides which row `DISTINCT ON` keeps. |
 | `LATERAL` subqueries | `JOIN LATERAL (…) x ON …` or `, LATERAL (…) x`. The subquery is wrapped as any FROM subquery. |
 | Window frames | `ROWS` and `RANGE` with literal offsets; functions `avg`, `min`, `max`, `lag`, `lead`, `first_value`, `last_value` and `dense_rank` gain `OVER`. |
 | Aggregates | `FILTER (WHERE …)`, `ORDER BY` inside an aggregate, `string_agg`. |
-| jsonb | Operators `->`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`; `jsonb_build_object`, `jsonb_build_array`, `jsonb_agg`, `jsonb_object_agg`, `to_jsonb`, `jsonb_typeof`; casts to `jsonb`. |
+| jsonb | Operators `->`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`; `jsonb_build_object`, `jsonb_build_array`, `jsonb_strip_nulls`, `jsonb_agg`, `jsonb_object_agg`, `to_jsonb`, `jsonb_typeof`; casts to `jsonb`. |
 | Text | `ILIKE`, `NOT ILIKE`, and the regular-expression operators `~`, `~*`, `!~`, `!~*`; `split_part`. |
 | Numbers | `greatest`, `least`, `floor`, `ceil`, `sqrt`, `power`. |
 | Time | `AT TIME ZONE`; `date_trunc` adds `minute` and `quarter`; `extract` adds `minute`, `quarter`, `week`, `isoyear`, `isodow`, `doy` and `epoch`. |
@@ -64,7 +64,7 @@ amendment.
 
 ### 3. A View may read another View
 
-- A View's `FROM` may name an **internal** View (`surface: internal`) that declares no `input` and no `requires`, by its name
+- A View's or a Procedure's `FROM` may name an **internal** View (`surface: internal`) that declares no `input` and no `requires`, by its name
   with `-` written `_` (`free-window` is `free_window`). A Schema of the same name keeps it: the name reads the Schema.
 - The compiler inlines the referenced View's compiled `SELECT` as a `FROM` subquery before the dialect sees the tree. Policy
   and every check then apply to it as to any subquery. Nothing reaches the runtime that a hand-written subquery could not.
@@ -116,7 +116,8 @@ amendment.
 1. Each decision 2 construct gives PostgreSQL's result on the PostgreSQL dialect, and D1 refuses it with "needs the
    PostgreSQL dialect".
 2. The relation-position probe covers `cte` and `setop`, and a Schema read inside a recursive CTE, a `UNION` branch and a
-   `LATERAL` subquery never shows another owner's rows.
+   `LATERAL` subquery never shows another owner's rows. An IR whose `cte` tag names a relation outside PostgreSQL's CTE
+   scope (the CTE's own body, a later sibling, a catalog view) is refused at runtime.
 3. A View's top-level `UNION` or `DISTINCT ON`, and a data-modifying CTE, are refused with a position.
 4. A View reads an internal View; the reference to a View with an input, a public View or a cycle is refused.
 5. A `restrict` that refuses a program stops it at runtime with its diagnostic.

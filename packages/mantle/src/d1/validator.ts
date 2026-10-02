@@ -2,7 +2,7 @@
  * The D1 dialect's allowlist: Mantle SQL's base profile (ADR-0037 decision 1). A construct only the reference profile accepts
  * is refused as needing the PostgreSQL dialect, so an author can tell an engine limit from a mistake.
  */
-import type { SqlContext, SqlDiagnostic, SqlNode as N, SqlPlan } from "../spec/domain/model/SqlIr.js";
+import { PG_GRAMMAR, type SqlContext, type SqlDiagnostic, type SqlNode as N, type SqlPlan } from "../spec/domain/model/SqlIr.js";
 import { SqlRefusal } from "../spec/domain/service/SqlRefusal.js";
 import { PROFILES, validateIr as check, validateProgram as accept } from "../core/sql/allowlist.js";
 
@@ -24,5 +24,5 @@ export function validateProgram(stmts: N[], ctx: SqlContext & { source?: string 
 
 export function validateIr(plan: SqlPlan, ctx: SqlContext): readonly SqlDiagnostic[] {
   const d = check(plan, ctx, PROFILES.base);
-  return d.length && plan?.stmts && postgresOnly(plan.stmts as N[], ctx) ? [{ ...d[0]!, message: `${d[0]!.message}: ${POSTGRES_ONLY}` }] : d;
+  return d.length && plan?.grammar === PG_GRAMMAR && Array.isArray(plan.stmts) && postgresOnly(plan.stmts as N[], ctx) ? [{ ...d[0]!, message: `${d[0]!.message}: ${POSTGRES_ONLY}` }] : d;
 }
