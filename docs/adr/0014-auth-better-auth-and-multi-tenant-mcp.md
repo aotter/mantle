@@ -898,3 +898,21 @@ Boundaries that stay:
   `verifyOAuthAccessToken`, DPoP binding and the MCP challenge are unchanged.
 - No other Better Auth field gains a passthrough by this amendment. The
   2026-05-14 test still applies to the next proposal.
+
+## 2026-10-02 amendment — a surface with no anonymous tool challenges at connect
+
+The 2026-09-21 amendment kept anonymous `initialize` and `tools/list` open on the public surface and moved the `401` to
+the first `tools/call` that needs identity. MCP clients do not all follow that: several decide whether to run OAuth from
+the connect step alone (an anonymous `initialize` that succeeds means "no sign-in"), so a surface whose every tool needs
+identity never showed them a sign-in. Better Auth's `withMcpAuth` and the MCP SDK's `requireBearerAuth` both challenge
+every unauthenticated request for the same reason.
+
+- A surface is **closed** when none of its tools may be called anonymously: every tool's `requires.auth.all` names at least
+  one predicate (each of `ctx.user`, `ctx.auth`, `ctx.staff`, `ctx.auth.scope` needs an identity). The staff surface is
+  always closed.
+- On a closed surface every anonymous request (`initialize`, `tools/list`, the SSE `GET`) answers `401` with the RFC 9728
+  `WWW-Authenticate` challenge, as the staff surface already did.
+- A surface with at least one tool anonymous may call keeps the 2026-09-21 behaviour: discovery stays open and the first
+  `tools/call` that needs identity answers `401`.
+- Nothing is configured: the rule follows from the plan, so a project that adds a public tool reopens discovery by
+  declaring it.

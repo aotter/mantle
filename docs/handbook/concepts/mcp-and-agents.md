@@ -39,7 +39,9 @@ Trigger for it.
 - **Errors.** A refused call is a tool error result carrying the diagnostic
   code (`AUTH_DENIED`, `CONFLICT`, …). An anonymous call to a tool that
   `requires` a caller is HTTP 401 with a `WWW-Authenticate` challenge, so an
-  MCP client starts OAuth.
+  MCP client starts OAuth. When no tool on the surface may be called
+  anonymously, every anonymous request is answered that way, `initialize`
+  included, so a client asks for sign-in as soon as it connects.
 
 Listing is not permission: every `tools/call` checks `requires` and the guard
 again.

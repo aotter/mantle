@@ -196,8 +196,24 @@ describe("MCP surface", () => {
     expect(r.status).toBe(401);
     expect(r.headers.get("www-authenticate")).toBe(`Bearer resource_metadata="${RM}"`);
     expect((await d1.all("SELECT count(*) AS c FROM notes WHERE title = 'x'"))[0]).toEqual({ c: 0 });
-    // discovery stays open on the public surface
+    // discovery stays open on a surface with a tool anonymous may call (`ranked`)
     expect((await rpc("public", anon, "tools/list")).status).toBe(200);
+  });
+
+  it("closes a surface whose every tool needs identity to anonymous from initialize on, so a client signs in when it connects", async () => {
+    const closed = MANIFESTS.split("\n---\n").filter((doc) => /name: (notes|add-note|mcp-add)\b/.test(doc)).join("\n---\n");
+    const res = await compilePlan({ sources: [{ sourceId: "memory:closed", text: closed }] });
+    if (!res.ok) throw new Error(JSON.stringify(res.diagnostics));
+    const mcp = createMcpSurface(await createMantleRuntime({ plan: res.plan, handlers: {}, storage: sqliteStorage(d1) }), { basePath: "/mcp", surface: "public", resourceMetadata: RM });
+    const post = (method: string) => new Request("https://x.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: method === "initialize" ? { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } : {} }) });
+    for (const request of [post("initialize"), post("tools/list"), new Request("https://x.test/mcp", { headers: { accept: "text/event-stream" } })]) {
+      const r = await mcp(request, anon);
+      expect(r.status).toBe(401);
+      expect(r.headers.get("www-authenticate")).toBe(`Bearer resource_metadata="${RM}"`);
+    }
+    expect((await mcp(post("initialize"), user("c1"))).status).toBe(200);
+    expect((await (await mcp(post("tools/list"), user("c1"))).text())).toContain("add_note");
   });
 
   it("closes the staff surface to anonymous (401) and non-staff (403) callers, for list and call alike", async () => {
