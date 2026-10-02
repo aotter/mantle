@@ -110,9 +110,13 @@ it.skipIf(!PG_URL)("a Schema field read through a CTE keeps its name and type, t
   const notes = doc("Schema", "notes", `  title: Notes\n  lifecycle: operational\n  scope: { ownerId: auth.uid() }\n  schema:\n    type: object\n    required: [ownerId]\n    properties: { ownerId: { type: string }, dueAt: { type: string, format: date-time } }\n  indexes: [[ownerId, dueAt]]`);
   const view = (name: string, sql: string) => doc("View", name, `  surface: public\n  requires: { auth: { all: [ctx.user] } }\n  sql: "${sql}"`);
   const res = await compilePlan({ sources: [{ sourceId: "memory:cte", text: [notes,
+    view("dup", "WITH x(p, q) AS (SELECT n.id AS k, n.dueAt AS k FROM notes n) SELECT x.p, x.q FROM x"),
+    view("cast", "WITH a AS (SELECT n.id, CAST(n.dueAt AS date) AS dueAt FROM notes n) SELECT a.id, a.dueAt FROM a"),
     view("due", "WITH a AS (SELECT n.id, n.dueAt FROM notes n), b(id, due) AS (SELECT a.id, a.dueAt FROM a) SELECT a.id, a.dueAt, b.due FROM a JOIN b ON b.id = a.id ORDER BY a.dueAt"),
   ].join("\n---\n") }] }, pgCompile);
   expect(res.ok, JSON.stringify(res.diagnostics)).toBe(true);
+  expect(res.plan.views.dup.columns.q).toEqual({ schema: "notes", field: "dueat" });
+  expect(res.plan.views.cast.columns?.dueat).toBeUndefined();
   expect(res.plan.views.due.columns).toMatchObject({ dueat: { schema: "notes", field: "dueat" }, due: { schema: "notes", field: "dueat" } });
   const db = await freshSchema();
   try {

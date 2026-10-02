@@ -169,7 +169,7 @@ async function diff(connect: PgConnect, plan: Readonly<Record<string, StorageSch
       for (const [n, a] of actual) {
         if (wanted.has(n) || a.pk || (a.uniq && a.cols === "id")) continue;
         if (a.uniq) block(name, `undeclared unique index ${n} on ${a.cols} still constrains writes; drop it or declare it`);
-        else undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_INDEX", message: n === ident(`_mantle_scope_${name}`) ? `index ${n} is redundant: a declared index leads with ${schema.scope}; drop it by hand` : `index ${n} is in the database and not in the plan; it is kept` });
+        else undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_INDEX", message: schema.scope && n === ident(`_mantle_scope_${name}`) ? `index ${n} is redundant: a declared index leads with ${schema.scope}; drop it by hand` : `index ${n} is in the database and not in the plan; it is kept` });
       }
     }
     // Mantle's checks are rebuilt from the plan: dropped, then added NOT VALID (a check binds writes, not old rows)

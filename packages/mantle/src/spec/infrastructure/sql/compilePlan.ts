@@ -57,17 +57,20 @@ type Columns = Record<string, { schema: string; field: string }>;
  * A View's outputs, read off its compiled SELECT: `keys` are the row's keys in order (undefined when an output has no name or
  * a `*` reads a subquery or `json_each`), `columns` the outputs that are a Schema field read unchanged.
  */
-export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>, ctes: ReadonlyMap<string, Columns> = new Map()): { keys?: string[]; columns: Columns } {
+export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>, ctes: ReadonlyMap<string, Columns> = new Map()): { keys?: string[]; columns: Columns; positions?: string[] } {
   const columns: Columns = {};
   const sel = view.stmts[0]?.SelectStmt;
   if (!sel?.targetList) return { columns };
   const outputs = (stmt: SqlNode, scope: ReadonlyMap<string, Columns>) => viewOutputs({ grammar: view.grammar, stmts: [stmt] }, schemas, scope);
-  // a CTE's outputs, like a FROM subquery's, keep the Schema field they read unchanged; a body sees its earlier siblings
+  // a CTE's outputs, like a FROM subquery's, keep the Schema field they read unchanged; a body sees its earlier siblings,
+  // and under RECURSIVE every sibling (one not yet read is untyped)
   const scope = new Map(ctes);
+  if (sel.withClause?.recursive) for (const { CommonTableExpr: c } of sel.withClause.ctes) scope.set(c.ctename, {});
   for (const { CommonTableExpr: c } of sel.withClause?.ctes ?? []) {
     const body = outputs(c.ctequery, scope);
     const renamed: string[] | undefined = c.aliascolnames?.map((x: SqlNode) => x.String.sval);
-    scope.set(c.ctename, renamed ? Object.fromEntries(renamed.flatMap((n, i) => (body.columns[body.keys?.[i] ?? ""] ? [[n, body.columns[body.keys![i]!]!]] : []))) : body.columns);
+    // a rename names the body's outputs by position, repeated names included
+    scope.set(c.ctename, renamed ? Object.fromEntries(renamed.flatMap((n, i) => (body.columns[body.positions?.[i] ?? ""] ? [[n, body.columns[body.positions![i]!]!]] : []))) : body.columns);
   }
   const rels = new Map<string, string | undefined>();
   // a FROM subquery's outputs that read a Schema field unchanged keep its type (an inlined View's, ADR-0037 decision 3)
@@ -105,7 +108,7 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
     const f = col ? field(rel, col) ?? (relName !== undefined ? subs.get(relName)?.[col] : undefined) : undefined;
     if (f && (fn !== "sum" || r.val?.ColumnRef || ["integer", "real"].includes(typeOf(f.schema, f.field)!) || typeOf(f.schema, f.field)!.startsWith("numeric("))) columns[name] = f;
   }
-  return { ...(keys ? { keys: [...new Set(keys)] } : {}), columns };
+  return { ...(keys ? { keys: [...new Set(keys)], positions: keys } : {}), columns };
 }
 
 /** Compile a linked manifest set to the sealed plan. Every refusal is reported, one per SQL source. */

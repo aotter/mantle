@@ -269,7 +269,7 @@ async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, Storag
         if (a.origin === "u" && a.unique && a.cols.join() !== "id") block(name, `${name} has a UNIQUE constraint on ${a.cols.join(", ")} that Mantle did not declare; it still constrains writes`);
         if (declaredIdx.has(n) || a.origin !== "c") continue;
         if (a.unique) block(name, `undeclared unique index ${n} still constrains writes; drop it or declare it`);
-        else undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_INDEX", message: n === `_mantle_scope_${name}` ? `index ${n} is redundant: a declared index leads with ${schema.scope}; drop it by hand` : `index ${n} is in the database and not in the plan; it is kept` });
+        else undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_INDEX", message: schema.scope && n === `_mantle_scope_${name}` ? `index ${n} is redundant: a declared index leads with ${schema.scope}; drop it by hand` : `index ${n} is in the database and not in the plan; it is kept` });
       }
     }
     // Mantle's own triggers and search / geo tables: rebuilt when their declaration changes, dropped when it goes away
