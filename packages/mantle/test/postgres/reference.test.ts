@@ -43,6 +43,7 @@ const REFUSED: [string, string, RegExp][] = [
   ["lag without OVER", "SELECT lag(id) AS p FROM items", /lag\(\) is a window function/],
   ["FILTER on a function that is not an aggregate", "SELECT lower(name) FILTER (WHERE true) AS l FROM items", /FILTER and ORDER BY belong to an aggregate/],
   ["generate_series", "SELECT g.id FROM generate_series(1, 3) g", /only json_each\(\) is allowed in FROM/],
+  ["a quoted CTE name that is not lower case", 'WITH "Items" AS (SELECT id FROM items) SELECT id FROM "Items" ORDER BY id', /a CTE name is lower case/],
   ["lag with an offset that is not a literal", "SELECT id, lag(id, stock) OVER (ORDER BY id) AS p FROM items ORDER BY id", /lag's offset is an integer literal/],
 ];
 

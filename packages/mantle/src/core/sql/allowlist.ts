@@ -377,6 +377,8 @@ const check: Record<string, Checker> = {
   },
   CommonTableExpr: (n, _c, _p, at) => {
     if (!n.ctequery?.SelectStmt) no('SQL_SHAPE', 'a CTE body is a SELECT: a write inside WITH is refused', at);
+    // the printer writes a CTE's name unquoted, so PostgreSQL would fold "Items" to items
+    if (String(n.ctename) !== String(n.ctename).toLowerCase()) no('SQL_SHAPE', `a CTE name is lower case: ${n.ctename}`, at);
   },
   WindowDef: (n, _c, _p, at) => {
     if (n.frameOptions & FRAME_REFUSED) no('SQL_UNSUPPORTED', 'GROUPS frames and EXCLUDE are refused', at, /\b(GROUPS|EXCLUDE)\b/i);
