@@ -21,6 +21,8 @@ export interface PostgresStorageOptions {
 /** The PostgreSQL dialect's runtime side over a time zone. */
 export function postgresDialect(timeZone = "UTC"): MantleDialect {
   new Intl.DateTimeFormat("en-US", { timeZone }); // an unknown zone throws here, not inside a query
+  // PostgreSQL reads '+08:00' as POSIX (eight hours west), Intl as eight hours east: only a named zone means the same to both
+  if (/^[+-]|^(utc|gmt)[+-]/i.test(timeZone)) throw new RangeError(`timeZone must be an IANA name such as Asia/Taipei, not the offset ${timeZone}`);
   return {
     name,
     version,

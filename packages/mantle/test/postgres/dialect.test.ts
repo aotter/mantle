@@ -73,3 +73,40 @@ it.skipIf(!PG_URL)("a guard holds under concurrent writers: SERIALIZABLE retries
     expect(n.rows[0].n).toBe(1);
   } finally { await e.drop(); }
 }, 60_000);
+
+it.skipIf(!PG_URL)("results do not depend on server settings, collation or NULL defaults; SQLite's arity and ON CONFLICT rules hold", async () => {
+  const e = await engine();
+  useCompileSide(pgCompile);
+  try {
+    // a server whose defaults differ everywhere they could: the dialect pins what it decodes under
+    const hostile = async () => { const c = await e.connect(); await c.query({ text: "SET DateStyle = 'SQL, DMY'; SET IntervalStyle = 'iso_8601'; SET extra_float_digits = 0; SET TimeZone = 'America/New_York'" }); return c; };
+    const s = site(await boot({ ...e, storage: postgresStorage({ connect: hostile }) }));
+    const view = (sql: string, inputs = {}, input = {}) => program("view", sql, inputs).then((p) => runView(s, p, caller(input))).then((r) => r.rows);
+    const write = (sql: string) => program("procedure", sql).then((p) => runProcedure(s, p, caller()));
+    expect(await view("SELECT CAST('2026-03-08T10:00:00.5Z' AS timestamptz) AS ts, date '2026-03-08' AS d, interval '90 minutes' AS iv, 1.0 / 3 AS f FROM items WHERE id = 'a'"))
+      .toEqual([{ ts: "2026-03-08T10:00:00.500000Z", d: "2026-03-08", iv: 5_400_000_000, f: 0.3333333333333333 }]);
+    // NULL first ascending, as Core pages every View and as D1 sorts: the LIMIT picks the same rows
+    expect(await view("SELECT name FROM items ORDER BY note, name LIMIT 2")).toEqual([{ name: "apple" }, { name: "berry" }]);
+    // text is compared by code point whatever the database collation
+    const [coll] = await e.driver.batch([{ sql: "SELECT collation_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'items' AND column_name = 'name'" }]);
+    expect(coll.rows[0].collation_name).toBe("C");
+    expect(await view("SELECT json_group_array(x.v) AS all FROM (SELECT json_group_array(name) AS v FROM items GROUP BY cat) x")).toEqual([{ all: [["cherry"], ["apple", "berry", "date"]] }]); // jsonb orders a shorter array first
+    expect(await view("SELECT i.tags ->> '$.a' AS a FROM items i WHERE id = 'a'")).toEqual([{ a: null }]);
+    await write("INSERT INTO settings (key, value) VALUES ('theme', 'light') ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE value <> excluded.value");
+    expect(await view("SELECT value FROM settings WHERE key = 'theme'")).toEqual([{ value: "light" }]);
+    await expect(write("INSERT INTO requisitions (item_id, qty, state) SELECT id, stock, name, cat FROM items")).rejects.toThrow(/refused the statement/);
+  } finally { useCompileSide(undefined); await e.drop(); }
+}, 60_000);
+
+it.skipIf(!PG_URL)("an offset time zone, an unreachable server and a name PostgreSQL would truncate are refused, not misread", async () => {
+  expect(() => postgresStorage({ connect: async () => { throw new Error("unused"); }, timeZone: "+08:00" })).toThrow(/IANA name/);
+  const down = postgresStorage({ connect: async () => { throw Object.assign(new Error("password authentication failed"), { code: "28P01" }); } });
+  const { PgStoreExecutor } = await import("../../src/postgres/executor.js");
+  const ex = new PgStoreExecutor(async () => { throw Object.assign(new Error("password authentication failed"), { code: "28P01" }); }, {}, new Map());
+  await expect(ex.select({ ir: { SelectStmt: { targetList: [{ ResTarget: { val: { A_Const: { ival: { ival: 1 } } } } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }, binds: [] })).rejects.toMatchObject({ diagnostic: { code: "RESOURCE_UNAVAILABLE" } });
+  expect(down.dialect.name).toBe("@aotter/mantle/postgres");
+  const e = await engine();
+  try {
+    await expect(e.storage.prepare(planOf({ notes: { scope: "owner", fields: { ["x".repeat(70)]: "text" } } }, "f1"))).rejects.toThrow(/at most 63 bytes/);
+  } finally { await e.drop(); }
+}, 60_000);

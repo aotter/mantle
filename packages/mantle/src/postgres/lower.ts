@@ -68,7 +68,8 @@ export function pgLowering(timeZone: string): PolicyLowering {
         case "json_each": return fn("_mantle_json_each", [cast(scope.tx(args[0]), "json")]);
         // PostgreSQL leaves an aggregate's input order open; ordering by the value (an object by its key) keeps it deterministic.
         // ponytail: D1 aggregates in scan order, so the two engines may order an array differently; neither order is promised
-        case "json_group_array": { const x = scope.tx(args[0]); return coalesce(fn("json_agg", [x], { agg_order: [by(x)], ...(n.agg_distinct ? { agg_distinct: true } : {}) }), json("[]")); }
+        // json has no ordering of its own, so the order is jsonb's; a DISTINCT aggregate may order only by its argument
+        case "json_group_array": { const x = scope.tx(args[0]); return coalesce(fn("json_agg", [x], n.agg_distinct ? { agg_order: [by(x)], agg_distinct: true } : { agg_order: [by(fn("to_jsonb", [x]))] }), json("[]")); }
         case "json_group_object": { const k = scope.tx(args[0]); return coalesce(fn("json_object_agg", [k, scope.tx(args[1])], { agg_order: [by(k)] }), json("{}")); }
         case "json_array_length": return fn("jsonb_array_length", [cast(scope.tx(args[0]), "json")]);
         case "instr": return fn("strpos", [scope.tx(args[0]), scope.tx(args[1])]);

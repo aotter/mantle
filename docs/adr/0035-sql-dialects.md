@@ -144,4 +144,11 @@ Proposed.
 > - **Core:** the `now` and `cutoff` binds and the TTL sweep's bind go through `codec.encode("timestamptz", …)` (the identity on D1), and `PolicyLowering.system` lets a dialect type `now()`'s bind (PostgreSQL cannot infer `$1 - interval '1 hour'`). D1's output is unchanged.
 > - **Concurrency:** every write batch is one `SERIALIZABLE` transaction, retried on 40001/40P01, which is the "engine's driver must run them serializable" that How to apply 4 asked for, for auth's guarded writes too (`pgDatabaseDriver`, `pgPool` for Better Auth).
 > - **Driver:** structural node-postgres types; `connect` opens a client per operation, as Workers and Hyperdrive need. Statements are sent one at a time; a pipelining driver is the upgrade if round trips show.
+> - **Same results as D1 where Mantle decides them:**
+>   - Text columns use `COLLATE "C"`.
+>   - A default NULL order is stated as Core pages Views: first ascending, last descending.
+>   - Every transaction pins `DateStyle`, `IntervalStyle`, `extra_float_digits` and `TimeZone`.
+>   - Reads run in read-only transactions, so Hyperdrive's cache never answers them.
+>
+>   Elsewhere the meaning is PostgreSQL's (`LIKE` case, division by zero, `->>` returning text).
 > - **Not yet:** site settings and media (D1 only), a trigram or GiST index behind `searchableFields` and `format: geo`, and `mantle generate --check`'s storage dry run (D1 only).

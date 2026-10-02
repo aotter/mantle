@@ -113,6 +113,15 @@ PostgreSQL also compiles for D1 and moving engines is a recompile.
 - `json_each`, `->>` and `CAST(x AS bool)` read as they do on D1 through small
   SQL functions Mantle creates (`_mantle_json_each`, `_mantle_jget`,
   `_mantle_bool`). `json_group_array` and `json_group_object` order by value.
+- Results match D1 where Mantle decides them. Text columns use `COLLATE "C"`,
+  so they compare by code point. An `ORDER BY` key without `NULLS FIRST/LAST`
+  puts NULL first ascending, as Core pages every View. Values never depend on
+  the server's `DateStyle`, `IntervalStyle` or `TimeZone`. Elsewhere the meaning
+  is PostgreSQL's, where D1 differs:
+  - `LIKE` is case-sensitive.
+  - Division by zero is an error.
+  - `->>` returns text.
+  - `||` prints booleans and floats as PostgreSQL does.
 - `searchableFields` and `mantle.near()` scan without an index in 0.2.0, and
   `mantle.search_rank()` counts occurrences rather than computing bm25.
   Site settings and media are D1-only.
@@ -143,7 +152,12 @@ const connect = (env: Env) => async () => {
 // identity: createMantleAuth({ database: pgPool(connect(env)), driver: pgDatabaseDriver(connect(env)), ... })
 ```
 
-The Worker needs `compatibility_flags: ["nodejs_compat"]` for `pg`.
+The Worker needs `compatibility_flags: ["nodejs_compat"]` for `pg`. Mantle runs
+every read in a transaction, which Hyperdrive never answers from its cache.
+Better Auth's reads (sessions, roles) do not, so create the Hyperdrive config
+with caching disabled (`wrangler hyperdrive create … --caching-disabled`), or a
+revoked session can be accepted until the cache expires. `timeZone` must be an
+IANA name: PostgreSQL reads an offset such as `+08:00` with the opposite sign.
 
 A `DatabaseDriver` is one method, so a Bun (`bun:sqlite`) or libSQL driver is
 a few lines of application code. Those hosts have no generated preset; their

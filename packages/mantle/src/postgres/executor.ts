@@ -41,7 +41,7 @@ export class PgStoreExecutor implements StoreExecutor {
   private mapped(e: unknown, kind: "select" | "apply"): never {
     if (e instanceof DiagnosticError) throw e;
     const state = sqlState(e);
-    const at = (e as { statement?: number }).statement;
+    const { statement: at, committing } = e as { statement?: number; committing?: boolean };
     const op = kind === "apply" && at !== undefined && at >= 0 ? { opIndex: at } : {};
     switch (state) {
       // the engine names the statement that failed, so a unique conflict always knows its op
@@ -51,10 +51,12 @@ export class PgStoreExecutor implements StoreExecutor {
       case "42P10": throw fail("INPUT_VALIDATION_FAILED", "onConflict.columns must match a unique index of the Schema.");
       case "40001": case "40P01": throw fail("RESOURCE_UNAVAILABLE", "The database stayed too busy to apply the write; nothing was written.");
     }
+    // the connection, the credentials, resources, an operator or the server itself: never the caller's input
+    const down = !state || /^(08|28|53|57|58|XX)/.test(state);
+    if (down && kind === "apply" && committing) throw fail("OUTCOME_UNKNOWN", "The database did not answer the commit; the write may or may not have been applied.");
+    if (down) throw fail("RESOURCE_UNAVAILABLE", kind === "apply" ? "The database is unavailable; nothing was written." : "The database is unavailable.");
     // a data exception (a value that does not fit its column), or any other refusal: the write did not happen
     if (state?.startsWith("22")) throw fail("INPUT_VALIDATION_FAILED", "A value does not fit its column's type.");
-    if (state) throw fail("INPUT_VALIDATION_FAILED", `The database refused the statement (SQLSTATE ${state}).`);
-    // no answer: a read can be retried, a write may or may not have landed and must be reconciled
-    throw fail(kind === "apply" ? "OUTCOME_UNKNOWN" : "RESOURCE_UNAVAILABLE", kind === "apply" ? "The database did not answer; the write may or may not have been applied." : "The database did not answer.");
+    throw fail("INPUT_VALIDATION_FAILED", `The database refused the statement (SQLSTATE ${state}).`);
   }
 }

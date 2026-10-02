@@ -3,7 +3,9 @@
  * gives PostgreSQL the types SQLite's affinity never needed (`typed`):
  * - a value written to a column is cast to the column's type (`j.value ->> 'reps'` is text; the column is int8);
  * - `a || b` concatenates text, as it does on D1 (`2 * 3 || 4` is '64'; PostgreSQL has no int || int);
- * - `x ->> k` is `_mantle_jget(x, k)`, which takes a json(b) or a JSON text, a key, an index or a `$` path, as SQLite does.
+ * - `x ->> k` is `_mantle_jget(x, k)`, which takes a json(b) or a JSON text, a key, an index or a `$` path, as SQLite does;
+ * - an ORDER BY key without NULLS FIRST/LAST states the rule Core pages every View by (run.ts): NULL first ascending, last
+ *   descending, so a LIMIT picks the same rows on both engines (PostgreSQL's own default is the reverse).
  */
 import { Deparser } from "pgsql-deparser";
 import type { SqlNode as N } from "../spec/domain/index.js";
@@ -50,6 +52,7 @@ export function typed(ast: N, schemas: Readonly<Record<string, StorageSchema>>):
     const e = out.A_Expr;
     if (e?.kind === "AEXPR_OP" && name(e) === "->>") return { FuncCall: { funcname: [S("_mantle_jget")], args: [e.lexpr, e.rexpr], funcformat: "COERCE_EXPLICIT_CALL" } };
     if (e?.kind === "AEXPR_OP" && name(e) === "||") return { A_Expr: { ...e, lexpr: textOf(e.lexpr), rexpr: textOf(e.rexpr) } };
+    if (out.SortBy?.sortby_nulls === "SORTBY_NULLS_DEFAULT") out.SortBy.sortby_nulls = out.SortBy.sortby_dir === "SORTBY_DESC" ? "SORTBY_NULLS_LAST" : "SORTBY_NULLS_FIRST";
     if (out.InsertStmt) insert(out.InsertStmt);
     if (out.UpdateStmt) assign(out.UpdateStmt.relation.relname, out.UpdateStmt.targetList);
     return out;
@@ -67,8 +70,11 @@ export function typed(ast: N, schemas: Readonly<Record<string, StorageSchema>>):
     const star = list[0]?.ResTarget?.val?.ColumnRef?.fields;
     const from = sel?.fromClause?.[0]?.RangeSubselect;
     // Core's insert shape (policy.ts): `SELECT _v.*, <fills> FROM (<the author's VALUES or SELECT>) _v`
-    if (star?.length === 2 && star[1].A_Star && from?.alias?.aliasname === star[0].String?.sval) {
-      const k = cols.length - (list.length - 1);
+    const k = cols.length - (list.length - 1);
+    const inner = from?.subquery?.SelectStmt;
+    const width = inner?.valuesLists?.[0]?.List?.items?.length ?? inner?.targetList?.length;
+    // a source wider or narrower than its columns is left as written, so PostgreSQL refuses it as SQLite does
+    if (star?.length === 2 && star[1].A_Star && from?.alias?.aliasname === star[0].String?.sval && width === k) {
       from.alias.colnames = Array.from({ length: k }, (_x, i) => S(`c${i}`));
       const authored = Array.from({ length: k }, (_x, i) => ({ ResTarget: { val: to(table, cols[i]!, { ColumnRef: { fields: [S(from.alias.aliasname), S(`c${i}`)] } }) } }));
       sel.targetList = [...authored, ...list.slice(1).map((t, j) => ({ ResTarget: { ...t.ResTarget, val: to(table, cols[k + j]!, t.ResTarget.val) } }))];
@@ -82,6 +88,7 @@ export function typed(ast: N, schemas: Readonly<Record<string, StorageSchema>>):
       return Object.fromEntries(Object.entries(v).map(([k, c]) => [k, qualify(c)]));
     };
     for (const t of n.onConflictClause?.targetList ?? []) t.ResTarget.val = qualify(t.ResTarget.val);
+    if (n.onConflictClause?.whereClause) n.onConflictClause.whereClause = qualify(n.onConflictClause.whereClause);
     assign(table, n.onConflictClause?.targetList);
   };
   return walk(ast);

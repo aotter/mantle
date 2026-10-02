@@ -41,6 +41,11 @@ async function run(client: PgClient, s: PgStatement): Promise<PgOutcome> {
 }
 
 const SERIALIZATION = new Set(["40001", "40P01"]);
+/**
+ * What every wire value is decoded under, whatever the server's defaults: ISO dates, PostgreSQL interval text, shortest exact
+ * floats, UTC. `SET LOCAL` inside the transaction, because Hyperdrive pools connections per transaction.
+ */
+const PINNED = "SET LOCAL DateStyle = 'ISO, YMD'; SET LOCAL IntervalStyle = 'postgres'; SET LOCAL extra_float_digits = 1; SET LOCAL TimeZone = 'UTC'";
 const ATTEMPTS = 5;
 
 /**
@@ -52,8 +57,9 @@ export async function transaction(connect: PgConnect, statements: readonly PgSta
   for (let attempt = 1; ; attempt++) {
     const client = await connect();
     let failedAt = -1;
+    let committing = false;
     try {
-      await client.query({ text: "BEGIN ISOLATION LEVEL SERIALIZABLE" });
+      await client.query({ text: `BEGIN ISOLATION LEVEL SERIALIZABLE; ${PINNED}` });
       const out: PgOutcome[] = [];
       for (const [i, s] of statements.entries()) {
         failedAt = i;
@@ -61,22 +67,33 @@ export async function transaction(connect: PgConnect, statements: readonly PgSta
         failedAt = -1;
         check?.(i, out[i]!);
       }
+      committing = true;
       await client.query({ text: "COMMIT" });
       return out;
     } catch (e) {
       await client.query({ text: "ROLLBACK" }).catch(() => undefined);
       if (SERIALIZATION.has(sqlState(e) ?? "") && attempt < ATTEMPTS) continue;
-      throw Object.assign(e as object, { statement: failedAt });
+      // `committing`: only a failure during COMMIT leaves the outcome unknown; anything before it applied nothing
+      throw Object.assign(e as object, { statement: failedAt, committing });
     } finally {
       await client.end().catch(() => undefined);
     }
   }
 }
 
-/** One read on its own client, outside any transaction. */
+/**
+ * One read on its own client, in a read-only transaction: the settings are pinned, and Hyperdrive never answers a read
+ * inside a transaction from its cache, so a read sees the write before it.
+ * ponytail: three round trips (BEGIN, the read, COMMIT); a pipelining driver sends them as one.
+ */
 export async function query(connect: PgConnect, s: PgStatement): Promise<PgOutcome> {
   const client = await connect();
-  try { return await run(client, s); } finally { await client.end().catch(() => undefined); }
+  try {
+    await client.query({ text: `BEGIN READ ONLY; ${PINNED}` });
+    const out = await run(client, s);
+    await client.query({ text: "COMMIT" });
+    return out;
+  } finally { await client.end().catch(() => undefined); }
 }
 
 /** `?1` binds (Mantle's portable SQL) as PostgreSQL's `$1`, outside quoted strings and names. */
