@@ -79,7 +79,8 @@ Commit and push only non-secret changes.
 - Sign-in works with the production method; the owner gets
   `GET /admin/api/me` → `owner`, a second account gets 403.
 - `/mcp` answers `tools/list`, and an anonymous call to a protected tool is
-  401 with a `WWW-Authenticate` challenge.
+  401 with a `WWW-Authenticate` challenge. When every public tool `requires` a
+  caller, anonymous `initialize` and `tools/list` are already that 401.
 - Every enabled schedule appears in the Worker's cron triggers.
 
 ## Handoff

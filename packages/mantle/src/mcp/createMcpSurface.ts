@@ -59,6 +59,12 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
   const requiredScopes = options.requiredScopes ?? ["mcp"];
   const tools = mcpTools(runtime.plan, options.surface, options.locale ?? "en");
   const byName = new Map(tools.map((t) => [t.name, t]));
+  // a surface whose every tool needs identity is closed to anonymous from `initialize` on, as the staff surface is: a client
+  // decides whether to sign in when it connects, so a 401 that waits for the first tool call never shows it a sign-in. A
+  // public surface with no tools stays open: nothing on it needs a sign-in, and under identity `none` none could be had.
+  // ponytail: decided over every tool, so an app-only tool anonymous may call keeps the surface open for a client that never
+  // lists it; decide per client UI support if a public surface ever carries one
+  const closed = options.surface === "staff" || (tools.length > 0 && tools.every((t) => (t.requires?.auth?.all.length ?? 0) > 0));
   const apps = linkApps(options.apps, new Set(tools.map((t) => t.name)), new Set(tools.filter((t) => t.kind === "view").map((t) => t.name)));
   const serverInfo = { name: "aotter.mantle", version: "0.2.0", ...options.serverInfo };
 
@@ -115,14 +121,15 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     const url = new URL(request.url);
     if ((url.pathname.replace(/\/+$/, "") || "/") !== base) return Response.json({ error: { code: "NOT_FOUND", message: "no such route" } }, { status: 404 });
     if (caller.kind !== "user" && caller.kind !== "anonymous") return challenge(403, undefined, true);
-    // a cookie session carries no scopes and is the browser identity Admin trusts; anonymous presents nothing and each tool decides
+    // a cookie session carries no scopes and is the browser identity Admin trusts; anonymous presents nothing and, on an open
+    // surface, each tool decides
     if (caller.kind === "user" && caller.credential !== "session" && requiredScopes.some((s) => !caller.scopes.includes(s)))
       return challenge(403, { code: "insufficient_scope", scope: [...new Set([...caller.scopes, ...requiredScopes])].join(" ") });
+    // the scope floor rides the challenge, so the first authorization already asks for what every call needs
+    if (caller.kind === "anonymous" && closed) return challenge(401, requiredScopes.length ? { scope: requiredScopes.join(" ") } : undefined);
     // the staff surface is closed to everyone but staff, for listing as much as for calling
-    if (options.surface === "staff") {
-      if (caller.kind === "anonymous") return challenge(401);
-      if (caller.role === null) return challenge(403, undefined, true); // a role is not a scope: no challenge, or a client would re-authorize in a loop
-    }
+    // a role is not a scope: no challenge, or a client would re-authorize in a loop
+    if (options.surface === "staff" && caller.kind === "user" && caller.role === null) return challenge(403, undefined, true);
     const authInfo: AuthInfo = { token: "", clientId: caller.kind === "user" ? caller.clientId ?? "" : "", scopes: caller.kind === "user" ? [...caller.scopes] : [], extra: { [CONTEXT_KEY]: caller } };
     if (request.method.toUpperCase() !== "POST" || !isJsonContentType(request.headers.get("content-type"))) return sdk.fetch(request, { authInfo });
     let text: string;
