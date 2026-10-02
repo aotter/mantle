@@ -36,15 +36,23 @@ its composition. To get a fresh preset, move the old file aside and rerun.
 
 | Key | Values | Meaning |
 |---|---|---|
-| `version` | `2` | `1`, or any `host` key, is a 0.1.x config and fails with exit 2 |
+| `version` | `2` | `1` (a 0.1.x config) fails with exit 2 |
 | `identity` | `mantle`, `custom`, `none` | who the callers are. `mantle`: `@aotter/mantle/auth` (Better Auth sign-in, staff roles, OAuth for MCP). `custom`: your `src/identity.ts` maps your own sessions to callers. `none`: every caller is anonymous |
 | `features` | a subset of `mcp`, `admin`, `web`, in that order | `mcp`: the public MCP surface at `/mcp` (and staff MCP inside Admin). `admin`: the Admin console and its API at `/admin`, which needs an identity. `web`: reserved for public pages; REST at `/api` is always mounted |
-| `dialect` | an npm package name, optional | the SQL dialect; absent is the built-in D1 dialect (`@aotter/mantle/d1`) |
+| `host` | `cloudflare`, `none`, optional | where the service runs (ADR-0036); absent is `cloudflare`. `none` writes no preset: only the plan and its types, and your code calls `createMantle`. The host never enters the plan |
+| `dialect` | `sqlite` (alias `d1`), `postgres`, or a dialect package name, optional | the SQL engine; absent is `sqlite`, which runs on D1. `postgres` runs on PostgreSQL, through Hyperdrive on Cloudflare. The plan records the dialect (the SQLite dialect as `@aotter/mantle/d1`) |
 
 Without a config or flags, the selection is identity `mantle` and every
 feature. An explicit `--features` without `--identity` means identity `none`.
-A rerun keeps the saved identity; asking for another one is refused (exit 2),
-so switching never drops tables.
+A rerun keeps the saved identity, host and dialect; asking for another one is
+refused (exit 2), so switching never drops tables or orphans data. Change
+`mantle.config.json` deliberately once the data is moved.
+
+| | `cloudflare` | `none` |
+|---|---|---|
+| `sqlite` | preset over D1 (the default) | plan and types only |
+| `postgres` | preset over Hyperdrive and `pg` | plan and types only |
+| a dialect package | plan and types only; compose `src/service.ts` with its storage adapter | plan and types only |
 
 Each selection needs packages in the project. `mantle generate` checks them
 and stops before writing anything, naming the install command for your
@@ -56,6 +64,7 @@ package manager. It never installs anything.
 | identity `mantle` | `better-auth`, `@better-auth/oauth-provider`, `@better-auth/mcp`, `@better-auth/cimd` |
 | feature `mcp` | `@modelcontextprotocol/server`, `@modelcontextprotocol/ext-apps` |
 | feature `admin` | `@aotter/mantle-ui` (its `dist/admin` is the console, bound as `ASSETS` in `wrangler.jsonc`) |
+| dialect `postgres` on `cloudflare` | `pg` |
 
 The project also installs `wrangler`, `@cloudflare/workers-types` and
 `@types/node` itself.
@@ -63,7 +72,7 @@ The project also installs `wrangler`, `@cloudflare/workers-types` and
 ## `mantle generate`
 
 ```sh
-mantle generate [--manifests <dir>] [--features <list>] [--identity <kind>]
+mantle generate [--manifests <dir>] [--features <list>] [--identity <kind>] [--host <host>] [--dialect <name>]
 mantle generate --check [--database <file>]
 ```
 
@@ -72,6 +81,8 @@ mantle generate --check [--database <file>]
 | `--manifests <dir>` | the manifest directory, default `./manifests`. Every `.yaml` and `.yml` file directly in it is read |
 | `--features <list>` | comma-separated, a positive list. A missing dependency fails with `GENERATE_FEATURE_DEPENDENCY_MISSING`; an omitted feature is never added back |
 | `--identity <kind>` | `mantle`, `custom` or `none` |
+| `--host <host>` | `cloudflare` or `none`, chosen on the first run |
+| `--dialect <name>` | `sqlite` (alias `d1`), `postgres` or a dialect package, chosen on the first run |
 | `--check` | writes nothing. Exits 1 when `plan.json`, `mantle.ts` or `mantle.config.json` differs from what generate would write, or a package is missing |
 | `--database <file>` | with `--check`: also read a local SQLite file (Wrangler's local D1 is under `.wrangler/state/v3/d1/`) read-only, and print the SQL storage convergence would run |
 
@@ -84,7 +95,7 @@ position in the statement.
 
 ### Schedules and Cloudflare crons
 
-Schedule Triggers use POSIX cron. `mantle generate` translates each enabled
+On host `cloudflare`, schedule Triggers use POSIX cron. `mantle generate` translates each enabled
 one with `toCloudflareCron` and refuses (exit 1, before writing) one that
 Cloudflare cannot run the same way. It writes `triggers.crons` into a new
 `wrangler.jsonc`; once the file is yours it only warns when the crons differ
@@ -94,7 +105,20 @@ from the plan, and you update them.
 
 Boot creates what the plan adds (tables, columns, indexes, check triggers) and
 refuses what it cannot change safely. `--check --database` prints the same
-diff without applying it; see [Deploy and operate](../cloudflare/deploy-and-operate.md).
+diff without applying it, for the `sqlite` dialect; see [Deploy and operate](../cloudflare/deploy-and-operate.md).
+
+### PostgreSQL on Cloudflare
+
+`mantle generate --dialect postgres` writes the same preset over Hyperdrive:
+`src/service.ts` opens a `pg` client per operation from `env.HYPERDRIVE`, and
+`wrangler.jsonc` binds `HYPERDRIVE` with a placeholder id and a
+`localConnectionString` for `wrangler dev`. Before deploying, create the config
+with caching off and put its id in place of the placeholder; generate warns
+until you do:
+
+```sh
+wrangler hyperdrive create my-app --caching-disabled --connection-string="postgres://user:pass@host:5432/db"
+```
 
 ## 0.1.x projects
 

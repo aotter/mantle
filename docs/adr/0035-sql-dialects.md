@@ -89,7 +89,7 @@ The CLI front end is shared and dialect-free. It parses, links, and refuses what
 - **ISO or ANSI SQL as the canonical language.** There is no authoritative parser for it, and PostgreSQL is the implementation closest to it. Naming the standard would still mean choosing one vendor's parser.
 - **Substrait.** A cross-engine relational-plan standard, but it describes plans after planning, it is not authored, and neither D1 nor most transactional engines consume it; every dialect would still render SQL from it.
 - **Mantle's own neutral tree.** A new language to specify and teach; ADR-0034 left the JSON grammar for SQL for this reason.
-- **A `host` option in the open-source CLI.** A host is a platform preset, not an engine; making it a CLI option ties platform files to the generator. Rejected in favor of the dialect interface.
+- **A `host` option in the open-source CLI.** A host is a platform preset, not an engine; making it a CLI option ties platform files to the generator. Rejected in favor of the dialect interface. *Superseded by ADR-0036: presets are written once and owned by the application, so the generator owns no platform file after the first run.*
 - **Bare `search()` and `near()`.** Shorter, but they read as PostgreSQL functions and can collide with an engine's or an extension's own.
 
 ## How to apply

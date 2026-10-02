@@ -89,8 +89,8 @@ and converges storage.
 - `date_trunc` and `extract` compute in the site time zone
   (`d1Storage(db, { timeZone })`, default UTC).
 
-`mantle.config.json` may name another dialect package (`dialect`); it must pass
-`runStorageConformance` from `@aotter/mantle/testing`. A plan records its
+`mantle.config.json` names the dialect (`sqlite`, `postgres`, or another dialect package, which must pass
+`runStorageConformance` from `@aotter/mantle/testing`). A plan records its
 dialect, and boot refuses a plan compiled for another one.
 
 ## The PostgreSQL dialect

@@ -64,9 +64,10 @@ function checkCoreCloudflareFree() {
  */
 function checkNextFolderImports() {
   // Core holds no engine code (ADR-0035 decision 3): SQLite lives in `d1`, and only `spec`'s front end (the built-in
-  // dialect's compile side), `cloudflare` and `cli` reach it. `testing` runs over the dialect interface.
-  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1"] };
-  const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec", "pgsql-deparser": "d1" };
+  // dialect's compile side), `cloudflare` and `cli` reach it. `testing` runs over the dialect interface. `postgres` reuses
+  // the SQLite dialect's subset check and codecs, and `cli` loads its compile side as a built-in (ADR-0036).
+  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], postgres: ["core", "spec", "d1"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1", "postgres/compile"] };
+  const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec", "pgsql-deparser": ["d1", "postgres"] };
   const NODE_ALLOWED = { auth: ["node:async_hooks"], testing: ["node:util"] };
   const root = join(ROOT, "packages/mantle/src");
   for (const [folder, reach] of Object.entries(folders)) {
@@ -84,7 +85,7 @@ function checkNextFolderImports() {
           if (folder !== "cli" && !(NODE_ALLOWED[folder] ?? []).includes(spec)) fail(file, `src/${folder} may not import '${spec}': only the CLI runs on Node`);
         } else {
           for (const [prefix, owner] of Object.entries(libs)) {
-            if ((spec === prefix || spec.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)) && owner !== folder) fail(file, `only src/${owner} may import '${spec}'`);
+            if ((spec === prefix || spec.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)) && ![owner].flat().includes(folder)) fail(file, `only src/${[owner].flat().join(", src/")} may import '${spec}'`);
           }
         }
       }
