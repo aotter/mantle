@@ -68,6 +68,8 @@ export interface PolicyLowering {
   newId(): N;
   /** Extra columns a Schema's read wrapper exposes (the dialect's own index joins). */
   columns(s: SchemaDef): N[];
+  /** `now()`'s bind, for an engine that cannot infer a parameter's type from `$n - interval '1 hour'` (absent: the bare bind). */
+  system?(param: N, type: "timestamptz"): N;
 }
 export type Compiled = {
   ast: N;
@@ -195,7 +197,7 @@ function lowerFunc(n: N, c: C): N {
   switch (f) {
     case 'auth.uid': return param$(c, { k: 'uid' });
     case 'auth.role': return param$(c, { k: 'role' });
-    case 'now': return param$(c, { k: 'now' });
+    case 'now': { const p = param$(c, { k: 'now' }); return c.lower.system?.(p, 'timestamptz') ?? p; }
   }
   return c.lower.func(f, n, scopeOf(c)) ?? c.lower.call(deep(n, c, 'FuncCall'));
 }

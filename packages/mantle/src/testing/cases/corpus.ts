@@ -95,3 +95,19 @@ export const corpus: Item[] = [
   w('upsert-nothing', "INSERT INTO settings (key, value) VALUES ('theme', 'light') ON CONFLICT (key) DO NOTHING RETURNING key", [[]]),
   w('upsert-update', "INSERT INTO settings (key, value) VALUES ('theme', 'light') ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE settings.value IS DISTINCT FROM excluded.value RETURNING key, value", [[{ key: 'theme', value: 'light' }]]),
 ];
+
+/**
+ * The same results as the Store's wire values (ADR-0034 decision 5), for the items whose expectation above is D1's storage
+ * encoding of a computed output (ADR-0035, "computed outputs"). A dialect that decodes computed outputs by type (PostgreSQL
+ * does, by each column's type OID) gives these; an item passes with either.
+ */
+const iso = (y: number, mo: number, d: number, h = 0, us6 = '000000') => `${new Date(Date.UTC(y, mo - 1, d, h)).toISOString().slice(0, 19)}.${us6}Z`;
+export const typedRows: Readonly<Record<string, unknown[][]>> = {
+  literals: [[{ s: "it's a \\ back\\slash", n: -7, f: 1.5, t: true, x: false, z: null, big: 1772928000000000 }]],
+  aggregates: [[{ cat: 'x', n: 3, d: 3, s: 14, lo: 2, hi: 7, av: 14 / 3, names: ['apple', 'berry', 'date'], cats: ['x'], obj: { a: 5, b: 2, d: 7 } },
+    { cat: 'y', n: 1, d: 1, s: 9, lo: 9, hi: 9, av: 9, names: ['cherry'], cats: ['y'], obj: { c: 9 } }]],
+  casts: [[{ t: '5', i: 5, f: 5, b: true, bf: false, bt: true, c: '5x' }]],
+  'literal-casts': [[{ ts: iso(2026, 3, 8, 10), d: '2026-03-08', iv: 129_600_000_000, im: 5_400_000_000, n: '12.34', us: iso(2026, 3, 8, 10, '123456') }]],
+  'mantle-refs': [[{ uid: 'o1', role: 'staff', now: iso(2026, 9, 29), x: 3 }]],
+  'date-trunc': [[{ h: iso(2026, 9, 29), d: iso(2026, 9, 29), w: iso(2026, 9, 28), m: iso(2026, 9, 1), y: iso(2026, 1, 1) }]],
+};

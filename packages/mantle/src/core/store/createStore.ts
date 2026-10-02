@@ -228,7 +228,7 @@ async function sweepExpired(deps: StoreDeps, request: import("../store.js").Swee
   const pick = (): N => ({ SelectStmt: { targetList: [{ ResTarget: { val: ref("_rid") } }], fromClause: [rel()], whereClause: expired(),
     sortClause: [{ SortBy: { node: ref("_rid"), sortby_dir: "SORTBY_ASC", sortby_nulls: "SORTBY_NULLS_DEFAULT" } }],
     limitCount: num(limit), limitOption: "LIMIT_OPTION_COUNT", op: "SETOP_NONE" } });
-  const binds = [deps.now() - def.ttlSeconds * 1_000_000];
+  const binds = [deps.dialect.codec.encode("timestamptz", deps.now() - def.ttlSeconds * 1_000_000)];
   const statements = [{ ir: pick(), binds }];
   if (request.delete !== false) {
     statements.push({ ir: { DeleteStmt: { relation: rel().RangeVar, whereClause: { SubLink: { subLinkType: "ANY_SUBLINK", testexpr: ref("_rid"), subselect: pick() } } } }, binds });

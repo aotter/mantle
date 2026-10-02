@@ -1,5 +1,5 @@
 ---
-description: How createMantle boots the runtime from a storage adapter, how storage converges to the plan, the D1 dialect and other SQLite drivers, and the fingerprint handshake.
+description: How createMantle boots the runtime from a storage adapter, how storage converges to the plan, the D1 and PostgreSQL dialects, and the fingerprint handshake.
 ---
 # Runtime, Store and dialects
 
@@ -93,12 +93,71 @@ and converges storage.
 `runStorageConformance` from `@aotter/mantle/testing`. A plan records its
 dialect, and boot refuses a plan compiled for another one.
 
+## The PostgreSQL dialect
+
+`"dialect": "@aotter/mantle/postgres"` in `mantle.config.json` compiles the
+plan for PostgreSQL (13 or later). It accepts the same portable subset as D1,
+except SQLite's own `typeof`, `hex`, `json_extract`, `json_set`, `json_insert`
+and `json_remove` (write `x ->> '$.path'`), so a manifest that compiles for
+PostgreSQL also compiles for D1 and moving engines is a recompile.
+
+- Columns have native types: `timestamptz`, `date`, `numeric(p, s)`, `boolean`,
+  `jsonb`, `bigint` and `double precision`. Values are decoded by the type
+  PostgreSQL reports, so computed outputs (`now()`, `date_trunc`, a `CAST`) come
+  back as wire values too: ISO date-times, booleans, parsed JSON.
+- Every write batch is one `SERIALIZABLE` transaction, retried on a
+  serialization failure, so a guard such as `WHERE NOT EXISTS` holds under
+  concurrent writers as it does on SQLite's single writer.
+- `checks` are `CHECK` constraints added `NOT VALID`: they bind every later
+  write and leave older rows alone, like D1's triggers.
+- `json_each`, `->>` and `CAST(x AS bool)` read as they do on D1 through small
+  SQL functions Mantle creates (`_mantle_json_each`, `_mantle_jget`,
+  `_mantle_bool`). `json_group_array` and `json_group_object` order by value.
+- Results match D1 where Mantle decides them. Text columns use `COLLATE "C"`,
+  so they compare by code point. An `ORDER BY` key without `NULLS FIRST/LAST`
+  puts NULL first ascending, as Core pages every View. Values never depend on
+  the server's `DateStyle`, `IntervalStyle` or `TimeZone`. Elsewhere the meaning
+  is PostgreSQL's, where D1 differs:
+  - `LIKE` is case-sensitive.
+  - Division by zero is an error.
+  - `->>` returns text.
+  - `||` prints booleans and floats as PostgreSQL does.
+- `searchableFields` and `mantle.near()` scan without an index in 0.2.0, and
+  `mantle.search_rank()` counts occurrences rather than computing bm25.
+  Site settings and media are D1-only.
+- `date_trunc` and `extract` compute in the site time zone
+  (`postgresStorage({ connect, timeZone })`, default UTC).
+
 ## Storage adapters
 
 | Adapter | From | Driver |
 |---|---|---|
 | `d1Storage(env.DB, { timeZone?, site? })` | `@aotter/mantle/cloudflare` | Cloudflare D1, the one the preset uses |
 | `sqliteStorage(driver, { timeZone?, maxBindings?, site? })` | `@aotter/mantle/d1` | any `DatabaseDriver`: `{ batch(statements) }`, all or nothing |
+| `postgresStorage({ connect, timeZone? })` | `@aotter/mantle/postgres` | `connect` opens one node-postgres (`pg`) client; Hyperdrive on Workers |
+
+On Workers, PostgreSQL goes through Hyperdrive, which pools the connections, so
+`connect` opens a client per operation (a socket must not outlive its request):
+
+```ts
+import pg from "pg";
+import { pgDatabaseDriver, pgPool, postgresStorage } from "@aotter/mantle/postgres";
+
+const connect = (env: Env) => async () => {
+  const client = new pg.Client({ connectionString: env.HYPERDRIVE.connectionString });
+  await client.connect();
+  return client;
+};
+// storage: (env) => postgresStorage({ connect: connect(env) })
+// identity: createMantleAuth({ database: pgPool(connect(env)), driver: pgDatabaseDriver(connect(env)), ... })
+```
+
+The Worker needs `compatibility_flags: ["nodejs_compat"]` for `pg`. Mantle runs
+every read in a transaction, which Hyperdrive never answers from its cache.
+Better Auth's reads (sessions, roles) do not, so create the Hyperdrive config
+with caching disabled (`wrangler hyperdrive create … --caching-disabled`), or a
+revoked session can be accepted until the cache expires. `timeZone` must be an
+IANA name: PostgreSQL reads an offset such as `+08:00` with the opposite sign.
 
 A `DatabaseDriver` is one method, so a Bun (`bun:sqlite`) or libSQL driver is
 a few lines of application code. Those hosts have no generated preset; their
