@@ -1,6 +1,6 @@
 /**
- * The Cloudflare service preset (ADR-0032 decision 6 and amendment "the service preset"): application-owned files `mantle generate`
- * writes once and never again. Nothing here is compared by `--check`.
+ * The Cloudflare service preset (ADR-0032 decision 6 and amendment "the service preset", ADR-0036): application-owned files
+ * `mantle generate` writes once and never again, for either built-in dialect. Nothing here is compared by `--check`.
  */
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -11,6 +11,8 @@ import { toCloudflareCron } from "../spec/domain/service/CloudflareCron.js";
 export interface PresetSelection {
   readonly identity: "mantle" | "custom" | "none";
   readonly features: readonly string[];
+  /** D1, or PostgreSQL through Hyperdrive. */
+  readonly dialect: "sqlite" | "postgres";
 }
 
 /** The generated module, as `src/*.ts` imports it (a constant, so check:boundaries does not read it as this folder's import). */
@@ -20,7 +22,8 @@ const json = (v: unknown) => `${JSON.stringify(v, null, 2)}\n`;
 /** `__proto__: fn` in an object literal sets the prototype instead of a handler, so it is computed. */
 const key = (s: string) => (s === "__proto__" ? '["__proto__"]' : /^[A-Za-z_$][\w$]*$/.test(s) ? s : JSON.stringify(s));
 
-function service({ identity, features }: PresetSelection): string {
+function service({ identity, features, dialect }: PresetSelection): string {
+  const postgres = dialect === "postgres";
   const mcp = features.includes("mcp");
   // the staff surface needs someone to be staff, so it comes with an identity
   const staffMcp = mcp && identity !== "none";
@@ -29,7 +32,7 @@ function service({ identity, features }: PresetSelection): string {
   const withEnv = mantle || admin;
   const core = ["createMantle", ...(identity === "none" ? [] : ["withCaller"]), "type MantleRuntime", "type MantleService", "type Surface"];
   const auth = mantle ? ["ConsoleEmailSender", "createAuthRoutes", "createCallerResolver", "createMantleAuth", "createSetupIncompleteAuth", "type MantleAuth"] : [];
-  const env = ["  readonly DB: D1Database;", ...(admin ? ["  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */", "  readonly ASSETS: Fetcher;"] : []), ...(mantle ? ["  readonly BETTER_AUTH_SECRET?: string;", "  readonly PUBLIC_ORIGIN?: string;", "  readonly ADMIN_EMAIL?: string;"] : [])];
+  const env = [...(postgres ? ["  /** PostgreSQL through Hyperdrive; `wrangler dev` connects to its localConnectionString. */", "  readonly HYPERDRIVE: { readonly connectionString: string };"] : ["  readonly DB: D1Database;"]), ...(admin ? ["  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */", "  readonly ASSETS: Fetcher;"] : []), ...(mantle ? ["  readonly BETTER_AUTH_SECRET?: string;", "  readonly PUBLIC_ORIGIN?: string;", "  readonly ADMIN_EMAIL?: string;"] : [])];
   const origin = mantle ? ["  const origin = env.PUBLIC_ORIGIN?.replace(/\\/+$/, \"\") ?? \"http://127.0.0.1:8787\";", "  const auth = createAuth(env, origin);"] : [];
   const caller = mantle
     ? [`  const resolver = createCallerResolver(auth${mcp ? ", { jwtBearer: { audience: `${origin}/mcp`, scopes: [\"mcp\"] } }" : ""});`, "  const authRoutes = createAuthRoutes(auth, { resolver });", "  const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);"]
@@ -72,7 +75,9 @@ function service({ identity, features }: PresetSelection): string {
     `import { ${core.join(", ")} } from "@aotter/mantle";`,
     ...(admin ? ['import { createAdminSurface } from "@aotter/mantle/admin";'] : []),
     ...(auth.length ? [`import { ${auth.join(", ")} } from "@aotter/mantle/auth";`] : []),
-    `import { ${mantle ? "d1Driver, " : ""}d1Storage } from "@aotter/mantle/cloudflare";`,
+    ...(postgres
+      ? [`import { ${mantle ? "pgDatabaseDriver, pgPool, " : ""}postgresStorage, type PgClient, type PgConnect } from "@aotter/mantle/postgres";`, 'import pg from "pg";']
+      : [`import { ${mantle ? "d1Driver, " : ""}d1Storage } from "@aotter/mantle/cloudflare";`]),
     ...(mcp ? [`import { createMcpSurface${staffMcp ? ", planApp" : ""} } from "@aotter/mantle/mcp";`] : []),
     ...(staffMcp ? ['import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";'] : []),
     'import { createRestSurface } from "@aotter/mantle/web";',
@@ -84,6 +89,15 @@ function service({ identity, features }: PresetSelection): string {
     ...env,
     "}",
     "",
+    ...(postgres ? [
+      "/** A client per operation: Hyperdrive keeps the pool, and a Worker's socket must not outlive its request. */",
+      'const connectTo = (env: Pick<Env, "HYPERDRIVE">): PgConnect => async () => {',
+      "  const client = new pg.Client({ connectionString: env.HYPERDRIVE.connectionString });",
+      "  await client.connect();",
+      "  return client as unknown as PgClient;",
+      "};",
+      "",
+    ] : []),
     ...(mantle ? [
       "/** One-time codes printed to the log are for local development: a deployed service picks its own sign-in method and sender. */",
       "function createAuth(env: Env, origin: string): MantleAuth {",
@@ -92,7 +106,9 @@ function service({ identity, features }: PresetSelection): string {
       "  if (!local || !env.BETTER_AUTH_SECRET || !env.ADMIN_EMAIL)",
       '    return createSetupIncompleteAuth({ message: "Sign-in is not configured: copy .dev.vars.example to .dev.vars locally, or choose a sign-in method in src/service.ts." });',
       "  return createMantleAuth({",
-      "    database: env.DB, driver: d1Driver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,",
+      postgres
+        ? "    database: pgPool(connectTo(env)), driver: pgDatabaseDriver(connectTo(env)), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
+        : "    database: env.DB, driver: d1Driver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,",
       '    methods: [{ kind: "email-otp", sender: new ConsoleEmailSender() }],',
       '    bootstrapOwner: { match: "email", value: env.ADMIN_EMAIL },',
       '    ipAddressHeaders: ["cf-connecting-ip"],',
@@ -123,7 +139,7 @@ function service({ identity, features }: PresetSelection): string {
         : "  fetch: (request, _env, { runtime }) => (routes ??= mount(runtime))(request),",
     "};",
     "",
-    "export const mantle = createMantle(service, { plan, storage: (env) => d1Storage(env.DB), schedules: true });",
+    `export const mantle = createMantle(service, { plan, storage: (env) => ${postgres ? "postgresStorage({ connect: connectTo(env) })" : "d1Storage(env.DB)"}, schedules: true });`,
     "",
   ].join("\n");
 }
@@ -192,12 +208,19 @@ export default {
 /** Where the Admin SPA's files are once `@aotter/mantle-ui` is installed. */
 const ADMIN_FILES = "node_modules/@aotter/mantle-ui/dist/admin";
 
-function wrangler(root: string, plan: RuntimePlan, admin: boolean): string {
+/** Where `wrangler dev` finds PostgreSQL; the deployed Worker uses the Hyperdrive config instead. */
+const LOCAL_PG = (name: string) => `postgres://postgres:postgres@127.0.0.1:5432/${name.replace(/-/g, "_")}`;
+
+function wrangler(root: string, plan: RuntimePlan, admin: boolean, dialect: PresetSelection["dialect"]): string {
   const name = basename(root).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "").slice(0, 63).replace(/-+$/, "") || "mantle-app";
   const crons = [...new Set(Object.values(plan.triggers).flatMap((t) => (t.source.kind === "schedule" && t.source.enabled !== false ? [toCloudflareCron(t.source.cron)] : [])))].sort();
   return json({
     $schema: "node_modules/wrangler/config-schema.json", name, main: "src/index.ts", compatibility_date: "2026-09-01", compatibility_flags: ["nodejs_compat"],
-    d1_databases: [{ binding: "DB", database_name: name }],
+    ...(dialect === "postgres"
+      // `wrangler hyperdrive create <name> --caching-disabled --connection-string=...` prints the id: Mantle reads in transactions,
+      // which Hyperdrive never caches, but Better Auth's session reads are not, so caching stays off
+      ? { hyperdrive: [{ binding: "HYPERDRIVE", id: "REPLACE_WITH_HYPERDRIVE_CONFIG_ID", localConnectionString: LOCAL_PG(name) }] }
+      : { d1_databases: [{ binding: "DB", database_name: name }] }),
     // the Worker answers every request (Admin serves the shell with its own headers); `none` keeps index.html fetchable by name
     ...(admin ? { assets: { directory: ADMIN_FILES, binding: "ASSETS", run_worker_first: true, html_handling: "none" } } : {}),
     ...(crons.length ? { triggers: { crons } } : {}),
@@ -225,7 +248,7 @@ export function presetFiles(root: string, selection: PresetSelection, plan: Runt
     ["src/handlers.ts", handlers(plan)],
     ...(selection.identity === "custom" ? [["src/identity.ts", IDENTITY] as [string, string]] : []),
     ["src/index.ts", ENTRY],
-    ...(["wrangler.jsonc", "wrangler.json", "wrangler.toml"].some((f) => existsSync(join(root, f))) ? [] : [["wrangler.jsonc", wrangler(root, plan, selection.features.includes("admin"))] as [string, string]]),
+    ...(["wrangler.jsonc", "wrangler.json", "wrangler.toml"].some((f) => existsSync(join(root, f))) ? [] : [["wrangler.jsonc", wrangler(root, plan, selection.features.includes("admin"), selection.dialect)] as [string, string]]),
     ["tsconfig.json", TSCONFIG],
     ...(selection.identity === "mantle" ? [[".dev.vars.example", DEV_VARS] as [string, string]] : []),
     [".gitignore", "node_modules/\n.wrangler/\n.dev.vars\n"],
@@ -265,6 +288,8 @@ export async function presetWarnings(root: string, selection: PresetSelection, s
     const wanted = new Set(Object.values(plan.triggers).flatMap((t) => (t.source.kind === "schedule" && t.source.enabled !== false ? [toCloudflareCron(t.source.cron)] : [])));
     const missing = [...wanted].filter((c) => !declared.has(c));
     const extra = [...declared].filter((c) => !wanted.has(c));
+    if (selection.dialect === "postgres" && !/"hyperdrive"\s*:/.test(wrangler)) out.push('wrangler.jsonc has no hyperdrive binding, which src/service.ts reads PostgreSQL through: add "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<config id>", "localConnectionString": "postgres://..." }]');
+    if (selection.dialect === "postgres" && wrangler.includes("REPLACE_WITH_HYPERDRIVE_CONFIG_ID")) out.push("wrangler.jsonc's Hyperdrive id is still the placeholder: create the config with `wrangler hyperdrive create <name> --caching-disabled --connection-string=...` before deploying");
     if (selection.features.includes("admin") && !/"binding"\s*:\s*"ASSETS"/.test(wrangler)) out.push('wrangler.jsonc binds no ASSETS, which src/service.ts serves the Admin console from: add "assets": { "directory": "node_modules/@aotter/mantle-ui/dist/admin", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none" }');
     if (missing.length || extra.length) out.push(`wrangler.jsonc triggers.crons does not match the plan's schedule Triggers${missing.length ? `; add ${missing.map((c) => `"${c}"`).join(", ")}` : ""}${extra.length ? `; nothing runs on ${extra.map((c) => `"${c}"`).join(", ")}` : ""}`);
   }

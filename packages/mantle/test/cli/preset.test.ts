@@ -21,7 +21,10 @@ const WRANGLER = realpathSync(dirname(createRequire(import.meta.url).resolve("wr
 const WORKERS_TYPES = join(dirname(createRequire(join(WRANGLER, "package.json")).resolve("@cloudflare/workers-types/package.json")), "index.d.ts");
 const TYPES = fileURLToPath(new URL("../../node_modules/@types", import.meta.url));
 const PEERS = ["better-auth", "@better-auth/oauth-provider", "@better-auth/mcp", "@better-auth/cimd", "@modelcontextprotocol/server", "@modelcontextprotocol/ext-apps", "@aotter/mantle-ui"];
-const SUBPATHS = ["spec", "cloudflare", "web", "mcp", "admin", "auth"];
+const SUBPATHS = ["spec", "cloudflare", "web", "mcp", "admin", "auth", "postgres"];
+/** The repo's own `pg` and its types, linked into a project whose preset reads PostgreSQL through Hyperdrive. */
+const NODE_MODULES = fileURLToPath(new URL("../../node_modules", import.meta.url));
+const PG_URL = process.env.MANTLE_PG_URL;
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -89,6 +92,9 @@ async function project(args: readonly string[], before: Record<string, string> =
     await mkdir(join(dir, "node_modules", p), { recursive: true });
     await writeFile(join(dir, "node_modules", p, "package.json"), `{ "name": "${p}" }`);
   }
+  await symlink(realpathSync(join(NODE_MODULES, "pg")), join(dir, "node_modules/pg"));
+  await mkdir(join(dir, "node_modules/@types"), { recursive: true });
+  await symlink(realpathSync(join(NODE_MODULES, "@types/pg")), join(dir, "node_modules/@types/pg"));
   // a stand-in for the built Admin SPA, where the preset's wrangler.jsonc binds it
   await mkdir(join(dir, "node_modules/@aotter/mantle-ui/dist/admin/assets"), { recursive: true });
   await writeFile(join(dir, "node_modules/@aotter/mantle-ui/dist/admin/index.html"), "<!doctype html><title>Mantle Admin</title>");
@@ -198,6 +204,65 @@ describe("the service preset", () => {
     expect(names).toContain("ticks");
     expect(names.filter((t) => ["user", "session", "account", "verification"].includes(t))).toEqual([]);
   }, 180_000);
+
+  it("dialect postgres: Hyperdrive wiring typechecks, and on PostgreSQL the Worker converges, serves Views and signs in", async () => {
+    const dir = await project(["--dialect", "postgres"]);
+    expect(JSON.parse(await read(dir, "mantle.config.json"))).toMatchObject({ dialect: "postgres" });
+    expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/postgres", version: "1" });
+    const service = await read(dir, "src/service.ts");
+    expect(service).toContain("postgresStorage({ connect: connectTo(env) })");
+    expect(service).toContain("database: pgPool(connectTo(env)), driver: pgDatabaseDriver(connectTo(env))");
+    expect(service).not.toContain("D1Database");
+    const wrangler = JSON.parse(await read(dir, "wrangler.jsonc"));
+    expect(wrangler.d1_databases).toBeUndefined();
+    expect(wrangler.hyperdrive).toEqual([expect.objectContaining({ binding: "HYPERDRIVE", id: "REPLACE_WITH_HYPERDRIVE_CONFIG_ID" })]);
+    expect(typecheck(dir)).toEqual([]);
+    // the placeholder id is reported on every run until it is replaced
+    expect((await generate(dir, [])).out).toContain("Hyperdrive id is still the placeholder");
+    // the engine is chosen once
+    expect(await generate(dir, ["--dialect", "sqlite"])).toMatchObject({ code: 2, out: expect.stringContaining("Switching dialect") });
+    if (!PG_URL) return;
+
+    const pg = (await import("pg")).default;
+    const name = `mantle_preset_${Date.now()}`;
+    const admin = new pg.Client(PG_URL);
+    await admin.connect();
+    await admin.query(`CREATE DATABASE ${name}`);
+    try {
+      const url = new URL(PG_URL);
+      url.pathname = `/${name}`;
+      await writeFile(join(dir, "wrangler.jsonc"), JSON.stringify({ ...wrangler, hyperdrive: [{ ...wrangler.hyperdrive[0], localConnectionString: url.href }] }));
+      await writeFile(join(dir, ".dev.vars"), (await read(dir, ".dev.vars.example")).replace("replace-with-a-random-32-byte-secret", "0123456789abcdef0123456789abcdef"));
+      await writeFile(join(dir, "src/handlers.ts"), TICK);
+      const worker = await boot(dir);
+      try {
+        expect(await rows(worker)).toEqual([]);
+        expect((await get(worker, "/api/auth/methods")).status).toBe(200);
+        expect((await get(worker, "/admin/api/me")).status).toBe(401);
+        // Better Auth migrates on PostgreSQL on its first sign-in step
+        const send = await worker.fetch("http://127.0.0.1:8787/api/auth/email-otp/send-verification-otp", { method: "POST", headers: { "content-type": "application/json", origin: "http://127.0.0.1:8787" }, body: JSON.stringify({ email: "you@example.com", type: "sign-in" }) });
+        expect(send.status, await send.text()).toBe(200);
+      } finally {
+        await worker.dispose();
+      }
+      const db = new pg.Client(url.href);
+      await db.connect();
+      const names = (await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")).rows.map((r) => r.table_name);
+      await db.end();
+      expect(names).toEqual(expect.arrayContaining(["ticks", "_mantle_boot_state", "user", "verification"]));
+    } finally {
+      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      await admin.end();
+    }
+  }, 180_000);
+
+  it("host none: only the plan and its types; no preset, no Cloudflare cron gate", async () => {
+    const dir = await project(["--host", "none"]);
+    for (const f of ["src/service.ts", "src/index.ts", "wrangler.jsonc"]) expect(await exists(dir, f)).toBe(false);
+    expect(await exists(dir, ".mantle/generated/mantle.ts")).toBe(true);
+    expect(JSON.parse(await read(dir, "mantle.config.json"))).toMatchObject({ host: "none" });
+    expect(await generate(dir, ["--host", "cloudflare"])).toMatchObject({ code: 2, out: expect.stringContaining("Switching host") });
+  });
 
   it("an enabled cron Cloudflare cannot run is refused before anything is written", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mantle-preset-"));

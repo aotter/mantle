@@ -217,6 +217,27 @@ describe("mantle generate", () => {
     expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/d1", version: "1" });
   });
 
+  it("the dialect's names: sqlite and d1 are the SQLite dialect, postgres needs pg; a v2 host is read, an unknown one refused", async () => {
+    for (const name of ["sqlite", "d1"]) {
+      const dir = await project();
+      await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], host: "cloudflare", dialect: name }));
+      expect((await gen([], dir)).code).toBe(0);
+      expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/d1", version: "1" });
+    }
+    const dir = await project();
+    await rm(join(dir, "src/service.ts"));
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "postgres" }));
+    expect(await gen([], dir)).toMatchObject({ code: 1, err: expect.stringContaining("dialect 'postgres' on Cloudflare needs pg") });
+    // restating the saved axis in another spelling rewrites nothing and keeps --check clean
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], host: "none", dialect: "d1" }));
+    expect((await gen(["--dialect", "sqlite", "--host", "none"], dir)).code).toBe(0);
+    expect(JSON.parse(await read(dir, "mantle.config.json"))).toEqual({ version: 2, identity: "custom", features: ["web"], host: "none", dialect: "d1" });
+    expect((await gen(["--check", "--dialect", "@aotter/mantle/d1"], dir)).code).toBe(0);
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], host: "lambda" }));
+    expect(await gen([], dir)).toMatchObject({ code: 2, err: expect.stringContaining('"host" must be one of') });
+    expect(await gen(["--host", "lambda"], dir)).toMatchObject({ code: 2 });
+  });
+
   it("prints manifest warnings (advice for an MCP tool) and still generates", async () => {
     const dir = await project();
     await writeFile(join(dir, "manifests", "mcp.yaml"), `apiVersion: cms.mantle.aotter.net/v2
