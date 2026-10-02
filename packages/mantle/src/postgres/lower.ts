@@ -19,6 +19,7 @@ export function cast(x: N, type: string): N {
   return { TypeCast: { arg: x, typeName: m ? { names: [S("numeric")], typmods: [num(Number(m[1])), num(Number(m[2]))], typemod: -1 } : { names: [S(t)], typemod: -1 } } };
 }
 const coalesce = (...args: N[]): N => ({ CoalesceExpr: { args } });
+const authored = (n: N, scope: LoweringScope) => (n.agg_filter ? { agg_filter: scope.tx(n.agg_filter) } : {});
 const by = (node: N): N => ({ SortBy: { node: structuredClone(node), sortby_dir: "SORTBY_DEFAULT", sortby_nulls: "SORTBY_NULLS_DEFAULT" } });
 /** `'[]'::json`: json, not jsonb, so it matches json_agg's type. */
 const json = (text: string): N => ({ TypeCast: { arg: str(text), typeName: { names: [S("json")], typemod: -1 } } });
@@ -69,8 +70,9 @@ export function pgLowering(timeZone: string): PolicyLowering {
         // PostgreSQL leaves an aggregate's input order open; ordering by the value (an object by its key) keeps it deterministic.
         // ponytail: D1 aggregates in scan order, so the two engines may order an array differently; neither order is promised
         // json has no ordering of its own, so the order is jsonb's; a DISTINCT aggregate may order only by its argument
-        case "json_group_array": { const x = scope.tx(args[0]); return coalesce(fn("json_agg", [x], n.agg_distinct ? { agg_order: [by(x)], agg_distinct: true } : { agg_order: [by(fn("to_jsonb", [x]))] }), json("[]")); }
-        case "json_group_object": { const k = scope.tx(args[0]); return coalesce(fn("json_object_agg", [k, scope.tx(args[1])], { agg_order: [by(k)] }), json("{}")); }
+        // an author's FILTER and ORDER BY (ADR-0037) are kept; without an ORDER BY the order is the value's, as above
+        case "json_group_array": { const x = scope.tx(args[0]); return coalesce(fn("json_agg", [x], { ...(n.agg_distinct ? { agg_order: [by(x)], agg_distinct: true } : { agg_order: n.agg_order ? scope.tx(n.agg_order) : [by(fn("to_jsonb", [x]))] }), ...authored(n, scope) }), json("[]")); }
+        case "json_group_object": { const k = scope.tx(args[0]); return coalesce(fn("json_object_agg", [k, scope.tx(args[1])], { agg_order: n.agg_order ? scope.tx(n.agg_order) : [by(k)], ...authored(n, scope) }), json("{}")); }
         case "json_array_length": return fn("jsonb_array_length", [cast(scope.tx(args[0]), "json")]);
         case "instr": return fn("strpos", [scope.tx(args[0]), scope.tx(args[1])]);
         // PostgreSQL rounds to a scale only as numeric

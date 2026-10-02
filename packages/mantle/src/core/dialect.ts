@@ -25,6 +25,15 @@ export interface StoreCodec {
   decode(type: string, value: unknown): unknown;
 }
 
+/** An operator's own refusals of a program's IR, run after the dialect's at runtime (ADR-0037 decision 4). It can only narrow. */
+export type RestrictSql = (plan: SqlPlan, context: SqlContext) => readonly SqlDiagnostic[];
+
+/** The dialect with `restrict` run after its own check. */
+export function restricted(dialect: MantleDialect, restrict?: RestrictSql): MantleDialect {
+  if (!restrict) return dialect;
+  return { ...dialect, check: (plan, context) => { const own = dialect.check(plan, context); return own.length ? own : restrict(plan, context); } };
+}
+
 /** Core's policy rewriter adds visibility and ownership to every relation position; the dialect spells the rest (`lowering`). */
 export interface MantleDialect {
   /** What a plan compiled for this dialect records (`RuntimePlan.dialect`); boot refuses any other. */

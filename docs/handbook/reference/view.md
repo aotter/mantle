@@ -46,12 +46,46 @@ never repeat them.
 | Time | `now()`, `date_trunc('hour'\|'day'\|'week'\|'month'\|'year', ts)`, `extract(year\|month\|day\|dow\|hour FROM ts)`, `ts ± interval '<n> seconds\|minutes\|hours'`, `ts - ts` | site time zone; `ts - ts` is microseconds. Calendar intervals (`day`, `month`) are refused: bind the boundary as an input |
 | Search and places | `mantle.search(t, q)`, `mantle.search_rank(t)`, `mantle.near(t.f, lat, lng, meters)`, `mantle.distance(t.f, lat, lng)` | `near` takes a literal radius of at most 50 km; ordering by `distance` needs `LIMIT` ≤ 100 and has no cursor |
 
-Refused always: `OFFSET`, `RIGHT`/`FULL`/`CROSS JOIN`, `LATERAL`, `NATURAL`,
-`USING`, recursive CTEs, `UNION`/`INTERSECT`/`EXCEPT`, window frames,
-`FOR UPDATE`, positional `$1`, `rowid`, SQLite's clock (`'now'`,
-`CURRENT_TIMESTAMP`), `strftime`/`date`/`unixepoch`, `REGEXP`, `ILIKE`,
-functions outside D1's allowlist, an unqualified `search()`, and any relation
-that is not a declared Schema (`_mantle_*` and auth tables included).
+Refused on D1: `WITH`, `LATERAL`, `UNION`/`INTERSECT`/`EXCEPT`, window frames,
+`FILTER`, `DISTINCT ON`, `ILIKE`, regular expressions and jsonb operators. The
+PostgreSQL dialect accepts each of them (next section), and D1 says so in its
+refusal: "needs the PostgreSQL dialect".
+
+Refused on every dialect: `OFFSET`, `RIGHT`/`FULL`/`CROSS JOIN`, `NATURAL`,
+`USING`, `FOR UPDATE`, a write inside `WITH`, positional `$1`, `rowid`,
+SQLite's clock (`'now'`, `CURRENT_TIMESTAMP`), `strftime`/`date`/`unixepoch`,
+`generate_series` and any function outside the allowlist, an unqualified
+`search()`, and any relation that is not a declared Schema, a CTE or an
+internal View (`_mantle_*` and auth tables included).
+
+### What the PostgreSQL dialect adds
+
+PostgreSQL is Mantle SQL's reference dialect (ADR-0037); D1 runs the subset above.
+On PostgreSQL a View may also use:
+
+| Construct | Notes |
+|---|---|
+| `WITH`, `WITH RECURSIVE` | every CTE body is a `SELECT`; a Schema read inside one is scoped like any other |
+| `UNION [ALL]`, `INTERSECT`, `EXCEPT`, `DISTINCT ON` | inside a `WITH` or a subquery, never the View's own `SELECT`, which Core pages and orders |
+| `JOIN LATERAL (…) x ON …`, `, LATERAL (…) x` | |
+| Window frames | `ROWS`/`RANGE BETWEEN … PRECEDING AND …` with literal offsets (an integer, or an interval for `RANGE` over time); `avg`, `min`, `max`, `lag`, `lead`, `first_value`, `last_value`, `dense_rank` over a window. `GROUPS` and `EXCLUDE` are refused |
+| Aggregates | `FILTER (WHERE …)`, `ORDER BY` inside an aggregate, `string_agg`, `jsonb_agg`, `jsonb_object_agg` |
+| jsonb | `->`, `#>`, `#>>`, `@>`, `<@`, `?`, `?\|`, `?&`; `jsonb_build_object`, `jsonb_build_array`, `to_jsonb`, `jsonb_typeof`; a json field is stored as `jsonb` |
+| Text and numbers | `ILIKE`, `~`, `~*`, `!~`, `!~*`, `split_part`, `greatest`, `least`, `floor`, `ceil`, `sqrt`, `power` |
+| Time | `ts AT TIME ZONE 'Asia/Taipei'`; `date_trunc` adds `minute` and `quarter`; `extract` adds `minute`, `quarter`, `week`, `isoyear`, `isodow`, `doy`, `epoch` |
+| Casts | any expression to `int4`, `int8`, `numeric(p, s)`, `date`, `timestamptz`, `jsonb`; a text literal compared with a date-time column is cast, as PostgreSQL does |
+
+Every statement on PostgreSQL has a 10-second `statement_timeout`
+(`postgresStorage({ statementTimeoutMs })`).
+
+### Reading another View
+
+A View's `FROM` may name an internal View (`surface: internal`, no `input`, no
+`requires`) by its name with `-` written `_`: `FROM free_window w`. The
+compiler inlines its `SELECT` as a subquery, so scope and every check apply
+inside it, on every dialect. A View that reads itself, directly or through
+others, is refused; a View named like a Schema is not readable this way (the name reads the Schema). Write a rule many
+Views share (a plan's visible window, a definition of "active") once this way.
 
 ### Names
 

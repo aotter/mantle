@@ -187,13 +187,14 @@ export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<
   const booted = await query(connect, { text: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" }).catch(() => undefined);
   if (booted?.rows[0]?.value === state) return { skipped: true, blocked: [], undeclared: [] };
   await transaction(connect, [LOCK, ...SYSTEM_DDL.map((text) => ({ text })), ...FUNCTIONS.map((text) => ({ text })),
-    { text: "INSERT INTO _mantle_boot_state (key, value) VALUES ('instance', $1) ON CONFLICT DO NOTHING", values: [crypto.randomUUID()] }]);
+    { text: "INSERT INTO _mantle_boot_state (key, value) VALUES ('instance', $1) ON CONFLICT DO NOTHING", values: [crypto.randomUUID()] }], undefined, 0);
   for (let attempt = 0; ; attempt++) {
     const { statements, blocked, undeclared } = await diff(connect, plan);
     if (blocked.length) return { skipped: false, blocked, undeclared };
     statements.push({ text: "INSERT INTO _mantle_boot_state (key, value) VALUES ('fingerprint', $1) ON CONFLICT (key) DO UPDATE SET value = excluded.value", values: [state] });
     try {
-      await transaction(connect, [LOCK, ...statements]);
+      // convergence builds indexes on tables that may be large: no statement timeout
+      await transaction(connect, [LOCK, ...statements], undefined, 0);
       return { skipped: false, blocked: [], undeclared };
     } catch (e) {
       const state = (e as { code?: string }).code;

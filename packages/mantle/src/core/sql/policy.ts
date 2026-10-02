@@ -109,8 +109,10 @@ type C = PolicyOpts & {
   binds: BindSpec[];
   keys: Map<string, number>;
   edge: string;
-  embed: 'top' | 'sublink' | 'from-subquery' | 'insert-select';
+  embed: 'top' | 'sublink' | 'from-subquery' | 'insert-select' | 'cte' | 'setop.left' | 'setop.right';
   sel: SelInfo[];
+  /** the CTEs in scope, innermost last: a reference reads its body's outputs (ordering needs its id) */
+  ctes: Map<string, N>[];
   dml?: { alias: string; schema: string };
 };
 
@@ -150,10 +152,15 @@ function positionOf(c: C): RelationPosition {
 
 /** The ONE function that prints a Schema reference in a read position. */
 function wrap(rv: N, c: C): N {
+  // a CTE's body is rewritten where it is defined (position `cte`); its name is not a Schema
+  if (rv.mantle === 'cte') {
+    if (!c.ctes.some((m) => m.has(rv.relname))) throw new Refused('SQL_RELATION', `${rv.relname}: a cte reference is not defined in scope`);
+    return { RangeVar: rv };
+  }
   const s = c.schemas[rv.relname];
   if (!s) throw new Refused('SQL_RELATION', `${rv.relname} is not a declared Schema`);
   if (rv.mantle === 'system') return { RangeVar: rv };
-  if (rv.mantle !== 'table') throw new Refused('SQL_RELATION', `${rv.relname}: a cte reference is not defined in scope`);
+  if (rv.mantle !== 'table') throw new Refused('SQL_RELATION', `${rv.relname}: a relation that is neither a Schema nor a CTE`);
   const position = positionOf(c); // computed even when nothing records it: an unclassified edge must fail closed
   c.seen?.add(position);
   const a = rv.alias?.aliasname ?? rv.relname;
@@ -228,7 +235,12 @@ function deep(n: N, c: C, type: string): N {
     if (c.edge === 'SubLink.subselect') c.embed = 'sublink';
     else if (c.edge === 'RangeSubselect.subquery') c.embed = 'from-subquery';
     else if (c.edge === 'InsertStmt.selectStmt') c.embed = 'insert-select';
-    out[k] = tx(v, c);
+    else if (c.edge === 'CommonTableExpr.ctequery') c.embed = 'cte';
+    // a set operation's branches are SELECT bodies without their type key: each is a select of its own
+    if (c.edge === 'SelectStmt.larg' || c.edge === 'SelectStmt.rarg') {
+      c.embed = c.edge === 'SelectStmt.larg' ? 'setop.left' : 'setop.right';
+      out[k] = select(v, c).SelectStmt;
+    } else out[k] = tx(v, c);
     c.edge = saved.edge;
     c.embed = saved.embed;
   }
@@ -248,7 +260,17 @@ export function tx(v: any, c: C): any {
   return deep(v, c, 'bare');
 }
 
+/** A SELECT's output names; a set operation's are its first branch's. */
+const outputsOf = (sel: N): string[] => (sel.op && sel.op !== 'SETOP_NONE' ? outputsOf(sel.larg) : (sel.targetList ?? []).map((t: N) => t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval));
+/** A CTE's: its column list renames its body's. */
+const cteOutputs = (cte: N): string[] => (cte.aliascolnames?.length ? cte.aliascolnames.map((x: N) => x.String.sval) : outputsOf(cte.ctequery.SelectStmt));
+
 function select(n: N, c: C): N {
+  const ctes = new Map<string, N>((n.withClause?.ctes ?? []).map((x: N) => [x.CommonTableExpr.ctename, x.CommonTableExpr]));
+  c.ctes.push(ctes);
+  try { return selectIn(n, c); } finally { c.ctes.pop(); }
+}
+function selectIn(n: N, c: C): N {
   const rels = relsOf(n.fromClause?.[0]);
   const info: SelInfo = {
     container: c.embed === 'top' ? 'from' : c.embed,
@@ -275,13 +297,15 @@ function select(n: N, c: C): N {
   // deterministic order: append the tiebreak (ADR-0034 decision 2, "Order and paging")
   const first = rels[0];
   const firstAlias = first?.RangeVar ? (first.RangeVar.alias?.aliasname ?? first.RangeVar.relname) : first?.RangeSubselect?.alias?.aliasname;
-  const aggregate = !n.groupClause && hasFunc(n.targetList, (f, fc) => ['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object'].includes(f) && !fc.over);
+  const aggregate = !n.groupClause && hasFunc(n.targetList, (f, fc) => AGGREGATES.has(f) && !fc.over);
   if (out.sortClause && !aggregate) {
     const have = new Set(out.sortClause.map((k: N) => JSON.stringify(k.SortBy.node)));
     if (n.groupClause) out.sortClause = [...out.sortClause, ...tx(n.groupClause, c).filter((g: N) => !have.has(JSON.stringify(g))).map(sort)];
     else if (firstAlias) {
-      if (first!.RangeSubselect && !first!.RangeSubselect.subquery.SelectStmt.targetList.some((t: N) => (t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === 'id'))
+      if (first!.RangeSubselect && !outputsOf(first!.RangeSubselect.subquery.SelectStmt).includes('id'))
         throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a subquery in FROM, needs the subquery to output id`);
+      const cte = first!.RangeVar?.mantle === 'cte' ? [...c.ctes].reverse().find((m) => m.has(first!.RangeVar.relname))?.get(first!.RangeVar.relname) : undefined;
+      if (cte && !cteOutputs(cte).includes('id')) throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a CTE, needs the CTE to output id`);
       const extra = [col(firstAlias, 'id')];
       const je = (n.fromClause ?? []).find((f: N) => f.RangeFunction);
       if (je?.RangeFunction.alias) extra.push(col(je.RangeFunction.alias.aliasname, 'id'));
@@ -317,6 +341,7 @@ function expandStar(n: N, info: SelInfo, c: C): N {
   return { ...n, targetList: list };
 }
 
+const AGGREGATES = new Set(['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object', 'string_agg', 'jsonb_agg', 'jsonb_object_agg']);
 const alias$ = (rel: N) => rel.alias?.aliasname ?? rel.relname;
 function returning(rc: N | undefined, s: SchemaDef, schema: string, c: C): N | undefined {
   const exprs = (rc?.exprs ?? []).flatMap((e: N) => (e.ResTarget.val?.ColumnRef?.fields?.[0]?.A_Star ? starCols(s).map((f) => res(col(f))) : [e]));
@@ -388,7 +413,7 @@ function insert(n: N, c: C): N {
 
 // ---- entry point -------------------------------------------------------------------------------------
 export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
-  const c: C = { ...opts, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [] };
+  const c: C = { ...opts, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
   const ast = tx(stmt, c);
   const t = Object.keys(stmt)[0]!;
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
