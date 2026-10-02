@@ -110,7 +110,7 @@ function featureDiagnostics(root: string, config: MantleConfig): Diagnostic[] {
   for (const f of config.features) need(`feature '${f}'`, PACKAGES[f]);
   // a preset written now serves the staff MCP App, which @aotter/mantle-ui builds; a service already written is the application's
   const writesPreset = (config.host ?? "cloudflare") === "cloudflare" && !!builtInOf(config.dialect) && !existsSync(join(root, "src/service.ts"));
-  if ((config.host ?? "cloudflare") === "cloudflare" && builtInOf(config.dialect) === "postgres") need("dialect 'postgres' on Cloudflare", POSTGRES_PACKAGES);
+  if (writesPreset && builtInOf(config.dialect) === "postgres") need("dialect 'postgres' on Cloudflare", POSTGRES_PACKAGES);
   if (writesPreset && config.features.includes("mcp") && config.identity !== "none" && !config.features.includes("admin")) need("the staff MCP App", ["@aotter/mantle-ui"]);
   if (config.features.includes("admin") && config.identity === "none")
     out.push(validateDiagnostic({ code: "GENERATE_FEATURE_DEPENDENCY_MISSING", severity: "error", path: "feature 'admin'", message: "feature 'admin' needs a caller identity, and identity is 'none'. Pass --identity mantle or --identity custom, or leave admin out of --features." }));
@@ -125,7 +125,7 @@ function readConfig(text: string): { config: MantleConfig; raw: Record<string, u
     throw new Error(`${CONFIG} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
   }
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error(`${CONFIG} must be a JSON object.`);
-  if (v.version === 1 || ("host" in v && v.version !== 2)) throw new Error(`${CONFIG} is a 0.1.x selection (version 1, with a host): move it to version 2 as node_modules/@aotter/mantle/docs/upgrade-0.1-to-0.2.md describes.`);
+  if (v.version === 1) throw new Error(`${CONFIG} is a 0.1.x selection (version 1, with a host): move it to version 2 as node_modules/@aotter/mantle/docs/upgrade-0.1-to-0.2.md describes.`);
   const features = v.features as Feature[];
   if (v.version !== 2 || !IDENTITIES.includes(v.identity as Identity) || !Array.isArray(features) || FEATURES.filter((f) => features.includes(f)).join() !== features.join())
     throw new Error(`${CONFIG} must be { "version": 2, "identity": ${IDENTITIES.map((i) => `"${i}"`).join(" | ")}, "features": a subset of ${FEATURES.join(", ")} in that order }.`);
@@ -169,7 +169,9 @@ function select(saved: MantleConfig | undefined, features: string | undefined, i
   const picked = features === undefined ? saved?.features ?? FEATURES : features.split(",").map((f) => f.trim()).filter(Boolean);
   const unknown = picked.filter((f) => !FEATURES.includes(f as Feature));
   if (unknown.length) throw new Error(`--features accepts only ${FEATURES.join(", ")}; got ${unknown.join(", ")}`);
-  const h = host ?? saved?.host, d = dialect ?? saved?.dialect;
+  // a flag that restates the saved axis (another spelling was refused above) keeps the saved spelling, so nothing is rewritten
+  const h = saved ? saved.host ?? (host === "cloudflare" ? undefined : host) : host;
+  const d = saved ? saved.dialect ?? (dialect !== undefined && builtInOf(dialect) === "sqlite" ? undefined : dialect) : dialect;
   return { version: 2, identity: (identity ?? saved?.identity ?? (features === undefined ? "mantle" : "none")) as Identity, features: FEATURES.filter((f) => picked.includes(f)), ...(h ? { host: h as Host } : {}), ...(d ? { dialect: d } : {}) };
 }
 
@@ -306,7 +308,9 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
     } catch (err) {
       return (stderr.write(`${err instanceof Error ? err.message : String(err)}; rerun mantle generate to finish the preset.\n`), 2);
     }
-    for (const w of await presetWarnings(root, selection, !!saved && changed(saved.config, config), compiled.plan)) stderr.write(`warning: ${w}\n`);
+    // host and dialect cannot change on a rerun (select refuses it), so only the identity and features can drift from src/service.ts
+    const selectionChanged = !!saved && (saved.config.identity !== config.identity || saved.config.features.join() !== config.features.join());
+    for (const w of await presetWarnings(root, selection, selectionChanged, compiled.plan)) stderr.write(`warning: ${w}\n`);
     if (written.length) stdout.write(`Wrote the service preset, which is yours to edit: ${written.join(", ")}.\n`);
     return 0;
   }

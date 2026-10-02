@@ -228,6 +228,11 @@ describe("mantle generate", () => {
     await rm(join(dir, "src/service.ts"));
     await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "postgres" }));
     expect(await gen([], dir)).toMatchObject({ code: 1, err: expect.stringContaining("dialect 'postgres' on Cloudflare needs pg") });
+    // restating the saved axis in another spelling rewrites nothing and keeps --check clean
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], host: "none", dialect: "d1" }));
+    expect((await gen(["--dialect", "sqlite", "--host", "none"], dir)).code).toBe(0);
+    expect(JSON.parse(await read(dir, "mantle.config.json"))).toEqual({ version: 2, identity: "custom", features: ["web"], host: "none", dialect: "d1" });
+    expect((await gen(["--check", "--dialect", "@aotter/mantle/d1"], dir)).code).toBe(0);
     await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], host: "lambda" }));
     expect(await gen([], dir)).toMatchObject({ code: 2, err: expect.stringContaining('"host" must be one of') });
     expect(await gen(["--host", "lambda"], dir)).toMatchObject({ code: 2 });

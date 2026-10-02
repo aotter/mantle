@@ -95,8 +95,10 @@ dialect, and boot refuses a plan compiled for another one.
 
 ## The PostgreSQL dialect
 
-`"dialect": "@aotter/mantle/postgres"` in `mantle.config.json` compiles the
-plan for PostgreSQL (13 or later). It accepts the same portable subset as D1,
+`"dialect": "postgres"` in `mantle.config.json` compiles the plan for
+PostgreSQL (13 or later). On Cloudflare, `mantle generate --dialect postgres`
+writes the preset over Hyperdrive; on any other platform, add `"host": "none"`
+and compose `createMantle` with `postgresStorage` yourself (ADR-0036). It accepts the same portable subset as D1,
 except SQLite's own `typeof`, `hex`, `json_extract`, `json_set`, `json_insert`
 and `json_remove` (write `x ->> '$.path'`), so a manifest that compiles for
 PostgreSQL also compiles for D1 and moving engines is a recompile.
