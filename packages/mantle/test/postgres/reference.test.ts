@@ -102,3 +102,29 @@ it("a public View's CTE over a publishing Schema is not read as an unpublished r
   const r = await compileSql("WITH x AS (SELECT id, title FROM posts) SELECT id, title FROM x ORDER BY id", { schemas, inputs: {}, kind: "view", public: true }, pgCompile);
   expect(r.ok, JSON.stringify(r)).toBe(true);
 });
+
+it.skipIf(!PG_URL)("a Schema field read through a CTE keeps its name and type, through renamed columns and a later sibling", async () => {
+  const { compilePlan } = await import("../../src/spec/index.js");
+  const { createMantleRuntime } = await import("../../src/core/index.js");
+  const doc = (kind: string, name: string, spec: string) => `apiVersion: cms.mantle.aotter.net/v2\nkind: ${kind}\nmetadata: { name: ${name} }\nspec:\n${spec}`;
+  const notes = doc("Schema", "notes", `  title: Notes\n  lifecycle: operational\n  scope: { ownerId: auth.uid() }\n  schema:\n    type: object\n    required: [ownerId]\n    properties: { ownerId: { type: string }, dueAt: { type: string, format: date-time } }\n  indexes: [[ownerId, dueAt]]`);
+  const view = (name: string, sql: string) => doc("View", name, `  surface: public\n  requires: { auth: { all: [ctx.user] } }\n  sql: "${sql}"`);
+  const res = await compilePlan({ sources: [{ sourceId: "memory:cte", text: [notes,
+    view("dup", "WITH x(p, q) AS (SELECT n.id AS k, n.dueAt AS k FROM notes n) SELECT x.p, x.q FROM x"),
+    view("cast", "WITH a AS (SELECT n.id, CAST(n.dueAt AS date) AS dueAt FROM notes n) SELECT a.id, a.dueAt FROM a"),
+    view("due", "WITH a AS (SELECT n.id, n.dueAt FROM notes n), b(id, due) AS (SELECT a.id, a.dueAt FROM a) SELECT a.id, a.dueAt, b.due FROM a JOIN b ON b.id = a.id ORDER BY a.dueAt"),
+  ].join("\n---\n") }] }, pgCompile);
+  expect(res.ok, JSON.stringify(res.diagnostics)).toBe(true);
+  expect(res.plan.views.dup.columns.q).toEqual({ schema: "notes", field: "dueat" });
+  expect(res.plan.views.cast.columns?.dueat).toBeUndefined();
+  expect(res.plan.views.due.columns).toMatchObject({ dueat: { schema: "notes", field: "dueat" }, due: { schema: "notes", field: "dueat" } });
+  const db = await freshSchema();
+  try {
+    const rt = await createMantleRuntime({ plan: res.plan, handlers: {}, storage: postgresStorage({ connect: db.connect }) });
+    const me = { kind: "user", subject: "u1", role: null, scopes: [], credential: "session", credentialId: null, clientId: null } as const;
+    await rt.store.as(me).write([{ insert: "notes", values: { dueAt: "2026-01-02T00:00:00Z" } }]);
+    const [row] = (await rt.store.as(me).view("due")).rows;
+    expect(Object.keys(row)).toEqual(["id", "dueAt", "due"]);
+    expect([row.dueAt, row.due]).toEqual(["2026-01-02T00:00:00.000000Z", "2026-01-02T00:00:00.000000Z"]);
+  } finally { await db.drop(); }
+}, 60_000);

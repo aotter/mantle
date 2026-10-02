@@ -8,6 +8,7 @@ import { expect, it } from "vitest";
 import { RUNTIME_PLAN_VERSION } from "../../src/spec/index.js";
 import { DiagnosticError } from "../../src/spec/kernel/index.js";
 import { pgDatabaseDriver, postgresStorage } from "../../src/postgres/index.js";
+import { convergeStorage } from "../../src/postgres/storage.js";
 import * as pgCompile from "../../src/postgres/compile/index.js";
 import { boot, caller, isCheck, opIndexOf, program, runProcedure, runView, site, useCompileSide } from "../../src/testing/harness.js";
 import { PG_URL, freshSchema } from "./engine.js";
@@ -29,6 +30,12 @@ it.skipIf(!PG_URL)("a second boot reads only the fingerprint; a new field is add
     await e.storage.prepare(planOf({ notes: { ...notes, fields: { title: "text", stars: "integer" } } }, "f2"));
     const [cols] = await e.driver.batch([{ sql: "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'notes' ORDER BY ordinal_position" }]);
     expect(cols.rows.map((r) => r.column_name)).toContain("stars");
+    // the scope gets no index of its own (the grammar has one lead with it); one left from before is called redundant
+    const [ix] = await e.driver.batch([{ sql: "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'notes'" }]);
+    expect(ix.rows.map((r) => r.indexname)).not.toContain("_mantle_scope_notes");
+    await e.driver.batch([{ sql: "CREATE INDEX _mantle_scope_notes ON notes (owner)" }]);
+    expect((await convergeStorage(e.connect, { notes: { ...notes, fields: { title: "text", stars: "integer" } } }, { fingerprint: "f2b" })).undeclared.map((u) => u.message))
+      .toEqual(["index _mantle_scope_notes is redundant: a declared index leads with owner; drop it by hand"]);
     await expect(e.storage.prepare(planOf({ notes: { ...notes, fields: { title: "integer" } } }, "f3"))).rejects.toThrow(/notes\.title is text, the plan says int8/);
     await e.driver.batch([{ sql: "CREATE TABLE theirs (id text)" }]);
     await expect(e.storage.prepare(planOf({ theirs: { fields: { x: "text" } } }, "f4"))).rejects.toThrow(/Mantle did not create it/);

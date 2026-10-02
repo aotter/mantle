@@ -51,14 +51,14 @@ export const NOW = Date.parse('2026-09-29T00:00:00Z') * 1000; // microseconds
 export const caller = (input: Record<string, unknown> = {}, uid = 'o1'): BindContext => ({ uid, now: NOW, input });
 
 export const schemas: Record<string, StorageSchema> = {
-  items: { scope: 'owner', ttl: 'expires_at', ttlSeconds: 3600, fields: { name: 'text', cat: 'text', stock: 'integer', tags: 'json', note: 'text', expires_at: 'timestamptz' }, checks: [await check('stock >= 0')] },
-  requisitions: { scope: 'owner', fields: { item_id: 'text', qty: 'integer', state: 'text' } },
-  orders: { scope: 'owner', fields: { item_id: 'text', qty: 'integer', total: 'numeric(12,2)' } },
+  items: { scope: 'owner', indexes: [['owner']], ttl: 'expires_at', ttlSeconds: 3600, fields: { name: 'text', cat: 'text', stock: 'integer', tags: 'json', note: 'text', expires_at: 'timestamptz' }, checks: [await check('stock >= 0')] },
+  requisitions: { scope: 'owner', indexes: [['owner']], fields: { item_id: 'text', qty: 'integer', state: 'text' } },
+  orders: { scope: 'owner', indexes: [['owner']], fields: { item_id: 'text', qty: 'integer', total: 'numeric(12,2)' } },
   settings: { scope: 'owner', fields: { key: 'text', value: 'text' }, unique: [['key']] },
   posts: { publishing: true, ttl: 'expires_at', ttlSeconds: 3600, fields: { title: 'text', body: 'text', expires_at: 'timestamptz' }, search: ['title', 'body'] },
   notes: { scope: 'owner', ttl: 'expires_at', ttlSeconds: 3600, fields: { title: 'text', body: 'text', expires_at: 'timestamptz' }, search: ['title', 'body'], unique: [['title']] },
-  places: { scope: 'owner', ttl: 'expires_at', ttlSeconds: 3600, fields: { name: 'text', loc: 'geo', expires_at: 'timestamptz' } },
-  events: { scope: 'owner', fields: { title: 'text', at: 'timestamptz', day: 'date', amount: 'numeric(12,2)', qty: 'integer' } },
+  places: { scope: 'owner', indexes: [['owner']], ttl: 'expires_at', ttlSeconds: 3600, fields: { name: 'text', loc: 'geo', expires_at: 'timestamptz' } },
+  events: { scope: 'owner', indexes: [['owner']], fields: { title: 'text', at: 'timestamptz', day: 'date', amount: 'numeric(12,2)', qty: 'integer' } },
 };
 
 /** a point and places at known distances north of it */
