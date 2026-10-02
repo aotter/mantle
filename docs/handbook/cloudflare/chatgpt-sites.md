@@ -106,7 +106,9 @@ resolver; a forwarded identity header is not one.
 ## Verify after every publish
 
 - Anonymous: a public View, an HTTP Trigger, `/mcp` (or your path)
-  `initialize` and `tools/list`.
+  `initialize` and `tools/list` when a public tool may be called anonymously;
+  when every public tool `requires` a caller, they answer 401 with a
+  `WWW-Authenticate` challenge instead.
 - The owner: `GET /admin/api/me` is `owner`; a staff View and an operation.
 - A second account: no Admin access until granted; revoking the role takes
   effect on the next request.

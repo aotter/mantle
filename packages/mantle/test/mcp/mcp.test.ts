@@ -160,6 +160,14 @@ const rpc = async (surface: "public" | "staff", caller: Caller, method: string, 
   const data = text.startsWith("event:") || text.includes("\ndata:") || text.startsWith("data:") ? JSON.parse(text.split("\n").find((l) => l.startsWith("data:"))!.slice(5)) : text ? JSON.parse(text) : null;
   return { status: res.status, headers: res.headers, data };
 };
+const post = (method: string) => new Request("https://x.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+  body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: method === "initialize" ? { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } : {} }) });
+/** The public surface of a plan made of the manifests whose text matches. */
+const subsetSurface = async (keep: RegExp, resourceMetadata?: string) => {
+  const res = await compilePlan({ sources: [{ sourceId: "memory:subset", text: MANIFESTS.split("\n---\n").filter((doc) => keep.test(doc)).join("\n---\n") }] });
+  if (!res.ok) throw new Error(JSON.stringify(res.diagnostics));
+  return createMcpSurface(await createMantleRuntime({ plan: res.plan, handlers: {}, storage: sqliteStorage(d1) }), { basePath: "/mcp", surface: "public", ...(resourceMetadata ? { resourceMetadata } : {}) });
+};
 const names = async (surface: "public" | "staff", caller: Caller) => ((await rpc(surface, caller, "tools/list")).data.result.tools as { name: string }[]).map((t) => t.name).sort();
 
 describe("MCP surface", () => {
@@ -201,19 +209,22 @@ describe("MCP surface", () => {
   });
 
   it("closes a surface whose every tool needs identity to anonymous from initialize on, so a client signs in when it connects", async () => {
-    const closed = MANIFESTS.split("\n---\n").filter((doc) => /name: (notes|add-note|mcp-add)\b/.test(doc)).join("\n---\n");
-    const res = await compilePlan({ sources: [{ sourceId: "memory:closed", text: closed }] });
-    if (!res.ok) throw new Error(JSON.stringify(res.diagnostics));
-    const mcp = createMcpSurface(await createMantleRuntime({ plan: res.plan, handlers: {}, storage: sqliteStorage(d1) }), { basePath: "/mcp", surface: "public", resourceMetadata: RM });
-    const post = (method: string) => new Request("https://x.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: method === "initialize" ? { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } : {} }) });
+    const mcp = await subsetSurface(/name: (notes|add-note|mcp-add)\b/, RM);
     for (const request of [post("initialize"), post("tools/list"), new Request("https://x.test/mcp", { headers: { accept: "text/event-stream" } })]) {
       const r = await mcp(request, anon);
       expect(r.status).toBe(401);
-      expect(r.headers.get("www-authenticate")).toBe(`Bearer resource_metadata="${RM}"`);
+      // the scope floor rides the challenge, so the first authorization asks for it
+      expect(r.headers.get("www-authenticate")).toBe(`Bearer scope="mcp", resource_metadata="${RM}"`);
     }
     expect((await mcp(post("initialize"), user("c1"))).status).toBe(200);
     expect((await (await mcp(post("tools/list"), user("c1"))).text())).toContain("add_note");
+    // without resource metadata (identity `custom`) the challenge is still sent, bare
+    expect((await (await subsetSurface(/name: (notes|add-note|mcp-add)\b/))(post("initialize"), anon)).headers.get("www-authenticate")).toBe('Bearer scope="mcp"');
+  });
+
+  it("keeps a public surface with no tools open: nothing on it needs a sign-in, and under identity none none could be had", async () => {
+    const r = await (await subsetSurface(/name: notes\b/, RM))(post("initialize"), anon);
+    expect(r.status).toBe(200);
   });
 
   it("closes the staff surface to anonymous (401) and non-staff (403) callers, for list and call alike", async () => {

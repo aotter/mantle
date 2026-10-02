@@ -909,9 +909,10 @@ every unauthenticated request for the same reason.
 
 - A surface is **closed** when none of its tools may be called anonymously: every tool's `requires.auth.all` names at least
   one predicate (each of `ctx.user`, `ctx.auth`, `ctx.staff`, `ctx.auth.scope` needs an identity). The staff surface is
-  always closed.
+  always closed; a public surface with no tools is open, since nothing on it needs a sign-in.
 - On a closed surface every anonymous request (`initialize`, `tools/list`, the SSE `GET`) answers `401` with the RFC 9728
-  `WWW-Authenticate` challenge, as the staff surface already did.
+  `WWW-Authenticate` challenge, as the staff surface already did. The challenge names the surface's scope floor
+  (`scope="mcp"` by default), so the first authorization already asks for it.
 - A surface with at least one tool anonymous may call keeps the 2026-09-21 behaviour: discovery stays open and the first
   `tools/call` that needs identity answers `401`.
 - Nothing is configured: the rule follows from the plan, so a project that adds a public tool reopens discovery by
