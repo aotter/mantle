@@ -16,6 +16,7 @@ export class PgStoreExecutor implements StoreExecutor {
     private readonly schemas: Readonly<Record<string, StorageSchema>>,
     /** Check constraint name -> "<schema>: <expression>", the message D1 gives for the same check. */
     private readonly checks: ReadonlyMap<string, string>,
+    private readonly timeoutMs?: number,
   ) {}
 
   private prepared(s: StoreStatement): PgStatement {
@@ -25,7 +26,7 @@ export class PgStoreExecutor implements StoreExecutor {
 
   async select(statement: StoreStatement): Promise<readonly StoreRow[]> {
     const s = this.prepared(statement);
-    return (await query(this.connect, s).catch((e) => this.mapped(e, "select"))).rows;
+    return (await query(this.connect, s, this.timeoutMs).catch((e) => this.mapped(e, "select"))).rows;
   }
 
   async apply(batch: readonly StoreStatement[]): Promise<readonly StoreApplied[]> {
@@ -34,7 +35,7 @@ export class PgStoreExecutor implements StoreExecutor {
     const out = await transaction(this.connect, statements, (i, o) => {
       const expect = batch[i]!.expect;
       if (expect !== undefined && o.count !== expect) throw fail("CONFLICT", `CONFLICT op=${i}: the write matched a different number of rows than it expected`, { opIndex: i, reason: "expect" });
-    }).catch((e) => this.mapped(e, "apply"));
+    }, this.timeoutMs).catch((e) => this.mapped(e, "apply"));
     return out.map((o) => ({ affected: o.count, rows: o.rows }));
   }
 

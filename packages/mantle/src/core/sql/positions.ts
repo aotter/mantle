@@ -7,13 +7,14 @@
 // the one hand-kept list. It is tied to @pgsql/types below: every edge names a real key of a real
 // node type (a renamed key fails typecheck), and `policy.ts` fails closed on any relation reached
 // through an edge that is not here.
-import type { DeleteStmt, InsertStmt, JoinExpr, OnConflictClause, RangeSubselect, SelectStmt, SubLink, UpdateStmt } from '@pgsql/types';
+import type { CommonTableExpr, DeleteStmt, InsertStmt, JoinExpr, OnConflictClause, RangeSubselect, SelectStmt, SubLink, UpdateStmt } from '@pgsql/types';
 
 type Edge<Name extends string, T, K extends keyof T & string> = `${Name}.${K}`;
 
 /** the IR edges a RangeVar (or a compiler-emitted relation) hangs from */
 export type RelationEdge =
-  | Edge<'SelectStmt', SelectStmt, 'fromClause'>
+  | Edge<'SelectStmt', SelectStmt, 'fromClause' | 'larg' | 'rarg'>
+  | Edge<'CommonTableExpr', CommonTableExpr, 'ctequery'>
   | Edge<'JoinExpr', JoinExpr, 'larg' | 'rarg'>
   | Edge<'RangeSubselect', RangeSubselect, 'subquery'>
   | Edge<'SubLink', SubLink, 'subselect'>
@@ -26,7 +27,10 @@ export type RelationPosition =
   | 'from' // a Schema in the FROM of the statement itself
   | 'join.left'
   | 'join.right'
-  | 'from-subquery' // inside `FROM (SELECT ...) alias`
+  | 'from-subquery' // inside `FROM (SELECT ...) alias`, LATERAL or not
+  | 'cte' // inside a CTE body, `WITH x AS (SELECT ...)` (a reference to the CTE is not a relation position)
+  | 'setop.left' // the first branch of UNION, INTERSECT or EXCEPT
+  | 'setop.right'
   | 'sublink' // inside IN (subquery), EXISTS (subquery) or a scalar subquery
   | 'json_each' // `FROM t, json_each(t.col)`: the unwind reads a column of a wrapped relation
   | 'window' // a select that feeds a window function
@@ -43,6 +47,9 @@ export const POSITION_EDGE = {
   'join.left': 'JoinExpr.larg',
   'join.right': 'JoinExpr.rarg',
   'from-subquery': 'RangeSubselect.subquery',
+  cte: 'CommonTableExpr.ctequery',
+  'setop.left': 'SelectStmt.larg',
+  'setop.right': 'SelectStmt.rarg',
   sublink: 'SubLink.subselect',
   json_each: 'SelectStmt.fromClause',
   window: 'SelectStmt.fromClause',

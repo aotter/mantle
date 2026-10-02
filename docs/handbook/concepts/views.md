@@ -42,9 +42,16 @@ has the full table):
 - `now()`, `date_trunc`, `extract`, `ts ± interval '<n> seconds|minutes|hours'`;
 - `mantle.search`, `mantle.search_rank`, `mantle.near`, `mantle.distance`.
 
-Refused: `OFFSET` (page with cursors), `RIGHT`/`FULL`/`CROSS JOIN`, recursive
-CTEs, `UNION`, window frames, any table that is not a declared Schema, and
-SQLite's own clock (`CURRENT_TIMESTAMP`, `'now'`).
+Refused: `OFFSET` (page with cursors), `RIGHT`/`FULL`/`CROSS JOIN`, any table
+that is not a declared Schema, and SQLite's own clock (`CURRENT_TIMESTAMP`,
+`'now'`).
+
+PostgreSQL is the reference dialect (ADR-0037): on it a View may also use `WITH`
+(recursive too), `UNION` and `DISTINCT ON` inside a `WITH` or subquery,
+`LATERAL`, window frames, `FILTER`, jsonb operators, `ILIKE` and regular
+expressions. D1 refuses them as needing the PostgreSQL dialect. On every
+dialect a View may read an internal View in `FROM`, which is inlined; that is
+how a rule many Views share is written once.
 
 ## Policies the runtime injects
 

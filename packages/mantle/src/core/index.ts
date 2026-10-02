@@ -9,3 +9,4 @@ export * from "./site.js";
 export * from "./store.js";
 export * from "./email.js";
 export * from "./runtime/auth.js";
+export type { RestrictSql } from "./dialect.js";

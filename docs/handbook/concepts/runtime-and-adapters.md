@@ -98,10 +98,14 @@ dialect, and boot refuses a plan compiled for another one.
 `"dialect": "postgres"` in `mantle.config.json` compiles the plan for
 PostgreSQL (13 or later). On Cloudflare, `mantle generate --dialect postgres`
 writes the preset over Hyperdrive; on any other platform, add `"host": "none"`
-and compose `createMantle` with `postgresStorage` yourself (ADR-0036). It accepts the same portable subset as D1,
-except SQLite's own `typeof`, `hex`, `json_extract`, `json_set`, `json_insert`
-and `json_remove` (write `x ->> '$.path'`), so a manifest that compiles for
-PostgreSQL also compiles for D1 and moving engines is a recompile.
+and compose `createMantle` with `postgresStorage` yourself (ADR-0036). PostgreSQL
+is Mantle SQL's reference dialect (ADR-0037): it accepts D1's subset without
+SQLite's own `typeof`, `hex`, `json_extract`, `json_set`, `json_insert` and
+`json_remove` (write `x ->> '$.path'`), plus `WITH`, set operations, `LATERAL`,
+window frames, `FILTER`, jsonb operators and the rest of the
+[View reference](../reference/view.md)'s PostgreSQL table. A manifest that uses
+them no longer compiles for D1; one that does not moves between engines with a
+recompile.
 
 - Columns have native types: `timestamptz`, `date`, `numeric(p, s)`, `boolean`,
   `jsonb`, `bigint` and `double precision`. Values are decoded by the type
@@ -129,14 +133,25 @@ PostgreSQL also compiles for D1 and moving engines is a recompile.
   Site settings and media are D1-only.
 - `date_trunc` and `extract` compute in the site time zone
   (`postgresStorage({ connect, timeZone })`, default UTC).
+- Every statement has a `statement_timeout` of 10 seconds, pinned in each
+  transaction (`statementTimeoutMs`; 0 is none). Storage convergence has none.
+  A statement past it fails with `RESOURCE_UNAVAILABLE` and writes nothing.
+- Connect as a role that owns the service's tables but is not a superuser and
+  holds no file or server privilege (`pg_read_server_files`,
+  `pg_execute_server_program`). Mantle's allowlist refuses such functions; the
+  role is the second line.
 
 ## Storage adapters
 
 | Adapter | From | Driver |
 |---|---|---|
 | `d1Storage(env.DB, { timeZone?, site? })` | `@aotter/mantle/cloudflare` | Cloudflare D1, the one the preset uses |
-| `sqliteStorage(driver, { timeZone?, maxBindings?, site? })` | `@aotter/mantle/d1` | any `DatabaseDriver`: `{ batch(statements) }`, all or nothing |
-| `postgresStorage({ connect, timeZone? })` | `@aotter/mantle/postgres` | `connect` opens one node-postgres (`pg`) client; Hyperdrive on Workers |
+| `sqliteStorage(driver, { timeZone?, maxBindings?, site?, restrict? })` | `@aotter/mantle/d1` | any `DatabaseDriver`: `{ batch(statements) }`, all or nothing |
+| `postgresStorage({ connect, timeZone?, statementTimeoutMs?, restrict? })` | `@aotter/mantle/postgres` | `connect` opens one node-postgres (`pg`) client; Hyperdrive on Workers |
+
+`restrict(plan, context)` returns refusals of its own, run after the dialect's
+on every program at runtime. It only narrows what runs, for an operator that
+runs other people's plans; a self-hosted service leaves it out (ADR-0037).
 
 On Workers, PostgreSQL goes through Hyperdrive, which pools the connections, so
 `connect` opens a client per operation (a socket must not outlive its request):

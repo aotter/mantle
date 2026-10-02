@@ -18,6 +18,23 @@ export interface SqlDialect {
   accepts(stmts: SqlNode[], context: SqlContext & { source: string }, locations: (number | undefined)[]): void;
 }
 
+/**
+ * The relation names a source reads, less every name it defines as a CTE, or none when it does not parse: the compiler
+ * orders Views by them. ponytail: a CTE named like a View hides that View for the whole source, not only in the CTE's scope.
+ */
+export async function relationNames(sql: string): Promise<Set<string>> {
+  const names = new Set<string>(), ctes = new Set<string>();
+  const walk = (v: any): void => {
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (!v || typeof v !== "object") return;
+    if (typeof v.relname === "string") names.add(v.relname);
+    if (typeof v.ctename === "string") ctes.add(v.ctename);
+    Object.values(v).forEach(walk);
+  };
+  try { walk((await parsePgSql(sql)).stmts); } catch { /* compileSql reports it */ }
+  return new Set([...names].filter((n) => !ctes.has(n)));
+}
+
 export type CompileSqlResult = { readonly ok: true; readonly plan: SqlPlan } | { readonly ok: false; readonly diagnostic: SqlDiagnostic };
 
 /** UTF-8 byte offset (what libpg-query reports) to offset, 1-based line and column, and the token there. */
@@ -37,7 +54,7 @@ function toDiagnostic(e: SqlRefusal, source: string): SqlDiagnostic {
   return { code: e.code, message: e.message, ...(e.offset === undefined ? {} : locate(source, e.offset)) };
 }
 
-/** Tag every RangeVar. The parser cannot tell a table from a CTE; with no CTE syntax every relation is a table. */
+/** Tag every RangeVar a table; the front end retags a CTE in scope `cte` and a View `view`. */
 function tagRelations(v: any): any {
   if (Array.isArray(v)) return v.map(tagRelations);
   if (!v || typeof v !== "object") return v;
@@ -45,6 +62,15 @@ function tagRelations(v: any): any {
   for (const [k, c] of Object.entries(v)) out[k] = tagRelations(c);
   if ("relname" in out && !("mantle" in out)) out.mantle = "table";
   return out;
+}
+
+/** Every relation tagged `view` becomes its View's compiled SELECT, as a FROM subquery under the name it was read by. */
+function inlineViews(v: any, views: SqlContext["views"]): any {
+  if (Array.isArray(v)) return v.map((x) => inlineViews(x, views));
+  if (!v || typeof v !== "object") return v;
+  const rv = v.RangeVar;
+  if (rv?.mantle === "view") return { RangeSubselect: { subquery: { SelectStmt: structuredClone(views![rv.relname]!.select) }, alias: { aliasname: rv.alias?.aliasname ?? rv.relname } } };
+  return Object.fromEntries(Object.entries(v).map(([k, c]) => [k, inlineViews(c, views)]));
 }
 
 /** Drop what only diagnostics need. */
@@ -61,8 +87,9 @@ export async function compileSql(sql: string, ctx: SqlContext, dialect: SqlDiale
     const parsed = await parsePgSql(sql);
     const tagged = tagRelations(parsed.stmts) as SqlNode[];
     refuseForEveryDialect(tagged, ctx, parsed.locations);
-    dialect.accepts(tagged, { ...ctx, source: sql }, parsed.locations);
-    return { ok: true, plan: { grammar: PG_GRAMMAR, stmts: stripLocations(tagged) } };
+    const stmts = ctx.views ? (inlineViews(tagged, ctx.views) as SqlNode[]) : tagged;
+    dialect.accepts(stmts, { ...ctx, source: sql }, parsed.locations);
+    return { ok: true, plan: { grammar: PG_GRAMMAR, stmts: stripLocations(stmts) } };
   } catch (e) {
     if (e instanceof SqlRefusal) return { ok: false, diagnostic: toDiagnostic(e, sql) };
     throw e;

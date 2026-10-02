@@ -36,7 +36,18 @@ export const PROBES = {
   from: { steps: [v('SELECT id, name FROM items ORDER BY id', [{ id: 'a', name: 'apple' }, { id: 'b', name: 'berry' }, { id: 'c', name: 'cherry' }, { id: 'd', name: 'date' }])] },
   'join.left': { steps: [v('SELECT a.id AS aid, o.id AS oid FROM items a JOIN orders o ON o.item_id = a.id ORDER BY a.id, o.id', [{ aid: 'a', oid: 'oa' }, { aid: 'a', oid: 'ob' }])] },
   'join.right': { steps: [v('SELECT o.id AS oid, i.name AS name FROM orders o LEFT JOIN items i ON i.id = o.item_id ORDER BY o.id', [{ oid: 'oa', name: 'apple' }, { oid: 'ob', name: 'apple' }, { oid: 'oe', name: null }])] },
-  'from-subquery': { steps: [v('SELECT s.id FROM (SELECT id FROM items) s ORDER BY s.id', ids('a', 'b', 'c', 'd'))] },
+  'from-subquery': { steps: [
+    v('SELECT s.id FROM (SELECT id FROM items) s ORDER BY s.id', ids('a', 'b', 'c', 'd')),
+    // LATERAL (reference profile): the subquery reads the outer row, and is wrapped as any FROM subquery
+    v('SELECT i.id, x.first FROM items i JOIN LATERAL (SELECT o.id AS first FROM orders o WHERE o.item_id = i.id ORDER BY o.id LIMIT 1) x ON true ORDER BY i.id', [{ id: 'a', first: 'oa' }]),
+  ] },
+  // the reference profile's positions (ADR-0037); the D1 dialect refuses them, and a refusal passes
+  cte: { steps: [
+    v('WITH x AS (SELECT id FROM items) SELECT id FROM x ORDER BY id', ids('a', 'b', 'c', 'd')),
+    v('WITH RECURSIVE r AS (SELECT id, 1 AS n FROM items UNION ALL SELECT r.id, r.n + 1 AS n FROM r WHERE r.n < 2) SELECT id FROM r ORDER BY id, n', ids('a', 'a', 'b', 'b', 'c', 'c', 'd', 'd')),
+  ] },
+  'setop.left': { steps: [v('SELECT u.id FROM (SELECT id FROM items UNION ALL SELECT id FROM requisitions) u ORDER BY u.id', ids('a', 'b', 'c', 'd', 'r1', 'r2'))] },
+  'setop.right': { steps: [v('SELECT u.id FROM (SELECT id FROM requisitions UNION SELECT id FROM items) u ORDER BY u.id', ids('a', 'b', 'c', 'd', 'r1', 'r2'))] },
   sublink: { steps: [
     v('SELECT id FROM orders WHERE item_id IN (SELECT id FROM items) ORDER BY id', ids('oa', 'ob')),
     v("SELECT id FROM requisitions WHERE EXISTS (SELECT 1 FROM items WHERE name LIKE 'LEAK%')", []),
@@ -84,12 +95,19 @@ export async function run(r: Report, engine: Engine) {
   r.equal(`the probe list covers all ${ALL_POSITIONS.length} positions of the IR union (and \`satisfies\` makes that a typecheck error when it does not)`, [...positions].sort(), [...ALL_POSITIONS].sort());
 
   // one probe run: the problems found (an error, a LEAK / X_ row in a result, a protected row changed)
+  // a dialect that runs only the base profile refuses the reference profile's steps, and that refusal passes
+  const refused = new Set<RelationPosition>();
   const probe = async (pos: RelationPosition, opts: Partial<Site>) => {
     const problems: string[] = [];
     for (const [n, step] of PROBES[pos].steps.entries()) {
       await reset(b);
       const before = JSON.stringify(await protectedRows(b.d1));
-      const p = await program(step.kind, step.sql, step.inputs ?? {});
+      let p;
+      try { p = await program(step.kind, step.sql, step.inputs ?? {}); } catch (e) {
+        if (!/needs the PostgreSQL dialect/.test(String(e))) throw e;
+        if (n === 0) refused.add(pos);
+        continue;
+      }
       const s = { ...site(b), ...opts, mode: step.mode };
       let rows: unknown[][] | undefined, err: unknown;
       try { rows = step.kind === 'view' ? [(await runView(s, p, caller(step.input))).rows] : (await runProcedure(s, p, caller(step.input))).rows; } catch (e) { err = e; }
@@ -102,14 +120,15 @@ export async function run(r: Report, engine: Engine) {
   for (const pos of positions) {
     const seen = new Set<RelationPosition>();
     const problems = await probe(pos, { seen });
-    if (!seen.has(pos)) problems.push('the policy pass printed no wrapper (or system relation) at this position');
+    if (!seen.has(pos) && !refused.has(pos)) problems.push('the policy pass printed no wrapper (or system relation) at this position');
     r.check(`${pos}: no LEAK / X_ row in a result, the caller's own rows all there, conflicts where the row is invisible, protected rows unchanged, wrapper printed`, problems.length === 0, problems);
   }
 
   // negative control: with the visibility predicate switched off, every read/write position must be caught by its probe
   const missed: string[] = [];
-  for (const pos of positions) if (!(await probe(pos, { unsafeNoVisibility: true })).length) missed.push(pos);
-  r.check(`negative control: with the visibility predicate off, ${positions.length - missed.length} of ${positions.length} positions are caught by their probes`, missed.length <= 1, `missed: ${missed.join(', ') || 'none'}`);
+  const run = positions.filter((pos) => !refused.has(pos));
+  for (const pos of run) if (!(await probe(pos, { unsafeNoVisibility: true })).length) missed.push(pos);
+  r.check(`negative control: with the visibility predicate off, ${run.length - missed.length} of ${run.length} positions are caught by their probes`, missed.length <= 1, `missed: ${missed.join(', ') || 'none'}`);
 
   // what the ADR says about the write path, on top of the positions
   await reset(b);

@@ -41,8 +41,9 @@ function walk(v: unknown, ctes: ReadonlySet<string>, at: number | undefined, ctx
     const n = c as N;
     const here = typeof n.location === "number" ? n.location : at;
     // a write's target is a RangeVar without its type key
-    if (k === "RangeVar" || k === "relation") relation(n, ctes, here, ctx);
-    else if (STATEMENTS.has(k)) {
+    if (k === "RangeVar" || k === "relation") relation(n, ctes, here, ctx, k === "relation");
+    // a set operation's branches are SELECT bodies without their type key, each with its own WITH
+    else if (STATEMENTS.has(k) || ((k === "larg" || k === "rarg") && "op" in n)) {
       if (ctx.kind === "view" && WRITES.has(k)) no("SQL_SHAPE", "a View reads only: no write in a WITH", here);
       if (n.intoClause) no("SQL_UNSUPPORTED", "SELECT ... INTO creates a table and is refused", here);
       const w = n.withClause as N | undefined;
@@ -66,10 +67,20 @@ function walk(v: unknown, ctes: ReadonlySet<string>, at: number | undefined, ctx
   }
 }
 
-/** A relation is a CTE in scope or a declared Schema, by PostgreSQL's name rules (unquoted names are already folded). */
-function relation(n: N, ctes: ReadonlySet<string>, at: number | undefined, ctx: SqlContext): void {
+/**
+ * A relation is a CTE in scope, a declared Schema, or an internal View (ADR-0037 decision 3), by PostgreSQL's name rules
+ * (unquoted names are already folded). A View is tagged `view`; the compiler inlines it before any dialect sees the tree.
+ */
+function relation(n: N, ctes: ReadonlySet<string>, at: number | undefined, ctx: SqlContext, written: boolean): void {
   const name = String(n.relname);
   if (n.schemaname || n.catalogname) no("SQL_RELATION", `${n.schemaname ?? n.catalogname}.${name}: a relation is a declared Schema, never schema-qualified`, at);
   if (ctes.has(name)) { n.mantle = "cte"; return; }
+  const view = Object.hasOwn(ctx.schemas, name) ? undefined : ctx.views?.[name];
+  if (view) {
+    if (written) no("SQL_WRITE", `${name} is a View: a View is read, never written`, at);
+    if (view.refusal) no("SQL_RELATION", view.refusal, at);
+    n.mantle = "view";
+    return;
+  }
   if (!Object.hasOwn(ctx.schemas, name)) no("SQL_RELATION", `${name} is not a declared Schema`, at);
 }

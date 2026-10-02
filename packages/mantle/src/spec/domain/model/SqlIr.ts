@@ -2,7 +2,7 @@
  * Store SQL and its IR (ADR-0034). The IR is libpg-query's parse tree for the
  * supported subset, with source locations stripped and every relation tagged
  * `table` or `cte`. Mantle designs no node types, so nodes are typed loosely on
- * purpose: the dialect's allowlist (D1: `src/d1/validator.ts`), not a TypeScript type, constrains
+ * purpose: the dialect's allowlist (`src/core/sql/allowlist.ts`), not a TypeScript type, constrains
  * them.
  *
  * Pure types and constants only. Nothing here imports the parser.
@@ -35,6 +35,11 @@ export interface SqlContext {
   readonly kind: "view" | "procedure";
   /** a public View: a caller sees published rows only, even across a join */
   readonly public?: boolean;
+  /**
+   * The Views a FROM may name (ADR-0037 decision 3), by name with `-` as `_`: an internal View's compiled SELECT, which the
+   * compiler inlines as a subquery, or why that View cannot be read. Compile side only.
+   */
+  readonly views?: Readonly<Record<string, { readonly select?: SqlNode; readonly refusal?: string }>>;
 }
 
 /** A refusal of Store SQL. `line` and `column` are 1-based; `token` is the source text there. */

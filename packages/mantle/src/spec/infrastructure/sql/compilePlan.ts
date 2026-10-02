@@ -12,7 +12,7 @@ import type { SqlContext, SqlDiagnostic, SqlNode, SqlPlan } from "../../domain/m
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
-import { compileSql, type SqlDialect } from "./compileSql.js";
+import { compileSql, relationNames, type SqlDialect } from "./compileSql.js";
 
 export type CompilePlanResult =
   | { readonly ok: true; readonly plan: RuntimePlan }
@@ -60,11 +60,14 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
   const sel = view.stmts[0]?.SelectStmt;
   if (!sel?.targetList) return { columns };
   const rels = new Map<string, string | undefined>();
+  // a FROM subquery's outputs that read a Schema field unchanged keep its type (an inlined View's, ADR-0037 decision 3)
+  const subs = new Map<string, Record<string, { schema: string; field: string }>>();
   const walk = (n: SqlNode): void => {
     if (n.JoinExpr) return (walk(n.JoinExpr.larg), walk(n.JoinExpr.rarg));
     const v = n.RangeVar;
     if (v) rels.set(v.alias?.aliasname ?? v.relname, v.mantle === "table" && schemas[String(v.relname).toLowerCase()] ? String(v.relname).toLowerCase() : undefined);
     else rels.set((n.RangeSubselect ?? n.RangeFunction)?.alias?.aliasname ?? "", undefined);
+    if (n.RangeSubselect?.subquery?.SelectStmt) subs.set(n.RangeSubselect.alias?.aliasname ?? "", viewOutputs({ grammar: view.grammar, stmts: [n.RangeSubselect.subquery] }, schemas).columns);
   };
   for (const f of sel.fromClause ?? []) walk(f);
   const typeOf = (schema: string, col: string) => schemas[schema]!.fields[col] ?? (Object.hasOwn(NATIVE_OUTPUT_TYPES, col) ? NATIVE_OUTPUT_TYPES[col] : undefined);
@@ -86,8 +89,9 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
     const name: string | undefined = r.name ?? col;
     if (!name) { keys = undefined; continue; }
     keys?.push(name);
-    const rel = refs?.length === 2 ? rels.get(refs[0].String.sval) : refs?.length === 1 && rels.size === 1 ? [...rels.values()][0] : undefined;
-    const f = col ? field(rel, col) : undefined;
+    const relName = refs?.length === 2 ? refs[0].String.sval : refs?.length === 1 && rels.size === 1 ? [...rels.keys()][0] : undefined;
+    const rel = relName === undefined ? undefined : rels.get(relName);
+    const f = col ? field(rel, col) ?? (relName !== undefined ? subs.get(relName)?.[col] : undefined) : undefined;
     if (f && (fn !== "sum" || r.val?.ColumnRef || ["integer", "real"].includes(typeOf(f.schema, f.field)!) || typeOf(f.schema, f.field)!.startsWith("numeric("))) columns[name] = f;
   }
   return { ...(keys ? { keys: [...new Set(keys)] } : {}), columns };
@@ -119,7 +123,19 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     };
   }
   const diagnostics: Diagnostic[] = [];
-  const ctxOf = (kind: SqlContext["kind"], input: JsonSchema | undefined, isPublic = false): SqlContext => ({ schemas, inputs: typesOf(input), kind, public: isPublic });
+  // ADR-0037 decision 3: the Views a FROM may name, by name with `-` as `_`; an internal View without input or requires is inlined
+  const refs: Record<string, { select?: SqlNode; refusal?: string }> = {};
+  const refName = (name: string) => name.toLowerCase().replace(/-/g, "_");
+  const refOf = new Map(linked.views.map((x) => [refName(x.manifest.metadata.name), x]));
+  const readable = new Set<string>();
+  for (const [ref, { manifest: v }] of refOf) {
+    if (Object.hasOwn(schemas, ref)) continue; // the name reads the Schema: a View named like its Schema is never a relation
+    const why = v.spec.surface !== "internal" ? `a ${v.spec.surface} View` : v.spec.input ? "a View with an input" : v.spec.requires ? "a View with requires" : undefined;
+    if (!why) readable.add(ref);
+    // a readable View is replaced by its SELECT once it compiles (in dependency order, below); until then it is refused
+    refs[ref] = { refusal: why ? `${ref} is ${why}: FROM reads only an internal View without input or requires` : `${ref} did not compile` };
+  }
+  const ctxOf = (kind: SqlContext["kind"], input: JsonSchema | undefined, isPublic = false): SqlContext => ({ schemas, inputs: typesOf(input), kind, public: isPublic, views: refs });
   const compile = async (kind: SqlContext["kind"], sql: string, input: JsonSchema | undefined, source: SourceLocation, pointer: string, isPublic = false) => {
     const res = await compileSql(sql, ctxOf(kind, input, isPublic), dialect);
     if (res.ok) return res.plan;
@@ -144,9 +160,33 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     if (checks.length) schemas[name] = { ...schemas[name]!, checks };
   }
 
+  // a View compiles after the Views it reads; a cycle is refused
+  type LinkedView = (typeof linked.views)[number];
+  const order: LinkedView[] = [];
+  const state = new Map<string, "visiting" | "done">();
+  const reads = new Map(await Promise.all(linked.views.map(async (x) => [x.manifest.metadata.name, [...await relationNames(x.manifest.spec.sql)].filter((r) => readable.has(r))] as const)));
+  const visit = (x: LinkedView, path: string[]): void => {
+    const name = x.manifest.metadata.name;
+    if (state.get(name) === "done") return;
+    if (state.get(name) === "visiting") { diagnostics.push(toDiagnostic({ code: "SQL_RELATION", message: `View '${name}' reads itself: ${[...path, name].join(" -> ")}` }, x.source, "/spec/sql")); return; }
+    state.set(name, "visiting");
+    for (const r of reads.get(name) ?? []) visit(refOf.get(r)!, [...path, name]);
+    state.set(name, "done");
+    order.push(x);
+  };
+  for (const x of linked.views) visit(x, []);
+  const compiled = new Map<string, SqlPlan | undefined>();
+  for (const { manifest: v, source } of order) {
+    // a View that reads one that failed (or a cycle) is not compiled: the first diagnostic is the one to fix
+    if ((reads.get(v.metadata.name) ?? []).some((r) => !refs[r]?.select)) continue;
+    const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
+    compiled.set(v.metadata.name, plan);
+    const ref = refName(v.metadata.name);
+    if (plan && readable.has(ref)) refs[ref] = { select: plan.stmts[0]!.SelectStmt };
+  }
   const views: Record<string, PlanView> = {};
   for (const { manifest: v, source } of linked.views) {
-    const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
+    const plan = compiled.get(v.metadata.name);
     const outputs = plan ? viewOutputs(plan, schemas) : undefined;
     const columns = outputs?.columns ?? {};
     // searchFields and filterFields become conditions on the View's outputs (ADR-0032 decision 5), so each must name one

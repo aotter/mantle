@@ -46,6 +46,9 @@ const SERIALIZATION = new Set(["40001", "40P01"]);
  * floats, UTC. `SET LOCAL` inside the transaction, because Hyperdrive pools connections per transaction.
  */
 const PINNED = "SET LOCAL DateStyle = 'ISO, YMD'; SET LOCAL IntervalStyle = 'postgres'; SET LOCAL extra_float_digits = 1; SET LOCAL TimeZone = 'UTC'";
+/** ADR-0037 decision 5: a statement that runs away (a recursive CTE, a regular expression) ends here. 0 is no limit. */
+export const STATEMENT_TIMEOUT_MS = 10_000;
+const pinned = (timeoutMs: number) => `${PINNED}; SET LOCAL statement_timeout = ${Math.max(0, Math.floor(timeoutMs))}`;
 const ATTEMPTS = 5;
 
 /**
@@ -53,13 +56,13 @@ const ATTEMPTS = 5;
  * (`WHERE NOT EXISTS`, a first sign-up becoming owner): a concurrent write that would break one fails with 40001 and the
  * whole batch is retried. `check` runs after each statement and may throw to roll everything back.
  */
-export async function transaction(connect: PgConnect, statements: readonly PgStatement[], check?: (i: number, outcome: PgOutcome) => void): Promise<PgOutcome[]> {
+export async function transaction(connect: PgConnect, statements: readonly PgStatement[], check?: (i: number, outcome: PgOutcome) => void, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome[]> {
   for (let attempt = 1; ; attempt++) {
     const client = await connect();
     let failedAt = -1;
     let committing = false;
     try {
-      await client.query({ text: `BEGIN ISOLATION LEVEL SERIALIZABLE; ${PINNED}` });
+      await client.query({ text: `BEGIN ISOLATION LEVEL SERIALIZABLE; ${pinned(timeoutMs)}` });
       const out: PgOutcome[] = [];
       for (const [i, s] of statements.entries()) {
         failedAt = i;
@@ -86,10 +89,10 @@ export async function transaction(connect: PgConnect, statements: readonly PgSta
  * inside a transaction from its cache, so a read sees the write before it.
  * ponytail: three round trips (BEGIN, the read, COMMIT); a pipelining driver sends them as one.
  */
-export async function query(connect: PgConnect, s: PgStatement): Promise<PgOutcome> {
+export async function query(connect: PgConnect, s: PgStatement, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome> {
   const client = await connect();
   try {
-    await client.query({ text: `BEGIN READ ONLY; ${PINNED}` });
+    await client.query({ text: `BEGIN READ ONLY; ${pinned(timeoutMs)}` });
     const out = await run(client, s);
     await client.query({ text: "COMMIT" });
     return out;
