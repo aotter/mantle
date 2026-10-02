@@ -40,3 +40,23 @@ it.skipIf(!PG_URL)("sign-in, the bootstrap owner and staff management run on Pos
     await drop();
   }
 }, 120_000);
+
+it.skipIf(!PG_URL)("an OAuth grant stored in jsonb (Better Auth's PostgreSQL schema) is read as the token's active grant", async () => {
+  const { assertActiveUserGrant } = await import("../../src/auth/oauthTokens.js");
+  const { connect, drop } = await freshSchema();
+  try {
+    const db = pgDatabaseDriver(connect);
+    await db.batch([
+      { sql: 'CREATE TABLE session (id text PRIMARY KEY, "userId" text NOT NULL, "expiresAt" timestamptz NOT NULL)' },
+      { sql: 'CREATE TABLE "oauthConsent" (id text PRIMARY KEY, "clientId" text NOT NULL, "userId" text NOT NULL, scopes jsonb NOT NULL, resources jsonb)' },
+      { sql: "INSERT INTO session VALUES ('s1', 'u1', now() + interval '1 hour')" },
+      { sql: `INSERT INTO "oauthConsent" VALUES ('c1', 'app', 'u1', '["mcp", "offline_access"]', '["https://x.test/mcp"]')` },
+    ]);
+    const claims = { sub: "u1", azp: "app", sid: "s1", mantle_consent_id: "c1", scope: "mcp" };
+    await expect(assertActiveUserGrant(db, claims, "https://x.test/mcp")).resolves.toBeUndefined();
+    await expect(assertActiveUserGrant(db, claims, "https://other.test/mcp")).rejects.toThrow(/no longer active/);
+    await expect(assertActiveUserGrant(db, { ...claims, scope: "mcp admin" }, "https://x.test/mcp")).rejects.toThrow(/no longer active/);
+  } finally {
+    await drop();
+  }
+});

@@ -45,10 +45,11 @@ function scopesFromClaim(value: unknown): string[] {
   return [];
 }
 
+/** A JSON array of strings as the store returns it: JSON text on SQLite, an already decoded array from PostgreSQL's jsonb. */
 export function parseStoredStringArray(value: unknown): string[] | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string" && !Array.isArray(value)) return null;
   try {
-    const parsed: unknown = JSON.parse(value);
+    const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
     return Array.isArray(parsed) && parsed.every((item) => typeof item === "string")
       ? parsed
       : null;
@@ -75,7 +76,7 @@ export async function assertActiveUserGrant(
   ) {
     throw new Error("OAuth token is not bound to a user session.");
   }
-  const result = await db.first<{ resources: string | null; scopes: string }>('SELECT c.resources, c.scopes FROM "oauthConsent" AS c ' +
+  const result = await db.first<{ resources: unknown; scopes: unknown }>('SELECT c.resources, c.scopes FROM "oauthConsent" AS c ' +
         'JOIN session AS s ON s.id = ? AND s."userId" = c."userId" AND s."expiresAt" > ? ' +
         'WHERE c.id = ? AND c."userId" = ? AND c."clientId" = ?', sessionId, new Date().toISOString(), consentId, userId, clientId);
   const tokenScopes = scopesFromClaim(claims["scope"]);
