@@ -256,6 +256,23 @@ describe("verifyPlan", () => {
     for (const fval of ["2.5", "-2.5", "1e3", "1772928000000000"]) expect([fval, await out(fval)]).toEqual([fval, expect.not.stringContaining("a literal is one integer")]);
   });
 
+  it("refuses fast on a long numeric literal, a sign over a number, and type modifiers D1 does not encode", async () => {
+    const plan = await compile();
+    const target = async (val: unknown) => (await verifyPlan(await reseal(plan, (p) => {
+      p.views.stock!.stmts[0]!.SelectStmt!.targetList = [{ ResTarget: { name: "x", val } }] as never; return p; }), d1())).map((d) => d.message).join();
+    const started = performance.now();
+    expect(await target({ A_Const: { fval: { fval: "1".repeat(80_000) + "x" } } })).toContain("a literal is one integer");
+    expect(performance.now() - started).toBeLessThan(1000);
+    const sign = (rexpr: unknown) => ({ A_Expr: { kind: "AEXPR_OP", name: [{ String: { sval: "-" } }], rexpr } });
+    expect(await target(sign({ A_Const: { ival: { ival: -2 } } }))).toContain("a sign over a number");
+    expect(await target(sign({ ColumnRef: { fields: [{ String: { sval: "stock" } }] } }))).not.toContain("a sign over a number");
+    const withView = (sql: string) => MANIFESTS.replace('sql: "SELECT name, sum(stock) OVER (ORDER BY name) AS running FROM items ORDER BY name"', `sql: ${JSON.stringify(sql)}`);
+    const refused = async (sql: string) => { const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withView(sql) }] }); return r.ok ? "" : r.diagnostics.map((d) => d.message).join(); };
+    expect(await refused("SELECT name FROM items WHERE CAST('2020-01-01T00:00:00.6Z' AS timestamptz(0)) < now()")).toMatch(/no type modifier/);
+    expect(await refused("SELECT name FROM items WHERE now() - interval '90 minutes' hour < now()")).toMatch(/no type modifier/);
+    expect(await refused("SELECT name FROM items WHERE now() - interval '2' hour < now() AND now() - CAST('2 hours' AS interval hour) < now() AND stock < CAST('1.5' AS numeric(3,1))")).toBe("");
+  });
+
   it("refuses an interval longer than D1's microseconds keep exactly", async () => {
     const withView = (sql: string) => MANIFESTS.replace('sql: "SELECT name, sum(stock) OVER (ORDER BY name) AS running FROM items ORDER BY name"', `sql: ${JSON.stringify(sql)}`);
     const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withView("SELECT name FROM items WHERE now() - interval '9999999999 hours' < now()") }] });

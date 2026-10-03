@@ -92,6 +92,8 @@ const WINDOW = new Set(['row_number', 'rank', 'sum', 'count']);
 /** functions that exist only with OVER */
 const WINDOW_ONLY = new Set(['row_number', 'rank', 'dense_rank', 'lag', 'lead', 'first_value', 'last_value']);
 const AGG = new Set(['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object']);
+/** An interval's single-field type modifier (PostgreSQL's typmod bits) -> that field's microseconds. */
+const INTERVAL_FIELD_US: Record<number, number> = { 1024: 3.6e9, 2048: 6e7, 4096: 1e6 };
 export const TRUNC_UNITS = new Set(['hour', 'day', 'week', 'month', 'year']);
 export const EXTRACT_FIELDS = new Set(['year', 'month', 'day', 'dow', 'hour']);
 const CAST_TYPES = new Set(['text', 'int4', 'int8', 'float8', 'bool', 'timestamptz', 'date', 'numeric', 'interval']);
@@ -281,7 +283,8 @@ function constant(node: N): boolean {
     case 'ival': return only('ival', Number.isSafeInteger);
     // the parser's Float: a point or exponent, or an integer past int32 (smaller ones are ival); never a sign the printers would
     // print as `+2`, which SQLite reads as a column position in ORDER BY
-    case 'fval': return only('fval', (x) => typeof x === 'string' && /^-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(x) && (/[.eE]/.test(x) || Math.abs(Number(x)) >= 2 ** 31));
+    // (one split of the digits, so the match is linear; and no longer than any number the parser writes)
+    case 'fval': return only('fval', (x) => typeof x === 'string' && x.length <= 64 && /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/.test(x) && (/[.eE]/.test(x) || Math.abs(Number(x)) >= 2 ** 31));
     case 'sval': return only('sval', (x) => typeof x === 'string');
     case 'boolval': return only('boolval', (x) => typeof x === 'boolean');
     case 'isnull': return v === true;
@@ -436,6 +439,10 @@ const check: Record<string, Checker> = {
     const range = n.kind === 'AEXPR_BETWEEN' || n.kind === 'AEXPR_NOT_BETWEEN';
     if (!n.rexpr || (!n.lexpr && !(n.kind === 'AEXPR_OP' && (op === '-' || op === '+'))) || (range && items?.length !== 2) || (n.kind === 'AEXPR_IN' && !items?.length) || (!range && n.kind !== 'AEXPR_IN' && n.rexpr.List))
       no('SQL_SHAPE', `a malformed ${op} expression`, at);
+    // the parser folds a sign into its number (`-2` is ival -2): a sign over a number constant is a resealed IR, and PostgreSQL
+    // folds `- -2` back into 2, a column position in ORDER BY and GROUP BY
+    if (n.kind === 'AEXPR_OP' && !n.lexpr && (op === '-' || op === '+') && (n.rexpr?.A_Const?.ival !== undefined || n.rexpr?.A_Const?.fval !== undefined))
+      no('SQL_SHAPE', `a sign over a number is that number: write ${op === '-' ? 'the negative constant' : 'the constant'}`, at);
     if (ctx.p.name === 'base') bareLiteralCompare(n, ctx, at); // PostgreSQL casts the literal to the column's type
     jsonCompare(n, ctx, at);
     if (n.kind === 'AEXPR_OP' && !ctx.p.ops.has(op)) no('SQL_UNSUPPORTED', `operator ${op} is refused`, at);
@@ -453,6 +460,14 @@ const check: Record<string, Checker> = {
     const base = ctx.p.name === 'base';
     if (base && (t === 'int4' || t === 'int8') && !(lit?.ival || /^\s*-?\d+\s*$/.test(lit?.sval?.sval ?? 'x')))
       no('SQL_TYPE', `CAST to ${t} takes an integer literal: SQLite truncates toward zero where PostgreSQL rounds. Write round(x)`, at);
+    // a type modifier is numeric's precision and scale, or one interval field (hour, minute, second) that truncates nothing; D1
+    // encodes nothing else (timestamptz(0) rounds on PostgreSQL, interval '90 minutes' hour truncates to an hour there)
+    const mods = n.typeName.typmods ?? [];
+    const field = INTERVAL_FIELD_US[mods[0]?.A_Const?.ival?.ival as number];
+    const text = lit?.sval?.sval ?? 'x';
+    if (mods.length && t !== 'numeric' && !(t === 'interval' && mods.length === 1 && field &&
+      (/^\s*-?\d+(\.\d+)?\s*$/.test(text) || intervalMicros(text) % field === 0)))
+      no('SQL_TYPE', `CAST to ${t} takes no type modifier here, or one that truncates nothing`, at);
     if (t === 'interval') {
       if (!lit?.sval) no('SQL_TYPE', 'an interval is a literal such as interval \'36 hours\'', at);
       intervalMicros(lit.sval.sval, n.typeName.typmods?.[0]?.A_Const?.ival?.ival); // throws SQL_TYPE for calendar units

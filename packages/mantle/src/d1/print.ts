@@ -38,7 +38,7 @@ export class SqliteDeparser extends Deparser {
       const not = n.name[0].String.sval === "!~~" ? "NOT " : "";
       return `${this.visit(n.lexpr as never, ctx)} ${not}LIKE ${this.visit(pat as never, ctx)} ESCAPE ${this.visit(esc as never, ctx)}`;
     }
-    // SQLite looks through a unary sign: `ORDER BY +2` (or `-2`) is column position 2 to it and a constant to PostgreSQL
+    // SQLite looks through a unary sign: `ORDER BY +2` is column position 2 to it (and `-2` an error) where PostgreSQL has a constant
     const sign = n.name?.[0]?.String?.sval;
     // the operand in its own parentheses: `-` then `-2` must never print as `--`, which starts a comment
     if (n.kind === "AEXPR_OP" && !n.lexpr && (sign === "+" || sign === "-")) return `(${sign}(${this.visit(n.rexpr as never, ctx)}) + 0)`;

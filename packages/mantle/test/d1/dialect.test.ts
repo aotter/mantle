@@ -101,7 +101,9 @@ it("a literal cast or signed constant in ORDER BY sorts by its value, never as a
   try {
     const s = site(await boot(e));
     // the IR orders by a constant, then id: the first row is 'a'; a bare 2 would sort by the second column (stock)
-    for (const cast of ["CAST('0.2' AS numeric(10,1))", "CAST('1970-01-03' AS date)", "+2", "(+2)"]) {
+    // (`+2` written in SQL is refused: a sign over a number constant is that constant)
+    await expect(program("view", "SELECT id FROM items ORDER BY +2, id")).rejects.toThrow(/a sign over a number/);
+    for (const cast of ["CAST('0.2' AS numeric(10,1))", "CAST('1970-01-03' AS date)"]) {
       const p = await program("view", `SELECT id FROM (SELECT id, stock FROM items ORDER BY ${cast}, id LIMIT 1) s ORDER BY id`);
       expect([cast, (await runView(s, p, { ...caller({}), role: "staff" })).rows]).toEqual([cast, [{ id: "a" }]]);
     }
