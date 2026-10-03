@@ -66,6 +66,22 @@ camelCase names.)
 
 `checks` (boolean SQL over the row's own columns) is new and optional.
 
+A JSON Schema `pattern` (in a Schema, a View input or a Procedure input/output)
+is now refused with `INVALID_PATTERN` when it could backtrack without bound on
+a caller's string:
+
+- a repeated group whose body repeats or alternates, such as the 0.1.x slug
+  `^[a-z0-9]+(-[a-z0-9]+)*$` or `(a|b)+`, and any backreference;
+- a pattern with k variable quantifiers (`*`, `+`, `?`, `{m,}`, `{m,n}`)
+  whose string has no `maxLength`, or one where maxLength^k exceeds
+  10,000,000: one quantifier allows any maxLength up to 10,000,000, an email
+  `^[^@]+@[^@]+$` (k = 2) up to 3162, `^a*a*a*…$` almost none.
+
+Rewrite a slug as `{ type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }`,
+which also accepts leading, trailing and doubled hyphens. On a Schema field
+that must not have them, add a `checks` entry:
+`"slug NOT LIKE '-%' AND slug NOT LIKE '%-' AND slug NOT LIKE '%--%'"`.
+
 ### View
 
 A View is one SQL `SELECT` in `spec.sql`, with `input` for its parameters.

@@ -34,7 +34,7 @@ spec:
     additionalProperties: false
     required: [slug, title, priceMinor]
     properties:
-      slug: { type: string, pattern: "^[a-z0-9-]+$" }
+      slug: { type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }
       title: { type: string, minLength: 1, maxLength: 160 }
       priceMinor: { type: integer, minimum: 0, x-mcp-hint: money-minor }
 ---

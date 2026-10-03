@@ -64,6 +64,29 @@ Property extensions:
 `x-mantle-bind` is refused in 0.2.0: use `scope`, or set the value with
 `auth.uid()` or `now()` in the Procedure's SQL.
 
+### JSON Schema limits
+
+These hold for every JSON Schema Mantle checks: a Schema's `schema`, and View
+and Procedure inputs and outputs.
+
+| Limit | Diagnostic |
+|---|---|
+| at most 100 levels deep and 10,000 schema nodes; an `enum` of at most 1,000 values | `JSON_SCHEMA_LIMIT_EXCEEDED` |
+| a `pattern` of at most 1,000 characters that compiles as a JavaScript regex | `INVALID_PATTERN` |
+| no repeated group whose body repeats or alternates (`(a+)+`, `(a\|b)*`, `^[a-z0-9]+(-[a-z0-9]+)*$`) and no backreference | `INVALID_PATTERN` |
+| a `pattern` with k variable quantifiers (`*`, `+`, `?`, `{m,}`, `{m,n}`, counted outside `[...]`) needs `maxLength` with maxLength^k ≤ 10,000,000 | `INVALID_PATTERN` |
+
+A JavaScript regex backtracks, and the pattern runs on every caller's string,
+so its work is bounded by the string's `maxLength`: `^[a-z0-9-]+$` (k = 1)
+allows any maxLength up to 10,000,000, the email `^[^@]+@[^@]+$` (k = 2) up
+to 3162, and `^[A-Z]{3}$` (k = 0) needs none. A string longer than its
+`maxLength` is refused before its pattern runs. The message names the largest
+maxLength the pattern allows; lower it, or use fewer variable quantifiers.
+
+A slug is `{ type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }`. It
+accepts leading, trailing and doubled hyphens; to refuse them on a Schema
+field, add `checks: ["slug NOT LIKE '-%' AND slug NOT LIKE '%-' AND slug NOT LIKE '%--%'"]`.
+
 ## `lifecycle`
 
 `publishing` (the default) gives rows the `draft` → `published` → `archived`

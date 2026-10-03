@@ -341,6 +341,22 @@ export function validateJsonSchema(
           },
         );
       }
+      // Adjacent variable quantifiers (`a*a*a*`, `\w*\w*`, `.*.*`) backtrack polynomially: maxLength^k on a string that fails
+      const k = variableQuantifiers(value["pattern"] as string);
+      const maxLength = value["maxLength"];
+      if (k > 0 && !(typeof maxLength === "number" && Number.isInteger(maxLength) && maxLength >= 0 && maxLength ** k <= MAX_PATTERN_WORK)) {
+        const limit = maxPatternLength(k);
+        const quantifiers = `${k} variable quantifier${k === 1 ? "" : "s"} (*, +, ?, {m,} or {m,n})`;
+        throw new ManifestParseError(
+          typeof maxLength === "number"
+            ? `${kind} '${name}' has a regex pattern at ${pointer} with ${quantifiers} and maxLength ${maxLength}: a caller's string could cost maxLength^${k} backtracking steps, over the ${MAX_PATTERN_WORK} limit. Declare maxLength of at most ${limit}, or use fewer variable quantifiers.`
+            : `${kind} '${name}' has a regex pattern at ${pointer} with ${quantifiers} but no maxLength: a caller's string of any length could cost length^${k} backtracking steps. Declare maxLength of at most ${limit} (maxLength^${k} ≤ ${MAX_PATTERN_WORK}), or use fewer variable quantifiers.`,
+          idx,
+          `${pointer}/pattern`,
+          "INVALID_PATTERN",
+          { value: value["pattern"], expected: `a string with maxLength of at most ${limit}` },
+        );
+      }
     }
     const properties = value["properties"];
     if (properties !== undefined && (!properties || typeof properties !== "object" || Array.isArray(properties))) {
@@ -429,7 +445,32 @@ export const MAX_JSON_SCHEMA_PATTERN = 1_000;
  * times (`(a+)+`, `(a*b?)*`, `((ab)+c)+`) or alternates (`(a|ab)+`), and a backreference. Character classes and escapes are atoms.
  */
 export function unsafePattern(pattern: string): string | undefined {
-  if (pattern.length > MAX_JSON_SCHEMA_PATTERN) return `longer than ${MAX_JSON_SCHEMA_PATTERN} characters`;
+  return scanPattern(pattern).problem;
+}
+
+/**
+ * How many quantifiers in `pattern` repeat a variable number of times — `*`, `+`, `?`, `{m,}` and `{m,n}` with m ≠ n — outside
+ * character classes and escapes; a quantifier on a group counts once, and each one inside it counts too. A regex can backtrack
+ * through about maxLength^k ways of splitting a string between k of them (`^a*a*a*$`), so the work bound below is maxLength^k.
+ */
+export function variableQuantifiers(pattern: string): number {
+  return scanPattern(pattern).variable;
+}
+
+/** The most backtracking steps a `pattern` may cost on one string: maxLength^k, k its variable quantifiers. */
+export const MAX_PATTERN_WORK = 10_000_000;
+
+/** The longest maxLength a pattern with `k` variable quantifiers may declare: the largest n with n^k ≤ MAX_PATTERN_WORK. */
+export function maxPatternLength(k: number): number {
+  let n = Math.floor(MAX_PATTERN_WORK ** (1 / k));
+  while ((n + 1) ** k <= MAX_PATTERN_WORK) n++;
+  while (n > 0 && n ** k > MAX_PATTERN_WORK) n--;
+  return n;
+}
+
+function scanPattern(pattern: string): { problem?: string; variable: number } {
+  let variable = 0;
+  if (pattern.length > MAX_JSON_SCHEMA_PATTERN) return { problem: `longer than ${MAX_JSON_SCHEMA_PATTERN} characters`, variable };
   type Frame = { quantified: boolean; alternates: boolean };
   const stack: Frame[] = [{ quantified: false, alternates: false }];
   let group: Frame | undefined; // the group just closed, when it is the atom a quantifier would apply to
@@ -444,9 +485,12 @@ export function unsafePattern(pattern: string): string | undefined {
       const max = brace ? (brace[2] === undefined ? min : brace[3] ? +brace[3] : Infinity) : c === "?" ? 1 : Infinity;
       if (brace) i += brace[0].length - 1;
       if (pattern[i + 1] === "?") i++; // lazy
-      if (group && max > 1 && group.quantified) return "a repeated group whose body repeats (nested quantifiers)";
-      if (group && max > 1 && group.alternates) return "a repeated group whose body alternates";
-      if (max !== min) top.quantified = true;
+      if (group && max > 1 && group.quantified) return { problem: "a repeated group whose body repeats (nested quantifiers)", variable };
+      if (group && max > 1 && group.alternates) return { problem: "a repeated group whose body alternates", variable };
+      if (max !== min) {
+        top.quantified = true;
+        variable++;
+      }
       group = undefined;
       atom = false;
       continue;
@@ -455,7 +499,7 @@ export function unsafePattern(pattern: string): string | undefined {
     atom = true;
     if (c === "\\") {
       const e = pattern[i + 1];
-      if (e !== undefined && (/[1-9]/.test(e) || e === "k")) return "a backreference";
+      if (e !== undefined && (/[1-9]/.test(e) || e === "k")) return { problem: "a backreference", variable };
       i++;
     } else if (c === "[") {
       let j = i + 1;
@@ -483,7 +527,7 @@ export function unsafePattern(pattern: string): string | undefined {
       atom = false;
     }
   }
-  return undefined;
+  return { variable };
 }
 
 function validateLocalSchemaRef(

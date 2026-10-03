@@ -433,6 +433,16 @@ spec:
     }
   });
 
+  it("refuses a pattern whose adjacent variable quantifiers backtrack past the work bound, or that declares no maxLength", async () => {
+    const base = await plan();
+    for (const [pattern, maxLength] of [["^a*a*a*a*a*a*a*a*a*a*a*a*$", 31], ["\\w*\\w*\\w*\\w*\\w*\\w*\\w*\\w*$", 100], ["(a*)(a*)(a*)(a*)", 100], ["^[a-z0-9-]+$", undefined]] as const) {
+      const p = await withProcedure(base, { type: "object", properties: { s: { type: "string", pattern, ...(maxLength === undefined ? {} : { maxLength }) } } });
+      expect(await codes(p)).toEqual([["INPUT_VALIDATION_FAILED", "plan#/procedures/audit/input/properties/s/pattern"]]);
+    }
+    const email = await withProcedure(base, { type: "object", properties: { s: { type: "string", maxLength: 254, pattern: "^[^@]+@[^@]+$" } } });
+    expect(await codes(email)).toEqual([]);
+  });
+
   it("refuses an http Trigger outside /api/ or on a route another Trigger has: the CLI's graph check", async () => {
     const base = await plan();
     const outside = await reseal(base, (p) => ({ ...p, triggers: { ...p.triggers, "audit-http": { source: { kind: "http", method: "POST", path: "/admin/audit" }, procedure: "audit" } as never } }));

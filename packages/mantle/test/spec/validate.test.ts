@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { validateManifests } from "./parse.js";
 import { parseManifests } from "./parse.js";
-import { unsafePattern } from "../../src/spec/domain/service/SchemaSpecChecks.js";
+import { unsafePattern, variableQuantifiers } from "../../src/spec/domain/service/SchemaSpecChecks.js";
+import { jsonSchemaToZod } from "../../src/spec/domain/service/JsonSchemaToZod.js";
 import type {
   Manifest,
   ProcedureManifest,
@@ -1297,10 +1298,63 @@ spec:
     ["a pattern with nested quantifiers", `{ type: object, properties: { s: { type: string, pattern: '^(a+)+$' } } }`, "INVALID_PATTERN"],
     ["a pattern repeating an alternation", `{ type: object, properties: { s: { type: string, pattern: '^(a|aa)*$' } } }`, "INVALID_PATTERN"],
     ["a pattern with a backreference", `{ type: object, properties: { s: { type: string, pattern: '^(a)\\1$' } } }`, "INVALID_PATTERN"],
+    // adjacent variable quantifiers backtrack polynomially: maxLength^k past the work bound, or no maxLength at all
+    ["twelve adjacent a*", `{ type: object, properties: { s: { type: string, maxLength: 31, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' } } }`, "INVALID_PATTERN"],
+    ["eight adjacent \\w*", `{ type: object, properties: { s: { type: string, maxLength: 100, pattern: '\\w*\\w*\\w*\\w*\\w*\\w*\\w*\\w*$' } } }`, "INVALID_PATTERN"],
+    ["four quantified groups in a row", `{ type: object, properties: { s: { type: string, maxLength: 100, pattern: '(a*)(a*)(a*)(a*)' } } }`, "INVALID_PATTERN"],
+    ["a variable pattern without maxLength", `{ type: object, properties: { s: { type: string, pattern: '^[a-z0-9-]+$' } } }`, "INVALID_PATTERN"],
+    ["a variable pattern in items without maxLength", `{ type: object, properties: { s: { type: array, items: { type: string, pattern: '^[^@]+@[^@]+$' } } } }`, "INVALID_PATTERN"],
+    ["a variable pattern in $defs past the bound", `{ type: object, $defs: { e: { type: string, maxLength: 3163, pattern: '^[^@]+@[^@]+$' } }, properties: { s: { $ref: '#/$defs/e' } } }`, "INVALID_PATTERN"],
     ["an enum of more than 1000 values", `{ type: object, properties: { s: { enum: [${Array.from({ length: 1001 }, (_, i) => i).join(", ")}] } } }`, "JSON_SCHEMA_LIMIT_EXCEEDED"],
   ])("rejects %s with a stable diagnostic", (_label, input, code) => {
     const result = parseManifests(procedure(input));
     expect(result.diagnostics[0]?.code).toBe(code);
+  });
+});
+
+describe("the pattern work bound", () => {
+  const procedure = (input: string) => `apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: bounded }
+spec:
+  input: ${input}
+  output: { type: object }
+  handler: { ref: bounded }
+`;
+  const input = (s: string) => parseManifests(procedure(`{ type: object, properties: { s: ${s} } }`)).diagnostics;
+  it("accepts a pattern with no variable quantifier without maxLength, and an email up to maxLength 3162", () => {
+    expect(input(`{ type: string, pattern: '^[A-Z]{3}$' }`)).toEqual([]);
+    expect(input(`{ type: string, maxLength: 254, pattern: '^[^@]+@[^@]+$' }`)).toEqual([]);
+    expect(input(`{ type: string, maxLength: 3162, pattern: '^[^@]+@[^@]+$' }`)).toEqual([]);
+    expect(input(`{ type: string, maxLength: 3, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' }`)).toEqual([]);
+  });
+  it("names the bound and the fix", () => {
+    const [missing] = input(`{ type: string, pattern: '^[^@]+@[^@]+$' }`);
+    expect([missing?.code, missing?.path]).toEqual(["INVALID_PATTERN", "manifest:doc/0#/spec/input/properties/s/pattern"]);
+    expect(missing?.message).toMatch(/maxLength of at most 3162/);
+    const [over] = input(`{ type: string, maxLength: 4, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' }`);
+    expect(over?.message).toMatch(/12 variable quantifiers.*maxLength of at most 3\b.*fewer variable quantifiers/s);
+  });
+  it("counts variable quantifiers outside character classes, a quantified group once", () => {
+    expect(["^[a-z*+?]{3}$", "^(ab)*$", "^\\*a+$", "^(a*)(b+)c?d{2,}e{1,3}f{4}$", "^[^@]+@[^@]+$"].map(variableQuantifiers)).toEqual([0, 1, 1, 5, 2]);
+  });
+  it("the worst accepted shape at its maxLength validates in well under 100 ms", () => {
+    for (const [pattern, maxLength] of [["^a*a*a*a*a*a*a*a*a*a*a*a*$", 3], ["^.*.*.*.*.*.*.*$", 10], ["^[^@]+@[^@]+$", 3162], ["^[a-z0-9-]+$", 100_000]] as const) {
+      expect(input(`{ type: string, maxLength: ${maxLength}, pattern: '${pattern}' }`)).toEqual([]);
+      const zs = jsonSchemaToZod({ type: "string", maxLength, pattern });
+      const worst = "a".repeat(maxLength - 1) + "!";
+      const started = performance.now();
+      zs.safeParse(worst);
+      zs.safeParse("a".repeat(maxLength + 1) + "!");
+      expect(performance.now() - started).toBeLessThan(100);
+    }
+  });
+  it("a string past maxLength is refused before its pattern runs", () => {
+    const zs = jsonSchemaToZod({ type: "object", properties: { s: { type: "string", maxLength: 3, pattern: "^a*a*a*a*a*a*a*a*a*a*a*a*$" } } });
+    const started = performance.now();
+    const result = zs.safeParse({ s: "a".repeat(30) + "b" });
+    expect(performance.now() - started).toBeLessThan(100);
+    expect(result.error?.issues.map((i) => i.code)).toEqual(["too_big"]);
   });
 });
 

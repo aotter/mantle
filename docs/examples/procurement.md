@@ -35,7 +35,7 @@ spec:
     additionalProperties: false
     required: [requestNumber, requestedBy, item, quantity, needBy, justification, requestStatus]
     properties:
-      requestNumber: { type: string, pattern: "^REQ-[A-Z0-9-]+$" }
+      requestNumber: { type: string, maxLength: 40, pattern: "^REQ-[A-Z0-9-]+$" }
       requestedBy: { type: string }
       item: { type: string, minLength: 1, maxLength: 160 }
       quantity: { type: integer, minimum: 1 }
@@ -84,7 +84,7 @@ spec:
     additionalProperties: false
     required: [requestNumber, item, quantity, needBy, justification]
     properties:
-      requestNumber: { type: string, pattern: "^REQ-[A-Z0-9-]+$" }
+      requestNumber: { type: string, maxLength: 40, pattern: "^REQ-[A-Z0-9-]+$" }
       item: { type: string, minLength: 1, maxLength: 160 }
       quantity: { type: integer, minimum: 1 }
       needBy: { type: string, format: date }

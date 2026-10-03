@@ -32,7 +32,7 @@ spec:
     type: object
     required: [slug]
     properties:
-      slug: { type: string, pattern: "^[a-z0-9-]+$" }
+      slug: { type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -50,7 +50,7 @@ spec:
     type: object
     required: [slug, locale, title, publishedAt]
     properties:
-      slug: { type: string, pattern: "^[a-z0-9-]+$" }
+      slug: { type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }
       locale: { type: string }
       title: { type: string }
       excerpt: { type: string }

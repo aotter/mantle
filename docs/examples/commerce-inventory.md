@@ -37,7 +37,7 @@ spec:
     additionalProperties: false
     required: [slug, title, priceMinor, currency]
     properties:
-      slug: { type: string, pattern: "^[a-z0-9-]+$" }
+      slug: { type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }
       title: { type: string, minLength: 1, maxLength: 160 }
       summary: { type: string, maxLength: 500 }
       priceMinor: { type: integer, minimum: 0, x-mcp-hint: money-minor }
@@ -183,7 +183,7 @@ spec:
           additionalProperties: false
           required: [productSlug, quantity]
           properties:
-            productSlug: { type: string, pattern: "^[a-z0-9-]+$" }
+            productSlug: { type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }
             quantity: { type: integer, minimum: 1, maximum: 99 }
   output:
     type: object
@@ -239,7 +239,7 @@ spec:
     required: [operationId, productSlug, delta, reason]
     properties:
       operationId: { type: string, format: uuid, x-mcp-hint: idempotency-key }
-      productSlug: { type: string, pattern: "^[a-z0-9-]+$", x-mantle-ref: { schema: products, field: slug } }
+      productSlug: { type: string, maxLength: 120, pattern: "^[a-z0-9-]+$", x-mantle-ref: { schema: products, field: slug } }
       delta: { type: integer, minimum: -100000, maximum: 100000 }
       reason: { type: string, minLength: 1, maxLength: 500 }
   uiSchema:
