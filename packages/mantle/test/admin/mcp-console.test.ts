@@ -173,7 +173,7 @@ describe("Admin: developer console and statistics", () => {
     expect(body.dataModel.views[0]).toMatchObject({ surface: "staff", query: { kind: "sql", statement: "SELECT id, slug FROM posts ORDER BY slug" }, authorization: [], guard: null });
     expect(JSON.stringify(body)).not.toMatch(/SelectStmt|A_Expr/); // the IR (a View's, a check's) stays on the server
     const procs = Object.fromEntries(body.logic.procedures.map((p: { name: string }) => [p.name, p]));
-    expect(procs.retitle.handler).toEqual({ kind: "sql", statement: "UPDATE posts SET title = input.title WHERE id = input.id RETURNING title" });
+    expect(procs.retitle.handler).toMatchObject({ kind: "sql", statement: "UPDATE posts SET title = input.title WHERE id = input.id RETURNING title", flow: [{ index: 0, operation: "UPDATE", table: "posts", mode: "row", reads: [], writes: ["posts"], returns: ["title"], filter: "id = input.id", cases: [] }] });
     expect(procs.nightly.handler).toEqual({ kind: "ref", ref: "nightly" });
     expect(body.logic.triggers).toContainEqual(expect.objectContaining({ name: "nightly-run", target: "nightly", audience: "system", source: { kind: "schedule", cron: "0 3 * * *" } }));
     expect(body.logic.triggers).toContainEqual(expect.objectContaining({ name: "t-retitle", target: "retitle", audience: "staff" }));

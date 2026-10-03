@@ -27,6 +27,7 @@ import { atomKindLabel, atomKindTone, audienceLabel, focusSlice, traceAtomIds } 
 import { CodeBlock, CodeTab, FactGrid, flattenSchemaFields } from "./data-model-view";
 import { DeveloperExplorer } from "./developer-explorer";
 import { developerDetailHref, developerSelectionHref } from "./developer-route";
+import { ProcedureFlow } from "./procedure-flow";
 
 type LogicItem =
   | { kind: "Trigger"; id: string; model: DeveloperTriggerModel }
@@ -152,6 +153,7 @@ function LogicDefinition({ item, snapshot, tab, manifestFocus, onTabChange, onNa
         <TabsContent value="overview" className="space-y-6 p-5">
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{summary}</p>
           {item.kind === "Procedure" && item.model.handler.kind === "ref" ? <p className="text-sm text-muted-foreground">{t(language, "developer.unknownEffects")}</p> : null}
+          {item.kind === "Procedure" && item.model.handler.kind === "sql" && item.model.handler.flow ? <ProcedureFlow key={item.id} statements={item.model.handler.flow} hooks={item.model.handler.hooks} authorization={item.model.authorization} guard={item.model.guard} /> : null}
           {item.kind === "Procedure" && item.model.handler.kind === "sql" ? <CodeBlock value={item.model.handler.statement} /> : null}
           {atom ? <ExecutionStrip selectedId={item.id} graph={snapshot.graph} onNavigate={onNavigate} /> : null}
           <section className="space-y-3">

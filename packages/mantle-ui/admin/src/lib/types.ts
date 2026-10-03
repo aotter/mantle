@@ -320,7 +320,7 @@ export type DeveloperTransport = "http" | "mcp" | "lifecycle" | "schedule";
 
 /** An inline program's SQL as authored, or a registered code handler. */
 export type DeveloperProcedureHandler =
-  | { kind: "sql"; statement: string }
+  | { kind: "sql"; statement: string; flow?: Array<{ index: number; operation: string; table: string | null; mode: "read" | "row" | "set"; reads: string[]; writes: string[]; returns: string[]; filter: string | null; cases: Array<{ field: string; branches: Array<{ condition: string; value: string }>; otherwise: string }> }>; hooks?: Array<{ trigger: string; procedure: string; schema: string; on: string[] }> }
   | { kind: "ref"; ref: string };
 
 export interface DeveloperProcedureModel {

@@ -90,6 +90,16 @@ a form above them; all of them keep cursor paging.
 
 ## Roles
 
+The Developer console's Procedure overview projects the sealed SQL AST into
+a static execution diagram: authorization, validated input, guard, applicable
+lifecycle hooks, ordered atomic statements, commit or rollback, and output
+validation. Statement cards show read/write dependencies, row versus set
+semantics, RETURNING and ordered CASE assignments. CASE chooses a field value;
+WHERE filters rows. A set operation can affect zero rows and still continue.
+Output validation and after-hook failures do not roll back an existing commit.
+Unsupported expression shapes remain explicitly opaque beside authored SQL;
+code handlers' effects and actual run history are not inferred.
+
 Admin's gate admits any staff role. Inside it, each route names the least role
 it needs: `contributor` reads and edits drafts, `editor` publishes, deletes
 and manages media, `owner` manages staff, site settings and the developer
