@@ -97,6 +97,18 @@ describe("verifyPlan", () => {
     }
   });
 
+  it("refuses a literal whose value is not of its type: a literal is printed as it is", async () => {
+    const plan = await compile();
+    const forged = { A_Const: { ival: { ival: "1 UNION SELECT email FROM user" } } };
+    const where = { A_Expr: { kind: "AEXPR_OP", name: [{ String: { sval: ">" } }], lexpr: { ColumnRef: { fields: [{ String: { sval: "stock" } }] } }, rexpr: forged } };
+    const view = await reseal(plan, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, stmts: [{ SelectStmt: { ...p.views.stock!.stmts[0]!.SelectStmt, whereClause: where } }] } } }));
+    expect((await verifyPlan(view, d1())).map((d) => d.path)).toEqual(["plan#/views/stock"]);
+    const check = await reseal(await compile(pgCompile), (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [where] } } }));
+    expect((await verifyPlan(check, pg())).map((d) => d.path)).toContain("plan#/schemas/items/checks/0");
+    for (const ok of [{ ival: {} }, { ival: { ival: -3 } }, { fval: { fval: "1.5e3" } }, { sval: {} }, { boolval: {} }, { isnull: true }])
+      expect(await verifyPlan(await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [{ ...where, A_Expr: { ...where.A_Expr, rexpr: { A_Const: ok } } }] } } })), d1())).toEqual([]);
+  });
+
   it("refuses a malformed plan with a diagnostic, not an exception", async () => {
     const plan = await compile();
     for (const broken of [{ ...plan, procedures: { x: { handler: null } } }, { ...plan, procedures: undefined }, null])

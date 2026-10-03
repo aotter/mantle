@@ -10,13 +10,15 @@ import { createMantleRuntime } from "./createRuntime.js";
 
 const BOOTED = Symbol("booted");
 
-/**
- * The plan's diagnostics, empty when it would boot on `storage` and every View and inline Procedure passes the dialect's check
- * (with the storage's `restrict`) and the policy rewrite. Only `storage.dialect` is read: nothing is prepared or converged.
- * Handlers are not checked (the host binds them); enabled schedule Triggers are allowed (the host decides whether it wires them).
- */
 const refused = (path: string, message: string): Diagnostic => makeDiagnostic({ code: "INPUT_VALIDATION_FAILED", phase: "boot", severity: "error", path, message });
 
+/**
+ * The plan's diagnostics: what boot refuses before storage (version, fingerprint, dialect, guard and hook targets), and every
+ * Schema check, View and inline Procedure through the storage's dialect (with its `restrict`) and the policy rewrite. Empty
+ * means no program can run SQL the dialect refuses. Only `storage.dialect` is read, so storage's own refusals (a reserved table
+ * name, a column type it cannot store) still surface where the plan first boots against its database, as with any plan.
+ * Handlers are not checked (the host binds them); enabled schedule Triggers are allowed (the host decides whether it wires them).
+ */
 export async function verifyPlan(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "dialect">): Promise<readonly Diagnostic[]> {
   // the plan is untrusted input: a shape Core does not expect is a refusal, never an exception
   try {

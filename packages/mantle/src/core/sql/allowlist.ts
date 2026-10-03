@@ -222,6 +222,27 @@ function shape(type: string, node: N, w: Walk, here: number | undefined): void {
     const e = w.ctx.p.enums[`${type}.${k}`];
     if (e && !e.includes(v as any)) no('SQL_UNSUPPORTED', `${type}.${k} = ${JSON.stringify(v)} is refused`, firstLoc(node) ?? here, KEYWORD[`${type}.${k}`]);
   }
+  if (type === 'A_Const' && !constant(node)) no('SQL_UNSUPPORTED', 'a literal is one integer, numeric, string, boolean or NULL', firstLoc(node) ?? here);
+}
+
+/**
+ * A literal's value is printed as it is, so its type is checked here: the walker never descends into a literal, and a plan
+ * that reaches the runtime is untrusted. libpg-query omits a zero, a false and an empty string (`{ ival: {} }`).
+ */
+function constant(node: N): boolean {
+  const own = Object.keys(node).filter((k) => k !== 'location');
+  if (own.length !== 1) return false;
+  const [k] = own as [string];
+  const v = node[k];
+  const only = (key: string, ok: (x: unknown) => boolean) => !!v && typeof v === 'object' && Object.keys(v).every((x) => x === key) && (!(key in v) || ok(v[key]));
+  switch (k) {
+    case 'ival': return only('ival', Number.isSafeInteger);
+    case 'fval': return only('fval', (x) => typeof x === 'string' && /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(x));
+    case 'sval': return only('sval', (x) => typeof x === 'string');
+    case 'boolval': return only('boolval', (x) => typeof x === 'boolean');
+    case 'isnull': return v === true;
+    default: return false;
+  }
 }
 
 /** Runs `f` with these CTE names in scope. */
