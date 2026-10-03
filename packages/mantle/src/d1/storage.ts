@@ -4,7 +4,7 @@
  * are reported and never dropped. STRICT tables, checks as triggers, and the FTS5 / R*Tree tables that back
  * `search` and `format: geo` are Mantle's own and are rebuilt when their declaration changes.
  */
-import { ftsTableName, geoTreeName, hasSubLink, parseNumeric, sideTableClashes, type SqlNode } from "../spec/domain/index.js";
+import { ftsTableName, geoTreeName, checkShapeProblem, parseNumeric, sideTableClashes, type SqlNode } from "../spec/domain/index.js";
 import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { print } from "./print.js";
@@ -40,7 +40,8 @@ function colType(t: string): "TEXT" | "INTEGER" | "REAL" {
 
 /** `stock >= 0` as IR -> `"new"."stock" >= 0`: the same printer as everything else. */
 function checkText(expr: SqlNode): string {
-  if (hasSubLink(expr)) throw new Error("a check reads only the row's own columns, never a subquery");
+  const problem = checkShapeProblem(expr);
+  if (problem) throw new Error(problem);
   const qualify = (v: any): any => {
     if (Array.isArray(v)) return v.map(qualify);
     if (!v || typeof v !== "object") return v;

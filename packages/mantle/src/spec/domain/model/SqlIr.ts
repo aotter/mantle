@@ -78,3 +78,27 @@ export function hasSubLink(v: unknown): boolean {
   if (!v || typeof v !== "object") return false;
   return Object.entries(v).some(([k, c]) => k === "SubLink" || hasSubLink(c));
 }
+
+/** The functions a Schema check may call: storage prints a check into its DDL as written, so only names SQLite and PostgreSQL define alike. */
+export const CHECK_FUNCTIONS: ReadonlySet<string> = new Set(["lower", "upper", "length", "abs"]);
+
+/**
+ * Why a Schema check cannot run in the table's DDL as written, or undefined. Storage prints a check unlowered into a trigger or
+ * CHECK constraint, so it reads only the row's own columns through operators and `CHECK_FUNCTIONS`: no subquery, no cast, and
+ * nothing the runtime binds per request (`auth.uid()`, `now()`) or a dialect spells its own way.
+ */
+export function checkShapeProblem(v: unknown): string | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  for (const [k, c] of Object.entries(v)) {
+    if (k === "SubLink") return "a check reads only the row's own columns: no subquery";
+    if (k === "TypeCast" || k === "SQLValueFunction") return "a check reads only the row's own columns: no cast or SQL value function";
+    if (k === "FuncCall") {
+      const names = (c as { funcname?: { String?: { sval?: unknown } }[] })?.funcname;
+      const name = Array.isArray(names) ? names.map((x) => x?.String?.sval).join(".").replace(/^pg_catalog\./, "") : "";
+      if (!CHECK_FUNCTIONS.has(name)) return `a check may call only ${[...CHECK_FUNCTIONS].join(", ")}: ${name || "this call"}() is printed into the table's DDL as written`;
+    }
+    const inner = checkShapeProblem(c);
+    if (inner) return inner;
+  }
+  return undefined;
+}

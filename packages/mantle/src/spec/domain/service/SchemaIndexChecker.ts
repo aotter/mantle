@@ -171,6 +171,19 @@ export function checkSchemaIndexes(manifest: SchemaManifest): SchemaIndexCheckRe
             });
             continue;
           }
+          // `status` exists only on a publishing Schema; storage creates no column for it otherwise
+          if (rawField === "status" && (spec["lifecycle"] ?? "publishing") !== "publishing") {
+            valid = false;
+            problems.push({
+              category: "invalid",
+              source,
+              pointer: fieldPointer,
+              value: rawField,
+              expected: "a native column this Schema has",
+              message: `Schema.spec.indexes field 'status' needs lifecycle: publishing; only a publishing Schema has a status column.`,
+            });
+            continue;
+          }
           // Native columns are always present and never shadowed by a data
           // property (the parser rejects that), so the tuple is unambiguous.
           fields.push({ name: rawField, affinity: nativeAffinity });

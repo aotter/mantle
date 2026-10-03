@@ -366,6 +366,7 @@ ${indexYaml}
     ["duplicate tuple", "  indexes: [[slug], [slug]]"],
     ["cross-kind duplicate", "  uniqueIndexes: [[slug]]\n  indexes: [[slug]]"],
     ["native column in uniqueIndexes", "  uniqueIndexes: [[status]]"],
+    ["status on an operational Schema, which has no status column", "  lifecycle: operational\n  indexes: [[status]]"],
     ["unsafe identifier", "  indexes: [['_slug']]"],
   ])("rejects semantic error: %s", (_label, declaration) => {
     const extra = declaration.includes("_slug")

@@ -109,7 +109,7 @@ workflow; only drafts are editable, and a public View sees published rows only.
 
 - `indexes`: ordered composite non-unique indexes over top-level scalar fields
   and native columns, spelled in camelCase here (`createdAt`, not
-  `created_at`).
+  `created_at`). `status` exists only on a `publishing` Schema.
 - `uniqueIndexes`: composite unique indexes. On a scoped Schema every entry
   starts with the scope field. A write that breaks one is `CONFLICT` with
   `conflict.reason: unique`; an `ON CONFLICT (<columns>)` target names one.
@@ -126,7 +126,10 @@ and update by triggers that storage convergence creates:
 checks: ["stock >= 0", "partySize IS NULL OR partySize BETWEEN 1 AND 20"]
 ```
 
-No subqueries. A violation fails the whole write with
+Storage prints a check into the table as written, so it uses operators and
+only the functions SQLite and PostgreSQL spell alike: `lower`, `upper`,
+`length` and `abs`. No subqueries, casts, `auth.*` or `now()`; a rule about
+the caller belongs in a Procedure's guard. A violation fails the whole write with
 `INPUT_VALIDATION_FAILED` and the message `CHECK <schema>: <expression>`.
 
 ## `searchableFields`

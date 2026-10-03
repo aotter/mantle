@@ -4,7 +4,7 @@
  * kept. Columns have native types; a Schema check is a CHECK constraint added NOT VALID, so it binds every later write and
  * leaves rows that predate it alone, as D1's trigger does.
  */
-import { hasSubLink, type SqlNode } from "../spec/domain/index.js";
+import { checkShapeProblem, type SqlNode } from "../spec/domain/index.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { query, transaction, type PgConnect, type PgStatement } from "./driver.js";
 import { pgType } from "./codec.js";
@@ -84,7 +84,8 @@ function indexes(name: string, s: StorageSchema) {
 
 /** A check's expression as PostgreSQL prints it, over the row's own columns. */
 function checkText(expr: SqlNode): string {
-  if (hasSubLink(expr)) throw new Error("a check reads only the row's own columns, never a subquery");
+  const problem = checkShapeProblem(expr);
+  if (problem) throw new Error(problem);
   return print(typed({ SelectStmt: { targetList: [{ ResTarget: { val: expr } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }, {})).replace(/^SELECT\s+/i, "");
 }
 

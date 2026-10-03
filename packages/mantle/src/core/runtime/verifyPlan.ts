@@ -3,7 +3,7 @@
  * database or the handlers (ADR-0034 decision 7: Cloud validates the IR and never parses SQL). Worker-safe: no SQL parser.
  */
 import { DiagnosticError, makeDiagnostic, type Diagnostic } from "../../spec/kernel/index.js";
-import { MAX_TTL_SECONDS, ManifestParseError, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, fieldTypes, hasSubLink, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
+import { MAX_TTL_SECONDS, ManifestParseError, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, checkShapeProblem, fieldTypes, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
 import { validateJsonSchema } from "../../spec/domain/service/SchemaSpecChecks.js";
 import { checkGuards, checkProcedureTarget, checkTriggerRefs } from "../../spec/domain/service/TriggerGraphChecks.js";
 import { MAX_NODES, schemaColumns } from "../sql/allowlist.js";
@@ -78,7 +78,8 @@ async function verify(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "di
   for (const [name, schema] of Object.entries(plan.schemas))
     for (const [i, where] of (schema.checks ?? []).entries()) {
       const path = `plan#/schemas/${name}/checks/${i}`;
-      if (hasSubLink(where)) out.push(refused(path, "SQL_SHAPE: a check reads only the row's own columns: no subquery"));
+      const problem = checkShapeProblem(where);
+      if (problem) out.push(refused(path, `SQL_SHAPE: ${problem}`));
       else check(path, [{ SelectStmt: { targetList: [{ ResTarget: { val: { A_Const: { ival: { ival: 1 } } } } }], fromClause: [{ RangeVar: { relname: name.toLowerCase(), inh: true, relpersistence: "p", mantle: "table" } }], whereClause: where, limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }], {}, "view", "caller");
     }
   for (const [name, v] of Object.entries(plan.views)) {
@@ -209,7 +210,8 @@ function planShape(plan: RuntimePlan): Diagnostic[] {
       if (!sameMap(fields, fieldTypes(s.schema)) || Object.keys(fields).length !== props.length) bad("fields are the JSON Schema's properties, typed as the CLI types them");
       if (!sameMap(s.names, Object.fromEntries(props.map((n) => [n.toLowerCase(), n])))) bad("names map each field to its property's name");
     }
-    const known = (x: unknown) => isName(x) && (Object.hasOwn(fields, x) || NATIVE.has(x));
+    // a column storage creates: a declared field that is one column (a geo field is two), or a native one (`status` only when publishing)
+    const column = (x: unknown) => isName(x) && (Object.hasOwn(fields, x) ? fields[x] !== "geo" : NATIVE.has(x) && (x !== "status" || !!s.publishing));
     if (!isName(key) || typeof s.name !== "string" || s.name.toLowerCase() !== key) bad("a Schema's key is its name in lower case");
     for (const [f, t] of Object.entries(fields)) if (!isName(f) || NATIVE.has(f) || !isFieldType(t)) bad(`field ${JSON.stringify(f)} is a lower-case name with a Mantle type`);
     for (const [f, n] of Object.entries(s.names ?? {})) if (!Object.hasOwn(fields, f) || typeof n !== "string" || n.toLowerCase() !== f) bad(`names[${JSON.stringify(f)}] names a field`);
@@ -218,7 +220,9 @@ function planShape(plan: RuntimePlan): Diagnostic[] {
     // as the CLI requires: a declared date-time field. A native column (`version`, `created_at`) would expire every row at once
     if (s.ttl !== undefined && !(isName(s.ttl) && Object.hasOwn(fields, s.ttl) && fields[s.ttl] === "timestamptz")) bad("ttl is a declared date-time (timestamptz) field");
     if (s.ttlSeconds !== undefined && !isTtlSeconds(s.ttlSeconds)) bad(`ttlSeconds is a whole number of seconds from 0 to ${MAX_TTL_SECONDS}`);
-    for (const cols of [...(s.search ? [s.search] : []), ...(s.unique ?? []), ...(s.indexes ?? [])]) if (!Array.isArray(cols) || !cols.length || !cols.every(known)) bad("search, unique and index columns are declared fields");
+    // as the CLI requires: search columns are declared text fields, unique and index columns scalar columns storage creates
+    if (s.search !== undefined && !(Array.isArray(s.search) && s.search.length && s.search.every((x) => isName(x) && fields[x] === "text"))) bad("search columns are declared text fields");
+    for (const cols of [...(s.unique ?? []), ...(s.indexes ?? [])]) if (!Array.isArray(cols) || !cols.length || !cols.every((x) => column(x) && fields[x as string] !== "json")) bad("unique and index columns are scalar columns storage creates (no geo or json field, status only when publishing)");
   }
   for (const c of sideTableClashes(plan.schemas)) out.push(refused(`plan#/schemas/${c.schema}`, `SQL_SHAPE: ${c.message}`));
 
