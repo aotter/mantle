@@ -2,8 +2,8 @@
  * `verifyPlan`: everything boot checks about an uploaded plan, plus every program through the storage's dialect, without a
  * database or the handlers (ADR-0034 decision 7: Cloud validates the IR and never parses SQL). Worker-safe: no SQL parser.
  */
-import { DiagnosticError, type Diagnostic } from "../../spec/kernel/index.js";
-import type { RuntimePlan, SqlNode } from "../../spec/domain/index.js";
+import { DiagnosticError, makeDiagnostic, type Diagnostic } from "../../spec/kernel/index.js";
+import { SqlRefusal, type RuntimePlan, type SqlNode } from "../../spec/domain/index.js";
 import { compileProgram, type Mode } from "../sql/compile.js";
 import type { MantleStorageAdapter } from "../service.js";
 import { createMantleRuntime } from "./createRuntime.js";
@@ -15,36 +15,45 @@ const BOOTED = Symbol("booted");
  * (with the storage's `restrict`) and the policy rewrite. Only `storage.dialect` is read: nothing is prepared or converged.
  * Handlers are not checked (the host binds them); enabled schedule Triggers are allowed (the host decides whether it wires them).
  */
+const refused = (path: string, message: string): Diagnostic => makeDiagnostic({ code: "INPUT_VALIDATION_FAILED", phase: "boot", severity: "error", path, message });
+
 export async function verifyPlan(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "dialect">): Promise<readonly Diagnostic[]> {
+  // the plan is untrusted input: a shape Core does not expect is a refusal, never an exception
+  try {
+    return await verify(plan, storage);
+  } catch (e) {
+    if (e instanceof DiagnosticError) return e.diagnostics;
+    return [makeDiagnostic({ code: "INVALID_MANIFEST_ENVELOPE", phase: "boot", severity: "error", path: "plan", message: `the plan is malformed: ${e instanceof Error ? e.message : String(e)}` })];
+  }
+}
+
+async function verify(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "dialect">): Promise<readonly Diagnostic[]> {
   const refs = Object.values(plan.procedures).flatMap((p) => ("ref" in p.handler ? [p.handler.ref] : []));
   try {
     // boot's own checks, stopped where storage would be prepared
     await createMantleRuntime({ plan, handlers: Object.fromEntries(refs.map((r) => [r, () => undefined])), schedules: true, storage: { dialect: storage.dialect, prepare: () => Promise.reject(BOOTED) } });
   } catch (e) {
-    if (e !== BOOTED) {
-      if (e instanceof DiagnosticError) return e.diagnostics;
-      throw e;
-    }
+    if (e !== BOOTED) throw e;
   }
   const out: Diagnostic[] = [];
-  const check = (stmts: readonly SqlNode[], inputs: Readonly<Record<string, string>>, kind: "view" | "procedure", mode: Mode) => {
+  const check = (path: string, stmts: readonly SqlNode[], inputs: Readonly<Record<string, string>>, kind: "view" | "procedure", mode: Mode) => {
     try {
       compileProgram(stmts, { dialect: storage.dialect, schemas: plan.schemas, inputs, kind, mode });
     } catch (e) {
-      if (!(e instanceof DiagnosticError)) throw e;
-      out.push(...e.diagnostics);
+      // the dialect's refusals arrive as a DiagnosticError, the policy rewrite's as a SqlRefusal; the runtime refuses both
+      if (e instanceof DiagnosticError) out.push(...e.diagnostics.map((d) => ({ ...d, path })));
+      else if (e instanceof SqlRefusal) out.push(refused(path, `${e.code}: ${e.message}`));
+      else throw e;
     }
   };
-  for (const [name, v] of Object.entries(plan.views)) {
-    const before = out.length;
-    check(v.stmts, v.inputs, "view", v.surface === "public" ? "public" : "caller");
-    for (let i = before; i < out.length; i++) out[i] = { ...out[i]!, path: `plan#/views/${name}` };
-  }
-  for (const [name, p] of Object.entries(plan.procedures)) {
-    if (!("sql" in p.handler)) continue;
-    const before = out.length;
-    check(p.handler.sql.stmts, p.inputs, "procedure", "caller");
-    for (let i = before; i < out.length; i++) out[i] = { ...out[i]!, path: `plan#/procedures/${name}` };
-  }
+  // a check is printed into the table's DDL and runs on every write: checked as the CLI compiles it, the WHERE of a read of its own Schema
+  for (const [name, schema] of Object.entries(plan.schemas))
+    for (const [i, where] of (schema.checks ?? []).entries()) {
+      const path = `plan#/schemas/${name}/checks/${i}`;
+      if (JSON.stringify(where).includes('"SubLink"')) out.push(refused(path, "SQL_SHAPE: a check reads only the row's own columns: no subquery"));
+      else check(path, [{ SelectStmt: { targetList: [{ ResTarget: { val: { A_Const: { ival: { ival: 1 } } } } }], fromClause: [{ RangeVar: { relname: name.toLowerCase(), inh: true, relpersistence: "p", mantle: "table" } }], whereClause: where, limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }], {}, "view", "caller");
+    }
+  for (const [name, v] of Object.entries(plan.views)) check(`plan#/views/${name}`, v.stmts, v.inputs, "view", v.surface === "public" ? "public" : "caller");
+  for (const [name, p] of Object.entries(plan.procedures)) if ("sql" in p.handler) check(`plan#/procedures/${name}`, p.handler.sql.stmts, p.inputs, "procedure", "caller");
   return out;
 }

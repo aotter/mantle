@@ -13,6 +13,7 @@ spec:
   lifecycle: operational
   scope: { owner: auth.uid() }
   indexes: [[owner]]
+  checks: ["stock >= 0"]
   schema:
     type: object
     required: [owner]
@@ -79,10 +80,33 @@ describe("verifyPlan", () => {
     expect(out.every((d) => d.path === "plan#/views/stock")).toBe(true);
   });
 
+  it("reports the policy rewrite's refusals as diagnostics, for a plan the CLI compiled as is", async () => {
+    const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: MANIFESTS.replace("SELECT name, sum(stock) OVER (ORDER BY name) AS running FROM items ORDER BY name", "SELECT name FROM (SELECT name FROM items) s ORDER BY name") }] });
+    if (!r.ok) throw new Error(JSON.stringify(r.diagnostics));
+    const out = await verifyPlan(r.plan, d1());
+    expect(out.map((d) => [d.code, d.path])).toEqual([["INPUT_VALIDATION_FAILED", "plan#/views/stock"]]);
+  });
+
+  it("checks a Schema's checks, which DDL runs on every write: a resealed check calling a function the dialect refuses is refused", async () => {
+    const sleep = { FuncCall: { funcname: [{ String: { sval: "pg_sleep" } }], args: [{ A_Const: { ival: { ival: 1000000 } } }] } };
+    const subquery = { SubLink: { subLinkType: "EXISTS_SUBLINK", subselect: {} } };
+    for (const plan of [await compile(), await compile(pgCompile)]) {
+      const storage = plan.dialect.name.includes("postgres") ? pg() : d1();
+      const hostile = await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [...p.schemas.items!.checks!, sleep, subquery] } } }));
+      expect((await verifyPlan(hostile, storage)).map((d) => d.path)).toEqual(["plan#/schemas/items/checks/1", "plan#/schemas/items/checks/2"]);
+    }
+  });
+
+  it("refuses a malformed plan with a diagnostic, not an exception", async () => {
+    const plan = await compile();
+    for (const broken of [{ ...plan, procedures: { x: { handler: null } } }, { ...plan, procedures: undefined }, null])
+      expect((await verifyPlan(broken as never, d1())).map((d) => d.code)).toEqual(["INVALID_MANIFEST_ENVELOPE"]);
+  });
+
   it("runs the operator's restrict on every program", async () => {
     const restrict = () => [{ code: "CLOUD_REFUSED", message: "no window functions here" }];
     const out = await verifyPlan(await compile(), d1({ restrict }));
-    expect(out.map((d) => d.path).sort()).toEqual(["plan#/procedures/add-item", "plan#/views/stock"]);
+    expect(out.map((d) => d.path).sort()).toEqual(["plan#/procedures/add-item", "plan#/schemas/items/checks/0", "plan#/views/stock"]);
     expect(out.every((d) => d.message.includes("CLOUD_REFUSED"))).toBe(true);
   });
 });
