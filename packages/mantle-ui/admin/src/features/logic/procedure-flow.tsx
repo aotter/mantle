@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { Background, Controls, MarkerType, Position, ReactFlow, type Edge, type Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger, Button } from '@aotter/mantle-ui/kit';
 import { usePreferences } from '../../app/preferences';
-import type { DeveloperProcedureHandler } from '../../lib/types';
+import type { DeveloperProcedureHandler, SqlLogicNode } from '../../lib/types';
 
 type Statements = NonNullable<Extract<DeveloperProcedureHandler, { kind: 'sql' }>['flow']>;
 
@@ -20,6 +21,7 @@ export function ProcedureFlow({ statements, hooks = [], authorization, guard }: 
       <p className="mt-2 text-xs text-muted-foreground">{zh ? '讀取依賴' : 'Reads'}: {statement.reads.join(', ') || '—'} · {zh ? '寫入' : 'Writes'}: {statement.writes.join(', ') || '—'}</p>
       <p className="mt-2 text-xs">{statement.mode === 'row' ? (zh ? '單筆操作：影響筆數必須為 1，否則整批回滾。' : 'Row operation: exactly one affected row, otherwise the batch rolls back.') : statement.mode === 'set' ? (zh ? '集合操作：零筆符合是正常結果，後續 SQL 仍繼續。' : 'Set operation: zero affected rows is a valid result; later SQL still runs.') : (zh ? '讀取結果' : 'Read result')}</p>
       {statement.returns.length ? <p className="mt-2 font-mono text-xs">RETURNING {statement.returns.join(', ')}</p> : null}
+      {statement.logic ? <SqlSyntaxFlow tree={statement.logic} zh={zh} /> : null}
       {statement.cases.map((c, caseIndex) => <CaseFlow key={caseIndex} field={c.field} branches={c.branches} otherwise={c.otherwise} zh={zh} />)}
     </div>)}
   </section>;
@@ -63,5 +65,42 @@ function CaseFlow({ field, branches, otherwise, zh }: Statements[number]['cases'
   edge('otherwise', 'assign');
   return <div className="mt-3 h-[380px] rounded border bg-slate-50" role="img" aria-label={`CASE ${field}: ${branches.map((b) => `${b.condition} → ${b.value}`).join('; ')}; ELSE ${otherwise}`}>
     <ReactFlow nodes={nodes} edges={edges} fitView nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} minZoom={0.2} maxZoom={1.5} colorMode="light"><Background /><Controls showInteractive={false} /></ReactFlow>
+  </div>;
+}
+
+
+function SqlSyntaxFlow({ tree, zh }: { tree: SqlLogicNode; zh: boolean }): React.ReactElement {
+  const [selected, setSelected] = React.useState(tree.label);
+  const { nodes, edges } = React.useMemo(() => {
+    const nodes: Node[] = [], edges: Edge[] = [];
+    let leaf = 0;
+    const visit = (item: SqlLogicNode, depth: number, parent?: string): number => {
+      const id = String(nodes.length);
+      const current: Node = { id, position: { x: depth * 270, y: 0 }, data: { label: item.label }, sourcePosition: Position.Right, targetPosition: Position.Left, style: { width: 230, fontSize: 12, whiteSpace: 'pre-wrap', background: item.kind === 'predicate' || item.kind === 'case' ? '#fef3c7' : item.kind === 'opaque' ? '#fee2e2' : '#f1f5f9', color: '#172033', borderRadius: 8 } };
+      nodes.push(current);
+      if (parent) edges.push({ id: `${parent}-${id}`, source: parent, target: id, type: 'smoothstep' });
+      const ys = item.children.map((child) => visit(child, depth + 1, id));
+      const y = ys.length ? (ys[0]! + ys[ys.length - 1]!) / 2 : leaf++ * 95;
+      current.position.y = y;
+      return y;
+    };
+    visit(tree, 0);
+    return { nodes, edges };
+  }, [tree]);
+  return <div className="mt-3 space-y-2">
+    <p className="text-xs text-muted-foreground">{zh ? 'SQL 結構與條件圖：線表示語法／資料依賴，不代表求值順序。AND／OR 遵循 SQL 三值邏輯；點選節點可讀完整文字。' : 'SQL structure and predicates: edges are syntax/data dependencies, not evaluation order. AND/OR use SQL three-valued logic. Select a node to read its label.'}</p>
+    <div className="h-[500px] rounded border bg-slate-50" role="img" aria-label={`${tree.label}: SQL syntax and data dependencies`}>
+      <ReactFlow nodes={nodes} edges={edges} fitView nodesDraggable={false} nodesConnectable={false} minZoom={0.05} maxZoom={2} colorMode="light" onNodeClick={(_event, node) => setSelected(String(node.data.label))}><Background /><Controls showInteractive={false} /></ReactFlow>
+    </div>
+    <Dialog>
+      <DialogTrigger asChild><Button variant="outline" size="sm">{zh ? '放大 SQL 條件圖' : 'Expand SQL graph'}</Button></DialogTrigger>
+      <DialogContent className="flex h-[90vh] w-[95vw] max-w-none sm:max-w-none flex-col" closeLabel={zh ? '關閉' : 'Close'}>
+        <DialogTitle>{zh ? 'SQL 結構與條件圖' : 'SQL structure and predicates'}</DialogTitle>
+        <DialogDescription>{zh ? '拖曳平移、縮放，或點選節點查看完整文字。線表示語法與資料依賴。' : 'Pan, zoom or select a node. Edges represent syntax and data dependencies.'}</DialogDescription>
+        <div className="min-h-0 flex-1"><ReactFlow nodes={nodes} edges={edges} fitView nodesDraggable={false} nodesConnectable={false} minZoom={0.05} maxZoom={2} colorMode="light" onNodeClick={(_event, node) => setSelected(String(node.data.label))}><Background /><Controls showInteractive={false} /></ReactFlow></div>
+        <p className="break-words font-mono text-xs" aria-live="polite">{selected}</p>
+      </DialogContent>
+    </Dialog>
+    <p className="break-words rounded border p-2 font-mono text-xs" aria-live="polite">{selected}</p>
   </div>;
 }
