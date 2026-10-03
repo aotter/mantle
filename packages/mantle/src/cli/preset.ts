@@ -113,7 +113,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
       `    return createSetupIncompleteAuth({ message: "Sign-in is not configured: copy ${localEnv}.example to ${localEnv} locally, or choose a sign-in method in src/service.ts." });`,
       "  return createMantleAuth({",
       bun
-        ? postgres ? "    database: bunAuthDatabase(env.SQL), driver: bunDatabaseDriver(env.SQL), baseURL: origin, secret: env.BETTER_AUTH_SECRET," : "    database: env.DB, driver: bunSqliteDriver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
+        ? postgres ? '    database: bunAuthDatabase(env.SQL), driver: bunDatabaseDriver(env.SQL), baseURL: origin, secret: env.BETTER_AUTH_SECRET,' : "    database: env.DB, driver: bunSqliteDriver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
         : postgres
         ? "    database: pgPool(connectTo(env)), driver: pgDatabaseDriver(connectTo(env)), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
         : "    database: env.DB, driver: d1Driver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,",
@@ -257,7 +257,7 @@ export function presetFiles(root: string, selection: PresetSelection, plan: Runt
     ...(selection.identity === "custom" ? [["src/identity.ts", IDENTITY] as [string, string]] : []),
     ["src/index.ts", selection.host === "bun" ? bunEntry(selection) : ENTRY],
     ...(selection.host === "bun" ? [] : ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].some((f) => existsSync(join(root, f))) ? [] : [["wrangler.jsonc", wrangler(root, plan, selection.features.includes("admin"), selection.dialect)] as [string, string]]),
-    ["tsconfig.json", selection.host === "bun" ? TSCONFIG.replace('"@cloudflare/workers-types",', '"bun-types",') : TSCONFIG],
+    ["tsconfig.json", selection.host === "bun" ? TSCONFIG.replace('"@cloudflare/workers-types",', '"bun-types",').replace('"ES2023"', '"ES2023",\n      "DOM"') : TSCONFIG],
     ...(selection.identity === "mantle" || selection.host === "bun" ? [[selection.host === "bun" ? ".env.example" : ".dev.vars.example", selection.host === "bun" ? bunEnv(selection) : DEV_VARS] as [string, string]] : []),
     [".gitignore", "node_modules/\n.wrangler/\n.dev.vars\n.env\n*.sqlite\n*.sqlite-shm\n*.sqlite-wal\n"],
     // last: its existence is what marks the preset as written, so a write that failed midway is completed by the rerun
@@ -316,6 +316,8 @@ ${pg ? 'if (!process.env.DATABASE_URL || !/^postgres(?:ql)?:\\/\\//.test(process
 const env: Env = {
   ${pg ? 'SQL: sql' : 'DB: db'},
 ${admin ? '  ASSETS: bunAdminAssets(dirname(fileURLToPath(import.meta.resolve("@aotter/mantle-ui/admin/index.html")))),\n' : ''}${selection.identity === 'mantle' ? '  PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN, BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET, ADMIN_EMAIL: process.env.ADMIN_EMAIL,\n' : ''}};
+// the client is the socket's address; behind a proxy you list in TRUSTED_PROXIES, the address it appended to X-Forwarded-For
+const proxies = new Set((process.env.TRUSTED_PROXIES ?? "").split(",").map((s) => s.trim()).filter(Boolean));
 const pending = new Set<Promise<unknown>>();
 const waitUntil = (promise: Promise<unknown>) => {
   const task = promise.catch(console.error).finally(() => pending.delete(task));
@@ -323,10 +325,18 @@ const waitUntil = (promise: Promise<unknown>) => {
 };
 const server = Bun.serve({
   hostname: process.env.HOST ?? "127.0.0.1", port: Number(process.env.PORT ?? 3000),
+  // never Bun's development error page: it shows the exception, the stack and paths to any client
+  development: false,
+  error(error) {
+    console.error(error);
+    return Response.json({ error: { code: "INTERNAL_ERROR", message: "Internal error" } }, { status: 500 });
+  },
   fetch(request, server) {
     const headers = new Headers(request.headers);
     headers.delete("x-mantle-client-ip");
-    const ip = server.requestIP(request)?.address;
+    const socket = server.requestIP(request)?.address;
+    const forwarded = socket && proxies.has(socket) ? request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() : undefined;
+    const ip = forwarded || socket;
     if (ip) headers.set("x-mantle-client-ip", ip);
     return mantle.fetch(new Request(request, { headers }), env, { waitUntil });
   },
@@ -349,5 +359,7 @@ function bunEnv(selection: PresetSelection): string {
   return `# Copy to .env for local development. Never deploy these values.
 ${selection.dialect === 'postgres' ? 'DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/mantle_app' : 'DATABASE_FILE=mantle.sqlite'}
 PORT=3000
+# Behind a reverse proxy, list its addresses so each client keeps its own sign-in rate limit, e.g. TRUSTED_PROXIES=127.0.0.1
+# TRUSTED_PROXIES=
 ${selection.identity === 'mantle' ? 'PUBLIC_ORIGIN=http://127.0.0.1:3000\nADMIN_EMAIL=you@example.com\nBETTER_AUTH_SECRET=replace-with-a-random-32-byte-secret\n' : ''}`;
 }

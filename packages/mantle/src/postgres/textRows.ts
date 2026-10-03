@@ -18,12 +18,14 @@ function outputName(n: N | undefined): [string, number] {
   if (n.SubLink?.subLinkType === 'EXPR_SUBLINK') { const t = n.SubLink.subselect?.SelectStmt?.targetList?.[0]?.ResTarget; return t?.name ? [t.name, 2] : outputName(t?.val); }
   return ['?column?', 0];
 }
-export function describeResult(ast: N): { query: string; names: string[] } | undefined {
+export function describeResult(ast: N): { query: string; names: string[] | undefined } | undefined {
   const body = ast.SelectStmt ?? ast.InsertStmt ?? ast.UpdateStmt ?? ast.DeleteStmt;
   const targets: N[] | undefined = ast.SelectStmt ? body.targetList : body?.returningClause?.exprs;
   if (!targets?.length) return undefined;
+  // `*` and `t.*` expand to columns only PostgreSQL knows: name none, so each column keeps its own name
+  const star = targets.some((t) => t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.A_Star);
   return {
     query: ast.SelectStmt ? print(ast) : `WITH _mantle_result AS (${print(ast)}) SELECT * FROM _mantle_result`,
-    names: targets.map((t) => t.ResTarget.name ?? outputName(t.ResTarget.val)[0]),
+    names: star ? undefined : targets.map((t) => t.ResTarget.name ?? outputName(t.ResTarget.val)[0]),
   };
 }

@@ -33,7 +33,13 @@ export const sqlState = (e: unknown): string | undefined => {
 // every value comes back as text and is decoded by its column's type OID (`decodeField`), never by the driver's own parsers
 const RAW = { getTypeParser: () => (text: string) => text };
 
-export interface PgStatement { readonly text: string; readonly values?: readonly unknown[]; readonly describeResult?: () => { query: string; names: string[] } | undefined }
+export interface PgStatement {
+  readonly text: string;
+  readonly values?: readonly unknown[];
+  readonly describeResult?: () => { query: string; names: string[] | undefined } | undefined;
+  /** The statement is a read: a client that had to begin read-write (to describe it) makes the transaction read-only first. */
+  readonly readOnly?: boolean;
+}
 /** One statement's rows (decoded) and the rows it wrote or returned. */
 export interface PgOutcome { readonly rows: Record<string, unknown>[]; readonly count: number }
 
@@ -49,7 +55,9 @@ const SERIALIZATION = new Set(["40001", "40P01"]);
  * What every wire value is decoded under, whatever the server's defaults: ISO dates, PostgreSQL interval text, shortest exact
  * floats, UTC. `SET LOCAL` inside the transaction, because Hyperdrive pools connections per transaction.
  */
-const PINNED = "SET LOCAL DateStyle = 'ISO, YMD'; SET LOCAL IntervalStyle = 'postgres'; SET LOCAL extra_float_digits = 1; SET LOCAL TimeZone = 'UTC'";
+const PINNED = "SET LOCAL DateStyle = 'ISO, YMD'; SET LOCAL IntervalStyle = 'postgres'; SET LOCAL extra_float_digits = 1; SET LOCAL TimeZone = 'UTC'; " +
+  // pg_temp named last: a temporary table on a pooled session never stands in for a Schema table of the same name
+  "SELECT set_config('search_path', concat_ws(', ', nullif(current_setting('search_path'), ''), 'pg_temp'), true)";
 /** ADR-0037 decision 5: a statement that runs away (a recursive CTE, a regular expression) ends here. 0 is no limit. */
 export const STATEMENT_TIMEOUT_MS = 10_000;
 const pinned = (timeoutMs: number) => `${PINNED}; SET LOCAL statement_timeout = ${Math.max(0, Math.floor(timeoutMs))}`;
@@ -97,7 +105,7 @@ export async function query(connect: PgConnect, s: PgStatement, timeoutMs = STAT
   const client = await connect();
   try {
     await client.query({ text: `BEGIN${client.temporaryResultMetadata ? "" : " READ ONLY"}; ${pinned(timeoutMs)}` });
-    const out = await run(client, s);
+    const out = await run(client, { ...s, readOnly: true });
     await client.query({ text: "COMMIT" });
     return out;
   } catch (e) {

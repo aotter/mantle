@@ -7,6 +7,19 @@ import { runStorageConformance } from '../../src/testing/index.ts';
 import * as pgCompile from '../../src/postgres/compile/index.ts';
 import { compileSql } from '../../src/spec/index.ts';
 import { createMantleAuth } from '../../src/auth/index.ts';
+import { query } from '../../src/postgres/driver.ts';
+
+/** OTP sign-in of the bootstrap owner: returns the staff list's first role. */
+async function signInOwner(auth: ReturnType<typeof createMantleAuth>, codes: Map<string, string>, email: string) {
+  const post = (path: string, body: unknown) => auth.handler(new Request(`http://localhost/api/auth${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'http://localhost', 'x-real-ip': '127.0.0.1' }, body: JSON.stringify(body) }));
+  assert.equal((await post('/email-otp/send-verification-otp', { email, type: 'sign-in' })).status, 200);
+  for (let i = 0; i < 100 && !codes.has(email); i++) await Bun.sleep(10);
+  const login = await post('/sign-in/email-otp', { email, otp: codes.get(email) });
+  assert.equal(login.status, 200);
+  const request = new Request('http://localhost/admin/api/staff', { headers: { cookie: login.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ') } });
+  return (await auth.listUsers(request))[0].role;
+}
+const otpAuth = (database: unknown, driver: ReturnType<typeof bunSqliteDriver>, codes: Map<string, string>, owner: string) => createMantleAuth({ database: database as never, driver, baseURL: 'http://localhost', secret: crypto.randomUUID() + crypto.randomUUID(), ipAddressHeaders: ['x-real-ip'], methods: [{ kind: 'email-otp', sender: { send: async ({ to, text }) => void codes.set(to, /\b(\d{6})\b/.exec(text)![1]!) } }], bootstrapOwner: { match: 'email', value: owner } });
 
 const sqlite = await runStorageConformance({ create: async () => {
   const db = new Database(':memory:');
@@ -14,6 +27,24 @@ const sqlite = await runStorageConformance({ create: async () => {
 } });
 assert.deepEqual(sqlite.failures, []);
 console.log(`Bun SQLite: ${sqlite.checks.length} conformance checks passed`);
+{
+  // one handle for Better Auth and Mantle, as the generated preset wires it
+  const db = new Database(':memory:');
+  const driver = bunSqliteDriver(db);
+  assert.deepEqual(db.prepare('PRAGMA foreign_keys').all(), [{ foreign_keys: 1 }], 'foreign keys on, as on D1');
+  const codes = new Map<string, string>();
+  assert.equal(await signInOwner(otpAuth(db, driver, codes, 'owner@sqlite.test'), codes, 'owner@sqlite.test'), 'owner', 'bun:sqlite auth signs in the bootstrap owner');
+  // a batch never runs inside another transaction on the handle: it waits, so a rollback there cannot take its write back
+  await driver.batch([{ sql: 'CREATE TABLE acked (n integer)' }]);
+  db.prepare('BEGIN').all();
+  const pending = driver.batch([{ sql: 'INSERT INTO acked VALUES (1)' }]);
+  await Bun.sleep(20);
+  db.prepare('ROLLBACK').all();
+  await pending;
+  assert.deepEqual(db.prepare('SELECT n FROM acked').all(), [{ n: 1 }], 'an acknowledged write survives the other transaction');
+  db.close();
+  console.log('Bun SQLite: auth, foreign keys and transactions on a shared handle passed');
+}
 
 const url = process.env.MANTLE_PG_URL;
 if (!url) { console.log('Bun PostgreSQL skipped: set MANTLE_PG_URL'); process.exit(0); }
@@ -56,6 +87,17 @@ try {
     const login=await post('/sign-in/email-otp',{email:'owner@bun.test',otp:codes.get('owner@bun.test')});assert.equal(login.status,200);
     const request=new Request('http://localhost/admin/api/staff',{headers:{cookie:login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ')}});
     assert.equal((await auth.listUsers(request))[0].role,'owner');
+    // a read is read-only, a statement past its timeout ends with 57014, and a session's temp table never stands in for a table
+    assert.deepEqual((await query(bunPgConnect(engine.sql), { text: "SELECT current_setting('transaction_read_only') AS ro" })).rows, [{ ro: 'on' }]);
+    await assert.rejects(query(bunPgConnect(engine.sql), { text: 'SELECT pg_sleep(1)::text AS s' }, 100), (e: { code?: string }) => e.code === '57014');
+    const one = new SQL(url, { prepare: false, bigint: true, max: 1, connection: { search_path: (await engine.sql`SELECT current_schema() AS s`)[0].s } });
+    try {
+      const reserved = await one.reserve();
+      await reserved.unsafe('CREATE TEMP TABLE truth (flag bool, n numeric(12,2))');
+      reserved.release();
+      assert.equal((await bunDatabaseDriver(one).batch([{ sql: 'SELECT count(*)::int4 AS n FROM truth' }]))[0].rows[0].n, 2, 'pg_temp is searched last');
+    } finally { await one.close(); }
+    assert.deepEqual(Object.keys((await select('SELECT t.* FROM truth t ORDER BY t.n'))[0]), ['flag', 'n'], 'a star keeps each column name');
     const connect=bunPgConnect(engine.sql);const first=await connect();const second=await connect();
     try { assert.notEqual((await first.query('SELECT pg_backend_pid() AS pid')).rows[0].pid,(await second.query('SELECT pg_backend_pid() AS pid')).rows[0].pid); } finally { await first.end();await first.end();await second.end(); }
     console.log('Bun PostgreSQL: exact values, expressions, CTE/comments, auth and reserved connections passed');
