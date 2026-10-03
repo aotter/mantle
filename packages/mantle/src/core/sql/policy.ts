@@ -356,7 +356,8 @@ function expandStar(n: N, info: SelInfo, c: C): N {
 const AGGREGATES = new Set(['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object', 'string_agg', 'jsonb_agg', 'jsonb_object_agg']);
 const alias$ = (rel: N) => rel.alias?.aliasname ?? rel.relname;
 function returning(rc: N | undefined, s: SchemaDef, schema: string, c: C): N | undefined {
-  const exprs = (rc?.exprs ?? []).flatMap((e: N) => (e.ResTarget.val?.ColumnRef?.fields?.[0]?.A_Star ? starCols(s).map((f) => res(col(f))) : [e]));
+  // `*` and `<target>.*` (the target is the one relation a RETURNING reaches) are its declared columns, as in a SELECT
+  const exprs = (rc?.exprs ?? []).flatMap((e: N) => (e.ResTarget.val?.ColumnRef?.fields?.at(-1)?.A_Star ? starCols(s).map((f) => res(col(f))) : [e]));
   // an after hook gets the whole row whatever the author returns: its own columns, which the result never carries (ADR-0032 decision 3)
   if (c.returning?.has(schema)) exprs.push(...readable(s).map((f) => res(col(f), `${HOOK_PREFIX}${f}`)));
   return exprs.length ? { exprs } : undefined;
