@@ -3,6 +3,8 @@ import dagre from "@dagrejs/dagre";
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Database, Info, LayoutGrid, Workflow, X } from "lucide-react";
 import {
   BaseEdge,
+  Background,
+  BackgroundVariant,
   ControlButton,
   Controls,
   EdgeLabelRenderer,
@@ -40,7 +42,8 @@ import { cn } from "../../lib/utils";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 
-import { businessRules } from "./business-rules";
+import { businessRules, type BusinessRule } from "./business-rules";
+import { businessFlow, BusinessGroupNode, BusinessRuleNode } from "./business-flow";
 
 export const atomKindTone = {
   Schema: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
@@ -63,7 +66,7 @@ type FocusSlice = { startId: string; nodeIds: Set<string>; relationIds: Set<stri
 type AudienceGroupGraphNode = Node<{ audience: DeveloperAudience; count: number; language: AdminLanguage }, "audience">;
 
 export const manifestEdgeTypes = { manifest: ManifestEdge } satisfies EdgeTypes;
-const nodeTypes = { audience: AudienceGroupNode } satisfies NodeTypes;
+const nodeTypes = { audience: AudienceGroupNode, businessGroup: BusinessGroupNode, businessRule: BusinessRuleNode } satisfies NodeTypes;
 export const graphCanvasClassName = "bg-background [--graph-inactive-filter:none] [--graph-inactive-opacity:0.16] dark:[--graph-inactive-filter:brightness(0.42)_saturate(0.2)] dark:[--graph-inactive-opacity:1]";
 
 export function GraphControls({ onRelayout }: { onRelayout: () => void }): React.ReactElement {
@@ -154,30 +157,29 @@ export function AtomGraph({
 }): React.ReactElement {
   const { language, theme } = usePreferences();
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
+  const [showDetails, setShowDetails] = React.useState(false);
+  const [showData, setShowData] = React.useState(false);
+  const [selectedRule, setSelectedRule] = React.useState<BusinessRule | null>(null);
   const layout = React.useMemo(() => {
     const base = layoutGraph(graph, language);
     const atom = graph.atoms.find((a) => a.id === expandedId);
     if (!atom) return base;
-    const rules = businessRules(atom, schemas, language);
-    const nodes = base.nodes.filter((n) => n.type !== 'audience');
-    const edges = [...base.edges];
-    const groupId = `RuleGroup:${atom.id}`;
-    const groupHeight = Math.ceil(rules.length / 2) * 220 + 40;
-    nodes.push({ id: groupId, position: { x: 0, y: 0 }, data: { label: language.startsWith('zh') ? '業務規則 · 從 manifest 衍生' : 'Business rules · derived from manifest' }, style: { width: 660, height: groupHeight }, className: '!border-dashed !bg-muted/20 !text-muted-foreground !text-xs [&_.react-flow__handle]:!hidden', draggable: false, selectable: false, focusable: false });
-    rules.forEach((rule, i) => {
-      const id = `Rule:${atom.id}:${i}`;
-      nodes.push({ id, parentId: groupId, extent: "parent", position: { x: 20 + (i % 2) * 320, y: 40 + Math.floor(i / 2) * 220 }, data: { label: <div className="space-y-2 text-start"><strong className="block text-sm">{rule.title}</strong><p className="line-clamp-5 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{rule.body}</p><span className="text-[10px] text-muted-foreground">{language.startsWith('zh') ? '點選查看程式依據' : 'Select for implementation'}</span></div> }, ariaLabel: rule.title, sourcePosition: Position.Bottom, targetPosition: Position.Top, draggable: false, className: '!w-[300px] !h-[200px] !rounded-2xl !border-2 !border-amber-500/40 !bg-card !text-card-foreground !p-4 !shadow-md' });
-    });
-    edges.push({ id: `RuleEdge:${atom.id}`, source: atom.id, target: groupId, type: 'smoothstep', style: { stroke: '#f59e0b', strokeDasharray: '5 4' } });
+    const derived = businessRules(atom, schemas, language);
+    if (!derived.length) return base;
+    const rules = businessFlow(atom.id, resolveLocalizedText(atom.title, language) || atom.name, derived, language.startsWith('zh'));
+    const related = focusSlice(graph, atom.id).nodeIds;
+    const nodes = base.nodes.filter((n) => related.has(n.id) && n.id !== atom.id && (showData || graph.atoms.find((a) => a.id === n.id)?.kind === 'Trigger'));
+    nodes.push(rules.group);
+    const visible = new Set(nodes.map((n) => n.id));
+    const edges = base.edges.filter((e) => visible.has(e.source) && visible.has(e.target)).map((e) => e.source === atom.id ? { ...e, style: { ...e.style, strokeDasharray: '3 5' } } : e);
     const dag = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-    dag.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 100 });
-    nodes.filter((n) => !n.parentId).forEach((n) => dag.setNode(n.id, { width: n.id === groupId ? 660 : 220, height: n.id === groupId ? groupHeight : 88 }));
-    edges.filter((e) => !e.id.startsWith('RuleEdge:')).forEach((e) => dag.setEdge(e.source, e.target));
-    dag.setEdge(atom.id, groupId);
+    dag.setGraph({ rankdir: 'TB', nodesep: 32, ranksep: 56 });
+    nodes.forEach((n) => dag.setNode(n.id, { width: Number(n.style?.width) || 220, height: Number(n.style?.height) || 88 }));
+    edges.forEach((e) => dag.setEdge(e.source, e.target));
     dagre.layout(dag);
-    nodes.filter((n) => !n.parentId).forEach((n) => { const p = dag.node(n.id); n.position = { x: p.x - (n.id === groupId ? 330 : 110), y: p.y - (n.id === groupId ? groupHeight / 2 : 44) }; });
-    return { nodes, edges };
-  }, [graph, language, schemas, expandedId]);
+    nodes.forEach((n) => { const p = dag.node(n.id); n.position = { x: p.x - p.width / 2, y: p.y - p.height / 2 }; });
+    return { nodes: [...nodes, ...rules.nodes], edges: [...edges, ...rules.edges] };
+  }, [graph, language, schemas, expandedId, showData]);
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
   const [flow, setFlow] = React.useState<ReactFlowInstance<Node, Edge> | null>(null);
@@ -200,16 +202,16 @@ export function AtomGraph({
       return {
         ...node,
         style: { ...node.style, opacity: inactive ? "var(--graph-inactive-opacity)" : 1, filter: inactive ? "var(--graph-inactive-filter)" : "none", transition: "filter 180ms ease, opacity 180ms ease" },
-        zIndex: atomsById.has(node.id) ? nodeIds.has(node.id) ? 1 : 0 : -1,
+        zIndex: node.type === "businessGroup" ? -1 : node.type === "businessRule" ? 2 : atomsById.has(node.id) ? nodeIds.has(node.id) ? 1 : 0 : -1,
       };
     }));
     setEdges((current) => current.map((edge) => {
-      const active = relationIds.has(edge.id) || edge.id.startsWith("RuleEdge:") && nodeIds.has(edge.source);
+      const active = relationIds.has(edge.id) || edge.id.startsWith("RuleEdge:") && !!expandedId && nodeIds.has(expandedId);
       return {
         ...edge,
-        style: { ...edge.style, opacity: active ? 1 : 0.08, stroke: active ? "var(--foreground)" : "var(--muted-foreground)", strokeWidth: active ? 2.5 : 1.25 },
+        style: { ...edge.style, opacity: active ? 1 : 0.08, stroke: edge.id.startsWith("RuleEdge:") ? edge.style?.stroke : active ? "var(--foreground)" : "var(--muted-foreground)", strokeWidth: active ? 2.5 : 1.25 },
         data: edge.data ? { ...edge.data, opacity: active ? 1 : 0.08 } : edge.data,
-        markerEnd: typeof edge.markerEnd === "object" ? { ...edge.markerEnd, color: active ? "var(--foreground)" : "var(--muted-foreground)" } : edge.markerEnd,
+        markerEnd: edge.id.startsWith("RuleEdge:") ? edge.markerEnd : typeof edge.markerEnd === "object" ? { ...edge.markerEnd, color: active ? "var(--foreground)" : "var(--muted-foreground)" } : edge.markerEnd,
         zIndex: active ? 1 : 0,
       };
     }));
@@ -226,16 +228,18 @@ export function AtomGraph({
     if (!flow || !selectedId) return;
     const compact = window.innerWidth < 640;
     void flow.fitView({
-      nodes: [{ id: selectedId }, ...layout.nodes.filter((n) => n.id.startsWith(`Rule:${selectedId}:`)).map((n) => ({ id: n.id }))],
-      padding: { top: "20%", right: compact ? "60%" : "34%", bottom: "20%", left: compact ? "2%" : "8%" },
+      nodes: expandedId ? layout.nodes.filter((n) => !n.parentId).map((n) => ({ id: n.id })) : [{ id: selectedId }],
+      padding: expandedId ? { top: "14%", right: "3%", bottom: "6%", left: "3%" } : { top: "20%", right: "5%", bottom: "20%", left: "5%" },
       minZoom: expandedId ? 0.25 : compact ? 0.78 : 0.9,
-      maxZoom: compact ? 1 : 1.2,
+      maxZoom: expandedId ? 1 : compact ? 1 : 1.2,
       duration: 320,
     });
   }, [flow, selectedId, expandedId, layout]);
 
   const selectAtom = (id: string, slice = focusSlice(graph, id)): void => {
     if (expandedId && expandedId !== id) setExpandedId(null);
+    setSelectedRule(null);
+    setShowDetails(false);
     inspect(id, slice);
     onSelect(id);
   };
@@ -263,6 +267,9 @@ export function AtomGraph({
   }, [atomsById, layout, selectedAtomId, selectedId]);
 
   const relayout = (): void => {
+    setExpandedId(null);
+    setShowDetails(false);
+    setSelectedRule(null);
     setNodes(layout.nodes);
     setEdges(layout.edges);
     setSelectedId(null);
@@ -290,25 +297,33 @@ export function AtomGraph({
       nodesConnectable={false}
       nodesDraggable
       onNodeClick={(_, node) => {
-        if (node.id.startsWith("Rule:") && expandedId) { const owner = atomsById.get(expandedId); if (owner) onOpen(owner); }
+        if (node.type === "businessRule") { setSelectedRule(node.data.rule as BusinessRule); setShowDetails(true); }
         if (atomsById.has(node.id)) selectAtom(node.id);
       }}
       onKeyDownCapture={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         const node = (event.target as HTMLElement).closest(".react-flow__node[data-id]");
         const id = node?.getAttribute("data-id");
-        if (id && atomsById.has(id)) { event.preventDefault(); selectAtom(id); }
-        else if (id?.startsWith("Rule:") && expandedId) { event.preventDefault(); const owner = atomsById.get(expandedId); if (owner) onOpen(owner); }
+        if (id && atomsById.has(id)) { event.preventDefault(); selectAtom(id); setShowDetails(true); }
+        else if (id?.startsWith("Rule:") && expandedId) { event.preventDefault(); const node = nodes.find((n) => n.id === id); if (node) { setSelectedRule(node.data.rule as BusinessRule); setShowDetails(true); } }
       }}
-      onPaneClick={clearSelection}
+      onPaneClick={expandedId ? () => setShowDetails(false) : clearSelection}
     >
+      <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
       <GraphControls onRelayout={relayout} />
-      {selected ? (
-        <Panel position="top-right" className="!m-3 w-[20rem] max-w-[calc(100%-1.5rem)] sm:w-[22rem]">
-          {selected.handler?.kind === 'sql' && selected.handler.flow?.length ? <Button className="mb-2 w-full" variant="outline" onClick={() => setExpandedId(expandedId === selected.id ? null : selected.id)}>{language.startsWith('zh') ? expandedId === selected.id ? '收合業務規則' : '在圖上展開業務規則' : expandedId === selected.id ? 'Collapse business rules' : 'Expand business rules in graph'}</Button> : null}
-          <GraphHud atom={selected} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={clearSelection} onSelect={moveAlongTrace} onOpen={onOpen} />
-        </Panel>
-      ) : null}
+      {selected ? <Panel position="top-left" className="!m-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-xl border bg-background/95 p-2 shadow-sm">
+        <span className="px-2 text-sm font-semibold">{resolveLocalizedText(selected.title, language) || selected.name}</span>
+        {selected.handler?.kind === 'sql' && selected.handler.flow?.length ? <Button size="sm" variant={expandedId ? 'secondary' : 'default'} onClick={() => { setExpandedId(expandedId === selected.id ? null : selected.id); setShowDetails(false); setSelectedRule(null); setShowData(false); }}>{language.startsWith('zh') ? expandedId ? '返回系統總覽' : '展開流程' : expandedId ? 'System overview' : 'Expand flow'}</Button> : null}
+        {expandedId ? <Button size="sm" variant="outline" aria-pressed={showData} onClick={() => setShowData(!showData)}>{language.startsWith('zh') ? showData ? '隱藏資料關聯' : '顯示資料關聯' : 'Data dependencies'}</Button> : null}
+        <Button size="sm" variant="ghost" aria-pressed={showDetails} onClick={() => { setSelectedRule(null); setShowDetails(!showDetails); }}>{language.startsWith('zh') ? '詳情' : 'Details'}</Button>
+      </Panel> : null}
+      {selected && showDetails ? <Panel position="top-right" className="!m-3 w-[20rem] max-w-[calc(100%-1.5rem)]">
+        {selectedRule ? <section aria-label={language.startsWith('zh') ? '規則詳細資料' : 'Rule details'} className="rounded-xl border bg-card p-4 shadow-lg">
+          <div className="flex items-start gap-2"><h3 className="flex-1 font-semibold">{selectedRule.title}</h3><Button size="icon" variant="ghost" aria-label={language.startsWith('zh') ? '關閉規則詳情' : 'Close rule details'} onClick={() => setShowDetails(false)}><X className="size-4" /></Button></div>
+          <p className="my-3 whitespace-pre-wrap text-sm leading-6">{selectedRule.body || selectedRule.summary}</p>
+          <Button size="sm" variant="outline" onClick={() => onOpen(selected)}>{language.startsWith('zh') ? '查看 SQL 與 manifest 依據' : 'View SQL and manifest'}</Button>
+        </section> : <GraphHud atom={selected} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={() => setShowDetails(false)} onSelect={moveAlongTrace} onOpen={onOpen} />}
+      </Panel> : null}
     </ReactFlow>
   );
 }
@@ -359,7 +374,7 @@ function layoutGraph(
         },
         ariaLabel: `${atomKindLabel(language, atom.kind)} ${atom.name}`,
         className: cn(
-          "!h-[88px] !w-[220px] !cursor-grab !rounded-xl !border-2 !bg-white !px-3 !py-2 !text-card-foreground !shadow-lg transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing dark:!bg-[#0a1124]",
+          "!h-[88px] !w-[220px] !cursor-grab !rounded-xl !border-2 !bg-card !px-3 !py-2 !text-card-foreground !shadow-sm transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing dark:!bg-card",
           atomKindNodeTone[atom.kind],
         ),
       } satisfies Node;
