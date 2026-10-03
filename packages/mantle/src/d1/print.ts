@@ -35,6 +35,9 @@ export class SqliteDeparser extends Deparser {
       const not = n.name[0].String.sval === "!~~" ? "NOT " : "";
       return `${this.visit(n.lexpr as never, ctx)} ${not}LIKE ${this.visit(pat as never, ctx)} ESCAPE ${this.visit(esc as never, ctx)}`;
     }
+    // SQLite looks through a unary sign: `ORDER BY +2` (or `-2`) is column position 2 to it and a constant to PostgreSQL
+    const sign = n.name?.[0]?.String?.sval;
+    if (n.kind === "AEXPR_OP" && !n.lexpr && (sign === "+" || sign === "-")) return `(${sign}${this.visit(n.rexpr as never, ctx)} + 0)`;
     return super.A_Expr(n, ctx);
   }
   override NullTest(n: SqlNode, ctx: any) { return super.NullTest(parenthesized("NullTest", n) as never, ctx); }

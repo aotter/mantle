@@ -96,12 +96,12 @@ it("a nested condition as an operand prints in parentheses: SQLite runs the IR, 
   } finally { await d1.dispose(); }
 });
 
-it("a literal cast in ORDER BY sorts by its value, never as a column position", async () => {
+it("a literal cast or signed constant in ORDER BY sorts by its value, never as a column position", async () => {
   const e = await engine();
   try {
     const s = site(await boot(e));
     // the IR orders by a constant, then id: the first row is 'a'; a bare 2 would sort by the second column (stock)
-    for (const cast of ["CAST('0.2' AS numeric(10,1))", "CAST('1970-01-03' AS date)"]) {
+    for (const cast of ["CAST('0.2' AS numeric(10,1))", "CAST('1970-01-03' AS date)", "+2", "(+2)"]) {
       const p = await program("view", `SELECT id FROM (SELECT id, stock FROM items ORDER BY ${cast}, id LIMIT 1) s ORDER BY id`);
       expect([cast, (await runView(s, p, { ...caller({}), role: "staff" })).rows]).toEqual([cast, [{ id: "a" }]]);
     }
