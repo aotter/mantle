@@ -15,7 +15,7 @@ function expression(node: SqlNode | undefined): string {
   }
   const e = node.A_Expr;
   if (e?.kind === 'AEXPR_OP' && e.name?.length === 1) {
-    const operand = (v: SqlNode) => v.A_Expr ? `(${expression(v)})` : expression(v);
+    const operand = (v: SqlNode) => v.A_Expr || v.BoolExpr ? `(${expression(v)})` : expression(v);
     const op = e.name[0].String.sval;
     if (!e.lexpr && e.rexpr) return `${op}(${expression(e.rexpr)})`;
     if (e.lexpr && e.rexpr) return `${operand(e.lexpr)} ${op} ${operand(e.rexpr)}`;
@@ -50,7 +50,7 @@ export function procedureFlow(stmts: readonly SqlNode[], relations?: (stmts: rea
         if (!c) return [];
         return [{
           field: target.name,
-          branches: (c.args ?? []).map(({ CaseWhen: w }: SqlNode) => ({ condition: c.arg ? `${sql(c.arg)} = ${sql(w.expr)}` : sql(w.expr), value: sql(w.result) })),
+          branches: (c.args ?? []).map(({ CaseWhen: w }: SqlNode) => ({ condition: c.arg ? `(${sql(c.arg)}) = (${sql(w.expr)})` : sql(w.expr), value: sql(w.result) })),
           otherwise: sql(c.defresult),
         }];
       }),

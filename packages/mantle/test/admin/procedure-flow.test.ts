@@ -13,4 +13,7 @@ it('projects ordered CASE values and row filters without inventing workflow bran
   const arithmetic = await compileSql('UPDATE requests SET amount = CASE WHEN (amount + 1) * 2 >= 100 THEN 1 ELSE 0 END WHERE id = input.id', { schemas: { requests: { fields: { amount: 'integer' } } }, inputs: { id: 'text' }, kind: 'procedure' });
   if (!arithmetic.ok) throw new Error(arithmetic.diagnostic.message);
   expect(procedureFlow(arithmetic.plan.stmts)[0]?.cases).toEqual([{ field: 'amount', branches: [{ condition: '((amount + 1) * 2) >= 100', value: '1' }], otherwise: '0' }]);
+  const boolean = await compileSql('UPDATE requests SET amount = CASE WHEN (approved AND funded) = FALSE THEN 0 ELSE 1 END WHERE id = input.id', { schemas: { requests: { fields: { amount: 'integer', approved: 'bool', funded: 'bool' } } }, inputs: { id: 'text' }, kind: 'procedure' });
+  if (!boolean.ok) throw new Error(boolean.diagnostic.message);
+  expect(procedureFlow(boolean.plan.stmts)[0]?.cases[0]?.branches[0]?.condition).toBe('((approved) AND (funded)) = FALSE');
 });
