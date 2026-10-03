@@ -248,6 +248,20 @@ describe("verifyPlan", () => {
       expect([sql, await compiles(sql)]).toEqual([sql, true]);
   });
 
+  it("refuses a numeric constant the parser never writes: a leading +, or a small integer as fval (`+2` is a column position to SQLite)", async () => {
+    const plan = await compile();
+    const out = async (fval: string) => (await verifyPlan(await reseal(plan, (p) => {
+      p.views.stock!.stmts[0]!.SelectStmt!.targetList = [{ ResTarget: { name: "x", val: { A_Const: { fval: { fval } } } } }] as never; return p; }), d1())).map((d) => d.message).join();
+    for (const fval of ["+2", "2", "+2.5"]) expect([fval, await out(fval)]).toEqual([fval, expect.stringContaining("a literal is one integer")]);
+    for (const fval of ["2.5", "-2.5", "1e3", "1772928000000000"]) expect([fval, await out(fval)]).toEqual([fval, expect.not.stringContaining("a literal is one integer")]);
+  });
+
+  it("refuses an interval longer than D1's microseconds keep exactly", async () => {
+    const withView = (sql: string) => MANIFESTS.replace('sql: "SELECT name, sum(stock) OVER (ORDER BY name) AS running FROM items ORDER BY name"', `sql: ${JSON.stringify(sql)}`);
+    const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withView("SELECT name FROM items WHERE now() - interval '9999999999 hours' < now()") }] });
+    expect(r.ok ? [] : r.diagnostics.map((d) => d.message).join()).toMatch(/longer than/);
+  });
+
 });
 
 describe("verifyPlan: the plan's other fields", () => {

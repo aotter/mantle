@@ -279,7 +279,9 @@ function constant(node: N): boolean {
   const only = (key: string, ok: (x: unknown) => boolean) => !!v && typeof v === 'object' && Object.keys(v).every((x) => x === key) && (!(key in v) || ok(v[key]));
   switch (k) {
     case 'ival': return only('ival', Number.isSafeInteger);
-    case 'fval': return only('fval', (x) => typeof x === 'string' && /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(x));
+    // the parser's Float: a point or exponent, or an integer past int32 (smaller ones are ival); never a sign the printers would
+    // print as `+2`, which SQLite reads as a column position in ORDER BY
+    case 'fval': return only('fval', (x) => typeof x === 'string' && /^-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(x) && (/[.eE]/.test(x) || Math.abs(Number(x)) >= 2 ** 31));
     case 'sval': return only('sval', (x) => typeof x === 'string');
     case 'boolval': return only('boolval', (x) => typeof x === 'boolean');
     case 'isnull': return v === true;

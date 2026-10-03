@@ -44,7 +44,10 @@ export function intervalMicros(text: string, typmod?: number): number {
   const unit = UNIT_US[m[2]!.toLowerCase()];
   if (!unit && /^(days?|weeks?|months?|mons?|years?|y)$/i.test(m[2]!)) throw new SqlRefusal('SQL_TYPE', `interval unit '${m[2]}' is a calendar unit (a day is 23 or 25 hours across daylight saving): bind the boundary as an input instead`);
   if (!unit) throw new SqlRefusal('SQL_TYPE', `interval '${text}' is not supported: write a number and second, minute or hour`);
-  return Math.round(Number(m[1]) * unit);
+  const micros = Math.round(Number(m[1]) * unit);
+  // D1 stores microseconds as a double: past 2^53 two different intervals would compare equal
+  if (!Number.isSafeInteger(micros)) throw new SqlRefusal('SQL_TYPE', `interval '${text}' is longer than ${Number.MAX_SAFE_INTEGER} microseconds`);
+  return micros;
 }
 
 /** D1's search table of a Schema (FTS5) and R*Tree of each geo field: the names `near()` and `search` read. */

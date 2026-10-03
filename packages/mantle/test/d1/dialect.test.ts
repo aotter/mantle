@@ -107,3 +107,15 @@ it("a literal cast or signed constant in ORDER BY sorts by its value, never as a
     }
   } finally { await e.driver.dispose(); }
 }, 120_000);
+
+it("a sign before a negative constant never prints `--`, and `true` is the boolean even beside an output named true", async () => {
+  const stmt = (val: unknown) => ({ SelectStmt: { targetList: [{ ResTarget: { val } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } });
+  const minus = (rexpr: unknown) => ({ A_Expr: { kind: "AEXPR_OP", name: [{ String: { sval: "-" } }], rexpr } });
+  for (const c of [{ ival: { ival: -2 } }, { fval: { fval: "-2.5" } }]) expect(print(stmt(minus({ A_Const: c })) as never)).not.toContain("--");
+  const e = await engine();
+  try {
+    const s = site(await boot(e));
+    const p = await program("view", `SELECT id, 0 AS "true" FROM items WHERE true ORDER BY id`);
+    expect((await runView(s, p, { ...caller({}), role: "staff" })).rows.map((r: any) => r.id)).toEqual(["a", "b", "c", "d"]);
+  } finally { await e.driver.dispose(); }
+}, 120_000);

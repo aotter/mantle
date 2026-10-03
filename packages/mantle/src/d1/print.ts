@@ -23,7 +23,10 @@ export class SqliteDeparser extends Deparser {
   }
   /** PostgreSQL prints E'a\\b' for a string with a backslash; SQLite has no E'' strings. */
   override A_Const(n: SqlNode, ctx: any) {
-    return n.sval ? `'${String(n.sval.sval ?? "").replace(/'/g, "''")}'` : super.A_Const(n, ctx);
+    if (n.sval) return `'${String(n.sval.sval ?? "").replace(/'/g, "''")}'`;
+    // SQLite resolves a bare `true`/`false` as a column or output alias of that name before the keyword
+    if (n.boolval) return n.boolval.boolval === true ? "(1 = 1)" : "(1 = 0)";
+    return super.A_Const(n, ctx);
   }
   /** `x LIKE p ESCAPE e` parses to LIKE with pg_catalog.like_escape(p, e), which SQLite has no function for. */
   override A_Expr(node: SqlNode, ctx: any) {
@@ -37,7 +40,8 @@ export class SqliteDeparser extends Deparser {
     }
     // SQLite looks through a unary sign: `ORDER BY +2` (or `-2`) is column position 2 to it and a constant to PostgreSQL
     const sign = n.name?.[0]?.String?.sval;
-    if (n.kind === "AEXPR_OP" && !n.lexpr && (sign === "+" || sign === "-")) return `(${sign}${this.visit(n.rexpr as never, ctx)} + 0)`;
+    // the operand in its own parentheses: `-` then `-2` must never print as `--`, which starts a comment
+    if (n.kind === "AEXPR_OP" && !n.lexpr && (sign === "+" || sign === "-")) return `(${sign}(${this.visit(n.rexpr as never, ctx)}) + 0)`;
     return super.A_Expr(n, ctx);
   }
   override NullTest(n: SqlNode, ctx: any) { return super.NullTest(parenthesized("NullTest", n) as never, ctx); }
