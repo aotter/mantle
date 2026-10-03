@@ -62,7 +62,11 @@
       "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./bun": {
+      "types": "./dist/bun/index.d.ts",
+      "import": "./dist/bun/index.js"
+    }
   },
   "bin": {
     "mantle": "./dist/cli/main.js"
@@ -82,7 +86,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "prepack": "node ../../scripts/sync-package-docs.mjs .",
-    "postpack": "node ../../scripts/sync-package-docs.mjs . --clean"
+    "postpack": "node ../../scripts/sync-package-docs.mjs . --clean",
+    "test:bun": "bun test/bun/native.ts"
   },
   "dependencies": {
     "@pgsql/types": "18.0.0",

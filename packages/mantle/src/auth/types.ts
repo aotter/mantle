@@ -226,8 +226,8 @@ export interface AuthSessionCache {
 export interface CreateMantleAuthOptions {
   /**
    * Better Auth's database handle for the **same** store as `driver`.
-   * Auth SQL is SQLite-shaped and expects JSON1; a non-SQLite
-   * `DatabaseDriver` is not a supported auth backend in v0.1. The two
+   * SQLite and PostgreSQL are supported; the host supplies a native Better Auth
+   * database handle and Mantle driver over the same connection store. The two
    * handles must wrap one underlying store — splitting them splits
    * schema migration from Better Auth's own reads.
    */

@@ -23,7 +23,7 @@ import { presetWarnings, writePreset } from "./preset.js";
 const FEATURES = ["mcp", "admin", "web"] as const;
 const IDENTITIES = ["mantle", "custom", "none"] as const;
 /** Where the service runs (ADR-0036). `none` writes no preset: the application wires `createMantle` itself. */
-const HOSTS = ["cloudflare", "none"] as const;
+const HOSTS = ["cloudflare", "bun", "none"] as const;
 type Feature = (typeof FEATURES)[number];
 type Identity = (typeof IDENTITIES)[number];
 type Host = (typeof HOSTS)[number];
@@ -109,8 +109,9 @@ function featureDiagnostics(root: string, config: MantleConfig): Diagnostic[] {
   need(`identity '${config.identity}'`, PACKAGES[config.identity]);
   for (const f of config.features) need(`feature '${f}'`, PACKAGES[f]);
   // a preset written now serves the staff MCP App, which @aotter/mantle-ui builds; a service already written is the application's
-  const writesPreset = (config.host ?? "cloudflare") === "cloudflare" && !!builtInOf(config.dialect) && !existsSync(join(root, "src/service.ts"));
-  if (writesPreset && builtInOf(config.dialect) === "postgres") need("dialect 'postgres' on Cloudflare", POSTGRES_PACKAGES);
+  const writesPreset = (config.host ?? "cloudflare") !== "none" && !!builtInOf(config.dialect) && !existsSync(join(root, "src/service.ts"));
+  if (writesPreset && (config.host ?? "cloudflare") === "cloudflare" && builtInOf(config.dialect) === "postgres") need("dialect 'postgres' on Cloudflare", POSTGRES_PACKAGES);
+  if (writesPreset && config.host === "bun") need("host 'bun' types", ["bun-types"]);
   if (writesPreset && config.features.includes("mcp") && config.identity !== "none" && !config.features.includes("admin")) need("the staff MCP App", ["@aotter/mantle-ui"]);
   if (config.features.includes("admin") && config.identity === "none")
     out.push(validateDiagnostic({ code: "GENERATE_FEATURE_DEPENDENCY_MISSING", severity: "error", path: "feature 'admin'", message: "feature 'admin' needs a caller identity, and identity is 'none'. Pass --identity mantle or --identity custom, or leave admin out of --features." }));
@@ -171,7 +172,7 @@ function select(saved: MantleConfig | undefined, features: string | undefined, i
   if (unknown.length) throw new Error(`--features accepts only ${FEATURES.join(", ")}; got ${unknown.join(", ")}`);
   // a flag that restates the saved axis (another spelling was refused above) keeps the saved spelling, so nothing is rewritten
   const h = saved ? saved.host ?? (host === "cloudflare" ? undefined : host) : host;
-  const d = saved ? saved.dialect ?? (dialect !== undefined && builtInOf(dialect) === "sqlite" ? undefined : dialect) : dialect;
+  const d = saved ? saved.dialect ?? (dialect !== undefined && builtInOf(dialect) === "sqlite" ? undefined : dialect) : dialect ?? (host === "bun" ? "postgres" : undefined);
   return { version: 2, identity: (identity ?? saved?.identity ?? (features === undefined ? "mantle" : "none")) as Identity, features: FEATURES.filter((f) => picked.includes(f)), ...(h ? { host: h as Host } : {}), ...(d ? { dialect: d } : {}) };
 }
 
@@ -205,7 +206,7 @@ Options:
   --manifests <dir>    Manifest directory (default: ./manifests)
   --features <list>    Comma-separated positive list of ${FEATURES.join(", ")} (default: all)
   --identity <kind>    ${IDENTITIES.join(", ")} (default: mantle; none with an explicit --features)
-  --host <host>        ${HOSTS.join(", ")} (default: cloudflare); none writes no preset
+  --host <host>        ${HOSTS.join(", ")} (default: cloudflare); bun defaults to postgres; none writes no preset
   --dialect <name>     sqlite (alias d1), postgres, or a dialect package (default: sqlite)
   --check              Write nothing; exit 1 when a generated file or ${CONFIG} is stale
   --database <file>    With --check: a SQLite file (e.g. wrangler's local D1 under .wrangler/state/v3/d1/),
@@ -258,7 +259,7 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   // the storage dry-run is the SQLite dialect's; a preset is written for the built-in dialects on Cloudflare (ADR-0036)
   const builtIn = dialect === d1;
   const host = config.host ?? "cloudflare";
-  const preset = host === "cloudflare" ? builtInOf(config.dialect) : undefined;
+  const preset = host !== "none" ? builtInOf(config.dialect) : undefined;
   if (!builtIn && values.database !== undefined) return (stderr.write(`--database is a SQLite file for the sqlite dialect; ${dialect.name} plans its own storage.\n`), 2);
   if (!compiled.ok) return (print(compiled.diagnostics), 1);
 
@@ -266,6 +267,7 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   if (missing.length) return (print(missing), 1);
   // the grammar has no rule across cron fields, so the Cloudflare preset's refusals come before anything is written
   const unmappable = Object.entries(compiled.plan.triggers).flatMap(([name, t]) => {
+    if (host === "bun" && t.source.kind === "schedule" && t.source.enabled !== false) return [`Trigger ${name}: Bun has no built-in cron dispatcher. Use host none with an explicit scheduler, or disable this Trigger before generating the Bun preset.\n`];
     if (host !== "cloudflare" || t.source.kind !== "schedule" || t.source.enabled === false) return [];
     try {
       return (toCloudflareCron(t.source.cron), []);
@@ -301,7 +303,7 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
       if (host === "cloudflare") stdout.write(`No preset for the dialect ${dialect.name}: compose src/service.ts with its storage adapter.\n`);
       return 0;
     }
-    const selection = { ...config, dialect: preset };
+    const selection = { ...config, host, dialect: preset };
     let written: string[];
     try {
       written = await writePreset(root, selection, compiled.plan);

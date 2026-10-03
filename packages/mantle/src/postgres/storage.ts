@@ -55,7 +55,7 @@ const SYSTEM_DDL = [
 ];
 
 /** One convergence at a time per database: the others wait, then find the work done. */
-const LOCK: PgStatement = { text: "SELECT pg_advisory_xact_lock(4471522036519061)" };
+const LOCK: PgStatement = { text: "SELECT pg_advisory_xact_lock(4471522036519061)::text AS locked" };
 
 /** Tables the platform creates itself (Better Auth, media, site config); a Schema may not take these names. */
 const RESERVED_TABLES = new Set([

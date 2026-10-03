@@ -394,3 +394,24 @@ describe("the service preset", () => {
     expect(await exists(dir, "src/service.ts")).toBe(true);
   }, 60_000);
 });
+
+// Bun owns native connections/assets; the composition still uses exactly the same createMantle service port.
+it('writes Bun presets for PostgreSQL and SQLite with no Cloudflare or pg imports', async () => {
+  const { presetFiles } = await import('../../src/cli/preset.js');
+  const plan = { schemas: {}, procedures: {}, triggers: {} } as any;
+  for (const dialect of ['postgres', 'sqlite'] as const) for (const identity of ['mantle', 'custom', 'none'] as const) {
+    const files = Object.fromEntries(presetFiles('/private/tmp/bun-preset', { host: 'bun', dialect, identity, features: identity === 'none' ? [] : ['admin'] }, plan));
+    expect(files['wrangler.jsonc']).toBeUndefined();
+    expect(files['src/service.ts']).toContain('@aotter/mantle/bun');
+    expect(files['src/service.ts']).not.toMatch(/@aotter\/mantle\/cloudflare|from "pg"|HYPERDRIVE|D1Database|Fetcher/);
+    expect(files['src/index.ts']).toContain('Bun.serve');
+    expect(files['src/index.ts']).toContain('headers.delete("x-mantle-client-ip")');
+    expect(files['src/index.ts']).toContain('while (pending.size)');
+    expect(files['src/service.ts']).toContain('schedules: false');
+    if (dialect === 'postgres') expect(files['src/index.ts']).toContain('prepare: false');
+    for (const [path, source] of Object.entries(files)) if (path.endsWith('.ts')) {
+      const result = ts.transpileModule(source, { fileName: path, compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }, reportDiagnostics: true });
+      expect(result.diagnostics?.filter((d) => d.category === ts.DiagnosticCategory.Error)).toEqual([]);
+    }
+  }
+});

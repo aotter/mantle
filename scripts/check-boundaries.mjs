@@ -51,7 +51,7 @@ function checkUiTokens() {
 function checkCoreCloudflareFree() {
   for (const file of listFiles(join(ROOT, "packages/mantle/src/core"), (p) => p.endsWith(".ts"))) {
     const source = stripComments(readFileSync(file, "utf8"));
-    for (const token of ["@cloudflare/", "cloudflare:", "D1Database", "KVNamespace", "R2Bucket", "ExecutionContext"]) {
+    for (const token of ["@cloudflare/", "cloudflare:", "D1Database", "KVNamespace", "R2Bucket", "ExecutionContext", "Bun.", "bun:"]) {
       if (source.includes(token)) fail(file, `core must not reference Cloudflare primitive '${token}'`);
     }
   }
@@ -66,9 +66,9 @@ function checkNextFolderImports() {
   // Core holds no engine code (ADR-0035 decision 3): SQLite lives in `d1`, and only `spec`'s front end (the built-in
   // dialect's compile side), `cloudflare` and `cli` reach it. `testing` runs over the dialect interface. `postgres` reuses
   // the SQLite dialect's subset check and codecs, and `cli` loads its compile side as a built-in (ADR-0036).
-  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], postgres: ["core", "spec", "d1"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1", "postgres/compile"] };
+  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], postgres: ["core", "spec", "d1"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], bun: ["core", "spec", "postgres", "d1"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1", "postgres/compile"] };
   const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec", "pgsql-deparser": ["d1", "postgres"] };
-  const NODE_ALLOWED = { auth: ["node:async_hooks"], testing: ["node:util"] };
+  const NODE_ALLOWED = { auth: ["node:async_hooks"], testing: ["node:util"], bun: ["node:path", "node:fs/promises"] };
   const root = join(ROOT, "packages/mantle/src");
   for (const [folder, reach] of Object.entries(folders)) {
     for (const file of listFiles(join(root, folder), (p) => p.endsWith(".ts") || p.endsWith(".tsx"))) {
