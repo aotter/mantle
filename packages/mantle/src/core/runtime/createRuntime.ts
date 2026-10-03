@@ -3,7 +3,8 @@
  * Boot checks the plan, the handlers and the storage; `invokeProcedure` is the one path every source runs through.
  */
 import { DiagnosticError, makeDiagnostic, readJsonPointer, type Diagnostic, type DiagnosticCode } from "../../spec/kernel/index.js";
-import { RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, jsonSchemaToZod, planFingerprint, type LifecycleHook, type RuntimePlan } from "../../spec/domain/index.js";
+import { RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, jsonSchemaToZod, planFingerprint, type LifecycleHook, type RuntimePlan, type TriggerManifest, ManifestParseError } from "../../spec/domain/index.js";
+import { validateTriggerSpec } from "../../spec/domain/service/TriggerSpecChecks.js";
 import type { ZodType } from "zod";
 import { systemCaller } from "../caller.js";
 import { MAX_INVOCATION_DEPTH, type HandlerContext, type Invocation, type InvocationCause, type LifecycleDispatcher, type LifecycleEvent, type MantleHandlers } from "../invocation.js";
@@ -66,6 +67,19 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   for (const name of Object.keys(args.handlers)) if (!refs.has(name)) throw fail("HANDLER_NOT_DECLARED", `${at}#/handlers/${name}`, `handler '${name}' is registered and no Procedure of the plan declares it`);
 
   const triggers = Object.entries(plan.triggers).sort(([a], [b]) => (a < b ? -1 : 1));
+  // a Trigger is checked as the CLI checks its manifest (a lifecycle hook that is not one would bind nothing), and it targets a
+  // Procedure and a Schema of this plan: a surface that cannot find one fails on every request instead
+  for (const [name, t] of triggers) {
+    const path = `${at}#/triggers/${name}`;
+    try {
+      validateTriggerSpec({ spec: { source: t.source, target: { procedure: t.procedure } } } as unknown as TriggerManifest, undefined as unknown as number); // no document index: the path names the Trigger
+    } catch (e) {
+      if (e instanceof ManifestParseError) throw fail(e.code, `${path}${e.pointer?.replace(/^\/spec/, "") ?? ""}`, e.message);
+      throw e;
+    }
+    if (!Object.hasOwn(plan.procedures, t.procedure)) throw fail("TRIGGER_TARGET_PROCEDURE_UNKNOWN", path, `Trigger '${name}' targets '${t.procedure}', which is not a Procedure of the plan`);
+    if (t.source.kind === "lifecycle" && !Object.hasOwn(plan.schemas, t.source.schema.toLowerCase())) throw fail("LIFECYCLE_SCHEMA_UNKNOWN", path, `lifecycle Trigger '${name}' watches '${t.source.schema}', which is not a Schema of the plan`);
+  }
   if (!args.schedules && triggers.some(([, t]) => t.source.kind === "schedule" && t.source.enabled !== false))
     throw fail("SCHEDULE_NOT_WIRED", at, "the plan has an enabled schedule Trigger and this entry does not wire schedules (pass schedules: true)");
 

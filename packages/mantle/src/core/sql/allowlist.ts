@@ -351,7 +351,10 @@ const isInputRef = (n: N | undefined) => n?.ColumnRef?.fields?.length === 2 && n
 type Checker = (n: N, ctx: Ctx, path: string[], at: number | undefined) => void;
 const check: Record<string, Checker> = {
   RangeVar: (n, ctx, _p, at) => {
-    const name = (n.relname as string).toLowerCase(); // SQLite names are case-insensitive, quoted or not; the context is keyed in lower case
+    // the parser folds an unquoted name and the CLI writes only lower case: an `ARTICLES` would be one Schema to the checks and
+    // another to what keys hooks and publishing by the folded name, so a relation (a Schema or a CTE reference) is lower case
+    if (typeof n.relname !== 'string' || n.relname !== n.relname.toLowerCase()) no('SQL_RELATION', `${JSON.stringify(n.relname)}: a relation is named in lower case`, at);
+    const name: string = n.relname;
     if (name.startsWith('_mantle') || name === 'input' || name === 'auth') no('SQL_RELATION', `${name} is not a declared Schema`, at);
     const reference = ctx.p.name === 'reference';
     // a `cte` tag is honored only for a CTE in scope here (the runtime never trusts an IR's tags); base has no WITH at all

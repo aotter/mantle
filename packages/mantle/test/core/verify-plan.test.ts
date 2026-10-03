@@ -4,6 +4,8 @@ import { DiagnosticError, verifyPlan } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
 import { postgresStorage } from "../../src/postgres/index.js";
 import * as pgCompile from "../../src/postgres/compile/index.js";
+import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
+import { convergeStorage } from "../../src/d1/storage.js";
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -188,6 +190,122 @@ describe("verifyPlan", () => {
     const out = await verifyPlan(await compile(), d1({ restrict }));
     expect(out.map((d) => d.path).sort()).toEqual(["plan#/procedures/add-item", "plan#/schemas/items/checks/0", "plan#/views/stock"]);
     expect(out.every((d) => d.message.includes("CLOUD_REFUSED"))).toBe(true);
+  });
+});
+
+describe("verifyPlan: the plan's other fields", () => {
+  const WRITES = `${MANIFESTS}---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: bump }
+spec:
+  input: { type: object, required: [id], properties: { id: { type: string } } }
+  output: { type: object, required: [results] }
+  handler: { sql: "UPDATE items SET stock = stock + 1 WHERE id = input.id" }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: drop }
+spec:
+  input: { type: object, required: [id], properties: { id: { type: string } } }
+  output: { type: object, required: [results] }
+  handler: { sql: "DELETE FROM items WHERE id = input.id" }
+`;
+  const plan = async () => {
+    const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: WRITES }] });
+    if (!r.ok) throw new Error(JSON.stringify(r.diagnostics));
+    return r.plan;
+  };
+  const paths = async (p: RuntimePlan) => (await verifyPlan(p, d1())).map((d) => d.path);
+  const schema = (fields: Record<string, string>, extra: object = {}) => ({ name: "", fields, names: Object.fromEntries(Object.keys(fields).map((f) => [f, f])), schema: { type: "object" }, ...extra });
+
+  it("refuses a write target or relation that is not lower case: hooks and publishing are keyed by the folded name", async () => {
+    const base = await plan();
+    expect(await verifyPlan(base, d1())).toEqual([]);
+    for (const name of ["bump", "drop"]) {
+      const upper = await reseal(base, (p) => {
+        const handler = structuredClone(p.procedures[name]!.handler) as { sql: { stmts: any[] } };
+        const stmt = handler.sql.stmts[0];
+        (stmt.UpdateStmt ?? stmt.DeleteStmt).relation.relname = "ITEMS";
+        return { ...p, procedures: { ...p.procedures, [name]: { ...p.procedures[name]!, handler } as never } };
+      });
+      expect(await paths(upper)).toEqual([`plan#/procedures/${name}`]);
+    }
+    const read = await reseal(base, (p) => {
+      const stmt = structuredClone(p.views.stock!.stmts[0]!) as any;
+      stmt.SelectStmt.fromClause[0].RangeVar.relname = "Items";
+      return { ...p, views: { ...p.views, stock: { ...p.views.stock!, stmts: [stmt] } } };
+    });
+    expect(await paths(read)).toEqual(["plan#/views/stock"]);
+  });
+
+  it("refuses a Trigger whose Procedure is not in the plan, and MCP tools a surface cannot build", async () => {
+    const base = await plan();
+    const missing = await reseal(base, (p) => ({ ...p, triggers: { t: { source: { kind: "mcp", surface: "public" }, procedure: "nope" } } }));
+    expect((await verifyPlan(missing, d1())).map((d) => [d.code, d.path])).toEqual([["TRIGGER_TARGET_PROCEDURE_UNKNOWN", "plan#/triggers/t"]]);
+    const proto = await reseal(base, (p) => ({ ...p, triggers: { t: { source: { kind: "http", method: "POST", path: "/x" }, procedure: "toString" } } }));
+    expect((await verifyPlan(proto, d1())).map((d) => d.code)).toEqual(["TRIGGER_TARGET_PROCEDURE_UNKNOWN"]);
+    const twins = await reseal(base, (p) => ({
+      ...p, procedures: { ...p.procedures, add_item: p.procedures["add-item"]! },
+      triggers: { a: { source: { kind: "mcp", surface: "staff" }, procedure: "add-item" }, b: { source: { kind: "mcp", surface: "staff" }, procedure: "add_item" } },
+    }));
+    expect(await paths(twins)).toEqual(["plan#/mcp/staff"]);
+    const paging = await reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, input: { type: "object", properties: { cursor: { type: "string" } } } } } }));
+    expect(await paths(paging)).toEqual(["plan#/mcp/staff"]);
+  });
+
+  it("refuses a lifecycle Trigger whose hooks are not hook names, or whose Schema is not in the plan: it would bind nothing", async () => {
+    const base = await plan();
+    const hook = (source: object) => reseal(base, (p) => ({ ...p, triggers: { h: { source: { kind: "lifecycle", schema: "items", on: ["before_create"], ...source }, procedure: "audit" } as never } }));
+    expect(await verifyPlan(await hook({}), d1())).toEqual([]);
+    for (const source of [{ on: ["before_creat"] }, { on: "before_create" }, { on: [] }, { schema: "nope" }, { schema: 1 }])
+      expect((await paths(await hook(source))).every((x) => x.startsWith("plan#/triggers/h"))).toBe(true);
+    for (const source of [{ on: ["before_creat"] }, { schema: "nope" }]) expect((await paths(await hook(source))).length).toBe(1);
+  });
+
+  it("refuses geo fields whose R*Trees would name one table, here and in D1 storage", async () => {
+    const base = await plan();
+    const geo = (schemas: Record<string, ReturnType<typeof schema>>) => reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, ...Object.fromEntries(Object.entries(schemas).map(([k, v]) => [k, { ...v, name: k }])) } as never }));
+    expect(await verifyPlan(await geo({ a: schema({ b: "geo" }), a_b: schema({ c: "geo" }) }), d1())).toEqual([]);
+    for (const c of [{ a: schema({ b_c: "geo" }), a_b: schema({ c: "geo" }) }, { a: schema({ g: "geo", g_node: "geo" }) }, { a: schema({ g: "geo", g_rowid: "geo" }) }]) {
+      expect((await paths(await geo(c))).some((x) => x.startsWith("plan#/schemas/a"))).toBe(true);
+      // the CLI's path: D1 storage blocks it before it creates a table
+      const r = await convergeStorage(await LocalD1.create(), Object.fromEntries(Object.entries(c).map(([k, v]) => [k, { ...v, name: k }])) as never, { fingerprint: "f" });
+      expect(r.blocked.map((b) => b.code)).toContain("STORAGE_CHANGE_BLOCKED");
+    }
+  });
+
+  it("checks field types as storage takes them: a numeric precision storage refuses is refused here", async () => {
+    const base = await plan();
+    const typed = (t: string) => reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, fields: { ...p.schemas.items!.fields, price: t } } } }));
+    for (const t of ["numeric(15, 2)", "numeric(5,0)", "date", "geo"]) expect(await verifyPlan(await typed(t), d1())).toEqual([]);
+    for (const t of ["numeric(16, 2)", "numeric(0, 0)", "numeric(3, 4)", "varchar", "Text"]) expect(await paths(await typed(t))).toEqual(["plan#/schemas/items"]);
+  });
+
+  it("refuses a TTL every read would fail on: ttl and ttlSeconds together, a whole number of seconds", async () => {
+    const base = await plan();
+    const ttl = (extra: object) => reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, fields: { ...p.schemas.items!.fields, expires: "timestamptz" }, ...extra } } }));
+    for (const ok of [{ ttl: "expires", ttlSeconds: 60 }, { ttl: "expires", ttlSeconds: 0 }]) expect(await verifyPlan(await ttl(ok), d1())).toEqual([]);
+    for (const bad of [{ ttl: "expires" }, { ttlSeconds: 60 }, { ttl: "expires", ttlSeconds: -1 }, { ttl: "expires", ttlSeconds: 1.5 }, { ttl: "expires", ttlSeconds: "60" }, { ttl: "expires", ttlSeconds: 1e15 }])
+      expect(await paths(await ttl(bad))).toEqual(["plan#/schemas/items"]);
+  });
+
+  it("checks a View's columns against the plan's Schemas: Store decodes and Admin labels by them", async () => {
+    const base = await plan();
+    expect(base.views.stock!.columns).toEqual({ name: { schema: "items", field: "name" } });
+    const cols = (columns: unknown) => reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, columns } as never } }));
+    expect(await verifyPlan(await cols({ name: { schema: "items", field: "name" }, at: { schema: "items", field: "created_at" } }), d1())).toEqual([]);
+    for (const bad of [{ name: { schema: "nope", field: "name" } }, { name: { schema: "items", field: "nope" } }, { name: { schema: "toString", field: "name" } }, { name: null }, { name: "items.name" }])
+      expect(await paths(await cols(bad))).toEqual(["plan#/views/stock/columns"]);
+  });
+
+  it("checks a View's uiSchema.list as the CLI does: lists of the View's outputs", async () => {
+    const base = await plan();
+    const ui = (uiSchema: unknown) => reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, uiSchema } as never } }));
+    expect(await verifyPlan(await ui({ list: { columns: ["name"], searchFields: ["name"], filterFields: ["running", "NAME"] } }), d1())).toEqual([]);
+    for (const bad of [{ list: { searchFields: "name" } }, { list: { filterFields: [1] } }, { list: { searchFields: ["stock"] } }, { list: { filterFields: ["nope"] } }, { list: [] }])
+      expect((await paths(await ui(bad))).every((x) => x.startsWith("plan#/views/stock/uiSchema"))).toBe(true);
+    for (const bad of [{ list: { searchFields: "name" } }, { list: { searchFields: ["stock"] } }]) expect((await paths(await ui(bad))).length).toBe(1);
   });
 });
 

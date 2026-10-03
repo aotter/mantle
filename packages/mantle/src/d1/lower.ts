@@ -1,7 +1,7 @@
 // The D1 dialect's lowering (ADR-0034 decision 8, ADR-0035 decision 6): what Core's policy rewriter hands a dialect to spell
 // in SQLite. Casts become the storage encodings, Mantle's functions become FTS5, R*Tree and `_mantle_tz` lookups, and a
 // surviving function prints as a plain call. Runs in the tenant Worker: AST in, AST out, no parser.
-import { SqlRefusal as Refused, intervalMicros, parseNumeric, type SqlNode as N } from '../spec/domain/index.js';
+import { SqlRefusal as Refused, ftsTableName, geoTreeName, intervalMicros, parseNumeric, type SqlNode as N } from '../spec/domain/index.js';
 import { S, num, ref as col, target as res } from '../core/sql/ast.js';
 import type { BindContext } from '../core/sql/compile.js';
 import type { PolicyLowering, LoweringScope } from '../core/sql/policy.js';
@@ -77,7 +77,7 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
       const { schema, def, searchQuery } = scope.alias(alias);
       if (!def.search?.length) throw new Refused('SQL_FUNCTION', `${schema} declares no search fields`);
       scope.seen('search');
-      const fts = q(`_mantle_fts_${schema}`), a = q(alias);
+      const fts = q(ftsTableName(schema)), a = q(alias);
       const query = scope.tx(f === 'mantle.search' ? args[1] : searchQuery ?? (() => { throw new Refused('SQL_FUNCTION', `mantle.search_rank(${alias}) needs a mantle.search(${alias}, ...) in the same query`); })());
       const phrase = `'"' || replace(__q, '"', '""') || '"'`; // a quoted phrase: FTS5 operators in the query are literal. `fts = q` is FTS5's spelling of `fts MATCH q`; PostgreSQL's grammar has no MATCH
       if (f === 'mantle.search_rank') return sql(`coalesce((SELECT bm25(${fts}) FROM ${fts} WHERE ${fts} = ${phrase} AND rowid = ${a}._rid), 0)`, { __q: query });
@@ -97,7 +97,7 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
       scope.seen('near');
       const meters = Number(args[3]!.A_Const.ival?.ival ?? args[3]!.A_Const.fval?.fval);
       const b = (which: BoxBind['box']) => scope.param({ k: 'dialect', box: which, lat: argOf(latN!, scope), lng: argOf(lngN!, scope), meters } satisfies BoxBind);
-      const geo = q(`_mantle_geo_${schema}_${fld}`);
+      const geo = q(geoTreeName(schema, fld));
       return sql(`(${a}._rid IN (SELECT id FROM ${geo} WHERE minLat >= __b0 AND maxLat <= __b1 AND minLng >= __b2 AND maxLng <= __b3) AND ${dist} <= ${meters})`,
         { ...sub, __b0: b('minLat'), __b1: b('maxLat'), __b2: b('minLng'), __b3: b('maxLng') });
     }

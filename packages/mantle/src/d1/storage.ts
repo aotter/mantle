@@ -4,7 +4,7 @@
  * are reported and never dropped. STRICT tables, checks as triggers, and the FTS5 / R*Tree tables that back
  * `search` and `format: geo` are Mantle's own and are rebuilt when their declaration changes.
  */
-import { hasSubLink, parseNumeric, type SqlNode } from "../spec/domain/index.js";
+import { ftsTableName, geoTreeName, hasSubLink, parseNumeric, sideTableClashes, type SqlNode } from "../spec/domain/index.js";
 import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { print } from "./print.js";
@@ -89,11 +89,11 @@ function desired(name: string, s: StorageSchema): Desired {
   });
   const virtuals: Desired["virtuals"][number][] = [];
   if (s.search?.length) {
-    const fts = q(`_mantle_fts_${name}`);
+    const fts = q(ftsTableName(name));
     const f = s.search.map(q).join(", ");
     const n = s.search.map((c) => `new.${q(c)}`).join(", ");
     const o = s.search.map((c) => `old.${q(c)}`).join(", ");
-    virtuals.push({ name: `_mantle_fts_${name}`, sql: `CREATE VIRTUAL TABLE ${fts} USING fts5(${f}, content=${lit(name)}, content_rowid='_rid', tokenize='trigram')`, rebuild: `INSERT INTO ${fts} (${fts}) VALUES ('rebuild')` });
+    virtuals.push({ name: ftsTableName(name), sql: `CREATE VIRTUAL TABLE ${fts} USING fts5(${f}, content=${lit(name)}, content_rowid='_rid', tokenize='trigram')`, rebuild: `INSERT INTO ${fts} (${fts}) VALUES ('rebuild')` });
     triggers.push(
       { name: `_mantle_fts_${name}_i`, sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_i`)} AFTER INSERT ON ${t} BEGIN INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END` },
       { name: `_mantle_fts_${name}_d`, sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_d`)} AFTER DELETE ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); END` },
@@ -103,7 +103,7 @@ function desired(name: string, s: StorageSchema): Desired {
   // one R*Tree per geo field: near() reads the tree of the field it names
   for (const [geo, ty] of Object.entries(s.fields)) {
     if (ty !== "geo") continue;
-    const tree = `_mantle_geo_${name}_${geo}`;
+    const tree = geoTreeName(name, geo);
     const g = q(tree);
     const la = q(`${geo}_lat`);
     const ln = q(`${geo}_lng`);
@@ -215,6 +215,9 @@ async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, Storag
   // a dry run creates nothing, so on a database Mantle never booted the registry does not exist yet
   const owned = !byName.has("_mantle_schema_tables") ? [] : (await driver.batch([{ sql: "SELECT name FROM _mantle_schema_tables" }]))[0]!.rows;
   const ownedNames = new Set(owned.map((r) => String(r.name).toLowerCase()));
+
+  // a search or geo table is named for its Schema (and field): two declarations that would name one object are refused
+  for (const c of sideTableClashes(plan)) block(c.schema, c.message);
 
   for (const [name, schema] of Object.entries(plan)) {
     const d = desired(name, schema);

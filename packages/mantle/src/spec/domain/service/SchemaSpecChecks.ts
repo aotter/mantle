@@ -4,6 +4,7 @@ import { ManifestParseError, V01_LIFECYCLE_MODES, escapeJsonPointerSegment, reje
 import { checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes, schemaIndexDiagnosticCode } from "./SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
+import { MAX_TTL_SECONDS, isTtlSeconds } from "./SqlTypes.js";
 
 export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   const s = m.spec as unknown as Record<string, unknown>;
@@ -101,8 +102,8 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
     const types = property && (typeof property["type"] === "string" ? [property["type"]] : property["type"]);
     if (typeof field !== "string" || !field || !property || property["format"] !== "date-time" ||
       !Array.isArray(types) || !types.includes("string") || types.some((type) => type !== "string" && type !== "null") ||
-      typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0 || seconds > Number.MAX_SAFE_INTEGER / 1000) {
-      throw new ManifestParseError("Schema.spec.ttl requires a top-level date-time string field and finite nonnegative expireAfterSeconds", idx, "/spec/ttl", "SCHEMA_TTL_INVALID");
+      !isTtlSeconds(seconds)) {
+      throw new ManifestParseError(`Schema.spec.ttl requires a top-level date-time string field and expireAfterSeconds a whole number from 0 to ${MAX_TTL_SECONDS}`, idx, "/spec/ttl", "SCHEMA_TTL_INVALID");
     }
   }
   const propertyNames = properties && typeof properties === "object" && !Array.isArray(properties)

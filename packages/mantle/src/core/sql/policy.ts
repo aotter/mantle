@@ -431,6 +431,7 @@ export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const ast = tx(stmt, c);
   const t = Object.keys(stmt)[0]!;
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
-  const schema = verb ? stmt[t].relation.relname : undefined;
+  // the Schema as hooks, publishing and the context key it: SQL folds the name (the allowlist admits only a lower-case one)
+  const schema = verb ? String(stmt[t].relation.relname).toLowerCase() : undefined;
   return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked: !!schema && !!opts.returning?.has(schema), publish: opts.status === 'published' };
 }
