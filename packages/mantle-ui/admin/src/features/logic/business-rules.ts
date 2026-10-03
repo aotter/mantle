@@ -1,7 +1,7 @@
 import type { DeveloperAtom, DeveloperSchemaModel, SqlLogicNode } from '../../lib/types';
 import type { AdminLanguage } from '../../app/preferences';
 import { resolveLocalizedText } from '../../lib/localized-text';
-import { enumOptions, moneyMinorHint, formatMoneyMinor } from '../../../../src/react/values';
+import { enumOptions, moneyMinorHint } from '../../../../src/react/values';
 
 export interface BusinessRule {
   kind: 'operation' | 'case';
@@ -19,17 +19,21 @@ export function businessRules(atom: DeveloperAtom, schemas: readonly DeveloperSc
   if (atom.handler?.kind !== 'sql') return [];
   const zh = language.startsWith('zh');
   return (atom.handler.flow ?? []).flatMap((statement) => {
-    const model = schemas.find((s) => s.name === statement.table);
+    const model = schemas.find((s) => s.name.toLowerCase() === statement.table?.toLowerCase());
     const name = model ? resolveLocalizedText(model.title, language) : statement.table;
     const fields = model?.schema.properties ?? {};
-    const fieldTitle = (name: string) => resolveLocalizedText(fields[name]?.title ?? null, language) || name;
+    const fieldSchema = (name: string) => {
+      const key = Object.keys(fields).find((key) => key.toLowerCase() === name.toLowerCase());
+      return key === undefined ? undefined : fields[key];
+    };
+    const fieldTitle = (name: string) => resolveLocalizedText(fieldSchema(name)?.title ?? null, language) || name;
     const unknown = zh ? '其他程式條件或值（查看詳情）' : 'Other program-defined condition or value (see details)';
     // ponytail: limited structural wording; extend SQL coverage here when a real manifest needs it.
     const expr = (n: SqlLogicNode, field?: string): string => {
       const children = n.children.map((child) => expr(child, field));
-      if (n.kind === 'value' && fields[n.label]) return fieldTitle(n.label);
+      if (n.kind === 'value' && fieldSchema(n.label)) return fieldTitle(n.label);
       if (n.label === 'auth.uid' && n.kind === 'function') return zh ? '目前使用者的識別碼' : 'Current user ID';
-      if (n.label.startsWith('input.')) return zh ? '本次輸入值' : 'Input value';
+      if (n.kind === 'value' && n.label.startsWith('input.')) return zh ? '本次輸入值' : 'Input value';
       if (n.kind === 'expression' && children.length === 2) {
         const operators: Record<string, string> = zh ? { '<': '小於', '>': '大於', '<=': '小於或等於', '>=': '大於或等於', '=': '等於', '<>': '不等於' } : { '<': 'is less than', '>': 'is greater than', '<=': 'is at most', '>=': 'is at least', '=': 'equals', '<>': 'differs from' };
         if (operators[n.label]) { const right = expr(n.children[1]!, n.children[0]?.label); return children[0] === unknown || right === unknown ? unknown : `${children[0]} ${operators[n.label]} ${right}`; }
@@ -39,16 +43,28 @@ export function businessRules(atom: DeveloperAtom, schemas: readonly DeveloperSc
       if (n.kind === 'subquery' && n.label === 'EXISTS') return zh ? '存在符合條件的資料' : 'Matching data exists';
       if (n.kind === 'value' && n.label === 'NULL') return zh ? '空值' : 'Empty value';
       if (n.kind === 'value' && /^-?\d+(\.\d+)?$/.test(n.label)) {
-        const value = Number(n.label);
-        if (field && moneyMinorHint(fields[field]) && Number.isSafeInteger(value)) {
-          const currencies = enumOptions(fields.currency);
-          return formatMoneyMinor(value, currencies?.length === 1 ? currencies[0]!.value : undefined) || n.label;
+        if (field && moneyMinorHint(fieldSchema(field))) {
+          // A SQL threshold must never be rounded by Number or currency display rules.
+          const value = Number(n.label);
+          if (/^-?\d+$/.test(n.label) && Number.isSafeInteger(value)) {
+            const digits = String(Math.abs(value)).padStart(3, '0');
+            const exact = `${value < 0 ? '-' : ''}${digits.slice(0, -2)}.${digits.slice(-2)}`;
+            const currencies = enumOptions(fieldSchema('currency'));
+            const currency = currencies?.length === 1 ? currencies[0]!.value : undefined;
+            let formatter: Intl.NumberFormat;
+            try { formatter = new Intl.NumberFormat(undefined, currency ? { style: 'currency', currency } : {}); }
+            catch { formatter = new Intl.NumberFormat(); }
+            const parts = formatter.formatToParts(value / 100);
+            const rendered = `${parts.some((p) => p.type === 'minusSign') ? '-' : ''}${parts.filter((p) => p.type === 'integer').map((p) => p.value).join('')}.${parts.find((p) => p.type === 'fraction')?.value ?? ''}`;
+            if (rendered.replace(/0+$/, '') === exact.replace(/0+$/, '')) return formatter.format(value / 100);
+          }
+          return `${n.label} (${zh ? 'SQL 原值' : 'raw SQL value'})`;
         }
         return n.label;
       }
       if (n.kind === 'value' && /^'.*'$/.test(n.label)) {
         const value = n.label.slice(1, -1).replace(/''/g, "'");
-        const options = (enumOptions(field ? fields[field] : undefined) ?? []).filter((o) => o.value === value && o.title);
+        const options = (enumOptions(field ? fieldSchema(field) : undefined) ?? []).filter((o) => o.value === value && o.title);
         if (options.length === 1) return resolveLocalizedText(options[0]!.title!, language) || value;
       }
       return unknown;
@@ -82,10 +98,12 @@ export function businessRules(atom: DeveloperAtom, schemas: readonly DeveloperSc
           }).join('\n'),
         });
       }
-      // ponytail: nested expressions stay in SQL details; don't project them as independent decisions.
-      if (n.kind !== 'case' && n.kind !== 'subquery' && n.kind !== 'statement') n.children.forEach((child) => cases(child, n.kind === 'output' ? n.label : field));
     };
-    outputs.forEach((output) => cases(output));
+    // Wrapped CASE results are operands, not the values assigned to this field.
+    outputs.forEach((output) => {
+      const value = output.children[0];
+      if (value?.kind === 'case') cases(value, output.label);
+    });
     return rules;
   });
 }
