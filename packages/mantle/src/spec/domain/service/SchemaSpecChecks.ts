@@ -454,7 +454,8 @@ export function unsafePattern(pattern: string): string | undefined {
  * that repeat a variable number of times — `*`, `+`, `?`, `{m,}` and `{m,n}` with m ≠ n — outside character classes and escapes (a
  * regex can split a string between k of them about n^k ways: `^a*a*a*$`), plus one when the pattern does not start with `^`, since
  * an unanchored pattern is retried at every start offset. `branches` multiplies the alternatives of every alternation (`(a|b)(c|d)`
- * tries up to 4 paths). Refused shapes aside (`unsafePattern`), the work is at most `branches × n^exponent`.
+ * tries up to 4 paths). A guard against accidental catastrophic backtracking, not a proof of bounded work: fixed counts,
+ * lookarounds and many patterned strings in one value cost more than the estimate. Untrusted plans need a per-request CPU limit.
  */
 export function patternCost(pattern: string): { exponent: number; branches: number } {
   const { variable, branches, anchored } = scanPattern(pattern);

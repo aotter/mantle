@@ -88,6 +88,12 @@ refused before its pattern runs. The message names the largest maxLength the
 pattern allows; lower it, anchor the pattern with `^`, or use fewer variable
 quantifiers or alternatives.
 
+These checks catch the patterns that backtrack catastrophically by accident;
+they are a guard, not a proof that every accepted pattern is fast. Fixed
+counts (`{1000}`), lookarounds and arrays of patterned strings still cost
+work the estimate leaves out, so keep patterns short and anchored, and a host
+that runs plans it does not trust bounds CPU per request.
+
 A slug is `{ type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }`. It
 accepts leading, trailing and doubled hyphens; to refuse them on a Schema
 field, add `checks: ["slug NOT LIKE '-%' AND slug NOT LIKE '%-' AND slug NOT LIKE '%--%'"]`.
