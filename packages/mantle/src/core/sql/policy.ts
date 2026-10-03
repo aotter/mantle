@@ -157,7 +157,7 @@ function wrap(rv: N, c: C): N {
     if (!c.ctes.some((m) => m.has(rv.relname))) throw new Refused('SQL_RELATION', `${rv.relname}: a cte reference is not defined in scope`);
     return { RangeVar: rv };
   }
-  const s = c.schemas[rv.relname];
+  const s = c.schemas[String(rv.relname).toLowerCase()];
   if (!s) throw new Refused('SQL_RELATION', `${rv.relname} is not a declared Schema`);
   if (rv.mantle === 'system') return { RangeVar: rv };
   if (rv.mantle !== 'table') throw new Refused('SQL_RELATION', `${rv.relname}: a relation that is neither a Schema nor a CTE`);
@@ -341,7 +341,7 @@ function expandStar(n: N, info: SelInfo, c: C): N {
     const f = t.ResTarget.val?.ColumnRef?.fields;
     if (!f?.at(-1)?.A_Star) return [t];
     // a bare `*` over anything but Schemas (a FROM subquery, json_each, a CTE) has no declared columns to expand to: refused, not emptied
-    if (f.length !== 2 && (n.fromClause ?? []).some((x: N) => relsOf(x).some((r) => !r.RangeVar || !c.schemas[r.RangeVar.relname] || r.RangeVar.mantle !== 'table')))
+    if (f.length !== 2 && (n.fromClause ?? []).some((x: N) => relsOf(x).some((r) => !r.RangeVar || !c.schemas[String(r.RangeVar.relname).toLowerCase()] || r.RangeVar.mantle !== 'table')))
       throw new Refused('SQL_SHAPE', 'SELECT * reads a subquery, json_each or a CTE: name the columns');
     const aliases = f.length === 2 ? [f[0].String.sval] : [...info.scope.keys()];
     return aliases.flatMap((a) => {
@@ -368,7 +368,7 @@ function dmlScope(rel: N, c: C) {
 }
 
 function update(n: N, c: C): N {
-  const s = c.schemas[n.relation.relname]!, a = alias$(n.relation);
+  const s = c.schemas[String(n.relation.relname).toLowerCase()]!, a = alias$(n.relation);
   c.seen?.add('update-target');
   dmlScope(n.relation, c);
   const out = deep(n, c, 'UpdateStmt');
@@ -379,7 +379,7 @@ function update(n: N, c: C): N {
   return { UpdateStmt: out };
 }
 function del(n: N, c: C): N {
-  const s = c.schemas[n.relation.relname]!, a = alias$(n.relation);
+  const s = c.schemas[String(n.relation.relname).toLowerCase()]!, a = alias$(n.relation);
   c.seen?.add('delete-target');
   dmlScope(n.relation, c);
   const out = deep(n, c, 'DeleteStmt');
@@ -389,7 +389,7 @@ function del(n: N, c: C): N {
   return { DeleteStmt: out };
 }
 function insert(n: N, c: C): N {
-  const s = c.schemas[n.relation.relname]!;
+  const s = c.schemas[String(n.relation.relname).toLowerCase()]!;
   c.seen?.add('insert-target');
   const out = deep(n, c, 'InsertStmt');
   const named = (x: string) => n.cols.some((r: N) => r.ResTarget.name === x);

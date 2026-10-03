@@ -37,7 +37,7 @@ async function verify(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "di
   } catch (e) {
     if (e !== BOOTED) throw e;
   }
-  const out: Diagnostic[] = [];
+  const out: Diagnostic[] = [...schemaNames(plan)];
   const check = (path: string, stmts: readonly SqlNode[], inputs: Readonly<Record<string, string>>, kind: "view" | "procedure", mode: Mode) => {
     try {
       compileProgram(stmts, { dialect: storage.dialect, schemas: plan.schemas, inputs, kind, mode });
@@ -57,5 +57,30 @@ async function verify(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "di
     }
   for (const [name, v] of Object.entries(plan.views)) check(`plan#/views/${name}`, v.stmts, v.inputs, "view", v.surface === "public" ? "public" : "caller");
   for (const [name, p] of Object.entries(plan.procedures)) if ("sql" in p.handler) check(`plan#/procedures/${name}`, p.handler.sql.stmts, p.inputs, "procedure", "caller");
+  return out;
+}
+
+const NATIVE = new Set(["id", "version", "status", "author_id", "created_at", "updated_at"]);
+const TYPE = /^(text|integer|real|bool|json|timestamptz|date|geo|numeric\(\d+, ?\d+\))$/;
+
+/**
+ * A Schema's names as the CLI writes them: its key, fields, scope, ttl, search, unique and index columns lower case, and each one
+ * a declared field (or a native column). SQL folds names, the checks compare folded names and storage quotes them, so a plan whose
+ * `Items` and `items`, or scope `Owner` and field `owner`, are two things to one layer and one to another is refused here.
+ */
+function schemaNames(plan: RuntimePlan): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const [key, s] of Object.entries(plan.schemas)) {
+    const bad = (what: string) => out.push(refused(`plan#/schemas/${key}`, `SQL_SHAPE: ${what}`));
+    const fields = s.fields ?? {};
+    const isName = (x: unknown): x is string => typeof x === "string" && x.length > 0 && x === x.toLowerCase();
+    const known = (x: unknown) => isName(x) && (Object.hasOwn(fields, x) || NATIVE.has(x));
+    if (!isName(key) || typeof s.name !== "string" || s.name.toLowerCase() !== key) bad("a Schema's key is its name in lower case");
+    for (const [f, t] of Object.entries(fields)) if (!isName(f) || NATIVE.has(f) || typeof t !== "string" || !TYPE.test(t)) bad(`field ${JSON.stringify(f)} is a lower-case name with a Mantle type`);
+    for (const [f, n] of Object.entries(s.names ?? {})) if (!Object.hasOwn(fields, f) || typeof n !== "string" || n.toLowerCase() !== f) bad(`names[${JSON.stringify(f)}] names a field`);
+    if (s.scope !== undefined && !(isName(s.scope) && Object.hasOwn(fields, s.scope))) bad("scope is a declared field");
+    if (s.ttl !== undefined && !known(s.ttl)) bad("ttl is a declared field");
+    for (const cols of [...(s.search ? [s.search] : []), ...(s.unique ?? []), ...(s.indexes ?? [])]) if (!Array.isArray(cols) || !cols.length || !cols.every(known)) bad("search, unique and index columns are declared fields");
+  }
   return out;
 }

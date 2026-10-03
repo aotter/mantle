@@ -340,9 +340,10 @@ function child(c: N, w: Walk, path: string[], k: string, loc: number | undefined
 
 /** A cast's type: `t` or `pg_catalog.t`, read as the lowerings and printers read it (the last name part). */
 const castType = (typeName: N): string => {
-  const names = sv(typeName?.names ?? []).split('.');
-  if (names.length === 2 ? names[0] !== 'pg_catalog' : names.length !== 1) no('SQL_TYPE', `a cast names one type: ${names.join('.')}`);
-  return names.at(-1)!;
+  const names: unknown[] = (typeName?.names ?? []).map((n: N) => n?.String?.sval);
+  const ok = names.every((x) => typeof x === 'string' && /^[a-z_][a-z0-9_]*$/.test(x)) && (names.length === 1 || (names.length === 2 && names[0] === 'pg_catalog'));
+  if (!ok) no('SQL_TYPE', `a cast names one type: ${JSON.stringify(names)}`);
+  return names.at(-1) as string;
 };
 const isConst = (n: N | undefined) => !!n?.A_Const;
 const isInputRef = (n: N | undefined) => n?.ColumnRef?.fields?.length === 2 && n.ColumnRef.fields[0].String?.sval === 'input';
@@ -364,7 +365,7 @@ const check: Record<string, Checker> = {
     const f = sv(n.fields), last = f.split('.').pop()!.toLowerCase();
     if (n.fields.length > 2) no('SQL_COLUMN', `${f}: at most alias.column`, at);
     if (['rowid', 'oid', '_rowid_', '_rid'].includes(last)) no('SQL_COLUMN', `${last} is not addressable`, at);
-    if (Object.values(ctx.schemas).some((s) => s.scope === last)) no('SQL_COLUMN', `${f}: the scope column is not addressable`, at);
+    if (Object.values(ctx.schemas).some((s) => s.scope?.toLowerCase() === last)) no('SQL_COLUMN', `${f}: the scope column is not addressable`, at);
     if (f.startsWith('input.') && !(last in ctx.inputs)) no('SQL_COLUMN', `${f} is not a declared input`, at);
     if (ctx.p.name === 'base' && SQLITE_ONLY_KEYWORDS.has(last)) no('SQL_UNSUPPORTED', `${last} is an SQLite keyword: the printer would not quote it`, at);
     if (last !== '*' && !f.startsWith('input.') && !ctx.known!.has(last)) no('SQL_COLUMN', `${f} is not a declared field`, at);
@@ -555,7 +556,7 @@ function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean, values?: N[]) {
     const at = firstLoc(r) ?? firstLoc(rel);
     const name = String(r.name).toLowerCase();
     const scopedId = insert && name === 'id' && s?.scope;
-    if (name === s?.scope || SYSTEM.has(name) || (!insert && name === 'id') || scopedId)
+    if (name === s?.scope?.toLowerCase() || SYSTEM.has(name) || (!insert && name === 'id') || scopedId)
       no('SQL_WRITE', `${r.name} is filled by Mantle and cannot be written${scopedId ? ' (a scoped Schema generates its ids)' : ''}`, at);
     const cols = Object.entries(s?.fields ?? {}).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
     if (name !== 'id' && !cols.includes(name)) no('SQL_WRITE', `${rel.relname} has no field ${r.name}`, at);

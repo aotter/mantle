@@ -118,7 +118,7 @@ describe("verifyPlan", () => {
     const emptyBound = { A_Expr: { ...oneBound.A_Expr, rexpr: { List: { items: [zero, {}] } } } };
     const emptyIn = { A_Expr: { kind: "AEXPR_IN", name: [{ String: { sval: "=" } }], lexpr: col, rexpr: { List: { items: [{}] } } } };
     const castOf = (names: string[]) => ({ A_Expr: { kind: "AEXPR_OP", name: [{ String: { sval: ">" } }], lexpr: col, rexpr: { TypeCast: { arg: { A_Const: { sval: { sval: "1" } } }, typeName: { names: names.map((sval) => ({ String: { sval } })), typemod: -1 } } } } });
-    for (const where of [oneBound, not2, emptyBound, emptyIn, castOf(["inpg_catalog", "terval"])]) {
+    for (const where of [oneBound, not2, emptyBound, emptyIn, castOf(["inpg_catalog", "terval"]), castOf(["pg_catalog.timestamptz"])]) {
       const p2 = await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [where] } } }));
       expect((await verifyPlan(p2, d1())).map((d) => d.path)).toEqual(["plan#/schemas/items/checks/0"]);
     }
@@ -166,6 +166,15 @@ describe("verifyPlan", () => {
     for (const p of forged) expect((await verifyPlan(p, pg())).length).toBeGreaterThan(0);
     const nonNode = await reseal(await compile(), (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [null as never] } } }));
     expect((await verifyPlan(nonNode, d1())).map((d) => d.path)).toEqual(["plan#/schemas/items/checks/0"]);
+  });
+
+  it("refuses Schema names that are not the CLI's: one layer folds them and another does not", async () => {
+    const plan = await compile();
+    const twin = await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, Items: { ...p.schemas.items!, name: "Items", scope: undefined } } }));
+    const scope = await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, scope: "Owner", fields: { ...p.schemas.items!.fields, Owner: "text" } } } }));
+    const index = await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, indexes: [["nope"]] } } }));
+    for (const p of [twin, scope, index]) expect((await verifyPlan(p, d1())).some((d) => d.path.startsWith("plan#/schemas/"))).toBe(true);
+    expect((await verifyPlan(plan, d1())).length).toBe(0);
   });
 
   it("refuses a malformed plan with a diagnostic, not an exception", async () => {
