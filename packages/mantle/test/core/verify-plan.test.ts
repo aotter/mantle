@@ -218,6 +218,9 @@ describe("verifyPlan", () => {
       const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck(c) }] });
       expect([c, r.ok ? [] : r.diagnostics.map((d) => d.code)]).toEqual([c, ["SQL_SHAPE"]]);
     }
+    // `~~` written as an operator is not LIKE to SQLite: refused, while LIKE itself stays
+    for (const c of ["name ~~ 'a%'", "name !~~ 'a%'"]) expect((await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck(c) }] })).ok, c).toBe(false)
+    expect((await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck("name LIKE 'a%' AND name NOT LIKE '%b'") }] })).ok).toBe(true)
     const ok = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck("length(lower(name)) > 0") }] });
     if (!ok.ok) throw new Error(JSON.stringify(ok.diagnostics));
     expect(await verifyPlan(ok.plan, d1())).toEqual([]);

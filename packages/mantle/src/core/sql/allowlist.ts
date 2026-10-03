@@ -77,7 +77,8 @@ export const ENUM: Record<string, (string | number | boolean)[]> = {
   'IndexElem.ordering': ['SORTBY_DEFAULT'], 'IndexElem.nulls_ordering': ['SORTBY_NULLS_DEFAULT'],
 };
 
-const OPS = new Set(['=', '<>', '!=', '<', '>', '<=', '>=', '+', '-', '*', '/', '%', '||', '->>', '~~', '!~~']);
+// LIKE is an AEXPR_LIKE node, checked below; `~~` written as a plain operator prints as itself, which SQLite cannot parse
+const OPS = new Set(['=', '<>', '!=', '<', '>', '<=', '>=', '+', '-', '*', '/', '%', '||', '->>']);
 /** scalar and aggregate functions. `pg_catalog.` is stripped before the lookup. */
 export const FUNCS = new Set([
   'count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object', 'row_number', 'rank',
