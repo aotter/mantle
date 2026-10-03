@@ -16,7 +16,7 @@ const ATOMIC = new Set(["ColumnRef", "A_Const", "ParamRef", "FuncCall", "TypeCas
 const atomic = (x: N | undefined) => !x || typeof x !== "object" || Object.keys(x).some((k) => ATOMIC.has(k)) ||
   (x.SubLink && ["EXPR_SUBLINK", "ARRAY_SUBLINK"].includes(x.SubLink.subLinkType));
 /** `x` in parentheses: the printers' `Raw` prints its parts inside `( )`. */
-const paren = (x: N | undefined) => (atomic(x) ? x : { Raw: { parts: [x] } });
+export const paren = (x: N | undefined) => (atomic(x) ? x : { Raw: { parts: [x] } });
 
 /**
  * An operator, test or `IN (subquery)` with each non-atomic operand in parentheses. pgsql-deparser prints the operands of BETWEEN,

@@ -10,7 +10,7 @@
 import { Deparser } from "pgsql-deparser";
 import type { SqlNode as N } from "../spec/domain/index.js";
 import type { StorageSchema } from "../core/dialect.js";
-import { S, parenthesized } from "../core/sql/ast.js";
+import { S, paren, parenthesized } from "../core/sql/ast.js";
 import { cast } from "./lower.js";
 
 export interface RawExpr { readonly parts: readonly (string | N)[] }
@@ -20,6 +20,12 @@ class PgDeparser extends Deparser {
   override NullTest(n: N, ctx: any) { return super.NullTest(parenthesized("NullTest", n) as never, ctx); }
   override BooleanTest(n: N, ctx: any) { return super.BooleanTest(parenthesized("BooleanTest", n) as never, ctx); }
   override SubLink(n: N, ctx: any) { return super.SubLink(parenthesized("SubLink", n) as never, ctx); }
+  /** The parser's `pg_catalog.*` calls print as SQL syntax (`ts AT TIME ZONE zone`, `OVERLAPS`), not a call: operands and all in parentheses. */
+  override FuncCall(n: N, ctx: any) {
+    // like_escape is the ESCAPE of a LIKE, printed there with its operands already parenthesized
+    if (n.funcname?.length !== 2 || n.funcname[0]?.String?.sval !== "pg_catalog" || n.funcname[1]?.String?.sval === "like_escape") return super.FuncCall(n, ctx);
+    return `(${super.FuncCall({ ...n, args: n.args?.map(paren) } as never, ctx)})`;
+  }
   /** Mantle's own lowerings are written as PostgreSQL text with sub-ASTs spliced in (see `sql` in lower.ts). */
   Raw(n: RawExpr, ctx: any) {
     return `(${n.parts.map((p) => (typeof p === "string" ? p : this.visit(p as never, ctx))).join("")})`;
