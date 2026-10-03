@@ -227,6 +227,9 @@ describe("verifyPlan", () => {
     const sealed = await reseal(ok.plan, (p) => { p.schemas.items!.checks = [uid as never]; return p; });
     expect((await verifyPlan(sealed, d1())).map((d) => d.message).join()).toMatch(/a check may call only lower, upper, length, abs: auth\.uid\(\)/);
     await expect(createMantleRuntime({ plan: sealed, handlers: { audit: () => ({}) }, storage: sqliteStorage(await LocalD1.create()) })).rejects.toThrow(/a check may call only/);
+    // a qualified name is printed as written, which SQLite cannot call
+    const qualified = { ...uid, A_Expr: { ...uid.A_Expr, rexpr: { FuncCall: { funcname: [{ String: { sval: "pg_catalog" } }, { String: { sval: "lower" } }], args: [{ ColumnRef: { fields: [{ String: { sval: "name" } }] } }] } } } };
+    expect((await verifyPlan(await reseal(ok.plan, (p) => { p.schemas.items!.checks = [qualified as never]; return p; }), d1())).map((d) => d.message).join()).toMatch(/pg_catalog\.lower\(\) is printed/);
     const star = { ...uid, A_Expr: { ...uid.A_Expr, rexpr: { FuncCall: { funcname: [{ String: { sval: "lower" } }], agg_star: true } } } };
     expect((await verifyPlan(await reseal(ok.plan, (p) => { p.schemas.items!.checks = [star as never]; return p; }), d1())).map((d) => d.message).join()).toMatch(/takes one argument/);
   });

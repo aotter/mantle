@@ -100,8 +100,11 @@ export function storageColumnClash(fields: Readonly<Record<string, string>>): st
   return Object.keys(fields).find((f) => taken.has(f));
 }
 
-/** The functions a Schema check may call, each on one argument of a type both SQLite and PostgreSQL accept. */
-export const CHECK_FUNCTIONS: ReadonlyMap<string, readonly string[]> = new Map([["lower", ["text"]], ["upper", ["text"]], ["length", ["text"]], ["abs", ["integer", "real"]]]);
+/** The functions a Schema check may call, by their bare name: each takes one argument of a type SQLite and PostgreSQL both accept. */
+export const CHECK_FUNCTIONS: ReadonlyMap<string, { readonly takes: readonly string[]; readonly returns: "text" | "integer" | "argument" }> = new Map([
+  ["lower", { takes: ["text"], returns: "text" }], ["upper", { takes: ["text"], returns: "text" }],
+  ["length", { takes: ["text"], returns: "integer" }], ["abs", { takes: ["integer", "real"], returns: "argument" }],
+]);
 
 /**
  * Why a Schema check cannot run in the table's DDL as written, or undefined. Storage prints a check unlowered into a trigger or
@@ -115,9 +118,11 @@ export function checkShapeProblem(v: unknown, columns: ReadonlyMap<string, strin
     const name = Array.isArray(fields) && fields.length === 1 ? (fields[0] as { String?: { sval?: unknown } })?.String?.sval : undefined;
     return typeof name === "string" && columns.has(name) ? name : undefined;
   };
+  // as written: storage prints the call unlowered, so `pg_catalog.lower` is not `lower` to SQLite
+  const fname = (call: { funcname?: unknown }) => Array.isArray(call?.funcname) ? call.funcname.map((x: any) => x?.String?.sval).join(".") : "";
   const typeOf = (n: Record<string, any> | undefined): string | undefined => {
     if (n?.ColumnRef) return columns.get(columnOf(n.ColumnRef) ?? "");
-    if (n?.FuncCall) { const f = n.FuncCall.funcname?.map((x: any) => x?.String?.sval).join("."); return f === "length" ? "integer" : f === "abs" ? typeOf(n.FuncCall.args?.[0]) : f === "lower" || f === "upper" ? "text" : undefined; }
+    if (n?.FuncCall) { const f = CHECK_FUNCTIONS.get(fname(n.FuncCall)); return f?.returns === "argument" ? typeOf(n.FuncCall.args?.[0]) : f?.returns; }
     if (n?.A_Const) return n.A_Const.sval ? "text" : n.A_Const.ival ? "integer" : n.A_Const.fval ? "real" : undefined;
     return undefined;
   };
@@ -128,9 +133,8 @@ export function checkShapeProblem(v: unknown, columns: ReadonlyMap<string, strin
       if (k === "TypeCast" || k === "SQLValueFunction") return "a check reads only the row's own columns: no cast or SQL value function";
       if (k === "ColumnRef" && !columnOf(c)) return `a check names only its own Schema's columns, unqualified: ${JSON.stringify((c?.fields ?? []).map((x: any) => x?.String?.sval ?? "*").join("."))} is not one`;
       if (k === "FuncCall") {
-        const names = c?.funcname;
-        const name = Array.isArray(names) ? names.map((x: any) => x?.String?.sval).join(".").replace(/^pg_catalog\./, "") : "";
-        const takes = CHECK_FUNCTIONS.get(name);
+        const name = fname(c);
+        const takes = CHECK_FUNCTIONS.get(name)?.takes;
         if (!takes) return `a check may call only ${[...CHECK_FUNCTIONS.keys()].join(", ")}: ${name || "this call"}() is printed into the table's DDL as written`;
         if (c.agg_star || c.agg_distinct || c.agg_filter || c.agg_order || c.over || !Array.isArray(c.args) || c.args.length !== 1) return `${name}() in a check takes one argument, with no DISTINCT, *, FILTER, ORDER BY or OVER`;
         const t = typeOf(c.args[0]);
