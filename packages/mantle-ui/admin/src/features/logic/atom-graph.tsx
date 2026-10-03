@@ -30,6 +30,7 @@ import { usePreferences } from "../../app/preferences";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type {
   DeveloperAudience,
+  DeveloperSchemaModel,
   DeveloperAtom,
   DeveloperAtomRelation,
   DeveloperConsoleSnapshot,
@@ -38,6 +39,8 @@ import type {
 import { cn } from "../../lib/utils";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
+
+import { businessRules } from "./business-rules";
 
 export const atomKindTone = {
   Schema: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
@@ -138,17 +141,43 @@ function AudienceGroupNode({ data }: NodeProps<AudienceGroupGraphNode>): React.R
 
 export function AtomGraph({
   graph,
+  schemas = [],
   selectedAtomId,
   onSelect,
   onOpen,
 }: {
   graph: DeveloperConsoleSnapshot["graph"];
+  schemas?: readonly DeveloperSchemaModel[];
   selectedAtomId: string | null;
   onSelect: (id: string | null) => void;
   onOpen: (atom: DeveloperAtom) => void;
 }): React.ReactElement {
   const { language, theme } = usePreferences();
-  const layout = React.useMemo(() => layoutGraph(graph, language), [graph, language]);
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
+  const layout = React.useMemo(() => {
+    const base = layoutGraph(graph, language);
+    const atom = graph.atoms.find((a) => a.id === expandedId);
+    if (!atom) return base;
+    const rules = businessRules(atom, schemas, language);
+    const nodes = base.nodes.filter((n) => n.type !== 'audience');
+    const edges = [...base.edges];
+    const groupId = `RuleGroup:${atom.id}`;
+    const groupHeight = Math.ceil(rules.length / 2) * 220 + 40;
+    nodes.push({ id: groupId, position: { x: 0, y: 0 }, data: { label: language.startsWith('zh') ? '業務規則 · 從 manifest 衍生' : 'Business rules · derived from manifest' }, style: { width: 660, height: groupHeight }, className: '!border-dashed !bg-muted/20 !text-muted-foreground !text-xs [&_.react-flow__handle]:!hidden', draggable: false, selectable: false, focusable: false });
+    rules.forEach((rule, i) => {
+      const id = `Rule:${atom.id}:${i}`;
+      nodes.push({ id, parentId: groupId, extent: "parent", position: { x: 20 + (i % 2) * 320, y: 40 + Math.floor(i / 2) * 220 }, data: { label: <div className="space-y-2 text-start"><strong className="block text-sm">{rule.title}</strong><p className="line-clamp-5 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{rule.body}</p><span className="text-[10px] text-muted-foreground">{language.startsWith('zh') ? '點選查看程式依據' : 'Select for implementation'}</span></div> }, ariaLabel: rule.title, sourcePosition: Position.Bottom, targetPosition: Position.Top, draggable: false, className: '!w-[300px] !h-[200px] !rounded-2xl !border-2 !border-amber-500/40 !bg-card !text-card-foreground !p-4 !shadow-md' });
+    });
+    edges.push({ id: `RuleEdge:${atom.id}`, source: atom.id, target: groupId, type: 'smoothstep', style: { stroke: '#f59e0b', strokeDasharray: '5 4' } });
+    const dag = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+    dag.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 100 });
+    nodes.filter((n) => !n.parentId).forEach((n) => dag.setNode(n.id, { width: n.id === groupId ? 660 : 220, height: n.id === groupId ? groupHeight : 88 }));
+    edges.filter((e) => !e.id.startsWith('RuleEdge:')).forEach((e) => dag.setEdge(e.source, e.target));
+    dag.setEdge(atom.id, groupId);
+    dagre.layout(dag);
+    nodes.filter((n) => !n.parentId).forEach((n) => { const p = dag.node(n.id); n.position = { x: p.x - (n.id === groupId ? 330 : 110), y: p.y - (n.id === groupId ? groupHeight / 2 : 44) }; });
+    return { nodes, edges };
+  }, [graph, language, schemas, expandedId]);
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
   const [flow, setFlow] = React.useState<ReactFlowInstance<Node, Edge> | null>(null);
@@ -175,7 +204,7 @@ export function AtomGraph({
       };
     }));
     setEdges((current) => current.map((edge) => {
-      const active = relationIds.has(edge.id);
+      const active = relationIds.has(edge.id) || edge.id.startsWith("RuleEdge:") && nodeIds.has(edge.source);
       return {
         ...edge,
         style: { ...edge.style, opacity: active ? 1 : 0.08, stroke: active ? "var(--foreground)" : "var(--muted-foreground)", strokeWidth: active ? 2.5 : 1.25 },
@@ -197,15 +226,16 @@ export function AtomGraph({
     if (!flow || !selectedId) return;
     const compact = window.innerWidth < 640;
     void flow.fitView({
-      nodes: [{ id: selectedId }],
+      nodes: [{ id: selectedId }, ...layout.nodes.filter((n) => n.id.startsWith(`Rule:${selectedId}:`)).map((n) => ({ id: n.id }))],
       padding: { top: "20%", right: compact ? "60%" : "34%", bottom: "20%", left: compact ? "2%" : "8%" },
-      minZoom: compact ? 0.78 : 0.9,
+      minZoom: expandedId ? 0.25 : compact ? 0.78 : 0.9,
       maxZoom: compact ? 1 : 1.2,
       duration: 320,
     });
-  }, [flow, selectedId]);
+  }, [flow, selectedId, expandedId, layout]);
 
   const selectAtom = (id: string, slice = focusSlice(graph, id)): void => {
+    if (expandedId && expandedId !== id) setExpandedId(null);
     inspect(id, slice);
     onSelect(id);
   };
@@ -256,9 +286,11 @@ export function AtomGraph({
       fitViewOptions={{ padding: 0.08 }}
       minZoom={0.25}
       maxZoom={1.8}
+      deleteKeyCode={null}
       nodesConnectable={false}
       nodesDraggable
       onNodeClick={(_, node) => {
+        if (node.id.startsWith("Rule:") && expandedId) { const owner = atomsById.get(expandedId); if (owner) onOpen(owner); }
         if (atomsById.has(node.id)) selectAtom(node.id);
       }}
       onKeyDownCapture={(event) => {
@@ -266,12 +298,14 @@ export function AtomGraph({
         const node = (event.target as HTMLElement).closest(".react-flow__node[data-id]");
         const id = node?.getAttribute("data-id");
         if (id && atomsById.has(id)) { event.preventDefault(); selectAtom(id); }
+        else if (id?.startsWith("Rule:") && expandedId) { event.preventDefault(); const owner = atomsById.get(expandedId); if (owner) onOpen(owner); }
       }}
       onPaneClick={clearSelection}
     >
       <GraphControls onRelayout={relayout} />
       {selected ? (
         <Panel position="top-right" className="!m-3 w-[20rem] max-w-[calc(100%-1.5rem)] sm:w-[22rem]">
+          {selected.handler?.kind === 'sql' && selected.handler.flow?.length ? <Button className="mb-2 w-full" variant="outline" onClick={() => setExpandedId(expandedId === selected.id ? null : selected.id)}>{language.startsWith('zh') ? expandedId === selected.id ? '收合業務規則' : '在圖上展開業務規則' : expandedId === selected.id ? 'Collapse business rules' : 'Expand business rules in graph'}</Button> : null}
           <GraphHud atom={selected} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={clearSelection} onSelect={moveAlongTrace} onOpen={onOpen} />
         </Panel>
       ) : null}
@@ -302,7 +336,10 @@ function layoutGraph(
       } satisfies Node)),
       ...graph.atoms.map((atom) => {
       const position = positions.get(atom.id) ?? { x: 0, y: 0 };
-      const title = resolveLocalizedText(atom.title, language);
+      const target = graph.relations.find((r) => r.kind === 'trigger-target' && r.sourceId === atom.id);
+      const targetAtom = target ? graph.atoms.find((a) => a.id === target.targetId) : undefined;
+      const targetTitle = targetAtom ? resolveLocalizedText(targetAtom.title, language) || targetAtom.name : null;
+      const title = resolveLocalizedText(atom.title, language) || (atom.kind === 'Trigger' && targetTitle ? `${targetTitle} · ${atom.transport?.toUpperCase() ?? atomKindLabel(language, atom.kind)}` : null);
       return {
         id: atom.id,
         position,
@@ -315,8 +352,8 @@ function layoutGraph(
                 <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atomKindLabel(language, atom.kind)}</span>
                 {atom.transport ? <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{atom.transport}</span> : null}
               </div>
-              <div className="truncate font-mono text-sm font-semibold">{atom.name}</div>
-              {title && title !== atom.name ? <div className="truncate text-xs text-foreground/80">{title}</div> : null}
+              <div className="truncate text-sm font-semibold">{title || atom.name}</div>
+              {atom.description ? <div className="line-clamp-1 text-xs text-foreground/80">{resolveLocalizedText(atom.description, language)}</div> : null}
             </div>
           ),
         },
