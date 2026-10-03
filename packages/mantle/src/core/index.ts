@@ -10,3 +10,7 @@ export * from "./store.js";
 export * from "./email.js";
 export * from "./runtime/auth.js";
 export type { RestrictSql } from "./dialect.js";
+export * from "./runtime/verifyPlan.js";
+// what host and handler code throws and checks, from the root: the `/spec` barrel bundles the SQL parser into a Worker
+export { DiagnosticError, makeDiagnostic, runtimeDiagnostic, type Diagnostic, type DiagnosticCode } from "../spec/kernel/index.js";
+export { STAFF_ROLES, isStaffRole, type StaffRole } from "../spec/domain/index.js";

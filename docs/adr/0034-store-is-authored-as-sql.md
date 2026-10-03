@@ -121,6 +121,8 @@ The platform-verified facts become the **Cloud-validated plan**, the pinned Core
 
 That the IR matches its SQL source is **service-reported**: the plan carries the source's hash, and the compiler is the pinned Core. Host protocol 3 uploads the plan.
 
+`verifyPlan(plan, storage)` in `@aotter/mantle` is that validation: boot's own checks of the plan (version, fingerprint, dialect, guard and hook targets) and every View and inline Procedure through the storage's dialect, its `restrict` and the policy rewrite, with no database and no SQL parser. It returns the diagnostics, each with the program's path; handlers and schedule wiring stay the host's.
+
 ### 8. Policy injection
 
 - **Every Schema reference is wrapped.** The compiler has one function that prints a Schema table's name, and it always prints `(SELECT <declared columns> FROM "t" WHERE <scope> AND <ttl> AND <published>) AS <alias>`. Joins, subqueries, set-op branches and window inputs therefore see only visible rows, and a `LEFT JOIN` stays a left join. SQLite flattens the wrapper, so the index the scope leads is still used; RIGHT JOIN would materialize, one more reason it is refused.

@@ -297,6 +297,8 @@ function formatValue(v: unknown): string {
   }
 }
 
+const BRAND = Symbol.for("net.aotter.mantle.DiagnosticError");
+
 /**
  * Throwable carrier for one or more Diagnostics. Layers that surface
  * an error across a transport boundary (HTTP handler, MCP tool call,
@@ -306,6 +308,15 @@ function formatValue(v: unknown): string {
  * throws.
  */
 export class DiagnosticError extends Error {
+  /**
+   * A handler bundled with its own copy of this class (a closed-module artifact) still throws a DiagnosticError: `instanceof`
+   * matches the brand, not the class identity, so the runtime keeps its code instead of reporting INTERNAL_ERROR.
+   */
+  static override [Symbol.hasInstance](value: unknown): boolean {
+    if (this !== DiagnosticError) return Function.prototype[Symbol.hasInstance].call(this, value);
+    return typeof value === "object" && value !== null && (value as Record<symbol, unknown>)[BRAND] === true;
+  }
+  readonly [BRAND] = true;
   readonly diagnostics: readonly Diagnostic[];
   constructor(diagnostic: Diagnostic | readonly Diagnostic[], options?: ErrorOptions) {
     const list = Array.isArray(diagnostic) ? diagnostic : [diagnostic as Diagnostic];
