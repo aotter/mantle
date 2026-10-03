@@ -25,6 +25,10 @@ createMantle(service, { plan, storage: (env) => MantleStorageAdapter, schedules?
   service decides what is mounted where.
 - The runtime boots lazily on the first call, once per isolate. A failed boot
   is retried by the next request.
+- Each entry call binds its own `ctx.waitUntil` to the runtime facade handed
+  to the service. Handler calls, nested invocations and Store lifecycle hooks
+  retain work on that entry's context, including concurrent requests. Calls
+  without a context do not borrow another request's retainer.
 - `invokeSchedule` runs every enabled schedule Trigger whose cron is exactly
   the given POSIX expression, as the system caller.
 - The host entry is a few lines the generator writes once

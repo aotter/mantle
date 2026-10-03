@@ -48,7 +48,7 @@ export function decodeOutput(type: string, v: any): unknown {
   switch (type) {
     case "bool": return typeof v === "boolean" ? v : v === 1;
     case "timestamptz": return typeof v === "number" ? decodeTimestamptz(v) : v;
-    case "json": if (typeof v === "string") { try { return JSON.parse(v); } catch { return v; } } return v;
+    case "json": return v; // decodeField already decoded json/jsonb; a string is a JSON scalar, not another wire payload.
   }
   return v;
 }
