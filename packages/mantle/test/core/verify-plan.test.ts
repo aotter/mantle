@@ -270,6 +270,8 @@ describe("verifyPlan", () => {
     const refused = async (sql: string) => { const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withView(sql) }] }); return r.ok ? "" : r.diagnostics.map((d) => d.message).join(); };
     expect(await refused("SELECT name FROM items WHERE CAST('2020-01-01T00:00:00.6Z' AS timestamptz(0)) < now()")).toMatch(/no type modifier/);
     expect(await refused("SELECT name FROM items WHERE now() - interval '90 minutes' hour < now()")).toMatch(/no type modifier/);
+    // a bare fraction under hour or minute truncates on PostgreSQL too
+    for (const v of ["interval '1.5' hour", "interval '1.5' minute"]) expect([v, await refused(`SELECT name FROM items WHERE now() - ${v} < now()`)]).toEqual([v, expect.stringMatching(/no type modifier/)]);
     expect(await refused("SELECT name FROM items WHERE now() - interval '2' hour < now() AND now() - CAST('2 hours' AS interval hour) < now() AND stock < CAST('1.5' AS numeric(3,1))")).toBe("");
   });
 

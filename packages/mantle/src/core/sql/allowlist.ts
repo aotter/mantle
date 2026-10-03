@@ -92,8 +92,6 @@ const WINDOW = new Set(['row_number', 'rank', 'sum', 'count']);
 /** functions that exist only with OVER */
 const WINDOW_ONLY = new Set(['row_number', 'rank', 'dense_rank', 'lag', 'lead', 'first_value', 'last_value']);
 const AGG = new Set(['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object']);
-/** An interval's single-field type modifier (PostgreSQL's typmod bits) -> that field's microseconds. */
-const INTERVAL_FIELD_US: Record<number, number> = { 1024: 3.6e9, 2048: 6e7, 4096: 1e6 };
 export const TRUNC_UNITS = new Set(['hour', 'day', 'week', 'month', 'year']);
 export const EXTRACT_FIELDS = new Set(['year', 'month', 'day', 'dow', 'hour']);
 const CAST_TYPES = new Set(['text', 'int4', 'int8', 'float8', 'bool', 'timestamptz', 'date', 'numeric', 'interval']);
@@ -462,11 +460,10 @@ const check: Record<string, Checker> = {
       no('SQL_TYPE', `CAST to ${t} takes an integer literal: SQLite truncates toward zero where PostgreSQL rounds. Write round(x)`, at);
     // a type modifier is numeric's precision and scale, or one interval field (hour, minute, second) that truncates nothing; D1
     // encodes nothing else (timestamptz(0) rounds on PostgreSQL, interval '90 minutes' hour truncates to an hour there)
+    // (intervalMicros reads a bare number in the field's unit and refuses any other field; one unit of the field divides the value)
     const mods = n.typeName.typmods ?? [];
-    const field = INTERVAL_FIELD_US[mods[0]?.A_Const?.ival?.ival as number];
-    const text = lit?.sval?.sval ?? 'x';
-    if (mods.length && t !== 'numeric' && !(t === 'interval' && mods.length === 1 && field &&
-      (/^\s*-?\d+(\.\d+)?\s*$/.test(text) || intervalMicros(text) % field === 0)))
+    const typmod = mods[0]?.A_Const?.ival?.ival as number | undefined;
+    if (mods.length && t !== 'numeric' && !(t === 'interval' && mods.length === 1 && intervalMicros(lit?.sval?.sval ?? 'x', typmod) % intervalMicros('1', typmod) === 0))
       no('SQL_TYPE', `CAST to ${t} takes no type modifier here, or one that truncates nothing`, at);
     if (t === 'interval') {
       if (!lit?.sval) no('SQL_TYPE', 'an interval is a literal such as interval \'36 hours\'', at);
