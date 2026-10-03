@@ -21,7 +21,8 @@ export type CompilePlanResult =
 /** JSON Schema property to Mantle type. `numeric(p,s)` and `geo` have no manifest spelling yet. */
 function mantleType(p: JsonSchema): string {
   const types = [...new Set([p.type].flat().filter((x) => x !== "null"))];
-  if (types.length > 1) return "json";
+  // integer or number is one number; any other union keeps each value's own JSON type
+  if (types.length > 1) return types.every((x) => x === "integer" || x === "number") ? "real" : "json";
   const t = types[0];
   if (p.format === "geo") return "geo";
   if (!t && enumOptions(p)) return "text"; // a string enum or a oneOf of string consts

@@ -120,6 +120,31 @@ spec: { source: { kind: lifecycle, schema: notes, on: [before_update] }, target:
   });
 });
 
+describe("a field with more than one JSON Schema type", () => {
+  const union = (extra: string) => `apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: things }
+spec:
+  title: Things
+  lifecycle: operational
+  schema:
+    type: object
+    properties: { qty: { type: [integer, number] }, mixed: { type: [integer, string] } }
+${extra}`;
+  it("is one number when its types are integer and number, and json otherwise", async () => {
+    const r = await compilePlan({ sources: [{ sourceId: "memory:union", text: union("") }] });
+    expect(r.ok && r.plan.schemas.things?.fields).toMatchObject({ qty: "real", mixed: "json" });
+  });
+  it("is refused in a comparison or a check when json: SQLite compares it as text, PostgreSQL has no jsonb < integer", async () => {
+    for (const extra of [`  checks: ["mixed < 5"]\n`, `---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: { name: v }\nspec: { surface: staff, sql: "SELECT id FROM things WHERE mixed > 3" }\n`]) {
+      const r = await compilePlan({ sources: [{ sourceId: "memory:union", text: union(extra) }] });
+      expect(r.ok ? [] : r.diagnostics.map((d) => d.message).join(" ")).toMatch(/mixed is json: compare a value read with ->>/);
+    }
+    const r = await compilePlan({ sources: [{ sourceId: "memory:union", text: union(`  checks: ["qty < 5"]\n`) }] });
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+  });
+});
+
 describe("names that differ only by case", () => {
   const codes = async (text: string) => { const r = await compile(text); return r.ok ? [] : r.diagnostics.map((d) => d.code); };
   it("two fields are FIELD_NAME_CASE_COLLISION, not one column", async () => {

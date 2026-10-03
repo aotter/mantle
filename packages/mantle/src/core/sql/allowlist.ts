@@ -424,7 +424,8 @@ function columnType(ctx: Ctx, name: string): string | undefined {
 
 /**
  * PostgreSQL reads `startsAt > '2020-01-01'` by casting the literal to the column's type; SQLite compares the stored integer with
- * text and the condition is silently false. A bare string literal against a date-time, date or boolean column is refused.
+ * text and the condition is silently false. A bare string literal against a date-time, date or boolean column is refused, and so
+ * is any comparison of a json column.
  */
 function bareLiteralCompare(n: N, ctx: Ctx, at: number | undefined) {
   const compares = n.kind === 'AEXPR_OP' ? ['=', '<>', '!=', '<', '>', '<=', '>='].includes(sv(n.name)) : ['AEXPR_IN', 'AEXPR_BETWEEN', 'AEXPR_NOT_BETWEEN', 'AEXPR_DISTINCT', 'AEXPR_NOT_DISTINCT'].includes(n.kind);
@@ -433,6 +434,8 @@ function bareLiteralCompare(n: N, ctx: Ctx, at: number | undefined) {
   const literals = (x: N | undefined): string[] => (x?.List ? x.List.items.flatMap(literals) : x?.A_Const?.sval ? [x.A_Const.sval.sval] : []);
   for (const [colSide, other] of [[n.lexpr, n.rexpr], [n.rexpr, n.lexpr]] as const) {
     const type = typeOf(colSide);
+    // a json value compares as text on SQLite and as jsonb (no operator with a number) on PostgreSQL: compare an extraction
+    if (type === 'json') no('SQL_TYPE', `${colSide.ColumnRef.fields.at(-1).String.sval} is json: compare a value read with ->> (and CAST), or declare the field with one scalar type`, at);
     if (!type || !STORED_AS_NUMBER.has(type)) continue;
     const text = literals(other)[0];
     if (text !== undefined)
