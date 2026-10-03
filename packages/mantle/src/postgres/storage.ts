@@ -4,7 +4,7 @@
  * kept. Columns have native types; a Schema check is a CHECK constraint added NOT VALID, so it binds every later write and
  * leaves rows that predate it alone, as D1's trigger does.
  */
-import { checkShapeProblem, type SqlNode } from "../spec/domain/index.js";
+import { checkShapeProblem, storageColumns, type SqlNode } from "../spec/domain/index.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { query, transaction, type PgConnect, type PgStatement } from "./driver.js";
 import { pgType } from "./codec.js";
@@ -83,15 +83,15 @@ function indexes(name: string, s: StorageSchema) {
 }
 
 /** A check's expression as PostgreSQL prints it, over the row's own columns. */
-function checkText(expr: SqlNode): string {
-  const problem = checkShapeProblem(expr);
+function checkText(expr: SqlNode, s: StorageSchema): string {
+  const problem = checkShapeProblem(expr, storageColumns(s));
   if (problem) throw new Error(problem);
   return print(typed({ SelectStmt: { targetList: [{ ResTarget: { val: expr } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }, {})).replace(/^SELECT\s+/i, "");
 }
 
 /** Constraint name -> "<schema>: <expression>", for the executor's CHECK message. */
 export function checkMessages(plan: Readonly<Record<string, StorageSchema>>): Map<string, string> {
-  return new Map(Object.entries(plan).flatMap(([name, s]) => (s.checks ?? []).map((c, i) => [ident(`_mantle_chk_${name}_${i}`), `${name}: ${checkText(c)}`] as [string, string])));
+  return new Map(Object.entries(plan).flatMap(([name, s]) => (s.checks ?? []).map((c, i) => [ident(`_mantle_chk_${name}_${i}`), `${name}: ${checkText(c, s)}`] as [string, string])));
 }
 
 /** Text compares and sorts by code point, as on D1, whatever collation the database was created with. */
@@ -175,7 +175,7 @@ async function diff(connect: PgConnect, plan: Readonly<Record<string, StorageSch
     }
     // Mantle's checks are rebuilt from the plan: dropped, then added NOT VALID (a check binds writes, not old rows)
     for (const r of chk!) if (r.tbl === name && String(r.name).startsWith("_mantle_chk_")) statements.push({ text: `ALTER TABLE ${t} DROP CONSTRAINT IF EXISTS ${q(String(r.name))}` });
-    (schema.checks ?? []).forEach((c, i) => statements.push({ text: `ALTER TABLE ${t} ADD CONSTRAINT ${q(ident(`_mantle_chk_${name}_${i}`))} CHECK (${checkText(c)}) NOT VALID` }));
+    (schema.checks ?? []).forEach((c, i) => statements.push({ text: `ALTER TABLE ${t} ADD CONSTRAINT ${q(ident(`_mantle_chk_${name}_${i}`))} CHECK (${checkText(c, schema)}) NOT VALID` }));
   }
   return { statements, blocked, undeclared };
 }

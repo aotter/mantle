@@ -3,7 +3,7 @@
  * database or the handlers (ADR-0034 decision 7: Cloud validates the IR and never parses SQL). Worker-safe: no SQL parser.
  */
 import { DiagnosticError, makeDiagnostic, type Diagnostic } from "../../spec/kernel/index.js";
-import { MAX_TTL_SECONDS, ManifestParseError, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, checkShapeProblem, fieldTypes, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
+import { MAX_TTL_SECONDS, ManifestParseError, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, checkShapeProblem, fieldTypes, storageColumnClash, storageColumns, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
 import { validateJsonSchema } from "../../spec/domain/service/SchemaSpecChecks.js";
 import { checkGuards, checkProcedureTarget, checkTriggerRefs } from "../../spec/domain/service/TriggerGraphChecks.js";
 import { MAX_NODES, schemaColumns } from "../sql/allowlist.js";
@@ -78,7 +78,7 @@ async function verify(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "di
   for (const [name, schema] of Object.entries(plan.schemas))
     for (const [i, where] of (schema.checks ?? []).entries()) {
       const path = `plan#/schemas/${name}/checks/${i}`;
-      const problem = checkShapeProblem(where);
+      const problem = checkShapeProblem(where, storageColumns(schema));
       if (problem) out.push(refused(path, `SQL_SHAPE: ${problem}`));
       else check(path, [{ SelectStmt: { targetList: [{ ResTarget: { val: { A_Const: { ival: { ival: 1 } } } } }], fromClause: [{ RangeVar: { relname: name.toLowerCase(), inh: true, relpersistence: "p", mantle: "table" } }], whereClause: where, limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }], {}, "view", "caller");
     }
@@ -214,6 +214,8 @@ function planShape(plan: RuntimePlan): Diagnostic[] {
     const column = (x: unknown) => isName(x) && (Object.hasOwn(fields, x) ? fields[x] !== "geo" : NATIVE.has(x) && (x !== "status" || !!s.publishing));
     if (!isName(key) || typeof s.name !== "string" || s.name.toLowerCase() !== key) bad("a Schema's key is its name in lower case");
     for (const [f, t] of Object.entries(fields)) if (!isName(f) || NATIVE.has(f) || !isFieldType(t)) bad(`field ${JSON.stringify(f)} is a lower-case name with a Mantle type`);
+    const clash = storageColumnClash(fields);
+    if (clash) bad(`field ${JSON.stringify(clash)} is a column storage creates for another purpose`);
     for (const [f, n] of Object.entries(s.names ?? {})) if (!Object.hasOwn(fields, f) || typeof n !== "string" || n.toLowerCase() !== f) bad(`names[${JSON.stringify(f)}] names a field`);
     if (s.scope !== undefined && !(isName(s.scope) && Object.hasOwn(fields, s.scope))) bad("scope is a declared field");
     if ((s.ttl === undefined) !== (s.ttlSeconds === undefined)) bad("ttl and ttlSeconds go together");

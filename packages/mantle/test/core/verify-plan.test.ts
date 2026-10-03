@@ -191,6 +191,46 @@ describe("verifyPlan", () => {
     expect(out.map((d) => d.path).sort()).toEqual(["plan#/procedures/add-item", "plan#/schemas/items/checks/0", "plan#/views/stock"]);
     expect(out.every((d) => d.message.includes("CLOUD_REFUSED"))).toBe(true);
   });
+  it("refuses search, unique and index columns storage does not create: boot would fail on the missing column", async () => {
+    const plan = await compile();
+    const messages = async (change: (s: RuntimePlan["schemas"][string]) => void) =>
+      (await verifyPlan(await reseal(plan, (p) => { change(p.schemas.items!); return p; }), d1())).map((d) => d.message).join("\n");
+    const geo = (s: RuntimePlan["schemas"][string]) => {
+      s.schema = { ...s.schema, properties: { ...s.schema.properties, loc: { type: "object", format: "geo" } } } as typeof s.schema;
+      s.fields = fieldTypes(s.schema); s.names = { ...s.names, loc: "loc" };
+    };
+    // an operational Schema has no status column; a geo field is two columns; search reads text
+    expect(await messages((s) => { s.indexes = [["owner"], ["status"]]; })).toMatch(/unique and index columns/);
+    expect(await messages((s) => { s.search = ["status"]; })).toMatch(/search columns are declared text fields/);
+    expect(await messages((s) => { s.search = ["stock"]; })).toMatch(/search columns are declared text fields/);
+    expect(await messages((s) => { geo(s); s.indexes = [["owner"], ["loc"]]; })).toMatch(/unique and index columns/);
+    expect(await messages((s) => { geo(s); s.search = ["loc"]; })).toMatch(/search columns/);
+    expect(await messages((s) => { s.search = ["name"]; s.indexes = [["owner"], ["created_at"]]; })).toBe("");
+    // a field may not be a column storage creates for something else
+    expect(await messages((s) => { geo(s); s.schema = { ...s.schema, properties: { ...s.schema.properties, loc_lat: { type: "number" } } } as typeof s.schema; s.fields = fieldTypes(s.schema); s.names = { ...s.names, loc_lat: "loc_lat" }; })).toMatch(/"loc_lat" is a column storage creates/);
+  });
+
+  it("refuses a check that calls what storage cannot print into DDL: the CLI, verifyPlan and boot agree", async () => {
+    const withCheck = (c: string) => MANIFESTS.replace('checks: ["stock >= 0"]', `checks: [${JSON.stringify(c)}]`);
+    for (const c of ["name <> auth.uid()", "auth.role() IS NULL", "stock < extract(year from now())", "name::text <> ''",
+      // columns this Schema's storage does not have, a qualified one, and calls DDL cannot run
+      "value > 0", "status <> 'x'", "items.stock >= 0", "lower(DISTINCT name) <> 'x'", "abs(name) > 0", "length(stock) > 0", "upper(name, name) <> ''"]) {
+      const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck(c) }] });
+      expect([c, r.ok ? [] : r.diagnostics.map((d) => d.code)]).toEqual([c, ["SQL_SHAPE"]]);
+    }
+    const ok = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck("length(lower(name)) > 0") }] });
+    if (!ok.ok) throw new Error(JSON.stringify(ok.diagnostics));
+    expect(await verifyPlan(ok.plan, d1())).toEqual([]);
+    await createMantleRuntime({ plan: ok.plan, handlers: { audit: () => ({}) }, storage: sqliteStorage(await LocalD1.create()) });
+    // a resealed check calling auth.uid(): verify refuses it, and boot names the problem instead of a driver syntax error
+    const uid = { A_Expr: { kind: "AEXPR_OP", name: [{ String: { sval: "<>" } }], lexpr: { ColumnRef: { fields: [{ String: { sval: "name" } }] } }, rexpr: { FuncCall: { funcname: [{ String: { sval: "auth" } }, { String: { sval: "uid" } }] } } } };
+    const sealed = await reseal(ok.plan, (p) => { p.schemas.items!.checks = [uid as never]; return p; });
+    expect((await verifyPlan(sealed, d1())).map((d) => d.message).join()).toMatch(/a check may call only lower, upper, length, abs: auth\.uid\(\)/);
+    await expect(createMantleRuntime({ plan: sealed, handlers: { audit: () => ({}) }, storage: sqliteStorage(await LocalD1.create()) })).rejects.toThrow(/a check may call only/);
+    const star = { ...uid, A_Expr: { ...uid.A_Expr, rexpr: { FuncCall: { funcname: [{ String: { sval: "lower" } }], agg_star: true } } } };
+    expect((await verifyPlan(await reseal(ok.plan, (p) => { p.schemas.items!.checks = [star as never]; return p; }), d1())).map((d) => d.message).join()).toMatch(/takes one argument/);
+  });
+
 });
 
 describe("verifyPlan: the plan's other fields", () => {
@@ -479,40 +519,6 @@ describe("the runtime's schema checks", () => {
 });
 
 describe("DiagnosticError across bundles", () => {
-  it("refuses search, unique and index columns storage does not create: boot would fail on the missing column", async () => {
-    const plan = await compile();
-    const messages = async (change: (s: RuntimePlan["schemas"][string]) => void) =>
-      (await verifyPlan(await reseal(plan, (p) => { change(p.schemas.items!); return p; }), d1())).map((d) => d.message).join("\n");
-    const geo = (s: RuntimePlan["schemas"][string]) => {
-      s.schema = { ...s.schema, properties: { ...s.schema.properties, loc: { type: "object", format: "geo" } } } as typeof s.schema;
-      s.fields = fieldTypes(s.schema); s.names = { ...s.names, loc: "loc" };
-    };
-    // an operational Schema has no status column; a geo field is two columns; search reads text
-    expect(await messages((s) => { s.indexes = [["owner"], ["status"]]; })).toMatch(/unique and index columns/);
-    expect(await messages((s) => { s.search = ["status"]; })).toMatch(/search columns are declared text fields/);
-    expect(await messages((s) => { s.search = ["stock"]; })).toMatch(/search columns are declared text fields/);
-    expect(await messages((s) => { geo(s); s.indexes = [["owner"], ["loc"]]; })).toMatch(/unique and index columns/);
-    expect(await messages((s) => { geo(s); s.search = ["loc"]; })).toMatch(/search columns/);
-    expect(await messages((s) => { s.search = ["name"]; s.indexes = [["owner"], ["created_at"]]; })).toBe("");
-  });
-
-  it("refuses a check that calls what storage cannot print into DDL: the CLI, verifyPlan and boot agree", async () => {
-    const withCheck = (c: string) => MANIFESTS.replace('checks: ["stock >= 0"]', `checks: [${JSON.stringify(c)}]`);
-    for (const c of ["name <> auth.uid()", "auth.role() IS NULL", "stock < extract(year from now())", "name::text <> ''"]) {
-      const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck(c) }] });
-      expect([c, r.ok ? [] : r.diagnostics.map((d) => d.code)]).toEqual([c, ["SQL_SHAPE"]]);
-    }
-    const ok = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck("length(lower(name)) > 0") }] });
-    if (!ok.ok) throw new Error(JSON.stringify(ok.diagnostics));
-    expect(await verifyPlan(ok.plan, d1())).toEqual([]);
-    await createMantleRuntime({ plan: ok.plan, handlers: { audit: () => ({}) }, storage: sqliteStorage(await LocalD1.create()) });
-    // a resealed check calling auth.uid(): verify refuses it, and boot names the problem instead of a driver syntax error
-    const uid = { A_Expr: { kind: "AEXPR_OP", name: [{ String: { sval: "<>" } }], lexpr: { ColumnRef: { fields: [{ String: { sval: "name" } }] } }, rexpr: { FuncCall: { funcname: [{ String: { sval: "auth" } }, { String: { sval: "uid" } }] } } } };
-    const sealed = await reseal(ok.plan, (p) => { p.schemas.items!.checks = [uid as never]; return p; });
-    expect((await verifyPlan(sealed, d1())).map((d) => d.message).join()).toMatch(/a check may call only lower, upper, length, abs: auth\.uid\(\)/);
-    await expect(createMantleRuntime({ plan: sealed, handlers: { audit: () => ({}) }, storage: sqliteStorage(await LocalD1.create()) })).rejects.toThrow(/a check may call only/);
-  });
-
   it("matches a copy of the class from another bundle by its brand, and nothing else", () => {
     // what a closed-module handler throws: its own bundled copy of the class
     const Copy = class extends Error { readonly [Symbol.for("net.aotter.mantle.DiagnosticError")] = true; diagnostics = []; };

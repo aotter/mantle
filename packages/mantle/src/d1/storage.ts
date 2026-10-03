@@ -4,7 +4,7 @@
  * are reported and never dropped. STRICT tables, checks as triggers, and the FTS5 / R*Tree tables that back
  * `search` and `format: geo` are Mantle's own and are rebuilt when their declaration changes.
  */
-import { ftsTableName, geoTreeName, checkShapeProblem, parseNumeric, sideTableClashes, type SqlNode } from "../spec/domain/index.js";
+import { ftsTableName, geoTreeName, checkShapeProblem, storageColumns, parseNumeric, sideTableClashes, type SqlNode } from "../spec/domain/index.js";
 import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { print } from "./print.js";
@@ -39,8 +39,8 @@ function colType(t: string): "TEXT" | "INTEGER" | "REAL" {
 }
 
 /** `stock >= 0` as IR -> `"new"."stock" >= 0`: the same printer as everything else. */
-function checkText(expr: SqlNode): string {
-  const problem = checkShapeProblem(expr);
+function checkText(expr: SqlNode, s: StorageSchema): string {
+  const problem = checkShapeProblem(expr, storageColumns(s));
   if (problem) throw new Error(problem);
   const qualify = (v: any): any => {
     if (Array.isArray(v)) return v.map(qualify);
@@ -84,7 +84,7 @@ function desired(name: string, s: StorageSchema): Desired {
 
   const triggers: { name: string; sql: string }[] = [];
   (s.checks ?? []).forEach((c, i) => {
-    const e = checkText(c);
+    const e = checkText(c, s);
     for (const ev of ["INSERT", "UPDATE"])
       triggers.push({ name: `_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`, sql: `CREATE TRIGGER ${q(`_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`)} BEFORE ${ev} ON ${t} WHEN NOT (${e}) BEGIN SELECT RAISE(ABORT, ${lit(`MANTLE_CHECK ${name}: ${e.replace(/\bnew\./g, "")}`)}); END` });
   });

@@ -9,7 +9,7 @@ import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type Pla
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
-import { checkShapeProblem, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
+import { checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
@@ -146,13 +146,15 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   // a check is compiled as the WHERE of a read of its own Schema, so its columns resolve against that Schema
   for (const { manifest: m, source } of linked.schemas) {
     const name = m.metadata.name.toLowerCase();
+    const clash = storageColumnClash(schemas[name]!.fields ?? {});
+    if (clash) diagnostics.push(toDiagnostic({ code: "SQL_SHAPE", message: `field '${clash}' is a column storage creates for another purpose (_rid, or a geo field's _lat/_lng)` }, source, `/spec/schema/properties/${clash}`));
     const checks: SqlNode[] = [];
     for (const [i, text] of (m.spec.checks ?? []).entries()) {
       const pointer = `/spec/checks/${i}`;
       const res = await compileSql(`SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${text}`, { schemas, inputs: {}, kind: "view" }, dialect);
       if (!res.ok) { diagnostics.push(toDiagnostic(res.diagnostic, source, pointer)); continue; }
       const where: SqlNode | undefined = res.plan.stmts[0]?.SelectStmt?.whereClause;
-      const problem = where ? checkShapeProblem(where) : "a check is one boolean expression";
+      const problem = where ? checkShapeProblem(where, storageColumns(schemas[name]!)) : "a check is one boolean expression";
       if (problem) {
         diagnostics.push(toDiagnostic({ code: "SQL_SHAPE", message: problem }, source, pointer));
         continue;

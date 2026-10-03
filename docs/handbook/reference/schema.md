@@ -126,10 +126,12 @@ and update by triggers that storage convergence creates:
 checks: ["stock >= 0", "partySize IS NULL OR partySize BETWEEN 1 AND 20"]
 ```
 
-Storage prints a check into the table as written, so it uses operators and
-only the functions SQLite and PostgreSQL spell alike: `lower`, `upper`,
-`length` and `abs`. No subqueries, casts, `auth.*` or `now()`; a rule about
-the caller belongs in a Procedure's guard. A violation fails the whole write with
+Storage prints a check into the table as written, so it names only the
+Schema's own columns, unqualified, and calls only the functions SQLite and
+PostgreSQL spell alike, each on one argument: `lower`, `upper` and `length`
+on text, `abs` on a number. No subqueries, casts, `auth.*` or `now()`; a rule
+about the caller belongs in a Procedure's guard. Other type mismatches
+(`name > 5` on a text field) are the database's to refuse when the app boots. A violation fails the whole write with
 `INPUT_VALIDATION_FAILED` and the message `CHECK <schema>: <expression>`.
 
 ## `searchableFields`

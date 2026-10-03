@@ -79,26 +79,67 @@ export function hasSubLink(v: unknown): boolean {
   return Object.entries(v).some(([k, c]) => k === "SubLink" || hasSubLink(c));
 }
 
-/** The functions a Schema check may call: storage prints a check into its DDL as written, so only names SQLite and PostgreSQL define alike. */
-export const CHECK_FUNCTIONS: ReadonlySet<string> = new Set(["lower", "upper", "length", "abs"]);
+/**
+ * The columns storage creates for a Schema, each with its type: the native ones, the scope field, `status` on a publishing Schema,
+ * and each field (a geo field as its `_lat` and `_lng` columns). `created_at`/`updated_at` are typed per dialect, so `native`.
+ */
+export function storageColumns(s: { readonly fields?: Readonly<Record<string, string>>; readonly scope?: string; readonly publishing?: boolean }): Map<string, string> {
+  const cols = new Map<string, string>([["_rid", "integer"], ["id", "text"], ["version", "integer"], ["created_at", "native"], ["updated_at", "native"], ["author_id", "text"]]);
+  if (s.scope) cols.set(s.scope, "text");
+  if (s.publishing) cols.set("status", "text");
+  for (const [f, t] of Object.entries(s.fields ?? {})) {
+    if (f === s.scope) continue;
+    if (t === "geo") { cols.set(`${f}_lat`, "real"); cols.set(`${f}_lng`, "real"); } else cols.set(f, t);
+  }
+  return cols;
+}
+
+/** A field whose name is a column storage creates for something else (`_rid`, or another geo field's `_lat`/`_lng`), or undefined. */
+export function storageColumnClash(fields: Readonly<Record<string, string>>): string | undefined {
+  const taken = new Set(["_rid", ...Object.entries(fields).filter(([, t]) => t === "geo").flatMap(([f]) => [`${f}_lat`, `${f}_lng`])]);
+  return Object.keys(fields).find((f) => taken.has(f));
+}
+
+/** The functions a Schema check may call, each on one argument of a type both SQLite and PostgreSQL accept. */
+export const CHECK_FUNCTIONS: ReadonlyMap<string, readonly string[]> = new Map([["lower", ["text"]], ["upper", ["text"]], ["length", ["text"]], ["abs", ["integer", "real"]]]);
 
 /**
  * Why a Schema check cannot run in the table's DDL as written, or undefined. Storage prints a check unlowered into a trigger or
- * CHECK constraint, so it reads only the row's own columns through operators and `CHECK_FUNCTIONS`: no subquery, no cast, and
- * nothing the runtime binds per request (`auth.uid()`, `now()`) or a dialect spells its own way.
+ * CHECK constraint, so it names only `columns` (`storageColumns` of its own Schema, unqualified) through operators and
+ * `CHECK_FUNCTIONS`: no subquery, no cast, and nothing the runtime binds per request (`auth.uid()`, `now()`) or a dialect spells
+ * its own way. Operand types beyond the functions' arguments are the database's to check at boot.
  */
-export function checkShapeProblem(v: unknown): string | undefined {
-  if (!v || typeof v !== "object") return undefined;
-  for (const [k, c] of Object.entries(v)) {
-    if (k === "SubLink") return "a check reads only the row's own columns: no subquery";
-    if (k === "TypeCast" || k === "SQLValueFunction") return "a check reads only the row's own columns: no cast or SQL value function";
-    if (k === "FuncCall") {
-      const names = (c as { funcname?: { String?: { sval?: unknown } }[] })?.funcname;
-      const name = Array.isArray(names) ? names.map((x) => x?.String?.sval).join(".").replace(/^pg_catalog\./, "") : "";
-      if (!CHECK_FUNCTIONS.has(name)) return `a check may call only ${[...CHECK_FUNCTIONS].join(", ")}: ${name || "this call"}() is printed into the table's DDL as written`;
+export function checkShapeProblem(v: unknown, columns: ReadonlyMap<string, string>): string | undefined {
+  const columnOf = (ref: { fields?: unknown }) => {
+    const fields = ref?.fields;
+    const name = Array.isArray(fields) && fields.length === 1 ? (fields[0] as { String?: { sval?: unknown } })?.String?.sval : undefined;
+    return typeof name === "string" && columns.has(name) ? name : undefined;
+  };
+  const typeOf = (n: Record<string, any> | undefined): string | undefined => {
+    if (n?.ColumnRef) return columns.get(columnOf(n.ColumnRef) ?? "");
+    if (n?.FuncCall) { const f = n.FuncCall.funcname?.map((x: any) => x?.String?.sval).join("."); return f === "length" ? "integer" : f === "abs" ? typeOf(n.FuncCall.args?.[0]) : f === "lower" || f === "upper" ? "text" : undefined; }
+    if (n?.A_Const) return n.A_Const.sval ? "text" : n.A_Const.ival ? "integer" : n.A_Const.fval ? "real" : undefined;
+    return undefined;
+  };
+  const walk = (v: unknown): string | undefined => {
+    if (!v || typeof v !== "object") return undefined;
+    for (const [k, c] of Object.entries(v) as [string, any][]) {
+      if (k === "SubLink") return "a check reads only the row's own columns: no subquery";
+      if (k === "TypeCast" || k === "SQLValueFunction") return "a check reads only the row's own columns: no cast or SQL value function";
+      if (k === "ColumnRef" && !columnOf(c)) return `a check names only its own Schema's columns, unqualified: ${JSON.stringify((c?.fields ?? []).map((x: any) => x?.String?.sval ?? "*").join("."))} is not one`;
+      if (k === "FuncCall") {
+        const names = c?.funcname;
+        const name = Array.isArray(names) ? names.map((x: any) => x?.String?.sval).join(".").replace(/^pg_catalog\./, "") : "";
+        const takes = CHECK_FUNCTIONS.get(name);
+        if (!takes) return `a check may call only ${[...CHECK_FUNCTIONS.keys()].join(", ")}: ${name || "this call"}() is printed into the table's DDL as written`;
+        if (c.agg_star || c.agg_distinct || c.agg_filter || c.agg_order || c.over || !Array.isArray(c.args) || c.args.length !== 1) return `${name}() in a check takes one argument, with no DISTINCT, *, FILTER, ORDER BY or OVER`;
+        const t = typeOf(c.args[0]);
+        if (!t || !takes.includes(t)) return `${name}() in a check takes a ${takes.join(" or ")} column, constant or call`;
+      }
+      const inner = walk(c);
+      if (inner) return inner;
     }
-    const inner = checkShapeProblem(c);
-    if (inner) return inner;
-  }
-  return undefined;
+    return undefined;
+  };
+  return walk(v);
 }
