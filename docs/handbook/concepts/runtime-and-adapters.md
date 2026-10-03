@@ -25,6 +25,10 @@ createMantle(service, { plan, storage: (env) => MantleStorageAdapter, schedules?
   service decides what is mounted where.
 - The runtime boots lazily on the first call, once per isolate. A failed boot
   is retried by the next request.
+- Each entry call binds its own `ctx.waitUntil` to the runtime facade handed
+  to the service. Handler calls, nested invocations and Store lifecycle hooks
+  retain work on that entry's context, including concurrent requests. Calls
+  without a context do not borrow another request's retainer.
 - `invokeSchedule` runs every enabled schedule Trigger whose cron is exactly
   the given POSIX expression, as the system caller.
 - The host entry is a few lines the generator writes once
@@ -148,6 +152,8 @@ recompile.
 | `d1Storage(env.DB, { timeZone?, site? })` | `@aotter/mantle/cloudflare` | Cloudflare D1, the one the preset uses |
 | `sqliteStorage(driver, { timeZone?, maxBindings?, site?, restrict? })` | `@aotter/mantle/d1` | any `DatabaseDriver`: `{ batch(statements) }`, all or nothing |
 | `postgresStorage({ connect, timeZone?, statementTimeoutMs?, restrict? })` | `@aotter/mantle/postgres` | `connect` opens one node-postgres (`pg`) client; Hyperdrive on Workers |
+| `bunPostgresStorage(sql, { timeZone?, statementTimeoutMs?, restrict? })` | `@aotter/mantle/bun` | a Bun.SQL pool with `prepare: false`; its role needs TEMPORARY (ADR-0038) |
+| `bunSqliteStorage(db, { timeZone?, site?, restrict? })` | `@aotter/mantle/bun` | a bun:sqlite `Database`; foreign keys are turned on |
 
 `restrict(plan, context)` returns refusals of its own, run after the dialect's
 on every program at runtime. It only narrows what runs, for an operator that
@@ -176,10 +182,11 @@ with caching disabled (`wrangler hyperdrive create … --caching-disabled`), or 
 revoked session can be accepted until the cache expires. `timeZone` must be an
 IANA name: PostgreSQL reads an offset such as `+08:00` with the opposite sign.
 
-A `DatabaseDriver` is one method, so a Bun (`bun:sqlite`) or libSQL driver is
-a few lines of application code. Those hosts have no generated preset; their
-entry calls `createMantle` and their own server. They are not tested end to end
-in 0.2.0.
+Bun has a generated preset for both engines (`mantle generate --host bun`,
+ADR-0038); `bunDatabaseDriver` / `bunAuthDatabase` and `bunSqliteDriver` give
+Better Auth the same store. A `DatabaseDriver` is one method, so another engine
+(libSQL, for example) is a few lines of application code on `host: none`: the
+entry calls `createMantle` and its own server.
 
 `site` turns on the site capability (site settings and media); see
 [Site defaults and site_config](../reference/site-config.md).

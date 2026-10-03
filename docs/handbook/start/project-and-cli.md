@@ -39,7 +39,7 @@ its composition. To get a fresh preset, move the old file aside and rerun.
 | `version` | `2` | `1` (a 0.1.x config) fails with exit 2 |
 | `identity` | `mantle`, `custom`, `none` | who the callers are. `mantle`: `@aotter/mantle/auth` (Better Auth sign-in, staff roles, OAuth for MCP). `custom`: your `src/identity.ts` maps your own sessions to callers. `none`: every caller is anonymous |
 | `features` | a subset of `mcp`, `admin`, `web`, in that order | `mcp`: the public MCP surface at `/mcp` (and staff MCP inside Admin). `admin`: the Admin console and its API at `/admin`, which needs an identity. `web`: reserved for public pages; REST at `/api` is always mounted |
-| `host` | `cloudflare`, `none`, optional | where the service runs (ADR-0036); absent is `cloudflare`. `none` writes no preset: only the plan and its types, and your code calls `createMantle`. The host never enters the plan |
+| `host` | `cloudflare`, `bun`, `none`, optional | where the service runs (ADR-0036); absent is `cloudflare`. `none` writes no preset: only the plan and its types, and your code calls `createMantle`. The host never enters the plan |
 | `dialect` | `sqlite` (alias `d1`), `postgres`, or a dialect package name, optional | the SQL engine; absent is `sqlite`, which runs on D1. `postgres` runs on PostgreSQL, through Hyperdrive on Cloudflare. The plan records the dialect (the SQLite dialect as `@aotter/mantle/d1`) |
 
 Without a config or flags, the selection is identity `mantle` and every
@@ -48,11 +48,11 @@ A rerun keeps the saved identity, host and dialect; asking for another one is
 refused (exit 2), so switching never drops tables or orphans data. Change
 `mantle.config.json` deliberately once the data is moved.
 
-| | `cloudflare` | `none` |
-|---|---|---|
-| `sqlite` | preset over D1 (the default) | plan and types only |
-| `postgres` | preset over Hyperdrive and `pg` | plan and types only |
-| a dialect package | plan and types only; compose `src/service.ts` with its storage adapter | plan and types only |
+| | `cloudflare` | `bun` | `none` |
+|---|---|---|---|
+| `sqlite` | preset over D1 (the default) | native bun:sqlite | plan and types only |
+| `postgres` | preset over Hyperdrive and `pg` | native Bun.SQL PostgreSQL pool | plan and types only |
+| a dialect package | plan and types only; compose `src/service.ts` with its storage adapter | plan and types only | plan and types only |
 
 Each selection needs packages in the project. `mantle generate` checks them
 and stops before writing anything, naming the install command for your
@@ -125,3 +125,23 @@ wrangler hyperdrive create my-app --caching-disabled --connection-string="postgr
 `apiVersion: cms.mantle.aotter.net/v1` manifests, `--host`, `mantle validate`,
 `mantle emit-openapi`, `mantle skills` and the `mantle-harness` bin are gone.
 `docs/upgrade-0.1-to-0.2.md` in the installed package is the guide.
+
+## Bun
+
+`mantle generate --host bun` selects PostgreSQL on first run. Install `bun-types`
+for the generated project's typecheck, the selected feature/identity packages,
+then set DATABASE_URL in `.env` and run `bun src/index.ts`. For SQLite pass
+`--dialect sqlite` and optionally DATABASE_FILE (default mantle.sqlite).
+The preset is written once, uses native drivers from `@aotter/mantle/bun`, and
+owns Bun.serve, trusted socket IP and shutdown/background work. Admin binds the
+installed UI bundle. Enabled schedule Triggers fail generation; use `host: none`
+with an explicit scheduler when schedules are required. Behind a reverse proxy,
+set TRUSTED_PROXIES to its addresses: otherwise every client shares the proxy's
+address, and with it one sign-in rate limit.
+
+PostgreSQL pools must set `prepare: false`: Bun otherwise re-encodes JSON strings,
+and the role needs TEMPORARY on the database (`GRANT TEMPORARY ON DATABASE app TO
+app_role`), which describing a result takes.
+Mantle refuses another setting. Native raw result metadata comes from PostgreSQL
+with three extra round trips per result, preserving microseconds and exact numeric
+scale. No pg dependency or PostgreSQL clone is added. See ADR-0038.

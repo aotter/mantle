@@ -128,7 +128,7 @@ spec: { surface: internal, sql: "SELECT * FROM items ORDER BY id" }
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: guarded-items }
-spec: { surface: internal, requires: { guard: { procedure: guard-office } }, sql: "SELECT id FROM items ORDER BY id" }
+spec: { surface: internal, input: { type: object, properties: { n: { type: integer, default: 2 } } }, requires: { guard: { procedure: guard-office } }, sql: "SELECT id FROM items WHERE stock >= input.n ORDER BY id" }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -162,6 +162,7 @@ const handlers: MantleHandlers<never> = {
     return {};
   },
   guardOffice: async (_i: unknown, ctx: HandlerContext) => {
+    calls.push({ name: "guardOffice", ctx, input: _i });
     if (ctx.caller.kind !== "user" || ctx.caller.subject !== "boss") throw new DiagnosticError({ code: "AUTH_DENIED", phase: "runtime", severity: "error", path: "guard", message: "not the boss", value: undefined, expected: undefined, candidates: undefined, suggestion: undefined });
     await expect(ctx.store.write([{ delete: "items", where: { id: "x" } }])).rejects.toThrow(/may not write/);
     return {};
@@ -308,6 +309,7 @@ describe("invokeProcedure", () => {
   it("a View's guard runs before the View", async () => {
     expect((await failure(rt.store.as(user("mallory")).view("guarded-items")))?.diagnostic.message).toBe("not the boss");
     expect((await rt.store.as(user("boss")).view("guarded-items")).rows).toEqual([]); // the guard passes; boss owns no items
+    expect(calls.filter((c) => c.name === "guardOffice").at(-1)?.input).toEqual({ n: 2 });
   });
 
   it("runs a guard first with the validated input, read-only, and stops the target when it throws", async () => {
@@ -320,10 +322,34 @@ describe("invokeProcedure", () => {
   it("chains through ctx.invoke and stops at the depth limit", async () => {
     expect(await rt.invokeProcedure(inv("chain", { depth: 3 }, user("o1")))).toEqual({});
     expect((await failure(rt.invokeProcedure(inv("chain", { depth: 20 }, user("o1")))))?.diagnostic.code).toBe("INVOCATION_DEPTH_EXCEEDED");
+    const cyclic = { kind: "internal" as const, id: "cycle", parent: undefined as Invocation["cause"] | undefined };
+    cyclic.parent = cyclic;
+    expect((await failure(rt.invokeProcedure({ ...inv("chain", { depth: 0 }, user("o1")), cause: cyclic })))?.diagnostic.code).toBe("INVOCATION_DEPTH_EXCEEDED");
   });
 });
 
 describe("createMantle", () => {
+  it("keeps each concurrent request's service, handler and lifecycle background work on its own context", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const retained = { a: 0, b: 0 };
+    const compiled = await compilePlan({ sources: [{ sourceId: "concurrent", text: `${MANIFESTS}\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: Schema\nmetadata: { name: background-items }\nspec: { title: Background items, lifecycle: operational, schema: { type: object, properties: { name: { type: string } } } }\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: Trigger\nmetadata: { name: audit-background }\nspec: { source: { kind: lifecycle, schema: background-items, on: [after_create] }, target: { procedure: audit } }` }] });
+    if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+    const background = { ...handlers, audit: (_input: unknown, ctx: HandlerContext) => { ctx.waitUntil(Promise.resolve()); return {}; } };
+    const m = createMantle({ handlers: background, fetch: async (request: Request, _env: unknown, { runtime, waitUntil }: { runtime: MantleRuntime; waitUntil: (p: Promise<unknown>) => void }) => {
+      if (new URL(request.url).pathname === "/a") await gate;
+      waitUntil(Promise.resolve());
+      await runtime.invokeProcedure(inv("audit", {}, user("concurrent")));
+      await runtime.store.as(user("concurrent")).write([{ insert: "items", values: { name: "concurrent", stock: 1 } }]);
+      await runtime.store.write([{ insert: "background-items", values: { name: "concurrent-host" } }]);
+      return new Response("ok");
+    } } as never, { plan: compiled.plan, schedules: true, storage: () => sqliteStorage(d1) });
+    const a = m.fetch(new Request("http://x/a"), {}, { waitUntil: () => { retained.a++; } });
+    await m.fetch(new Request("http://x/b"), {}, { waitUntil: () => { retained.b++; } });
+    release();
+    await a;
+    expect(retained).toEqual({ a: 4, b: 4 });
+  });
   it("boots lazily once, hands the runtime to the service, runs schedules as the system caller, and accepts a deferred hook", async () => {
     let boots = 0;
     const m = createMantle({ handlers, fetch: async (req: Request, _env: unknown, { runtime }: { runtime: MantleRuntime }) => Response.json(await runtime.invokeProcedure(inv("add-item", { name: new URL(req.url).pathname, stock: 1 }, user("http")))) } as never, {
@@ -347,6 +373,18 @@ describe("createMantle", () => {
     // a message is honoured only for what a Trigger of the plan would have run, and never as the system caller
     const forged = [{ ...audit, caller: systemCaller("forged") }, { ...audit, procedure: "take" }, { ...audit, cause: { ...audit.cause, trigger: "nope" } }, { ...audit, cause: { ...audit.cause, schema: "other" } }];
     for (const f of forged) expect((await failure(m.runDeferredHook(f, {})))?.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
+    const malformed = [
+      { ...audit, cause: { ...audit.cause, trigger: "toString" } },
+      { ...audit, cause: { ...audit.cause, hook: undefined } },
+      { ...audit, cause: { ...audit.cause, hook: 3 } },
+      { ...audit, caller: { kind: "user" } },
+      { ...audit, cause: { ...audit.cause, rows: [] } },
+      { ...audit, cause: { ...audit.cause, parent: { kind: "internal" } } },
+    ];
+    const cyclic = { ...audit.cause, parent: undefined as Invocation["cause"] | undefined };
+    cyclic.parent = cyclic;
+    malformed.push({ ...audit, cause: cyclic });
+    for (const f of malformed) expect((await failure(m.runDeferredHook(f, {})))?.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
   });
 
   it("retries a failed boot on the next request", async () => {

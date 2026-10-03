@@ -175,7 +175,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
         }
         input = r.data;
       }
-      if (caller && v.guard) await deps.guardView?.(v.guard, caller, options.input ?? {}, parent ?? { kind: "internal", id: `store:${deps.newId()}` });
+      if (caller && v.guard) await deps.guardView?.(v.guard, caller, (input ?? {}) as Readonly<Record<string, unknown>>, parent ?? { kind: "internal", id: `store:${deps.newId()}` });
       const limit = options.limit ?? 50;
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");
       const { mode, bind: b } = bindFor(deps.now(), caller);
@@ -198,12 +198,21 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
   };
 }
 
+const causeBindings = new WeakMap<MantleStore, (cause: InvocationCause) => CallerStore>();
+
+/** Internal host binding: preserves the trusted Store's caller-free authorization semantics. */
+export function bindStoreCause(store: MantleStore, cause: InvocationCause): CallerStore {
+  return causeBindings.get(store)!(cause);
+}
+
 export function createStore(deps: StoreDeps): MantleStore {
-  return {
+  const store: MantleStore = {
     ...make(deps, undefined),
     as: (caller, cause) => make(deps, caller, cause),
     sweepExpired: (request) => sweepExpired(deps, request),
   };
+  causeBindings.set(store, (cause) => make(deps, undefined, cause));
+  return store;
 }
 
 // ---- TTL sweep ---------------------------------------------------------------------------------------------------

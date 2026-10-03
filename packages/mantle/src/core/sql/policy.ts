@@ -355,8 +355,10 @@ function expandStar(n: N, info: SelInfo, c: C): N {
 
 const AGGREGATES = new Set(['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object', 'string_agg', 'jsonb_agg', 'jsonb_object_agg']);
 const alias$ = (rel: N) => rel.alias?.aliasname ?? rel.relname;
-function returning(rc: N | undefined, s: SchemaDef, schema: string, c: C): N | undefined {
-  const exprs = (rc?.exprs ?? []).flatMap((e: N) => (e.ResTarget.val?.ColumnRef?.fields?.[0]?.A_Star ? starCols(s).map((f) => res(col(f))) : [e]));
+function returning(rc: N | undefined, s: SchemaDef, schema: string, c: C, target: string): N | undefined {
+  // `*` and `<target>.*` are the target's declared columns, as in a SELECT; any other star is left for PostgreSQL to refuse
+  const own = (f: N[] | undefined) => !!f?.at(-1)?.A_Star && (f.length === 1 || f[0]?.String?.sval === target);
+  const exprs = (rc?.exprs ?? []).flatMap((e: N) => (own(e.ResTarget.val?.ColumnRef?.fields) ? starCols(s).map((f) => res(col(f))) : [e]));
   // an after hook gets the whole row whatever the author returns: its own columns, which the result never carries (ADR-0032 decision 3)
   if (c.returning?.has(schema)) exprs.push(...readable(s).map((f) => res(col(f), `${HOOK_PREFIX}${f}`)));
   return exprs.length ? { exprs } : undefined;
@@ -373,7 +375,7 @@ function update(n: N, c: C): N {
   c.sel.pop();
   out.targetList.push(bump(), touch(c), ...(c.status ? [res(param$(c, { k: 'const', value: c.status }), 'status')] : []));
   out.whereClause = and(out.whereClause, visible(s, a, c), c.lockVersion && op('=', col(a, 'version'), param$(c, { k: 'version' })));
-  out.returningClause = returning(out.returningClause, s, n.relation.relname, c);
+  out.returningClause = returning(out.returningClause, s, n.relation.relname, c, alias$(n.relation));
   return { UpdateStmt: out };
 }
 function del(n: N, c: C): N {
@@ -383,7 +385,7 @@ function del(n: N, c: C): N {
   const out = deep(n, c, 'DeleteStmt');
   c.sel.pop();
   out.whereClause = and(out.whereClause, visible(s, a, c), c.lockVersion && op('=', col(a, 'version'), param$(c, { k: 'version' })));
-  out.returningClause = returning(out.returningClause, s, n.relation.relname, c);
+  out.returningClause = returning(out.returningClause, s, n.relation.relname, c, alias$(n.relation));
   return { DeleteStmt: out };
 }
 function insert(n: N, c: C): N {
@@ -419,7 +421,7 @@ function insert(n: N, c: C): N {
       oc.whereClause = and(oc.whereClause, visible(s, n.relation.relname, c)); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one
     }
   }
-  out.returningClause = returning(out.returningClause, s, n.relation.relname, c);
+  out.returningClause = returning(out.returningClause, s, n.relation.relname, c, alias$(n.relation));
   return { InsertStmt: out };
 }
 

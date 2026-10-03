@@ -5,9 +5,11 @@
  */
 import { DiagnosticError, makeDiagnostic } from "../spec/kernel/index.js";
 import type { RuntimePlan } from "../spec/domain/index.js";
+import { STAFF_ROLES, LIFECYCLE_HOOKS } from "../spec/domain/index.js";
 import { systemCaller } from "./caller.js";
-import type { Invocation } from "./invocation.js";
+import { MAX_INVOCATION_DEPTH, type Invocation, type InvocationCause } from "./invocation.js";
 import { createMantleRuntime } from "./runtime/createRuntime.js";
+import { bindStoreCause } from "./store/createStore.js";
 import type { MantleRuntime, MantleService, MantleStorageAdapter } from "./service.js";
 
 interface WaitUntil {
@@ -31,25 +33,73 @@ export interface Mantle<Env> {
 }
 
 const bad = (message: string) => new DiagnosticError(makeDiagnostic({ code: "INPUT_VALIDATION_FAILED", phase: "runtime", severity: "error", path: "deferred-hook", message }));
+const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+
+/** Queue payloads are unknown, including their caller and parent chain. Validate before boot or dispatch. */
+function deferredInvocation(message: unknown): Invocation {
+  if (!record(message) || typeof message.procedure !== "string" || !record(message.caller)) throw bad("invalid deferred Invocation");
+  const c = message.caller;
+  if (c.kind !== "anonymous" && !(c.kind === "user" && typeof c.subject === "string" && c.subject.length > 0
+    && (c.role === null || (STAFF_ROLES as readonly unknown[]).includes(c.role))
+    && Array.isArray(c.scopes) && c.scopes.every((s) => typeof s === "string")
+    && ["session", "oauth", "api-key", "personal-token"].includes(c.credential as string)
+    && (c.credentialId === null || typeof c.credentialId === "string") && (c.clientId === null || typeof c.clientId === "string"))) throw bad("invalid deferred caller");
+  let cause = message.cause;
+  let depth = 0;
+  while (cause !== undefined) {
+    if (++depth > MAX_INVOCATION_DEPTH || !record(cause) || typeof cause.id !== "string") throw bad("invalid deferred cause chain");
+    if (!["http", "mcp", "internal", "schedule", "lifecycle"].includes(cause.kind as string)) throw bad("invalid deferred cause kind");
+    if (cause.kind === "lifecycle" && (typeof cause.trigger !== "string" || typeof cause.schema !== "string"
+      || typeof cause.hook !== "string" || !(LIFECYCLE_HOOKS as readonly string[]).includes(cause.hook)
+      || !Array.isArray(cause.rows) || !cause.rows.length || !cause.rows.every(record))) throw bad("invalid deferred lifecycle cause");
+    if (cause.kind === "schedule" && (typeof cause.trigger !== "string" || typeof cause.cron !== "string" || typeof cause.scheduledTime !== "number" || !Number.isFinite(cause.scheduledTime))) throw bad("invalid deferred schedule cause");
+    cause = cause.parent;
+  }
+  if (!record(message.cause) || message.cause.kind !== "lifecycle" || !(message.cause.hook as string).startsWith("after_")) throw bad("a deferred hook message is the Invocation of an after hook");
+  return message as unknown as Invocation;
+}
 
 export function createMantle<Env>(service: MantleService<Env>, options: MantleOptions<Env>): Mantle<Env> {
   let booted: Promise<MantleRuntime> | undefined;
-  // a request's waitUntil outlives it only through the isolate, so the latest one is the one hooks use
-  let waitUntil: (p: Promise<unknown>) => void = () => undefined;
+  const retainers = new WeakMap<InvocationCause, (p: Promise<unknown>) => void>();
 
-  const runtimeFor = (env: Env, ctx?: WaitUntil) => {
-    if (ctx) waitUntil = (p) => ctx.waitUntil(p);
+  const runtimeFor = async (env: Env, ctx?: WaitUntil): Promise<MantleRuntime> => {
     booted ??= createMantleRuntime({
       plan: options.plan, handlers: service.handlers as never, storage: options.storage(env), env, schedules: options.schedules,
-      expectedFingerprint: options.expectedFingerprint, waitUntil: (p) => waitUntil(p),
+      expectedFingerprint: options.expectedFingerprint, waitUntil: (p, cause) => {
+        for (let depth = 0; cause && depth <= MAX_INVOCATION_DEPTH; cause = cause.parent, depth++) {
+          const retain = retainers.get(cause);
+          if (retain) { retain(p); return; }
+        }
+      },
     }).catch((e) => { booted = undefined; throw e; }); // a failed boot is retried by the next request
-    return booted;
+    const runtime = await booted;
+    const retain = ctx ? (p: Promise<unknown>) => ctx.waitUntil(p) : () => undefined;
+    const hostCause: InvocationCause = { kind: "internal", id: `host:${crypto.randomUUID()}` };
+    retainers.set(hostCause, retain);
+    return {
+      ...runtime,
+      invokeProcedure: (inv) => {
+        const cause = { ...inv.cause };
+        retainers.set(cause, retain);
+        return runtime.invokeProcedure({ ...inv, cause });
+      },
+      store: {
+        ...runtime.store,
+        ...bindStoreCause(runtime.store, hostCause),
+        as: (caller, cause = { kind: "internal", id: `store:${crypto.randomUUID()}` }) => {
+          const boundCause = { ...cause };
+          retainers.set(boundCause, retain);
+          return runtime.store.as(caller, boundCause);
+        },
+      },
+    };
   };
 
   return {
     async fetch(request, env, ctx) {
       const runtime = await runtimeFor(env, ctx);
-      return service.fetch(request, env, { runtime, waitUntil: (p) => waitUntil(p) });
+      return service.fetch(request, env, { runtime, waitUntil: ctx ? (p) => ctx.waitUntil(p) : () => undefined });
     },
 
     async invokeSchedule(cron, scheduledTime, env, ctx) {
@@ -68,11 +118,11 @@ export function createMantle<Env>(service: MantleService<Env>, options: MantleOp
     },
 
     async runDeferredHook(message, env, ctx) {
-      const inv = message as Partial<Invocation> | null;
-      if (!inv || typeof inv.procedure !== "string" || !inv.caller || inv.cause?.kind !== "lifecycle" || !inv.cause.hook.startsWith("after_")) throw bad("a deferred hook message is the Invocation of an after hook");
+      const inv = deferredInvocation(message);
       // the queue is Mantle's own channel, but the message is only ever honoured for what a Trigger of the plan would have run:
       // that Trigger, its Procedure and its hook, and never as the system caller (no wire produces one)
-      const t = options.plan.triggers[inv.cause.trigger];
+      if (inv.cause.kind !== "lifecycle") throw bad("invalid deferred lifecycle cause");
+      const t = Object.hasOwn(options.plan.triggers, inv.cause.trigger) ? options.plan.triggers[inv.cause.trigger] : undefined;
       if (inv.caller.kind === "system" || t?.source.kind !== "lifecycle" || t.procedure !== inv.procedure || t.source.schema !== inv.cause.schema || !t.source.on.includes(inv.cause.hook))
         throw bad("the message does not match a lifecycle Trigger of the plan");
       await (await runtimeFor(env, ctx)).invokeProcedure(inv as Invocation);

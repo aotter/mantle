@@ -16,6 +16,7 @@ import.
 | `@aotter/mantle` | `createMantle`, `createMantleRuntime`, Store, `Caller`, the handler contract, `withCaller` |
 | `@aotter/mantle/spec` | The manifest grammar, validation and `compilePlan` (the CLI side) |
 | `@aotter/mantle/d1`, `/d1/compile` | The built-in SQLite dialect: runtime and compile sides (ADR-0035) |
+| `@aotter/mantle/bun` | Native Bun.SQL PostgreSQL, bun:sqlite and Admin assets (ADR-0038) |
 | `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |
 | `@aotter/mantle/auth` | `createMantleAuth` (Better Auth), `createCallerResolver`, `createAuthRoutes` |
 | `@aotter/mantle/admin` | `createAdminSurface` |

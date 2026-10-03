@@ -32,7 +32,7 @@ export interface MantleRuntimeArgs {
   readonly schedules?: boolean;
   /** Handed to handlers as `ctx.env`. */
   readonly env?: unknown;
-  readonly waitUntil?: (promise: Promise<unknown>) => void;
+  readonly waitUntil?: (promise: Promise<unknown>, cause?: InvocationCause) => void;
   /** Microseconds since the epoch, and new entry ids. */
   readonly now?: () => number;
   readonly newId?: () => string;
@@ -42,7 +42,11 @@ const fail = (code: DiagnosticCode, path: string, message: string, phase: Diagno
   new DiagnosticError(makeDiagnostic({ code, phase, severity: "error", path, message, ...extra }));
 
 const VERB = { create: "insert", update: "update", delete: "delete", publish: "publish" } as const;
-const depthOf = (c: InvocationCause | undefined): number => (c ? 1 + depthOf(c.parent) : 0);
+const depthOf = (c: InvocationCause | undefined): number => {
+  let depth = 0;
+  for (; c && depth <= MAX_INVOCATION_DEPTH; c = c.parent) depth++;
+  return depth;
+};
 const child = (parent: InvocationCause, procedure: string): InvocationCause => ({ kind: "internal", id: `${parent.id}>${procedure}`, parent });
 
 export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<MantleRuntime> {
@@ -145,7 +149,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   async function invoke(inv: Invocation, guard = false): Promise<unknown> {
     if (depthOf(inv.cause) > MAX_INVOCATION_DEPTH)
       throw fail("INVOCATION_DEPTH_EXCEEDED", `manifest:Procedure/${inv.procedure}`, `Procedures invoked more than ${MAX_INVOCATION_DEPTH} deep (hooks and ctx.invoke count)`, "runtime");
-    const proc = plan.procedures[inv.procedure];
+    const proc = Object.hasOwn(plan.procedures, inv.procedure) ? plan.procedures[inv.procedure] : undefined;
     const path = `manifest:Procedure/${inv.procedure}`;
     if (!proc) throw fail("PROCEDURE_NOT_FOUND", path, `unknown Procedure '${inv.procedure}'`, "runtime");
     const denial = evaluateAuthAll(proc.requires, inv.caller, path);
@@ -166,7 +170,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
         // only the system caller reaches TTL maintenance: no request can produce one (ADR-0032 decision 8)
         const scoped = inv.caller.kind === "system" && !ro ? { ...bound, sweepExpired: store.sweepExpired } : bound;
         const ctx: HandlerContext = {
-          caller: inv.caller, cause: inv.cause, env: args.env, waitUntil: args.waitUntil ?? (() => undefined),
+          caller: inv.caller, cause: inv.cause, env: args.env, waitUntil: (promise) => args.waitUntil?.(promise, inv.cause),
           store: ro ? readOnly(scoped) : scoped,
           invoke: (procedure, i) => (ro ? Promise.reject(fail("AUTH_DENIED", path, "a guard or a before hook may not invoke a Procedure", "runtime")) : invoke({ procedure, input: i, caller: inv.caller, cause: child(inv.cause, procedure) })),
         };

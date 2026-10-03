@@ -61,4 +61,5 @@ run; and a second built-in dialect exists, so "which engine on which platform" i
 
 ## Implementation status
 
-Implemented in #1296: the axes, the aliases, the Hyperdrive preset, `host: none`. The Bun host follows.
+Implemented in #1296: the axes, the aliases, the Hyperdrive preset, `host: none`. The Bun host (`host: bun`, both dialects)
+is ADR-0038, which amends decisions 1 and 3.

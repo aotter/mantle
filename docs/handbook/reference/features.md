@@ -50,4 +50,4 @@ description: A task-to-feature table for Mantle 0.2.0 manifests — what to decl
 | `errorPolicy` on lifecycle hooks | before hooks fail closed; after hooks are best effort |
 | deferred hooks on a Queue | after hooks run after the commit; a queue is the service's own |
 | Mantle-rendered public pages, templates, sitemap | not ported; render from your own `fetch` |
-| `--host`, `mantle validate`, `emit-openapi`, `mantle skills` | `mantle generate` and `mantle generate --check` |
+| `mantle validate`, `emit-openapi`, `mantle skills` | `mantle generate` and `mantle generate --check` |

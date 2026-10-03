@@ -3,6 +3,7 @@ import { DiagnosticError, runtimeDiagnostic, type Diagnostic } from "../spec/ker
 import type { StorageSchema } from "../core/dialect.js";
 import type { StoreApplied, StoreExecutor, StoreRow, StoreStatement } from "../core/store.js";
 import { query, sqlState, transaction, type PgConnect, type PgError, type PgStatement } from "./driver.js";
+import { describeResult } from "./textRows.js";
 import { print, typed } from "./print.js";
 
 const fail = (code: Diagnostic["code"], message: string, conflict?: Diagnostic["conflict"]) =>
@@ -21,7 +22,8 @@ export class PgStoreExecutor implements StoreExecutor {
 
   private prepared(s: StoreStatement): PgStatement {
     if (s.binds.length > this.maxBindings) throw fail("INPUT_VALIDATION_FAILED", `a statement binds ${s.binds.length} values; the limit is ${this.maxBindings}`);
-    return { text: print(typed(s.ir, this.schemas)), values: s.binds };
+    const ast = typed(s.ir, this.schemas);
+    return { text: print(ast), values: s.binds, describeResult: () => describeResult(ast) };
   }
 
   async select(statement: StoreStatement): Promise<readonly StoreRow[]> {

@@ -394,3 +394,33 @@ describe("the service preset", () => {
     expect(await exists(dir, "src/service.ts")).toBe(true);
   }, 60_000);
 });
+
+// Bun owns native connections/assets; the composition still uses exactly the same createMantle service port.
+it('writes Bun presets for PostgreSQL and SQLite with no Cloudflare or pg imports', async () => {
+  const { presetFiles } = await import('../../src/cli/preset.js');
+  const plan = { schemas: {}, procedures: {}, triggers: {} } as any;
+  for (const dialect of ['postgres', 'sqlite'] as const) for (const identity of ['mantle', 'custom', 'none'] as const) {
+    const files = Object.fromEntries(presetFiles('/private/tmp/bun-preset', { host: 'bun', dialect, identity, features: identity === 'none' ? [] : ['admin'] }, plan));
+    expect(files['wrangler.jsonc']).toBeUndefined();
+    expect(files['src/service.ts']).toContain('@aotter/mantle/bun');
+    expect(files['src/service.ts']).not.toMatch(/@aotter\/mantle\/cloudflare|from "pg"|HYPERDRIVE|D1Database|Fetcher/);
+    expect(files['src/index.ts']).toContain('Bun.serve');
+    expect(files['src/index.ts']).toContain('headers.delete("x-mantle-client-ip")');
+    expect(files['src/index.ts']).toContain('while (pending.size)');
+    expect(files['src/service.ts']).toContain('schedules: false');
+    if (dialect === 'postgres') expect(files['src/index.ts']).toContain('prepare: false');
+    expect(files['src/index.ts']).toContain('development: false');
+    // the generated project typechecks against bun-types, with @aotter/mantle mapped to this repo's source
+    const dir = await mkdtemp(join(tmpdir(), 'mantle-bun-preset-'));
+    for (const [path, source] of Object.entries(files)) { await mkdir(dirname(join(dir, path)), { recursive: true }); await writeFile(join(dir, path), source); }
+    await mkdir(join(dir, '.mantle/generated'), { recursive: true });
+    await writeFile(join(dir, '.mantle/generated/mantle.ts'), 'import type { MantleHandlers as Handlers, RuntimePlan } from "@aotter/mantle";\nexport const plan = {} as RuntimePlan;\nexport type MantleHandlers<E = unknown> = Handlers<E>;\n');
+    const { config } = ts.readConfigFile(join(dir, 'tsconfig.json'), ts.sys.readFile);
+    const { options, fileNames } = ts.parseJsonConfigFileContent(config, ts.sys, dir);
+    expect(options.types).toEqual(['bun-types', 'node']);
+    const paths = { '@aotter/mantle': [join(SRC, 'core/index.ts')], '@aotter/mantle/*': [join(SRC, '*/index.ts')] };
+    const program = ts.createProgram([...fileNames, join(NODE_MODULES, 'bun-types/index.d.ts')], { ...options, types: ['node'], typeRoots: [TYPES], paths });
+    expect(ts.getPreEmitDiagnostics(program).map((d) => `${d.file?.fileName ?? ''}: ${ts.flattenDiagnosticMessageText(d.messageText, '\n')}`), `${dialect} ${identity}`).toEqual([]);
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 120_000);

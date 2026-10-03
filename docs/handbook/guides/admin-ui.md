@@ -90,6 +90,28 @@ a form above them; all of them keep cursor paging.
 
 ## Roles
 
+The Developer console's Procedure overview projects the sealed SQL AST into
+a static execution diagram: authorization, validated input, guard, applicable
+lifecycle hooks, ordered atomic statements, commit or rollback, and output
+validation. Statement cards show read/write dependencies, row versus set
+semantics, RETURNING and ordered CASE assignments. CASE chooses a field value;
+WHERE filters rows. A set operation can affect zero rows and still continue.
+Output validation and after-hook failures do not roll back an existing commit.
+Unsupported expression shapes remain explicitly opaque beside authored SQL;
+code handlers' effects and actual run history are not inferred.
+
+The inline business flow uses Schema/property titles and titled enum options
+from the developer snapshot; generic verbs and operators are UI translations.
+It expands direct `UPDATE SET field = CASE … END` assignments only. CASE
+inside arithmetic, casts, functions, SELECT or INSERT remains in the SQL
+detail tree, rather than pretending its intermediate result is the assigned
+value. SQL identifiers match manifest names case-insensitively. The existing
+`money-minor` display convention uses hundredths and a single-valued sibling
+`currency` enum; if numeric conversion or currency formatting would round a
+threshold, the flow shows its exact SQL literal marked as a raw SQL value.
+These display hints do not establish or validate business units.
+
+
 Admin's gate admits any staff role. Inside it, each route names the least role
 it needs: `contributor` reads and edits drafts, `editor` publishes, deletes
 and manages media, `owner` manages staff, site settings and the developer

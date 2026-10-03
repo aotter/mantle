@@ -128,3 +128,18 @@ it.skipIf(!PG_URL)("a Schema field read through a CTE keeps its name and type, t
     expect([row.dueAt, row.due]).toEqual(["2026-01-02T00:00:00.000000Z", "2026-01-02T00:00:00.000000Z"]);
   } finally { await db.drop(); }
 }, 60_000);
+
+it.skipIf(!PG_URL)("RETURNING <target>.* is the target's declared columns, as RETURNING * is", async () => {
+  const db = await freshSchema();
+  useCompileSide(pgCompile);
+  try {
+    const s = site(await boot({ storage: postgresStorage({ connect: db.connect }), driver: pgDatabaseDriver(db.connect) }));
+    const keys = async (sql: string) => Object.keys((await runProcedure(s, await program("procedure", sql), caller())).rows[0][0]).sort();
+    const star = await keys("INSERT INTO settings (key, value) VALUES ('a', 'b') RETURNING *");
+    expect(await keys("INSERT INTO settings (key, value) VALUES ('c', 'd') RETURNING settings.*")).toEqual(star);
+    expect(await keys("UPDATE settings AS t SET value = 'e' WHERE t.key = 'c' RETURNING t.*")).toEqual(star);
+    expect(star).not.toContain("owner");
+    // a star of anything but the target is left to PostgreSQL, which refuses it; it is never read as the target's columns
+    await expect(runProcedure(s, await program("procedure", "INSERT INTO settings (key, value) VALUES ('f', 'g') RETURNING nope.*"), caller())).rejects.toThrow();
+  } finally { useCompileSide(undefined); await db.drop(); }
+}, 60_000);

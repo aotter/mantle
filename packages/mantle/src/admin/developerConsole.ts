@@ -4,6 +4,7 @@
  * IR, so a View's sources and a Procedure's writes are the relations the runtime runs. No run is observed (G7).
  */
 import { mcpTools, resolveMantleRef, type AuthPredicate, type AuthorizationRequirements, type JsonSchema, type RuntimePlan, type SqlNode } from "../spec/domain/index.js";
+import { procedureFlow } from "./procedureFlow.js";
 
 type Audience = "public" | "members" | "staff" | "system" | "api-clients";
 
@@ -17,7 +18,7 @@ function audienceOf(requires: AuthorizationRequirements | undefined): Audience |
 }
 
 /** The Schemas a program reads (every table relation) and writes (a statement's target), by the plan's lower-case key. */
-function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; writes: Set<string> } {
+export function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; writes: Set<string> } {
   const reads = new Set<string>();
   const writes = new Set<string>();
   const walk = (v: unknown, write: boolean): void => {
@@ -31,7 +32,6 @@ function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; writes: S
     }
   };
   walk(stmts, false);
-  for (const w of writes) reads.delete(w);
   return { reads, writes };
 }
 
@@ -42,7 +42,18 @@ export function developerConsole(plan: RuntimePlan) {
   const schemas = Object.values(plan.schemas).sort((a, b) => a.name.localeCompare(b.name));
   const views = Object.entries(plan.views).filter(([, v]) => v.surface !== "internal").sort(([a], [b]) => a.localeCompare(b));
   const procedureAudience = (name: string): Audience => audienceOf(plan.procedures[name]?.requires) ?? "public";
-  const handlerOf = (h: RuntimePlan["procedures"][string]["handler"]) => ("ref" in h ? { kind: "ref" as const, ref: h.ref } : { kind: "sql" as const, statement: h.source });
+  const handlerOf = (h: RuntimePlan["procedures"][string]["handler"]) => {
+    if ("ref" in h) return { kind: "ref" as const, ref: h.ref };
+    const flow = procedureFlow(h.sql.stmts, relationsOf);
+    const verbs: Record<string, string> = { INSERT: "create", UPDATE: "update", DELETE: "delete" };
+    const hooks = Object.entries(plan.triggers).flatMap(([trigger, t]) => {
+      if (t.source.kind !== "lifecycle") return [];
+      const source = t.source;
+      const on = source.on.filter((hook) => flow.some((s) => s.writes.includes(source.schema.toLowerCase()) && hook.endsWith(`_${verbs[s.operation]}`)));
+      return on.length ? [{ trigger, procedure: t.procedure, schema: source.schema, on }] : [];
+    });
+    return { kind: "sql" as const, statement: h.source, flow, hooks };
+  };
   const procedures = Object.entries(plan.procedures).sort(([a], [b]) => a.localeCompare(b)).map(([name, p]) => ({
     name, title: p.title ?? null, description: p.description ?? null, audience: procedureAudience(name), input: p.input, output: p.output,
     authorization: p.requires?.auth?.all ?? [], guard: p.requires?.guard?.procedure ?? null, handler: handlerOf(p.handler),

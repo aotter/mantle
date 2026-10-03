@@ -27,6 +27,7 @@ export function DeveloperOverviewView(): React.ReactElement {
     <DeveloperOperations operations={snapshot.data.operations} />
     <div className="min-h-0 flex-1"><AtomGraph
       graph={snapshot.data.graph}
+      schemas={snapshot.data.dataModel.schemas}
       selectedAtomId={selectedId}
       onSelect={(id) => navigate(developerSelectionHref("/admin/dev/overview/flow", id))}
       onOpen={(atom) => navigate(developerDetailHref(atom.id))}

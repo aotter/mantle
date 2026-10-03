@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { PG_GRAMMAR, compilePlan } from "../../src/spec/index.js";
+import * as pgCompile from "../../src/postgres/compile/index.js";
 
 const fixture = readFileSync(fileURLToPath(new URL("./fixtures/pipeline/valid.yaml", import.meta.url)), "utf8");
 
@@ -117,6 +118,30 @@ spec: { source: { kind: lifecycle, schema: notes, on: [before_update] }, target:
     const res = await compile(SCHEMA + procedure("INSERT INTO notes (body) VALUES (input.text)") + trigger);
     if (res.ok) throw new Error("accepted an inline hook target");
     expect(res.diagnostics[0]).toMatchObject({ code: "LIFECYCLE_TARGET_NOT_REF" });
+  });
+});
+
+describe("a field with more than one JSON Schema type", () => {
+  const doc = (kind: string, name: string, spec: string) => `apiVersion: cms.mantle.aotter.net/v2\nkind: ${kind}\nmetadata: { name: ${name} }\nspec:\n${spec}\n`;
+  const things = (checks = "") => doc("Schema", "things", `  title: Things\n  lifecycle: operational\n  schema:\n    type: object\n    properties: { qty: { type: [integer, number] }, mixed: { type: [integer, string] }, tags: { type: array } }\n${checks}`);
+  const labels = doc("Schema", "labels", "  title: Labels\n  lifecycle: operational\n  schema:\n    type: object\n    properties: { mixed: { type: string }, value: { type: object } }");
+  const view = (sql: string) => `---\n${doc("View", "v", `  surface: staff\n  sql: "${sql}"`)}`;
+  const compile = async (text: string, dialect?: typeof pgCompile) => {
+    const r = await compilePlan({ sources: [{ sourceId: "memory:union", text }] }, ...(dialect ? [dialect] : []));
+    return r.ok ? "ok" : r.diagnostics.map((d) => d.message).join(" ");
+  };
+  it("is one number when its types are integer and number, and json otherwise", async () => {
+    const r = await compilePlan({ sources: [{ sourceId: "memory:union", text: things() }] });
+    expect(r.ok && r.plan.schemas.things?.fields).toMatchObject({ qty: "real", mixed: "json" });
+  });
+  it("is refused in a comparison or a check when json, on every dialect: SQLite compares its text, PostgreSQL has no jsonb < integer", async () => {
+    for (const dialect of [undefined, pgCompile]) {
+      for (const text of [things(`  checks: ["mixed < 5"]`), `${things()}---\n${labels}${view("SELECT t.id FROM things t JOIN labels l ON l.id = t.id WHERE t.mixed > 3")}`])
+        expect(await compile(text, dialect)).toMatch(/mixed is json: compare a value read with ->>/);
+      // not refused: a numeric union, another relation's field of the same name, a subquery's output, json_each's value, IS NULL
+      for (const sql of ["SELECT id FROM things WHERE qty < 5", "SELECT l.id FROM labels l WHERE l.mixed = 'x'", "SELECT s.mixed FROM (SELECT CAST(t.qty AS text) AS mixed FROM things t) s WHERE s.mixed = 'x'", "SELECT t.id FROM things t, json_each(t.tags) WHERE value = 'x'", "SELECT id FROM things WHERE mixed IS NULL"])
+        expect(await compile(`${things()}---\n${labels}${view(sql)}`, dialect), `${dialect ? "pg" : "d1"}: ${sql}`).toBe("ok");
+    }
   });
 });
 
