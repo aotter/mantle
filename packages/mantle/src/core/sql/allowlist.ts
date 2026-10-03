@@ -15,7 +15,7 @@ import { intervalMicros, parseNumeric } from "../../spec/domain/service/SqlTypes
 
 type Code = SqlDiagnosticCode;
 /** `scope`: the CTE names in scope, innermost last, by PostgreSQL's rule (see `withScope`) */
-type Ctx = SqlContext & { source?: string; known?: Set<string>; p: Profile; scope: Set<string>[] };
+type Ctx = SqlContext & { source?: string; known?: Set<string>; p: Profile; scope: Set<string>[]; rels?: Map<string, string>[] };
 
 /** node type -> the keys it may carry */
 export const KEYS_SRC: Record<string, string> = {
@@ -247,7 +247,10 @@ function walk(type: string, node: N, w: Walk, path: string[], loc: number | unde
     shape('WithClause', wc, w, here);
     (wc.ctes ?? []).forEach((x: N, j: number) => withScope(w, wc.recursive ? names : names.slice(0, j), () => child(x, w, [...path, 'WithClause'], 'ctes', here)));
   }
-  withScope(w, names, () => {
+  // the Schema relations this statement reads directly, by alias: what a column reference in it can name (`jsonCompare`)
+  const rels = type === 'SelectStmt' || type === 'UpdateStmt' || type === 'DeleteStmt' ? relationsOf(node) : undefined;
+  if (rels) (w.ctx.rels ??= []).push(rels);
+  try { withScope(w, names, () => {
     for (const [k, v] of Object.entries(node)) {
       if (type === 'A_Const' || k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end' || (wc && k === 'withClause')) continue;
       const bare = BARE[`${type}.${k}`] ?? BARE[k];
@@ -255,7 +258,20 @@ function walk(type: string, node: N, w: Walk, path: string[], loc: number | unde
       else if (Array.isArray(v)) v.forEach((c) => child(c, w, path, k, here));
       else if (v && typeof v === 'object') child(v as N, w, path, k, here);
     }
-  });
+  }); } finally { if (rels) w.ctx.rels!.pop(); }
+}
+
+/** A statement's own Schema relations (FROM, its joins, an UPDATE or DELETE target), by alias; never a subquery or CTE. */
+function relationsOf(node: N): Map<string, string> {
+  const out = new Map<string, string>();
+  const add = (n: N | undefined): void => {
+    if (n?.JoinExpr) return (add(n.JoinExpr.larg), add(n.JoinExpr.rarg));
+    const v = n?.RangeVar ?? n;
+    if (v?.mantle === 'table') out.set(String(v.alias?.aliasname ?? v.relname).toLowerCase(), String(v.relname).toLowerCase());
+  };
+  for (const f of node.fromClause ?? []) add(f);
+  add(node.relation);
+  return out;
 }
 function child(c: N, w: Walk, path: string[], k: string, loc: number | undefined) {
   const keys = Object.keys(c);
@@ -331,6 +347,7 @@ const check: Record<string, Checker> = {
   A_Expr: (n, ctx, _p, at) => {
     const op = sv(n.name);
     if (ctx.p.name === 'base') bareLiteralCompare(n, ctx, at); // PostgreSQL casts the literal to the column's type
+    jsonCompare(n, ctx, at);
     if (n.kind === 'AEXPR_OP' && !ctx.p.ops.has(op)) no('SQL_UNSUPPORTED', `operator ${op} is refused`, at);
     if (n.kind === 'AEXPR_IN' && !['=', '<>'].includes(op)) no('SQL_UNSUPPORTED', 'a bad IN', at);
     if (n.kind === 'AEXPR_LIKE' && !['~~', '!~~'].includes(op)) no('SQL_UNSUPPORTED', 'ILIKE and regular expressions are refused', at, /\bILIKE\b/i);
@@ -424,8 +441,7 @@ function columnType(ctx: Ctx, name: string): string | undefined {
 
 /**
  * PostgreSQL reads `startsAt > '2020-01-01'` by casting the literal to the column's type; SQLite compares the stored integer with
- * text and the condition is silently false. A bare string literal against a date-time, date or boolean column is refused, and so
- * is any comparison of a json column.
+ * text and the condition is silently false. A bare string literal against a date-time, date or boolean column is refused.
  */
 function bareLiteralCompare(n: N, ctx: Ctx, at: number | undefined) {
   const compares = n.kind === 'AEXPR_OP' ? ['=', '<>', '!=', '<', '>', '<=', '>='].includes(sv(n.name)) : ['AEXPR_IN', 'AEXPR_BETWEEN', 'AEXPR_NOT_BETWEEN', 'AEXPR_DISTINCT', 'AEXPR_NOT_DISTINCT'].includes(n.kind);
@@ -434,12 +450,30 @@ function bareLiteralCompare(n: N, ctx: Ctx, at: number | undefined) {
   const literals = (x: N | undefined): string[] => (x?.List ? x.List.items.flatMap(literals) : x?.A_Const?.sval ? [x.A_Const.sval.sval] : []);
   for (const [colSide, other] of [[n.lexpr, n.rexpr], [n.rexpr, n.lexpr]] as const) {
     const type = typeOf(colSide);
-    // a json value compares as text on SQLite and as jsonb (no operator with a number) on PostgreSQL: compare an extraction
-    if (type === 'json') no('SQL_TYPE', `${colSide.ColumnRef.fields.at(-1).String.sval} is json: compare a value read with ->> (and CAST), or declare the field with one scalar type`, at);
     if (!type || !STORED_AS_NUMBER.has(type)) continue;
     const text = literals(other)[0];
     if (text !== undefined)
       no('SQL_TYPE', `'${text}' is text and the column is ${type}, which is stored as a number: ${type === 'bool' ? 'write true or false' : `write CAST('${text}' AS ${type})`}, or bind it as an input`, at);
+  }
+}
+
+/**
+ * A json field compares as its stored text on SQLite and as jsonb on PostgreSQL (no jsonb < integer): either way not as the value
+ * the author meant, so a comparison of one is refused on every dialect. The field is the statement's own Schema column: named
+ * through its alias, or bare when exactly one of its Schema relations declares it.
+ */
+function jsonCompare(n: N, ctx: Ctx, at: number | undefined) {
+  const compares = n.kind === 'AEXPR_OP' ? ['=', '<>', '!=', '<', '>', '<=', '>='].includes(sv(n.name)) : ['AEXPR_IN', 'AEXPR_BETWEEN', 'AEXPR_NOT_BETWEEN', 'AEXPR_DISTINCT', 'AEXPR_NOT_DISTINCT'].includes(n.kind);
+  const rels = ctx.rels?.at(-1);
+  if (!compares || !rels) return;
+  for (const side of [n.lexpr, n.rexpr]) {
+    const f: N[] | undefined = side?.ColumnRef?.fields;
+    if (!f || f.length > 2 || !f.every((x) => x.String)) continue;
+    const name = String(f.at(-1)!.String.sval).toLowerCase();
+    const schemas = f.length === 2 ? [rels.get(String(f[0]!.String.sval).toLowerCase())].filter((s): s is string => !!s)
+      : [...new Set(rels.values())].filter((s) => Object.hasOwn(ctx.schemas[s]?.fields ?? {}, name));
+    if (schemas.length === 1 && ctx.schemas[schemas[0]!]?.fields[name] === 'json')
+      no('SQL_TYPE', `${f.at(-1)!.String.sval} is json: compare a value read with ->> (and CAST), or declare the field with one scalar type`, at);
   }
 }
 

@@ -139,5 +139,7 @@ it.skipIf(!PG_URL)("RETURNING <target>.* is the target's declared columns, as RE
     expect(await keys("INSERT INTO settings (key, value) VALUES ('c', 'd') RETURNING settings.*")).toEqual(star);
     expect(await keys("UPDATE settings AS t SET value = 'e' WHERE t.key = 'c' RETURNING t.*")).toEqual(star);
     expect(star).not.toContain("owner");
+    // a star of anything but the target is left to PostgreSQL, which refuses it; it is never read as the target's columns
+    await expect(runProcedure(s, await program("procedure", "INSERT INTO settings (key, value) VALUES ('f', 'g') RETURNING nope.*"), caller())).rejects.toThrow();
   } finally { useCompileSide(undefined); await db.drop(); }
 }, 60_000);

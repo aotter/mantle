@@ -329,12 +329,12 @@ const server = Bun.serve({
   development: false,
   error(error) {
     console.error(error);
-    return Response.json({ error: { code: "INTERNAL_ERROR", message: "Internal error" } }, { status: 500 });
+    return Response.json({ error: { code: "INTERNAL_ERROR", message: "An internal error occurred." } }, { status: 500 });
   },
   fetch(request, server) {
     const headers = new Headers(request.headers);
     headers.delete("x-mantle-client-ip");
-    const socket = server.requestIP(request)?.address;
+    const socket = server.requestIP(request)?.address?.replace(/^::ffff:/, "");
     const forwarded = socket && proxies.has(socket) ? request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() : undefined;
     const ip = forwarded || socket;
     if (ip) headers.set("x-mantle-client-ip", ip);
@@ -347,7 +347,7 @@ const stop = async () => {
   stopping = true;
   await server.stop();
   while (pending.size) await Promise.allSettled([...pending]);
-  ${pg ? 'await sql.close();' : 'db.close();'}
+  ${pg ? 'await sql.close({ timeout: 5 });' : 'db.close();'}
 };
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);

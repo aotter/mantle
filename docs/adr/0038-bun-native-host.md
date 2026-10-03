@@ -28,16 +28,18 @@ the statement, so the engine still refuses a write as it does on every other
 PostgreSQL host. Creating the temporary table needs the TEMPORARY privilege on the
 database (`GRANT TEMPORARY ON DATABASE ... TO <role>`); without it every read fails
 with 42501 naming this requirement, and a read replica cannot serve this host.
-Every transaction names `pg_temp` last in its search_path, on every PostgreSQL
-host, so a temporary table on a pooled session never stands in for a Schema table.
+Every transaction appends `pg_temp` to its search_path, on every PostgreSQL host,
+so a temporary table on a pooled session never stands in for a Schema table (unless
+the role's own search_path already names pg_temp earlier, which it should not).
 A connection whose ROLLBACK failed is closed, never released to the pool.
 This costs three metadata round trips per result. Replace it only when Bun
 provides public RowDescription metadata; do not approximate money or time values.
 
 The entry overwrites the trusted IP header from the socket; behind a reverse proxy
 listed in TRUSTED_PROXIES, the client is the address that proxy appended last to
-X-Forwarded-For, so each client keeps its own sign-in rate limit. Bun.serve runs
-with `development: false` and an error handler that answers a generic 500: Bun's
+X-Forwarded-For (one trusted hop; an IPv4-mapped socket address is matched as
+IPv4), so each client keeps its own sign-in rate limit. Bun.serve runs
+with `development: false` and an error handler that answers Core's 500 envelope: Bun's
 development page would show the exception, stack and paths. Admin assets reject
 traversal, control characters and symlinks outside the installed bundle.
 bun:sqlite runs with foreign keys on, as D1 does, and a Mantle batch waits for a
