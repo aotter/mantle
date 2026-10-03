@@ -32,7 +32,7 @@ export function safeParseJson<T extends ZodType>(schema: T, value: unknown): Ret
 
 /**
  * Zod checks a string's `maxLength` before its `pattern` but runs the pattern even when the length failed. The CLI bounds a
- * pattern's backtracking only up to the declared maxLength (maxLength^k), so a longer string must stop at the length check:
+ * pattern's backtracking only up to the declared maxLength (branches × maxLength^e), so a longer string must stop at the length check:
  * every string schema's maxLength check aborts the checks after it.
  */
 function lengthBeforePattern(root: ZodType): ZodType {

@@ -72,10 +72,13 @@ a caller's string:
 
 - a repeated group whose body repeats or alternates, such as the 0.1.x slug
   `^[a-z0-9]+(-[a-z0-9]+)*$` or `(a|b)+`, and any backreference;
-- a pattern with k variable quantifiers (`*`, `+`, `?`, `{m,}`, `{m,n}`)
-  whose string has no `maxLength`, or one where maxLength^k exceeds
-  10,000,000: one quantifier allows any maxLength up to 10,000,000, an email
-  `^[^@]+@[^@]+$` (k = 2) up to 3162, `^a*a*a*…$` almost none.
+- a pattern whose backtracking, branches × maxLength^e, could exceed
+  10,000,000 — e is its variable quantifiers (`*`, `+`, `?`, `{m,}`,
+  `{m,n}`) plus 1 unless it starts with `^`, branches the product of its
+  alternations' alternatives — or one with e > 0 whose string has no
+  `maxLength`: `^[a-z0-9-]+$` (e = 1) allows any maxLength up to
+  10,000,000, an email `^[^@]+@[^@]+$` (e = 2) up to 3162, the unanchored
+  `[^@]+@` (e = 2) also 3162, `^a*a*a*…$` almost none.
 
 Rewrite a slug as `{ type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }`,
 which also accepts leading, trailing and doubled hyphens. On a Schema field

@@ -341,20 +341,21 @@ export function validateJsonSchema(
           },
         );
       }
-      // Adjacent variable quantifiers (`a*a*a*`, `\w*\w*`, `.*.*`) backtrack polynomially: maxLength^k on a string that fails
-      const k = variableQuantifiers(value["pattern"] as string);
+      // Adjacent variable quantifiers (`a*a*a*`), the unanchored retry at every start offset and chained alternations backtrack
+      const { exponent, branches } = patternCost(value["pattern"] as string);
       const maxLength = value["maxLength"];
-      if (k > 0 && !(typeof maxLength === "number" && Number.isInteger(maxLength) && maxLength >= 0 && maxLength ** k <= MAX_PATTERN_WORK)) {
-        const limit = maxPatternLength(k);
-        const quantifiers = `${k} variable quantifier${k === 1 ? "" : "s"} (*, +, ?, {m,} or {m,n})`;
+      const bounded = typeof maxLength === "number" && Number.isInteger(maxLength) && maxLength >= 0;
+      if (branches * (exponent === 0 ? 1 : bounded ? maxLength ** exponent : Infinity) > MAX_PATTERN_WORK) {
+        const limit = maxPatternLength(exponent, branches);
+        const cost = `${branches === 1 ? "" : `${branches} alternative paths × `}maxLength^${exponent}`;
         throw new ManifestParseError(
-          typeof maxLength === "number"
-            ? `${kind} '${name}' has a regex pattern at ${pointer} with ${quantifiers} and maxLength ${maxLength}: a caller's string could cost maxLength^${k} backtracking steps, over the ${MAX_PATTERN_WORK} limit. Declare maxLength of at most ${limit}, or use fewer variable quantifiers.`
-            : `${kind} '${name}' has a regex pattern at ${pointer} with ${quantifiers} but no maxLength: a caller's string of any length could cost length^${k} backtracking steps. Declare maxLength of at most ${limit} (maxLength^${k} ≤ ${MAX_PATTERN_WORK}), or use fewer variable quantifiers.`,
+          `${kind} '${name}' has a regex pattern at ${pointer} that could cost ${cost} backtracking steps on one string (${exponent} = its variable quantifiers *, +, ?, {m,}, {m,n}, plus 1 unless it starts with ^), over the ${MAX_PATTERN_WORK} limit. ${
+            limit > 0 ? `Declare maxLength of at most ${limit}, anchor it with ^, or use fewer variable quantifiers or alternatives.` : "Use fewer alternatives, or an enum."
+          }`,
           idx,
           `${pointer}/pattern`,
           "INVALID_PATTERN",
-          { value: value["pattern"], expected: `a string with maxLength of at most ${limit}` },
+          { value: value["pattern"], expected: limit > 0 ? `a string with maxLength of at most ${limit}` : `at most ${MAX_PATTERN_WORK} alternative paths` },
         );
       }
     }
@@ -449,30 +450,38 @@ export function unsafePattern(pattern: string): string | undefined {
 }
 
 /**
- * How many quantifiers in `pattern` repeat a variable number of times — `*`, `+`, `?`, `{m,}` and `{m,n}` with m ≠ n — outside
- * character classes and escapes; a quantifier on a group counts once, and each one inside it counts too. A regex can backtrack
- * through about maxLength^k ways of splitting a string between k of them (`^a*a*a*$`), so the work bound below is maxLength^k.
+ * The backtracking a `pattern` can cost on one string of length n, as `branches × n^exponent`. `exponent` counts the quantifiers
+ * that repeat a variable number of times — `*`, `+`, `?`, `{m,}` and `{m,n}` with m ≠ n — outside character classes and escapes (a
+ * regex can split a string between k of them about n^k ways: `^a*a*a*$`), plus one when the pattern does not start with `^`, since
+ * an unanchored pattern is retried at every start offset. `branches` multiplies the alternatives of every alternation (`(a|b)(c|d)`
+ * tries up to 4 paths). Refused shapes aside (`unsafePattern`), the work is at most `branches × n^exponent`.
  */
-export function variableQuantifiers(pattern: string): number {
-  return scanPattern(pattern).variable;
+export function patternCost(pattern: string): { exponent: number; branches: number } {
+  const { variable, branches, anchored } = scanPattern(pattern);
+  return { exponent: variable + (anchored ? 0 : 1), branches };
 }
 
-/** The most backtracking steps a `pattern` may cost on one string: maxLength^k, k its variable quantifiers. */
+/** The most backtracking steps a `pattern` may cost on one string: `branches × maxLength^exponent` (`patternCost`). */
 export const MAX_PATTERN_WORK = 10_000_000;
 
-/** The longest maxLength a pattern with `k` variable quantifiers may declare: the largest n with n^k ≤ MAX_PATTERN_WORK. */
-export function maxPatternLength(k: number): number {
-  let n = Math.floor(MAX_PATTERN_WORK ** (1 / k));
-  while ((n + 1) ** k <= MAX_PATTERN_WORK) n++;
-  while (n > 0 && n ** k > MAX_PATTERN_WORK) n--;
+/** The longest maxLength a pattern of this cost may declare: the largest n with branches × n^exponent ≤ MAX_PATTERN_WORK (0 if none). */
+export function maxPatternLength(exponent: number, branches = 1): number {
+  const work = MAX_PATTERN_WORK / branches;
+  if (work < 1) return 0;
+  if (exponent === 0) return Infinity;
+  let n = Math.floor(work ** (1 / exponent));
+  while ((n + 1) ** exponent <= work) n++;
+  while (n > 0 && n ** exponent > work) n--;
   return n;
 }
 
-function scanPattern(pattern: string): { problem?: string; variable: number } {
+function scanPattern(pattern: string): { problem?: string; variable: number; branches: number; anchored: boolean } {
   let variable = 0;
-  if (pattern.length > MAX_JSON_SCHEMA_PATTERN) return { problem: `longer than ${MAX_JSON_SCHEMA_PATTERN} characters`, variable };
-  type Frame = { quantified: boolean; alternates: boolean };
-  const stack: Frame[] = [{ quantified: false, alternates: false }];
+  let branches = 1;
+  const anchored = pattern.startsWith("^");
+  if (pattern.length > MAX_JSON_SCHEMA_PATTERN) return { problem: `longer than ${MAX_JSON_SCHEMA_PATTERN} characters`, variable, branches, anchored };
+  type Frame = { quantified: boolean; alternates: boolean; branches: number };
+  const stack: Frame[] = [{ quantified: false, alternates: false, branches: 1 }];
   let group: Frame | undefined; // the group just closed, when it is the atom a quantifier would apply to
   let atom = false; // there is an atom a quantifier would apply to
   for (let i = 0; i < pattern.length; i++) {
@@ -485,8 +494,8 @@ function scanPattern(pattern: string): { problem?: string; variable: number } {
       const max = brace ? (brace[2] === undefined ? min : brace[3] ? +brace[3] : Infinity) : c === "?" ? 1 : Infinity;
       if (brace) i += brace[0].length - 1;
       if (pattern[i + 1] === "?") i++; // lazy
-      if (group && max > 1 && group.quantified) return { problem: "a repeated group whose body repeats (nested quantifiers)", variable };
-      if (group && max > 1 && group.alternates) return { problem: "a repeated group whose body alternates", variable };
+      if (group && max > 1 && group.quantified) return { problem: "a repeated group whose body repeats (nested quantifiers)", variable, branches, anchored };
+      if (group && max > 1 && group.alternates) return { problem: "a repeated group whose body alternates", variable, branches, anchored };
       if (max !== min) {
         top.quantified = true;
         variable++;
@@ -499,16 +508,15 @@ function scanPattern(pattern: string): { problem?: string; variable: number } {
     atom = true;
     if (c === "\\") {
       const e = pattern[i + 1];
-      if (e !== undefined && (/[1-9]/.test(e) || e === "k")) return { problem: "a backreference", variable };
+      if (e !== undefined && (/[1-9]/.test(e) || e === "k")) return { problem: "a backreference", variable, branches, anchored };
       i++;
     } else if (c === "[") {
       let j = i + 1;
-      if (pattern[j] === "^") j++;
-      if (pattern[j] === "]") j++;
+      if (pattern[j] === "^") j++; // without the u or v flag a class ends at its first `]`: `[]` and `[^]` are whole classes
       while (j < pattern.length && pattern[j] !== "]") j += pattern[j] === "\\" ? 2 : 1;
       i = j;
     } else if (c === "(") {
-      stack.push({ quantified: false, alternates: false });
+      stack.push({ quantified: false, alternates: false, branches: 1 });
       atom = false;
       if (pattern[i + 1] === "?") {
         const head = /^\?(?::|=|!|<=|<!|<[A-Za-z_$][\w$]*>)/.exec(pattern.slice(i + 1));
@@ -519,15 +527,18 @@ function scanPattern(pattern: string): { problem?: string; variable: number } {
       const parent = stack.at(-1)!;
       parent.quantified ||= closed.quantified;
       parent.alternates ||= closed.alternates;
+      branches *= closed.branches;
       group = closed;
     } else if (c === "|") {
       top.alternates = true;
+      top.branches++;
       atom = false;
     } else if (c === "^" || c === "$") {
       atom = false;
     }
   }
-  return { variable };
+  // a top-level alternative after `|` is not anchored by the leading `^`
+  return { variable, branches: branches * stack[0]!.branches, anchored: anchored && stack[0]!.branches === 1 };
 }
 
 function validateLocalSchemaRef(

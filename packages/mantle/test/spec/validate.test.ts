@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateManifests } from "./parse.js";
 import { parseManifests } from "./parse.js";
-import { unsafePattern, variableQuantifiers } from "../../src/spec/domain/service/SchemaSpecChecks.js";
+import { patternCost, unsafePattern } from "../../src/spec/domain/service/SchemaSpecChecks.js";
 import { jsonSchemaToZod } from "../../src/spec/domain/service/JsonSchemaToZod.js";
 import type {
   Manifest,
@@ -1333,13 +1333,22 @@ spec:
     expect([missing?.code, missing?.path]).toEqual(["INVALID_PATTERN", "manifest:doc/0#/spec/input/properties/s/pattern"]);
     expect(missing?.message).toMatch(/maxLength of at most 3162/);
     const [over] = input(`{ type: string, maxLength: 4, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' }`);
-    expect(over?.message).toMatch(/12 variable quantifiers.*maxLength of at most 3\b.*fewer variable quantifiers/s);
+    expect(over?.message).toMatch(/maxLength\^12.*maxLength of at most 3\b.*fewer variable quantifiers/s);
+    const [paths] = input(`{ type: string, pattern: '^${"(a|b)".repeat(24)}$' }`);
+    expect(paths?.message).toMatch(/16777216 alternative paths.*fewer alternatives/s);
+    // an unanchored pattern is retried at every offset: one more factor of maxLength
+    expect(input(`{ type: string, maxLength: 3162, pattern: '[a-z]*[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 215\b/);
+    expect(input(`{ type: string, maxLength: 100000, pattern: '[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 3162\b/);
   });
-  it("counts variable quantifiers outside character classes, a quantified group once", () => {
-    expect(["^[a-z*+?]{3}$", "^(ab)*$", "^\\*a+$", "^(a*)(b+)c?d{2,}e{1,3}f{4}$", "^[^@]+@[^@]+$"].map(variableQuantifiers)).toEqual([0, 1, 1, 5, 2]);
+  it("counts variable quantifiers outside character classes, a quantified group once, plus one when unanchored", () => {
+    expect(["^[a-z*+?]{3}$", "^(ab)*$", "^\\*a+$", "^(a*)(b+)c?d{2,}e{1,3}f{4}$", "^[^@]+@[^@]+$", "[a-z]*!", "abc", "^a|b"].map((p) => patternCost(p).exponent)).toEqual([0, 1, 1, 5, 2, 2, 1, 1]);
+    // without the u flag `[]` and `[^]` are whole classes: what follows is outside them
+    expect(["^[]a*$", "^[^]a*a*]?$"].map((p) => patternCost(p).exponent)).toEqual([1, 3]);
+    expect(unsafePattern("^[^](a+)+]?$")).toBeDefined();
+    expect(["^(?:[a-f0-9]{40}|[a-f0-9]{64})$", "^(a|b)(c|d|e)$", "^x|y|z"].map((p) => patternCost(p).branches)).toEqual([2, 6, 3]);
   });
   it("the worst accepted shape at its maxLength validates in well under 100 ms", () => {
-    for (const [pattern, maxLength] of [["^a*a*a*a*a*a*a*a*a*a*a*a*$", 3], ["^.*.*.*.*.*.*.*$", 10], ["^[^@]+@[^@]+$", 3162], ["^[a-z0-9-]+$", 100_000]] as const) {
+    for (const [pattern, maxLength] of [["^a*a*a*a*a*a*a*a*a*a*a*a*$", 3], ["^.*.*.*.*.*.*.*$", 10], ["^[^@]+@[^@]+$", 3162], ["^[a-z0-9-]+$", 100_000], ["[a-z]*[a-z]*!", 215], ["[a-z]*!", 3162], ["^[^]a*a*]?$", 215], [`^${"(a|a)".repeat(23)}a*$`, 1]] as const) {
       expect(input(`{ type: string, maxLength: ${maxLength}, pattern: '${pattern}' }`)).toEqual([]);
       const zs = jsonSchemaToZod({ type: "string", maxLength, pattern });
       const worst = "a".repeat(maxLength - 1) + "!";

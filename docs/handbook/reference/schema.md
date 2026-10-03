@@ -74,14 +74,19 @@ and Procedure inputs and outputs.
 | at most 100 levels deep and 10,000 schema nodes; an `enum` of at most 1,000 values | `JSON_SCHEMA_LIMIT_EXCEEDED` |
 | a `pattern` of at most 1,000 characters that compiles as a JavaScript regex | `INVALID_PATTERN` |
 | no repeated group whose body repeats or alternates (`(a+)+`, `(a\|b)*`, `^[a-z0-9]+(-[a-z0-9]+)*$`) and no backreference | `INVALID_PATTERN` |
-| a `pattern` with k variable quantifiers (`*`, `+`, `?`, `{m,}`, `{m,n}`, counted outside `[...]`) needs `maxLength` with maxLength^k ≤ 10,000,000 | `INVALID_PATTERN` |
+| a `pattern` costs at most branches × maxLength^e ≤ 10,000,000, and declares `maxLength` when e > 0 | `INVALID_PATTERN` |
 
 A JavaScript regex backtracks, and the pattern runs on every caller's string,
-so its work is bounded by the string's `maxLength`: `^[a-z0-9-]+$` (k = 1)
-allows any maxLength up to 10,000,000, the email `^[^@]+@[^@]+$` (k = 2) up
-to 3162, and `^[A-Z]{3}$` (k = 0) needs none. A string longer than its
-`maxLength` is refused before its pattern runs. The message names the largest
-maxLength the pattern allows; lower it, or use fewer variable quantifiers.
+so its work is bounded by the string's `maxLength`. The exponent e counts the
+variable quantifiers (`*`, `+`, `?`, `{m,}`, `{m,n}`, outside `[...]`), plus
+1 when the pattern does not start with `^`, because an unanchored pattern is
+retried at every offset; branches multiplies the alternatives of every
+alternation. `^[a-z0-9-]+$` (e = 1) allows any maxLength up to 10,000,000,
+the email `^[^@]+@[^@]+$` (e = 2) up to 3162, `^(?:[a-f0-9]{40}|[a-f0-9]{64})$`
+(e = 0, 2 branches) needs none. A string longer than its `maxLength` is
+refused before its pattern runs. The message names the largest maxLength the
+pattern allows; lower it, anchor the pattern with `^`, or use fewer variable
+quantifiers or alternatives.
 
 A slug is `{ type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }`. It
 accepts leading, trailing and doubled hyphens; to refuse them on a Schema
