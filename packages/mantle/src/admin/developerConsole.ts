@@ -18,7 +18,7 @@ function audienceOf(requires: AuthorizationRequirements | undefined): Audience |
 }
 
 /** The Schemas a program reads (every table relation) and writes (a statement's target), by the plan's lower-case key. */
-function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; writes: Set<string> } {
+export function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; writes: Set<string> } {
   const reads = new Set<string>();
   const writes = new Set<string>();
   const walk = (v: unknown, write: boolean): void => {
@@ -32,7 +32,6 @@ function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; writes: S
     }
   };
   walk(stmts, false);
-  for (const w of writes) reads.delete(w);
   return { reads, writes };
 }
 
