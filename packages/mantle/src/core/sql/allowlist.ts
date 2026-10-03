@@ -35,6 +35,32 @@ export const KEYS_SRC: Record<string, string> = {
 };
 export const KEYS = Object.fromEntries(Object.entries(KEYS_SRC).map(([k, v]) => [k, new Set(v.split(' ').filter(Boolean))]));
 
+/**
+ * Where a node may sit. The printers print whatever node a slot holds, and the policy rewriter wraps only a `RangeVar` in FROM, so
+ * the type of every child is checked against its slot: a `String` in FROM would print as a table read with no wrapper. A key not
+ * listed here is a scalar (a name, an enum, a flag) and must hold a string, number or boolean, never a node.
+ */
+const EXPR = 'ColumnRef A_Const A_Expr BoolExpr NullTest CaseExpr CoalesceExpr TypeCast FuncCall SubLink MinMaxExpr';
+const FROM = 'RangeVar RangeSubselect RangeFunction JoinExpr';
+const SLOTS_SRC: Record<string, string> = {
+  'SelectStmt.targetList': 'ResTarget', 'SelectStmt.fromClause': FROM, 'SelectStmt.whereClause': EXPR, 'SelectStmt.havingClause': EXPR,
+  'SelectStmt.groupClause': EXPR, 'SelectStmt.sortClause': 'SortBy', 'SelectStmt.limitCount': EXPR, 'SelectStmt.distinctClause': EXPR,
+  'SelectStmt.valuesLists': 'List', 'SelectStmt>List.items': EXPR,
+  'InsertStmt.cols': 'ResTarget', 'InsertStmt.selectStmt': 'SelectStmt', 'UpdateStmt.targetList': 'ResTarget', 'UpdateStmt.whereClause': EXPR,
+  'DeleteStmt.whereClause': EXPR, 'ReturningClause.exprs': 'ResTarget', 'ResTarget.val': EXPR,
+  'ColumnRef.fields': 'String A_Star', 'A_Expr.name': 'String', 'A_Expr.lexpr': EXPR, 'A_Expr.rexpr': `${EXPR} List`, 'A_Expr>List.items': EXPR,
+  'BoolExpr.args': EXPR, 'NullTest.arg': EXPR, 'CaseExpr.arg': EXPR, 'CaseExpr.args': 'CaseWhen', 'CaseExpr.defresult': EXPR,
+  'CaseWhen.expr': EXPR, 'CaseWhen.result': EXPR, 'CoalesceExpr.args': EXPR, 'TypeCast.arg': EXPR, 'TypeName.names': 'String', 'TypeName.typmods': 'A_Const',
+  'FuncCall.funcname': 'String', 'FuncCall.args': EXPR, 'FuncCall.agg_filter': EXPR, 'FuncCall.agg_order': 'SortBy',
+  'WindowDef.partitionClause': EXPR, 'WindowDef.orderClause': 'SortBy', 'WindowDef.startOffset': EXPR, 'WindowDef.endOffset': EXPR,
+  'SubLink.testexpr': EXPR, 'SubLink.subselect': 'SelectStmt', 'SubLink.operName': 'String', 'SortBy.node': EXPR,
+  'RangeSubselect.subquery': 'SelectStmt', 'RangeFunction.functions': 'List', 'RangeFunction>List.items': 'FuncCall',
+  'JoinExpr.larg': FROM, 'JoinExpr.rarg': FROM, 'JoinExpr.quals': EXPR,
+  'OnConflictClause.targetList': 'ResTarget', 'OnConflictClause.whereClause': EXPR, 'InferClause.indexElems': 'IndexElem',
+  'WithClause.ctes': 'CommonTableExpr', 'CommonTableExpr.ctequery': 'SelectStmt', 'CommonTableExpr.aliascolnames': 'String', 'MinMaxExpr.args': EXPR,
+};
+const SLOTS = new Map(Object.entries(SLOTS_SRC).map(([k, v]) => [k, new Set(v.split(' '))]));
+
 /** keys (or `Type.key`) whose value is one node with the type key omitted (libpg-query prints nothing for it) */
 export const BARE: Record<string, string> = { alias: 'Alias', typeName: 'TypeName', infer: 'InferClause', returningClause: 'ReturningClause', relation: 'RangeVar', over: 'WindowDef', onConflictClause: 'OnConflictClause', withClause: 'WithClause', 'SelectStmt.larg': 'SelectStmt', 'SelectStmt.rarg': 'SelectStmt' };
 
@@ -276,6 +302,9 @@ function walk(type: string, node: N, w: Walk, path: string[], loc: number | unde
     for (const [k, v] of Object.entries(node)) {
       if (type === 'A_Const' || k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end' || (wc && k === 'withClause')) continue;
       const bare = BARE[`${type}.${k}`] ?? BARE[k];
+      const slot = bare || SLOTS.has(`${type}.${k}`) || (type === 'List' && k === 'items');
+      if (!slot) { if (v !== null && typeof v === 'object') no('SQL_UNSUPPORTED', `${type}.${k} is a value, not a node`, here); continue; }
+      if (v === null || typeof v !== 'object') no('SQL_UNSUPPORTED', `${type}.${k} holds a node`, here);
       if (bare) walk(bare, v as N, w, [...path, bare], here);
       else if (Array.isArray(v)) v.forEach((c) => child(c, w, path, k, here));
       else if (v && typeof v === 'object') child(v as N, w, path, k, here);
@@ -301,7 +330,10 @@ function child(c: N, w: Walk, path: string[], k: string, loc: number | undefined
     if (k === 'distinctClause' || k === 'items') return; // `DISTINCT` is [{}]; a json_each coldeflist slot is {}
     no('SQL_UNSUPPORTED', `an empty node in ${k}`, loc);
   }
-  if (keys.length !== 1) no('SQL_UNSUPPORTED', 'a malformed node', loc);
+  if (keys.length !== 1 || c[keys[0]!] === null || typeof c[keys[0]!] !== 'object') no('SQL_UNSUPPORTED', 'a malformed node', loc);
+  const parent = path.at(-1)!;
+  const allowed = SLOTS.get(parent === 'List' ? `${path.at(-2)}>List.${k}` : `${parent}.${k}`);
+  if (w.ctx.p.keys[keys[0]!] && !allowed?.has(keys[0]!)) no('SQL_SHAPE', `${keys[0]} cannot stand in ${parent}.${k}`, loc); // an unknown type is shape()'s refusal
   walk(keys[0]!, c[keys[0]!], w, [...path, keys[0]!], loc);
 }
 

@@ -134,6 +134,31 @@ describe("verifyPlan", () => {
     expect((await verifyPlan(injected, pg())).map((d) => d.path)).toEqual(["plan#/views/stock"]);
   });
 
+  it("refuses a node in a slot that does not take its type: the printers print any node, and policy wraps only a RangeVar in FROM", async () => {
+    const plan = await compile(pgCompile);
+    const view = (change: (stmt: any) => void) => reseal(plan, (p) => {
+      const stmt = structuredClone(p.views.stock!.stmts[0]!) as any;
+      change(stmt.SelectStmt);
+      return { ...p, views: { ...p.views, stock: { ...p.views.stock!, stmts: [stmt] } } };
+    });
+    const proc = (change: (stmt: any) => void) => reseal(plan, (p) => {
+      const handler = p.procedures["add-item"]!.handler as { sql: { stmts: any[] } };
+      const stmt = structuredClone(handler.sql.stmts[0]);
+      change(stmt.InsertStmt);
+      return { ...p, procedures: { ...p.procedures, "add-item": { ...p.procedures["add-item"]!, handler: { ...handler, sql: { ...handler.sql, stmts: [stmt] } } } } };
+    });
+    const forged = [
+      await view((s) => { s.fromClause = [{ String: { sval: "items" } }]; }), // a table read with no wrapper
+      await view((s) => { s.limitCount = { List: { items: [{ A_Const: { ival: { ival: 2 } } }, { A_Const: { ival: { ival: 10 } } }] } }; }), // SQLite's LIMIT offset, count
+      await view((s) => { s.whereClause = "1=1"; }),
+      await proc((s) => { s.cols[0].ResTarget.name = { String: { sval: "status" } }; }),
+      await proc((s) => { const v = s.selectStmt.SelectStmt.valuesLists[0].List.items; v[0] = { List: { items: [v[0], v[1]] } }; }),
+    ];
+    for (const p of forged) expect((await verifyPlan(p, pg())).length).toBeGreaterThan(0);
+    const nonNode = await reseal(await compile(), (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [null as never] } } }));
+    expect((await verifyPlan(nonNode, d1())).map((d) => d.path)).toEqual(["plan#/schemas/items/checks/0"]);
+  });
+
   it("refuses a malformed plan with a diagnostic, not an exception", async () => {
     const plan = await compile();
     for (const broken of [{ ...plan, procedures: { x: { handler: null } } }, { ...plan, procedures: undefined }, null])
