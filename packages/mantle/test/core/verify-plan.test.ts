@@ -237,14 +237,14 @@ describe("verifyPlan", () => {
     expect((await verifyPlan(await reseal(ok.plan, (p) => { p.schemas.items!.checks = [star as never]; return p; }), d1())).map((d) => d.message).join()).toMatch(/takes one argument/);
   });
 
-  it("refuses what the printers would print as another expression or that SQLite cannot run: nested conditions, *, DISTINCT, like_escape", async () => {
+  it("refuses what SQLite cannot run as printed (*, DISTINCT, like_escape) and accepts nested conditions, which the printers parenthesize", async () => {
     const withView = (sql: string) => MANIFESTS.replace('sql: "SELECT name, sum(stock) OVER (ORDER BY name) AS running FROM items ORDER BY name"', `sql: ${JSON.stringify(sql)}`);
     const compiles = async (sql: string) => (await compilePlan({ sources: [{ sourceId: "memory:verify", text: withView(sql) }] })).ok;
-    for (const sql of ["SELECT name FROM items WHERE stock BETWEEN 0 AND (stock BETWEEN 1 AND 2)", "SELECT name FROM items WHERE stock BETWEEN (stock IS NULL) AND 1",
-      "SELECT name FROM items WHERE (name LIKE 'a%') LIKE 'b'", "SELECT name FROM items WHERE (stock = 1) IN (true)", "SELECT lower(*) AS x FROM items",
+    for (const sql of ["SELECT lower(*) AS x FROM items",
       "SELECT sum(DISTINCT stock) OVER () AS c FROM items", "SELECT json_group_object(DISTINCT name, stock) AS x FROM items", "SELECT name FROM items WHERE name LIKE like_escape('a%')"])
       expect([sql, await compiles(sql)]).toEqual([sql, false]);
-    for (const sql of ["SELECT count(*) AS n, count(DISTINCT name) AS d FROM items", "SELECT name FROM items WHERE stock BETWEEN 1 AND stock + 1 AND name LIKE 'a!%' ESCAPE '!' AND stock IN (1, 2)"])
+    for (const sql of ["SELECT count(*) AS n, count(DISTINCT name) AS d FROM items", "SELECT name FROM items WHERE stock BETWEEN 1 AND stock + 1 AND name LIKE 'a!%' ESCAPE '!' AND stock IN (1, 2)",
+      "SELECT name FROM items WHERE (stock = 1) IN (true)", "SELECT name FROM items WHERE (stock IN (SELECT stock FROM items)) = (stock > 4)"])
       expect([sql, await compiles(sql)]).toEqual([sql, true]);
   });
 

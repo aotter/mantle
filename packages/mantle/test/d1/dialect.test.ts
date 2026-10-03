@@ -8,6 +8,7 @@ import { expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { sqliteStorage } from "../../src/d1/index.js";
 import { print } from "../../src/d1/print.js";
+import { loadModule, parseSync } from "libpg-query";
 import { Report } from "../../src/testing/report.js";
 import { boot, caller, compileProgram, program, runView, site, useCompileSide } from "../../src/testing/harness.js";
 import * as printer from "../../src/testing/cases/printer.js";
@@ -81,3 +82,16 @@ it("the printer case passes a corpus item the compile side refuses as unsupporte
   expect(unsupported.check).toMatch(/refused as unsupported: \w/);
   await expect(printed("SQL_COLUMN")).rejects.toThrow(/^SQL_COLUMN: window functions/);
 }, 120_000);
+
+it("a nested condition as an operand prints in parentheses: SQLite runs the IR, not a regrouped expression", async () => {
+  await loadModule();
+  const d1 = await LocalD1.create();
+  try {
+    // SQLite groups BETWEEN, LIKE and IN left to right: without the parentheses each of these selects another value
+    for (const q of ["SELECT 5 BETWEEN 0 AND (5 BETWEEN 1 AND 2) AS v", "SELECT 5 BETWEEN 0 AND (5 IN (SELECT 1)) AS v", "SELECT 'a' LIKE ('a' IN (SELECT 1)) AS v",
+      "SELECT 'ab' LIKE 'a%' ESCAPE ('!' = '!') AS v", "SELECT (1 IN (SELECT 1)) BETWEEN 0 AND 0 AS v", "SELECT (2 = 2) IS NULL AS v"]) {
+      const printed = print((parseSync(q) as any).stmts[0].stmt);
+      expect([q, (await d1.all(printed))[0]]).toEqual([q, (await d1.all(q))[0]]);
+    }
+  } finally { await d1.dispose(); }
+});

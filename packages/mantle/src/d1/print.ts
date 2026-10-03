@@ -5,6 +5,7 @@
  */
 import { Deparser } from "pgsql-deparser";
 import type { SqlNode } from "../spec/domain/index.js";
+import { parenthesized } from "../core/sql/ast.js";
 
 /** A pre-lowered SQLite expression: strings print as they are, nodes print as the deparser would, always in parentheses. */
 export interface RawExpr {
@@ -25,7 +26,8 @@ export class SqliteDeparser extends Deparser {
     return n.sval ? `'${String(n.sval.sval ?? "").replace(/'/g, "''")}'` : super.A_Const(n, ctx);
   }
   /** `x LIKE p ESCAPE e` parses to LIKE with pg_catalog.like_escape(p, e), which SQLite has no function for. */
-  override A_Expr(n: SqlNode, ctx: any) {
+  override A_Expr(node: SqlNode, ctx: any) {
+    const n = parenthesized("A_Expr", node);
     const fc = n.rexpr?.FuncCall;
     // only the parser's own like_escape(p, e); any other function on the right of LIKE is an ordinary pattern expression
     if (n.kind === "AEXPR_LIKE" && fc?.funcname?.at(-1)?.String?.sval === "like_escape" && fc.args?.length === 2) {
@@ -35,6 +37,9 @@ export class SqliteDeparser extends Deparser {
     }
     return super.A_Expr(n, ctx);
   }
+  override NullTest(n: SqlNode, ctx: any) { return super.NullTest(parenthesized("NullTest", n) as never, ctx); }
+  override BooleanTest(n: SqlNode, ctx: any) { return super.BooleanTest(parenthesized("BooleanTest", n) as never, ctx); }
+  override SubLink(n: SqlNode, ctx: any) { return super.SubLink(parenthesized("SubLink", n) as never, ctx); }
   /** Mantle's own lowerings are written as SQLite text with sub-ASTs spliced in (see `raw` in policy.ts). */
   Raw(n: RawExpr, ctx: any) {
     return `(${n.parts.map((p) => (typeof p === "string" ? p : this.visit(p as never, ctx))).join("")})`;

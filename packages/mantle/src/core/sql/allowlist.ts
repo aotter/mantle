@@ -440,13 +440,6 @@ const check: Record<string, Checker> = {
     if (n.kind === 'AEXPR_IN' && !['=', '<>'].includes(op)) no('SQL_UNSUPPORTED', 'a bad IN', at);
     if (n.kind === 'AEXPR_LIKE' && !['~~', '!~~'].includes(op)) no('SQL_UNSUPPORTED', 'ILIKE and regular expressions are refused', at, /\bILIKE\b/i);
     if (n.kind === 'AEXPR_ILIKE' && !['~~*', '!~~*'].includes(op)) no('SQL_UNSUPPORTED', 'a bad ILIKE', at);
-    // the printers do not parenthesize an operand of BETWEEN, LIKE or IN: a nested condition there would print as another expression
-    // (D1 reads `a BETWEEN 0 AND b BETWEEN 1 AND 2` left to right) or not parse (PostgreSQL), so arithmetic only
-    const condition = (x: N | undefined) => !!x && (x.NullTest || x.BooleanTest || x.BoolExpr || x.SubLink?.subLinkType === 'EXISTS_SUBLINK' ||
-      (x.A_Expr && (x.A_Expr.kind !== 'AEXPR_OP' || ['=', '<>', '!=', '<', '>', '<=', '>='].includes(sv(x.A_Expr.name)))));
-    if ((range || n.kind === 'AEXPR_LIKE' || n.kind === 'AEXPR_ILIKE' || n.kind === 'AEXPR_IN') &&
-      [n.lexpr, ...(range ? items ?? [] : n.kind === 'AEXPR_IN' ? [] : [n.rexpr])].some(condition))
-      no('SQL_SHAPE', `an operand of ${range ? 'BETWEEN' : n.kind === 'AEXPR_IN' ? 'IN' : 'LIKE'} is a value, not a condition: compare it on its own`, at);
     const esc = (x: N | undefined) => !!x?.FuncCall && fname(x.FuncCall) === 'like_escape';
     if (esc(n.lexpr) || (esc(n.rexpr) && n.kind !== 'AEXPR_LIKE')) no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at);
   },

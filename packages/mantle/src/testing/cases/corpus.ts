@@ -39,6 +39,11 @@ export const corpus: Item[] = [
   v('like', "SELECT id FROM items WHERE name LIKE 'a%' OR name LIKE '%y' ORDER BY id", ids('a', 'b', 'c')),
   v('not-like', "SELECT id FROM items WHERE name NOT LIKE '%rr%' ORDER BY id", ids('a', 'd')),
   v('like-escape', "SELECT id FROM items WHERE 'a%b' LIKE 'a!%b' ESCAPE '!' AND 'axb' NOT LIKE 'a!%b' ESCAPE '!' AND id = 'a'", ids('a')),
+  // a condition as an operand: the printers parenthesize it, or SQLite would group it left to right and PostgreSQL refuse it
+  v('condition-in', 'SELECT id FROM items WHERE (stock > 4) IN (true) ORDER BY id', ids('a', 'c', 'd')),
+  v('condition-between', 'SELECT id FROM items WHERE (stock > 4) BETWEEN false AND (stock < 8) ORDER BY id', ids('a', 'b', 'd')),
+  v('condition-compare', "SELECT id FROM items WHERE (name LIKE 'a%') = (stock > 4) ORDER BY id", ids('a', 'b')),
+  v('condition-in-subquery', "SELECT id FROM items WHERE (stock IN (SELECT stock FROM items WHERE id = 'a')) = (stock > 4) ORDER BY id", ids('a', 'b')),
   v('null-tests', "SELECT id FROM items WHERE cat IS NOT DISTINCT FROM 'x' AND tags IS NOT NULL AND NOT (stock IS NULL) AND cat IS DISTINCT FROM 'q' ORDER BY id", ids('a', 'b', 'd')),
   v('in-list', "SELECT id FROM items WHERE id IN ('a', 'b') AND stock NOT IN (2) ORDER BY id", ids('a')),
   v('any-subquery', 'SELECT id FROM items WHERE id = ANY (SELECT item_id FROM orders) ORDER BY id', ids('a')),
