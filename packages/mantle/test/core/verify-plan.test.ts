@@ -216,7 +216,7 @@ describe("verifyPlan", () => {
       // columns this Schema's storage does not have, a qualified one, and calls DDL cannot run
       "value > 0", "status <> 'x'", "items.stock >= 0", "lower(DISTINCT name) <> 'x'", "abs(name) > 0", "length(stock) > 0", "upper(name, name) <> ''"]) {
       const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck(c) }] });
-      expect([c, r.ok ? [] : r.diagnostics.map((d) => d.code)]).toEqual([c, ["SQL_SHAPE"]]);
+      expect([c, r.ok ? [] : r.diagnostics.map((d) => d.code)]).toEqual([c, [c.includes("DISTINCT") ? "SQL_FUNCTION" : "SQL_SHAPE"]]); // DISTINCT on a scalar is the allowlist's refusal
     }
     // `~~` written as an operator is not LIKE to SQLite: refused, while LIKE itself stays
     for (const c of ["name ~~ 'a%'", "name !~~ 'a%'"]) expect((await compilePlan({ sources: [{ sourceId: "memory:verify", text: withCheck(c) }] })).ok, c).toBe(false)
@@ -235,6 +235,17 @@ describe("verifyPlan", () => {
     expect((await verifyPlan(await reseal(ok.plan, (p) => { p.schemas.items!.checks = [qualified as never]; return p; }), d1())).map((d) => d.message).join()).toMatch(/pg_catalog\.lower\(\) is printed/);
     const star = { ...uid, A_Expr: { ...uid.A_Expr, rexpr: { FuncCall: { funcname: [{ String: { sval: "lower" } }], agg_star: true } } } };
     expect((await verifyPlan(await reseal(ok.plan, (p) => { p.schemas.items!.checks = [star as never]; return p; }), d1())).map((d) => d.message).join()).toMatch(/takes one argument/);
+  });
+
+  it("refuses what the printers would print as another expression or that SQLite cannot run: nested conditions, *, DISTINCT, like_escape", async () => {
+    const withView = (sql: string) => MANIFESTS.replace('sql: "SELECT name, sum(stock) OVER (ORDER BY name) AS running FROM items ORDER BY name"', `sql: ${JSON.stringify(sql)}`);
+    const compiles = async (sql: string) => (await compilePlan({ sources: [{ sourceId: "memory:verify", text: withView(sql) }] })).ok;
+    for (const sql of ["SELECT name FROM items WHERE stock BETWEEN 0 AND (stock BETWEEN 1 AND 2)", "SELECT name FROM items WHERE stock BETWEEN (stock IS NULL) AND 1",
+      "SELECT name FROM items WHERE (name LIKE 'a%') LIKE 'b'", "SELECT name FROM items WHERE (stock = 1) IN (true)", "SELECT lower(*) AS x FROM items",
+      "SELECT sum(DISTINCT stock) OVER () AS c FROM items", "SELECT json_group_object(DISTINCT name, stock) AS x FROM items", "SELECT name FROM items WHERE name LIKE like_escape('a%')"])
+      expect([sql, await compiles(sql)]).toEqual([sql, false]);
+    for (const sql of ["SELECT count(*) AS n, count(DISTINCT name) AS d FROM items", "SELECT name FROM items WHERE stock BETWEEN 1 AND stock + 1 AND name LIKE 'a!%' ESCAPE '!' AND stock IN (1, 2)"])
+      expect([sql, await compiles(sql)]).toEqual([sql, true]);
   });
 
 });

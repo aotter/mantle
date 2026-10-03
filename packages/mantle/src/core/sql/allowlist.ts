@@ -402,7 +402,7 @@ const check: Record<string, Checker> = {
     const args: N[] = n.args ?? [];
     const str = (a?: N) => a?.A_Const?.sval?.sval as string | undefined;
     switch (f) {
-      case 'like_escape': if (path.at(-2) !== 'A_Expr') no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at); break;
+      case 'like_escape': if (path.at(-2) !== 'A_Expr' || args.length !== 2) no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at); break;
       case 'date_trunc': if (args.length !== 2 || !ctx.p.trunc.has(str(args[0]) ?? '')) no('SQL_TYPE', `date_trunc takes ${[...ctx.p.trunc].join(', ')} as a literal first argument`, at); break;
       case 'extract': if (args.length !== 2 || !ctx.p.extract.has(str(args[0]) ?? '')) no('SQL_TYPE', `extract takes ${[...ctx.p.extract].join(', ')}`, at); break;
       case 'now': case 'auth.uid': case 'auth.role': if (args.length) no('SQL_FUNCTION', `${f}() takes no arguments`, at); break;
@@ -423,6 +423,9 @@ const check: Record<string, Checker> = {
       }
     }
     if (ctx.p.agg.has(f) && n.args?.length === 0 && !n.agg_star) no('SQL_FUNCTION', `${f} needs an argument`, at);
+    // the printers print these as written: `*` is count(*) only, DISTINCT one argument of an aggregate outside a window
+    if (n.agg_star && (f !== 'count' || args.length)) no('SQL_FUNCTION', `${f}(*) is refused: only count(*)`, at);
+    if (n.agg_distinct && (!ctx.p.agg.has(f) || args.length !== 1 || n.over)) no('SQL_FUNCTION', `DISTINCT is one argument of an aggregate, outside a window`, at);
   },
   A_Expr: (n, ctx, _p, at) => {
     const op = sv(n.name);
@@ -437,6 +440,13 @@ const check: Record<string, Checker> = {
     if (n.kind === 'AEXPR_IN' && !['=', '<>'].includes(op)) no('SQL_UNSUPPORTED', 'a bad IN', at);
     if (n.kind === 'AEXPR_LIKE' && !['~~', '!~~'].includes(op)) no('SQL_UNSUPPORTED', 'ILIKE and regular expressions are refused', at, /\bILIKE\b/i);
     if (n.kind === 'AEXPR_ILIKE' && !['~~*', '!~~*'].includes(op)) no('SQL_UNSUPPORTED', 'a bad ILIKE', at);
+    // the printers do not parenthesize an operand of BETWEEN, LIKE or IN: a nested condition there would print as another expression
+    // (D1 reads `a BETWEEN 0 AND b BETWEEN 1 AND 2` left to right) or not parse (PostgreSQL), so arithmetic only
+    const condition = (x: N | undefined) => !!x && (x.NullTest || x.BooleanTest || x.BoolExpr || x.SubLink?.subLinkType === 'EXISTS_SUBLINK' ||
+      (x.A_Expr && (x.A_Expr.kind !== 'AEXPR_OP' || ['=', '<>', '!=', '<', '>', '<=', '>='].includes(sv(x.A_Expr.name)))));
+    if ((range || n.kind === 'AEXPR_LIKE' || n.kind === 'AEXPR_ILIKE' || n.kind === 'AEXPR_IN') &&
+      [n.lexpr, ...(range ? items ?? [] : n.kind === 'AEXPR_IN' ? [] : [n.rexpr])].some(condition))
+      no('SQL_SHAPE', `an operand of ${range ? 'BETWEEN' : n.kind === 'AEXPR_IN' ? 'IN' : 'LIKE'} is a value, not a condition: compare it on its own`, at);
     const esc = (x: N | undefined) => !!x?.FuncCall && fname(x.FuncCall) === 'like_escape';
     if (esc(n.lexpr) || (esc(n.rexpr) && n.kind !== 'AEXPR_LIKE')) no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at);
   },

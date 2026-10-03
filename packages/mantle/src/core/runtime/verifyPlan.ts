@@ -36,8 +36,10 @@ const refused = (path: string, message: string): Diagnostic => makeDiagnostic({ 
  * fingerprint, dialect, Triggers, guard and hook targets), what the CLI's own validators refuse of the manifests the plan stands
  * for (`planShape`: its JSON Schemas, fields, TTL, graph checks), and every
  * Schema check, View and inline Procedure through the storage's dialect (with its `restrict`) and the policy rewrite. Empty
- * means no program can run SQL the dialect refuses. Only `storage.dialect` is read, so storage's own refusals (a reserved table
- * name, a column type it cannot store) still surface where the plan first boots against its database, as with any plan.
+ * means every program reads and writes only through the policy rewrite, in the shapes the dialect allows. It does not type-check
+ * the SQL: a statement the database refuses (a function's argument count or type, an operand type) fails that call, or boot for
+ * a check, with the database's error, never past the policy. Only `storage.dialect` is read, so storage's own refusals (a
+ * reserved table name, a column type it cannot store) still surface where the plan first boots against its database.
  * Handlers are not checked (the host binds them); enabled schedule Triggers are allowed (the host decides whether it wires them).
  */
 export async function verifyPlan(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "dialect">): Promise<readonly Diagnostic[]> {
