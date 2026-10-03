@@ -105,17 +105,21 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
   return undefined;
 }
 
+// A literal cast lowers to its encoded number as an expression: an integer in ORDER BY or GROUP BY, even parenthesized, is a
+// column position to SQLite, and `n + 0` is not
+const value = (x: N): N => ({ Raw: { parts: [x, " + 0"] } });
+
 function lowerCast(n: N, scope: LoweringScope): N {
   const t = n.typeName.names.at(-1).String.sval as string;
   const lit = n.arg?.A_Const;
   const litStr = lit?.sval?.sval ?? lit?.fval?.fval ?? (lit?.ival?.ival !== undefined ? String(lit.ival.ival) : undefined);
-  if (t === 'interval') return num(intervalMicros(lit.sval.sval, n.typeName.typmods?.[0]?.A_Const?.ival?.ival));
-  if (t === 'timestamptz') return num(encodeTimestamptz(litStr!));
-  if (t === 'date') return num(encodeDate(litStr!));
+  if (t === 'interval') return value(num(intervalMicros(lit.sval.sval, n.typeName.typmods?.[0]?.A_Const?.ival?.ival)));
+  if (t === 'timestamptz') return value(num(encodeTimestamptz(litStr!)));
+  if (t === 'date') return value(num(encodeDate(litStr!)));
   if (t === 'numeric') {
     const [p, s] = n.typeName.typmods.map((m: N) => m.A_Const.ival.ival);
     parseNumeric(`numeric(${p}, ${s})`);
-    return num(encodeNumeric(litStr!, p, s));
+    return value(num(encodeNumeric(litStr!, p, s)));
   }
   // PostgreSQL: a number is true when non-zero, text by its spelling; NULL stays NULL. A bare `x <> 0` is always true for text in SQLite ('false' <> 0 is 1)
   if (t === 'bool') return sql(`CASE WHEN typeof(__x) = 'text' THEN lower(__x) IN ('t', 'true', 'y', 'yes', 'on', '1') WHEN __x IS NULL THEN NULL ELSE __x <> 0 END`, { __x: scope.tx(n.arg) });
