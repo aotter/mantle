@@ -135,9 +135,13 @@ then set DATABASE_URL in `.env` and run `bun src/index.ts`. For SQLite pass
 The preset is written once, uses native drivers from `@aotter/mantle/bun`, and
 owns Bun.serve, trusted socket IP and shutdown/background work. Admin binds the
 installed UI bundle. Enabled schedule Triggers fail generation; use `host: none`
-with an explicit scheduler when schedules are required.
+with an explicit scheduler when schedules are required. Behind a reverse proxy,
+set TRUSTED_PROXIES to its addresses: otherwise every client shares the proxy's
+address, and with it one sign-in rate limit.
 
-PostgreSQL pools must set `prepare: false`: Bun otherwise re-encodes JSON strings.
+PostgreSQL pools must set `prepare: false`: Bun otherwise re-encodes JSON strings,
+and the role needs TEMPORARY on the database (`GRANT TEMPORARY ON DATABASE app TO
+app_role`), which describing a result takes.
 Mantle refuses another setting. Native raw result metadata comes from PostgreSQL
 with three extra round trips per result, preserving microseconds and exact numeric
 scale. No pg dependency or PostgreSQL clone is added. See ADR-0038.

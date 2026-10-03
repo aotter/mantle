@@ -2,9 +2,9 @@ name: CI
 
 # ponytail: PR-only. The merge ref was already tested; push runs repeated it.
 # Drafts skip until ready_for_review — agent PRs iterate in draft.
+# Every base: a release line (0.2.x) and a PR stacked on another PR are merged as well, so they are tested as well.
 on:
   pull_request:
-    branches: [main, develop]
     types: [opened, synchronize, reopened, ready_for_review]
 
 # Cancel superseded runs on the same ref. PR pushes that arrive in
