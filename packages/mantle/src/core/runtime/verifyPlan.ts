@@ -3,7 +3,7 @@
  * database or the handlers (ADR-0034 decision 7: Cloud validates the IR and never parses SQL). Worker-safe: no SQL parser.
  */
 import { DiagnosticError, makeDiagnostic, type Diagnostic } from "../../spec/kernel/index.js";
-import { SqlRefusal, type RuntimePlan, type SqlNode } from "../../spec/domain/index.js";
+import { SqlRefusal, hasSubLink, type RuntimePlan, type SqlNode } from "../../spec/domain/index.js";
 import { compileProgram, type Mode } from "../sql/compile.js";
 import type { MantleStorageAdapter } from "../service.js";
 import { createMantleRuntime } from "./createRuntime.js";
@@ -52,7 +52,7 @@ async function verify(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "di
   for (const [name, schema] of Object.entries(plan.schemas))
     for (const [i, where] of (schema.checks ?? []).entries()) {
       const path = `plan#/schemas/${name}/checks/${i}`;
-      if (JSON.stringify(where).includes('"SubLink"')) out.push(refused(path, "SQL_SHAPE: a check reads only the row's own columns: no subquery"));
+      if (hasSubLink(where)) out.push(refused(path, "SQL_SHAPE: a check reads only the row's own columns: no subquery"));
       else check(path, [{ SelectStmt: { targetList: [{ ResTarget: { val: { A_Const: { ival: { ival: 1 } } } } }], fromClause: [{ RangeVar: { relname: name.toLowerCase(), inh: true, relpersistence: "p", mantle: "table" } }], whereClause: where, limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }], {}, "view", "caller");
     }
   for (const [name, v] of Object.entries(plan.views)) check(`plan#/views/${name}`, v.stmts, v.inputs, "view", v.surface === "public" ? "public" : "caller");

@@ -293,6 +293,7 @@ function walk(type: string, node: N, w: Walk, path: string[], loc: number | unde
   const names: string[] = (wc?.ctes ?? []).map((x: N) => String(x.CommonTableExpr?.ctename));
   if (wc) {
     shape('WithClause', wc, w, here);
+    if (wc.recursive !== undefined && typeof wc.recursive !== 'boolean') no('SQL_UNSUPPORTED', 'WithClause.recursive is a flag', here);
     (wc.ctes ?? []).forEach((x: N, j: number) => withScope(w, wc.recursive ? names : names.slice(0, j), () => child(x, w, [...path, 'WithClause'], 'ctes', here)));
   }
   // the Schema relations this statement reads directly, by alias: what a column reference in it can name (`jsonCompare`)
@@ -307,7 +308,7 @@ function walk(type: string, node: N, w: Walk, path: string[], loc: number | unde
       if (v === null || typeof v !== 'object') no('SQL_UNSUPPORTED', `${type}.${k} holds a node`, here);
       if (bare) walk(bare, v as N, w, [...path, bare], here);
       else if (Array.isArray(v)) v.forEach((c) => child(c, w, path, k, here));
-      else if (v && typeof v === 'object') child(v as N, w, path, k, here);
+      else child(v as N, w, path, k, here);
     }
   }); } finally { if (rels) w.ctx.rels!.pop(); }
 }
@@ -327,7 +328,7 @@ function relationsOf(node: N): Map<string, string> {
 function child(c: N, w: Walk, path: string[], k: string, loc: number | undefined) {
   const keys = Object.keys(c);
   if (!keys.length) {
-    if (k === 'distinctClause' || k === 'items') return; // `DISTINCT` is [{}]; a json_each coldeflist slot is {}
+    if (k === 'distinctClause' || (k === 'items' && path.at(-2) === 'RangeFunction')) return; // `DISTINCT` is [{}]; a json_each coldeflist slot is {}
     no('SQL_UNSUPPORTED', `an empty node in ${k}`, loc);
   }
   if (keys.length !== 1 || c[keys[0]!] === null || typeof c[keys[0]!] !== 'object') no('SQL_UNSUPPORTED', 'a malformed node', loc);
@@ -337,6 +338,12 @@ function child(c: N, w: Walk, path: string[], k: string, loc: number | undefined
   walk(keys[0]!, c[keys[0]!], w, [...path, keys[0]!], loc);
 }
 
+/** A cast's type: `t` or `pg_catalog.t`, read as the lowerings and printers read it (the last name part). */
+const castType = (typeName: N): string => {
+  const names = sv(typeName?.names ?? []).split('.');
+  if (names.length === 2 ? names[0] !== 'pg_catalog' : names.length !== 1) no('SQL_TYPE', `a cast names one type: ${names.join('.')}`);
+  return names.at(-1)!;
+};
 const isConst = (n: N | undefined) => !!n?.A_Const;
 const isInputRef = (n: N | undefined) => n?.ColumnRef?.fields?.length === 2 && n.ColumnRef.fields[0].String?.sval === 'input';
 
@@ -415,7 +422,7 @@ const check: Record<string, Checker> = {
     if (esc(n.lexpr) || (esc(n.rexpr) && n.kind !== 'AEXPR_LIKE')) no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at);
   },
   TypeCast: (n, ctx, _p, at) => {
-    const t = sv(n.typeName.names).replace('pg_catalog.', '');
+    const t = castType(n.typeName);
     if (!ctx.p.casts.has(t)) no('SQL_TYPE', `CAST to ${t} is refused`, at);
     const lit = n.arg?.A_Const;
     // the literal-only rules exist because SQLite truncates and stores time and decimals as integers; PostgreSQL casts any value
@@ -464,7 +471,7 @@ const check: Record<string, Checker> = {
   WindowDef: (n, _c, _p, at) => {
     if (n.frameOptions & FRAME_REFUSED) no('SQL_UNSUPPORTED', 'GROUPS frames and EXCLUDE are refused', at, /\b(GROUPS|EXCLUDE)\b/i);
     // an offset is a literal: rows as an integer, a RANGE over time as an interval literal
-    for (const o of [n.startOffset, n.endOffset]) if (o && !(o.A_Const?.ival !== undefined || (o.TypeCast?.arg?.A_Const?.sval && sv(o.TypeCast.typeName.names).replace('pg_catalog.', '') === 'interval')))
+    for (const o of [n.startOffset, n.endOffset]) if (o && !(o.A_Const?.ival !== undefined || (o.TypeCast?.arg?.A_Const?.sval && castType(o.TypeCast.typeName) === 'interval')))
       no('SQL_SHAPE', 'a frame offset is a literal: an integer, or an interval such as interval \'6 days\'', at);
   },
   SelectStmt: (n, ctx, path, at) => {

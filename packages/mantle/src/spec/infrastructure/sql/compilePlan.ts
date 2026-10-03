@@ -8,7 +8,7 @@ import { enumOptions, type JsonSchema, type ProcedureManifest } from "../../doma
 import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
-import type { SqlContext, SqlDiagnostic, SqlNode, SqlPlan } from "../../domain/model/SqlIr.js";
+import { hasSubLink, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
@@ -168,7 +168,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       const res = await compileSql(`SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${text}`, { schemas, inputs: {}, kind: "view" }, dialect);
       if (!res.ok) { diagnostics.push(toDiagnostic(res.diagnostic, source, pointer)); continue; }
       const where: SqlNode | undefined = res.plan.stmts[0]?.SelectStmt?.whereClause;
-      if (!where || JSON.stringify(where).includes('"SubLink"')) {
+      if (!where || hasSubLink(where)) {
         diagnostics.push(toDiagnostic({ code: "SQL_SHAPE", message: "a check reads only the row's own columns: no subquery" }, source, pointer));
         continue;
       }

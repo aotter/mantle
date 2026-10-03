@@ -4,7 +4,7 @@
  * `invokeProcedure` both run through here; nothing else reaches the executor.
  */
 import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
-import { decideLifecycleWrite, isIdCol, pinnedTarget, type ContentState, type SqlNode as N } from "../../spec/domain/index.js";
+import { decideLifecycleWrite, hasSubLink, isIdCol, pinnedTarget, type ContentState, type SqlNode as N } from "../../spec/domain/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
 import type { StoreExecutor, StoreRow } from "../store.js";
@@ -91,7 +91,7 @@ async function preRead(env: RunEnv, p: Program, i: number, c: Compiled, as: RunA
     const cols: N[] = stmt.InsertStmt.cols;
     const values: N[] = stmt.InsertStmt.selectStmt.SelectStmt.valuesLists[0].List.items;
     // the hook sees these values in a read of its own, so they must not depend on data that can change before the commit
-    if (JSON.stringify(values).includes('"SubLink"')) throw refuse(`SQL_SHAPE: an insert into ${c.schema}, which has a before create hook, may not read data in its VALUES`);
+    if (hasSubLink(values)) throw refuse(`SQL_SHAPE: an insert into ${c.schema}, which has a before create hook, may not read data in its VALUES`);
     if (!values.length) return {}; // an insert that names no column: the hook sees an empty entry
     read = select(values.map((val, k) => ({ ResTarget: { name: cols[k]!.ResTarget.name, val } })));
   } else {

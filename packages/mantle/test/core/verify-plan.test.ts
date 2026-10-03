@@ -115,10 +115,19 @@ describe("verifyPlan", () => {
     const zero = { A_Const: { ival: {} } };
     const oneBound = { A_Expr: { kind: "AEXPR_BETWEEN", name: [{ String: { sval: "BETWEEN" } }], lexpr: col, rexpr: { List: { items: [zero] } } } };
     const not2 = { BoolExpr: { boolop: "NOT_EXPR", args: [oneBound.A_Expr ? { NullTest: { arg: col, nulltesttype: "IS_NULL" } } : zero, { NullTest: { arg: col, nulltesttype: "IS_NULL" } }] } };
-    for (const where of [oneBound, not2]) {
+    const emptyBound = { A_Expr: { ...oneBound.A_Expr, rexpr: { List: { items: [zero, {}] } } } };
+    const emptyIn = { A_Expr: { kind: "AEXPR_IN", name: [{ String: { sval: "=" } }], lexpr: col, rexpr: { List: { items: [{}] } } } };
+    const castOf = (names: string[]) => ({ A_Expr: { kind: "AEXPR_OP", name: [{ String: { sval: ">" } }], lexpr: col, rexpr: { TypeCast: { arg: { A_Const: { sval: { sval: "1" } } }, typeName: { names: names.map((sval) => ({ String: { sval } })), typemod: -1 } } } } });
+    for (const where of [oneBound, not2, emptyBound, emptyIn, castOf(["inpg_catalog", "terval"])]) {
       const p2 = await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [where] } } }));
       expect((await verifyPlan(p2, d1())).map((d) => d.path)).toEqual(["plan#/schemas/items/checks/0"]);
     }
+  });
+
+  it("reads a check's subquery by structure: a string 'SubLink' is not one", async () => {
+    const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: MANIFESTS.replace('checks: ["stock >= 0"]', `checks: ["stock >= 0", "name <> 'SubLink'"]`) }] });
+    if (!r.ok) throw new Error(JSON.stringify(r.diagnostics));
+    expect(await verifyPlan(r.plan, d1())).toEqual([]);
   });
 
   it("refuses a CTE name that is not a plain identifier: the PostgreSQL printer writes it as it is", async () => {

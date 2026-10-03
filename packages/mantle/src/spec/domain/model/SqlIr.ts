@@ -57,3 +57,9 @@ export interface SqlPlan {
   readonly grammar: number;
   readonly stmts: readonly SqlNode[];
 }
+
+/** Whether an expression holds a subquery, by structure: a string literal 'SubLink' is not one. */
+export function hasSubLink(v: unknown): boolean {
+  if (!v || typeof v !== "object") return false;
+  return Object.entries(v).some(([k, c]) => k === "SubLink" || hasSubLink(c));
+}
