@@ -109,6 +109,31 @@ describe("verifyPlan", () => {
       expect(await verifyPlan(await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [{ ...where, A_Expr: { ...where.A_Expr, rexpr: { A_Const: ok } } }] } } })), d1())).toEqual([]);
   });
 
+  it("refuses a node the printer would join with what policy appends: a one-bound BETWEEN, a two-operand NOT", async () => {
+    const plan = await compile();
+    const col = { ColumnRef: { fields: [{ String: { sval: "stock" } }] } };
+    const zero = { A_Const: { ival: {} } };
+    const oneBound = { A_Expr: { kind: "AEXPR_BETWEEN", name: [{ String: { sval: "BETWEEN" } }], lexpr: col, rexpr: { List: { items: [zero] } } } };
+    const not2 = { BoolExpr: { boolop: "NOT_EXPR", args: [oneBound.A_Expr ? { NullTest: { arg: col, nulltesttype: "IS_NULL" } } : zero, { NullTest: { arg: col, nulltesttype: "IS_NULL" } }] } };
+    for (const where of [oneBound, not2]) {
+      const p2 = await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [where] } } }));
+      expect((await verifyPlan(p2, d1())).map((d) => d.path)).toEqual(["plan#/schemas/items/checks/0"]);
+    }
+  });
+
+  it("refuses a CTE name that is not a plain identifier: the PostgreSQL printer writes it as it is", async () => {
+    const text = MANIFESTS.replace("SELECT name, sum(stock) OVER (ORDER BY name) AS running FROM items ORDER BY name", "WITH z AS (SELECT id, name FROM items) SELECT id, name FROM items ORDER BY name");
+    const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text }] }, pgCompile);
+    if (!r.ok) throw new Error(JSON.stringify(r.diagnostics));
+    expect(await verifyPlan(r.plan, pg())).toEqual([]);
+    const injected = await reseal(r.plan, (p) => {
+      const stmt = structuredClone(p.views.stock!.stmts[0]!) as any;
+      stmt.SelectStmt.withClause.ctes[0].CommonTableExpr.ctename = "items as (select name, owner from items), z";
+      return { ...p, views: { ...p.views, stock: { ...p.views.stock!, stmts: [stmt] } } };
+    });
+    expect((await verifyPlan(injected, pg())).map((d) => d.path)).toEqual(["plan#/views/stock"]);
+  });
+
   it("refuses a malformed plan with a diagnostic, not an exception", async () => {
     const plan = await compile();
     for (const broken of [{ ...plan, procedures: { x: { handler: null } } }, { ...plan, procedures: undefined }, null])

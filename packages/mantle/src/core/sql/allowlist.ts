@@ -222,6 +222,7 @@ function shape(type: string, node: N, w: Walk, here: number | undefined): void {
     const e = w.ctx.p.enums[`${type}.${k}`];
     if (e && !e.includes(v as any)) no('SQL_UNSUPPORTED', `${type}.${k} = ${JSON.stringify(v)} is refused`, firstLoc(node) ?? here, KEYWORD[`${type}.${k}`]);
   }
+  if (type === 'String' && node.sval !== undefined && typeof node.sval !== 'string') no('SQL_SHAPE', 'a name is a string', here);
   if (type === 'A_Const' && !constant(node)) no('SQL_UNSUPPORTED', 'a literal is one integer, numeric, string, boolean or NULL', firstLoc(node) ?? here);
 }
 
@@ -367,6 +368,11 @@ const check: Record<string, Checker> = {
   },
   A_Expr: (n, ctx, _p, at) => {
     const op = sv(n.name);
+    // the printer joins what it is given: a missing operand or a one-bound BETWEEN would bind the policy predicate appended after it
+    const items: N[] | undefined = n.rexpr?.List?.items;
+    const range = n.kind === 'AEXPR_BETWEEN' || n.kind === 'AEXPR_NOT_BETWEEN';
+    if (!n.rexpr || (!n.lexpr && !(n.kind === 'AEXPR_OP' && (op === '-' || op === '+'))) || (range && items?.length !== 2) || (n.kind === 'AEXPR_IN' && !items?.length) || (!range && n.kind !== 'AEXPR_IN' && n.rexpr.List))
+      no('SQL_SHAPE', `a malformed ${op} expression`, at);
     if (ctx.p.name === 'base') bareLiteralCompare(n, ctx, at); // PostgreSQL casts the literal to the column's type
     jsonCompare(n, ctx, at);
     if (n.kind === 'AEXPR_OP' && !ctx.p.ops.has(op)) no('SQL_UNSUPPORTED', `operator ${op} is refused`, at);
@@ -415,8 +421,13 @@ const check: Record<string, Checker> = {
   },
   CommonTableExpr: (n, _c, _p, at) => {
     if (!n.ctequery?.SelectStmt) no('SQL_SHAPE', 'a CTE body is a SELECT: a write inside WITH is refused', at);
-    // the printer writes a CTE's name unquoted, so PostgreSQL would fold "Items" to items
-    if (String(n.ctename) !== String(n.ctename).toLowerCase()) no('SQL_SHAPE', `a CTE name is lower case: ${n.ctename}`, at);
+    // the printer writes a CTE's name and its column names unquoted: each is a plain lower-case identifier
+    for (const name of [n.ctename, ...(n.aliascolnames ?? []).map((c: N) => c?.String?.sval)])
+      if (typeof name !== 'string' || !/^[a-z_][a-z0-9_]*$/.test(name)) no('SQL_SHAPE', `a CTE name is lower case, a plain identifier: ${JSON.stringify(name)}`, at);
+  },
+  BoolExpr: (n, _c, _p, at) => {
+    const k = (n.args ?? []).length;
+    if (n.boolop === 'NOT_EXPR' ? k !== 1 : k < 1) no('SQL_SHAPE', `a malformed ${n.boolop}`, at);
   },
   WindowDef: (n, _c, _p, at) => {
     if (n.frameOptions & FRAME_REFUSED) no('SQL_UNSUPPORTED', 'GROUPS frames and EXCLUDE are refused', at, /\b(GROUPS|EXCLUDE)\b/i);
