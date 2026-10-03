@@ -282,6 +282,8 @@ export function validateJsonSchema(
   }
   const rootObject = root as Record<string, unknown>;
   let nodes = 0;
+  /** every `$ref`: where it is, what it says, and the schema it resolves to */
+  const refs: [string, string, Record<string, unknown>][] = [];
   const visit = (node: unknown, pointer: string, depth: number): void => {
     if (!node || typeof node !== "object" || Array.isArray(node)) {
       throw new ManifestParseError(`${kind} '${name}' has a non-object JSON Schema at ${pointer}`, idx, pointer);
@@ -305,10 +307,28 @@ export function validateJsonSchema(
         );
       }
     }
-    if ("$ref" in value) validateLocalSchemaRef(value["$ref"], rootObject, idx, kind, name, `${pointer}/$ref`);
-    if (typeof value["pattern"] === "string") {
+    if ("$ref" in value) refs.push([`${pointer}/$ref`, value["$ref"] as string, validateLocalSchemaRef(value["$ref"], rootObject, idx, kind, name, `${pointer}/$ref`)]);
+    if (value["enum"] !== undefined && (!Array.isArray(value["enum"]) || value["enum"].length > MAX_JSON_SCHEMA_ENUM)) {
+      throw new ManifestParseError(
+        `${kind} '${name}' enum must be a list of at most ${MAX_JSON_SCHEMA_ENUM} values`,
+        idx,
+        `${pointer}/enum`,
+        "JSON_SCHEMA_LIMIT_EXCEEDED",
+      );
+    }
+    if (value["pattern"] !== undefined) {
+      const problem = typeof value["pattern"] === "string" ? unsafePattern(value["pattern"]) : "a pattern is a string";
+      if (problem) {
+        throw new ManifestParseError(
+          `${kind} '${name}' has a regex pattern at ${pointer} that could take exponential time: ${problem}`,
+          idx,
+          `${pointer}/pattern`,
+          "INVALID_PATTERN",
+          { value: value["pattern"], expected: `a regular expression of at most ${MAX_JSON_SCHEMA_PATTERN} characters with no repeated group that itself repeats or alternates` },
+        );
+      }
       try {
-        new RegExp(value["pattern"]);
+        new RegExp(value["pattern"] as string);
       } catch (error) {
         throw new ManifestParseError(
           `${kind} '${name}' has an uncompilable regex pattern at ${pointer}: ${error instanceof Error ? error.message : String(error)}`,
@@ -362,6 +382,108 @@ export function validateJsonSchema(
     }
   };
   visit(root, basePointer, 0);
+  // A `$ref` that reaches itself through `$ref` and `oneOf` alone never reaches a value: the validator would recurse until the
+  // stack overflows on every call. A cycle through `properties`, `items` or `additionalProperties` reads one level of the value
+  // each turn, so it ends with the value.
+  const target = new Map(refs.map(([, ref, node]) => [ref, node]));
+  const next = (node: unknown): unknown[] => !node || typeof node !== "object" ? [] : [
+    ...("$ref" in node ? [(node as Record<string, unknown>)["$ref"]] : []),
+    ...(Array.isArray((node as Record<string, unknown>)["oneOf"]) ? ((node as Record<string, unknown>)["oneOf"] as unknown[]).flatMap(next) : []),
+  ];
+  const done = new Set<unknown>();
+  const onPath = new Set<unknown>();
+  let at = basePointer;
+  const cycle = (ref: unknown): boolean => {
+    if (onPath.has(ref)) return true;
+    if (done.has(ref)) return false;
+    onPath.add(ref);
+    // a target outside the schemas visited above (a `$ref` into an `enum` value) is resolved by the same rule
+    const node = typeof ref === "string" && target.has(ref) ? target.get(ref) : validateLocalSchemaRef(ref, rootObject, idx, kind, name, at);
+    const found = next(node).some(cycle);
+    onPath.delete(ref);
+    done.add(ref);
+    return found;
+  };
+  for (const [pointer, ref] of refs) {
+    at = pointer;
+    if (cycle(ref)) {
+      throw new ManifestParseError(
+        `${kind} '${name}' $ref '${ref}' refers back to itself without reading any part of the value`,
+        idx,
+        pointer,
+        "JSON_SCHEMA_REF_INVALID",
+        { value: ref, expected: "a $ref cycle only through properties, items or additionalProperties" },
+      );
+    }
+  }
+}
+
+/** The most values one `enum` lists. */
+export const MAX_JSON_SCHEMA_ENUM = 1_000;
+/** The longest `pattern`. */
+export const MAX_JSON_SCHEMA_PATTERN = 1_000;
+
+/**
+ * Why a JSON Schema `pattern` could backtrack exponentially (or undefined): a JavaScript regex backtracks, and a caller's string
+ * runs it on every call. Refused, conservatively: a group repeated more than once whose body itself repeats a variable number of
+ * times (`(a+)+`, `(a*b?)*`, `((ab)+c)+`) or alternates (`(a|ab)+`), and a backreference. Character classes and escapes are atoms.
+ */
+export function unsafePattern(pattern: string): string | undefined {
+  if (pattern.length > MAX_JSON_SCHEMA_PATTERN) return `longer than ${MAX_JSON_SCHEMA_PATTERN} characters`;
+  type Frame = { quantified: boolean; alternates: boolean };
+  const stack: Frame[] = [{ quantified: false, alternates: false }];
+  let group: Frame | undefined; // the group just closed, when it is the atom a quantifier would apply to
+  let atom = false; // there is an atom a quantifier would apply to
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i]!;
+    const top = stack.at(-1)!;
+    // a quantifier: `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}` (a `{` of another shape is a literal)
+    const brace = c === "{" ? /^\{(\d+)(,(\d*))?\}/.exec(pattern.slice(i)) : null;
+    if (atom && (c === "*" || c === "+" || c === "?" || brace)) {
+      const min = brace ? +brace[1]! : c === "+" ? 1 : 0;
+      const max = brace ? (brace[2] === undefined ? min : brace[3] ? +brace[3] : Infinity) : c === "?" ? 1 : Infinity;
+      if (brace) i += brace[0].length - 1;
+      if (pattern[i + 1] === "?") i++; // lazy
+      if (group && max > 1 && group.quantified) return "a repeated group whose body repeats (nested quantifiers)";
+      if (group && max > 1 && group.alternates) return "a repeated group whose body alternates";
+      if (max !== min) top.quantified = true;
+      group = undefined;
+      atom = false;
+      continue;
+    }
+    group = undefined;
+    atom = true;
+    if (c === "\\") {
+      const e = pattern[i + 1];
+      if (e !== undefined && (/[1-9]/.test(e) || e === "k")) return "a backreference";
+      i++;
+    } else if (c === "[") {
+      let j = i + 1;
+      if (pattern[j] === "^") j++;
+      if (pattern[j] === "]") j++;
+      while (j < pattern.length && pattern[j] !== "]") j += pattern[j] === "\\" ? 2 : 1;
+      i = j;
+    } else if (c === "(") {
+      stack.push({ quantified: false, alternates: false });
+      atom = false;
+      if (pattern[i + 1] === "?") {
+        const head = /^\?(?::|=|!|<=|<!|<[A-Za-z_$][\w$]*>)/.exec(pattern.slice(i + 1));
+        if (head) i += head[0].length;
+      }
+    } else if (c === ")" && stack.length > 1) {
+      const closed = stack.pop()!;
+      const parent = stack.at(-1)!;
+      parent.quantified ||= closed.quantified;
+      parent.alternates ||= closed.alternates;
+      group = closed;
+    } else if (c === "|") {
+      top.alternates = true;
+      atom = false;
+    } else if (c === "^" || c === "$") {
+      atom = false;
+    }
+  }
+  return undefined;
 }
 
 function validateLocalSchemaRef(
@@ -371,7 +493,7 @@ function validateLocalSchemaRef(
   kind: "Schema" | "View" | "Procedure",
   name: string,
   pointer: string,
-): void {
+): Record<string, unknown> {
   if (typeof ref !== "string" || !ref.startsWith("#/$defs/")) {
     throw new ManifestParseError(
       `${kind} '${name}' $ref must be a same-document pointer beginning '#/$defs/'`,
@@ -406,4 +528,5 @@ function validateLocalSchemaRef(
       { value: ref, expected: "a JSON Schema object in this document" },
     );
   }
+  return current as Record<string, unknown>;
 }

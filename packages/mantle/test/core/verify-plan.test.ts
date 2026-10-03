@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { compilePlan, planFingerprint, type RuntimePlan } from "../../src/spec/index.js";
-import { DiagnosticError, verifyPlan } from "../../src/core/index.js";
+import { compilePlan, fieldTypes, planFingerprint, type RuntimePlan } from "../../src/spec/index.js";
+import { DiagnosticError, PLAN_LIMITS, createMantleRuntime, verifyPlan } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
 import { postgresStorage } from "../../src/postgres/index.js";
 import * as pgCompile from "../../src/postgres/compile/index.js";
@@ -217,7 +217,12 @@ spec:
     return r.plan;
   };
   const paths = async (p: RuntimePlan) => (await verifyPlan(p, d1())).map((d) => d.path);
-  const schema = (fields: Record<string, string>, extra: object = {}) => ({ name: "", fields, names: Object.fromEntries(Object.keys(fields).map((f) => [f, f])), schema: { type: "object" }, ...extra });
+  // a field and its JSON Schema property, as the CLI writes both
+  const PROPERTY: Record<string, object> = { text: { type: "string" }, integer: { type: "integer" }, timestamptz: { type: "string", format: "date-time" }, date: { type: "string", format: "date" }, geo: { type: "object", format: "geo" } };
+  const schema = (fields: Record<string, string>, extra: object = {}) => ({ name: "", fields, names: Object.fromEntries(Object.keys(fields).map((f) => [f, f])), schema: { type: "object", properties: Object.fromEntries(Object.entries(fields).map(([f, t]) => [f, PROPERTY[t]])) }, ...extra });
+  /** the Schema `items` with one more field, typed `type`, whose JSON Schema property is `property` */
+  const withField = (s: RuntimePlan["schemas"][string], field: string, type: string, property: object = PROPERTY[type] ?? { type: "number" }) =>
+    ({ ...s, fields: { ...s.fields, [field]: type }, names: { ...s.names, [field]: field }, schema: { ...s.schema, properties: { ...s.schema.properties, [field]: property } } });
 
   it("refuses a write target or relation that is not lower case: hooks and publishing are keyed by the folded name", async () => {
     const base = await plan();
@@ -250,7 +255,7 @@ spec:
       triggers: { a: { source: { kind: "mcp", surface: "staff" }, procedure: "add-item" }, b: { source: { kind: "mcp", surface: "staff" }, procedure: "add_item" } },
     }));
     expect(await paths(twins)).toEqual(["plan#/mcp/staff"]);
-    const paging = await reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, input: { type: "object", properties: { cursor: { type: "string" } } } } } }));
+    const paging = await reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, input: { type: "object", properties: { cursor: { type: "string" } } }, inputs: { cursor: "text" } } } }));
     expect(await paths(paging)).toEqual(["plan#/mcp/staff"]);
   });
 
@@ -275,17 +280,36 @@ spec:
     }
   });
 
-  it("checks field types as storage takes them: a numeric precision storage refuses is refused here", async () => {
+  it("checks field types as the CLI types them: each is its JSON Schema property's type, one storage takes", async () => {
     const base = await plan();
-    const typed = (t: string) => reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, fields: { ...p.schemas.items!.fields, price: t } } } }));
-    for (const t of ["numeric(15, 2)", "numeric(5,0)", "date", "geo"]) expect(await verifyPlan(await typed(t), d1())).toEqual([]);
-    for (const t of ["numeric(16, 2)", "numeric(0, 0)", "numeric(3, 4)", "varchar", "Text"]) expect(await paths(await typed(t))).toEqual(["plan#/schemas/items"]);
+    const typed = (t: string, property?: object) => reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: withField(p.schemas.items!, "price", t, property) } }));
+    for (const t of ["date", "geo", "timestamptz", "integer"]) expect(await verifyPlan(await typed(t), d1())).toEqual([]);
+    // numeric(p, s) has no manifest spelling: the CLI never writes one
+    for (const t of ["numeric(15, 2)", "numeric(16, 2)", "numeric(0, 0)", "numeric(3, 4)", "varchar", "Text"]) expect(new Set(await paths(await typed(t)))).toEqual(new Set(["plan#/schemas/items"]));
+    // a type its property does not have, a property no field has, a field no property has
+    expect(await paths(await typed("integer", { type: "string" }))).toEqual(["plan#/schemas/items"]);
+    const extraProperty = await reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, schema: { ...p.schemas.items!.schema, properties: { ...p.schemas.items!.schema.properties, note: { type: "string" } } } } } }));
+    const extraField = await reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, fields: { ...p.schemas.items!.fields, note: "text" }, names: { ...p.schemas.items!.names, note: "note" } } } }));
+    // two properties that fold to one column
+    const folded = await reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, schema: { ...p.schemas.items!.schema, properties: { ...p.schemas.items!.schema.properties, Name: { type: "string" } } } } } }));
+    for (const p of [extraProperty, extraField, folded]) expect(new Set(await paths(p))).toEqual(new Set(["plan#/schemas/items"]));
+  });
+
+  it("checks a program's inputs against its input schema, as the CLI types them", async () => {
+    const base = await plan();
+    const retyped = await reseal(base, (p) => ({ ...p, procedures: { ...p.procedures, bump: { ...p.procedures.bump!, inputs: { id: "integer" } } } }));
+    const viewInputs = await reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, inputs: { q: "text" } } } }));
+    expect(await paths(retyped)).toEqual(["plan#/procedures/bump/inputs"]);
+    expect(await paths(viewInputs)).toEqual(["plan#/views/stock/inputs"]);
   });
 
   it("refuses a TTL every read would fail on: ttl and ttlSeconds together, a whole number of seconds", async () => {
     const base = await plan();
-    const ttl = (extra: object) => reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, fields: { ...p.schemas.items!.fields, expires: "timestamptz" }, ...extra } } }));
+    const ttl = (extra: object) => reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...withField(p.schemas.items!, "expires", "timestamptz"), ...extra } } }));
     for (const ok of [{ ttl: "expires", ttlSeconds: 60 }, { ttl: "expires", ttlSeconds: 0 }]) expect(await verifyPlan(await ttl(ok), d1())).toEqual([]);
+    // a TTL on a native or non-date column (`version` is never a recent time: every row would expire and be swept at once)
+    for (const bad of [{ ttl: "version", ttlSeconds: 60 }, { ttl: "created_at", ttlSeconds: 60 }, { ttl: "name", ttlSeconds: 60 }, { ttl: "stock", ttlSeconds: 60 }])
+      expect(await paths(await ttl(bad))).toEqual(["plan#/schemas/items"]);
     for (const bad of [{ ttl: "expires" }, { ttlSeconds: 60 }, { ttl: "expires", ttlSeconds: -1 }, { ttl: "expires", ttlSeconds: 1.5 }, { ttl: "expires", ttlSeconds: "60" }, { ttl: "expires", ttlSeconds: 1e15 }])
       expect(await paths(await ttl(bad))).toEqual(["plan#/schemas/items"]);
   });
@@ -306,6 +330,141 @@ spec:
     for (const bad of [{ list: { searchFields: "name" } }, { list: { filterFields: [1] } }, { list: { searchFields: ["stock"] } }, { list: { filterFields: ["nope"] } }, { list: [] }])
       expect((await paths(await ui(bad))).every((x) => x.startsWith("plan#/views/stock/uiSchema"))).toBe(true);
     for (const bad of [{ list: { searchFields: "name" } }, { list: { searchFields: ["stock"] } }]) expect((await paths(await ui(bad))).length).toBe(1);
+  });
+});
+
+describe("verifyPlan: what the CLI refuses of a manifest, refused of the plan", () => {
+  const WITH_HOOKS = `${MANIFESTS}---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: Notes }
+spec:
+  title: Notes
+  lifecycle: operational
+  schema: { type: object, properties: { body: { type: string } } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: on-note }
+spec:
+  source: { kind: lifecycle, schema: Notes, on: [after_create] }
+  target: { procedure: audit }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: audit-http }
+spec:
+  source: { kind: http, method: POST, path: /api/audit }
+  target: { procedure: audit }
+`;
+  const plan = async () => {
+    const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: WITH_HOOKS }] });
+    if (!r.ok) throw new Error(JSON.stringify(r.diagnostics));
+    return r.plan;
+  };
+  const codes = async (p: RuntimePlan) => (await verifyPlan(p, d1())).map((d) => [d.code, d.path]);
+  const withProcedure = (base: RuntimePlan, input: object) => reseal(base, (p) => ({ ...p, procedures: { ...p.procedures, audit: { ...p.procedures.audit!, input, inputs: fieldTypes(input) } } }));
+
+  it("bounds the plan before any other check: counts of each kind, fields, checks and each program's IR", async () => {
+    const base = await plan();
+    expect(await verifyPlan(base, d1())).toEqual([]);
+    const many = (n: number, f: (i: number) => [string, unknown]) => Object.fromEntries(Array.from({ length: n }, (_, i) => f(i)));
+    const schemas = await reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, ...many(PLAN_LIMITS.schemas, (i) => [`s${i}`, { ...p.schemas.items!, name: `s${i}` }]) } }));
+    const fields = await reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, fields: many(PLAN_LIMITS.fieldsPerSchema + 1, (i) => [`f${i}`, "text"]) } } }));
+    const checks = await reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: Array(PLAN_LIMITS.checksPerSchema + 1).fill(p.schemas.items!.checks![0]) } } }));
+    const triggers = await reseal(base, (p) => ({ ...p, triggers: many(PLAN_LIMITS.triggers + 1, (i) => [`t${i}`, { source: { kind: "mcp", surface: "staff" }, procedure: "audit" }]) as never }));
+    const deep = { BoolExpr: { boolop: "OR_EXPR", args: Array(PLAN_LIMITS.programIrValues / 2).fill({ A_Const: { boolval: { boolval: true } } }) } };
+    const ir = await reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, checks: [deep as never] } } }));
+    expect(await codes(schemas)).toEqual([["RESOURCE_EXHAUSTED", "plan#/schemas"]]);
+    expect(await codes(fields)).toEqual([["RESOURCE_EXHAUSTED", "plan#/schemas/items/fields"]]);
+    expect(await codes(checks)).toEqual([["RESOURCE_EXHAUSTED", "plan#/schemas/items/checks"]]);
+    expect(await codes(triggers)).toEqual([["RESOURCE_EXHAUSTED", "plan#/triggers"]]);
+    expect(await codes(ir)).toEqual([["RESOURCE_EXHAUSTED", "plan#/schemas/items/checks/0"]]);
+  });
+
+  it("checks a plan at its limits in linear time: what the allowlist reads off every Schema is read once per plan", async () => {
+    const base = await plan();
+    // as many Schemas of as many fields as a plan may have, and a View per Schema: each View's columns are checked against them all
+    const width = PLAN_LIMITS.fieldsPerSchema;
+    const big = await reseal(base, (p) => {
+      const schemas: Record<string, unknown> = { ...p.schemas };
+      const views: Record<string, unknown> = { ...p.views };
+      for (let i = 0; i < PLAN_LIMITS.schemas - 2; i++) {
+        const fields = Object.fromEntries(Array.from({ length: width }, (_, j) => [`c${i}_${j}`, "text"]));
+        schemas[`s${i}`] = { name: `s${i}`, title: "S", publishing: false, fields, names: Object.fromEntries(Object.keys(fields).map((f) => [f, f])), schema: { type: "object", properties: Object.fromEntries(Object.keys(fields).map((f) => [f, { type: "string" }])) } };
+        views[`v${i}`] = { ...p.views.stock!, stmts: [{ SelectStmt: { targetList: Object.keys(fields).slice(0, 100).map((f) => ({ ResTarget: { val: { ColumnRef: { fields: [{ String: { sval: f } }] } } } })), fromClause: [{ RangeVar: { relname: `s${i}`, inh: true, relpersistence: "p", mantle: "table" } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }], columns: undefined, uiSchema: undefined };
+      }
+      return { ...p, schemas, views } as never;
+    });
+    const started = Date.now();
+    expect(await verifyPlan(big, d1())).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(6_000);
+  }, 30_000);
+
+  it("refuses a TTL on a native column: sweepExpired would delete every owner's rows", async () => {
+    const base = await plan();
+    const ttl = await reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, ttl: "version", ttlSeconds: 60 } } }));
+    expect(await codes(ttl)).toEqual([["INPUT_VALIDATION_FAILED", "plan#/schemas/items"]]);
+  });
+
+  it("checks every JSON Schema as the CLI does: a $ref cycle that reads no value is refused, and a recursive tree is not", async () => {
+    const base = await plan();
+    const cycle = { type: "object", $defs: { a: { $ref: "#/$defs/b" }, b: { oneOf: [{ $ref: "#/$defs/a" }, { type: "string" }] } }, properties: { x: { $ref: "#/$defs/a" } } };
+    const tree = { type: "object", $defs: { node: { type: "object", properties: { children: { type: "array", items: { $ref: "#/$defs/node" } } } } }, properties: { root: { $ref: "#/$defs/node" } } };
+    expect(await verifyPlan(await withProcedure(base, tree), d1())).toEqual([]);
+    const refused = await codes(await withProcedure(base, cycle));
+    expect(refused.length).toBe(1);
+    expect(refused[0]![1]).toMatch(/^plan#\/procedures\/audit\/input\//);
+    expect(refused[0]![0]).toBe("INPUT_VALIDATION_FAILED");
+    // the output, a View's input and a Schema's schema are checked too
+    const output = await reseal(base, (p) => ({ ...p, procedures: { ...p.procedures, audit: { ...p.procedures.audit!, output: cycle } } }));
+    const viewInput = await reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, input: { type: "object", properties: { q: { type: "string", pattern: "^(a+)+$" } } }, inputs: { q: "text" } } } }));
+    const schema = await reseal(base, (p) => ({ ...p, schemas: { ...p.schemas, items: { ...p.schemas.items!, schema: { ...p.schemas.items!.schema, properties: { ...p.schemas.items!.schema.properties, name: { type: "string", enum: Array.from({ length: 1001 }, (_, i) => `v${i}`) } } } } } }));
+    expect((await codes(output)).map((x) => x[1])).toEqual([expect.stringMatching(/^plan#\/procedures\/audit\/output\//)]);
+    expect((await codes(viewInput)).map((x) => x[1])).toEqual(["plan#/views/stock/input/properties/q/pattern"]);
+    expect((await codes(schema)).map((x) => x[1])).toEqual(["plan#/schemas/items/schema/properties/name/enum"]);
+  });
+
+  it("refuses a pattern that backtracks exponentially: the isolate would stall on a short caller string", async () => {
+    const base = await plan();
+    for (const pattern of ["^(a+)+$", "(a|aa)*", "^(\\w+\\s?)*$", "((ab)*c)+", "(a*){20}"]) {
+      const p = await withProcedure(base, { type: "object", properties: { s: { type: "string", pattern } } });
+      expect(await codes(p)).toEqual([["INPUT_VALIDATION_FAILED", "plan#/procedures/audit/input/properties/s/pattern"]]);
+    }
+  });
+
+  it("refuses an http Trigger outside /api/ or on a route another Trigger has: the CLI's graph check", async () => {
+    const base = await plan();
+    const outside = await reseal(base, (p) => ({ ...p, triggers: { ...p.triggers, "audit-http": { source: { kind: "http", method: "POST", path: "/admin/audit" }, procedure: "audit" } as never } }));
+    const twice = await reseal(base, (p) => ({ ...p, triggers: { ...p.triggers, again: { source: { kind: "http", method: "POST", path: "/api/audit" }, procedure: "audit" } as never } }));
+    expect(await codes(outside)).toEqual([["TRIGGER_PATH_INVALID", "plan#/triggers/audit-http/source/path"]]);
+    expect(await codes(twice)).toEqual([["TRIGGER_PATH_COLLISION", "plan#/triggers/again/source"]]);
+  });
+
+  it("refuses a lifecycle Trigger that names its Schema in another case: the deferred after hook would be refused on every delivery", async () => {
+    const base = await plan();
+    expect(base.schemas.notes!.name).toBe("Notes");
+    for (const schema of ["notes", "NOTES"]) {
+      const folded = await reseal(base, (p) => ({ ...p, triggers: { ...p.triggers, "on-note": { source: { kind: "lifecycle", schema, on: ["after_create"] }, procedure: "audit" } as never } }));
+      expect(await codes(folded)).toEqual([["LIFECYCLE_SCHEMA_UNKNOWN", "plan#/triggers/on-note"]]);
+      // boot itself refuses it, verified or not
+      const booted = await createMantleRuntime({ plan: folded, handlers: { audit: () => ({}) }, storage: sqliteStorage(await LocalD1.create()) }).then(() => undefined, (e) => e);
+      expect((booted as DiagnosticError).diagnostics?.[0]?.code).toBe("LIFECYCLE_SCHEMA_UNKNOWN");
+    }
+    await createMantleRuntime({ plan: base, handlers: { audit: () => ({}) }, storage: sqliteStorage(await LocalD1.create()) });
+  });
+});
+
+describe("the runtime's schema checks", () => {
+  it("turn a validator that throws into a diagnostic: a plan nobody verified with a $ref cycle fails one call, not the isolate", async () => {
+    const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: MANIFESTS }] });
+    if (!r.ok) throw new Error(JSON.stringify(r.diagnostics));
+    const cycle = { type: "object", $defs: { a: { $ref: "#/$defs/a" } }, properties: { x: { $ref: "#/$defs/a" } } };
+    const plan = await reseal(r.plan, (p) => ({ ...p, procedures: { ...p.procedures, audit: { ...p.procedures.audit!, input: cycle } } }));
+    const runtime = await createMantleRuntime({ plan, handlers: { audit: () => ({}) }, storage: sqliteStorage(await LocalD1.create()) });
+    const e = await runtime.invokeProcedure({ procedure: "audit", input: { x: 1 }, caller: { kind: "user", subject: "u", role: null, scopes: [], credential: "session", credentialId: null, clientId: null }, cause: { kind: "http", id: "t" } }).then(() => undefined, (x) => x);
+    expect(e).toBeInstanceOf(DiagnosticError);
+    expect((e as DiagnosticError).diagnostics[0]!.code).toBe("INPUT_VALIDATION_FAILED");
   });
 });
 

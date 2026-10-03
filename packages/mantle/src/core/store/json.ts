@@ -4,7 +4,7 @@
  * are bound and CAST like any input, and the result goes through the same validation and policy.
  */
 import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
-import { firstZodIssueAsJsonPointer, jsonSchemaToZod, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
+import { firstZodIssueAsJsonPointer, jsonSchemaToZod, safeParseJson, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
 import type { ZodType } from "zod";
 import { classify } from "../../spec/domain/index.js";
 import { S, op, ref, table, target } from "../sql/ast.js";
@@ -82,7 +82,7 @@ export function validateValues(def: StoreSchema, values: Readonly<Record<string,
   }
   // null clears a field the Schema does not require: it is stored as NULL and read back as null, so it is checked as absent
   const required = new Set(def.schema.required ?? []);
-  const r = z[mode].safeParse(Object.fromEntries(Object.entries(named).filter(([k, v]) => v !== null || required.has(k))));
+  const r = safeParseJson(z[mode], Object.fromEntries(Object.entries(named).filter(([k, v]) => v !== null || required.has(k))));
   if (r.success) return;
   const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
   throw invalid(`The values do not match the Schema${instancePath ? ` at ${instancePath}` : ""}: ${message}`);

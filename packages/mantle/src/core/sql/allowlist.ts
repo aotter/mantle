@@ -8,14 +8,14 @@
  * Pure JavaScript. This file must never import the parser: the runtime imports it, and the parser
  * declares a 128 MiB WASM memory, which is a Worker's whole isolate limit.
  */
-import type { SqlContext, SqlDiagnostic, SqlDiagnosticCode, SqlNode as N, SqlPlan, SqlSchemaDef } from "../../spec/domain/model/SqlIr.js";
+import type { SchemaColumns, SqlContext, SqlDiagnostic, SqlDiagnosticCode, SqlNode as N, SqlPlan, SqlSchemaDef } from "../../spec/domain/model/SqlIr.js";
 import { PG_GRAMMAR } from "../../spec/domain/model/SqlIr.js";
 import { SqlRefusal } from "../../spec/domain/service/SqlRefusal.js";
 import { intervalMicros, parseNumeric } from "../../spec/domain/service/SqlTypes.js";
 
 type Code = SqlDiagnosticCode;
 /** `scope`: the CTE names in scope, innermost last, by PostgreSQL's rule (see `withScope`) */
-type Ctx = SqlContext & { source?: string; known?: Set<string>; p: Profile; scope: Set<string>[]; rels?: Map<string, string>[] };
+type Ctx = SqlContext & { source?: string; known?: Set<string>; cols?: SchemaColumns; p: Profile; scope: Set<string>[]; rels?: Map<string, string>[] };
 
 /** node type -> the keys it may carry */
 export const KEYS_SRC: Record<string, string> = {
@@ -96,7 +96,8 @@ export const EXTRACT_FIELDS = new Set(['year', 'month', 'day', 'dow', 'hour']);
 const CAST_TYPES = new Set(['text', 'int4', 'int8', 'float8', 'bool', 'timestamptz', 'date', 'numeric', 'interval']);
 export const MAX_RADIUS_M = 50_000;
 export const MAX_NEAR_K = 100;
-const MAX_NODES = 2000;
+/** The most nodes one program's IR may have. */
+export const MAX_NODES = 2000;
 
 
 /** What one profile accepts. `reference` also lifts the rules that exist only because SQLite stores and compares differently. */
@@ -188,7 +189,7 @@ export function validateProgram(stmts: N[], ctx: SqlContext & { source?: string 
 function program(stmts: N[], ctx: Ctx, locs: (number | undefined)[]): void {
   if (!Array.isArray(stmts) || !stmts.length) no('SQL_SHAPE', 'an empty program');
   if (ctx.kind === 'view' && (stmts.length !== 1 || !stmts[0]!.SelectStmt)) no('SQL_SHAPE', 'a View is exactly one SELECT', locs[1]);
-  ctx = { ...ctx, known: knownColumns(stmts, ctx) };
+  ctx = { ...ctx, known: knownColumns(stmts), cols: ctx.columns ?? schemaColumns(ctx.schemas) };
   const w: Walk = { ctx, budget: { n: 0 } };
   stmts.forEach((s, i) => {
     const t = Object.keys(s)[0] ?? '';
@@ -210,15 +211,28 @@ function* find(v: any, key: string): Generator<any> {
   }
 }
 
+/** What every program checked against these Schemas reads off them: computed once per plan by a caller that checks many. */
+export function schemaColumns(schemas: SqlContext['schemas']): SchemaColumns {
+  const known = new Set<string>();
+  const scopes = new Set<string>();
+  const types = new Map<string, string | null>();
+  for (const s of Object.values(schemas)) {
+    if (typeof s.scope === 'string') scopes.add(s.scope.toLowerCase());
+    for (const [f, t] of Object.entries(s.fields)) {
+      (t === 'geo' ? [f, `${f}_lat`, `${f}_lng`] : [f]).forEach((c) => known.add(c));
+      types.set(f, types.has(f) && types.get(f) !== t ? null : t); // null: two Schemas disagree
+    }
+  }
+  return { known, scopes, types: new Map([...types].filter((e): e is [string, string] => e[1] !== null)) };
+}
+
 /**
- * Every name a column may have: declared fields (a geo field also as _lat and _lng), `id`, the system
- * columns, json_each's, relation names and aliases, and every output name the program gives (ORDER BY and outer queries read them).
- * A name outside the set is a typo. Not per relation: a column of another table passes here.
+ * Every name a column may have beyond the declared fields (`SchemaColumns.known`, a geo field also as _lat and _lng): `id`, the
+ * system columns, json_each's, relation names and aliases, and every output name the program gives (ORDER BY and outer queries
+ * read them). A name outside both is a typo. Not per relation: a column of another table passes here.
  */
-function knownColumns(stmts: N[], ctx: Ctx): Set<string> {
+function knownColumns(stmts: N[]): Set<string> {
   const known = new Set(['id', 'key', 'value', 'type', 'atom', 'parent', 'fullkey', 'path', ...SYSTEM]);
-  for (const s of Object.values(ctx.schemas))
-    for (const [f, t] of Object.entries(s.fields)) (t === 'geo' ? [f, `${f}_lat`, `${f}_lng`] : [f]).forEach((c) => known.add(c));
   for (const r of find(stmts, 'ResTarget')) if (r.name) known.add(String(r.name).toLowerCase());
   for (const r of find(stmts, 'RangeVar')) [r.relname, r.alias?.aliasname].forEach((a) => a && known.add(a.toLowerCase())); // mantle.search(<alias>, ...) names a relation
   for (const c of find(stmts, 'CommonTableExpr')) [c.ctename, ...(c.aliascolnames ?? []).map((x: N) => x.String?.sval)].forEach((a) => a && known.add(String(a).toLowerCase()));
@@ -368,10 +382,10 @@ const check: Record<string, Checker> = {
     const f = sv(n.fields), last = f.split('.').pop()!.toLowerCase();
     if (n.fields.length > 2) no('SQL_COLUMN', `${f}: at most alias.column`, at);
     if (['rowid', 'oid', '_rowid_', '_rid'].includes(last)) no('SQL_COLUMN', `${last} is not addressable`, at);
-    if (Object.values(ctx.schemas).some((s) => s.scope?.toLowerCase() === last)) no('SQL_COLUMN', `${f}: the scope column is not addressable`, at);
+    if (ctx.cols!.scopes.has(last)) no('SQL_COLUMN', `${f}: the scope column is not addressable`, at);
     if (f.startsWith('input.') && !(last in ctx.inputs)) no('SQL_COLUMN', `${f} is not a declared input`, at);
     if (ctx.p.name === 'base' && SQLITE_ONLY_KEYWORDS.has(last)) no('SQL_UNSUPPORTED', `${last} is an SQLite keyword: the printer would not quote it`, at);
-    if (last !== '*' && !f.startsWith('input.') && !ctx.known!.has(last)) no('SQL_COLUMN', `${f} is not a declared field`, at);
+    if (last !== '*' && !f.startsWith('input.') && !ctx.known!.has(last) && !ctx.cols!.known.has(last)) no('SQL_COLUMN', `${f} is not a declared field`, at);
   },
   FuncCall: (n, ctx, path, at) => {
     const f = fname(n);
@@ -510,8 +524,7 @@ const SYSTEM_TIMES = new Set(['created_at', 'updated_at']);
 /** The type a column name has in every Schema that declares it, or undefined when none does or they disagree. */
 function columnType(ctx: Ctx, name: string): string | undefined {
   if (SYSTEM_TIMES.has(name)) return 'timestamptz';
-  const types = new Set(Object.values(ctx.schemas).flatMap((s: SqlSchemaDef) => (Object.hasOwn(s.fields, name) ? [s.fields[name]!] : [])));
-  return types.size === 1 ? [...types][0] : undefined;
+  return ctx.cols!.types.get(name);
 }
 
 /**

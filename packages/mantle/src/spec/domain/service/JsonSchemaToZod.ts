@@ -17,6 +17,19 @@ export function jsonSchemaToZod(schema: JsonSchema): ZodType {
   return jsonValueWithinLimits().pipe(imported);
 }
 
+/**
+ * `schema.safeParse(value)`, where anything the validator throws other than a Zod issue (a stack overflow on a schema nobody
+ * checked) is a failed parse: a value the schema cannot check is not accepted, and the caller reports it as it reports any.
+ */
+export function safeParseJson<T extends ZodType>(schema: T, value: unknown): ReturnType<T["safeParse"]> {
+  try {
+    return schema.safeParse(value) as ReturnType<T["safeParse"]>;
+  } catch (error) {
+    const message = `the schema cannot check this value: ${error instanceof Error ? error.message : String(error)}`;
+    return { success: false, error: new z.ZodError([{ code: "custom", path: [], message, input: value }]) } as ReturnType<T["safeParse"]>;
+  }
+}
+
 function normalizeNullable(schema: JsonSchema): JsonSchema {
   const transform = (node: JsonSchema): JsonSchema => {
     const out: Record<string, unknown> = { ...node };

@@ -28,8 +28,23 @@ export interface SqlSchemaDef {
   readonly fields: Readonly<Record<string, string>>;
 }
 
+/**
+ * What the allowlist reads off every Schema of a context: computed from `schemas` (`schemaColumns`), once per plan by a caller that
+ * checks many programs against one plan, or per program when absent.
+ */
+export interface SchemaColumns {
+  /** every declared column name (a geo field also as its `_lat` and `_lng` columns) */
+  readonly known: ReadonlySet<string>;
+  /** the scope columns, folded */
+  readonly scopes: ReadonlySet<string>;
+  /** column name -> its type, when every Schema that declares it agrees */
+  readonly types: ReadonlyMap<string, string>;
+}
+
 export interface SqlContext {
   readonly schemas: Readonly<Record<string, SqlSchemaDef>>;
+  /** `schemaColumns(schemas)`, precomputed; must be of these `schemas` */
+  readonly columns?: SchemaColumns;
   /** declared input properties and their Mantle types */
   readonly inputs: Readonly<Record<string, string>>;
   readonly kind: "view" | "procedure";

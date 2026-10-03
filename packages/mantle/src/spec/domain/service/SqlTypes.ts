@@ -2,6 +2,7 @@
  * Type rules the SQL allowlist needs (ADR-0034 decisions 2 and 5): `numeric(p, s)`
  * bounds and `interval` literals. Pure; a refusal is a `SqlRefusal`.
  */
+import { enumOptions, type JsonSchema } from "../model/ManifestGrammar.js";
 import { SqlRefusal } from "./SqlRefusal.js";
 
 export const MAX_NUMERIC_P = 15;
@@ -72,4 +73,21 @@ export function sideTableClashes(schemas: Readonly<Record<string, { readonly sea
       }
   }
   return out;
+}
+
+/** JSON Schema property to Mantle type, as the CLI types a column or an input. `numeric(p,s)` has no manifest spelling yet. */
+export function fieldType(p: JsonSchema): string {
+  const types = [...new Set([p.type].flat().filter((x) => x !== "null"))];
+  // integer or number is one number; any other union keeps each value's own JSON type
+  if (types.length > 1) return types.every((x) => x === "integer" || x === "number") ? "real" : "json";
+  const t = types[0];
+  if (p.format === "geo") return "geo";
+  if (!t && enumOptions(p)) return "text"; // a string enum or a oneOf of string consts
+  if (t === "string") return p.format === "date-time" ? "timestamptz" : p.format === "date" ? "date" : "text";
+  return ({ integer: "integer", number: "real", boolean: "bool" } as Record<string, string>)[String(t)] ?? "json";
+}
+
+/** A JSON Schema's top-level properties as columns or inputs: SQL folds unquoted identifiers, so keys are lower case. */
+export function fieldTypes(schema: JsonSchema | undefined): Record<string, string> {
+  return Object.fromEntries(Object.entries(schema?.properties ?? {}).map(([name, p]) => [name.toLowerCase(), fieldType(p)]));
 }

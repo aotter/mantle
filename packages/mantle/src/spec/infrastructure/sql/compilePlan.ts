@@ -4,10 +4,11 @@
  * declarations. Like `compileSql`, only the CLI and the plugin's helper scripts import this.
  */
 import { validateDiagnostic, type Diagnostic, type SourceLocation } from "../../kernel/diagnostic.js";
-import { enumOptions, type JsonSchema, type ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
+import type { JsonSchema, ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
 import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
+import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
 import { hasSubLink, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
@@ -18,26 +19,9 @@ export type CompilePlanResult =
   | { readonly ok: true; readonly plan: RuntimePlan }
   | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] };
 
-/** JSON Schema property to Mantle type. `numeric(p,s)` and `geo` have no manifest spelling yet. */
-function mantleType(p: JsonSchema): string {
-  const types = [...new Set([p.type].flat().filter((x) => x !== "null"))];
-  // integer or number is one number; any other union keeps each value's own JSON type
-  if (types.length > 1) return types.every((x) => x === "integer" || x === "number") ? "real" : "json";
-  const t = types[0];
-  if (p.format === "geo") return "geo";
-  if (!t && enumOptions(p)) return "text"; // a string enum or a oneOf of string consts
-  if (t === "string") return p.format === "date-time" ? "timestamptz" : p.format === "date" ? "date" : "text";
-  return ({ integer: "integer", number: "real", boolean: "bool" } as Record<string, string>)[String(t)] ?? "json";
-}
-
 /** The physical columns of the native entry fields an index may name (SchemaIndexChecker); a declared field is its lower-cased name. */
 const NATIVE_COLUMNS: Readonly<Record<string, string>> = { id: "id", status: "status", version: "version", createdAt: "created_at", updatedAt: "updated_at", authorId: "author_id" };
 const indexColumn = (field: string) => (Object.hasOwn(NATIVE_COLUMNS, field) ? NATIVE_COLUMNS[field]! : field.toLowerCase());
-
-/** SQL folds unquoted identifiers to lower case, so the context is keyed the way the parser reads names. */
-function typesOf(schema: JsonSchema | undefined): Record<string, string> {
-  return Object.fromEntries(Object.entries(schema?.properties ?? {}).map(([name, p]) => [name.toLowerCase(), mantleType(p)]));
-}
 
 function toDiagnostic(d: SqlDiagnostic, source: SourceLocation, pointer: string): Diagnostic {
   const at = d.line === undefined ? undefined : { line: d.line, column: d.column, ...(d.token ? { token: d.token } : {}) };

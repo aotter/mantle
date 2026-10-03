@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateManifests } from "./parse.js";
 import { parseManifests } from "./parse.js";
+import { unsafePattern } from "../../src/spec/domain/service/SchemaSpecChecks.js";
 import type {
   Manifest,
   ProcedureManifest,
@@ -1289,8 +1290,25 @@ spec:
     ["remote refs", `{ $ref: 'https://example.com/schema.json' }`, "JSON_SCHEMA_REF_INVALID"],
     ["unresolved refs", `{ $ref: '#/$defs/missing' }`, "JSON_SCHEMA_REF_INVALID"],
     ["unsupported composition", `{ anyOf: [{ type: string }, { type: number }] }`, "JSON_SCHEMA_UNSUPPORTED"],
+    // a $ref that reaches itself without reading a level of the value: every validation would overflow the stack
+    ["a $ref to itself", `{ type: object, $defs: { a: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
+    ["a $ref cycle through oneOf", `{ type: object, $defs: { a: { oneOf: [{ $ref: '#/$defs/b' }, { type: string }] }, b: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
+    ["a $ref cycle nothing reads", `{ type: object, $defs: { a: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
+    ["a pattern with nested quantifiers", `{ type: object, properties: { s: { type: string, pattern: '^(a+)+$' } } }`, "INVALID_PATTERN"],
+    ["a pattern repeating an alternation", `{ type: object, properties: { s: { type: string, pattern: '^(a|aa)*$' } } }`, "INVALID_PATTERN"],
+    ["a pattern with a backreference", `{ type: object, properties: { s: { type: string, pattern: '^(a)\\1$' } } }`, "INVALID_PATTERN"],
+    ["an enum of more than 1000 values", `{ type: object, properties: { s: { enum: [${Array.from({ length: 1001 }, (_, i) => i).join(", ")}] } } }`, "JSON_SCHEMA_LIMIT_EXCEEDED"],
   ])("rejects %s with a stable diagnostic", (_label, input, code) => {
     const result = parseManifests(procedure(input));
     expect(result.diagnostics[0]?.code).toBe(code);
+  });
+});
+
+describe("unsafePattern", () => {
+  it("accepts the patterns apps write, and refuses the shapes that backtrack exponentially", () => {
+    for (const ok of ["^[a-z0-9-]+$", "^[a-f0-9]{64}$", "^[A-Z]{3}$", "^SR-[0-9]{6}$", "^(?:[a-f0-9]{40}|[a-f0-9]{64})$", "^release/sha256-[a-f0-9]{64}\\.json$", "^[a-z][a-z0-9-]{1,38}[a-z0-9]$", "^(\\d{3}-)?\\d{4}$", "^(ab){2}$", "[(+*)]+", "\\(a+\\)+", "a{x}+"])
+      expect([ok, unsafePattern(ok)]).toEqual([ok, undefined]);
+    for (const bad of ["^(a+)+$", "(a*)*", "(a?)+", "((ab)+c)*", "(\\w+\\s?)*", "(a|b)+", "(?:x+y)+", "(?<n>a+){2,}", "(a+){20}", "(a)\\1", "\\k<n>", "a".repeat(1001)])
+      expect([bad, unsafePattern(bad)]).not.toEqual([bad, undefined]);
   });
 });

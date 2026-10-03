@@ -4,7 +4,7 @@
  * have one implementation.
  */
 import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
-import { firstZodIssueAsJsonPointer, jsonSchemaToZod, NATIVE_OUTPUT_TYPES, SqlRefusal, type AuthorizationRequirements, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
+import { firstZodIssueAsJsonPointer, jsonSchemaToZod, safeParseJson, NATIVE_OUTPUT_TYPES, SqlRefusal, type AuthorizationRequirements, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreViewOptions, StoreWriteResult } from "../store.js";
@@ -168,7 +168,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       if (v.input) {
         let z = viewInputs.get(v);
         if (!z) viewInputs.set(v, (z = jsonSchemaToZod(v.input)));
-        const r = z.safeParse(options.input ?? {});
+        const r = safeParseJson(z, options.input ?? {});
         if (!r.success) {
           const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
           throw invalid(`View '${name}' input does not match its schema${instancePath ? ` at ${instancePath}` : ""}: ${message}`);

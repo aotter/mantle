@@ -198,7 +198,8 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
 
 // ---- Views and cursors --------------------------------------------------------------------------------
 const refuseOutput = (name: string): never => { throw refuse(`SQL_SHAPE: the View has no output named '${name}'`); };
-const outName = (t: N) => t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval;
+/** The name a View output has on the row: its alias, or the column it reads. */
+export const outName = (t: N) => t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval;
 
 export interface ViewPage {
   readonly rows: readonly StoreRow[];
