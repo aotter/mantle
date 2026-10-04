@@ -148,7 +148,10 @@ predicate holds for it, so it declares none. `ctx.cause.id` is
 `schedules: true` to `createMantle` (the preset does); without it boot refuses
 an enabled schedule with `SCHEDULE_NOT_WIRED`. The generated Cloudflare entry
 maps Cloudflare's cron spelling back to the plan's; see
-[The service and its entry](../cloudflare/service-entry.md).
+[The service and its entry](../cloudflare/service-entry.md). The Bun preset
+has no cron dispatcher: `mantle generate --host bun` refuses an enabled
+schedule Trigger, and a service with its own scheduler uses `host: none` and
+calls `mantle.invokeSchedule`.
 
 ## Webhooks
 

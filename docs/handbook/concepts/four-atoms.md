@@ -14,7 +14,7 @@ spec: { … }
 
 | Atom | Declares | Compiles to | Code |
 |---|---|---|---|
-| **Schema** | rows: a JSON Schema of fields, indexes, `checks`, scope, TTL, lifecycle | one `STRICT` table with native columns and one column per scalar field | none |
+| **Schema** | rows: a JSON Schema of fields, indexes, `checks`, scope, TTL, lifecycle | one table (`STRICT` on SQLite) with native columns and one column per scalar field | none |
 | **View** | a read: one SQL `SELECT`, its `input`, `surface` and `requires` | validated SQL IR in the plan | none |
 | **Procedure** | a write: `input`, `output`, `requires` and a handler, either SQL statements or a `ref` | IR for `sql`, a name for `ref` | only `ref` |
 | **Trigger** | when a Procedure runs: an HTTP route, an MCP tool, a lifecycle hook or a schedule | a binding in the plan | none |

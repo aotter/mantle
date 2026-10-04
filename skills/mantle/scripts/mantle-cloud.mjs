@@ -58,7 +58,7 @@ const files = readdirSync(manifests, { withFileTypes: true })
   .map((name) => ({ name, text: readFileSync(join(manifests, name), "utf8").replace(/^﻿/, "").replace(/\r\n/g, "\n") }));
 const sourceHash = createHash("sha256").update(JSON.stringify(files.map((f) => [f.name, f.text]))).digest("hex");
 
-if (config.dialect && config.dialect !== "@aotter/mantle/d1") {
+if (config.dialect && !["sqlite", "d1", "@aotter/mantle/d1"].includes(config.dialect)) {
   // Mantle Cloud runs D1 plans only (ADR-0035 decision 5)
   fail("dialect_unsupported", config.dialect, { kind: "fix", reason: "Mantle Cloud accepts plans for the built-in D1 dialect only." });
 }

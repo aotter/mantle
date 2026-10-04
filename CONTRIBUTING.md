@@ -30,7 +30,7 @@ The package topology is:
 
 | Package | Responsibility |
 |---|---|
-| `@aotter/mantle` | One package, one folder of `src/` per subpath (ADR-0032 decision 13): Core (`.`), the grammar and compiler (`/spec`), the D1 dialect (`/d1`, `/d1/compile`), Cloudflare bindings (`/cloudflare`), Auth, Admin, MCP and REST surfaces (`/auth`, `/admin`, `/mcp`, `/web`), the dialect compliance suite (`/testing`) and the `mantle` CLI. `check:boundaries` enforces what each folder may import. |
+| `@aotter/mantle` | One package, one folder of `src/` per subpath (ADR-0032 decision 13): Core (`.`), the grammar and compiler (`/spec`), the built-in dialects (D1/SQLite `/d1`, `/d1/compile`; PostgreSQL `/postgres`, `/postgres/compile`), the hosts (Cloudflare `/cloudflare`, Bun `/bun`), Auth, Admin, MCP and REST surfaces (`/auth`, `/admin`, `/mcp`, `/web`), the dialect compliance suite (`/testing`) and the `mantle` CLI. `check:boundaries` enforces what each folder may import. |
 | `@aotter/mantle-ui` | The Admin console (`/admin`: built static files the preset binds) and optional shared UI (ADR-0029): the framework-free interaction controller (`/controller`), React interaction components (`/`), the UI kit (`/kit`, libraries as optional peers) and the MCP App (`/mcp-app`). Admin and MCP Apps both use it. |
 
 `skills/*` are versioned consumer product artifacts. Maintainer instructions
@@ -39,12 +39,15 @@ audiences or copy maintainer policy into shipped skills.
 
 ## Hard invariants
 
-- `src/spec` stays environment- and adapter-free; only the CLI runs on Node.
-- `src/core` holds no engine or platform code: no Cloudflare primitive, no
-  SQLite. A dialect (ADR-0035) and a storage adapter bind Core's ports.
-- Store is authored as SQL in PostgreSQL syntax (ADR-0034). D1 is the built-in
-  dialect, not the contract; another engine implements `MantleDialect` and
-  passes `@aotter/mantle/testing`'s compliance suite.
+- `src/spec` stays environment- and adapter-free (only its CLI front end,
+  `spec/infrastructure`, reaches `d1/compile`); only the CLI runs on Node.
+- `src/core` holds no engine or platform code: no Cloudflare or Bun
+  primitive, no SQLite. It keeps the engine-neutral SQL allowlist and policy
+  (ADR-0037); a dialect (ADR-0035) and a storage adapter bind Core's ports.
+- Store is authored as SQL in PostgreSQL syntax (ADR-0035). PostgreSQL is the
+  reference dialect and D1/SQLite runs its base subset (ADR-0037); both ship
+  built in. Another engine implements `MantleDialect` and passes
+  `@aotter/mantle/testing`'s compliance suite.
 - Web, Admin, Admin UI, Auth, and every platform adapter remain optional. Core must
   not require routes, HTML, static assets, auth, or an Admin surface.
 - Runtime input is a sealed `RuntimePlan`, never raw manifests. Deployment
@@ -57,7 +60,7 @@ audiences or copy maintainer policy into shipped skills.
   or accessibility basics.
 - Auth is a selected product/platform contract, not a Runtime port. The
   portable surface lives in `@aotter/mantle/auth`; the preset owns host wiring
-  (trusted IP headers, D1/KV). Better Auth is the default implementation, not
+  (trusted IP headers, the auth database). Better Auth is the default implementation, not
   an option pass-through API; see
   [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md).
 
@@ -66,14 +69,15 @@ audiences or copy maintainer policy into shipped skills.
 `src/spec` follows:
 
 ```text
-kernel <- domain (model + port + service) <- usecase <- infrastructure
+kernel <- domain (model + service) <- usecase <- infrastructure
 ```
 
 - `kernel/` imports only external libraries and other kernel files.
 - `domain/` does not import `usecase/`, `infrastructure/`, or assembly code.
 - `usecase/` does not import `infrastructure/`.
-- Port interfaces live in `domain/port/`; concrete implementations live in
-  infrastructure or downstream adapters.
+- Spec declares no ports. Core's ports (`MantleDialect`, the storage and
+  driver interfaces) live in `src/core`; dialect and host folders implement
+  them.
 - Use cases accept request DTOs and explicit dependencies. Infrastructure is
   thin envelope handling and delegation.
 - `src/core/runtime/createRuntime.ts` assembles the runtime. It must not regain
@@ -94,10 +98,12 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-`pnpm check` runs package-boundary and release self-checks, builds exact packed
-consumer fixtures, typechecks, and tests the workspace. Use package filters
-while iterating. Changes to Cloudflare request/storage performance must also run
-`pnpm bench:wrangler`.
+`pnpm check` runs the boundary, skill, plugin-manifest and release
+self-checks, builds, compiles the documented examples, typechecks, tests the
+workspace and runs the reference service from exact packed tarballs. Use
+package filters while iterating. PostgreSQL tests skip unless `MANTLE_PG_URL`
+names a disposable database; native Bun conformance is separate
+(`pnpm --filter @aotter/mantle test:bun`, Bun 1.3.14). CI runs both.
 
 ## Branches, commits, and pull requests
 

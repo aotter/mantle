@@ -35,16 +35,18 @@ A JSON Schema object for the row's fields. It is checked on every write, Admin
 and `ctx.store` included. `required` fields must be present on an operational
 insert and when a draft is published; a draft may be saved incomplete.
 
-| Property | Stored as | Notes |
-|---|---|---|
-| `type: string` | `TEXT` | |
-| `type: string, format: date-time` | integer microseconds | an ISO string on the wire; compare with `now()` and `interval` in SQL |
-| `type: string, format: date` | integer days | `"2026-10-01"` on the wire |
-| `type: integer` | `INTEGER` | |
-| `type: number` | `REAL` | |
-| `type: boolean` | integer 0/1 | `true`/`false` on the wire |
-| `type: object`, `type: array` | JSON | read with `->>` or `json_each` in SQL |
-| `format: geo` | two `REAL` columns and an R*Tree | `{ lat, lng }`; query with `mantle.near` and `mantle.distance` |
+| Property | Stored as (`sqlite`) | Stored as (`postgres`) | Notes |
+|---|---|---|---|
+| `type: string` | `TEXT` | `text` | |
+| `type: string, format: date-time` | integer microseconds | `timestamptz` | an ISO string on the wire; compare with `now()` and `interval` in SQL |
+| `type: string, format: date` | integer days | `date` | `"2026-10-01"` on the wire |
+| `type: integer` | `INTEGER` | `int8` | |
+| `type: number` | `REAL` | `float8` | |
+| `type: boolean` | integer 0/1 | `bool` | `true`/`false` on the wire |
+| `type: object`, `type: array` | JSON | `jsonb` | read with `->>` or `json_each` in SQL |
+| `format: geo` | two `REAL` columns and an R*Tree | two `float8` columns | `{ lat, lng }`; query with `mantle.near` and `mantle.distance` |
+
+### Reserved entry columns
 
 A field may not be named like a native column (`id`, `status`, `version`,
 `createdAt`, `updatedAt`, `authorId`), nor `expectedVersion`, nor `locale` on
@@ -57,7 +59,7 @@ Property extensions:
 |---|---|
 | `x-mantle-ref: <schema>` or `{ schema, field }` | the value is another Schema's `id` (or the named single-field unique field). Admin relates and binds rows by it, either way; a required one folds the child under its parent. `MANTLE_REF_INVALID` when the target is not `id` or a unique field |
 | `oneOf: [{ const, title }, …]` | a string field whose options each have a label (a string or a locale map): stored as text, checked like an `enum`, usable as `uiSchema.list.filterField`, and shown by its `title` in Admin |
-| `x-mcp-hint` | a widget hint: `markdown`, `html`, `richtext`, `code`, `media`, `media-image`, `media-video`, `media-file`, `money-minor`, `idempotency-key` |
+| `x-mcp-hint` | a widget hint: `markdown`, `html`, `richtext`, `code`, `media`, `media-image`, `media-video`, `media-file`, `money-minor`, `timestamp-ms`, `idempotency-key` |
 | `title`, `description` | a field's label and help, a string or a locale map |
 | `readOnly: true` (at the root) | Admin's generic entry routes refuse writes; declared Procedures still write |
 
@@ -120,7 +122,9 @@ until you drop the old one ([Deploy and operate](../cloudflare/deploy-and-operat
 ## `checks`
 
 Boolean SQL expressions over the row's own columns, enforced on every insert
-and update by triggers that storage convergence creates:
+and update by what storage convergence creates: triggers on SQLite, a `CHECK`
+constraint added `NOT VALID` on PostgreSQL. Rows that predate a check are left
+alone:
 
 ```yaml
 checks: ["stock >= 0", "partySize IS NULL OR partySize BETWEEN 1 AND 20"]
@@ -136,9 +140,10 @@ about the caller belongs in a Procedure's guard. Other type mismatches
 
 ## `searchableFields`
 
-Top-level string fields for full-text search: an FTS5 trigram index kept in
-step by triggers. A query of three characters or more matches substrings
-(Chinese included); a shorter one scans. Used by `mantle.search(t, q)` in SQL,
+Top-level string fields for full-text search. On SQLite, an FTS5 trigram
+index kept in step by triggers: a query of three characters or more matches
+substrings (Chinese included); a shorter one scans. On PostgreSQL, a
+case-insensitive substring scan (`ILIKE`) over the fields. Used by `mantle.search(t, q)` in SQL,
 `search` in `ctx.store.select`, and Admin's search box. `id` is always
 searched by Store's `search`. Date and date-time fields are refused.
 

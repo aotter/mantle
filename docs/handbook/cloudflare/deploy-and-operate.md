@@ -14,13 +14,17 @@ pnpm exec wrangler secret put ADMIN_EMAIL
 pnpm exec wrangler deploy
 ```
 
+With dialect `postgres`, create the Hyperdrive config instead of the D1
+database (`pnpm exec wrangler hyperdrive create my-service --caching-disabled
+--connection-string=…`) and copy its id into `hyperdrive[0].id`.
+
 Set `PUBLIC_ORIGIN` in `wrangler.jsonc` `vars` to the deployed origin, and
 replace the console email sender first
 ([Authentication](./authentication.md#production)). The first request boots
 the runtime, which creates every table the plan needs on the empty database.
 
-Deploying anywhere is your choice: Cloudflare is the one generated preset,
-and you may always self-host. Mantle Cloud is one option, never a
+Deploying anywhere is your choice: Cloudflare and Bun have generated presets,
+`host: none` composes any other, and you may always self-host. Mantle Cloud is one option, never a
 requirement.
 
 ## Changing Schemas
@@ -46,7 +50,8 @@ pnpm exec mantle generate --check --database .wrangler/state/v3/d1/<…>.sqlite
 ```
 
 It prints the SQL boot would run, the undeclared differences as comments, or
-the blocked change (exit 1). It reads the file read-only.
+the blocked change (exit 1). It reads the file read-only. The dry run is the
+SQLite dialect's; PostgreSQL has none.
 
 ### Resolving a blocked change
 
@@ -101,5 +106,5 @@ the plan and the installed Core version so a project is ready when it does.
 
 ## Moving data from 0.1.x
 
-Give the 0.2.0 service a new D1 database and import through
+Give the 0.2.0 service a new database and import through
 `runtime.store`; `docs/upgrade-0.1-to-0.2.md` describes the steps.

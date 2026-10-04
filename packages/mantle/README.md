@@ -16,6 +16,7 @@ import.
 | `@aotter/mantle` | `createMantle`, `createMantleRuntime`, Store, `Caller`, the handler contract, `withCaller` |
 | `@aotter/mantle/spec` | The manifest grammar, validation and `compilePlan` (the CLI side) |
 | `@aotter/mantle/d1`, `/d1/compile` | The built-in SQLite dialect: runtime and compile sides (ADR-0035) |
+| `@aotter/mantle/postgres`, `/postgres/compile` | The PostgreSQL reference dialect: `postgresStorage`, `pgDatabaseDriver`, `pgPool`, and its compile side (ADR-0037) |
 | `@aotter/mantle/bun` | Native Bun.SQL PostgreSQL, bun:sqlite and Admin assets (ADR-0038) |
 | `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |
 | `@aotter/mantle/auth` | `createMantleAuth` (Better Auth), `createCallerResolver`, `createAuthRoutes` |
@@ -31,10 +32,14 @@ mantle generate           # manifests + mantle.config.json -> .mantle/generated/
 mantle generate --check   # the gate: fails when anything generated is stale
 ```
 
-On its first run, `mantle generate` writes the Cloudflare service preset:
+While `src/service.ts` does not exist, `mantle generate` writes the service
+preset for the chosen host (ADR-0036): on `cloudflare`, the default,
 `src/service.ts`, `src/index.ts`, `src/handlers.ts`, `wrangler.jsonc`,
-`tsconfig.json`. It never writes those files again, and it never installs
-packages. It names each missing package together with the install command.
+`tsconfig.json`, `.gitignore`, and `.dev.vars.example` with identity `mantle`
+(`src/identity.ts` with `custom`); on `bun`, the same without
+`wrangler.jsonc`, with `.env.example`; on `none`, nothing. It never writes
+those files again, and it never installs packages. It names each missing
+package together with the install command.
 
 ## Start
 
@@ -44,4 +49,4 @@ It is a whole service with its smoke test. The installed docs are under
 the examples, the agent workflow skills (`skills/`), and
 `upgrade-0.1-to-0.2.md` for projects on 0.1.x.
 
-The decisions behind the design are ADR-0032 to ADR-0035 in `docs/adr/`.
+The decisions behind the design are ADR-0032 to ADR-0038 in `docs/adr/`.

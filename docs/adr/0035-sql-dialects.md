@@ -1,6 +1,6 @@
 # ADR-0035: SQL dialects — PostgreSQL syntax is Mantle SQL, a dialect runs it on one engine
 
-**Status:** Proposed for 0.2.0. Amends ADR-0032 decisions 6 and 12, ADR-0033, and ADR-0034 decisions 2, 3, 5, 6, 7, 8 and 9.
+**Status:** Accepted for 0.2.0. Amends ADR-0032 decisions 6 and 12, ADR-0033, and ADR-0034 decisions 2, 3, 5, 6, 7, 8 and 9. Amended by its PostgreSQL dialect amendment (#1293), [ADR-0036](0036-host-and-dialect.md) and [ADR-0037](0037-postgresql-is-the-reference-dialect.md).
 
 **Date:** 2026-09-30
 

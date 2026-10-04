@@ -156,7 +156,7 @@ export function siteApiKeys(db: D1Database) {
 In `src/service.ts`, pass it to the generated resolver:
 
 ```ts
-const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp` }, credentialResolver: siteApiKeys(env.DB) });
+const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] }, credentialResolver: siteApiKeys(env.DB) });
 ```
 
 The key's caller is a `user` with that subject and its scopes. Its role is
@@ -169,7 +169,7 @@ caller. With identity `custom`, do the same inside your own `src/identity.ts`.
 
 ```ts
 // src/handlers.ts
-import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle/spec";
+import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle";
 import type { MantleHandlers } from "../.mantle/generated/mantle.js";
 import type { Env } from "./service.js";
 

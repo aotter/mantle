@@ -30,7 +30,11 @@ createMantleAuth({
 
 then `createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } })`,
 `createAuthRoutes(auth, { resolver })` and an `AdminIdentity` over the auth's
-own methods.
+own methods. With dialect `postgres` the preset passes `database:
+pgPool(connect), driver: pgDatabaseDriver(connect)` over Hyperdrive; host `bun`
+passes `bunAuthDatabase(sql)` and `bunDatabaseDriver(sql)` (or the bun:sqlite
+`Database` and `bunSqliteDriver(db)`), with `ipAddressHeaders:
+["x-mantle-client-ip"]`, which its entry sets from the socket.
 
 ### Local sign-in
 
@@ -93,7 +97,9 @@ role on every request, so a revoked role takes effect at once.
 ### Account deletion
 
 `auth.deleteUser(userId)` deletes a user through Better Auth, sessions
-included. Never delete auth rows with SQL.
+included, and the email codes still pending for its address. Never delete auth
+rows with SQL. To require a recent sign-in first, compare
+`(await auth.getSession(request)).session.createdAt` with the current time.
 
 ## Identity `custom`
 

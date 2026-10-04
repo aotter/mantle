@@ -1,6 +1,6 @@
 # ADR-0032: Store-centric Core, an application-owned service, and caller identity
 
-**Status:** Proposed for 0.2.0 (#1188). Amends ADR-0014, ADR-0026, ADR-0027 and ADR-0030; storage evolution is decided separately in [ADR-0033](0033-storage-converges-to-the-plan.md). Decisions 1–5, 10 and 13 are amended by [ADR-0034](0034-store-is-authored-as-sql.md): manifests carry SQL, which the CLI compiles to the IR.
+**Status:** Accepted for 0.2.0 (#1188). Amends ADR-0014, ADR-0026, ADR-0027 and ADR-0030; storage evolution is decided separately in [ADR-0033](0033-storage-converges-to-the-plan.md). Decisions 1–5, 10 and 13 are amended by [ADR-0034](0034-store-is-authored-as-sql.md): manifests carry SQL, which the CLI compiles to the IR. Decisions 6 and 12 are amended by [ADR-0035](0035-sql-dialects.md).
 
 **Date:** 2026-09-27
 

@@ -14,6 +14,7 @@ interface Diagnostic {
   message: string;               // for people; never parse it
   source?: { sourceId, documentIndex, path, … };   // the manifest file and document
   value?: unknown; expected?: string; candidates?: string[]; suggestion?: string;
+  failure?: { outcome: "not-applied" | "partial" | "unknown"; retry: "never" | "after-change" | "safe" | "reconcile"; resource? };
   conflict?: { opIndex?: number; reason: "lock" | "expect" | "unique" };
 }
 ```
@@ -47,7 +48,8 @@ Handler code catches `DiagnosticError` and reads `error.diagnostic.code`.
 | `MEDIA_*` | 400, 404, 409, 410, 501 | media uploads: `MEDIA_NOT_CONFIGURED` (501) without media storage and site defaults, `MEDIA_UPLOAD_EXPIRED` (410), `MEDIA_ASSET_NOT_FOUND` (404), `MEDIA_OBJECT_NOT_FOUND` and `MEDIA_CHECKSUM_MISMATCH` (409), and 400 for a refused type, size, purpose or variant set |
 
 Admin's statistics route answers 501 with the wire code
-`STATISTICS_UNAVAILABLE`, which is not a `DiagnosticCode`.
+`STATISTICS_UNAVAILABLE`, which is not a `DiagnosticCode`. `DISPATCHER_NOT_BUILT`
+(501) is in the catalog and not raised by 0.2.0.
 
 ## Boot
 
@@ -73,9 +75,10 @@ Admin's statistics route answers 501 with the wire code
 | `AUTH_PREDICATE_NOT_IN_ENUM`, `GUARD_PROCEDURE_UNKNOWN`, `GUARD_SELF_REFERENCE`, `GUARD_PROCEDURE_NOT_REF`, `GUARD_CHAIN_NOT_ALLOWED`, `PROCEDURE_TARGET_INVALID` | `requires` and `target` |
 | `TRIGGER_TARGET_PROCEDURE_UNKNOWN`, `TRIGGER_PATH_COLLISION`, `TRIGGER_PATH_INVALID`, `SCHEDULE_INPUT_INVALID`, `SCHEDULE_AUTH_INVALID`, `LIFECYCLE_SCHEMA_UNKNOWN`, `LIFECYCLE_TARGET_NOT_REF` | Triggers |
 | `MCP_TOOL_NAME_COLLISION`, `MCP_TOOL_DESCRIPTION_MISSING` (warning), `MCP_TOOL_INPUT_UNION_AMBIGUOUS`, `MCP_TOOL_INPUT_UNBOUNDED` | MCP tools |
-| `GENERATE_FEATURE_DEPENDENCY_MISSING` | a selected feature or identity whose package is not installed, or `admin` with identity `none`; the message carries the install command |
+| `GENERATE_FEATURE_DEPENDENCY_MISSING` | a selected feature, identity, host or dialect whose package is not installed, or `admin` with identity `none`; the message carries the install command |
 
-A schedule Trigger whose cron Cloudflare cannot run the same way fails with
-exit 1 as `Trigger <name>: <message>` before anything is written.
+A schedule Trigger whose cron Cloudflare cannot run the same way, or any
+enabled schedule Trigger on host `bun`, fails with exit 1 as
+`Trigger <name>: <message>` before anything is written.
 
 `FIXTURE_SCHEMA_VIOLATION` is reserved for consumer test diagnostics.

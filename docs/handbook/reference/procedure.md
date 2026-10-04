@@ -88,7 +88,7 @@ one (`HANDLER_NOT_DECLARED`).
 
 A handler reaches Mantle-owned rows only through `ctx.store`
 ([Query from TypeScript](../guides/typed-queries.md)). It throws
-`DiagnosticError` (from `@aotter/mantle/spec`) to answer with a code; any
+`DiagnosticError` (from `@aotter/mantle`) to answer with a code; any
 other throw is logged and answered as `INTERNAL_ERROR`. Guards, before hooks
 and lifecycle targets must be `ref` handlers.
 

@@ -284,6 +284,21 @@ describe("the service preset", () => {
     expect(typecheck(await project(args))).toEqual([]);
   }, 60_000);
 
+  it("the typed Store's view takes search and filters, as Store does (ADR-0032 decision 5)", async () => {
+    const dir = await project(["--features", ""]);
+    await writeFile(join(dir, "src/handlers.ts"), `import type { MantleHandlers } from "../.mantle/generated/mantle.js";
+export const handlers: MantleHandlers = {
+  tick: async (_input, ctx) => {
+    await ctx.store.view("ticks", { search: "a", filters: { kind: "b" }, limit: 10 });
+    // @ts-expect-error a filter compares one scalar
+    await ctx.store.view("ticks", { filters: { kind: { b: 1 } } });
+    return {};
+  },
+};
+`);
+    expect(typecheck(dir)).toEqual([]);
+  }, 60_000);
+
   it("identity custom: the resolver stub fails loudly until the application fills it", async () => {
     const dir = await project(["--features", "admin", "--identity", "custom"]);
     const identity = await read(dir, "src/identity.ts");

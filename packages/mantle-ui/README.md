@@ -2,13 +2,15 @@
 
 Shared interaction UI for the Mantle Admin and MCP Apps (ADR-0029). The
 `/controller` subpath is framework-free; the root adds React components on top
-of it (React 19 is an optional peer, needed only for the root).
+of it (React 19 is an optional peer, needed only for the root and `/kit`).
 
 ## Admin
 
 `dist/admin/` is the built Admin console (a static SPA with base `/admin/`).
 Nothing imports it: `mantle generate`'s Cloudflare preset binds
-`node_modules/@aotter/mantle-ui/dist/admin` as the Worker's static assets, and
+`node_modules/@aotter/mantle-ui/dist/admin` as the Worker's static assets (the
+Bun preset resolves `@aotter/mantle-ui/admin/index.html` and serves its
+directory with `bunAdminAssets`), and
 `createAdminSurface` (`@aotter/mantle/admin`) serves it at `/admin`. It is
 built for that path, so `createAdminSurface` refuses `assets` under any other
 `basePath`. Its source is `admin/`.

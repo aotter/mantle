@@ -6,7 +6,7 @@ description: Every HTTP route the generated Mantle 0.2.0 service mounts (REST, a
 ## Routes of the generated service
 
 `src/service.ts` mounts, in this order. Each surface runs behind
-`withCaller(resolver, …)`.
+`withCaller(resolver, …)`; with identity `none`, every caller is anonymous.
 
 | Path | Surface | Mounted when |
 |---|---|---|
@@ -71,21 +71,23 @@ Two npm packages, always published together at one version.
 | Import | Exports |
 |---|---|
 | `@aotter/mantle` | `createMantle`, `createMantleRuntime`, `verifyPlan` and its `PLAN_LIMITS`, `withCaller`, `systemCaller`, the `Caller`, `CallerResolver`, `MantleService`, `HandlerContext`, `Invocation` and Store types, `EmailSender`, `DiagnosticError`, `makeDiagnostic`, `runtimeDiagnostic`, `STAFF_ROLES`, `isStaffRole` |
-| `@aotter/mantle/spec` | the grammar types, `compilePlan`, `mcpTools`, `DiagnosticError`, `runtimeDiagnostic` (the SQL compiler loads only when called) |
-| `@aotter/mantle/d1`, `/d1/compile` | the D1 dialect: `sqliteStorage`; its compile side |
+| `@aotter/mantle/spec` | the grammar types, `compilePlan`, `mcpTools` (the CLI side; it bundles the SQL parser, so a Worker or handler imports `DiagnosticError` from the root) |
+| `@aotter/mantle/d1`, `/d1/compile` | the `sqlite` dialect: `sqliteStorage` over any `DatabaseDriver`; its compile side |
+| `@aotter/mantle/postgres`, `/postgres/compile` | the `postgres` dialect: `postgresStorage`, `postgresDialect`, `pgDatabaseDriver`, `pgPool`, the `PgClient` and `PgConnect` types; its compile side |
 | `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |
 | `@aotter/mantle/auth` | `createMantleAuth`, `createSetupIncompleteAuth`, `createCallerResolver`, `createAuthRoutes`, `ConsoleEmailSender`, `appleClientSecret` |
 | `@aotter/mantle/admin` | `createAdminSurface`, `AdminIdentity` |
 | `@aotter/mantle/mcp` | `createMcpSurface`, `planApp` and `appCatalog` (the MCP App's catalog) |
 | `@aotter/mantle/web` | `createRestSurface` |
+| `@aotter/mantle/bun` | `bunPostgresStorage`, `bunSqliteStorage`, `bunPgConnect`, `bunDatabaseDriver`, `bunSqliteDriver`, `bunAuthDatabase`, `bunAdminAssets` |
 | `@aotter/mantle/testing` | `runStorageConformance`, the dialect compliance suite |
-| `@aotter/mantle-ui` | `/controller`, `/kit`, `/mcp-app` (`mantleAppHtml`, the App `planApp` serves), and the prebuilt Admin console in `dist/admin` (exported as `./admin/index.html`), which the preset serves at `/admin` |
+| `@aotter/mantle-ui` | the root (React operation components and the controller), `/controller`, `/kit`, `/kit.css`, `/tokens.css`, `/mcp-app` (`mantleAppHtml`, the App `planApp` serves), and the prebuilt Admin console in `dist/admin` (exported as `./admin/index.html`), which the preset serves at `/admin` |
 
 A subpath that is not imported is never loaded: a service with identity
 `none` bundles no Better Auth, and no Worker bundles the SQL parser.
 
 ## CLI
 
-`mantle generate [--manifests <dir>] [--features <list>] [--identity <kind>]`
+`mantle generate [--manifests <dir>] [--features <list>] [--identity <kind>] [--host <host>] [--dialect <name>]`
 and `mantle generate --check [--database <file>]`. See
 [Project layout and CLI](../start/project-and-cli.md).

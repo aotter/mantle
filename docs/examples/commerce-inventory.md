@@ -327,7 +327,7 @@ Points worth noticing:
 
 ```ts
 // src/handlers.ts
-import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle/spec";
+import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle";
 import type { MantleHandlers } from "../.mantle/generated/mantle.js";
 import type { Env } from "./service.js";
 

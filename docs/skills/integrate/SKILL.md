@@ -52,7 +52,8 @@ Switching identity later is refused; choose deliberately.
 ## Embedding into an existing entry
 
 `mantle generate` writes the preset only where `src/service.ts` does not
-exist. For an application with its own entry, generate in a scratch
+exist; `--host none` writes no preset at all, only the plan and its types.
+For an application with its own entry, generate in a scratch
 directory with the same manifests and config, then copy the composition you
 need from the generated `src/service.ts` into the application's own entry:
 
@@ -64,8 +65,10 @@ need from the generated `src/service.ts` into the application's own entry:
 Put that composition in the application's `src/service.ts` before the first
 `mantle generate` inside the application: while `src/service.ts` is missing,
 generate writes every missing preset file (`src/service.ts`, `src/index.ts`,
-`src/handlers.ts`, `tsconfig.json`, `.gitignore`, `.dev.vars.example`, and
-`wrangler.jsonc` unless a `wrangler.*` exists) beside the application's own.
+`src/handlers.ts`, `src/identity.ts` for `custom`, `tsconfig.json`,
+`.gitignore`, `.dev.vars.example` for `mantle`, and `wrangler.jsonc` unless a
+`wrangler.*` exists; on Bun `.env.example` and no `wrangler.jsonc`) beside the
+application's own.
 Commit `.mantle/generated/` and run `mantle generate --check` in CI.
 
 ## Moving data into a Schema

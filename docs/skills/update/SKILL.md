@@ -35,13 +35,15 @@ pnpm exec mantle generate --check
 pnpm exec tsc --noEmit
 ```
 
-6. The preset (`src/service.ts`, `src/index.ts`, `wrangler.jsonc`) is never
+6. The preset (`src/service.ts`, `src/index.ts`, `src/handlers.ts`,
+   `wrangler.jsonc`) is never
    rewritten. Generate into a scratch directory with the same manifests and
    `mantle.config.json`, diff it against the project's files, and apply the
    changes that matter by hand.
 7. Run the service locally and test its real routes and sign-in. Before
-   deploying, run `mantle generate --check --database <local SQLite file>`
-   to see what boot will change.
+   deploying a SQLite project, run
+   `mantle generate --check --database <local SQLite file>` to see what boot
+   will change.
 
 Report the old and new versions, the checks and their results, what changed
 in the service files, and what remains. A dependency update does not

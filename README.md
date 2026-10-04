@@ -57,7 +57,7 @@ modules you need.
   search, served over REST and MCP.
   [Publishing example](docs/examples/publication.md).
 - **Embed in an existing application.** Mount the REST, MCP or Admin surface
-  you need inside your own Worker entry.
+  you need inside your own Worker or server entry.
   [Integration choices](#choose-how-much-to-use).
 
 ## Admin for people and agents
@@ -136,8 +136,9 @@ editors, plugins, and project instructions.
 
 Install an exact 0.2.x version of `@aotter/mantle`, write your manifests, and
 run `mantle generate`. The first run names the packages your selection needs;
-install them and run it again. It writes the Cloudflare service preset once,
-and from then on those files are yours. Follow the
+install them and run it again. It writes the service preset for the chosen
+host (Cloudflare by default, or Bun) once, and from then on those files are
+yours. Follow the
 [quickstart](docs/handbook/start/quickstart-worker.md), then the
 [project and CLI guide](docs/handbook/start/project-and-cli.md). The
 [reference service](docs/examples/reference-service/README.md) is a whole
@@ -150,11 +151,13 @@ Using ChatGPT Sites? Follow [Mantle on ChatGPT Sites](docs/handbook/cloudflare/c
 | Start with | Add when you need |
 |---|---|
 | [`@aotter/mantle`](packages/mantle/README.md) | Manifests, Store authored as SQL, the runtime and the `mantle` CLI. |
-| `@aotter/mantle/cloudflare` and the generated preset | A Worker on D1 with REST, MCP and Admin. |
+| `@aotter/mantle/cloudflare` and the generated preset | A Worker on D1, or on PostgreSQL through Hyperdrive, with REST, MCP and Admin. |
+| `@aotter/mantle/bun` and the generated preset | A Bun server on PostgreSQL or SQLite with the same surfaces. |
 | `@aotter/mantle/auth` | Sign-in, staff roles, and OAuth for MCP. |
 | [The reference service](docs/examples/reference-service/README.md) | A whole service to read and run. |
 
-Cloudflare D1 is the built-in dialect and the one preset. Upgrading from 0.1.x:
+SQLite (D1) and PostgreSQL are the built-in dialects, PostgreSQL the
+reference; Cloudflare and Bun are the preset hosts. Upgrading from 0.1.x:
 [the upgrade guide](docs/upgrade-0.1-to-0.2.md).
 
 <details>
@@ -162,7 +165,7 @@ Cloudflare D1 is the built-in dialect and the one preset. Upgrading from 0.1.x:
 
 | Package | Purpose |
 |---|---|
-| `@aotter/mantle` | Core, the manifest compiler, the D1 dialect, the Cloudflare driver, Auth, Admin, MCP and REST surfaces, the compliance suite, and the `mantle` CLI, as subpaths. |
+| `@aotter/mantle` | Core, the manifest compiler, the D1 and PostgreSQL dialects, the Cloudflare and Bun hosts, Auth, Admin, MCP and REST surfaces, the compliance suite, and the `mantle` CLI, as subpaths. |
 | `@aotter/mantle-ui` | The Admin console (`/admin`, served by the preset) and shared UI for Admin and MCP Apps: interaction controller, components, the UI kit and the MCP App. |
 
 </details>

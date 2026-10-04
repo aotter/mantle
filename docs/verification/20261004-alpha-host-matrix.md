@@ -76,8 +76,12 @@ configure that capability. Media has no blob/R2 binding in this fixture and is
 not accepted by this run. Deployed Hyperdrive, sustained production load and
 external identity-provider integration remain separate gates.
 
-Open auth follow-up #1315 was not merged into the frozen baseline and is not
-claimed as tested. Re-run relevant gates when that source changes. The release
+Auth follow-up #1315 was not in the frozen baseline; PR #1320 brings it into
+the stack afterwards. With it, the Core suite passed against PostgreSQL 16
+(780 passed; the two failures are sandbox-only: a `chmod` check that root
+bypasses and the local Hyperdrive Worker test, which also times out on #1319)
+and native Bun passed 79 SQLite + 79 PostgreSQL checks. The populated four-host
+matrix was not re-run with #1315: re-run it before the alpha. The release
 controller currently maps alpha versions to `develop`; integrate the reviewed
 0.2.x stack into the governed release branch before dispatching an alpha.
 No release was published, tagged or merged by this acceptance run.

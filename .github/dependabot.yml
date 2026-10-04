@@ -2,7 +2,7 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /
-    target-branch: 0.2.x
+    target-branch: develop
     schedule:
       interval: weekly
     open-pull-requests-limit: 8
@@ -63,7 +63,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
-    target-branch: 0.2.x
+    target-branch: develop
     schedule:
       interval: weekly
     labels:

@@ -61,7 +61,7 @@ actual tables and indexes, compares them with the plan, and:
 
 | Difference | Boot |
 |---|---|
-| a missing table, field column, index, or unique index that builds | creates it (`STRICT` tables, check and FTS triggers included) |
+| a missing table, field column, index, or unique index that builds | creates it (on SQLite, `STRICT` tables with their check and FTS triggers) |
 | a unique index that fails on existing rows, a column with another type, a changed index, a missing native column | refuses with `STORAGE_CHANGE_BLOCKED`, naming the change and a SQL hint |
 | a column or non-unique index the plan no longer declares | keeps it and warns; nothing is ever dropped |
 
@@ -134,7 +134,7 @@ recompile.
   - `||` prints booleans and floats as PostgreSQL does.
 - `searchableFields` and `mantle.near()` scan without an index in 0.2.0, and
   `mantle.search_rank()` counts occurrences rather than computing bm25.
-  Site settings and media are D1-only.
+  Site settings and media are SQLite-only (D1, bun:sqlite).
 - `date_trunc` and `extract` compute in the site time zone
   (`postgresStorage({ connect, timeZone })`, default UTC).
 - Every statement has a `statement_timeout` of 10 seconds, pinned in each

@@ -33,6 +33,9 @@ never repeat them.
 
 ### What the D1 dialect accepts
 
+The `sqlite` dialect (`@aotter/mantle/d1`) runs this subset on D1, on Bun's
+SQLite and on any `sqliteStorage` driver.
+
 | Area | Supported | Rule |
 |---|---|---|
 | Expressions | columns, aliases, literals, arithmetic, `\|\|`, `CASE`, `COALESCE`, `NULLIF`, `CAST` | `CAST(x AS int)` only for an integer literal: use `round(x)`. `CAST(x AS bool)` follows PostgreSQL. `*` expands to declared fields; a bare `*` over a subquery or `json_each` is refused: name the columns |

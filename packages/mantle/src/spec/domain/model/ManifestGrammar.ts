@@ -35,8 +35,8 @@ export function isMediaMcpHint(value: unknown): value is MediaMcpHint {
  *  to zod (Workers-CSP-safe). Cross-collection refs use the custom
  *  keyword `x-mantle-ref: <collectionName>` on string-typed fields holding
  *  foreign-key IDs; `x-mcp-hint` is a widget-intent hint. The grammar
- *  accepts strings; the v0.1 conventional values agents and admin
- *  widgets should understand are `markdown`, `richtext`, `code`,
+ *  accepts strings; the conventional values agents and admin
+ *  widgets understand are `markdown`, `html`, `richtext`, `code`,
  *  `media`, `media-image`, `media-video`, `media-file`, `money-minor`,
  *  `timestamp-ms`, and `idempotency-key`. */
 export type JsonSchema = {

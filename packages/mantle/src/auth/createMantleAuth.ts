@@ -147,6 +147,8 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       return session
         ? {
             ...session,
+            // a session read back from the session cache carries its dates as strings
+            session: { ...session.session, createdAt: new Date(session.session.createdAt), expiresAt: new Date(session.session.expiresAt) },
             user: {
               ...session.user,
               ...(Object.hasOwn(session.user, "role") && (!await sessionsAreCached() || !STAFF_ROLE_SET.has(role ?? ""))
@@ -451,8 +453,12 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       await prepareAuth();
       // no session to act as, so Better Auth's own delete, which also clears cached sessions
       const context = await auth.$context;
-      if (!await context.internalAdapter.findUserById(userId)) return false;
+      const user = await context.internalAdapter.findUserById(userId);
+      if (!user) return false;
       await context.internalAdapter.deleteUser(userId);
+      // pending email codes name the address, not the user row, so they would outlive it
+      const email = user.email.toLowerCase();
+      await context.adapter.deleteMany({ model: "verification", where: [{ field: "identifier", operator: "in", value: ["sign-in", "email-verification", "forget-password"].map((type) => `${type}-otp-${email}`) }] });
       return true;
     },
     registerOAuthClient: async (input) => {

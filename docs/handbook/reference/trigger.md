@@ -79,7 +79,10 @@ accept an empty object (`SCHEDULE_INPUT_INVALID`). `ctx.cause` is
 `{ kind: "schedule", trigger, cron, scheduledTime, id: "<trigger>:<scheduledTime>" }`.
 
 The service passes `schedules: true` to `createMantle`; without it boot
-refuses an enabled schedule (`SCHEDULE_NOT_WIRED`).
+refuses an enabled schedule (`SCHEDULE_NOT_WIRED`). The Cloudflare preset
+passes it. The Bun preset has no scheduler, so `mantle generate --host bun`
+refuses an enabled schedule; use host `none` with your own scheduler calling
+`invokeSchedule(cron, scheduledTime, env)` on what `createMantle` returns.
 
 ### Cloudflare
 
