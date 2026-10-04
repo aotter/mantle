@@ -127,10 +127,9 @@ dist-tag DELETE only added failure and re-run state, and Actions
    Frozen legacy consumers stay on their pinned version; do not make them
    follow new Core.
 4. Run `pnpm check`, including the reference service from exact packed
-   tarballs, skills, release invariants, types and tests. The controller's
-   `pnpm check` runs without PostgreSQL or Bun, so the PostgreSQL tests
-   (`MANTLE_PG_URL`) and native Bun conformance (`test:bun`) are gated by the
-   release PR's CI. Inspect the `@aotter/mantle` docs payload
+   tarballs, skills, release invariants, types and tests. The controller runs
+   the same `pnpm check` against a PostgreSQL service (`MANTLE_PG_URL`), then
+   native Bun conformance (`test:bun`), before it tags. Inspect the `@aotter/mantle` docs payload
    (`scripts/sync-package-docs.mjs`: the upgrade guide, ADRs, handbook,
    examples and package skills): no workspace dependencies, secrets or local
    state.
