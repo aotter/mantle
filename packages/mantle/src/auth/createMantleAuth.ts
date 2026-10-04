@@ -455,10 +455,10 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       const context = await auth.$context;
       const user = await context.internalAdapter.findUserById(userId);
       if (!user) return false;
-      await context.internalAdapter.deleteUser(userId);
-      // pending email codes name the address, not the user row, so they would outlive it
+      // Clean address-keyed codes first: a failure must leave the user available for retry.
       const email = user.email.toLowerCase();
       await context.adapter.deleteMany({ model: "verification", where: [{ field: "identifier", operator: "in", value: ["sign-in", "email-verification", "forget-password"].map((type) => `${type}-otp-${email}`) }] });
+      await context.internalAdapter.deleteUser(userId);
       return true;
     },
     registerOAuthClient: async (input) => {

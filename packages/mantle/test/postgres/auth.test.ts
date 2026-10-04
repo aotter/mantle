@@ -34,8 +34,19 @@ it.skipIf(!PG_URL)("sign-in, the bootstrap owner and staff management run on Pos
     expect(await auth.getUserRole(invited.id)).toBe("contributor");
 
     const member = await signIn("member@x.test");
+    const session = await auth.getSession(member);
+    expect(session!.session.createdAt).toBeInstanceOf(Date);
+    expect(session!.session.expiresAt).toBeInstanceOf(Date);
+    const db = pgDatabaseDriver(connect);
+    await db.batch(["sign-in", "email-verification", "forget-password"].map((type) => ({
+      sql: `INSERT INTO verification (id, identifier, value, "expiresAt", "createdAt", "updatedAt") VALUES (?1, ?2, ?3, now() + interval '1 hour', now(), now())`,
+      binds: [type, `${type}-otp-member@x.test`, "pending"],
+    })));
     await expect(auth.setUserRole(member, invited.id, "owner")).rejects.toMatchObject({ status: "FORBIDDEN" });
     expect(await auth.getUserRole((await auth.listUsers(owner))[0]!.id)).toBe("owner");
+    expect(await auth.deleteUser(session!.user.id)).toBe(true);
+    expect((await db.batch([{ sql: "SELECT identifier FROM verification WHERE identifier LIKE ?1", binds: ["%member@x.test"] }]))[0]!.rows).toEqual([]);
+    expect(await auth.getSession(member)).toBeNull();
   } finally {
     await drop();
   }
