@@ -93,7 +93,6 @@ function consentSurface(auth: AuthRoutesAuth, options: AuthRoutesOptions): Surfa
 
 // ---- the pages a service without Admin shows: Admin is an optional subpath (ADR-0032 decision 13), OAuth is not tied to it
 
-/** A form's redirect is held to `form-action` too, so the client's callback origin is allowed. */
 /**
  * No `form-action`: browsers check it against every redirect of a form's navigation, so a callback that redirects again
  * (www.cursor.com answers 308 to cursor.com) would hang the approval. The page runs no script and escapes every value.
