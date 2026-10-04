@@ -64,7 +64,12 @@ conformance TODOs (one skipped file), UI 209 passed, plus packed Worker consumer
 TypeScript, build, boundary, skill, plugin, release self-test and doc checks.
 Native Bun conformance separately passed 79 tests for SQLite and 79 for PG.
 The fix passed 17 targeted PostgreSQL-auth/CLI tests and all four consumer
-TypeScript checks. Final broad regression is recorded in the associated PR.
+TypeScript checks. Final `pnpm check` passed on clean commit `1b7c0a08`: Core
+781 passed / three existing TODOs, UI 209 passed, and packed Worker consumer
+passed with identical SDK/UI artifact hashes above. Native Bun was re-run and
+passed 79 SQLite + 79 PostgreSQL checks. PR
+[#1319](https://github.com/aotter/mantle/pull/1319) stacks the reproducible gate
+on #1318. Subsequent edits only tighten fixture assertions and record results.
 
 Optional site settings explicitly return 501 because these presets do not
 configure that capability. Media has no blob/R2 binding in this fixture and is
