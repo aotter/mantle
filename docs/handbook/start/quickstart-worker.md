@@ -1,203 +1,145 @@
 ---
-description: "Author a minimal Cloudflare Worker from scratch: one Schema, one public View, generate, validate, run locally and probe it with curl."
+description: Create a Mantle 0.2.0 service on Cloudflare Workers from an empty directory, run it locally, then add sign-in, Admin and MCP.
 ---
-# Quickstart: a minimal Worker
+# Quickstart: a service on Cloudflare Workers
 
-This page reproduces the API-only Worker reference as a direct-authoring
-walkthrough: View REST without Admin, Auth or a visitor frontend. For a new
-project, `mantle generate --host cf --features spec,api` assembles that smaller
-composition. Omit `--features` to include Admin, MCP and a blank home. The
-[local Admin tutorial](./quickstart-admin.md) covers an authored Worker entry.
-Pin every selected `@aotter/mantle*` package to one exact version; see
-[Versions](../reference/surface.md#versions).
+From an empty directory to a running service with a public View and a write.
+You need Node 22 or later and a package manager (pnpm is used below).
 
-## Prerequisites
+## 1. Create the project
 
-- Node.js 22 or newer.
-- pnpm 9 or newer. The reference is tested with pnpm; see the npm note at the end of this page.
-- `wrangler` is installed as a project devDependency below. No Cloudflare account, D1 database or secret is needed for the local loop.
-
-## 1. `package.json`
-
-Step 5 adds the two Mantle packages at one exact version. For a prerelease
-evaluation, select its exact version explicitly rather than mixing channels.
-The entries below are the peers and tools used by this direct-authored reference.
-
-```json
-{
-  "name": "mantle-minimal-consumer",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "generate": "mantle generate",
-    "validate": "mantle validate",
-    "typecheck": "tsc --noEmit",
-    "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
-    "check": "mantle generate && mantle generate --check && mantle validate && mantle skills && mantle skills --check && tsc --noEmit"
-  },
-  "dependencies": {
-    "better-auth": "1.7.2",
-    "hono": "^4.13.3",
-    "zod": "^4.5.4",
-    "aws4fetch": "^1.0.20"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260907.1",
-    "typescript": "^6.0.3",
-    "wrangler": "^4.125.0"
-  },
-  "packageManager": "pnpm@9.15.0"
-}
+```sh
+mkdir notes && cd notes
+pnpm init
+npm pkg set type=module
+npm view @aotter/mantle dist-tags
 ```
 
-The reference's own `check` script ends with `&& node smoke.mjs`, a test that starts the Worker and asserts the three probes in step 6. This walkthrough runs those probes by hand instead.
+Pick a `0.2.x` version from the output. While 0.2.0 is in prerelease it is
+on the `alpha` tag, and `latest` still names 0.1.x. Install it with an exact
+version:
 
-Add a `tsconfig.json` that includes the generated module:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "types": ["@cloudflare/workers-types"]
-  },
-  "include": ["src/**/*.ts", ".mantle/generated/**/*.ts"]
-}
+```sh
+pnpm add --save-exact @aotter/mantle@<0.2.x version>
+pnpm add -D wrangler @cloudflare/workers-types @types/node typescript
 ```
 
-## 2. `manifests/site.yaml`
+## 2. Write a manifest
 
-One publishing Schema and one public View. `mantle generate` never invents a Schema; this notes model is example business data.
+`manifests/notes.yaml`:
 
 ```yaml
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
-metadata:
-  name: notes
+metadata: { name: notes }
 spec:
   title: Notes
+  lifecycle: operational
   schema:
     type: object
-    required: [title]
+    required: [text]
     properties:
-      title: { type: string }
-  lifecycle: publishing
+      text: { type: string, minLength: 1, maxLength: 500 }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
-metadata:
-  name: published-notes
+metadata: { name: latest-notes }
 spec:
   surface: public
-  from: notes
-  cache: { sharedMaxAge: 3600 }
-  fields: [id, title]
-  filter:
-    eq: { field: status, value: published }
-  limit: 20
+  sql: SELECT id, text, created_at FROM notes ORDER BY created_at DESC LIMIT 20
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: add-note }
+spec:
+  input:
+    type: object
+    required: [text]
+    properties:
+      text: { type: string, minLength: 1, maxLength: 500 }
+  output: { type: object }
+  handler:
+    sql: INSERT INTO notes (text) VALUES (input.text) RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: add-note-http }
+spec:
+  source: { kind: http, method: POST, path: /api/notes }
+  target: { procedure: add-note }
 ```
 
-## 3. `src/index.ts`
+## 3. Generate
 
-The conventional Worker entry hands the sealed plan to the Cloudflare adapter.
-
-```ts
-import { createMantleWorker } from "@aotter/mantle/cloudflare";
-import { plan } from "../.mantle/generated/mantle.js";
-
-export default createMantleWorker({ plan });
-```
-
-`createMantleWorker` owns the D1 and assets bindings, Auth, Admin, View REST, HTTP Triggers, OAuth, MCP and cache policy. Application handlers and extra routes go through its `extend` option; see [the conventional Worker](../cloudflare/conventional-worker.md).
-
-## 4. `wrangler.jsonc`
-
-```jsonc
-{
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mantle-reference",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-09-08",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "observability": { "enabled": true },
-  "vars": { "MANTLE_AUTH_MODE": "self-managed" },
-  "d1_databases": [
-    { "binding": "DB", "database_name": "mantle-reference-local" }
-  ]
-}
-```
-
-Both compatibility flags are required by the adapter. `MANTLE_AUTH_MODE` must be explicit; `self-managed` without GitHub credentials is a deliberate partial configuration for this local reference, so Auth-owned routes fail closed while public routes work. Local `wrangler dev` creates the D1 database on demand; configure a real `database_id` and the full auth matrix before any remote deploy ([Authentication](../cloudflare/authentication.md)).
-
-## 5. Install, generate, validate, run
+Start with the smallest selection: no identity (every caller is anonymous)
+and only the REST surface.
 
 ```sh
-# Resolve once; for a requested prerelease, set its exact version instead.
-MANTLE_VERSION=$(pnpm view @aotter/mantle@latest version)
-pnpm add --save-exact "@aotter/mantle@$MANTLE_VERSION" "@aotter/mantle-cloudflare@$MANTLE_VERSION"
+pnpm exec mantle generate --identity none --features web
+```
+
+It writes `.mantle/generated/plan.json` and `mantle.ts`, `mantle.config.json`,
+and once, the preset: `src/service.ts`, `src/index.ts`, `src/handlers.ts`,
+`wrangler.jsonc`, `tsconfig.json` and `.gitignore`. Commit all of them,
+`.mantle/generated` included.
+
+## 4. Run it
+
+```sh
+pnpm exec wrangler dev --local
+```
+
+On the first request the runtime creates the tables on the local D1 database.
+Then:
+
+```sh
+curl -sS -X POST http://127.0.0.1:8787/api/notes -H 'content-type: application/json' -d '{"text":"hello"}'
+curl -sS http://127.0.0.1:8787/api/views/latest-notes
+```
+
+The write answers `{ "results": [[{ "id": "…" }]] }` and the View
+`{ "rows": [{ "id": "…", "text": "hello", "created_at": … }] }`.
+
+## 5. Add sign-in, Admin and MCP
+
+The full selection is identity `mantle` (Better Auth sign-in, staff roles,
+OAuth for MCP) and the features `mcp`, `admin` and `web`. A rerun cannot
+switch identity, and the preset is never rewritten, so start a project that
+needs them with the full selection instead:
+
+```sh
 pnpm exec mantle generate
-pnpm exec mantle validate
-pnpm exec wrangler dev --local --ip 127.0.0.1 --port 8787
 ```
 
-`mantle validate` prints `OK  no issues (root: manifests, phase: preview)`. Wrangler prints `Ready on http://127.0.0.1:8787`. Use that origin in the next step. The Admin OTP path uses the same pin; `PUBLIC_ORIGIN` must match wrangler's printed origin there.
-
-## 6. Probe the Worker
+With no flags the selection is identity `mantle` and every feature. The first
+run names the packages it needs, with the install command, and writes nothing
+until they are installed:
 
 ```sh
-curl -s http://127.0.0.1:8787/api/views/published-notes
+pnpm add better-auth @better-auth/oauth-provider @better-auth/mcp @better-auth/cimd \
+  @modelcontextprotocol/server @modelcontextprotocol/ext-apps @aotter/mantle-ui
+pnpm exec mantle generate
+cp .dev.vars.example .dev.vars   # set ADMIN_EMAIL and a random BETTER_AUTH_SECRET
+pnpm exec wrangler dev --local
 ```
 
-```json
-{ "ok": true, "data": { "rows": [], "page": 1, "show": 20, "hasMore": false } }
-```
+Request a code for `ADMIN_EMAIL` (`POST /api/auth/email-otp/send-verification-otp`
+with `{ "email": …, "type": "sign-in" }`). The code is printed to the wrangler
+log, and that email becomes the owner. Codes in the log are for local
+development only; [Authentication](../cloudflare/authentication.md) covers
+production sign-in.
 
-The View is served with no data because the local D1 is fresh. `show` follows the View's `limit` when the request carries no `?show=`; `?page=` and `?show=` are the reserved pagination params ([Reads: Views, REST and MCP](../concepts/views.md)).
+Or open `/admin/sign-in` in a browser: the console is served at `/admin` from
+`@aotter/mantle-ui/admin`, which the generated `wrangler.jsonc` binds as the
+Worker's `ASSETS`. Admin's API answers at `/admin/api/*`, the public MCP
+surface at `/mcp`, and the staff MCP surface at `/mcp/staff`. The
+[reference service](../../examples/reference-service/README.md) is this
+selection with a smoke test that signs in and drives every surface.
 
-```sh
-curl -i http://127.0.0.1:8787/
-```
+## Next
 
-`GET /` returns `404`. No visitor frontend is installed or rendered; `mantle-web` is optional composition and never owns an implicit home route. Add your own routes or templates when the product needs them ([Public web, SEO and cache](../cloudflare/public-web.md)).
-
-```sh
-curl -i http://127.0.0.1:8787/mcp/staff
-```
-
-`GET /mcp/staff` returns `503` with the error code `setup_incomplete` until `MANTLE_AUTH_MODE` is backed by a complete configuration. This is the expected fail-closed state; a working public endpoint is not evidence of a working Admin or MCP login.
-
-## What `mantle generate` wrote
-
-- `.mantle/generated/mantle.ts` — one module with the sealed `plan`, generated `Schemas`, `Views`, `Store` and `MantleHandlers<Env>` types. The Worker entry above imports only `plan`.
-- `public/_mantle/admin/` — the Admin SPA, synced only when `@aotter/mantle-admin-ui` is installed. This project did not install it, so nothing is written there and `/admin` has no assets.
-
-This walkthrough uses the existing direct-authored Worker entry; in that legacy
-compile mode, `generate` expects the supplied manifests and does not add a
-home route. New applications can instead use `mantle generate --host cf`
-with `--features spec,api` for a smaller assembled Worker. The CLI never
-invents a Schema. `mantle generate --check` reports stale output without
-writing. The reference keeps `.mantle/`, `.agents/` and `.claude/` out of git
-and regenerates them in `check`; see [Project layout and CLI](./project-and-cli.md).
-
-## Next steps
-
-- [Quickstart: local Admin](./quickstart-admin.md) — opt-in Dev UI: ASSETS, prebuilt Admin, email OTP.
-- [Project layout and the CLI loop](./project-and-cli.md) — the files you own, every CLI flag, the daily check loop.
-- [The four atoms](../concepts/four-atoms.md) — add a Procedure and a Trigger to accept writes.
-- [Authentication](../cloudflare/authentication.md) — complete Auth so Admin and `/mcp/staff` open.
-- [Public web, SEO and cache](../cloudflare/public-web.md) — give the service a rendered public surface.
-
-## Source
-- [`docs/examples/host-minimal-worker/README.md`](../../../docs/examples/host-minimal-worker/README.md)
-- [`docs/examples/host-minimal-worker/package.json`](../../../docs/examples/host-minimal-worker/package.json)
-- [`docs/examples/host-minimal-worker/tsconfig.json`](../../../docs/examples/host-minimal-worker/tsconfig.json)
-- [`docs/examples/host-minimal-worker/manifests/site.yaml`](../../../docs/examples/host-minimal-worker/manifests/site.yaml)
-- [`docs/examples/host-minimal-worker/src/index.ts`](../../../docs/examples/host-minimal-worker/src/index.ts)
-- [`docs/examples/host-minimal-worker/wrangler.jsonc`](../../../docs/examples/host-minimal-worker/wrangler.jsonc)
-- [`docs/examples/host-minimal-worker/smoke.mjs`](../../../docs/examples/host-minimal-worker/smoke.mjs)
-- [`docs/direct-authoring.md`](../../../docs/direct-authoring.md)
-- [`packages/mantle-runtime/src/domain/service/Pagination.ts`](../../../packages/mantle-runtime/src/domain/service/Pagination.ts)
+- [Project layout and CLI](./project-and-cli.md): what each generated file is,
+  and `mantle generate --check`.
+- [Writes: Procedures, Triggers and hooks](../concepts/procedures-and-triggers.md)
+  and [Reads: Views, REST and MCP](../concepts/views.md).
+- [Deploy and operate](../cloudflare/deploy-and-operate.md).

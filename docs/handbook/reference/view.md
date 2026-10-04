@@ -1,268 +1,162 @@
 ---
-description: View field reference — declarative and SQL forms, filter AST, params, pagination, REST and MCP surfaces, and every diagnostic they raise.
+description: View field reference for Mantle 0.2.0 — the SQL SELECT and the dialect it accepts, input, surface, requires, uiSchema, cache, output names, paging and diagnostics.
 ---
 # View
 
-A View is a named read-only query over Schemas. It is the only atom that needs no [Trigger](./trigger.md): `surface: public` or `staff` exposes it on supported transports; `internal` keeps it host-only. This page is the field-level contract; the concepts are in [Views](../concepts/views.md) and [The four atoms](../concepts/four-atoms.md). Envelope rules are in [Manifest envelope and conventions](./manifest.md), and every diagnostic code named here is catalogued in [Diagnostics](./diagnostics.md).
-
-## Fields
-
-| Field | Type | Required | Default | Rules |
-|---|---|---|---|---|
-| `title` | LocalizedText | no | Title-Cased `metadata.name` | Admin report label. Non-empty string or locale map. |
-| `description` | LocalizedText | no | Generated `Query <surface> View '<name>'.` | What the View answers. Agents read it as the View's MCP tool description. Non-empty string or locale map. |
-| `uiSchema` | object | no | — | Only on `surface: staff`; only the key `list`. Violations are `VIEW_UI_INVALID`. |
-| `from` | string | exactly one of `from` / `sql` | — | Name of a declared Schema (`VIEW_FROM_UNKNOWN_SCHEMA`). The declarative form. |
-| `sql` | string | exactly one of `from` / `sql` | — | One SQLite `SELECT`. See [`sql`](#sql). |
-| `surface` | `public` \| `staff` \| `internal` | yes | — | Decides where the View mounts. See [Surfaces](#surfaces). |
-| `cache` | `{ sharedMaxAge }` | no | — | Anonymous REST shared-cache hint. `sharedMaxAge` is an integer from 1 to 86400. Only an unguarded, declarative public View over a publishing Schema may declare it. |
-| `requires` | AuthorizationRequirements | no | — | `auth.all` predicates plus one optional `guard.procedure`. See [Authorization](./authorization.md). |
-| `filter` | FilterAst | no | — | `from` form only. See [Filter AST](#filter-ast). |
-| `fields` | `string[]` | no | the reserved entry columns (`id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId`) | `from` form only. Projection. Not shape-validated by the parser. |
-| `orderBy` | `{ field, direction? }[]` | no | `[]` | `from` form only. `direction` defaults to `asc`. |
-| `limit` | number | no | 50 at runtime | `from` and `sql`. Not shape-validated by the parser; clamped at request time. |
-| `params` | JSON Schema | no | — | `type: object` with `properties`. Reserved: `page`, `show`, `cursor`. |
-
-`from` counts as present when it is a non-empty string; `sql` when it is non-empty after trimming. Declaring both, or neither, is `INVALID_MANIFEST_ENVELOPE` at `/spec` with the message *View.spec requires exactly one of from or sql*. Combining `sql` with `filter`, `fields` or `orderBy` is rejected the same way at `/spec/<key>`.
-
-## Declarative example
-
 ```yaml
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
-metadata:
-  name: my-support-requests
+metadata: { name: search-items }
 spec:
-  title: { en: My support requests, "zh-TW": 我的客服請求 }
-  surface: public
-  from: support-requests
-  requires:
-    auth:
-      all: [ctx.user]
-  fields: [id, ticketNumber, subject, requestStatus, submittedAt]
-  filter:
-    and:
-      - eq: { field: submittedBy, value: { "$ctx.user": "id" } }
-      - eq: { field: requestStatus, value: { $param: requestStatus } }
-  orderBy:
-    - { field: submittedAt, direction: desc }
-  limit: 100
-  params:
+  title: Search items          # optional, a string or a locale map
+  description: …               # optional; the MCP tool's description
+  surface: public              # public | staff | internal (required)
+  requires: { … }              # optional, see Authorization requirements
+  input:                       # optional JSON Schema object
     type: object
-    required: [requestStatus]
-    properties:
-      requestStatus: { type: string, enum: [open, waiting, closed] }
+    required: [q]
+    properties: { q: { type: string, minLength: 1 } }
+  uiSchema: { list: { … } }    # optional, staff Views only
+  cache: { sharedMaxAge: 60 }  # optional
+  sql: |                       # required: one SELECT
+    SELECT i.id, i.name, i.stock FROM items i
+    WHERE mantle.search(i, input.q)
+    ORDER BY mantle.search_rank(i), i.name
 ```
-
-The Schema this reads must index `submittedBy` as the leftmost field of some tuple, otherwise the identity filter is rejected. See [Schema indexes](./schema.md#indexes).
-
-For caller-independent published data, a View may opt its anonymous REST response into the deployment cache:
-
-```yaml
-spec:
-  surface: public
-  from: published-notes
-  cache: { sharedMaxAge: 3600 }
-```
-
-This emits `Cache-Control: public, max-age=0, s-maxage=3600` only when the request has no cookie or authorization header and the Cloudflare Worker has a valid `cacheScope`. MCP, WebMCP, staff, guarded, SQL and operational-schema reads remain uncached. Invalid combinations fail with `VIEW_CACHE_INVALID`.
-
-## SQL example
-
-```yaml
-apiVersion: cms.mantle.aotter.net/v1
-kind: View
-metadata:
-  name: order-lines-by-status
-spec:
-  title: Order lines by status
-  surface: staff
-  sql: |
-    SELECT o._mantle_id AS orderId,
-           o.orderNumber AS orderNumber,
-           json_extract(line.value, '$.sku') AS sku,
-           json_extract(line.value, '$.quantity') AS quantity
-    FROM orders AS o
-    JOIN json_each(o.lines) AS line
-    WHERE o.orderStatus = :orderStatus
-    ORDER BY o.orderNumber ASC
-  params:
-    type: object
-    required: [orderStatus]
-    properties:
-      orderStatus: { type: string, enum: [paid, shipped, cancelled] }
-  limit: 200
-  uiSchema:
-    list:
-      columns: [orderNumber, sku, quantity]
-      searchFields: [orderNumber, sku]
-      filterFields: [sku]
-```
-
-## Filter AST
-
-`filter` is a tree. Every node is an object with **exactly one** key: a comparison operator, or `and` / `or`.
-
-| Key | Shape | Rules |
-|---|---|---|
-| `eq`, `gt`, `gte`, `lt`, `lte` | `{ field, value }` | Only those two keys. `field` is a non-empty string. `value` must be present; `null` is a legal value. |
-| `and`, `or` | array of nodes | Non-empty. Nests to any depth. |
-
-Any other key, a node with zero or several keys, an array node, or an empty `and` / `or` is `INVALID_MANIFEST_ENVELOPE` at the node's pointer.
-
-### Value forms
-
-| Form | Written as | Rules |
-|---|---|---|
-| Literal | `value: published` | Any JSON scalar, including `null`. Compared as written. |
-| Param reference | `value: { $param: locale }` | The name must be declared under `params.properties` (`VIEW_FILTER_PARAM_REF_UNKNOWN`, also raised when no `params` is declared at all or the name is empty) and listed in `params.required` (`VIEW_FILTER_PARAM_REF_NOT_REQUIRED`). |
-| Caller identity | `value: { "$ctx.user": "id" }` | The sentinel is closed: exactly one key, the literal string `id`, and only under `eq`. Anything else is `VIEW_FILTER_CTX_USER_REF_INVALID`. |
-
-The identity sentinel carries two further graph-level obligations, checked once `from` resolves:
-
-| Rule | Diagnostic |
-|---|---|
-| The View declares `ctx.user` in `requires.auth.all`. | `VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH` at `/spec/requires/auth/all` |
-| The compared field is the leftmost field of some `uniqueIndexes` or `indexes` tuple on the source Schema. | `VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX` |
-
-Provider claims and platform identities are deliberately out of reach; `id` is the only bindable identity value.
-
-### Graph-level field checks
-
-For a `from` View, the valid field names are the top-level keys of the Schema's `properties` plus the [reserved entry columns](./schema.md#reserved-entry-columns). Unknown names are rejected per site:
-
-| Location | Diagnostic |
-|---|---|
-| `filter.<op>.field` | `VIEW_FILTER_FIELD_NOT_IN_SCHEMA` |
-| `fields[i]`, `orderBy[i].field` | `VIEW_FIELD_NOT_IN_SCHEMA` |
-| `uiSchema.list.<key>[i]` | `VIEW_UI_INVALID` |
-| `from` itself | `VIEW_FROM_UNKNOWN_SCHEMA` (no further field checks run) |
-
-None of these run for a `sql` View — its output columns are whatever the `SELECT` produces.
 
 ## `sql`
 
-One statement, read-only, compiled and bound by the runtime.
+One `SELECT` in PostgreSQL syntax over declared Schemas. It reads
+`input.<name>`, `auth.uid()`, `auth.role()` and `now()`. The runtime adds
+scope, TTL and (on a public View) published-only to every Schema it reads;
+never repeat them.
 
-| Rule | Effect |
-|---|---|
-| The trimmed text matches `/^select\b/i` and contains no `;`. | Otherwise `INVALID_MANIFEST_ENVELOPE` at `/spec/sql`: `View.spec.sql must be one SELECT statement without a semicolon`. |
-| Every `:name` occurrence is declared in `params.properties`. | `VIEW_FILTER_PARAM_REF_UNKNOWN` |
-| Every `:name` occurrence is listed in `params.required`. | `VIEW_FILTER_PARAM_REF_NOT_REQUIRED` |
-| `filter`, `fields` and `orderBy` are absent. | `INVALID_MANIFEST_ENVELOPE` at `/spec/<key>` |
-| Tables are Schema names. | Each Schema is exposed as a logical table reconciled at boot. Names containing `-` must be double-quoted: `FROM "post-translations"`. |
+### What the D1 dialect accepts
 
-Bound params are passed as positional values; caller input is never interpolated into the statement. SQLite JSON functions are available, so `json_each` and `json_extract` can unnest and project array or object members of `data` — the SQL example above does both.
+The `sqlite` dialect (`@aotter/mantle/d1`) runs this subset on D1, on Bun's
+SQLite and on any `sqliteStorage` driver.
 
-> **Warning**
-> `sql` Views are native SQLite. `mantle validate` prepares each statement against an empty SQLite database containing only the declared Schema tables; an undeclared table, syntax error or unknown column is `INVALID_MANIFEST_ENVELOPE` at `/spec/sql`. Programmatic validation runs the same check when the host supplies `sqlViewSandbox`; without that port it is deferred to the host's admission gate. On a storage adapter that does not support the native dialect the View fails at prepare time with `VIEW_DIALECT_UNSUPPORTED`, naming the dialects that adapter does support.
-
-## `params`
-
-`params` declares the caller-supplied query shape and is walked by the [JSON Schema subset](./schema.md#json-schema-subset) validator.
-
-| Rule | Diagnostic |
-|---|---|
-| A non-array object. | `VIEW_PARAMS_INVALID_SHAPE` at `/spec/params` |
-| `type: "object"`. | `VIEW_PARAMS_INVALID_SHAPE` at `/spec/params/type` |
-| `properties` is declared and is an object. | `VIEW_PARAMS_INVALID_SHAPE` at `/spec/params/properties` |
-| No property named `page`, `show` or `cursor`. | `VIEW_PARAMS_RESERVED_NAME` |
-
-The runtime owns those three names for pagination, which is why they cannot be redeclared. Rename the domain param (`pageSize`, `showArchived`).
-
-## `orderBy`, `fields` and `limit`
-
-`orderBy` is an array of objects accepting only `field` and `direction`. A non-array value, a non-object entry, a missing or empty `field`, or a `direction` other than `asc` / `desc` is `VIEW_ORDERBY_INVALID` at the offending pointer; an unrecognized key inside an entry is `INVALID_MANIFEST_ENVELOPE`.
-
-`fields` and `limit` receive **no shape validation in the parser**. A `fields` value that is not an array of strings, or a `limit` that is not a number, is not reported as a diagnostic — it fails later, at graph validation or at request time. Declare them as documented.
-
-`limit` is a per-View cap, and the runtime clamps around it on every call:
-
-| Input | Result |
-|---|---|
-| `limit` missing, non-numeric, non-finite or `<= 0` | Cap is 50. |
-| `limit` valid | Cap is `min(floor(limit), 500)`. 500 is the hard ceiling for any single round-trip. |
-| `?show=` missing or not a positive finite number | Page size is the cap. |
-| `?show=` valid | Page size is `min(floor(show), cap)`. |
-| `?page=` missing or below 1 | Page 1. |
-
-## `uiSchema.list`
-
-Admin presentation for `surface: staff` Views. Declaring `uiSchema` on a public View is `VIEW_UI_INVALID`, as is any root key other than `list` or any key inside `list` other than the three below.
-
-| Key | Meaning |
-|---|---|
-| `columns` | Ordered columns for the Admin report table and the default CSV column set. |
-| `searchFields` | Output fields the Admin substring search box covers. |
-| `filterFields` | Output fields offered as exact-match filters (`?filter.<field>=`). |
-
-Each is an array of non-empty strings with no duplicates within the key. The characters `"`, `\` and NUL are rejected in a field name. The names are **View output field names** — SQL aliases for a `sql` View; for a `from` View they are additionally checked against the Schema's properties plus reserved columns.
-
-Admin applies search and filters before pagination, rejecting a search term or filter value longer than 200 characters and any `filter.<field>` key that is not a declared `filterFields` entry. `GET /admin/api/views/<name>/export` streams the same query as CSV covering every matching row, not only the visible page; its columns come from `uiSchema.list.columns`, falling back to `spec.fields` and then to the union of keys in the returned rows.
-
-## Surfaces
-
-| `surface` | REST | MCP tool | Admin |
-|---|---|---|---|
-| `public` | `GET /api/views/<name>`, plus a catalog at `GET /api/views` | `query_view_<segment>` on `/mcp` | Also mounted at `GET /admin/api/views/<name>` and `/export` behind the staff gate |
-| `staff` | `GET /admin/api/views/<name>` and `/admin/api/views/<name>/export` — not mounted publicly | `query_view_<segment>` on `/mcp/staff` | Report sidebar |
-| `internal` | Not mounted | Not mounted | Not listed or mounted |
-
-For a complete generated Store type-map example, see [Typed queries](../guides/typed-queries.md).
-
-An `internal` View remains in the compiled plan for host code to call through `runtime.store.as(ctx).view()`. It is an exposure policy, not an authorization bypass: `requires` and guards still evaluate against the verified caller context. Shared HTTP caching is invalid because no adapter owns an HTTP response for the View.
-
-A `public` declarative View over a `publishing` Schema reads **published rows only**, on every transport. The runtime adds `status = published` to the compiled query whether or not the filter spells it out; writing it is allowed and redundant, and comparing `status` to any other value is rejected at validate time (`VIEW_PUBLIC_STATUS_INVALID`). Staff Views see every status. `operational` Schemas create rows as `published`, so nothing is added. SQL Views (`spec.sql`) are the author's own statement and receive no injected predicate. Decision record: ADR-0025.
-
-`<segment>` is `metadata.name` lower-cased with `-` replaced by `_`. Two Views that mangle to the same segment collide with `MCP_TOOL_NAME_COLLISION`. Admin also serves the manifest listing `GET /admin/api/views-manifest`. Surface choice is visibility, not authorization: `requires` still gates every call on both transports. See [Surfaces](./surface.md) and [MCP and agents](../concepts/mcp-and-agents.md).
-
-The MCP `inputSchema` is `params.properties` plus `page` and `show` as optional numbers, carrying `params.required` through unchanged; the tool is annotated `readOnlyHint: true`.
-
-A declarative View whose rows carry every field an interaction binds (and `version` when the interaction locks one) appends the interaction to its tool description as a row action, for example `Row actions: review_requisition (id = row.id, expectedVersion = row.version).` Only Procedure tools on the View's own surface are listed. A View without `fields` returns only the reserved entry columns, so it qualifies only for bindings on `id` (and `version`); a SQL View is never bound automatically. See [MCP and agents](../concepts/mcp-and-agents.md).
-
-Admin offers the same staff row actions from each row of the View page, to staff members who may run the operation. The dialog shows the inputs taken from the row, reads the entry through `read_entry` and locks the version the person reviewed. If the entry changed since the list was loaded, the dialog shows what changed and asks for a review before anything is submitted. A conflict keeps the input and asks for the latest version. A write whose outcome is unknown is never retried automatically. `GET /admin/api/views-manifest` lists each View's `rowActions`.
-
-## REST contract
-
-Pagination uses the two reserved knobs, `?page=` (1-indexed) and `?show=`. The response envelope is:
-
-```json
-{ "ok": true, "data": { "rows": [], "page": 1, "show": 20, "hasMore": true } }
-```
-
-`hasMore` is the lazy form — `rows.length === show`. There is no COUNT query and no `LIMIT n+1` probe, so a final page that exactly fills `show` reports `hasMore: true` and the next page comes back empty.
-
-A failure returns `{ ok: false, diagnostic }` with the diagnostic's mapped status. Static `requires.auth` runs before parameter validation, so an unauthorized caller never learns the parameter shape; a `guard` Procedure runs after validation and authorizes the whole query rather than filtering rows.
-
-### Param coercion
-
-Query strings arrive as text. The runtime coerces each declared param by its `type` before validating against `params`; MCP callers send typed JSON and skip this step.
-
-| Declared `type` | Coercion | Rejected when |
+| Area | Supported | Rule |
 |---|---|---|
-| `string`, or `type` omitted | Used as-is. | — |
-| `integer` | `parseInt(raw, 10)` | The round-trip does not equal the trimmed input, so `"1.5"` and `"1abc"` fail. |
-| `number` | `Number(raw)` | The result is not finite. |
-| `boolean` | `"true"` / `"false"` | Any other text. |
-| `enum` (with any of the above) | Coerced by `type` first, then checked for membership. | The coerced value is not in `enum`. |
-| anything else | — | Unsupported on the REST surface. |
+| Expressions | columns, aliases, literals, arithmetic, `\|\|`, `CASE`, `COALESCE`, `NULLIF`, `CAST` | `CAST(x AS int)` only for an integer literal: use `round(x)`. `CAST(x AS bool)` follows PostgreSQL. `*` expands to declared fields; a bare `*` over a subquery or `json_each` is refused: name the columns |
+| Conditions | comparisons, `AND`/`OR`/`NOT`, `BETWEEN`, `IS [NOT] NULL`, `IS DISTINCT FROM`, `IN (list \| subquery)`, `[NOT] EXISTS`, `LIKE … ESCAPE` | `LIKE` is case-insensitive (SQLite). An input array in `IN` binds once. A date-time, date or boolean column (and `created_at`, `updated_at`) is not compared with a bare string: write `CAST('…' AS timestamptz)`, `true`, or bind an input |
+| Relations | one Schema, `INNER`/`LEFT JOIN … ON` (self-joins too), a subquery in `FROM`, `json_each(<input or column>)` | the only comma join is `t, json_each(t.col)` |
+| Subqueries | scalar and correlated | |
+| Aggregation | `count`, `sum`, `min`, `max`, `avg`, `count(DISTINCT)`, `json_group_array([DISTINCT])`, `json_group_object`, `GROUP BY`, `HAVING` | a selected column is grouped or aggregated |
+| Windows | `row_number()`, `rank()`, `sum`/`count … OVER (PARTITION BY … ORDER BY …)` | no frame clause |
+| Order and paging | `ORDER BY … [NULLS FIRST \| LAST]`, `LIMIT`, `DISTINCT` | `id` is appended as the last sort key; `LIMIT` needs `ORDER BY` and bounds every page together; a sort key may be NULL (an unstated `NULLS` puts NULL first ascending and last descending, and the cursor follows the same rule); `ORDER BY 1` sorts by the first output; `DISTINCT` with `ORDER BY` is refused. A View without `ORDER BY` (a `DISTINCT`, an aggregate, a `GROUP BY`) is one page: it takes no cursor and is refused when it has more rows than the page |
+| JSON | `->>`, `json_extract`, `json_set`, `json_insert`, `json_remove`, `json_array_length` | `->` is refused |
+| Time | `now()`, `date_trunc('hour'\|'day'\|'week'\|'month'\|'year', ts)`, `extract(year\|month\|day\|dow\|hour FROM ts)`, `ts ± interval '<n> seconds\|minutes\|hours'`, `ts - ts` | site time zone; `ts - ts` is microseconds. Calendar intervals (`day`, `month`) are refused: bind the boundary as an input |
+| Search and places | `mantle.search(t, q)`, `mantle.search_rank(t)`, `mantle.near(t.f, lat, lng, meters)`, `mantle.distance(t.f, lat, lng)` | `near` takes a literal radius of at most 50 km; ordering by `distance` needs `LIMIT` ≤ 100 and has no cursor |
 
-A missing required param or a failed coercion is `INPUT_VALIDATION_FAILED` (400). Unknown query keys are ignored.
+Refused on D1: `WITH`, `LATERAL`, `UNION`/`INTERSECT`/`EXCEPT`, window frames,
+`FILTER`, `DISTINCT ON`, `ILIKE`, regular expressions and jsonb operators. The
+PostgreSQL dialect accepts each of them (next section), and D1 says so in its
+refusal: "needs the PostgreSQL dialect".
 
-## Source
+Refused on every dialect: `OFFSET`, `RIGHT`/`FULL`/`CROSS JOIN`, `NATURAL`,
+`USING`, `FOR UPDATE`, a write inside `WITH`, positional `$1`, `rowid`,
+SQLite's clock (`'now'`, `CURRENT_TIMESTAMP`), `strftime`/`date`/`unixepoch`,
+`generate_series` and any function outside the allowlist, an unqualified
+`search()`, and any relation that is not a declared Schema, a CTE or an
+internal View (`_mantle_*` and auth tables included).
 
-- [`packages/mantle-spec/src/domain/model/ManifestGrammar.ts`](../../../packages/mantle-spec/src/domain/model/ManifestGrammar.ts)
-- [`packages/mantle-spec/src/domain/service/ManifestParser.ts`](../../../packages/mantle-spec/src/domain/service/ManifestParser.ts)
-- [`packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts`](../../../packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts)
-- [`packages/mantle-spec/src/domain/service/SchemaAdminUiChecker.ts`](../../../packages/mantle-spec/src/domain/service/SchemaAdminUiChecker.ts)
-- [`packages/mantle-spec/src/domain/service/McpToolNaming.ts`](../../../packages/mantle-spec/src/domain/service/McpToolNaming.ts)
-- [`packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts`](../../../packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts)
-- [`packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts`](../../../packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts)
-- [`packages/mantle-runtime/src/domain/service/Pagination.ts`](../../../packages/mantle-runtime/src/domain/service/Pagination.ts)
-- [`packages/mantle-runtime/src/domain/service/CallableCapabilityProjector.ts`](../../../packages/mantle-runtime/src/domain/service/CallableCapabilityProjector.ts)
-- [`packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts`](../../../packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts)
-- [`packages/mantle-runtime/src/infrastructure/storage/SqliteViewCompiler.ts`](../../../packages/mantle-runtime/src/infrastructure/storage/SqliteViewCompiler.ts)
-- [`packages/mantle-runtime/src/infrastructure/storage/SqliteMantleStorageAdapter.ts`](../../../packages/mantle-runtime/src/infrastructure/storage/SqliteMantleStorageAdapter.ts)
-- [`packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts`](../../../packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts)
-- [`packages/mantle-admin/src/mountMantleAdmin.ts`](../../../packages/mantle-admin/src/mountMantleAdmin.ts)
-- [`packages/adapters/cloudflare/src/mount/mountRuntimeEndpoints.ts`](../../../packages/adapters/cloudflare/src/mount/mountRuntimeEndpoints.ts)
+### What the PostgreSQL dialect adds
+
+PostgreSQL is Mantle SQL's reference dialect (ADR-0037); D1 runs the subset above.
+On PostgreSQL a View may also use:
+
+| Construct | Notes |
+|---|---|
+| `WITH`, `WITH RECURSIVE` | every CTE body is a `SELECT`; a Schema read inside one is scoped like any other |
+| `UNION [ALL]`, `INTERSECT`, `EXCEPT`, `DISTINCT ON` | inside a `WITH` or a subquery, never the View's own `SELECT`, which Core pages and orders |
+| `JOIN LATERAL (…) x ON …`, `, LATERAL (…) x` | |
+| Window frames | `ROWS`/`RANGE BETWEEN … PRECEDING AND …` with literal offsets (an integer, or an interval for `RANGE` over time); `avg`, `min`, `max`, `lag`, `lead`, `first_value`, `last_value`, `dense_rank` over a window. `GROUPS` and `EXCLUDE` are refused |
+| Aggregates | `FILTER (WHERE …)`, `ORDER BY` inside an aggregate, `string_agg`, `jsonb_agg`, `jsonb_object_agg` |
+| jsonb | `->`, `#>`, `#>>`, `@>`, `<@`, `?`, `?\|`, `?&`; `jsonb_build_object`, `jsonb_build_array`, `jsonb_strip_nulls`, `to_jsonb`, `jsonb_typeof`; a json field is stored as `jsonb` |
+| Text and numbers | `ILIKE`, `~`, `~*`, `!~`, `!~*`, `split_part`, `greatest`, `least`, `floor`, `ceil`, `sqrt`, `power` |
+| Time | `ts AT TIME ZONE 'Asia/Taipei'`; `date_trunc` adds `minute` and `quarter`; `extract` adds `minute`, `quarter`, `week`, `isoyear`, `isodow`, `doy`, `epoch` |
+| Casts | any expression to `int4`, `int8`, `numeric(p, s)`, `date`, `timestamptz`, `jsonb`; a text literal compared with a date-time column is cast, as PostgreSQL does |
+
+Every statement on PostgreSQL has a 10-second `statement_timeout`
+(`postgresStorage({ statementTimeoutMs })`).
+
+### Reading another View
+
+A View's `FROM` may name an internal View (`surface: internal`, no `input`, no
+`requires`) by its name with `-` written `_`: `FROM free_window w`. The
+compiler inlines its `SELECT` as a subquery, so scope and every check apply
+inside it, on every dialect. A View that reads itself, directly or through
+others, is refused; a View named like a Schema is not readable this way (the name reads the Schema). Write a rule many
+Views share (a plan's visible window, a definition of "active") once this way.
+
+### Names
+
+- Unquoted identifiers fold to lower case; Schema and field names resolve
+  case-insensitively. A Schema whose name is not a plain identifier is quoted:
+  `FROM "support-tickets"`.
+- Native columns are `id`, `status`, `version`, `created_at`, `updated_at`,
+  `author_id`.
+- An output that reads a Schema field unchanged comes back under the field's
+  declared name and is decoded to its type, and so does `created_at` or
+  `updated_at` (an ISO date-time). A `sum`, `min` or `max` of one column keeps
+  that column's type and hints (a sum of a `money-minor` field is money); a
+  `count` or an `avg` is a plain number. Any other output keeps its alias as
+  SQL folded it: `AS orderCount` is `ordercount`, `AS "orderCount"` keeps the
+  case. A staff View's `uiSchema.list.columns` must name each output as the row
+  carries it; a name that differs only by case is `VIEW_UI_INVALID`, and the
+  message says to quote the alias.
+
+## `input`
+
+A JSON Schema object with declared `properties`; the SQL reads
+`input.<name>`. `limit` and `cursor` are reserved
+(`VIEW_INPUT_RESERVED_NAME`). An input the call leaves out binds `NULL`, after
+the schema's `default` if it declares one.
+
+## `surface`
+
+| Value | Served |
+|---|---|
+| `public` | `GET /api/views/<name>` and a tool on `/mcp` |
+| `staff` | `GET /admin/api/views/<name>`, `GET /admin/api/views/<name>/export` (CSV), and a tool on the staff MCP surface |
+| `internal` | nowhere: `ctx.store.view(name, …)` and `runtime.store` only |
+
+## Paging and the response
+
+Every surface takes `limit` (default 50, maximum 500) and `cursor`, and answers
+`{ "rows": [...], "nextCursor": "…" }`. `nextCursor` appears only when more
+rows exist; pass it back unchanged. A cursor is bound to its View and order.
+REST coerces each `input` query parameter to its declared type.
+
+## `uiSchema` (staff Views)
+
+| Key | Effect |
+|---|---|
+| `list.columns` | the outputs the console shows, in order; CSV export uses them |
+| `list.searchFields` | outputs the console's search box matches: one case-insensitive `LIKE '%text%'` per output, ORed, with `%`, `_` and `\` in the text matched literally |
+| `list.filterFields` | outputs the console offers as filters: one `=` each, the value coerced to the output's field type |
+
+Each name must be one of the View's outputs (`VIEW_UI_INVALID` otherwise).
+The conditions wrap the View's own query, after its `WHERE` and the injected
+policy and before paging, so they narrow what the caller may already see and
+the cursor stays valid. Over HTTP they are Admin's `search` and
+`filter.<output>` query parameters on `/admin/api/views/<name>` and its
+`/export`; in code, `store.view(name, { search, filters })`. A declared
+`input` remains the way to parameterize the query itself. Other keys are
+refused (`VIEW_UI_INVALID`).
+
+## `cache`
+
+`{ sharedMaxAge: 1–86400 }` is accepted only on an unguarded public View whose
+SQL reads neither `auth.*` nor `now()` (`VIEW_CACHE_INVALID`). The 0.2.0 REST
+surface does not send cache headers yet; cache in front of it if you need to.
+
+## Diagnostics
+
+`SQL_SYNTAX`, `SQL_UNSUPPORTED`, `SQL_FUNCTION`, `SQL_RELATION`, `SQL_COLUMN`,
+`SQL_SHAPE`, `SQL_TYPE` (each with a line and column in the SQL),
+`VIEW_INPUT_INVALID_SHAPE`, `VIEW_INPUT_RESERVED_NAME`, `VIEW_CACHE_INVALID`,
+`VIEW_UI_INVALID`, `AUTH_PREDICATE_NOT_IN_ENUM`, `GUARD_PROCEDURE_UNKNOWN`. At
+run time: `UNAUTHENTICATED`, `AUTH_DENIED`, `INPUT_VALIDATION_FAILED`,
+`NOT_FOUND`. See [Diagnostics](./diagnostics.md).

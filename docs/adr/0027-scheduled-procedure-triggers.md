@@ -24,7 +24,7 @@ Keeping host-only calls would preserve the old grammar but fail static validatio
 
 ## How to apply
 
-Declare a schedule Trigger, export `worker.scheduled`, and register its expression in `wrangler.jsonc`. Use `ctx.schedule.id` to deduplicate writes. See [Trigger reference](../handbook/reference/trigger.md#schedule-source).
+Declare a schedule Trigger, export `worker.scheduled`, and register its expression in `wrangler.jsonc`. Use `ctx.schedule.id` to deduplicate writes. See [Trigger reference](../handbook/reference/trigger.md#schedule).
 
 ## Implementation status
 

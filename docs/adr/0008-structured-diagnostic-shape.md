@@ -7,7 +7,7 @@ diagnostic emitters and measured harnesses.
 
 **Deciders**: phsu
 
-**Related**: [ADR-0007](0007-ai-as-primary-author.md) (the AI-as-primary-author contract this diagnostic format serves); the zod runtime is described in [`docs/design-atoms.md`](../design-atoms.md) § "Manifest validation — JSON Schema in, zod at runtime".
+**Related**: [ADR-0007](0007-ai-as-primary-author.md) (the AI-as-primary-author contract this diagnostic format serves); the zod runtime is described in [`docs/design-atoms.md`](https://github.com/aotter/mantle/blob/main/docs/design-atoms.md) § "Manifest validation — JSON Schema in, zod at runtime".
 
 ---
 
@@ -217,7 +217,7 @@ from day 1 — manifest authoring stays JSON Schema, but the
 runtime validator a manifest author's request body hits is a
 zod schema, produced by Zod's official `z.fromJSONSchema` importer behind the
 compatibility boundary in
-`@aotter/mantle-spec` (see [`docs/design-atoms.md`](../design-atoms.md) § "Manifest validation — JSON Schema in, zod at runtime").
+`@aotter/mantle-spec` (see [`docs/design-atoms.md`](https://github.com/aotter/mantle/blob/main/docs/design-atoms.md) § "Manifest validation — JSON Schema in, zod at runtime").
 Mantle validates its supported keyword/ref policy before import and emits
 `JSON_SCHEMA_UNSUPPORTED`, `JSON_SCHEMA_REF_INVALID`, or
 `JSON_SCHEMA_LIMIT_EXCEEDED`; Zod owns the accepted keywords' validation

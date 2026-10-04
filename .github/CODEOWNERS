@@ -6,19 +6,8 @@
 * @guyspy
 
 # Engine packages
-/packages/mantle-spec/          @guyspy
-/packages/mantle-runtime/       @guyspy
-/packages/mantle-mcp/           @guyspy
-/packages/mantle-ui/            @guyspy
-/packages/mantle-web/           @guyspy
-/packages/mantle-admin/         @guyspy
-/packages/mantle-admin-ui/      @guyspy
-/packages/mantle-auth/          @guyspy
 /packages/mantle/               @guyspy
-/packages/adapters/bun/         @guyspy
-/packages/adapters/indexeddb/   @guyspy
-/packages/adapters/vercel/      @guyspy
-/packages/adapters/cloudflare/  @guyspy
+/packages/mantle-ui/            @guyspy
 
 # Docs & governance
 /docs/adr/                      @guyspy
@@ -34,4 +23,3 @@
 # CI / release plumbing
 /.github/                       @guyspy
 /scripts/                       @guyspy
-/packages/mantle-host/          @guyspy

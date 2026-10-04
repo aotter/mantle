@@ -1,0 +1,1936 @@
+{
+  "sourceHash": "6f7b8f545325b7c315f51d8a0e0b4d2ffa01132cb4e2969e47fc775f69d37010",
+  "plan": {
+    "version": 6,
+    "dialect": {
+      "name": "@aotter/mantle/d1",
+      "version": "1"
+    },
+    "schemas": {
+      "items": {
+        "name": "items",
+        "title": "Items",
+        "uiSchema": {
+          "list": {
+            "primaryField": "name",
+            "columns": [
+              "sku",
+              "stock"
+            ]
+          }
+        },
+        "publishing": false,
+        "schema": {
+          "type": "object",
+          "required": [
+            "sku",
+            "name",
+            "stock"
+          ],
+          "properties": {
+            "sku": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "priceCents": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "stock": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        },
+        "fields": {
+          "sku": "text",
+          "name": "text",
+          "pricecents": "integer",
+          "stock": "integer"
+        },
+        "names": {
+          "sku": "sku",
+          "name": "name",
+          "pricecents": "priceCents",
+          "stock": "stock"
+        },
+        "search": [
+          "name",
+          "sku"
+        ],
+        "unique": [
+          [
+            "sku"
+          ]
+        ],
+        "checks": [
+          {
+            "A_Expr": {
+              "kind": "AEXPR_OP",
+              "name": [
+                {
+                  "String": {
+                    "sval": ">="
+                  }
+                }
+              ],
+              "lexpr": {
+                "ColumnRef": {
+                  "fields": [
+                    {
+                      "String": {
+                        "sval": "stock"
+                      }
+                    }
+                  ]
+                }
+              },
+              "rexpr": {
+                "A_Const": {
+                  "ival": {}
+                }
+              }
+            }
+          }
+        ]
+      },
+      "orders": {
+        "name": "orders",
+        "title": "Orders",
+        "uiSchema": {
+          "list": {
+            "primaryField": "itemId",
+            "columns": [
+              "qty",
+              "orderStatus"
+            ]
+          }
+        },
+        "scope": "owner",
+        "publishing": false,
+        "schema": {
+          "type": "object",
+          "required": [
+            "owner",
+            "itemId",
+            "qty",
+            "orderStatus"
+          ],
+          "properties": {
+            "owner": {
+              "type": "string"
+            },
+            "itemId": {
+              "type": "string"
+            },
+            "qty": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "orderStatus": {
+              "type": "string",
+              "enum": [
+                "placed",
+                "cancelled"
+              ]
+            },
+            "placedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "fields": {
+          "owner": "text",
+          "itemid": "text",
+          "qty": "integer",
+          "orderstatus": "text",
+          "placedat": "timestamptz"
+        },
+        "names": {
+          "owner": "owner",
+          "itemid": "itemId",
+          "qty": "qty",
+          "orderstatus": "orderStatus",
+          "placedat": "placedAt"
+        },
+        "indexes": [
+          [
+            "owner"
+          ]
+        ]
+      },
+      "activity": {
+        "name": "activity",
+        "title": "Activity",
+        "publishing": false,
+        "schema": {
+          "type": "object",
+          "required": [
+            "kind",
+            "subject"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        },
+        "fields": {
+          "kind": "text",
+          "subject": "text",
+          "detail": "text"
+        },
+        "names": {
+          "kind": "kind",
+          "subject": "subject",
+          "detail": "detail"
+        }
+      }
+    },
+    "views": {
+      "catalog": {
+        "grammar": 180004,
+        "stmts": [
+          {
+            "SelectStmt": {
+              "targetList": [
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "id"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "sku"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "name"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "pricecents"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "stock"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "fromClause": [
+                {
+                  "RangeVar": {
+                    "relname": "items",
+                    "inh": true,
+                    "relpersistence": "p",
+                    "mantle": "table"
+                  }
+                }
+              ],
+              "sortClause": [
+                {
+                  "SortBy": {
+                    "node": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "name"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "sortby_dir": "SORTBY_DEFAULT",
+                    "sortby_nulls": "SORTBY_NULLS_DEFAULT"
+                  }
+                }
+              ],
+              "limitOption": "LIMIT_OPTION_DEFAULT",
+              "op": "SETOP_NONE"
+            }
+          }
+        ],
+        "columns": {
+          "sku": {
+            "schema": "items",
+            "field": "sku"
+          },
+          "name": {
+            "schema": "items",
+            "field": "name"
+          },
+          "pricecents": {
+            "schema": "items",
+            "field": "pricecents"
+          },
+          "stock": {
+            "schema": "items",
+            "field": "stock"
+          }
+        },
+        "inputs": {},
+        "source": "SELECT id, sku, name, priceCents, stock FROM items ORDER BY name",
+        "surface": "public"
+      },
+      "search-items": {
+        "grammar": 180004,
+        "stmts": [
+          {
+            "SelectStmt": {
+              "targetList": [
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "i"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "id"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "i"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "name"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "i"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "stock"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "fromClause": [
+                {
+                  "RangeVar": {
+                    "relname": "items",
+                    "inh": true,
+                    "relpersistence": "p",
+                    "alias": {
+                      "aliasname": "i"
+                    },
+                    "mantle": "table"
+                  }
+                }
+              ],
+              "whereClause": {
+                "FuncCall": {
+                  "funcname": [
+                    {
+                      "String": {
+                        "sval": "mantle"
+                      }
+                    },
+                    {
+                      "String": {
+                        "sval": "search"
+                      }
+                    }
+                  ],
+                  "args": [
+                    {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "i"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "input"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "q"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "funcformat": "COERCE_EXPLICIT_CALL"
+                }
+              },
+              "sortClause": [
+                {
+                  "SortBy": {
+                    "node": {
+                      "FuncCall": {
+                        "funcname": [
+                          {
+                            "String": {
+                              "sval": "mantle"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "search_rank"
+                            }
+                          }
+                        ],
+                        "args": [
+                          {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "i"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ],
+                        "funcformat": "COERCE_EXPLICIT_CALL"
+                      }
+                    },
+                    "sortby_dir": "SORTBY_DEFAULT",
+                    "sortby_nulls": "SORTBY_NULLS_DEFAULT"
+                  }
+                },
+                {
+                  "SortBy": {
+                    "node": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "i"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "name"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "sortby_dir": "SORTBY_DEFAULT",
+                    "sortby_nulls": "SORTBY_NULLS_DEFAULT"
+                  }
+                }
+              ],
+              "limitOption": "LIMIT_OPTION_DEFAULT",
+              "op": "SETOP_NONE"
+            }
+          }
+        ],
+        "columns": {
+          "name": {
+            "schema": "items",
+            "field": "name"
+          },
+          "stock": {
+            "schema": "items",
+            "field": "stock"
+          }
+        },
+        "inputs": {
+          "q": "text"
+        },
+        "input": {
+          "type": "object",
+          "required": [
+            "q"
+          ],
+          "properties": {
+            "q": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "source": "SELECT i.id, i.name, i.stock FROM items i\nWHERE mantle.search(i, input.q)\nORDER BY mantle.search_rank(i), i.name\n",
+        "surface": "public"
+      },
+      "my-orders": {
+        "grammar": 180004,
+        "stmts": [
+          {
+            "SelectStmt": {
+              "targetList": [
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "o"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "id"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "o"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "qty"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "o"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "orderstatus"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "name": "item",
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "i"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "name"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "o"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "version"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "fromClause": [
+                {
+                  "JoinExpr": {
+                    "jointype": "JOIN_INNER",
+                    "larg": {
+                      "RangeVar": {
+                        "relname": "orders",
+                        "inh": true,
+                        "relpersistence": "p",
+                        "alias": {
+                          "aliasname": "o"
+                        },
+                        "mantle": "table"
+                      }
+                    },
+                    "rarg": {
+                      "RangeVar": {
+                        "relname": "items",
+                        "inh": true,
+                        "relpersistence": "p",
+                        "alias": {
+                          "aliasname": "i"
+                        },
+                        "mantle": "table"
+                      }
+                    },
+                    "quals": {
+                      "A_Expr": {
+                        "kind": "AEXPR_OP",
+                        "name": [
+                          {
+                            "String": {
+                              "sval": "="
+                            }
+                          }
+                        ],
+                        "lexpr": {
+                          "ColumnRef": {
+                            "fields": [
+                              {
+                                "String": {
+                                  "sval": "i"
+                                }
+                              },
+                              {
+                                "String": {
+                                  "sval": "id"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "rexpr": {
+                          "ColumnRef": {
+                            "fields": [
+                              {
+                                "String": {
+                                  "sval": "o"
+                                }
+                              },
+                              {
+                                "String": {
+                                  "sval": "itemid"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ],
+              "sortClause": [
+                {
+                  "SortBy": {
+                    "node": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "o"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "created_at"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "sortby_dir": "SORTBY_DESC",
+                    "sortby_nulls": "SORTBY_NULLS_DEFAULT"
+                  }
+                }
+              ],
+              "limitOption": "LIMIT_OPTION_DEFAULT",
+              "op": "SETOP_NONE"
+            }
+          }
+        ],
+        "columns": {
+          "qty": {
+            "schema": "orders",
+            "field": "qty"
+          },
+          "orderstatus": {
+            "schema": "orders",
+            "field": "orderstatus"
+          },
+          "item": {
+            "schema": "items",
+            "field": "name"
+          }
+        },
+        "inputs": {},
+        "source": "SELECT o.id, o.qty, o.orderStatus, i.name AS item, o.version\nFROM orders o JOIN items i ON i.id = o.itemId\nORDER BY o.created_at DESC\n",
+        "surface": "public",
+        "requires": {
+          "auth": {
+            "all": [
+              "ctx.user"
+            ]
+          }
+        }
+      },
+      "sales-by-item": {
+        "grammar": 180004,
+        "stmts": [
+          {
+            "SelectStmt": {
+              "targetList": [
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "i"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "name"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "name": "orders",
+                    "val": {
+                      "FuncCall": {
+                        "funcname": [
+                          {
+                            "String": {
+                              "sval": "count"
+                            }
+                          }
+                        ],
+                        "args": [
+                          {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "o"
+                                  }
+                                },
+                                {
+                                  "String": {
+                                    "sval": "id"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ],
+                        "funcformat": "COERCE_EXPLICIT_CALL"
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "name": "units",
+                    "val": {
+                      "CoalesceExpr": {
+                        "args": [
+                          {
+                            "FuncCall": {
+                              "funcname": [
+                                {
+                                  "String": {
+                                    "sval": "sum"
+                                  }
+                                }
+                              ],
+                              "args": [
+                                {
+                                  "ColumnRef": {
+                                    "fields": [
+                                      {
+                                        "String": {
+                                          "sval": "o"
+                                        }
+                                      },
+                                      {
+                                        "String": {
+                                          "sval": "qty"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ],
+                              "funcformat": "COERCE_EXPLICIT_CALL"
+                            }
+                          },
+                          {
+                            "A_Const": {
+                              "ival": {}
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "fromClause": [
+                {
+                  "JoinExpr": {
+                    "jointype": "JOIN_LEFT",
+                    "larg": {
+                      "RangeVar": {
+                        "relname": "items",
+                        "inh": true,
+                        "relpersistence": "p",
+                        "alias": {
+                          "aliasname": "i"
+                        },
+                        "mantle": "table"
+                      }
+                    },
+                    "rarg": {
+                      "RangeVar": {
+                        "relname": "orders",
+                        "inh": true,
+                        "relpersistence": "p",
+                        "alias": {
+                          "aliasname": "o"
+                        },
+                        "mantle": "table"
+                      }
+                    },
+                    "quals": {
+                      "BoolExpr": {
+                        "boolop": "AND_EXPR",
+                        "args": [
+                          {
+                            "A_Expr": {
+                              "kind": "AEXPR_OP",
+                              "name": [
+                                {
+                                  "String": {
+                                    "sval": "="
+                                  }
+                                }
+                              ],
+                              "lexpr": {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "o"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "itemid"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "rexpr": {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "i"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "id"
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "A_Expr": {
+                              "kind": "AEXPR_OP",
+                              "name": [
+                                {
+                                  "String": {
+                                    "sval": "="
+                                  }
+                                }
+                              ],
+                              "lexpr": {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "o"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "orderstatus"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "rexpr": {
+                                "A_Const": {
+                                  "sval": {
+                                    "sval": "placed"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "groupClause": [
+                {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "String": {
+                          "sval": "i"
+                        }
+                      },
+                      {
+                        "String": {
+                          "sval": "name"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "sortClause": [
+                {
+                  "SortBy": {
+                    "node": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "units"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "sortby_dir": "SORTBY_DESC",
+                    "sortby_nulls": "SORTBY_NULLS_DEFAULT"
+                  }
+                },
+                {
+                  "SortBy": {
+                    "node": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "i"
+                            }
+                          },
+                          {
+                            "String": {
+                              "sval": "name"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "sortby_dir": "SORTBY_DEFAULT",
+                    "sortby_nulls": "SORTBY_NULLS_DEFAULT"
+                  }
+                }
+              ],
+              "limitOption": "LIMIT_OPTION_DEFAULT",
+              "op": "SETOP_NONE"
+            }
+          }
+        ],
+        "columns": {
+          "name": {
+            "schema": "items",
+            "field": "name"
+          }
+        },
+        "inputs": {},
+        "source": "SELECT i.name, count(o.id) AS orders, coalesce(sum(o.qty), 0) AS units\nFROM items i LEFT JOIN orders o ON o.itemId = i.id AND o.orderStatus = 'placed'\nGROUP BY i.name\nORDER BY units DESC, i.name\n",
+        "surface": "staff",
+        "requires": {
+          "auth": {
+            "all": [
+              {
+                "ctx.staff": [
+                  "owner",
+                  "editor"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "recent-activity": {
+        "grammar": 180004,
+        "stmts": [
+          {
+            "SelectStmt": {
+              "targetList": [
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "kind"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "subject"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "ResTarget": {
+                    "val": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "detail"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "fromClause": [
+                {
+                  "RangeVar": {
+                    "relname": "activity",
+                    "inh": true,
+                    "relpersistence": "p",
+                    "mantle": "table"
+                  }
+                }
+              ],
+              "sortClause": [
+                {
+                  "SortBy": {
+                    "node": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "created_at"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "sortby_dir": "SORTBY_DESC",
+                    "sortby_nulls": "SORTBY_NULLS_DEFAULT"
+                  }
+                }
+              ],
+              "limitCount": {
+                "A_Const": {
+                  "ival": {
+                    "ival": 50
+                  }
+                }
+              },
+              "limitOption": "LIMIT_OPTION_COUNT",
+              "op": "SETOP_NONE"
+            }
+          }
+        ],
+        "columns": {
+          "kind": {
+            "schema": "activity",
+            "field": "kind"
+          },
+          "subject": {
+            "schema": "activity",
+            "field": "subject"
+          },
+          "detail": {
+            "schema": "activity",
+            "field": "detail"
+          }
+        },
+        "inputs": {},
+        "source": "SELECT kind, subject, detail FROM activity ORDER BY created_at DESC LIMIT 50",
+        "surface": "staff",
+        "requires": {
+          "auth": {
+            "all": [
+              {
+                "ctx.staff": [
+                  "owner",
+                  "editor"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "procedures": {
+      "place-order": {
+        "title": "Place an order",
+        "description": "Order one item for the signed-in caller; the stock check fails the whole order when stock runs out.",
+        "input": {
+          "type": "object",
+          "required": [
+            "itemId",
+            "qty"
+          ],
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "qty": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "output": {
+          "type": "object"
+        },
+        "inputs": {
+          "itemid": "text",
+          "qty": "integer"
+        },
+        "requires": {
+          "auth": {
+            "all": [
+              "ctx.user"
+            ]
+          }
+        },
+        "target": {
+          "schema": "items",
+          "id": "itemId"
+        },
+        "handler": {
+          "sql": {
+            "grammar": 180004,
+            "stmts": [
+              {
+                "InsertStmt": {
+                  "relation": {
+                    "relname": "orders",
+                    "inh": true,
+                    "relpersistence": "p",
+                    "mantle": "table"
+                  },
+                  "cols": [
+                    {
+                      "ResTarget": {
+                        "name": "itemid"
+                      }
+                    },
+                    {
+                      "ResTarget": {
+                        "name": "qty"
+                      }
+                    },
+                    {
+                      "ResTarget": {
+                        "name": "orderstatus"
+                      }
+                    },
+                    {
+                      "ResTarget": {
+                        "name": "placedat"
+                      }
+                    }
+                  ],
+                  "selectStmt": {
+                    "SelectStmt": {
+                      "targetList": [
+                        {
+                          "ResTarget": {
+                            "val": {
+                              "ColumnRef": {
+                                "fields": [
+                                  {
+                                    "String": {
+                                      "sval": "id"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "ResTarget": {
+                            "val": {
+                              "ColumnRef": {
+                                "fields": [
+                                  {
+                                    "String": {
+                                      "sval": "input"
+                                    }
+                                  },
+                                  {
+                                    "String": {
+                                      "sval": "qty"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "ResTarget": {
+                            "val": {
+                              "A_Const": {
+                                "sval": {
+                                  "sval": "placed"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "ResTarget": {
+                            "val": {
+                              "FuncCall": {
+                                "funcname": [
+                                  {
+                                    "String": {
+                                      "sval": "now"
+                                    }
+                                  }
+                                ],
+                                "funcformat": "COERCE_EXPLICIT_CALL"
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "fromClause": [
+                        {
+                          "RangeVar": {
+                            "relname": "items",
+                            "inh": true,
+                            "relpersistence": "p",
+                            "mantle": "table"
+                          }
+                        }
+                      ],
+                      "whereClause": {
+                        "A_Expr": {
+                          "kind": "AEXPR_OP",
+                          "name": [
+                            {
+                              "String": {
+                                "sval": "="
+                              }
+                            }
+                          ],
+                          "lexpr": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "id"
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "rexpr": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "input"
+                                  }
+                                },
+                                {
+                                  "String": {
+                                    "sval": "itemid"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "limitOption": "LIMIT_OPTION_DEFAULT",
+                      "op": "SETOP_NONE"
+                    }
+                  },
+                  "returningClause": {
+                    "exprs": [
+                      {
+                        "ResTarget": {
+                          "val": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "id"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "ResTarget": {
+                          "val": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "qty"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "ResTarget": {
+                          "val": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "orderstatus"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "override": "OVERRIDING_NOT_SET"
+                }
+              },
+              {
+                "UpdateStmt": {
+                  "relation": {
+                    "relname": "items",
+                    "inh": true,
+                    "relpersistence": "p",
+                    "mantle": "table"
+                  },
+                  "targetList": [
+                    {
+                      "ResTarget": {
+                        "name": "stock",
+                        "val": {
+                          "A_Expr": {
+                            "kind": "AEXPR_OP",
+                            "name": [
+                              {
+                                "String": {
+                                  "sval": "-"
+                                }
+                              }
+                            ],
+                            "lexpr": {
+                              "ColumnRef": {
+                                "fields": [
+                                  {
+                                    "String": {
+                                      "sval": "stock"
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "rexpr": {
+                              "ColumnRef": {
+                                "fields": [
+                                  {
+                                    "String": {
+                                      "sval": "input"
+                                    }
+                                  },
+                                  {
+                                    "String": {
+                                      "sval": "qty"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "whereClause": {
+                    "A_Expr": {
+                      "kind": "AEXPR_OP",
+                      "name": [
+                        {
+                          "String": {
+                            "sval": "="
+                          }
+                        }
+                      ],
+                      "lexpr": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "id"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "rexpr": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "input"
+                              }
+                            },
+                            {
+                              "String": {
+                                "sval": "itemid"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "source": "INSERT INTO orders (itemId, qty, orderStatus, placedAt)\nSELECT id, input.qty, 'placed', now() FROM items WHERE id = input.itemId\nRETURNING id, qty, orderStatus;\nUPDATE items SET stock = stock - input.qty WHERE id = input.itemId\n"
+        }
+      },
+      "cancel-order": {
+        "title": "Cancel an order",
+        "input": {
+          "type": "object",
+          "required": [
+            "orderId",
+            "expectedVersion"
+          ],
+          "properties": {
+            "orderId": {
+              "type": "string"
+            },
+            "expectedVersion": {
+              "type": "integer"
+            }
+          }
+        },
+        "output": {
+          "type": "object"
+        },
+        "inputs": {
+          "orderid": "text",
+          "expectedversion": "integer"
+        },
+        "requires": {
+          "auth": {
+            "all": [
+              "ctx.user"
+            ]
+          }
+        },
+        "handler": {
+          "ref": "cancelOrder"
+        }
+      },
+      "restock": {
+        "title": "Restock an item",
+        "description": "Add stock to an item by SKU, creating the item if it is new.",
+        "input": {
+          "type": "object",
+          "required": [
+            "sku",
+            "name",
+            "qty"
+          ],
+          "properties": {
+            "sku": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "qty": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "output": {
+          "type": "object"
+        },
+        "inputs": {
+          "sku": "text",
+          "name": "text",
+          "qty": "integer"
+        },
+        "requires": {
+          "auth": {
+            "all": [
+              {
+                "ctx.staff": [
+                  "owner",
+                  "editor"
+                ]
+              }
+            ]
+          }
+        },
+        "handler": {
+          "sql": {
+            "grammar": 180004,
+            "stmts": [
+              {
+                "InsertStmt": {
+                  "relation": {
+                    "relname": "items",
+                    "inh": true,
+                    "relpersistence": "p",
+                    "mantle": "table"
+                  },
+                  "cols": [
+                    {
+                      "ResTarget": {
+                        "name": "sku"
+                      }
+                    },
+                    {
+                      "ResTarget": {
+                        "name": "name"
+                      }
+                    },
+                    {
+                      "ResTarget": {
+                        "name": "stock"
+                      }
+                    }
+                  ],
+                  "selectStmt": {
+                    "SelectStmt": {
+                      "valuesLists": [
+                        {
+                          "List": {
+                            "items": [
+                              {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "input"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "sku"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "input"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "name"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "input"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "qty"
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ],
+                      "limitOption": "LIMIT_OPTION_DEFAULT",
+                      "op": "SETOP_NONE"
+                    }
+                  },
+                  "onConflictClause": {
+                    "action": "ONCONFLICT_UPDATE",
+                    "infer": {
+                      "indexElems": [
+                        {
+                          "IndexElem": {
+                            "name": "sku",
+                            "ordering": "SORTBY_DEFAULT",
+                            "nulls_ordering": "SORTBY_NULLS_DEFAULT"
+                          }
+                        }
+                      ]
+                    },
+                    "targetList": [
+                      {
+                        "ResTarget": {
+                          "name": "stock",
+                          "val": {
+                            "A_Expr": {
+                              "kind": "AEXPR_OP",
+                              "name": [
+                                {
+                                  "String": {
+                                    "sval": "+"
+                                  }
+                                }
+                              ],
+                              "lexpr": {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "items"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "stock"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "rexpr": {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "excluded"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "stock"
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "returningClause": {
+                    "exprs": [
+                      {
+                        "ResTarget": {
+                          "val": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "id"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "ResTarget": {
+                          "val": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "sku"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "ResTarget": {
+                          "val": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "stock"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "override": "OVERRIDING_NOT_SET"
+                }
+              }
+            ]
+          },
+          "source": "INSERT INTO items (sku, name, stock) VALUES (input.sku, input.name, input.qty)\nON CONFLICT (sku) DO UPDATE SET stock = items.stock + EXCLUDED.stock\nRETURNING id, sku, stock\n"
+        }
+      },
+      "record-orders": {
+        "input": {
+          "type": "object"
+        },
+        "output": {
+          "type": "object"
+        },
+        "inputs": {},
+        "handler": {
+          "ref": "recordOrders"
+        }
+      },
+      "weekly-digest": {
+        "input": {
+          "type": "object"
+        },
+        "output": {
+          "type": "object"
+        },
+        "inputs": {},
+        "handler": {
+          "ref": "weeklyDigest"
+        }
+      }
+    },
+    "triggers": {
+      "place-order-http": {
+        "source": {
+          "kind": "http",
+          "method": "POST",
+          "path": "/api/orders"
+        },
+        "procedure": "place-order"
+      },
+      "place-order-mcp": {
+        "source": {
+          "kind": "mcp",
+          "surface": "public"
+        },
+        "procedure": "place-order"
+      },
+      "cancel-order-http": {
+        "source": {
+          "kind": "http",
+          "method": "POST",
+          "path": "/api/orders/cancel"
+        },
+        "procedure": "cancel-order"
+      },
+      "restock-mcp": {
+        "source": {
+          "kind": "mcp",
+          "surface": "staff"
+        },
+        "procedure": "restock"
+      },
+      "orders-recorded": {
+        "source": {
+          "kind": "lifecycle",
+          "schema": "orders",
+          "on": [
+            "after_create",
+            "after_update"
+          ]
+        },
+        "procedure": "record-orders"
+      },
+      "weekly-digest": {
+        "source": {
+          "kind": "schedule",
+          "cron": "0 3 * * 0"
+        },
+        "procedure": "weekly-digest"
+      }
+    },
+    "fingerprint": "e3e18eb517297a5fe1ed9b4ba182271694858f261e20026f22f2e8615751ce56"
+  }
+}

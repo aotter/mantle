@@ -1,0 +1,28 @@
+import type { ParsedManifestSet } from "../../domain/service/ManifestParser.js";
+
+/**
+ * Input to the manifest validation use case (Loop 1 of the SDK
+ * authoring contract — ADR-0007). Loose primitives stay out per the
+ * clean-arch DTO rule; everything the use case needs is named here.
+ */
+export interface ValidateManifestsRequest {
+  readonly parsed: ParsedManifestSet;
+  /** Optional site config locales for the locale-vs-Schema consistency
+   *  check (ADR-0010). Validate-from-CLI flows leave this absent
+   *  (CLI can't reach the runtime DB); boot always passes it. */
+  readonly siteLocales?: ReadonlyArray<string>;
+  /** Advisory checks on MCP-surfaced Procedure inputs (#971). Core ships
+   *  the defaults; a downstream decides its own thresholds. `false`
+   *  disables the whole group. */
+  readonly mcpInput?: false | McpInputCheckOptions;
+}
+
+export interface McpInputCheckOptions {
+  /** Warn on a top-level `oneOf` input; the message names any branch-only
+   *  required fields hidden behind the advertised `required` (default `true`). */
+  readonly unionAmbiguity?: boolean;
+  /** Warn on array inputs whose `maxItems` exceeds this bound or is
+   *  undeclared, and on free-form object inputs (default `100`;
+   *  `null` disables the size check). */
+  readonly maxArrayItems?: number | null;
+}

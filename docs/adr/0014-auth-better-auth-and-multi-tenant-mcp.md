@@ -439,7 +439,7 @@ and `ADMIN_GITHUB_LOGIN`; it does not use Platform Account OIDC, a client
 secret, or an owner email handoff. The local provider id remains `github`.
 The wire contract remains in [Platform #35](https://github.com/aotter/mantle-platform/issues/35),
 and the product boundary is documented in
-[`docs/auth-hosting-model.md`](../auth-hosting-model.md).
+[`docs/auth-hosting-model.md`](https://github.com/aotter/mantle/blob/main/docs/auth-hosting-model.md).
 
 This does not change ADR-0014's core rule: Mantle does not expose an
 un-curated `betterAuthOptions` or `advanced` passthrough. Missing Better
@@ -521,7 +521,7 @@ every `tools/call`. MCP does not promise to accept a raw REST API key/PAT.
 Dynamic membership, billing, and entitlement state remains consumer-owned.
 `requires.guard.procedure` orchestrates a site handler on every invocation but
 does not introduce a Policy atom or an entitlement service. See
-[`API and MCP authorization`](../api-mcp-authorization.md) for the public API
+[Guarded API access](../examples/guarded-api.md) for the public API
 and end-to-end examples.
 
 ## Amendment — 2026-08-22: Better Auth 1.7 MCP and CIMD convergence
@@ -898,3 +898,22 @@ Boundaries that stay:
   `verifyOAuthAccessToken`, DPoP binding and the MCP challenge are unchanged.
 - No other Better Auth field gains a passthrough by this amendment. The
   2026-05-14 test still applies to the next proposal.
+
+## 2026-10-02 amendment — a surface with no anonymous tool challenges at connect
+
+The 2026-09-21 amendment kept anonymous `initialize` and `tools/list` open on the public surface and moved the `401` to
+the first `tools/call` that needs identity. MCP clients do not all follow that: several decide whether to run OAuth from
+the connect step alone (an anonymous `initialize` that succeeds means "no sign-in"), so a surface whose every tool needs
+identity never showed them a sign-in. Better Auth's `withMcpAuth` and the MCP SDK's `requireBearerAuth` both challenge
+every unauthenticated request for the same reason.
+
+- A surface is **closed** when none of its tools may be called anonymously: every tool's `requires.auth.all` names at least
+  one predicate (each of `ctx.user`, `ctx.auth`, `ctx.staff`, `ctx.auth.scope` needs an identity). The staff surface is
+  always closed; a public surface with no tools is open, since nothing on it needs a sign-in.
+- On a closed surface every anonymous request (`initialize`, `tools/list`, the SSE `GET`) answers `401` with the RFC 9728
+  `WWW-Authenticate` challenge, as the staff surface already did. The challenge names the surface's scope floor
+  (`scope="mcp"` by default), so the first authorization already asks for it.
+- A surface with at least one tool anonymous may call keeps the 2026-09-21 behaviour: discovery stays open and the first
+  `tools/call` that needs identity answers `401`.
+- Nothing is configured: the rule follows from the plan, so a project that adds a public tool reopens discovery by
+  declaring it.

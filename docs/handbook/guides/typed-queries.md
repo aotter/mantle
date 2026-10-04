@@ -1,26 +1,34 @@
 ---
-description: Generate wire-keyed Store types, call named Views, and distinguish trusted Store reads from authorized public reads.
+description: Read and write through the typed Store from handlers and service code, call named Views, and choose between ctx.store, runtime.store and runtime.store.as(caller).
 ---
 # Query from TypeScript
 
-Use a **View** when a read needs declared params, projection, pagination or
-`requires` authorization. Use an **entry reader** for trusted host code that
-needs stored entries by a data field. The generated Store map types the Schema and View wire names; only the View
-executes the declared View authorization contract.
+Handler and service code reach Mantle-owned rows only through Store. The
+generated `.mantle/generated/mantle.ts` types it over your Schemas and Views:
+`ctx.store` in a `MantleHandlers` handler is its `CallerStore`, while
+`runtime.store` is the untyped `MantleStore` until you cast it to the
+generated `Store`.
 
-## Declare an internal query
+| Store | Where | Scope |
+|---|---|---|
+| `ctx.store` | inside a `ref` handler | bound to the invocation's caller. A guard or a before hook gets a read-only one |
+| `runtime.store.as(caller)` | service code that has resolved a caller | that caller |
+| `runtime.store` | trusted host code (imports, maintenance) | none: no caller scope. TTL still applies |
 
-Save this complete source as `manifests/tickets.yaml`. The operational Schema
-uses a business status field distinct from Mantle's native `status`.
+Each one applies TTL visibility, and published-only on public Views. Only
+`runtime.store` skips caller scope, so never hand it a request's input
+unchecked.
+
+## Declare an internal View
 
 ```yaml
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
-metadata:
-  name: tickets
+metadata: { name: tickets }
 spec:
   title: Tickets
   lifecycle: operational
+  indexes: [[ticketState]]
   schema:
     type: object
     additionalProperties: false
@@ -28,128 +36,120 @@ spec:
     properties:
       subject: { type: string }
       ticketState: { type: string, enum: [open, closed] }
-  indexes: [[ticketState]]
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
-metadata:
-  name: tickets-by-state
+metadata: { name: tickets-by-state }
 spec:
   surface: internal
-  from: tickets
-  fields: [id, subject, ticketState]
-  filter:
-    eq: { field: ticketState, value: { $param: ticketState } }
-  params:
+  input:
     type: object
     additionalProperties: false
     required: [ticketState]
     properties:
       ticketState: { type: string, enum: [open, closed] }
-  limit: 50
+  sql: |
+    SELECT id, subject, ticketState FROM tickets
+    WHERE ticketState = input.ticketState
+    ORDER BY created_at DESC LIMIT 50
 ```
 
-```sh
-pnpm exec mantle validate --no-source
-pnpm exec mantle generate
-pnpm exec mantle generate --check
-```
+`internal` keeps the View off REST, MCP and Admin. It is still in the plan and
+the typed Store. It is not a security bypass: a `requires` on it is checked
+for the caller the Store is bound to.
 
-`internal` keeps this query out of REST routes, OpenAPI, MCP/WebMCP catalogs and
-Admin reports. It remains in the plan and Store type map. It is not a
-security bypass: adding `requires` evaluates the same authorization and guards
-against the host-supplied `ctx` on every call. No `uiSchema` or shared HTTP
-cache is allowed for an internal View.
-
-## Call with wire names
-
-The generated module exports a sealed `plan` plus `Schemas`, `Views`, and
-`Store` type maps. Host code boots that plan once and uses the same
-`runtime.store` object for typed reads and writes:
+## Call it
 
 ```ts
-import type { MantleRuntime } from "@aotter/mantle/runtime";
-import { plan } from "../.mantle/generated/mantle.js";
-import type { Store } from "../.mantle/generated/mantle.js";
+import type { MantleHandlers } from "../.mantle/generated/mantle.js";
 
-export async function openTickets(runtime: MantleRuntime) {
-  if (runtime.revision !== plan.semanticFingerprint) {
-    throw new Error("Generated Store types do not match this runtime revision.");
-  }
-  const store = runtime.store as Store;
-  const result = await store.view("tickets-by-state", {
-    params: { ticketState: "open" },
-    page: 1,
-    show: 20,
-  });
-  return result.rows;
-}
+export const handlers: MantleHandlers = {
+  closeStale: async (_input, ctx) => {
+    const { rows, nextCursor } = await ctx.store.view("tickets-by-state", { input: { ticketState: "open" }, limit: 20 });
+    // rows: { id: unknown; subject: string | null; ticketState: "open" | "closed" | null }[]
+    return { open: rows.length, more: nextCursor !== undefined };
+  },
+};
 ```
 
-The wire name remains `tickets-by-state`; no lower-camel name is generated.
-Check the runtime revision before asserting generated types on a host-owned
-runtime. Booting directly with the generated `plan` provides the same match.
-Required params are checked by TypeScript and Runtime validates the values.
-`show` remains capped by the View's `limit`. A View with `requires` still
-needs a verified caller context; invoke it through
-`runtime.store.as(ctx).view(view, options)`.
+The View name, its `input` and its row type are checked by `tsc`. A staff View
+with `uiSchema.list.searchFields` or `filterFields` also takes `search` and
+`filters` (`ctx.store.view(name, { search: "refund", filters: { ticketState: "open" } })`);
+Store refuses a filter the View does not declare. An output that reads a
+Schema field unchanged has that field's type, `created_at` and `updated_at`
+are `string | null`, and an expression, or another native column such as `id`,
+is `unknown`. Page with `limit` (default 50, at most 500) and the opaque
+`cursor` from `nextCursor`.
 
-To boot from generated code, pass its `plan` and typed `MantleHandlers` to
-`bootMantleRuntime({ plan, storage, handlers, ports })`. Host code owns
-connection lifetime and retries.
+## `select` and `write`
 
-## What is typed
-
-| Query form | Generated shape | Limit |
-|---|---|---|
-| Declarative View | `Mantle.ViewParams_<name>` and `Mantle.ViewRow_<name>` | Projection follows `fields`; native columns have their native types. Data properties remain optional in the row type. |
-| SQL View | Typed params; row type `unknown` | The generator does not infer SQL expressions or aliases. Narrow/validate rows in host code. |
-| Store select/write | `Store`, `Schemas` | Schema wire names and insert/update values are typed; Runtime still validates Store queries. |
-| Dynamic Runtime call | `runtime.store.as(ctx).view(view, options)` | Useful without codegen; supplying a generic row type is the caller's assertion, not SQL validation. |
-
-Without `fields`, a declarative View includes native entry columns and Schema
-properties. Use explicit projections on exposed reads. Public declarative
-Views over publishing Schemas inject `status = published`; internal/staff
-Views and SQL statements do not. See [View reference](../reference/view.md).
-
-## Store reads
-
-For the Schema above, use Store. Legacy `runtime.entries` readers remain
-available to existing Web/Admin code until the grammar migration:
+For a query that needs no declared View, `select` takes a JSON query over one
+Schema:
 
 ```ts
-const rows = await (runtime.store as Store).select({
+const { rows } = await ctx.store.select({
   from: "tickets",
-  where: { ticketState: "open" },
+  columns: ["id", "subject"],
+  where: { ticketState: "open", subject: { like: "%refund%" } },
+  orderBy: { updatedAt: "desc" },
   limit: 20,
 });
-// rows.rows[n] is a flat Store row.
 ```
 
-Trusted host Store reads include every lifecycle status and do not evaluate a
-View's `requires` or public visibility. Use a public View for untrusted callers.
-Declare an index whose leftmost field matches a frequent lookup. The old
-`runtime.entries` methods remain for existing Web/Admin code, but generated
-per-Schema wrappers are gone.
+- `where`: `{ column: value }` is equality and sibling keys are AND; also
+  `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`, and
+  `and`, `or`, `not`. `in` takes a list or `{ select, from, where }`.
+- `orderBy`: one column; `id` breaks ties. Default `{ updatedAt: "desc" }`.
+- `search`: text matched against `searchableFields` (and `id`).
+- Native columns are camelCase here (`createdAt`, `authorId`), while SQL spells
+  them snake_case (`created_at`).
 
-## Generate from an existing plan
-
-A build tool that already compiled a sealed plan can use the pure emitter:
+`write` applies every operation or none, in order:
 
 ```ts
-import { emitMantleModule } from "@aotter/mantle/codegen";
-
-const emitted = emitMantleModule({ plan });
-if (!emitted.ok) throw new Error(emitted.diagnostics.map(d => d.message).join("\n"));
-// Write emitted.source to your generated module in the build step.
+await ctx.store.write([
+  { update: "tickets", set: { ticketState: "closed" }, where: { id }, lock: expectedVersion },
+  { insert: "ticket-events", values: { ticketId: id, kind: "closed" } },
+]);
 ```
 
-Pass either `{ plan }` or `{ linked }`, never both. The plan form avoids
-reparsing YAML and preserves the same generated type maps. The emitter does no I/O, asset copying, storage preparation or caching.
+- `insert` with `values`, optional client `id` (`ctx.store.id()`) and
+  `onConflict: "ignore" | { columns, update }`. A scoped Schema refuses a
+  client `id`, because a chosen id could collide with another owner's row and
+  reveal it: give such rows a field of your own that is unique with the scope
+  field (`uniqueIndexes: [[owner, clientKey]]`) when other rows of the same
+  write must point at them, or when a retry must find them.
+- `update` with `set` and `where`; `delete` with `where`. A `where` that pins
+  `id` is a row op: it may carry `lock` (the version the caller saw), and
+  writing no row is `CONFLICT`.
+- A result is `{ id, version }` for a row op and `{ affected }` for a set op.
+- `set` and `values` never name the scope field or a native column (except
+  `status` on a `publishing` Schema, below); Store
+  fills them. A `null` leaves empty, or clears, a field the Schema does not
+  require (the generated `values` and `set` types accept it); for a required
+  field it is refused. On a `publishing` Schema, `set: { status }` is how a `ref`
+  handler publishes, unpublishes or archives.
 
-## Source
+Failures throw `DiagnosticError` with `INPUT_VALIDATION_FAILED` (including a
+failed `check`), `CONFLICT` (`conflict.reason` is `lock`, `expect` or
+`unique`, and `conflict.opIndex` names the operation; for `unique` it is
+present when exactly one operation of the write targets the violated Schema,
+since the engine names the table and not the statement), `RESOURCE_UNAVAILABLE`
+or `OUTCOME_UNKNOWN`. Nothing is written on any failure. After
+`OUTCOME_UNKNOWN`, retry with the same client ids and locks: a replayed insert
+conflicts on its id, a replayed update on its lock.
 
-- [Binding generator](../../../packages/mantle/src/codegen/emitMantleModule.ts)
-- [Type generator](../../../packages/mantle-spec/src/usecase/EmitTypesUseCase.ts)
-- [Entry reader contract](../../../packages/mantle-runtime/src/domain/port/EntryReader.ts)
-- [View execution](../../../packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts)
+## From service code
+
+The service's `fetch` receives the runtime. Resolve the caller first, as the
+generated `withCaller` does, and bind Store to it:
+
+```ts
+const caller = await resolveCaller(request);
+if (!("caller" in caller)) return new Response("unauthorized", { status: 401 });
+const { rows } = await runtime.store.as(caller.caller).view("tickets-by-state", { input: { ticketState: "open" } });
+```
+
+To run a Procedure from service code, with its auth, guard and validation, call
+`runtime.invokeProcedure({ procedure, input, caller, cause: { kind: "internal", id } })`.
+Inside a handler, `ctx.invoke(name, input)` does the same and keeps the caller.

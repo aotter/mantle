@@ -53,11 +53,11 @@ modules you need.
   signed-in staff session. Remote MCP clients connect through authenticated
   endpoints, with authorization checked on each call.
   [MCP and WebMCP](docs/handbook/concepts/mcp-and-agents.md).
-- **Publishing and discovery.** Add localized HTML and Markdown, draft/publish
-  workflows, `llms.txt`, sitemaps, and search/social metadata.
-  [Publishing example](docs/examples/builtin-publication.md).
-- **Embed in an existing application.** Use validation alone, connect Runtime
-  to your storage, or add Web, Admin, and a host adapter.
+- **Publishing.** Draft/publish workflows, localized content and full-text
+  search, served over REST and MCP.
+  [Publishing example](docs/examples/publication.md).
+- **Embed in an existing application.** Mount the REST, MCP or Admin surface
+  you need inside your own Worker or server entry.
   [Integration choices](#choose-how-much-to-use).
 
 ## Admin for people and agents
@@ -81,11 +81,15 @@ the owning definitions.
 *Developer UI rendered locally from the intake example. The graph describes
 compiled declarations; it does not certify runtime or deployment health.*
 
-| Interface | Where to explore it | Integration guide |
-|---|---|---|
-| HTTP | Admin → Developer → API (`/admin/dev/docs/api`) | [HTTP API](docs/handbook/concepts/procedures-and-triggers.md) |
-| Remote MCP | Admin → Developer → MCP (`/admin/dev/docs/mcp`) | [Endpoints, tools, and authentication](docs/handbook/concepts/mcp-and-agents.md) |
-| Browser WebMCP | Admin → Developer → WebMCP (`/admin/dev/docs/webmcp`) | [Admin and public-page WebMCP](docs/handbook/concepts/mcp-and-agents.md#webmcp-in-the-browser) |
+The generated service serves the console at `/admin` from
+`@aotter/mantle-ui/admin`; this view draws from the owner-only
+`GET /admin/api/developer-console`.
+
+| Interface | Integration guide |
+|---|---|
+| HTTP | [Writes: Procedures, Triggers and hooks](docs/handbook/concepts/procedures-and-triggers.md) |
+| Remote MCP | [Endpoints, tools, and authentication](docs/handbook/concepts/mcp-and-agents.md) |
+| Browser WebMCP | [WebMCP in Admin](docs/handbook/concepts/mcp-and-agents.md#webmcp-in-admin) |
 
 ## A Manifest in practice
 
@@ -93,27 +97,24 @@ An intake application needs request records, a submission action, and a staff
 inbox. Its staff View can be as small as:
 
 ```yaml
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
-metadata:
-  name: recent-requests
+metadata: { name: recent-requests }
 spec:
   title: Recent requests
   surface: staff
-  from: requests
-  fields: [id, name, email, message, submittedAt]
-  orderBy:
-    - { field: submittedAt, direction: desc }
-  limit: 50
+  sql: |
+    SELECT id, name, email, message, created_at FROM requests
+    ORDER BY created_at DESC LIMIT 50
 ```
 
 Together with the `requests` Schema, this defines the read used by the staff
 report and its MCP tool. A Procedure handles submissions, with Triggers choosing
-HTTP and MCP exposure. [Read the complete intake example](docs/examples/builtin-intake.md).
+HTTP and MCP exposure. [Read the complete intake example](docs/examples/intake.md).
 
-For other applications, explore [commerce](docs/examples/builtin-commerce.md),
-[reservations](docs/examples/builtin-reservation.md), and
-[procurement](docs/examples/builtin-procurement.md).
+For other applications, explore [commerce](docs/examples/commerce.md),
+[reservations](docs/examples/reservation.md), and
+[procurement](docs/examples/procurement.md).
 
 ## Get started
 
@@ -133,60 +134,39 @@ editors, plugins, and project instructions.
 
 ### Build it yourself
 
-In 0.1.5, install an exact SDK version, then run `mantle generate --host cf` or
-`mantle generate --host chatgpt-sites`. By default, it assembles Spec,
-Runtime, API, MCP, Admin and an editable blank home. Run the package install it
-requests, then rerun `mantle generate` to finish. Use `--features` to select a
-smaller app, including host-free Spec-only. Follow the
-[project and CLI guide](docs/handbook/start/project-and-cli.md) for commands,
-file ownership and local verification.
-For an older installed SDK, use that package's handbook and CLI help; 0.1.4
-does not have the new project flags.
+Install an exact 0.2.x version of `@aotter/mantle`, write your manifests, and
+run `mantle generate`. The first run names the packages your selection needs;
+install them and run it again. It writes the service preset for the chosen
+host (Cloudflare by default, or Bun) once, and from then on those files are
+yours. Follow the
+[quickstart](docs/handbook/start/quickstart-worker.md), then the
+[project and CLI guide](docs/handbook/start/project-and-cli.md). The
+[reference service](docs/examples/reference-service/README.md) is a whole
+service with its smoke test.
 
-The [handbook](docs/handbook/start/overview.md) explains the parts. The
-[minimal Worker](docs/examples/host-minimal-worker/README.md) and
-[local Admin example](docs/examples/host-local-admin-otp/README.md) remain
-useful for applications that already own their Worker assembly.
-
-Using ChatGPT Sites? Follow the [Sites integration](docs/handbook/chatgpt-sites/index.md)
-for D1, owner sign-in, content management and publishing. Media is added only
-when your app needs it.
+Using ChatGPT Sites? Follow [Mantle on ChatGPT Sites](docs/handbook/cloudflare/chatgpt-sites.md).
 
 ## Choose how much to use
 
 | Start with | Add when you need |
 |---|---|
-| [Spec](docs/spec-only-host-adoption.md) | Manifest parsing, validation, and introspection in an existing system. |
-| [Runtime + typed APIs](packages/mantle/README.md) | Queries and actions backed by your storage and handlers. |
-| [A host adapter](docs/adapter-guide.md) | HTTP and other supported transports on your chosen platform. |
-| [Web](packages/mantle-web/README.md) | Public HTML, Markdown, localization, and discovery metadata. |
-| [Admin](docs/handbook/guides/admin-ui.md) | A staff API and prebuilt console with Manifest-driven rendering. |
-| [Auth](packages/mantle-auth/README.md) | Identity, staff roles, and OAuth / MCP authorization. |
+| [`@aotter/mantle`](packages/mantle/README.md) | Manifests, Store authored as SQL, the runtime and the `mantle` CLI. |
+| `@aotter/mantle/cloudflare` and the generated preset | A Worker on D1, or on PostgreSQL through Hyperdrive, with REST, MCP and Admin. |
+| `@aotter/mantle/bun` and the generated preset | A Bun server on PostgreSQL or SQLite with the same surfaces. |
+| `@aotter/mantle/auth` | Sign-in, staff roles, and OAuth for MCP. |
+| [The reference service](docs/examples/reference-service/README.md) | A whole service to read and run. |
 
-Cloudflare is the supported host for the integrated Auth, Admin, and MCP
-experience. Bun and Vercel adapters are experimental; they support public Views
-and HTTP Triggers, with authentication and CSRF owned by the host.
-[Compare adapters](docs/adapter-guide.md).
+SQLite (D1) and PostgreSQL are the built-in dialects, PostgreSQL the
+reference; Cloudflare and Bun are the preset hosts. Upgrading from 0.1.x:
+[the upgrade guide](docs/upgrade-0.1-to-0.2.md).
 
 <details>
 <summary>Package reference</summary>
 
 | Package | Purpose |
 |---|---|
-| `@aotter/mantle` | Core umbrella, CLI, and code generation. |
-| `@aotter/mantle-spec` | Manifest parsing, validation, and introspection. |
-| `@aotter/mantle-runtime` | Runtime execution and storage ports. |
-| `@aotter/mantle-mcp` | MCP surface on the official MCP SDK. |
-| `@aotter/mantle-ui` | Shared UI for Admin and MCP Apps: interaction controller, components, the UI kit and the MCP App. |
-| `@aotter/mantle-web` | Public rendering and discovery metadata. |
-| `@aotter/mantle-admin` | Admin API and session integration. |
-| `@aotter/mantle-admin-ui` | Prebuilt staff console and Developer UI. |
-| `@aotter/mantle-auth` | Identity, roles, and OAuth authorization. |
-| `@aotter/mantle-indexeddb` | Browser-local storage. |
-| `@aotter/mantle-cloudflare` | Workers, D1, and integrated surfaces. |
-| `@aotter/mantle-host` | Mantle Cloud upload rules and source for the plugin script. |
-| `@aotter/mantle-bun` | Experimental Bun adapter. |
-| `@aotter/mantle-vercel` | Experimental Vercel adapter. |
+| `@aotter/mantle` | Core, the manifest compiler, the D1 and PostgreSQL dialects, the Cloudflare and Bun hosts, Auth, Admin, MCP and REST surfaces, the compliance suite, and the `mantle` CLI, as subpaths. |
+| `@aotter/mantle-ui` | The Admin console (`/admin`, served by the preset) and shared UI for Admin and MCP Apps: interaction controller, components, the UI kit and the MCP App. |
 
 </details>
 
@@ -195,8 +175,8 @@ and HTTP Triggers, with authentication and CSRF owned by the host.
 - [Handbook](docs/handbook/start/overview.md) — concepts, setup, and task guides.
 - [Manifest feature reference](docs/handbook/reference/features.md) — capabilities and their authoring fields.
 - [SDK and package API](packages/mantle/README.md) — installation, typed bindings, and optional modules.
-- [CLI guide](docs/handbook/start/project-and-cli.md) — validate, generate, and maintain a project.
-- [Examples](docs/examples/README.md) — complete Manifests and runnable hosts.
+- [Examples](docs/examples/README.md) — whole services, and the runnable reference service.
+- [Upgrading from 0.1.x](docs/upgrade-0.1-to-0.2.md) — for a coding agent doing the move.
 - [Releases](https://github.com/aotter/mantle/releases) — changes and upgrade notes.
 
 ## Contributing

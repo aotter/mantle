@@ -28,7 +28,7 @@ if (process.argv[2] === "--self-test") {
   );
   const steps = [...workflow.matchAll(/^      - name: (.+)$/gm)].map((match) => match[1]);
   const ordered = [
-    "Check Core source",
+    "Check Core source", "Check native Bun host",
     "Record published packages",
     "Pack release tarballs", "Verify release credentials", "Create immutable Core tag",
     "Publish to npmjs", "Verify immutable npm artifacts", "Mirror to GitHub Packages",
@@ -46,7 +46,13 @@ if (process.argv[2] === "--self-test") {
   assert(pkg.scripts.check.includes("pnpm check:worker-consumer"));
   assert.match(
     workflow,
-    /- name: Check Core source\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm check/,
+    /- name: Check Core source\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm check\n        env:\n          MANTLE_PG_URL: postgres:\/\/\S+\n/,
+  );
+  // the release gates PostgreSQL and native Bun as CI does: a PR must not be checked more than the release that ships it
+  assert.match(workflow, /services:\n      postgres:\n        image: postgres:/);
+  assert.match(
+    workflow,
+    /- name: Check native Bun host\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm --filter @aotter\/mantle test:bun\n        env:\n          MANTLE_PG_URL: postgres:\/\/\S+\n/,
   );
   assert.match(workflow, /CORE_SHA=\$TAG_SHA/);
   assert.doesNotMatch(workflow, /mantle-starters|mantle-landing|RELEASE_FANOUT_TOKEN|deploy_landing/);

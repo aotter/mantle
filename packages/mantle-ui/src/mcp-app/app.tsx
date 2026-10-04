@@ -1,95 +1,93 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createInteractionController, type InteractionController } from "../controller/index.js";
 import { OperationPanel } from "../react/components.js";
-import { SchemaForm, schemaText } from "../react/schema-form.js";
+import { SchemaFields, applyFieldEdits } from "../react/fields.js";
 import { useInteraction } from "../react/use-interaction.js";
+import { nativeTimestamp, propertyLabel, renderDataValue, resolveLocalizedText, withNativeSchema, type FieldSchema } from "../react/values.js";
 import {
+  actionsFor,
   diagnosticsOf,
   hiddenInputs,
   idempotencyInputs,
-  inertPreview,
   invokeTool,
-  previewHtml,
-  readEntry,
-  viewOf,
+  rowsOf,
+  toolOf,
+  type AppCatalog,
+  type AppCatalogView,
+  BARE_VIEW,
   type AppRowAction,
-  type AppView,
   type CallTool,
   type ToolResult,
-} from "./bridge.js";
+} from "../app/bridge.js";
 import { appLabels, type AppLabels } from "./locale.js";
 
+type Row = Readonly<Record<string, unknown>>;
+
+/** A View column's label: its field's title in the host's language, the entry's own timestamps in the App's, else the name humanized, as Admin. */
+function columnLabel(name: string, schema: FieldSchema | undefined, language: string, labels: AppLabels): string {
+  const native = nativeTimestamp(name);
+  return resolveLocalizedText(schema?.title, language) == null && native ? labels[native] : propertyLabel(name, schema, language);
+}
+
 /**
- * The Mantle MCP App: a View's rows, and one row action at a time through
- * the shared controller. Every read and write is a server tool call through
- * the host (`callServerTool`), under the caller's own MCP authorization; the
- * App holds no credentials and opening it has no side effect.
+ * The Mantle MCP App: a View tool's rows as Admin shows them, and one row action at a time through the shared controller.
+ * What a View's columns are and which tools act on a row come from the catalog the server embedded; every read and write is a
+ * server tool call through the host (`callServerTool`), under the caller's own MCP authorization. The App holds no
+ * credentials, and opening it has no side effect.
  */
-export function InteractionApp(props: {
+export function MantleApp(props: {
+  readonly catalog: AppCatalog;
   readonly call: CallTool;
   /** The View tool's result, as the host delivered it. */
   readonly result: ToolResult | null;
-  /** The View tool's arguments, reused to refresh the rows. */
+  /** The View tool's arguments, reused to refresh the rows and to re-read one. */
   readonly input: Readonly<Record<string, unknown>> | null;
+  /** The tool the host says it called, when the result does not name it. */
+  readonly hostTool?: string;
   /** The host cancelled the View call before a result arrived. */
   readonly cancelled?: boolean;
   /** The host's BCP 47 locale. */
   readonly locale?: string;
 }): ReactNode {
   const labels = appLabels(props.locale);
-  const [view, setView] = useState<AppView | null>(() => (props.result ? viewOf(props.result) : null));
+  const language = props.locale ?? "en";
+  const tool = props.result ? toolOf(props.result, props.hostTool) : null;
+  // a View the catalog does not describe still shows its rows, with nothing to open
+  const view = tool && Object.prototype.hasOwnProperty.call(props.catalog.views, tool) ? props.catalog.views[tool]! : BARE_VIEW;
+  const [rows, setRows] = useState<Row[] | null>(() => (props.result ? rowsOf(props.result) : null));
   const [stale, setStale] = useState(false);
-  const [open, setOpen] = useState<{ row: Readonly<Record<string, unknown>>; action: AppRowAction } | null>(null);
-  const [previewing, setPreviewing] = useState<string | null>(null);
+  const [open, setOpen] = useState<{ row: Row; action: AppRowAction } | null>(null);
   useEffect(() => {
-    setView(props.result ? viewOf(props.result) : null);
+    setRows(props.result ? rowsOf(props.result) : null);
     setStale(false);
-    setPreviewing(null);
   }, [props.result]);
 
   const refresh = async () => {
-    if (!view) return;
+    if (!tool) return;
     try {
-      const next = await props.call(view.view, { ...props.input });
-      const fresh = viewOf(next);
-      if (fresh) setView(fresh);
+      const fresh = rowsOf(await props.call(tool, { ...props.input }));
+      if (fresh) setRows(fresh);
       setStale(!fresh);
     } catch {
       setStale(true);
     }
   };
 
-  if (!view) {
-    if (props.result) {
-      const failure = diagnosticsOf(props.result)[0]?.message;
-      return (
-        <div role="alert" className="grid gap-1 p-4 text-sm">
-          <p className="text-destructive font-medium">{labels.viewFailed}</p>
-          {failure ? <p className="text-muted-foreground">{failure}</p> : null}
-        </div>
-      );
-    }
-    return <p className="text-muted-foreground p-4 text-sm">{props.cancelled ? labels.viewCancelled : labels.waiting}</p>;
-  }
-  if (previewing && view.preview && view.collection) {
+  if (!props.result) return <p className="text-muted-foreground p-4 text-sm">{props.cancelled ? labels.viewCancelled : labels.waiting}</p>;
+  if (!rows) {
+    const failure = diagnosticsOf(props.result)[0]?.message;
     return (
-      <SitePreview
-        call={props.call}
-        tool={view.preview}
-        collection={view.collection}
-        id={previewing}
-        labels={labels}
-        onClose={() => setPreviewing(null)}
-      />
+      <div role="alert" className="grid gap-1 p-4 text-sm">
+        <p className="text-destructive font-medium">{labels.viewFailed}</p>
+        {failure ? <p className="text-muted-foreground">{failure}</p> : null}
+      </div>
     );
   }
-  if (open && view.collection) {
+  if (open && tool) {
     return (
       <RowAction
-        key={`${open.action.capability}:${open.action.bind.map(({ input }) => input).join(",")}:${String(open.row["id"])}`}
+        key={`${open.action.capability}:${String(open.row["id"])}`}
         call={props.call}
-        collection={view.collection}
-        read={view.read}
         row={open.row}
         action={open.action}
         labels={labels}
@@ -100,41 +98,32 @@ export function InteractionApp(props: {
     );
   }
   const notice = stale ? <p role="status" className="text-destructive px-3 pt-3 text-sm">{labels.refreshFailed}</p> : null;
-  if (view.rows.length === 0) return <>{notice}<p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p></>;
-  const columns = [...new Set(view.rows.flatMap((row) => Object.keys(row)))].filter((field) => field !== "version").slice(0, 4);
+  if (rows.length === 0) return <>{notice}<p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p></>;
+  const columns = columnsOf(view, rows);
   return (
     <>
       {notice}
       <ul data-slot="app-rows" className="grid gap-2 p-3">
-        {view.rows.map((row, index) => {
+        {rows.map((row, index) => {
           const id = typeof row["id"] === "string" ? row["id"] : undefined;
+          const actions = actionsFor(props.catalog, view, row);
           return (
             <li key={id ?? index} className="grid gap-2 rounded-md border p-3 text-sm">
-              <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3">
+              <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
                 {columns.map((field) => (
                   <div key={field} className="contents">
-                    <dt className="text-muted-foreground">{field}</dt>
-                    <dd className="break-words">{format(row[field])}</dd>
+                    <dt className="text-muted-foreground">{columnLabel(field, view.columns[field], language, labels)}</dt>
+                    <dd className="break-words">{renderDataValue(withNativeSchema(field, view.columns[field]), row[field], language)}</dd>
                   </div>
                 ))}
               </dl>
-              {view.rowActions.length > 0 || (view.preview && id) ? (
+              {actions.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {view.preview && id ? (
-                    <button
-                      type="button"
-                      aria-label={`${labels.preview}: ${id}`}
-                      className="rounded-md border px-3 py-1 font-medium"
-                      onClick={() => setPreviewing(id)}
-                    >
-                      {labels.preview}
-                    </button>
-                  ) : null}
-                  {view.rowActions.map((action) => {
-                    const title = action.title ?? action.capability;
+                  {actions.map((action) => {
+                    const title = resolveLocalizedText(action.title, language) ?? action.capability;
                     return (
                       <button
-                        key={`${action.capability}:${action.bind.map(({ input }) => input).join(",")}`}
+                        key={action.capability}
                         type="button"
                         // Every row repeats the same buttons; name the row too.
                         aria-label={id ? `${title}: ${id}` : undefined}
@@ -155,10 +144,14 @@ export function InteractionApp(props: {
   );
 }
 
+/** The View's declared list columns, else what the rows carry but the id and version, as Admin's report shows them. */
+function columnsOf(view: AppCatalogView, rows: readonly Row[]): string[] {
+  if (view.list.columns.length) return [...view.list.columns];
+  return [...new Set(rows.flatMap((row) => Object.keys(row)))].filter((field) => field !== "id" && field !== "version").slice(0, 6);
+}
+
 function RowAction(props: {
   readonly call: CallTool;
-  readonly collection: string;
-  readonly read: string | null;
   readonly row: Readonly<Record<string, unknown>>;
   readonly action: AppRowAction;
   readonly labels: AppLabels;
@@ -170,16 +163,14 @@ function RowAction(props: {
   // Created once when the action is opened, from the row as it was then: a
   // refresh of the list never rebuilds it or points it at another entry.
   const [created] = useState((): { controller: InteractionController } | { error: unknown } => {
-    const { call, collection, read, row, action } = props;
+    const { call, row, action } = props;
     try {
       return {
         controller: createInteractionController({
           interaction: action,
           row,
-          // Without a reader on this surface, the row as listed is the reviewed entry.
-          ...(action.version && read
-            ? { read: (signal: AbortSignal) => readEntry(call, read, collection, String(row["id"]), signal) }
-            : {}),
+          // the row as listed is the reviewed entry: a version that moved since is the server's CONFLICT, and the person
+          // reopens the action from the refreshed list
           invoke: (values, signal) => invokeTool(call, action.capability, values, signal),
           // One key per opened action, so a retry after an uncertain write reuses it.
           initialInput: Object.fromEntries(automatic.map((field) => [field, crypto.randomUUID()])),
@@ -229,58 +220,38 @@ function RowActionPanel(props: {
     }
     props.onClose();
   };
-  const properties = action.inputSchema.properties ?? {};
-  const fieldLabel = (field: string) => schemaText(properties[field]?.title, props.locale) ?? field;
+  const language = props.locale ?? "en";
+  const properties = (action.inputSchema.properties ?? {}) as Readonly<Record<string, FieldSchema>>;
+  // a Procedure's inputs are its own: a field named created_at is not the entry's timestamp
+  const fieldLabel = (field: string) => propertyLabel(field, properties[field], language);
+  const fieldValue = (field: string, value: unknown) => renderDataValue(properties[field], value, language);
+  const hidden = hiddenInputs(action);
+  const visible = Object.keys(properties).some((name) => !hidden.includes(name));
   return (
-    <div className="p-3">
+    // room for a Select's list or the date picker, which open over the panel inside the host's frame
+    <div className="min-h-[28rem] p-3">
       <OperationPanel
         controller={controller}
-        title={action.title ?? action.capability}
+        title={resolveLocalizedText(action.title, language) ?? action.capability}
         labels={props.labels.interaction}
         fieldLabel={fieldLabel}
+        fieldValue={fieldValue}
         onClose={close}
         onCancel={close}
       >
-        <SchemaForm schema={action.inputSchema} controller={controller} state={state} hidden={hiddenInputs(action)} language={props.locale} />
+        {/* Admin's own form: option titles, money and date previews, a field's widget from the Procedure's uiSchema */}
+        {visible ? (
+          <SchemaFields
+            schema={action.inputSchema as FieldSchema}
+            uiSchema={action.uiSchema ?? null}
+            value={state.draft}
+            onChange={(next) => applyFieldEdits(controller, state.draft, next)}
+            language={language}
+            hiddenRootFields={hidden}
+            labels={props.labels.fields}
+          />
+        ) : null}
       </OperationPanel>
     </div>
   );
-}
-
-/**
- * The entry's site page, rendered by the server for this caller. It is
- * shown in an iframe with an empty sandbox (no scripts, forms, popups or
- * access to the App) and with its links and refreshes removed. Assets load
- * only as far as the App's CSP allows.
- */
-function SitePreview(props: {
-  readonly call: CallTool;
-  readonly tool: string;
-  readonly collection: string;
-  readonly id: string;
-  readonly labels: AppLabels;
-  readonly onClose: () => void;
-}): ReactNode {
-  const [page, setPage] = useState<{ html: string } | { error: string } | null>(null);
-  useEffect(() => {
-    let live = true;
-    previewHtml(props.call, props.tool, props.collection, props.id)
-      .then((html) => { if (live) setPage({ html: inertPreview(html) }); }, (error: unknown) => { if (live) setPage({ error: error instanceof Error ? error.message : String(error) }); });
-    return () => { live = false; };
-  }, [props.call, props.tool, props.collection, props.id]);
-  return (
-    <div className="grid gap-2 p-3">
-      <div className="flex justify-end">
-        <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" onClick={props.onClose}>{props.labels.interaction.close}</button>
-      </div>
-      {page === null ? <p className="text-muted-foreground text-sm">{props.labels.previewLoading}</p>
-        : "error" in page ? <p role="alert" className="text-destructive text-sm">{page.error}</p>
-        : <iframe title={props.labels.sitePreview} sandbox="" srcDoc={page.html} className="h-[70vh] w-full rounded-md border" />}
-    </div>
-  );
-}
-
-function format(value: unknown): string {
-  if (value === undefined || value === null || value === "") return "—";
-  return typeof value === "object" ? JSON.stringify(value) : String(value);
 }

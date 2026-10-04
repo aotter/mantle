@@ -2,7 +2,36 @@
 
 Shared interaction UI for the Mantle Admin and MCP Apps (ADR-0029). The
 `/controller` subpath is framework-free; the root adds React components on top
-of it (React 19 is an optional peer, needed only for the root).
+of it (React 19 is an optional peer, needed only for the root and `/kit`).
+
+## Admin
+
+`dist/admin/` is the built Admin console (a static SPA with base `/admin/`).
+Nothing imports it: `mantle generate`'s Cloudflare preset binds
+`node_modules/@aotter/mantle-ui/dist/admin` as the Worker's static assets (the
+Bun preset resolves `@aotter/mantle-ui/admin/index.html` and serves its
+directory with `bunAdminAssets`), and
+`createAdminSurface` (`@aotter/mantle/admin`) serves it at `/admin`. It is
+built for that path, so `createAdminSurface` refuses `assets` under any other
+`basePath`. Its source is `admin/`.
+
+## MCP App
+
+`/mcp-app` exports `mantleAppHtml`, one self-contained HTML document. Give it
+to `planApp` from `@aotter/mantle/mcp`, which embeds the plan's catalog of
+Views and row operations and renders every View tool of a surface:
+
+```ts
+apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }
+```
+
+The App shows a View's rows with Admin's value renderers and opens one row
+operation at a time through the controller and `OperationPanel`. Every read
+and write is a tool call through the host; it holds no credentials.
+
+An App of your own reuses the same pieces from the root: `readCatalog`,
+`toolOf`, `outputOf`, `rowsOf`, `invokeTool` and `actionsFor` read the catalog
+and tool results as Mantle's App does (the `develop` skill's MCP App recipe).
 
 ## Controller
 
@@ -83,6 +112,19 @@ Styling uses Tailwind token classes (`bg-muted`, `border`, `text-destructive`,
 `bg-primary`, …) resolved from the host's CSS variables. Add
 `@source "../node_modules/@aotter/mantle-ui/dist/**/*.js"` (adjusted to your
 stylesheet's location) so Tailwind generates the classes.
+
+## Fields and values
+
+Admin's own value and field code is shared, so an MCP App renders a field
+exactly as the console does:
+
+- `SchemaFields` (from `/kit`, since its controls are kit components): a form over a JSON Schema (option lists from `enum` or a
+  `oneOf` of titled `const`s, money and date previews, arrays, nested objects).
+  Strings come from `labels`; a control only one host has (Admin's media
+  library and rich text editors) comes through `renderField`, and without it
+  markdown and HTML are a textarea. `propertyLabel` overrides how a label reads.
+- `renderDataValue` (root, React only), `optionLabel`, `propertyLabel`, `resolveLocalizedText` and
+  the money and date formatters: how a value reads in a cell or a card.
 
 ## Kit
 

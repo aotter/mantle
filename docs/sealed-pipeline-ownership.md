@@ -1,5 +1,12 @@
 # Sealed pipeline ownership ledger
 
+> **Historical record.** This ledger is the 0.1.x evidence for ADR-0019 and
+> epic #656. Mantle 0.2.0 replaced that pipeline: manifests compile to a
+> sealed plan with SQL IR, one Store executes it, and the service owns its
+> entry (ADR-0032 to ADR-0035). The package names, use cases and examples
+> below are 0.1.x's and no longer exist. Read the
+> [handbook](handbook/concepts/runtime-and-adapters.md) for 0.2.0.
+
 This is the migration evidence for ADR-0019 and epic #656. It records the
 `v0.1.0-alpha.7` owners before code moves, the single target owner, and the
 issue that must delete or delegate the old path.
@@ -61,7 +68,7 @@ diagnostics.
 
 The following pins record the historical sealed-pipeline migration gates.
 ADR-0021 supersedes the Starter/Landing release coupling: current Core CI and
-release use `docs/examples/host-minimal-worker` from the same reviewed commit.
+release use `docs/examples/reference-service` from the same reviewed commit.
 Private consumers can still run the exact-tarball checker in their own repos;
 public Core PRs receive no cross-repository credentials:
 

@@ -1,20 +1,26 @@
+import type { FieldLabels } from "../react/fields.js";
 import type { InteractionLabels } from "../react/labels.js";
 
 /** Strings the App renders around the shared components. */
 export interface AppLabels {
   readonly interaction: InteractionLabels;
+  /** The form's own strings, as Admin's. */
+  readonly fields: FieldLabels;
+  /** The entry's own timestamps, which no Schema titles. */
+  readonly created: string;
+  readonly updated: string;
   readonly waiting: string;
   readonly nothing: string;
   readonly viewFailed: string;
   readonly viewCancelled: string;
   readonly refreshFailed: string;
-  readonly preview: string;
-  readonly previewLoading: string;
-  readonly sitePreview: string;
 }
 
 const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
   "en": {
+    fields: { emptyOption: "No value", chooseOption: "Choose…", boolean: "Enabled", dateTimeSelect: "Select date and time", dateTimeTime: "Time", removeItem: "Remove item", addItem: "Add item" },
+    created: "Created",
+    updated: "Updated",
     interaction: {
       submit: "Run",
       submitting: "Running…",
@@ -49,11 +55,11 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "These results could not be shown.",
     viewCancelled: "The request was cancelled.",
     refreshFailed: "The list could not be refreshed. It may be out of date.",
-    preview: "Preview page",
-    previewLoading: "Loading preview…",
-    sitePreview: "Site preview",
   },
   "zh-TW": {
+    fields: { emptyOption: "無值", chooseOption: "請選擇…", boolean: "啟用", dateTimeSelect: "選擇日期與時間", dateTimeTime: "時間", removeItem: "移除項目", addItem: "新增項目" },
+    created: "建立時間",
+    updated: "更新時間",
     interaction: {
       submit: "執行",
       submitting: "執行中…",
@@ -88,11 +94,11 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "無法顯示這些結果。",
     viewCancelled: "請求已取消。",
     refreshFailed: "無法重新整理清單，內容可能不是最新的。",
-    preview: "預覽頁面",
-    previewLoading: "正在載入預覽…",
-    sitePreview: "網站預覽",
   },
   "zh-CN": {
+    fields: { emptyOption: "无值", chooseOption: "请选择…", boolean: "启用", dateTimeSelect: "选择日期与时间", dateTimeTime: "时间", removeItem: "移除项目", addItem: "新增项目" },
+    created: "创建时间",
+    updated: "更新时间",
     interaction: {
       submit: "执行",
       submitting: "执行中…",
@@ -127,9 +133,6 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "无法显示这些结果。",
     viewCancelled: "请求已取消。",
     refreshFailed: "无法刷新列表，内容可能不是最新的。",
-    preview: "预览页面",
-    previewLoading: "正在加载预览…",
-    sitePreview: "网站预览",
   },
 };
 

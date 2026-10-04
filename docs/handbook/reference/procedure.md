@@ -1,366 +1,127 @@
 ---
-description: Procedure field reference — runtime order of operations, ref and builtin handlers, the builtin op contract, EntryRow responses and Admin operations.
+description: Procedure field reference for Mantle 0.2.0 — input and output, SQL and ref handlers, write rules, row ops and locks, target, mcp annotations, uiSchema and diagnostics.
 ---
 # Procedure
 
-A Procedure is a typed callable: input schema, output schema, authorization requirement, and one handler binding. It is the only atom with a code seam, and it is never exposed on its own — a [Trigger](./trigger.md) is what makes it reachable. This page is the field-level contract; the concepts are in [Procedures and Triggers](../concepts/procedures-and-triggers.md). Envelope rules are in [Manifest envelope and conventions](./manifest.md), and diagnostic codes are catalogued in [Diagnostics](./diagnostics.md).
-
-## Fields
-
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `title` | LocalizedText | no | Admin label for the staff-operations surface. Absent falls back to a Title-Cased `metadata.name`. |
-| `description` | LocalizedText | no | The MCP tool description and the `description` field of `GET /admin/api/operations`. |
-| `requires` | AuthorizationRequirements | no | `auth.all` predicates plus one optional `guard.procedure`. See [Authorization](./authorization.md). |
-| `input` | JSON Schema | yes | Must be an object. Becomes the MCP tool `inputSchema` and the OpenAPI request body. |
-| `uiSchema` | object | no | Admin-only. Accepts `collectionAction` and `fields`. Violations are `SCHEMA_UI_INVALID`. |
-| `output` | JSON Schema | yes | Checked after the handler returns. Failure is `OUTPUT_VALIDATION_FAILED` (500). |
-| `handler` | `ref` \| `builtin` | yes | Exactly one binding shape; see below. |
-| `target` | `{ schema, id, version? }` | no | The entity a `ref` handler mutates and whose version it locks. `schema` is an existing Schema, `id` a required string input property, `version` a number input property. Declare it only when an interaction must bind to one entry, for example a row action or automatic version binding. Queries, notifications and multi-entry Procedures declare none. Rejected on builtin handlers, whose target is `handler.schema`. Violations are `PROCEDURE_TARGET_INVALID`. |
-| `mcp` | object | no | MCP tool annotations the author asserts: `readOnlyHint`, `destructiveHint`, `openWorldHint` (booleans). Core infers what it can prove — every builtin handler writes, `op: delete` destroys, an `x-mcp-hint: idempotency-key` input makes the tool idempotent — and emits nothing else, so absent hints keep the MCP spec's conservative defaults. `readOnlyHint: true` on a builtin handler is `BUILTIN_HANDLER_CONTRACT_INVALID`. |
-
-Both `input` and `output` are walked by the [JSON Schema subset](./schema.md#json-schema-subset) validator, so the same recognized and rejected keywords apply.
-
-## Order of operations
-
-Every invocation — HTTP Trigger, MCP tool call, lifecycle hook, Admin operation — runs the same pipeline.
-
-| Step | Behavior | Failure |
-|---|---|---|
-| 1. Authorize | Evaluate every `requires.auth.all` predicate against the caller context. | `UNAUTHENTICATED` (401) when the caller carried no credential, `AUTH_DENIED` (403) when an authenticated caller falls short. |
-| 2. Validate input | Compile `input` to zod and parse the request. | `INPUT_VALIDATION_FAILED` (400), pointing at the first failing property. |
-| 3. Guard | Invoke `requires.guard.procedure` with the validated input and the same context. | Any guard failure denies the target. Guards fail closed. |
-| 4. Dispatch | `ref`: look up the registration key and call the function. `builtin`: run the op. | See the two handler sections. |
-| 5. Validate output | Parse the handler result against `output`. | `OUTPUT_VALIDATION_FAILED` (500) — this is a handler bug, not a caller error. |
-
-The value returned to the caller is the handler's own result. Output validation checks it; it does not strip unexpected fields.
-
-## `handler.kind: ref`
-
 ```yaml
-handler:
-  kind: ref
-  ref: approve-purchase-order
-```
-
-`ref` is an **opaque registration key, not a path**. It never names a file, module or export. The consumer passes a matching key in the `handlers` map given to the runtime or Worker, and the key is the whole contract between manifest and code.
-
-| Rule | Effect |
-|---|---|
-| `ref` is a non-empty string; only `kind` and `ref` are accepted under `handler`. | `INVALID_MANIFEST_ENVELOPE` |
-| Every declared `ref` resolves to a registered handler. | `HANDLER_NOT_REGISTERED` at boot, listing the registered keys as candidates. |
-| An unregistered key reached at request time. | The same `HANDLER_NOT_REGISTERED` code, mapped to 500 — defense in depth for embeddings that skipped boot validation. |
-| A handler throws. | Anything other than a structured error becomes `INTERNAL_ERROR` (500) with a safe generic message; exception details remain in internal logs. |
-
-To return a structured error instead, throw `InvokeFailure` carrying a diagnostic; the runtime unwraps it and returns that diagnostic with its own status. This is how a handler reports `CONFLICT`, `ENTITLEMENT_REQUIRED` or a domain-specific `INPUT_VALIDATION_FAILED` rather than a generic 500.
-
-### `ref` example
-
-```yaml
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
-metadata:
-  name: approve-purchase-order
+metadata: { name: review-order }
 spec:
-  title: { en: Approve purchase order, "zh-TW": 核准採購單 }
-  description: Approve a submitted order and record the approver.
-  requires:
-    auth:
-      all:
-        - { "ctx.staff": [owner, editor] }
-  input:
-    type: object
-    additionalProperties: false
-    required: [orderId, decision]
-    properties:
-      orderId: { type: string, x-mantle-ref: purchase-orders }
-      decision: { type: string, enum: [approve, reject] }
-      note: { type: string, maxLength: 2000 }
-      requestId: { type: string, x-mcp-hint: idempotency-key }
-  uiSchema:
-    fields:
-      note: { widget: textarea }
-  output:
-    type: object
-    required: [orderId, status]
-    properties:
-      orderId: { type: string }
-      status: { type: string, enum: [approved, rejected] }
-  handler:
-    kind: ref
-    ref: approve-purchase-order
+  title: Review order                 # optional, a string or a locale map
+  description: …                      # optional; the MCP tool's and Admin operation's description
+  requires: { … }                     # optional, see Authorization requirements
+  input: { type: object, … }          # required JSON Schema
+  output: { type: object }            # required JSON Schema
+  handler: { sql: "…" }               # or { ref: <name> }
+  target: { schema, id, version? }    # optional; inferred for one locked row op
+  mcp: { destructiveHint: true }      # optional tool annotations
+  uiSchema: { … }                     # optional, Admin only
 ```
 
-```ts
-// src/mantle/config.ts
-import { approvePurchaseOrder } from "./handlers/approve-purchase-order";
+`input` is validated before the handler runs (`INPUT_VALIDATION_FAILED`),
+and the result against `output` (`OUTPUT_VALIDATION_FAILED`, a 500: the bug
+is the handler's). `expectedVersion` is the conventional input name for the
+version a caller read.
 
-export const handlers = {
-  "approve-purchase-order": approvePurchaseOrder,
-};
-```
+## `handler.sql`
 
-## `handler.kind: builtin`
+One or more `INSERT`, `UPDATE` and `DELETE` statements separated by `;`,
+applied as one batch: all or nothing, in order. The output is
+`{ "results": [[…], …] }`, the `RETURNING` rows of each statement in order; so
+an `output` of `{ type: object }` accepts it.
 
-A shortcut over the entry-writer chokepoint for Procedures whose body is "write a row". Reach for `ref` as soon as there is real business logic.
-
-```yaml
-handler:
-  kind: builtin
-  op: create | update | upsert | delete | archive
-  schema: <Schema metadata.name>
-  match: [<field>, ...]   # only with op: upsert
-```
-
-| Rule | Diagnostic |
+| Statement | Supported |
 |---|---|
-| Only `kind`, `op`, `schema` and `match` are accepted; `ref` alongside `builtin` is rejected. | `INVALID_MANIFEST_ENVELOPE` |
-| `op` is one of the five; `schema` is a non-empty string. | `INVALID_MANIFEST_ENVELOPE` |
-| `match` appears only with `op: upsert`, and is a non-empty array of unique non-empty strings. | `INVALID_MANIFEST_ENVELOPE` |
-| `schema` names a declared Schema. | `BUILTIN_HANDLER_SCHEMA_UNKNOWN` |
-| `input` is an object schema. | `BUILTIN_HANDLER_CONTRACT_INVALID` |
-| The runtime was built without the builtin dispatcher. | `HANDLER_BUILTIN_NOT_IN_V010` at request time. |
+| `INSERT` | `INSERT INTO t (cols) VALUES (…)` (one row), `INSERT INTO t (cols) SELECT …`, `ON CONFLICT (cols) DO NOTHING \| DO UPDATE SET c = EXCLUDED.c …`, `RETURNING` |
+| `UPDATE` | `UPDATE t SET c = <expr> … WHERE …`, `RETURNING` |
+| `DELETE` | `DELETE FROM t WHERE …`, `RETURNING` |
 
-`request_publish` and `publish` are deliberately absent: they are lifecycle operations, not CRUD primitives.
+Expressions are those of [View SQL](./view.md#what-the-d1-dialect-accepts).
+References: `input.<name>`, `auth.uid()`, `auth.role()`, `now()`.
 
-### Ops
+**A write may not name** the scope field, `version`, `status`, `created_at`,
+`updated_at`, `author_id`, or `id` in an `UPDATE`, in a column list, `SET` or
+`DO UPDATE SET`; on a scoped Schema an `INSERT` names no `id`. Store fills
+them (`SQL_WRITE`). Multi-row `VALUES` is refused: insert from
+`json_each(input.items)` instead. `UPDATE … FROM`, `DELETE … USING`,
+`INSERT OR …` and `last_insert_rowid()` are refused.
 
-| `op` | Runtime behavior | Input contract |
-|---|---|---|
-| `create` | Projects `input ∩ Schema.properties` into `data`, stamps every `x-mantle-bind` property, generates an id and writes. `status` is `draft`, or `published` on a `lifecycle: operational` Schema. `authorId` is `ctx.user?.id ?? null`. Returns the created row. | `input` is an object schema. No other required properties. |
-| `update` | Loads the row (`NOT_FOUND` if absent), merges the patch over the stored `data` so omitted fields and existing stamps survive, writes under optimistic concurrency against the caller's `expectedVersion` (observed native `entry.version` at read time, not `version+1`), bumps `version`. | `id` (strict `type: string`) and `expectedVersion` (strict `type: number`) declared under `properties` **and** listed in `required`. |
-| `upsert` with `match` | Reads the matched fields off the validated input and looks the row up by those data values. Found: the update path, using the **caller's** `expectedVersion` (never the preloaded row's version). Not found: the create path only when `expectedVersion` is omitted; a versioned write for a missing row is `NOT_FOUND` and does not recreate. | `match` equals one declared `uniqueIndexes` tuple exactly, in order. Every matched field is a Schema property, is declared in `input.properties`, and appears in `input.required`. `input` must **not** declare `id`. `expectedVersion` **must** be declared as strict `number`; it is not globally required so create can omit it. |
-| `upsert` without `match` | Id-based upsert. Create when the caller omits `expectedVersion` (and either omits `id` or the id is unknown). Update when a resolved `id` is present — the caller token is required and is the OCC check. A versioned write for a missing id is `NOT_FOUND`. | `expectedVersion` must be declared as strict `number`. If `id` is declared it must be strict `string`. Neither is in `required`. |
-| `delete` | Loads the row (`NOT_FOUND` if absent), runs the delete guard, then hard-deletes pinned to the row's status and version. Returns `{ removed }`. | `id` (strict `type: string`) declared and in `required`. |
-| `archive` | Loads the row, checks the lifecycle state machine (`CONFLICT` on an illegal transition), then transitions to `archived` pinned to the version just read. | `id` (strict `type: string`) declared and in `required`. The target Schema must be `lifecycle: publishing`; an operational target is rejected. |
+**RETURNING names** fold to lower case unless quoted:
+`RETURNING id, orderNumber AS "orderNumber"`.
 
-Every contract violation in the right-hand column is `BUILTIN_HANDLER_CONTRACT_INVALID`, reported at the offending pointer. *Strict* means a single scalar type — an array-valued `type` or `nullable: true` does not satisfy it.
+### Row ops and set ops
 
-All five ops write through the same chokepoint, which validates the projected `data` against the Schema, runs the [write-time locale gate](./schema.md#write-time-locale-gate) and performs a unique-index preflight before the write.
+- **Row op**: an `UPDATE` or `DELETE` whose top-level `WHERE` has
+  `id = <value>`, or a one-row `INSERT … VALUES` without `ON CONFLICT`. If it
+  writes no row the batch fails with `CONFLICT` and nothing applies.
+- **Set op**: everything else. Writing no row is a normal result. Refused on a
+  `publishing` Schema, and on a Schema with a `before_*` hook for that
+  operation.
+- **Lock**: `AND version = input.<name>` in a row op's `WHERE`. A stale version
+  matches nothing, so it is `CONFLICT` (HTTP 409).
 
-### Side-channel input fields
+### `target`
 
-`input` is the contract with the *caller*, not with the Schema. It may declare fields the collection has no column for — a CAPTCHA token, an idempotency key, a routing hint. JSON Schema's default `additionalProperties: true` lets them validate, and the builtin op projects `input ∩ Schema.properties`, so they never reach `data`.
+`{ schema, id, version? }`: the Schema the Procedure mutates, the required
+string input holding the row id, and the integer input holding the version it
+locks. Admin binds an operation to a row by it. A Procedure whose SQL is
+exactly one row op pinning `id` (and `version`) to inputs gets it inferred;
+declare it for a `ref` handler. `PROCEDURE_TARGET_INVALID` when the inputs do
+not have those shapes.
 
-They are not lost. The pre-projection input travels to the chokepoint as `originalInput`, and synchronous `before_*` lifecycle hooks receive it as their handler input. A `before_create` hook can therefore verify a token the row never stores. See [Trigger](./trigger.md#lifecycle-source).
-
-### Builtin `upsert` example
+## `handler.ref`
 
 ```yaml
-apiVersion: cms.mantle.aotter.net/v1
-kind: Procedure
-metadata:
-  name: sync-inventory-level
-spec:
-  title: Sync inventory level
-  description: Insert or update the stock level for one SKU in one warehouse.
-  requires:
-    auth:
-      all:
-        - ctx.auth
-        - { "ctx.auth.scope": "inventory:write" }
-  input:
-    type: object
-    required: [sku, warehouse, onHand]
-    properties:
-      sku: { type: string, minLength: 1 }
-      warehouse: { type: string, minLength: 1 }
-      onHand: { type: integer, minimum: 0 }
-      countedAt: { type: integer, x-mcp-hint: timestamp-ms }
-      requestId: { type: string, x-mcp-hint: idempotency-key }
-      expectedVersion: { type: number }
-  output:
-    type: object
-    required: [id, version]
-    properties:
-      id: { type: string }
-      version: { type: number }
-  handler:
-    kind: builtin
-    op: upsert
-    schema: inventory-levels
-    match: [sku, warehouse]
+handler: { ref: cancelOrder }
 ```
 
-This requires `inventory-levels` to declare `uniqueIndexes: [[sku, warehouse]]` — the same fields, in the same order. `requestId` is a side-channel field: it validates, reaches `before_*` hooks, and is never written to `data`. `expectedVersion` is the observed native `entry.version` at read time (not `version+1`). Omit it to create; send it to update. A matched upsert has no single operation target, so Admin shows `expectedVersion` as an ordinary input there; it binds and hides it only for an id-based upsert (ADR-0029). HTTP and MCP callers supply it themselves.
-
-## The response shape
-
-Every builtin op except `delete` returns the persisted `EntryRow`.
-
-| Field | Type | Notes |
-|---|---|---|
-| `id` | string | Generated on create. |
-| `collection` | string | The Schema's `metadata.name`. |
-| `status` | `draft` \| `published` \| `archived` | |
-| `version` | number | Optimistic-concurrency counter; bumps on every persisted update. |
-| `data` | object | The projected, stamped Schema fields. |
-| `authorId` | string \| null | |
-| `createdAt`, `updatedAt` | number | Unix epoch milliseconds. |
-| `locale` | string | Present only when the row carries `data.locale`. |
-
-An HTTP Trigger wraps a success as `{ "ok": true, "data": <EntryRow> }` with status 200.
-
-> **Warning**
-> Declare `output` against the **row**, not the envelope. `output: { type: object, required: [id], properties: { id: { type: string } } }` checks that an id came back. Output validation does not strip the other fields, so a caller still receives the whole row; use a `ref` handler with an explicit projection when the response must be smaller.
-
-`delete` returns `{ removed: boolean }` instead.
-
-## Conflicts and idempotency
-
-A unique-index preflight runs before individual writes, and the database's own constraints catch the races the preflight misses. Atomic groups rely on the transaction's database constraints so an earlier operation may free a unique value for a later one. Both paths surface collisions as `CONFLICT` (409), as do a stale `expectedVersion` and an illegal lifecycle transition. **There is no automatic retry** — the caller decides whether to re-read and try again.
-
-Idempotency has no grammar key. The convention is an `input` property marked `x-mcp-hint: idempotency-key`: Admin generates and hides one UUID per form submission, and other callers generate one and reuse it across retries of the same logical request. The handler is responsible for acting on it.
-
-Optimistic concurrency uses the reserved input name `expectedVersion` — the version the caller **read**, not the next version. First-party Admin and the MCP App bind and hide it from the row the person reviewed, where the operation target declares it (builtin `update` and id-based `upsert`, or `Procedure.spec.target.version`); other callers send it themselves. There is no `x-mcp-hint` for OCC. On `CONFLICT` (409) Admin keeps the operator's business fields and requires an explicit re-read and review; it does not retry with the latest version. New reserved Procedure input names need an ADR.
-
-Deferred lifecycle hooks have a stronger guarantee to work with: delivery is at-least-once, and handlers key on `${ctx.event.id}:${ctx.event.trigger}` — stable across enqueue fallback, queue retries and replay. See [Deferred hooks on Queues](../cloudflare/deferred-hooks-queues.md).
-
-## Atomic entry writes in a ref handler
-
-When one request must change several Schemas together, a `ref` handler calls
-`ctx.store.write(ops)`. Every operation commits or none does, in order, as one
-storage transaction. Cloudflare D1 and Bun SQLite support it; an adapter
-without the optional `atomicEntries` capability returns `RESOURCE_UNAVAILABLE`
-(503) instead of committing part of the group.
-
-| Operation | Shape | Result |
-|---|---|---|
-| Insert | `{ insert: "<schema>", values: {...}, id? }` | `{ id, version }` |
-| Row update | `{ update: "<schema>", set: {...}, where: { id }, lock: <version> }` | `{ id, version }` |
-| Row delete | `{ delete: "<schema>", where: { id }, lock: <version> }` | `{ deleted: 1 }` |
-| Set-based delete | `{ delete: "<schema>", where: <any filter>, expect? }` | `{ deleted: <count> }` |
-
-Results follow operation order. `insert` validates `values` like `createDraft`;
-the author is the caller (`ctx.user?.id ?? null`) and `id` is optional (see
-`ctx.store.id()`). Operational Schemas become live on insert; publishing
-Schemas create drafts. `update` merges `set` into the entry. `lock` is the
-version the caller **read**, not the next one; it is required for a row update
-and for a row delete.
-
-A `delete` whose `where` is anything other than exactly `{ id }` with `lock` is
-set-based: one statement over the same filter grammar as
-[`select`](#store-queries-in-a-ref-handler). With `expect: n` the whole group
-fails with `CONFLICT` unless exactly `n` rows were deleted. Like `select`, it
-sees only live rows; TTL-expired rows are left to `store.sweepExpired`. A
-set-based delete skips per-row checks, so it is rejected with
-`INPUT_VALIDATION_FAILED` on a publishing Schema (published entries cannot be
-deleted) and on a Schema that has `before_delete` or `after_delete` lifecycle
-Triggers; delete those entries one by one with `where: { id }` and `lock`.
+The name of a function in the service's `handlers` map. The generated
+`MantleHandlers` type lists exactly the plan's refs, with typed input and
+output; boot refuses a missing one (`HANDLER_NOT_REGISTERED`) and an extra
+one (`HANDLER_NOT_DECLARED`).
 
 ```ts
-const sessionId = ctx.store!.id();
-await ctx.store!.write([
-  { insert: "sessions", id: sessionId, values: { name: input.name } },
-  { insert: "exercise-blocks", values: { sessionId, exercise: input.exercise } },
-  { insert: "receipts", values: { token: input.requestId } },
-  { update: "programs", set: { lastSessionId: sessionId }, where: { id: input.programId }, lock: input.programVersion },
-  { delete: "reminders", where: { programId: input.programId, dueAt: { lte: input.startedAt } } },
-]);
-return { sessionId };
+(input, ctx) => output | Promise<output>
+// ctx: { caller, cause, store, invoke, env, waitUntil }
 ```
 
-Declare `receipts.token` as a Schema `uniqueIndexes: [[token]]`. A duplicate
-receipt rejects the whole group, including the session and block. The handler
-can then read the existing receipt **after** the failed transaction to answer
-an idempotent retry. A stale `lock` or an unmet `expect` rejects the whole
-group with `CONFLICT` even when it is the final operation. Row operations may
-touch each entry only once, and a set-based delete must not match an entry
-another operation in the group writes: the conditional write then finds it
-gone and the group fails with `CONFLICT`. Read and authorization decisions happen before the batch,
-and the version and status the group read are checked again by the conditional
-database write. An invalid operation or value is `INPUT_VALIDATION_FAILED`.
-Failures throw `DiagnosticError` from `ctx.store.write`.
+A handler reaches Mantle-owned rows only through `ctx.store`
+([Query from TypeScript](../guides/typed-queries.md)). It throws
+`DiagnosticError` (from `@aotter/mantle`) to answer with a code; any
+other throw is logged and answered as `INTERNAL_ERROR`. Guards, before hooks
+and lifecycle targets must be `ref` handlers.
 
-All Schema projection, stamping, validation, uniqueness, and lifecycle rules
-still apply. `before_*` hooks run in operation order before the batch and can
-veto it; their external effects cannot be rolled back. `after_*` hooks run
-only after commit, in operation order. Publishing-content invalidation runs
-once for the group. Deferred Queue delivery is separate from the database
-transaction. Application-owned tables can use their host's transaction
-facility inside a ref handler, but that does not give those tables Mantle
-entry semantics. Direct SQL writes to Mantle Schema tables are unsupported.
-Authorization guard Procedures receive a read-only Store: `write` and
-`sweepExpired` fail with `INPUT_VALIDATION_FAILED`. Host code uses
-`runtime.store.write` the same way, with a `null` author.
+## `requires`
 
-On D1 and Bun SQLite a group reads its row update and delete targets before the
-batch with one query per 95 ids per Schema. The batch holds one statement per
-insert, two per row update or delete (the write and its guard), one per
-set-based delete (two with `expect`: the delete and its guard) and, when the
-group has any guard, one final cleanup: 200 row updates in one Schema cost
-3 reads and 401 statements. A conflict re-reads the targets once more to name
-the stale entry. D1 counts queries against a per-invocation limit; size groups
-with that in mind.
+`requires.auth.all` (predicates) and `requires.guard.procedure` (a `ref`
+Procedure run before this one). See
+[Authorization requirements](./authorization.md).
 
-## Store queries in a ref handler
+## `mcp`
 
-`ctx.store` is the caller-bound Store ([ADR-0030](../../adr/0030-store.md)). `select` reads any Schema with a closed relational filter; values are always bound.
-
-```ts
-const { rows, nextCursor } = await ctx.store!.select({
-  from: "training_sets",
-  where: { blockId: { in: { select: "id", from: "training_blocks", where: { sessionId: input.id } } } },
-  orderBy: { position: "asc" },
-  limit: 200,
-});
-```
-
-`where` takes `{ column: value }` (equality; sibling keys AND), `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`, `and`/`or`/`not`, and a `{ select, from, where }` subquery inside `in`/`notIn`. Columns are scalar Schema fields and the native `id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId`. Rows are flat and include every lifecycle status — filter `status` yourself before returning publishing entries to a caller. For a Schema with `scope: { ownerId: "$ctx.user.id" }`, `ctx.store` adds the caller predicate to reads and deletes (also inside subqueries); a missing identity fails closed. `orderBy` takes one scalar column (default `{ updatedAt: "desc" }`; NULLs sort last); pass `nextCursor` back as `cursor` for the next page (limit 1–500, default 50). `ne` and `not` exclude NULL rows, as in SQL. A key or operator whose value is `undefined` is rejected, never skipped, so an unset variable cannot widen a filter or a set-based delete; use `isNull` to match NULL. TTL-expired rows are hidden. A statement binds at most 100 values — use a subquery rather than a long `in` list. `ctx.store.view(name, { params })` runs a named View as the caller; `ctx.store.id()` returns a new entry id. Host code uses `runtime.store` without a caller context or injected scope. Adapters without the capability return `RESOURCE_UNAVAILABLE`.
-
-`like` requires a string column and accepts SQL `%` and `_` pattern wildcards.
-Use `\%`, `\_`, or `\\` for literal wildcard or backslash characters.
-SQLite's default `LIKE` is case-insensitive for ASCII and case-sensitive for
-non-ASCII characters. Patterns are limited to 1,024 UTF-8 bytes.
-
-## TTL sweep in a ref handler
-
-`runtime.store.sweepExpired({ collection, limit })` previews a bounded page of expired rows; `delete: true` explicitly removes it. The result contains `scanned`, `removed` and an optional `nextCursor`. Continue with that cursor until absent. TTL cleanup is host maintenance and is absent from `ctx.store` in Procedures. D1 and Bun SQLite implement this semantic capability; unsupported storage returns `RESOURCE_UNAVAILABLE`. No sweep is scheduled automatically. See [Schema TTL](./schema.md#ttl).
+`readOnlyHint`, `destructiveHint`, `openWorldHint` (booleans), copied onto the
+MCP tool. `readOnlyHint` and `destructiveHint` may not both be true, and a SQL
+handler, which always writes, may not claim `readOnlyHint: true`.
 
 ## `uiSchema`
 
-Admin presentation only. It never affects input validation, the MCP tool schema or the OpenAPI document. Roots are closed: `collectionAction` and `fields`.
-
-| Key | Rule |
+| Key | Effect in Admin |
 |---|---|
-| `collectionAction` | A declared Schema name. Admin offers the Procedure as an action on that collection's list page. A non-empty string that names no Schema is `SCHEMA_UI_INVALID`; a Schema that declares `collectionAction` is rejected outright. |
-| `fields.<field>.widget` | Only `textarea`. `<field>` must be a top-level property of `input` with a string type. Anything else is `SCHEMA_UI_INVALID`. |
+| `fields.<name>.widget: textarea` | a multiline input |
+| `collectionAction: <schema>` | offer the operation on that collection's list |
 
-## Staff operations in Admin
+Admin lists a Procedure as an operation only when a Trigger binds it to the
+staff MCP surface.
 
-Admin derives its operations surface from the manifest graph — there is no extra grammar. A Procedure is staff-operable when **either** condition holds:
+## Diagnostics
 
-1. Some Trigger targets it with `source.kind: mcp` and `source.surface: staff` — the same predicate that builds the `/mcp/staff` tool catalog.
-2. Some Trigger targets it with `source.kind: http` **and** the Procedure's `requires.auth.all` includes a `ctx.staff` predicate.
-
-| Endpoint | Behavior |
-|---|---|
-| `GET /admin/api/operations` | Lists the staff-operable Procedures the calling staff member may actually run. |
-| `POST /admin/api/operations/:name` | Invokes one, through the same pipeline as any other caller. |
-
-Each listed operation carries `name`, `title`, `description`, `input`, `uiSchema`, `triggers` (the distinct kinds that qualified it, so a Procedure can be both), `interactions` and `rowBindings`.
-
-`interactions` come from the compiled plan (ADR-0029): each is `{ collection, bind: [{ input, field }], version?, mutates }`. Admin offers the operation from that collection's row menu and fills the bound inputs from the row, read-only. The operation target comes first: a declared `Procedure.spec.target`, or the target implied by a builtin `update`, `delete`, `archive` or id-based `upsert`. It binds the entry id and, where the Procedure takes one, `version` names the input that receives the version the person reviewed. A reference (`x-mantle-ref`) binds its input and locks nothing. With the object form `x-mantle-ref: { schema, field }`, the bound field is the declared `field`. The string form is transitional (D8): when its inferred field (a same-named property, else the lone single-field unique index) is not `id`, Admin keeps that binding without a version and logs one warning per Procedure input at mount, naming the object form to declare. The next minor release reads the string form as `field: id`. Refs to unknown collections or to translation children produce no binding and no error. `rowBindings` is the first bound input of each interaction, kept for one minor release; `targetCollection` is gone.
-
-Admin runs every operation through the shared interaction controller, whether it is opened from a row, an entry page, a collection header or the Operations page. `expectedVersion` is no longer a magic name: it is filled only when an interaction declares it as `version`, from the entry the person reviewed. A change since the list is shown for review before anything is sent. A `CONFLICT` on a locked version keeps the input and asks for the latest version; any other refusal is shown and the person may fix and resubmit. A write whose outcome is unknown is never retried. Without an interaction, the operation is an ordinary form, and a declared `expectedVersion` is an ordinary input.
-
-Worked end-to-end examples live in [Commerce inventory](../../examples/cf-primitives-commerce-inventory.md), [Commerce catalog](../../examples/builtin-commerce.md), and [Procurement approvals](../../examples/builtin-procurement.md).
-
-## Source
-
-- [`packages/mantle-spec/src/domain/model/ManifestGrammar.ts`](../../../packages/mantle-spec/src/domain/model/ManifestGrammar.ts)
-- [`packages/mantle-spec/src/domain/service/ManifestParser.ts`](../../../packages/mantle-spec/src/domain/service/ManifestParser.ts)
-- [`packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts`](../../../packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts)
-- [`packages/mantle-spec/src/domain/service/SchemaAdminUiChecker.ts`](../../../packages/mantle-spec/src/domain/service/SchemaAdminUiChecker.ts)
-- [`packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts`](../../../packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts)
-- [`packages/mantle-runtime/src/usecase/procedure/InvokeBuiltinUseCase.ts`](../../../packages/mantle-runtime/src/usecase/procedure/InvokeBuiltinUseCase.ts)
-- [`docs/adr/0020-builtin-handler-contracts-and-matched-upsert.md`](../../adr/0020-builtin-handler-contracts-and-matched-upsert.md)
-- [`docs/adr/0022-caller-observed-version-occ.md`](../../adr/0022-caller-observed-version-occ.md)
-- [`packages/mantle-runtime/src/domain/service/BuiltinProjector.ts`](../../../packages/mantle-runtime/src/domain/service/BuiltinProjector.ts)
-- [`packages/mantle-runtime/src/domain/model/EntryRow.ts`](../../../packages/mantle-runtime/src/domain/model/EntryRow.ts)
-- [`packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts`](../../../packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts)
-- [`packages/mantle-runtime/src/domain/service/io/EntryDeleteGuard.ts`](../../../packages/mantle-runtime/src/domain/service/io/EntryDeleteGuard.ts)
-- [`packages/mantle-runtime/src/domain/service/CallableCapabilityProjector.ts`](../../../packages/mantle-runtime/src/domain/service/CallableCapabilityProjector.ts)
-- [`packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts`](../../../packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts)
-- [`packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts`](../../../packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts)
-- [`packages/mantle-admin/src/mountMantleAdmin.ts`](../../../packages/mantle-admin/src/mountMantleAdmin.ts)
+Validate: `SQL_SYNTAX`, `SQL_UNSUPPORTED`, `SQL_FUNCTION`, `SQL_RELATION`,
+`SQL_COLUMN`, `SQL_WRITE`, `SQL_SHAPE`, `SQL_TYPE`, `PROCEDURE_TARGET_INVALID`,
+`GUARD_PROCEDURE_UNKNOWN`, `GUARD_SELF_REFERENCE`, `GUARD_PROCEDURE_NOT_REF`,
+`GUARD_CHAIN_NOT_ALLOWED`, `MCP_TOOL_DESCRIPTION_MISSING` (a warning),
+`MCP_TOOL_INPUT_UNION_AMBIGUOUS`, `MCP_TOOL_INPUT_UNBOUNDED`. Boot:
+`HANDLER_NOT_REGISTERED`, `HANDLER_NOT_DECLARED`. Run time:
+`INPUT_VALIDATION_FAILED`, `UNAUTHENTICATED`, `AUTH_DENIED`,
+`ENTITLEMENT_REQUIRED`, `CONFLICT`, `OUTPUT_VALIDATION_FAILED`,
+`INVOCATION_DEPTH_EXCEEDED`, `INTERNAL_ERROR`. See [Diagnostics](./diagnostics.md).

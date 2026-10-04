@@ -19,6 +19,8 @@ import { useInteraction } from "./use-interaction.js";
 export interface FieldLabelProps {
   /** Human label for a field name; defaults to the name itself. */
   readonly fieldLabel?: (field: string) => string;
+  /** How a field's value reads (an option's label, a date); defaults to the value as text. Empty values always show `labels.empty`. */
+  readonly fieldValue?: (field: string, value: unknown) => ReactNode;
 }
 
 export function EntityPreview(props: FieldLabelProps & {
@@ -36,7 +38,7 @@ export function EntityPreview(props: FieldLabelProps & {
         {fields.map((field) => (
           <div key={field} className="contents">
             <dt className="text-muted-foreground">{label(field)}</dt>
-            <dd className="min-w-0 break-words">{formatValue(props.entry.data[field], labels.empty)}</dd>
+            <dd className="min-w-0 break-words">{show(props, field, props.entry.data[field], labels.empty)}</dd>
           </div>
         ))}
         <dt className="text-muted-foreground">{labels.version}</dt>
@@ -68,8 +70,8 @@ export function ChangeDiff(props: FieldLabelProps & {
         {props.changes.map((change) => (
           <tr key={change.field} className="border-t align-top">
             <th scope="row" className="py-1 pr-2 text-left font-normal break-words">{label(change.field)}</th>
-            <td className="py-1 pr-2 break-all line-through decoration-muted-foreground/60">{formatValue(change.before, labels.empty)}</td>
-            <td className="py-1 break-all">{formatValue(change.after, labels.empty)}</td>
+            <td className="py-1 pr-2 break-all line-through decoration-muted-foreground/60">{show(props, change.field, change.before, labels.empty)}</td>
+            <td className="py-1 break-all">{show(props, change.field, change.after, labels.empty)}</td>
           </tr>
         ))}
       </tbody>
@@ -117,7 +119,7 @@ export function OperationStatus(props: FieldLabelProps & {
           {state.contested.length > 0
             ? <p className="mt-1 font-medium">{labels.contested} {state.contested.map(label).join(", ")}</p>
             : null}
-          <ChangeDiff changes={controller.latestChanges()} caption={labels.latestChanges} labels={labels} fieldLabel={props.fieldLabel} />
+          <ChangeDiff changes={controller.latestChanges()} caption={labels.latestChanges} labels={labels} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
         </>
       ));
     case "conflict":
@@ -208,20 +210,20 @@ export function OperationPanel(props: FieldLabelProps & {
             {bound.map(([field, value]) => (
               <div key={field} className="contents">
                 <dt className="text-muted-foreground">{label(field)}</dt>
-                <dd className="break-words">{formatValue(value, labels.empty)}</dd>
+                <dd className="break-words">{show(props, field, value, labels.empty)}</dd>
               </div>
             ))}
           </dl>
         </section>
       ) : null}
       {props.previewFields && state.reviewed
-        ? <EntityPreview entry={state.reviewed} fields={props.previewFields} labels={labels} fieldLabel={props.fieldLabel} />
+        ? <EntityPreview entry={state.reviewed} fields={props.previewFields} labels={labels} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
         : null}
       <fieldset disabled={busy || done} className="grid gap-3">{props.children}</fieldset>
-      <ChangeDiff changes={controller.changes()} labels={labels} fieldLabel={props.fieldLabel} />
+      <ChangeDiff changes={controller.changes()} labels={labels} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
       {/* One live region that stays mounted, so screen readers announce each step. */}
       <div aria-live="polite" className="grid gap-2">
-        <OperationStatus controller={controller} state={state} labels={labels} fieldLabel={props.fieldLabel} />
+        <OperationStatus controller={controller} state={state} labels={labels} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
         <OperationOutcome state={state} labels={labels} renderResult={props.renderResult} />
       </div>
       <footer className="flex justify-end gap-2">
@@ -252,6 +254,10 @@ export function OperationPanel(props: FieldLabelProps & {
       </footer>
     </form>
   );
+}
+
+function show(props: FieldLabelProps, field: string, value: unknown, empty: string): ReactNode {
+  return props.fieldValue && value !== undefined && value !== null && value !== "" ? props.fieldValue(field, value) : formatValue(value, empty);
 }
 
 function formatValue(value: unknown, empty: string): string {

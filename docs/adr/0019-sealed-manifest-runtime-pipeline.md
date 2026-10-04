@@ -74,7 +74,7 @@ semantic fingerprint.
 | Optional modules/adapters | Web/Admin composition and request/session/cache/platform translation | Re-parsing, re-linking, or a second authorization/runtime stack |
 
 The current-to-target rule ledger and evidence are maintained in
-[`docs/sealed-pipeline-ownership.md`](../sealed-pipeline-ownership.md).
+[`docs/sealed-pipeline-ownership.md`](https://github.com/aotter/mantle/blob/main/docs/sealed-pipeline-ownership.md).
 
 ### Core and optional products
 

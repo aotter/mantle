@@ -9,5 +9,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*"],
-  "exclude": ["dist/**/*"]
+  "exclude": ["dist/**/*", "src/cloudflare/testing/**/*"]
 }

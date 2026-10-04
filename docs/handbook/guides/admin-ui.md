@@ -1,63 +1,57 @@
 ---
-description: How Schema, View, Procedure, Trigger and uiSchema become Admin forms, lists, navigation and actions, with a complete customization example.
+description: What Admin serves in 0.2.0, how manifests and uiSchema become Admin's collections, reports and operations, and how to verify a change.
 ---
-# Customize the Admin console
+# Customize Admin from manifests
 
-Many Admin changes are manifest edits: labels, multiline inputs, operational
-list columns and tabs, reports and action placement. Admin API derives
-metadata from the compiled plan; the prebuilt SPA renders it. The host must
-already mount Admin API, authentication and Admin assets — see the
-[local Admin tutorial](../start/quickstart-admin.md).
+`createAdminSurface` serves Admin's API at `/admin/api/*` behind a staff gate.
+Every route reads and writes through `runtime.store.as(caller)` and
+`invokeProcedure`, so Admin sees exactly what the signed-in staff member may
+see. What Admin shows is derived from the compiled plan: labels, forms, list
+columns, reports and operations are manifest edits.
 
-## Manifest to rendered UI
+With feature `admin`, the generated preset also serves the console, the
+prebuilt SPA in `@aotter/mantle-ui/admin`, at `/admin`: `wrangler.jsonc` binds
+`node_modules/@aotter/mantle-ui/dist/admin` as the Worker's `ASSETS`
+(`run_worker_first`), and `src/service.ts` passes `createAdminSurface` an
+`assets` function that reads from it. `mantle generate` warns when `admin` is
+selected and `wrangler.jsonc` binds no `ASSETS`. The Bun preset reads the
+same files with `bunAdminAssets` from `@aotter/mantle/bun`. Sign in at
+`/admin/sign-in`.
 
-| User request | Author this | What Admin renders / constraints |
+## Manifest to Admin
+
+| You want | Author this | Effect and limits |
 |---|---|---|
-| Rename a collection or explain a field | Schema `title` / `description`, property `title` / `description` | Localized labels and help. Property names and stored values stay unchanged. |
-| Make a field required or an option list | JSON Schema `required`, `enum`, `type` | Required marker and type-derived control; enums become selects. These are data contracts, not styling flags. |
-| Make a string multiline | Schema or Procedure `uiSchema.fields.<name>.widget: textarea` | Textarea for a top-level string field. `textarea` is the only supported explicit widget. |
-| Edit Markdown or HTML | Property `x-mcp-hint: markdown` or `html` | Rich editor; these hints take precedence over `widget: textarea`. `richtext` currently uses a textarea. |
-| Edit a timestamp or show money | `format: date-time` on a string; `x-mcp-hint: timestamp-ms` or `money-minor` on a number | Date/time controls or number preview. Money uses minor units divided by 100 and a sibling `currency` when present. |
-| Reorder an operational record list | Schema `uiSchema.list.primaryField`, `.columns` | Linked leading data field, then ordered columns. Native columns such as `status` and `createdAt` are allowed in `columns`; `primaryField` must be a scalar data property. |
-| Add business-state tabs | Schema `uiSchema.list.filterField` | Operational-only enum tabs/sidebar links. Field needs a string enum and a left-prefix index. |
-| Search record contents | Schema `searchableFields` | Searches declared string fields plus entry id. This is substring search, not an index declaration. |
-| Show related records | Required property `x-mantle-ref` | Eligible child collections fold into the parent's workbench; translation children use language tabs. |
-| Also show a folded child in navigation | Schema `uiSchema.nav.standalone: true`, optional `parentField` | Adds its own list with parent filter, retaining the folded view. Multiple eligible parent refs require `parentField`; not allowed on translation children. |
-| Add a read-only report and CSV | View `surface: staff`, `title`, `uiSchema.list` | Report navigation; `columns`, `searchFields`, `filterFields` use output names. Server filters before pagination; CSV includes all matches. |
-| Add a list-level action | Eligible Procedure `uiSchema.collectionAction: <schema>` | Collection action with a form generated from Procedure `input`. |
-| Add a row action | Eligible Procedure input property `x-mantle-ref: <schema>` | Row operation with prefilled reference. Selection uses a same-name Schema property, then a sole single-field unique index, otherwise entry `id`. |
-| Make generic content editing read-only | Schema root `schema.readOnly: true` | Generic authoring writes are blocked; declared Procedures remain available. A disabled field is not an authorization rule. |
-
-The data editor also handles booleans, numbers, objects and arrays from JSON
-Schema. Bound fields (`x-mantle-bind`) display read-only because Runtime owns
-the value. Media controls depend on the supported media schema and host media
-policy; `uiSchema` alone cannot enable uploads.
+| Rename a collection or explain a field | Schema `title` / `description`, property `title` / `description` (a string or a locale map) | Labels and help. Stored names do not change |
+| Required fields and option lists | JSON Schema `required`, `enum`, `type` | Data contracts, checked on every write, not styling |
+| Option labels | a string property's `oneOf: [{ const: open, title: { en: Open, zh-TW: 處理中 } }, …]` instead of `enum` | Selects, filter tabs and list cells show the `title` |
+| A multiline string | Schema or Procedure `uiSchema.fields.<name>.widget: textarea` | `textarea` is the only explicit widget |
+| Markdown or HTML | property `x-mcp-hint: markdown` or `html` | A rich editor |
+| A timestamp, a date or money | `format: date-time`, `format: date`; `x-mcp-hint: money-minor` on an integer | Date controls; money in minor units, with a sibling `currency` when present |
+| Columns of an operational list | Schema `uiSchema.list.primaryField`, `.columns` | `primaryField` is a scalar data field; `columns` may name native columns (`createdAt`, `updatedAt`) |
+| Business-state tabs | Schema `uiSchema.list.filterField` | Operational Schemas only; a string enum that leads an index |
+| Search | Schema `searchableFields` | Full-text search over those string fields, plus `id` |
+| Related records | a required property with `x-mantle-ref` | Children fold under their parent |
+| A folded child in navigation too | Schema `uiSchema.nav.standalone: true`, optional `parentField` | Its own list with a parent filter |
+| A read-only report with CSV | a View with `surface: staff`, `title`, `uiSchema.list` | `columns`, `searchFields` and `filterFields` name the View's outputs; the search box and filters become `LIKE` and `=` on them. `GET /admin/api/views/<name>/export` returns every matching row |
+| An operation | a Procedure bound by a Trigger with `source: { kind: mcp, surface: staff }` | Listed at `/admin/api/operations` for staff its `requires` admits, and run with `POST /admin/api/operations/<name>` |
+| A row operation | that Procedure's `target` (declared or inferred from `WHERE id = … AND version = …`) | Bound to the row's `id`, and its version when the target names one |
+| A list-level operation | Procedure `uiSchema.collectionAction: <schema>` | Shown on that collection |
+| No generic edits | Schema root `schema.readOnly: true` | Admin's entry routes refuse writes (`CONFLICT`); declared Procedures still run |
 
 Schema list presentation (`primaryField`, `columns`, `filterField`) is for
-`lifecycle: operational`. Publishing collections keep the built-in publishing
-workflow. For an alternate publishing table, define a staff View report.
+`lifecycle: operational`. Publishing Schemas keep the draft, publish and
+archive workflow (`POST /admin/api/entries/{id}/publish` and `/unpublish`).
 
 ## Example: an operational inbox
 
-This complete source configures a collection and a separate staff report.
-The collection filters by `ticketState`, not Mantle's native publishing status.
-
 ```yaml
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
-metadata:
-  name: support-tickets
+metadata: { name: support-tickets }
 spec:
   title: { en: Support tickets, zh-TW: 客服工單 }
   lifecycle: operational
-  schema:
-    type: object
-    additionalProperties: false
-    required: [subject, ticketState]
-    properties:
-      subject: { type: string, title: Subject }
-      details: { type: string, description: Include the steps to reproduce. }
-      ticketState: { type: string, enum: [open, waiting, closed] }
   indexes: [[ticketState]]
   searchableFields: [subject, details]
   uiSchema:
@@ -67,82 +61,80 @@ spec:
       primaryField: subject
       columns: [ticketState, createdAt]
       filterField: ticketState
+  schema:
+    type: object
+    additionalProperties: false
+    required: [subject, ticketState]
+    properties:
+      subject: { type: string, title: Subject }
+      details: { type: string, description: Include the steps to reproduce. }
+      ticketState: { type: string, enum: [open, waiting, closed] }
 ---
-apiVersion: cms.mantle.aotter.net/v1
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
-metadata:
-  name: support-report
+metadata: { name: support-report }
 spec:
   title: Support report
   surface: staff
-  from: support-tickets
-  fields: [id, subject, ticketState, createdAt]
+  requires: { auth: { all: [{ ctx.staff: [owner, editor] }] } }
   uiSchema:
     list:
-      columns: [subject, ticketState, createdAt]
+      columns: [subject, ticketState, created_at]
       searchFields: [subject]
       filterFields: [ticketState]
+  sql: SELECT id, subject, ticketState, created_at FROM "support-tickets" ORDER BY created_at DESC
 ```
 
-The collection shows Subject first, State and Created at next, state tabs,
-and a multiline Details editor. The report is a separate navigation entry
-with its own search/filter configuration and CSV export. Schema `.list` and
-View `.list` are different contracts; do not copy their keys between atoms.
+Schema `uiSchema.list` and View `uiSchema.list` are different contracts; do
+not copy keys between them. The report's search box matches `subject`
+(`LIKE`), its filter is `ticketState` (`=`), and a declared `input` would add
+a form above them; all of them keep cursor paging.
 
-## When a Procedure becomes a button
+## Developer console
 
-`uiSchema.collectionAction` alone does not expose a Procedure. Admin discovers
-staff operations from either a staff MCP Trigger or an HTTP Trigger whose
-Procedure requires `ctx.staff`. Runtime rechecks Procedure `requires` on
-execution. Use the [Procedure reference](../reference/procedure.md#uischema)
-for a complete action declaration.
+The Developer console's Procedure overview projects the sealed SQL AST into
+a static execution diagram: authorization, validated input, guard, applicable
+lifecycle hooks, ordered atomic statements, commit or rollback, and output
+validation. Statement cards show read/write dependencies, row versus set
+semantics, RETURNING and ordered CASE assignments. CASE chooses a field value;
+WHERE filters rows. A set operation can affect zero rows and still continue.
+Output validation and after-hook failures do not roll back an existing commit.
+Unsupported expression shapes remain explicitly opaque beside authored SQL;
+code handlers' effects and actual run history are not inferred.
 
-An eligible operation with row bindings appears on those records. One with
-`collectionAction` appears on that collection's list. Operations without either
-appear in the standalone Operations screen.
+The inline business flow uses Schema/property titles and titled enum options
+from the developer snapshot; generic verbs and operators are UI translations.
+It expands direct `UPDATE SET field = CASE … END` assignments only. CASE
+inside arithmetic, casts, functions, SELECT or INSERT remains in the SQL
+detail tree, rather than pretending its intermediate result is the assigned
+value. SQL identifiers match manifest names case-insensitively. The existing
+`money-minor` display convention uses hundredths and a single-valued sibling
+`currency` enum; if numeric conversion or currency formatting would round a
+threshold, the flow shows its exact SQL literal marked as a raw SQL value.
+These display hints do not establish or validate business units.
 
-Every entry point runs the operation the same way, through the shared
-interaction controller ([MCP and agents](../concepts/mcp-and-agents.md)):
+## Roles
 
-- A row binds only what the compiled plan declares for that collection: the
-  operation target (a builtin id operation or `Procedure.spec.target`) binds
-  its id and locks the version the person reviewed; a reference
-  (`x-mantle-ref`) binds its input and locks nothing. Admin guesses no other
-  target, so an `expectedVersion` with no declared target is an ordinary input.
-- If the entry changed after the list was loaded, Admin shows what changed and
-  submits only after the person reviews the newer version.
-- A conflict keeps the input. A write whose outcome is unknown is never
-  retried: the person reloads the entry, or confirms they checked, first.
-
-Keep the Procedure's input contract intact when adjusting presentation.
+Admin's gate admits any staff role. Inside it, each route names the least role
+it needs: `contributor` reads and edits drafts, `editor` publishes, deletes
+and manages media, `owner` manages staff, site settings and the developer
+console. Operations and staff Views are further limited by their own
+`requires`.
 
 ## Verify a change
 
-1. Edit the application manifests, then run `mantle validate`, `mantle generate`
-   and `mantle generate --check` through the local package manager.
-2. Restart/reload the host so Admin receives the new compiled plan. Check
-   `/admin/api/collections`, `/admin/api/views-manifest` or
-   `/admin/api/operations` in an authenticated session if the UI seems stale.
-3. Open the affected list and editor: check labels, actual columns, filters,
-   form values and keyboard access. Verify a record after saving, and verify
-   report filters in CSV as well as the visible page.
+1. Run `mantle generate`, then `mantle generate --check`.
+2. Restart `wrangler dev` (or the Bun process) so the runtime loads the new plan.
+3. Open `/admin` with a staff session and check the affected list, form,
+   report or operation. `GET /admin/api/bootstrap` carries the collections,
+   Views, operations and site the console renders.
 
-`uiSchema` roots and supported nested keys are closed. Schema accepts `fields`,
-`list`, `nav`; Procedure accepts `collectionAction`, `fields`; staff View accepts
-`list`. They do not accept a custom layout, CSS, React component, arbitrary
-widget name or permission policy. See [Schema](../reference/schema.md#uischema),
-[View](../reference/view.md#uischemalist) and [Procedure](../reference/procedure.md#uischema).
-
-For a new layout or unsupported widget, use application-owned UI against the
-appropriate APIs or propose a change to the Admin UI package. Do not patch
-`public/_mantle/admin/`: generation replaces those prebuilt assets. Visitor
-frontend styles and the `theme` skill's site changes do not style Admin.
+`uiSchema` keys are closed. Schema takes `fields`, `list` and `nav`;
+Procedure takes `collectionAction` and `fields`; a staff View takes `list`. No
+layout, CSS, component or permission keys exist; build those in your own UI
+over Admin's API or your own surfaces.
 
 ## Source
 
-- [Admin UI contract validation](../../../packages/mantle-spec/src/domain/service/SchemaAdminUiChecker.ts)
-- [Admin metadata and operation discovery](../../../packages/mantle-admin/src/mountMantleAdmin.ts)
-- [Entry form renderer](../../../packages/mantle-admin-ui/src/features/content/entry-edit-view.tsx)
-- [Collection renderer](../../../packages/mantle-admin-ui/src/features/content/collection-view.tsx)
-- [Action renderer](../../../packages/mantle-admin-ui/src/features/content/row-operations.tsx)
-- [Navigation rules](../../../packages/mantle-admin-ui/src/lib/collection-nav.ts)
+- [Schema](../reference/schema.md#uischema), [View](../reference/view.md) and [Procedure](../reference/procedure.md) references
+- [HTTP, MCP, CLI and packages](../reference/surface.md): every Admin route
