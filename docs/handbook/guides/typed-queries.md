@@ -74,13 +74,12 @@ export const handlers: MantleHandlers = {
 
 The View name, its `input` and its row type are checked by `tsc`. A staff View
 with `uiSchema.list.searchFields` or `filterFields` also takes `search` and
-`filters` (`runtime.store.view(name, { search: "refund", filters: { ticketState: "open" } })`);
-Store refuses a filter the View does not declare. The generated `Store` types
-only `input`, `limit` and `cursor`, so pass `search` and `filters` through the
-untyped `MantleStore`. An output that reads a Schema field unchanged has that
-field's type, `created_at` and `updated_at` are `string | null`, and an
-expression, or another native column such as `id`, is `unknown`. Page with `limit` (default 50,
-at most 500) and the opaque `cursor` from `nextCursor`.
+`filters` (`ctx.store.view(name, { search: "refund", filters: { ticketState: "open" } })`);
+Store refuses a filter the View does not declare. An output that reads a
+Schema field unchanged has that field's type, `created_at` and `updated_at`
+are `string | null`, and an expression, or another native column such as `id`,
+is `unknown`. Page with `limit` (default 50, at most 500) and the opaque
+`cursor` from `nextCursor`.
 
 ## `select` and `write`
 
