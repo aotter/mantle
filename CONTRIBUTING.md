@@ -108,8 +108,7 @@ names a disposable database; native Bun conformance is separate
 ## Branches, commits, and pull requests
 
 - `develop` is the integration branch. `main` moves only through deliberate
-  release promotion. Until the 0.2 line merges into `develop`, its work
-  branches from and targets `0.2.x` (see the release process).
+  release promotion.
 - Branch from `origin/develop` with `feat/issue-N-topic`,
   `fix/issue-N-topic`, `docs/issue-N-topic`, or `chore/issue-N-topic`.
 - Use conventional commit subjects. Keep each commit and PR coherent and

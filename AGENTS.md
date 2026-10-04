@@ -13,8 +13,7 @@ Repository safety gates:
 
 - Branch from and open PRs against `develop`; preserve merge commits. `main` is
   the default branch, so pass `--base develop` — an unspecified base targets
-  `main`, which takes only promotion and hotfix PRs. Until the 0.2 line merges
-  into `develop`, its work targets `0.2.x`.
+  `main`, which takes only promotion and hotfix PRs.
 - Keep Runtime adapter-neutral and the v2 manifest grammar closed.
 - Use the narrowest relevant check while editing; run `pnpm check` for broad
   changes.
