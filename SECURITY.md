@@ -12,7 +12,7 @@ Fallback contact: `security@aotter.net`.
 
 Include:
 
-- affected package, starter, or deployed surface,
+- affected package and version, or deployed surface,
 - reproduction steps,
 - expected impact,
 - whether credentials, tokens, user data, content data, or deployment resources are involved,
@@ -28,9 +28,9 @@ These are targets, not contractual SLAs.
 
 ## Supported versions
 
-Until v0.1.0, only the active `develop` line and latest alpha are considered supported for security fixes.
-
-After v0.1.0, this file must be updated with the supported release window.
+Fixes land on the active development line and ship as a new version; a
+published version is never overwritten. The maintainer has not yet defined a
+supported release window for older versions.
 
 ## Scope
 
@@ -40,7 +40,7 @@ Security-sensitive areas include:
 - MCP endpoints,
 - auth and session handling,
 - staff role and permission enforcement,
-- D1 / KV / asset storage boundaries,
+- D1, PostgreSQL and asset storage boundaries,
 - entry write chokepoints,
 - render and content ingestion paths,
 - deployment and provisioning scripts that handle credentials.

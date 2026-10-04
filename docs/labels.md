@@ -17,22 +17,23 @@ Labels keep issues and PRs sortable for humans and cold-start AI agents. Apply t
 | `wontfix` | Valid but intentionally not planned. | Maintainer. | Usually never; close with reason. |
 | `epic` | Tracks a multi-issue initiative. | Maintainer. | The epic closes. |
 | `spike` | Exploratory work, not guaranteed to land. | Triager or maintainer. | The work becomes a concrete proposal or implementation issue. |
+| `dependencies` | Dependency update; its own section in generated release notes. | Dependabot (`.github/dependabot.yml`). | Usually never. |
 
 ## Area
 
 Use at least one `area:*` label when the affected surface is known.
 
-For package README or package-local docs changes, prefer the package area label (`area:spec`, `area:runtime`, `area:cf`, or `area:admin-ui`). Use `area:docs` for repo-wide docs, governance, ADRs, release docs, root README content, and cross-cutting documentation work.
+For package README or package-local docs changes, prefer the matching area label (`area:spec`, `area:runtime`, `area:cf`, or `area:admin-ui`). Use `area:docs` for repo-wide docs, governance, ADRs, release docs, root README content, and cross-cutting documentation work.
 
 | Label | Meaning |
 |---|---|
-| `area:runtime` | `packages/mantle-runtime` behavior, ports, use cases, dispatcher, and MCP runtime. |
-| `area:spec` | `packages/mantle-spec`, manifest parsing, validation, diagnostics, CLI, spec types. |
-| `area:cf` | `packages/adapters/cloudflare`, Workers adapter, D1/KV/ASSETS wiring, Cloudflare deploy behavior. |
+| `area:runtime` | Core (`packages/mantle/src/core`): runtime, Store, ports, dispatcher; and the MCP and REST surfaces. |
+| `area:spec` | `packages/mantle/src/spec` and `src/cli`: manifest parsing, SQL compilation, validation, diagnostics, the CLI, spec types. |
+| `area:cf` | `packages/mantle/src/cloudflare` and `src/d1`: Workers host, D1/Hyperdrive/ASSETS wiring, Cloudflare deploy behavior. |
 | `area:skills` | `skills/*` agent briefs and install/extend/provision workflows. |
-| `area:admin-ui` | `packages/mantle-ui/admin` React admin SPA. |
+| `area:admin-ui` | `packages/mantle-ui` (Admin SPA, components, kit, MCP App) and `packages/mantle/src/admin`. |
 | `area:docs` | Repo-wide human docs, governance docs, ADR text, release docs, root README content, and cross-cutting documentation work. |
-| `area:adapter` | Adapter boundary work spanning Cloudflare or future adapters. |
+| `area:adapter` | Host and dialect boundary work (`src/bun`, `src/postgres`, the dialect interface) and future adapters. |
 | `area:ci` | GitHub Actions, dependency automation, and repository checks. |
 | `area:starters` | **Legacy only.** Retired `aotter/mantle-starters` source and migration notes. Do not use for new Core work. |
 

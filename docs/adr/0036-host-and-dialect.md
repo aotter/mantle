@@ -1,6 +1,6 @@
 # ADR-0036: Host and dialect are the two axes of a project
 
-**Status:** Accepted for 0.2.0. Amends ADR-0035 decision 5 and replaces its rejected alternative "a `host` option in the open-source CLI".
+**Status:** Accepted for 0.2.0. Amends ADR-0035 decision 5 and replaces its rejected alternative "a `host` option in the open-source CLI". Amended by [ADR-0038](0038-bun-native-host.md).
 
 **Date:** 2026-10-02
 

@@ -40,12 +40,14 @@ WRANGLER_SEND_METRICS=false CI=1 ../node_modules/.bin/wrangler dev \
   --local --ip 127.0.0.1 --port 4423 --inspector-port 0
 ```
 
-Capture each host's output in `/private/tmp/mantle-alpha-<pair>.log`: the test
-reads the real locally printed OTP. These logs contain short-lived codes and
-must not be committed. From the **consumer root**, run:
+Capture each host's output in a log file (e.g. `bun src/index.ts 2>&1 | tee <log>`):
+`e2e.mjs` reads the real locally printed OTP from
+`/private/tmp/mantle-alpha-<pair>.log` (a macOS path), or from the file
+`MANTLE_ALPHA_LOG` names. These logs contain short-lived codes and must not be
+committed. From the **consumer root**, run:
 
 ```sh
-node e2e.mjs bun-sqlite
+MANTLE_ALPHA_LOG=/tmp/mantle-alpha-bun-sqlite.log node e2e.mjs bun-sqlite
 node extras.mjs bun-sqlite
 # Repeat for bun-postgres, cf-sqlite and cf-postgres on their ports.
 ```
@@ -57,7 +59,8 @@ budgets, custom business roles and seven real users. It checks:
 - Store-validated data imports, rejection of invalid dynamic rows, searchable
   announcements, indexed filters/sorts and disjoint cursor pages.
 - Related scope + compound-index sorting (actual ordered values, not only
-  HTTP success), filtered amount order and complete sorted CSV export.
+  HTTP success), filtered amount order and a complete (row-count) CSV export
+  of the sorted scope.
 - Small, threshold and large procurement; three approval/payment stages,
   self-approval rejection, role revoke/restore and exact invoice matching.
 - Whole SQL-batch rollback on insufficient budget and stale-version conflicts.

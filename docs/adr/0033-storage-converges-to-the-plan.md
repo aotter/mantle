@@ -1,6 +1,6 @@
 # ADR-0033: Schema storage converges to the plan; Mantle verifies, the author changes
 
-**Status:** Proposed for 0.2.0 (#1188). Amends ADR-0024; replaces the reviewed-artifact workflow of #1080 and #1086. Amended by [ADR-0034](0034-store-is-authored-as-sql.md).
+**Status:** Proposed for 0.2.0 (#1188). Amends ADR-0024; replaces the reviewed-artifact workflow of #1080 and #1086. Amended by [ADR-0034](0034-store-is-authored-as-sql.md) and [ADR-0035](0035-sql-dialects.md).
 
 **Date:** 2026-09-27
 
