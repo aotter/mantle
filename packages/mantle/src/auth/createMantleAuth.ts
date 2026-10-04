@@ -124,7 +124,8 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
             return Response.json({ code: "FORBIDDEN", message: "Staff role changed; sign in again." }, { status: 403 });
           }
         }
-        return normalizeAuthResponseCookies(await auth.handler(request));
+        const registration = request.method === "POST" && pathname === `${basePath}/oauth2/register` ? await loopbackClientsAreNative(request) : request;
+        return normalizeAuthResponseCookies(await auth.handler(registration));
       };
       const retain = context?.waitUntil;
       return retain ? backgroundTaskRetention.run(retain, serve) : serve();
@@ -498,4 +499,26 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       return mapRegisteredOAuthClient(created);
     },
   };
+}
+
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+/**
+ * A dynamic registration whose every redirect URI is http on a loopback host and that names no application_type is a
+ * native app (RFC 8252 7.3): local MCP clients register this way. Better Auth reads the missing type as `web`, which
+ * needs https on a non-loopback host, so it would refuse them all. Mark it native, as the client could itself; a
+ * registration naming a type, mixing hosts or using any other redirect is passed through unchanged.
+ */
+async function loopbackClientsAreNative(request: Request): Promise<Request> {
+  const body = await request.clone().json().catch(() => null) as Record<string, unknown> | null;
+  const uris = body?.redirect_uris;
+  if (!body || typeof body !== "object" || Array.isArray(body) || body.application_type !== undefined || !Array.isArray(uris) || !uris.length) return request;
+  const loopback = uris.every((uri) => {
+    if (typeof uri !== "string" || !URL.canParse(uri)) return false;
+    const url = new URL(uri);
+    return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
+  });
+  if (!loopback) return request;
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
+  return new Request(request.url, { method: "POST", headers, body: JSON.stringify({ ...body, application_type: "native" }) });
 }

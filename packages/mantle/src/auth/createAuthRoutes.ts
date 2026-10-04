@@ -17,7 +17,7 @@ export interface AuthRoutesOptions {
   /**
    * Where `GET /oauth/consents` sends the browser, e.g. Admin's connected-apps page. Without it, that route answers a plain HTML
    * page, as `GET /oauth/consent` does, so OAuth works on a service without Admin. Point `oauthProvider.consentPage` at Admin's own
-   * page to use it for consent.
+   * page, `/admin/oauth/consent`, to use it for consent.
    */
   readonly connectedAppsPage?: string;
 }
@@ -56,7 +56,7 @@ function consentSurface(auth: AuthRoutesAuth, options: AuthRoutesOptions): Surfa
     }
     if (route === "GET /oauth/consent") {
       const model = await auth.getOAuthConsentRequest(request).catch(() => null);
-      return html(consentHtml(locale, model), model ? 200 : 400, model?.redirectUri);
+      return html(consentHtml(locale, model), model ? 200 : 400);
     }
     if (route === "POST /oauth/consent") {
       if (!person) return new Response("sign in to answer this request", { status: 401 });
@@ -94,14 +94,16 @@ function consentSurface(auth: AuthRoutesAuth, options: AuthRoutesOptions): Surfa
 // ---- the pages a service without Admin shows: Admin is an optional subpath (ADR-0032 decision 13), OAuth is not tied to it
 
 /** A form's redirect is held to `form-action` too, so the client's callback origin is allowed. */
-function html(body: string, status: number, redirectUri?: string): Response {
-  const callback = redirectUri && URL.canParse(redirectUri) ? new URL(redirectUri) : null;
-  const action = callback ? `'self' ${callback.origin === "null" ? callback.protocol : callback.origin}` : "'self'";
+/**
+ * No `form-action`: browsers check it against every redirect of a form's navigation, so a callback that redirects again
+ * (www.cursor.com answers 308 to cursor.com) would hang the approval. The page runs no script and escapes every value.
+ */
+function html(body: string, status: number): Response {
   return new Response(body, {
     status,
     headers: {
       ...PRIVATE, "content-type": "text/html; charset=UTF-8", "referrer-policy": "same-origin", "x-content-type-options": "nosniff", "x-frame-options": "DENY",
-      "content-security-policy": `default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; form-action ${action}; frame-ancestors 'none'; base-uri 'none'`,
+      "content-security-policy": "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
     },
   });
 }

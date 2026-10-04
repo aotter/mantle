@@ -29,7 +29,7 @@ function createAuth(env: Env, origin: string): MantleAuth {
     methods: [{ kind: "email-otp", sender: new ConsoleEmailSender() }],
     bootstrapOwner: { match: "email", value: env.ADMIN_EMAIL },
     ipAddressHeaders: ["cf-connecting-ip"],
-    oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/oauth/consent", scopes: ["mcp"], mcpResource: `${origin}/mcp` },
+    oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/admin/oauth/consent", scopes: ["mcp"], mcpResource: `${origin}/mcp` },
   });
 }
 

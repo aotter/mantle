@@ -34,7 +34,7 @@ origins.
 | `GET /api/auth/methods` | the sign-in methods this service offers |
 | `/api/auth/*` | Better Auth: email OTP (`/email-otp/send-verification-otp`, `/sign-in/email-otp`), magic link, social and generic OAuth sign-in, sessions, sign-out, the OAuth provider |
 | `/.well-known/oauth-authorization-server/*`, `/.well-known/oauth-protected-resource[/mcp]` | OAuth metadata, served by Better Auth |
-| `/oauth/consent`, `/oauth/consents` | consent and connected apps, session only |
+| `/oauth/consent`, `/oauth/consents` | consent and connected apps, session only; with Admin, consent renders at `/admin/oauth/consent` and posts here |
 
 ### MCP
 
