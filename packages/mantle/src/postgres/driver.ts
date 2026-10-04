@@ -132,8 +132,10 @@ export function pgDatabaseDriver(connect: PgConnect): DatabaseDriver {
  * What Better Auth takes as a PostgreSQL pool (`database: pgPool(connect)`): Kysely's `PostgresDialect` asks it for a client per
  * query or transaction and releases it, so each gets its own connection, as the Workers rule above asks.
  */
-export function pgPool(connect: PgConnect): { connect(): Promise<PgClient & { release(): void }>; end(): Promise<void> } {
+export function pgPool(connect: PgConnect): { readonly options: Readonly<Record<string, never>>; connect(): Promise<PgClient & { release(): void }>; end(): Promise<void> } {
   return {
+    // Kysely 0.29 requires pool options; this shim owns no connection configuration or control client.
+    options: {},
     async connect() {
       const client = await connect();
       return Object.assign(client, { release: () => void client.end().catch(() => undefined) });

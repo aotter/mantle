@@ -87,6 +87,7 @@ export const bunDatabaseDriver = (sql: BunSqlPool) => pgDatabaseDriver(bunPgConn
  * form of `query`, which Better Auth never calls and the driver does not offer.
  */
 export interface BunAuthPool {
+  readonly options: Readonly<Record<string, never>>;
   connect(): Promise<{ query(sql: string, parameters: readonly unknown[]): Promise<any>; query(cursor: unknown): any; release(): void }>;
   end(): Promise<void>;
 }

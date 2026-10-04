@@ -60,3 +60,7 @@ it.skipIf(!PG_URL)("an OAuth grant stored in jsonb (Better Auth's PostgreSQL sch
     await drop();
   }
 });
+
+it("the structural auth pool includes Kysely pool options", () => {
+  expect(pgPool(async () => { throw new Error("not called"); }).options).toEqual({});
+});
