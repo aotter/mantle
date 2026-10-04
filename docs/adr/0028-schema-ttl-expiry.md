@@ -26,7 +26,7 @@ Scheduler-driven deletion alone leaves a visibility gap. Implicit migration-time
 
 ## How to apply
 
-Declare `ttl` on a Schema, use declarative Views, preview with `runtime.sweepExpired`, then explicitly request deletion page by page. See [Schema TTL](../handbook/reference/schema.md#ttl).
+Declare `ttl` on a Schema, use declarative Views, preview with `runtime.store.sweepExpired({ collection, delete: false })`, then explicitly request deletion page by page. See [Schema TTL](../handbook/reference/schema.md#ttl).
 
 ## Implementation status
 

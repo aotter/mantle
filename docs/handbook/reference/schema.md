@@ -59,7 +59,7 @@ Property extensions:
 |---|---|
 | `x-mantle-ref: <schema>` or `{ schema, field }` | the value is another Schema's `id` (or the named single-field unique field). Admin relates and binds rows by it, either way; a required one folds the child under its parent. `MANTLE_REF_INVALID` when the target is not `id` or a unique field |
 | `oneOf: [{ const, title }, …]` | a string field whose options each have a label (a string or a locale map): stored as text, checked like an `enum`, usable as `uiSchema.list.filterField`, and shown by its `title` in Admin |
-| `x-mcp-hint` | a widget hint: `markdown`, `html`, `richtext`, `code`, `media`, `media-image`, `media-video`, `media-file`, `money-minor`, `idempotency-key` |
+| `x-mcp-hint` | a widget hint: `markdown`, `html`, `richtext`, `code`, `media`, `media-image`, `media-video`, `media-file`, `money-minor`, `timestamp-ms`, `idempotency-key` |
 | `title`, `description` | a field's label and help, a string or a locale map |
 | `readOnly: true` (at the root) | Admin's generic entry routes refuse writes; declared Procedures still write |
 
