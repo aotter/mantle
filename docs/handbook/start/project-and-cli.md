@@ -67,7 +67,8 @@ package manager. It never installs anything.
 | dialect `postgres` on `cloudflare` | `pg` |
 
 The project also installs `wrangler`, `@cloudflare/workers-types` and
-`@types/node` itself.
+`@types/node` itself. A TypeScript Cloudflare/PostgreSQL project also installs
+`@types/pg` as a dev dependency for the generated `pg` import.
 
 ## `mantle generate`
 
