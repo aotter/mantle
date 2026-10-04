@@ -5,6 +5,7 @@
  */
 import { Deparser } from "pgsql-deparser";
 import type { SqlNode } from "../spec/domain/index.js";
+import { parenthesized } from "../core/sql/ast.js";
 
 /** A pre-lowered SQLite expression: strings print as they are, nodes print as the deparser would, always in parentheses. */
 export interface RawExpr {
@@ -22,10 +23,14 @@ export class SqliteDeparser extends Deparser {
   }
   /** PostgreSQL prints E'a\\b' for a string with a backslash; SQLite has no E'' strings. */
   override A_Const(n: SqlNode, ctx: any) {
-    return n.sval ? `'${String(n.sval.sval ?? "").replace(/'/g, "''")}'` : super.A_Const(n, ctx);
+    if (n.sval) return `'${String(n.sval.sval ?? "").replace(/'/g, "''")}'`;
+    // SQLite resolves a bare `true`/`false` as a column or output alias of that name before the keyword
+    if (n.boolval) return n.boolval.boolval === true ? "(1 = 1)" : "(1 = 0)";
+    return super.A_Const(n, ctx);
   }
   /** `x LIKE p ESCAPE e` parses to LIKE with pg_catalog.like_escape(p, e), which SQLite has no function for. */
-  override A_Expr(n: SqlNode, ctx: any) {
+  override A_Expr(node: SqlNode, ctx: any) {
+    const n = parenthesized("A_Expr", node);
     const fc = n.rexpr?.FuncCall;
     // only the parser's own like_escape(p, e); any other function on the right of LIKE is an ordinary pattern expression
     if (n.kind === "AEXPR_LIKE" && fc?.funcname?.at(-1)?.String?.sval === "like_escape" && fc.args?.length === 2) {
@@ -33,8 +38,15 @@ export class SqliteDeparser extends Deparser {
       const not = n.name[0].String.sval === "!~~" ? "NOT " : "";
       return `${this.visit(n.lexpr as never, ctx)} ${not}LIKE ${this.visit(pat as never, ctx)} ESCAPE ${this.visit(esc as never, ctx)}`;
     }
+    // SQLite looks through a unary sign: `ORDER BY +2` is column position 2 to it (and `-2` an error) where PostgreSQL has a constant
+    const sign = n.name?.[0]?.String?.sval;
+    // the operand in its own parentheses: `-` then `-2` must never print as `--`, which starts a comment
+    if (n.kind === "AEXPR_OP" && !n.lexpr && (sign === "+" || sign === "-")) return `(${sign}(${this.visit(n.rexpr as never, ctx)}) + 0)`;
     return super.A_Expr(n, ctx);
   }
+  override NullTest(n: SqlNode, ctx: any) { return super.NullTest(parenthesized("NullTest", n) as never, ctx); }
+  override BooleanTest(n: SqlNode, ctx: any) { return super.BooleanTest(parenthesized("BooleanTest", n) as never, ctx); }
+  override SubLink(n: SqlNode, ctx: any) { return super.SubLink(parenthesized("SubLink", n) as never, ctx); }
   /** Mantle's own lowerings are written as SQLite text with sub-ASTs spliced in (see `raw` in policy.ts). */
   Raw(n: RawExpr, ctx: any) {
     return `(${n.parts.map((p) => (typeof p === "string" ? p : this.visit(p as never, ctx))).join("")})`;

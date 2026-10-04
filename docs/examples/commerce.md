@@ -31,7 +31,7 @@ spec:
     additionalProperties: false
     required: [slug, title, priceMinor, currency]
     properties:
-      slug: { type: string, pattern: "^[a-z0-9-]+$" }
+      slug: { type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }
       title: { type: string, minLength: 1, maxLength: 160 }
       summary: { type: string, maxLength: 500 }
       priceMinor: { type: integer, minimum: 0, x-mcp-hint: money-minor }
@@ -68,7 +68,7 @@ spec:
           additionalProperties: false
           required: [productSlug, title, quantity, unitPriceMinor, lineTotalMinor]
           properties:
-            productSlug: { type: string, pattern: "^[a-z0-9-]+$" }
+            productSlug: { type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }
             title: { type: string }
             quantity: { type: integer, minimum: 1, maximum: 99 }
             unitPriceMinor: { type: integer, minimum: 0 }
@@ -127,7 +127,7 @@ spec:
           additionalProperties: false
           required: [productSlug, title, quantity, unitPriceMinor, lineTotalMinor]
           properties:
-            productSlug: { type: string, pattern: "^[a-z0-9-]+$" }
+            productSlug: { type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }
             title: { type: string }
             quantity: { type: integer, minimum: 1, maximum: 99 }
             unitPriceMinor: { type: integer, minimum: 0 }

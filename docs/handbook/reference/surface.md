@@ -70,7 +70,7 @@ Two npm packages, always published together at one version.
 
 | Import | Exports |
 |---|---|
-| `@aotter/mantle` | `createMantle`, `createMantleRuntime`, `withCaller`, `systemCaller`, the `Caller`, `CallerResolver`, `MantleService`, `HandlerContext`, `Invocation` and Store types, `EmailSender` |
+| `@aotter/mantle` | `createMantle`, `createMantleRuntime`, `verifyPlan` and its `PLAN_LIMITS`, `withCaller`, `systemCaller`, the `Caller`, `CallerResolver`, `MantleService`, `HandlerContext`, `Invocation` and Store types, `EmailSender`, `DiagnosticError`, `makeDiagnostic`, `runtimeDiagnostic`, `STAFF_ROLES`, `isStaffRole` |
 | `@aotter/mantle/spec` | the grammar types, `compilePlan`, `mcpTools`, `DiagnosticError`, `runtimeDiagnostic` (the SQL compiler loads only when called) |
 | `@aotter/mantle/d1`, `/d1/compile` | the D1 dialect: `sqliteStorage`; its compile side |
 | `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |

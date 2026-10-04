@@ -8,14 +8,14 @@
  * Pure JavaScript. This file must never import the parser: the runtime imports it, and the parser
  * declares a 128 MiB WASM memory, which is a Worker's whole isolate limit.
  */
-import type { SqlContext, SqlDiagnostic, SqlDiagnosticCode, SqlNode as N, SqlPlan, SqlSchemaDef } from "../../spec/domain/model/SqlIr.js";
+import type { SchemaColumns, SqlContext, SqlDiagnostic, SqlDiagnosticCode, SqlNode as N, SqlPlan, SqlSchemaDef } from "../../spec/domain/model/SqlIr.js";
 import { PG_GRAMMAR } from "../../spec/domain/model/SqlIr.js";
 import { SqlRefusal } from "../../spec/domain/service/SqlRefusal.js";
 import { intervalMicros, parseNumeric } from "../../spec/domain/service/SqlTypes.js";
 
 type Code = SqlDiagnosticCode;
 /** `scope`: the CTE names in scope, innermost last, by PostgreSQL's rule (see `withScope`) */
-type Ctx = SqlContext & { source?: string; known?: Set<string>; p: Profile; scope: Set<string>[]; rels?: Map<string, string>[] };
+type Ctx = SqlContext & { source?: string; known?: Set<string>; cols?: SchemaColumns; p: Profile; scope: Set<string>[]; rels?: Map<string, string>[] };
 
 /** node type -> the keys it may carry */
 export const KEYS_SRC: Record<string, string> = {
@@ -35,6 +35,32 @@ export const KEYS_SRC: Record<string, string> = {
 };
 export const KEYS = Object.fromEntries(Object.entries(KEYS_SRC).map(([k, v]) => [k, new Set(v.split(' ').filter(Boolean))]));
 
+/**
+ * Where a node may sit. The printers print whatever node a slot holds, and the policy rewriter wraps only a `RangeVar` in FROM, so
+ * the type of every child is checked against its slot: a `String` in FROM would print as a table read with no wrapper. A key not
+ * listed here is a scalar (a name, an enum, a flag) and must hold a string, number or boolean, never a node.
+ */
+const EXPR = 'ColumnRef A_Const A_Expr BoolExpr NullTest CaseExpr CoalesceExpr TypeCast FuncCall SubLink MinMaxExpr';
+const FROM = 'RangeVar RangeSubselect RangeFunction JoinExpr';
+const SLOTS_SRC: Record<string, string> = {
+  'SelectStmt.targetList': 'ResTarget', 'SelectStmt.fromClause': FROM, 'SelectStmt.whereClause': EXPR, 'SelectStmt.havingClause': EXPR,
+  'SelectStmt.groupClause': EXPR, 'SelectStmt.sortClause': 'SortBy', 'SelectStmt.limitCount': EXPR, 'SelectStmt.distinctClause': EXPR,
+  'SelectStmt.valuesLists': 'List', 'SelectStmt>List.items': EXPR,
+  'InsertStmt.cols': 'ResTarget', 'InsertStmt.selectStmt': 'SelectStmt', 'UpdateStmt.targetList': 'ResTarget', 'UpdateStmt.whereClause': EXPR,
+  'DeleteStmt.whereClause': EXPR, 'ReturningClause.exprs': 'ResTarget', 'ResTarget.val': EXPR,
+  'ColumnRef.fields': 'String A_Star', 'A_Expr.name': 'String', 'A_Expr.lexpr': EXPR, 'A_Expr.rexpr': `${EXPR} List`, 'A_Expr>List.items': EXPR,
+  'BoolExpr.args': EXPR, 'NullTest.arg': EXPR, 'CaseExpr.arg': EXPR, 'CaseExpr.args': 'CaseWhen', 'CaseExpr.defresult': EXPR,
+  'CaseWhen.expr': EXPR, 'CaseWhen.result': EXPR, 'CoalesceExpr.args': EXPR, 'TypeCast.arg': EXPR, 'TypeName.names': 'String', 'TypeName.typmods': 'A_Const',
+  'FuncCall.funcname': 'String', 'FuncCall.args': EXPR, 'FuncCall.agg_filter': EXPR, 'FuncCall.agg_order': 'SortBy',
+  'WindowDef.partitionClause': EXPR, 'WindowDef.orderClause': 'SortBy', 'WindowDef.startOffset': EXPR, 'WindowDef.endOffset': EXPR,
+  'SubLink.testexpr': EXPR, 'SubLink.subselect': 'SelectStmt', 'SubLink.operName': 'String', 'SortBy.node': EXPR,
+  'RangeSubselect.subquery': 'SelectStmt', 'RangeFunction.functions': 'List', 'RangeFunction>List.items': 'FuncCall',
+  'JoinExpr.larg': FROM, 'JoinExpr.rarg': FROM, 'JoinExpr.quals': EXPR,
+  'OnConflictClause.targetList': 'ResTarget', 'OnConflictClause.whereClause': EXPR, 'InferClause.indexElems': 'IndexElem',
+  'WithClause.ctes': 'CommonTableExpr', 'CommonTableExpr.ctequery': 'SelectStmt', 'CommonTableExpr.aliascolnames': 'String', 'MinMaxExpr.args': EXPR,
+};
+const SLOTS = new Map(Object.entries(SLOTS_SRC).map(([k, v]) => [k, new Set(v.split(' '))]));
+
 /** keys (or `Type.key`) whose value is one node with the type key omitted (libpg-query prints nothing for it) */
 export const BARE: Record<string, string> = { alias: 'Alias', typeName: 'TypeName', infer: 'InferClause', returningClause: 'ReturningClause', relation: 'RangeVar', over: 'WindowDef', onConflictClause: 'OnConflictClause', withClause: 'WithClause', 'SelectStmt.larg': 'SelectStmt', 'SelectStmt.rarg': 'SelectStmt' };
 
@@ -51,7 +77,8 @@ export const ENUM: Record<string, (string | number | boolean)[]> = {
   'IndexElem.ordering': ['SORTBY_DEFAULT'], 'IndexElem.nulls_ordering': ['SORTBY_NULLS_DEFAULT'],
 };
 
-const OPS = new Set(['=', '<>', '!=', '<', '>', '<=', '>=', '+', '-', '*', '/', '%', '||', '->>', '~~', '!~~']);
+// LIKE is an AEXPR_LIKE node, checked below; `~~` written as a plain operator prints as itself, which SQLite cannot parse
+const OPS = new Set(['=', '<>', '!=', '<', '>', '<=', '>=', '+', '-', '*', '/', '%', '||', '->>']);
 /** scalar and aggregate functions. `pg_catalog.` is stripped before the lookup. */
 export const FUNCS = new Set([
   'count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object', 'row_number', 'rank',
@@ -70,7 +97,8 @@ export const EXTRACT_FIELDS = new Set(['year', 'month', 'day', 'dow', 'hour']);
 const CAST_TYPES = new Set(['text', 'int4', 'int8', 'float8', 'bool', 'timestamptz', 'date', 'numeric', 'interval']);
 export const MAX_RADIUS_M = 50_000;
 export const MAX_NEAR_K = 100;
-const MAX_NODES = 2000;
+/** The most nodes one program's IR may have. */
+export const MAX_NODES = 2000;
 
 
 /** What one profile accepts. `reference` also lifts the rules that exist only because SQLite stores and compares differently. */
@@ -162,7 +190,7 @@ export function validateProgram(stmts: N[], ctx: SqlContext & { source?: string 
 function program(stmts: N[], ctx: Ctx, locs: (number | undefined)[]): void {
   if (!Array.isArray(stmts) || !stmts.length) no('SQL_SHAPE', 'an empty program');
   if (ctx.kind === 'view' && (stmts.length !== 1 || !stmts[0]!.SelectStmt)) no('SQL_SHAPE', 'a View is exactly one SELECT', locs[1]);
-  ctx = { ...ctx, known: knownColumns(stmts, ctx) };
+  ctx = { ...ctx, known: knownColumns(stmts), cols: ctx.columns ?? schemaColumns(ctx.schemas) };
   const w: Walk = { ctx, budget: { n: 0 } };
   stmts.forEach((s, i) => {
     const t = Object.keys(s)[0] ?? '';
@@ -184,15 +212,28 @@ function* find(v: any, key: string): Generator<any> {
   }
 }
 
+/** What every program checked against these Schemas reads off them: computed once per plan by a caller that checks many. */
+export function schemaColumns(schemas: SqlContext['schemas']): SchemaColumns {
+  const known = new Set<string>();
+  const scopes = new Set<string>();
+  const types = new Map<string, string | null>();
+  for (const s of Object.values(schemas)) {
+    if (typeof s.scope === 'string') scopes.add(s.scope.toLowerCase());
+    for (const [f, t] of Object.entries(s.fields)) {
+      (t === 'geo' ? [f, `${f}_lat`, `${f}_lng`] : [f]).forEach((c) => known.add(c));
+      types.set(f, types.has(f) && types.get(f) !== t ? null : t); // null: two Schemas disagree
+    }
+  }
+  return { known, scopes, types: new Map([...types].filter((e): e is [string, string] => e[1] !== null)) };
+}
+
 /**
- * Every name a column may have: declared fields (a geo field also as _lat and _lng), `id`, the system
- * columns, json_each's, relation names and aliases, and every output name the program gives (ORDER BY and outer queries read them).
- * A name outside the set is a typo. Not per relation: a column of another table passes here.
+ * Every name a column may have beyond the declared fields (`SchemaColumns.known`, a geo field also as _lat and _lng): `id`, the
+ * system columns, json_each's, relation names and aliases, and every output name the program gives (ORDER BY and outer queries
+ * read them). A name outside both is a typo. Not per relation: a column of another table passes here.
  */
-function knownColumns(stmts: N[], ctx: Ctx): Set<string> {
+function knownColumns(stmts: N[]): Set<string> {
   const known = new Set(['id', 'key', 'value', 'type', 'atom', 'parent', 'fullkey', 'path', ...SYSTEM]);
-  for (const s of Object.values(ctx.schemas))
-    for (const [f, t] of Object.entries(s.fields)) (t === 'geo' ? [f, `${f}_lat`, `${f}_lng`] : [f]).forEach((c) => known.add(c));
   for (const r of find(stmts, 'ResTarget')) if (r.name) known.add(String(r.name).toLowerCase());
   for (const r of find(stmts, 'RangeVar')) [r.relname, r.alias?.aliasname].forEach((a) => a && known.add(a.toLowerCase())); // mantle.search(<alias>, ...) names a relation
   for (const c of find(stmts, 'CommonTableExpr')) [c.ctename, ...(c.aliascolnames ?? []).map((x: N) => x.String?.sval)].forEach((a) => a && known.add(String(a).toLowerCase()));
@@ -222,6 +263,31 @@ function shape(type: string, node: N, w: Walk, here: number | undefined): void {
     const e = w.ctx.p.enums[`${type}.${k}`];
     if (e && !e.includes(v as any)) no('SQL_UNSUPPORTED', `${type}.${k} = ${JSON.stringify(v)} is refused`, firstLoc(node) ?? here, KEYWORD[`${type}.${k}`]);
   }
+  if (type === 'String' && node.sval !== undefined && typeof node.sval !== 'string') no('SQL_SHAPE', 'a name is a string', here);
+  if (type === 'A_Const' && !constant(node)) no('SQL_UNSUPPORTED', 'a literal is one integer, numeric, string, boolean or NULL', firstLoc(node) ?? here);
+}
+
+/**
+ * A literal's value is printed as it is, so its type is checked here: the walker never descends into a literal, and a plan
+ * that reaches the runtime is untrusted. libpg-query omits a zero, a false and an empty string (`{ ival: {} }`).
+ */
+function constant(node: N): boolean {
+  const own = Object.keys(node).filter((k) => k !== 'location');
+  if (own.length !== 1) return false;
+  const [k] = own as [string];
+  const v = node[k];
+  const only = (key: string, ok: (x: unknown) => boolean) => !!v && typeof v === 'object' && Object.keys(v).every((x) => x === key) && (!(key in v) || ok(v[key]));
+  switch (k) {
+    case 'ival': return only('ival', Number.isSafeInteger);
+    // the parser's Float: a point or exponent, or an integer past int32 (smaller ones are ival); never a sign the printers would
+    // print as `+2`, which SQLite reads as a column position in ORDER BY
+    // (one split of the digits, so the match is linear; and no longer than any number the parser writes)
+    case 'fval': return only('fval', (x) => typeof x === 'string' && x.length <= 64 && /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/.test(x) && (/[.eE]/.test(x) || Math.abs(Number(x)) >= 2 ** 31));
+    case 'sval': return only('sval', (x) => typeof x === 'string');
+    case 'boolval': return only('boolval', (x) => typeof x === 'boolean');
+    case 'isnull': return v === true;
+    default: return false;
+  }
 }
 
 /** Runs `f` with these CTE names in scope. */
@@ -245,6 +311,7 @@ function walk(type: string, node: N, w: Walk, path: string[], loc: number | unde
   const names: string[] = (wc?.ctes ?? []).map((x: N) => String(x.CommonTableExpr?.ctename));
   if (wc) {
     shape('WithClause', wc, w, here);
+    if (wc.recursive !== undefined && typeof wc.recursive !== 'boolean') no('SQL_UNSUPPORTED', 'WithClause.recursive is a flag', here);
     (wc.ctes ?? []).forEach((x: N, j: number) => withScope(w, wc.recursive ? names : names.slice(0, j), () => child(x, w, [...path, 'WithClause'], 'ctes', here)));
   }
   // the Schema relations this statement reads directly, by alias: what a column reference in it can name (`jsonCompare`)
@@ -254,9 +321,12 @@ function walk(type: string, node: N, w: Walk, path: string[], loc: number | unde
     for (const [k, v] of Object.entries(node)) {
       if (type === 'A_Const' || k === 'location' || k === 'rexpr_list_start' || k === 'rexpr_list_end' || (wc && k === 'withClause')) continue;
       const bare = BARE[`${type}.${k}`] ?? BARE[k];
+      const slot = bare || SLOTS.has(`${type}.${k}`) || (type === 'List' && k === 'items');
+      if (!slot) { if (v !== null && typeof v === 'object') no('SQL_UNSUPPORTED', `${type}.${k} is a value, not a node`, here); continue; }
+      if (v === null || typeof v !== 'object') no('SQL_UNSUPPORTED', `${type}.${k} holds a node`, here);
       if (bare) walk(bare, v as N, w, [...path, bare], here);
       else if (Array.isArray(v)) v.forEach((c) => child(c, w, path, k, here));
-      else if (v && typeof v === 'object') child(v as N, w, path, k, here);
+      else child(v as N, w, path, k, here);
     }
   }); } finally { if (rels) w.ctx.rels!.pop(); }
 }
@@ -276,20 +346,33 @@ function relationsOf(node: N): Map<string, string> {
 function child(c: N, w: Walk, path: string[], k: string, loc: number | undefined) {
   const keys = Object.keys(c);
   if (!keys.length) {
-    if (k === 'distinctClause' || k === 'items') return; // `DISTINCT` is [{}]; a json_each coldeflist slot is {}
+    if (k === 'distinctClause' || (k === 'items' && path.at(-2) === 'RangeFunction')) return; // `DISTINCT` is [{}]; a json_each coldeflist slot is {}
     no('SQL_UNSUPPORTED', `an empty node in ${k}`, loc);
   }
-  if (keys.length !== 1) no('SQL_UNSUPPORTED', 'a malformed node', loc);
+  if (keys.length !== 1 || c[keys[0]!] === null || typeof c[keys[0]!] !== 'object') no('SQL_UNSUPPORTED', 'a malformed node', loc);
+  const parent = path.at(-1)!;
+  const allowed = SLOTS.get(parent === 'List' ? `${path.at(-2)}>List.${k}` : `${parent}.${k}`);
+  if (w.ctx.p.keys[keys[0]!] && !allowed?.has(keys[0]!)) no('SQL_SHAPE', `${keys[0]} cannot stand in ${parent}.${k}`, loc); // an unknown type is shape()'s refusal
   walk(keys[0]!, c[keys[0]!], w, [...path, keys[0]!], loc);
 }
 
+/** A cast's type: `t` or `pg_catalog.t`, read as the lowerings and printers read it (the last name part). */
+const castType = (typeName: N): string => {
+  const names: unknown[] = (typeName?.names ?? []).map((n: N) => n?.String?.sval);
+  const ok = names.every((x) => typeof x === 'string' && /^[a-z_][a-z0-9_]*$/.test(x)) && (names.length === 1 || (names.length === 2 && names[0] === 'pg_catalog'));
+  if (!ok) no('SQL_TYPE', `a cast names one type: ${JSON.stringify(names)}`);
+  return names.at(-1) as string;
+};
 const isConst = (n: N | undefined) => !!n?.A_Const;
 const isInputRef = (n: N | undefined) => n?.ColumnRef?.fields?.length === 2 && n.ColumnRef.fields[0].String?.sval === 'input';
 
 type Checker = (n: N, ctx: Ctx, path: string[], at: number | undefined) => void;
 const check: Record<string, Checker> = {
   RangeVar: (n, ctx, _p, at) => {
-    const name = (n.relname as string).toLowerCase(); // SQLite names are case-insensitive, quoted or not; the context is keyed in lower case
+    // the parser folds an unquoted name and the CLI writes only lower case: an `ARTICLES` would be one Schema to the checks and
+    // another to what keys hooks and publishing by the folded name, so a relation (a Schema or a CTE reference) is lower case
+    if (typeof n.relname !== 'string' || n.relname !== n.relname.toLowerCase()) no('SQL_RELATION', `${JSON.stringify(n.relname)}: a relation is named in lower case`, at);
+    const name: string = n.relname;
     if (name.startsWith('_mantle') || name === 'input' || name === 'auth') no('SQL_RELATION', `${name} is not a declared Schema`, at);
     const reference = ctx.p.name === 'reference';
     // a `cte` tag is honored only for a CTE in scope here (the runtime never trusts an IR's tags); base has no WITH at all
@@ -303,10 +386,10 @@ const check: Record<string, Checker> = {
     const f = sv(n.fields), last = f.split('.').pop()!.toLowerCase();
     if (n.fields.length > 2) no('SQL_COLUMN', `${f}: at most alias.column`, at);
     if (['rowid', 'oid', '_rowid_', '_rid'].includes(last)) no('SQL_COLUMN', `${last} is not addressable`, at);
-    if (Object.values(ctx.schemas).some((s) => s.scope === last)) no('SQL_COLUMN', `${f}: the scope column is not addressable`, at);
+    if (ctx.cols!.scopes.has(last)) no('SQL_COLUMN', `${f}: the scope column is not addressable`, at);
     if (f.startsWith('input.') && !(last in ctx.inputs)) no('SQL_COLUMN', `${f} is not a declared input`, at);
     if (ctx.p.name === 'base' && SQLITE_ONLY_KEYWORDS.has(last)) no('SQL_UNSUPPORTED', `${last} is an SQLite keyword: the printer would not quote it`, at);
-    if (last !== '*' && !f.startsWith('input.') && !ctx.known!.has(last)) no('SQL_COLUMN', `${f} is not a declared field`, at);
+    if (last !== '*' && !f.startsWith('input.') && !ctx.known!.has(last) && !ctx.cols!.known.has(last)) no('SQL_COLUMN', `${f} is not a declared field`, at);
   },
   FuncCall: (n, ctx, path, at) => {
     const f = fname(n);
@@ -322,7 +405,7 @@ const check: Record<string, Checker> = {
     const args: N[] = n.args ?? [];
     const str = (a?: N) => a?.A_Const?.sval?.sval as string | undefined;
     switch (f) {
-      case 'like_escape': if (path.at(-2) !== 'A_Expr') no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at); break;
+      case 'like_escape': if (path.at(-2) !== 'A_Expr' || args.length !== 2) no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at); break;
       case 'date_trunc': if (args.length !== 2 || !ctx.p.trunc.has(str(args[0]) ?? '')) no('SQL_TYPE', `date_trunc takes ${[...ctx.p.trunc].join(', ')} as a literal first argument`, at); break;
       case 'extract': if (args.length !== 2 || !ctx.p.extract.has(str(args[0]) ?? '')) no('SQL_TYPE', `extract takes ${[...ctx.p.extract].join(', ')}`, at); break;
       case 'now': case 'auth.uid': case 'auth.role': if (args.length) no('SQL_FUNCTION', `${f}() takes no arguments`, at); break;
@@ -343,9 +426,21 @@ const check: Record<string, Checker> = {
       }
     }
     if (ctx.p.agg.has(f) && n.args?.length === 0 && !n.agg_star) no('SQL_FUNCTION', `${f} needs an argument`, at);
+    // the printers print these as written: `*` is count(*) only, DISTINCT one argument of an aggregate outside a window
+    if (n.agg_star && (f !== 'count' || args.length)) no('SQL_FUNCTION', `${f}(*) is refused: only count(*)`, at);
+    if (n.agg_distinct && (!ctx.p.agg.has(f) || args.length !== 1 || n.over)) no('SQL_FUNCTION', `DISTINCT is one argument of an aggregate, outside a window`, at);
   },
   A_Expr: (n, ctx, _p, at) => {
     const op = sv(n.name);
+    // the printer joins what it is given: a missing operand or a one-bound BETWEEN would bind the policy predicate appended after it
+    const items: N[] | undefined = n.rexpr?.List?.items;
+    const range = n.kind === 'AEXPR_BETWEEN' || n.kind === 'AEXPR_NOT_BETWEEN';
+    if (!n.rexpr || (!n.lexpr && !(n.kind === 'AEXPR_OP' && (op === '-' || op === '+'))) || (range && items?.length !== 2) || (n.kind === 'AEXPR_IN' && !items?.length) || (!range && n.kind !== 'AEXPR_IN' && n.rexpr.List))
+      no('SQL_SHAPE', `a malformed ${op} expression`, at);
+    // the parser folds a sign into its number (`-2` is ival -2): a sign over a number constant is a resealed IR, and PostgreSQL
+    // folds `- -2` back into 2, a column position in ORDER BY and GROUP BY
+    if (n.kind === 'AEXPR_OP' && !n.lexpr && (op === '-' || op === '+') && (n.rexpr?.A_Const?.ival !== undefined || n.rexpr?.A_Const?.fval !== undefined))
+      no('SQL_SHAPE', `a sign over a number is that number: write ${op === '-' ? 'the negative constant' : 'the constant'}`, at);
     if (ctx.p.name === 'base') bareLiteralCompare(n, ctx, at); // PostgreSQL casts the literal to the column's type
     jsonCompare(n, ctx, at);
     if (n.kind === 'AEXPR_OP' && !ctx.p.ops.has(op)) no('SQL_UNSUPPORTED', `operator ${op} is refused`, at);
@@ -356,13 +451,20 @@ const check: Record<string, Checker> = {
     if (esc(n.lexpr) || (esc(n.rexpr) && n.kind !== 'AEXPR_LIKE')) no('SQL_FUNCTION', 'like_escape is only the ESCAPE of a LIKE', at);
   },
   TypeCast: (n, ctx, _p, at) => {
-    const t = sv(n.typeName.names).replace('pg_catalog.', '');
+    const t = castType(n.typeName);
     if (!ctx.p.casts.has(t)) no('SQL_TYPE', `CAST to ${t} is refused`, at);
     const lit = n.arg?.A_Const;
     // the literal-only rules exist because SQLite truncates and stores time and decimals as integers; PostgreSQL casts any value
     const base = ctx.p.name === 'base';
     if (base && (t === 'int4' || t === 'int8') && !(lit?.ival || /^\s*-?\d+\s*$/.test(lit?.sval?.sval ?? 'x')))
       no('SQL_TYPE', `CAST to ${t} takes an integer literal: SQLite truncates toward zero where PostgreSQL rounds. Write round(x)`, at);
+    // a type modifier is numeric's precision and scale, or one interval field (hour, minute, second) that truncates nothing; D1
+    // encodes nothing else (timestamptz(0) rounds on PostgreSQL, interval '90 minutes' hour truncates to an hour there)
+    // (intervalMicros reads a bare number in the field's unit and refuses any other field; one unit of the field divides the value)
+    const mods = n.typeName.typmods ?? [];
+    const typmod = mods[0]?.A_Const?.ival?.ival as number | undefined;
+    if (mods.length && t !== 'numeric' && !(t === 'interval' && mods.length === 1 && intervalMicros(lit?.sval?.sval ?? 'x', typmod) % intervalMicros('1', typmod) === 0))
+      no('SQL_TYPE', `CAST to ${t} takes no type modifier here, or one that truncates nothing`, at);
     if (t === 'interval') {
       if (!lit?.sval) no('SQL_TYPE', 'an interval is a literal such as interval \'36 hours\'', at);
       intervalMicros(lit.sval.sval, n.typeName.typmods?.[0]?.A_Const?.ival?.ival); // throws SQL_TYPE for calendar units
@@ -394,13 +496,18 @@ const check: Record<string, Checker> = {
   },
   CommonTableExpr: (n, _c, _p, at) => {
     if (!n.ctequery?.SelectStmt) no('SQL_SHAPE', 'a CTE body is a SELECT: a write inside WITH is refused', at);
-    // the printer writes a CTE's name unquoted, so PostgreSQL would fold "Items" to items
-    if (String(n.ctename) !== String(n.ctename).toLowerCase()) no('SQL_SHAPE', `a CTE name is lower case: ${n.ctename}`, at);
+    // the printer writes a CTE's name and its column names unquoted: each is a plain lower-case identifier
+    for (const name of [n.ctename, ...(n.aliascolnames ?? []).map((c: N) => c?.String?.sval)])
+      if (typeof name !== 'string' || !/^[a-z_][a-z0-9_]*$/.test(name)) no('SQL_SHAPE', `a CTE name is lower case, a plain identifier: ${JSON.stringify(name)}`, at);
+  },
+  BoolExpr: (n, _c, _p, at) => {
+    const k = (n.args ?? []).length;
+    if (n.boolop === 'NOT_EXPR' ? k !== 1 : k < 1) no('SQL_SHAPE', `a malformed ${n.boolop}`, at);
   },
   WindowDef: (n, _c, _p, at) => {
     if (n.frameOptions & FRAME_REFUSED) no('SQL_UNSUPPORTED', 'GROUPS frames and EXCLUDE are refused', at, /\b(GROUPS|EXCLUDE)\b/i);
     // an offset is a literal: rows as an integer, a RANGE over time as an interval literal
-    for (const o of [n.startOffset, n.endOffset]) if (o && !(o.A_Const?.ival !== undefined || (o.TypeCast?.arg?.A_Const?.sval && sv(o.TypeCast.typeName.names).replace('pg_catalog.', '') === 'interval')))
+    for (const o of [n.startOffset, n.endOffset]) if (o && !(o.A_Const?.ival !== undefined || (o.TypeCast?.arg?.A_Const?.sval && castType(o.TypeCast.typeName) === 'interval')))
       no('SQL_SHAPE', 'a frame offset is a literal: an integer, or an interval such as interval \'6 days\'', at);
   },
   SelectStmt: (n, ctx, path, at) => {
@@ -435,8 +542,7 @@ const SYSTEM_TIMES = new Set(['created_at', 'updated_at']);
 /** The type a column name has in every Schema that declares it, or undefined when none does or they disagree. */
 function columnType(ctx: Ctx, name: string): string | undefined {
   if (SYSTEM_TIMES.has(name)) return 'timestamptz';
-  const types = new Set(Object.values(ctx.schemas).flatMap((s: SqlSchemaDef) => (Object.hasOwn(s.fields, name) ? [s.fields[name]!] : [])));
-  return types.size === 1 ? [...types][0] : undefined;
+  return ctx.cols!.types.get(name);
 }
 
 /**
@@ -484,7 +590,7 @@ function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean, values?: N[]) {
     const at = firstLoc(r) ?? firstLoc(rel);
     const name = String(r.name).toLowerCase();
     const scopedId = insert && name === 'id' && s?.scope;
-    if (name === s?.scope || SYSTEM.has(name) || (!insert && name === 'id') || scopedId)
+    if (name === s?.scope?.toLowerCase() || SYSTEM.has(name) || (!insert && name === 'id') || scopedId)
       no('SQL_WRITE', `${r.name} is filled by Mantle and cannot be written${scopedId ? ' (a scoped Schema generates its ids)' : ''}`, at);
     const cols = Object.entries(s?.fields ?? {}).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
     if (name !== 'id' && !cols.includes(name)) no('SQL_WRITE', `${rel.relname} has no field ${r.name}`, at);

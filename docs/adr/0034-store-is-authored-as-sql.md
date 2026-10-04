@@ -121,6 +121,10 @@ The platform-verified facts become the **Cloud-validated plan**, the pinned Core
 
 That the IR matches its SQL source is **service-reported**: the plan carries the source's hash, and the compiler is the pinned Core. Host protocol 3 uploads the plan.
 
+`verifyPlan(plan, storage)` in `@aotter/mantle` is that validation: boot's own checks of the plan (version, fingerprint, dialect, guard and hook targets) and every View and inline Procedure through the storage's dialect, its `restrict` and the policy rewrite, with no database and no SQL parser. It returns the diagnostics, each with the program's path; handlers and schedule wiring stay the host's.
+
+What `verifyPlan` proves is that a plan reads and writes only through the policy rewrite and refuses what boot would refuse of the plan. It does not type-check the SQL: a statement the database refuses (a function's arity or argument type, an operand type) fails that request, or boot for a Schema check, with the database's error, and never runs past the policy. It does not bound the CPU a plan's request costs either: a JSON Schema `pattern` runs a backtracking JavaScript regex, and the pattern checks catch the shapes that backtrack catastrophically by accident, not every slow regex an author can write. A host that runs untrusted plans bounds CPU per request instead (Cloud dispatches each tenant request with a CPU limit), so a slow plan stalls only its own requests.
+
 ### 8. Policy injection
 
 - **Every Schema reference is wrapped.** The compiler has one function that prints a Schema table's name, and it always prints `(SELECT <declared columns> FROM "t" WHERE <scope> AND <ttl> AND <published>) AS <alias>`. Joins, subqueries, set-op branches and window inputs therefore see only visible rows, and a `LEFT JOIN` stays a left join. SQLite flattens the wrapper, so the index the scope leads is still used; RIGHT JOIN would materialize, one more reason it is refused.

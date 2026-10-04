@@ -3,7 +3,8 @@
  * Boot checks the plan, the handlers and the storage; `invokeProcedure` is the one path every source runs through.
  */
 import { DiagnosticError, makeDiagnostic, readJsonPointer, type Diagnostic, type DiagnosticCode } from "../../spec/kernel/index.js";
-import { RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, jsonSchemaToZod, planFingerprint, type LifecycleHook, type RuntimePlan } from "../../spec/domain/index.js";
+import { RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, jsonSchemaToZod, planFingerprint, safeParseJson, type LifecycleHook, type RuntimePlan, type TriggerManifest, ManifestParseError } from "../../spec/domain/index.js";
+import { validateTriggerSpec } from "../../spec/domain/service/TriggerSpecChecks.js";
 import type { ZodType } from "zod";
 import { systemCaller } from "../caller.js";
 import { MAX_INVOCATION_DEPTH, type HandlerContext, type Invocation, type InvocationCause, type LifecycleDispatcher, type LifecycleEvent, type MantleHandlers } from "../invocation.js";
@@ -49,6 +50,9 @@ const depthOf = (c: InvocationCause | undefined): number => {
 };
 const child = (parent: InvocationCause, procedure: string): InvocationCause => ({ kind: "internal", id: `${parent.id}>${procedure}`, parent });
 
+/** The key of the Schema a lifecycle Trigger names, as the dispatcher keys its hooks: the name in lower case, an own key. */
+const lifecycleKey = (plan: RuntimePlan, schema: string): string | undefined => (Object.hasOwn(plan.schemas, schema.toLowerCase()) ? schema.toLowerCase() : undefined);
+
 export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<MantleRuntime> {
   const { plan } = args;
   const at = "plan";
@@ -66,6 +70,23 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   for (const name of Object.keys(args.handlers)) if (!refs.has(name)) throw fail("HANDLER_NOT_DECLARED", `${at}#/handlers/${name}`, `handler '${name}' is registered and no Procedure of the plan declares it`);
 
   const triggers = Object.entries(plan.triggers).sort(([a], [b]) => (a < b ? -1 : 1));
+  // a Trigger is checked as the CLI checks its manifest (a lifecycle hook that is not one would bind nothing), and it targets a
+  // Procedure and a Schema of this plan: a surface that cannot find one fails on every request instead
+  for (const [name, t] of triggers) {
+    const path = `${at}#/triggers/${name}`;
+    try {
+      validateTriggerSpec({ spec: { source: t.source, target: { procedure: t.procedure } } } as unknown as TriggerManifest, undefined as unknown as number); // no document index: the path names the Trigger
+    } catch (e) {
+      if (e instanceof ManifestParseError) throw fail(e.code, `${path}${e.pointer?.replace(/^\/spec/, "") ?? ""}`, e.message);
+      throw e;
+    }
+    if (!Object.hasOwn(plan.procedures, t.procedure)) throw fail("TRIGGER_TARGET_PROCEDURE_UNKNOWN", path, `Trigger '${name}' targets '${t.procedure}', which is not a Procedure of the plan`);
+    // the dispatcher keys hooks by the Schema's key (its name in lower case) and a deferred after hook is honoured only for the
+    // Schema's name as declared (`runDeferredHook`), so the Trigger names a Schema exactly as the CLI's linker requires
+    const key = t.source.kind === "lifecycle" ? lifecycleKey(plan, t.source.schema) : undefined;
+    if (t.source.kind === "lifecycle" && (key === undefined || plan.schemas[key]!.name !== t.source.schema))
+      throw fail("LIFECYCLE_SCHEMA_UNKNOWN", path, `lifecycle Trigger '${name}' watches '${t.source.schema}', which is not the name of a Schema of the plan`);
+  }
   if (!args.schedules && triggers.some(([, t]) => t.source.kind === "schedule" && t.source.enabled !== false))
     throw fail("SCHEDULE_NOT_WIRED", at, "the plan has an enabled schedule Trigger and this entry does not wire schedules (pass schedules: true)");
 
@@ -97,7 +118,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     for (const hook of t.source.on) {
       const [stage, op] = hook.split("_") as ["before" | "after", keyof typeof VERB];
       // a statement names its table the way SQL folds it, so hooks are keyed by the lower-cased Schema name
-      const schema = t.source.schema.toLowerCase();
+      const schema = lifecycleKey(plan, t.source.schema)!;
       (stage === "before" ? before : after).add(`${schema}.${VERB[op]}`);
       const key = `${schema}|${hook}`;
       byHook.set(key, [...(byHook.get(key) ?? []), [name, t.procedure]]);
@@ -132,7 +153,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   const zod = new Map<string, ZodType>();
   const schemaOf = (key: string, schema: Parameters<typeof jsonSchemaToZod>[0]) => zod.get(key) ?? (zod.set(key, jsonSchemaToZod(schema)), zod.get(key)!);
   const check = (kind: "input" | "output", name: string, path: string, value: unknown, schema: Parameters<typeof jsonSchemaToZod>[0]) => {
-    const r = schemaOf(`${name}#${kind}`, schema).safeParse(value);
+    const r = safeParseJson(schemaOf(`${name}#${kind}`, schema), value);
     if (r.success) return r.data;
     const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
     throw new DiagnosticError(makeDiagnostic({

@@ -2,7 +2,7 @@
  * IR -> physical statements: validate (the runtime never trusts an IR), inject policy, resolve binds.
  * Everything a Store does per statement before the executor runs it (ADR-0034 decisions 3 and 8).
  */
-import { PG_GRAMMAR, type JsonSchema, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
+import { PG_GRAMMAR, type JsonSchema, type SchemaColumns, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
 import { runtimeDiagnostic, DiagnosticError } from "../../spec/kernel/index.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
 import { applyPolicy, type BindSpec, type Compiled, type Mode, type PolicyOpts } from "./policy.js";
@@ -31,6 +31,8 @@ export function sqlInput(schema: JsonSchema | undefined, input: unknown): Record
 export interface CompileContext {
   readonly dialect: MantleDialect;
   readonly schemas: Readonly<Record<string, StorageSchema>>;
+  /** `schemaColumns(schemas)`, when the caller checks many programs against one plan. */
+  readonly columns?: SchemaColumns;
   /** Declared input properties and their Mantle types. */
   readonly inputs: Readonly<Record<string, string>>;
   readonly kind: "view" | "procedure";
@@ -49,7 +51,7 @@ export interface CompileContext {
 
 /** Check every statement of a program with the dialect, then inject policy. A refused IR is `INPUT_VALIDATION_FAILED`. */
 export function compileProgram(stmts: readonly SqlNode[], ctx: CompileContext): Compiled[] {
-  const diagnostics = ctx.dialect.check({ grammar: PG_GRAMMAR, stmts } satisfies SqlPlan, { schemas: ctx.schemas, inputs: ctx.inputs, kind: ctx.kind, public: ctx.mode === "public" });
+  const diagnostics = ctx.dialect.check({ grammar: PG_GRAMMAR, stmts } satisfies SqlPlan, { schemas: ctx.schemas, ...(ctx.columns ? { columns: ctx.columns } : {}), inputs: ctx.inputs, kind: ctx.kind, public: ctx.mode === "public" });
   if (diagnostics.length)
     throw new DiagnosticError(diagnostics.map((d) => runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `${d.code}: ${d.message}` })));
   const opts: PolicyOpts = { schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, lockVersion: ctx.lockVersion, returning: ctx.returning as Set<string> | undefined, seen: ctx.seen, unsafeNoVisibility: ctx.unsafeNoVisibility, lower: ctx.dialect.lowering };

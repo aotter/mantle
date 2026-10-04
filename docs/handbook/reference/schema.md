@@ -64,6 +64,40 @@ Property extensions:
 `x-mantle-bind` is refused in 0.2.0: use `scope`, or set the value with
 `auth.uid()` or `now()` in the Procedure's SQL.
 
+### JSON Schema limits
+
+These hold for every JSON Schema Mantle checks: a Schema's `schema`, and View
+and Procedure inputs and outputs.
+
+| Limit | Diagnostic |
+|---|---|
+| at most 100 levels deep and 10,000 schema nodes; an `enum` of at most 1,000 values | `JSON_SCHEMA_LIMIT_EXCEEDED` |
+| a `pattern` of at most 1,000 characters that compiles as a JavaScript regex | `INVALID_PATTERN` |
+| no repeated group whose body repeats or alternates (`(a+)+`, `(a\|b)*`, `^[a-z0-9]+(-[a-z0-9]+)*$`) and no backreference | `INVALID_PATTERN` |
+| a `pattern` costs at most branches × maxLength^e ≤ 10,000,000, and declares `maxLength` when e > 0 | `INVALID_PATTERN` |
+
+A JavaScript regex backtracks, and the pattern runs on every caller's string,
+so its work is bounded by the string's `maxLength`. The exponent e counts the
+variable quantifiers (`*`, `+`, `?`, `{m,}`, `{m,n}`, outside `[...]`), plus
+1 when the pattern does not start with `^`, because an unanchored pattern is
+retried at every offset; branches multiplies the alternatives of every
+alternation. `^[a-z0-9-]+$` (e = 1) allows any maxLength up to 10,000,000,
+the email `^[^@]+@[^@]+$` (e = 2) up to 3162, `^(?:[a-f0-9]{40}|[a-f0-9]{64})$`
+(e = 0, 2 branches) needs none. A string longer than its `maxLength` is
+refused before its pattern runs. The message names the largest maxLength the
+pattern allows; lower it, anchor the pattern with `^`, or use fewer variable
+quantifiers or alternatives.
+
+These checks catch the patterns that backtrack catastrophically by accident;
+they are a guard, not a proof that every accepted pattern is fast. Fixed
+counts (`{1000}`), lookarounds and arrays of patterned strings still cost
+work the estimate leaves out, so keep patterns short and anchored, and a host
+that runs plans it does not trust bounds CPU per request.
+
+A slug is `{ type: string, maxLength: 120, pattern: "^[a-z0-9-]+$" }`. It
+accepts leading, trailing and doubled hyphens; to refuse them on a Schema
+field, add `checks: ["slug NOT LIKE '-%' AND slug NOT LIKE '%-' AND slug NOT LIKE '%--%'"]`.
+
 ## `lifecycle`
 
 `publishing` (the default) gives rows the `draft` → `published` → `archived`
@@ -75,7 +109,7 @@ workflow; only drafts are editable, and a public View sees published rows only.
 
 - `indexes`: ordered composite non-unique indexes over top-level scalar fields
   and native columns, spelled in camelCase here (`createdAt`, not
-  `created_at`).
+  `created_at`). `status` exists only on a `publishing` Schema.
 - `uniqueIndexes`: composite unique indexes. On a scoped Schema every entry
   starts with the scope field. A write that breaks one is `CONFLICT` with
   `conflict.reason: unique`; an `ON CONFLICT (<columns>)` target names one.
@@ -92,7 +126,12 @@ and update by triggers that storage convergence creates:
 checks: ["stock >= 0", "partySize IS NULL OR partySize BETWEEN 1 AND 20"]
 ```
 
-No subqueries. A violation fails the whole write with
+Storage prints a check into the table as written, so it names only the
+Schema's own columns, unqualified, and calls only the functions SQLite and
+PostgreSQL spell alike, each on one argument: `lower`, `upper` and `length`
+on text, `abs` on a number. No subqueries, casts, `auth.*` or `now()`; a rule
+about the caller belongs in a Procedure's guard. Other type mismatches
+(`name > 5` on a text field) are the database's to refuse when the app boots. A violation fails the whole write with
 `INPUT_VALIDATION_FAILED` and the message `CHECK <schema>: <expression>`.
 
 ## `searchableFields`

@@ -3,18 +3,60 @@ import type { JsonSchema } from "../model/ManifestGrammar.js";
 
 /**
  * Thin boundary around Zod's official JSON Schema importer. Mantle keeps
- * only its legacy `nullable` normalization and an input-depth guard here;
- * JSON Schema semantics belong to Zod.
+ * only its legacy `nullable` normalization, an input-depth guard and the
+ * length-before-pattern order here; JSON Schema semantics belong to Zod.
  */
 export function jsonSchemaToZod(schema: JsonSchema): ZodType {
   let imported: ZodType;
   try {
-    imported = z.fromJSONSchema(normalizeNullable(schema) as never);
+    imported = lengthBeforePattern(z.fromJSONSchema(normalizeNullable(schema) as never));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     imported = z.never({ error: `Invalid JSON Schema: ${message}` });
   }
   return jsonValueWithinLimits().pipe(imported);
+}
+
+/**
+ * `schema.safeParse(value)`, where anything the validator throws other than a Zod issue (a stack overflow on a schema nobody
+ * checked) is a failed parse: a value the schema cannot check is not accepted, and the caller reports it as it reports any.
+ */
+export function safeParseJson<T extends ZodType>(schema: T, value: unknown): ReturnType<T["safeParse"]> {
+  try {
+    return schema.safeParse(value) as ReturnType<T["safeParse"]>;
+  } catch (error) {
+    const message = `the schema cannot check this value: ${error instanceof Error ? error.message : String(error)}`;
+    return { success: false, error: new z.ZodError([{ code: "custom", path: [], message, input: value }]) } as ReturnType<T["safeParse"]>;
+  }
+}
+
+/**
+ * Zod checks a string's `maxLength` before its `pattern` but runs the pattern even when the length failed. The CLI bounds a
+ * pattern's backtracking only up to the declared maxLength (branches × maxLength^e), so a longer string must stop at the length check:
+ * every string schema's maxLength check aborts the checks after it.
+ */
+function lengthBeforePattern(root: ZodType): ZodType {
+  const seen = new WeakSet<object>();
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object" || seen.has(node)) return;
+    seen.add(node);
+    const def = (node as { _zod?: { def?: Record<string, unknown> } })._zod?.def;
+    if (!def) {
+      for (const child of Array.isArray(node) ? node : Object.values(node)) visit(child);
+      return;
+    }
+    if (def["type"] === "string") {
+      for (const check of (def["checks"] ?? []) as { _zod: { def: { check?: string; abort?: boolean } } }[]) {
+        if (check._zod.def.check === "max_length") check._zod.def.abort = true;
+      }
+    }
+    for (const [key, child] of Object.entries(def)) {
+      if (key === "checks") continue;
+      visit(key === "getter" && typeof child === "function" ? (child as () => unknown)() : child);
+    }
+  };
+  visit(root);
+  return root;
 }
 
 function normalizeNullable(schema: JsonSchema): JsonSchema {

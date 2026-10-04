@@ -8,6 +8,7 @@ import { expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { sqliteStorage } from "../../src/d1/index.js";
 import { print } from "../../src/d1/print.js";
+import { loadModule, parseSync } from "libpg-query";
 import { Report } from "../../src/testing/report.js";
 import { boot, caller, compileProgram, program, runView, site, useCompileSide } from "../../src/testing/harness.js";
 import * as printer from "../../src/testing/cases/printer.js";
@@ -80,4 +81,43 @@ it("the printer case passes a corpus item the compile side refuses as unsupporte
   expect(unsupported.failed).toBe(0);
   expect(unsupported.check).toMatch(/refused as unsupported: \w/);
   await expect(printed("SQL_COLUMN")).rejects.toThrow(/^SQL_COLUMN: window functions/);
+}, 120_000);
+
+it("a nested condition as an operand prints in parentheses: SQLite runs the IR, not a regrouped expression", async () => {
+  await loadModule();
+  const d1 = await LocalD1.create();
+  try {
+    // SQLite groups BETWEEN, LIKE and IN left to right: without the parentheses each of these selects another value
+    for (const q of ["SELECT 5 BETWEEN 0 AND (5 BETWEEN 1 AND 2) AS v", "SELECT 5 BETWEEN 0 AND (5 IN (SELECT 1)) AS v", "SELECT 'a' LIKE ('a' IN (SELECT 1)) AS v",
+      "SELECT 'ab' LIKE 'a%' ESCAPE ('!' = '!') AS v", "SELECT (1 IN (SELECT 1)) BETWEEN 0 AND 0 AS v", "SELECT (2 = 2) IS NULL AS v"]) {
+      const printed = print((parseSync(q) as any).stmts[0].stmt);
+      expect([q, (await d1.all(printed))[0]]).toEqual([q, (await d1.all(q))[0]]);
+    }
+  } finally { await d1.dispose(); }
+});
+
+it("a literal cast or signed constant in ORDER BY sorts by its value, never as a column position", async () => {
+  const e = await engine();
+  try {
+    const s = site(await boot(e));
+    // the IR orders by a constant, then id: the first row is 'a'; a bare 2 would sort by the second column (stock)
+    // (`+2` written in SQL is refused: a sign over a number constant is that constant)
+    await expect(program("view", "SELECT id FROM items ORDER BY +2, id")).rejects.toThrow(/a sign over a number/);
+    for (const cast of ["CAST('0.2' AS numeric(10,1))", "CAST('1970-01-03' AS date)"]) {
+      const p = await program("view", `SELECT id FROM (SELECT id, stock FROM items ORDER BY ${cast}, id LIMIT 1) s ORDER BY id`);
+      expect([cast, (await runView(s, p, { ...caller({}), role: "staff" })).rows]).toEqual([cast, [{ id: "a" }]]);
+    }
+  } finally { await e.driver.dispose(); }
+}, 120_000);
+
+it("a sign before a negative constant never prints `--`, and `true` is the boolean even beside an output named true", async () => {
+  const stmt = (val: unknown) => ({ SelectStmt: { targetList: [{ ResTarget: { val } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } });
+  const minus = (rexpr: unknown) => ({ A_Expr: { kind: "AEXPR_OP", name: [{ String: { sval: "-" } }], rexpr } });
+  for (const c of [{ ival: { ival: -2 } }, { fval: { fval: "-2.5" } }]) expect(print(stmt(minus({ A_Const: c })) as never)).not.toContain("--");
+  const e = await engine();
+  try {
+    const s = site(await boot(e));
+    const p = await program("view", `SELECT id, 0 AS "true" FROM items WHERE true ORDER BY id`);
+    expect((await runView(s, p, { ...caller({}), role: "staff" })).rows.map((r: any) => r.id)).toEqual(["a", "b", "c", "d"]);
+  } finally { await e.driver.dispose(); }
 }, 120_000);

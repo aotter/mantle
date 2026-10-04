@@ -1,7 +1,7 @@
 // The D1 dialect's lowering (ADR-0034 decision 8, ADR-0035 decision 6): what Core's policy rewriter hands a dialect to spell
 // in SQLite. Casts become the storage encodings, Mantle's functions become FTS5, R*Tree and `_mantle_tz` lookups, and a
 // surviving function prints as a plain call. Runs in the tenant Worker: AST in, AST out, no parser.
-import { SqlRefusal as Refused, intervalMicros, parseNumeric, type SqlNode as N } from '../spec/domain/index.js';
+import { SqlRefusal as Refused, ftsTableName, geoTreeName, intervalMicros, parseNumeric, type SqlNode as N } from '../spec/domain/index.js';
 import { S, num, ref as col, target as res } from '../core/sql/ast.js';
 import type { BindContext } from '../core/sql/compile.js';
 import type { PolicyLowering, LoweringScope } from '../core/sql/policy.js';
@@ -77,7 +77,7 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
       const { schema, def, searchQuery } = scope.alias(alias);
       if (!def.search?.length) throw new Refused('SQL_FUNCTION', `${schema} declares no search fields`);
       scope.seen('search');
-      const fts = q(`_mantle_fts_${schema}`), a = q(alias);
+      const fts = q(ftsTableName(schema)), a = q(alias);
       const query = scope.tx(f === 'mantle.search' ? args[1] : searchQuery ?? (() => { throw new Refused('SQL_FUNCTION', `mantle.search_rank(${alias}) needs a mantle.search(${alias}, ...) in the same query`); })());
       const phrase = `'"' || replace(__q, '"', '""') || '"'`; // a quoted phrase: FTS5 operators in the query are literal. `fts = q` is FTS5's spelling of `fts MATCH q`; PostgreSQL's grammar has no MATCH
       if (f === 'mantle.search_rank') return sql(`coalesce((SELECT bm25(${fts}) FROM ${fts} WHERE ${fts} = ${phrase} AND rowid = ${a}._rid), 0)`, { __q: query });
@@ -97,7 +97,7 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
       scope.seen('near');
       const meters = Number(args[3]!.A_Const.ival?.ival ?? args[3]!.A_Const.fval?.fval);
       const b = (which: BoxBind['box']) => scope.param({ k: 'dialect', box: which, lat: argOf(latN!, scope), lng: argOf(lngN!, scope), meters } satisfies BoxBind);
-      const geo = q(`_mantle_geo_${schema}_${fld}`);
+      const geo = q(geoTreeName(schema, fld));
       return sql(`(${a}._rid IN (SELECT id FROM ${geo} WHERE minLat >= __b0 AND maxLat <= __b1 AND minLng >= __b2 AND maxLng <= __b3) AND ${dist} <= ${meters})`,
         { ...sub, __b0: b('minLat'), __b1: b('maxLat'), __b2: b('minLng'), __b3: b('maxLng') });
     }
@@ -105,17 +105,21 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
   return undefined;
 }
 
+// A literal cast lowers to its encoded number as an expression: an integer in ORDER BY or GROUP BY, even parenthesized, is a
+// column position to SQLite, and `n + 0` is not
+const value = (x: N): N => ({ Raw: { parts: [x, " + 0"] } });
+
 function lowerCast(n: N, scope: LoweringScope): N {
   const t = n.typeName.names.at(-1).String.sval as string;
   const lit = n.arg?.A_Const;
   const litStr = lit?.sval?.sval ?? lit?.fval?.fval ?? (lit?.ival?.ival !== undefined ? String(lit.ival.ival) : undefined);
-  if (t === 'interval') return num(intervalMicros(lit.sval.sval, n.typeName.typmods?.[0]?.A_Const?.ival?.ival));
-  if (t === 'timestamptz') return num(encodeTimestamptz(litStr!));
-  if (t === 'date') return num(encodeDate(litStr!));
+  if (t === 'interval') return value(num(intervalMicros(lit.sval.sval, n.typeName.typmods?.[0]?.A_Const?.ival?.ival)));
+  if (t === 'timestamptz') return value(num(encodeTimestamptz(litStr!)));
+  if (t === 'date') return value(num(encodeDate(litStr!)));
   if (t === 'numeric') {
     const [p, s] = n.typeName.typmods.map((m: N) => m.A_Const.ival.ival);
     parseNumeric(`numeric(${p}, ${s})`);
-    return num(encodeNumeric(litStr!, p, s));
+    return value(num(encodeNumeric(litStr!, p, s)));
   }
   // PostgreSQL: a number is true when non-zero, text by its spelling; NULL stays NULL. A bare `x <> 0` is always true for text in SQLite ('false' <> 0 is 1)
   if (t === 'bool') return sql(`CASE WHEN typeof(__x) = 'text' THEN lower(__x) IN ('t', 'true', 'y', 'yes', 'on', '1') WHEN __x IS NULL THEN NULL ELSE __x <> 0 END`, { __x: scope.tx(n.arg) });

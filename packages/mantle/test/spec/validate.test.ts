@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { validateManifests } from "./parse.js";
 import { parseManifests } from "./parse.js";
+import { patternCost, unsafePattern } from "../../src/spec/domain/service/SchemaSpecChecks.js";
+import { jsonSchemaToZod } from "../../src/spec/domain/service/JsonSchemaToZod.js";
 import type {
   Manifest,
   ProcedureManifest,
@@ -364,6 +366,7 @@ ${indexYaml}
     ["duplicate tuple", "  indexes: [[slug], [slug]]"],
     ["cross-kind duplicate", "  uniqueIndexes: [[slug]]\n  indexes: [[slug]]"],
     ["native column in uniqueIndexes", "  uniqueIndexes: [[status]]"],
+    ["status on an operational Schema, which has no status column", "  lifecycle: operational\n  indexes: [[status]]"],
     ["unsafe identifier", "  indexes: [['_slug']]"],
   ])("rejects semantic error: %s", (_label, declaration) => {
     const extra = declaration.includes("_slug")
@@ -1289,8 +1292,87 @@ spec:
     ["remote refs", `{ $ref: 'https://example.com/schema.json' }`, "JSON_SCHEMA_REF_INVALID"],
     ["unresolved refs", `{ $ref: '#/$defs/missing' }`, "JSON_SCHEMA_REF_INVALID"],
     ["unsupported composition", `{ anyOf: [{ type: string }, { type: number }] }`, "JSON_SCHEMA_UNSUPPORTED"],
+    // a $ref that reaches itself without reading a level of the value: every validation would overflow the stack
+    ["a $ref to itself", `{ type: object, $defs: { a: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
+    ["a $ref cycle through oneOf", `{ type: object, $defs: { a: { oneOf: [{ $ref: '#/$defs/b' }, { type: string }] }, b: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
+    ["a $ref cycle nothing reads", `{ type: object, $defs: { a: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
+    ["a pattern with nested quantifiers", `{ type: object, properties: { s: { type: string, pattern: '^(a+)+$' } } }`, "INVALID_PATTERN"],
+    ["a pattern repeating an alternation", `{ type: object, properties: { s: { type: string, pattern: '^(a|aa)*$' } } }`, "INVALID_PATTERN"],
+    ["a pattern with a backreference", `{ type: object, properties: { s: { type: string, pattern: '^(a)\\1$' } } }`, "INVALID_PATTERN"],
+    // adjacent variable quantifiers backtrack polynomially: maxLength^k past the work bound, or no maxLength at all
+    ["twelve adjacent a*", `{ type: object, properties: { s: { type: string, maxLength: 31, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' } } }`, "INVALID_PATTERN"],
+    ["eight adjacent \\w*", `{ type: object, properties: { s: { type: string, maxLength: 100, pattern: '\\w*\\w*\\w*\\w*\\w*\\w*\\w*\\w*$' } } }`, "INVALID_PATTERN"],
+    ["four quantified groups in a row", `{ type: object, properties: { s: { type: string, maxLength: 100, pattern: '(a*)(a*)(a*)(a*)' } } }`, "INVALID_PATTERN"],
+    ["a variable pattern without maxLength", `{ type: object, properties: { s: { type: string, pattern: '^[a-z0-9-]+$' } } }`, "INVALID_PATTERN"],
+    ["a variable pattern in items without maxLength", `{ type: object, properties: { s: { type: array, items: { type: string, pattern: '^[^@]+@[^@]+$' } } } }`, "INVALID_PATTERN"],
+    ["a variable pattern in $defs past the bound", `{ type: object, $defs: { e: { type: string, maxLength: 3163, pattern: '^[^@]+@[^@]+$' } }, properties: { s: { $ref: '#/$defs/e' } } }`, "INVALID_PATTERN"],
+    ["an enum of more than 1000 values", `{ type: object, properties: { s: { enum: [${Array.from({ length: 1001 }, (_, i) => i).join(", ")}] } } }`, "JSON_SCHEMA_LIMIT_EXCEEDED"],
   ])("rejects %s with a stable diagnostic", (_label, input, code) => {
     const result = parseManifests(procedure(input));
     expect(result.diagnostics[0]?.code).toBe(code);
+  });
+});
+
+describe("the pattern work bound", () => {
+  const procedure = (input: string) => `apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: bounded }
+spec:
+  input: ${input}
+  output: { type: object }
+  handler: { ref: bounded }
+`;
+  const input = (s: string) => parseManifests(procedure(`{ type: object, properties: { s: ${s} } }`)).diagnostics;
+  it("accepts a pattern with no variable quantifier without maxLength, and an email up to maxLength 3162", () => {
+    expect(input(`{ type: string, pattern: '^[A-Z]{3}$' }`)).toEqual([]);
+    expect(input(`{ type: string, maxLength: 254, pattern: '^[^@]+@[^@]+$' }`)).toEqual([]);
+    expect(input(`{ type: string, maxLength: 3162, pattern: '^[^@]+@[^@]+$' }`)).toEqual([]);
+    expect(input(`{ type: string, maxLength: 3, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' }`)).toEqual([]);
+  });
+  it("names the bound and the fix", () => {
+    const [missing] = input(`{ type: string, pattern: '^[^@]+@[^@]+$' }`);
+    expect([missing?.code, missing?.path]).toEqual(["INVALID_PATTERN", "manifest:doc/0#/spec/input/properties/s/pattern"]);
+    expect(missing?.message).toMatch(/maxLength of at most 3162/);
+    const [over] = input(`{ type: string, maxLength: 4, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' }`);
+    expect(over?.message).toMatch(/maxLength\^12.*maxLength of at most 3\b.*fewer variable quantifiers/s);
+    const [paths] = input(`{ type: string, pattern: '^${"(a|b)".repeat(24)}$' }`);
+    expect(paths?.message).toMatch(/16777216 alternative paths.*fewer alternatives/s);
+    // an unanchored pattern is retried at every offset: one more factor of maxLength
+    expect(input(`{ type: string, maxLength: 3162, pattern: '[a-z]*[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 215\b/);
+    expect(input(`{ type: string, maxLength: 100000, pattern: '[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 3162\b/);
+  });
+  it("counts variable quantifiers outside character classes, a quantified group once, plus one when unanchored", () => {
+    expect(["^[a-z*+?]{3}$", "^(ab)*$", "^\\*a+$", "^(a*)(b+)c?d{2,}e{1,3}f{4}$", "^[^@]+@[^@]+$", "[a-z]*!", "abc", "^a|b"].map((p) => patternCost(p).exponent)).toEqual([0, 1, 1, 5, 2, 2, 1, 1]);
+    // without the u flag `[]` and `[^]` are whole classes: what follows is outside them
+    expect(["^[]a*$", "^[^]a*a*]?$"].map((p) => patternCost(p).exponent)).toEqual([1, 3]);
+    expect(unsafePattern("^[^](a+)+]?$")).toBeDefined();
+    expect(["^(?:[a-f0-9]{40}|[a-f0-9]{64})$", "^(a|b)(c|d|e)$", "^x|y|z"].map((p) => patternCost(p).branches)).toEqual([2, 6, 3]);
+  });
+  it("the worst accepted shape at its maxLength validates in well under 100 ms", () => {
+    for (const [pattern, maxLength] of [["^a*a*a*a*a*a*a*a*a*a*a*a*$", 3], ["^.*.*.*.*.*.*.*$", 10], ["^[^@]+@[^@]+$", 3162], ["^[a-z0-9-]+$", 100_000], ["[a-z]*[a-z]*!", 215], ["[a-z]*!", 3162], ["^[^]a*a*]?$", 215], [`^${"(a|a)".repeat(23)}a*$`, 1]] as const) {
+      expect(input(`{ type: string, maxLength: ${maxLength}, pattern: '${pattern}' }`)).toEqual([]);
+      const zs = jsonSchemaToZod({ type: "string", maxLength, pattern });
+      const worst = "a".repeat(maxLength - 1) + "!";
+      const started = performance.now();
+      zs.safeParse(worst);
+      zs.safeParse("a".repeat(maxLength + 1) + "!");
+      expect(performance.now() - started).toBeLessThan(100);
+    }
+  });
+  it("a string past maxLength is refused before its pattern runs", () => {
+    const zs = jsonSchemaToZod({ type: "object", properties: { s: { type: "string", maxLength: 3, pattern: "^a*a*a*a*a*a*a*a*a*a*a*a*$" } } });
+    const started = performance.now();
+    const result = zs.safeParse({ s: "a".repeat(30) + "b" });
+    expect(performance.now() - started).toBeLessThan(100);
+    expect(result.error?.issues.map((i) => i.code)).toEqual(["too_big"]);
+  });
+});
+
+describe("unsafePattern", () => {
+  it("accepts the patterns apps write, and refuses the shapes that backtrack exponentially", () => {
+    for (const ok of ["^[a-z0-9-]+$", "^[a-f0-9]{64}$", "^[A-Z]{3}$", "^SR-[0-9]{6}$", "^(?:[a-f0-9]{40}|[a-f0-9]{64})$", "^release/sha256-[a-f0-9]{64}\\.json$", "^[a-z][a-z0-9-]{1,38}[a-z0-9]$", "^(\\d{3}-)?\\d{4}$", "^(ab){2}$", "[(+*)]+", "\\(a+\\)+", "a{x}+"])
+      expect([ok, unsafePattern(ok)]).toEqual([ok, undefined]);
+    for (const bad of ["^(a+)+$", "(a*)*", "(a?)+", "((ab)+c)*", "(\\w+\\s?)*", "(a|b)+", "(?:x+y)+", "(?<n>a+){2,}", "(a+){20}", "(a)\\1", "\\k<n>", "a".repeat(1001)])
+      expect([bad, unsafePattern(bad)]).not.toEqual([bad, undefined]);
   });
 });

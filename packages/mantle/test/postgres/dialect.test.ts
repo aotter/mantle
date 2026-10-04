@@ -5,6 +5,8 @@
  * json_each, which SQLite's affinity coerced and PostgreSQL needs cast.
  */
 import { expect, it } from "vitest";
+import { loadModule, parseSync } from "libpg-query";
+import { print } from "../../src/postgres/print.js";
 import { RUNTIME_PLAN_VERSION } from "../../src/spec/index.js";
 import { DiagnosticError } from "../../src/spec/kernel/index.js";
 import { pgDatabaseDriver, postgresStorage } from "../../src/postgres/index.js";
@@ -117,3 +119,16 @@ it.skipIf(!PG_URL)("an offset time zone, an unreachable server and a name Postgr
     await expect(e.storage.prepare(planOf({ notes: { scope: "owner", fields: { ["x".repeat(70)]: "text" } } }, "f1"))).rejects.toThrow(/at most 63 bytes/);
   } finally { await e.drop(); }
 }, 60_000);
+
+it.skipIf(!PG_URL)("a nested operand prints in parentheses, `AT TIME ZONE` included: PostgreSQL runs the IR, not a regrouped expression", async () => {
+  await loadModule();
+  const db = await freshSchema();
+  const client = await db.connect();
+  try {
+    for (const q of ["SELECT (timestamptz '2026-01-01' AT TIME ZONE ('UT' || 'C'))::text AS v", "SELECT (('2026-01-01 00:00' || '') ::timestamp AT TIME ZONE 'UTC') < now() AS v",
+      "SELECT 5 BETWEEN 0 AND (2 + 3) AS v", "SELECT (1 = 1) IN (true) AS v", "SELECT 'ab' LIKE ('a' || '%') AS v"]) {
+      const printed = print((parseSync(q) as any).stmts[0].stmt);
+      expect([q, (await client.query(printed)).rows[0]]).toEqual([q, (await client.query(q)).rows[0]]);
+    }
+  } finally { await (client as any).end?.(); await db.drop(); }
+});
