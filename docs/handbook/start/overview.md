@@ -27,12 +27,12 @@ src/service.ts   createMantle(service, { plan, storage, schedules })
   ├─ handlers    the `ref` Procedures, typed by mantle.ts
   └─ fetch       your routes, then Mantle's surfaces behind withCaller(resolver, …):
                  auth routes · Admin at /admin · MCP at /mcp · REST at /api
-src/index.ts     the Cloudflare entry: fetch and scheduled
+src/index.ts     the host entry: Cloudflare's fetch and scheduled, or Bun.serve
 ```
 
 The first `mantle generate` writes `src/service.ts`, `src/index.ts`,
-`src/handlers.ts`, `wrangler.jsonc` and `tsconfig.json` once. After that they
-are your files.
+`src/handlers.ts`, `tsconfig.json` and, on Cloudflare, `wrangler.jsonc` once.
+After that they are your files.
 
 ## Read next
 
@@ -46,7 +46,7 @@ are your files.
 | See whole services | [Examples](../examples/hub.md) and the runnable reference service |
 | Move a 0.1.x project | `docs/upgrade-0.1-to-0.2.md` in the installed package |
 
-The decisions behind 0.2.0 are ADR-0032 to ADR-0035 in `docs/adr/`. The ADRs
+The decisions behind 0.2.0 are ADR-0032 to ADR-0038 in `docs/adr/`. The ADRs
 record decisions and may describe work not built yet; the installed code is the
 authority. When an ADR and this handbook disagree, follow this handbook and
 check the code.
@@ -55,6 +55,9 @@ check the code.
 
 - **Mantle-rendered public pages.** `createWebSurface` is not ported. Render
   pages from your own `fetch` or frontend over the REST surface.
-- **A preset for any host but Cloudflare.** `@aotter/mantle/d1` runs on other
-  SQLite drivers, but `mantle generate` writes the Cloudflare entry only.
+- **A preset for any host but Cloudflare and Bun.** With `--host none`,
+  `mantle generate` writes the plan and its types only, and your code calls
+  `createMantle`. The Bun preset has no scheduler.
+- **Site settings and media on PostgreSQL.** Only the `sqlite` dialect's
+  storage takes `SiteDefaults`; see [Site defaults](../reference/site-config.md).
 - **Deploying to Mantle Cloud.** See [Deploy and operate](../cloudflare/deploy-and-operate.md).

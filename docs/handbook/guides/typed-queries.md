@@ -4,7 +4,10 @@ description: Read and write through the typed Store from handlers and service co
 # Query from TypeScript
 
 Handler and service code reach Mantle-owned rows only through Store. The
-generated `.mantle/generated/mantle.ts` types it over your Schemas and Views.
+generated `.mantle/generated/mantle.ts` types it over your Schemas and Views:
+`ctx.store` in a `MantleHandlers` handler is its `CallerStore`, while
+`runtime.store` is the untyped `MantleStore` until you cast it to the
+generated `Store`.
 
 | Store | Where | Scope |
 |---|---|---|
@@ -72,9 +75,11 @@ export const handlers: MantleHandlers = {
 The View name, its `input` and its row type are checked by `tsc`. A staff View
 with `uiSchema.list.searchFields` or `filterFields` also takes `search` and
 `filters` (`runtime.store.view(name, { search: "refund", filters: { ticketState: "open" } })`);
-Store refuses a filter the View does not declare. An output
-that reads a Schema field unchanged has that field's type; an expression, or
-a native column such as `id`, is `unknown`. Page with `limit` (default 50,
+Store refuses a filter the View does not declare. The generated `Store` types
+only `input`, `limit` and `cursor`, so pass `search` and `filters` through the
+untyped `MantleStore`. An output that reads a Schema field unchanged has that
+field's type, `created_at` and `updated_at` are `string | null`, and an
+expression, or another native column such as `id`, is `unknown`. Page with `limit` (default 50,
 at most 500) and the opaque `cursor` from `nextCursor`.
 
 ## `select` and `write`

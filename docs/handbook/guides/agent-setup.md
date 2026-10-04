@@ -69,7 +69,7 @@ Installing instructions proves only that they were copied. Prove the service:
 
 1. `mantle generate` and `mantle generate --check` exit 0.
 2. The project typechecks against `.mantle/generated/mantle.ts`.
-3. `wrangler dev` starts, and the routes you depend on answer: a REST View, an
+3. `wrangler dev` (or, on Bun, `bun src/index.ts`) starts, and the routes you depend on answer: a REST View, an
    HTTP Trigger, `/mcp` `tools/list`, and with identity `mantle` a sign-in and
    `GET /admin/api/me`.
 
@@ -77,6 +77,6 @@ Installing instructions proves only that they were copied. Prove the service:
 |---|---|
 | `docs/...` is missing after installing the skill | The skill carries no docs. Install the SDK and read `node_modules/@aotter/mantle/docs/`. |
 | `mantle` is not found | Install `@aotter/mantle` locally and run it through the package manager (`pnpm exec mantle`). |
-| `mantle skills` or `--host` is unknown | Those are 0.1.x. Follow the installed 0.2.x docs. |
+| `mantle skills` is unknown | It is 0.1.x. Follow the installed 0.2.x docs. |
 | A v1 manifest or a `version: 1` config fails | The project is on 0.1.x. Follow `docs/upgrade-0.1-to-0.2.md`. |
 | A documented feature is missing | The installed version is older than the docs you read. Read its own docs, or upgrade deliberately. |

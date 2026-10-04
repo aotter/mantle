@@ -12,7 +12,7 @@ description: The files of a Mantle 0.2.0 project, who owns each, mantle.config.j
 | `.mantle/generated/plan.json` | every `mantle generate` | generated: never edit, commit it |
 | `.mantle/generated/mantle.ts` | every `mantle generate` | generated: never edit, commit it |
 | `src/service.ts`, `src/index.ts`, `src/handlers.ts`, `src/identity.ts` (identity `custom`) | the first `mantle generate` | yours from then on |
-| `wrangler.jsonc`, `tsconfig.json`, `.dev.vars.example`, `.gitignore` | the first `mantle generate`, each only if missing | yours |
+| `wrangler.jsonc` (Cloudflare, unless a `wrangler.json` or `wrangler.toml` exists), `tsconfig.json`, `.dev.vars.example` (Cloudflare, identity `mantle`) or `.env.example` (Bun), `.gitignore` | the first `mantle generate`, each only if missing | yours |
 
 `mantle generate` writes each preset file only when it does not exist, and
 writes none once `src/service.ts` exists: from then on the application owns
@@ -56,7 +56,8 @@ refused (exit 2), so switching never drops tables or orphans data. Change
 
 Each selection needs packages in the project. `mantle generate` checks them
 and stops before writing anything, naming the install command for your
-package manager. It never installs anything.
+package manager. It never installs anything. The host and dialect rows, and the
+staff MCP App, are checked only while the preset is still to be written.
 
 | Selection | Packages |
 |---|---|
@@ -65,8 +66,10 @@ package manager. It never installs anything.
 | feature `mcp` | `@modelcontextprotocol/server`, `@modelcontextprotocol/ext-apps` |
 | feature `admin` | `@aotter/mantle-ui` (its `dist/admin` is the console, bound as `ASSETS` in `wrangler.jsonc`) |
 | dialect `postgres` on `cloudflare` | `pg` |
+| host `bun` | `bun-types` |
+| feature `mcp` with an identity, without `admin` | `@aotter/mantle-ui` (the staff MCP App) |
 
-The project also installs `wrangler`, `@cloudflare/workers-types` and
+On Cloudflare the project also installs `wrangler`, `@cloudflare/workers-types` and
 `@types/node` itself. A TypeScript Cloudflare/PostgreSQL project also installs
 `@types/pg` as a dev dependency for the generated `pg` import.
 
@@ -82,7 +85,7 @@ mantle generate --check [--database <file>]
 | `--manifests <dir>` | the manifest directory, default `./manifests`. Every `.yaml` and `.yml` file directly in it is read |
 | `--features <list>` | comma-separated, a positive list. A missing dependency fails with `GENERATE_FEATURE_DEPENDENCY_MISSING`; an omitted feature is never added back |
 | `--identity <kind>` | `mantle`, `custom` or `none` |
-| `--host <host>` | `cloudflare` or `none`, chosen on the first run |
+| `--host <host>` | `cloudflare`, `bun` or `none`, chosen on the first run. `bun` defaults the dialect to `postgres` |
 | `--dialect <name>` | `sqlite` (alias `d1`), `postgres` or a dialect package, chosen on the first run |
 | `--check` | writes nothing. Exits 1 when `plan.json`, `mantle.ts` or `mantle.config.json` differs from what generate would write, or a package is missing |
 | `--database <file>` | with `--check`: also read a local SQLite file (Wrangler's local D1 is under `.wrangler/state/v3/d1/`) read-only, and print the SQL storage convergence would run |
@@ -123,7 +126,7 @@ wrangler hyperdrive create my-app --caching-disabled --connection-string="postgr
 
 ## 0.1.x projects
 
-`apiVersion: cms.mantle.aotter.net/v1` manifests, `--host`, `mantle validate`,
+`apiVersion: cms.mantle.aotter.net/v1` manifests, a `version: 1` config, `mantle validate`,
 `mantle emit-openapi`, `mantle skills` and the `mantle-harness` bin are gone.
 `docs/upgrade-0.1-to-0.2.md` in the installed package is the guide.
 

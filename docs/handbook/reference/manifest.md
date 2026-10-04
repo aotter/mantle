@@ -30,8 +30,9 @@ matter to the plan; they enter only `sourceHash`.
   case-insensitively.
 - A Schema name that is not a plain identifier (`support-tickets`) is written
   quoted in SQL: `"support-tickets"`.
-- `input` and `auth` are reserved and cannot name a Schema or an alias. A
-  Schema or field may not be one of the 14 words SQLite refuses unquoted:
+- `input` and `auth` are reserved and cannot name a Schema or an alias. On
+  the `sqlite` dialect, SQL may not name a Schema, field or alias that is one
+  of the 14 words SQLite refuses unquoted (`SQL_UNSUPPORTED`):
   `add alter autoincrement commit delete drop escape index insert nothing raise set transaction update`.
 - MCP tool names are the View or Procedure name in snake case.
 

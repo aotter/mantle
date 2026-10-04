@@ -14,7 +14,9 @@ prebuilt SPA in `@aotter/mantle-ui/admin`, at `/admin`: `wrangler.jsonc` binds
 `node_modules/@aotter/mantle-ui/dist/admin` as the Worker's `ASSETS`
 (`run_worker_first`), and `src/service.ts` passes `createAdminSurface` an
 `assets` function that reads from it. `mantle generate` warns when `admin` is
-selected and `wrangler.jsonc` binds no `ASSETS`. Sign in at `/admin/sign-in`.
+selected and `wrangler.jsonc` binds no `ASSETS`. The Bun preset reads the
+same files with `bunAdminAssets` from `@aotter/mantle/bun`. Sign in at
+`/admin/sign-in`.
 
 ## Manifest to Admin
 
@@ -88,7 +90,7 @@ not copy keys between them. The report's search box matches `subject`
 (`LIKE`), its filter is `ticketState` (`=`), and a declared `input` would add
 a form above them; all of them keep cursor paging.
 
-## Roles
+## Developer console
 
 The Developer console's Procedure overview projects the sealed SQL AST into
 a static execution diagram: authorization, validated input, guard, applicable
@@ -111,6 +113,7 @@ value. SQL identifiers match manifest names case-insensitively. The existing
 threshold, the flow shows its exact SQL literal marked as a raw SQL value.
 These display hints do not establish or validate business units.
 
+## Roles
 
 Admin's gate admits any staff role. Inside it, each route names the least role
 it needs: `contributor` reads and edits drafts, `editor` publishes, deletes
@@ -121,7 +124,7 @@ console. Operations and staff Views are further limited by their own
 ## Verify a change
 
 1. Run `mantle generate`, then `mantle generate --check`.
-2. Restart `wrangler dev` so the runtime loads the new plan.
+2. Restart `wrangler dev` (or the Bun process) so the runtime loads the new plan.
 3. Open `/admin` with a staff session and check the affected list, form,
    report or operation. `GET /admin/api/bootstrap` carries the collections,
    Views, operations and site the console renders.

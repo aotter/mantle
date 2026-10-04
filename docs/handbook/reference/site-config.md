@@ -26,7 +26,9 @@ carries `runtime.site`. Without it those tables are not created,
 `runtime.site` is absent, Admin's `/site-settings` answers 501
 `SITE_NOT_CONFIGURED` and its media routes 501 `MEDIA_NOT_CONFIGURED`, and the
 console leaves Settings and Media out of its navigation. The generated preset
-does not pass `site`; add it in `src/service.ts`.
+does not pass `site`; add it in `src/service.ts`. In 0.2.0 only the `sqlite`
+dialect's storage takes `site` (`d1Storage`, `sqliteStorage`,
+`bunSqliteStorage`); PostgreSQL storage has no site settings or media.
 
 ## `SiteDefaults`
 
@@ -49,8 +51,8 @@ defaults and refuses a malformed purpose or locale.
   operator fields; an empty string clears one.
 - Admin: `GET /admin/api/site` (any staff role) answers the site for the
   console, with `mcpEndpoints` from `createAdminSurface`'s
-  `site: { mcpEndpoints }` (the preset passes `{ public: "/mcp", staff: null }`;
-  default `null`). `GET` and `PATCH /admin/api/site-settings` (owner) read and
+  `site: { mcpEndpoints }` (with feature `mcp` the preset passes
+  `{ public: "/mcp", staff: "/mcp/staff" }`; default `null`). `GET` and `PATCH /admin/api/site-settings` (owner) read and
   edit the operator fields.
 
 ## Media purposes
