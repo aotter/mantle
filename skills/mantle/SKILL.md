@@ -25,9 +25,9 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
 
 - `0.2.x`: continue below; for ongoing work read
   `node_modules/@aotter/mantle/docs/skills/develop/SKILL.md`.
-- `0.1.x` (v1 manifests, `--host`, `mantle skills`): upgrade only when asked,
-  with `docs/skills/update/SKILL.md` and `docs/upgrade-0.1-to-0.2.md` of the
-  0.2 package.
+- `0.1.x` (v1 manifests, a `version: 1` `mantle.config.json`, `mantle skills`):
+  upgrade only when asked, with `docs/skills/update/SKILL.md` and
+  `docs/upgrade-0.1-to-0.2.md` of the 0.2 package.
 
 ## New project
 
@@ -46,8 +46,10 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
 4. Choose the identity and features with the user's request:
    `mantle generate` with no flags is Better Auth sign-in plus Admin, MCP and
    REST; `--identity custom` keeps the user's own auth;
-   `--identity none --features web` is a public REST service. Identity cannot be
-   switched later.
+   `--identity none --features web` is a public REST service. The default
+   host is Cloudflare over D1; `--host bun` (PostgreSQL unless
+   `--dialect sqlite`) or `--dialect postgres` choose another (`docs/handbook/start/project-and-cli.md`). Identity, host and
+   dialect cannot be switched later.
 5. Write only the user's Schemas, Views, Procedures and Triggers in
    `manifests/`. `docs/examples/` shows whole services; do not copy one
    wholesale or invent business data.
@@ -55,7 +57,8 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
    those with the project's package manager and run it again. Then
    `mantle generate --check` and `tsc --noEmit`.
 7. With identity `mantle`: `cp .dev.vars.example .dev.vars`, set
-   `ADMIN_EMAIL` and a random `BETTER_AUTH_SECRET`, run `wrangler dev --local`,
+   `ADMIN_EMAIL` and a random `BETTER_AUTH_SECRET`, run `wrangler dev --local`
+   (on Bun: `.env.example` to `.env`, then `bun src/index.ts`),
    sign in at `/admin/sign-in` with the one-time code printed to the log, and
    check that the console loads and `GET /admin/api/me` is `owner`. Exercise the REST routes and `/mcp` `tools/list`.
 
@@ -82,6 +85,8 @@ node <this skill>/scripts/mantle-cloud.mjs check [--project <dir>] [--core <vers
   `{ ok, coreVersion, fingerprint, sourceHash, planFile, cloud, nextAction? }`.
   `planFile: "stale"` means run `mantle generate` and commit
   `.mantle/generated/`. `core_mismatch` means install the version Cloud pins.
+  `dialect_unsupported` means the project is not on D1, the only dialect Cloud
+  runs.
   Run it by absolute path; never edit it.
 
 The plugin also configures the Mantle Cloud MCP connection

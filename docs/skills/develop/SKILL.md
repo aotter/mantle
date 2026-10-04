@@ -18,11 +18,13 @@ govern behavior: `node_modules/@aotter/mantle/docs/`.
 1. `package.json` and the lockfile: the installed `@aotter/mantle` version.
    Every `@aotter/mantle*` package is at that same exact version. If
    `node_modules/` is missing, install with the lockfile first.
-2. `mantle.config.json`: `identity` (`mantle`, `custom`, `none`) and
-   `features`. A `version: 1` config or `cms.mantle.aotter.net/v1` manifests
-   mean 0.1.x: switch to `docs/skills/update/SKILL.md`.
+2. `mantle.config.json`: `identity` (`mantle`, `custom`, `none`),
+   `features`, `host` (`cloudflare`, `bun`, `none`) and `dialect` (`sqlite`,
+   `postgres`); absent host and dialect mean Cloudflare over D1. A
+   `version: 1` config or `cms.mantle.aotter.net/v1` manifests mean 0.1.x:
+   switch to `docs/skills/update/SKILL.md`.
 3. `manifests/*.yaml`, `src/service.ts`, `src/handlers.ts`, `src/index.ts`
-   (and `src/identity.ts` for `custom`), `wrangler.jsonc`.
+   (and `src/identity.ts` for `custom`), `wrangler.jsonc` (not on Bun).
 4. Installed docs: `docs/handbook/reference/features.md` to map the request to
    manifest features, then the field references it links to.
    `docs/examples/` holds whole services in the v2 grammar.
@@ -55,9 +57,10 @@ Choose in this order, stopping at the first that works:
 - Optimistic lock: `WHERE id = input.id AND version = input.expectedVersion`.
   Writing no row is `CONFLICT`. Keep omitted optional fields with
   `COALESCE(input.x, x)`.
-- `LIMIT` needs `ORDER BY`. No `OFFSET`, `RIGHT JOIN`, `UNION`, recursive CTEs,
-  `CURRENT_TIMESTAMP`. `CAST(x AS int)` only on an integer literal: use
-  `round(x)`.
+- `LIMIT` needs `ORDER BY`. No `OFFSET`, `RIGHT JOIN` or `CURRENT_TIMESTAMP`
+  on any dialect. On SQLite (D1) also no `WITH`, `UNION`, `ILIKE` or jsonb
+  operators, and `CAST(x AS int)` only on an integer literal: use `round(x)`.
+  PostgreSQL accepts these (`docs/handbook/reference/view.md`).
 - Unquoted aliases fold to lower case: `AS "orderCount"` keeps the case.
 - The runtime injects scope and TTL into every Schema reference, and
   published-only into public Views. Never repeat them.
@@ -66,7 +69,8 @@ Choose in this order, stopping at the first that works:
 
 ## Handlers
 
-- `src/handlers.ts` exports `handlers: MantleHandlers<Env>`; the generated type
+- `src/handlers.ts` exports `handlers: MantleHandlers` (`MantleHandlers<Env>`
+  types `ctx.env`); the generated type
   lists exactly the plan's refs. Read and write only through `ctx.store`.
 - After hooks: loop over `ctx.cause.rows`; never read only `rows[0]`.
 - Before hooks and guards are read-only and reject by throwing
@@ -100,14 +104,14 @@ to build when the product asks for one: follow [the recipe](mcp-app.md).
 pnpm exec mantle generate
 pnpm exec mantle generate --check
 pnpm exec tsc --noEmit
-pnpm exec wrangler dev --local
+pnpm exec wrangler dev --local   # on Bun: bun src/index.ts
 ```
 
 Then exercise what changed over HTTP: the REST View or Trigger, `/mcp`
 `tools/list` and a call, and with identity `mantle` a console email-OTP
 sign-in and the Admin route (`docs/handbook/cloudflare/authentication.md`).
-Check the stored rows, not only a 200. Before deploying a Schema change, run
-`mantle generate --check --database <file>` to see the storage SQL.
+Check the stored rows, not only a 200. Before deploying a Schema change on
+SQLite, run `mantle generate --check --database <file>` to see the storage SQL.
 
 ## Rules
 
@@ -118,7 +122,7 @@ Check the stored rows, not only a 200. Before deploying a Schema change, run
   by hand, then rerun; Mantle never drops a column or index.
 - Do not commit secrets (`.dev.vars`, provider keys).
 - Every 0.1.x term is gone: builtin handlers, `from`/`filter`, `params`,
-  `$ctx`, `x-mantle-bind`, `--host`, `mantle validate`, `mantle skills`,
+  `$ctx`, `x-mantle-bind`, `mantle validate`, `mantle skills`,
   `createMantleWorker`.
 
 ## When you are done

@@ -34,10 +34,10 @@ for (const page of pages) {
     symlinkSync(join(root, "packages/mantle"), join(project, "node_modules/@aotter/mantle"), "dir");
     writeFileSync(join(project, "package.json"), '{ "type": "module" }\n');
     blocks.forEach((block, index) => writeFileSync(join(project, "manifests", `${index}.yaml`), block));
-    // identity none and REST only: the page's manifests are what is checked, not the peers a fuller selection needs
+    // identity none and REST only, on SQLite named as `mantle generate --dialect sqlite` writes it: the page's manifests are what is checked, not the peers a fuller selection needs
     // a warning fails too: an example teaches what a clean manifest looks like. The plugin's Cloud helper must then compile the
     // same plan through the project's installed Core and find plan.json fresh.
-    for (const args of [[cli, "generate", "--identity", "none", "--features", "web"], [cli, "generate", "--check"], [cloudHelper, "check"]]) {
+    for (const args of [[cli, "generate", "--identity", "none", "--features", "web", "--dialect", "sqlite"], [cli, "generate", "--check"], [cloudHelper, "check"]]) {
       const run = spawnSync(process.execPath, args, { cwd: project, encoding: "utf8" });
       if (run.status !== 0 || /^warning:/m.test(run.stdout + run.stderr)) {
         failures.push(`${page}: ${args.slice(1).join(" ")}\n${run.stdout}${run.stderr}`);

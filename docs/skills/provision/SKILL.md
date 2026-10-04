@@ -24,6 +24,7 @@ Ask which target, unless the project already shows one.
 | Cloudflare Workers | `wrangler.jsonc` | the rest of this skill |
 | ChatGPT Sites | the Site's hosting config | installed `docs/handbook/cloudflare/chatgpt-sites.md`; publish through Sites, never `wrangler deploy` |
 | Mantle Cloud | — | not available for 0.2 services yet; the plugin's `mantle` skill says when it is |
+| Bun (host `bun`) | `.env` | self-hosted; installed `docs/handbook/start/project-and-cli.md` (Bun), not this skill |
 
 Self-hosting is always an option; never present a hosted target as required.
 
@@ -42,8 +43,11 @@ Confirm the active Cloudflare account with the user before creating anything.
 
 1. **Database.** `pnpm exec wrangler d1 create <name>` and put the
    `database_id` into `wrangler.jsonc`'s `d1_databases[0]`, keeping the
-   binding `DB`. An existing 0.1.x database is never reused: 0.2 starts on a
-   new one.
+   binding `DB`. With dialect `postgres`, instead run
+   `pnpm exec wrangler hyperdrive create <name> --caching-disabled --connection-string=...`
+   (the connection string by hidden input) and replace the placeholder id in
+   `hyperdrive[0]`, keeping the binding `HYPERDRIVE`. An existing 0.1.x
+   database is never reused: 0.2 starts on a new one.
 2. **Origin.** Set `PUBLIC_ORIGIN` in `vars` to the deployed HTTPS origin.
    Update it together with any OAuth callback when a custom domain is added.
 3. **Sign-in (identity `mantle`).** Choose one production method and edit
@@ -66,7 +70,7 @@ read -rsp "GitHub client secret: " S && printf '%s' "$S" | pnpm exec wrangler se
 5. **Optional bindings.** R2 for media only when asked
    (`docs/handbook/cloudflare/media-r2.md`).
 6. **Deploy.** `pnpm exec wrangler deploy`. The first request creates the
-   tables. Later Schema changes: run
+   tables. Later Schema changes on D1: run
    `mantle generate --check --database <local SQLite file>` (local D1 under
    `.wrangler/state/v3/d1/`, which must have run the plan now deployed) before
    each deploy and resolve any blocked change by hand.
