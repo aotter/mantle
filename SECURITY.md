@@ -28,9 +28,9 @@ These are targets, not contractual SLAs.
 
 ## Supported versions
 
-Fixes land on the active development line and ship as a new version; a
-published version is never overwritten. The maintainer has not yet defined a
-supported release window for older versions.
+While Mantle is 0.x, only the latest patch of the latest minor line receives
+security fixes. Fixes ship as a new version; a published version is never
+overwritten. 0.1.x receives no fixes once 0.2.0 is published as stable.
 
 ## Scope
 
