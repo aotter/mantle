@@ -97,7 +97,9 @@ role on every request, so a revoked role takes effect at once.
 ### Account deletion
 
 `auth.deleteUser(userId)` deletes a user through Better Auth, sessions
-included. Never delete auth rows with SQL.
+included, and the email codes still pending for its address. Never delete auth
+rows with SQL. To require a recent sign-in first, compare
+`(await auth.getSession(request)).session.createdAt` with the current time.
 
 ## Identity `custom`
 
