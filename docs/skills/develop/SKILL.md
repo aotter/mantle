@@ -74,7 +74,7 @@ Choose in this order, stopping at the first that works:
   lists exactly the plan's refs. Read and write only through `ctx.store`.
 - After hooks: loop over `ctx.cause.rows`; never read only `rows[0]`.
 - Before hooks and guards are read-only and reject by throwing
-  `DiagnosticError` (from `@aotter/mantle/spec`); any other throw is a 500.
+  `DiagnosticError` (from `@aotter/mantle`); any other throw is a 500.
 - `ctx.caller.kind === "user"` means signed in; a schedule runs as `system`.
   Never test `!== "anonymous"`.
 - `ctx.invoke(name, input)` calls another Procedure with the same caller.

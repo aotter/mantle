@@ -2,19 +2,21 @@
 
 No codemod, and no in-place upgrade of a 0.1.x database. A coding agent moves
 one project by hand with this guide. When it and ADR-0032 to ADR-0035
-(`docs/adr/`) disagree, the ADR wins.
+(`docs/adr/`), ADR-0036 (host and dialect) or ADR-0038 (Bun) disagree, the
+ADR wins.
 
 ## Rules
 
 - Work on a branch. Keep the 0.1.x project running until the 0.2.0 one passes
   its checks.
 - Move meaning, not text. If a manifest does something no row below covers,
-  stop and ask. Bun and Vercel projects have no 0.2.0 preset: stop and ask.
+  stop and ask. Vercel projects have no 0.2.0 preset: stop and ask. A Bun
+  project moves to `host: bun` (section 2).
 - Never loosen access. Every 0.1.x `requires`, guard, `scope` and
   `x-mantle-bind` must come out at least as strict. `x-mantle-bind` is
   refused in 0.2.0 and stamps nothing, so each one becomes `scope` or an
   explicit value in the write (section 3).
-- Give the 0.2.0 service a new D1 database; never boot it against the 0.1.x
+- Give the 0.2.0 service a new database; never boot it against the 0.1.x
   one. Move data by export and import (section 5).
 - `mantle generate --check` is the gate. Never hand-edit `.mantle/generated/`.
 
@@ -22,9 +24,8 @@ one project by hand with this guide. When it and ADR-0032 to ADR-0035
 
 | 0.1.x | 0.2.0 |
 |---|---|
-| `@aotter/mantle` and `@aotter/mantle-spec`, `-runtime`, `-cloudflare`, `-auth`, `-admin`, `-mcp`, `-web`, `-bun`, `-vercel`, `-indexeddb`, `-host` | `@aotter/mantle` (subpaths `/spec`, `/d1`, `/cloudflare`, `/auth`, `/admin`, `/mcp`, `/web`, `/testing`) |
-| `@aotter/mantle-ui` | the same package at the same version |
-| `@aotter/mantle-admin-ui` | `@aotter/mantle-ui/admin`: the preset serves the console at `/admin` from the installed `@aotter/mantle-ui`; nothing to import. Its `/kit` re-export is gone: import `@aotter/mantle-ui/kit` |
+| `@aotter/mantle` and `@aotter/mantle-spec`, `-runtime`, `-cloudflare`, `-auth`, `-admin`, `-web`, `-bun`, `-vercel`, `-indexeddb` | `@aotter/mantle` (subpaths `/spec`, `/d1`, `/postgres`, `/cloudflare`, `/bun`, `/auth`, `/admin`, `/mcp`, `/web`, `/testing`) |
+| `@aotter/mantle-admin-ui` | `@aotter/mantle-ui` at the same version as `@aotter/mantle`: the preset serves the console at `/admin` from its `dist/admin` files; nothing to import. Its `/kit` re-export is gone: import `@aotter/mantle-ui/kit` |
 
 Remove every old package and install `@aotter/mantle` at the exact target
 version. `mantle generate` names any other package it needs, with the install
@@ -32,17 +33,29 @@ command; it never installs anything.
 
 ## 2. `mantle.config.json`
 
+0.1.4 had none; 0.1.5-alpha.1 wrote a `version: 1` one. Write version 2:
+
 ```json
 { "version": 2, "identity": "mantle", "features": ["mcp", "admin", "web"] }
 ```
 
-- `version: 1`, `host` and `--host` are gone. Cloudflare is the one preset.
+- `version: 1` is refused.
+- `host` is `cloudflare` (the default, left out), `bun` or `none`; `none`
+  writes the plan and types only, for a platform with no preset. `host: bun`
+  refuses an enabled schedule Trigger: Bun has no cron dispatcher in the
+  preset.
 - `identity`: `mantle` if the project used Mantle auth (Better Auth sign-in,
   Admin users, OAuth for MCP), `custom` if it resolved callers itself, `none`
   if it had no signed-in callers. `admin` needs an identity.
 - `features` is a subset of `mcp`, `admin`, `web`, in that order. The 0.1.x
   features `spec`, `runtime` and `api` are dropped: REST is always mounted.
-- `dialect` is optional; leave it out for D1.
+- `dialect` is `sqlite` (alias `d1`, the default, left out) or `postgres`
+  (PostgreSQL through Hyperdrive on `cloudflare`; Bun.SQL on `bun`, where it
+  is the default). A 0.1.x project was SQLite: keep `sqlite` (with
+  `--host bun`, pass `--dialect sqlite`) unless the data also moves to
+  PostgreSQL.
+- `host` and `dialect` are chosen on the first `mantle generate` (`--host`,
+  `--dialect`); a rerun that asks for another is refused.
 
 ## 3. Manifests
 
@@ -130,7 +143,8 @@ in one `sql` apply together or not at all. `requires.auth` and
 - `schedule` cron is POSIX: weekday 0 = Sunday. 0.1.x used Cloudflare's
   numbering (1 = Sunday), so subtract 1 from every weekday number, in ranges
   and lists too (`1` → `0`, `2-6` → `1-5`, `7` → `6`); `*` and `*/n` stay.
-  A cron that sets both a day of month and a weekday is refused.
+  On host `cloudflare`, a cron that sets both a day of month and a weekday
+  is refused.
 - `lifecycle` `errorPolicy` is removed: a before hook fails closed (a 0.1.x
   `continue` now blocks the write), an after hook is best effort.
 - `http`, `mcp` and other `lifecycle` fields keep their shape.
@@ -147,7 +161,7 @@ The generated types list exactly the plan's refs.
 | `ctx.staff` | `ctx.caller.kind === "user" && ctx.caller.role !== null` |
 | `ctx.event`, `ctx.schedule` | `ctx.cause` (`kind`: `http`, `mcp`, `internal`, `schedule`, `lifecycle`); `ctx.cause.cron` is POSIX, so shift any cron string the code compares |
 | `ctx.event.entry` | **a loop** over `ctx.cause.rows` (one statement can touch many rows; never `rows[0]`). Rows are flat: `entry.data.x` → `row.x` |
-| `ctx.store.view(name, { params, page, show, search, filters })` | `ctx.store.view(name, { input, limit, cursor })` |
+| `ctx.store.view(name, { params, page, show, search, filters })` | `ctx.store.view(name, { input, limit, cursor, search, filters })`; `search` and `filters` match only the View's `uiSchema.list.searchFields` and `filterFields`, and the generated typed `view` takes only `input`, `limit` and `cursor` (`docs/handbook/guides/typed-queries.md`) |
 | `runtime.entries`, `runtime.executeView`, `ctx.writeAtomically` | `ctx.store.select`, `ctx.store.view`, `ctx.store.write([...ops])` (all or nothing), `ctx.store.id()` |
 | `runtime.store.as(ctx)` | `runtime.store.as(caller)` |
 | calling another Procedure through a `getRuntime` closure | `await ctx.invoke("procedure-name", input)` (keeps the caller, re-checks its auth) |
@@ -158,8 +172,9 @@ only in trusted host code.
 ## 5. The Worker and the data
 
 1. Move the old `src/`, `wrangler.jsonc` (or `.toml`) and `tsconfig.json`
-   aside. `mantle generate` writes the preset (`src/*.ts`, `wrangler.jsonc`,
-   `tsconfig.json`) only where no such file exists, and never again.
+   aside. `mantle generate` writes the preset (`src/*.ts`, `tsconfig.json`,
+   and `wrangler.jsonc` on `cloudflare` or `.env.example` on `bun`) only
+   where no such file exists, and only while `src/service.ts` is missing.
 2. Run `mantle generate`, then move custom routes, bindings and env from the
    old Worker into the new files by hand.
 3. With `identity: mantle`, sign-in uses a console email sender locally;
@@ -177,7 +192,8 @@ only in trusted host code.
 | 0.1.x | 0.2.0 |
 |---|---|
 | `mantle validate`, `mantle emit-openapi` | `mantle generate --check` (fails if anything is stale; `--database <file>` also prints the storage SQL) |
-| `mantle generate --host …` | `mantle generate` |
+| `mantle generate --host …` (0.1.5-alpha.1) | `mantle generate --host cloudflare\|bun\|none` on the first run only |
+| `mantle generate --output`, `--namespace` | removed: output is always `.mantle/generated/` |
 | `mantle skills`, the `mantle-harness` bin | removed |
 
 ## 7. Verify
@@ -188,8 +204,8 @@ only in trusted host code.
    including a caller who must see nothing (scope) and an anonymous request.
 4. A write cannot set an owner, author or timestamp field from its input.
 5. Every schedule fires on the intended weekday.
-6. `wrangler dev` starts, sign-in works if `identity` is `mantle`, and Admin,
-   MCP and REST answer on their paths.
+6. `wrangler dev` (or `bun src/index.ts`) starts, sign-in works if
+   `identity` is `mantle`, and Admin, MCP and REST answer on their paths.
 
 Report what changed per manifest, every place where access got stricter, and
 anything you could not map.

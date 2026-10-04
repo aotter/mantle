@@ -42,7 +42,7 @@ async function adminAsset(assets: Fetcher, path: string): Promise<Response | nul
 function mount(runtime: MantleRuntime, env: Env) {
   const origin = env.PUBLIC_ORIGIN?.replace(/\/+$/, "") ?? "http://127.0.0.1:8787";
   const auth = createAuth(env, origin);
-  const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp` } });
+  const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } });
   const authRoutes = createAuthRoutes(auth, { resolver });
   const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);
   const resourceMetadata = `${origin}/.well-known/oauth-protected-resource/mcp`;

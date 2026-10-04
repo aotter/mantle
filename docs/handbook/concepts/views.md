@@ -22,9 +22,9 @@ spec:
 
 `mantle generate` parses the SQL with PostgreSQL's own parser, refuses what the
 dialect does not support (with the position in the statement), and stores the
-parse tree as the View's IR in the plan. No Worker parses SQL. At run time the
-runtime validates the IR against the same allowlist, injects policy, and the D1
-dialect prints SQLite.
+parse tree as the View's IR in the plan. No running service parses SQL. At run time the
+runtime validates the IR against the same allowlist, injects policy, and the
+dialect prints its engine's SQL (SQLite for D1).
 
 What the D1 dialect accepts, in short (the [View reference](../reference/view.md)
 has the full table):

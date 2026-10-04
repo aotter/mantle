@@ -3,10 +3,13 @@
 0.1.x had per-host adapters (`@aotter/mantle-cloudflare`, `-bun`, `-vercel`,
 `-indexeddb`) built on ADR-0011's storage ports. 0.2.0 replaced them
 (ADR-0032 decision 6, ADR-0035): a service is a WinterTC `fetch`, and a host
-differs only in its storage driver and how its entry is spelled. This page
-says what to write for each.
+differs only in its storage driver and how its entry is spelled. `mantle
+generate` writes a preset for `host: cloudflare` (D1, or PostgreSQL through
+Hyperdrive) and `host: bun` (Bun.SQL or bun:sqlite, ADR-0038); `host: none`
+writes the plan and types only (ADR-0036). This page says what to write for
+any other host.
 
-## Another SQLite host (Bun, libSQL, Node)
+## Another SQLite host (libSQL, Node)
 
 The built-in D1 dialect runs on any SQLite-family engine through a
 `DatabaseDriver`, one method that applies statements in order, all or
@@ -23,9 +26,10 @@ const mantle = createMantle(service, { plan, storage: () => sqliteStorage(driver
 Then spell the host's entry: `Bun.serve({ fetch: (r) => mantle.fetch(r, env) })`,
 a Node HTTP handler, and so on. Schedules call
 `mantle.invokeSchedule(posixCron, scheduledTime, env)` from the host's own
-scheduler, and the service passes `schedules: true`. `mantle generate` writes
-only the Cloudflare preset; adapt `src/service.ts` from it. These hosts are
-not tested end to end in 0.2.0.
+scheduler, and the service passes `schedules: true`. Set `"host": "none"`
+and adapt `src/service.ts` from a preset. These hosts are not tested end to
+end in 0.2.0. PostgreSQL on such a host is the same with `postgresStorage({
+connect })` from `@aotter/mantle/postgres`.
 
 Binds are numbered `?1`, `?2` in the order given; a driver whose engine binds
 only anonymous `?` rewrites them in order (the CLI's `node:sqlite` driver does).
@@ -51,4 +55,4 @@ They are host-neutral Fetch functions: `createRestSurface`,
 ## Not in 0.2.0
 
 A browser or IndexedDB driver, Mantle-rendered public pages, and a generated
-preset for any host but Cloudflare.
+preset for any host but Cloudflare and Bun.

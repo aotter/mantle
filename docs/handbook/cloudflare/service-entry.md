@@ -3,7 +3,8 @@ description: The generated src/service.ts and src/index.ts of a Mantle 0.2.0 Clo
 ---
 # The service and its entry
 
-`mantle generate` writes two files once, then they are yours:
+On host `cloudflare`, `mantle generate` writes two files once, then they are
+yours (host `bun` writes a `Bun.serve` entry instead, ADR-0038):
 
 - `src/service.ts` composes the service: storage, identity, surfaces, and the
   `mantle` object from `createMantle`;
@@ -103,8 +104,10 @@ export default {
 
 ## Bindings
 
-`wrangler.jsonc` starts with `DB` (D1), `triggers.crons`, and with feature
-`admin` the console's files:
+`wrangler.jsonc` starts with `DB` (D1), or with dialect `postgres` a
+`HYPERDRIVE` binding whose `id` is a placeholder until
+`wrangler hyperdrive create <name> --caching-disabled --connection-string=…`
+gives one, `triggers.crons`, and with feature `admin` the console's files:
 
 ```jsonc
 "assets": { "directory": "node_modules/@aotter/mantle-ui/dist/admin", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none" }

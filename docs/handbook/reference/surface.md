@@ -71,7 +71,7 @@ Two npm packages, always published together at one version.
 | Import | Exports |
 |---|---|
 | `@aotter/mantle` | `createMantle`, `createMantleRuntime`, `verifyPlan` and its `PLAN_LIMITS`, `withCaller`, `systemCaller`, the `Caller`, `CallerResolver`, `MantleService`, `HandlerContext`, `Invocation` and Store types, `EmailSender`, `DiagnosticError`, `makeDiagnostic`, `runtimeDiagnostic`, `STAFF_ROLES`, `isStaffRole` |
-| `@aotter/mantle/spec` | the grammar types, `compilePlan`, `mcpTools`, `DiagnosticError`, `runtimeDiagnostic` (the SQL compiler loads only when called) |
+| `@aotter/mantle/spec` | the grammar types, `compilePlan`, `mcpTools` (the CLI side; it bundles the SQL parser, so a Worker or handler imports `DiagnosticError` from the root) |
 | `@aotter/mantle/d1`, `/d1/compile` | the `sqlite` dialect: `sqliteStorage` over any `DatabaseDriver`; its compile side |
 | `@aotter/mantle/postgres`, `/postgres/compile` | the `postgres` dialect: `postgresStorage`, `postgresDialect`, `pgDatabaseDriver`, `pgPool`, the `PgClient` and `PgConnect` types; its compile side |
 | `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |

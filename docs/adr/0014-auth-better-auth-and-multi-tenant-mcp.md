@@ -439,7 +439,7 @@ and `ADMIN_GITHUB_LOGIN`; it does not use Platform Account OIDC, a client
 secret, or an owner email handoff. The local provider id remains `github`.
 The wire contract remains in [Platform #35](https://github.com/aotter/mantle-platform/issues/35),
 and the product boundary is documented in
-[`docs/auth-hosting-model.md`](../auth-hosting-model.md).
+[`docs/auth-hosting-model.md`](https://github.com/aotter/mantle/blob/main/docs/auth-hosting-model.md).
 
 This does not change ADR-0014's core rule: Mantle does not expose an
 un-curated `betterAuthOptions` or `advanced` passthrough. Missing Better

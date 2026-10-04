@@ -129,7 +129,7 @@ Why each check sits where it does:
 
 ```ts
 // src/handlers.ts
-import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle/spec";
+import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle";
 import type { MantleHandlers } from "../.mantle/generated/mantle.js";
 import type { Env } from "./service.js";
 
@@ -194,8 +194,8 @@ Put `send_email` (`[{ "name": "EMAIL" }]`) and the two `vars` in
 
 A handler throws `DiagnosticError` to answer with that code's status
 (`AUTH_DENIED` is 403). Any other throw is logged and answered as 500
-`INTERNAL_ERROR`. Importing from `@aotter/mantle/spec` here keeps only the
-diagnostic helpers in the bundle; the SQL compiler is never loaded.
+`INTERNAL_ERROR`. Import it from `@aotter/mantle`, not `@aotter/mantle/spec`:
+the root carries no SQL parser, while `/spec` bundles it into the Worker.
 
 Two policies are deliberate:
 

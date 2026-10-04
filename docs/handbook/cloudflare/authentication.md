@@ -30,7 +30,11 @@ createMantleAuth({
 
 then `createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } })`,
 `createAuthRoutes(auth, { resolver })` and an `AdminIdentity` over the auth's
-own methods.
+own methods. With dialect `postgres` the preset passes `database:
+pgPool(connect), driver: pgDatabaseDriver(connect)` over Hyperdrive; host `bun`
+passes `bunAuthDatabase(sql)` and `bunDatabaseDriver(sql)` (or the bun:sqlite
+`Database` and `bunSqliteDriver(db)`), with `ipAddressHeaders:
+["x-mantle-client-ip"]`, which its entry sets from the socket.
 
 ### Local sign-in
 
