@@ -56,7 +56,8 @@ budgets, custom business roles and seven real users. It checks:
 - Browser OTP bootstrap-owner login; real staff grants and outsider denial.
 - Store-validated data imports, rejection of invalid dynamic rows, searchable
   announcements, indexed filters/sorts and disjoint cursor pages.
-- Related scope + compound-index sorting and complete sorted CSV export.
+- Related scope + compound-index sorting (actual ordered values, not only
+  HTTP success), filtered amount order and complete sorted CSV export.
 - Small, threshold and large procurement; three approval/payment stages,
   self-approval rejection, role revoke/restore and exact invoice matching.
 - Whole SQL-batch rollback on insufficient budget and stale-version conflicts.
@@ -72,7 +73,7 @@ It writes in chunks of ten to stay below the sealed SQL program's IR work
 budget; each chunk is atomic, the entire import is not. Existing IDs are ignored
 for recovery. Fresh databases/directories give the cleanest reproducible run:
 re-running business scenarios consumes more budget. Auth rate limits stay on;
-the test honors 429 delays. `.auth-*.json` files cache locally issued sessions
+the test honors 429 delays with at most three retries per request. `.auth-*.json` files cache locally issued sessions
 for recovery and must remain private/uncommitted. A cached session that expires
 requires deleting that pair's private auth files and signing in again.
 
