@@ -367,7 +367,8 @@ export interface MantleAuth {
    *  (OTP send, rate-limit cleanup) survives the response on Workers. */
   readonly handler: (request: Request, context?: MantleAuthRequestContext) => Promise<Response>;
   readonly getSession: (request: Request) => Promise<{
-    session: { id: string; userId: string; expiresAt: Date };
+    /** `createdAt` is when this sign-in happened: a sensitive action can require a recent one. */
+    session: { id: string; userId: string; expiresAt: Date; createdAt: Date };
     user: {
       id: string;
       email: string;
@@ -488,7 +489,7 @@ export interface MantleAuth {
    *  user with sessions/accounts can never be cascade-deleted through
    *  this path. Returns false when the row didn't match the guard. */
   readonly revokeInvite: (userId: string) => Promise<boolean>;
-  /** Delete a user; sessions and accounts cascade, and cached sessions are cleared when a session cache is configured. A service stops running raw SQL against auth tables. */
+  /** Delete a user; sessions and accounts cascade, and cached sessions are cleared when a session cache is configured. Pending email codes for its address are deleted too. A service stops running raw SQL against auth tables. */
   readonly deleteUser: (userId: string) => Promise<boolean>;
   /** Register an OAuth/OIDC client when `oauthProvider` is configured.
    *  Uses Better Auth's own provider plugin endpoint and returns the

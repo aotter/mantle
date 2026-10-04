@@ -85,6 +85,35 @@ it("staff management acts as the signed-in owner through Better Auth's admin API
   expect(await auth.deleteUser(invited.id)).toBe(false);
 });
 
+it("a session tells when its sign-in happened, and deleting a user drops the codes still pending for its address", async () => {
+  const { d1, driver } = sqlite();
+  const codes = new Map<string, string>();
+  const auth = createMantleAuth({
+    database: d1, driver, baseURL: "http://localhost", secret: "x".repeat(40), ipAddressHeaders: ["x-real-ip"],
+    methods: [{ kind: "email-otp", sender: { send: async ({ to, text }) => void codes.set(to, /\b(\d{6})\b/.exec(text)![1]!) } }],
+  });
+  let ip = 0; // one address per request: Better Auth rate-limits repeated sends
+  const post = (path: string, body: unknown) =>
+    auth.handler(new Request(`http://localhost/api/auth${path}`, { method: "POST", headers: { "content-type": "application/json", origin: "http://localhost", "x-real-ip": `1.1.1.${++ip}` }, body: JSON.stringify(body) }));
+  const send = async (email: string) => { expect((await post("/email-otp/send-verification-otp", { email, type: "sign-in" })).status).toBe(200); await new Promise((r) => setTimeout(r, 20)); };
+  await send("member@x.test");
+  const before = Date.now();
+  const signedIn = await post("/sign-in/email-otp", { email: "member@x.test", otp: codes.get("member@x.test") });
+  const request = new Request("http://localhost/", { headers: { cookie: signedIn.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ") } });
+  const session = await auth.getSession(request);
+  expect(session!.session.createdAt).toBeInstanceOf(Date);
+  expect(Math.abs(session!.session.createdAt.getTime() - before)).toBeLessThan(5_000);
+
+  await send("Member@X.test"); // a new code requested after sign-in, never used
+  const pending = async () => (await driver.batch([{ sql: "SELECT identifier FROM verification WHERE identifier LIKE ?1", binds: ["%member@x.test"] }]))[0]!.rows;
+  expect(await pending()).toHaveLength(1);
+  await send("other@x.test");
+  expect(await auth.deleteUser(session!.user.id)).toBe(true);
+  expect(await pending()).toEqual([]);
+  expect((await driver.batch([{ sql: "SELECT identifier FROM verification", binds: [] }]))[0]!.rows).toEqual([{ identifier: "sign-in-otp-other@x.test" }]);
+  expect(await auth.getSession(request)).toBeNull();
+});
+
 it("the statements Better Auth has no call for run on a real database: members, invites, linked accounts, consents", async () => {
   const { d1, driver } = sqlite();
   const auth = createMantleAuth({
