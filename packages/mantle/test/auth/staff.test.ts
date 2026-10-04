@@ -7,9 +7,10 @@ import { createMantleAuth, type CreateMantleAuthOptions } from "../../src/auth/i
  * Better Auth and Mantle over one real SQLite database, as a Worker has them over one D1: Better Auth gets the D1 shape the
  * preset hands it (Node 22.14's `node:sqlite` lacks what Better Auth's own node dialect needs).
  */
-function sqlite() {
+function sqlite(rejectVerificationDelete: () => boolean = () => false) {
   const db = new DatabaseSync(":memory:");
   const exec = (sql: string, binds: readonly unknown[] = []) => {
+    if (rejectVerificationDelete() && /^\s*DELETE\b.*\bverification\b/i.test(sql)) throw new Error("injected OTP cleanup failure");
     // Node 22's `node:sqlite` binds only anonymous `?`, so a numbered `?N` becomes `?` with its value in order
     const ordered: unknown[] = [];
     const text = sql.replace(/\?(\d+)/g, (_, n: string) => (ordered.push(binds[Number(n) - 1]), "?"));
@@ -85,11 +86,15 @@ it("staff management acts as the signed-in owner through Better Auth's admin API
   expect(await auth.deleteUser(invited.id)).toBe(false);
 });
 
-it("a session tells when its sign-in happened, and deleting a user drops the codes still pending for its address", async () => {
-  const { d1, driver } = sqlite();
+it("cached sessions retain sign-in dates and OTP cleanup can fail safely before user deletion", async () => {
+  let rejectCleanup = false;
+  const { d1, driver } = sqlite(() => rejectCleanup);
+  await driver.batch([{ sql: "CREATE TABLE _mantle_boot_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)" }, { sql: "INSERT INTO _mantle_boot_state VALUES ('instance', 'cache-test-store')" }]);
+  const cache = new Map<string, string>();
   const codes = new Map<string, string>();
   const auth = createMantleAuth({
     database: d1, driver, baseURL: "http://localhost", secret: "x".repeat(40), ipAddressHeaders: ["x-real-ip"],
+    sessionCache: { get: async (key) => cache.get(key) ?? null, set: async (key, value) => { cache.set(key, value); }, delete: async (key) => { cache.delete(key); } },
     methods: [{ kind: "email-otp", sender: { send: async ({ to, text }) => void codes.set(to, /\b(\d{6})\b/.exec(text)![1]!) } }],
   });
   let ip = 0; // one address per request: Better Auth rate-limits repeated sends
@@ -101,13 +106,20 @@ it("a session tells when its sign-in happened, and deleting a user drops the cod
   const signedIn = await post("/sign-in/email-otp", { email: "member@x.test", otp: codes.get("member@x.test") });
   const request = new Request("http://localhost/", { headers: { cookie: signedIn.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ") } });
   const session = await auth.getSession(request);
+  expect(cache.size).toBeGreaterThan(0);
   expect(session!.session.createdAt).toBeInstanceOf(Date);
+  expect(session!.session.expiresAt).toBeInstanceOf(Date);
   expect(Math.abs(session!.session.createdAt.getTime() - before)).toBeLessThan(5_000);
 
   await send("Member@X.test"); // a new code requested after sign-in, never used
   const pending = async () => (await driver.batch([{ sql: "SELECT identifier FROM verification WHERE identifier LIKE ?1", binds: ["%member@x.test"] }]))[0]!.rows;
   expect(await pending()).toHaveLength(1);
   await send("other@x.test");
+  rejectCleanup = true;
+  await expect(auth.deleteUser(session!.user.id)).rejects.toThrow("injected OTP cleanup failure");
+  expect((await driver.batch([{ sql: "SELECT id FROM user WHERE id = ?1", binds: [session!.user.id] }]))[0]!.rows).toHaveLength(1);
+  expect(await pending()).toHaveLength(1);
+  rejectCleanup = false;
   expect(await auth.deleteUser(session!.user.id)).toBe(true);
   expect(await pending()).toEqual([]);
   expect((await driver.batch([{ sql: "SELECT identifier FROM verification", binds: [] }]))[0]!.rows).toEqual([{ identifier: "sign-in-otp-other@x.test" }]);
