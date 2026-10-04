@@ -439,3 +439,13 @@ it('writes Bun presets for PostgreSQL and SQLite with no Cloudflare or pg import
     await rm(dir, { recursive: true, force: true });
   }
 }, 120_000);
+
+// #1325: with Admin, consent is Admin's page (createAuthRoutes answers /oauth/consent first with its plain one)
+it("points oauthProvider.consentPage at Admin's consent page when the preset mounts Admin", async () => {
+  const { presetFiles } = await import('../../src/cli/preset.js');
+  const plan = { schemas: {}, procedures: {}, triggers: {} } as any;
+  const service = (features: string[]) => Object.fromEntries(presetFiles('/private/tmp/consent-preset', { host: 'cloudflare', dialect: 'sqlite', identity: 'mantle', features }, plan))['src/service.ts'];
+  expect(service(['admin', 'mcp'])).toContain('consentPage: "/admin/oauth/consent"');
+  expect(service(['mcp'])).toContain('consentPage: "/oauth/consent"');
+  expect(service(['mcp'])).not.toContain('/admin/oauth/consent');
+});
