@@ -48,8 +48,9 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
    REST; `--identity custom` keeps the user's own auth;
    `--identity none --features web` is a public REST service. The default
    host is Cloudflare over D1; `--host bun` (PostgreSQL unless
-   `--dialect sqlite`) or `--dialect postgres` choose another (`docs/handbook/start/project-and-cli.md`). Identity, host and
-   dialect cannot be switched later.
+   `--dialect sqlite`) or `--dialect postgres` choose another
+   (`docs/handbook/start/project-and-cli.md`). Identity, host and dialect
+   cannot be switched later.
 5. Write only the user's Schemas, Views, Procedures and Triggers in
    `manifests/`. `docs/examples/` shows whole services; do not copy one
    wholesale or invent business data.
