@@ -279,6 +279,11 @@ describe("verifyPlan", () => {
     const withView = (sql: string) => MANIFESTS.replace('sql: "SELECT name, sum(stock) OVER (ORDER BY name) AS running FROM items ORDER BY name"', `sql: ${JSON.stringify(sql)}`);
     const r = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withView("SELECT name FROM items WHERE now() - interval '9999999999 hours' < now()") }] });
     expect(r.ok ? [] : r.diagnostics.map((d) => d.message).join()).toMatch(/longer than/);
+    const finer = await compilePlan({ sources: [{ sourceId: "memory:verify", text: withView("SELECT name FROM items WHERE now() - interval '2.0000005 seconds' < now()") }] });
+    expect(finer.ok ? [] : finer.diagnostics.map((d) => d.message).join()).toMatch(/finer than a microsecond/);
+    // exact in integers: no float error at large or fractional values
+    const { intervalMicros } = await import("../../src/spec/domain/service/SqlTypes.js");
+    expect([intervalMicros("3.750636 seconds"), intervalMicros("2234272.72 hours"), intervalMicros("-1.5 minutes"), intervalMicros("2", 1024)]).toEqual([3750636, 8043381792000000, -90000000, 7200000000]);
   });
 
 });

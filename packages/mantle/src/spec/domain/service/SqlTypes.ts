@@ -44,7 +44,11 @@ export function intervalMicros(text: string, typmod?: number): number {
   const unit = UNIT_US[m[2]!.toLowerCase()];
   if (!unit && /^(days?|weeks?|months?|mons?|years?|y)$/i.test(m[2]!)) throw new SqlRefusal('SQL_TYPE', `interval unit '${m[2]}' is a calendar unit (a day is 23 or 25 hours across daylight saving): bind the boundary as an input instead`);
   if (!unit) throw new SqlRefusal('SQL_TYPE', `interval '${text}' is not supported: write a number and second, minute or hour`);
-  const micros = Math.round(Number(m[1]) * unit);
+  // exact, in integers: a value finer than a microsecond is refused (each engine would round it its own way)
+  const [, sign, whole, frac = ''] = /^(-?)(\d+)(?:\.(\d+))?$/.exec(m[1]!)!;
+  const scale = 10n ** BigInt(frac.length), fraction = BigInt(frac || '0') * BigInt(unit);
+  if (fraction % scale !== 0n) throw new SqlRefusal('SQL_TYPE', `interval '${text}' is finer than a microsecond`);
+  const micros = (sign ? -1 : 1) * Number(BigInt(whole!) * BigInt(unit) + fraction / scale);
   // D1 stores microseconds as a double: past 2^53 two different intervals would compare equal
   if (!Number.isSafeInteger(micros)) throw new SqlRefusal('SQL_TYPE', `interval '${text}' is longer than ${Number.MAX_SAFE_INTEGER} microseconds`);
   return micros;
