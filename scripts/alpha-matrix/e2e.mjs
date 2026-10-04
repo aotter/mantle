@@ -6,7 +6,7 @@ const pairs = ['bun-sqlite','bun-postgres','cf-sqlite','cf-postgres'];
 const port = 4421 + pairs.indexOf(name);
 assert(pairs.includes(name));
 const origin = `http://127.0.0.1:${port}`;
-const log = `/private/tmp/mantle-alpha-${name}.log`;
+const log = process.env.MANTLE_ALPHA_LOG ?? `/private/tmp/mantle-alpha-${name}.log`;
 const output = `evidence/${name}`;
 await mkdir(output, { recursive: true });
 await rm(output+'/result.json', { force: true });
