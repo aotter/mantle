@@ -114,22 +114,9 @@ export function safeReturnPath(raw: string | null | undefined): string {
   }
 }
 
-/** Preserve only the Better Auth-signed OAuth fields while the login UI adds
- * its own query parameters. Mirrors oauthProviderClient without coupling the
- * static Admin SPA to a second auth client. */
-export function signedOAuthQuery(search: string): string | undefined {
-  const params = new URLSearchParams(search);
-  if (!params.has("sig")) return undefined;
-  const signedNames = new Set(params.getAll("ba_param"));
-  if (signedNames.size === 0) return undefined;
-  const signed = new URLSearchParams();
-  for (const [key, value] of params) {
-    if (key === "sig" || key === "ba_param" || signedNames.has(key)) {
-      signed.append(key, value);
-    }
-  }
-  return signed.toString();
-}
+// The signed OAuth query lives in the kit, which a service's own sign-in page uses too.
+import { signedOAuthQuery } from "@aotter/mantle-ui/kit";
+export { signedOAuthQuery };
 
 // Both moved to the kit component that now owns the email-OTP flow;
 // re-exported here so Admin call sites and tests keep one import path.

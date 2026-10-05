@@ -7,6 +7,7 @@
 export * from "./components/auth-card.js";
 export * from "./components/one-time-code-input.js";
 export * from "./components/sign-in-flow.js";
+export { signedOAuthQuery } from "./lib/signed-oauth-query.js";
 export * from "./components/ui/alert-dialog.js";
 export * from "./components/ui/avatar.js";
 export * from "./components/ui/badge.js";

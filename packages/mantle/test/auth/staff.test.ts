@@ -200,3 +200,29 @@ it("two isolates preparing a fresh database at once both succeed; a prepared one
   await make().listMembers({ limit: 1 });
   expect(statements).toBe(2); // the digest read, then the members query
 });
+
+it("dynamic registration takes a loopback-only client without application_type as native, and nothing else", async () => {
+  const { d1, driver } = sqlite();
+  const auth = createMantleAuth({
+    database: d1, driver, baseURL: "http://localhost", secret: "x".repeat(40), ipAddressHeaders: ["x-real-ip"],
+    methods: [{ kind: "email-otp", sender: { send: async () => {} } }],
+    oauthProvider: { loginPage: "/sign-in", consentPage: "/oauth/consent", scopes: ["mcp"], mcpResource: "http://localhost/mcp",
+      allowDynamicClientRegistration: true, allowUnauthenticatedClientRegistration: true, clientRegistrationDefaultScopes: ["mcp"] },
+  });
+  let ip = 0; // one address per request: Better Auth rate-limits registration
+  const register = async (body: Record<string, unknown>) => {
+    const res = await auth.handler(new Request("http://localhost/api/auth/oauth2/register", { method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", "x-real-ip": `10.0.0.${++ip}` }, body: JSON.stringify(body) }));
+    return { status: res.status, body: await res.json() as { application_type?: string; error?: string } };
+  };
+  for (const [redirect, method] of [["http://localhost:8787/callback", "none"], ["http://127.0.0.1:8787/callback", "client_secret_post"], ["http://[::1]:33418/", undefined]] as const) {
+    const created = await register({ redirect_uris: [redirect], ...(method ? { token_endpoint_auth_method: method } : {}) });
+    expect([created.status, created.body.application_type], redirect).toEqual([201, "native"]);
+  }
+  expect((await register({ redirect_uris: ["https://client.example/cb"], token_endpoint_auth_method: "none" })).status).toBe(201);
+  for (const body of [
+    { redirect_uris: ["http://localhost:8787/callback"], application_type: "web" },
+    { redirect_uris: ["http://localhost/cb", "https://client.example/cb"] },
+    { redirect_uris: ["http://client.example/cb"], token_endpoint_auth_method: "none" },
+  ]) expect(await register(body), JSON.stringify(body)).toMatchObject({ status: 400, body: { error: "invalid_redirect_uri" } });
+});

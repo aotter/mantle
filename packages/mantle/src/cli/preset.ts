@@ -120,7 +120,8 @@ function service({ identity, features, dialect, host }: PresetSelection): string
       '    methods: [{ kind: "email-otp", sender: new ConsoleEmailSender() }],',
       '    bootstrapOwner: { match: "email", value: env.ADMIN_EMAIL },',
       bun ? '    ipAddressHeaders: ["x-mantle-client-ip"],' : '    ipAddressHeaders: ["cf-connecting-ip"],',
-      ...(mcp ? ['    oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/oauth/consent", scopes: ["mcp"], mcpResource: `${origin}/mcp` },'] : []),
+      // with Admin, its own consent page (Mantle UI); without, Core's plain one at /oauth/consent
+      ...(mcp ? [`    oauthProvider: { loginPage: "/admin/sign-in", consentPage: "${admin ? "/admin/oauth/consent" : "/oauth/consent"}", scopes: ["mcp"], mcpResource: \`\${origin}/mcp\` },`] : []),
       "  });",
       "}",
       "",

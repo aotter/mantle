@@ -134,7 +134,8 @@ describe("createAuthRoutes: consent", () => {
 
   it("without Admin the pages are plain HTML; with Admin the connected-apps page is Admin's", async () => {
     const page = (await req(`/oauth/consent?client_id=evil&scope=${encodeURIComponent("mcp <i>all</i>")}`, { headers: { "accept-language": "zh-TW" } }))!;
-    expect(page.headers.get("content-security-policy")).toContain("form-action 'self' https://client.test;");
+    // no form-action: the approval's navigation follows the callback's own redirects (www.cursor.com 308s to cursor.com)
+    expect(page.headers.get("content-security-policy")).toBe("default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'");
     const html = await page.text();
     expect(html).toContain("&#60;b&#62;Evil&#60;/b&#62;");
     expect(html).toContain('lang="zh-Hant-TW"');

@@ -40,7 +40,7 @@ describe("signOut", () => {
 
 describe("sign-in", () => {
   it("renders no Admin UI in an iframe, including direct static asset URLs", () => {
-    for (const pathname of ["/admin/index.html", "/admin", "/admin/sign-in", "/oauth/consent"]) {
+    for (const pathname of ["/admin/index.html", "/admin", "/admin/sign-in", "/oauth/consent", "/admin/oauth/consent"]) {
       vi.stubGlobal("window", { self: {}, top: {}, location: { pathname, search: "" } });
       expect(renderToStaticMarkup(createElement(AdminRouterProvider, null, createElement(AdminApp)))).toBe("");
     }
@@ -100,6 +100,20 @@ describe("sign-in", () => {
     expect(render("/admin/connected-apps")).toContain('action="/oauth/consents/revoke"');
     expect(render("/admin/settings")).not.toContain("My agent");
     expect(render("/admin/settings")).toContain('href="/admin/connected-apps"');
+    client.clear();
+  });
+
+  it("renders the consent page at Admin's own path, for oauthProvider.consentPage, and at Core's", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
+    const search = "?client_id=c1&sig=s";
+    client.setQueryData(["oauth-consent", search], { clientName: "Cursor", redirectUri: "https://www.cursor.com/cb", scopes: ["mcp"], oauthQuery: "client_id=c1&sig=s" });
+    for (const pathname of ["/admin/oauth/consent", "/oauth/consent"]) {
+      vi.stubGlobal("window", { location: { pathname, search } });
+      const html = renderToStaticMarkup(createElement(QueryClientProvider, { client },
+        createElement(PreferencesProvider, null, createElement(AdminRouterProvider, null, createElement(AdminApp)))));
+      expect(html, pathname).toContain("Cursor");
+      expect(html, pathname).toContain('action="/oauth/consent"');
+    }
     client.clear();
   });
 

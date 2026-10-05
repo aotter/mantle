@@ -34,17 +34,23 @@ import { MembersView } from "../features/system/members-view";
 
 const DeveloperWorkspace = React.lazy(() => import("../features/logic/developer-workspace"));
 
+/**
+ * Where the consent view renders: `/admin/oauth/consent` is Admin's own page, which `oauthProvider.consentPage` names
+ * when a service mounts Admin; `/oauth/consent` is kept for a service that routes Core's consent URL to this shell.
+ */
+const CONSENT_PATHS = ["/admin/oauth/consent", "/oauth/consent"];
+
 export function AdminApp({ preview = false }: { preview?: boolean } = {}): React.ReactElement | null {
   const location = useAdminLocation();
 
   // Static asset URLs can bypass the server's frame-ancestors headers.
   if (typeof window !== "undefined" && !canRenderAdmin(window, preview)) return null;
 
-  if (preview && ["/admin/sign-in", "/admin/connected-apps", "/oauth/consent"].includes(location.pathname)) {
+  if (preview && ["/admin/sign-in", "/admin/connected-apps", ...CONSENT_PATHS].includes(location.pathname)) {
     return <PreviewAccountNotice />;
   }
 
-  if (location.pathname === "/oauth/consent") return <OAuthConsentView />;
+  if (CONSENT_PATHS.includes(location.pathname)) return <OAuthConsentView />;
 
   if (location.pathname === "/admin/sign-in") {
     return <SignInView />;

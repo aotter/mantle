@@ -24,9 +24,13 @@ createMantleAuth({
   methods: [{ kind: "email-otp", sender: new ConsoleEmailSender() }],
   bootstrapOwner: { match: "email", value: env.ADMIN_EMAIL },
   ipAddressHeaders: ["cf-connecting-ip"],
-  oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/oauth/consent", scopes: ["mcp"], mcpResource: `${origin}/mcp` },
+  oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/admin/oauth/consent", scopes: ["mcp"], mcpResource: `${origin}/mcp` },
 });
 ```
+
+`consentPage` is Admin's consent page when the service mounts Admin (the
+preset does); without Admin it is `/oauth/consent`, the plain page
+`createAuthRoutes` serves. Both post the decision to `/oauth/consent`.
 
 then `createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } })`,
 `createAuthRoutes(auth, { resolver })` and an `AdminIdentity` over the auth's
@@ -52,6 +56,30 @@ The preset prints codes only when `PUBLIC_ORIGIN` is set to a loopback `http:`
 origin and both secrets exist. Otherwise it uses
 `createSetupIncompleteAuth`, which refuses sign-in with a message, so a
 deployed service never prints codes to its log.
+
+### MCP clients for members
+
+`/admin/sign-in` suits staff. When members connect an MCP client to the public
+`/mcp`, set `loginPage` to the service's own sign-in page. That page must
+continue the authorization: Better Auth sends the browser there with the
+request signed, and the sign-in carries it back as `oauth_query`, then follows
+the `url` it answers (consent) instead of the page's own destination:
+
+```ts
+import { signedOAuthQuery } from "@aotter/mantle-ui/kit";
+
+const oauthQuery = signedOAuthQuery(window.location.search);
+const res = await fetch("/api/auth/sign-in/email-otp", { method: "POST", credentials: "include",
+  headers: { "content-type": "application/json" }, body: JSON.stringify({ email, otp, ...(oauthQuery ? { oauth_query: oauthQuery } : {}) }) });
+const { url } = await res.json();
+location.assign(url ?? "/account");
+```
+
+Dynamic client registration takes a client that names no `application_type`
+and registers only `http` loopback redirects (`localhost`, `127.0.0.1`,
+`[::1]`) as `native` (RFC 8252), which is how local MCP clients register; any
+other registration is checked as Better Auth checks it (`web` needs `https` on a
+non-loopback host).
 
 ### Production
 
