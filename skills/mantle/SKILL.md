@@ -1,6 +1,6 @@
 ---
 name: mantle
-description: Create a Mantle 0.2 service, continue an existing one, or check it for Mantle Cloud, using the installed @aotter/mantle package's own docs and this skill's Cloud helper script.
+description: Create a Mantle 0.2 service, continue an existing one, or save, preview and publish it on Mantle Cloud, using the installed @aotter/mantle package's own docs and this skill's Cloud helper script.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/mantle/SKILL.md
@@ -33,7 +33,10 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
 
 1. Create a directory outside the SDK checkout with Node 22+ and
    `"type": "module"` in `package.json`.
-2. Choose the version: `npm view @aotter/mantle dist-tags`. Use a `0.2.x`
+2. For a Mantle Cloud project, first connect Cloud MCP and select or create the
+   organization/project as described in [Cloud workflow](references/cloud.md).
+   Use the exact Core version returned by `cloud_host_contract`. Otherwise
+   choose the version: `npm view @aotter/mantle dist-tags`. Use a `0.2.x`
    version (while 0.2.0 is in prerelease it is on `alpha`; `latest` may still
    be 0.1.x). Install it exactly: `npm install --save-exact @aotter/mantle@<version>`
    (or the pnpm/yarn equivalent), plus `wrangler`, `@cloudflare/workers-types`,
@@ -63,36 +66,43 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
    sign in at `/admin/sign-in` with the one-time code printed to the log, and
    check that the console loads and `GET /admin/api/me` is `owner`. Exercise the REST routes and `/mcp` `tools/list`.
 
-Do not push, deploy or configure providers during a cold start.
+For a local cold start, do not push, deploy or configure providers. For a
+requested hosted app, continue with the selected hosting workflow.
 
-## Deploy
+## Hosting and publishing
 
-Deploying is a separate, explicit request. Self-hosting is always available,
-and Mantle Cloud is one option, never a requirement.
+Follow the user's requested host. A request for a complete hosted Mantle Cloud
+app includes saving, previewing and publishing it; continue through the terminal
+release result. A local-only or save-only request stops there. Creating a local
+project alone does not imply a deploy request. Self-hosting remains available.
 
 - **Cloudflare Workers or ChatGPT Sites:** follow
-  `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md`.
-- **Mantle Cloud:** Cloud does not accept 0.2 services yet; it needs host
-  protocol 3 (a service entry with its compiled plan). Until then, check that
-  the project is ready and tell the user Cloud deploy is not available:
+  `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` and that host's
+  native deployment workflow.
+- **Mantle Cloud:** follow [Cloud workflow](references/cloud.md). The bundled
+  `scripts/mantle-cloud.mjs` supports `link`, `save`, `status`, `deploy`,
+  `rollback` and `version`. Run it by absolute path from the application root;
+  execute its literal `nextAction` using the connected Cloud MCP, not guessed
+  tool names. It uses the project's installed compiler and esbuild; it bundles
+  no Core, SQL parser, provider credentials or application runtime.
+
+For an offline readiness check:
 
 ```bash
-node <this skill>/scripts/mantle-cloud.mjs check [--project <dir>] [--core <version Cloud pins>]
+node <this skill>/scripts/mantle-cloud.mjs check [--project <dir>] [--core <Cloud version>]
 ```
 
-  It compiles the manifests with the project's installed
-  `@aotter/mantle/spec` (the plugin bundles no compiler), writes nothing and
-  contacts no network. It prints one JSON line,
-  `{ ok, coreVersion, fingerprint, sourceHash, planFile, cloud, nextAction? }`.
-  `planFile: "stale"` means run `mantle generate` and commit
-  `.mantle/generated/`. `core_mismatch` means install the version Cloud pins.
-  `dialect_unsupported` means the project is not on D1, the only dialect Cloud
-  runs.
-  Run it by absolute path; never edit it.
+It reads only the project, compiles with its installed `@aotter/mantle/spec`,
+and prints `{ ok, coreVersion, fingerprint, sourceHash, planFile, cloud,
+nextAction? }`. `cloud: "not_checked"` is not a deployment result.
+`planFile: "stale"` means regenerate and commit `.mantle/generated/`;
+`core_mismatch` means install Cloud's exact version. Cloud serves D1 plans.
 
-The plugin also configures the Mantle Cloud MCP connection
-(`https://cloud.mantle.tools/mcp`). Never put tokens or grants in files,
-commands or chat.
+The plugin configures `https://cloud.mantle.tools/mcp`. The same Cloud workflow
+works with a staging MCP connection; do not change production to staging behind
+the user's back. Never put tokens or grants in files, commands or chat. Pipe
+Cloud results to the helper over stdin. Existing OAuth/session and project
+edit/deploy rules still apply; Cloud membership never grants tenant staff access.
 
 ## Existing project and handoff
 

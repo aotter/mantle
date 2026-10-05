@@ -13,7 +13,7 @@ distributions (ADR-0032 decision 13):
 
 | Skill | When to invoke |
 |---|---|
-| [`mantle`](mantle/SKILL.md) | Create a Mantle service, continue one, or check it for Mantle Cloud. |
+| [`mantle`](mantle/SKILL.md) | Create a Mantle service, continue one, or save, preview and publish it on Mantle Cloud. |
 | [`develop`](../docs/skills/develop/SKILL.md) | Change manifests, SQL, handlers, the service entry or surfaces of an existing project. |
 | [`integrate`](../docs/skills/integrate/SKILL.md) | Add Mantle to an application that has its own code, users or data, or rebuild one and migrate. |
 | [`update`](../docs/skills/update/SKILL.md) | Upgrade `@aotter/mantle`, including from 0.1.x. |
@@ -44,13 +44,23 @@ Claude Code users with the next Core release.
 
 ## The Cloud helper
 
-`mantle/scripts/mantle-cloud.mjs check` compiles the project's manifests with
-the project's own installed `@aotter/mantle/spec` (ADR-0034 decision 3: the
-plugin bundles no compiler), and reports the Core version, the plan
-fingerprint, the source hash and whether `.mantle/generated/plan.json` is that
-plan. It writes nothing and contacts no network. Uploading and deploying wait
-for Mantle Cloud's host protocol 3 and will be added to this script then.
-`scripts/check-doc-examples.mjs` runs it against every example.
+`mantle/scripts/mantle-cloud.mjs` is the public entry for offline `check` and
+Cloud `link`, `save`, `status`, `deploy`, `rollback` and `version`. The helper
+loads the project's own compiler (ADR-0034 decision 3), never a bundled parser.
+Cloud returns its exact Core pin before a save; grants arrive through stdin.
+The generated `cloud-host.mjs` carries the same upload rules as Cloud Control;
+`VENDORED.json` records its source commit, protocol and SHA-256. Do not edit it.
+Rebuild from that mantle-home commit with
+`pnpm --filter @aotter/mantle-cloud build:host` and copy the deterministic
+`dist/mantle-host.mjs` bundle; that legacy build filename is internal.
+
+[Cloud workflow](mantle/references/cloud.md) covers source recovery, saving,
+previewing, publishing and interruption recovery. `check` is offline and
+reports `cloud: "not_checked"`; it proves no remote deployment. A hosted app
+request continues through Cloud's serving result; save-only/local work stops
+at the requested state. Runtime and project edit/deploy permissions stay in
+Cloud. `scripts/check-doc-examples.mjs` exercises the readiness entry and the
+plugin contract check verifies the actual packaged helper.
 
 ## Disclosure audit
 
@@ -63,7 +73,7 @@ each other: `metadata.projection` is `plugin` for `skills/mantle` and
 
 | Skill | Routes on | Entry constraints | Distribution | Restricted because |
 |---|---|---|---|---|
-| `mantle` | new project, existing project, Cloud readiness | the installed package's docs win; never use the SDK checkout as the application; no deploy during a cold start | plugin | The plugin's entry skill; it creates projects and carries the Cloud helper, so it is installed from the repository, not the npm package. |
+| `mantle` | new project, existing project, Cloud workflow | the installed package's docs win; never use the SDK checkout as the application; no deploy during a cold start | plugin | The plugin's entry skill; it creates projects and carries the Cloud helper, so it is installed from the repository, not the npm package. |
 | `develop` | manifest, SQL, handler, service or surface work | read the installed version first; never edit `.mantle/generated/`; data only through Store | package | — |
 | `integrate` | an application with its own code, users or data | inspect before choosing; the application keeps its users; one writer per table | package | — |
 | `update` | an SDK upgrade | never overwrite application files; 0.1.x moves by the upgrade guide to a new database | package | — |
