@@ -59,6 +59,13 @@ and stops before writing anything, naming the install command for your
 package manager. It never installs anything. The host and dialect rows, and the
 staff MCP App, are checked only while the preset is still to be written.
 
+Use the versions in the installed Core's `package.json` `peerDependencies`,
+not registry latest, for optional auth and MCP packages. The diagnostic's
+install command includes those versions and incompatible installed peers are
+refused before generation. Keep `@aotter/mantle-ui` at Core's
+exact version. A package manager accepting an incompatible peer does not make
+it a supported combination; inspect peer warnings before starting the service.
+
 | Selection | Packages |
 |---|---|
 | always | `@aotter/mantle` |

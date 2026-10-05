@@ -10,12 +10,12 @@
   "dependencies": {
     "@aotter/mantle": "0.2.0-alpha.2",
     "@aotter/mantle-ui": "0.2.0-alpha.2",
-    "@better-auth/cimd": "1.7.2",
-    "@better-auth/mcp": "1.7.2",
-    "@better-auth/oauth-provider": "1.7.2",
+    "@better-auth/cimd": "1.7.7",
+    "@better-auth/mcp": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/server": "2.1.0",
-    "better-auth": "1.7.2"
+    "better-auth": "1.7.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260904.1",

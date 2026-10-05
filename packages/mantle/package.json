@@ -94,7 +94,8 @@
     "libpg-query": "18.1.5",
     "pgsql-deparser": "18.3.8",
     "yaml": "^2.9.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "semver": "^7.8.5"
   },
   "devDependencies": {
     "@better-auth/cimd": "catalog:",
@@ -112,7 +113,8 @@
     "pg": "8.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "4.126.0"
+    "wrangler": "4.126.0",
+    "@types/semver": "^7.7.1"
   },
   "peerDependencies": {
     "@better-auth/cimd": "catalog:",

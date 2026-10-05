@@ -112,12 +112,13 @@ pnpm exec mantle generate
 ```
 
 With no flags the selection is identity `mantle` and every feature. The first
-run names the packages it needs, with the install command, and writes nothing
-until they are installed:
+run names the packages it needs, with versioned install commands from the
+installed Core's `peerDependencies`, and writes nothing until they are installed
+at compatible versions. Copy those commands rather than installing registry
+latest; `@aotter/mantle-ui` must match Core's exact version:
 
 ```sh
-pnpm add better-auth @better-auth/oauth-provider @better-auth/mcp @better-auth/cimd \
-  @modelcontextprotocol/server @modelcontextprotocol/ext-apps @aotter/mantle-ui
+# Run each versioned pnpm add command printed above first.
 pnpm exec mantle generate
 cp .dev.vars.example .dev.vars   # set ADMIN_EMAIL and a random BETTER_AUTH_SECRET
 pnpm exec wrangler dev --local

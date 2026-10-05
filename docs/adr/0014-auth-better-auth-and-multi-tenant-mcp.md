@@ -702,6 +702,18 @@ Failed Auth initialization evicts only the failed Worker assembly so a later
 request can retry. Non-HTTP callers await Auth initialization with runtime boot;
 HTTP requests anchor it without making public responses depend on Auth health.
 
+### 2026-10-05 amendment — Better Auth 1.7.7 schema validation order
+
+Issue #1335 upgrades the complete Better Auth family and the nested MCP provider
+override together to 1.7.7. The AsyncLocalStorage integration above is retested
+against that pin. Better Auth now checks schemas eagerly at construction, before
+Mantle's lazy schema convergence. Mantle disables only that automatic timing and
+executes the public `context.explicitSchemaCheck` after convergence, before auth
+handlers or session reads. It also checks when the auth-schema ledger matches,
+so incompatible schema drift fails closed. Failed preparation clears its promise
+for retry. Static/plan-only requests still do not prepare auth tables. No new
+consumer pass-through, Core port or public grammar is added.
+
 The conventional `/favicon.ico` reflects the configured site icon, but is a
 fallback after consumer routes, not a newly reserved namespace. Existing
 consumer icon routes must continue to work after a package update.

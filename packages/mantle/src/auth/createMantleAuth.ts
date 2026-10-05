@@ -29,13 +29,17 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     const context = await auth.$context;
     const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(context.tables)))), (b) => b.toString(16).padStart(2, "0")).join("");
     const done = await db.first<{ value: string }>("SELECT value FROM _mantle_boot_state WHERE key = 'auth-schema'").catch(() => null);
-    if (done?.value === digest) return;
+    if (done?.value === digest) {
+      await context.explicitSchemaCheck?.();
+      return;
+    }
     const migrate = async () => (await getMigrations(context.options)).runMigrations();
     // Better Auth's statements are not idempotent: an isolate racing another retries until the other has finished its tables
     for (let attempt = 1; ; attempt++) {
       try { await migrate(); break; } catch (error) { if (attempt === 5) throw error; await new Promise((r) => setTimeout(r, 50 * attempt)); }
     }
     await db.batch([{ sql: 'CREATE INDEX IF NOT EXISTS user_role_idx ON "user" (role) WHERE role IS NOT NULL' }]);
+    await context.explicitSchemaCheck?.();
     // a store Mantle has not converged has no boot state: the next isolate introspects again
     await db.batch([{ sql: "INSERT INTO _mantle_boot_state (key, value) VALUES ('auth-schema', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", binds: [digest] }]).catch(() => undefined);
   })().catch(error => { schemaReady = null; throw error; });
@@ -131,15 +135,8 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       return retain ? backgroundTaskRetention.run(retain, serve) : serve();
     },
     getSession: async (request) => {
-      let session;
-      try {
-        session = await api.getSession({ headers: request.headers });
-      } catch {
-        // Existing sessions resolve from KV without paying the schema-ledger read.
-        // A fresh database with a stale cookie prepares once, then retries safely.
-        await prepareAuth();
-        session = await api.getSession({ headers: request.headers });
-      }
+      await prepareAuth();
+      const session = await api.getSession({ headers: request.headers });
       // A cached snapshot never vouches for a staff role, so callers re-read it
       // and a demoted user is locked out immediately (ADR-0014 §5). A cached
       // non-staff role may be trusted: at worst a fresh promotion waits for

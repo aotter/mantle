@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAuthRoutes, createCallerResolver, createMantleAuth, type AuthLike, type AuthRoutesAuth, type CreateMantleAuthOptions } from "../../src/auth/index.js";
+import { sqlite } from "./sqliteFixture.js";
+import { createAuthRoutes, createCallerResolver, createMantleAuth, type AuthLike, type AuthRoutesAuth } from "../../src/auth/index.js";
 
 const REDIRECT = "https://client.test/cb";
 const complete = vi.fn(async (request: Request, accept: boolean) => {
@@ -68,11 +69,8 @@ describe("createAuthRoutes: what goes to Better Auth", () => {
   });
 
   it("Better Auth serves both metadata documents natively, so Mantle writes none", async () => {
-    let id: unknown;
-    const stmt = { bind: (...a: unknown[]) => { id = a[0]; return stmt; }, first: async () => (typeof id === "string" && id.startsWith("auth-schema:") ? { id } : null), all: async () => ({ results: [], success: true, meta: {} }) };
-    const real = createMantleAuth({
-      database: { prepare: () => stmt, exec: async () => ({ count: 0, duration: 0 }), batch: async () => [] } as unknown as CreateMantleAuthOptions["database"],
-      driver: { batch: async (s) => s.map((x) => ({ rows: [{ id: x.binds?.[0] ?? "auth-schema:1", n: 0 }], changes: 0 })) },
+    const { d1: database, driver } = sqlite();
+    const real = createMantleAuth({ database, driver,
       ipAddressHeaders: ["x-real-ip"], baseURL: ORIGIN, secret: "x".repeat(40), methods: [{ kind: "social", provider: "github", options: { clientId: "g", clientSecret: "g" } }],
       oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/oauth/consent", scopes: ["mcp"], mcpResource: `${ORIGIN}/mcp` },
     });
