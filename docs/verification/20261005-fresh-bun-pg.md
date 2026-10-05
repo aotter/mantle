@@ -42,6 +42,10 @@ reviewers are explicitly allowed all request details.
 - Sandbox networking and Bun's cached same-filename local tarball required
   network access and a new tarball filename. Installed metadata was checked before
   accepting upgraded-package evidence, and another empty database was used.
+- The populated 1.7.2 database exposed a required legacy `account.issuer` that
+  1.7.7 no longer writes. Explicit validation correctly refused auth. The documented
+  PostgreSQL migration drops only NOT NULL and retains the column and its values;
+  the update skill routes existing consumers to this step before service startup.
 
 ## Real consumer validation
 
@@ -53,6 +57,15 @@ Admin promotion, public MCP submit, Admin return, REST revise/resubmit, staff MC
 approve, generic create/edit/delete denial, stale and simultaneous-review conflicts,
 self-review denial, immediate role revocation, CSRF, tool visibility, and a separate
 PostgreSQL persistence read. First startup has no schema mismatch diagnostic.
+
+The old-schema database was separately upgraded with that reviewed PostgreSQL
+constraint migration and restarted. Fourteen checks then passed, and all seven
+existing requisitions (including fields/version), seven user identities/roles and
+the owner ID were unchanged. Its OTP-only account table had no rows, so this
+consumer does not prove preservation of nonempty historical issuer values.
+A real PostgreSQL SDK regression adds a populated legacy account, verifies auth
+refusal before migration, then proves its issuer value, complete account/user rows,
+and an existing owner session survive the documented migration.
 
 A separate real installed-consumer fixture with Better Auth 1.7.2 is refused by
 the upgraded generator with `bun add better-auth@1.7.7` and no generated writes.

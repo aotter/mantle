@@ -51,6 +51,45 @@ lazily before authenticated operations. Mantle runs Better Auth's explicit schem
 validation after that preparation, including when the schema ledger is current;
 an incompatible existing schema still rejects authentication.
 
+#### Upgrading an existing 1.7.0–1.7.2 auth database
+
+Those Better Auth versions created a required `account.issuer` column that
+1.7.7 no longer writes. Automatic additive convergence preserves that column;
+it cannot make a required unused column safe for future inserts. Before starting
+the upgraded service, the database owner must migrate this legacy constraint.
+Fresh databases need no such step.
+
+For PostgreSQL, first inspect the service's own database/schema and back it up:
+
+```sql
+SELECT table_schema, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_name = 'account' AND column_name = 'issuer';
+```
+
+If the legacy column is required and has no default, apply this in the service's
+auth schema (the example assumes it is selected by `search_path`):
+
+```sql
+BEGIN;
+ALTER TABLE "account" ALTER COLUMN "issuer" DROP NOT NULL;
+COMMIT;
+```
+
+This retains every row and existing issuer value. It changes only the obsolete
+constraint; new accounts may leave that column null. Restart the service after
+the migration so Better Auth checks the repaired schema in a fresh context.
+Verify existing users, roles, sessions and content rows, then sign in again.
+Do not drop auth tables or disable schema validation. This applies to native Bun
+PostgreSQL and Cloudflare/Hyperdrive PostgreSQL alike.
+
+For D1/SQLite, `ALTER COLUMN` is unavailable. Use a database-owner-reviewed table
+rebuild that retains every column/value, index and foreign-key relationship while
+making the legacy issuer nullable; do not run the PostgreSQL statement there.
+See Better Auth's [1.7 upgrade guide](https://www.better-auth.com/docs/guides/1-7-upgrade-guide).
+Mantle's portable auth facade does not silently perform engine-specific table
+rebuilds or remove historical fields.
+
 ```sh
 cp .dev.vars.example .dev.vars   # ADMIN_EMAIL, a random BETTER_AUTH_SECRET, PUBLIC_ORIGIN=http://127.0.0.1:8787
 pnpm exec wrangler dev --local

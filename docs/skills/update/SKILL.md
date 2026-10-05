@@ -27,6 +27,12 @@ Upgrade deliberately; never overwrite application-owned code.
    `@aotter/mantle-ui/admin`), and update the lockfile with the
    package manager. Review the dependency diff and any peer changes
    `mantle generate` names.
+   With identity `mantle`, inspect auth database upgrade requirements in
+   `docs/handbook/cloudflare/authentication.md` before starting the new service.
+   Better Auth 1.7.0–1.7.2's required legacy `account.issuer` needs a
+   data-preserving host-specific constraint migration when moving to 1.7.7;
+   fresh-database success alone does not verify an upgrade. Back up the service's
+   own database and retain existing users, sessions, roles and content.
 5. Regenerate and check:
 
 ```sh
