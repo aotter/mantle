@@ -144,8 +144,9 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   const sees = (requires: Parameters<typeof evaluateAuthAll>[0], caller: Staff) => evaluateAuthAll(requires, caller, P) === null;
   const operations = (caller: Staff) => staffProcedures.filter((name) => sees(plan.procedures[name]!.requires, caller)).map((name) => {
     const p = plan.procedures[name]!;
+    const requiredStates = p.target && "sql" in p.handler ? requiredEnumStates(p.handler.sql.stmts, p.target.schema, plan.schemas[p.target.schema.toLowerCase()]?.schema ?? {}) : [];
     return {
-      requiredStates: p.target && "sql" in p.handler ? requiredEnumStates(p.handler.sql.stmts, p.target.schema, plan.schemas[p.target.schema.toLowerCase()]?.schema ?? {}) : [],
+      ...(requiredStates.length ? { requiredStates } : {}),
       name, title: p.title ?? null, description: p.description ?? null, input: p.input, uiSchema: p.uiSchema ?? null,
       interactions: p.target ? [{ collection: p.target.schema, bind: [{ input: p.target.id, field: "id" }], ...(p.target.version ? { version: p.target.version } : {}), mutates: true }] : [],
     };
