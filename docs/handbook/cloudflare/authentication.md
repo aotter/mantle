@@ -42,6 +42,54 @@ passes `bunAuthDatabase(sql)` and `bunDatabaseDriver(sql)` (or the bun:sqlite
 
 ### Local sign-in
 
+Install auth and MCP dependencies at the versions declared in the installed
+Core package's `peerDependencies`; the generator prints a versioned install
+command and refuses incompatible installed peers before writing generated files.
+The preset owns convergence; a normal fresh local database needs no manual auth
+migration. `auth.ready` initializes Better Auth's context; auth tables are prepared
+lazily before authenticated operations. Mantle runs Better Auth's explicit schema
+validation after that preparation, including when the schema ledger is current;
+an incompatible existing schema still rejects authentication.
+
+#### Upgrading an existing 1.7.0–1.7.2 auth database
+
+Those Better Auth versions created a required `account.issuer` column that
+1.7.7 no longer writes. Automatic additive convergence preserves that column;
+it cannot make a required unused column safe for future inserts. Before starting
+the upgraded service, the database owner must migrate this legacy constraint.
+Fresh databases need no such step.
+
+For PostgreSQL, first inspect the service's own database/schema and back it up:
+
+```sql
+SELECT table_schema, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_name = 'account' AND column_name = 'issuer';
+```
+
+If the legacy column is required and has no default, apply this in the service's
+auth schema (the example assumes it is selected by `search_path`):
+
+```sql
+BEGIN;
+ALTER TABLE "account" ALTER COLUMN "issuer" DROP NOT NULL;
+COMMIT;
+```
+
+This retains every row and existing issuer value. It changes only the obsolete
+constraint; new accounts may leave that column null. Restart the service after
+the migration so Better Auth checks the repaired schema in a fresh context.
+Verify existing users, roles, sessions and content rows, then sign in again.
+Do not drop auth tables or disable schema validation. This applies to native Bun
+PostgreSQL and Cloudflare/Hyperdrive PostgreSQL alike.
+
+For D1/SQLite, `ALTER COLUMN` is unavailable. Use a database-owner-reviewed table
+rebuild that retains every column/value, index and foreign-key relationship while
+making the legacy issuer nullable; do not run the PostgreSQL statement there.
+See Better Auth's [1.7 upgrade guide](https://www.better-auth.com/docs/guides/1-7-upgrade-guide).
+Mantle's portable auth facade does not silently perform engine-specific table
+rebuilds or remove historical fields.
+
 ```sh
 cp .dev.vars.example .dev.vars   # ADMIN_EMAIL, a random BETTER_AUTH_SECRET, PUBLIC_ORIGIN=http://127.0.0.1:8787
 pnpm exec wrangler dev --local
@@ -56,6 +104,17 @@ The preset prints codes only when `PUBLIC_ORIGIN` is set to a loopback `http:`
 origin and both secrets exist. Otherwise it uses
 `createSetupIncompleteAuth`, which refuses sign-in with a message, so a
 deployed service never prints codes to its log.
+
+On Bun, copy `.env.example` to `.env`, set `PUBLIC_ORIGIN=http://127.0.0.1:3000`
+and run `bun src/index.ts`; send the same HTTP requests to port 3000. Codes print
+to the Bun console. Normalize test email addresses to lowercase when matching
+that output. Treat codes and session cookies as secrets in test logs.
+
+Local clients share the loopback socket IP and therefore share sign-in limits.
+Multi-user smoke tests must respect the retry window (HTTP 429) rather than
+spoofing forwarding headers or disabling production limits. `rateLimit: {
+window: 60, max: 100 }` changes the general quota, but plugin-specific OTP limits
+still apply; changing it is not a way to bypass those limits.
 
 ### MCP clients for members
 

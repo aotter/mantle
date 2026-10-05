@@ -13,7 +13,7 @@ import { dbOf, readStoreInstanceId } from "./db.js";
 
 import { type AuthHookContext, buildEmailOTPPlugin, buildGenericOAuthProviders, buildMagicLinkPlugin, buildOAuthProviderOptions, buildSocialProviders, buildTrustedOriginsFor, guardGithubLoginProfile, hasEmailAuthSurface, methodsRequireSameSiteNone, normalizeAuthBasePath, normalizeAuthErrorURL, pickSingleton, resolveClientIpHeaders, shouldPromoteToOwner, validateBootstrap } from "./methods.js";
 import type { BackgroundTaskRetainer, CreateMantleAuthOptions } from "./types.js";
-// Better Auth 1.7.2 initializes its shared stores asynchronously. Seed them
+// Better Auth 1.7.7 initializes its shared stores asynchronously. Seed them
 // before any request can be canceled; the accessor-identity regression test
 // pins this version-specific integration to the stores Better Auth uses.
 const betterAuthGlobalKey = Symbol.for("better-auth:global");
@@ -192,6 +192,10 @@ export function buildAuth(config: CreateMantleAuthOptions) {
   // it (Better Auth's default raises a state-mismatch).
   const appleNeedsCrossSite = methodsRequireSameSiteNone(config.methods);
   const advancedConfig = {
+    // Mantle converges lazily. Better Auth 1.7.7's automatic check runs at
+    // construction, before those tables exist. Keep its explicit schema check
+    // and run it in prepareAuth after convergence, before any auth operation.
+    database: { validateSchema: false },
     // Host adapter supplies the trusted ingress header(s). Never default to XFF.
     ipAddress: { ipAddressHeaders: [...ipAddressHeaders] },
     ...(appleNeedsCrossSite
@@ -335,4 +339,3 @@ export function buildAuth(config: CreateMantleAuthOptions) {
     databaseHooks,
   });
 }
-

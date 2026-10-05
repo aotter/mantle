@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { sqlite } from "./sqliteFixture.js";
 import type { DatabaseDriver } from "../../src/core/index.js";
 import {
   createMantleAuth,
@@ -89,8 +90,9 @@ describe("createMantleAuth — oauthProvider.extensions passthrough", () => {
         token_type: "Bearer" as const,
         expires_in: 60,
       }));
+      const { d1: database, driver } = sqlite();
       const auth = createMantleAuth(
-        baseOptions({
+        baseOptions({ database, driver,
           oauthProvider: { ...provider, mcpResource, extensions: [{ grants: { [GRANT]: grant } }] },
         }),
       );
@@ -102,7 +104,8 @@ describe("createMantleAuth — oauthProvider.extensions passthrough", () => {
   }
 
   it("rejects an extension grant_type that no extension declared", async () => {
-    const auth = createMantleAuth(baseOptions({ oauthProvider: provider }));
+    const { d1: database, driver } = sqlite();
+    const auth = createMantleAuth(baseOptions({ database, driver, oauthProvider: provider }));
     const response = await auth.handler(tokenRequest());
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: "unsupported_grant_type" });

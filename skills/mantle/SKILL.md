@@ -39,12 +39,14 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
    choose the version: `npm view @aotter/mantle dist-tags`. Use a `0.2.x`
    version (while 0.2.0 is in prerelease it is on `alpha`; `latest` may still
    be 0.1.x). Install it exactly: `npm install --save-exact @aotter/mantle@<version>`
-   (or the pnpm/yarn equivalent), plus `wrangler`, `@cloudflare/workers-types`,
-   `@types/node` and `typescript` as dev dependencies. Pin every
+   (or the pnpm/yarn/bun equivalent). Install `@types/node` and `typescript`
+   as dev dependencies; Cloudflare additionally needs `wrangler` and
+   `@cloudflare/workers-types`, while Bun needs `bun-types`. Pin every
    `@aotter/mantle*` package to that same version. If the project's registry
    overrides npmjs, add `@aotter:registry=https://registry.npmjs.org/` to the
    project's `.npmrc`.
 3. Read `node_modules/@aotter/mantle/docs/handbook/start/quickstart-worker.md`
+   for Cloudflare, or `docs/handbook/start/project-and-cli.md` for Bun,
    and `docs/handbook/reference/features.md`.
 4. Choose the identity and features with the user's request:
    `mantle generate` with no flags is Better Auth sign-in plus Admin, MCP and
@@ -58,7 +60,10 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
    `manifests/`. `docs/examples/` shows whole services; do not copy one
    wholesale or invent business data.
 6. Run `mantle generate`. When it names missing packages, install exactly
-   those with the project's package manager and run it again. Then
+   those with the project's package manager and run it again. Use Core's
+   installed `package.json` `peerDependencies` versions for auth/MCP peers,
+   not registry latest; resolve incompatible peer warnings before running.
+   Then
    `mantle generate --check` and `tsc --noEmit`.
 7. With identity `mantle`: `cp .dev.vars.example .dev.vars`, set
    `ADMIN_EMAIL` and a random `BETTER_AUTH_SECRET`, run `wrangler dev --local`

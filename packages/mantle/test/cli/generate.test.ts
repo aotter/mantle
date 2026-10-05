@@ -22,7 +22,13 @@ async function project(packages: readonly string[] = ["@aotter/mantle"], lockfil
   await cp(FIXTURE, dir, { recursive: true });
   for (const p of packages) {
     await mkdir(join(dir, "node_modules", p), { recursive: true });
-    await writeFile(join(dir, "node_modules", p, "package.json"), `{ "name": "${p}" }`);
+    await writeFile(join(dir, "node_modules", p, "package.json"), JSON.stringify(p === "@aotter/mantle" ? {
+      name: p, version: "0.2.0-test.42", peerDependencies: {
+        "better-auth": "1.7.2", "@better-auth/oauth-provider": "1.7.2",
+        "@better-auth/mcp": "1.7.2", "@better-auth/cimd": "1.7.2",
+        "@modelcontextprotocol/server": "2.1.0", "@modelcontextprotocol/ext-apps": "2.0.0",
+      },
+    } : { name: p }));
   }
   if (lockfile) await writeFile(join(dir, lockfile), "");
   return dir;
@@ -108,9 +114,12 @@ describe("mantle generate", () => {
     const dir = await project(["@aotter/mantle"], "pnpm-lock.yaml");
     const r = await gen([], dir);
     expect(r.code).toBe(1);
-    expect(r.err).toContain("GENERATE_FEATURE_DEPENDENCY_MISSING identity 'mantle': identity 'mantle' needs better-auth, @better-auth/oauth-provider, @better-auth/mcp, @better-auth/cimd, which are not installed. Run `pnpm add better-auth @better-auth/oauth-provider @better-auth/mcp @better-auth/cimd`");
-    expect(r.err).toContain("feature 'mcp' needs @modelcontextprotocol/server, @modelcontextprotocol/ext-apps, which are not installed. Run `pnpm add @modelcontextprotocol/server @modelcontextprotocol/ext-apps`");
+    expect(r.err).toContain("GENERATE_FEATURE_DEPENDENCY_MISSING identity 'mantle': identity 'mantle' needs better-auth, @better-auth/oauth-provider, @better-auth/mcp, @better-auth/cimd, which are not installed. Run `pnpm add better-auth@1.7.2 @better-auth/oauth-provider@1.7.2 @better-auth/mcp@1.7.2 @better-auth/cimd@1.7.2`");
+    expect(r.err).toContain("feature 'mcp' needs @modelcontextprotocol/server, @modelcontextprotocol/ext-apps, which are not installed. Run `pnpm add @modelcontextprotocol/server@2.1.0 @modelcontextprotocol/ext-apps@2.0.0`");
     expect(r.err).toContain("feature 'admin' needs @aotter/mantle-ui");
+    expect(r.err).toContain("pnpm add @aotter/mantle-ui@0.2.0-test.42");
+    const bun = await gen([], await project(["@aotter/mantle"], "bun.lock"));
+    expect(bun.err).toContain("bun add better-auth@1.7.2");
     await expect(read(dir, ".mantle/generated/plan.json")).rejects.toThrow();
     // an explicit --features without --identity is `none`, and admin then needs an identity: never re-added, never installed
     const none = await gen(["--features", "admin"], await project(["@aotter/mantle", "@aotter/mantle-ui"]));
@@ -128,6 +137,26 @@ describe("mantle generate", () => {
     // a service already written (the fixture's) is the application's: its imports decide, not the preset
     const written = await gen(mcp, await project(all.filter((p) => p !== "@aotter/mantle-ui")));
     expect([written.code, written.err]).toEqual([0, ""]);
+  });
+
+  it("refuses installed incompatible peers before writing and prints the SDK's corrective version", async () => {
+    const dir = await project(["@aotter/mantle", "better-auth", "@better-auth/oauth-provider", "@better-auth/mcp", "@better-auth/cimd", "@modelcontextprotocol/server", "@modelcontextprotocol/ext-apps", "@aotter/mantle-ui"], "bun.lock");
+    await writeFile(join(dir, "node_modules/better-auth/package.json"), JSON.stringify({ name: "better-auth", version: "1.7.7" }));
+    await writeFile(join(dir, "node_modules/@aotter/mantle-ui/package.json"), JSON.stringify({ name: "@aotter/mantle-ui", version: "0.2.0-test.41" }));
+    const r = await gen([], dir);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("needs better-auth@1.7.2, but 1.7.7 is installed. Run `bun add better-auth@1.7.2`");
+    expect(r.err).toContain("needs @aotter/mantle-ui@0.2.0-test.42, but 0.2.0-test.41 is installed");
+    await expect(read(dir, ".mantle/generated/plan.json")).rejects.toThrow();
+  });
+
+  it("keeps a ranged peer with spaces and shell operators in one install argument", async () => {
+    const dir = await project(["@aotter/mantle"], "bun.lock");
+    const path = join(dir, "node_modules/@aotter/mantle/package.json");
+    const sdk = JSON.parse(await readFile(path, "utf8"));
+    sdk.peerDependencies["better-auth"] = "^1.7.7 || ^2.0.0";
+    await writeFile(path, JSON.stringify(sdk));
+    expect((await gen([], dir)).err).toContain("bun add 'better-auth@^1.7.7 || ^2.0.0'");
   });
 
   it("refuses to switch identity on a rerun", async () => {

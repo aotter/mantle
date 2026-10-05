@@ -3,13 +3,14 @@
  * `mantle.config.json` in, `.mantle/generated/plan.json` and `.mantle/generated/mantle.ts` out. It never installs a package.
  */
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import process, { cwd as processCwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
+import { satisfies, validRange } from "semver";
 import type { DatabaseDriver } from "../core/driver.js";
 import { planStorageChanges } from "../d1/storage.js";
 import { compileLinkedPlan, parseManifestSources, validateDiagnostic, ValidateManifestsUseCase, type Diagnostic, type SqlDialect } from "../spec/index.js";
@@ -72,6 +73,22 @@ function findUp(root: string, rel: string): string | undefined {
 
 const LOCKFILES = ["pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", "package-lock.json"];
 
+interface PackageMetadata { readonly version?: string; readonly peerDependencies?: Record<string, string>; }
+function packageMetadata(root: string, name: string): PackageMetadata | undefined {
+  let path = findUp(root, join("node_modules", name, "package.json"));
+  if (!path && process.versions.pnp) {
+    const require = createRequire(join(root, "package.json"));
+    try { path = require.resolve(`${name}/package.json`); }
+    catch { try { path = findUp(dirname(require.resolve(name)), "package.json"); } catch { /* absent */ } }
+  }
+  return path ? JSON.parse(readFileSync(path, "utf8")) as PackageMetadata : undefined;
+}
+
+function supportedVersion(root: string, name: string): string | undefined {
+  const sdk = packageMetadata(root, "@aotter/mantle");
+  return name === "@aotter/mantle-ui" ? sdk?.version : sdk?.peerDependencies?.[name];
+}
+
 /** The nearest directory with a lockfile decides the package manager. */
 function installCommand(root: string, packages: readonly string[]): string {
   let lock: string | undefined;
@@ -80,7 +97,16 @@ function installCommand(root: string, packages: readonly string[]): string {
     if (dirname(dir) === dir) break;
   }
   const add = lock === "pnpm-lock.yaml" ? "pnpm add" : lock === "yarn.lock" ? "yarn add" : lock?.startsWith("bun") ? "bun add" : "npm install";
-  return `${add} ${packages.join(" ")}`;
+  // Read the consumer's packed SDK contract, not the maintainer workspace's
+  // catalog or registry latest. Optional adapters have exact tested peers.
+  const specs = packages.map((name) => {
+    const version = supportedVersion(root, name);
+    const spec = version ? `${name}@${version}` : name;
+    // Ranged peers may contain spaces or ||; keep the suggested shell command
+    // one package argument rather than turning a range into shell operators.
+    return /^[a-zA-Z0-9@/._~^*+:-]+$/.test(spec) ? spec : `'${spec.replace(/'/g, "'\\''")}'`;
+  });
+  return `${add} ${specs.join(" ")}`;
 }
 
 /**
@@ -104,6 +130,12 @@ function featureDiagnostics(root: string, config: MantleConfig): Diagnostic[] {
     const missing = packages.filter((p) => !installed(root, p));
     if (missing.length)
       out.push(validateDiagnostic({ code: "GENERATE_FEATURE_DEPENDENCY_MISSING", severity: "error", path: what, message: `${what} needs ${missing.join(", ")}, which ${missing.length > 1 ? "are" : "is"} not installed. Run \`${installCommand(root, missing)}\`; mantle generate never installs packages.` }));
+    for (const name of packages.filter((p) => !missing.includes(p))) {
+      const expected = supportedVersion(root, name);
+      const actual = packageMetadata(root, name)?.version;
+      if (expected && actual && validRange(expected) && !satisfies(actual, expected))
+        out.push(validateDiagnostic({ code: "GENERATE_FEATURE_DEPENDENCY_MISSING", severity: "error", path: what, message: `${what} needs ${name}@${expected}, but ${actual} is installed. Run \`${installCommand(root, [name])}\`; mantle generate never installs packages.` }));
+    }
   };
   need("@aotter/mantle", ["@aotter/mantle"]);
   need(`identity '${config.identity}'`, PACKAGES[config.identity]);
