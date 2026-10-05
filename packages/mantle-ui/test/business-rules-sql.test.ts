@@ -41,3 +41,34 @@ it('preserves exact SQL thresholds when numeric conversion or currency formattin
   expect(normal.rules[1]!.branches![0]!.condition).toContain('10,000');
   expect(normal.rules[1]!.branches![0]!.condition).not.toContain('SQL 原值');
 });
+
+it('projects arbitrary state handoffs, aliases, role predicates and checks without guessing business names', async () => {
+  const compiled = await compileSql(`UPDATE stock SET phase = CASE WHEN quantity < 7 THEN 'ready' ELSE 'review' END WHERE id=input.id AND phase='draft' AND requester<>auth.uid() AND EXISTS (SELECT 1 FROM access a WHERE a.subject=auth.uid() AND a.allowed=true)`, {
+    schemas: { stock: { fields: { quantity: 'integer', phase: 'text', requester: 'text' } }, access: { fields: { subject: 'text', allowed: 'bool' } } }, inputs: { id: 'text' }, kind: 'procedure',
+  }, pg);
+  if (!compiled.ok) throw new Error(compiled.diagnostic.message);
+  const atom = { id: 'Procedure:inspect', kind: 'Procedure', name: 'inspect', title: '檢查庫存', handler: { kind: 'sql', statement: '', flow: procedureFlow(compiled.plan.stmts) } } as DeveloperAtom;
+  const schemas = [
+    { name: 'stock', title: '庫存', schema: { properties: { quantity: { type: 'integer', title: '數量' }, requester: { type: 'string', title: '提報者' }, phase: { type: 'string', title: '處理階段', oneOf: [{ const: 'draft', title: '草稿' }, { const: 'ready', title: '可出貨' }, { const: 'review', title: '待檢查' }] } } } },
+    { name: 'access', title: '操作資格', schema: { properties: { subject: { title: '人員' }, allowed: { type: 'boolean', title: '可操作' } } } },
+  ] as DeveloperSchemaModel[];
+  const rules = businessRules(atom, schemas, 'zh-TW');
+  expect(rules[0]!.transitions).toEqual([{ schema: 'stock', field: 'phase', from: 'draft', to: ['ready', 'review'] }]);
+  expect(rules[0]!.conditions).toContain('提報者 不等於 目前使用者的識別碼');
+  expect(rules[0]!.conditions).toContain('操作資格 · 可操作 等於 是');
+  expect(rules[0]!.conditions).not.toContain('尚無業務翻譯');
+  const { businessOverview } = await import('../admin/src/features/logic/business-overview');
+  const graph = businessOverview({ atoms: [atom], relations: [] }, schemas, 'zh-TW');
+  expect(graph.nodes[0]!.data.title).toBe('檢查庫存');
+  expect(graph.nodes[0]!.data.subtitle).toBe('草稿 → 可出貨／待檢查');
+  const next = { ...atom, id: 'Procedure:ship', name: 'ship', title: '出貨', handler: { kind: 'sql', statement: '', flow: procedureFlow((await compileSql("UPDATE stock SET phase='review' WHERE id=input.id AND phase='ready'", { schemas: { stock: { fields: { quantity: 'integer', phase: 'text' } } }, inputs: { id: 'text' }, kind: 'procedure' }, pg) as Extract<Awaited<ReturnType<typeof compileSql>>, { ok: true }>).plan.stmts) } } as DeveloperAtom;
+  const path = businessOverview({ atoms: [atom, next], relations: [] }, schemas, 'zh-TW');
+  expect(path.edges).toHaveLength(1);
+  expect(path.edges[0]!.label).toBe('可出貨');
+  expect(graph.edges.every((e) => e.style?.strokeDasharray)).toBe(true);
+  for (const predicate of [`phase='draft' OR quantity=7`, `NOT (phase='draft')`, `phase IN ('draft','review')`]) {
+    const ir = await compileSql(`UPDATE stock SET phase='ready' WHERE id=input.id AND (${predicate})`, { schemas: { stock: { fields: { quantity: 'integer', phase: 'text' } } }, inputs: { id: 'text' }, kind: 'procedure' }, pg);
+    if (!ir.ok) throw new Error(ir.diagnostic.message);
+    expect(businessRules({ ...atom, handler: { kind: 'sql', statement: '', flow: procedureFlow(ir.plan.stmts) } }, schemas, 'zh-TW')[0]!.transitions).toEqual([]);
+  }
+});

@@ -43,6 +43,7 @@ import { Button } from "@aotter/mantle-ui/kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 
 import { businessRules, type BusinessRule } from "./business-rules";
+import { businessOverview, BusinessStepNode } from "./business-overview";
 import { businessFlow, BusinessGroupNode, BusinessRuleNode } from "./business-flow";
 
 export const atomKindTone = {
@@ -66,7 +67,7 @@ type FocusSlice = { startId: string; nodeIds: Set<string>; relationIds: Set<stri
 type AudienceGroupGraphNode = Node<{ audience: DeveloperAudience; count: number; language: AdminLanguage }, "audience">;
 
 export const manifestEdgeTypes = { manifest: ManifestEdge } satisfies EdgeTypes;
-const nodeTypes = { audience: AudienceGroupNode, businessGroup: BusinessGroupNode, businessRule: BusinessRuleNode } satisfies NodeTypes;
+const nodeTypes = { audience: AudienceGroupNode, businessGroup: BusinessGroupNode, businessRule: BusinessRuleNode, businessStep: BusinessStepNode } satisfies NodeTypes;
 export const graphCanvasClassName = "bg-background [--graph-inactive-filter:none] [--graph-inactive-opacity:0.16] dark:[--graph-inactive-filter:brightness(0.42)_saturate(0.2)] dark:[--graph-inactive-opacity:1]";
 
 export function GraphControls({ onRelayout }: { onRelayout: () => void }): React.ReactElement {
@@ -156,22 +157,24 @@ export function AtomGraph({
   onOpen: (atom: DeveloperAtom) => void;
 }): React.ReactElement {
   const { language, theme } = usePreferences();
+  const [business, setBusiness] = React.useState(() => graph.atoms.some((a) => businessRules(a, schemas, language).some((r) => r.transitions?.length)));
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [showDetails, setShowDetails] = React.useState(false);
   const [showData, setShowData] = React.useState(false);
   const [selectedRule, setSelectedRule] = React.useState<BusinessRule | null>(null);
   const layout = React.useMemo(() => {
-    const base = layoutGraph(graph, language);
+    const base = business ? businessOverview(graph, schemas, language) : layoutGraph(graph, language);
     const atom = graph.atoms.find((a) => a.id === expandedId);
     if (!atom) return base;
     const derived = businessRules(atom, schemas, language);
     if (!derived.length) return base;
     const rules = businessFlow(atom.id, resolveLocalizedText(atom.title, language) || atom.name, derived, language.startsWith('zh'));
     const related = focusSlice(graph, atom.id).nodeIds;
-    const nodes = base.nodes.filter((n) => related.has(n.id) && n.id !== atom.id && (showData || graph.atoms.find((a) => a.id === n.id)?.kind === 'Trigger'));
+    const wiring = layoutGraph(graph, language);
+    const nodes = wiring.nodes.filter((n) => related.has(n.id) && n.id !== atom.id && (showData || !business && graph.atoms.find((a) => a.id === n.id)?.kind === 'Trigger'));
     nodes.push(rules.group);
     const visible = new Set(nodes.map((n) => n.id));
-    const edges = base.edges.filter((e) => visible.has(e.source) && visible.has(e.target)).map((e) => e.source === atom.id ? { ...e, style: { ...e.style, strokeDasharray: '3 5' } } : e);
+    const edges = wiring.edges.filter((e) => visible.has(e.source) && visible.has(e.target)).map((e) => e.source === atom.id ? { ...e, style: { ...e.style, strokeDasharray: '3 5' } } : e);
     const dag = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
     dag.setGraph({ rankdir: 'TB', nodesep: 32, ranksep: 56 });
     nodes.forEach((n) => dag.setNode(n.id, { width: Number(n.style?.width) || 220, height: Number(n.style?.height) || 88 }));
@@ -179,7 +182,7 @@ export function AtomGraph({
     dagre.layout(dag);
     nodes.forEach((n) => { const p = dag.node(n.id); n.position = { x: p.x - p.width / 2, y: p.y - p.height / 2 }; });
     return { nodes: [...nodes, ...rules.nodes], edges: [...edges, ...rules.edges] };
-  }, [graph, language, schemas, expandedId, showData]);
+  }, [graph, language, schemas, expandedId, showData, business]);
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
   const [flow, setFlow] = React.useState<ReactFlowInstance<Node, Edge> | null>(null);
@@ -194,6 +197,7 @@ export function AtomGraph({
     setEdges(layout.edges);
     setSelectedId(null);
     setTrace(null);
+    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.08, minZoom: !expandedId && business ? 0.65 : 0.25, duration: 240 }));
   }, [layout, setEdges, setNodes]);
 
   const highlight = (nodeIds: ReadonlySet<string>, relationIds: ReadonlySet<string>): void => {
@@ -279,6 +283,19 @@ export function AtomGraph({
   };
 
   return (
+    <div className="flex h-full flex-col">
+      <div className="shrink-0 border-b bg-background px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant={business ? "default" : "outline"} onClick={() => { setBusiness(true); setExpandedId(null); clearSelection(); }}>{language.startsWith("zh") ? "業務狀態" : "Business states"}</Button>
+          <Button size="sm" variant={!business ? "default" : "outline"} onClick={() => { setBusiness(false); setExpandedId(null); clearSelection(); }}>{language.startsWith("zh") ? "系統接線" : "System wiring"}</Button>
+          <select aria-label={language.startsWith("zh") ? "選擇業務流程" : "Choose a procedure"} className="h-8 max-w-64 rounded-md border bg-background px-2 text-sm" value={selected?.kind === "Procedure" ? selected.id : ""} onChange={(event) => { if (event.target.value) { selectAtom(event.target.value); setExpandedId(event.target.value); } }}>
+            <option value="">{language.startsWith("zh") ? "選擇業務流程…" : "Choose a procedure…"}</option>
+            {graph.atoms.filter((a) => a.kind === "Procedure").map((a) => <option key={a.id} value={a.id}>{resolveLocalizedText(a.title, language) || a.name}</option>)}
+          </select>
+        </div>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">{language.startsWith("zh") ? business ? "虛線表示狀態可能接續，仍須符合各步驟條件；不是自動執行或案件進度。點選步驟看規則，拖曳空白處移動。" : "實線表示系統與資料關聯，並非業務辦理順序。" : business ? "Dashed lines show possible state handoffs, subject to each step’s conditions; not execution or case progress." : "System/data dependencies, not business execution order."}</p>
+      </div>
+    <div className="min-h-0 flex-1">
     <ReactFlow
       className={graphCanvasClassName}
       nodes={nodes}
@@ -290,7 +307,7 @@ export function AtomGraph({
       nodeTypes={nodeTypes}
       colorMode={theme}
       fitView
-      fitViewOptions={{ padding: 0.08 }}
+      fitViewOptions={{ padding: 0.08, minZoom: business ? 0.65 : 0.25 }}
       minZoom={0.25}
       maxZoom={1.8}
       deleteKeyCode={null}
@@ -298,7 +315,7 @@ export function AtomGraph({
       nodesDraggable
       onNodeClick={(_, node) => {
         if (node.type === "businessRule") { setSelectedRule(node.data.rule as BusinessRule); setShowDetails(true); }
-        if (atomsById.has(node.id)) selectAtom(node.id);
+        if (atomsById.has(node.id)) { selectAtom(node.id); if (business && atomsById.get(node.id)?.handler?.kind === "sql") setExpandedId(node.id); }
       }}
       onKeyDownCapture={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
@@ -311,20 +328,23 @@ export function AtomGraph({
     >
       <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
       <GraphControls onRelayout={relayout} />
+
       {selected ? <Panel position="top-left" className="!m-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-xl border bg-background/95 p-2 shadow-sm">
         <span className="px-2 text-sm font-semibold">{resolveLocalizedText(selected.title, language) || selected.name}</span>
-        {selected.handler?.kind === 'sql' && selected.handler.flow?.length ? <Button size="sm" variant={expandedId ? 'secondary' : 'default'} onClick={() => { setExpandedId(expandedId === selected.id ? null : selected.id); setShowDetails(false); setSelectedRule(null); setShowData(false); }}>{language.startsWith('zh') ? expandedId ? '返回系統總覽' : '展開流程' : expandedId ? 'System overview' : 'Expand flow'}</Button> : null}
+        {selected.handler?.kind === 'sql' && selected.handler.flow?.length ? <Button size="sm" variant={expandedId ? 'secondary' : 'default'} onClick={() => { setExpandedId(expandedId === selected.id ? null : selected.id); setShowDetails(false); setSelectedRule(null); setShowData(false); }}>{language.startsWith('zh') ? expandedId ? '返回總覽' : '展開流程' : expandedId ? 'System overview' : 'Expand flow'}</Button> : null}
         {expandedId ? <Button size="sm" variant="outline" aria-pressed={showData} onClick={() => setShowData(!showData)}>{language.startsWith('zh') ? showData ? '隱藏資料關聯' : '顯示資料關聯' : 'Data dependencies'}</Button> : null}
         <Button size="sm" variant="ghost" aria-pressed={showDetails} onClick={() => { setSelectedRule(null); setShowDetails(!showDetails); }}>{language.startsWith('zh') ? '詳情' : 'Details'}</Button>
       </Panel> : null}
-      {selected && showDetails ? <Panel position="top-right" className="!m-3 w-[20rem] max-w-[calc(100%-1.5rem)]">
+      {selected && showDetails ? <Panel position="top-right" className="!m-3 max-h-[70vh] overflow-y-auto w-[24rem] max-w-[calc(100%-1.5rem)]">
         {selectedRule ? <section aria-label={language.startsWith('zh') ? '規則詳細資料' : 'Rule details'} className="rounded-xl border bg-card p-4 shadow-lg">
           <div className="flex items-start gap-2"><h3 className="flex-1 font-semibold">{selectedRule.title}</h3><Button size="icon" variant="ghost" aria-label={language.startsWith('zh') ? '關閉規則詳情' : 'Close rule details'} onClick={() => setShowDetails(false)}><X className="size-4" /></Button></div>
           <p className="my-3 whitespace-pre-wrap text-sm leading-6">{selectedRule.body || selectedRule.summary}</p>
-          <Button size="sm" variant="outline" onClick={() => onOpen(selected)}>{language.startsWith('zh') ? '查看 SQL 與 manifest 依據' : 'View SQL and manifest'}</Button>
+          <details className="border-t pt-3"><summary className="cursor-pointer text-sm font-medium">{language.startsWith("zh") ? "查看 SQL 依據" : "SQL source"}</summary><pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-3 text-xs" tabIndex={0}>{selected.handler?.kind === "sql" ? selected.handler.statement : ""}</pre><Button className="mt-2" size="sm" variant="outline" onClick={() => onOpen(selected)}>{language.startsWith("zh") ? "開啟完整技術詳情" : "Full technical details"}</Button></details>
         </section> : <GraphHud atom={selected} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={() => setShowDetails(false)} onSelect={moveAlongTrace} onOpen={onOpen} />}
       </Panel> : null}
     </ReactFlow>
+    </div>
+    </div>
   );
 }
 
