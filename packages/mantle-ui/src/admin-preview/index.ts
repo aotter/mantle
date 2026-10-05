@@ -1,6 +1,6 @@
 /** Static document preparation and the explicit preview protocol, independent of Admin's application internals. */
 export function adminPreviewDocument(html: string, options: { assetBasePath: string; basePath: string; design?: boolean }): string {
-  for (const path of [options.assetBasePath, options.basePath]) if (!/^\/[a-zA-Z0-9/_-]+$/.test(path)) throw new TypeError("Expected a local preview mount path.");
+  for (const path of [options.assetBasePath, options.basePath]) if (path.startsWith("//") || !/^\/[a-zA-Z0-9/_-]+$/.test(path)) throw new TypeError("Expected a local preview mount path.");
   if (!html.includes('name="mantle-admin-preview"')) throw new TypeError("Expected the SDK's opt-in preview document.");
   const assets = options.assetBasePath.replace(/\/$/, "");
   return html.replace(/<base\s+href=["']\/admin\/["']\s*\/?>/, `<base href="${assets}/">`).replace(/(\b(?:src|href)=["'])\/admin\//g, `$1${assets}/`)
