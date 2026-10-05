@@ -89,3 +89,9 @@ describe("resolveLocalizedText", () => {
     expect(resolveLocalizedText({ "zh-TW": "品項" }, "fr")).toBe("品項");
   });
 });
+
+ it("renders boolean values in the reader's language", () => {
+   expect(renderDataValue({ type: "boolean" }, true, "zh-TW")).toBe("是");
+   expect(renderDataValue({ type: "boolean" }, false, "zh-TW")).toBe("否");
+   expect(renderDataValue({ type: "boolean" }, false, "en")).toBe("No");
+ });

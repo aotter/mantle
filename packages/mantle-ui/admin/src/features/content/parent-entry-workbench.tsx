@@ -77,6 +77,7 @@ export function ParentEntryWorkbench({
         actions={
           <RowOperationsMenu
             row={payload.entry}
+            collection={payload.collection}
             operations={boundOperations}
             editHref={entryEditPath(collectionName, entryId)}
             language={language}

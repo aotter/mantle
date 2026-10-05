@@ -204,6 +204,7 @@ export function EntryEditView({
             {!isOperational && <StatusBadge status={payload.entry.status} />}
             <RowOperationsMenu
               row={payload.entry}
+              collection={payload.collection}
               operations={boundOperations}
               language={language}
               canonical={canonical}
@@ -749,6 +750,7 @@ function RelatedSections({
                     </a>
                     <RowOperationsMenu
                       row={entry}
+                      collection={section.collection}
                       operations={boundOperations}
                       language={language}
                       canonical={canonical}

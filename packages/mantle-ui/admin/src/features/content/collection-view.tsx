@@ -1190,6 +1190,7 @@ function EntryRowDisplay({
           ) : null}
           <RowOperationsMenu
             row={row}
+            collection={collection}
             operations={boundOperations}
             language={language}
             canonical={canonical}

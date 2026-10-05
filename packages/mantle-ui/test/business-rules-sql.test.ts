@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { compileSql } from '../../mantle/src/spec/index';
 import * as pg from '../../mantle/src/postgres/compile/index';
-import { procedureFlow } from '../../mantle/src/admin/procedureFlow';
+import { procedureFlow, requiredEnumStates } from '../../mantle/src/admin/procedureFlow';
 import { businessRules } from '../admin/src/features/logic/business-rules';
 import type { DeveloperAtom, DeveloperSchemaModel } from '../admin/src/lib/types';
 
@@ -52,6 +52,7 @@ it('projects arbitrary state handoffs, aliases, role predicates and checks witho
     { name: 'stock', title: '庫存', schema: { properties: { quantity: { type: 'integer', title: '數量' }, requester: { type: 'string', title: '提報者' }, phase: { type: 'string', title: '處理階段', oneOf: [{ const: 'draft', title: '草稿' }, { const: 'ready', title: '可出貨' }, { const: 'review', title: '待檢查' }] } } } },
     { name: 'access', title: '操作資格', schema: { properties: { subject: { title: '人員' }, allowed: { type: 'boolean', title: '可操作' } } } },
   ] as DeveloperSchemaModel[];
+  expect(requiredEnumStates(compiled.plan.stmts, 'stock', schemas[0]!.schema)).toEqual([{ field: 'phase', value: 'draft' }]);
   const rules = businessRules(atom, schemas, 'zh-TW');
   expect(rules[0]!.transitions).toEqual([{ schema: 'stock', field: 'phase', from: 'draft', to: ['ready', 'review'] }]);
   expect(rules[0]!.conditions).toContain('提報者 不等於 目前使用者的識別碼');
@@ -69,6 +70,7 @@ it('projects arbitrary state handoffs, aliases, role predicates and checks witho
   for (const predicate of [`phase='draft' OR quantity=7`, `NOT (phase='draft')`, `phase IN ('draft','review')`]) {
     const ir = await compileSql(`UPDATE stock SET phase='ready' WHERE id=input.id AND (${predicate})`, { schemas: { stock: { fields: { quantity: 'integer', phase: 'text' } } }, inputs: { id: 'text' }, kind: 'procedure' }, pg);
     if (!ir.ok) throw new Error(ir.diagnostic.message);
+    expect(requiredEnumStates(ir.plan.stmts, 'stock', schemas[0]!.schema)).toEqual([]);
     expect(businessRules({ ...atom, handler: { kind: 'sql', statement: '', flow: procedureFlow(ir.plan.stmts) } }, schemas, 'zh-TW')[0]!.transitions).toEqual([]);
   }
 });

@@ -147,6 +147,7 @@ export function renderDataValue(schema: FieldSchema | undefined, value: unknown,
   }
   if (value == null || value === "") return <span className="text-muted-foreground">-</span>;
   if (typeof value === "string" && enumOptions(schema)) return optionLabel(schema, value, language, canonical);
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "boolean") return language.startsWith("zh") ? value ? "是" : "否" : value ? "Yes" : "No";
+  if (typeof value === "string" || typeof value === "number") return String(value);
   return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
 }

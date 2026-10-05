@@ -1,5 +1,5 @@
 /** A static projection of authored SQL IR. CASE chooses values; WHERE filters rows, not control flow. */
-import { classify, type SqlNode } from '../spec/domain/index.js';
+import { classify, type JsonSchema, type SqlNode } from '../spec/domain/index.js';
 
 /** Display only constructs we can spell exactly. Other expressions stay explicitly opaque beside the authored SQL. */
 function expression(node: SqlNode | undefined): string {
@@ -117,4 +117,28 @@ export function sqlLogic(node: SqlNode): SqlLogicNode {
   if (node.IndexElem) return branch('column', node.IndexElem.name);
   const rendered = sql(node);
   return branch(rendered.startsWith('[SQL') ? 'opaque' : 'value', rendered.startsWith('[SQL') ? `${Object.keys(node)[0]} · see authored SQL` : rendered);
+}
+
+/** Necessary enum predicates for a declared row target; a display hint, never authorization. */
+export function requiredEnumStates(stmts: readonly SqlNode[], target: string, schema: JsonSchema): Array<{ field: string; value: string }> {
+  const writes = procedureFlow(stmts).filter((s) => s.table?.toLowerCase() === target.toLowerCase() && s.operation === 'UPDATE');
+  if (writes.length !== 1 || writes[0]!.mode !== 'row') return [];
+  const tree = writes[0]!.logic;
+  const relation = tree.children.find((c) => c.label === 'Target')?.children[0]?.relation;
+  const filter = tree.children.find((c) => c.label.startsWith('WHERE'))?.children[0];
+  const required = (n: SqlLogicNode): SqlLogicNode[] => n.kind === 'predicate' && n.label.startsWith('AND ·') ? n.children.flatMap(required) : [n];
+  return (filter ? required(filter) : []).flatMap((n) => {
+    if (n.kind !== 'expression' || n.label !== '=' || n.children.length !== 2) return [];
+    const match = (column: SqlLogicNode, literal: SqlLogicNode) => {
+      const ref = column.column;
+      if (!ref || ref.relation && ref.relation.toLowerCase() !== (relation?.alias ?? target).toLowerCase() || literal.column || literal.kind !== 'value' || !/^'.*'$/.test(literal.label)) return [];
+      const field = Object.keys(schema.properties ?? {}).find((k) => k.toLowerCase() === ref.name.toLowerCase());
+      if (!field) return [];
+      const value = literal.label.slice(1, -1).replace(/''/g, "'");
+      const property = schema.properties![field]!;
+      const options = property.enum ?? property.oneOf?.map((o: { const?: unknown }) => o.const);
+      return Array.isArray(options) && options.includes(value) ? [{ field, value }] : [];
+    };
+    return [...match(n.children[0]!, n.children[1]!), ...match(n.children[1]!, n.children[0]!)];
+  });
 }
