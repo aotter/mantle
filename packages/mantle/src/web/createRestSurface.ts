@@ -7,6 +7,9 @@ import type { JsonSchema } from "../spec/domain/index.js";
 import type { MantleRuntime, Surface } from "../core/index.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
 
+// Public routing does not imply public data: Views and Triggers can depend on the Caller.
+const NO_STORE = { "cache-control": "private, no-store" };
+
 export interface RestSurfaceOptions {
   /** Where the Views are mounted, e.g. `/api`. HTTP Trigger paths are absolute. */
   readonly basePath: string;
@@ -29,7 +32,7 @@ export function createRestSurface(runtime: MantleRuntime, options: RestSurfaceOp
       if (view !== undefined) {
         const v = plan.views[view];
         if (!v || v.surface !== "public") throw wireError("NOT_FOUND", `no public View '${view}'`, "rest");
-        return json(await runtime.store.as(caller).view(view, viewQuery(view, v, url.searchParams, "rest")));
+        return json(await runtime.store.as(caller).view(view, viewQuery(view, v, url.searchParams, "rest")), 200, NO_STORE);
       }
 
       for (const route of routes) {
@@ -39,11 +42,11 @@ export function createRestSurface(runtime: MantleRuntime, options: RestSurfaceOp
         const props = plan.procedures[route.procedure]?.input.properties ?? {};
         const body = await readJsonObject(request, "rest");
         const input = { ...body, ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, coerce(v, props[k] as JsonSchema | undefined, k, "rest")])) };
-        return json(await runtime.invokeProcedure({ procedure: route.procedure, input, caller, cause: { kind: "http", id: crypto.randomUUID() } }));
+        return json(await runtime.invokeProcedure({ procedure: route.procedure, input, caller, cause: { kind: "http", id: crypto.randomUUID() } }), 200, NO_STORE);
       }
       throw wireError("NOT_FOUND", "no such route", "rest");
     } catch (e) {
-      return failure(e, "rest");
+      return failure(e, "rest", NO_STORE);
     }
   };
 }

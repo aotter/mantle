@@ -144,6 +144,21 @@ const call = async (method: string, path: string, caller: Caller, body?: unknown
 };
 
 describe("REST surface", () => {
+  it("never caches caller-dependent Views, Trigger results or errors", async () => {
+    const surface = api(rt, { basePath: "/api" });
+    for (const [method, path, caller, status] of [
+      ["GET", "/api/views/my-notes", user("cache-owner"), 200],
+      ["GET", "/api/views/my-notes", { kind: "anonymous" }, 401],
+      ["GET", "/api/views/my-notes?min=abc", user("cache-owner"), 400],
+      ["GET", "/api/views/hidden", user("cache-owner"), 404],
+      ["POST", "/api/notes/search", user("cache-owner"), 200],
+    ] as const) {
+      const response = await surface(new Request(`http://x${path}`, { method }), caller);
+      expect(response.status).toBe(status);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+    }
+  });
+
   it("runs an HTTP Trigger with the JSON body, and binds path params to the input by their declared type", async () => {
     const a = await call("POST", "/api/notes", user("o1"), { title: "hello", rank: 2 });
     expect(a).toMatchObject({ status: 200, body: { results: [[{ title: "hello", rank: 2 }]] } });

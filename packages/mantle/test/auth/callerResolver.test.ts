@@ -73,9 +73,12 @@ describe("withCaller", () => {
     expect(seen).toEqual([{ kind: "anonymous" }]);
     const bad = withCaller(createCallerResolver(auth(), { jwtBearer: { audience: "a" } }), surface as never);
     const res = await bad(req({ authorization: "Bearer nope" }));
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
     expect([res.status, res.headers.get("www-authenticate"), ((await res.json()) as { error: { code: string } }).error.code]).toEqual([401, 'Bearer error="invalid_token"', "UNAUTHENTICATED"]);
     const scoped = withCaller(createCallerResolver(auth({ verifyOAuthAccessToken: async () => ({ ok: false, status: 403, reason: "insufficient-scope", missingScopes: ["w"] }) }), { jwtBearer: { audience: "a" } }), surface as never);
-    expect((await scoped(req({ authorization: "Bearer t" }))).status).toBe(403);
+    const denied = await scoped(req({ authorization: "Bearer t" }));
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("cache-control")).toBe("private, no-store");
     expect(seen).toHaveLength(1); // no surface ran for either refusal
   });
 });
