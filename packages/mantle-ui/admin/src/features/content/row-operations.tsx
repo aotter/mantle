@@ -11,7 +11,7 @@ import { fieldLabel } from "../../lib/field-label";
 import { api, ApiError } from "../../lib/api";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { entryApiPath } from "../../lib/queries";
-import type { EntryEditorPayload, StaffOperation, StaffOperationInteraction } from "../../lib/types";
+import type { Collection, EntryEditorPayload, StaffOperation, StaffOperationInteraction } from "../../lib/types";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { ErrorBox, redirectToSignIn } from "../../ui/page";
@@ -21,6 +21,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
@@ -71,6 +73,7 @@ export function rowValues(row: OperableRow): Record<string, unknown> {
 /** Row operation menu shared by lists and entry pages. */
 export function RowOperationsMenu({
   row,
+  collection,
   operations,
   editHref,
   language,
@@ -79,6 +82,7 @@ export function RowOperationsMenu({
   trigger,
 }: {
   row: OperableRow;
+  collection?: Collection;
   /** Pre-filtered via `boundOperationsFor(allOps, row.collection)`. */
   operations: readonly StaffOperation[];
   editHref?: string;
@@ -91,6 +95,10 @@ export function RowOperationsMenu({
 }): React.ReactElement | null {
   const [activeOperation, setActiveOperation] = React.useState<StaffOperation | null>(null);
   if (operations.length === 0 && !editHref) return null;
+  const values = rowValues(row);
+  const matches = (op: StaffOperation) => !!op.requiredStates?.length && op.requiredStates.every(({ field, value }) => values[field] === value);
+  const relevant = operations.filter(matches);
+  const other = operations.filter((op) => !matches(op));
 
   return (
     <>
@@ -117,12 +125,10 @@ export function RowOperationsMenu({
               </a>
             </DropdownMenuItem>
           ) : null}
-          {operations.map((op) => (
-            <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}>
-              <Workflow aria-hidden />
-              {resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name)}
-            </DropdownMenuItem>
-          ))}
+          {[relevant, other].map((group, index) => <React.Fragment key={index}>
+            {group.length && relevant.length ? <><DropdownMenuSeparator /><DropdownMenuLabel>{language.startsWith('zh') ? index === 0 ? '符合目前狀態（仍須驗證權限）' : '其他操作' : index === 0 ? 'Matching state (permission checks still apply)' : 'Other operations'}</DropdownMenuLabel></> : null}
+            {group.map((op) => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name)}</DropdownMenuItem>)}
+          </React.Fragment>)}
         </DropdownMenuContent>
       </DropdownMenu>
       {activeOperation ? (
@@ -131,6 +137,7 @@ export function RowOperationsMenu({
           operation={activeOperation}
           interaction={(activeOperation.interactions ?? []).find((item) => item.collection === row.collection)}
           row={row}
+          collection={collection}
           language={language}
           canonical={canonical}
           onClose={() => setActiveOperation(null)}
@@ -189,6 +196,7 @@ export function OperationDialog({
   operation,
   interaction,
   row,
+  collection,
   language,
   canonical,
   onClose,
@@ -197,6 +205,7 @@ export function OperationDialog({
   operation: StaffOperation;
   interaction?: StaffOperationInteraction;
   row?: OperableRow;
+  collection?: Collection;
   language: AdminLanguage;
   canonical: string | null;
   onClose: () => void;
@@ -238,6 +247,8 @@ export function OperationDialog({
       automatic={automatic}
       language={language}
       canonical={canonical}
+      sourceSchema={collection?.schema ?? entry.data?.collection.schema}
+      previewFields={row ? [...new Set([collection?.list?.primaryField, ...(collection?.list?.columns ?? []), ...(collection?.list ? [] : Object.keys(collection?.schema?.properties ?? entry.data?.collection.schema.properties ?? {}))])].filter((field): field is string => !!field && field !== "id" && field !== "version" && !!reviewed && field in reviewed) : undefined}
       onClose={onClose}
       onDone={onSuccess}
       onSucceeded={() => toast.success(t(language, "ops.success", { name: title }))}

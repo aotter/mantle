@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   OperationPanel,
+  EntityPreview,
   useInteraction,
   type InteractionController,
   type InteractionLabels,
@@ -74,7 +75,7 @@ export function operationFormSchema(schema: JsonSchema, hiddenFields: readonly s
  * conflicts and uncertain writes behave the same everywhere. The caller
  * decides how the controller reads and invokes.
  */
-export function InteractionDialog({ create, operation, hidden, automatic, language, canonical, sourceSchema, onClose, onDone, onSucceeded, renderResult }: {
+export function InteractionDialog({ create, operation, hidden, automatic, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult }: {
   /** Called once when the dialog opens; a binding that cannot be met is shown, not thrown. */
   create: () => InteractionController;
   operation: StaffOperation;
@@ -85,6 +86,7 @@ export function InteractionDialog({ create, operation, hidden, automatic, langua
   language: AdminLanguage;
   canonical: string | null;
   sourceSchema?: JsonSchema;
+  previewFields?: readonly string[];
   onClose: () => void;
   /** Called once when a write landed or may have landed. */
   onDone: () => void;
@@ -133,6 +135,7 @@ export function InteractionDialog({ create, operation, hidden, automatic, langua
             language={language}
             canonical={canonical}
             sourceSchema={sourceSchema}
+            previewFields={previewFields}
             onClose={onClose}
             onDone={refreshed}
             onSucceeded={onSucceeded}
@@ -147,7 +150,7 @@ export function InteractionDialog({ create, operation, hidden, automatic, langua
   );
 }
 
-function InteractionDialogPanel({ controller, operation, hidden, automatic, title, description, language, canonical, sourceSchema, onClose, onDone, onSucceeded, renderResult, closeRef }: {
+function InteractionDialogPanel({ controller, operation, hidden, automatic, title, description, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult, closeRef }: {
   controller: InteractionController;
   operation: StaffOperation;
   hidden: readonly string[];
@@ -157,6 +160,7 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
   language: AdminLanguage;
   canonical: string | null;
   sourceSchema?: JsonSchema;
+  previewFields?: readonly string[];
   onClose: () => void;
   onDone: () => void;
   onSucceeded?: () => void;
@@ -209,6 +213,7 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
       onCancel={close}
       {...(renderResult ? { renderResult } : {})}
     >
+      {previewFields?.length && sourceSchema && state.reviewed ? <EntityPreview entry={state.reviewed} fields={previewFields} labels={interactionLabels(language)} fieldLabel={(field) => propertyLabel(field, sourceSchema.properties?.[field], language, canonical)} fieldValue={(field, value) => renderDataValue(sourceSchema.properties?.[field], value, language, canonical)} /> : null}
       {Object.keys(schema.properties ?? {}).length > 0 ? (
         <SchemaFields
           schema={schema}

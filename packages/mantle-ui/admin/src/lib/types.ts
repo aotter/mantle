@@ -257,6 +257,8 @@ export interface StaffOperationInteraction {
 }
 
 export interface StaffOperation {
+  /** Necessary enum predicates only; does not authorize execution. */
+  requiredStates?: Array<{ field: string; value: string }>;
   name: string;
   title: LocalizedText | null;
   description: LocalizedText | null;
