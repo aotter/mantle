@@ -61,7 +61,7 @@ it("keeps the built preview on its bridge, including search and downloads, while
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as {port:number}).port}`;
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   try {
     const page = await browser.newPage();
     page.setDefaultTimeout(8_000);

@@ -6,6 +6,30 @@ of it (React 19 is an optional peer, needed only for the root and `/kit`).
 
 ## Admin
 
+The full SPA has a separate opt-in iframe artifact at
+`@aotter/mantle-ui/admin/preview.html`. Resolve that exported file, copy its
+adjacent assets, and use `adminPreviewDocument` from `/admin-preview` to prepare
+the document for the host's mount and asset paths. It installs the exported
+`admin/host-bridge.js` synchronously before Admin starts. Mount the document at
+`/builder/admin/dev` to open the complete Developer workspace's system flow.
+The canonical `admin/index.html` continues to refuse framing.
+
+The immediate parent must be same-origin. The host accepts only that iframe's
+`mantle:host-api:request` messages (protocolVersion 1), validates each envelope
+with `readAdminPreviewRequest`, and replies on the supplied MessagePort with
+`{ ok: true, status, headers, body }` or `{ ok: false, error }`. No unknown
+request falls through to native HTTP, authentication, OAuth, or another origin.
+Remount on project/revision changes; do not let an old frame address a new target.
+
+For an authoring draft, pass `design: true`: the same full Admin SPA opens its
+Developer pages, with data and account actions unavailable until a service is
+built. Core's public `developerConsole(plan)` and `createAdminDesignSurface`
+(`@aotter/mantle/admin`) project a compiled plan without creating a runtime,
+database, authenticated caller, or role grant. A compiler host must bind the
+snapshot to the exact source hash and revision. This does not relax the running
+Admin API's owner-only developer-console route. Runtime preview hosts instead
+dispatch through the real authorized Admin surface.
+
 `dist/admin/` is the built Admin console (a static SPA with base `/admin/`).
 Nothing imports it: `mantle generate`'s Cloudflare preset binds
 `node_modules/@aotter/mantle-ui/dist/admin` as the Worker's static assets (the

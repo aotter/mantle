@@ -46,6 +46,10 @@ export function AdminApp({ preview = false }: { preview?: boolean } = {}): React
   // Static asset URLs can bypass the server's frame-ancestors headers.
   if (typeof window !== "undefined" && !canRenderAdmin(window, preview)) return null;
 
+  if (preview && window.__MANTLE_ADMIN_PREVIEW__?.mode === "design" && !(location.pathname === "/admin/dev" || location.pathname.startsWith("/admin/dev/")) && location.pathname !== "/admin/preferences") {
+    return <div className="p-6"><h1 className="text-xl font-semibold">Design workspace</h1><p className="mt-2">This draft has no running service or business data. Save and build it in Cloud to test the signed-in Admin preview.</p><a className="mt-4 inline-block underline" href="/admin/dev">Return to the system flow</a></div>;
+  }
+
   if (preview && ["/admin/sign-in", "/admin/connected-apps", ...CONSENT_PATHS].includes(location.pathname)) {
     return <PreviewAccountNotice />;
   }

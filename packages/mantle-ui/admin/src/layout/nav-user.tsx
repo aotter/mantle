@@ -30,6 +30,9 @@ export interface NavUserProps {
 export function NavUser({ login, image, role }: NavUserProps): React.ReactElement {
   const { language } = usePreferences();
   const initials = initialsFor(login);
+  const design = isAdminPreview() && window.__MANTLE_ADMIN_PREVIEW__?.mode === "design";
+  const name = design ? t(language, "preview.designTitle") : login ?? t(language, "common.signedIn");
+  const status = design ? t(language, "preview.designStatus") : role ?? t(language, "common.signedIn");
 
   return (
     <SidebarMenu>
@@ -39,9 +42,9 @@ export function NavUser({ login, image, role }: NavUserProps): React.ReactElemen
             <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent">
               <UserAvatar src={image} fallback={initials} />
               <div className="grid min-w-0 flex-1 text-start text-sm leading-tight">
-                <span className="truncate font-medium">{login ?? t(language, "common.signedIn")}</span>
+                <span className="truncate font-medium">{name}</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {role ?? t(language, "common.signedIn")}
+                  {status}
                 </span>
               </div>
               <ChevronsUpDown className="ms-auto" aria-hidden />
@@ -56,9 +59,9 @@ export function NavUser({ login, image, role }: NavUserProps): React.ReactElemen
             <DropdownMenuLabel className="flex items-center gap-2">
               <UserAvatar src={image} fallback={initials} />
               <div className="grid min-w-0 flex-1 leading-tight">
-                <span className="truncate font-medium">{login ?? t(language, "common.signedIn")}</span>
+                <span className="truncate font-medium">{name}</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {role ?? t(language, "common.signedIn")}
+                  {status}
                 </span>
               </div>
             </DropdownMenuLabel>

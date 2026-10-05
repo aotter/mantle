@@ -12,14 +12,14 @@ const { version } = JSON.parse(readFileSync(resolve(root, "../package.json"), "u
  * The Admin SPA, `@aotter/mantle-ui/admin`: static files under `dist/admin/`, served at `/admin/` by `createAdminSurface`'s
  * `assets` (the generated Cloudflare preset binds them as the Worker's static assets).
  */
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root,
-  base: "/admin/",
+  base: command === "build" ? "./" : "/admin/", // Lazy chunks resolve beside their own script in canonical and embedded mounts.
   define: { __MANTLE_VERSION__: JSON.stringify(version) },
   plugins: [react(), tailwindcss(), previewDocument()],
   build: { outDir: resolve(root, "../dist/admin"), emptyOutDir: true },
   resolve: { alias: { "@": resolve(root, "src") } },
-});
+}));
 
 /** A separate opt-in document for the same-origin preview; the canonical index.html keeps its frame refusal. */
 function previewDocument(): Plugin {

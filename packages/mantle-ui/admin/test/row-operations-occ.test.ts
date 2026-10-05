@@ -196,7 +196,7 @@ async function bootAdmin(args: { operations: unknown[]; conflictCode?: string; f
 }> {
   const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(8_000);
   await page.addInitScript(() => {

@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 it("discovers global operations, never retries an uncertain write and reuses its idempotency key", async () => {
   const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   try {
     const page = await browser.newPage();
     page.setDefaultTimeout(8_000);
