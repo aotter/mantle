@@ -1,7 +1,7 @@
 {
   "name": "mantle",
   "description": "Build and embed Mantle applications with version-matched SDK guidance.",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "author": {
     "name": "Aotter",
     "url": "https://mantle.tools/"
