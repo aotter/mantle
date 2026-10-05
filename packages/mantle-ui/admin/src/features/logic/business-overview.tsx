@@ -12,11 +12,13 @@ type Step = Node<{ title: string; subtitle: string }, 'businessStep'>;
 export function BusinessStepNode({ data }: NodeProps<Step>): React.ReactElement {
   return <div className="h-full rounded-xl border-2 bg-card p-3 text-card-foreground shadow-sm">
     <Handle type="target" position={Position.Top} />
+    <Handle id="bypass" type="target" position={Position.Left} />
     <div className="flex items-start gap-3"><Workflow className="mt-0.5 size-6 shrink-0 text-amber-500" aria-hidden /><div>
       <div className="text-base font-semibold leading-6">{data.title}</div>
       <div className="mt-1 text-xs leading-5 text-muted-foreground">{data.subtitle}</div>
     </div></div>
     <Handle type="source" position={Position.Bottom} />
+    <Handle id="bypass" type="source" position={Position.Left} />
   </div>;
 }
 
@@ -55,5 +57,10 @@ export function businessOverview(graph: DeveloperConsoleSnapshot['graph'], schem
   edges.forEach((e) => dag.setEdge(e.source, e.target));
   dagre.layout(dag);
   nodes.forEach((n) => { const p = dag.node(n.id); n.position = { x: p.x - 135, y: p.y - 56 }; });
+  // Route state handoffs that skip a rank beside the cards, rather than through them.
+  edges.forEach((edge) => {
+    const delta = nodes.get(edge.target)!.position.y - nodes.get(edge.source)!.position.y;
+    if (delta > 153 || delta <= 0) { edge.sourceHandle = "bypass"; edge.targetHandle = "bypass"; }
+  });
   return { nodes: [...nodes.values()], edges };
 }

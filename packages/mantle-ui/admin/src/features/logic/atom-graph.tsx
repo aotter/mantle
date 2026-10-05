@@ -283,6 +283,19 @@ export function AtomGraph({
   };
 
   return (
+    <div className="flex h-full flex-col">
+      <div className="shrink-0 border-b bg-background px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant={business ? "default" : "outline"} onClick={() => { setBusiness(true); setExpandedId(null); clearSelection(); }}>{language.startsWith("zh") ? "業務狀態" : "Business states"}</Button>
+          <Button size="sm" variant={!business ? "default" : "outline"} onClick={() => { setBusiness(false); setExpandedId(null); clearSelection(); }}>{language.startsWith("zh") ? "系統接線" : "System wiring"}</Button>
+          <select aria-label={language.startsWith("zh") ? "選擇業務流程" : "Choose a procedure"} className="h-8 max-w-64 rounded-md border bg-background px-2 text-sm" value={selected?.kind === "Procedure" ? selected.id : ""} onChange={(event) => { if (event.target.value) { selectAtom(event.target.value); setExpandedId(event.target.value); } }}>
+            <option value="">{language.startsWith("zh") ? "選擇業務流程…" : "Choose a procedure…"}</option>
+            {graph.atoms.filter((a) => a.kind === "Procedure").map((a) => <option key={a.id} value={a.id}>{resolveLocalizedText(a.title, language) || a.name}</option>)}
+          </select>
+        </div>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">{language.startsWith("zh") ? business ? "虛線表示狀態可能接續，仍須符合各步驟條件；不是自動執行或案件進度。點選步驟看規則，拖曳空白處移動。" : "實線表示系統與資料關聯，並非業務辦理順序。" : business ? "Dashed lines show possible state handoffs, subject to each step’s conditions; not execution or case progress." : "System/data dependencies, not business execution order."}</p>
+      </div>
+    <div className="min-h-0 flex-1">
     <ReactFlow
       className={graphCanvasClassName}
       nodes={nodes}
@@ -315,17 +328,7 @@ export function AtomGraph({
     >
       <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
       <GraphControls onRelayout={relayout} />
-      <Panel position="bottom-right" className="!m-3 max-w-[calc(100%-5rem)] rounded-xl border bg-background/95 p-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant={business ? "default" : "outline"} onClick={() => { setBusiness(true); setExpandedId(null); clearSelection(); }}>{language.startsWith("zh") ? "業務狀態" : "Business states"}</Button>
-          <Button size="sm" variant={!business ? "default" : "outline"} onClick={() => { setBusiness(false); setExpandedId(null); clearSelection(); }}>{language.startsWith("zh") ? "系統接線" : "System wiring"}</Button>
-          <select aria-label={language.startsWith("zh") ? "選擇業務流程" : "Choose a procedure"} className="h-8 max-w-64 rounded-md border bg-background px-2 text-sm" value={selected?.kind === "Procedure" ? selected.id : ""} onChange={(event) => { if (event.target.value) { selectAtom(event.target.value); setExpandedId(event.target.value); } }}>
-            <option value="">{language.startsWith("zh") ? "選擇業務流程…" : "Choose a procedure…"}</option>
-            {graph.atoms.filter((a) => a.kind === "Procedure").map((a) => <option key={a.id} value={a.id}>{resolveLocalizedText(a.title, language) || a.name}</option>)}
-          </select>
-        </div>
-        <p className="mt-2 max-w-lg text-xs leading-5 text-muted-foreground">{language.startsWith("zh") ? business ? "虛線表示狀態可能接續，仍須符合各步驟條件；不是自動執行或案件進度。點選步驟看規則，拖曳空白處移動。" : "實線表示系統與資料關聯，並非業務辦理順序。" : business ? "Dashed lines show possible state handoffs, subject to each step’s conditions; not execution or case progress." : "System/data dependencies, not business execution order."}</p>
-      </Panel>
+
       {selected ? <Panel position="top-left" className="!m-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-xl border bg-background/95 p-2 shadow-sm">
         <span className="px-2 text-sm font-semibold">{resolveLocalizedText(selected.title, language) || selected.name}</span>
         {selected.handler?.kind === 'sql' && selected.handler.flow?.length ? <Button size="sm" variant={expandedId ? 'secondary' : 'default'} onClick={() => { setExpandedId(expandedId === selected.id ? null : selected.id); setShowDetails(false); setSelectedRule(null); setShowData(false); }}>{language.startsWith('zh') ? expandedId ? '返回總覽' : '展開流程' : expandedId ? 'System overview' : 'Expand flow'}</Button> : null}
@@ -340,6 +343,8 @@ export function AtomGraph({
         </section> : <GraphHud atom={selected} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={() => setShowDetails(false)} onSelect={moveAlongTrace} onOpen={onOpen} />}
       </Panel> : null}
     </ReactFlow>
+    </div>
+    </div>
   );
 }
 
