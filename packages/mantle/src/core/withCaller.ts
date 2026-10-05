@@ -5,7 +5,7 @@ import type { Surface } from "./service.js";
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 
 const refuse = (status: 401 | 403, code: DiagnosticCode, message: string, path: string, challenge?: string) =>
-  Response.json({ error: redactForWire(makeDiagnostic({ code, phase: "runtime", severity: "error", path, message })) }, { status, headers: challenge ? { "www-authenticate": challenge } : {} });
+  Response.json({ error: redactForWire(makeDiagnostic({ code, phase: "runtime", severity: "error", path, message })) }, { status, headers: { "cache-control": "private, no-store", ...(challenge ? { "www-authenticate": challenge } : {}) } });
 
 export interface WithCallerOptions {
   /**
