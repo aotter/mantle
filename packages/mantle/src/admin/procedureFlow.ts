@@ -60,12 +60,22 @@ export function procedureFlow(stmts: readonly SqlNode[], relations?: (stmts: rea
 }
 
 /** A syntax/data dependency tree, never a promise of SQL evaluation order or short-circuit execution. */
-export interface SqlLogicNode { kind: string; label: string; children: SqlLogicNode[] }
+export interface SqlLogicNode {
+  kind: string; label: string; children: SqlLogicNode[];
+  column?: { name: string; relation?: string };
+  relation?: { name: string; alias?: string };
+}
 const branch = (kind: string, label: string, children: SqlLogicNode[] = []): SqlLogicNode => ({ kind, label, children });
 export function sqlLogic(node: SqlNode): SqlLogicNode {
   const list = (items: SqlNode[] = []) => items.map(sqlLogic);
   const clause = (label: string, value: SqlNode | undefined) => value ? [branch('clause', label, [sqlLogic(value)])] : [];
   const group = (label: string, values: SqlNode[] | undefined) => values?.length ? [branch('clause', label, list(values))] : [];
+  if (node.ColumnRef) {
+    const names = node.ColumnRef.fields.map((f: SqlNode) => f.String?.sval);
+    const result = branch('value', sql(node));
+    if (names.every((n: unknown) => typeof n === 'string') && names.length <= 2) result.column = { name: names.at(-1)!, ...(names.length === 2 ? { relation: names[0] } : {}) };
+    return result;
+  }
   if (node.BoolExpr) { const b = node.BoolExpr; return branch('predicate', b.boolop === 'AND_EXPR' ? 'AND · all conditions' : b.boolop === 'OR_EXPR' ? 'OR · any condition' : 'NOT', list(b.args)); }
   if (node.A_Expr) {
     const e = node.A_Expr;
@@ -89,7 +99,7 @@ export function sqlLogic(node: SqlNode): SqlLogicNode {
   if (node.List) return branch('list', 'Values', list(node.List.items));
   if (node.ResTarget) return branch('output', node.ResTarget.name ?? 'Output', node.ResTarget.val ? [sqlLogic(node.ResTarget.val)] : []);
   if (node.SortBy) return branch('order', `${(node.SortBy.sortby_dir ?? 'SORTBY_DEFAULT').replace('SORTBY_', '')} · ${(node.SortBy.sortby_nulls ?? 'SORTBY_NULLS_DEFAULT').replace('SORTBY_', '')}`, [sqlLogic(node.SortBy.node)]);
-  if (node.RangeVar) return branch('table', node.RangeVar.relname + (node.RangeVar.alias ? ` AS ${node.RangeVar.alias.aliasname}` : ''));
+  if (node.RangeVar) return { ...branch('table', node.RangeVar.relname + (node.RangeVar.alias ? ` AS ${node.RangeVar.alias.aliasname}` : '')), relation: { name: node.RangeVar.relname, ...(node.RangeVar.alias ? { alias: node.RangeVar.alias.aliasname } : {}) } };
   if (node.RangeSubselect) return branch('subquery', `${node.RangeSubselect.lateral ? 'LATERAL ' : ''}${node.RangeSubselect.alias?.aliasname ?? 'Subquery'}`, [sqlLogic(node.RangeSubselect.subquery)]);
   if (node.JoinExpr) { const j = node.JoinExpr; return branch('join', `${j.jointype.replace('JOIN_', '')} JOIN`, [sqlLogic(j.larg), sqlLogic(j.rarg), ...clause('ON', j.quals), ...group('USING', j.usingClause)]); }
   if (node.WindowDef) { const w = node.WindowDef; return branch('window', `Window${w.name ? ` ${w.name}` : ''} · ${w.frameOptions & 4 ? 'ROWS' : 'RANGE'} frame (see authored SQL)`, [...group('PARTITION BY', w.partitionClause), ...group('ORDER BY', w.orderClause), ...clause('Frame start', w.startOffset), ...clause('Frame end', w.endOffset)]); }

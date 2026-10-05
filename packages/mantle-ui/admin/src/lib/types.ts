@@ -291,6 +291,7 @@ export interface DeveloperSchemaModel {
   localized: boolean;
   translates: { parent: string; on: string } | null;
   schema: JsonSchema;
+  checks?: SqlLogicNode[];
   uniqueIndexes: string[][];
   indexes: string[][];
   searchableFields: string[];
@@ -319,7 +320,7 @@ export type DeveloperAudience = "public" | "members" | "staff" | "system" | "api
 export type DeveloperTransport = "http" | "mcp" | "lifecycle" | "schedule";
 
 /** An inline program's SQL as authored, or a registered code handler. */
-export interface SqlLogicNode { kind: string; label: string; children: SqlLogicNode[] }
+export interface SqlLogicNode { kind: string; label: string; children: SqlLogicNode[]; column?: { name: string; relation?: string }; relation?: { name: string; alias?: string } }
 
 export type DeveloperProcedureHandler =
   | { kind: "sql"; statement: string; flow?: Array<{ logic?: SqlLogicNode; index: number; operation: string; table: string | null; mode: "read" | "row" | "set"; reads: string[]; writes: string[]; returns: string[]; filter: string | null; cases: Array<{ field: string; branches: Array<{ condition: string; value: string }>; otherwise: string }> }>; hooks?: Array<{ trigger: string; procedure: string; schema: string; on: string[] }> }
@@ -369,6 +370,7 @@ export interface DeveloperAtom {
   description?: LocalizedText | null;
   audience?: DeveloperAudience;
   transport?: DeveloperTransport;
+  input?: JsonSchema;
   handler?: DeveloperProcedureHandler;
 }
 

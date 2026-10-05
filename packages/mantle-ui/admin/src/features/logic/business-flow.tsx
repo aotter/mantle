@@ -1,17 +1,17 @@
 import * as React from "react";
 import dagre from "@dagrejs/dagre";
-import { Database, GitBranch, Pencil, Workflow } from "lucide-react";
+import { Database, GitBranch, Pencil, ShieldCheck, Workflow } from "lucide-react";
 import { Handle, MarkerType, Position, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import type { BusinessRule } from "./business-rules";
 
-type RuleData = { title: string; subtitle: string; kind: 'operation' | 'condition' | 'result'; zh: boolean; rule: BusinessRule };
+type RuleData = { title: string; subtitle: string; kind: 'operation' | 'condition' | 'result' | 'eligibility'; zh: boolean; rule: BusinessRule };
 type RuleNode = Node<RuleData, 'businessRule'>;
 type GroupNode = Node<{ title: string; count: number; zh: boolean }, 'businessGroup'>;
 const width = 184;
 const height = 152;
 
 export function BusinessRuleNode({ data }: NodeProps<RuleNode>): React.ReactElement {
-  const Icon = data.kind === 'condition' ? GitBranch : data.kind === 'result' ? Pencil : Database;
+  const Icon = data.kind === 'eligibility' ? ShieldCheck : data.kind === 'condition' ? GitBranch : data.kind === 'result' ? Pencil : Database;
   const tone = data.kind === 'condition' ? 'border-amber-400/70 bg-amber-500/10 text-amber-600 dark:text-amber-300' : data.kind === 'result' ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'border-blue-400/60 bg-blue-500/10 text-blue-600 dark:text-blue-300';
   return <div className="group h-full text-center text-card-foreground">
     <Handle type="target" position={Position.Left} style={{ left: 60, top: 32 }} className="!size-2.5 !border-background !bg-muted-foreground" />
@@ -30,7 +30,7 @@ export function BusinessGroupNode({ data }: NodeProps<GroupNode>): React.ReactEl
     <Handle type="target" position={Position.Top} className="!opacity-0" />
     <header className="flex h-[76px] items-center gap-3 border-b border-border px-5">
       <Workflow className="size-6 text-amber-500" aria-hidden />
-      <div><h2 className="text-lg font-semibold">{data.title}</h2><p className="mt-1 text-xs text-muted-foreground">{data.zh ? `${data.count} 項資料操作 · 同一交易，全部成功才提交` : `${data.count} operations · one transaction`}</p></div>
+      <div><h2 className="text-lg font-semibold">{data.title}</h2><p className="mt-1 text-xs text-muted-foreground">{data.zh ? `${data.count} 項資料操作 · 全部成功才保存` : `${data.count} operations · one transaction`}</p></div>
       <div className="ml-auto flex flex-col gap-1 text-xs text-muted-foreground"><span>{data.zh ? '實線 → 操作順序' : 'Solid → statement order'}</span><span>{data.zh ? '虛線 ⇢ 欄位值選擇' : 'Dashed → value choice'}</span></div>
     </header>
     <Handle type="source" position={Position.Bottom} className="!opacity-0" />
@@ -48,6 +48,11 @@ export function businessFlow(owner: string, title: string, rules: BusinessRule[]
   const link = (source: string, target: string, value: boolean, label?: string, handle?: string) => edges.push({ id: `RuleEdge:${source}:${target}`, source, target, sourceHandle: handle, type: 'smoothstep', label, labelStyle: { fontSize: 12, fontWeight: 600, fill: 'var(--foreground)' }, labelBgStyle: { fill: 'var(--card)' }, labelBgPadding: [6, 4], labelBgBorderRadius: 5, style: { stroke: handle === 'yes' ? '#10b981' : handle === 'no' ? '#d97706' : value ? '#10b981' : '#64748b', strokeWidth: 1.8, ...(value ? { strokeDasharray: '5 4' } : {}) }, markerEnd: { type: MarkerType.ArrowClosed, color: handle === 'yes' ? '#10b981' : handle === 'no' ? '#d97706' : value ? '#10b981' : '#64748b', width: 14, height: 14 } });
   operations.forEach((op, i) => {
     const id = `Rule:${owner}:operation:${op.statement}`;
+    if (i === 0 && op.conditions) {
+      const gate = `Rule:${owner}:eligibility`;
+      add(gate, 'eligibility', zh ? '辦理條件與限制' : 'Eligibility and constraints', zh ? '點選確認資格、狀態與限制' : 'Select for required conditions', { ...op, title: zh ? '辦理條件與限制' : 'Eligibility and constraints', body: op.conditions });
+      link(gate, id, false, zh ? '符合才處理' : 'Matching rows');
+    }
     add(id, 'operation', op.title, op.summary || (zh ? '點選查看資料來源與條件' : 'Select for sources and conditions'), op);
     if (i) link(`Rule:${owner}:operation:${operations[i - 1]!.statement}`, id, false, zh ? '接著' : 'Next');
     rules.filter((r) => r.kind === 'case' && r.statement === op.statement).forEach((rule, ci) => {

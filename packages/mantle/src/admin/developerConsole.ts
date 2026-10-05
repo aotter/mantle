@@ -4,7 +4,7 @@
  * IR, so a View's sources and a Procedure's writes are the relations the runtime runs. No run is observed (G7).
  */
 import { mcpTools, resolveMantleRef, type AuthPredicate, type AuthorizationRequirements, type JsonSchema, type RuntimePlan, type SqlNode } from "../spec/domain/index.js";
-import { procedureFlow } from "./procedureFlow.js";
+import { procedureFlow, sqlLogic } from "./procedureFlow.js";
 
 type Audience = "public" | "members" | "staff" | "system" | "api-clients";
 
@@ -108,7 +108,7 @@ export function developerConsole(plan: RuntimePlan) {
     dataModel: {
       schemas: schemas.map((s) => ({
         name: s.name, title: s.title ?? s.name, lifecycle: s.publishing ? "publishing" : "operational", localized: s.localized === true, translates: s.translates ?? null,
-        schema: s.schema, uniqueIndexes: s.unique ?? [], indexes: s.indexes ?? [], searchableFields: s.search ?? [], manifest: (({ checks: _ir, ...rest }) => rest)(s),
+        schema: s.schema, checks: (s.checks ?? []).map(sqlLogic), uniqueIndexes: s.unique ?? [], indexes: s.indexes ?? [], searchableFields: s.search ?? [], manifest: (({ checks: _ir, ...rest }) => rest)(s),
       })),
       views: views.map(([name, v]) => ({
         name, title: v.title ?? null, surface: v.surface, query: { kind: "sql" as const, statement: v.source, ...(v.input ? { params: v.input } : {}) },
@@ -121,7 +121,7 @@ export function developerConsole(plan: RuntimePlan) {
       atoms: [
         ...schemas.map((s) => ({ id: `Schema:${s.name}`, kind: "Schema" as const, name: s.name, title: s.title ?? s.name })),
         ...views.map(([name, v]) => ({ id: `View:${name}`, kind: "View" as const, name, title: v.title ?? null, audience: viewAudience(v) })),
-        ...procedures.map(({ name, title, description, audience, handler }) => ({ id: `Procedure:${name}`, kind: "Procedure" as const, name, title, description, audience, handler })),
+        ...procedures.map(({ name, title, description, audience, handler, input }) => ({ id: `Procedure:${name}`, kind: "Procedure" as const, name, title, description, audience, handler, input })),
         ...triggers.map(({ name, source, audience }) => ({ id: `Trigger:${name}`, kind: "Trigger" as const, name, title: null, audience, transport: source.kind })),
       ].sort((a, b) => a.id.localeCompare(b.id)),
       relations,
