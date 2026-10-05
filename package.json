@@ -23,7 +23,8 @@
     "check:doc-examples": "node scripts/check-doc-examples.mjs",
     "check:plugin-manifests": "node scripts/sync-plugin-manifests.mjs --check",
     "check:release": "node scripts/release-tag-order.mjs --self-test",
-    "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm check:doc-examples && pnpm typecheck && pnpm test && pnpm check:worker-consumer",
+    "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm check:doc-examples && pnpm check:cloud-plugin && pnpm typecheck && pnpm test && pnpm check:worker-consumer",
+    "check:cloud-plugin": "node scripts/check-cloud-plugin.mjs",
     "check:worker-consumer": "node scripts/check-worker-consumer.mjs"
   },
   "devDependencies": {
