@@ -39,7 +39,10 @@
       "types": "./dist/mcp-app/index.d.ts",
       "import": "./dist/mcp-app/index.js"
     },
-    "./admin/index.html": "./dist/admin/index.html"
+    "./admin/index.html": "./dist/admin/index.html",
+    "./admin/preview.html": "./dist/admin/preview.html",
+    "./admin/host-bridge.js": "./dist/admin/host-bridge.js",
+    "./admin-preview": { "types": "./dist/admin-preview/index.d.ts", "import": "./dist/admin-preview/index.js" }
   },
   "files": [
     "dist",
@@ -47,7 +50,7 @@
   ],
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json && vite build --config vite.kit.config.ts && node scripts/emit-kit-styles.mjs && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts",
+    "build": "tsc -b tsconfig.lib.json && vite build --config vite.kit.config.ts && node scripts/emit-kit-styles.mjs && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts && vite build --config vite.preview.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json && tsc -p tsconfig.mcp-app.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "vitest run"
   },

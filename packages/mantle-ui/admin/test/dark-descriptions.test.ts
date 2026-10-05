@@ -12,7 +12,7 @@ import { CollapsibleDescription, PageHeader } from "../src/ui/page";
 it("keeps primary descriptions readable in dark mode without changing light or metadata colors", async () => {
   const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   try {
     const page = await browser.newPage();
     const markup = renderToStaticMarkup(h("main", { className: "bg-background text-foreground p-8 space-y-8" },

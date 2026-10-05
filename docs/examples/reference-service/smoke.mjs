@@ -113,10 +113,14 @@ try {
   // the console: @aotter/mantle-ui/admin served by Admin at /admin, its assets by name, any other path its client-side route
   const shell = await fetch(`${origin}/admin/c/items`);
   const html = await shell.text();
-  const script = /src="(\/admin\/assets\/[^"]+\.js)"/.exec(html)?.[1];
+  const script = /src="((?:\/admin\/|\.\/)assets\/[^"]+\.js)"/.exec(html)?.[1];
+  const base = /<base href="([^"]+)"/.exec(html)?.[1] ?? "/admin/";
   assert.equal(shell.headers.get("x-frame-options"), "DENY");
   assert.ok(script, html.slice(0, 300));
-  assert.equal((await fetch(`${origin}${script}`)).status, 200);
+  const scriptUrl = new URL(script, new URL(base, origin));
+  assert.equal(scriptUrl.origin, origin);
+  assert.ok(scriptUrl.pathname.startsWith("/admin/assets/"));
+  assert.equal((await fetch(scriptUrl)).status, 200);
   assert.equal((await fetch(`${origin}/admin/assets/missing.js`)).status, 404);
   // the editor's round trip: it reads the whole entry and writes it back, an unset optional field included as null
   const [tea] = (await call("GET", "/admin/api/entries?collection=items", { cookie: staff })).body.items;

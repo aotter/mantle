@@ -81,7 +81,7 @@ it("loads live model data only on demand through the existing guarded paths", as
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   try {
     const page = await browser.newPage();
     page.setDefaultTimeout(8_000);

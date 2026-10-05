@@ -7,6 +7,7 @@ import { mcpTools, resolveMantleRef, type AuthPredicate, type AuthorizationRequi
 import { procedureFlow, sqlLogic } from "./procedureFlow.js";
 
 type Audience = "public" | "members" | "staff" | "system" | "api-clients";
+export type DeveloperConsoleSnapshot = ReturnType<typeof developerConsole>;
 
 /** Who a `requires` admits, as the console groups it; null is anyone. */
 function audienceOf(requires: AuthorizationRequirements | undefined): Audience | null {
