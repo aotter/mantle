@@ -157,7 +157,7 @@ export function AtomGraph({
   onOpen: (atom: DeveloperAtom) => void;
 }): React.ReactElement {
   const { language, theme } = usePreferences();
-  const [business, setBusiness] = React.useState(true);
+  const [business, setBusiness] = React.useState(() => graph.atoms.some((a) => businessRules(a, schemas, language).some((r) => r.transitions?.length)));
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [showDetails, setShowDetails] = React.useState(false);
   const [showData, setShowData] = React.useState(false);
