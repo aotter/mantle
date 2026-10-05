@@ -135,7 +135,7 @@ export function requiredEnumStates(stmts: readonly SqlNode[], target: string, sc
       const field = Object.keys(schema.properties ?? {}).find((k) => k.toLowerCase() === ref.name.toLowerCase());
       if (!field) return [];
       const value = literal.label.slice(1, -1).replace(/''/g, "'");
-      const property = schema.properties![field];
+      const property = schema.properties![field]!;
       const options = property.enum ?? property.oneOf?.map((o: { const?: unknown }) => o.const);
       return Array.isArray(options) && options.includes(value) ? [{ field, value }] : [];
     };
