@@ -39,7 +39,7 @@ export type CompileSqlResult = { readonly ok: true; readonly plan: SqlPlan } | {
 
 /** UTF-8 byte offset (what libpg-query reports) to offset, 1-based line and column, and the token there. */
 export function locate(source: string, byteOffset: number): Pick<SqlDiagnostic, "offset" | "line" | "column" | "token"> {
-  const prefix = new TextDecoder("utf-8", { ignoreBOM: true }).decode(new TextEncoder().encode(source).subarray(0, byteOffset));
+  const prefix = new TextDecoder("utf-8", { ignoreBOM: true, fatal: false }).decode(new TextEncoder().encode(source).subarray(0, byteOffset));
   const lines = prefix.split("\n");
   const rest = source.slice(prefix.length);
   const token = /^("[^"]*"|'[^']*'|[\w.$]+|\S)/.exec(rest)?.[0];
