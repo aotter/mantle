@@ -239,7 +239,10 @@ export function AtomGraph({
 
   React.useEffect(() => {
     if (selectedAtomId && atomsById.has(selectedAtomId)) {
-      if (selectedAtomId !== selectedId) inspect(selectedAtomId);
+      if (selectedAtomId !== selectedId) {
+        inspect(selectedAtomId);
+        setShowDetails(true);
+      }
       return;
     }
     if (selectedId) closeHud();
