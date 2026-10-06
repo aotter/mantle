@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Background, Controls, ReactFlow } from "@xyflow/react";
+import { Background, Controls, ReactFlow, type ReactFlowInstance } from "@xyflow/react";
 import { Maximize2 } from "lucide-react";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../../app/preferences";
@@ -25,10 +25,19 @@ export function ProcedureLogicPreview({ atom, schemas }: { atom: DeveloperAtom; 
     return { nodes, edges: flow.edges };
   }, [atom.id, title, rules, zh]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [expandedFlow, setExpandedFlow] = React.useState<ReactFlowInstance | null>(null);
+  React.useEffect(() => {
+    if (!expandedFlow) return;
+    const frame = window.requestAnimationFrame(() => {
+      void expandedFlow.fitView({ padding: 0.12, maxZoom: 1 });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [expandedFlow, selectedId]);
   const selectedRule = layout.nodes.find((node) => node.id === selectedId)?.data.rule as BusinessRule | undefined;
   if (atom.kind !== "Procedure" || atom.handler?.kind !== "sql" || !layout.nodes.length) return null;
 
   const canvas = (expanded: boolean) => <ReactFlow
+    onInit={expanded ? setExpandedFlow : undefined}
     nodes={layout.nodes.map((node) => ({ ...node, selected: node.id === selectedId }))}
     edges={layout.edges} nodeTypes={nodeTypes} colorMode={resolvedTheme}
     fitView fitViewOptions={{ padding: 0.12, maxZoom: expanded ? 1 : 0.65 }}
