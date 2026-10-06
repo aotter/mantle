@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Exercise the plugin as installed: no mantle-home checkout or dependency.
+// Exercise the plugin as installed: no private source checkout or dependency.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -11,8 +11,7 @@ const root = resolve(import.meta.dirname, '..');
 const skill = join(root, 'skills/mantle');
 const helper = join(skill, 'scripts/mantle-cloud.mjs');
 const provenance = JSON.parse(readFileSync(join(skill, 'scripts/VENDORED.json'), 'utf8'));
-assert.equal(provenance.repository, 'https://github.com/aotter/mantle-home');
-assert.match(provenance.commit, /^[a-f0-9]{40}$/);
+assert.equal(provenance.artifact, 'cloud-host.mjs');
 assert.equal(provenance.protocol, 4);
 assert.equal(createHash('sha256').update(readFileSync(join(skill, 'scripts/cloud-host.mjs'))).digest('hex'), provenance.sha256);
 
