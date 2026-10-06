@@ -11,6 +11,7 @@ const root = resolve(import.meta.dirname, '..');
 const skill = join(root, 'skills/mantle');
 const helper = join(skill, 'scripts/mantle-cloud.mjs');
 const provenance = JSON.parse(readFileSync(join(skill, 'scripts/VENDORED.json'), 'utf8'));
+assert.deepEqual(Object.keys(provenance).sort(), ['artifact', 'protocol', 'sha256']);
 assert.equal(provenance.artifact, 'cloud-host.mjs');
 assert.equal(provenance.protocol, 4);
 assert.equal(createHash('sha256').update(readFileSync(join(skill, 'scripts/cloud-host.mjs'))).digest('hex'), provenance.sha256);
