@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DIAGNOSTIC_CODES,
   PG_GRAMMAR,
@@ -9,6 +9,7 @@ import {
   type SqlDiagnosticCode,
   type SqlNode,
 } from "../../src/spec/index.js";
+import { locate } from "../../src/spec/infrastructure/sql/compileSql.js";
 import { parsePgSql } from "../../src/spec/infrastructure/sql/PgQueryParser.js";
 import { validateIr } from "../../src/d1/validator.js";
 
@@ -116,6 +117,18 @@ describe("compileSql", () => {
     expect(await pub(j("s.key = p.title"))).toMatchObject({ ok: true });
     expect(await pub(j("s.key = 'a'"))).toMatchObject({ ok: false, diagnostic: { code: "SQL_RELATION", message: /published/ } });
     expect(await pub("SELECT id FROM settings ORDER BY id")).toMatchObject({ ok: true });
+  });
+
+  it("reports UTF-8 syntax and refusal locations without a Node Buffer global", async () => {
+    await parsePgSql("SELECT 1");
+    vi.stubGlobal("Buffer", undefined);
+    try {
+      expect(locate("\uFEFF台北 OFFSET 1", new TextEncoder().encode("\uFEFF台北 ").byteLength)).toMatchObject({ offset: 4, column: 5, token: "OFFSET" });
+      const syntax = await compileSql("SELECT 台北 FORM items", ctxOf("view"));
+      expect(syntax).toMatchObject({ ok: false, diagnostic: { code: "SQL_SYNTAX", line: 1, column: 16, token: "items" } });
+      const refusal = await compileSql("SELECT '台北' FROM items OFFSET 1", ctxOf("view"));
+      expect(refusal).toMatchObject({ ok: false, diagnostic: { code: "SQL_UNSUPPORTED", token: "OFFSET" } });
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it("points at the right line, column and token (multi-line, after Chinese text, past a quoted keyword)", async () => {

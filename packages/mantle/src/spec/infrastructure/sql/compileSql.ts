@@ -39,7 +39,7 @@ export type CompileSqlResult = { readonly ok: true; readonly plan: SqlPlan } | {
 
 /** UTF-8 byte offset (what libpg-query reports) to offset, 1-based line and column, and the token there. */
 export function locate(source: string, byteOffset: number): Pick<SqlDiagnostic, "offset" | "line" | "column" | "token"> {
-  const prefix = Buffer.from(source, "utf8").subarray(0, byteOffset).toString("utf8");
+  const prefix = new TextDecoder("utf-8", { ignoreBOM: true, fatal: false }).decode(new TextEncoder().encode(source).subarray(0, byteOffset));
   const lines = prefix.split("\n");
   const rest = source.slice(prefix.length);
   const token = /^("[^"]*"|'[^']*'|[\w.$]+|\S)/.exec(rest)?.[0];
@@ -50,7 +50,7 @@ function toDiagnostic(e: SqlRefusal, source: string): SqlDiagnostic {
   // a clause the AST gives no position: point at its keyword, never at a quoted string or identifier
   // that spells it (literals are blanked to the same length, so indexes still match the source)
   const at = e.keyword?.exec(source.replace(/'(?:[^']|'')*'|"(?:[^"]|"")*"/g, (m) => " ".repeat(m.length)));
-  if (at) return { code: e.code, message: e.message, ...locate(source, Buffer.byteLength(source.slice(0, at.index))), token: at[0] };
+  if (at) return { code: e.code, message: e.message, ...locate(source, new TextEncoder().encode(source.slice(0, at.index)).byteLength), token: at[0] };
   return { code: e.code, message: e.message, ...(e.offset === undefined ? {} : locate(source, e.offset)) };
 }
 
