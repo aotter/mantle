@@ -1,0 +1,133 @@
+{
+  "name": "@aotter/mantle-ui",
+  "version": "0.2.0-alpha.3",
+  "description": "Shared interaction UI for Mantle Admin and MCP Apps: a framework-free controller (/controller), React components on top of it, the UI kit (/kit) and the MCP App (/mcp-app).",
+  "license": "Apache-2.0",
+  "homepage": "https://mantle.tools/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aotter/mantle.git",
+    "directory": "packages/mantle-ui"
+  },
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha",
+    "registry": "https://registry.npmjs.org"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./controller": {
+      "types": "./dist/controller/index.d.ts",
+      "import": "./dist/controller/index.js"
+    },
+    "./kit": {
+      "types": "./dist/kit/index.d.ts",
+      "import": "./dist/kit/index.js"
+    },
+    "./kit.css": "./dist/kit/kit.css",
+    "./tokens.css": "./dist/kit/tokens.css",
+    "./package.json": "./package.json",
+    "./mcp-app/interaction.html": "./dist/mcp-app/interaction.html",
+    "./mcp-app": {
+      "types": "./dist/mcp-app/index.d.ts",
+      "import": "./dist/mcp-app/index.js"
+    },
+    "./admin/index.html": "./dist/admin/index.html",
+    "./admin/preview.html": "./dist/admin/preview.html",
+    "./admin/host-bridge.js": "./dist/admin/host-bridge.js",
+    "./admin-preview": { "types": "./dist/admin-preview/index.d.ts", "import": "./dist/admin-preview/index.js" }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prebuild": "rm -rf dist .tsbuildinfo",
+    "build": "tsc -b tsconfig.lib.json && vite build --config vite.kit.config.ts && node scripts/emit-kit-styles.mjs && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts && vite build --config vite.preview.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json && tsc -p tsconfig.mcp-app.json && tsc --noEmit -p admin/tsconfig.json",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "input-otp": "^1.5.0",
+    "lucide-react": "^1.41.0",
+    "radix-ui": "^1.6.7",
+    "react": "^19.0.0",
+    "react-day-picker": "^10.0.1",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.6.0"
+  },
+  "peerDependenciesMeta": {
+    "class-variance-authority": {
+      "optional": true
+    },
+    "clsx": {
+      "optional": true
+    },
+    "input-otp": {
+      "optional": true
+    },
+    "lucide-react": {
+      "optional": true
+    },
+    "radix-ui": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-day-picker": {
+      "optional": true
+    },
+    "sonner": {
+      "optional": true
+    },
+    "tailwind-merge": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@aotter/mantle": "workspace:*",
+    "@dagrejs/dagre": "^3.1.1",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-query": "^5.102.8",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "@types/node": "catalog:",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@xyflow/react": "^12.11.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "input-otp": "^1.5.0",
+    "lucide-react": "^1.41.0",
+    "playwright": "catalog:",
+    "radix-ui": "^1.6.7",
+    "react": "^19.2.8",
+    "react-day-picker": "^10.0.1",
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "shadcn": "^4.19.1",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3",
+    "tw-animate-css": "^1.4.0",
+    "typescript": "catalog:",
+    "vite": "^8.2.2",
+    "vite-plugin-singlefile": "^2.3.0",
+    "vitest": "catalog:"
+  }
+}

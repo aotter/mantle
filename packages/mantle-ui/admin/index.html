@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <base href="/admin/" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin · mantle</title>
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/admin/favicon.svg" />
+    <meta name="theme-color" content="#f6f8fc" />
+    <meta name="theme-color" content="#02050d" media="(prefers-color-scheme: dark)" />
+    <!-- Blocking so system theme + browser-local override apply before first paint. -->
+    <script src="/admin/theme.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

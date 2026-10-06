@@ -15,15 +15,16 @@ No task implicitly authorizes publication; no manual package/tag writer exists.
 |---|---|---|
 | Reviewed source; unused version | Core source/packed-consumer gates, then immutable Core tag | Exact canonical merged PR SHA and version required |
 | Tag exists; registry candidates partial | Existing npm/GPR publication steps | Verify existing artifact identity; publish missing versions only |
-| Tag exists and all eleven npmjs packages already exist | Metadata verify, then channel promote and the GitHub release | Skip pack and immutable tarball compare. The controller tip must not rebuild published artifact identity. npm integrity metadata still has to be `sha512`. The public-registry Worker gate stays skipped |
+| Tag exists and both npmjs packages already exist | Metadata verify, then channel promote and the GitHub release | Skip pack and immutable tarball compare. The controller tip must not rebuild published artifact identity. npm integrity metadata still has to be `sha512`. The public-registry Worker gate stays skipped |
 | Tag exists on an ancestor of the dispatched tip; tip package versions still match | Resolve binds release identity to the tag SHA; later steps stay the existing writers | Controller-only recovery. Do not retag. The canonical merged-PR check uses the tag SHA. Fail when the tip version differs or the tag commit is not an ancestor |
 | Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels and `mantle-release` unchanged |
 | Consumer passes | That registry's promote step: monotonic channel add for every package | Same version is a no-op; older runs cannot move a channel backward. Public channels are only `alpha`, `beta`, `rc`, and `latest`. `mantle-release` is never removed |
 | Channels promoted or preserved | GitHub release step | Existing release identity or fail. Leftover `mantle-release` pointing at the last published candidate is expected |
 
-The public-registry gate uses a disposable copy of the directly authored
-`docs/examples/host-minimal-worker` reference, installs the exact candidate, then
-checks generation, skill projection, TypeScript and real Worker HTTP behavior.
+The public-registry gate (`scripts/check-worker-consumer.mjs --registry`) uses
+a disposable copy of the directly authored `docs/examples/reference-service`,
+installs the exact candidate, then runs its `pnpm check`: `mantle generate`,
+`generate --check`, TypeScript and a real `wrangler dev` smoke test.
 The same reference is gated against exact tarballs before Core tagging. It is
 a test/example, not a scaffold product or another repository release.
 
@@ -98,8 +99,9 @@ dist-tag DELETE only added failure and re-run state, and Actions
    PRs skip-release-notes. Do not duplicate release entries in CHANGELOG.md.
 2. Align every workspace package, plugin and marketplace ref to the version.
    The controller checks package.json files and plugin manifests only; docs
-   pins and the admin-ui registry dependency are hand-edited, so grep for the
-   old version until only lockfiles and registry-pinned examples remain:
+   pins and the reference service's exact `@aotter/mantle*` dependencies are
+   hand-edited, so grep for the old version until only lockfiles and
+   registry-pinned examples remain:
 
    ```sh
    OLD=<previous version> NEW=<version>
@@ -108,6 +110,9 @@ dist-tag DELETE only added failure and re-run state, and Actions
    node scripts/sync-plugin-manifests.mjs
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
+
+   The plugin's Cloud helper, `skills/mantle/scripts/mantle-cloud.mjs`, is
+   plain source with no build; it ships with the plugin version above.
 
    Leave the consumer cold-start entry **untagged**: `npx skills add
    aotter/mantle`, `/plugin marketplace add aotter/mantle`,
@@ -121,28 +126,34 @@ dist-tag DELETE only added failure and re-run state, and Actions
 3. Review API compatibility and migration instructions for actual consumers.
    Frozen legacy consumers stay on their pinned version; do not make them
    follow new Core.
-4. Run `pnpm check`, including exact packed Worker, optional products, Bun,
-   Vercel, skills, release invariants, types and tests. Inspect the umbrella
-   docs/skills payload: no workspace dependencies, secrets or local state.
+4. Run `pnpm check`, including the reference service from exact packed
+   tarballs, skills, release invariants, types and tests. The controller runs
+   the same `pnpm check` against a PostgreSQL service (`MANTLE_PG_URL`), then
+   native Bun conformance (`test:bun`), before it tags. Inspect the `@aotter/mantle` docs payload
+   (`scripts/sync-package-docs.mjs`: the upgrade guide, ADRs, handbook,
+   examples and package skills): no workspace dependencies, secrets or local
+   state.
 5. Freeze the PR head for self review; CI must pass before merge. Merge into
    `develop` with a merge commit for every version. For an alpha, dispatch
    release.yml from that merge with `version` (without v). For beta, RC and
    stable, continue with the promotion below. The controller refuses an
    untagged source that is no longer the expected branch tip.
 
-The eleven public packages remain in dependency order:
+The two public packages, in dependency order (0.2.0 folded the other twelve
+into `@aotter/mantle`'s subpaths and `@aotter/mantle-ui/admin`, ADR-0032 decision 13):
 
-1. @aotter/mantle-spec
-2. @aotter/mantle-admin-ui
-3. @aotter/mantle-runtime
-4. @aotter/mantle-indexeddb
-5. @aotter/mantle-web
-6. @aotter/mantle-admin
-7. @aotter/mantle-auth
-8. @aotter/mantle-bun
-9. @aotter/mantle-vercel
-10. @aotter/mantle-cloudflare
-11. @aotter/mantle
+1. @aotter/mantle-ui
+2. @aotter/mantle
+
+A `0.2.0-alpha.N` publishes on the same `alpha` channel as every alpha: the
+controller owns channels, so `publishConfig.tag` never picks one. Promoting it
+moves `@alpha` from 0.1.x to the breaking 0.2 line, and a later 0.1.x alpha
+would no longer promote, since the two lines do not order. Like every alpha it
+dispatches from `develop`, so the 0.2 line is released only after `0.2.x` is
+merged there: a same-repository PR from `0.2.x` into `develop`, merged with a
+merge commit. That merge is the dispatch source of an alpha whose version the
+branch already carries; otherwise the version PR follows it. A separate `next`
+channel for 0.2 would need a controller change first.
 
 ## Promote to main (beta, RC, stable)
 
@@ -208,9 +219,12 @@ issue with the run link and completion evidence.
 Core needs NPM_TOKEN for npmjs. Its job-scoped GITHUB_TOKEN creates the Core
 tag/release and mirrors GitHub Packages. No cross-repository fanout token is
 needed. Before tagging, verify credentials and new-version absence on both
-registries. Existing artifacts on retry must have matching integrity.
+registries. Existing artifacts on retry must have matching integrity. The
+preflight cannot prove write access for a package's first publish
+(`@aotter/mantle-ui` with 0.2): `npm access` lists only existing packages, so
+confirm NPM_TOKEN has `@aotter` scope write before the immutable tag.
 
-Completion requires the Core tag SHA, all eleven npmjs/GPR packages, exact
+Completion requires the Core tag SHA, both npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
 correct channel tags, and the GitHub release. Leftover `mantle-release`
 pointing at the last published candidate is expected. Retain run links and
@@ -232,7 +246,7 @@ from the source branch. Resolve recovers using the existing tag SHA when
 that commit is an ancestor of the tip and package versions on the tip still
 match. The tag owns the release SHA; the tip only carries controller fixes.
 Tagged recovery skips the Core source check because that tree was already
-released from the immutable tag. When `tag_exists` and all eleven npmjs
+released from the immutable tag. When `tag_exists` and both npmjs
 packages already exist at that version, that same existence check skips
 packing, immutable tarball comparison, and the public-registry Worker gate.
 The controller tip must not rebuild an artifact whose identity is already

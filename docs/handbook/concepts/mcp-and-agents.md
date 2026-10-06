@@ -1,134 +1,129 @@
 ---
-description: Mantle serves /mcp and /mcp/staff from the same Manifest — tool naming, the OAuth model, connecting a client, llms.txt, WebMCP and skills.
+description: The public and staff MCP surfaces, which tools a plan lists, how agents authenticate with OAuth, MCP Apps resources, and Admin's WebMCP catalog.
 ---
 # MCP and agents
 
-Mantle is an MCP server out of the box. Nothing is registered, exported or annotated to make it one: the same compiled plan that produces REST and Admin also produces the tool catalog, so an agent and a browser reach identical behavior through different transports. `/mcp` and `/mcp/staff` are that live-app catalog — Manifest → RuntimePlan verbs — not a how-to-author-Mantle manual. The CLI and pinned package docs are the authoring SSOT; MCP does not mirror the CLI. This page covers the two surfaces, how tools are named, how a client authenticates, and the rest of the agent-facing surface area.
+`createMcpSurface(runtime, { basePath, surface })` from `@aotter/mantle/mcp`
+serves a plan's tools over MCP's Streamable HTTP transport. The generated
+preset mounts two:
 
-## Two surfaces
+| Mount | Surface | Who | Authenticates with |
+|---|---|---|---|
+| `/mcp` | `public` | anyone; each tool's `requires` still applies | an OAuth bearer token (identity `mantle`), or whatever your resolver accepts |
+| `/mcp/staff` | `staff` | staff only | the same OAuth bearer token as `/mcp` (with identity `mantle`; any identity but `none`) |
 
-| Mount | Caller | Exposes |
-|---|---|---|
-| `/mcp` | Any caller the site's HTTP routes would accept: OAuth bearer, same-origin cookie session, or anonymous. Each tool's `requires` decides; a `tools/call` that needs identity answers `401` with the OAuth challenge | Views with `surface: public`, and Procedures reached by an MCP Trigger with `surface: public` |
-| `/mcp/staff` | Authenticated caller holding a staff role | Views with `surface: staff`, the generic authoring tools (rank-gated at `tools/call`), Procedures reached by an MCP Trigger with `surface: staff` |
+Both run behind `withCaller(resolver, …)`, so a tool sees the same
+[Caller](./authorization.md) as a REST call.
 
-Both accept tokens for one canonical protected resource, `${PUBLIC_ORIGIN}/mcp`. `/mcp/staff` is a stricter server-side role projection, not a second OAuth audience.
+## Which tools
 
-## Tool naming
+A surface lists exactly:
 
-A tool name is derived from a manifest name by `mcpToolNameSegment`: lowercased, with `-` replaced by `_`.
+- each Procedure bound by a Trigger `{ kind: mcp, surface: <this surface> }`,
+  named after the Procedure in snake case (`place-order` is `place_order`);
+- each View whose `surface` is this one, as a read-only tool with the View's
+  `input` plus `limit` and `cursor`.
 
-| Tool | Produced by | Surface |
-|---|---|---|
-| `query_view_<segment>` | Public or staff View (never internal) | The View's own `surface` |
-| `create_draft_<schema>`, `update_draft_<schema>` | A Schema with `lifecycle: publishing` | Staff |
-| `create_record_<schema>`, `update_record_<schema>` | A Schema with `lifecycle: operational` | Staff |
-| `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | Present when an applicable Schema exists | Staff |
-| `create_media_upload`, `commit_media_upload` | Media storage bound and at least one purpose declared | Staff |
-| `<procedure segment>` | A Trigger with `source.kind: mcp` | The Trigger's `source.surface` |
+A Schema is never a tool: there are no generated create, update or publish
+record tools. To let an agent change rows, declare a Procedure and an `mcp`
+Trigger for it.
 
-A Schema whose root `schema` sets `readOnly: true` gets no authoring tools; its declared Procedures still work. Update tools add required `id` and `expected_version` arguments, and fields carrying `x-mantle-bind` are stripped from authoring tool schemas because the runtime stamps them. Those generic names and the `create_draft_`, `update_draft_`, `create_record_`, `update_record_` and `query_view_` prefixes are reserved; a collision is rejected at validation with `MCP_TOOL_NAME_COLLISION`.
+- **Description.** A Procedure's or View's `description` is the tool's
+  description. Write it for an agent deciding what to call.
+  `MCP_TOOL_DESCRIPTION_MISSING` warns when an exposed Procedure has none.
+- **Annotations.** A View is `readOnlyHint: true`. A Procedure may declare
+  `mcp: { readOnlyHint, destructiveHint, openWorldHint }`, which the tool
+  carries as written.
+- **Output.** An object `output` becomes the tool's `outputSchema`, and the
+  result is returned as structured content.
+- **Errors.** A refused call is a tool error result carrying the diagnostic
+  code (`AUTH_DENIED`, `CONFLICT`, …). An anonymous call to a tool that
+  `requires` a caller is HTTP 401 with a `WWW-Authenticate` challenge, so an
+  MCP client starts OAuth. When no tool on the surface may be called
+  anonymously, every anonymous request is answered that way, `initialize`
+  included, so a client asks for sign-in as soon as it connects.
 
-Procedures are never exposed on their own. A Procedure becomes a tool only through a Trigger of `kind: mcp`, exactly as it becomes a route only through a Trigger of `kind: http`. Writing a Procedure with no Trigger gives you typed logic that nothing can call from outside — which is what a guard Procedure or a cron-invoked Procedure wants. See [Writes: Procedures, Triggers and hooks](./procedures-and-triggers.md).
+Listing is not permission: every `tools/call` checks `requires` and the guard
+again.
 
-## The OAuth model
+## OAuth for agents (identity `mantle`)
 
-The Cloudflare adapter runs one Better Auth 1.7 instance for staff identity, authorization, consent, client registration and MCP resource verification. Client identity is CIMD-first — the MCP 2026-07-28 Client ID Metadata Document profile, which is why the Worker needs the `global_fetch_strictly_public` flag to fetch client metadata across the public Internet boundary. Unauthenticated Dynamic Client Registration remains available as a bounded path with a 90-day default lifetime for clients that do not present CIMD. One non-colon scope, `mcp`, is advertised in `scopes_supported`, because clients such as claude.ai reject colon-shaped scopes; per-surface enforcement then happens server-side, not through scope strings. Authorization is session-bound: the JWT's originating Better Auth session must still exist and be unexpired, so signing out of Admin also ends that session's MCP access, and a refresh token is not an independent authorization. Invalid credentials on either mount, and anonymous requests to `/mcp/staff`, answer `401` with a `WWW-Authenticate` challenge pointing at the RFC 9728 protected-resource metadata document served under the auth mount; on `/mcp` an anonymous caller can list tools and call anonymous ones, and receives the same `401` challenge from the first `tools/call` whose target requires identity. Authorization endpoints live under `/api/auth/oauth2/*` and are discovered from the advertised metadata, never hard-coded.
+`createMantleAuth` runs Better Auth's OAuth provider with `mcpResource:
+{PUBLIC_ORIGIN}/mcp`. An MCP client discovers it from the 401 challenge's
+`resource_metadata` (`/.well-known/oauth-protected-resource/mcp`), uses a registered client,
+sends the user through sign-in and consent (Admin's `/admin/oauth/consent`, or the plain `/oauth/consent`), and calls `/mcp`
+with the token. The resolver (`createCallerResolver(auth, { jwtBearer: { audience, scopes: ["mcp"] } })`)
+verifies it on every request and reads the user's current role; nothing is
+cached. Every MCP surface also keeps the scope floor (ADR-0014): a credential
+other than a cookie session (an OAuth token, an API key, a personal token)
+must carry `mcp` before any tool is listed or called, or the request is HTTP
+403 `insufficient_scope`; `createMcpSurface`'s `requiredScopes` changes the
+floor. When an OAuth token lacks a scope a tool's `requires` names, the call
+is HTTP 403 with an `insufficient_scope` challenge naming the scopes to ask
+for.
 
-## Connecting a local client
+## Staff tools
 
-Start the dev server and use the exact origin it prints. Before touching client configuration, confirm the endpoint is reachable and protected:
-
-```sh
-curl -i http://localhost:8787/mcp
-```
-
-An OAuth-protected endpoint answers `401` with a `WWW-Authenticate` resource-metadata challenge before sign-in. A `503 setup_incomplete` instead means Auth configuration is missing; see [Authentication](../cloudflare/authentication.md).
-
-Prefer the client's native remote HTTP and OAuth support. Use a standard HTTP-to-stdio bridge only when the client accepts stdio MCP servers and cannot connect to remote HTTP directly:
-
-```sh
-npx -y mcp-remote http://localhost:8787/mcp
-```
-
-Mantle owns no local proxy and no auth-bypass mode. After connecting, inspect `tools/list`, then make one read-only `query_view_*` call before invoking any mutation — it proves the credential, the surface and the data path in one step that cannot damage anything. Use project-scoped client configuration where the client offers it, and never commit OAuth tokens or the bridge's token cache.
-
-> **Discovery is not enforcement**
-> `tools/list` filtering is UX. Every `tools/call` re-evaluates the manifest predicates and the guard through the same evaluator REST uses, so a guessed tool name gains nothing. See [Authorization](./authorization.md).
-
-## The agent-readable web surface
-
-When a Worker mounts public pages, the same content is served in a form agents can read without parsing HTML:
-
-- **Markdown mirrors.** Every entry page has a `.md` twin at the same path, and entry pages advertise it with `<link rel="alternate" type="text/markdown">`.
-- **`llms.txt` indexes.** `GET /llms.txt` lists the site; `GET /:locale/llms.txt` lists one locale. Pages hold 50 entries, ordered `updatedAt DESC, id DESC`, with a forward `cursor`, a `Link: ...; rel="next"` header and a `## Continue` section.
-- **Sitemap.** `GET /sitemap.xml` returns a urlset, or an index linking `/sitemap.xml?part=1&cursor=...` parts of up to 2,000 URLs each.
-
-Only `status: published` entries appear anywhere in that set. Details are in [Public web, SEO and cache](../cloudflare/public-web.md).
-
-## WebMCP in the browser
-
-### Admin: tools for the signed-in staff member
-
-Admin UI registers staff tools in browsers supporting `document.modelContext`.
-The catalog comes from `GET /admin/api/webmcp`; calls use
-`POST /admin/api/mcp` with the current staff session. Server-side role checks,
-Procedure authorization, and optimistic concurrency remain in force.
-`admin_get_context` and `admin_navigate` add page context and navigation.
-The WebMCP control appears after registration succeeds; unsupported browsers
-can continue using the regular Admin UI.
-
-Owners can explore application API documentation in Developer UI:
-`/admin/dev/docs/api` for HTTP, `/admin/dev/docs/mcp` for remote MCP, and
-`/admin/dev/docs/webmcp` for the Admin catalog and public-page capabilities.
-These pages show projected definitions. Remote clients connect to the host's
-advertised MCP endpoints using the authentication described above.
-See the [Admin API guide](../../../packages/mantle-admin/README.md#admin-webmcp).
-
-### Public pages: opt-in registration
-
-`@aotter/mantle-web/webmcp` exposes public capabilities as tools inside a page, for browsers implementing the draft imperative WebMCP API. Importing the subpath has no side effect; registration starts only when `bindWebMcp()` is called.
+The preset mounts the staff surface at `/mcp/staff` whenever it mounts `/mcp`
+and has an identity. It shares the `/mcp` audience, so one token with the `mcp`
+scope reaches both:
 
 ```ts
-import { bindWebMcp } from "@aotter/mantle-web/webmcp";
-
-const binding = await bindWebMcp();
-// later, when the page or app scope ends
-binding.dispose();
+const staffMcp = withCaller(resolver,
+  createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", resourceMetadata }),
+  { resourceMetadata });
 ```
 
-It feature-detects `document.modelContext` and returns `{ supported: false }` on browsers without it. This public-page binding registers only public capabilities. Staff tools use the separate authenticated Admin integration above. Existing host tool names are inspected and skipped, never replaced. A server-backed page discovers the safe descriptors published at `GET /api/views` and calls the same-origin `GET /api/views/<name>` routes; a browser-local SPA passes `projectCallableCapabilities(plan, { surface: "public" })` and its own invoker. Procedure tools must still originate from an explicit public MCP Trigger, and invocation enters the runtime through that Trigger, so browser tools cannot bypass validation or authorization. See [Runtime pipeline and adapters](./runtime-and-adapters.md).
+`resourceMetadata` is the `/mcp` metadata URL. The staff surface admits only
+callers with a staff role, and the role is read on every request.
 
-## Skills for your coding agent
+## WebMCP in Admin
 
-The installed SDK ships version-matched instructions for agents working on a Mantle project. Project them into the repository:
+`GET /admin/api/webmcp` returns `{ tools, routes }`: the staff tools (what
+`/mcp/staff` lists, in its default locale) and, for each tool, the Admin page
+it belongs to (a Procedure with a `target` maps to its collection, a View to its
+report). A browser agent in the console registers these tools and calls one
+with `POST /admin/api/webmcp/<tool>` and the input as the JSON body. Admin runs
+it as `/mcp/staff` would, with the same input, an `mcp` cause and the signed-in
+session, and answers `{ output }` or the refusal. Admin itself answers no MCP.
+An MCP App's `appOnly` tools are hidden from MCP clients only; in Admin the
+agent acts as the signed-in person, who can run every staff tool by hand.
 
-```sh
-pnpm exec mantle skills
-pnpm exec mantle skills --check
+## MCP Apps
+
+`createMcpSurface(runtime, { …, apps: { resources: [...] } })` serves `ui://`
+resources beside the tools. Each resource names the tools whose results it
+`renders`, and may name `appOnly` View tools that only the App can call. A
+client without MCP Apps support never sees app-only tools. The HTML is a static
+asset; caller data travels only in tool results.
+
+The preset serves Mantle's App on `/mcp/staff`:
+
+```ts
+import { planApp } from "@aotter/mantle/mcp";
+import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";
+
+createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }, resourceMetadata });
 ```
 
-This copies every skill the installed package marks `projection: project` — the develop skill among them — into matching `.agents/skills/mantle-*` and `.claude/skills/mantle-*` paths. Both layouts receive identical bytes; `--check` detects drift without writing. Skills that act destructively or target one platform stay out of that set and are opt-in. Manifest generation never rewrites agent instructions.
+`planApp` renders every View tool of the surface and embeds the plan's catalog
+in the HTML once: each View's columns as the Schema fields they read (so a
+value is labelled and formatted as Admin shows it), and, for a View that reads
+one table and outputs its `id`, the Procedure tools whose `target` is that
+Schema. A host that renders MCP Apps shows a View's rows in the chat; a row
+with an `id` (and a `version`, for an operation that locks one) offers those
+operations through the same review-and-submit panel Admin uses. The row as
+listed is what the person reviews: a version that moved since is the server's
+`CONFLICT`. The catalog is the plan's, not the caller's, so an operation the
+caller's role cannot run is offered and then refused. Every read and write is a
+tool call under the caller's own token. A rendered result names its tool in
+`_meta["net.aotter.mantle/tool"]`.
 
-The bootstrap `mantle` skill is also available from the plugin marketplace.
-The ongoing workflows come from the installed SDK through `mantle skills`:
+On the public surface, a member-facing App is the application's to build; the
+SDK attaches none. The `develop` skill's
+[MCP App recipe](../../skills/develop/mcp-app.md) lists the pieces.
 
-```sh
-# Canonical
-npx skills add aotter/mantle
+## Further reading
 
-# Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle
-/plugin install mantle@mantle
-```
-
-Never point a versioned project at a mutable branch. See [Project layout and the CLI loop](../start/project-and-cli.md).
-
-## Source
-- [`docs/adapter-guide.md`](../../../docs/adapter-guide.md)
-- [`docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md`](../../../docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md)
-- [`packages/mantle-spec/src/domain/service/McpToolNaming.ts`](../../../packages/mantle-spec/src/domain/service/McpToolNaming.ts)
-- [`packages/mantle-web/README.md`](../../../packages/mantle-web/README.md)
-- [`packages/mantle/README.md`](../../../packages/mantle/README.md)
-- [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
-- [`docs/skills/develop/SKILL.md`](../../skills/develop/SKILL.md)
+- [Reads: Views, REST and MCP](./views.md)
+- [HTTP, MCP, CLI and packages](../reference/surface.md)

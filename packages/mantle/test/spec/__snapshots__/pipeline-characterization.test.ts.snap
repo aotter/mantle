@@ -1,0 +1,182 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`sealed-pipeline characterization > freezes source-aware parse diagnostic order and withholds partial values 1`] = `
+{
+  "diagnostics": [
+    {
+      "candidates": undefined,
+      "code": "INVALID_MANIFEST_ENVELOPE",
+      "expected": undefined,
+      "message": "[doc 0] unexpected is not supported",
+      "path": "/unexpected",
+      "phase": "validate",
+      "severity": "error",
+      "source": {
+        "documentIndex": 0,
+        "path": "/unexpected",
+        "sourceId": "fixture:parse-invalid.yaml",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5,
+            "offset": 100,
+          },
+          "start": {
+            "column": 13,
+            "line": 4,
+            "offset": 95,
+          },
+        },
+      },
+      "suggestion": undefined,
+      "value": undefined,
+    },
+    {
+      "candidates": undefined,
+      "code": "INVALID_MANIFEST_ENVELOPE",
+      "expected": undefined,
+      "message": "[doc 1] YAML parse error: Flow sequence in block collection must be sufficiently indented and end with a ] at line 14, column 1:
+
+  title: [unterminated
+
+^
+",
+      "path": "/",
+      "phase": "validate",
+      "severity": "error",
+      "source": {
+        "documentIndex": 1,
+        "path": "/",
+        "sourceId": "fixture:parse-invalid.yaml",
+        "span": {
+          "end": {
+            "column": 2,
+            "line": 14,
+            "offset": 285,
+          },
+          "start": {
+            "column": 1,
+            "line": 14,
+            "offset": 284,
+          },
+        },
+      },
+      "suggestion": undefined,
+      "value": undefined,
+    },
+  ],
+  "ok": false,
+}
+`;
+
+exports[`sealed-pipeline characterization > freezes successful parse and semantic validation 1`] = `
+{
+  "procedures": [
+    {
+      "collectionActionSchema": undefined,
+      "guard": undefined,
+      "name": "authorize-order",
+    },
+    {
+      "collectionActionSchema": undefined,
+      "guard": undefined,
+      "name": "place-order",
+    },
+    {
+      "collectionActionSchema": undefined,
+      "guard": undefined,
+      "name": "cancel-order",
+    },
+  ],
+  "schemas": [
+    {
+      "name": "orders",
+      "translationParent": undefined,
+    },
+  ],
+  "triggers": [
+    {
+      "lifecycleSchema": undefined,
+      "name": "place-order-http",
+      "target": "place-order",
+    },
+    {
+      "lifecycleSchema": undefined,
+      "name": "place-order-mcp",
+      "target": "place-order",
+    },
+    {
+      "lifecycleSchema": "orders",
+      "name": "order-created",
+      "target": "place-order",
+    },
+  ],
+  "views": [
+    {
+      "guard": "authorize-order",
+      "name": "open-orders",
+    },
+  ],
+}
+`;
+
+exports[`sealed-pipeline characterization > keeps the pre-link semantic diagnostic order characterized 1`] = `
+[
+  {
+    "candidates": [],
+    "code": "TRIGGER_TARGET_PROCEDURE_UNKNOWN",
+    "expected": "name of a declared Procedure",
+    "message": "Trigger 'missing-target' targets unknown Procedure 'unknown-procedure'.",
+    "path": "/spec/target/procedure",
+    "phase": "validate",
+    "severity": "error",
+    "source": {
+      "documentIndex": 0,
+      "path": "/spec/target/procedure",
+      "sourceId": "fixture:link-invalid.yaml",
+      "span": {
+        "end": {
+          "column": 42,
+          "line": 6,
+          "offset": 193,
+        },
+        "start": {
+          "column": 24,
+          "line": 6,
+          "offset": 175,
+        },
+      },
+    },
+    "suggestion": undefined,
+    "value": "unknown-procedure",
+  },
+  {
+    "candidates": undefined,
+    "code": "TRIGGER_PATH_INVALID",
+    "expected": "path starting with '/api/'",
+    "message": "Trigger 'missing-target' has path '/outside-core' — http Trigger paths MUST start with '/api/' so adapters can route public pages and Procedure endpoints without ambiguity.",
+    "path": "/spec/source/path",
+    "phase": "validate",
+    "severity": "error",
+    "source": {
+      "documentIndex": 0,
+      "path": "/spec/source/path",
+      "sourceId": "fixture:link-invalid.yaml",
+      "span": {
+        "end": {
+          "column": 59,
+          "line": 5,
+          "offset": 150,
+        },
+        "start": {
+          "column": 45,
+          "line": 5,
+          "offset": 136,
+        },
+      },
+    },
+    "suggestion": undefined,
+    "value": "/outside-core",
+  },
+]
+`;

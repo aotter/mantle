@@ -1,0 +1,77 @@
+@import "tailwindcss";
+@source "../react/**/*.tsx";
+@source "./**/*.tsx";
+@source "../kit/**/*.tsx";
+
+/* `dark:` follows the host's theme (`data-theme`), and the system's only when the host sets none, as the palette below does */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]) *, :root:not([data-theme])) { @slot; }
+  }
+}
+
+/* Mantle tokens resolve to the host's MCP Apps style variables when the host
+   provides them (useHostStyles), and to the App's own palette otherwise. The
+   host's theme arrives as `data-theme` on the root; without one, the App
+   follows the system color scheme. */
+@theme inline {
+  --color-background: var(--color-background-primary, var(--mantle-app-background));
+  --color-foreground: var(--color-text-primary, var(--mantle-app-foreground));
+  --color-muted: var(--color-background-secondary, var(--mantle-app-muted));
+  --color-muted-foreground: var(--color-text-secondary, var(--mantle-app-muted-foreground));
+  --color-border: var(--color-border-primary, var(--mantle-app-border));
+  --color-destructive: var(--color-text-danger, var(--mantle-app-destructive));
+  --color-primary: var(--color-background-inverse, var(--mantle-app-primary));
+  --color-primary-foreground: var(--color-text-inverse, var(--mantle-app-primary-foreground));
+  /* the kit's field controls (SchemaFields) read these */
+  --color-input: var(--color-border-primary, var(--mantle-app-border));
+  --color-ring: var(--color-text-secondary, var(--mantle-app-muted-foreground));
+  --color-popover: var(--color-background-primary, var(--mantle-app-background));
+  --color-popover-foreground: var(--color-text-primary, var(--mantle-app-foreground));
+  --color-accent: var(--color-background-secondary, var(--mantle-app-muted));
+  --color-accent-foreground: var(--color-text-primary, var(--mantle-app-foreground));
+  --color-secondary: var(--color-background-secondary, var(--mantle-app-muted));
+  --color-secondary-foreground: var(--color-text-primary, var(--mantle-app-foreground));
+  --color-card: var(--color-background-primary, var(--mantle-app-background));
+  --color-card-foreground: var(--color-text-primary, var(--mantle-app-foreground));
+  --font-app: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+    --mantle-app-background: #ffffff;
+    --mantle-app-foreground: #18181b;
+    --mantle-app-muted: #f4f4f5;
+    --mantle-app-muted-foreground: #52525b;
+    --mantle-app-border: #e4e4e7;
+    --mantle-app-destructive: #b91c1c;
+    --mantle-app-primary: #18181b;
+    --mantle-app-primary-foreground: #fafafa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --mantle-app-background: #18181b;
+      --mantle-app-foreground: #fafafa;
+      --mantle-app-muted: #27272a;
+      --mantle-app-muted-foreground: #a1a1aa;
+      --mantle-app-border: #3f3f46;
+      --mantle-app-destructive: #f87171;
+      --mantle-app-primary: #fafafa;
+      --mantle-app-primary-foreground: #18181b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --mantle-app-background: #18181b;
+    --mantle-app-foreground: #fafafa;
+    --mantle-app-muted: #27272a;
+    --mantle-app-muted-foreground: #a1a1aa;
+    --mantle-app-border: #3f3f46;
+    --mantle-app-destructive: #f87171;
+    --mantle-app-primary: #fafafa;
+    --mantle-app-primary-foreground: #18181b;
+  }
+  * { border-color: var(--color-border); }
+  body { background: var(--color-background); color: var(--color-foreground); font-family: var(--font-app); margin: 0; }
+}

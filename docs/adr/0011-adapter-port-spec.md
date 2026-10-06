@@ -63,7 +63,7 @@ execution. Deferred envelopes carry persisted entry data and normalized actor
 metadata, never arbitrary original request input. Adapter-specific retry,
 delay, batch, DLQ, and message-size settings remain outside manifest grammar.
 The operational reference is
-[`docs/deferred-lifecycle-queues.md`](../deferred-lifecycle-queues.md).
+[`docs/deferred-lifecycle-queues.md`](https://github.com/aotter/mantle/blob/main/docs/deferred-lifecycle-queues.md).
 
 Identity, session, OAuth, and role enforcement are adapter-owned per
 ADR-0014. The runtime does not define `SessionRepository`,
@@ -227,7 +227,7 @@ There's no module-global state holding adapter-specific bindings.
 - Removing a port is also possible (if a port is found to overlap or be unnecessary), again by amending this ADR.
 
 **Discoverability for adapter authors**:
-- A future adapter author reads this ADR + [`docs/adapter-guide.md`](../adapter-guide.md), implements the two required ports, then wires boot and HTTP/MCP surfaces. That's the contract. No hidden state, no implicit assumptions about the HTTP framework.
+- A future adapter author reads this ADR + [`docs/adapter-guide.md`](https://github.com/aotter/mantle/blob/main/docs/adapter-guide.md), implements the two required ports, then wires boot and HTTP/MCP surfaces. That's the contract. No hidden state, no implicit assumptions about the HTTP framework.
 
 **Test ergonomics**:
 - Each port is small and isolated. Tests can mock individual ports without spinning up D1 or an OAuth provider.

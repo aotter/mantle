@@ -1,338 +1,246 @@
 ---
-description: Configure MANTLE_AUTH_MODE, secrets, the first owner and staff roles; understand which routes need a session.
+description: Sign-in for a Mantle 0.2.0 service — the three identity choices, createMantleAuth with email OTP, social and OAuth methods, the first owner, roles, production senders, and a custom CallerResolver.
 ---
 # Authentication
 
-Conventional Auth is chosen by one variable, `MANTLE_AUTH_MODE`, and fails closed when its configuration is incomplete. This page covers the two modes, the secrets each needs, first-owner bootstrap, roles, the routes that require a session, and the Better Auth integration surface.
+Mantle never owns your users. Choose once, in `mantle.config.json`:
 
-## Local Admin: email OTP
+| `identity` | Callers come from | Auth tables |
+|---|---|---|
+| `mantle` | `@aotter/mantle/auth`: Better Auth sign-in, staff roles, an OAuth server for MCP | Better Auth's, migrated by Better Auth |
+| `custom` | your `src/identity.ts`, a `CallerResolver` over your own sessions or tokens | none |
+| `none` | nobody: every caller is anonymous | none |
 
-The local human path does not use `MANTLE_AUTH_MODE` or GitHub. Pass `auth` to `createMantleWorker` with `email-otp`, `ConsoleEmailSender`, and `bootstrapOwner.match: "email"`. The one-time code is printed on the wrangler log. See [Quickstart: local Admin](../start/quickstart-admin.md). `ConsoleEmailSender` is for `wrangler dev` only; production needs a real sender. The official example binds `127.0.0.1:8787` and sets `PUBLIC_ORIGIN` to that origin; Better Auth rejects OTP with `INVALID_ORIGIN` when they diverge from the origin wrangler prints.
+A rerun of `mantle generate` cannot switch identity. Admin needs `mantle` or
+`custom`.
 
-With `auth` set, the mode matrix below is not read. Core still owns `/admin` and `/api/auth/*`.
+## Identity `mantle`
 
-For production email OTP, keep the custom `createAuth()` factory, replace
-`ConsoleEmailSender` with the application's production `EmailSender`, and keep
-`bootstrapOwner: { match: "email", value: <owner email> }`. Store the sender
-credentials and `BETTER_AUTH_SECRET` as Worker secrets. If the application has
-no transactional-email provider, use self-managed GitHub OAuth instead; never
-deploy console delivery.
+The generated `src/service.ts` builds the auth from `env`:
 
-## Mode matrix
-
-| Mode | Non-secret vars | Worker secrets | Must be absent |
-|---|---|---|---|
-| `self-managed` | `MANTLE_AUTH_MODE=self-managed`, `PUBLIC_ORIGIN`, `GITHUB_CLIENT_ID`, `ADMIN_GITHUB_LOGIN` | `GITHUB_CLIENT_SECRET`, `BETTER_AUTH_SECRET` | `MANTLE_HOSTED_AUTH_ISSUER`, `MANTLE_HOSTED_AUTH_CLIENT_ID` |
-| `hosted` | `MANTLE_AUTH_MODE=hosted`, `PUBLIC_ORIGIN`, `MANTLE_HOSTED_AUTH_ISSUER`, `MANTLE_HOSTED_AUTH_CLIENT_ID`, `ADMIN_GITHUB_LOGIN` | `BETTER_AUTH_SECRET` | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` |
-
-Validation rules:
-
-- `PUBLIC_ORIGIN` is the site's HTTPS origin without a trailing slash. When unset, the adapter falls back to `http://localhost:8787`. That fallback string is not the preferred local Admin pin. The origin wrangler prints is authoritative; the Admin OTP reference binds `127.0.0.1:8787` and sets `PUBLIC_ORIGIN` to the same origin.
-- Self-managed uses the site's own GitHub OAuth app. Register its callback URL as `<PUBLIC_ORIGIN>/api/auth/callback/github`.
-- Hosted is a public PKCE client with no client secret. `MANTLE_HOSTED_AUTH_ISSUER` must be an HTTPS root origin (no path, query or fragment; `http` only for loopback). `MANTLE_HOSTED_AUTH_CLIENT_ID` must be a URL on that same origin shaped `/clients/<id>`.
-- `ADMIN_GITHUB_LOGIN` must be a valid GitHub login.
-
-Any missing, invalid, partial or mixed-mode configuration produces a setup-incomplete Auth instance instead of a working one.
-
-## `503 setup_incomplete`
-
-With incomplete Auth, public routes keep working: public Views, public HTTP Triggers, public pages, `.md` mirrors, `llms.txt` and the sitemap. Auth-owned private routes return:
-
-```json
-{ "error": "setup_incomplete", "message": "Self-managed Auth configuration errors: BETTER_AUTH_SECRET is not set; ..." }
+```ts
+createMantleAuth({
+  database: env.DB, driver: d1Driver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,
+  methods: [{ kind: "email-otp", sender: new ConsoleEmailSender() }],
+  bootstrapOwner: { match: "email", value: env.ADMIN_EMAIL },
+  ipAddressHeaders: ["cf-connecting-ip"],
+  oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/admin/oauth/consent", scopes: ["mcp"], mcpResource: `${origin}/mcp` },
+});
 ```
 
-with status `503` and `private, no-store`. The affected paths are `/admin` and `/admin/*`, `/api/auth` and `/api/auth/*`, `/oauth` and `/oauth/*`, `/.well-known/oauth*`, `/mcp` and `/mcp/*`. The message lists every failing check.
+`consentPage` is Admin's consent page when the service mounts Admin (the
+preset does); without Admin it is `/oauth/consent`, the plain page
+`createAuthRoutes` serves. Both post the decision to `/oauth/consent`.
 
-## Secrets and local values
+then `createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } })`,
+`createAuthRoutes(auth, { resolver })` and an `AdminIdentity` over the auth's
+own methods. With dialect `postgres` the preset passes `database:
+pgPool(connect), driver: pgDatabaseDriver(connect)` over Hyperdrive; host `bun`
+passes `bunAuthDatabase(sql)` and `bunDatabaseDriver(sql)` (or the bun:sqlite
+`Database` and `bunSqliteDriver(db)`), with `ipAddressHeaders:
+["x-mantle-client-ip"]`, which its entry sets from the socket.
+
+### Local sign-in
+
+Install auth and MCP dependencies at the versions declared in the installed
+Core package's `peerDependencies`; the generator prints a versioned install
+command and refuses incompatible installed peers before writing generated files.
+The preset owns convergence; a normal fresh local database needs no manual auth
+migration. `auth.ready` initializes Better Auth's context; auth tables are prepared
+lazily before authenticated operations. Mantle runs Better Auth's explicit schema
+validation after that preparation, including when the schema ledger is current;
+an incompatible existing schema still rejects authentication.
+
+#### Upgrading an existing 1.7.0–1.7.2 auth database
+
+Those Better Auth versions created a required `account.issuer` column that
+1.7.7 no longer writes. Automatic additive convergence preserves that column;
+it cannot make a required unused column safe for future inserts. Before starting
+the upgraded service, the database owner must migrate this legacy constraint.
+Fresh databases need no such step.
+
+For PostgreSQL, first inspect the service's own database/schema and back it up:
+
+```sql
+SELECT table_schema, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_name = 'account' AND column_name = 'issuer';
+```
+
+If the legacy column is required and has no default, apply this in the service's
+auth schema (the example assumes it is selected by `search_path`):
+
+```sql
+BEGIN;
+ALTER TABLE "account" ALTER COLUMN "issuer" DROP NOT NULL;
+COMMIT;
+```
+
+This retains every row and existing issuer value. It changes only the obsolete
+constraint; new accounts may leave that column null. Restart the service after
+the migration so Better Auth checks the repaired schema in a fresh context.
+Verify existing users, roles, sessions and content rows, then sign in again.
+Do not drop auth tables or disable schema validation. This applies to native Bun
+PostgreSQL and Cloudflare/Hyperdrive PostgreSQL alike.
+
+For D1/SQLite, `ALTER COLUMN` is unavailable. Use a database-owner-reviewed table
+rebuild that retains every column/value, index and foreign-key relationship while
+making the legacy issuer nullable; do not run the PostgreSQL statement there.
+See Better Auth's [1.7 upgrade guide](https://www.better-auth.com/docs/guides/1-7-upgrade-guide).
+Mantle's portable auth facade does not silently perform engine-specific table
+rebuilds or remove historical fields.
 
 ```sh
-wrangler secret put BETTER_AUTH_SECRET
-wrangler secret put GITHUB_CLIENT_SECRET   # self-managed only
+cp .dev.vars.example .dev.vars   # ADMIN_EMAIL, a random BETTER_AUTH_SECRET, PUBLIC_ORIGIN=http://127.0.0.1:8787
+pnpm exec wrangler dev --local
+curl -X POST http://127.0.0.1:8787/api/auth/email-otp/send-verification-otp \
+  -H 'content-type: application/json' -H 'origin: http://127.0.0.1:8787' \
+  -d '{"email":"you@example.com","type":"sign-in"}'
 ```
 
-Non-secret vars go in `wrangler.jsonc` under `vars`. For local development put the same names in `.dev.vars`, which the minimal reference ignores in git (`.dev.vars*`). Never commit a secret.
+`ConsoleEmailSender` prints the code to the wrangler log; post it to
+`/api/auth/sign-in/email-otp` with `{ email, otp }` to get a session cookie.
+The preset prints codes only when `PUBLIC_ORIGIN` is set to a loopback `http:`
+origin and both secrets exist. Otherwise it uses
+`createSetupIncompleteAuth`, which refuses sign-in with a message, so a
+deployed service never prints codes to its log.
 
-## First owner
+On Bun, copy `.env.example` to `.env`, set `PUBLIC_ORIGIN=http://127.0.0.1:3000`
+and run `bun src/index.ts`; send the same HTTP requests to port 3000. Codes print
+to the Bun console. Normalize test email addresses to lowercase when matching
+that output. Treat codes and session cookies as secrets in test logs.
 
-Every new user receives the default role `user`, which has no staff access. The first sign-in whose GitHub login matches `ADMIN_GITHUB_LOGIN` is promoted to `owner`. Promotion is blocked once any staff user exists, so the variable only bootstraps an empty site.
+Local clients share the loopback socket IP and therefore share sign-in limits.
+Multi-user smoke tests must respect the retry window (HTTP 429) rather than
+spoofing forwarding headers or disabling production limits. `rateLimit: {
+window: 60, max: 100 }` changes the general quota, but plugin-specific OTP limits
+still apply; changing it is not a way to bypass those limits.
 
-## Roles
+### MCP clients for members
 
-Staff roles are `owner`, `editor` and `contributor`, in descending order. Owners manage them in Admin; the underlying routes are:
+`/admin/sign-in` suits staff. When members connect an MCP client to the public
+`/mcp`, set `loginPage` to the service's own sign-in page. That page must
+continue the authorization: Better Auth sends the browser there with the
+request signed, and the sign-in carries it back as `oauth_query`, then follows
+the `url` it answers (consent) instead of the page's own destination:
 
-| Route | Minimum role |
-|---|---|
-| `GET /admin/api/staff`, `PATCH /admin/api/staff/:id/role` (a role or `null` to revoke) | `owner` |
-| `POST /admin/api/staff/invitations`, `DELETE /admin/api/staff/invitations/:id` | `owner` |
-| `GET /admin/api/site-settings`, `PATCH /admin/api/site-settings` | `owner` |
-| `GET /admin/api/members` | `editor` |
-| `POST /admin/api/entries/:id/publish`, `POST /admin/api/entries/:id/unpublish`, `DELETE /admin/api/entries/:id` | `editor` |
+```ts
+import { signedOAuthQuery } from "@aotter/mantle-ui/kit";
 
-The staff role is re-read from D1 on every protected REST and MCP call; a revoked role takes effect on the next request. Manifest-level rules such as `requires.auth` are covered in [Authorization](../concepts/authorization.md) and the [authorization reference](../reference/authorization.md).
+const oauthQuery = signedOAuthQuery(window.location.search);
+const res = await fetch("/api/auth/sign-in/email-otp", { method: "POST", credentials: "include",
+  headers: { "content-type": "application/json" }, body: JSON.stringify({ email, otp, ...(oauthQuery ? { oauth_query: oauthQuery } : {}) }) });
+const { url } = await res.json();
+location.assign(url ?? "/account");
+```
 
-## What needs a session
+The generated preset does not enable dynamic client registration (DCR).
+An `access_denied` response from `/api/auth/oauth2/register` does not mean
+member OAuth is broken. An owner can register a known local client through
+the public `MantleAuth` API, without opening DCR:
 
-| Surface | Requirement |
-|---|---|
-| `/admin`, `/admin/api/*` | Staff session; role gates per route |
-| `/api/auth/*`, `/oauth/*`, `/.well-known/oauth*` | Auth-owned; public endpoints of the OAuth flow |
-| `/mcp` | Same caller resolution as HTTP routes (bearer, same-origin cookie session, or anonymous); each tool's `requires` gates the call, and a call that needs identity answers `401` with a `WWW-Authenticate` challenge |
-| `/mcp/staff` | Authenticated caller with a staff role |
-| `/<locale>/<segment>/<slug>?preview=1` | Staff session (`401` without a session, `403` without a staff role) |
-| Public Views, public HTTP Triggers, public pages, `.md`, `llms.txt`, sitemap | None, unless the manifest declares `requires` |
+```ts
+const client = await auth.registerOAuthClient({
+  requestHeaders: ownerRequest.headers,
+  clientName: "Local MCP client",
+  redirectUris: ["http://127.0.0.1:3456/callback"],
+  applicationType: "native",
+  tokenEndpointAuthMethod: "none",
+  grantTypes: ["authorization_code", "refresh_token"],
+  responseTypes: ["code"],
+  scope: ["mcp"],
+  requirePKCE: true,
+});
+```
 
-MCP tokens are session-bound: signing out of Admin ends MCP access. See [MCP and agents](../concepts/mcp-and-agents.md).
+Use a real owner session, keep persisted user consent, and configure the MCP
+client with the returned `clientId`. This belongs in an owner-controlled
+management path, not an anonymous registration handler. Choose DCR separately
+according to the host's registration policy.
 
-## Session cache and database replacement
+When DCR is enabled, registration takes a client that names no `application_type`
+and registers only `http` loopback redirects (`localhost`, `127.0.0.1`,
+`[::1]`) as `native` (RFC 8252), which is how local MCP clients register; any
+other registration is checked as Better Auth checks it (`web` needs `https` on a
+non-loopback host).
 
-When optional session caching is enabled, the cache is derived from the
-canonical store, not a second identity authority. Auth prefixes keys with
-`better-auth:<store-instance-id>:`. Preparing a new store gives it a distinct
-identity, so reusing the same KV namespace after replacing D1 cannot resurrect
-the previous store's cached sessions. Ordinary preparation of the same store
-preserves its identity.
+### Production
 
-Custom low-level Auth composition must prepare the Mantle store before cached
-Auth operations; do not construct cache keys or seed the identity yourself.
-OTP verification remains in the primary database and rate limiting remains
-isolate-local. Revocation/user-update cache invalidation still follows KV
-propagation; the namespace change is isolation across stores, not a promise of
-instant global invalidation. See the [Auth decision](../../adr/0014-auth-better-auth-and-multi-tenant-mcp.md).
+Replace the local choices in `src/service.ts`:
 
-## Better Auth configuration
-
-`createAuth()` owns the Worker lifecycle, Admin metadata, sender integration,
-bootstrap rules, roles and MCP invariants. Method-specific configuration stays
-native to Better Auth under `options`, so provider updates and type inference do
-not need a matching Mantle DSL update. There is deliberately no
-`Partial<BetterAuthOptions>` deep merge.
+- **A real sender.** Implement `EmailSender` (`send({ to, subject, text, html?, locale, category? })`)
+  over your provider, and pass it to the email method. Drop the loopback check
+  once the sender is real.
+- **Secrets.** `wrangler secret put BETTER_AUTH_SECRET` (32+ random bytes) and
+  `wrangler secret put ADMIN_EMAIL`; set `PUBLIC_ORIGIN` to the deployed origin
+  in `vars`.
+- **Methods.** `methods` takes any mix:
 
 ```ts
 methods: [
-  {
-    kind: "social",
-    provider: "google",
-    options: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, accessType: "offline" },
-  },
-  {
-    kind: "social",
-    provider: "apple",
-    options: async () => ({ clientId: env.APPLE_CLIENT_ID, clientSecret: await loadAppleSecret(env) }),
-  },
-  {
-    kind: "email-otp",
-    sender,
-    options: { otpLength: 8 },
-  },
+  { kind: "email-otp", sender },
+  { kind: "magic-link", sender },
+  { kind: "social", provider: "google", options: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } },
+  { kind: "oauth", displayName: "Company SSO", options: { providerId: "sso", discoveryUrl: …, clientId: …, clientSecret: … } },
 ]
 ```
 
-Email OTP storage defaults to a keyed HMAC-SHA-256 of the code using
-`BETTER_AUTH_SECRET`. Magic-link tokens remain `hashed` (high-entropy).
-Explicit official overrides remain available, including `plain` and custom
-hashing/encryption:
+`options` is Better Auth's own configuration for that method, passed through.
+`appleClientSecret` builds Apple's signed client secret. `GET /api/auth/methods`
+lists what the service offers, for your sign-in page.
+
+Other options: `rateLimit`, `trustedOrigins`, `cookiePrefix`,
+`crossSubDomainCookies` (first-party apps under one parent domain),
+`accountLinking` (passed to Better Auth; by default a social sign-in links to
+an existing row only when the provider verified the email and the local row is
+verified), `staffInvitationSender`, `sessionCache`, and raw Better Auth
+`plugins`.
+
+### The first owner and roles
+
+`bootstrapOwner: { match: "email", value }` (or `{ match: "github-login", value }`)
+makes the first matching sign-in the `owner`. Staff roles are `owner`,
+`editor` and `contributor`; a user without one is a member. Owners manage staff
+through Admin's API (`/admin/api/staff`, `/staff/invitations`), which calls
+Better Auth's admin API with the owner's own request. The resolver reads the
+role on every request, so a revoked role takes effect at once.
+
+### Account deletion
+
+`auth.deleteUser(userId)` deletes a user through Better Auth, sessions
+included, and the email codes still pending for its address. Never delete auth
+rows with SQL. To require a recent sign-in first, compare
+`(await auth.getSession(request)).session.createdAt` with the current time.
+
+## Identity `custom`
+
+`src/identity.ts` exports `resolveCaller: CallerResolver`. It throws until you
+implement it, so a request fails loudly instead of running as anonymous.
 
 ```ts
-{ kind: "email-otp", sender, options: {
-  storeOTP: { encrypt: encryptOtp, decrypt: decryptOtp },
-} }
-{ kind: "magic-link", sender, options: {
-  storeToken: { type: "custom-hasher", hash: hashMagicToken },
-} }
+export const resolveCaller: CallerResolver = async (request) => {
+  const token = request.headers.get("authorization")?.replace(/^Bearer /, "");
+  if (!token) return { caller: { kind: "anonymous" } };   // nothing presented
+  const user = await verifyMyToken(token);                // your own auth
+  if (!user) return { invalid: true };                    // presented and bad: 401, never anonymous
+  return { caller: {
+    kind: "user", subject: `myapp:${user.id}`, role: user.isAdmin ? "owner" : null,
+    scopes: user.scopes, credential: "oauth", credentialId: user.tokenId, clientId: null,
+  } };
+};
 ```
 
-For complete callback ownership, register an official plugin instance directly.
-Raw plugins do not add a button to `Auth.methods`; the application owns that UI.
-Duplicate plugin ids fail at construction rather than silently replacing one:
+- `subject` is stable and unique across every issuer you accept; namespace it
+  when there are several. Never use an email.
+- Map your roles onto `owner`, `editor` and `contributor`, or leave `role`
+  `null` and authorize with scopes and guards.
+- Admin gets no `identity` with `custom`, so it hides user management.
+  Implement `AdminIdentity` (`directory`, `roles`, `deleteUser`, each optional)
+  from `@aotter/mantle/admin` to show it.
 
-```ts
-createAuth({
-  database: env.DB,
-  baseURL: env.PUBLIC_ORIGIN,
-  secret: env.BETTER_AUTH_SECRET,
-  methods: [],
-  plugins: [emailOTP({ sendVerificationOTP, storeOTP: "encrypted" })],
-});
-```
+[Mantle on ChatGPT Sites](./chatgpt-sites.md) is a worked `custom` identity.
 
-When several first-party apps share one parent domain that the same party controls, configure shared cookies explicitly. `cookiePrefix` is required whenever more than one Better Auth app writes cookies under that domain; `trustedOrigins` is the auth-flow trust list, not a CORS policy.
+## Further reading
 
-```ts
-const auth = createAuth({
-  database: env.DB,
-  baseURL: "https://platform.example.com",
-  secret: env.BETTER_AUTH_SECRET,
-  methods,
-  trustedOrigins: ["https://example.com", "https://www.example.com"],
-  cookiePrefix: "example-platform",
-  crossSubDomainCookies: { enabled: true, domain: "example.com" },
-});
-```
-
-Shared cookies do not cross registrable domains. A browser never sends an `example.com` cookie to `customer.com`. For a customer-owned domain, use an OAuth/OIDC broker flow: the customer site redirects to the identity provider's authorize endpoint, receives the callback, verifies the response and creates its own local session. The broker returns identity; the customer site remains the authority for its members and grants.
-
-### Account linking across providers
-
-One person signing in with Google, then with GitHub, may land on one user row
-or be refused — Better Auth decides this, and `createAuth()` does not override
-it. Left unconfigured, Better Auth's own defaults apply: implicit linking is
-on, so a social sign-in whose provider reports a verified email attaches to the
-existing row carrying that email. It never creates a second row for the same
-address; when linking is not permitted the sign-in fails with
-`account not linked`.
-
-Two defaults are worth knowing before you change anything. `requireLocalEmailVerified`
-is on, so linking is refused while the *local* row is still unverified — this is
-what stops someone pre-registering an unverified row at your user's address and
-having that user's Google identity attach to it. It is also why a staff invitation
-(`inviteUser` writes `emailVerified: 0`) cannot be claimed by a social sign-in
-until the invitee verifies by email once. Separately, `trustedProviders` is
-empty, so every provider must supply `email_verified` to link at all.
-
-Pass `accountLinking` to scope this. It is forwarded verbatim:
-
-```ts
-const auth = createAuth({
-  database: env.DB,
-  baseURL: env.PUBLIC_ORIGIN,
-  secret: env.BETTER_AUTH_SECRET,
-  methods,
-  accountLinking: {
-    // Accept these providers' word without an `email_verified` claim.
-    trustedProviders: ["google", "github"],
-  },
-});
-```
-
-Listing a provider in `trustedProviders` asserts that it verifies the addresses
-it returns; a provider that does not turns the list into an account-takeover
-path. To go the other way and keep every identity separate, set
-`disableImplicitLinking: true` (users may still link deliberately via
-`linkSocial()` while signed in) or `enabled: false` to refuse linking outright.
-
-## Self-hosted and hosted
-
-A free self-hosted site runs every method `createAuth()` exposes: Better Auth social providers, email OTP, magic link, and parent-domain SSO. The owner supplies provider credentials, email sending and cookie policy. Hosted auth is an operations convenience: the platform holds provider and email configuration and registers the site as a PKCE client, while the site still owns grants, members, content and `ctx.user`/`ctx.staff` mapping. Neither mode changes the runtime's authorization vocabulary.
-
-## Replacing Auth construction
-
-```ts
-createMantleWorker({
-  plan,
-  auth: (env) => createAuth({ /* curated, site-specific methods */ }),
-});
-```
-
-With `auth` set, `MANTLE_AUTH_MODE` and the mode variables are not read. Core still owns the Auth routes: the factory's `basePath` joins the reserved paths, the MCP resource defaults to `auth.mcpResource ?? <PUBLIC_ORIGIN>/mcp`, and a rejected `auth.ready` evicts the isolate's assembly. Keep the D1 `DB` binding; Better Auth tables live there.
-
-## OAuth resource primitives
-
-When one Mantle site is an OAuth client of another, request a stable RFC 8707
-resource and use standard `offline_access` when refresh is needed:
-
-```ts
-const clientAuth = createAuth({
-  // database, baseURL, secret, other methods...
-  methods: [{
-    kind: "oauth",
-    options: {
-      providerId: "mantle-platform",
-      clientId: env.PLATFORM_CLIENT_ID,
-      discoveryUrl: "https://platform.example.com/api/auth/.well-known/openid-configuration",
-      scopes: ["openid", "offline_access", "accounts:read"],
-      authorizationUrlParams: { resource: "https://api.example.com" },
-      tokenUrlParams: { resource: "https://api.example.com" },
-      refreshTokenParams: { resource: "https://api.example.com" },
-    },
-  }],
-});
-
-const { accessToken, accessTokenExpiresAt, scopes } =
-  await clientAuth.getProviderAccessToken(request, "mantle-platform");
-```
-
-The server-side getter is bound to the current local session request and never
-returns a refresh token or account row. On the provider:
-
-```ts
-const providerAuth = createAuth({
-  // database, baseURL, secret, methods...
-  oauthProvider: {
-    loginPage: "/sign-in",
-    consentPage: "/consent",
-    scopes: ["openid", "offline_access", "accounts:read"],
-    resources: ["https://api.example.com"],
-  },
-});
-
-const verification = await providerAuth.verifyOAuthAccessToken(request, {
-  audience: "https://api.example.com",
-  scopes: ["accounts:read"],
-});
-```
-
-The verifier accepts JWT access tokens only and checks the configured issuer,
-JWKS/signature, audience, time claims, required scopes, and—when passed the
-request—DPoP proof binding with database-backed replay protection. It returns
-only `userId`, `clientId`, `credentialId`, and scopes. Opaque tokens are
-rejected; there is no introspection fallback.
-
-## Enterprise-Managed Authorization
-
-MCP's [Enterprise-Managed Authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization)
-extension lets an enterprise IdP decide which employees may reach an MCP
-server. The MCP client exchanges the user's IdP login for an ID-JAG (identity
-assertion authorization grant) and presents it to the server's token endpoint
-as `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`; no consent page
-is shown. Everything after that is an ordinary access token.
-
-Core does not know any issuer or JWKS. The token grant is a
-`@better-auth/oauth-provider` extension supplied by the adopter through
-`oauthProvider.extensions`, appended after Core's own claims extension:
-
-```ts
-import { identityAssertionAuthorizationGrant } from "@aotterclam/id-jag";
-
-const auth = createAuth({
-  // database, baseURL, secret, methods...
-  oauthProvider: {
-    loginPage: "/admin/sign-in",
-    consentPage: "/oauth/consent",
-    scopes: ["mcp", "offline_access"],
-    mcpResource: env.PUBLIC_ORIGIN + "/mcp",
-    extensions: [
-      identityAssertionAuthorizationGrant({
-        issuer: env.ENTERPRISE_IDP_ISSUER,
-        jwksUrl: env.ENTERPRISE_IDP_JWKS_URL,
-        authorizationServer: env.PUBLIC_ORIGIN,
-        resource: env.PUBLIC_ORIGIN + "/mcp",
-        scopes: ["mcp"],
-        fetchJwks: (input, init) => fetch(input, { ...init, redirect: "manual" }),
-      }),
-    ],
-  },
-});
-```
-
-The extension validates the assertion's signature, issuer, audience and
-lifetime, maps its subject to a user, and issues tokens through the provider's
-shared token path, so `verifyOAuthAccessToken`, DPoP and the MCP challenge
-behave exactly as for interactive grants. `@aotterclam/id-jag` is a reference
-implementation, not a Core dependency; any `OAuthProviderExtension` works.
-Extensions may also add client-authentication strategies, discovery metadata
-and additional claims. The same passthrough applies without `mcpResource`.
-
-## Source
-- [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
-- [`packages/adapters/cloudflare/src/auth/conventionalAuth.ts`](../../../packages/adapters/cloudflare/src/auth/conventionalAuth.ts)
-- [`packages/adapters/cloudflare/src/auth/createAuth.ts`](../../../packages/adapters/cloudflare/src/auth/createAuth.ts)
-- [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts)
-- [`packages/adapters/cloudflare/src/mount/mountPublicRoutes.ts`](../../../packages/adapters/cloudflare/src/mount/mountPublicRoutes.ts)
-- [`packages/adapters/cloudflare/src/mount/mountMcp.ts`](../../../packages/adapters/cloudflare/src/mount/mountMcp.ts)
-- [`packages/mantle-admin/src/mountMantleAdmin.ts`](../../../packages/mantle-admin/src/mountMantleAdmin.ts)
-- [`docs/auth-hosting-model.md`](../../../docs/auth-hosting-model.md)
-- [`docs/adapter-guide.md`](../../../docs/adapter-guide.md)
-- [`docs/examples/host-local-admin-otp/src/index.ts`](../../../docs/examples/host-local-admin-otp/src/index.ts)
-- [`docs/examples/host-local-admin-otp/.dev.vars.example`](../../../docs/examples/host-local-admin-otp/.dev.vars.example)
-- [`docs/examples/host-minimal-worker/.gitignore`](../../../docs/examples/host-minimal-worker/.gitignore)
+- [Authorization](../concepts/authorization.md)
+- [MCP and agents](../concepts/mcp-and-agents.md): OAuth for MCP clients

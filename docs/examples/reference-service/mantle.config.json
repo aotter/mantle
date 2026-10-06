@@ -1,0 +1,1 @@
+{ "version": 2, "identity": "mantle", "features": ["mcp", "admin", "web"] }

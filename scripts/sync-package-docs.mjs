@@ -1,37 +1,20 @@
 #!/usr/bin/env node
+// Invoked by packages/mantle pre/postpack with cwd = the package dir. Ships the docs that describe 0.2.0: the upgrade guide, the
+// ADRs, the handbook, the examples and the package skills. The other top-level docs/*.md are contributor notes from 0.1.x and stay out.
 import { cpSync, rmSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(scriptDir, "..");
-const clean = process.argv.includes("--clean");
-// Invoked by packages/mantle pre/postpack with cwd = the package dir.
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = process.cwd();
+const target = resolve(packageRoot, "docs");
+const SHIPPED = ["upgrade-0.1-to-0.2.md", "adr", "handbook", "examples", "skills"];
+// Runnable docs may have been installed or run locally; never publish that state.
+const LOCAL = ["node_modules", ".wrangler", ".dev.vars", "pnpm-lock.yaml"];
 
-for (const dir of ["docs"]) {
-  const target = resolve(packageRoot, dir);
-  rmSync(target, { recursive: true, force: true });
-  if (!clean) {
-    cpSync(resolve(repoRoot, dir), target, {
-      recursive: true,
-      // Runnable docs may have been installed locally; never publish that state.
-      filter: (path) => {
-        const name = basename(path);
-        if (["node_modules", ".git", ".mantle", ".wrangler", ".agents", ".claude", ".sites-runtime", "dist", "_mantle", "pnpm-lock.yaml"].includes(name)) {
-          return false;
-        }
-        if (name.endsWith(".example")) return true;
-        return !/^\.(?:env|dev\.vars)(?:\.|$)/.test(name);
-      },
-    });
+rmSync(target, { recursive: true, force: true });
+if (!process.argv.includes("--clean")) {
+  for (const path of SHIPPED) {
+    cpSync(resolve(repoRoot, "docs", path), resolve(target, path), { recursive: true, filter: (p) => !LOCAL.includes(basename(p)) });
   }
-}
-
-const skillsTarget = resolve(packageRoot, "skills");
-rmSync(skillsTarget, { recursive: true, force: true });
-if (!clean) {
-  cpSync(resolve(repoRoot, "docs/skills"), skillsTarget, { recursive: true });
-  cpSync(resolve(repoRoot, "skills/install"), resolve(skillsTarget, "install"), { recursive: true });
-  cpSync(resolve(repoRoot, "skills/README.md"), resolve(skillsTarget, "README.md"));
 }

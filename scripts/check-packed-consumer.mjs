@@ -18,7 +18,7 @@ import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const packages = JSON.parse(execFileSync(
   "pnpm",
-  ["--filter", "@aotter/mantle...", "list", "--depth", "-1", "--json"],
+  ["--filter", "@aotter/mantle*", "list", "--depth", "-1", "--json"],
   { cwd: root, encoding: "utf8" },
 )).filter((pkg) => !pkg.private).map((pkg) => [pkg.name, pkg.path]);
 const separator = process.argv.indexOf("--");
@@ -40,7 +40,7 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   if (!isWithin(source, join(source, "output")) || isWithin(source, join(tmpdir(), "output"))) {
     throw new Error("packed-consumer output boundary self-test failed");
   }
-  const archived = archiveProject(join(root, "docs/examples/host-minimal-worker"));
+  const archived = archiveProject(join(root, "docs/examples/reference-service"));
   const entries = execFileSync("tar", ["-tf", "-"], { input: archived.bytes, encoding: "utf8" }).split("\n");
   if (!entries.includes("package.json") || entries.some((entry) => entry.includes("node_modules/"))) {
     throw new Error("packed-consumer committed subtree archive failed");
@@ -239,3 +239,5 @@ function archiveProject(directory) {
   const bytes = execFileSync("git", ["-C", top, "archive", prefix ? `HEAD:${prefix}` : "HEAD"], { maxBuffer: 64 * 1024 * 1024 });
   return { prefix, bytes };
 }
+
+/** One JSON-RPC answer, sent as JSON or as a single-event SSE stream. */

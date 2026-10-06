@@ -1,250 +1,142 @@
 ---
 name: develop
-description: Work on any Mantle project using the Core SDK contract. Use for manifest, runtime, content model, handler, adapter, validation, and MCP work after a project already exists.
+description: Work on an existing Mantle 0.2 project — manifests, SQL Views and Procedures, ref handlers, the service entry, surfaces, identity and MCP — using the installed package's contract.
 metadata:
   source: "@aotter/mantle"
   sourcePath: docs/skills/develop/SKILL.md
-  applies_to: mantle grammar v0.1
-  projection: project
+  applies_to: mantle 0.2
+  projection: package
 ---
 
 # Mantle Develop
 
-This is the Core workflow skill for an existing Mantle project. Repo-local
-copies are byte-for-byte projections from the installed package; its embedded
-docs govern runtime/API behavior.
+The workflow for changing a Mantle 0.2 project. The installed package's docs
+govern behavior: `node_modules/@aotter/mantle/docs/`.
 
-## First Read
+## First read
 
-1. `package.json` for the installed `@aotter/mantle*` versions.
-2. The manifest directory selected by the project scripts, the actual host
-   entry and adapter config (for example `wrangler.jsonc` on Cloudflare).
-   Read custom Auth construction there when present.
-3. Optional local context: `.mantle/plugins.json`, `.mantle/plugins.lock.json`,
-   and `.mantle/recipes/`. Legacy launch/handoff files are context only.
-4. Installed Core docs in `node_modules/@aotter/mantle/docs/`.
+1. `package.json` and the lockfile: the installed `@aotter/mantle` version.
+   Every `@aotter/mantle*` package is at that same exact version. If
+   `node_modules/` is missing, install with the lockfile first.
+2. `mantle.config.json`: `identity` (`mantle`, `custom`, `none`),
+   `features`, `host` (`cloudflare`, `bun`, `none`) and `dialect` (`sqlite`,
+   `postgres`); absent host and dialect mean Cloudflare over D1. A
+   `version: 1` config or `cms.mantle.aotter.net/v1` manifests mean 0.1.x:
+   switch to `docs/skills/update/SKILL.md`.
+3. `manifests/*.yaml`, `src/service.ts`, `src/handlers.ts`, `src/index.ts`
+   (and `src/identity.ts` for `custom`), `wrangler.jsonc` (not on Bun).
+4. Installed docs: `docs/handbook/reference/features.md` to map the request to
+   manifest features, then the field references it links to.
+   `docs/examples/` holds whole services in the v2 grammar.
 
-If `node_modules/` is missing, run `pnpm install --frozen-lockfile` before
-falling back to remote docs. Remote docs must use a tag matching the installed
-version; never use `develop` branch docs for a versioned consumer project.
+## The model
 
-## Existing Examples
+Four atoms, nothing else: **Schema** (rows), **View** (one SQL `SELECT`),
+**Procedure** (SQL write statements, or a `ref` handler), **Trigger** (HTTP,
+MCP, lifecycle, schedule). Do not invent kinds such as `Form` or `Workflow`.
 
-Read installed `docs/handbook/start/project-and-cli.md` and
-`docs/examples/README.md`. Use `docs/examples/host-minimal-worker/` for Spec +
-adapter without Admin. Read `docs/examples/host-local-admin-otp/` only when the
-project already has Admin or the human asked for Dev UI — that path is opt-in.
-Ingest only `docs/examples/builtin-*.md` Manifests as grammar for new domains.
-Read `docs/examples/cf-primitives-*.md` before inventing Durable Object, Queue,
-cron, or `ref` handler patterns.
-References are test/documentation, not a Starter or a fixed application shape.
+Choose in this order, stopping at the first that works:
 
-Public rendering is opt-in consumer wiring: `mountPublicRoutes`, a
-`TemplateRegistry`, and a matching `publicPathResolver` must agree on the
-exposed collections. Do not auto-publish every Schema. Applications document their mounted URL surface in their own README.
-Import the registry and resolver from `@aotter/mantle/web`; Core runtime does
-not install public rendering by itself.
+1. A Schema feature: `checks`, `uniqueIndexes`, `scope`, `ttl`,
+   `searchableFields`, `lifecycle`.
+2. SQL: a View for reads; a Procedure's `sql` for writes. Several statements in
+   one `sql` apply together or not at all.
+3. `requires` for who may call; a guard for a live check before one action.
+4. A `ref` handler, only for what SQL cannot do: calling another service,
+   reading before writing, setting `status`, branching on a read.
 
-## Authoring CLI
+## SQL rules that trip agents
 
-Use the project's scripts first; applications use the shipping
-`mantle` authoring CLI from `@aotter/mantle`. Ask the installed CLI for its
-command list instead of trusting one copied into prose — the surface is
-version-matched and changes between releases:
+- PostgreSQL syntax over declared Schemas only. References: `input.<name>`,
+  `auth.uid()`, `auth.role()`, `now()`; search is `mantle.search(t, q)`.
+- Native columns are snake_case in SQL (`created_at`, `author_id`) and
+  camelCase in `ctx.store` JSON and in `indexes`.
+- A write never names the scope field, `id` (on update), `version`, `status`,
+  `created_at`, `updated_at` or `author_id`. Set an owner with `auth.uid()` and
+  a time with `now()`, never from input.
+- Optimistic lock: `WHERE id = input.id AND version = input.expectedVersion`.
+  Writing no row is `CONFLICT`. Keep omitted optional fields with
+  `COALESCE(input.x, x)`.
+- `LIMIT` needs `ORDER BY`. No `OFFSET`, `RIGHT JOIN` or `CURRENT_TIMESTAMP`
+  on any dialect. On SQLite (D1) also no `WITH`, `UNION`, `ILIKE` or jsonb
+  operators, and `CAST(x AS int)` only on an integer literal: use `round(x)`.
+  PostgreSQL accepts these (`docs/handbook/reference/view.md`).
+- Unquoted aliases fold to lower case: `AS "orderCount"` keeps the case.
+- The runtime injects scope and TTL into every Schema reference, and
+  published-only into public Views. Never repeat them.
+- `scope` hides rows from staff too. When staff must see every row, store
+  `auth.uid()` in a field and filter on it instead.
+- That filter protects the View, not generic Admin Schema reads. Root
+  `schema.readOnly: true` blocks generic writes only. If a contributor must
+  not read other users' rows, restrict the application-owned Admin surface
+  inside its existing `withCaller` boundary; see
+  `docs/handbook/guides/admin-ui.md` (Roles). Keep business transitions in SQL.
 
-```bash
-pnpm exec mantle --help
-pnpm validate
-```
+## Handlers
 
-This CLI validates and derives artifacts from application-authored manifests.
-It does not create projects, business schemas or a visitor homepage. There is
-no `mantle create` / `mantle update` happy path.
+- `src/handlers.ts` exports `handlers: MantleHandlers` (`MantleHandlers<Env>`
+  types `ctx.env`); the generated type
+  lists exactly the plan's refs. Read and write only through `ctx.store`.
+- After hooks: loop over `ctx.cause.rows`; never read only `rows[0]`.
+- Before hooks and guards are read-only and reject by throwing
+  `DiagnosticError` (from `@aotter/mantle`); any other throw is a 500.
+- `ctx.caller.kind === "user"` means signed in; a schedule runs as `system`.
+  Never test `!== "anonymous"`.
+- `ctx.invoke(name, input)` calls another Procedure with the same caller.
 
-## Core Model
+## The service
 
-Mantle exposes exactly four declarative atoms:
+`src/service.ts`, `src/index.ts` and `wrangler.jsonc` belong to the
+application after the first `mantle generate`; it never rewrites them. Add
+routes, bindings and env there (`docs/handbook/cloudflare/service-entry.md`).
+Reach data from service code through `runtime.store.as(caller)` or
+`runtime.invokeProcedure`; `runtime.store` alone is unscoped. A signed webhook
+is a route in the service's `fetch` that verifies the raw body, then invokes
+a Procedure as `systemCaller(...)`.
 
-| Atom | Purpose |
-|---|---|
-| `Schema` | Stored entity/table shape. |
-| `View` | Read/query surface. |
-| `Procedure` | Typed mutation or operation. |
-| `Trigger` | HTTP/lifecycle/MCP invocation binding. |
+## MCP
 
-Do not invent manifest kinds such as `Form`, `Feature`, `Workflow`, or
-`Membership`. Compose those from the four atoms plus TypeScript only where
-the atoms cannot express the behavior.
-
-## Choose the manifest feature first
-
-Read installed `docs/handbook/reference/features.md` to map the requested
-behavior to fields before adding handlers or a custom UI. For host-only reads,
-`surface: internal` keeps a View out of REST/MCP/Admin while preserving its
-`requires` checks. Read `docs/handbook/guides/typed-queries.md` for generated
-View params/results, indexed entry reads, and their authorization boundary.
-Use `from` for portable typed projections; SQL is for queries needing native
-SQLite and produces `unknown` row types.
-
-For Admin labels, inputs, collection columns/tabs, reports or action buttons,
-read `docs/handbook/guides/admin-ui.md`. Prefer supported Schema/Procedure/View
-metadata and `uiSchema` before custom frontend code. These control the Admin
-console, not the visitor frontend. Regenerate and verify the actual console;
-never edit generated `public/_mantle/admin/` assets.
-
-## Content Edits
-
-- Follow the actual frontend content source. Use Admin or Staff MCP for
-  runtime-backed content. Do not invent an overlay/seed homepage.
-- For a new submitted field, update the stored `Schema` and the public
-  `Procedure.spec.input` before any form UI. Keep public mutation inputs
-  `additionalProperties: false`; otherwise JSON Schema's default may strip an
-  undeclared field while returning success.
-- Use `lifecycle: operational` for submissions, inquiries, orders, and other
-  Procedure-created operational records that staff inspect or correct. Reserve
-  `publishing` for content a person stages and publishes.
-- Lifecycle `before_update` / `after_update` hooks also fire for unpublish,
-  archive, and every other status transition whose target is not `published`;
-  do not use them for edit-only work.
-- When a form's fixed option values change, update the stored Schema and public
-  Procedure input `enum` together. Keep translated labels in the frontend content source;
-  Admin and Staff MCP derive their typed controls from the manifest values.
-- If the application has a `page` Schema with sections, update its declared
-  section properties when adding display fields; an undeclared property has no
-  runtime-backed Admin or Staff MCP path.
-- Update notification handlers when they need the new field. Test the stored
-  entry, not only the HTTP `{ "ok": true }` response.
-
-## Locales
-
-- `data.locale` is reserved for `localized: true` Schemas. A non-localized
-  Schema must use a domain field such as `replyLocale`.
-- Use a standalone localized Schema only for independent locale rows. For
-  versions of one entity, use a non-localized parent plus a localized child
-  with `translates: { parent, on }`. The child must own at least one field
-  besides `locale` and the join field.
-- Parallel locale blocks must keep field names, option values, step IDs, and
-  result keys identical; translate display strings only.
-- `siteDefaults.origin`, `siteDefaults.locales`, and `siteDefaults.icons` are
-  code-owned and boot-synced. The icon list is shared by browser favicons,
-  Admin chrome, and MCP `serverInfo.icons`; keep its static files under
-  `public/`. Brand, title, and description seed once, then change through site
-  settings.
-- When changing an existing collection from `[slug]` to `[slug, locale]`,
-  boot with a Mantle version that reconciles obsolete unique indexes and test
-  the same slug in two locales. Do not patch D1 manually.
-
-## Adapter Boundary
-
-The runtime is adapter-neutral. A `MantleStorageAdapter` prepares the compiled
-plan into semantic storage ports; `createMantleRuntime` binds that prepared
-storage and selected capabilities. Database drivers and asset serving belong
-to the host/optional composition. Follow the installed adapter guide.
-
-Do not assume Cloudflare unless the project imports `@aotter/mantle/cloudflare`
-or its adapter config is visible. A future Netlify adapter should satisfy the
-same Core workflow through its own ports and provider setup.
-
-Site code is a consumer of this abstraction. Use Manifests, runtime use cases,
-`runtime.entries`, and optional `runtime.siteConfig`; do not query Mantle-owned `entries` or
-`site_config`, reach through deprecated `runtime.db`, copy generated-column
-names, or construct SDK KV keys. Cloudflare bindings belong only at the
-composition root. If a normal feature cannot be expressed through a
-purpose-shaped surface, treat that as a Core abstraction gap instead of
-teaching the project Mantle internals.
-
-## Auth Composition
-
-Admin is opt-in. A project without `@aotter/mantle-admin-ui` is complete.
-When Admin is installed, `createMantleWorker({ auth })` with `email-otp`
-and `ConsoleEmailSender` is the local human path (OTP in wrangler logs).
-That override owns Auth construction; Core still owns `/admin` and
-`/api/auth/*`. Admin also requires wrangler `assets.directory=./public`
-and an `ASSETS` binding. A white screen at `/admin` with HTML 200 and
-`/_mantle/admin/assets/*` 404 is a missing assets binding, not a missing
-frontend build.
-
-Conventional Cloudflare projects that do not replace Auth declare
-`MANTLE_AUTH_MODE=hosted` or `self-managed`; Core owns that standard
-composition and rejects partial or mixed bindings. Preserve the explicit
-mode recorded in Worker config, keep provider secrets out of source, and
-do not infer a mode from whichever credentials happen to be present.
-
-## Performance Loop
-
-After changing a Schema index, View filter/order, public API, or rendered page,
-run the project's index check when present. Otherwise run the installed
-harness directly:
-
-```bash
-pnpm exec mantle-harness indexes --require-public --format text
-```
-
-The check uses crowded real SQLite and the shipped compiler. It complements
-`pnpm validate`; it does not replace correctness validation. Declare the
-smallest ordered index justified by the measured path and respect SQLite's
-leftmost-prefix rule; which columns an index may name and how a public View's
-status predicate shapes it is in the handbook (`reference/schema.md#indexes`).
-Do not change user-visible filter or ordering semantics
-just to make the gate pass. Do not add every permutation or cache every read.
-
-For relevant Cloudflare serving changes, start the project and sample the
-actual routes:
-
-```bash
-pnpm exec mantle-harness http \
-  --base-url http://127.0.0.1:8787 \
-  --route page=/en/example \
-  --rounds 20 --warmup 2 --format text
-```
-
-Prefer query plan, query count, `rows_read` scaling, and cache MISS/HIT
-evidence. Do not create CI gates from absolute local milliseconds.
+With feature `mcp`, the preset mounts `/mcp` (public tools) and, with an
+identity, `/mcp/staff` (staff tools for a staff role; with identity `mantle`,
+the same OAuth token as `/mcp`). `/mcp/staff` serves
+Mantle's MCP App: a host that renders MCP Apps shows each staff View's rows and
+the operations on one row. A member-facing App on `/mcp` is the application's
+to build when the product asks for one: follow [the recipe](mcp-app.md).
 
 ## Loop
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm validate
-pnpm check:indexes # when the project provides it
-pnpm typecheck
-pnpm check
+pnpm exec mantle generate
+pnpm exec mantle generate --check
+pnpm exec tsc --noEmit
+pnpm exec wrangler dev --local   # on Bun: bun src/index.ts
 ```
 
-Use `pnpm dev` for local preview when the project provides it.
-
-## Connect a Local MCP Client
-
-Start the project with `pnpm dev`, then use the exact local origin it prints.
-The conventional Cloudflare adapter exposes:
-
-- `http://localhost:8787/mcp` for public tools;
-- `http://localhost:8787/mcp/staff` for authenticated authoring tools.
-
-Prefer the client's native remote HTTP + OAuth support. Use a standard
-HTTP-to-stdio bridge such as `npx -y mcp-remote <url>` only when the client
-accepts stdio MCP servers but cannot connect to remote HTTP directly. Mantle
-does not own a separate local proxy or an auth-bypass mode.
-
-Before changing client config, confirm the Worker is reachable:
-
-```bash
-curl -i http://localhost:8787/mcp
-```
-
-An OAuth-protected endpoint should respond with `401` and a
-`WWW-Authenticate` resource-metadata challenge before sign-in. After
-connecting, inspect `tools/list`; make one read-only `query_view_*` call when
-available before invoking any mutation. Use project-scoped client config when
-the client offers it, and never commit OAuth tokens or the bridge's token
-cache.
+Then exercise what changed over HTTP: the REST View or Trigger, `/mcp`
+`tools/list` and a call, and with identity `mantle` a console email-OTP
+sign-in and the Admin route (`docs/handbook/cloudflare/authentication.md`).
+Check the stored rows, not only a 200. Before deploying a Schema change on
+SQLite, run `mantle generate --check --database <file>` to see the storage SQL.
+For a workflow, verify valid and invalid state transitions, ownership on every
+mounted surface (including generic Admin reads and writes), concurrent writes
+with one expected version, and persisted data and sessions after a restart.
+Exercise the actual UI when the product includes one; serving HTML alone does
+not verify its forms or operations.
 
 ## Rules
 
-- Keep content models in the configured manifest directory; its immediate
-  `.yaml` and `.yml` files are loaded together.
-- Add TypeScript only for handlers, rendering, adapter wiring, or real behavior.
-- Do not write directly to D1, KV, Postgres, or object storage for content
-  authoring. Use runtime use cases, admin APIs, or Staff MCP.
-- Do not commit provider secrets.
-- If the work is an installable capability, switch to `mantle:plugin`.
+- Never edit `.mantle/generated/`. Commit it.
+- Never write a Schema's table with `env.DB`, KV or SQL from outside Store;
+  never touch `_mantle_*` tables. The application's own tables are its own.
+- A blocked storage change (`STORAGE_CHANGE_BLOCKED`) is the author's to make
+  by hand, then rerun; Mantle never drops a column or index.
+- Do not commit secrets (`.dev.vars`, provider keys).
+- Every 0.1.x term is gone: builtin handlers, `from`/`filter`, `params`,
+  `$ctx`, `x-mantle-bind`, `mantle validate`, `mantle skills`,
+  `createMantleWorker`.
+
+## When you are done
+
+Report the manifests and code you changed, the `generate --check` and
+typecheck results, the HTTP calls you made and what they returned, and any
+access you made stricter or could not express.

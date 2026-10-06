@@ -1,22 +1,20 @@
 # Examples hub
 
-This folder is the only official examples tree. Filenames carry the handler class. There is no second Manifest body under `docs/handbook/examples/` — those pages redirect here.
+Every page is a whole service in the 0.2.0 grammar: its manifests compile with
+`mantle generate` (the SDK repository compiles each one in its checks). Copy the shape you need into
+your project's `manifests/`; none is a template to copy wholesale.
 
-**Builder** may ingest a Manifest only when every Procedure is `handler.kind: builtin` (or the example has no Procedures). That is the `builtin-*` prefix. `cf-primitives-*` documents Durable Objects, Queues, cron, R2, and/or `handler.kind: ref`. `host-*` directories are runnable consumer projects, not business presets.
+| Example | What it shows | Handler code |
+|---|---|---|
+| [`reference-service/`](./reference-service/README.md) | A runnable service with its smoke test: scoped orders, SQL Views and Procedures, hooks, a cron, REST, both MCP surfaces, Admin's API and console email-OTP sign-in. The release gate runs it. | yes |
+| [Intake form](./intake.md) | An anonymous form: one SQL `INSERT` and a staff View. | none |
+| [Intake with bot check and notification](./intake-hooks.md) | A Turnstile check as the Procedure's guard, an email from an after hook. | 2 handlers |
+| [Reservation requests](./reservation.md) | A request queue with a Schema `check`. | none |
+| [Publication](./publication.md) | Localized posts with a parent identity, per-locale lists and `mantle.search`. | none |
+| [Legal documents and consent](./legal-documents.md) | Immutable revisions, and an acceptance written only for a published revision. | none |
+| [Procurement approvals](./procurement.md) | Members see their own rows through `auth.uid()`; staff review with an optimistic lock. | none |
+| [Commerce catalog and orders](./commerce.md) | A published catalog, guest orders and a locked staff review. | none |
+| [Commerce inventory](./commerce-inventory.md) | Server-side pricing, atomic stock reservation with `checks` and locks, a scheduled expiry and a verified payment callback. | 3 handlers |
+| [Guarded API access](./guarded-api.md) | API keys through a custom `CallerResolver`, scopes and a live entitlement guard. | 2 handlers |
 
-Drop a `builtin-*` YAML block into `host-local-admin-otp/manifests/` (or `host-minimal-worker/manifests/`) and run `mantle validate`.
-
-| Id / filename | Meaning | Class | Builder | Admin | Related host |
-|---|---|---|---|---|---|
-| [`builtin-intake.md`](./builtin-intake.md) | Public request form; builtin create; staff list | builtin | yes | optional (staff View / Staff MCP) | `host-minimal-worker` or `host-local-admin-otp` |
-| [`builtin-reservation.md`](./builtin-reservation.md) | Public reservation queue; builtin create; staff list | builtin | yes | optional | `host-minimal-worker` or `host-local-admin-otp` |
-| [`builtin-publication.md`](./builtin-publication.md) | Localized posts, public list, reader suggestions | builtin | yes | optional (Admin or Staff MCP to draft/publish) | `host-local-admin-otp` |
-| [`builtin-procurement.md`](./builtin-procurement.md) | Member requisitions and staff approve/reject with OCC | builtin | yes | optional (Admin or Staff MCP) | `host-local-admin-otp` |
-| [`builtin-legal-documents.md`](./builtin-legal-documents.md) | Localized Terms/Privacy revisions and signed-in acceptances | builtin | yes | optional (staff create via MCP; Admin for review) | `host-local-admin-otp` |
-| [`builtin-commerce.md`](./builtin-commerce.md) | Product catalog, guest orders, staff fulfill/cancel; builtin create/update only | builtin | yes | optional (Admin or Staff MCP to publish products) | `host-local-admin-otp` |
-| [`cf-primitives-intake-hooks.md`](./cf-primitives-intake-hooks.md) | Same intake Schema with Turnstile `before_create` and email `after_create` `ref` hooks | cf-primitives | no | optional | `host-minimal-worker` plus handlers |
-| [`cf-primitives-commerce-inventory.md`](./cf-primitives-commerce-inventory.md) | Catalog plus Durable Object stock authority, Queue expiry, payment callback, `ref` handlers | cf-primitives | no | optional | `host-minimal-worker` plus DO/Queue/cron |
-| [`cf-primitives-guarded-api.md`](./cf-primitives-guarded-api.md) | API keys, scopes, live entitlement `ref` guards over REST and MCP | cf-primitives | no | none | `host-minimal-worker` plus credential resolver |
-| [`host-minimal-worker/`](./host-minimal-worker/README.md) | Executable Spec + adapter without Admin | host | no | none | itself |
-| [`host-local-admin-otp/`](./host-local-admin-otp/README.md) | Executable opt-in Admin / Dev UI with email OTP | host | no | required | itself |
-| [Mantle on ChatGPT Sites](../handbook/chatgpt-sites/index.md) · [runnable reference](./host-chatgpt-sites/README.md) | Runnable Sites D1/R2, ChatGPT identity, Admin media, published web and public read-only MCP | host | no | required | itself |
+Projects on 0.1.x move with [the upgrade guide](../upgrade-0.1-to-0.2.md).

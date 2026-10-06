@@ -1,0 +1,27 @@
+{
+  "name": "mantle-reference-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "mantle generate",
+    "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
+    "check": "mantle generate && mantle generate --check && tsc --noEmit && node smoke.mjs"
+  },
+  "dependencies": {
+    "@aotter/mantle": "0.2.0-alpha.3",
+    "@aotter/mantle-ui": "0.2.0-alpha.3",
+    "@better-auth/cimd": "1.7.7",
+    "@better-auth/mcp": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@modelcontextprotocol/server": "2.1.0",
+    "better-auth": "1.7.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260904.1",
+    "@types/node": "^26",
+    "typescript": "^6.0.3",
+    "wrangler": "4.129.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

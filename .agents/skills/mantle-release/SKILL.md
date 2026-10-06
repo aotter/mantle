@@ -14,9 +14,11 @@ Prepare a same-repository release PR: prove the new version/tag unused,
 preview native release notes and correct PR metadata, align package/plugin
 versions (the consumer cold-start commands stay untagged — see
 docs/release-process.md step 2), inspect the packed docs/skills payload, run `pnpm check` and review
-its exact SHA. The reference consumer gate runs from packed packages outside
-workspace links. Merge into develop for every version. Beta, RC and stable
-then follow "Promote to main" in docs/release-process.md: pin
+its exact SHA. The reference consumer gate runs
+from packed packages outside workspace links. Merge into develop for every
+version; 0.2 work on `0.2.x` reaches a release only after a `0.2.x` -> develop
+PR merges (docs/release-process.md). Beta, RC and stable then follow "Promote to main" in
+docs/release-process.md: pin
 `promote/<version>` at that develop merge SHA, PR it into main, merge with a
 merge commit, dispatch with `--ref main`. Stable also needs recorded owner
 acceptance on the version's release-gate issue, and its entry added to
@@ -27,7 +29,7 @@ Dispatch the controller from the reviewed release merge with the version
 without v. Watch all gates, not only publication:
 
 1. Core tag resolves to that canonical merge.
-2. All eleven npmjs artifacts exist with matching integrity and no workspace:*.
+2. Both npmjs artifacts exist with matching integrity and no workspace:*.
 3. GitHub Packages mirrors verify the same candidate.
 4. The reference Worker installs exact public packages, generates/types/checks
    successfully and serves its declared HTTP route before channel promotion.
@@ -51,7 +53,8 @@ from the source branch. Resolve recovers using the existing tag SHA when
 that commit is an ancestor of the tip and package versions still match.
 Tagged recovery skips the Core source check because that tree was already
 released from the immutable tag. When every npmjs package at that version
-already exists, it also skips packing and immutable tarball comparison.
+already exists, it also skips packing, immutable tarball comparison and the
+public-registry Worker gate.
 The controller tip must not rebuild published artifact identity.
 
 Legacy recovery follows the controller and docs at that version's immutable

@@ -74,7 +74,7 @@ semantic fingerprint.
 | Optional modules/adapters | Web/Admin composition and request/session/cache/platform translation | Re-parsing, re-linking, or a second authorization/runtime stack |
 
 The current-to-target rule ledger and evidence are maintained in
-[`docs/sealed-pipeline-ownership.md`](../sealed-pipeline-ownership.md).
+[`docs/sealed-pipeline-ownership.md`](https://github.com/aotter/mantle/blob/main/docs/sealed-pipeline-ownership.md).
 
 ### Core and optional products
 
@@ -148,6 +148,10 @@ add browser globals to Runtime Core, expose staff capabilities, or introduce a
 second manifest/runtime path.
 
 ### Naming and code generation
+
+This section records the original codegen decision. The current generated API
+uses a sealed `plan` and wire-keyed `Schemas`, `Views`, and `Store` type maps;
+see the [typed queries guide](../handbook/guides/typed-queries.md).
 
 The Core execution unit is `MantleRuntime`, not a site. Optional TypeScript
 generation is a pure projection of linked/compiled semantics. It exposes

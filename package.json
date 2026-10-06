@@ -1,7 +1,7 @@
 {
   "name": "mantle-monorepo",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.2.0-alpha.3",
   "description": "Embeddable, manifest-driven application runtime.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
@@ -18,16 +18,13 @@
     "build": "pnpm -r --filter '@aotter/mantle*' build",
     "typecheck": "pnpm -r --filter '@aotter/mantle*' typecheck",
     "test": "pnpm -r --filter '@aotter/mantle*' test",
-    "bench:wrangler": "pnpm --filter @aotter/mantle-cloudflare bench:wrangler",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:skills": "node scripts/check-skills.mjs",
+    "check:doc-examples": "node scripts/check-doc-examples.mjs",
     "check:plugin-manifests": "node scripts/sync-plugin-manifests.mjs --check",
-    "check:optional-packages": "node scripts/check-optional-packages.mjs",
-    "check:bun-package": "node scripts/check-bun-package.mjs",
-    "check:vercel-package": "pnpm --dir packages/adapters/vercel/test/fixtures/live-node typecheck && node scripts/check-vercel-package.mjs",
     "check:release": "node scripts/release-tag-order.mjs --self-test",
-    "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm run check:optional-packages && pnpm run check:bun-package && pnpm run check:vercel-package && pnpm typecheck && pnpm test && pnpm check:worker-consumer",
-    "bench:parity": "pnpm --filter @aotter/mantle-cloudflare bench:parity",
+    "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm check:doc-examples && pnpm check:cloud-plugin && pnpm typecheck && pnpm test && pnpm check:worker-consumer",
+    "check:cloud-plugin": "node scripts/check-cloud-plugin.mjs",
     "check:worker-consumer": "node scripts/check-worker-consumer.mjs"
   },
   "devDependencies": {
@@ -36,7 +33,8 @@
   "packageManager": "pnpm@9.15.0",
   "pnpm": {
     "overrides": {
-      "miniflare>sharp": "0.35.4"
+      "miniflare>sharp": "0.35.4",
+      "@better-auth/mcp>@better-auth/oauth-provider": "1.7.7"
     }
   }
 }

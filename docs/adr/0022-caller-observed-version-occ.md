@@ -1,6 +1,6 @@
 # ADR-0022: Caller-observed `expectedVersion` for Admin and builtin upsert
 
-**Status:** Accepted
+**Status:** Accepted; the Admin binding rules are superseded by [ADR-0029](0029-mcp-apps-interaction-contracts.md) (Admin binds `expectedVersion` only from a declared interaction and infers no OCC target). The caller-observed version contract itself stands.
 
 **Date:** 2026-09-14
 

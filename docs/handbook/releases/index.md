@@ -1,25 +1,68 @@
 ---
-description: Every stable Mantle release — what it contains, what it requires, and what changed since the previous stable.
+description: Every Mantle release line — what 0.2.0 changes, and what each stable 0.1.x release contained.
 ---
 # Releases
 
 Mantle publishes to npm under the `@aotter/*` scope. A **stable** release is a
-plain `X.Y.Z` version on the `latest` dist-tag; it is the only kind of release
-covered by this chapter and the only kind intended for production use.
+plain `X.Y.Z` version on the `latest` dist-tag and is the only kind intended
+for production. Prereleases (`alpha`, `rc`) let a release be prepared in the
+open; installing one means choosing an exact version, not a channel.
+[GitHub Releases](https://github.com/aotter/mantle/releases) is the canonical
+change history; this page is the narrative one.
 
-```sh
-npm install @aotter/mantle
-```
+From 0.2.0, Mantle is two packages, `@aotter/mantle` and `@aotter/mantle-ui`,
+published together at one version: the 0.1.x `-spec`, `-runtime`,
+`-cloudflare`, `-auth`, `-admin`, `-mcp`, `-web` and other packages fold into
+subpaths of `@aotter/mantle`, and `@aotter/mantle-admin-ui` into
+`@aotter/mantle-ui/admin`. Pin every one you use to the
+same exact version and upgrade them together.
 
-Prereleases exist so a stable can be prepared in the open, and they are not
-covered here: `alpha` is cut from `develop` and may break anything, `rc` is a
-stable candidate cut from `main`. Installing a prerelease means opting into an
-exact version, not a channel. [GitHub Releases](https://github.com/aotter/mantle/releases)
-is the canonical, immutable change history; this chapter is the narrative one.
+## 0.2.0 — in preparation
 
-All eleven packages share a single version and are published together, so mixed
-versions across `@aotter/mantle*` are never a supported combination. Pin the
-version you install and upgrade the whole set at once.
+0.2.0 replaces 0.1.x's grammar and composition; no stable 0.1.5 was released
+(`0.1.5-alpha.1` was a prerelease). It breaks every consumer, and
+`docs/upgrade-0.1-to-0.2.md` in the package is the guide for moving a project
+by hand.
+
+- **Manifests are `cms.mantle.aotter.net/v2`.** Views are one SQL `SELECT` and
+  Procedures are SQL statements or a `ref`, in PostgreSQL syntax. The builtin
+  handlers, the Filter AST, `params`, `$ctx` references and `x-mantle-bind` are
+  gone; Schemas gain `checks`, and `searchableFields` becomes full-text search.
+- **SQL in PostgreSQL syntax.** PostgreSQL is the reference dialect
+  (`@aotter/mantle/postgres`); D1 and SQLite run a subset
+  (`@aotter/mantle/d1`). A plan records its dialect.
+- **One Store.** Every read and write goes through Store, which adds caller
+  scope, TTL and published-only to every statement, and an optimistic lock
+  where the caller passes one; a write
+  is all or nothing.
+- **The service is the application's.** `createMantle(service, …)` replaces
+  `createMantleWorker`, and the first `mantle generate` writes the host's
+  preset (`src/service.ts`, `src/index.ts`, ...) once. `--host` is
+  `cloudflare` (D1, or PostgreSQL through Hyperdrive), `bun` (Bun.SQL or
+  bun:sqlite, `@aotter/mantle/bun`) or `none` (plan and types only), and
+  `--dialect` is `sqlite` or `postgres`; both are chosen once.
+- **Mantle never owns your users.** A `CallerResolver` turns a request into a
+  `Caller`; identity is `mantle` (Better Auth), `custom` or `none`. Core creates
+  no auth tables.
+- **Storage converges to the plan** at boot: additions are applied, unsafe
+  changes are refused with a diagnostic, nothing is dropped, and there are no
+  migration files.
+- **Schedules are POSIX cron**; `toCloudflareCron` translates them for Wrangler.
+- **MCP tools come from Views and Procedures only.** Staff tools are at
+  `/mcp/staff` for an OAuth client, with Mantle's MCP App rendering staff
+  View rows in the chat; Admin's WebMCP runs the same tools on Admin's own
+  routes.
+- **The CLI is `mantle generate`** and `mantle generate --check`. `validate`,
+  `emit-openapi`, `skills` and `mantle-harness` are removed.
+- **The Admin console** moves to `@aotter/mantle-ui/admin`, served at `/admin`
+  by the preset through the service's `ASSETS` binding.
+- **Mantle Cloud** uses its pinned Core contract and host protocol 4 through
+  the plugin's `mantle` Cloud workflow, requiring a verified source receipt
+  before save, with separate preview and publish
+  states. Its host contract decides the accepted version; offline readiness
+  is not a deployed service.
+- **Not yet in 0.2.0:** Mantle-rendered public pages and the MCP interaction
+  App tools.
 
 ## 0.1.4 — 2026-09-24
 
@@ -123,7 +166,7 @@ See [HTTP, MCP, CLI and packages](../reference/surface.md) for the full list.
 D1 and assets bindings, Better Auth 1.7 (social providers, email OTP, magic
 link, passkey), Admin, MCP, Web and R2 media uploads. The Bun and Vercel
 adapters are experimental, cover public Views and HTTP Triggers only, and leave
-authentication and CSRF to the host. [ChatGPT Sites](../chatgpt-sites/index.md) is a
+authentication and CSRF to the host. ChatGPT Sites is a
 first-class integration with a runnable reference.
 
 **Agents.** `mantle skills` projects the installed package's skills into
@@ -138,7 +181,5 @@ Bun and Vercel adapters may change in a minor release.
 
 ## Source
 
-- [`CHANGELOG.md`](../../../CHANGELOG.md)
-- [`docs/release-process.md`](../../../docs/release-process.md)
-- [`.github/workflows/release.yml`](../../../.github/workflows/release.yml)
-- [`scripts/release-tag-order.mjs`](../../../scripts/release-tag-order.mjs)
+- [GitHub Releases](https://github.com/aotter/mantle/releases)
+- [`CHANGELOG.md`](https://github.com/aotter/mantle/blob/main/CHANGELOG.md)

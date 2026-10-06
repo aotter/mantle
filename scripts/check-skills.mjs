@@ -1,23 +1,21 @@
 #!/usr/bin/env node
 // Enforces the disclosure audit in skills/README.md: front matter is the only
-// projection-scope authority, the audit table states the same scope the code
-// acts on, restricted scopes carry a reason, links resolve from wherever the
-// skill is read.
+// distribution authority, the audit table states the same distribution and
+// reason, and every relative link resolves inside what is actually shipped.
+//
+// Two distributions (ADR-0032 decision 13): the plugin's one `mantle` skill
+// under skills/ (copied with its scripts), and the package skills under
+// docs/skills/ (shipped in @aotter/mantle's docs/, read from node_modules).
 import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const skillsRoot = join(repoRoot, "docs", "skills");
-const SCOPES = new Set(["project", "plugin", "package"]);
 const failures = [];
-
 const fail = (where, message) => failures.push(`${where}: ${message}`);
 
 // ponytail: front matter here is a fixed flat shape, so one regex beats a YAML
-// dependency in a repo-root script. `projectionScopes` in
-// packages/mantle/src/cli/skills.ts reads the same field the same way — keep the
-// two expressions identical if either changes.
+// dependency in a repo-root script.
 function frontMatter(text) {
   const match = /^---\n([\s\S]*?)\n---\n/.exec(text);
   if (!match) return null;
@@ -27,21 +25,27 @@ function frontMatter(text) {
   };
 }
 
-const scopesOf = (declared) => (declared ?? "").split(",").map((scope) => scope.trim()).filter(Boolean);
+const directories = (path) => existsSync(path)
+  ? readdirSync(path, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+  : [];
 
-const skills = ["mantle", ...readdirSync(skillsRoot, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)].sort();
+// skill -> { file, projection it must declare, the directory its links must stay inside }
+const skills = new Map();
+for (const name of directories(join(repoRoot, "skills"))) {
+  skills.set(name, { where: `skills/${name}/SKILL.md`, projection: "plugin", root: join(repoRoot, "skills", name) });
+}
+for (const name of directories(join(repoRoot, "docs", "skills"))) {
+  const where = `docs/skills/${name}/SKILL.md`;
+  if (skills.has(name)) fail(where, `skill name ${name} is already shipped by ${skills.get(name).where}`);
+  else skills.set(name, { where, projection: "package", root: join(repoRoot, "docs") });
+}
+if ([...skills.values()].filter((s) => s.projection === "plugin").length !== 1 || skills.get("mantle")?.projection !== "plugin") {
+  fail("skills/", "the plugin ships exactly one skill, skills/mantle");
+}
 
-if (skills.length === 0) fail("skills/", "no skills found");
-
-const declaredScope = new Map();
-const declaredReason = new Map();
-const projected = [];
-
-for (const skill of skills) {
-  const file = skill === "mantle" ? join(repoRoot, "skills", "install", "SKILL.md") : join(skillsRoot, skill, "SKILL.md");
-  const where = skill === "mantle" ? "skills/install/SKILL.md" : `docs/skills/${skill}/SKILL.md`;
+const declared = new Map();
+for (const [name, { where, projection, root }] of skills) {
+  const file = join(repoRoot, where);
   if (!existsSync(file)) {
     fail(where, "missing SKILL.md");
     continue;
@@ -52,68 +56,42 @@ for (const skill of skills) {
     fail(where, "missing front matter");
     continue;
   }
-
-  if (front("name") !== skill) fail(where, `front-matter name must equal the folder name (${skill})`);
+  if (front("name") !== name) fail(where, `front-matter name must equal the folder name (${name})`);
   if (!front("description")) fail(where, "missing description");
-
-  const raw = front("projection");
-  const scopes = scopesOf(raw);
-  declaredScope.set(skill, scopes.join(", "));
-  declaredReason.set(skill, front("projectionReason"));
-  if (!raw) {
-    fail(where, "missing metadata.projection (declare `project`, `plugin`, or both)");
-  } else {
-    const unknown = scopes.filter((scope) => !SCOPES.has(scope));
-    if (unknown.length > 0) fail(where, `unknown projection scope: ${unknown.join(", ")}`);
-    if (scopes.includes("project")) projected.push(skill);
-    // A skill kept out of generated projects is a safety decision; make it explain itself.
-    else if (!front("projectionReason")) fail(where, "projection excludes `project` but no projectionReason is given");
-  }
+  if (front("sourcePath") !== where) fail(where, `metadata.sourcePath must be ${where}`);
+  if (front("projection") !== projection) fail(where, `metadata.projection must be \`${projection}\``);
+  declared.set(name, { projection: front("projection"), reason: front("projectionReason") });
 
   for (const [, target] of text.matchAll(/\]\(([^)]+)\)/g)) {
     if (/^(https?:|mailto:|#)/.test(target)) continue;
-    // `mantle skills` copies SKILL.md alone, so a project-scoped skill cannot
-    // reference a sibling file: it would resolve in this repository and be
-    // missing everywhere the skill is actually read.
-    if (scopes.includes("project")) {
-      fail(where, `relative link is unreachable once projected: ${target}`);
-      continue;
-    }
-    if (!existsSync(resolve(dirname(file), target.split("#")[0]))) fail(where, `dead link: ${target}`);
+    const path = resolve(dirname(file), target.split("#")[0]);
+    if (!existsSync(path)) fail(where, `dead link: ${target}`);
+    // a link that leaves what ships resolves here and is missing wherever the skill is read
+    else if (relative(root, path).startsWith(`..${sep}`) || relative(root, path) === "..") fail(where, `link leaves the shipped files: ${target}`);
   }
 }
 
-// The README audit table is the human view of the same front matter, and the
-// column a reviewer reads when deciding whether a destructive skill belongs in
-// generated projects. Assert it says what the code will do.
+// The README audit table is the human view of the same front matter.
 const readme = readFileSync(join(repoRoot, "skills", "README.md"), "utf8");
 const rows = [...readme.matchAll(/^\| `([a-z-]+)` \|(.+)$/gm)].map((match) => ({
   skill: match[1],
   cells: match[2].split("|").map((cell) => cell.trim()),
 }));
+const names = [...skills.keys()].sort();
 const audited = rows.map((row) => row.skill).sort();
-if (audited.join() !== skills.join()) {
-  fail("skills/README.md", `disclosure audit rows ${JSON.stringify(audited)} do not match shipped skills ${JSON.stringify(skills)}`);
+if (audited.join() !== names.join()) {
+  fail("skills/README.md", `disclosure audit rows ${JSON.stringify(audited)} do not match shipped skills ${JSON.stringify(names)}`);
 }
 for (const { skill, cells } of rows) {
-  if (!declaredScope.has(skill)) continue;
-  // …| Projection | Restricted because | (trailing empty cell from the final pipe)
-  const projection = cells.at(-3);
-  const restricted = cells.at(-2);
-  if (projection !== declaredScope.get(skill)) {
-    fail("skills/README.md", `${skill}: audit table says projection "${projection}", front matter says "${declaredScope.get(skill)}"`);
-  }
-  const reason = declaredReason.get(skill);
-  if (reason && restricted !== reason) {
-    fail("skills/README.md", `${skill}: audit table reason does not match projectionReason`);
-  }
-  if (!reason && restricted !== "—") {
-    fail("skills/README.md", `${skill}: audit table gives a restriction reason but front matter declares none`);
-  }
+  const front = declared.get(skill);
+  if (!front) continue;
+  // …| Distribution | Restricted because | (trailing empty cell from the final pipe)
+  if (cells.at(-3) !== front.projection) fail("skills/README.md", `${skill}: audit table says "${cells.at(-3)}", front matter says "${front.projection}"`);
+  if (cells.at(-2) !== (front.reason ?? "—")) fail("skills/README.md", `${skill}: audit table reason does not match projectionReason`);
 }
 
 if (failures.length > 0) {
   console.error(`check-skills: ${failures.length} problem(s)\n${failures.map((line) => `  ${line}`).join("\n")}`);
   process.exit(1);
 }
-console.log(`check-skills: ${skills.length} skills, ${projected.length} projected into generated projects (${projected.join(", ")})`);
+console.log(`check-skills: ${skills.size} skills (${names.join(", ")})`);
