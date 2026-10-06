@@ -26,6 +26,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { t } from "../../app/i18n";
+import { isAdminPreview } from "../../app/frame-policy";
 import type { AdminLanguage } from "../../app/preferences";
 import { usePreferences } from "../../app/preferences";
 import { resolveLocalizedText } from "../../lib/localized-text";
@@ -157,7 +158,7 @@ export function AtomGraph({
   onOpen: (atom: DeveloperAtom) => void;
 }): React.ReactElement {
   const { language, theme } = usePreferences();
-  const [business, setBusiness] = React.useState(() => graph.atoms.some((a) => businessRules(a, schemas, language).some((r) => r.transitions?.length)));
+  const [business, setBusiness] = React.useState(() => !isAdminPreview() && graph.atoms.some((a) => businessRules(a, schemas, language).some((r) => r.transitions?.length)));
   const [showDetails, setShowDetails] = React.useState(Boolean(selectedAtomId));
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const hudRef = React.useRef<HTMLDivElement>(null);
