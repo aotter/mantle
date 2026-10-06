@@ -8,7 +8,7 @@ declare global {
 export function canRenderAdmin(win: Window, preview: boolean): boolean {
   if (!preview) return win.self === win.top;
   try {
-    return win.self !== win.top && win.parent === win.top
+    return win.self !== win.parent
       && win.parent.location.origin === win.location.origin
       && typeof win.__MANTLE_ADMIN_PREVIEW__?.fetch === "function"
       && win.__MANTLE_ADMIN_PREVIEW__.fetch === win.fetch;

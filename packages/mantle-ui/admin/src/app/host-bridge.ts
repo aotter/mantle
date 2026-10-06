@@ -4,7 +4,7 @@ import type {} from "./frame-policy";
 if (window.parent !== window) {
   const script = document.currentScript as HTMLScriptElement | null;
   const base = script?.dataset.basePath ?? "/builder/admin";
-  if (base.startsWith("//") || !/^\/[a-zA-Z0-9/_-]+$/.test(base) || window.parent !== window.top || window.parent.location.origin !== location.origin) {
+  if (base.startsWith("//") || !/^\/[a-zA-Z0-9/_-]+$/.test(base) || window.parent.location.origin !== location.origin) {
     throw new Error("Admin preview requires an immediate same-origin host.");
   }
   const origin = location.origin;
