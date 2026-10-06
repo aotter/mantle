@@ -287,8 +287,8 @@ export function AtomGraph({
       <PageHeaderActions>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="ghost" aria-label={language.startsWith("zh") ? "圖表模式" : "Diagram mode"}>
-              {language.startsWith("zh") ? business ? "業務狀態" : "系統接線" : business ? "Business states" : "System wiring"}
+            <Button size="sm" variant="ghost" className="min-w-0 max-w-full shrink" aria-label={language.startsWith("zh") ? "圖表模式" : "Diagram mode"}>
+              <span className="truncate">{language.startsWith("zh") ? business ? "業務狀態" : "系統接線" : business ? "Business states" : "System wiring"}</span>
               <ChevronDown aria-hidden className="size-3" />
             </Button>
           </DropdownMenuTrigger>
