@@ -158,11 +158,30 @@ export function AtomGraph({
   const { language, theme } = usePreferences();
   const [business, setBusiness] = React.useState(() => graph.atoms.some((a) => businessRules(a, schemas, language).some((r) => r.transitions?.length)));
   const [showDetails, setShowDetails] = React.useState(Boolean(selectedAtomId));
+  const canvasRef = React.useRef<HTMLDivElement>(null);
+  const hudRef = React.useRef<HTMLDivElement>(null);
+
   const layout = React.useMemo(() => business ? businessOverview(graph, schemas, language) : layoutGraph(graph, language), [graph, language, schemas, business]);
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
   const [flow, setFlow] = React.useState<ReactFlowInstance<Node, Edge> | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!showDetails) return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const update = (): void => {
+      if (canvasRef.current) canvasRef.current.inert = media.matches;
+      if (media.matches) hudRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    };
+    update();
+    media.addEventListener("change", update);
+    return () => {
+      media.removeEventListener("change", update);
+      if (canvasRef.current) canvasRef.current.inert = false;
+      if (media.matches && previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [showDetails, selectedId]);
   const [trace, setTrace] = React.useState<FocusSlice | null>(null);
   const atomsById = React.useMemo(() => new Map(graph.atoms.map((atom) => [atom.id, atom])), [graph.atoms]);
   const selected = selectedId ? atomsById.get(selectedId) ?? null : null;
@@ -272,7 +291,7 @@ export function AtomGraph({
         </div>
       </div>
     <div className="relative flex min-h-0 flex-1">
-    <div className="min-w-0 flex-1">
+    <div ref={canvasRef} className="min-w-0 flex-1">
     <ReactFlow
       className={graphCanvasClassName}
       nodes={nodes}
@@ -306,7 +325,7 @@ export function AtomGraph({
 
     </ReactFlow>
     </div>
-      {selected && showDetails ? <div className="absolute inset-y-0 right-0 z-20 w-[min(24rem,calc(100%-1rem))] border-l bg-background shadow-xl md:relative md:w-[24rem] md:max-w-[50%] md:shrink-0 md:shadow-none"><GraphHud key={selected.id} atom={selected} schemas={schemas} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={() => setShowDetails(false)} onSelect={moveAlongTrace} onOpen={onOpen} /></div> : null}
+      {selected && showDetails ? <div ref={hudRef} onKeyDown={(event) => { if (event.key === "Escape") setShowDetails(false); }} className="absolute inset-y-0 right-0 z-20 w-[min(24rem,calc(100%-1rem))] border-l bg-background shadow-xl md:relative md:w-[24rem] md:max-w-[50%] md:shrink-0 md:shadow-none"><GraphHud key={selected.id} atom={selected} schemas={schemas} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={() => setShowDetails(false)} onSelect={moveAlongTrace} onOpen={onOpen} /></div> : null}
     </div>
     </div>
   );
