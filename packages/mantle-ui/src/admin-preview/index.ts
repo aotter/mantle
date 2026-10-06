@@ -18,3 +18,23 @@ export function readAdminPreviewRequest(value: unknown, origin: string): Request
   if (url.origin !== origin || !url.pathname.startsWith("/admin/api/") || (["GET", "HEAD"].includes(input.method) && input.body !== null)) throw new TypeError("Unsupported Admin preview request.");
   return new Request(url, { method: input.method, headers: input.headers, ...(input.body ? { body: input.body } : {}) });
 }
+
+/** Host-owned commands rendered by the opt-in preview, never inferred by Admin. */
+export interface AdminPreviewMenu {
+  label: string;
+  description: string;
+  items: { id: string; label: string; disabled?: boolean }[];
+}
+export function readAdminPreviewMenu(value: unknown): AdminPreviewMenu {
+  const menu = value as AdminPreviewMenu | null;
+  const text = (value: unknown, max: number) => typeof value === "string" && value.length > 0 && value.length <= max;
+  if (!menu || !text(menu.label, 80) || !text(menu.description, 240) || !Array.isArray(menu.items) || menu.items.length > 32 ||
+    menu.items.some(item => !item || !text(item.id, 80) || !/^[a-zA-Z0-9:_-]+$/.test(item.id) || !text(item.label, 80) || (item.disabled !== undefined && typeof item.disabled !== "boolean")) ||
+    new Set(menu.items.map(item => item.id)).size !== menu.items.length) throw new TypeError("Invalid Admin preview menu.");
+  return menu;
+}
+export function readAdminPreviewAction(value: unknown): string {
+  const data = value as { type?: unknown; protocolVersion?: unknown; id?: unknown } | null;
+  if (data?.type !== "mantle:host-ui:action" || data.protocolVersion !== 1 || typeof data.id !== "string" || !/^[a-zA-Z0-9:_-]{1,80}$/.test(data.id)) throw new TypeError("Invalid Admin preview action.");
+  return data.id;
+}

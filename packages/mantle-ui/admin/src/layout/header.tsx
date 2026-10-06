@@ -1,4 +1,5 @@
 import * as React from "react";
+import { HostMenu } from "./host-menu";
 import { WebMcpControl } from "./webmcp-control";
 import { ExternalLink, type LucideIcon } from "lucide-react";
 
@@ -49,7 +50,7 @@ export function Header({
     <header
       data-slot="app-header"
       className={cn(
-        "group/header flex h-14 shrink-0 items-center gap-2 border-b px-4",
+        "group/header flex h-14 shrink-0 items-center gap-1 border-b px-2 sm:gap-2 sm:px-4",
         className,
       )}
     >
@@ -69,7 +70,7 @@ export function Header({
           ) : null}
         </BreadcrumbList>
       </Breadcrumb>
-      <div ref={actionsHostRef} data-slot="page-header-actions" className="flex min-w-0 shrink-0 items-center" />
+      <div ref={actionsHostRef} data-slot="page-header-actions" className="flex min-w-0 shrink items-center" />
       <div className="ms-auto flex shrink-0 items-center gap-1">
         {workspaceLink ? (
           <Tooltip>
@@ -84,7 +85,7 @@ export function Header({
           </Tooltip>
         ) : null}
         {publicUrl ? (
-          <Tooltip>
+          <span className="hidden sm:inline-flex"><Tooltip>
             <TooltipTrigger asChild>
               <Button asChild variant="ghost" size="icon-sm">
                 <a
@@ -98,8 +99,9 @@ export function Header({
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t(language, "common.viewSite")}</TooltipContent>
-          </Tooltip>
+          </Tooltip></span>
         ) : null}
+        <HostMenu />
         <LanguagePreferenceDropdown compact />
         <ThemePreferenceDropdown compact />
         <WebMcpControl />
