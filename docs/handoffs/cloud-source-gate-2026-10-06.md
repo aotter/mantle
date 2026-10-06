@@ -29,7 +29,7 @@ original goal complete yet.
 - Core full local check constituents, 775 tests passed / 16 skipped / three
   todo (two workers); UI 214 passed. Core CI excludes plugin-only changes:
   these local results are the evidence, not a claim that CI ran those suites.
-- Actual Core tip tarball consumer validation passed. Final doc-only tip
+- Actual Core tip tarball consumer validation passed. The `e7bec36b` doc-only tip
   produced the same package bytes as the fully tested implementation tip.
 - Dedicated native Artifacts spike: 18 checks passed; its repository and
   short-lived credentials were deleted.
