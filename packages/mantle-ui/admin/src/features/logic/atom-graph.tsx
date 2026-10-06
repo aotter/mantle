@@ -26,7 +26,6 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { t } from "../../app/i18n";
-import { isAdminPreview } from "../../app/frame-policy";
 import type { AdminLanguage } from "../../app/preferences";
 import { usePreferences } from "../../app/preferences";
 import { resolveLocalizedText } from "../../lib/localized-text";
@@ -148,17 +147,21 @@ export function AtomGraph({
   graph,
   schemas = [],
   selectedAtomId,
+  diagramMode,
+  onDiagramModeChange,
   onSelect,
   onOpen,
 }: {
   graph: DeveloperConsoleSnapshot["graph"];
   schemas?: readonly DeveloperSchemaModel[];
   selectedAtomId: string | null;
+  diagramMode: string | null;
+  onDiagramModeChange: (mode: "business" | "system") => void;
   onSelect: (id: string | null) => void;
   onOpen: (atom: DeveloperAtom) => void;
 }): React.ReactElement {
   const { language, theme } = usePreferences();
-  const [business, setBusiness] = React.useState(() => !isAdminPreview() && graph.atoms.some((a) => businessRules(a, schemas, language).some((r) => r.transitions?.length)));
+  const business = diagramMode === "business" || (diagramMode !== "system" && graph.atoms.some((a) => businessRules(a, schemas, language).some((r) => r.transitions?.length)));
   const [showDetails, setShowDetails] = React.useState(Boolean(selectedAtomId));
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const hudRef = React.useRef<HTMLDivElement>(null);
@@ -290,7 +293,7 @@ export function AtomGraph({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuRadioGroup value={business ? "business" : "system"} onValueChange={(value) => { setBusiness(value === "business"); clearSelection(); }}>
+            <DropdownMenuRadioGroup value={business ? "business" : "system"} onValueChange={(value) => onDiagramModeChange(value === "business" ? "business" : "system")}>
               <DropdownMenuRadioItem value="business">{language.startsWith("zh") ? "業務狀態" : "Business states"}</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="system">{language.startsWith("zh") ? "系統接線" : "System wiring"}</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>

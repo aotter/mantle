@@ -114,11 +114,29 @@ it("loads live model data only on demand through the existing guarded paths", as
     await page.getByRole("button", { name: "Query" }).click();
     await page.getByText("View access denied").waitFor();
 
-    await page.goto(`${origin}/admin/dev/overview/flow`);
+    await page.goto(`${origin}/admin/dev/overview/flow?diagram=system&hostHint=keep`);
     const node = page.locator('.react-flow__node[data-id="Schema:articles"]');
     await node.focus();
     await node.press("Enter");
     await page.getByRole("button", { name: "Open in data model" }).waitFor();
+    expect(new URL(page.url()).searchParams.get("diagram")).toBe("system");
+    expect(new URL(page.url()).searchParams.get("hostHint")).toBe("keep");
+    expect(new URL(page.url()).searchParams.get("selected")).toBe("Schema:articles");
+    const mode = page.getByRole("button", { name: "Diagram mode", exact: true });
+    await mode.click();
+    await page.getByRole("menuitemradio", { name: "Business states", exact: true }).click();
+    expect(new URL(page.url()).searchParams.has("selected")).toBe(false);
+    expect(new URL(page.url()).searchParams.get("hostHint")).toBe("keep");
+    await page.reload();
+    await page.getByRole("button", { name: "Diagram mode", exact: true }).filter({ hasText: "Business states" }).waitFor();
+    await mode.click();
+    await page.getByRole("menuitemradio", { name: "System wiring", exact: true }).click();
+    await page.goBack();
+    await mode.filter({ hasText: "Business states" }).waitFor();
+    expect(new URL(page.url()).searchParams.get("diagram")).toBe("business");
+    await page.goForward();
+    await mode.filter({ hasText: "System wiring" }).waitFor();
+    expect(new URL(page.url()).searchParams.get("diagram")).toBe("system");
   } finally {
     await browser.close();
     await new Promise<void>((done) => server.close(() => done()));

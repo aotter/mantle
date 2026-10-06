@@ -185,3 +185,5 @@ views; use the static Admin SPA or sandbox preview for the complete product.
 
 Applications that compile Tailwind themselves import `tokens.css` and add
 `@source` for `node_modules/@aotter/mantle-ui/dist/kit` instead of `kit.css`.
+
+Developer overview URLs accept `?diagram=system` or `?diagram=business`. The mode switch updates the URL, preserving other query parameters; without a recognized mode the existing graph heuristic applies. Hosts choose their initial iframe URL. Preview documents require an explicit local `basePath` through `adminPreviewDocument`; the SDK does not choose a host mount or deployment destination.
