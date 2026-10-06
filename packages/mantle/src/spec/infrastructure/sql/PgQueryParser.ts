@@ -25,7 +25,7 @@ export async function parsePgSql(sql: string): Promise<ParsedSql> {
   } catch (e: any) {
     const at = e?.sqlDetails?.cursorPosition; // a character index, not a byte offset
     // libpg-query prefixes "syntax error at or near ..." messages with its own noise; keep the part after the first colon
-    throw new SqlRefusal("SQL_SYNTAX", String(e?.message ?? e).replace(/^.*?:\s*/, ""), typeof at === "number" ? Buffer.byteLength(sql.slice(0, at)) : undefined);
+    throw new SqlRefusal("SQL_SYNTAX", String(e?.message ?? e).replace(/^.*?:\s*/, ""), typeof at === "number" ? new TextEncoder().encode(sql.slice(0, at)).byteLength : undefined);
   }
   const raw = tree.stmts as SqlNode[];
   return { stmts: raw.map((s) => s.stmt), locations: raw.map((s) => s.stmt_location) };
