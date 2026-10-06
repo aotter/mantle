@@ -23,10 +23,4 @@ Applications read version-matched instructions from their installed Core
 package (`node_modules/@aotter/mantle/docs/`); see
 [agent setup](docs/handbook/guides/agent-setup.md).
 
-Public/private boundary:
-
-- This repository is public. Keep private service source references, internal
-  implementation details, operational handoffs, tenant identifiers and access
-  lifecycle evidence in private storage. Public documents, issues, PR bodies,
-  comments and generated metadata should contain Core contracts and generic
-  validation evidence only. Review generated bundles for internal metadata.
+Public/private boundary: follow [CONTRIBUTING.md](CONTRIBUTING.md#publicprivate-boundary).
