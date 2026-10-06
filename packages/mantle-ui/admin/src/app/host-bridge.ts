@@ -1,6 +1,5 @@
 /** The opt-in Admin document uses only its immediate same-origin host; never live HTTP. */
 import type {} from "./frame-policy";
-import { readAdminPreviewMenu } from "../../../src/admin-preview/index.js";
 
 if (window.parent !== window) {
   const script = document.currentScript as HTMLScriptElement | null;
@@ -44,15 +43,7 @@ if (window.parent !== window) {
   };
   window.__MANTLE_ADMIN_PREVIEW__ = { fetch: window.fetch, mode: script?.dataset.mode === "design" ? "design" : "runtime" };
   window.addEventListener("message", (event) => {
-    if (event.origin !== origin || event.source !== window.parent) return;
-    if (event.data?.type === "mantle:host-ui:menu" && event.data.protocolVersion === 1) {
-      try {
-        window.__MANTLE_ADMIN_PREVIEW__!.menu = readAdminPreviewMenu(event.data.menu);
-        window.dispatchEvent(new Event("mantle:host-ui:menu"));
-      } catch { /* Invalid host configuration cannot change the menu. */ }
-      return;
-    }
-    if (event.data?.type !== "mantle:host-api:reload") return;
+    if (event.origin !== origin || event.source !== window.parent || event.data?.type !== "mantle:host-api:reload") return;
     if (adminPath(location.pathname) && !location.pathname.startsWith("/admin/api/")) {
       location.replace(base + location.pathname.slice("/admin".length) + location.search + location.hash);
     }
