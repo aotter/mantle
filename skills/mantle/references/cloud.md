@@ -12,7 +12,7 @@ keep its organization, project ID, hosting link, source and access grants.
 List organizations/projects through the discovered tools before selecting one;
 create a project only for a new application. Tool names on MCP use underscores
 (for example `cloud_create_project`, `cloud_host_contract` and
-`query_view_member_project`). Read each discovered tool's input schema.
+`member_project`). Read each discovered tool's input schema.
 
 Call `cloud_host_contract` with that project ID before installing Core or
 packing an application. It returns the exact Core version/revision and host
