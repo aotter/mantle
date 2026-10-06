@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle",
-  "version": "0.2.0-alpha.2",
+  "version": "0.2.0-alpha.3",
   "description": "Mantle: a manifest-driven service core. Store authored as SQL, surfaces as Fetch functions, and the mantle CLI.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
