@@ -30,6 +30,7 @@ interface HeaderProps {
   publicUrl?: string;
   pageTitle?: string;
   workspaceLink?: { href: string; label: string; icon: LucideIcon };
+  actionsHostRef?: React.Ref<HTMLDivElement>;
 }
 
 export function Header({
@@ -38,6 +39,7 @@ export function Header({
   publicUrl,
   pageTitle,
   workspaceLink,
+  actionsHostRef,
 }: HeaderProps): React.ReactElement {
   const { pathname } = useAdminLocation();
   const { language } = usePreferences();
@@ -67,6 +69,7 @@ export function Header({
           ) : null}
         </BreadcrumbList>
       </Breadcrumb>
+      <div ref={actionsHostRef} data-slot="page-header-actions" className="flex min-w-0 shrink-0 items-center" />
       <div className="ms-auto flex shrink-0 items-center gap-1">
         {workspaceLink ? (
           <Tooltip>
