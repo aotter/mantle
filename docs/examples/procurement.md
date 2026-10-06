@@ -33,6 +33,7 @@ spec:
   schema:
     type: object
     additionalProperties: false
+    readOnly: true
     required: [requestNumber, requestedBy, item, quantity, needBy, justification, requestStatus]
     properties:
       requestNumber: { type: string, maxLength: 40, pattern: "^REQ-[A-Z0-9-]+$" }
@@ -154,6 +155,15 @@ spec:
   could not see the queue. Scope is for rows only their owner may ever see.
   Here the member View filters on `requestedBy = auth.uid()` instead, and
   `requires: ctx.user` means an anonymous caller is 401 before the query runs.
+- **Generic Admin access is a separate entrance.** The View's SQL filter and
+  `requires` protect that View, not generic Schema entry routes. Root
+  `schema.readOnly: true` blocks generic Admin create, patch and delete, so
+  every write goes through the declared Procedures. It does not block reads:
+  Admin admits contributors by default, and this Schema is not scoped. If
+  only owner/editor reviewers may read everyone's requisitions, restrict the
+  Admin surface in the application; see [Roles](../handbook/guides/admin-ui.md#roles).
+  Keep that restriction inside the existing `withCaller` boundary. Members
+  and contributors use the owner-filtered public View instead.
 - **A Schema whose name is not a plain identifier is quoted in SQL**:
   `"purchase-requisitions"`.
 
@@ -204,7 +214,8 @@ staff surface.
 ## What this leaves out
 
 - **Approval chains.** One decision by one staff member. Sequential approvers
-  need a step field and a `before_update` hook that checks the transition.
+  need a step field and SQL conditions on the current step and caller. Use a
+  hook or guard only for a check SQL cannot express.
 - **Budgets.** A live budget check belongs in a `requires.guard` handler.
 - **Notifications.** See the `after_create` hook in
   [Intake with bot check and notification](./intake-hooks.md).

@@ -134,7 +134,31 @@ const { url } = await res.json();
 location.assign(url ?? "/account");
 ```
 
-Dynamic client registration takes a client that names no `application_type`
+The generated preset does not enable dynamic client registration (DCR).
+An `access_denied` response from `/api/auth/oauth2/register` does not mean
+member OAuth is broken. An owner can register a known local client through
+the public `MantleAuth` API, without opening DCR:
+
+```ts
+const client = await auth.registerOAuthClient({
+  requestHeaders: ownerRequest.headers,
+  clientName: "Local MCP client",
+  redirectUris: ["http://127.0.0.1:3456/callback"],
+  applicationType: "native",
+  tokenEndpointAuthMethod: "none",
+  grantTypes: ["authorization_code", "refresh_token"],
+  responseTypes: ["code"],
+  scope: ["mcp"],
+  requirePKCE: true,
+});
+```
+
+Use a real owner session, keep persisted user consent, and configure the MCP
+client with the returned `clientId`. This belongs in an owner-controlled
+management path, not an anonymous registration handler. Choose DCR separately
+according to the host's registration policy.
+
+When DCR is enabled, registration takes a client that names no `application_type`
 and registers only `http` loopback redirects (`localhost`, `127.0.0.1`,
 `[::1]`) as `native` (RFC 8252), which is how local MCP clients register; any
 other registration is checked as Better Auth checks it (`web` needs `https` on a

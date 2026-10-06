@@ -50,7 +50,7 @@ again.
 
 `createMantleAuth` runs Better Auth's OAuth provider with `mcpResource:
 {PUBLIC_ORIGIN}/mcp`. An MCP client discovers it from the 401 challenge's
-`resource_metadata` (`/.well-known/oauth-protected-resource/mcp`), registers,
+`resource_metadata` (`/.well-known/oauth-protected-resource/mcp`), uses a registered client,
 sends the user through sign-in and consent (Admin's `/admin/oauth/consent`, or the plain `/oauth/consent`), and calls `/mcp`
 with the token. The resolver (`createCallerResolver(auth, { jwtBearer: { audience, scopes: ["mcp"] } })`)
 verifies it on every request and reads the user's current role; nothing is

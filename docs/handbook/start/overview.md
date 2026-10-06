@@ -43,6 +43,7 @@ After that they are your files.
 | Look up a field | [Feature table](../reference/features.md), then the [Schema](../reference/schema.md), [View](../reference/view.md), [Procedure](../reference/procedure.md) and [Trigger](../reference/trigger.md) references |
 | Wire sign-in, media or deploy | [Authentication](../cloudflare/authentication.md), [Media uploads with R2](../cloudflare/media-r2.md), [Deploy and operate](../cloudflare/deploy-and-operate.md) |
 | Run on ChatGPT Sites | [Mantle on ChatGPT Sites](../cloudflare/chatgpt-sites.md) |
+| Save, preview and publish on Mantle Cloud | [Mantle Cloud](../cloudflare/deploy-and-operate.md#mantle-cloud), then the plugin's `mantle` Cloud workflow |
 | See whole services | [Examples](../examples/hub.md) and the runnable reference service |
 | Move a 0.1.x project | `docs/upgrade-0.1-to-0.2.md` in the installed package |
 
@@ -60,4 +61,3 @@ check the code.
   `createMantle`. The Bun preset has no scheduler.
 - **Site settings and media on PostgreSQL.** Only the `sqlite` dialect's
   storage takes `SiteDefaults`; see [Site defaults](../reference/site-config.md).
-- **Deploying to Mantle Cloud.** See [Deploy and operate](../cloudflare/deploy-and-operate.md).

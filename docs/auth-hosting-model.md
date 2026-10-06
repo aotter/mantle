@@ -24,6 +24,8 @@ What carries over from 0.1.x:
 - **API and MCP authorization** is the same `requires` and guard everywhere;
   see [Guarded API access](examples/guarded-api.md).
 
-There is no Mantle-hosted auth or Landing provisioning in 0.2.0. See
+The standalone hosted-auth and Landing provisioning flow from 0.1.x is absent
+in 0.2.0. A Mantle Cloud tenant uses Cloud's managed identity/storage contract;
+Cloud project membership does not grant tenant staff access. See
 [Authentication](handbook/cloudflare/authentication.md) and
 [Authorization](handbook/concepts/authorization.md).

@@ -121,6 +121,35 @@ and manages media, `owner` manages staff, site settings and the developer
 console. Operations and staff Views are further limited by their own
 `requires`.
 
+Those atom predicates do not restrict generic Schema entry routes. A root
+Schema `readOnly: true` blocks generic writes, not reads. In a service where
+only owner/editor reviewers may read an unscoped table, restrict the Admin
+surface in the application-owned `src/service.ts`:
+
+```ts
+// Replace the preset's Admin composition, keeping its existing options.
+const adminSurface = createAdminSurface(runtime, { /* existing Admin options */ });
+const admin = withCaller(resolver, async (request, caller) => {
+  if (new URL(request.url).pathname.startsWith("/admin/api/") &&
+      caller.kind === "user" && caller.role === "contributor") {
+    return Response.json({ error: {
+      code: "AUTH_DENIED", message: "Admin access requires an owner or editor role.",
+    } }, { status: 403 });
+  }
+  return adminSurface(request, caller);
+});
+```
+
+The preset already imports `withCaller` from `@aotter/mantle`. Reuse its
+resolver so credential validation and the session origin guard run once;
+Admin retains its own gates for members and anonymous callers. Contributors
+can use an application-owned page over an owner-filtered public View. Keep
+sign-in, OAuth consent and UI assets reachable; restricting the whole `/admin`
+prefix would also block member MCP consent at `/admin/oauth/consent`. This is
+host surface composition, not a Procedure `ref` handler or a new Manifest
+permission key. Exercise generic entry reads, reports and operations with
+each role, including after revoking a role in an existing session.
+
 ## Verify a change
 
 1. Run `mantle generate`, then `mantle generate --check`.

@@ -117,7 +117,13 @@ The writer comes from the caller, never from an input. See
 
 Admin's gate admits any staff role, and each Admin route names the least role
 it needs. Admin reads and writes through `runtime.store.as(caller)`, so scope
-and `requires` apply to staff exactly as to anyone. See
+applies to generic entry routes. A View or Procedure's `requires` applies when
+that atom runs, including Admin reports and operations; it does not restrict
+generic entry reads or writes. Root Schema `readOnly: true` blocks generic
+writes, while reads still follow Admin's role gate and Schema scope.
+For an unscoped table shared by members and reviewers, an owner-filtered View
+does not hide its rows from contributors using generic Admin routes. Compose
+a stricter Admin surface in the application when the product requires it. See
 [Customize Admin](../guides/admin-ui.md).
 
 ## Further reading

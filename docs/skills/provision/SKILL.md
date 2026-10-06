@@ -23,7 +23,7 @@ Ask which target, unless the project already shows one.
 |---|---|---|
 | Cloudflare Workers | `wrangler.jsonc` | the rest of this skill |
 | ChatGPT Sites | the Site's hosting config | installed `docs/handbook/cloudflare/chatgpt-sites.md`; publish through Sites, never `wrangler deploy` |
-| Mantle Cloud | — | not available for 0.2 services yet; the plugin's `mantle` skill says when it is |
+| Mantle Cloud | Cloud project link | the plugin's `mantle` skill and its Cloud workflow; connect Cloud MCP and use its exact host contract, not `wrangler deploy` |
 | Bun (host `bun`) | `.env` | self-hosted; installed `docs/handbook/start/project-and-cli.md` (Bun), not this skill |
 
 Self-hosting is always an option; never present a hosted target as required.
@@ -58,8 +58,9 @@ Confirm the active Cloudflare account with the user before creating anything.
      and `bootstrapOwner: { match: "github-login", value }`. The user creates a
      GitHub OAuth App with callback `<PUBLIC_ORIGIN>/api/auth/callback/github`.
    Remove the preset's loopback-only check once the method is real.
-4. **Secrets.** Never in chat, files or logs. Use a connector, or hidden
-   input:
+4. **Secrets.** Never commit them or put them in chat, logs or `wrangler.jsonc`
+   `vars`. Store production values in the deployment's secret store. Use a
+   connector, or hidden input:
 
 ```bash
 openssl rand -hex 32 | pnpm exec wrangler secret put BETTER_AUTH_SECRET
