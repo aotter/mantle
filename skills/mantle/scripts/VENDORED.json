@@ -1,9 +1,5 @@
 {
-  "repository": "https://github.com/aotter/mantle-home",
-  "commit": "d596588b9d29f1f0b44fa9de84bd8a652274ee3f",
-  "source": "packages/cloud-cli/src/host/entry.mjs",
-  "build": "pnpm --filter @aotter/mantle-cloud build:host",
-  "artifact": "packages/cloud-cli/dist/mantle-host.mjs",
-  "sha256": "70597d519e427f0febefc80c94b6c58ce2fb8577f7dade213f4cf02ca31abdc7",
+  "artifact": "cloud-host.mjs",
+  "sha256": "c340a3d276029373a08e9ddf858ef495772e75f7718ca549b7e2003ae360e5cf",
   "protocol": 4
 }
