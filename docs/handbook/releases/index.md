@@ -56,8 +56,9 @@ by hand.
   `emit-openapi`, `skills` and `mantle-harness` are removed.
 - **The Admin console** moves to `@aotter/mantle-ui/admin`, served at `/admin`
   by the preset through the service's `ASSETS` binding.
-- **Mantle Cloud** uses its pinned Core contract and host protocol 3 through
-  the plugin's `mantle` Cloud workflow, with separate save, preview and publish
+- **Mantle Cloud** uses its pinned Core contract and host protocol 4 through
+  the plugin's `mantle` Cloud workflow, requiring a verified source receipt
+  before save, with separate preview and publish
   states. Its host contract decides the accepted version; offline readiness
   is not a deployed service.
 - **Not yet in 0.2.0:** Mantle-rendered public pages and the MCP interaction

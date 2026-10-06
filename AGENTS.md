@@ -22,3 +22,5 @@ Repository safety gates:
 Applications read version-matched instructions from their installed Core
 package (`node_modules/@aotter/mantle/docs/`); see
 [agent setup](docs/handbook/guides/agent-setup.md).
+
+Public/private boundary: follow [CONTRIBUTING.md](CONTRIBUTING.md#publicprivate-boundary).

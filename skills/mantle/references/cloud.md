@@ -12,7 +12,7 @@ keep its organization, project ID, hosting link, source and access grants.
 List organizations/projects through the discovered tools before selecting one;
 create a project only for a new application. Tool names on MCP use underscores
 (for example `cloud_create_project`, `cloud_host_contract` and
-`query_view_member_project`). Read each discovered tool's input schema.
+`member_project`). Read each discovered tool's input schema.
 
 Call `cloud_host_contract` with that project ID before installing Core or
 packing an application. It returns the exact Core version/revision and host
@@ -22,12 +22,23 @@ package's new-project/develop instructions, then run generate and checks.
 For an existing application, a version mismatch is an explicit upgrade task;
 preserve its source and data until the user authorizes the upgrade.
 
-For an existing Cloud project without a local checkout, use
-`cloud_static_source_discover` to obtain its authorized source snapshot. Verify
-the returned SHA-256 before extracting into an empty application directory,
-keep the original project ID and hosting link, and inspect its package/lockfile.
-If no source was saved, report that limitation rather than rebuilding over the
-existing project. A fresh application directory is not a new Cloud project.
+For an existing Cloud project without a local checkout, call
+`cloud_project_source` to inspect its repository and saved source history.
+Obtain a five-minute read credential with `cloud_source_read_credential`, then
+pipe that result to this command in an empty application directory:
+
+```text
+node <helper> open --project <id> --grant - --json
+```
+
+`open` clones the existing main branch and validates its hosting target; it
+never overwrites a non-empty directory. Keep the project ID and hosting link,
+inspect package/lockfiles, and install only the pinned dependencies. For an
+older project without a Git repository, `cloud_static_source_discover` can
+recover a retained source ZIP: verify SHA-256, extract into an empty directory,
+retain its project identity, initialize Git and commit it before source admission.
+If neither source exists, report the limitation instead of rebuilding over it.
+A fresh application directory is not a new Cloud project.
 
 ## Prepare and save
 
@@ -53,23 +64,44 @@ run the project's own checks/build. `esbuild` is a project dev dependency when
 bundling handlers/services.
 
 ```text
+node <helper> source --json
 node <helper> save --json
 ```
 
-Follow every literal `nextAction`. The first requests `cloud_host_contract`;
-pipe its JSON result to the printed `save --resume --grant -` command. The
-helper packs the committed backend, then requests `cloud_backend_upload`.
-Supply `expectedVersion` from the required project query and pipe its result
-to the printed command. Upload grants stay on stdin, never shell arguments,
-source files or logs. It uploads, polls readiness and verifies the frontend
-kit SHA-256. Follow that kit's `AGENT.md` to build the static frontend, then
-resume to pack source/static artifacts and call `cloud_static_frontend_upload`.
-Pipe that result to the next command. Pairing finishes with `{versionId, commit}`.
+Follow every literal `nextAction`. `source` requests
+`cloud_source_write_credential`: supply `expectedVersion` from the project query
+and confirm the destination using the existing authorization. Pipe the result
+to `source --resume --grant -`. The helper performs an ordinary push of clean
+HEAD and verifies the remote main hash; it never force-pushes, resets or merges
+local work. It then requests `cloud_save_source_version` with the full commit,
+target and persisted operation ID. Pipe that receipt to its printed command.
+The sourceVersionId, commit and Core pin are persisted together; credentials
+stay in memory. The entire repo is pushed, so `--omit` cannot hide tracked secrets.
+A saved source is not a built artifact or a running preview.
 
-On interruption, use `status` and the existing `save --resume` action. Reuse
-the recorded operation ID; do not create a new project or invent a new upload
-on retry. A changed source needs a new save. Version/revision conflicts mean
-refresh and review the current project; never remove the expected-version check.
+`save` refuses a missing/stale source receipt and `--no-git`. Protocol 4 first
+requests `cloud_host_contract`; pipe its result to `save --resume --grant -`.
+The helper compiles/packs the committed backend and requests
+`cloud_backend_upload` with sourceVersionId. Cloud checks the plan/YAML against
+that fixed commit. Supply `expectedVersion` and pipe the result to its command.
+It uploads, polls readiness and verifies the frontend kit SHA-256. It clears the
+configured ignored build directory, refusing tracked source or symlink paths;
+follow kit `AGENT.md`, build fresh static files and resume. The helper never runs
+build commands itself. `cloud_static_frontend_upload` binds the source commit
+and retained ZIP to the same Git tree, minus explicitly recorded omissions.
+Pipe that result to the next command. Pairing finishes with `{versionId, commit}`.
+Source is verified; client-built handlers/static output are not server build
+attestation. Keep that distinction in the deploy review.
+
+On interruption, use `status` and the existing source/save resume action. Reuse
+the recorded operation ID and exact arguments; never create a new project or
+invent a replacement upload on retry. Changed source requires a new commit,
+`source`, then `save`. A competing push requires reviewing and merging locally;
+there is no force-push fallback. A Cloud Core pin change requires a new source
+receipt (`source --restart`) before saving again; an SDK upgrade also requires
+regenerating and committing the plan. Version conflicts mean refresh and review
+the project, never remove the expected-version check. Grants stay on stdin,
+never shell arguments, source files or logs.
 
 ## Preview and publish
 

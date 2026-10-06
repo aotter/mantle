@@ -85,7 +85,7 @@ project alone does not imply a deploy request. Self-hosting remains available.
   `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` and that host's
   native deployment workflow.
 - **Mantle Cloud:** follow [Cloud workflow](references/cloud.md). The bundled
-  `scripts/mantle-cloud.mjs` supports `link`, `save`, `status`, `deploy`,
+  `scripts/mantle-cloud.mjs` supports `link`, `source`, `open`, `save`, `status`, `deploy`,
   `rollback` and `version`. Run it by absolute path from the application root;
   execute its literal `nextAction` using the connected Cloud MCP, not guessed
   tool names. It uses the project's installed compiler and esbuild; it bundles

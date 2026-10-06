@@ -45,14 +45,13 @@ Claude Code users with the next Core release.
 ## The Cloud helper
 
 `mantle/scripts/mantle-cloud.mjs` is the public entry for offline `check` and
-Cloud `link`, `save`, `status`, `deploy`, `rollback` and `version`. The helper
-loads the project's own compiler (ADR-0034 decision 3), never a bundled parser.
-Cloud returns its exact Core pin before a save; grants arrive through stdin.
-The generated `cloud-host.mjs` carries the same upload rules as Cloud Control;
-`VENDORED.json` records its source commit, protocol and SHA-256. Do not edit it.
-Rebuild from that mantle-home commit with
-`pnpm --filter @aotter/mantle-cloud build:host` and copy the deterministic
-`dist/mantle-host.mjs` bundle; that legacy build filename is internal.
+Cloud `link`, `source`, `open`, `save`, `status`, `deploy`, `rollback` and `version`.
+The helper loads the project's own compiler (ADR-0034 decision 3), never a bundled
+parser. Cloud returns its exact Core pin before a save; source credentials arrive
+through stdin. The generated `cloud-host.mjs` carries the same upload rules as
+Cloud; `VENDORED.json` records its public artifact identity, protocol and SHA-256.
+Do not edit the generated artifact; obtain a checksum-verified replacement from
+the owning Cloud service.
 
 [Cloud workflow](mantle/references/cloud.md) covers source recovery, saving,
 previewing, publishing and interruption recovery. `check` is offline and
