@@ -4573,7 +4573,7 @@ function backendNext(ctx, pending) {
       { tool: "member-organization", arguments: { organizationId: entry.organizationId }, field: "name" },
       { tool: "member-project", arguments: { projectId: entry.projectId }, field: "name" }
     ] } : {},
-    reason: (confirm ? `${ctx.linkFile} is new or changed: call each confirm tool, show the user the organization and project names (site slug ${entry.slug}) and get confirmation before uploading. ` : "") + "Call the tool with these arguments plus expectedVersion from query_view_member_project, then pipe its result to the command. A retry reuses this operationId."
+    reason: (confirm ? `${ctx.linkFile} is new or changed: call each confirm tool, show the user the organization and project names (site slug ${entry.slug}) and get confirmation before uploading. ` : "") + "Call the tool with these arguments plus expectedVersion from member_project, then pipe its result to the command. A retry reuses this operationId."
   };
 }
 function staticNext(ctx, pending) {
@@ -4593,7 +4593,7 @@ function staticNext(ctx, pending) {
     },
     requires: requiresVersion(entry.projectId),
     command: ctx.resume(true),
-    reason: "Call the tool with these arguments plus expectedVersion from query_view_member_project, then pipe its result to the command. A retry reuses this operationId."
+    reason: "Call the tool with these arguments plus expectedVersion from member_project, then pipe its result to the command. A retry reuses this operationId."
   };
 }
 function buildNext(ctx, pending) {
@@ -5251,7 +5251,7 @@ async function rollback(ctx, positional, flags, readInput) {
       kind: "mcp",
       tool: "cloud-rollback-project",
       arguments: { projectId: entry.projectId, operationId, expectedRevision: active, targetRevision: target },
-      reason: "Confirm with the deployer: this restores Manifest, handlers, frontend and assets only, never data. Repeat the identical call until cloud_project_deployment reports targetRevision active."
+      reason: "Confirm with the deployer: this restores Manifest, handlers, frontend and assets only, never data. Repeat the identical call until cloud_project_deployment reports this operationId with deploymentStatus active, then verify the restored content. Rollback creates a new revision; it does not reactivate the historical target hash."
     }
   });
   return 0;
@@ -5494,7 +5494,7 @@ var options = {
 };
 var verbs = /* @__PURE__ */ new Set(["link", "source", "open", "save", "status", "deploy", "rollback", "version"]);
 var inputLimit = 8e6;
-var mcpToolName = (name2) => `${name2 === "member-project" || name2 === "member-organization" ? "query_view_" : ""}${name2.replaceAll("-", "_")}`;
+var mcpToolName = (name2) => name2.replaceAll("-", "_");
 var mcpAction = (action) => action && action.kind === "mcp" ? {
   ...action,
   ...action.tool ? { tool: mcpToolName(action.tool) } : {},

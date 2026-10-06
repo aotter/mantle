@@ -70,7 +70,7 @@ try {
   assert.equal(packed.nextAction.tool, 'cloud_backend_upload');
   assert.equal(packed.nextAction.arguments.sourceVersionId, sourceVersionId);
   assert.ok(packed.nextAction.command.includes(helper));
-  assert.equal(packed.nextAction.requires[0].tool, 'query_view_member_project');
+  assert.equal(packed.nextAction.requires[0].tool, 'member_project');
   assert.equal(JSON.parse(readFileSync(join(project, '.mantle/host/out/production/backend.json'), 'utf8')).version, 2);
   assert.equal(line(['status']).nextAction.arguments.operationId, packed.nextAction.arguments.operationId);
   console.log('check-cloud-plugin: packaged helper requires a source receipt, negotiates Core, compiles v2, and resumes the same MCP operation');
