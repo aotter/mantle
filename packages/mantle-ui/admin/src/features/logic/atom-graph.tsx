@@ -172,7 +172,7 @@ export function AtomGraph({
     const previousFocus = document.activeElement as HTMLElement | null;
     const update = (): void => {
       if (canvasRef.current) canvasRef.current.inert = media.matches;
-      if (media.matches) hudRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      if (media.matches) hudRef.current?.querySelector<HTMLButtonElement>("[data-inspector-close]")?.focus();
     };
     update();
     media.addEventListener("change", update);
@@ -546,7 +546,7 @@ function GraphHud({ atom, schemas, graph, atomsById, traceAtoms, onClose, onSele
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" onClick={() => onOpen(atom)} aria-label={openLabel}><OpenIcon aria-hidden /></Button></TooltipTrigger><TooltipContent>{openLabel}</TooltipContent></Tooltip>
-            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t(language, "common.close")}><X aria-hidden /></Button>
+            <Button type="button" variant="ghost" size="icon-sm" data-inspector-close onClick={onClose} aria-label={t(language, "common.close")}><X aria-hidden /></Button>
           </div>
         </div>
         <div className="mt-3 flex items-center gap-2 border-t pt-3">
