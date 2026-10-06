@@ -19,82 +19,10 @@ function parseCorePin(value) {
   return value && typeof value === "object" && typeof value.version === "string" && typeof value.revision === "string" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value.version) && /^[0-9a-f]{40}$/.test(value.revision) ? { version: value.version, revision: value.revision } : null;
 }
 
-// package.json
+// Public helper identity; internal package metadata is not distributed.
 var package_default = {
   name: "@aotter/mantle-cloud",
-  private: true,
-  version: "0.1.0-alpha.1",
-  description: "Shared Mantle Cloud release rules (consumed by Control) and the source of the mantle-host plugin script. Not published.",
-  license: "Apache-2.0",
-  homepage: "https://mantle.tools/",
-  repository: {
-    type: "git",
-    url: "git+https://github.com/aotter/mantle-home.git",
-    directory: "packages/cloud-cli"
-  },
-  type: "module",
-  sideEffects: false,
-  engines: {
-    node: ">=22"
-  },
-  exports: {
-    "./closed-module": {
-      types: "./src/closed-module.d.mts",
-      default: "./src/closed-module.mjs"
-    },
-    "./static-artifact": {
-      types: "./src/static-artifact.d.mts",
-      default: "./src/static-artifact.mjs"
-    },
-    "./source-zip": {
-      types: "./src/source-zip.d.mts",
-      default: "./src/source-zip.mjs"
-    },
-    "./bounded-body": {
-      types: "./src/bounded-body.d.mts",
-      default: "./src/bounded-body.mjs"
-    },
-    "./version": {
-      types: "./src/version.d.mts",
-      default: "./src/version.mjs"
-    },
-    "./protocol": {
-      types: "./src/protocol.d.mts",
-      default: "./src/protocol.mjs"
-    },
-    "./backend-artifact": {
-      types: "./src/backend-artifact.d.mts",
-      default: "./src/backend-artifact.mjs"
-    },
-    "./backend-artifact-v2": {
-      types: "./src/backend-artifact-v2.d.mts",
-      default: "./src/backend-artifact-v2.mjs"
-    },
-    "./core.json": "./src/core.json",
-    "./pack": {
-      types: "./src/pack.d.mts",
-      default: "./src/pack.mjs"
-    },
-    "./pack-backend": {
-      types: "./src/pack-backend.d.mts",
-      default: "./src/pack-backend.mjs"
-    },
-    "./host": {
-      types: "./src/host/main.d.mts",
-      default: "./src/host/main.mjs"
-    },
-    "./package.json": "./package.json"
-  },
-  scripts: {
-    "build:host": "node scripts/build-host.mjs",
-    test: "node --test test/*.test.mjs",
-    check: "pnpm build:host && pnpm test"
-  },
-  dependencies: {
-    "es-module-lexer": "2.3.2",
-    esbuild: "0.28.1",
-    fflate: "0.8.3"
-  }
+  version: "0.1.0-alpha.1"
 };
 
 // src/version.mjs
@@ -5727,3 +5655,4 @@ if (process.argv[1] && realpathSync2(process.argv[1]) === fileURLToPath2(import.
 export {
   main
 };
+
