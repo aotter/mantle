@@ -37,6 +37,7 @@ import { useAdminLocation } from "../app/router";
 import { usePreferences, type AdminLanguage } from "../app/preferences";
 import { AppSidebar } from "./app-sidebar";
 import { Header } from "./header";
+import { PageHeaderActionsHostContext } from "./page-header-actions";
 import { Main } from "./main";
 import { SkipToMain } from "./skip-to-main";
 import { statusLabel } from "../features/content/status";
@@ -54,6 +55,7 @@ export function AuthenticatedLayout({
   workspace = "content",
 }: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
+  const [pageHeaderActionsHost, setPageHeaderActionsHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
   const fullBleed = workspace === "developer" && pathname.startsWith("/admin/dev");
   const { language } = usePreferences();
@@ -135,6 +137,7 @@ export function AuthenticatedLayout({
     : undefined;
   return (
     <FormActionBarHostContext.Provider value={formActionBarHost}>
+    <PageHeaderActionsHostContext.Provider value={pageHeaderActionsHost}>
       <SidebarProvider className="h-svh min-h-0 overflow-hidden">
         <SkipToMain />
         <AppSidebar
@@ -150,6 +153,7 @@ export function AuthenticatedLayout({
         />
         <SidebarInset className="min-h-0 overflow-hidden">
           <Header
+            actionsHostRef={setPageHeaderActionsHost}
             className="absolute inset-x-0 top-0 z-30"
             site={resolvedBrand}
             publicUrl={site.data?.publicUrl}
@@ -190,6 +194,7 @@ export function AuthenticatedLayout({
           </footer>
         </SidebarInset>
       </SidebarProvider>
+    </PageHeaderActionsHostContext.Provider>
     </FormActionBarHostContext.Provider>
   );
 }

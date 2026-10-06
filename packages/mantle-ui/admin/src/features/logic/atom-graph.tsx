@@ -38,7 +38,8 @@ import type {
   DeveloperRelationKind,
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Button } from "@aotter/mantle-ui/kit";
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@aotter/mantle-ui/kit";
+import { PageHeaderActions } from "../../layout/page-header-actions";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 
 import { businessRules } from "./business-rules";
@@ -279,17 +280,22 @@ export function AtomGraph({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b bg-background px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" aria-pressed={business} variant={business ? "default" : "outline"} onClick={() => { setBusiness(true); clearSelection(); }}>{language.startsWith("zh") ? "業務狀態" : "Business states"}</Button>
-          <Button size="sm" aria-pressed={!business} variant={!business ? "default" : "outline"} onClick={() => { setBusiness(false); clearSelection(); }}>{language.startsWith("zh") ? "系統接線" : "System wiring"}</Button>
-          <select aria-label={language.startsWith("zh") ? "選擇業務流程" : "Choose a procedure"} className="h-8 min-w-0 max-w-64 rounded-md border bg-background px-2 text-sm" value={selected?.kind === "Procedure" ? selected.id : ""} onChange={(event) => { if (event.target.value) selectAtom(event.target.value); else clearSelection(); }}>
-            <option value="">{language.startsWith("zh") ? "選擇業務流程…" : "Choose a procedure…"}</option>
-            {graph.atoms.filter((a) => a.kind === "Procedure").map((a) => <option key={a.id} value={a.id}>{resolveLocalizedText(a.title, language) || a.name}</option>)}
-          </select>
-          <Tooltip><TooltipTrigger asChild><Button size="icon-sm" variant="ghost" aria-label={language.startsWith("zh") ? "圖例說明" : "Diagram legend"}><Info aria-hidden /></Button></TooltipTrigger><TooltipContent className="max-w-xs">{language.startsWith("zh") ? business ? "虛線表示狀態可能接續，仍須符合各步驟條件；不是自動執行或案件進度。" : "實線表示系統與資料關聯，並非業務辦理順序。" : business ? "Dashed lines show possible state handoffs, subject to each step’s conditions; not execution or case progress." : "System/data dependencies, not business execution order."}</TooltipContent></Tooltip>
-        </div>
-      </div>
+      <PageHeaderActions>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="ghost" aria-label={language.startsWith("zh") ? "圖表模式" : "Diagram mode"}>
+              {language.startsWith("zh") ? business ? "業務狀態" : "系統接線" : business ? "Business states" : "System wiring"}
+              <ChevronDown aria-hidden className="size-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuRadioGroup value={business ? "business" : "system"} onValueChange={(value) => { setBusiness(value === "business"); clearSelection(); }}>
+              <DropdownMenuRadioItem value="business">{language.startsWith("zh") ? "業務狀態" : "Business states"}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="system">{language.startsWith("zh") ? "系統接線" : "System wiring"}</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </PageHeaderActions>
     <div className="relative flex min-h-0 flex-1">
     <div ref={canvasRef} className="min-w-0 flex-1">
     <ReactFlow

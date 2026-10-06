@@ -93,7 +93,7 @@ export function WebMcpControl(): React.ReactElement | null {
   const translatedPrompt = t(language, "webmcp.prompt");
   const prompt = translatedPrompt.match(/^.*?admin_get_context[^.!?。！？]*[.!?。！？]?/u)?.[0] ?? translatedPrompt;
   return <Dialog>
-    <DialogTrigger asChild><Button variant="ghost" size="sm" aria-label={t(language, "webmcp.title")}><span className="size-2 rounded-full bg-emerald-500" aria-hidden />WebMCP</Button></DialogTrigger>
+    <DialogTrigger asChild><Button variant="ghost" size="sm" aria-label={t(language, "webmcp.title")}><span className="size-2 rounded-full bg-emerald-500" aria-hidden /><span className="hidden sm:inline">WebMCP</span></Button></DialogTrigger>
     <DialogContent closeLabel={t(language, "common.close")} className="sm:max-w-lg">
       <DialogHeader><DialogTitle>{t(language, "webmcp.title")}</DialogTitle><DialogDescription>WebMCP · {catalog.tools.length}</DialogDescription></DialogHeader>
       <details className="rounded-md border px-3 py-2 text-sm">
