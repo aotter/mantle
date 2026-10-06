@@ -325,7 +325,7 @@ export function AtomGraph({
 
     </ReactFlow>
     </div>
-      {selected && showDetails ? <div ref={hudRef} onKeyDown={(event) => { if (event.key === "Escape") setShowDetails(false); }} className="absolute inset-y-0 right-0 z-20 w-[min(24rem,calc(100%-1rem))] border-l bg-background shadow-xl md:relative md:w-[24rem] md:max-w-[50%] md:shrink-0 md:shadow-none"><GraphHud key={selected.id} atom={selected} schemas={schemas} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={() => setShowDetails(false)} onSelect={moveAlongTrace} onOpen={onOpen} /></div> : null}
+      {selected && showDetails ? <div ref={hudRef} onKeyDown={(event) => { if (event.key === "Escape" && hudRef.current?.contains(event.target as HTMLElement)) setShowDetails(false); }} className="absolute inset-y-0 right-0 z-20 w-[min(24rem,calc(100%-1rem))] border-l bg-background shadow-xl md:relative md:w-[24rem] md:max-w-[50%] md:shrink-0 md:shadow-none"><GraphHud key={selected.id} atom={selected} schemas={schemas} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={() => setShowDetails(false)} onSelect={moveAlongTrace} onOpen={onOpen} /></div> : null}
     </div>
     </div>
   );
