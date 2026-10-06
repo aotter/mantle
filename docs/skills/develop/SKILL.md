@@ -66,6 +66,11 @@ Choose in this order, stopping at the first that works:
   published-only into public Views. Never repeat them.
 - `scope` hides rows from staff too. When staff must see every row, store
   `auth.uid()` in a field and filter on it instead.
+- That filter protects the View, not generic Admin Schema reads. Root
+  `schema.readOnly: true` blocks generic writes only. If a contributor must
+  not read other users' rows, restrict the application-owned Admin surface
+  inside its existing `withCaller` boundary; see
+  `docs/handbook/guides/admin-ui.md` (Roles). Keep business transitions in SQL.
 
 ## Handlers
 
@@ -112,6 +117,11 @@ Then exercise what changed over HTTP: the REST View or Trigger, `/mcp`
 sign-in and the Admin route (`docs/handbook/cloudflare/authentication.md`).
 Check the stored rows, not only a 200. Before deploying a Schema change on
 SQLite, run `mantle generate --check --database <file>` to see the storage SQL.
+For a workflow, verify valid and invalid state transitions, ownership on every
+mounted surface (including generic Admin reads and writes), concurrent writes
+with one expected version, and persisted data and sessions after a restart.
+Exercise the actual UI when the product includes one; serving HTML alone does
+not verify its forms or operations.
 
 ## Rules
 

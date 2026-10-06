@@ -19,7 +19,7 @@ decision. Build it case by case from these pieces.
 | `SchemaFields` and the primitives | `@aotter/mantle-ui/kit`, styled by `@aotter/mantle-ui/kit.css` | Admin's form controls |
 
 The App's own build installs what it imports: `@modelcontextprotocol/ext-apps`
-at the exact version `@aotter/mantle` depends on, React and the kit's peers
+at the exact version in the installed Core's `peerDependencies`, React and the kit's peers
 (`@aotter/mantle-ui`'s README lists them). `docs/handbook/concepts/mcp-and-agents.md`
 (MCP Apps) describes the catalog and the staff App these share.
 

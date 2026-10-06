@@ -99,10 +99,21 @@ you built (`PLAN_FINGERPRINT_MISMATCH`). The fingerprint is in
 
 ## Mantle Cloud
 
-Deploying a 0.2.0 service to Mantle Cloud needs Cloud's host protocol 3, which
-uploads the compiled plan and the service entry. Mantle Cloud does not accept
-0.2.0 services yet. The plugin's `mantle` skill and its helper script check
-the plan and the installed Core version so a project is ready when it does.
+Mantle Cloud accepts its pinned 0.2 service contract through host protocol 3.
+Connect Cloud MCP and follow the plugin's `mantle` skill and its
+`references/cloud.md` workflow. Call `cloud_host_contract` for the selected
+project before installing or packing: Cloud returns the exact Core version
+and revision. Do not substitute a moving npm tag or upload a self-hosted
+Worker's platform wiring. Cloud supplies identity and D1 storage; PostgreSQL
+plans are not accepted.
+
+The skill's `scripts/mantle-cloud.mjs` helper orchestrates save, paired
+preview and publish through the connected MCP tools. Follow its literal
+`nextAction`, keeping grants on stdin and preserving the project and operation
+IDs on retry. A saved or paired version is not a serving deployment; publish
+only under the user's authorization and verify Cloud's returned serving state.
+Its offline `check` reports `cloud: "not_checked"`, which proves local
+readiness only. Use Cloud's workflow, not `wrangler deploy`, for that target.
 
 ## Moving data from 0.1.x
 
