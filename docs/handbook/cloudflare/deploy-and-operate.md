@@ -99,7 +99,7 @@ you built (`PLAN_FINGERPRINT_MISMATCH`). The fingerprint is in
 
 ## Mantle Cloud
 
-Mantle Cloud accepts its pinned 0.2 service contract through host protocol 3.
+Mantle Cloud accepts its pinned 0.2 service contract through host protocol 4. A verified source receipt is required before save.
 Connect Cloud MCP and follow the plugin's `mantle` skill and its
 `references/cloud.md` workflow. Call `cloud_host_contract` for the selected
 project before installing or packing: Cloud returns the exact Core version

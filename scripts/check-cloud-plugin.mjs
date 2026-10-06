@@ -23,6 +23,11 @@ const run = (args, input) => {
   return result.stdout;
 };
 const line = (args, input) => JSON.parse(run([helper, ...args, '--json'], input).trim().split('\n').at(-1));
+const failure = (args, input) => {
+  const result = spawnSync(process.execPath, [helper, ...args, '--json'], { cwd: project, input, encoding: 'utf8' });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  return JSON.parse(result.stdout.trim().split('\n').at(-1));
+};
 try {
   mkdirSync(join(project, 'manifests'));
   mkdirSync(join(project, 'node_modules/@aotter'), { recursive: true });
@@ -51,7 +56,7 @@ try {
   assert.equal(line(['source']).nextAction.tool, 'cloud_source_write_credential');
   const statePath = join(project, '.mantle/host/state.json');
   const state = JSON.parse(readFileSync(statePath, 'utf8'));
-  // The native Git transport and receipt API are tested in Home. Exercise the
+  // The native Git transport and receipt API are tested by the owning Cloud service. Exercise the
   // installed plugin's post-push MCP receipt boundary without provider credentials.
   state.targets.production.source.stage = 'receipt';
   writeFileSync(statePath, JSON.stringify(state));
@@ -61,11 +66,15 @@ try {
   const receipt = { sourceVersionId, projectId, operationId: state.targets.production.source.operationId,
     commit, tree: 'b'.repeat(40), target: 'production', projectVersion: 1, core: pin, state: 'source_saved' };
   assert.equal(line(['source', '--resume', '--grant', '-'], JSON.stringify(receipt)).sourceVersionId, sourceVersionId);
+  assert.equal(failure(['save', '--no-git']).error, 'source_git_required');
   const first = line(['save']);
   assert.equal(first.nextAction.tool, 'cloud_host_contract');
   assert.deepEqual(first.nextAction.arguments, { projectId });
   assert.ok(first.nextAction.command.includes(helper));
   const contract = { projectId, core: pin, protocol: { current: 4, minimum: 4 } };
+  const mismatch = failure(['save', '--resume', '--grant', '-'], JSON.stringify({ ...contract, core: { ...pin, revision: 'c'.repeat(40) } }));
+  assert.equal(mismatch.error, 'cli_core_mismatch');
+  assert.match(mismatch.nextAction.command, /source.*--restart/);
   const packed = line(['save', '--resume', '--grant', '-'], JSON.stringify({ content: [{ type: 'text', text: JSON.stringify({ ok: true, data: contract }) }] }));
   assert.equal(packed.nextAction.tool, 'cloud_backend_upload');
   assert.equal(packed.nextAction.arguments.sourceVersionId, sourceVersionId);
@@ -73,6 +82,9 @@ try {
   assert.equal(packed.nextAction.requires[0].tool, 'member_project');
   assert.equal(JSON.parse(readFileSync(join(project, '.mantle/host/out/production/backend.json'), 'utf8')).version, 2);
   assert.equal(line(['status']).nextAction.arguments.operationId, packed.nextAction.arguments.operationId);
+  writeFileSync(join(project, 'README.md'), 'New committed source\n');
+  git('add', 'README.md'); git('commit', '-m', 'New source');
+  assert.equal(failure(['save']).error, 'source_version_required');
   console.log('check-cloud-plugin: packaged helper requires a source receipt, negotiates Core, compiles v2, and resumes the same MCP operation');
 } finally {
   rmSync(project, { recursive: true, force: true });

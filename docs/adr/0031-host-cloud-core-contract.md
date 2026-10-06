@@ -1,6 +1,6 @@
 # ADR 0031: Cloud supplies the host Core pin
 
-Status: Accepted for mantle-host protocol 2.
+Status: Accepted for mantle-host protocols 2 and 4.
 
 The backend artifact includes `sdkVersion` and `sdkRevision` in its hashed
 bytes. The old host bundled a fixed Core revision. Cloud can run the previous
