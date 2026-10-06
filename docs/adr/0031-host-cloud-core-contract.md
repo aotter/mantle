@@ -35,7 +35,7 @@ bytes for review and rollback. The helper can reopen an existing project with
 an authorized short-lived read credential, without creating a new project.
 
 Artifacts repository provisioning, credentials, receipt records, resource
-cleanup and deployment policy belong to Mantle Home. Core vendors its exact
-helper commit/checksum and documents the MCP workflow; it gains no provider
+cleanup and deployment policy belong to the Cloud service. Core vendors its exact
+helper artifact/checksum and documents the MCP workflow; it gains no provider
 adapter, SQL compiler, runtime wiring or new Manifest grammar. Client-built
 handlers/static files are not represented as server build attestation.
