@@ -1,5 +1,4 @@
 import * as React from "react";
-import { HostMenu } from "./host-menu";
 import { WebMcpControl } from "./webmcp-control";
 import { ExternalLink, type LucideIcon } from "lucide-react";
 
@@ -101,7 +100,6 @@ export function Header({
             <TooltipContent>{t(language, "common.viewSite")}</TooltipContent>
           </Tooltip></span>
         ) : null}
-        <HostMenu />
         <LanguagePreferenceDropdown compact />
         <ThemePreferenceDropdown compact />
         <WebMcpControl />

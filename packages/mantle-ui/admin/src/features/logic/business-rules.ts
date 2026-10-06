@@ -65,7 +65,8 @@ export function businessRules(atom: DeveloperAtom, schemas: readonly DeveloperSc
       if (prop) return `${n.column?.relation ? `${resolveLocalizedText(prop.model.title, language)} · ` : ''}${resolveLocalizedText(prop.schema.title ?? null, language) || prop.key}`;
       if (n.column?.relation === 'input' || n.kind === 'value' && n.label.startsWith('input.')) {
         const key = n.column?.name ?? n.label.slice(6);
-        const title = resolveLocalizedText(atom.input?.properties?.[key]?.title ?? null, language);
+        const inputKey = Object.keys(atom.input?.properties ?? {}).find((name) => name.toLowerCase() === key.toLowerCase());
+        const title = resolveLocalizedText(inputKey ? atom.input?.properties?.[inputKey]?.title ?? null : null, language);
         return `${zh ? '本次輸入' : 'Input'}${title ? `「${title}」` : ''}`;
       }
       if (n.column && ['id', 'version'].includes(n.column.name.toLowerCase())) return zh ? n.column.name.toLowerCase() === 'id' ? '資料識別碼' : '資料版本' : n.column.name.toLowerCase() === 'id' ? 'Record ID' : 'Record version';
@@ -135,12 +136,18 @@ ${children.join('\n')}`;
     const operation = ({ UPDATE: zh ? '更新' : 'Update', INSERT: zh ? '新增' : 'Create', DELETE: zh ? '刪除' : 'Delete', SELECT: zh ? '讀取' : 'Read' } as Record<string, string>)[statement.operation] ?? (zh ? '處理' : 'Process');
     const tree = statement.logic;
     const where = tree?.children.find((c) => c.label.startsWith('WHERE'));
-    const outputs = tree?.children.find((c) => c.label === 'SET')?.children ?? [];
+    const columns = tree?.children.find((c) => c.label === 'Columns')?.children ?? [];
+    const select = tree?.children.find((c) => c.label === 'Source SELECT')?.children[0];
+    const values = select?.children.find((c) => c.label === 'VALUES')?.children;
+    const row = values?.length === 1 ? values[0]?.children : select?.children.find((c) => c.label === 'SELECT')?.children.map((c) => c.children[0]);
+    const inserted = columns.length && row?.length === columns.length ? columns.map((column, i) => ({ ...column, children: row[i] ? [row[i]!] : [] })) : [];
+    const outputs = tree?.children.find((c) => c.label === 'SET')?.children ?? inserted;
+    const assignmentScope = statement.operation === 'INSERT' && select ? scopeFor(select, rootScope) : rootScope;
     const filter = where?.children[0];
     const conditionCount = filter?.label.startsWith('AND') || filter?.label.startsWith('OR') ? filter.children.length : filter ? 1 : 0;
     const summary = outputs.length ? `${zh ? '設定' : 'Set'}：${outputs.map((o) => fieldTitle(o.label)).slice(0, 2).join('、')}${outputs.length > 2 ? (zh ? '等欄位' : '…') : ''}` : conditionCount ? (zh ? `篩選資料：${conditionCount} 項條件` : `Filter: ${conditionCount} conditions`) : '';
     const conditions = where?.children[0] ? expr(where.children[0]) : '';
-    const assignments = outputs.map((o) => `${fieldTitle(o.label)} ← ${o.children[0]?.kind === 'case' ? zh ? '依下方規則決定' : 'Chosen by the rule below' : expr(o.children[0] ?? o, o.label)}`);
+    const assignments = outputs.map((o) => `${fieldTitle(o.label)} ← ${o.children[0]?.kind === 'case' ? zh ? '依下方規則決定' : 'Chosen by the rule below' : expr(o.children[0] ?? o, o.label, assignmentScope)}`);
     const checks = (model?.checks ?? []).map((c) => expr(c, undefined, new Map(model ? [[model.name.toLowerCase(), model]] : [])));
     const rules: BusinessRule[] = [{ kind: 'operation', statement: statement.index, summary, conditions, assignments, title: `${operation} ${name || (zh ? '資料' : 'data')}`, body: [conditions, assignments.join('\n'), checks.length ? `${zh ? '資料限制（不成立時整批不保存；空值依 SQL 規則）' : 'Data constraints (failure rolls back the batch)'}：\n${checks.join('\n')}` : '', statement.mode === 'row' ? (zh ? '必須符合一筆資料；否則整批不寫入' : 'Exactly one affected row; otherwise the batch rolls back') : statement.mode === 'set' ? (zh ? '可能符合多筆；零筆符合時仍繼續' : 'May affect multiple rows; zero matches still continues') : ''].filter(Boolean).join('\n') }];
     if (model && statement.mode === 'row' && statement.operation === 'UPDATE' && filter) {
@@ -169,17 +176,17 @@ ${children.join('\n')}`;
           kind: 'case', statement: statement.index, field: field ? fieldTitle(field) : undefined, summary: zh ? '依順序選擇第一個成立的結果' : 'First matching result in order',
           branches: n.children.filter((c) => c.kind === 'when').map((c) => {
             const condition = c.children[0]!;
-            return { condition: expr(selector ? { kind: 'expression', label: '=', children: [selector, condition.children[0] ?? condition] } : condition), value: expr(c.children[1]?.children[0] ?? c, field) };
+            return { condition: expr(selector ? { kind: 'expression', label: '=', children: [selector, condition.children[0] ?? condition] } : condition, undefined, assignmentScope), value: expr(c.children[1]?.children[0] ?? c, field, assignmentScope) };
           }),
-          otherwise: expr(n.children.find((c) => c.label === 'ELSE')?.children[0] ?? { kind: 'value', label: 'NULL', children: [] }, field),
+          otherwise: expr(n.children.find((c) => c.label === 'ELSE')?.children[0] ?? { kind: 'value', label: 'NULL', children: [] }, field, assignmentScope),
           title: zh ? `決定${field ? `「${fieldTitle(field)}」` : '欄位值'}` : `Choose ${field ? fieldTitle(field) : 'a value'}`,
           body: n.children.filter((c) => c.label !== 'Value').map((c) => {
             if (c.kind === 'when') {
               const condition = c.children[0]!;
               const comparison: SqlLogicNode = selector ? { kind: 'expression', label: '=', children: [selector, condition.children[0] ?? condition] } : condition;
-              return `${c.label.replace('WHEN', zh ? '條件' : 'Condition')}：${expr(comparison)}\n${zh ? '結果' : 'Result'}：${expr(c.children[1]?.children[0] ?? c, field)}`;
+              return `${c.label.replace('WHEN', zh ? '條件' : 'Condition')}：${expr(comparison, undefined, assignmentScope)}\n${zh ? '結果' : 'Result'}：${expr(c.children[1]?.children[0] ?? c, field, assignmentScope)}`;
             }
-            return c.label === 'ELSE' ? `${zh ? '其他情況（含未成立或未知）' : 'Otherwise (including false or unknown)'}：${expr(c.children[0] ?? c, field)}` : expr(c);
+            return c.label === 'ELSE' ? `${zh ? '其他情況（含未成立或未知）' : 'Otherwise (including false or unknown)'}：${expr(c.children[0] ?? c, field, assignmentScope)}` : expr(c);
           }).join('\n'),
         });
       }

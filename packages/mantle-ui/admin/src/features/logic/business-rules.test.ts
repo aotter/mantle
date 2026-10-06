@@ -33,3 +33,31 @@ it('derives business names and boundaries from arbitrary manifest fields without
   decision.children[1]!.children[0] = n('predicate', 'Condition', [n('value', '7')]);
   expect(businessRules(atom, schemas, 'zh-TW')[1]!.body).toContain('數量 等於 7');
 });
+
+it('renders CASE assigned by INSERT VALUES and INSERT SELECT using positional column names', () => {
+  const n = (kind: string, label: string, children: SqlLogicNode[] = []): SqlLogicNode => ({ kind, label, children });
+  const decision = n('case', 'CASE · first TRUE condition', [n('when', 'WHEN 1', [n('predicate', 'Condition', [n('expression', '>', [n('value', 'input.totalamount'), n('value', '10000')])]), n('value', 'THEN', [n('value', "'submitted'")])]), n('value', 'ELSE', [n('value', "'approved'")])]);
+  const schemas = [{ name: 'requests', title: '請購單', lifecycle: 'operational', localized: false, translates: null, uniqueIndexes: [], indexes: [], searchableFields: [], manifest: {}, schema: { properties: { requestStatus: { type: 'string', title: '審核狀態', oneOf: [{ const: 'submitted', title: '待審核' }, { const: 'approved', title: '已核准' }] } } } }] as DeveloperSchemaModel[];
+  const atom: DeveloperAtom = { id: 'Procedure:submit', kind: 'Procedure', name: 'submit', title: '提交', input: { properties: { totalAmount: { type: 'integer', title: '請購金額' } } }, handler: { kind: 'sql', statement: '', flow: [] } };
+  for (const source of [n('clause', 'VALUES', [n('list', 'Values', [decision])]), n('clause', 'SELECT', [n('output', 'Output', [decision])])]) {
+    const logic = n('statement', 'INSERT', [n('clause', 'Columns', [n('output', 'requeststatus')]), n('clause', 'Source SELECT', [n('statement', 'SELECT', [source])])]);
+    const handler = { kind: 'sql' as const, statement: '', flow: [{ index: 0, operation: 'INSERT', table: 'requests', mode: 'row' as const, reads: [], writes: ['requests'], returns: [], filter: null, cases: [], logic }] };
+    const rules = businessRules({ ...atom, handler }, schemas, 'zh-TW');
+    expect(rules.map(rule => rule.title)).toEqual(['新增 請購單', '決定「審核狀態」']);
+    expect(rules[1]!.branches).toEqual([{ condition: '本次輸入「請購金額」 大於 10000', value: '待審核' }]);
+    expect(rules[1]!.otherwise).toBe('已核准');
+    const flow = businessFlow(atom.id, '提交', rules, true);
+    expect(flow.nodes.filter(node => node.data.kind === 'condition')).toHaveLength(1);
+    expect(flow.nodes.filter(node => node.data.kind === 'result').map(node => node.data.title)).toEqual(['待審核', '已核准']);
+    if (source.label === 'SELECT') {
+      const left = decision.children[0]!.children[0]!.children[0]!.children[0]!;
+      left.label = 'r.totalamount'; left.column = { name: 'totalamount', relation: 'r' };
+      const relation = n('table', 'budget'); relation.relation = { name: 'budget', alias: 'r' };
+      logic.children[1]!.children[0]!.children.push(n('clause', 'FROM', [relation]));
+      const sourceModel = { ...schemas[0]!, name: 'budget', title: '預算', schema: { properties: { totalAmount: { type: 'integer', title: '來源金額' } } } };
+      expect(businessRules({ ...atom, handler }, [...schemas, sourceModel], 'zh-TW')[1]!.branches![0]!.condition).toBe('預算 · 來源金額 大於 10000');
+    }
+    logic.children[0]!.children.push(n('output', 'unmatched'));
+    expect(businessRules({ ...atom, handler }, schemas, 'zh-TW')).toHaveLength(1);
+  }
+});
