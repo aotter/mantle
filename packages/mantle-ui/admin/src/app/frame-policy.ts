@@ -1,7 +1,8 @@
+import type { AdminPreviewMenu } from "../../../src/admin-preview/index.js";
 declare global {
   interface Window {
     /** Installed by a same-origin sandbox host before preview.html boots. */
-    __MANTLE_ADMIN_PREVIEW__?: { fetch: typeof fetch; mode?: "design" | "runtime" };
+    __MANTLE_ADMIN_PREVIEW__?: { fetch: typeof fetch; mode?: "design" | "runtime"; menu?: AdminPreviewMenu };
   }
 }
 
@@ -37,7 +38,7 @@ export function installPreviewPolicy(win: Window): void {
     return bridge(request);
   };
   win.fetch = sandboxFetch;
-  win.__MANTLE_ADMIN_PREVIEW__ = { fetch: sandboxFetch, mode: win.__MANTLE_ADMIN_PREVIEW__?.mode };
+  win.__MANTLE_ADMIN_PREVIEW__ = { ...win.__MANTLE_ADMIN_PREVIEW__, fetch: sandboxFetch };
   // Enforce native fetch/XHR and form.submit(), which never enter our bridge.
   const policy = win.document.createElement("meta");
   policy.httpEquiv = "Content-Security-Policy";

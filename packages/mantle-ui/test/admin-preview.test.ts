@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { adminPreviewDocument, readAdminPreviewRequest } from "../src/admin-preview/index.js";
+import { adminPreviewDocument, readAdminPreviewRequest, readAdminPreviewMenu, readAdminPreviewAction } from "../src/admin-preview/index.js";
 
 it("prepares only the opt-in asset, and rejects requests outside its Admin bridge", () => {
   expect(() => adminPreviewDocument('<head></head>', { basePath: '/builder/admin', assetBasePath: '/preview' })).toThrow();
@@ -15,4 +15,12 @@ it("prepares only the opt-in asset, and rejects requests outside its Admin bridg
     expect(() => readAdminPreviewRequest({ ...envelope, request: { ...envelope.request, url } }, 'https://host.test')).toThrow();
   }
   expect(() => readAdminPreviewRequest({ ...envelope, request: { ...envelope.request, body: new ArrayBuffer(1) } }, 'https://host.test')).toThrow();
+});
+
+it("validates host menu commands without accepting executable content or duplicate identifiers", () => {
+  const menu = { label: "Tools", description: "Host workspace", items: [{ id: "source", label: "View source" }] };
+  expect(readAdminPreviewMenu(menu)).toEqual(menu);
+  for (const value of [null, { ...menu, items: [{ id: "../action", label: "bad" }] }, { ...menu, items: [...menu.items, ...menu.items] }, { ...menu, items: [{ id: "source", label: "source", disabled: "false" }] }]) expect(() => readAdminPreviewMenu(value)).toThrow();
+  expect(readAdminPreviewAction({ type: "mantle:host-ui:action", protocolVersion: 1, id: "source" })).toBe("source");
+  for (const value of [null, { type: "mantle:host-ui:action", protocolVersion: 2, id: "source" }, { type: "mantle:host-ui:action", protocolVersion: 1, id: "../source" }]) expect(() => readAdminPreviewAction(value)).toThrow();
 });
