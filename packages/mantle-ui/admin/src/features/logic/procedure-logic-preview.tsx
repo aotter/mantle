@@ -26,13 +26,20 @@ export function ProcedureLogicPreview({ atom, schemas }: { atom: DeveloperAtom; 
   }, [atom.id, title, rules, zh]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [expandedFlow, setExpandedFlow] = React.useState<ReactFlowInstance | null>(null);
+  const expandedCanvasRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
-    if (!expandedFlow) return;
-    const frame = window.requestAnimationFrame(() => {
-      void expandedFlow.fitView({ padding: 0.12, maxZoom: 1 });
+    const canvas = expandedCanvasRef.current;
+    if (!expandedFlow || !canvas) return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        void expandedFlow.fitView({ padding: 0.12, maxZoom: 1 });
+      });
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [expandedFlow, selectedId]);
+    observer.observe(canvas);
+    return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
+  }, [expandedFlow]);
   const selectedRule = layout.nodes.find((node) => node.id === selectedId)?.data.rule as BusinessRule | undefined;
   if (atom.kind !== "Procedure" || atom.handler?.kind !== "sql" || !layout.nodes.length) return null;
 
@@ -64,7 +71,7 @@ export function ProcedureLogicPreview({ atom, schemas }: { atom: DeveloperAtom; 
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription className="mt-1">{zh ? "流程邏輯：實線是資料操作順序，虛線是欄位值選擇。點選節點查看規則。" : "Procedure logic: solid lines show statement order; dashed lines select field values. Select a node for its rules."}</DialogDescription>
           </div>
-          <div className="min-h-0 flex-1" aria-label={zh ? "完整流程邏輯圖" : "Full procedure logic graph"}>{canvas(true)}</div>
+          <div ref={expandedCanvasRef} className="min-h-0 flex-1" aria-label={zh ? "完整流程邏輯圖" : "Full procedure logic graph"}>{canvas(true)}</div>
           {selectedRule ? <div className="max-h-[25svh] shrink-0 overflow-auto">{details}</div> : null}
         </DialogContent>
       </Dialog>
