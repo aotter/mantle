@@ -13,7 +13,7 @@ const helper = join(skill, 'scripts/mantle-cloud.mjs');
 const provenance = JSON.parse(readFileSync(join(skill, 'scripts/VENDORED.json'), 'utf8'));
 assert.equal(provenance.repository, 'https://github.com/aotter/mantle-home');
 assert.match(provenance.commit, /^[a-f0-9]{40}$/);
-assert.equal(provenance.protocol, 3);
+assert.equal(provenance.protocol, 4);
 assert.equal(createHash('sha256').update(readFileSync(join(skill, 'scripts/cloud-host.mjs'))).digest('hex'), provenance.sha256);
 
 const project = mkdtempSync(join(tmpdir(), 'mantle-plugin-consumer-'));
@@ -38,21 +38,42 @@ try {
   const organizationId = '0199aaaa-0000-7000-8000-000000000001';
   const projectId = '0199aaaa-0000-7000-8000-000000000002';
   assert.equal(line(['link', '--organization', organizationId, '--project', projectId, '--slug', 'plugin-check']).state, 'linked');
-  // No Git mode is explicit for this disposable fixture. The first save must
-  // negotiate with Cloud before packing; the plugin carries no static Core pin.
-  const first = line(['save', '--no-git']);
+  const git = (...args) => {
+    const result = spawnSync('git', ['-c', 'user.name=Plugin check', '-c', 'user.email=check@example.invalid',
+      '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: project, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr); return result.stdout.trim();
+  };
+  git('init', '-b', 'main'); git('add', '-A'); git('commit', '-m', 'Generated source');
+  const commit = git('rev-parse', 'HEAD');
+  const missing = spawnSync(process.execPath, [helper, 'save', '--json'], { cwd: project, encoding: 'utf8' });
+  assert.equal(missing.status, 1);
+  assert.equal(JSON.parse(missing.stdout.trim().split('\n').at(-1)).error, 'source_version_required');
+  assert.equal(line(['source']).nextAction.tool, 'cloud_source_write_credential');
+  const statePath = join(project, '.mantle/host/state.json');
+  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  // The native Git transport and receipt API are tested in Home. Exercise the
+  // installed plugin's post-push MCP receipt boundary without provider credentials.
+  state.targets.production.source.stage = 'receipt';
+  writeFileSync(statePath, JSON.stringify(state));
+  const core = JSON.parse(readFileSync(join(root, 'packages/mantle/package.json'), 'utf8'));
+  const pin = { version: core.version, revision: 'a'.repeat(40) };
+  const sourceVersionId = '0199aaaa-0000-7000-8000-000000000003';
+  const receipt = { sourceVersionId, projectId, operationId: state.targets.production.source.operationId,
+    commit, tree: 'b'.repeat(40), target: 'production', projectVersion: 1, core: pin, state: 'source_saved' };
+  assert.equal(line(['source', '--resume', '--grant', '-'], JSON.stringify(receipt)).sourceVersionId, sourceVersionId);
+  const first = line(['save']);
   assert.equal(first.nextAction.tool, 'cloud_host_contract');
   assert.deepEqual(first.nextAction.arguments, { projectId });
   assert.ok(first.nextAction.command.includes(helper));
-  const core = JSON.parse(readFileSync(join(root, 'packages/mantle/package.json'), 'utf8'));
-  const contract = { projectId, core: { version: core.version, revision: 'a'.repeat(40) }, protocol: { current: 3, minimum: 3 } };
+  const contract = { projectId, core: pin, protocol: { current: 4, minimum: 4 } };
   const packed = line(['save', '--resume', '--grant', '-'], JSON.stringify({ content: [{ type: 'text', text: JSON.stringify({ ok: true, data: contract }) }] }));
   assert.equal(packed.nextAction.tool, 'cloud_backend_upload');
+  assert.equal(packed.nextAction.arguments.sourceVersionId, sourceVersionId);
   assert.ok(packed.nextAction.command.includes(helper));
   assert.equal(packed.nextAction.requires[0].tool, 'query_view_member_project');
   assert.equal(JSON.parse(readFileSync(join(project, '.mantle/host/out/production/backend.json'), 'utf8')).version, 2);
   assert.equal(line(['status']).nextAction.arguments.operationId, packed.nextAction.arguments.operationId);
-  console.log('check-cloud-plugin: packaged helper negotiates Core, compiles v2, and resumes the same MCP operation');
+  console.log('check-cloud-plugin: packaged helper requires a source receipt, negotiates Core, compiles v2, and resumes the same MCP operation');
 } finally {
   rmSync(project, { recursive: true, force: true });
 }

@@ -1,17 +1,18 @@
 // mantle-host: generated from packages/cloud-cli/src/host by scripts/build-host.mjs. Do not edit.
 
 // src/host/entry.mjs
+import { realpathSync as realpathSync2 } from "node:fs";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/host/main.mjs
 import { createHash as createHash5 } from "node:crypto";
-import { readFile as readFile4, realpath as realpath4, stat } from "node:fs/promises";
-import { resolve as resolve2 } from "node:path";
+import { readFile as readFile4, realpath as realpath5, stat } from "node:fs/promises";
+import { resolve as resolve3 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 // src/protocol.mjs
-var hostProtocol = Object.freeze({ current: 3, minimum: 3 });
+var hostProtocol = Object.freeze({ current: 4, minimum: 4 });
 var hostProtocolHeader = "x-mantle-host-protocol";
 var hostClientHeader = "x-mantle-host-client";
 function parseCorePin(value) {
@@ -82,11 +83,7 @@ var package_default = {
       types: "./src/host/main.d.mts",
       default: "./src/host/main.mjs"
     },
-    "./package.json": "./package.json",
-    "./builder-compile-route": {
-      types: "./src/builder-compile-route.d.mts",
-      default: "./src/builder-compile-route.mjs"
-    }
+    "./package.json": "./package.json"
   },
   scripts: {
     "build:host": "node scripts/build-host.mjs",
@@ -737,13 +734,13 @@ function createOutput({ json = false, write = (text) => process.stdout.write(tex
     const rows = [head];
     if (line.detail) rows.push(`  ${line.detail}`);
     for (const note of line.notes ?? []) rows.push(`  ${note}`);
-    const next = line.nextAction;
-    if (next) {
-      for (const look of next.confirm ?? []) rows.push(`  confirm with the user: ${look.field} from ${look.tool} ${JSON.stringify(look.arguments)}`);
-      if (next.tool) rows.push(`  next: call ${next.tool} ${JSON.stringify(next.arguments ?? {})}`);
-      for (const need of next.requires ?? []) rows.push(`    ${need.argument} = ${need.field} from ${need.tool} ${JSON.stringify(need.arguments)}`);
-      if (next.command) rows.push(`  ${next.tool ? "then" : "next"}: ${next.command}`);
-      if (next.reason) rows.push(`  ${next.reason}`);
+    const next2 = line.nextAction;
+    if (next2) {
+      for (const look of next2.confirm ?? []) rows.push(`  confirm with the user: ${look.field} from ${look.tool} ${JSON.stringify(look.arguments)}`);
+      if (next2.tool) rows.push(`  next: call ${next2.tool} ${JSON.stringify(next2.arguments ?? {})}`);
+      for (const need of next2.requires ?? []) rows.push(`    ${need.argument} = ${need.field} from ${need.tool} ${JSON.stringify(need.arguments)}`);
+      if (next2.command) rows.push(`  ${next2.tool ? "then" : "next"}: ${next2.command}`);
+      if (next2.reason) rows.push(`  ${next2.reason}`);
     }
     return rows.join("\n");
   };
@@ -3553,13 +3550,13 @@ function validateBackendArtifactV2(text, pin) {
   if (core.version !== pin.version || core.revision !== pin.revision) throw new CloudRuleError(409, "cli_core_mismatch", `artifact Core ${core.version} (${core.revision}); Cloud pins ${pin.version} (${pin.revision})`);
   const { sources } = artifact;
   if (!Array.isArray(sources) || !sources.length || sources.length > backendSourceLimits.count) throw invalid(`sources holds 1-${backendSourceLimits.count} manifests`);
-  sources.forEach((source, index) => {
-    if (!record(source) || Object.keys(source).length !== 2 || typeof source.sourceId !== "string" || typeof source.text !== "string") throw invalid("a source is { sourceId, text }");
-    if (source.sourceId.length > backendSourceLimits.sourceId || !manifestName.test(source.sourceId))
-      throw new CloudRuleError(400, "manifest_path_invalid", `${source.sourceId}: Core 0.2 reads lowercase .yaml files directly in manifests/`);
-    if (index && !(sources[index - 1].sourceId < source.sourceId)) throw invalid("sources are sorted by sourceId without duplicates");
-    if (!source.text.length || source.text.length > backendSourceLimits.text) throw invalid(`${source.sourceId}: 1-${backendSourceLimits.text} characters`);
-    if (source.text.charCodeAt(0) === 65279) throw new CloudRuleError(400, "manifest_bom", source.sourceId);
+  sources.forEach((source2, index) => {
+    if (!record(source2) || Object.keys(source2).length !== 2 || typeof source2.sourceId !== "string" || typeof source2.text !== "string") throw invalid("a source is { sourceId, text }");
+    if (source2.sourceId.length > backendSourceLimits.sourceId || !manifestName.test(source2.sourceId))
+      throw new CloudRuleError(400, "manifest_path_invalid", `${source2.sourceId}: Core 0.2 reads lowercase .yaml files directly in manifests/`);
+    if (index && !(sources[index - 1].sourceId < source2.sourceId)) throw invalid("sources are sorted by sourceId without duplicates");
+    if (!source2.text.length || source2.text.length > backendSourceLimits.text) throw invalid(`${source2.sourceId}: 1-${backendSourceLimits.text} characters`);
+    if (source2.text.charCodeAt(0) === 65279) throw new CloudRuleError(400, "manifest_bom", source2.sourceId);
   });
   if (typeof artifact.sourceHash !== "string" || !/^[a-f0-9]{64}$/.test(artifact.sourceHash)) throw invalid("sourceHash is 64 lowercase hex");
   const sourceHash = manifestSourceHash(sources);
@@ -3840,7 +3837,7 @@ var targetState = (state, target) => state.targets[target] ??= { confirmedLink: 
 // src/host/save.mjs
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { join as join6, relative as relative4, sep as sep5 } from "node:path";
-import { realpath as realpath3, stat as statPath, writeFile as writeFile3 } from "node:fs/promises";
+import { realpath as realpath3, readdir as readdir2, stat as statPath, writeFile as writeFile3 } from "node:fs/promises";
 
 // src/pack.mjs
 import { lstat as lstat2, mkdir as mkdir2, readFile as readFile2, readdir, realpath, writeFile as writeFile2 } from "node:fs/promises";
@@ -3992,15 +3989,15 @@ function directory(bytes) {
   return entries;
 }
 function sourceManifestMismatch(files, sources) {
-  const ids = new Set(sources.map((source) => source.sourceId));
+  const ids = new Set(sources.map((source2) => source2.sourceId));
   if (Object.keys(files).some((path) => manifestPath(path) && !ids.has(path))) return true;
-  return sources.some((source) => !files[source.sourceId] || !equalBytes(files[source.sourceId], strToU8(source.text)));
+  return sources.some((source2) => !files[source2.sourceId] || !equalBytes(files[source2.sourceId], strToU8(source2.text)));
 }
-function inspectSourceArchive(bytes, sources) {
+function inspectSourceArchive(bytes, sources, visit) {
   if (bytes.byteLength > sourceArchiveLimit) throw new CloudRuleError(400, "source_archive_too_large");
   const entries = directory(bytes);
   if (entries.some((entry) => !entry.stored)) throw new CloudRuleError(400, "source_archive_noncanonical");
-  const ids = new Set(sources.map((source) => source.sourceId)), manifests = /* @__PURE__ */ Object.create(null);
+  const ids = new Set(sources.map((source2) => source2.sourceId)), manifests = /* @__PURE__ */ Object.create(null);
   let expanded = 0, offset = 0, canonical2 = true;
   for (const entry of entries) {
     if (ids.has(entry.name) || manifestPath(entry.name)) manifests[entry.name] = entry.data;
@@ -4019,6 +4016,7 @@ function inspectSourceArchive(bytes, sources) {
     offset += 30 + name2.length + entry.size;
   });
   if (!canonical2 || u32(bytes, bytes.byteLength - 22 + 16) !== offset) throw new CloudRuleError(400, "source_archive_noncanonical");
+  if (visit) for (const entry of entries) visit(entry.name, entry.data);
   return { files: entries.map((entry) => entry.name).sort(), expandedBytes: expanded };
 }
 
@@ -4124,33 +4122,6 @@ async function readDist(distArg, ignored = []) {
   );
   if (secrets.length) throw new CloudRuleError(400, "static_asset_secret_path", secrets.join(", "));
   return files;
-}
-async function readSource(projectArg, excludes = []) {
-  const project = await realpath(resolve(projectArg));
-  const skipped = excludes.map((item) => posix(item).replace(/^\.\/+/, "").replace(/\/+$/, "")).filter(Boolean);
-  const excluded = /* @__PURE__ */ new Set();
-  const skip = (rel, entry) => {
-    const hit = defaultSourceExcludes.includes(entry.name) || skipped.some((item) => rel === item || rel.startsWith(item + "/"));
-    if (hit) excluded.add(rel);
-    return hit;
-  };
-  const files = /* @__PURE__ */ Object.create(null), secrets = [], seen = /* @__PURE__ */ new Map();
-  let expanded = 0;
-  await walk2(project, async (rel, path) => {
-    if (secretSourcePath(rel)) {
-      secrets.push(rel);
-      return;
-    }
-    const key = sourcePathKey(rel);
-    if (seen.has(key)) throw new CloudRuleError(400, "source_archive_duplicate_path", `${seen.get(key)} and ${rel}`);
-    seen.set(key, rel);
-    const bytes = new Uint8Array(await readFile2(path));
-    expanded += bytes.byteLength;
-    if (Object.keys(files).length >= sourceEntryLimit || expanded > sourceExpandedLimit) throw new CloudRuleError(400, "source_archive_expansion_limit");
-    files[rel] = bytes;
-  }, skip);
-  if (secrets.length) throw new CloudRuleError(400, "source_archive_secret_path", secrets.join(", "));
-  return { project, files, excluded: [...excluded].sort() };
 }
 
 // src/host/backend.mjs
@@ -4324,7 +4295,7 @@ var stale = (detail) => fail("plan_stale", `${detail}; run mantle generate and c
 async function packPlanSnapshot({ top, appRoot, entry, service, files, git: git2, omit, core, installed }) {
   if (installed.version !== core.version) throw fail("core_version_mismatch", `the project installs @aotter/mantle ${installed.version}; Cloud pins ${core.version}`);
   const sources = manifestSources(files);
-  const nested = sources.find((source) => source.sourceId.indexOf("/", "manifests/".length) >= 0);
+  const nested = sources.find((source2) => source2.sourceId.indexOf("/", "manifests/".length) >= 0);
   if (nested) throw fail("manifest_path_invalid", `${nested.sourceId}: Core 0.2 reads manifests directly in manifests/`);
   if (!Object.hasOwn(files, planFile)) throw fail("plan_missing", `${planFile} is not ${git2 ? "committed" : "in the project"}; run mantle generate`);
   let generated;
@@ -4640,13 +4611,6 @@ async function ancestorPackages(project, { top, appRoot, commit }) {
   for (const [index, rel] of rels.entries()) if (text(await readFile3(inRepo[index])) !== text(blobs.get(head.get(rel).oid))) changed.push(rel);
   if (changed.length) throw fail("worktree_dirty", listing(changed));
 }
-async function diskSnapshot(project, appRoot, { omit, dist }) {
-  const own = [join5(project, ".mantle", "host"), dist].filter(Boolean).filter((path) => inside(appRoot, path) && path !== appRoot).map((path) => relative3(appRoot, path).split(sep4).join("/"));
-  const { files } = await readSource(appRoot, [...omit, ...own]);
-  if (Object.keys(files).length > sourceEntryLimit) throw fail("source_archive_expansion_limit");
-  await ancestorPackages(project, { top: project, appRoot, commit: null });
-  return { commit: "unversioned", top: project, files };
-}
 
 // src/host/save.mjs
 var reuseMs = 25 * 6e4;
@@ -4673,7 +4637,7 @@ function backendNext(ctx, pending) {
   return {
     kind: "mcp",
     tool: "cloud-backend-upload",
-    arguments: { projectId: entry.projectId, operationId: pending.backend.operationId, contentHash: pending.backend.contentHash },
+    arguments: { projectId: entry.projectId, sourceVersionId: pending.sourceVersionId, operationId: pending.backend.operationId, contentHash: pending.backend.contentHash },
     requires: requiresVersion(entry.projectId),
     command: ctx.resume(true),
     // Literal lookups (the view parameters in Control's manifest) whose `name` the user confirms.
@@ -4696,7 +4660,7 @@ function staticNext(ctx, pending) {
       contractHash: pending.contractHash,
       contentHash: pending.static.contentHash,
       sourceHash: pending.static.sourceHash,
-      ...pending.mode === "git" ? { sourceRef: { commit: pending.commit } } : {},
+      sourceRef: { commit: pending.commit },
       ...pending.omitted.length ? { omitted: pending.omitted } : {}
     },
     requires: requiresVersion(entry.projectId),
@@ -4757,7 +4721,10 @@ function saveFailureNext(ctx, code) {
       return fix("Add esbuild as a devDependency of the project and install it (mantle-host never installs packages), then re-run save.");
     case "git_repository_missing":
     case "git_head_missing":
-      return fix("Commit the project to Git (save labels versions with the HEAD commit), or pass --no-git to save an unversioned copy.");
+      return fix("Commit the project to Git, then save its remote source version before building.");
+    case "source_git_required":
+    case "source_version_required":
+      return { kind: "run", command: ctx.line("source", ...ctx.targetArgs), reason: "Push the committed project and obtain a Cloud source receipt before saving artifacts." };
     case "plan_stale":
     case "plan_missing":
     case "plan_invalid":
@@ -4772,7 +4739,7 @@ function saveFailureNext(ctx, code) {
     case "client_outdated":
       return { kind: "fix", reason: `Cloud requires a newer mantle-host protocol. ${updateHost} Nothing was uploaded by this call.` };
     case "cli_core_mismatch":
-      return { kind: "run", command: ctx.line("save", ...ctx.targetArgs, "--restart"), reason: "Cloud changed its Core pin. Start a new save with its current contract." };
+      return { kind: "run", command: ctx.line("source", ...ctx.targetArgs, "--restart"), reason: "Cloud changed its Core pin. Obtain a new source receipt before restarting save with its current contract." };
     case "grant_project_mismatch":
       return { kind: "fix", reason: `The grant is for another project than ${ctx.linkFile} names. Call the tool with exactly the arguments of the last nextAction.` };
     case "core_pin_invalid":
@@ -4815,11 +4782,10 @@ function saveFailureNext(ctx, code) {
       return fix("Fix the reported problem and re-run save.");
   }
 }
-async function snapshot(ctx, pending, { distPath } = {}) {
-  const { entry } = ctx.link;
-  if (pending.mode === "git") return gitSnapshot(ctx.project, { root: entry.root, omit: pending.omitted, commit: pending.commit });
-  return diskSnapshot(ctx.project, ctx.appRoot, { omit: pending.omitted, dist: distPath ?? join6(ctx.appRoot, ...entry.frontend.dist.split("/")) });
-}
+var snapshot = (ctx, pending) => gitSnapshot(
+  ctx.project,
+  { root: ctx.link.entry.root, omit: pending.omitted, commit: pending.commit }
+);
 var outFile = (ctx, name2) => `${outDir(ctx.target)}/${name2}`;
 async function readOwn(ctx, name2, hash, limit) {
   const bytes = await readInside(ctx.project, outFile(ctx, name2), limit);
@@ -4830,24 +4796,29 @@ async function startSave(ctx, flags) {
   const { entry } = ctx.link;
   const ts = ctx.targetState;
   const omitted = normalizeOmit(flags.omit);
-  const mode = flags["no-git"] ? "unversioned" : "git";
+  if (flags["no-git"]) throw fail("source_git_required", "Cloud saves require a verified remote Git commit.");
+  const mode = "git";
   const snap = await snapshot(ctx, { mode, omitted });
   ctx.emit({
     ok: true,
     stage: "preflight",
-    state: mode === "git" ? "clean" : "unversioned",
+    state: "clean",
     commit: snap.commit,
     nextAction: null,
     notes: [`${Object.keys(snap.files).length} files`, ...omitted.length ? [`omitted: ${omitted.join(", ")}`] : []]
   });
+  const source2 = ts.source;
+  if (source2?.stage !== "saved" || source2.commit !== snap.commit || source2.linkHash !== ctx.link.hash || !uuid.test(source2.sourceVersionId ?? "") || !parseCorePin(source2.core)) throw fail("source_version_required");
   const previous = ts.pending;
-  const reuse = previous && !flags.restart && previous.linkHash === ctx.link.hash && previous.mode === mode && previous.commit === snap.commit && previous.omitted.join("\0") === omitted.join("\0") && ctx.now() - (previous.backend?.reservedAt ?? 0) < reuseMs;
+  const reuse = previous && !flags.restart && previous.linkHash === ctx.link.hash && previous.mode === mode && previous.commit === snap.commit && previous.sourceVersionId === source2.sourceVersionId && previous.omitted.join("\0") === omitted.join("\0") && ctx.now() - (previous.backend?.reservedAt ?? 0) < reuseMs;
   const pending = ts.pending = {
     stage: "contract",
     mode,
     commit: snap.commit,
     omitted,
     linkHash: ctx.link.hash,
+    sourceVersionId: source2.sourceVersionId,
+    sourceCore: parseCorePin(source2.core),
     ...reuse ? { core: previous.core, backend: previous.backend } : {}
   };
   await saveState(ctx.project, ctx.state);
@@ -4858,7 +4829,8 @@ async function resumeSave(ctx, readGrant) {
   const pending = ctx.targetState.pending;
   if (!pending) throw fail("nothing_pending", "run save first");
   if (pending.linkHash !== ctx.link.hash) throw fail("link_changed", `${ctx.linkFile} changed during this save`);
-  if (pending.mode === "git") await cleanHead(ctx.project, pending.commit);
+  if (pending.mode !== "git" || !uuid.test(pending.sourceVersionId ?? "") || !parseCorePin(pending.sourceCore)) throw fail("source_version_required");
+  await cleanHead(ctx.project, pending.commit);
   if (pending.stage !== "contract" && !parseCorePin(pending.core)) throw fail("cli_core_mismatch", "this save predates Cloud Core negotiation", 409);
   if (pending.stage === "contract") return resumeContract(ctx, pending, await readGrant());
   if (pending.stage === "backend") return resumeBackend(ctx, pending, await readGrant());
@@ -4874,13 +4846,14 @@ async function resumeContract(ctx, pending, raw) {
   if (contract.projectId !== ctx.link.entry.projectId) throw fail("grant_project_mismatch");
   const core = parseCorePin(contract.core);
   if (!core) throw fail("core_pin_invalid", "Cloud must return a Core version and full revision");
+  sameCore({ core: pending.sourceCore }, core);
   const snap = await snapshot(ctx, pending);
   const artifact = await packBackendSnapshot({
     top: snap.top,
     appRoot: ctx.appRoot,
     ...backendEntry(ctx.link.entry),
     files: snap.files,
-    git: pending.mode === "git",
+    git: true,
     omit: pending.omitted,
     cliVersion: `${hostName}@${cliVersion}`,
     core
@@ -4920,6 +4893,7 @@ async function resumeBackend(ctx, pending, raw) {
   const grant = unwrapResult(raw, "candidateId");
   if (!grant || !uuid.test(grant.candidateId ?? "") || !grant.poll || !("upload" in grant) || "staticUploadId" in grant) throw fail("grant_invalid", "expected the cloud-backend-upload result for this save");
   if (grant.projectId !== entry.projectId) throw fail("grant_project_mismatch", `${ctx.linkFile} names project ${entry.projectId}`);
+  if (grant.sourceVersionId !== pending.sourceVersionId) throw fail("source_receipt_mismatch");
   if (grant.contentHash !== pending.backend.contentHash) throw fail("local_hash_mismatch", "the grant reserves other bytes", 409);
   if (grant.operationId !== void 0 && grant.operationId !== pending.backend.operationId) throw fail("operation_mismatch");
   checkProtocol(grant.protocol);
@@ -4967,6 +4941,13 @@ async function resumeBackend(ctx, pending, raw) {
   const { entries } = extractKit(zip, { candidateId: id, contractHash: kit.contractHash, core: pending.core });
   const dir = await resetDir(ctx.project, `${outDir(ctx.target)}/kit`);
   for (const name2 of kitFiles) await writeFile3(join6(dir, name2), entries[name2], { flag: "wx" });
+  const distRel = joinRelative(entry.root, entry.frontend.dist);
+  if (distRel.split("/").some((part) => unsafeDist.includes(part.toLowerCase()))) throw fail("dist_path_unsafe", entry.frontend.dist);
+  const committed = await snapshot(ctx, { ...pending, omitted: [] });
+  if (Object.keys(committed.files).some((path2) => path2 === entry.frontend.dist || path2.startsWith(entry.frontend.dist + "/"))) {
+    throw fail("dist_source_tracked", "frontend.dist holds committed source; choose a separate ignored build directory.");
+  }
+  await resetDir(ctx.project, distRel);
   Object.assign(pending, { stage: "build", contractHash: kit.contractHash, kitZipSha256: kit.zipSha256 });
   await saveState(ctx.project, ctx.state);
   ctx.emit({
@@ -4984,6 +4965,7 @@ async function packStatic(ctx, pending) {
   const distPath = join6(ctx.appRoot, ...entry.frontend.dist.split("/"));
   const stat2 = await statPath(distPath).catch(() => null);
   if (!stat2?.isDirectory()) throw fail("dist_missing", distPath);
+  if (!(await readdir2(distPath)).length) throw fail("dist_missing", distPath);
   const dist = await realpath3(distPath);
   if (!inside(ctx.appRoot, dist) || dist === ctx.appRoot) throw fail("dist_outside_root", entry.frontend.dist);
   if (relative4(ctx.appRoot, dist).split(sep5).some((part) => unsafeDist.includes(part.toLowerCase())) || inside(join6(ctx.project, ".git"), dist) || inside(join6(ctx.project, ".mantle"), dist))
@@ -4998,21 +4980,8 @@ async function packStatic(ctx, pending) {
   if (kit.coreVersion !== pending.core.version || kit.coreRevision !== pending.core.revision) throw fail("cli_core_mismatch", void 0, 409);
   const ignored = [];
   const frontendText = serializeStaticArtifact(await readDist(dist, ignored), { sdkRevision: pending.core.revision, spa: entry.frontend.spa });
-  const snap = await snapshot(ctx, pending, { distPath: dist });
+  const snap = await snapshot(ctx, pending);
   const backend = JSON.parse(new TextDecoder().decode(await readOwn(ctx, "backend.json", pending.backend.contentHash, 2e6)));
-  if (pending.mode !== "git") {
-    const again = await packBackendSnapshot({
-      top: snap.top,
-      appRoot: ctx.appRoot,
-      ...backendEntry(entry),
-      files: snap.files,
-      git: false,
-      omit: pending.omitted,
-      cliVersion: `${hostName}@${cliVersion}`,
-      core: pending.core
-    });
-    if (again.sha256 !== pending.backend.contentHash) throw fail("local_hash_mismatch", "the manifests or handlers changed after the backend upload", 409);
-  }
   const zip = canonicalSourceZip(snap.files);
   inspectSourceArchive(zip, backend.sources);
   const frontend = new TextEncoder().encode(frontendText);
@@ -5077,12 +5046,12 @@ async function resumeStatic(ctx, pending, raw) {
   if (result.status === "failed") throw fail("static_pair_failed", String(result.failure ?? "probe failed").slice(0, 200));
   if (result.status === "superseded") throw fail("static_pair_superseded", "another static upload was paired with this candidate later");
   if (result.status === "blocked") {
-    const next = result.nextAction && typeof result.nextAction === "object" ? result.nextAction : null;
-    throw Object.assign(fail("static_pair_blocked", String(result.reason ?? "").slice(0, 100)), next ? { nextAction: {
-      kind: next.kind === "fix" ? "fix" : "mcp",
-      ...typeof next.tool === "string" ? { tool: next.tool } : {},
-      ...next.arguments && typeof next.arguments === "object" ? { arguments: next.arguments } : {},
-      reason: String(next.reason ?? "").slice(0, 500)
+    const next2 = result.nextAction && typeof result.nextAction === "object" ? result.nextAction : null;
+    throw Object.assign(fail("static_pair_blocked", String(result.reason ?? "").slice(0, 100)), next2 ? { nextAction: {
+      kind: next2.kind === "fix" ? "fix" : "mcp",
+      ...typeof next2.tool === "string" ? { tool: next2.tool } : {},
+      ...next2.arguments && typeof next2.arguments === "object" ? { arguments: next2.arguments } : {},
+      reason: String(next2.reason ?? "").slice(0, 500)
     } } : {});
   }
   const versionId = `${pending.backend.candidateId}.${id}`;
@@ -5157,9 +5126,9 @@ async function link(ctx, flags) {
       build: flags.build ?? base.frontend?.build
     }) : void 0
   }) : drop({ ...base, config: flags.config ?? base.config });
-  const next = { schemaVersion: 1, targets: { ...doc.targets, [target]: entry } };
-  validateLink(next);
-  await writeLink(ctx.project, next);
+  const next2 = { schemaVersion: 1, targets: { ...doc.targets, [target]: entry } };
+  validateLink(next2);
+  await writeLink(ctx.project, next2);
   const ignore = await readInside(ctx.project, ".gitignore", 1e6);
   const text = ignore ? new TextDecoder().decode(ignore) : "";
   const lines = text.split(/\r?\n/).map((line) => line.trim());
@@ -5222,7 +5191,7 @@ var reviewSummary = (review) => ({
     files: (review.static?.files ?? []).slice(0, 100).map((file) => file.path),
     omitted: review.static?.omitted ?? []
   },
-  sourceRef: review.static?.sourceRef?.commit ? `${review.static.sourceRef.commit} (unverified label, not provenance)` : "none (unversioned)",
+  sourceRef: review.static?.sourceRef?.commit ? `${review.static.sourceRef.commit} (${review.static?.sourceVerification?.state === "git_verified" ? "Git source verified; build output is client-built" : "legacy unverified label"})` : "none (unversioned)",
   contractHash: review.contractHash ?? null,
   handlerRefs: (review.handlerRefs ?? []).slice(0, 100),
   yaml: review.yamlDiff ? { changed: review.yamlDiff.changed, added: review.yamlDiff.added, removed: review.yamlDiff.removed } : null,
@@ -5360,14 +5329,207 @@ async function rollback(ctx, positional, flags, readInput) {
   return 0;
 }
 
+// src/host/source.mjs
+import { randomUUID as randomUUID4 } from "node:crypto";
+
+// src/host/source-git.mjs
+import { spawn as spawn2 } from "node:child_process";
+import { devNull as devNull2, tmpdir as tmpdir2 } from "node:os";
+import { readdir as readdir3, realpath as realpath4 } from "node:fs/promises";
+import { resolve as resolve2 } from "node:path";
+function sourceCredential(value, projectId, now = Date.now()) {
+  let remote;
+  try {
+    remote = new URL(value?.remoteUrl);
+  } catch {
+    throw fail("source_credential_invalid");
+  }
+  if (!uuid.test(projectId ?? "") || value.projectId !== projectId || value.repository !== "project-" + projectId || value.branch !== "main" || value.authMode !== "http_extra_header" || typeof value.token !== "string" || !value.token || value.token.length > 8192 || /[^\x21-\x7e]/.test(value.token) || remote.protocol !== "https:" || !/^[a-f0-9]{32}\.artifacts\.cloudflare\.net$/.test(remote.hostname) || remote.port || remote.username || remote.password || remote.search || remote.hash || !new RegExp("^/git/[a-zA-Z0-9_.-]+/project-" + projectId + "\\.git$").test(remote.pathname)) throw fail("source_credential_invalid");
+  const expires = Date.parse(value.expiresAt);
+  if (!Number.isFinite(expires) || expires <= now || expires > now + 5 * 6e4 + 1e4) throw fail("source_credential_expired");
+  return value;
+}
+var hardened = [
+  "--no-pager",
+  "--no-replace-objects",
+  "-c",
+  "core.fsmonitor=false",
+  "-c",
+  `core.hooksPath=${devNull2}`,
+  "-c",
+  `init.templateDir=${devNull2}`,
+  "-c",
+  "credential.helper=",
+  "-c",
+  "http.extraHeader=",
+  "-c",
+  "http.followRedirects=false",
+  "-c",
+  "http.sslVerify=true",
+  "-c",
+  "http.proxy=",
+  "-c",
+  "protocol.allow=never",
+  "-c",
+  "protocol.https.allow=always"
+];
+function remoteGit(project, args, credential) {
+  const env = gitEnv();
+  const auth = credential ? [
+    "-c",
+    `http.${credential.remoteUrl}.extraHeader=`,
+    "-c",
+    `http.${credential.remoteUrl}.followRedirects=false`,
+    "-c",
+    `http.${credential.remoteUrl}.sslVerify=true`,
+    "-c",
+    `http.${credential.remoteUrl}.proxy=`,
+    "-c",
+    `credential.${credential.remoteUrl}.helper=`,
+    `--config-env=http.${credential.remoteUrl}.extraHeader=MANTLE_SOURCE_AUTHORIZATION`
+  ] : [];
+  if (credential) env.MANTLE_SOURCE_AUTHORIZATION = "Authorization: Bearer " + credential.token;
+  return new Promise((done, reject) => {
+    const child = spawn2(
+      gitBinary(project),
+      [...hardened, ...auth, "-C", project, ...args],
+      { cwd: tmpdir2(), env, shell: false, stdio: ["ignore", "pipe", "ignore"], windowsHide: true }
+    );
+    const chunks = [];
+    let size = 0;
+    const timeout = setTimeout(() => child.kill(), 6e4);
+    child.stdout.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > 64e3) child.kill();
+      else chunks.push(chunk);
+    });
+    child.on("error", () => {
+      clearTimeout(timeout);
+      reject(fail("source_git_unavailable"));
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      done({ code, text: Buffer.concat(chunks).toString("utf8") });
+    });
+  });
+}
+async function destination(project, credential) {
+  const rewritten = await remoteGit(project, ["ls-remote", "--get-url", credential.remoteUrl]);
+  const push = await remoteGit(project, ["config", "--get-regexp", "^url\\..*\\.pushinsteadof$"]);
+  if (rewritten.code !== 0 || rewritten.text.trim() !== credential.remoteUrl || ![0, 1].includes(push.code) || push.text.split("\n").some((line) => {
+    const prefix = line.match(/^\S+\s+(.+)$/)?.[1];
+    return prefix && credential.remoteUrl.startsWith(prefix);
+  })) {
+    throw fail("source_remote_rewritten", "Remove Git URL rewriting before using the Cloud source credential.");
+  }
+}
+async function pushSource(project, value, projectId, commit) {
+  const credential = sourceCredential(value, projectId);
+  if (!/^[a-f0-9]{40}$/.test(commit ?? "")) throw fail("source_commit_invalid");
+  if ((await repository(project)).top !== await realpath4(project)) throw fail("source_git_root_required");
+  await cleanHead(project, commit);
+  await destination(project, credential);
+  const pushed = await remoteGit(project, ["push", credential.remoteUrl, `${commit}:refs/heads/main`], credential);
+  if (pushed.code !== 0) throw fail("source_push_refused", "Local commits are retained. Renew expired credentials or reconcile competing changes; never force push.");
+  const head = await remoteGit(project, ["ls-remote", "--heads", credential.remoteUrl, "refs/heads/main"], credential);
+  if (head.code !== 0 || head.text.trim().split(/\s+/)[0] !== commit) throw fail("source_head_changed");
+  await cleanHead(project, commit);
+  return commit;
+}
+async function cloneSource(directory2, value, projectId) {
+  const credential = sourceCredential(value, projectId);
+  const project = await realpath4(resolve2(directory2));
+  if ((await readdir3(project)).length) throw fail("source_destination_not_empty");
+  await destination(project, credential);
+  const cloned = await remoteGit(project, ["clone", "--no-tags", "--single-branch", "--branch", "main", "--", credential.remoteUrl, project], credential);
+  if (cloned.code !== 0) throw fail("source_clone_refused", "Renew the read credential. Any partially cloned files are retained for inspection.");
+  return await cleanHead(project);
+}
+
+// src/host/source.mjs
+function next(ctx, source2) {
+  const projectId = ctx.link.entry.projectId;
+  return {
+    kind: "mcp",
+    tool: source2.stage === "credential" ? "cloud-source-write-credential" : "cloud-save-source-version",
+    arguments: { projectId, ...source2.stage === "credential" ? {} : { operationId: source2.operationId, commit: source2.commit, target: ctx.target } },
+    requires: requiresVersion(projectId),
+    command: ctx.line("source", ...ctx.targetArgs, "--resume", "--grant", "-"),
+    ...source2.stage === "credential" && ctx.targetState.confirmedLink !== ctx.link.hash ? {
+      confirm: [
+        { tool: "member-organization", arguments: { organizationId: ctx.link.entry.organizationId }, field: "name" },
+        { tool: "member-project", arguments: { projectId }, field: "name" }
+      ]
+    } : {},
+    reason: "Add expectedVersion from member-project, then pipe the result to this command. Credentials remain in memory only."
+  };
+}
+async function source(ctx, flags, readGrant) {
+  const snap = await gitSnapshot(ctx.project, { root: "", omit: [], commit: void 0 });
+  let pending = ctx.targetState.source;
+  if (!flags.resume) {
+    if (pending?.stage === "saved" && pending.commit === snap.commit && pending.linkHash === ctx.link.hash && !flags.restart) {
+      ctx.emit({
+        ok: true,
+        stage: "source",
+        state: "saved",
+        commit: pending.commit,
+        sourceVersionId: pending.sourceVersionId,
+        nextAction: { kind: "run", command: ctx.line("save", ...ctx.targetArgs) }
+      });
+      return 0;
+    }
+    const reuse = pending && !flags.restart && pending.commit === snap.commit && pending.linkHash === ctx.link.hash;
+    pending = ctx.targetState.source = {
+      stage: "credential",
+      commit: snap.commit,
+      linkHash: ctx.link.hash,
+      operationId: reuse ? pending.operationId : randomUUID4()
+    };
+    await saveState(ctx.project, ctx.state);
+    ctx.emit({ ok: true, stage: "source", state: "pending", commit: pending.commit, nextAction: next(ctx, pending) });
+    return 0;
+  }
+  if (!pending || pending.linkHash !== ctx.link.hash || pending.commit !== snap.commit) throw fail("source_changed", "Run source again after reviewing and committing the changes.");
+  const raw = await readGrant();
+  if (pending.stage === "credential") {
+    const credential = unwrapResult(raw, "authMode");
+    if (!credential) throw fail("source_credential_invalid");
+    checkProtocol(credential.protocol);
+    await pushSource(ctx.project, credential, ctx.link.entry.projectId, pending.commit);
+    ctx.targetState.confirmedLink = ctx.link.hash;
+    pending.stage = "receipt";
+    await saveState(ctx.project, ctx.state);
+    ctx.emit({ ok: true, stage: "source", state: "pushed", commit: pending.commit, nextAction: next(ctx, pending) });
+    return 0;
+  }
+  if (pending.stage !== "receipt") throw fail("nothing_pending", "The source receipt was already saved.");
+  const receipt = unwrapResult(raw, "sourceVersionId");
+  const core = parseCorePin(receipt?.core);
+  if (!receipt || !uuid.test(receipt.sourceVersionId ?? "") || receipt.projectId !== ctx.link.entry.projectId || receipt.operationId !== pending.operationId || receipt.commit !== pending.commit || receipt.target !== ctx.target || !Number.isSafeInteger(receipt.projectVersion) || receipt.projectVersion < 1 || !/^[a-f0-9]{40}$/.test(receipt.tree ?? "") || receipt.state !== "source_saved" || !core) throw fail("source_receipt_mismatch");
+  Object.assign(pending, { stage: "saved", sourceVersionId: receipt.sourceVersionId, core, projectVersion: receipt.projectVersion });
+  await saveState(ctx.project, ctx.state);
+  ctx.emit({
+    ok: true,
+    stage: "source",
+    state: "saved",
+    commit: pending.commit,
+    sourceVersionId: pending.sourceVersionId,
+    nextAction: { kind: "run", command: ctx.line("save", ...ctx.targetArgs) }
+  });
+  return 0;
+}
+
 // src/host/main.mjs
 var usage = `${hostName} <command> [--target <name>] [--json]
 
   link    [--target <name>] [--runtime mantle-cloud|cloudflare|chatgpt-sites] [--organization <id>] [--project <id>]
           [--slug <slug>] [--root <dir>] [--handlers <file> | --service <file> [--mount GET:/path]...] [--dist <dir>] [--spa]
           [--build <command>] [--config <file>]
-  save    [--omit <path>]... [--no-git] [--restart]      check HEAD and request Cloud's Core contract
+  save    [--omit <path>]... [--restart]               require a saved source version and request Cloud's Core contract
   save    --resume [--grant - | --grant-file <path>]     continue with the piped Cloud MCP tool result
+  source  [--restart] [--resume --grant -]                push committed source and save its receipt through MCP
+  open    --project <id> --grant -                       clone source into the current empty directory
   status                                                 local state and the next step, no network
   deploy  <versionId> [--review -] [--dry-run]           review, then print the cloud-publish-paired-release call
   rollback [<versionId>] [--revision <hex>] [--deployment -]   print the cloud-rollback-project call
@@ -5402,7 +5564,7 @@ var options = {
   revision: { type: "string" },
   help: { type: "boolean" }
 };
-var verbs = /* @__PURE__ */ new Set(["link", "save", "status", "deploy", "rollback", "version"]);
+var verbs = /* @__PURE__ */ new Set(["link", "source", "open", "save", "status", "deploy", "rollback", "version"]);
 var inputLimit = 8e6;
 var mcpToolName = (name2) => `${name2 === "member-project" || name2 === "member-organization" ? "query_view_" : ""}${name2.replaceAll("-", "_")}`;
 var mcpAction = (action) => action && action.kind === "mcp" ? {
@@ -5462,7 +5624,30 @@ async function main(args, io = {}) {
       ctx.emit({ ok: true, stage, state: "local", version: cliVersion, protocol: hostProtocol.current, commit: null, nextAction: null });
       return 0;
     }
-    ctx.project = await realpath4(resolve2(io.cwd ?? process.cwd()));
+    ctx.project = await realpath5(resolve3(io.cwd ?? process.cwd()));
+    if (verb === "open") {
+      if (flags.grant !== "-" || !flags.project) throw fail("usage", "Pass --project <id> --grant - in an empty directory; pipe cloud-source-read-credential on stdin.");
+      let raw;
+      try {
+        raw = JSON.parse(decodeInput(await (io.stdin ?? readStdin)()));
+      } catch {
+        throw fail("grant_invalid_json");
+      }
+      rememberCredentials(raw, output);
+      const credential = unwrapResult(raw, "authMode");
+      checkProtocol(credential?.protocol);
+      const commit = await cloneSource(ctx.project, credential, flags.project);
+      const selected = pickTarget(await readLink(ctx.project), flags.target);
+      if (selected.entry.runtime !== "mantle-cloud" || selected.entry.projectId !== flags.project) throw fail("source_receipt_mismatch");
+      ctx.emit({
+        ok: true,
+        stage: "open",
+        state: "opened",
+        commit,
+        nextAction: { kind: "edit", reason: "Review the existing source, install the pinned dependencies and edit it. Commit changes, then run source before save." }
+      });
+      return 0;
+    }
     if (verb === "link") return await link(ctx, flags);
     ctx.link = pickTarget(await readLink(ctx.project), flags.target);
     ctx.target = ctx.link.target;
@@ -5492,7 +5677,7 @@ async function main(args, io = {}) {
         if (flags.grant !== "-") throw fail("grant_inline_refused", "pass --grant - and pipe the tool result on stdin; a grant on the command line reaches shell history");
         bytes = await (io.stdin ?? readStdin)();
       } else if (flags["grant-file"] !== void 0) {
-        const path = resolve2(ctx.project, flags["grant-file"]);
+        const path = resolve3(ctx.project, flags["grant-file"]);
         const unreadable = () => fail("grant_file_unreadable", "pass --grant - and pipe the Cloud MCP tool result on stdin");
         const info = await stat(path).catch(() => {
           throw unreadable();
@@ -5515,6 +5700,8 @@ async function main(args, io = {}) {
       return grant;
     };
     switch (verb) {
+      case "source":
+        return await source(ctx, flags, readGrant);
       case "save":
         return flags.resume ? await resumeSave(ctx, readGrant) : await startSave(ctx, flags);
       case "status":
@@ -5534,7 +5721,7 @@ async function main(args, io = {}) {
 }
 
 // src/host/entry.mjs
-if (process.argv[1] === fileURLToPath2(import.meta.url)) {
+if (process.argv[1] && realpathSync2(process.argv[1]) === fileURLToPath2(import.meta.url)) {
   process.exitCode = await main(process.argv.slice(2), { scriptPath: fileURLToPath2(import.meta.url) });
 }
 export {
