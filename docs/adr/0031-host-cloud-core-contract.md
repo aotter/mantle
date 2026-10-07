@@ -1,6 +1,6 @@
 # ADR 0031: Cloud supplies the host Core pin
 
-Status: Accepted for mantle-host protocols 2 and 4.
+Status: Accepted for mantle-host protocols 2, 4 and 5.
 
 The backend artifact includes `sdkVersion` and `sdkRevision` in its hashed
 bytes. The old host bundled a fixed Core revision. Cloud can run the previous
@@ -55,3 +55,23 @@ The agent checks these against reservations and uses native HTTP grant transport
 Cloud admission and plan/archive verification remain unchanged; handler/static
 bundles remain client-built. The source transport also rejects secret-named files
 in reachable history, without claiming to scan source content for credentials.
+
+## Protocol 5: mandatory structural website acceptance
+
+A shared artifact validator runs in offline frontend packing and host admission,
+and the host repeats it before new publication. The uploader cannot disable it
+with an artifact flag or a self-reported checklist. A permanent canonical origin
+is bound to the immutable static upload receipt and checked against the selected
+site at reservation. Current rule/version and frontend hash bind the report;
+changing a candidate or bytes requires fresh evidence. Existing stored releases
+remain readable and rollback preserves their historical bytes.
+
+The plugin packer requires `--origin` and emits structured missing-check
+diagnostics. The upload MCP contract requires `canonicalOrigin`. This changes
+validation meaning and therefore increments the host protocol, not the Manifest
+grammar or Core runtime. The validator checks built HTML AST structure and
+metadata, deterministic sitemap/robots and SPA routing configuration without
+executing untrusted code or launching a browser. The host provides Admin, OTP
+and media wiring; artifact validation does not certify delivery, uploads,
+arbitrary authorization, visual behavior, content truth or dynamic HTML refresh.
+A REST-only host must report dynamic-content SEO unsupported.
