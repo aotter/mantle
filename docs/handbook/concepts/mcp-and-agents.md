@@ -123,6 +123,18 @@ On the public surface, a member-facing App is the application's to build; the
 SDK attaches none. The `develop` skill's
 [MCP App recipe](../../skills/develop/mcp-app.md) lists the pieces.
 
+## Native metadata observations
+
+`createMcpSurface` optionally takes `onObservation(event)`. Registered tool dispatch emits `kind: "invocation"` with `phase: "attempt"` then `phase: "completion"`, sharing `invocationId` with the runtime's MCP cause. Metadata includes time, surface, MCP tool name and a frozen copy of the resolved Caller; completion adds monotonic `durationMs`, `outcome` (`succeeded`, `failed`, `denied`) and an optional diagnostic code. Runtime auth, guard or input-validation refusal is a dispatched invocation with a failed/denied completion; it does not assert that a business handler executed or committed. The Caller contract uses opaque subject/credential record IDs, never emails or raw tokens. Input, output and diagnostic messages are absent. A host must still allowlist what it exports.
+
+The surface's existing authorization gates emit `kind: "request-refused"` with time, surface and HTTP status. A refused batch emits one request refusal and no invocation observations. Unknown/client-hidden tools and protocol validation errors do not fabricate executed invocations. These are separate measurements: request rejections must not be added to executed-call totals.
+
+`withCaller` optionally takes `onRefusal(event)` for identity or session-origin rejection before a surface runs. It emits only time, status and `reason: "credential" | "origin"`; it cannot identify a tool in a body it has not parsed. A host registers both hooks to cover the two boundaries without resolving identity twice.
+
+Callbacks can return `void` or a delivery promise. Delivery promises are not awaited; throws/rejections are contained and never change a response. Synchronous listener work still runs inline: keep it short. The host owns request-scoped background scheduling, transport, failure reporting and retention. The simplest request binding is to construct `createMcpSurface` and `withCaller` inside the host's request handler, with callbacks closing over that request's background-task function; reuse the already-created runtime, not a new runtime/Auth. Surface construction traverses its plan's tool catalog. A host that reuses surfaces can instead use its existing request-local context facility, such as AsyncLocalStorage, to retrieve the current execution context. Never close over the first request's context or share its delivery promise with another request. With Streamable HTTP, tool execution and completion observations may happen after `fetch` returns its Response, while its body is consumed; keep the request-bound context available through that lifetime.
+
+Attempt/completion can arrive out of order, a completion may be absent, and capture is best-effort. `succeeded` describes native execution/serialization, not successful transport delivery afterward. `durationMs` uses the host's `performance.now()` clock; its precision and advancement depend on the host. This is observability, not a billing or transactional audit guarantee. Omitting both callbacks preserves current dispatch/auth behavior and adds no provider dependency or storage statement. These callbacks cover this native MCP surface, not Admin WebMCP or every runtime source. The two refusal hooks have different shapes because caller rejection occurs before a surface has identified a tool; the adopter may project them into its own request-rejection metadata.
+
 ## Further reading
 
 - [Reads: Views, REST and MCP](./views.md)

@@ -1,6 +1,7 @@
 import { makeDiagnostic, redactForWire, type DiagnosticCode } from "../spec/kernel/index.js";
 import type { CallerResolver } from "./caller.js";
 import type { Surface } from "./service.js";
+import { observe } from "./observation.js";
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -13,6 +14,15 @@ export interface WithCallerOptions {
    * `resource_metadata` parameter of the 401 challenge, so an MCP entry passes it and every challenge carries it.
    */
   readonly resourceMetadata?: string;
+  /** Metadata only; no request body or credential. A delivery promise is not awaited. */
+  readonly onRefusal?: (event: CallerRefusal) => void | Promise<void>;
+}
+
+/** A request refused before a surface runs, not an executed tool invocation. */
+export interface CallerRefusal {
+  readonly at: number;
+  readonly status: 401 | 403;
+  readonly reason: "origin" | "credential";
 }
 
 /**
@@ -22,6 +32,10 @@ export interface WithCallerOptions {
  */
 export function withCaller(resolve: CallerResolver, surface: Surface, options: WithCallerOptions = {}): (request: Request) => Promise<Response> {
   return async (request) => {
+    const rejected = (reason: CallerRefusal["reason"], status: 401 | 403, code: DiagnosticCode, message: string, path: string, challenge?: string) => {
+      if (options.onRefusal) observe(options.onRefusal, { at: Date.now(), status, reason });
+      return refuse(status, code, message, path, challenge);
+    };
     const r = await resolve(request);
     if ("caller" in r) {
       if (r.caller.kind === "user" && r.caller.credential === "session" && !SAFE.has(request.method)) {
@@ -29,14 +43,14 @@ export function withCaller(resolve: CallerResolver, surface: Surface, options: W
         const origin = request.headers.get("origin");
         // neither header is what Better Auth refuses too: every browser sends one of them on a mutation
         if ((!site && !origin) || (site && site !== "same-origin" && site !== "none") || (origin && origin !== new URL(request.url).origin))
-          return refuse(403, "AUTH_DENIED", "Cross-origin session mutation rejected.", "request:origin");
+          return rejected("origin", 403, "AUTH_DENIED", "Cross-origin session mutation rejected.", "request:origin");
       }
       return surface(request, r.caller);
     }
     const status = r.status ?? 401;
     const challenge = r.challenge && options.resourceMetadata ? `${r.challenge}, resource_metadata="${options.resourceMetadata}"` : r.challenge ?? (options.resourceMetadata ? `Bearer resource_metadata="${options.resourceMetadata}"` : undefined);
     return status === 401
-      ? refuse(401, "UNAUTHENTICATED", "The presented credential is missing, malformed, expired, revoked, or invalid.", "request:authorization", challenge)
-      : refuse(403, "AUTH_DENIED", "The verified credential lacks a required scope.", "request:authorization", challenge);
+      ? rejected("credential", 401, "UNAUTHENTICATED", "The presented credential is missing, malformed, expired, revoked, or invalid.", "request:authorization", challenge)
+      : rejected("credential", 403, "AUTH_DENIED", "The verified credential lacks a required scope.", "request:authorization", challenge);
   };
 }
