@@ -77,7 +77,7 @@ try {
   const html = `<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Plugin check</title><meta name="description" content="Synthetic static website"><link rel="canonical" href="${origin}/"><meta property="og:title" content="Plugin check"><meta property="og:type" content="website"><meta property="og:url" content="${origin}/"><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage"}</script></head><body><main><h1>Plugin check</h1><p>Synthetic public content.</p></main></body></html>`;
   writeFileSync(join(project, 'dist/index.html'), html);
   writeFileSync(join(project, 'dist/sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${origin}/</loc></url>\n</urlset>\n`);
-  writeFileSync(join(project, 'dist/robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
+  writeFileSync(join(project, 'dist/robots.txt'), `User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: ${origin}/sitemap.xml\n`);
   const frontend = line(frontendArgs);
   assert.equal(frontend.website.status, 'passed');
   assert.equal(frontend.website.dynamicContentSeo, 'unsupported');
