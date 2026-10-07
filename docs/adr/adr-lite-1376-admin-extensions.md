@@ -1,11 +1,11 @@
 # ADR-lite 1376: Admin extensions
 
-**Status:** Proposed (revision 2: the full contract, replacing the pages-only
-draft)
+**Status:** Proposed (revision 3: the full contract, for hosts and for
+projects; replaces the pages-only draft)
 
 ## Context
 
-A host that mounts Admin sometimes needs its own UI next to the generated
+A project or the host that mounts Admin sometimes needs its own UI next to the generated
 collections, Views and operations. Examples are an operator's
 access-management screen, a record action that calls a host service, or a
 field widget for a host-specific format. Today the Admin SPA has no way to add
@@ -59,10 +59,10 @@ The survey also turns up five lessons that bear on this design:
 
 ## Decision
 
-### 1. One declaration per extension
+### 1. One declaration per extension, from the project or the host
 
 `createAdminSurface` accepts `extensions: AdminExtension[]`. Each extension
-pairs a declaration, which is plain data, with server handlers, which are host
+pairs a declaration, which is plain data, with server handlers, which are
 code:
 
 ```ts
@@ -86,6 +86,35 @@ code:
   },
 }
 ```
+
+### 1a. Projects author extensions; hosts may add their own
+
+Extensions are not a host-only feature. An agent customizing a project's Admin
+is the main author:
+
+- A project's service module may export `adminExtensions: AdminExtension[]`
+  next to its other service exports. The generated preset passes them to
+  `createAdminSurface`. A host that builds Admin itself (for example a hosted
+  platform) reads the same export and appends its own extensions.
+- Extension ids are one namespace per Admin. A host extension whose id
+  collides with a project extension fails construction, so a project can
+  never shadow a host page, and the reverse.
+- `mantle verify` validates a project's declarations against the exported
+  JSON Schema, and `mantle build` bundles each `module` with the import map's
+  packages kept external (§4). The same project shows the same extensions
+  locally and when deployed; a host only adds.
+
+**Trust.** A project extension's module runs in Admin's origin with the
+viewer's session. That gives it no more power than the project already has:
+whoever can deploy the project already controls its server code, its
+handlers and its storage. Two rules keep that equivalence true:
+
+- Host extension routes reachable from a project's Admin origin must act only
+  on that project. Anything wider (an organization console, other projects)
+  lives on a different origin, so a project module never holds its session.
+- A host that restricts what some staff may do inside a project (fine-grained
+  policies) must treat the right to deploy as full trust in that project, and
+  govern deployment separately.
 
 Contributions and their targets:
 
@@ -193,15 +222,16 @@ export default defineAdminExtension({
 - A marketplace or untrusted third-party extensions (reserved tier, above).
 - Server-side sandboxing of handlers. They are host code in the host's
   process.
-- Declaring extensions in a project manifest. Extensions belong to the host
-  that mounts Admin, not to a project. A future grammar ADR may add
-  schema-only settings to manifests.
+- Declaring extensions in the YAML manifest. They live in the project's
+  service module (TypeScript), so the four-atom grammar does not change.
 
 ## Consequences
 
-- Hosts add pages, settings, actions, panels and field widgets without
-  forking the SPA, and the SPA stays one build. Without `extensions`, nothing
-  changes.
+- Projects and hosts add pages, settings, actions, panels and field widgets
+  without forking the SPA, and the SPA stays one build. Without
+  `extensions`, nothing changes.
+- An agent can customize a project's Admin with a small module and a
+  declaration that tooling validates and diffs before deploy.
 - Settings pages need no client code at all. This covers most host
   configuration screens and is the easiest kind for an agent to author and
   review.
