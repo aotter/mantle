@@ -9,6 +9,14 @@ import { DiagnosticError, makeDiagnostic, redactForWire, type Diagnostic } from 
 import { mcpTools, type AuthPredicate, type AuthorizationRequirements, type JsonSchema, type McpTool } from "../spec/domain/index.js";
 import { evaluateAuthAll, type Caller, type MantleRuntime, type Surface } from "../core/index.js";
 import { appHtml, appMeta, clientUiSupport, linkApps, type ClientUiSupport, type McpApps } from "./apps.js";
+import { observe } from "../core/observation.js";
+
+export type McpObservation =
+  | { readonly kind: "request-refused"; readonly at: number; readonly surface: "public" | "staff"; readonly status: 401 | 403 }
+  | { readonly kind: "invocation"; readonly at: number; readonly surface: "public" | "staff"; readonly invocationId: string; readonly tool: string; readonly caller: Caller } & (
+    | { readonly phase: "attempt" }
+    | { readonly phase: "completion"; readonly outcome: "succeeded" | "failed" | "denied"; readonly durationMs: number; readonly code?: Diagnostic["code"] }
+  );
 
 export interface McpSurfaceOptions {
   /** Where this surface answers, e.g. `/mcp` or `/mcp/staff`. */
@@ -28,6 +36,8 @@ export interface McpSurfaceOptions {
    * so a token minted for a narrow integration never reaches a tool. Defaults to the one compatibility scope, `["mcp"]`.
    */
   readonly requiredScopes?: readonly string[];
+  /** Native metadata only. Best-effort; delivery promises never delay a response. The host owns transport and request lifetime. */
+  readonly onObservation?: (event: McpObservation) => void | Promise<void>;
 }
 
 const CONTEXT_KEY = "mantle.caller";
@@ -69,6 +79,7 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
   const serverInfo = { name: "aotter.mantle", version: "0.2.0", ...options.serverInfo };
 
   const challenge = (status: 401 | 403, error?: { code?: string; scope?: string }, bare = false) => {
+    if (options.onObservation) observe(options.onObservation, { kind: "request-refused", at: Date.now(), surface: options.surface, status });
     const parts = [...(error?.code ? [`error="${error.code}"`] : []), ...(error?.scope ? [`scope="${error.scope}"`] : []), ...(options.resourceMetadata ? [`resource_metadata="${options.resourceMetadata}"`] : [])];
     const code = status === 401 ? "UNAUTHENTICATED" : "AUTH_DENIED";
     return Response.json({ error: redactForWire(makeDiagnostic({ code, phase: "runtime", severity: "error", path: "mcp", message: status === 401 ? "Authentication is required." : "The credential does not allow this." })) }, { status, headers: bare ? {} : { "www-authenticate": `Bearer${parts.length ? " " + parts.join(", ") : ""}` } });
@@ -92,14 +103,25 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
       const execute = async (args: unknown): Promise<CallToolResult> => {
         const input = isRecord(args) ? args : {};
         const cause = { kind: "mcp" as const, id: crypto.randomUUID() };
+        // An observer cannot mutate the Caller used for execution, including its scopes array.
+        const observedCaller = options.onObservation ? Object.freeze(caller.kind === "user" ? { ...caller, scopes: Object.freeze([...caller.scopes]) } : { ...caller }) : caller;
+        const metadata = { kind: "invocation" as const, surface: options.surface, invocationId: cause.id, tool: tool.name, caller: observedCaller };
+        if (options.onObservation) observe(options.onObservation, { ...metadata, phase: "attempt", at: Date.now() });
+        const started = options.onObservation ? performance.now() : 0;
+        let outcome: "succeeded" | "failed" | "denied" = "succeeded";
+        let code: Diagnostic["code"] | undefined;
         try {
           if (tool.kind === "procedure") return result(await runtime.invokeProcedure({ procedure: tool.source, input, caller, cause }));
           const { limit, cursor, ...rest } = input;
           return result(await runtime.store.as(caller, cause).view(tool.source, { input: rest, ...(limit !== undefined ? { limit: limit as number } : {}), ...(cursor !== undefined ? { cursor: cursor as string } : {}) }));
         } catch (e) {
+          code = e instanceof DiagnosticError ? e.diagnostic.code : "INTERNAL_ERROR";
+          outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
           if (e instanceof DiagnosticError) return failure(e.diagnostic, tool.outputSchema !== undefined);
           console.error(`[mantle mcp ${tool.name}] unhandled failure`, e);
           return failure(makeDiagnostic({ code: "INTERNAL_ERROR", phase: "runtime", severity: "error", path: `MCP ${tool.name}`, message: "Internal error." }), tool.outputSchema !== undefined);
+        } finally {
+          if (options.onObservation) observe(options.onObservation, { ...metadata, phase: "completion", at: Date.now(), outcome, durationMs: Math.max(0, performance.now() - started), ...(code ? { code } : {}) });
         }
       };
       const config = { ...(tool.title ? { title: tool.title } : {}), description: tool.description, inputSchema: schemaOf(tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schemaOf(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) };

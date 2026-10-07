@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { CLIENT_CAPABILITIES_META_KEY } from "@modelcontextprotocol/server";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
-import { compilePlan } from "../../src/spec/index.js";
+import { compilePlan, DiagnosticError, makeDiagnostic } from "../../src/spec/index.js";
 import { createMantleRuntime, type Caller, type MantleRuntime } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
-import { createMcpSurface } from "../../src/mcp/index.js";
+import { createMcpSurface, type McpSurfaceOptions, type McpObservation } from "../../src/mcp/index.js";
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -153,8 +154,8 @@ beforeAll(async () => {
 afterAll(() => d1.dispose());
 
 const RM = "https://x.test/.well-known/oauth-protected-resource";
-const rpc = async (surface: "public" | "staff", caller: Caller, method: string, params: unknown = {}) => {
-  const res = await createMcpSurface(rt, { basePath: "/mcp", surface, resourceMetadata: RM })(
+const rpc = async (surface: "public" | "staff", caller: Caller, method: string, params: unknown = {}, options: Partial<McpSurfaceOptions> = {}) => {
+  const res = await createMcpSurface(rt, { basePath: "/mcp", surface, resourceMetadata: RM, ...options })(
     new Request("https://x.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), caller);
   const text = await res.text();
   const data = text.startsWith("event:") || text.includes("\ndata:") || text.startsWith("data:") ? JSON.parse(text.split("\n").find((l) => l.startsWith("data:"))!.slice(5)) : text ? JSON.parse(text) : null;
@@ -171,6 +172,77 @@ const subsetSurface = async (keep: RegExp, resourceMetadata?: string) => {
 const names = async (surface: "public" | "staff", caller: Caller) => ((await rpc(surface, caller, "tools/list")).data.result.tools as { name: string }[]).map((t) => t.name).sort();
 
 describe("MCP surface", () => {
+  it("observes a native guard denial once without executing its guarded read", async () => {
+    const plan = await compilePlan({ sources: [{ sourceId: "memory:observer-guard", text: `${MANIFESTS.split("\n---\n")[0]}\n---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: observation-guard }
+spec: { input: { type: object }, output: { type: object }, handler: { ref: denyObservation } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: guarded-observation }
+spec: { surface: public, requires: { guard: { procedure: observation-guard } }, sql: "SELECT id FROM notes ORDER BY id" }
+` }] });
+    if (!plan.ok) throw new Error(JSON.stringify(plan.diagnostics));
+    let guards = 0;
+    const guarded = await createMantleRuntime({ plan: plan.plan, storage: sqliteStorage(d1), handlers: { denyObservation: () => { guards++; throw new DiagnosticError(makeDiagnostic({ code: "AUTH_DENIED", phase: "runtime", severity: "error", path: "guard", message: "private guard detail" })); } } });
+    const events: McpObservation[] = [];
+    const response = await createMcpSurface(guarded, { basePath: "/mcp", surface: "public", onObservation: event => { events.push(event); } })(new Request("https://x.test/mcp", {
+      method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "guarded_observation", arguments: {} } }),
+    }), user("observer"));
+    await response.text(); // SDK Streamable HTTP completes execution while its response body is consumed.
+    expect(guards).toBe(1);
+    expect(events).toHaveLength(2);
+    expect(events[1]).toMatchObject({ phase: "completion", outcome: "denied", code: "AUTH_DENIED" });
+    expect(JSON.stringify(events)).not.toContain("private guard detail");
+  });
+  it("observes native invocation phases, correlation and outcomes without payloads", async () => {
+    const events: McpObservation[] = [];
+    const options = { onObservation: (event: McpObservation) => { events.push(event); } };
+    for (const [name, args, outcome] of [["ranked", { min: 0 }, "succeeded"], ["ranked", { min: "private-input" }, "failed"], ["scoped_add", { title: "private-input" }, "denied"]] as const) {
+      events.length = 0;
+      await rpc("public", user("observer"), "tools/call", { name, arguments: args }, options);
+      expect(events).toHaveLength(2);
+      const [attempt, completion] = events;
+      expect(attempt).toMatchObject({ kind: "invocation", phase: "attempt", tool: name });
+      expect(completion).toMatchObject({ kind: "invocation", phase: "completion", tool: name, outcome, invocationId: (attempt as Extract<McpObservation, { kind: "invocation" }>).invocationId });
+      expect(JSON.stringify(events)).not.toContain("private-input");
+      expect(completion).toHaveProperty("durationMs", expect.any(Number));
+    }
+  });
+
+  it("separates request refusals and never fabricates an unknown tool invocation", async () => {
+    const events: McpObservation[] = [];
+    const options = { onObservation: (event: McpObservation) => { events.push(event); } };
+    expect((await rpc("staff", anon, "tools/call", { name: "staff_wipe" }, options)).status).toBe(401);
+    expect(events).toEqual([{ kind: "request-refused", surface: "staff", at: expect.any(Number), status: 401 }]);
+    events.length = 0;
+    expect((await rpc("public", user("narrow", { credential: "oauth", scopes: [] }), "tools/list", {}, options)).status).toBe(403);
+    expect(events).toEqual([{ kind: "request-refused", surface: "public", at: expect.any(Number), status: 403 }]);
+    events.length = 0;
+    await rpc("public", user("observer"), "tools/call", { name: "arbitrary-private-name" }, options);
+    expect(events).toEqual([]);
+    await rpc("public", user("observer"), "tools/call", { name: "ranked", arguments: { min: 0 }, _meta: { [CLIENT_CAPABILITIES_META_KEY]: {} } }, {
+      ...options, apps: { resources: [{ name: "notes", uri: "ui://notes", html: "<html></html>", appOnly: ["ranked"] }] },
+    });
+    expect(events).toEqual([]);
+    await rpc("staff", user("observer", { role: "owner" }), "tools/call", { name: "staff_notes", arguments: {} }, options);
+    expect(events).toHaveLength(2);
+    expect(events[1]).toMatchObject({ kind: "invocation", surface: "staff", phase: "completion", outcome: "succeeded" });
+  });
+
+  it("a throwing, rejected or pending observer cannot change the result or Caller", async () => {
+    for (const onObservation of [() => { throw new Error("delivery failed"); }, () => Promise.reject(new Error("delivery failed")), () => new Promise<void>(() => {})]) {
+      const response = await rpc("public", user("observer"), "tools/call", { name: "ranked", arguments: { min: 0 } }, { onObservation });
+      expect(response.data.result.isError).not.toBe(true);
+    }
+    const response = await rpc("public", user("observer"), "tools/call", { name: "scoped_add", arguments: { title: "must-not-write" } }, {
+      onObservation: event => { if (event.kind === "invocation" && event.caller.kind === "user") (event.caller.scopes as string[]).push("notes:write"); },
+    });
+    expect(response.data.result.isError).toBe(true);
+  }, 10_000);
   it("lists only Procedure and View tools of the surface; an internal View and every Schema are absent", async () => {
     expect(await names("public", user("a"))).toEqual(["add_note", "leaky", "my_notes", "ranked", "scoped_add"]);
     expect(await names("staff", user("a", { role: "owner" }))).toEqual(["staff_notes", "staff_wipe"]);
@@ -288,9 +360,11 @@ describe("MCP surface", () => {
   });
 
   it("refuses a whole batch when one call in it needs identity", async () => {
-    const res = await createMcpSurface(rt, { basePath: "/mcp", surface: "public" })(new Request("https://x.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    const events: McpObservation[] = [];
+    const res = await createMcpSurface(rt, { basePath: "/mcp", surface: "public", onObservation: event => { events.push(event); } })(new Request("https://x.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
       body: JSON.stringify([{ jsonrpc: "2.0", id: 1, method: "tools/list" }, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "add_note", arguments: { title: "batch" } } }]) }), anon);
     expect(res.status).toBe(401);
+    expect(events).toEqual([{ kind: "request-refused", surface: "public", at: expect.any(Number), status: 401 }]);
   });
 
   it("answers a path that is not its own with 404", async () => {

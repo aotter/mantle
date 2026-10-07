@@ -65,6 +65,23 @@ describe("createCallerResolver", () => {
 });
 
 describe("withCaller", () => {
+  it("observes refusals before a surface without exposing credentials or awaiting delivery", async () => {
+    const events: unknown[] = [];
+    const never = () => { throw new Error("surface must not run"); };
+    const invalid = withCaller(async () => ({ invalid: true, challenge: 'Bearer error="invalid_token"' }), never, {
+      onRefusal: event => { events.push(event); return Promise.reject(new Error("delivery failed")); },
+    });
+    const response = await invalid(req({ authorization: "Bearer private-credential" }));
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe('Bearer error="invalid_token"');
+    expect(events).toEqual([{ at: expect.any(Number), status: 401, reason: "credential" }]);
+    events.length = 0;
+    const origin = withCaller(async () => ({ caller: { kind: "user", subject: "u", role: null, scopes: [], credential: "session", credentialId: null, clientId: null } }), never, {
+      onRefusal: event => { events.push(event); return new Promise<void>(() => {}); },
+    });
+    expect((await origin(new Request("https://x/mcp", { method: "POST", headers: { origin: "https://elsewhere.test" } }))).status).toBe(403);
+    expect(events).toEqual([{ at: expect.any(Number), status: 403, reason: "origin" }]);
+  });
   const seen: unknown[] = [];
   const surface = async (_r: Request, caller: unknown) => { seen.push(caller); return new Response("ok"); };
   it("runs the surface for anonymous and users, and answers an invalid credential 401 (403 for a missing scope) with a challenge, before any surface", async () => {

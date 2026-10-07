@@ -214,6 +214,12 @@ Every Mantle package versions and releases together, so splitting by area buys n
 
 ## Conformance cases
 
+### 2026-10-07 amendment — metadata observation belongs to its native boundary (#1356)
+
+MCP offers optional `onObservation` at registered tool dispatch and its existing request-refusal gates. Attempt and completion share the runtime cause ID; output/input, requested unknown names, URLs and exception messages are never observation fields. Unknown and client-hidden tools are not registered invocations. An authentication-refused request or batch is a request refusal, not a set of executed tools. Invalid credentials and session-origin refusals remain owned by `withCaller`, which offers optional `onRefusal` without parsing the body or exposing credentials.
+
+Callbacks are best-effort and platform-independent. Their synchronous exceptions and rejected promises do not change the business result or authentication challenge; delivery promises are not awaited. A host owns request lifetime, transport, source enrichment, storage, query authorization and reporting delivery failure. A pending callback can outlive the available request lifetime or be lost. Neither callback promises exactly-once capture or transactional audit. Core adds no telemetry table, provider binding, queue or global I/O promise. The existing business Store audit contract is unchanged.
+
 The three contracts #1188 made ADR gates are accepted only with these cases, run against every `StoreExecutor` and the lifecycle layer:
 
 1. **Atomicity and hooks.** A hook target with an inline program is rejected. A before hook has no write and no `invoke`; its rejection applies nothing in the batch. A concurrent write between a before check and the commit fails on OCC. A rollback emits no after event. An after-hook failure leaves the committed result. A replayed after event carries the same `ctx.cause.id`.
