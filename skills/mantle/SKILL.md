@@ -74,6 +74,14 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
 For a local cold start, do not push, deploy or configure providers. For a
 requested hosted app, continue with the selected hosting workflow.
 
+## Complete websites
+
+For a requested complete website, apply [website defaults](references/website.md)
+without asking the user to enumerate OTP, media, Admin or SEO. A Cloud frontend
+kit is authoritative about the selected runtime's capabilities. Defaults are
+acceptance requirements, not evidence that a missing renderer is implemented.
+Do not report a complete website with blocked required checks.
+
 ## Hosting and publishing
 
 Follow the user's requested host. A request for a complete hosted Mantle Cloud
