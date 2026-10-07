@@ -77,7 +77,7 @@ code:
     settings: [{ id, title, role, schema }],          // JSON Schema form, no client code
     actions:  [{ id, title, role, target, presentation, destructive?, when? }],
     panels:   [{ id, title, role, target, when? }],
-    fields:   [{ id, target, when }],
+    fields:   [{ id, target, when?, optionsSchema? }],
   },
   handlers: {
     api?(request, { caller, extension, path }): Promise<Response | null>,
@@ -116,6 +116,8 @@ handlers and its storage. Two rules keep that equivalence true:
   policies) must treat the right to deploy as full trust in that project, and
   govern deployment separately.
 
+Contributions and their targets are listed below; §1b covers how manifests use them.
+
 Contributions and their targets:
 
 | Contribution | Targets (`/v1`) | Client code |
@@ -131,6 +133,62 @@ string[], format?: string[] }`. It contains no expressions and no record
 values, so the server can evaluate it.
 
 `role` is the minimum staff role, the same vocabulary as `requires.auth`.
+
+### 1b. Manifests pick contributions through `uiSchema`
+
+There are two ways to attach a contribution. Both stay:
+
+- **From the manifest.** `uiSchema` already chooses Admin presentation
+  (`fields.<name>.widget: textarea`, `list.columns`, `collectionAction`).
+  It may also name a contribution as `<extension>/<contribution>`:
+
+  ```yaml
+  # Schema products
+  uiSchema:
+    fields:
+      color: { widget: brand-kit/color, options: { palette: brand } }
+      notes: { widget: textarea }
+    list:
+      cells: { color: brand-kit/swatch }       # field.cell/v1
+    panels: [brand-kit/usage]                  # record.sidebar/v1
+  # Procedure reassign-order (uiSchema.fields.<name>.widget works the same)
+  # View sales-by-region
+  uiSchema:
+    list: { cells: { region: maps/region-badge } }
+  ```
+
+  - The binding sits next to the field it changes. An agent writes both in
+    one change, and a manifest review shows it.
+  - `options` is passed to the renderer as `ctx.options`. A contribution may
+    declare `optionsSchema` (the settings form subset). `options` is checked
+    against it, and a contribution without one refuses `options`.
+  - The target kind must match the key: `fields.*.widget` names a
+    `field.input/v1` contribution, `list.cells.*` a `field.cell/v1`
+    contribution, and `panels` a `record.sidebar/v1` contribution.
+- **From the extension.** `when: { schema, field, format }` attaches a
+  contribution everywhere it matches without touching manifests, for example
+  every field with `x-mcp-hint: money-minor`. This suits host extensions and
+  cross-cutting widgets.
+
+When both apply to one place, the manifest wins.
+
+**Validation.**
+- The manifest grammar checks the shape: `<extension>/<contribution>` with
+  kebab-case parts. `textarea` stays the one built-in widget.
+- Whether the named contribution exists, has the right target and accepts the
+  `options` is checked where the plan and the extensions meet:
+  - `createAdminSurface` fails construction with `UI_EXTENSION_UNKNOWN`,
+    `UI_EXTENSION_TARGET` or `UI_EXTENSION_OPTIONS`.
+  - `mantle verify` runs the same check when the service module exports
+    `adminExtensions`.
+
+**Who may be named.** A manifest may name only the project's own extensions,
+never a host's. A project then renders the same locally and when deployed. A
+host attaches its contributions with `when` instead.
+
+**Effect.** `uiSchema` stays presentation only. It never changes validation,
+MCP schemas or authorization. The field's JSON Schema still validates what a
+widget sends.
 
 ### 2. The server decides what a caller sees, and checks again on use
 
@@ -231,7 +289,12 @@ export default defineAdminExtension({
   without forking the SPA, and the SPA stays one build. Without
   `extensions`, nothing changes.
 - An agent can customize a project's Admin with a small module and a
-  declaration that tooling validates and diffs before deploy.
+  declaration that tooling validates and diffs before deploy. A `uiSchema`
+  line in the manifest binds it to a field, a list cell or a record panel.
+- The `uiSchema` vocabulary widens from fixed values to
+  `<extension>/<contribution>` names. This is a grammar change, so ADR-0002's
+  closed-enum rule needs an amendment: the name's shape is closed and checked
+  at generate time, and its existence is checked at construction.
 - Settings pages need no client code at all. This covers most host
   configuration screens and is the easiest kind for an agent to author and
   review.
