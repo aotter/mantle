@@ -13,15 +13,19 @@ selected host's frontend kit before choosing APIs.
   Admin media library and host storage. Follow the pinned Core upload/PUT/commit
   contract and supported media field hints. Upload capability URLs are temporary,
   not committed public images; anonymous visitors must not gain staff media access.
-- Generate an accessible, responsive public frontend using the installed
-  `@aotter/mantle/web` server-side capabilities and same-origin browser fetch;
-  the server surface is not a browser client library. Do not install the historical standalone
+- Generate an accessible, responsive public frontend by reading the installed
+  `@aotter/mantle/web` REST contract; browser code on static hosts uses
+  same-origin fetch, not a server surface imported into the browser. Do not install the historical standalone
   `@aotter/mantle-web` or invent an HTML renderer. A REST-only version does not
   provide server-rendered pages. Follow the host's static/template restrictions.
 - Public content needs real per-URL HTML with semantic body text, title,
   description, canonical, Open Graph, sitemap.xml, robots.txt and appropriate
   JSON-LD. Include authorship and publication/update dates where applicable.
   Client-side-only metadata or an SPA shell is not sufficient for SEO/AEO/GEO.
+  For public content on static hosts disable SPA fallback and check unknown URLs
+  return 404. Use the permanent canonical origin returned by the host or the
+  explicitly configured site domain, never a candidate preview origin. Missing
+  final origin blocks origin-dependent checks.
   Structured data must match visible content; do not fabricate facts or promise
   ranking or AI citation.
 - Verify that content publication, edits and deletion update the crawlable page
@@ -33,9 +37,12 @@ Before reporting completion, inspect HTML with JavaScript disabled, check
 metadata/sitemap and anonymous draft/permission refusal, and exercise OTP,
 content editing and media upload/commit with authorized synthetic accounts.
 Read the host's preview capability limits: disabled mail/media checks stay
-pending, not passed. Use staging first with existing authorized staff accounts. Live tests require
+pending, not passed. Use candidate preview first, then an existing explicitly authorized live test
+tenant with authorized staff accounts for disabled services. Do not create or
+publish a test tenant without authorization. Live tests require
 explicit authorization for synthetic writes and cleanup. Without a published
 test tenant or that authorization, report them pending.
 Do not weaken preview isolation, fake success or grant staff privileges outside the authorized test scope to make
 checks pass. Provenance/pairing review does not certify website quality; report
-passed, failed and blocked checks separately.
+passed, failed and blocked checks separately. Pending required checks also
+block completion.
