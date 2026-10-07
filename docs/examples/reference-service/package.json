@@ -8,8 +8,8 @@
     "check": "mantle generate && mantle generate --check && tsc --noEmit && node smoke.mjs"
   },
   "dependencies": {
-    "@aotter/mantle": "0.2.0-alpha.3",
-    "@aotter/mantle-ui": "0.2.0-alpha.3",
+    "@aotter/mantle": "0.2.0-alpha.4",
+    "@aotter/mantle-ui": "0.2.0-alpha.4",
     "@better-auth/cimd": "1.7.7",
     "@better-auth/mcp": "1.7.7",
     "@better-auth/oauth-provider": "1.7.7",
