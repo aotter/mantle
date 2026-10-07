@@ -116,3 +116,18 @@ describe("member navigation", () => {
     expect(urls).not.toContain("/admin/c/members");
   });
 });
+
+describe("host extension pages in the sidebar", () => {
+  it("lists the pages the server returned, localized, under More", () => {
+    const groups = buildNavGroups([], [], "zh-TW", null, "contributor", false, undefined, [
+      { id: "staff-access", title: { en: "Staff access", "zh-TW": "Staff 權限" }, module: "/x/access.js" },
+    ]);
+    const more = groups[groups.length - 1]!;
+    expect(more.items).toEqual([expect.objectContaining({ title: "Staff 權限", url: "/admin/x/staff-access" })]);
+  });
+
+  it("adds nothing when the server lists no pages (or is older and sends none)", () => {
+    const before = buildNavGroups([], [], "en", null, "owner");
+    expect(buildNavGroups([], [], "en", null, "owner", false, undefined, [])).toEqual(before);
+  });
+});

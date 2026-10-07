@@ -5,7 +5,7 @@ import { requiredEnumStates } from "./procedureFlow.js";
  * caller's scope sees and nothing wider. Routes of an `AdminIdentity` facet that is absent do not exist.
  */
 import { makeDiagnostic, redactForWire } from "../spec/kernel/index.js";
-import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, enumOptions, resolveMantleRef, mcpTools, type JsonSchema, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
+import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, enumOptions, resolveMantleRef, mcpTools, type JsonSchema, type LocalizedText, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
 import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
 import { siteConfigOf } from "../core/siteConfig.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
@@ -26,6 +26,27 @@ export interface AdminSurfaceOptions {
   readonly site?: { readonly mcpEndpoints?: { readonly public: string | null; readonly staff: string | null } };
   /** Media objects; the media routes also need `runtime.site`, which owns the tables, and answer 501 without either. */
   readonly media?: MediaStorage;
+  /** Pages the host adds to Admin, and their API. */
+  readonly extensions?: AdminExtensions;
+}
+
+/**
+ * A host page in Admin's navigation at `/admin/x/{id}`, for `role` and above. The SPA imports `module` (a same-origin
+ * path) and calls its `mount(element, context)`; the module is the host's code and runs with Admin's privileges.
+ */
+export interface AdminExtensionPage {
+  readonly id: string;
+  readonly title: LocalizedText;
+  readonly role: StaffRole;
+  readonly module: string;
+}
+export interface AdminExtensions {
+  readonly pages: readonly AdminExtensionPage[];
+  /**
+   * A page's own API at `{basePath}/api/x/{id}/{path}`. It runs after Admin's checks (a signed-in staff session whose role
+   * meets the page's); `null` answers 404.
+   */
+  readonly api?: (request: Request, context: { readonly caller: Extract<Caller, { kind: "user" }> & { readonly role: StaffRole }; readonly page: string; readonly path: string }) => Response | null | Promise<Response | null>;
 }
 
 type Staff = Extract<Caller, { kind: "user" }> & { readonly role: StaffRole };
@@ -186,7 +207,15 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   // a custom directory may return more than it declares: only the declared fields reach the wire
   const staffInfo = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: StaffUserInfo) => ({ id, email, name, role, githubLogin, emailVerified, createdAt });
   const memberInfo = ({ id, email, name, emailVerified, createdAt }: MemberUserInfo) => ({ id, email, name, emailVerified, createdAt });
-  const site = async (url: URL) => {
+  const extensionPages = options.extensions?.pages ?? [];
+  for (const [index, page] of extensionPages.entries()) {
+    if (!/^[a-z][a-z0-9-]{0,62}$/.test(page.id) || extensionPages.findIndex((p) => p.id === page.id) !== index) throw new TypeError(`createAdminSurface: extension page id '${page.id}' must be unique kebab-case.`);
+    // same origin only: an absolute path, never a scheme-relative or external URL
+    if (!/^\/(?![\/\\])\S*$/.test(page.module)) throw new TypeError(`createAdminSurface: extension page '${page.id}' module must be a same-origin path.`);
+    if (!isStaffRole(page.role)) throw new TypeError(`createAdminSurface: extension page '${page.id}' needs a staff role.`);
+  }
+  const extensionsFor = (caller: Staff) => extensionPages.filter((p) => meetsRole(caller.role, p.role)).map(({ id, title, module }) => ({ id, title, module }));
+  const site = async (url: URL, caller: Staff) => {
     const { origin, ...config } = runtime.site ? await runtime.site.read() : siteConfigOf([]);
     // boot refuses a bad origin; a row edited by hand still must not take /site down
     const publicUrl = URL.canParse(origin) ? origin : url.origin;
@@ -195,7 +224,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     // what this deployment turned on, so the console does not offer a page that can only answer 501
     // creation statistics are a storage capability 0.2.0 storage does not have (the route answers 501)
     const capabilities = { siteSettings: runtime.site !== undefined, media: !!library, invitationEmail: !!roles?.sendStaffInvitation, statistics: false };
-    return { ...config, publicUrl, mcpEndpoints: { public: at(mcp?.public), staff: at(mcp?.staff) }, capabilities };
+    return { ...config, publicUrl, mcpEndpoints: { public: at(mcp?.public), staff: at(mcp?.staff) }, capabilities, extensions: extensionsFor(caller) };
   };
   const library = options.media && runtime.site?.media(options.media);
   const media = () => {
@@ -352,7 +381,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     { method: "GET", path: "/me", role: "contributor", run: ({ caller }) => me(caller) },
     {
       method: "GET", path: "/bootstrap", role: "contributor", run: async ({ caller, url, url: { searchParams: q } }) => ({
-        me: await me(caller), site: await site(url), collections, operations: operations(caller), views: views(caller), webmcp,
+        me: await me(caller), site: await site(url, caller), collections, operations: operations(caller), views: views(caller), webmcp,
         // the first page of the collection the SPA opens on
         ...(q.get("collection") ? { entries: await list(caller, q) } : {}),
       }),
@@ -366,7 +395,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       },
     },
     { method: "GET", path: "/developer-console", role: "owner", run: async () => (developer ??= developerConsole(plan)) },
-    { method: "GET", path: "/site", role: "contributor", run: ({ url }) => site(url) },
+    { method: "GET", path: "/site", role: "contributor", run: ({ url, caller }) => site(url, caller) },
     // the bytes go straight to the bucket: create, PUT each variant to its uploadUrl, commit
     { method: "POST", path: "/media/uploads", role: "editor", run: async ({ request }) => media().createUpload(await readJsonObject(request, P)) },
     { method: "POST", path: "/media/uploads/{groupId}/commit", role: "editor", run: async ({ request, params: { groupId } }) => media().commitUpload(groupId!, await readJsonObject(request, P)) },
@@ -549,6 +578,20 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     // Admin acts as the person: a token or key minted for something narrower (an MCP client, a script) is not a sign-in
     if (caller.credential !== "session") throw wireError("AUTH_DENIED", "Admin needs a signed-in session.", P);
     const staff = caller as Staff;
+    const prefix = `${base}/api/x/`;
+    const extension = url.pathname.startsWith(prefix) ? /^([^/]+)(?:\/(.*))?$/.exec(url.pathname.slice(prefix.length)) : null;
+    if (extension) {
+      const page = extensionPages.find((p) => p.id === extension[1]);
+      if (!page || !options.extensions?.api) throw wireError("NOT_FOUND", "no such route", P);
+      if (!meetsRole(staff.role, page.role)) return denied(page.role, `This needs the ${page.role} role.`);
+      const out = await options.extensions.api(request, { caller: staff, page: page.id, path: extension[2] ?? "" });
+      if (!out) throw wireError("NOT_FOUND", "no such route", P);
+      // like every Admin API answer, staff data is not cached unless the host says otherwise
+      if (out.headers.has("cache-control")) return out;
+      const headers = new Headers(out.headers);
+      headers.set("cache-control", "no-store");
+      return new Response(out.body, { status: out.status, statusText: out.statusText, headers });
+    }
     for (const route of routes) {
       const params = route.method === request.method ? match(`${base}/api${route.path}`, url.pathname) : null;
       if (!params) continue;

@@ -197,9 +197,18 @@ export interface SiteInfo {
   mcpUrl: string | null;
   /** What the deployment turned on; absent from an older server, which means all of it. */
   capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean };
+  /** Host pages this staff member's role reaches; absent from an older server. */
+  extensions?: AdminExtensionInfo[];
   media?: {
     purposes?: MediaPurposePolicy[];
   };
+}
+
+/** A host page at `/admin/x/{id}`: Admin imports `module` and calls its `mount`. */
+export interface AdminExtensionInfo {
+  id: string;
+  title: LocalizedText;
+  module: string;
 }
 
 export interface SiteIcon {

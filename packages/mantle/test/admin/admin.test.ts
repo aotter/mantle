@@ -353,3 +353,53 @@ describe("Admin surface: the SPA shell", () => {
     expect(r.status).toBe(404);
   });
 });
+
+describe("Admin surface: host extension pages", () => {
+  const pages = [
+    { id: "audit", title: { en: "Audit", "zh-TW": "稽核" }, role: "editor" as const, module: "/admin-extensions/audit.js" },
+    { id: "access", title: "Access", role: "owner" as const, module: "/admin-extensions/access.js" },
+  ];
+  const seen: unknown[] = [];
+  const surface = () => createAdminSurface(rt, { basePath: "/admin", identity, assets, extensions: { pages, api: async (request, { caller, page, path }) => {
+    seen.push([request.method, caller.subject, page, path]);
+    return path === "missing" ? null : Response.json({ page, path });
+  } } });
+  const ask = async (path: string, caller: Caller, method = "GET") => {
+    const res = await surface()(new Request(`http://x${path}`, { method }), caller);
+    return { status: res.status, headers: res.headers, body: await res.json() as any };
+  };
+
+  it("lists only the pages the caller's role reaches, on /site and in bootstrap", async () => {
+    expect((await ask("/admin/api/site", owner)).body.extensions.map((p: { id: string }) => p.id)).toEqual(["audit", "access"]);
+    expect((await ask("/admin/api/site", editor)).body.extensions).toEqual([{ id: "audit", title: { en: "Audit", "zh-TW": "稽核" }, module: "/admin-extensions/audit.js" }]);
+    expect((await ask("/admin/api/site", contributor)).body.extensions).toEqual([]);
+    expect((await ask("/admin/api/bootstrap", editor)).body.site.extensions.map((p: { id: string }) => p.id)).toEqual(["audit"]);
+  });
+
+  it("routes a page's API after Admin's own gate and the page's role, no-store unless the host says otherwise", async () => {
+    seen.length = 0;
+    const ok = await ask("/admin/api/x/audit/events/today", editor, "POST");
+    expect(ok).toMatchObject({ status: 200, body: { page: "audit", path: "events/today" } });
+    expect(ok.headers.get("cache-control")).toBe("no-store");
+    expect(seen).toEqual([["POST", "u-editor", "audit", "events/today"]]);
+    expect((await ask("/admin/api/x/access", editor)).status).toBe(403);
+    expect((await ask("/admin/api/x/audit", contributor)).status).toBe(403);
+    expect((await ask("/admin/api/x/audit", anon)).status).toBe(401);
+    // A token is not a sign-in, as everywhere in Admin.
+    expect((await ask("/admin/api/x/audit", { ...owner, credential: "oauth" } as Caller)).status).toBe(403);
+    expect((await ask("/admin/api/x/nope", owner)).status).toBe(404);
+    expect((await ask("/admin/api/x/audit/missing", owner)).status).toBe(404);
+    // Only gated, known pages ever reach the host: the denied and unknown requests above did not.
+    expect(seen.map((entry) => (entry as string[])[3])).toEqual(["events/today", "missing"]);
+    // Without a host API, a page's API path is just unknown.
+    expect((await createAdminSurface(rt, { basePath: "/admin", extensions: { pages } })(new Request("http://x/admin/api/x/audit"), owner)).status).toBe(404);
+  });
+
+  it("refuses pages that are not same-origin, kebab-case and unique", () => {
+    const make = (page: object) => () => createAdminSurface(rt, { basePath: "/admin", extensions: { pages: [{ id: "a", title: "A", role: "owner", module: "/a.js", ...page }] as never } });
+    expect(make({})).not.toThrow();
+    for (const bad of [{ module: "https://cdn.example/a.js" }, { module: "//cdn.example/a.js" }, { module: "a.js" }, { module: "/\\evil" }, { id: "Bad Id" }, { role: "admin" }])
+      expect(make(bad)).toThrow(TypeError);
+    expect(() => createAdminSurface(rt, { basePath: "/admin", extensions: { pages: [pages[0]!, pages[0]!] } })).toThrow(/unique/);
+  });
+});

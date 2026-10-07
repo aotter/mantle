@@ -14,6 +14,7 @@ import {
   ContactRound,
   Users,
   Workflow,
+  Puzzle,
 } from "lucide-react";
 
 import { SidebarInset, SidebarProvider } from "@aotter/mantle-ui/kit";
@@ -124,8 +125,9 @@ export function AuthenticatedLayout({
           (operationsQuery.data ?? []).some((operation) =>
             (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]),
           site.data?.capabilities,
+          site.data?.extensions,
         ),
-    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.role, workspace, site.data?.capabilities],
+    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.role, workspace, site.data?.capabilities, site.data?.extensions],
   );
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
@@ -213,6 +215,7 @@ export function buildNavGroups(
   role: AdminUser["role"],
   hasGlobalOperations = false,
   capabilities?: SiteInfo["capabilities"],
+  extensions?: SiteInfo["extensions"],
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter(isPrimaryNavCollection);
   const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "operational");
@@ -273,6 +276,12 @@ export function buildNavGroups(
             { title: t(language, "nav.staff"), url: "/admin/staff", icon: Users },
           ]
         : []),
+      // host pages, already filtered to this staff member's role by the server
+      ...(extensions ?? []).map((extension) => ({
+        title: resolveLocalizedText(extension.title, language, canonical) ?? extension.id,
+        url: `/admin/x/${encodeURIComponent(extension.id)}`,
+        icon: Puzzle,
+      })),
     ],
   };
 

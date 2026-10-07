@@ -56,13 +56,14 @@ Every route needs a staff caller; the column names the least role.
 | `POST …/entries/{id}/publish`, `…/unpublish`, `DELETE …/entries/{id}` | editor | |
 | `GET /admin/api/views-manifest`, `GET …/views/{name}`, `GET …/views/{name}/export` | contributor | staff Views (`{ name, title, description, input, list: { columns, searchFields, filterFields }, columns }`); rows by `limit`/`cursor` with `search` and `filter.<output>`; CSV |
 | `GET /admin/api/operations`, `POST …/operations/{name}` | contributor | Procedures bound to the staff MCP surface |
-| `GET /admin/api/site` | contributor | site metadata, `mcpEndpoints`, and `capabilities: { siteSettings, media, invitationEmail, statistics }` (what this deployment turned on; the console hides what is off) |
+| `GET /admin/api/site` | contributor | site metadata, `mcpEndpoints`, `capabilities: { siteSettings, media, invitationEmail, statistics }` (what this deployment turned on; the console hides what is off), and `extensions` (the host pages the caller's role reaches) |
 | `GET`, `PATCH /admin/api/site-settings` | owner | 501 `SITE_NOT_CONFIGURED` without `runtime.site` |
 | `POST /admin/api/media/uploads`, `POST …/media/uploads/{groupId}/commit`, `GET …/media`, `GET`, `PATCH`, `DELETE …/media/{id}` | editor | with `media` and `runtime.site` |
 | `GET /admin/api/webmcp`, `POST …/webmcp/{tool}` | contributor | the staff tools for a browser agent (`{ tools, routes }`); a call runs one as `/mcp/staff` does and answers `{ output }` |
 | `GET /admin/api/staff`, `PATCH …/staff/{id}/role`, `POST …/staff/invitations`, `DELETE …/staff/invitations/{id}` | owner | with an `AdminIdentity` that has `directory` / `roles` |
 | `GET /admin/api/members` | editor | with `directory` |
 | `GET /admin/api/developer-console` | owner | the plan's data model, logic and schedules |
+| `… /admin/api/x/{id}/{path}` | the page's `role` | a host page's own API (`extensions.api`); runs after the staff-session check, `null` answers 404, answers are `no-store` unless the host sets `cache-control` |
 
 ## Packages
 
