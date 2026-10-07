@@ -1,6 +1,6 @@
-# ADR-lite: Host extension pages in Admin
+# ADR-lite 1376: Host extension pages in Admin
 
-**Status:** Proposed (record number assigned with its issue)
+**Status:** Proposed
 
 ## Context
 
