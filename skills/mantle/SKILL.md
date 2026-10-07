@@ -85,10 +85,10 @@ project alone does not imply a deploy request. Self-hosting remains available.
   `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` and that host's
   native deployment workflow.
 - **Mantle Cloud:** follow [Cloud workflow](references/cloud.md). The bundled
-  `scripts/mantle-cloud.mjs` supports `link`, `source`, `open`, `save`, `status`, `deploy`,
-  `rollback` and `version`. Run it by absolute path from the application root;
-  execute its literal `nextAction` using the connected Cloud MCP, not guessed
-  tool names. It uses the project's installed compiler and esbuild; it bundles
+  `scripts/mantle-cloud.mjs` supports `source`, `open`, `pack backend`, `pack frontend` and `version`.
+  Cloud MCP owns source admission, polling, review, deploy and rollback. Run it by absolute path from the application root;
+  follow the discovered Cloud MCP schemas and the workflow reference;
+  local pack output is not Cloud state. It uses the project's installed compiler and esbuild; it bundles
   no Core, SQL parser, provider credentials or application runtime.
 
 For an offline readiness check:
@@ -106,7 +106,7 @@ nextAction? }`. `cloud: "not_checked"` is not a deployment result.
 The plugin configures `https://cloud.mantle.tools/mcp`. The same Cloud workflow
 works with a staging MCP connection; do not change production to staging behind
 the user's back. Never put tokens or grants in files, commands or chat. Pipe
-Cloud results to the helper over stdin. Existing OAuth/session and project
+Cloud contracts or Git credentials to the helper over stdin. Existing OAuth/session and project
 edit/deploy rules still apply; Cloud membership never grants tenant staff access.
 
 ## Existing project and handoff

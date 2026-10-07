@@ -39,3 +39,19 @@ cleanup and deployment policy belong to the Cloud service. Core vendors its exac
 helper artifact/checksum and documents the MCP workflow; it gains no provider
 adapter, SQL compiler, runtime wiring or new Manifest grammar. Client-built
 handlers/static files are not represented as server build attestation.
+
+## Agent orchestration and offline packing (#1368)
+
+Cloud MCP remains protocol 4 and owns lifecycle state and permissions. The plugin
+helper no longer mirrors candidate/deploy state or polls Cloud. Its public bundle
+contains safe Git source transport and offline backend/frontend/source packing.
+The agent discovers MCP schemas, records non-secret operation IDs for identical
+retries, and observes server state before publication. Packaging still uses the
+installed Core compiler; this is not a Core runtime/provider adapter change.
+
+`pack backend --contract -` validates the project and Cloud pin. `pack frontend`
+requires the backend commit and ready kit candidate, and emits immutable hashes.
+The agent checks these against reservations and uses native HTTP grant transport.
+Cloud admission and plan/archive verification remain unchanged; handler/static
+bundles remain client-built. The source transport also rejects secret-named files
+in reachable history, without claiming to scan source content for credentials.
