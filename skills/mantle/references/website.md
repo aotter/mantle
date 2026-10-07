@@ -16,15 +16,13 @@ selected host's frontend kit before choosing APIs.
 - Generate an accessible, responsive public frontend by reading the installed
   `@aotter/mantle/web` REST contract; browser code on static hosts uses
   same-origin fetch, not a server surface imported into the browser. Do not install the historical standalone
-  `@aotter/mantle-web` or invent an HTML renderer. A REST-only version does not
-  provide server-rendered pages. Follow the host's static/template restrictions.
+  `@aotter/mantle-web` or claim Core supplies an HTML renderer. Application-owned `service.fetch` may render HTML; follow the selected host's static/template and pairing restrictions.
 - Public content needs real per-URL HTML with semantic body text, title,
   description, canonical, Open Graph, sitemap.xml, robots.txt and appropriate
   JSON-LD. Include authorship and publication/update dates where applicable.
   Client-side-only metadata or an SPA shell is not sufficient for SEO/AEO/GEO.
   For public content on static hosts disable SPA fallback and check unknown URLs
-  return 404. Use the permanent canonical origin returned by the host or the
-  explicitly configured site domain, never a candidate preview origin. Missing
+  return 404. For Mantle Cloud protocol 5, use only the permanent managed `.mantle.tools` origin accepted by the host gate, never a custom domain or candidate preview origin. Other hosts follow their own domain contract. Missing
   final origin blocks origin-dependent checks.
   Structured data must match visible content; do not fabricate facts or promise
   ranking or AI citation.
@@ -33,7 +31,7 @@ selected host's frontend kit before choosing APIs.
   dependency; a dynamic blog is blocked until that path exists. Do not silently
   substitute build-time sample content for live tenant content.
 
-Before reporting completion, inspect HTML with JavaScript disabled, check
+Before upload, follow the [local HTTP acceptance](cloud.md#local-http-acceptance-before-source-upload): native HTTP HTML responses need no browser or deployment. Before reporting completion, inspect HTML without executing JavaScript, check
 metadata/sitemap and anonymous draft/permission refusal, and exercise OTP,
 content editing and media upload/commit with authorized synthetic accounts.
 Read the host's preview capability limits: disabled mail/media checks stay

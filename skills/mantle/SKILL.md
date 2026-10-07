@@ -69,7 +69,7 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
    `ADMIN_EMAIL` and a random `BETTER_AUTH_SECRET`, run `wrangler dev --local`
    (on Bun: `.env.example` to `.env`, then `bun src/index.ts`),
    sign in at `/admin/sign-in` with the one-time code printed to the log, and
-   check that the console loads and `GET /admin/api/me` is `owner`. Exercise the REST routes and `/mcp` `tools/list`.
+   check that the console loads and `GET /admin/api/me` is `owner`. Exercise the REST routes and `/mcp` `tools/list`. For custom handlers and websites, run the [local HTTP acceptance](references/cloud.md#local-http-acceptance-before-source-upload) before uploading source; compilation and packing do not execute handlers.
 
 For a local cold start, do not push, deploy or configure providers. For a
 requested hosted app, continue with the selected hosting workflow.
