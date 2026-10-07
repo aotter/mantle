@@ -32,8 +32,8 @@ export interface CallerRefusal {
  */
 export function withCaller(resolve: CallerResolver, surface: Surface, options: WithCallerOptions = {}): (request: Request) => Promise<Response> {
   return async (request) => {
-    const rejected = (status: 401 | 403, code: DiagnosticCode, message: string, path: string, challenge?: string) => {
-      if (options.onRefusal) observe(options.onRefusal, { at: Date.now(), status, reason: path === "request:origin" ? "origin" : "credential" });
+    const rejected = (reason: CallerRefusal["reason"], status: 401 | 403, code: DiagnosticCode, message: string, path: string, challenge?: string) => {
+      if (options.onRefusal) observe(options.onRefusal, { at: Date.now(), status, reason });
       return refuse(status, code, message, path, challenge);
     };
     const r = await resolve(request);
@@ -43,14 +43,14 @@ export function withCaller(resolve: CallerResolver, surface: Surface, options: W
         const origin = request.headers.get("origin");
         // neither header is what Better Auth refuses too: every browser sends one of them on a mutation
         if ((!site && !origin) || (site && site !== "same-origin" && site !== "none") || (origin && origin !== new URL(request.url).origin))
-          return rejected(403, "AUTH_DENIED", "Cross-origin session mutation rejected.", "request:origin");
+          return rejected("origin", 403, "AUTH_DENIED", "Cross-origin session mutation rejected.", "request:origin");
       }
       return surface(request, r.caller);
     }
     const status = r.status ?? 401;
     const challenge = r.challenge && options.resourceMetadata ? `${r.challenge}, resource_metadata="${options.resourceMetadata}"` : r.challenge ?? (options.resourceMetadata ? `Bearer resource_metadata="${options.resourceMetadata}"` : undefined);
     return status === 401
-      ? rejected(401, "UNAUTHENTICATED", "The presented credential is missing, malformed, expired, revoked, or invalid.", "request:authorization", challenge)
-      : rejected(403, "AUTH_DENIED", "The verified credential lacks a required scope.", "request:authorization", challenge);
+      ? rejected("credential", 401, "UNAUTHENTICATED", "The presented credential is missing, malformed, expired, revoked, or invalid.", "request:authorization", challenge)
+      : rejected("credential", 403, "AUTH_DENIED", "The verified credential lacks a required scope.", "request:authorization", challenge);
   };
 }

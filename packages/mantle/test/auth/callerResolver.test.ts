@@ -81,6 +81,8 @@ describe("withCaller", () => {
     });
     expect((await origin(new Request("https://x/mcp", { method: "POST", headers: { origin: "https://elsewhere.test" } }))).status).toBe(403);
     expect(events).toEqual([{ at: expect.any(Number), status: 403, reason: "origin" }]);
+    const throwing = withCaller(async () => ({ invalid: true }), never, { onRefusal: () => { throw new Error("delivery failed"); } });
+    expect((await throwing(req())).status).toBe(401);
   });
   const seen: unknown[] = [];
   const surface = async (_r: Request, caller: unknown) => { seen.push(caller); return new Response("ok"); };

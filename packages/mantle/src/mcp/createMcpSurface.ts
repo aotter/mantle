@@ -36,7 +36,7 @@ export interface McpSurfaceOptions {
    * so a token minted for a narrow integration never reaches a tool. Defaults to the one compatibility scope, `["mcp"]`.
    */
   readonly requiredScopes?: readonly string[];
-  /** Native metadata only. Best-effort; delivery promises never delay a response. The host owns transport and request lifetime. */
+  /** Native metadata only. Delivery promises are not awaited; synchronous listener work still runs inline. The host owns transport and request lifetime. */
   readonly onObservation?: (event: McpObservation) => void | Promise<void>;
 }
 
@@ -104,7 +104,11 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
         const input = isRecord(args) ? args : {};
         const cause = { kind: "mcp" as const, id: crypto.randomUUID() };
         // An observer cannot mutate the Caller used for execution, including its scopes array.
-        const observedCaller = options.onObservation ? Object.freeze(caller.kind === "user" ? { ...caller, scopes: Object.freeze([...caller.scopes]) } : { ...caller }) : caller;
+        const observedCaller: Caller = options.onObservation ? Object.freeze(caller.kind === "user" ? {
+          kind: "user" as const, subject: caller.subject, ...(caller.issuer !== undefined ? { issuer: caller.issuer } : {}),
+          role: caller.role, scopes: Object.freeze([...caller.scopes]), credential: caller.credential,
+          credentialId: caller.credentialId, clientId: caller.clientId,
+        } : { kind: "anonymous" as const }) : caller;
         const metadata = { kind: "invocation" as const, surface: options.surface, invocationId: cause.id, tool: tool.name, caller: observedCaller };
         if (options.onObservation) observe(options.onObservation, { ...metadata, phase: "attempt", at: Date.now() });
         const started = options.onObservation ? performance.now() : 0;

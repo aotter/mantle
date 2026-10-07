@@ -242,6 +242,12 @@ spec: { surface: public, requires: { guard: { procedure: observation-guard } }, 
       onObservation: event => { if (event.kind === "invocation" && event.caller.kind === "user") (event.caller.scopes as string[]).push("notes:write"); },
     });
     expect(response.data.result.isError).toBe(true);
+    const events: McpObservation[] = [];
+    await rpc("public", { ...user("observer"), privateExtra: { secret: "unlisted-claim" } } as Caller, "tools/call", { name: "ranked", arguments: { min: 0 } }, { onObservation: event => { events.push(event); } });
+    expect(JSON.stringify(events)).not.toContain("unlisted-claim");
+    for (const onObservation of [() => { throw new Error("delivery failed"); }, () => Promise.reject(new Error("delivery failed"))]) {
+      expect((await rpc("staff", anon, "tools/list", {}, { onObservation })).status).toBe(401);
+    }
   }, 10_000);
   it("lists only Procedure and View tools of the surface; an internal View and every Schema are absent", async () => {
     expect(await names("public", user("a"))).toEqual(["add_note", "leaky", "my_notes", "ranked", "scoped_add"]);
