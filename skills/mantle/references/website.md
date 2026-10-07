@@ -5,7 +5,7 @@ unless the user explicitly changes the scope. They do not add Manifest keys or
 change Core's optional composition. Read the installed version's docs and the
 selected host's frontend kit before choosing APIs.
 
-- Reuse Mantle Admin UI and configured tenant OTP. Add visitor sign-in only where
+- Link to host-provided Mantle Admin UI and configured tenant OTP; do not emit frontend assets under host-owned /admin routes. Add visitor sign-in only where
   needed. Do not build a second identity store or configure another mail provider
   when the host already supplies one. Backend permissions enforce roles and data
   access; Cloud membership is not tenant staff access.
@@ -14,7 +14,8 @@ selected host's frontend kit before choosing APIs.
   contract and supported media field hints. Upload capability URLs are temporary,
   not committed public images; anonymous visitors must not gain staff media access.
 - Generate an accessible, responsive public frontend using the installed
-  `@aotter/mantle/web` capabilities. Do not install the historical standalone
+  `@aotter/mantle/web` server-side capabilities and same-origin browser fetch;
+  the server surface is not a browser client library. Do not install the historical standalone
   `@aotter/mantle-web` or invent an HTML renderer. A REST-only version does not
   provide server-rendered pages. Follow the host's static/template restrictions.
 - Public content needs real per-URL HTML with semantic body text, title,
@@ -32,7 +33,9 @@ Before reporting completion, inspect HTML with JavaScript disabled, check
 metadata/sitemap and anonymous draft/permission refusal, and exercise OTP,
 content editing and media upload/commit with authorized synthetic accounts.
 Read the host's preview capability limits: disabled mail/media checks stay
-pending, not passed. Test them on a live tenant only when explicitly authorized.
-Do not weaken preview isolation, fake success or grant staff privileges to make
+pending, not passed. Use staging first with existing authorized staff accounts. Live tests require
+explicit authorization for synthetic writes and cleanup. Without a published
+test tenant or that authorization, report them pending.
+Do not weaken preview isolation, fake success or grant staff privileges outside the authorized test scope to make
 checks pass. Provenance/pairing review does not certify website quality; report
 passed, failed and blocked checks separately.
