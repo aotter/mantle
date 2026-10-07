@@ -85,7 +85,7 @@ project alone does not imply a deploy request. Self-hosting remains available.
   `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` and that host's
   native deployment workflow.
 - **Mantle Cloud:** follow [Cloud workflow](references/cloud.md). The bundled
-  `scripts/mantle-cloud.mjs` supports `source`, `open`, `pack backend`, `pack frontend` and `version`.
+  `scripts/mantle-cloud.mjs` supports `check`, `source`, `open`, `pack backend`, `pack frontend` and `version`.
   Cloud MCP owns source admission, polling, review, deploy and rollback. Run it by absolute path from the application root;
   follow the discovered Cloud MCP schemas and the workflow reference;
   local pack output is not Cloud state. It uses the project's installed compiler and esbuild; it bundles

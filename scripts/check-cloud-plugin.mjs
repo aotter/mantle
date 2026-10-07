@@ -65,8 +65,14 @@ try {
   const first = line(['pack', 'backend', '--contract', '-'], JSON.stringify(contract));
   assert.deepEqual(first.files, packed.files);
   assert.equal(failure(['save']).error, 'usage');
+  assert.equal(failure(['pack', 'frontend', '--kit', '.mantle/host/kit', '--candidate', '0199aaaa-0000-7000-8000-000000000003', '--commit', commit]).error, 'usage');
   writeFileSync(join(project, 'README.md'), 'Dirty source\n');
   assert.equal(failure(['pack', 'backend', '--contract', '-'], JSON.stringify(contract)).error, 'worktree_dirty');
+  git('add', 'README.md'); git('commit', '-m', 'Commit synthetic note');
+  writeFileSync(join(project, '.env'), 'SYNTHETIC=not-real\n');
+  git('add', '-f', '.env'); git('commit', '-m', 'Synthetic history guard');
+  git('rm', '.env'); git('commit', '-m', 'Remove synthetic file');
+  assert.equal(failure(['source', '--project', projectId, '--grant', '-'], JSON.stringify({ authMode: 'http_extra_header', protocol: { current: 4, minimum: 4 } })).error, 'source_history_secret_path');
   console.log('check-cloud-plugin: installed offline packer negotiates Cloud pin, preserves commit/hash identity, refuses wrong project and dirty source; MCP owns lifecycle');
 } finally {
   rmSync(project, { recursive: true, force: true });
