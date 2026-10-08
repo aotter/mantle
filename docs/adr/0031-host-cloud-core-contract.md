@@ -75,3 +75,7 @@ executing untrusted code or launching a browser. The host provides Admin, OTP
 and media wiring; artifact validation does not certify delivery, uploads,
 arbitrary authorization, visual behavior, content truth or dynamic HTML refresh.
 A REST-only host must report dynamic-content SEO unsupported.
+
+## Local preparation and additive continuation (#1381)
+
+The existing offline helper may run explicit application check/build argv arrays, pack a clean fixed commit and ordinarily push it in a single `prepare` entry. It returns source-admission arguments and deterministic artifact metadata; no Cloud lifecycle state, HTTP upload, polling or publication is added. Commands cannot silently commit source changes; dirty tracked output fails the existing clean-commit checks. Credentials stay in session memory/stdin. Native host responses may add continuation facts derived from their authoritative resource/lease rows; read-only backend status remains read-only. These additions do not change artifact bytes, admission rules or protocol 5 validation meaning.

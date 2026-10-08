@@ -58,6 +58,9 @@ try {
   const packed = line(['pack', 'backend', '--contract', '-'], JSON.stringify({ content: [{ type: 'text', text: JSON.stringify({ ok: true, data: contract }) }] }));
   assert.equal(packed.cloud, 'not_checked');
   assert.equal(packed.commit, commit);
+  assert.equal(packed.nextAction.tool, 'cloud_backend_upload');
+  assert.equal(packed.nextAction.arguments.contentHash, packed.files['backend.json'].sha256);
+  assert.equal(failure(['prepare', '--grant', '-'], JSON.stringify({commands: []})).error, 'prepare_input_invalid');
   const artifact = packed.files['backend.json'];
   assert.equal(createHash('sha256').update(readFileSync(join(project, artifact.path))).digest('hex'), artifact.sha256);
   assert.equal(JSON.parse(readFileSync(join(project, artifact.path), 'utf8')).version, 2);
@@ -80,6 +83,9 @@ try {
   writeFileSync(join(project, 'dist/robots.txt'), `User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: ${origin}/sitemap.xml\n`);
   const frontend = line(frontendArgs);
   assert.equal(frontend.website.status, 'passed');
+  assert.equal(frontend.nextAction.tool, 'cloud_static_frontend_upload');
+  assert.deepEqual(frontend.nextAction.arguments.sourceRef, {commit});
+  assert.equal(frontend.nextAction.arguments.sourceHash, frontend.files['source.zip'].sha256);
   assert.equal(frontend.website.dynamicContentSeo, 'unsupported');
   assert.equal(frontend.website.runtimeContract.otp, 'cloud_wired_not_exercised');
   writeFileSync(join(project, 'README.md'), 'Dirty source\n');
