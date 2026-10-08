@@ -128,7 +128,8 @@ recompile.
   sorts NULL as PostgreSQL does: last ascending, first descending (D1 puts it
   first ascending). The `id` tiebreak follows the last key's direction, so an
   index on the sort keys (and the `updated_at` index Mantle creates) serves a
-  paged sort. Values never depend on
+  paged sort. This is PostgreSQL's default for every `ORDER BY`, window and
+  aggregate (`json_group_array`) ones included. Values never depend on
   the server's `DateStyle`, `IntervalStyle` or `TimeZone`. Elsewhere the meaning
   is PostgreSQL's, where D1 differs:
   - `LIKE` is case-sensitive.
