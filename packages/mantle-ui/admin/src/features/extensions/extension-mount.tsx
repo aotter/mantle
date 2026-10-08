@@ -67,6 +67,11 @@ export function ExtensionMount({ extension, kind, id, place, onClose, fallback, 
   React.useEffect(() => {
     const host = element.current;
     if (!host) return;
+    // each mount gets its own element: a renderer still finishing for an earlier mount writes into a detached node,
+    // never over the current one
+    const target = document.createElement("div");
+    target.style.display = "contents";
+    host.append(target);
     let cancelled = false;
     setFailed(false);
     loadExtensionModule(extension)
@@ -74,7 +79,7 @@ export function ExtensionMount({ extension, kind, id, place, onClose, fallback, 
         const render = module[kind]?.[id];
         if (typeof render !== "function") throw new Error(`no ${kind}.${id} renderer`);
         if (cancelled) return;
-        const mounted = await render(host, latest.current());
+        const mounted = await render(target, latest.current());
         if (cancelled) { unmount(mounted); return; }
         handle.current = mounted ?? null;
       })
@@ -87,11 +92,9 @@ export function ExtensionMount({ extension, kind, id, place, onClose, fallback, 
       cancelled = true;
       const mounted = handle.current ?? undefined;
       handle.current = null;
+      target.remove();
       // after Admin's own commit: an extension's React root must not unmount while Admin's is rendering
-      queueMicrotask(() => {
-        unmount(mounted);
-        host.replaceChildren();
-      });
+      queueMicrotask(() => unmount(mounted));
     };
   }, [extension, kind, id, generation]);
 

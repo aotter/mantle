@@ -92,9 +92,10 @@ code:
 Extensions are not a host-only feature. An agent customizing a project's Admin
 is the main author:
 
-- A project exports `adminExtensions: AdminExtension[]`. The generated preset
-  writes `src/admin-extensions.ts` for it and passes it to
-  `createAdminSurface`. A host that builds Admin itself (for example a hosted
+- A project exports `adminExtensions: AdminExtension[]`. For a new project the
+  generated preset writes `src/admin-extensions.ts` and passes it to
+  `createAdminSurface`; the preset is written once, so an existing
+  `src/service.ts` wires it by hand. A host that builds Admin itself (for example a hosted
   platform) reads the same export and appends its own extensions.
 - Extension ids are one namespace per Admin. A host extension whose id
   collides with a project extension fails construction, so a project can
@@ -247,7 +248,10 @@ mounting again; a field value the renderer reported itself never remounts it.
     and `options` from `uiSchema`; `field.input/v1` also gets `onChange(value)`
 - A small `host` object offers `navigate(path)`, `notify(message)` and
   `close()` for dialogs.
-- Nothing else from the SPA is reachable.
+- Admin offers no other SPA API. This is a supported surface, not a sandbox:
+  the module is trusted same-origin code (§5).
+- Each mount gets a fresh element. A renderer that resolves after its mount was
+  replaced writes into a detached node, never over the current one.
 
 ### 4. Shared dependencies come from Admin
 
