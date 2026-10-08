@@ -11,7 +11,7 @@ selected host's frontend kit before choosing APIs.
   access; Cloud membership is not tenant staff access.
 - Integrate image selection/upload into content editing through the existing
   Admin media library and host storage. Follow the pinned Core upload/PUT/commit
-  contract and supported media field hints. Upload capability URLs are temporary,
+  contract and `x-mantle-ref: media_assets` plus `x-mcp-hint: media-image`; store committed asset IDs, resolve permanent variants in the frontend, never use an ID as an image URL. Tenant `/mcp/staff` supplies `get_media_upload_policy` → `create_media_upload` → direct HTTP PUT → `commit_media_upload` when its shared media adapter is wired. Follow the pinned media docs for tenant editor/owner authentication; Cloud project credentials are not tenant credentials. Upload capability URLs are temporary,
   not committed public images; anonymous visitors must not gain staff media access.
 - Generate an accessible, responsive public frontend by reading the installed
   `@aotter/mantle/web` REST contract; browser code on static hosts uses

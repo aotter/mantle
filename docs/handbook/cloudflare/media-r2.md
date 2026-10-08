@@ -1,5 +1,5 @@
 ---
-description: Media uploads in Mantle 0.2.0 on Cloudflare R2 — site media purposes, r2MediaStorage, wiring Admin's media routes, the presigned upload flow, and what to store in a Schema.
+description: Media uploads in Mantle 0.2.0 on Cloudflare R2 — site media purposes, r2MediaStorage, wiring Admin and staff MCP media tools, the presigned upload flow, and what to store in a Schema.
 ---
 # Media uploads with R2
 
@@ -37,7 +37,7 @@ export const mantle = createMantle(service, {
   } }),
 });
 
-// in mount(): the media storage, handed to Admin
+// in mount(): one media storage, shared by Admin and staff MCP
 const media = r2MediaStorage({
   bucket: env.MEDIA,
   signer: new AwsClient({ accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY, region: "auto", service: "s3" }),
@@ -45,11 +45,16 @@ const media = r2MediaStorage({
   publicBase: env.MEDIA_PUBLIC_BASE,
 });
 const admin = guard(createAdminSurface(runtime, { basePath: "/admin", media, /* …the generated options… */ }));
+const staffMcp = guard(createMcpSurface(runtime, {
+  basePath: "/mcp/staff", surface: "staff", media, resourceMetadata,
+}), { resourceMetadata });
 ```
 
 `aws4fetch` is the application's dependency; Mantle only calls its `sign`.
-Without both `media` and site defaults, every media route answers 501
-`MEDIA_NOT_CONFIGURED`.
+Without both `media` and site defaults, every Admin media route answers 501
+`MEDIA_NOT_CONFIGURED`, and MCP advertises no media tools. Public MCP never
+advertises media tools. The generated preset does not invent bucket credentials;
+add the same explicit adapter to its application-owned service composition.
 
 ## 3. The upload flow
 
@@ -75,16 +80,62 @@ retried.
 Optimize images where they are made (in the browser or the agent), and upload
 the variants; Mantle does not transform images.
 
+## Staff MCP upload flow
+
+Connect the tenant's `/mcp/staff` using its own identity, with the `mcp` scope
+and `editor` or `owner` role. Cloud project membership is not tenant staff.
+The verified role is checked again on every call, as in Admin.
+
+1. Call `get_media_upload_policy` to read the declared purpose MIME slots and
+   byte caps. Obtain the chat attachment bytes in the agent environment and
+   optimize/encode the required variants there; do not ask the user to run a
+   terminal command.
+2. Call `create_media_upload` with the same body as Admin's create endpoint.
+3. PUT every variant's actual bytes to its capability URL using all returned
+   `requiredHeaders`, before `expiresAt`. Bytes never travel as base64 MCP JSON.
+4. Call `commit_media_upload` with `{ uploadGroupId, alt?, caption? }`.
+   Verify success before using the returned permanent asset `id`.
+5. Pass that ID to the application's content Procedure. Images are content
+   operations, not a new Cloud source build or deploy.
+
+`list_media_assets`, `get_media_asset`, `update_media_asset` (`id`, `alt?`,
+`caption?`) and `delete_media_asset` (`id`) share the same library and editor
+permission as Admin. A create refusal publishes nothing. Expired groups need
+new capabilities; partial delete failures can retry the same ID. Keep upload
+capabilities out of logs and persisted content.
+
 ## Storing media in a Schema
 
-Store the asset's `publicUrl` (or its `id`) in a string field and mark it:
+Store the committed asset ID, not its temporary capability URL:
 
 ```yaml
-cover: { type: string, x-mcp-hint: media-image }
+coverAssetId:
+  type: string
+  x-mantle-ref: media_assets
+  x-mcp-hint: media-image
 ```
 
-The hint tells Admin and agents what the field holds. No MCP tool uploads
-media in 0.2.0; an agent uploads through Admin's API with a staff session.
+The string reference defaults to the native library's `id` and enables Admin's
+existing MediaPicker. The hint alone does not enable the picker. Do not author
+a replacement `media_assets` Schema: the site's library owns that table.
+
+An asset ID is not an image URL. Resolve it with the existing site library in
+an application-owned frontend handler, then use a variant's `publicUrl`:
+
+```ts
+// The same media adapter used by Admin and staff MCP.
+const asset = await runtime.site!.media(media).get(post.coverAssetId);
+const primary = asset.variants.find((variant) => variant.role === "primary")!;
+// Render primary.publicUrl as the image src; asset.alt as its alt text.
+```
+
+A public frontend route must enforce the content's publication and visibility
+before resolving its media. Return only public URLs/alt/variant metadata it
+needs; never expose upload capabilities or a staff MCP credential. Native site
+product tables are not manifest Store tables: do not query `media_assets` in
+View/Procedure SQL or widen the SQL grammar to resolve them. A custom handler
+can use the existing library capability while its content reads remain
+caller-scoped.
 
 ## Stale uploads
 

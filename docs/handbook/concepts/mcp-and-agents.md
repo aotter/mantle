@@ -17,12 +17,18 @@ Both run behind `withCaller(resolver, …)`, so a tool sees the same
 
 ## Which tools
 
-A surface lists exactly:
+A surface lists these plan tools:
 
 - each Procedure bound by a Trigger `{ kind: mcp, surface: <this surface> }`,
   named after the Procedure in snake case (`place-order` is `place_order`);
 - each View whose `surface` is this one, as a read-only tool with the View's
   `input` plus `limit` and `cursor`.
+
+A configured staff surface also offers optional media product tools (see
+[media upload](../cloudflare/media-r2.md)); these delegate to the same site
+library as Admin. Without site defaults or media storage they are absent;
+public MCP never exposes them. A name collision with a plan tool fails at
+assembly rather than replacing either tool.
 
 A Schema is never a tool: there are no generated create, update or publish
 record tools. To let an agent change rows, declare a Procedure and an `mcp`
@@ -74,13 +80,15 @@ const staffMcp = withCaller(resolver,
   { resourceMetadata });
 ```
 
-`resourceMetadata` is the `/mcp` metadata URL. The staff surface admits only
+`resourceMetadata` is the `/mcp` metadata URL. Pass the same `media` adapter as Admin to enable media tools. They require
+`editor` or `owner`; a contributor can discover them but cannot call them.
+The staff surface admits only
 callers with a staff role, and the role is read on every request.
 
 ## WebMCP in Admin
 
-`GET /admin/api/webmcp` returns `{ tools, routes }`: the staff tools (what
-`/mcp/staff` lists, in its default locale) and, for each tool, the Admin page
+`GET /admin/api/webmcp` returns `{ tools, routes }`: the manifest staff tools (in its default locale; optional native media tools
+use the existing Admin media REST routes) and, for each tool, the Admin page
 it belongs to (a Procedure with a `target` maps to its collection, a View to its
 report). A browser agent in the console registers these tools and calls one
 with `POST /admin/api/webmcp/<tool>` and the input as the JSON body. Admin runs
