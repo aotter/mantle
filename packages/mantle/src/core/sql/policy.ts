@@ -22,6 +22,8 @@ export type BindSpec =
 export const HOOK_PREFIX = '_mantle_h_';
 export type Mode = 'caller' | 'public' | 'trusted';
 export type PolicyOpts = {
+  /** `MantleDialect.nativeOrder`: the id tiebreak follows the last sort key's direction */
+  nativeOrder?: boolean;
   schemas: Schemas;
   inputs: Record<string, string>;
   mode?: Mode;
@@ -93,7 +95,7 @@ const and = (...args: (N | undefined | false)[]): N | undefined => {
 const or = (...a: N[]): N => ({ BoolExpr: { boolop: 'OR_EXPR', args: a } });
 const bump = (): N => res(op('+', col('version'), num(1)), 'version');
 const touch = (c: C): N => res(param$(c, { k: 'now' }), 'updated_at');
-const sort = (node: N): N => ({ SortBy: { node, sortby_dir: 'SORTBY_DEFAULT', sortby_nulls: 'SORTBY_NULLS_DEFAULT' } });
+const sort = (node: N, dir = 'SORTBY_DEFAULT'): N => ({ SortBy: { node, sortby_dir: dir, sortby_nulls: 'SORTBY_NULLS_DEFAULT' } });
 
 // ---- Schema helpers -------------------------------------------------------------------------------
 // the scope column is never read back, not even by `SELECT *`: it is the caller's own subject key
@@ -311,8 +313,10 @@ function selectIn(n: N, c: C): N {
   const firstAlias = first?.RangeVar ? (first.RangeVar.alias?.aliasname ?? first.RangeVar.relname) : first?.RangeSubselect?.alias?.aliasname;
   const aggregate = !n.groupClause && hasFunc(n.targetList, (f, fc) => AGGREGATES.has(f) && !fc.over);
   if (out.sortClause && !aggregate) {
+    // on a native-order dialect the tiebreak runs the way the last key does, so one index scan (forward or backward) serves the whole ORDER BY
+    const dir = c.nativeOrder && out.sortClause.at(-1)?.SortBy.sortby_dir === 'SORTBY_DESC' ? 'SORTBY_DESC' : 'SORTBY_DEFAULT';
     const have = new Set(out.sortClause.map((k: N) => JSON.stringify(k.SortBy.node)));
-    if (n.groupClause) out.sortClause = [...out.sortClause, ...tx(n.groupClause, c).filter((g: N) => !have.has(JSON.stringify(g))).map(sort)];
+    if (n.groupClause) out.sortClause = [...out.sortClause, ...tx(n.groupClause, c).filter((g: N) => !have.has(JSON.stringify(g))).map((g: N) => sort(g, dir))];
     else if (firstAlias) {
       if (first!.RangeSubselect && !outputsOf(first!.RangeSubselect.subquery.SelectStmt).includes('id'))
         throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a subquery in FROM, needs the subquery to output id`);
@@ -321,7 +325,7 @@ function selectIn(n: N, c: C): N {
       const extra = [col(firstAlias, 'id')];
       const je = (n.fromClause ?? []).find((f: N) => f.RangeFunction);
       if (je?.RangeFunction.alias) extra.push(col(je.RangeFunction.alias.aliasname, 'id'));
-      out.sortClause = [...out.sortClause, ...extra.filter((e) => !have.has(JSON.stringify(e))).map(sort)];
+      out.sortClause = [...out.sortClause, ...extra.filter((e) => !have.has(JSON.stringify(e))).map((e) => sort(e, dir))];
     }
   }
   // ADR-0034 says every window's ORDER BY gets the id key. The spike found that wrong for anything but

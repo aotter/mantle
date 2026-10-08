@@ -83,7 +83,7 @@ it.skipIf(!PG_URL)("a guard holds under concurrent writers: SERIALIZABLE retries
   } finally { await e.drop(); }
 }, 60_000);
 
-it.skipIf(!PG_URL)("results do not depend on server settings, collation or NULL defaults; SQLite's arity and ON CONFLICT rules hold", async () => {
+it.skipIf(!PG_URL)("results do not depend on server settings or collation, and NULL sorts as PostgreSQL sorts it; SQLite's arity and ON CONFLICT rules hold", async () => {
   const e = await engine();
   useCompileSide(pgCompile);
   try {
@@ -105,8 +105,8 @@ it.skipIf(!PG_URL)("results do not depend on server settings, collation or NULL 
     const write = (sql: string) => program("procedure", sql).then((p) => runProcedure(s, p, caller()));
     expect(await view("SELECT CAST('2026-03-08T10:00:00.5Z' AS timestamptz) AS ts, date '2026-03-08' AS d, interval '90 minutes' AS iv, 1.0 / 3 AS f FROM items WHERE id = 'a'"))
       .toEqual([{ ts: "2026-03-08T10:00:00.500000Z", d: "2026-03-08", iv: 5_400_000_000, f: 0.3333333333333333 }]);
-    // NULL first ascending, as Core pages every View and as D1 sorts: the LIMIT picks the same rows
-    expect(await view("SELECT name FROM items ORDER BY note, name LIMIT 2")).toEqual([{ name: "apple" }, { name: "berry" }]);
+    // PostgreSQL's own NULL order (ADR-0039): NULL last ascending, so the LIMIT picks the non-NULL rows
+    expect(await view("SELECT name FROM items ORDER BY note, name LIMIT 2")).toEqual([{ name: "cherry" }, { name: "date" }]);
     // text is compared by code point whatever the database collation
     const [coll] = await e.driver.batch([{ sql: "SELECT collation_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'items' AND column_name = 'name'" }]);
     expect(coll.rows[0].collation_name).toBe("C");

@@ -39,6 +39,7 @@ export function postgresDialect(timeZone = "UTC"): MantleDialect {
     codec: { encode: encodeInput, decode: decodeOutput },
     check: validateIr,
     lowering: pgLowering(timeZone),
+    nativeOrder: true,
     // the one bind the dialect adds, a corner of a near() box, is D1's (including its refusal of a box across a pole)
     bind: bindBox,
   };

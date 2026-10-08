@@ -89,6 +89,9 @@ function indexes(name: string, s: StorageSchema) {
   return [
     ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })),
     ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: [...cols] })),
+    // Admin's default list order (updated_at descending, then the id tiebreak), served by a backward scan (ADR-0039 decision 2)
+    // ponytail: every Schema pays this index on UPDATE; a write-hot table that is never listed could opt out once one is measured
+    { name: `_mantle_ix_${name}_updated`, unique: false, columns: [...(s.scope ? [s.scope] : []), "updated_at", "id"] },
   ].map((i) => ({ ...i, name: ident(i.name), sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(ident(i.name))} ON ${q(name)} (${i.columns.map(q).join(", ")})` }));
 }
 
