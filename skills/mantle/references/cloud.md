@@ -87,7 +87,7 @@ When source changes invalidate this operation's unpublished candidate, discover
 `cloud_backend_candidate_discard` on the selected host and use its exact project
 and candidate IDs. Discard only your own abandoned preview, never another
 editor's candidate or a release-pinned artifact. Current deploy/uploader access
-and live leases still apply. Read candidate status until `cleanupComplete` is
+and live leases still apply. Read candidate status until `workflow.cleanupComplete` is
 true before reserving a replacement; expiry alone does not free its slot. If the
 host lacks this tool or reports a lease/pin refusal, follow the reported wait or
 handoff. Never edit quotas, storage or receipts to bypass recovery.
