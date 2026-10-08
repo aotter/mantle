@@ -76,6 +76,9 @@ const ATTEMPTS = 5;
  */
 export async function transaction(connect: PgConnect, statements: readonly PgStatement[], timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome[]> {
   for (let attempt = 1; ; attempt++) {
+    // a retry waits a random while first: writers that failed together, retried at once, collide again (a pipelined batch,
+    // one round trip long, does so every time) and run out of attempts
+    if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, Math.random() * 10 * 2 ** attempt));
     const client = await connect();
     if (client.pipeline && statements.every((s) => (s.values ?? []).every(wire))) {
       try {
