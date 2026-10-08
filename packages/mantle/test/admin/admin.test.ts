@@ -3,6 +3,7 @@ import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, type StaffRole } from "../../src/spec/index.js";
 import { createMantleRuntime, type Caller, type MantleRuntime } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
+import { rememberSessionUser } from "../../src/core/sessionUser.js";
 import { createAdminSurface, encodeMemberCursor, type AdminAssets, type AdminIdentity } from "../../src/admin/index.js";
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
@@ -178,6 +179,10 @@ describe("Admin surface: the staff gate", () => {
 describe("Admin surface: reads", () => {
   it("/me joins the caller with the directory, and has null fields without one", async () => {
     expect((await call("GET", "/admin/api/me", owner)).body).toEqual({ userId: "u-owner", role: "owner", login: "Olive", image: "https://x.test/o.png" });
+    // a cookie session's user is already in hand: the directory is not asked again
+    const noReread: AdminIdentity = { directory: { ...identity.directory!, getUser: async () => { throw new Error("re-read"); } } };
+    const session = rememberSessionUser(staff("u-owner", "owner"), { email: "o@x.test", name: "Olive", image: "https://x.test/o.png", githubLogin: null });
+    expect((await call("GET", "/admin/api/me", session, undefined, { identity: noReread })).body).toEqual({ userId: "u-owner", role: "owner", login: "Olive", image: "https://x.test/o.png" });
     expect((await call("GET", "/admin/api/me", editor, undefined, { identity: null })).body).toEqual({ userId: "u-editor", role: "editor", login: null, image: null });
   });
 

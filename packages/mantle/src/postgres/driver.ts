@@ -178,13 +178,16 @@ async function pipelined(client: PgClient, begin: string, statements: readonly P
 export const numbered = (sql: string) => sql.replace(/'(?:[^']|'')*'|"(?:[^"]|"")*"|\?(\d+)/g, (m, n?: string) => (n ? `$${n}` : m));
 
 /**
- * The `DatabaseDriver` over PostgreSQL, for auth's portable SQL and the conformance fixtures: every batch is one transaction.
+ * The `DatabaseDriver` over PostgreSQL, for auth's portable SQL and the conformance fixtures: every batch is one transaction, a single read is not.
  */
 export function pgDatabaseDriver(connect: PgConnect): DatabaseDriver {
   return {
     async batch(statements: readonly SqlStatement[]): Promise<readonly SqlResult[]> {
       return (await transaction(connect, statements.map((s) => ({ text: numbered(s.sql), values: s.binds })))).map((o) => ({ rows: o.rows }));
     },
+    // a read is one statement in autocommit (`query`): no BEGIN, no COMMIT, no isolation retry loop
+    async all(s) { return (await query(connect, { text: numbered(s.sql), values: s.binds })).rows; },
+    async first(s) { return (await query(connect, { text: numbered(s.sql), values: s.binds })).rows[0] ?? null; },
   };
 }
 

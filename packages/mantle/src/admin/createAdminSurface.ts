@@ -8,6 +8,7 @@ import { makeDiagnostic, redactForWire } from "../spec/kernel/index.js";
 import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, enumOptions, resolveMantleRef, mcpTools, type JsonSchema, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
 import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
 import { siteConfigOf } from "../core/siteConfig.js";
+import { sessionUserOf } from "../core/sessionUser.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
 import { decodeMemberCursor } from "./consent.js";
 import type { AdminIdentity, MemberUserInfo, StaffUserInfo } from "./identity.js";
@@ -203,7 +204,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     return library;
   };
   const me = async (caller: Staff) => {
-    const u = await directory?.getUser?.(caller.subject);
+    // the session user this request already resolved; a token or credential caller has none and reads the row
+    const u = sessionUserOf(caller) ?? await directory?.getUser?.(caller.subject);
     return { userId: caller.subject, role: caller.role, login: u ? u.githubLogin || u.name || u.email || null : null, image: u?.image ?? null };
   };
 

@@ -345,7 +345,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     },
     unlinkAccount: async (userId, providerId) => {
       await prepareAuth();
-      return (await db.all('DELETE FROM account WHERE "userId" = ? AND "providerId" = ? RETURNING id', userId, providerId)).length > 0;
+      return (await db.returning('DELETE FROM account WHERE "userId" = ? AND "providerId" = ? RETURNING id', userId, providerId)).length > 0;
     },
     listUsers: async (request) => {
       await prepareAuth();
@@ -445,7 +445,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     } : {}),
     revokeInvite: async (userId) => {
       await prepareAuth();
-      return (await db.all('DELETE FROM "user" WHERE id = ? AND NOT "emailVerified" AND NOT EXISTS (SELECT 1 FROM account WHERE account."userId" = "user".id) RETURNING id', userId)).length > 0;
+      return (await db.returning('DELETE FROM "user" WHERE id = ? AND NOT "emailVerified" AND NOT EXISTS (SELECT 1 FROM account WHERE account."userId" = "user".id) RETURNING id', userId)).length > 0;
     },
     deleteUser: async (userId) => {
       await prepareAuth();

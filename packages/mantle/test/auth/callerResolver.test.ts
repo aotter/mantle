@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { withCaller } from "../../src/core/index.js";
+import { sessionUserOf } from "../../src/core/sessionUser.js";
 import { createCallerResolver, type AuthLike, type OAuthAccessTokenVerification } from "../../src/auth/index.js";
 
 const req = (headers: Record<string, string> = {}) => new Request("https://x/api", { headers });
@@ -23,6 +24,15 @@ describe("createCallerResolver", () => {
     expect(getUserRole).toHaveBeenCalledOnce();
     const stranger = createCallerResolver(auth({ getSession: async () => ({ session: { id: "s" }, user: { id: "u" } }), getUserRole: async () => "superuser" }));
     expect(((await stranger(req())) as { caller: { role: unknown } }).caller.role).toBeNull();
+  });
+
+  it("a cookie session keeps its user beside the Caller, so Admin's /me need not read the row again; a token has none", async () => {
+    const resolve = createCallerResolver(auth({
+      getSession: async () => ({ session: { id: "s1" }, user: { id: "u1", email: "a@x.test", name: "Ann", image: null, githubLogin: "ann" } }),
+      getUserRole: async () => "editor", verifyOAuthAccessToken: async () => okToken,
+    }), { jwtBearer: { audience: "https://mcp" } });
+    expect(sessionUserOf(((await resolve(req())) as any).caller)).toEqual({ email: "a@x.test", name: "Ann", image: null, githubLogin: "ann" });
+    expect(sessionUserOf(((await resolve(req({ authorization: "Bearer t" }))) as any).caller)).toBeUndefined();
   });
 
   it("a role that came from the same uncached read is not read again", async () => {
