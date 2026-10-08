@@ -1,6 +1,6 @@
 # ADR-0039: PostgreSQL is native, and node-postgres is its only driver
 
-**Status:** Proposed.
+**Status:** Accepted (2026-10-08).
 
 **Date:** 2026-10-08.
 
@@ -127,4 +127,4 @@ Each step is its own PR. Each is breaking where noted.
 
 ## Implementation status
 
-Proposed. Nothing implemented.
+Accepted. Implementation follows in the stacked PRs listed under How to apply.
