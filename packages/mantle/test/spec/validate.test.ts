@@ -548,6 +548,54 @@ spec:
     expect(parseManifests(source).diagnostics).toEqual([]);
   });
 
+  it("names Admin extension widgets with options, and refuses malformed ones (ADR-lite 1376)", () => {
+    const procedure = (fields: string) => `apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: paint }
+spec:
+  input:
+    type: object
+    properties:
+      color: { type: string }
+      count: { type: integer }
+  uiSchema:
+    fields:
+${fields}
+  output: { type: object }
+  handler: { ref: paint }
+`;
+    expect(parseManifests(procedure("      color: { widget: brand-kit/color, options: { palette: brand } }\n      count: { widget: brand-kit/stepper }")).diagnostics).toEqual([]);
+    for (const [fields, pointer] of [
+      ["      color: { widget: Brand/Color }", "/spec/uiSchema/fields/color/widget"],
+      ["      color: { widget: brand-kit }", "/spec/uiSchema/fields/color/widget"],
+      ["      color: { widget: textarea, options: { rows: 3 } }", "/spec/uiSchema/fields/color/options"],
+      ["      color: { widget: brand-kit/color, options: [brand] }", "/spec/uiSchema/fields/color/options"],
+      ["      color: { widget: brand-kit/color, label: Color }", "/spec/uiSchema/fields/color/label"],
+      ["      count: { widget: textarea }", "/spec/uiSchema/fields/count/widget"],
+    ] as const) {
+      const d = parseManifests(procedure(fields)).diagnostics[0];
+      expect(d, fields).toMatchObject({ code: "SCHEMA_UI_INVALID" });
+      expect(d?.path, fields).toContain(pointer);
+    }
+  });
+
+  it("lets a Schema name extension list cells and record panels", () => {
+    const schema = (ui: string) => `apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: products }
+spec:
+  title: Products
+  uiSchema: ${ui}
+  schema:
+    type: object
+    properties:
+      color: { type: string }
+`;
+    expect(parseManifests(schema("{ list: { cells: { color: brand-kit/swatch, updatedAt: brand-kit/ago } }, panels: [brand-kit/usage] }")).diagnostics).toEqual([]);
+    for (const ui of ["{ list: { cells: { missing: brand-kit/swatch } } }", "{ list: { cells: { color: swatch } } }", "{ list: { cells: [color] } }", "{ panels: brand-kit/usage }", "{ panels: [brand-kit/usage, brand-kit/usage] }", "{ panels: [usage] }"])
+      expect(parseManifests(schema(ui)).diagnostics[0]?.code, ui).toBe("SCHEMA_UI_INVALID");
+  });
+
   it("accepts a collection action targeting an existing Schema", () => {
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema

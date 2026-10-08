@@ -14,6 +14,7 @@ import {
   ContactRound,
   Users,
   Workflow,
+  Puzzle,
 } from "lucide-react";
 
 import { SidebarInset, SidebarProvider } from "@aotter/mantle-ui/kit";
@@ -124,8 +125,9 @@ export function AuthenticatedLayout({
           (operationsQuery.data ?? []).some((operation) =>
             (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]),
           site.data?.capabilities,
+          site.data?.extensions,
         ),
-    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.role, workspace, site.data?.capabilities],
+    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.role, workspace, site.data?.capabilities, site.data?.extensions],
   );
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
@@ -213,6 +215,7 @@ export function buildNavGroups(
   role: AdminUser["role"],
   hasGlobalOperations = false,
   capabilities?: SiteInfo["capabilities"],
+  extensions?: SiteInfo["extensions"],
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter(isPrimaryNavCollection);
   const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "operational");
@@ -273,6 +276,21 @@ export function buildNavGroups(
             { title: t(language, "nav.staff"), url: "/admin/staff", icon: Users },
           ]
         : []),
+      // extension pages and settings (ADR-lite 1376), already filtered to this staff member's role by the server;
+      // a page appears only when it asks for a place, a settings page always does
+      ...(extensions ?? []).flatMap((extension) => [
+        ...(extension.contributes?.pages ?? []).filter((p) => p.nav).map((p) => ({ ...p, order: p.nav!.order ?? 0, group: p.nav!.group })),
+        ...(extension.contributes?.settings ?? []).map((s) => ({ ...s, order: 0, group: "settings" as const })),
+      ].map((c) => ({
+        order: c.order,
+        group: c.group,
+        title: resolveLocalizedText(c.title, language, canonical) ?? c.id,
+        url: `/admin/x/${encodeURIComponent(extension.id)}/${encodeURIComponent(c.id)}`,
+        icon: c.group === "settings" ? SettingsIcon : Puzzle,
+      })))
+        // settings next to Admin's own settings, then the rest; a stable sort keeps declaration order within one order
+        .sort((a, b) => (a.group === b.group ? a.order - b.order : a.group === "settings" ? -1 : 1))
+        .map(({ order: _order, group: _group, ...item }) => item),
     ],
   };
 

@@ -11,11 +11,14 @@ import { TooltipProvider } from "@aotter/mantle-ui/kit";
 import { Toaster } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "./app/preferences";
 import "./styles/global.css";
+import { installExtensionShared } from "./app/extension-shared";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
   throw new Error("Missing #root element.");
 }
+
+installExtensionShared();
 
 const preview = isAdminPreview();
 if (preview && canRenderAdmin(window, true)) installPreviewPolicy(window);
