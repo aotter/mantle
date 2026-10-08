@@ -109,6 +109,7 @@ handler, which always writes, may not claim `readOnlyHint: true`.
 | Key | Effect in Admin |
 |---|---|
 | `fields.<name>.widget: textarea` | a multiline input |
+| `fields.<name>.widget: <extension>/<contribution>` (with optional `options`) | an Admin extension's `field.input/v1` control ([Extend Admin](../guides/admin-extensions.md)) |
 | `collectionAction: <schema>` | offer the operation on that collection's list |
 
 Admin lists a Procedure as an operation only when a Trigger binds it to the

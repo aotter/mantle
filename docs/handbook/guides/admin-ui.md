@@ -25,7 +25,8 @@ same files with `bunAdminAssets` from `@aotter/mantle/bun`. Sign in at
 | Rename a collection or explain a field | Schema `title` / `description`, property `title` / `description` (a string or a locale map) | Labels and help. Stored names do not change |
 | Required fields and option lists | JSON Schema `required`, `enum`, `type` | Data contracts, checked on every write, not styling |
 | Option labels | a string property's `oneOf: [{ const: open, title: { en: Open, zh-TW: 處理中 } }, …]` instead of `enum` | Selects, filter tabs and list cells show the `title` |
-| A multiline string | Schema or Procedure `uiSchema.fields.<name>.widget: textarea` | `textarea` is the only explicit widget |
+| A multiline string | Schema or Procedure `uiSchema.fields.<name>.widget: textarea` | `textarea` is the only built-in explicit widget |
+| Your own control, list cell or record panel | `uiSchema.fields.<name>.widget: <extension>/<contribution>`, `uiSchema.list.cells`, `uiSchema.panels` | Contributions of the project's Admin extensions; see [Extend Admin](admin-extensions.md) |
 | Markdown or HTML | property `x-mcp-hint: markdown` or `html` | A rich editor |
 | A timestamp, a date or money | `format: date-time`, `format: date`; `x-mcp-hint: money-minor` on an integer | Date controls; money in minor units, with a sibling `currency` when present |
 | Columns of an operational list | Schema `uiSchema.list.primaryField`, `.columns` | `primaryField` is a scalar data field; `columns` may name native columns (`createdAt`, `updatedAt`) |
