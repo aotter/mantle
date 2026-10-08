@@ -89,6 +89,9 @@ function indexes(name: string, s: StorageSchema) {
   return [
     ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })),
     ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: [...cols] })),
+    // Admin's default list order (updated_at descending, then the id tiebreak), served by a backward scan (ADR-0039 decision 2)
+    // ponytail: every Schema pays this index on UPDATE; a write-hot table that is never listed could opt out once one is measured; a large existing table is better served by CREATE INDEX CONCURRENTLY (outside the convergence transaction) with the same name and columns, which is the upgrade path
+    { name: `_mantle_ix_${name}_updated`, unique: false, columns: [...(s.scope ? [s.scope] : []), "updated_at", "id"] },
   ].map((i) => ({ ...i, name: ident(i.name), sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(ident(i.name))} ON ${q(name)} (${i.columns.map(q).join(", ")})` }));
 }
 
@@ -190,10 +193,13 @@ async function diff(connect: PgConnect, plan: Readonly<Record<string, StorageSch
   return { statements, blocked, undeclared };
 }
 
+/** Bump whenever `indexes()` or `createTable()` output changes for an unchanged plan: the boot state includes it, so a booted database converges again. */
+const LAYOUT = "2";
+
 /** Converge storage to the plan. Blocked differences are reported and applied to nothing; a matching fingerprint reads nothing else. */
 export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<string, StorageSchema>>, options: { fingerprint: string }): Promise<StorageReport> {
   // the plan and Mantle's functions: a release that changes a function re-creates it on the next boot
-  const state = `${options.fingerprint}|${fnv(FUNCTIONS.join("\n"))}`;
+  const state = `${options.fingerprint}|${fnv(FUNCTIONS.join("\n"))}|${LAYOUT}`;
   const booted = await query(connect, { text: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" }).catch(() => undefined);
   if (booted?.rows[0]?.value === state) return { skipped: true, blocked: [], undeclared: [] };
   await transaction(connect, [LOCK, ...SYSTEM_DDL.map((text) => ({ text })), ...FUNCTIONS.map((text) => ({ text })),

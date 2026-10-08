@@ -3,9 +3,7 @@
  * gives PostgreSQL the types SQLite's affinity never needed (`typed`):
  * - a value written to a column is cast to the column's type (`j.value ->> 'reps'` is text; the column is int8);
  * - `a || b` concatenates text, as it does on D1 (`2 * 3 || 4` is '64'; PostgreSQL has no int || int);
- * - `x ->> k` is `_mantle_jget(x, k)`, which takes a json(b) or a JSON text, a key, an index or a `$` path, as SQLite does;
- * - an ORDER BY key without NULLS FIRST/LAST states the rule Core pages every View by (run.ts): NULL first ascending, last
- *   descending, so a LIMIT picks the same rows on both engines (PostgreSQL's own default is the reverse).
+ * - `x ->> k` is `_mantle_jget(x, k)`, which takes a json(b) or a JSON text, a key, an index or a `$` path, as SQLite does.
  */
 import { Deparser } from "pgsql-deparser";
 import type { SqlNode as N } from "../spec/domain/index.js";
@@ -62,7 +60,6 @@ export function typed(ast: N, schemas: Readonly<Record<string, StorageSchema>>):
     const e = out.A_Expr;
     if (e?.kind === "AEXPR_OP" && name(e) === "->>") return { FuncCall: { funcname: [S("_mantle_jget")], args: [e.lexpr, e.rexpr], funcformat: "COERCE_EXPLICIT_CALL" } };
     if (e?.kind === "AEXPR_OP" && name(e) === "||") return { A_Expr: { ...e, lexpr: textOf(e.lexpr), rexpr: textOf(e.rexpr) } };
-    if (out.SortBy?.sortby_nulls === "SORTBY_NULLS_DEFAULT") out.SortBy.sortby_nulls = out.SortBy.sortby_dir === "SORTBY_DESC" ? "SORTBY_NULLS_LAST" : "SORTBY_NULLS_FIRST";
     if (out.InsertStmt) insert(out.InsertStmt);
     if (out.UpdateStmt) assign(out.UpdateStmt.relation.relname, out.UpdateStmt.targetList);
     return out;

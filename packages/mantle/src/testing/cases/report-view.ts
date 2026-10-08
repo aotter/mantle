@@ -39,5 +39,23 @@ export async function run(r: Report, engine: Engine) {
   const forged = await runView(s, p, caller({ min: 0 }), { cursor: [0, 'LEAK-zeta', 'LEAK-zeta'], pageSize: 5 });
   const inTie = await runView(s, p, caller({ min: 0 }), { cursor: [0, 'berry', 'berry'], pageSize: 5 });
   r.check("a forged cursor value only filters the caller's own rows; a cursor inside a run of equal totals continues after the given name", !JSON.stringify(forged.rows).includes('LEAK') && JSON.stringify(inTie.rows.map((x: any) => x.name)) === '["cherry","date"]', [forged.rows, inTie.rows]);
-
+  // NULL order is the dialect's own (ADR-0039): SQLite puts NULL first ascending and last descending with an ascending id tiebreak;
+  // a native-order dialect (PostgreSQL) puts it last ascending and first descending, and the tiebreak follows the last key. A cursor pages across the NULLs either way.
+  const nativeOrder = !!b.dialect.nativeOrder;
+  const paged = async (sql: string) => {
+    const q = await program('view', sql);
+    const ids: string[] = [];
+    let after: unknown[] | undefined;
+    for (let i = 0; i < 6; i++) {
+      const page = await runView(s, q, caller(), { cursor: after, pageSize: 1 });
+      ids.push(...page.rows.map((x: any) => x.id));
+      if (!page.next) break;
+      after = page.next;
+    }
+    return ids;
+  };
+  r.equal(`NULL order, ascending, paged one row at a time (${nativeOrder ? 'native: NULL last' : 'SQLite: NULL first'})`,
+    await paged('SELECT id, note FROM items ORDER BY note'), nativeOrder ? ['c', 'd', 'a', 'b'] : ['a', 'b', 'c', 'd']);
+  r.equal(`NULL order, descending, paged one row at a time (${nativeOrder ? 'native: NULL first, id descending' : 'SQLite: NULL last, id ascending'})`,
+    await paged('SELECT id, note FROM items ORDER BY note DESC'), nativeOrder ? ['b', 'a', 'd', 'c'] : ['d', 'c', 'a', 'b']);
 }

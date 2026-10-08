@@ -222,7 +222,7 @@ const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}
 /**
  * Keyset pagination over a View. The sort keys (the author's plus the compiler's appended id or group key)
  * become hidden `_k<i>` columns; the cursor is the last row's keys and the next page filters on them. A NULL key
- * sorts by the page's own NULLS rule (stated on every key, so the cursor and the order agree).
+ * sorts by the dialect's own NULLS rule (stated on every key, so the cursor and the order agree).
  *
  * A View's own LIMIT bounds every page together. A View without ORDER BY (a DISTINCT, a GROUP BY or an aggregate) cannot
  * be paged: it returns its rows when they fit one page and is refused when they do not.
@@ -252,9 +252,9 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
       : f?.length === 1 && aliasVal.has(f[0].String.sval) ? aliasVal.get(f[0].String.sval)! : node;
     return { ResTarget: { name: `_k${i}`, val } };
   });
-  // SQLite's own rule, stated: ascending puts NULL first, descending last
+  // the dialect's own rule, stated: SQLite puts NULL first ascending and last descending; a native-order dialect (PostgreSQL) the reverse
   const desc = (k: N) => k.SortBy.sortby_dir === "SORTBY_DESC";
-  const nullsFirst = (k: N) => (k.SortBy.sortby_nulls === "SORTBY_NULLS_FIRST" ? true : k.SortBy.sortby_nulls === "SORTBY_NULLS_LAST" ? false : !desc(k));
+  const nullsFirst = (k: N) => (k.SortBy.sortby_nulls === "SORTBY_NULLS_FIRST" ? true : k.SortBy.sortby_nulls === "SORTBY_NULLS_LAST" ? false : desc(k) === !!env.dialect.nativeOrder);
   // an authored LIMIT bounds the whole result: the View's own ORDER BY and LIMIT pick its rows, and the pages run through those
   const inner: N = sel.limitCount
     ? { ...sel, targetList: [...sel.targetList, ...hidden] }

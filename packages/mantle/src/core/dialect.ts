@@ -43,6 +43,12 @@ export interface MantleDialect {
   /** The dialect's refusals of a program's IR. Run on every program: the runtime never trusts an IR. */
   check(plan: SqlPlan, context: SqlContext): readonly SqlDiagnostic[];
   readonly lowering: PolicyLowering;
+  /**
+   * The engine orders as PostgreSQL does (ADR-0039): NULL sorts as the largest value, and the appended `id` tiebreak runs in the
+   * direction of the last sort key, so a btree index serves ORDER BY ... LIMIT. Absent, the SQLite rule applies: NULL first
+   * ascending, last descending, `id` ascending.
+   */
+  readonly nativeOrder?: boolean;
   /** Resolves a bind the lowering added. */
   bind(spec: DialectBind, context: BindContext): unknown;
 }
