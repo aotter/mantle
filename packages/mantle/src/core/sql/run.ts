@@ -249,7 +249,10 @@ export interface ViewMatch {
 const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 // ---- the row-comparison cursor ------------------------------------------------------------------------
-/** Columns every Schema's table declares NOT NULL (`postgres/storage.ts` createTable): the native ones, the scope column, and `status` when publishing. */
+/**
+ * Columns every Schema's table declares NOT NULL (`postgres/storage.ts` createTable): the native ones, the scope column, and `status` when publishing.
+ * The scope branch is the table's truth but does not fire today: a View's readable projection never exposes the scope column to sort by.
+ */
 const nativeNotNull = (s: { scope?: string; publishing?: boolean }, column: string) =>
   column === "id" || column === "version" || column === "created_at" || column === "updated_at" || column === s.scope || (!!s.publishing && column === "status");
 
@@ -407,11 +410,11 @@ function pagedOf(env: RunEnv, c: Compiled, pageSize: number, cursor: readonly un
       const row = (args: N[]): N => ({ RowExpr: { args, row_format: "COERCE_IMPLICIT_CAST" } });
       conditions.push(op(desc(keys[0]!) ? "<" : ">", row(keys.map((_k, i) => col(`_k${i}`))), row(cur.map((_v, i) => param({ cursor: i })))));
     } else {
-    const args = keys.flatMap((k, i) => {
-      const last = past(k, i);
-      return last ? [{ BoolExpr: { boolop: "AND_EXPR", args: [...keys.slice(0, i).map((_x, j) => same(j)), last] } }] : [];
-    });
-    conditions.push(args.length ? { BoolExpr: { boolop: "OR_EXPR", args } } : { A_Const: { boolval: { boolval: false } } });
+      const args = keys.flatMap((k, i) => {
+        const last = past(k, i);
+        return last ? [{ BoolExpr: { boolop: "AND_EXPR", args: [...keys.slice(0, i).map((_x, j) => same(j)), last] } }] : [];
+      });
+      conditions.push(args.length ? { BoolExpr: { boolop: "OR_EXPR", args } } : { A_Const: { boolval: { boolval: false } } });
     }
   }
   // an output by the name SQL gave it: an unquoted alias or column folds to lower case

@@ -112,6 +112,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
         "  // error is destroyed, as is one a failed request left in a transaction",
         "  const listeners: ((e: Error) => void)[] = [];",
         "  let broken = false;",
+        "  let released = false;",
         "  const onError = () => { broken = true; };",
         '  client.on("error", onError);',
         "  return {",
@@ -120,6 +121,9 @@ function service({ identity, features, dialect, host }: PresetSelection): string
         '    on: (_event: "error", f: (e: Error) => void) => { listeners.push(f); client.on("error", f); },',
         "    getTransactionStatus: () => client.getTransactionStatus(),",
         "    end: async () => {",
+        "      // a stale second end() must not release a client another request has since checked out",
+        "      if (released) return;",
+        "      released = true;",
         '      for (const f of [onError, ...listeners]) client.removeListener("error", f);',
         '      client.release(broken || client.getTransactionStatus() !== "I");',
         "    },",
@@ -362,7 +366,7 @@ function bunEntry(selection: PresetSelection): string {
 ${pg ? 'import pg from "pg";' : 'import { Database } from "bun:sqlite";'}
 ${admin ? 'import { bunAdminAssets } from "@aotter/mantle/bun";\nimport { dirname } from "node:path";\nimport { fileURLToPath } from "node:url";\n' : ''}import { mantle, type Env } from "./service.js";
 
-${pg ? 'if (!process.env.DATABASE_URL || !/^postgres(?:ql)?:\\/\\//.test(process.env.DATABASE_URL)) throw new Error("DATABASE_URL must be a PostgreSQL URL");\n// pipeline: one round trip per write batch (#1379). The role sets statement_timeout and TimeZone UTC; boot checks them.\nconst pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, pipeline: true } as pg.PoolConfig);\npool.on("error", console.error);' : 'const db = new Database(process.env.DATABASE_FILE ?? "mantle.sqlite", { create: true });'}
+${pg ? 'if (!process.env.DATABASE_URL || !/^postgres(?:ql)?:\\/\\//.test(process.env.DATABASE_URL)) throw new Error("DATABASE_URL must be a PostgreSQL URL");\n// pipeline: one round trip per write batch (#1379). The role sets statement_timeout and TimeZone UTC; boot checks them.\nconst pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, pipeline: true });\npool.on("error", console.error);' : 'const db = new Database(process.env.DATABASE_FILE ?? "mantle.sqlite", { create: true });'}
 const env: Env = {
   ${pg ? 'PG: pool' : 'DB: db'},
 ${admin ? '  ASSETS: bunAdminAssets(dirname(fileURLToPath(import.meta.resolve("@aotter/mantle-ui/admin/index.html")))),\n' : ''}${selection.identity === 'mantle' ? '  PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN, BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET, ADMIN_EMAIL: process.env.ADMIN_EMAIL,\n' : ''}};

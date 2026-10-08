@@ -44,7 +44,7 @@ const VIEWS: [string, string, unknown[]][] = [
 
 // SQLite spellings (ADR-0039): refused with the PostgreSQL one to use
 const REFUSED: [string, string, RegExp][] = [
-  ["json_each", "SELECT j.value AS v FROM items i, json_each(i.tags) j", /json_each\(\) is SQLite's: use jsonb_array_elements_text\(x\) AS j\(value\)/],
+  ["json_each", "SELECT j.value AS v FROM items i, json_each(i.tags) j", /json_each\(\) is SQLite's: use jsonb_array_elements_text\(x\) WITH ORDINALITY AS j\(value, n\)/],
   ["a $ path of ->>", "SELECT tags ->> '$[0]' AS t FROM items", /'\$\[0\]' is a SQLite JSON path.*x ->> 'key', x ->> 0 or x #>> '\{a,b\}'/],
   ["json_extract", "SELECT json_extract(tags, '$[0]') AS t FROM items", /json_extract\(\) is SQLite's: use x ->> 'key'/],
   ["hex", "SELECT hex(name) AS t FROM items", /hex\(\) is SQLite's/],

@@ -55,12 +55,13 @@ const pools: pg.Pool[] = [];
 const fresh = async (max = 10) => {
   const schema = `bun_${crypto.randomUUID().replace(/-/g, '')}`;
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const pool = new pg.Pool({ connectionString: url, options: `-c search_path=${schema} -c statement_timeout=10000 -c TimeZone=UTC`, pipeline: true, max } as pg.PoolConfig);
+  const pool = new pg.Pool({ connectionString: url, options: `-c search_path=${schema} -c statement_timeout=10000 -c TimeZone=UTC`, pipeline: true, max });
   pools.push(pool);
   const connect: PgConnect = async () => {
     const client = await pool.connect();
     const listeners: ((e: Error) => void)[] = [];
     let broken = false;
+    let released = false;
     const onError = () => { broken = true; };
     client.on('error', onError);
     return {
@@ -68,7 +69,7 @@ const fresh = async (max = 10) => {
       query: client.query.bind(client),
       on: (_e: 'error', f: (e: Error) => void) => { listeners.push(f); client.on('error', f); },
       getTransactionStatus: () => client.getTransactionStatus(),
-      end: async () => { for (const f of [onError, ...listeners]) client.removeListener('error', f); client.release(broken || client.getTransactionStatus() !== 'I'); },
+      end: async () => { if (released) return; released = true; for (const f of [onError, ...listeners]) client.removeListener('error', f); client.release(broken || client.getTransactionStatus() !== 'I'); },
     } as unknown as PgClient;
   };
   return { pool, connect, storage: postgresStorage({ connect }), driver: pgDatabaseDriver(connect), cleanup: async () => { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); } };

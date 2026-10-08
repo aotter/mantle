@@ -47,7 +47,11 @@ Choose in this order, stopping at the first that works:
 
 ## SQL rules that trip agents
 
-- PostgreSQL syntax over declared Schemas only. References: `input.<name>`,
+- SQL over declared Schemas only, in the project's own dialect: PostgreSQL's
+  syntax on PostgreSQL, a SQLite subset on D1. Each dialect is its own target:
+  a manifest need not compile for the other, and a SQLite spelling such as
+  `json_each` or `->> '$.a'` is refused on PostgreSQL with the PostgreSQL one
+  (rewrite table: `docs/handbook/concepts/runtime-and-adapters.md`). References: `input.<name>`,
   `auth.uid()`, `auth.role()`, `now()`; search is `mantle.search(t, q)`.
 - Native columns are snake_case in SQL (`created_at`, `author_id`) and
   camelCase in `ctx.store` JSON and in `indexes`.
@@ -60,7 +64,9 @@ Choose in this order, stopping at the first that works:
 - `LIMIT` needs `ORDER BY`. No `OFFSET`, `RIGHT JOIN` or `CURRENT_TIMESTAMP`
   on any dialect. On SQLite (D1) also no `WITH`, `UNION`, `ILIKE` or jsonb
   operators, and `CAST(x AS int)` only on an integer literal: use `round(x)`.
-  PostgreSQL accepts these (`docs/handbook/reference/view.md`).
+  PostgreSQL accepts these (`docs/handbook/reference/view.md`). On PostgreSQL
+  unnest with `jsonb_array_elements_text(t.col) WITH ORDINALITY AS j(value, n)`,
+  not `json_each`; unstated `NULLS` follow PostgreSQL (last ascending).
 - Unquoted aliases fold to lower case: `AS "orderCount"` keeps the case.
 - The runtime injects scope and TTL into every Schema reference, and
   published-only into public Views. Never repeat them.

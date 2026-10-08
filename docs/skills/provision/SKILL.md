@@ -47,7 +47,10 @@ Confirm the active Cloudflare account with the user before creating anything.
    `pnpm exec wrangler hyperdrive create <name> --caching-disabled --connection-string=...`
    (the connection string by hidden input) and replace the placeholder id in
    `hyperdrive[0]`, keeping the binding `HYPERDRIVE`. An existing 0.1.x
-   database is never reused: 0.2 starts on a new one.
+   database is never reused: 0.2 starts on a new one. PostgreSQL uses
+   node-postgres on every host (Hyperdrive on Cloudflare, a `pg.Pool` on Bun);
+   set `statement_timeout` (10s or less) and `TimeZone` `UTC` on the database
+   role, which boot checks on both.
 2. **Origin.** Set `PUBLIC_ORIGIN` in `vars` to the deployed HTTPS origin.
    Update it together with any OAuth callback when a custom domain is added.
 3. **Sign-in (identity `mantle`).** Choose one production method and edit

@@ -115,7 +115,7 @@ A SQLite spelling fails validation with its position and the PostgreSQL one:
 
 | SQLite (D1) | PostgreSQL |
 |---|---|
-| `FROM t, json_each(t.col) j`, `j.value` | `FROM t, jsonb_array_elements_text(t.col) AS j(value)` (`jsonb_array_elements` for jsonb values, `jsonb_each_text(t.col) AS j(key, value)` for an object; `WITH ORDINALITY AS j(value, n)` for the position) |
+| `FROM t, json_each(t.col) j`, `j.value` | `FROM t, jsonb_array_elements_text(t.col) WITH ORDINALITY AS j(value, n)` (`jsonb_array_elements` for jsonb values, `jsonb_each_text(t.col) WITH ORDINALITY AS j(key, value, n)` for an object) |
 | `ORDER BY …, j.id` of `json_each` | `WITH ORDINALITY AS j(value, n)`, then `ORDER BY …, j.n` (a sorted View over a row source needs `WITH ORDINALITY`; Mantle pages by it) |
 | `x ->> '$.a.b'`, `x ->> '$[0]'` | `x #>> '{a,b}'`, `x ->> 'a'`, `x ->> 0` (a `$…` string is refused: PostgreSQL would read it as a key) |
 | `json_extract(x, '$.a')` | `x ->> 'a'` (text) or `x -> 'a'` (jsonb) |
@@ -218,7 +218,9 @@ The Worker needs `compatibility_flags: ["nodejs_compat"]` for `pg`. Mantle's
 and Better Auth's reads run outside a transaction, which Hyperdrive would answer
 from its cache, so create the Hyperdrive config with caching disabled
 (`wrangler hyperdrive create … --caching-disabled`), or a read can miss the
-write before it and a revoked session can be accepted until the cache expires. `timeZone` must be an
+write before it and a revoked session can be accepted until the cache expires. The same holds for a role
+re-read and for a revoked grant: Auth's reads are single statements outside a transaction, so their freshness
+depends on `--caching-disabled` too. `timeZone` must be an
 IANA name: PostgreSQL reads an offset such as `+08:00` with the opposite sign.
 
 Bun has a generated preset for both engines (`mantle generate --host bun`,

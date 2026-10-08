@@ -72,13 +72,14 @@ it a supported combination; inspect peer warnings before starting the service.
 | identity `mantle` | `better-auth`, `@better-auth/oauth-provider`, `@better-auth/mcp`, `@better-auth/cimd` |
 | feature `mcp` | `@modelcontextprotocol/server`, `@modelcontextprotocol/ext-apps` |
 | feature `admin` | `@aotter/mantle-ui` (its `dist/admin` is the console, bound as `ASSETS` in `wrangler.jsonc`) |
-| dialect `postgres` on `cloudflare` | `pg` |
+| dialect `postgres` (host `cloudflare` or `bun`) | `pg` |
 | host `bun` | `bun-types` |
 | feature `mcp` with an identity, without `admin` | `@aotter/mantle-ui` (the staff MCP App) |
 
 On Cloudflare the project also installs `wrangler`, `@cloudflare/workers-types` and
-`@types/node` itself. A TypeScript Cloudflare/PostgreSQL project also installs
-`@types/pg` as a dev dependency for the generated `pg` import.
+`@types/node` itself. A TypeScript PostgreSQL project, on Cloudflare or Bun, also installs
+`@types/pg` as a dev dependency for the generated `pg` import; node-postgres is
+the PostgreSQL driver on every host.
 
 ## `mantle generate`
 

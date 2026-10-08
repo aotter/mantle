@@ -10,6 +10,10 @@ It does not validate a deployed Cloudflare account or publish a release.
 
 Use Bun 1.3.14, Node 22+, pnpm 9+, Chrome and PostgreSQL. Create two **disposable,
 separate databases** with a role allowed to converge tables. Keep other data out.
+Both PostgreSQL pairs (bun-postgres and cf-postgres) run on node-postgres, and boot
+checks the role's settings on each: set `statement_timeout` (10s or less) and
+`TimeZone` to `UTC` on the role, for example
+`ALTER ROLE alpha SET statement_timeout = '10s'; ALTER ROLE alpha SET TimeZone = 'UTC';`.
 
 ```sh
 pnpm install --frozen-lockfile
