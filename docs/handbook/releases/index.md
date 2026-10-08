@@ -38,8 +38,8 @@ by hand.
 - **The service is the application's.** `createMantle(service, …)` replaces
   `createMantleWorker`, and the first `mantle generate` writes the host's
   preset (`src/service.ts`, `src/index.ts`, ...) once. `--host` is
-  `cloudflare` (D1, or PostgreSQL through Hyperdrive), `bun` (Bun.SQL or
-  bun:sqlite, `@aotter/mantle/bun`) or `none` (plan and types only), and
+  `cloudflare` (D1, or PostgreSQL through Hyperdrive), `bun` (node-postgres
+  or bun:sqlite, `@aotter/mantle/bun`) or `none` (plan and types only), and
   `--dialect` is `sqlite` or `postgres`; both are chosen once.
 - **Mantle never owns your users.** A `CallerResolver` turns a request into a
   `Caller`; identity is `mantle` (Better Auth), `custom` or `none`. Core creates

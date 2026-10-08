@@ -50,7 +50,7 @@ command; it never installs anything.
 - `features` is a subset of `mcp`, `admin`, `web`, in that order. The 0.1.x
   features `spec`, `runtime` and `api` are dropped: REST is always mounted.
 - `dialect` is `sqlite` (alias `d1`, the default, left out) or `postgres`
-  (PostgreSQL through Hyperdrive on `cloudflare`; Bun.SQL on `bun`, where it
+  (PostgreSQL through Hyperdrive on `cloudflare`; node-postgres on `bun`, where it
   is the default). A 0.1.x project was SQLite: keep `sqlite` (with
   `--host bun`, pass `--dialect sqlite`) unless the data also moves to
   PostgreSQL.

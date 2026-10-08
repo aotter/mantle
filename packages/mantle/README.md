@@ -17,7 +17,7 @@ import.
 | `@aotter/mantle/spec` | The manifest grammar, validation and `compilePlan` (the CLI side) |
 | `@aotter/mantle/d1`, `/d1/compile` | The built-in SQLite dialect: runtime and compile sides (ADR-0035) |
 | `@aotter/mantle/postgres`, `/postgres/compile` | The PostgreSQL reference dialect: `postgresStorage`, `pgDatabaseDriver`, `pgPool`, and its compile side (ADR-0037) |
-| `@aotter/mantle/bun` | Native Bun.SQL PostgreSQL, bun:sqlite and Admin assets (ADR-0038) |
+| `@aotter/mantle/bun` | bun:sqlite and Admin assets; PostgreSQL on Bun is `pg` (ADR-0038, ADR-0039) |
 | `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |
 | `@aotter/mantle/auth` | `createMantleAuth` (Better Auth), `createCallerResolver`, `createAuthRoutes` |
 | `@aotter/mantle/admin` | `createAdminSurface` |

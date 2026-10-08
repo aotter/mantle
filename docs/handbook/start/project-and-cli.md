@@ -51,7 +51,7 @@ refused (exit 2), so switching never drops tables or orphans data. Change
 | | `cloudflare` | `bun` | `none` |
 |---|---|---|---|
 | `sqlite` | preset over D1 (the default) | native bun:sqlite | plan and types only |
-| `postgres` | preset over Hyperdrive and `pg` | native Bun.SQL PostgreSQL pool | plan and types only |
+| `postgres` | preset over Hyperdrive and `pg` | preset over a `pg.Pool` (node-postgres) | plan and types only |
 | a dialect package | plan and types only; compose `src/service.ts` with its storage adapter | plan and types only | plan and types only |
 
 Each selection needs packages in the project. `mantle generate` checks them
@@ -151,16 +151,15 @@ ALTER ROLE app SET TimeZone = 'UTC';
 for the generated project's typecheck, the selected feature/identity packages,
 then set DATABASE_URL in `.env` and run `bun src/index.ts`. For SQLite pass
 `--dialect sqlite` and optionally DATABASE_FILE (default mantle.sqlite).
-The preset is written once, uses native drivers from `@aotter/mantle/bun`, and
+The preset is written once, uses `pg` for PostgreSQL and bun:sqlite for SQLite (`@aotter/mantle/bun`), and
 owns Bun.serve, trusted socket IP and shutdown/background work. Admin binds the
 installed UI bundle. Enabled schedule Triggers fail generation; use `host: none`
 with an explicit scheduler when schedules are required. Behind a reverse proxy,
 set TRUSTED_PROXIES to its addresses: otherwise every client shares the proxy's
 address, and with it one sign-in rate limit.
 
-PostgreSQL pools must set `prepare: false`: Bun otherwise re-encodes JSON strings,
-and the role needs TEMPORARY on the database (`GRANT TEMPORARY ON DATABASE app TO
-app_role`), which describing a result takes.
-Mantle refuses another setting. Native raw result metadata comes from PostgreSQL
-with three extra round trips per result, preserving microseconds and exact numeric
-scale. No pg dependency or PostgreSQL clone is added. See ADR-0038.
+PostgreSQL on Bun is node-postgres, as on Workers (ADR-0039): the entry builds a
+`pg.Pool` with `pipeline: true`, and each request borrows one pooled client
+(`requestScoped`). Install `pg`. The role needs no privilege beyond converging its
+tables (no `TEMPORARY`); set `statement_timeout` and `TimeZone` UTC on the role,
+which boot checks.

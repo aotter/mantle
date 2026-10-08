@@ -25,7 +25,7 @@ interface Scope {
   client?: Promise<PgClient>;
 }
 
-// for a transport that does not report the protocol's transaction state (Bun.SQL): what the SQL text says
+// for a client that does not report the protocol's transaction state: what the SQL text says
 const BEGINS = /^\s*(BEGIN|START\s+TRANSACTION)\b/i;
 const ENDS = /^\s*(COMMIT|ROLLBACK|END|ABORT)\s*(;|$)/i;
 const close = (c: Promise<PgClient> | undefined) => void c?.then((x) => x.end()).catch(() => undefined);
@@ -57,7 +57,6 @@ export function requestScoped(connect: PgConnect): PgSession {
     };
     return {
       pipeline: client.pipeline,
-      temporaryResultMetadata: client.temporaryResultMetadata,
       ...(client.execute ? { execute: (s) => track(s.text, client.execute!(s)) } : {}),
       query: ((config: string | { text: string }, values?: readonly unknown[]) =>
         track(typeof config === "string" ? config : config.text, (client.query as (c: unknown, v?: unknown) => Promise<never>)(config, values))) as PgClient["query"],

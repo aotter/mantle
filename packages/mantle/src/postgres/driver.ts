@@ -17,8 +17,6 @@ export interface PgResult { readonly rows: Record<string, unknown>[]; readonly r
 export interface PgClient {
   /** node-postgres pipeline mode: queries issued without awaiting share the wire. */
   readonly pipeline?: boolean;
-  /** A native transport without RowDescription can execute a dialect-supplied result description. */
-  readonly temporaryResultMetadata?: boolean;
   execute?(statement: PgStatement): Promise<PgOutcome>;
   query(config: { text: string; values?: unknown[]; types?: { getTypeParser(oid: number, format?: string): (text: string) => unknown } }): Promise<PgResult>;
   /** The positional form Kysely (Better Auth) calls. */
@@ -43,9 +41,6 @@ const RAW = { getTypeParser: () => (text: string) => text };
 export interface PgStatement {
   readonly text: string;
   readonly values?: readonly unknown[];
-  readonly describeResult?: () => { query: string; names: string[] | undefined } | undefined;
-  /** The statement is a read: a client that had to begin read-write (to describe it) makes the transaction read-only first. */
-  readonly readOnly?: boolean;
 }
 /** One statement's rows (decoded) and the rows it wrote or returned. */
 export interface PgOutcome { readonly rows: Record<string, unknown>[]; readonly count: number }
@@ -62,11 +57,9 @@ const SERIALIZATION = new Set(["40001", "40P01"]);
 export const STATEMENT_TIMEOUT_MS = 10_000;
 /**
  * A transaction's first message, still one round trip. A write's own limit is `SET LOCAL` (convergence lifts it to build
- * indexes); a read has the role's, which boot checked. pg_temp is named last for a transport that describes results through
- * a temporary table (Bun.SQL): one on a pooled session never stands in for a Schema table of the same name.
+ * indexes); a read has the role's, which boot checked.
  */
-const begin = (client: PgClient, head: string, timeoutMs: number) => `${head}; SET LOCAL statement_timeout = ${Math.max(0, Math.floor(timeoutMs))}` +
-  (client.temporaryResultMetadata ? "; SELECT set_config('search_path', concat_ws(', ', nullif(current_setting('search_path'), ''), 'pg_temp'), true)" : "");
+const begin = (head: string, timeoutMs: number) => `${head}; SET LOCAL statement_timeout = ${Math.max(0, Math.floor(timeoutMs))}`;
 const ATTEMPTS = 5;
 
 /**
@@ -82,7 +75,7 @@ export async function transaction(connect: PgConnect, statements: readonly PgSta
     const client = await connect();
     if (client.pipeline && statements.every((s) => (s.values ?? []).every(wire))) {
       try {
-        return await pipelined(client, begin(client, "BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs), statements);
+        return await pipelined(client, begin("BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs), statements);
       } catch (e) {
         if (SERIALIZATION.has(sqlState(e) ?? "") && attempt < ATTEMPTS) continue;
         throw e;
@@ -93,7 +86,7 @@ export async function transaction(connect: PgConnect, statements: readonly PgSta
     let failedAt = -1;
     let committing = false;
     try {
-      await client.query({ text: begin(client, "BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs) });
+      await client.query({ text: begin("BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs) });
       const out: PgOutcome[] = [];
       for (const [i, s] of statements.entries()) {
         failedAt = i;
@@ -118,22 +111,10 @@ export async function transaction(connect: PgConnect, statements: readonly PgSta
  * One read: one statement in autocommit, which is a transaction of its own, one round trip. It runs under the session's
  * settings and statement_timeout, which boot checked; a read sees the write before it because the Hyperdrive config has
  * caching disabled (the generated preset creates it so, since Better Auth's reads were never in a transaction either).
- * A transport that describes results through a temporary table (Bun.SQL) still needs a transaction to drop it in.
  */
-export async function query(connect: PgConnect, s: PgStatement, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome> {
+export async function query(connect: PgConnect, s: PgStatement): Promise<PgOutcome> {
   const client = await connect();
-  if (!client.temporaryResultMetadata) {
-    try { return await run(client, s); } finally { await client.end().catch(() => undefined); }
-  }
-  try {
-    await client.query({ text: begin(client, "BEGIN", timeoutMs) });
-    const out = await run(client, { ...s, readOnly: true });
-    await client.query({ text: "COMMIT" });
-    return out;
-  } catch (e) {
-    await client.query({ text: "ROLLBACK" }).catch(() => undefined);
-    throw e;
-  } finally { await client.end().catch(() => undefined); }
+  try { return await run(client, s); } finally { await client.end().catch(() => undefined); }
 }
 
 /**
@@ -149,7 +130,7 @@ export async function query(connect: PgConnect, s: PgStatement, timeoutMs = STAT
 export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<string[]> {
   const client = await connect();
   try {
-    // the driver's own types, int4 and bool only: every transport parses them alike, and Bun.SQL describes nothing outside a transaction
+    // the driver's own types, int4 and bool only
     const [r] = (await client.query({ text: `SELECT quote_ident(current_user) AS role, quote_ident(current_database()) AS db,
       current_setting('DateStyle') AS datestyle, current_setting('IntervalStyle') AS intervalstyle,
       current_setting('extra_float_digits')::int4 AS float_digits, current_setting('standard_conforming_strings') AS scs,
@@ -163,8 +144,7 @@ export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_
       ...(r!.float_digits >= 1 ? [] : [`extra_float_digits is ${r!.float_digits}, which rounds float8 values: ${fix("extra_float_digits", "1")}`]),
       ...(r!.utc ? [] : [`TimeZone is '${r!.tz}'; Mantle casts between dates and instants in UTC, as D1 does: ${fix("TimeZone", "UTC")}`]),
       ...(r!.scs === "on" ? [] : [`standard_conforming_strings is off: ${fix("standard_conforming_strings", "on")}`]),
-      // a transport that reads in a transaction (Bun.SQL) pins its own limit there
-      ...(client.temporaryResultMetadata || !ms || (r!.timeout_ms > 0 && r!.timeout_ms <= ms) ? [] :
+      ...(!ms || (r!.timeout_ms > 0 && r!.timeout_ms <= ms) ? [] :
         [`statement_timeout is ${r!.timeout_ms ? `${r!.timeout_ms} ms` : "unset"}; a read runs outside a transaction under the role's limit, which must be at most ${ms} ms (statementTimeoutMs): ${fix("statement_timeout", `${ms}ms`)}`]),
     ];
   } finally { await client.end().catch(() => undefined); }
@@ -212,7 +192,7 @@ export function pgDatabaseDriver(connect: PgConnect): DatabaseDriver {
  * What Better Auth takes as a PostgreSQL pool (`database: pgPool(connect)`): Kysely's `PostgresDialect` asks it for a client per
  * query or transaction and releases it, so each gets its own connection, as the Workers rule above asks.
  */
-export function pgPool(connect: PgConnect): { readonly options: Readonly<Record<string, never>>; connect(): Promise<PgClient & { release(): void }>; end(): Promise<void> } {
+export function pgPool(connect: PgConnect): PgAuthPool {
   return {
     // Kysely 0.29 requires pool options; this shim owns no connection configuration or control client.
     options: {},
@@ -221,5 +201,11 @@ export function pgPool(connect: PgConnect): { readonly options: Readonly<Record<
       return Object.assign(client, { release: () => void client.end().catch(() => undefined) });
     },
     async end() {},
-  };
+  } as unknown as PgAuthPool;
+}
+/** Kysely's PostgresPool, structurally (no auth import here). Kysely also declares a cursor form of `query`, which Better Auth never calls and the driver does not offer. */
+export interface PgAuthPool {
+  readonly options: Readonly<Record<string, never>>;
+  connect(): Promise<{ query(sql: string, parameters: readonly unknown[]): Promise<any>; query(cursor: unknown): any; release(): void }>;
+  end(): Promise<void>;
 }

@@ -5,7 +5,7 @@
 (ADR-0032 decision 6, ADR-0035): a service is a WinterTC `fetch`, and a host
 differs only in its storage driver and how its entry is spelled. `mantle
 generate` writes a preset for `host: cloudflare` (D1, or PostgreSQL through
-Hyperdrive) and `host: bun` (Bun.SQL or bun:sqlite, ADR-0038); `host: none`
+Hyperdrive) and `host: bun` (node-postgres or bun:sqlite, ADR-0038, ADR-0039); `host: none`
 writes the plan and types only (ADR-0036). This page says what to write for
 any other host.
 

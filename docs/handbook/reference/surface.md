@@ -83,7 +83,7 @@ Two npm packages, always published together at one version.
 | `@aotter/mantle/admin` | `createAdminSurface`, `AdminIdentity` |
 | `@aotter/mantle/mcp` | `createMcpSurface`, `planApp` and `appCatalog` (the MCP App's catalog) |
 | `@aotter/mantle/web` | `createRestSurface` |
-| `@aotter/mantle/bun` | `bunPostgresStorage`, `bunSqliteStorage`, `bunPgConnect`, `bunDatabaseDriver`, `bunSqliteDriver`, `bunAuthDatabase`, `bunAdminAssets` |
+| `@aotter/mantle/bun` | `bunSqliteStorage`, `bunSqliteDriver`, `bunAdminAssets` |
 | `@aotter/mantle/testing` | `runStorageConformance`, the dialect compliance suite |
 | `@aotter/mantle-ui` | the root (React operation components and the controller), `/controller`, `/kit`, `/kit.css`, `/tokens.css`, `/mcp-app` (`mantleAppHtml`, the App `planApp` serves), and the prebuilt Admin console in `dist/admin` (exported as `./admin/index.html`), which the preset serves at `/admin` |
 
