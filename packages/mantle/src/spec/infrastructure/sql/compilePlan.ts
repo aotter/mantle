@@ -201,6 +201,10 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     }
     // a column is read off the row by its exact key: a field read carries the declared name, anything else the name SQL gave it
     const wire = (outputs?.keys ?? []).map((k) => (columns[k]?.field === k ? schemas[columns[k]!.schema]!.names?.[k] ?? k : k));
+    for (const f of Object.keys((v.spec.uiSchema?.["list"] as { cells?: Record<string, string> } | undefined)?.cells ?? {})) {
+      if (!outputs?.keys || wire.includes(f)) continue;
+      diagnostics.push(validateDiagnostic({ code: "VIEW_UI_INVALID", severity: "error", path: `${source.sourceId}#/${source.documentIndex}/spec/uiSchema/list/cells/${f}`, source: { ...source, path: `/spec/uiSchema/list/cells/${f}` }, value: f, expected: `one of the View's outputs: ${wire.join(", ")}`, message: `View '${v.metadata.name}' uiSchema.list.cells names '${f}', which the View's SELECT does not output.` }));
+    }
     for (const [i, f] of (list["columns"] ?? []).entries()) {
       if (!outputs?.keys || wire.includes(f)) continue;
       const folded = wire.find((k) => k.toLowerCase() === f.toLowerCase());

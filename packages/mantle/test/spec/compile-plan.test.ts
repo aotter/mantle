@@ -108,6 +108,15 @@ describe("compilePlan", () => {
     expect(!bad.ok && bad.diagnostics.map((d) => [d.code, d.value])).toEqual([["VIEW_UI_INVALID", "body"], ["VIEW_UI_INVALID", "ownerId"]]);
   });
 
+  it("refuses a uiSchema.list.cells key the View's SELECT does not output (ADR-lite 1376)", async () => {
+    const withCells = (cells: string) => SCHEMA + view("SELECT id, body AS text FROM notes ORDER BY id").replace("surface: staff,", `surface: staff, uiSchema: { list: { cells: { ${cells} } } },`);
+    expect((await compile(withCells("text: kit/preview"))).ok).toBe(true);
+    const bad = await compile(withCells("body: kit/preview"));
+    expect(!bad.ok && bad.diagnostics.map((d) => [d.code, d.value])).toEqual([["VIEW_UI_INVALID", "body"]]);
+    const shape = await compile(withCells("text: preview"));
+    expect(!shape.ok && shape.diagnostics[0]?.code).toBe("VIEW_UI_INVALID");
+  });
+
   it("refuses an inline program as a lifecycle hook target (it would write inside a before hook)", async () => {
     const trigger = `---
 apiVersion: cms.mantle.aotter.net/v2
