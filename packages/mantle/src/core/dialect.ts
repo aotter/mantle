@@ -25,7 +25,7 @@ export interface StoreCodec {
   decode(type: string, value: unknown): unknown;
 }
 
-/** An operator's own refusals of a program's IR, run after the dialect's at runtime (ADR-0037 decision 4). It can only narrow. */
+/** An operator's own refusals of a program's IR, run after the dialect's at runtime (ADR-0037 decision 4). It can only narrow. An accepted program's verdict is cached per program (Core's compile cache), so `restrict` must be a pure function of (plan, context); refusals are not cached. */
 export type RestrictSql = (plan: SqlPlan, context: SqlContext) => readonly SqlDiagnostic[];
 
 /** The dialect with `restrict` run after its own check. */

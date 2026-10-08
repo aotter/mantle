@@ -24,22 +24,41 @@ export class PgStoreExecutor implements StoreExecutor {
     private readonly timeoutMs?: number,
   ) {}
 
+  /**
+   * The printed form of an IR, once. A sealed plan's compiled statements (and the paged forms Core caches) are the same objects on
+   * every request, and `typed` + `print` is a pure function of the IR and this executor's schemas, so the WeakMap lives as long as the plan.
+   */
+  private readonly printed = new WeakMap<object, { text: string; returns: boolean }>();
+  /** ASTs already checked to hold no write; Core allowlists a View to one SELECT, this guards the executor on its own. */
+  private readonly readChecked = new WeakSet<object>();
+
+  private print(ir: StoreStatement["ir"]): { text: string; returns: boolean } {
+    let hit = this.printed.get(ir);
+    if (!hit) {
+      const ast = typed(ir, this.schemas);
+      this.printed.set(ir, (hit = { text: print(ast), returns: Boolean(ast[Object.keys(ast)[0]!]?.returningClause) }));
+    }
+    return hit;
+  }
+
   private prepared(s: StoreStatement, i = -1): PgStatement {
     if (s.binds.length > this.maxBindings) throw fail("INPUT_VALIDATION_FAILED", `a statement binds ${s.binds.length} values; the limit is ${this.maxBindings}`);
-    const ast = typed(s.ir, this.schemas);
-    if (s.expect === undefined) return { text: print(ast), values: s.binds };
+    if (s.expect === undefined) return { text: this.print(s.ir).text, values: s.binds };
     // printed into the SQL, so only a whole number; any other never matched a count, so it fails as a mismatch always did
     if (!Number.isSafeInteger(s.expect)) throw fail("CONFLICT", `CONFLICT op=${i}: the write matched a different number of rows than it expected`, { opIndex: i, reason: "expect" });
     // the count is checked by the statement itself, so nothing waits on it between statements: a data-modifying CTE always
     // runs to completion, and an aggregate without GROUP BY is one group even over no rows, so the guard always runs
-    const returns = Boolean(ast[Object.keys(ast)[0]!]?.returningClause);
-    const text = `WITH _mantle_w AS (${print(ast)}${returns ? "" : " RETURNING 1"}), _mantle_x AS (INSERT INTO _mantle_assert (ok) SELECT true FROM _mantle_w HAVING NOT _mantle_expect(count(*), ${s.expect})) SELECT * FROM _mantle_w`;
+    const { text: inner, returns } = this.print(s.ir);
+    const text = `WITH _mantle_w AS (${inner}${returns ? "" : " RETURNING 1"}), _mantle_x AS (INSERT INTO _mantle_assert (ok) SELECT true FROM _mantle_w HAVING NOT _mantle_expect(count(*), ${s.expect})) SELECT * FROM _mantle_w`;
     return { text, values: s.binds, ...(returns ? {} : { discardRows: true }) };
   }
 
   async select(statement: StoreStatement): Promise<readonly StoreRow[]> {
     // a read is a bare statement now, no READ ONLY transaction behind the allowlist: one that writes is refused here too
-    if (writes(statement.ir)) throw fail("INPUT_VALIDATION_FAILED", "SQL_WRITE: a read cannot write");
+    if (!this.readChecked.has(statement.ir)) {
+      if (writes(statement.ir)) throw fail("INPUT_VALIDATION_FAILED", "SQL_WRITE: a read cannot write");
+      this.readChecked.add(statement.ir);
+    }
     const s = this.prepared(statement);
     return (await query(this.connect, s).catch((e) => this.mapped(e, "select"))).rows;
   }

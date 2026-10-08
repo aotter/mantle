@@ -65,9 +65,14 @@ function mapped(e: unknown, kind: "select" | "apply", writes: readonly (string |
 export class SqliteStoreExecutor implements StoreExecutor {
   constructor(private readonly driver: DatabaseDriver, readonly maxBindings = 100) {}
 
+  /** The printed form of an IR, once: a sealed plan's compiled statements are the same objects on every request (see PgStoreExecutor). */
+  private readonly printed = new WeakMap<object, string>();
+
   private prepared(s: Statement): SqlStatement {
     if (s.binds.length > this.maxBindings) throw fail("INPUT_VALIDATION_FAILED", `a statement binds ${s.binds.length} values; the limit is ${this.maxBindings}`);
-    return { sql: print(s.ir), binds: s.binds };
+    let sql = this.printed.get(s.ir);
+    if (sql === undefined) this.printed.set(s.ir, (sql = print(s.ir)));
+    return { sql, binds: s.binds };
   }
 
   async select(statement: Statement): Promise<readonly StoreRow[]> {
