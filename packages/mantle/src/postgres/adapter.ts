@@ -4,7 +4,7 @@ import { restricted, type MantleDialect, type RestrictSql } from "../core/dialec
 import type { MantleStorageAdapter } from "../core/service.js";
 import { decodeOutput, encodeInput } from "./codec.js";
 import { name, version } from "./compile/index.js";
-import { sessionProblems, type PgConnect } from "./driver.js";
+import { bootRead, type PgConnect } from "./driver.js";
 import { PgStoreExecutor } from "./executor.js";
 import { pgLowering } from "./lower.js";
 import { bindBox } from "../d1/lower.js";
@@ -52,10 +52,10 @@ export function postgresStorage(options: PostgresStorageOptions): MantleStorageA
   return {
     dialect: restricted(postgresDialect(options.timeZone), options.restrict),
     async prepare(plan) {
-      const settings = await sessionProblems(options.connect, ms);
+      const { problems: settings, booted } = await bootRead(options.connect, ms);
       if (settings.length)
         throw new DiagnosticError(settings.map((message) => makeDiagnostic({ code: "STORAGE_CHANGE_BLOCKED", phase: "boot", severity: "error", path: "storage:settings", message })));
-      const report = await convergeStorage(options.connect, plan.schemas, { fingerprint: plan.fingerprint });
+      const report = await convergeStorage(options.connect, plan.schemas, { fingerprint: plan.fingerprint, booted });
       if (report.blocked.length)
         throw new DiagnosticError(report.blocked.map((b) => makeDiagnostic({ code: b.code === "STORAGE_TABLE_NOT_OWNED" ? "STORAGE_TABLE_NOT_OWNED" : "STORAGE_CHANGE_BLOCKED", phase: "boot", severity: "error", path: `storage:${b.schema}`, message: b.message })));
       for (const u of report.undeclared) console.warn(`[mantle storage] ${u.code}: ${u.message}`);

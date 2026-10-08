@@ -7,7 +7,7 @@
  * A transaction only where atomicity needs one (#1379): a read is one bare statement, one round trip. A write batch is
  * BEGIN … COMMIT; a client that pipelines (node-postgres `new Client({ pipeline: true })`) gets all of it written before the
  * first answer is read, one round trip, and one that does not takes N + 2. Nothing depends on per-transaction session state:
- * what decoding needs is the role's or the database's configuration, checked once at boot (`sessionProblems`).
+ * what decoding needs is the role's or the database's configuration, checked once at boot (`bootRead`).
  */
 import type { DatabaseDriver, SqlResult, SqlStatement } from "../core/driver.js";
 import { decodeField } from "./codec.js";
@@ -118,7 +118,7 @@ export async function query(connect: PgConnect, s: PgStatement): Promise<PgOutco
 }
 
 /**
- * What decoding and the statement limit need from the server, read once at boot in one statement: anything returned is a
+ * What decoding and the statement limit need from the server, and the converged fingerprint, read once at boot in one statement: anything returned is a
  * problem with the fix an operator runs. Role or database configuration, never `SET` per transaction: Hyperdrive resets a
  * pooled session to exactly that configuration, and a bare read has no transaction to pin anything in.
  * - DateStyle ISO and IntervalStyle postgres: the text `decodeField` parses. extra_float_digits >= 1: shortest exact floats.
@@ -127,18 +127,25 @@ export async function query(connect: PgConnect, s: PgStatement): Promise<PgOutco
  *   and timestamptz, explicit or implicit, is taken in the session's zone, and an author's SQL cannot be checked for those casts.
  * - statement_timeout: a read is bounded by the role's limit, so it must be set and at most Mantle's (0 asks for none).
  */
-export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<string[]> {
+export async function bootRead(connect: PgConnect, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<{ problems: string[]; booted: string | null }> {
   const client = await connect();
   try {
     // the driver's own types, int4 and bool only
-    const [r] = (await client.query({ text: `SELECT quote_ident(current_user) AS role, quote_ident(current_database()) AS db,
+    const settings = `SELECT quote_ident(current_user) AS role, quote_ident(current_database()) AS db,
       current_setting('DateStyle') AS datestyle, current_setting('IntervalStyle') AS intervalstyle,
       current_setting('extra_float_digits')::int4 AS float_digits, current_setting('standard_conforming_strings') AS scs,
       (SELECT setting::int4 FROM pg_settings WHERE name = 'statement_timeout') AS timeout_ms, current_setting('TimeZone') AS tz,
-      (SELECT bool_and(extract(timezone FROM t) = 0) FROM unnest('{1900-01-01 00:00+00, 1970-01-01 00:00+00, 2000-01-01 00:00+00, 2000-07-01 00:00+00}'::timestamptz[]) t) AS utc` })).rows as Record<string, any>[];
+      (SELECT bool_and(extract(timezone FROM t) = 0) FROM unnest('{1900-01-01 00:00+00, 1970-01-01 00:00+00, 2000-01-01 00:00+00, 2000-07-01 00:00+00}'::timestamptz[]) t) AS utc`;
+    // the converged state rides along in the same statement; a database never booted has no table, which fails the statement
+    // (42P01) and costs the first boot one more round trip, once
+    const booted = ", (SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint') AS booted";
+    const [r] = (await client.query({ text: settings + booted }).catch((e) => {
+      if (sqlState(e) !== "42P01") throw e;
+      return client.query({ text: settings });
+    })).rows as Record<string, any>[];
     const fix = (name: string, value: string) => `ALTER ROLE ${r!.role} SET ${name} = '${value}' (or ALTER DATABASE ${r!.db} SET …); new connections read it`;
     const ms = Math.max(0, Math.floor(timeoutMs));
-    return [
+    const problems = [
       ...(/^ISO\b/i.test(r!.datestyle) ? [] : [`DateStyle is '${r!.datestyle}'; Mantle reads dates as ISO text: ${fix("DateStyle", "ISO, YMD")}`]),
       ...(r!.intervalstyle === "postgres" ? [] : [`IntervalStyle is '${r!.intervalstyle}'; Mantle reads intervals as PostgreSQL text: ${fix("IntervalStyle", "postgres")}`]),
       ...(r!.float_digits >= 1 ? [] : [`extra_float_digits is ${r!.float_digits}, which rounds float8 values: ${fix("extra_float_digits", "1")}`]),
@@ -147,6 +154,7 @@ export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_
       ...(!ms || (r!.timeout_ms > 0 && r!.timeout_ms <= ms) ? [] :
         [`statement_timeout is ${r!.timeout_ms ? `${r!.timeout_ms} ms` : "unset"}; a read runs outside a transaction under the role's limit, which must be at most ${ms} ms (statementTimeoutMs): ${fix("statement_timeout", `${ms}ms`)}`]),
     ];
+    return { problems, booted: typeof r!.booted === "string" ? r!.booted : null };
   } finally { await client.end().catch(() => undefined); }
 }
 
