@@ -1,10 +1,13 @@
 /**
  * The PostgreSQL connection port. Structural types of node-postgres (`pg`), so Mantle depends on no driver: the host passes
  * `connect`, which opens one client (`new Client(env.HYPERDRIVE.connectionString)` on Workers, where Hyperdrive pools the
- * connections and a socket must not outlive its request). Every operation opens a client and ends it.
+ * connections and a socket must not outlive its request). Every operation opens a client and ends it; `requestScoped`
+ * (session.ts) makes that one client per request.
  *
- * ponytail: a client per operation, statements sent one at a time (pg does not pipeline). Upgrade to one client per request,
- * or a pipelining driver, when a Procedure's round trips show in latency.
+ * A transaction only where atomicity needs one (#1379): a read is one bare statement, one round trip. A write batch is
+ * BEGIN … COMMIT; a client that pipelines (node-postgres `new Client({ pipeline: true })`) gets all of it written before the
+ * first answer is read, one round trip, and one that does not takes N + 2. Nothing depends on per-transaction session state:
+ * what decoding needs is the role's or the database's configuration, checked once at boot (`sessionProblems`).
  */
 import type { DatabaseDriver, SqlResult, SqlStatement } from "../core/driver.js";
 import { decodeField } from "./codec.js";
@@ -12,6 +15,8 @@ import { decodeField } from "./codec.js";
 export interface PgField { readonly name: string; readonly dataTypeID: number; readonly dataTypeModifier?: number }
 export interface PgResult { readonly rows: Record<string, unknown>[]; readonly rowCount: number | null; readonly fields: readonly PgField[] }
 export interface PgClient {
+  /** node-postgres pipeline mode: queries issued without awaiting share the wire. */
+  readonly pipeline?: boolean;
   /** A native transport without RowDescription can execute a dialect-supplied result description. */
   readonly temporaryResultMetadata?: boolean;
   execute?(statement: PgStatement): Promise<PgOutcome>;
@@ -19,6 +24,8 @@ export interface PgClient {
   /** The positional form Kysely (Better Auth) calls. */
   query(text: string, values?: readonly unknown[]): Promise<PgResult & { command: string }>;
   end(): Promise<void>;
+  /** node-postgres: the last ReadyForQuery's state, `I` idle, `T` in a transaction, `E` in a failed one. */
+  getTransactionStatus?(): string | null;
 }
 /** Opens one connected client. */
 export type PgConnect = () => Promise<PgClient>;
@@ -51,36 +58,47 @@ async function run(client: PgClient, s: PgStatement): Promise<PgOutcome> {
 }
 
 const SERIALIZATION = new Set(["40001", "40P01"]);
-/**
- * What every wire value is decoded under, whatever the server's defaults: ISO dates, PostgreSQL interval text, shortest exact
- * floats, UTC. `SET LOCAL` inside the transaction, because Hyperdrive pools connections per transaction.
- */
-const PINNED = "SET LOCAL DateStyle = 'ISO, YMD'; SET LOCAL IntervalStyle = 'postgres'; SET LOCAL extra_float_digits = 1; SET LOCAL TimeZone = 'UTC'; " +
-  // pg_temp named last: a temporary table on a pooled session never stands in for a Schema table of the same name
-  "SELECT set_config('search_path', concat_ws(', ', nullif(current_setting('search_path'), ''), 'pg_temp'), true)";
 /** ADR-0037 decision 5: a statement that runs away (a recursive CTE, a regular expression) ends here. 0 is no limit. */
 export const STATEMENT_TIMEOUT_MS = 10_000;
-const pinned = (timeoutMs: number) => `${PINNED}; SET LOCAL statement_timeout = ${Math.max(0, Math.floor(timeoutMs))}`;
+/**
+ * A transaction's first message, still one round trip. A write's own limit is `SET LOCAL` (convergence lifts it to build
+ * indexes); a read has the role's, which boot checked. pg_temp is named last for a transport that describes results through
+ * a temporary table (Bun.SQL): one on a pooled session never stands in for a Schema table of the same name.
+ */
+const begin = (client: PgClient, head: string, timeoutMs: number) => `${head}; SET LOCAL statement_timeout = ${Math.max(0, Math.floor(timeoutMs))}` +
+  (client.temporaryResultMetadata ? "; SELECT set_config('search_path', concat_ws(', ', nullif(current_setting('search_path'), ''), 'pg_temp'), true)" : "");
 const ATTEMPTS = 5;
 
 /**
  * Statements in one SERIALIZABLE transaction, all or nothing. SERIALIZABLE keeps what SQLite's one writer gave every guard
  * (`WHERE NOT EXISTS`, a first sign-up becoming owner): a concurrent write that would break one fails with 40001 and the
- * whole batch is retried. `check` runs after each statement and may throw to roll everything back.
+ * whole batch is retried. A write's `expect` is checked inside its own statement (executor.ts), so nothing waits between them.
  */
-export async function transaction(connect: PgConnect, statements: readonly PgStatement[], check?: (i: number, outcome: PgOutcome) => void, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome[]> {
+export async function transaction(connect: PgConnect, statements: readonly PgStatement[], timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome[]> {
   for (let attempt = 1; ; attempt++) {
+    // a retry waits a random while first: writers that failed together, retried at once, collide again (a pipelined batch,
+    // one round trip long, does so every time) and run out of attempts
+    if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, Math.random() * 10 * 2 ** attempt));
     const client = await connect();
+    if (client.pipeline && statements.every((s) => (s.values ?? []).every(wire))) {
+      try {
+        return await pipelined(client, begin(client, "BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs), statements);
+      } catch (e) {
+        if (SERIALIZATION.has(sqlState(e) ?? "") && attempt < ATTEMPTS) continue;
+        throw e;
+      } finally {
+        await client.end().catch(() => undefined);
+      }
+    }
     let failedAt = -1;
     let committing = false;
     try {
-      await client.query({ text: `BEGIN ISOLATION LEVEL SERIALIZABLE; ${pinned(timeoutMs)}` });
+      await client.query({ text: begin(client, "BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs) });
       const out: PgOutcome[] = [];
       for (const [i, s] of statements.entries()) {
         failedAt = i;
         out.push(await run(client, s));
         failedAt = -1;
-        check?.(i, out[i]!);
       }
       committing = true;
       await client.query({ text: "COMMIT" });
@@ -97,14 +115,18 @@ export async function transaction(connect: PgConnect, statements: readonly PgSta
 }
 
 /**
- * One read on its own client, in a read-only transaction: the settings are pinned, and Hyperdrive never answers a read
- * inside a transaction from its cache, so a read sees the write before it.
- * ponytail: three round trips (BEGIN, the read, COMMIT); a pipelining driver sends them as one.
+ * One read: one statement in autocommit, which is a transaction of its own, one round trip. It runs under the session's
+ * settings and statement_timeout, which boot checked; a read sees the write before it because the Hyperdrive config has
+ * caching disabled (the generated preset creates it so, since Better Auth's reads were never in a transaction either).
+ * A transport that describes results through a temporary table (Bun.SQL) still needs a transaction to drop it in.
  */
 export async function query(connect: PgConnect, s: PgStatement, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome> {
   const client = await connect();
+  if (!client.temporaryResultMetadata) {
+    try { return await run(client, s); } finally { await client.end().catch(() => undefined); }
+  }
   try {
-    await client.query({ text: `BEGIN${client.temporaryResultMetadata ? "" : " READ ONLY"}; ${pinned(timeoutMs)}` });
+    await client.query({ text: begin(client, "BEGIN", timeoutMs) });
     const out = await run(client, { ...s, readOnly: true });
     await client.query({ text: "COMMIT" });
     return out;
@@ -112,6 +134,64 @@ export async function query(connect: PgConnect, s: PgStatement, timeoutMs = STAT
     await client.query({ text: "ROLLBACK" }).catch(() => undefined);
     throw e;
   } finally { await client.end().catch(() => undefined); }
+}
+
+/**
+ * What decoding and the statement limit need from the server, read once at boot in one statement: anything returned is a
+ * problem with the fix an operator runs. Role or database configuration, never `SET` per transaction: Hyperdrive resets a
+ * pooled session to exactly that configuration, and a bare read has no transaction to pin anything in.
+ * - DateStyle ISO and IntervalStyle postgres: the text `decodeField` parses. extra_float_digits >= 1: shortest exact floats.
+ * - standard_conforming_strings on: a backslash in a printed literal is a backslash, never an escape.
+ * - TimeZone UTC: not for decoding (`decodeField` reads any offset PostgreSQL prints) but for meaning, since a cast between date
+ *   and timestamptz, explicit or implicit, is taken in the session's zone, and D1 takes it in UTC.
+ * - statement_timeout: a read is bounded by the role's limit, so it must be set and at most Mantle's (0 asks for none).
+ */
+export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<string[]> {
+  const client = await connect();
+  try {
+    // the driver's own types, int4 and bool only: every transport parses them alike, and Bun.SQL describes nothing outside a transaction
+    const [r] = (await client.query({ text: `SELECT quote_ident(current_user) AS role, quote_ident(current_database()) AS db,
+      current_setting('DateStyle') AS datestyle, current_setting('IntervalStyle') AS intervalstyle,
+      current_setting('extra_float_digits')::int4 AS float_digits, current_setting('standard_conforming_strings') AS scs,
+      (SELECT setting::int4 FROM pg_settings WHERE name = 'statement_timeout') AS timeout_ms, current_setting('TimeZone') AS tz,
+      (SELECT bool_and(extract(timezone FROM t) = 0) FROM unnest('{1900-01-01 00:00+00, 1970-01-01 00:00+00, 2000-01-01 00:00+00, 2000-07-01 00:00+00}'::timestamptz[]) t) AS utc` })).rows as Record<string, any>[];
+    const fix = (name: string, value: string) => `ALTER ROLE ${r!.role} SET ${name} = '${value}' (or ALTER DATABASE ${r!.db} SET …); new connections read it`;
+    const ms = Math.max(0, Math.floor(timeoutMs));
+    return [
+      ...(/^ISO\b/i.test(r!.datestyle) ? [] : [`DateStyle is '${r!.datestyle}'; Mantle reads dates as ISO text: ${fix("DateStyle", "ISO, YMD")}`]),
+      ...(r!.intervalstyle === "postgres" ? [] : [`IntervalStyle is '${r!.intervalstyle}'; Mantle reads intervals as PostgreSQL text: ${fix("IntervalStyle", "postgres")}`]),
+      ...(r!.float_digits >= 1 ? [] : [`extra_float_digits is ${r!.float_digits}, which rounds float8 values: ${fix("extra_float_digits", "1")}`]),
+      ...(r!.utc ? [] : [`TimeZone is '${r!.tz}'; Mantle casts between dates and instants in UTC, as D1 does: ${fix("TimeZone", "UTC")}`]),
+      ...(r!.scs === "on" ? [] : [`standard_conforming_strings is off: ${fix("standard_conforming_strings", "on")}`]),
+      // a transport that reads in a transaction (Bun.SQL) pins its own limit there
+      ...(client.temporaryResultMetadata || !ms || (r!.timeout_ms > 0 && r!.timeout_ms <= ms) ? [] :
+        [`statement_timeout is ${r!.timeout_ms ? `${r!.timeout_ms} ms` : "unset"}; a read runs outside a transaction under the role's limit, which must be at most ${ms} ms (statementTimeoutMs): ${fix("statement_timeout", `${ms}ms`)}`]),
+    ];
+  } finally { await client.end().catch(() => undefined); }
+}
+
+/**
+ * A bind node-postgres encodes without throwing. One it throws on fails on the client after Parse: it sends Close and Sync, the
+ * server never sees an error, and a pipelined COMMIT would commit the statements around it. Such a batch goes one at a time.
+ */
+const wire = (v: unknown) => v == null || ["string", "number", "boolean", "bigint"].includes(typeof v) || v instanceof Date || ArrayBuffer.isView(v);
+
+/**
+ * BEGIN, every statement and COMMIT written at once. Each is its own Sync, so a failure the server answers leaves the
+ * transaction aborted: the statements after it fail with 25P02 and COMMIT answers ROLLBACK, which ends it, so no ROLLBACK
+ * follows. The first failure is the one reported, with its statement. A failure without a SQLSTATE is the socket's, and COMMIT
+ * was already written: whether it ran is unknown (`committing`), wherever the first rejection landed.
+ */
+async function pipelined(client: PgClient, begin: string, statements: readonly PgStatement[]): Promise<PgOutcome[]> {
+  const settled = await Promise.allSettled([
+    client.query({ text: begin }),
+    ...statements.map((s) => run(client, s)),
+    client.query({ text: "COMMIT" }),
+  ]);
+  const failed = settled.findIndex((r) => r.status === "rejected");
+  if (failed === -1) return settled.slice(1, -1).map((r) => (r as PromiseFulfilledResult<PgOutcome>).value);
+  const e = (settled[failed] as PromiseRejectedResult).reason;
+  throw Object.assign(e as object, { statement: failed >= 1 && failed <= statements.length ? failed - 1 : -1, committing: failed === statements.length + 1 || !sqlState(e) });
 }
 
 /** `?1` binds (Mantle's portable SQL) as PostgreSQL's `$1`, outside quoted strings and names. */

@@ -121,7 +121,7 @@ diff without applying it, for the `sqlite` dialect; see [Deploy and operate](../
 ### PostgreSQL on Cloudflare
 
 `mantle generate --dialect postgres` writes the same preset over Hyperdrive:
-`src/service.ts` opens a `pg` client per operation from `env.HYPERDRIVE`, and
+`src/service.ts` opens one `pg` client per request from `env.HYPERDRIVE`, and
 `wrangler.jsonc` binds `HYPERDRIVE` with a placeholder id and a
 `localConnectionString` for `wrangler dev`. Before deploying, create the config
 with caching off and put its id in place of the placeholder; generate warns
@@ -129,6 +129,14 @@ until you do:
 
 ```sh
 wrangler hyperdrive create my-app --caching-disabled --connection-string="postgres://user:pass@host:5432/db"
+```
+
+Reads run under the role's own statement limit, so give it one, and UTC, before
+the first boot (locally too); the boot error names any other setting:
+
+```sql
+ALTER ROLE app SET statement_timeout = '10s';
+ALTER ROLE app SET TimeZone = 'UTC';
 ```
 
 ## 0.1.x projects

@@ -78,8 +78,9 @@ On PostgreSQL a View may also use:
 | Time | `ts AT TIME ZONE 'Asia/Taipei'`; `date_trunc` adds `minute` and `quarter`; `extract` adds `minute`, `quarter`, `week`, `isoyear`, `isodow`, `doy`, `epoch` |
 | Casts | any expression to `int4`, `int8`, `numeric(p, s)`, `date`, `timestamptz`, `jsonb`; a text literal compared with a date-time column is cast, as PostgreSQL does |
 
-Every statement on PostgreSQL has a 10-second `statement_timeout`
-(`postgresStorage({ statementTimeoutMs })`).
+Every statement on PostgreSQL has a `statement_timeout` of at most 10 seconds
+(`postgresStorage({ statementTimeoutMs })`); a View runs under the role's own,
+which boot requires to be set and no larger.
 
 ### Reading another View
 

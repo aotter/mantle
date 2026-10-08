@@ -59,6 +59,8 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     "  // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers",
     '  const rest = guard(createRestSurface(runtime, { basePath: "/api" }));',
   ];
+  const scoped = postgres && !bun;
+  const call = `(routes ??= mount(runtime${withEnv ? ", env" : ""}))(request${mantle ? ", waitUntil" : ""})`;
   const route = [
     `  return async (request: Request${mantle ? ", waitUntil: (promise: Promise<unknown>) => void" : ""}): Promise<Response> => {`,
     "    const { pathname } = new URL(request.url);",
@@ -82,7 +84,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     ...(bun
       ? [postgres ? 'import type { SQL } from "bun";' : 'import type { Database } from "bun:sqlite";', `import { ${postgres ? 'bunPostgresStorage' : 'bunSqliteStorage'}${mantle ? (postgres ? ', bunDatabaseDriver, bunAuthDatabase' : ', bunSqliteDriver') : ''} } from "@aotter/mantle/bun";`]
       : postgres
-      ? [`import { ${mantle ? "pgDatabaseDriver, pgPool, " : ""}postgresStorage, type PgClient, type PgConnect } from "@aotter/mantle/postgres";`, 'import pg from "pg";']
+      ? [`import { ${mantle ? "pgDatabaseDriver, pgPool, " : ""}postgresStorage, requestScoped, type PgClient, type PgSession } from "@aotter/mantle/postgres";`, 'import pg from "pg";']
       : [`import { ${mantle ? "d1Driver, " : ""}d1Storage } from "@aotter/mantle/cloudflare";`]),
     ...(mcp ? [`import { createMcpSurface${staffMcp ? ", planApp" : ""} } from "@aotter/mantle/mcp";`] : []),
     ...(staffMcp ? ['import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";'] : []),
@@ -96,12 +98,17 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     "}",
     "",
     ...(postgres && !bun ? [
-      "/** A client per operation: Hyperdrive keeps the pool, and a Worker's socket must not outlive its request. */",
-      'const connectTo = (env: Pick<Env, "HYPERDRIVE">): PgConnect => async () => {',
+      "/**",
+      " * One client per request (`database(env).run` in fetch below): Hyperdrive keeps the pool, and a Worker's socket must not",
+      " * outlive its request. Work outside a request (boot, schedules) opens a client per operation.",
+      " */",
+      "let session: PgSession | undefined;",
+      'const database = (env: Pick<Env, "HYPERDRIVE">) => (session ??= requestScoped(async () => {',
+      "  // pg's `pipeline: true` sends a write batch in one round trip; it stays off until Hyperdrive is verified to forward it (#1379)",
       "  const client = new pg.Client({ connectionString: env.HYPERDRIVE.connectionString });",
       "  await client.connect();",
       "  return client as unknown as PgClient;",
-      "};",
+      "}));",
       "",
     ] : []),
     ...(mantle ? [
@@ -115,7 +122,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
       bun
         ? postgres ? '    database: bunAuthDatabase(env.SQL), driver: bunDatabaseDriver(env.SQL), baseURL: origin, secret: env.BETTER_AUTH_SECRET,' : "    database: env.DB, driver: bunSqliteDriver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
         : postgres
-        ? "    database: pgPool(connectTo(env)), driver: pgDatabaseDriver(connectTo(env)), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
+        ? "    database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
         : "    database: env.DB, driver: d1Driver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,",
       '    methods: [{ kind: "email-otp", sender: new ConsoleEmailSender() }],',
       '    bootstrapOwner: { match: "email", value: env.ADMIN_EMAIL },',
@@ -141,14 +148,11 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     "let routes: ReturnType<typeof mount> | undefined;",
     "const service: MantleService<Env> = {",
     "  handlers,",
-    mantle
-      ? "  fetch: (request, env, { runtime, waitUntil }) => (routes ??= mount(runtime, env))(request, waitUntil),"
-      : withEnv
-        ? "  fetch: (request, env, { runtime }) => (routes ??= mount(runtime, env))(request),"
-        : "  fetch: (request, _env, { runtime }) => (routes ??= mount(runtime))(request),",
+    // over PostgreSQL on Workers, a request is the unit of work: one client for all of its queries
+    `  fetch: (request, ${scoped || withEnv ? "env" : "_env"}, { runtime${mantle ? ", waitUntil" : ""} }) => ${scoped ? `database(env).run(() => ${call})` : call},`,
     "};",
     "",
-    `export const mantle = createMantle(service, { plan, storage: (env) => ${bun ? (postgres ? "bunPostgresStorage(env.SQL)" : "bunSqliteStorage(env.DB)") : postgres ? "postgresStorage({ connect: connectTo(env) })" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
+    `export const mantle = createMantle(service, { plan, storage: (env) => ${bun ? (postgres ? "bunPostgresStorage(env.SQL)" : "bunSqliteStorage(env.DB)") : postgres ? "postgresStorage({ connect: database(env).connect })" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
     "",
   ].join("\n");
 }
@@ -226,8 +230,8 @@ function wrangler(root: string, plan: RuntimePlan, admin: boolean, dialect: Pres
   return json({
     $schema: "node_modules/wrangler/config-schema.json", name, main: "src/index.ts", compatibility_date: "2026-09-01", compatibility_flags: ["nodejs_compat"],
     ...(dialect === "postgres"
-      // `wrangler hyperdrive create <name> --caching-disabled --connection-string=...` prints the id: Mantle reads in transactions,
-      // which Hyperdrive never caches, but Better Auth's session reads are not, so caching stays off
+      // `wrangler hyperdrive create <name> --caching-disabled --connection-string=...` prints the id: reads run outside a
+      // transaction (Mantle's and Better Auth's), which Hyperdrive would answer from its cache, so caching stays off
       ? { hyperdrive: [{ binding: "HYPERDRIVE", id: "REPLACE_WITH_HYPERDRIVE_CONFIG_ID", localConnectionString: LOCAL_PG(name) }] }
       : { d1_databases: [{ binding: "DB", database_name: name }] }),
     // the Worker answers every request (Admin serves the shell with its own headers); `none` keeps index.html fetchable by name
