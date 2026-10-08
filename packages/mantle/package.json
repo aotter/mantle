@@ -113,7 +113,8 @@
     "pg": "8.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "4.126.0",
+    "@cloudflare/workers-types": "^5.20261008.1",
+    "wrangler": "4.137.0",
     "@types/semver": "^7.7.1"
   },
   "peerDependencies": {
