@@ -365,3 +365,20 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 ## Implementation status
 
 Proposed. Nothing in decisions 1–13 is implemented beyond the ADR-0030 slices already on `develop`.
+
+## 2026-10-08 amendment — optional staff media MCP
+
+Issue #1384 restores the pre-consolidation media lifecycle without adding
+Schema CRUD or a new Runtime path. `createMcpSurface` may receive `media:
+MediaStorage`; only a staff surface with `runtime.site` advertises the native
+media policy/create/commit/list/get/update/delete tools. They delegate to the
+same `runtime.site.media(media)` library as Admin and use its editor/owner
+permission, purpose/type/size validation, expiry and object verification.
+The surface retains its shared credential scope floor and invocation
+observations; a collision with a manifest Procedure/View fails at assembly.
+Media bytes remain direct PUT capabilities. The deliberately removed base64
+variant-upload tool is not restored. No grammar, portable Runtime execution,
+storage schema or provider ownership changes. Application-owned/generated
+service files pass their chosen adapter to both Admin and staff MCP; the
+preset cannot invent object-storage credentials. Admin WebMCP continues to
+list manifest tools; its native media operations remain REST-backed.

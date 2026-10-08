@@ -1,14 +1,15 @@
 /**
- * The MCP surface (ADR-0032 decision 9): a Fetch function over the runtime. Tools come only from Procedures (through an `mcp`
- * Trigger) and Views, never from a Schema. A Procedure's tool is `invokeProcedure`; a View's tool is `store.as(caller).view`, so both
+ * The MCP surface (ADR-0032 decision 9): a Fetch function over the runtime. Plan tools come from Procedures (through an `mcp`
+ * Trigger) and Views, never from a Schema; optional staff media tools use the existing site library. A Procedure's tool is `invokeProcedure`; a View's tool is `store.as(caller).view`, so both
  * run the same auth, guard and validation as every other source.
  */
 import { McpServer, createMcpHandler, fromJsonSchema, isJsonContentType, readRequestBody, type AuthInfo, type CallToolResult, type JsonSchemaType, type JsonSchemaValidator, type StandardSchemaWithJSON, type jsonSchemaValidator } from "@modelcontextprotocol/server";
 import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import { DiagnosticError, makeDiagnostic, redactForWire, type Diagnostic } from "../spec/kernel/index.js";
 import { mcpTools, type AuthPredicate, type AuthorizationRequirements, type JsonSchema, type McpTool } from "../spec/domain/index.js";
-import { evaluateAuthAll, type Caller, type MantleRuntime, type Surface } from "../core/index.js";
+import { evaluateAuthAll, type Caller, type MantleRuntime, type MediaStorage, type Surface } from "../core/index.js";
 import { appHtml, appMeta, clientUiSupport, linkApps, type ClientUiSupport, type McpApps } from "./apps.js";
+import { mediaTools, type MediaMcpTool } from "./media.js";
 import { observe } from "../core/observation.js";
 
 export type McpObservation =
@@ -31,6 +32,8 @@ export interface McpSurfaceOptions {
   readonly maxRequestBodySize?: number;
   /** Language tried first when a description is localized. Defaults to `en`. */
   readonly locale?: string;
+  /** Optional staff media tools. Needs runtime.site and shares its library with Admin; never enabled on public MCP. */
+  readonly media?: MediaStorage;
   /**
    * The scope floor (ADR-0014): every presented credential but a cookie session must carry these before any tool is listed or called,
    * so a token minted for a narrow integration never reaches a tool. Defaults to the one compatibility scope, `["mcp"]`.
@@ -61,13 +64,15 @@ const failure = (d: Diagnostic, hasOutputSchema: boolean): CallToolResult => {
 export const APP_TOOL_META_KEY = "net.aotter.mantle/tool";
 
 /** The surface and the tools it registers for a client without MCP Apps, in its locale. */
-export type McpSurface = Surface & { readonly tools: readonly McpTool[] };
+export type McpSurface = Surface & { readonly tools: readonly (McpTool | MediaMcpTool)[] };
 
 export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOptions): McpSurface {
   const base = options.basePath.replace(/\/+$/, "") || "/";
   const maxBody = options.maxRequestBodySize ?? 1024 * 1024;
   const requiredScopes = options.requiredScopes ?? ["mcp"];
-  const tools = mcpTools(runtime.plan, options.surface, options.locale ?? "en");
+  const library = options.surface === "staff" && options.media && runtime.site?.media(options.media);
+  const tools: (McpTool | MediaMcpTool)[] = [...mcpTools(runtime.plan, options.surface, options.locale ?? "en"), ...(library ? mediaTools(library, runtime.site!) : [])];
+  if (new Set(tools.map((t) => t.name)).size !== tools.length) throw new TypeError("MCP media tool name collides with a declared Procedure or View.");
   const byName = new Map(tools.map((t) => [t.name, t]));
   // a surface whose every tool needs identity is closed to anonymous from `initialize` on, as the staff surface is: a client
   // decides whether to sign in when it connects, so a 401 that waits for the first tool call never shows it a sign-in. A
@@ -115,6 +120,11 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
         let outcome: "succeeded" | "failed" | "denied" = "succeeded";
         let code: Diagnostic["code"] | undefined;
         try {
+          if (tool.kind === "media") {
+            const denied = evaluateAuthAll(tool.requires, caller, `MCP ${tool.name}`);
+            if (denied) throw new DiagnosticError(denied);
+            return result(await tool.run(input));
+          }
           if (tool.kind === "procedure") return result(await runtime.invokeProcedure({ procedure: tool.source, input, caller, cause }));
           const { limit, cursor, ...rest } = input;
           return result(await runtime.store.as(caller, cause).view(tool.source, { input: rest, ...(limit !== undefined ? { limit: limit as number } : {}), ...(cursor !== undefined ? { cursor: cursor as string } : {}) }));
