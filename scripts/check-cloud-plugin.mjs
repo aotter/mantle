@@ -13,7 +13,7 @@ const helper = join(skill, 'scripts/mantle-cloud.mjs');
 const provenance = JSON.parse(readFileSync(join(skill, 'scripts/VENDORED.json'), 'utf8'));
 assert.deepEqual(Object.keys(provenance).sort(), ['artifact', 'protocol', 'sha256']);
 assert.equal(provenance.artifact, 'cloud-host.mjs');
-assert.equal(provenance.protocol, 5);
+assert.equal(provenance.protocol, 6);
 assert.equal(createHash('sha256').update(readFileSync(join(skill, 'scripts/cloud-host.mjs'))).digest('hex'), provenance.sha256);
 
 const project = mkdtempSync(join(tmpdir(), 'mantle-plugin-consumer-'));
@@ -54,7 +54,9 @@ try {
   const commit = git('rev-parse', 'HEAD');
   const core = JSON.parse(readFileSync(join(root, 'packages/mantle/package.json'), 'utf8'));
   const pin = { version: core.version, revision: 'a'.repeat(40) };
-  const contract = { projectId, core: pin, protocol: { current: 5, minimum: 5 } };
+  const contract = { projectId, core: pin, protocol: { current: 6, minimum: 6 } };
+  assert.equal(failure(['pack', 'backend', '--contract', '-'], JSON.stringify({ ...contract, protocol: { current: 5, minimum: 5 } })).error, 'host_outdated');
+  assert.equal(failure(['pack', 'backend', '--contract', '-'], JSON.stringify({ ...contract, protocol: { current: 7, minimum: 7 } })).error, 'client_outdated');
   const packed = line(['pack', 'backend', '--contract', '-'], JSON.stringify({ content: [{ type: 'text', text: JSON.stringify({ ok: true, data: contract }) }] }));
   assert.equal(packed.cloud, 'not_checked');
   assert.equal(packed.commit, commit);
@@ -72,7 +74,7 @@ try {
   mkdirSync(join(project, '.mantle/host/kit'), { recursive: true });
   mkdirSync(join(project, 'dist'), { recursive: true });
   const candidateId = '0199aaaa-0000-7000-8000-000000000003';
-  writeFileSync(join(project, '.mantle/host/kit/kit.json'), JSON.stringify({ candidateId, contractHash: 'b'.repeat(64), coreVersion: pin.version, coreRevision: pin.revision }));
+  writeFileSync(join(project, '.mantle/host/kit/kit.json'), JSON.stringify({ candidateId, contractHash: 'b'.repeat(64), coreVersion: pin.version, coreRevision: pin.revision, protocol: contract.protocol }));
   const origin = 'https://plugin-check.mantle.tools';
   const frontendArgs = ['pack', 'frontend', '--kit', '.mantle/host/kit', '--candidate', candidateId, '--commit', commit, '--backend-sha256', artifact.sha256, '--origin', origin];
   writeFileSync(join(project, 'dist/index.html'), '<div id="root"></div>');
@@ -94,7 +96,7 @@ try {
   writeFileSync(join(project, '.env'), 'SYNTHETIC=not-real\n');
   git('add', '-f', '.env'); git('commit', '-m', 'Synthetic history guard');
   git('rm', '.env'); git('commit', '-m', 'Remove synthetic file');
-  assert.equal(failure(['source', '--project', projectId, '--grant', '-'], JSON.stringify({ authMode: 'http_extra_header', protocol: { current: 5, minimum: 5 } })).error, 'source_history_secret_path');
+  assert.equal(failure(['source', '--project', projectId, '--grant', '-'], JSON.stringify({ authMode: 'http_extra_header', protocol: { current: 6, minimum: 6 } })).error, 'source_history_secret_path');
   console.log('check-cloud-plugin: installed offline packer negotiates Cloud pin, preserves commit/hash identity, refuses wrong project and dirty source; MCP owns lifecycle');
 } finally {
   rmSync(project, { recursive: true, force: true });

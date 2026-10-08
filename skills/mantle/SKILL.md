@@ -94,7 +94,7 @@ project alone does not imply a deploy request. Self-hosting remains available.
   native deployment workflow.
 - **Mantle Cloud:** follow [Cloud workflow](references/cloud.md). The bundled
   `scripts/mantle-cloud.mjs` supports `check`, `prepare`, `source`, `open`, `pack backend`, `pack frontend` and `version`.
-  Cloud MCP owns source admission, polling, review, deploy and rollback. Run it by absolute path from the application root;
+  Cloud MCP owns source admission, review, durable deployment and rollback. After one accepted publication, read native status until terminal; do not advance each deployment step. Run the helper by absolute path from the application root;
   follow the discovered Cloud MCP schemas and the workflow reference;
   local pack output is not Cloud state. It uses the project's installed compiler and esbuild; it bundles
   no Core, SQL parser, provider credentials or application runtime.
