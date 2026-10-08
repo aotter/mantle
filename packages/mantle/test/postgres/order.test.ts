@@ -62,8 +62,17 @@ it.skipIf(!PG_URL)("a declared index and the default updated_at index serve page
     // a cursor (a value, then past the NULLs) keeps the index
     await served("SELECT id, amount FROM reqs ORDER BY amount", "_mantle_ix_reqs_0", { cursor: [7, "r000507"] });
     await served("SELECT id, amount FROM reqs ORDER BY amount DESC", "_mantle_ix_reqs_0", { cursor: [null, "r004990"] });
-    // a mixed-direction sort cannot ride the ascending index: it sorts, but still pages correctly
-    expect((await runView(s, await program("view", "SELECT id, amount FROM reqs ORDER BY amount, name DESC", {}, schemas), caller(), { pageSize: 2 })).rows.length).toBe(2);
+    // a mixed-direction sort cannot ride the ascending index: it sorts, but still pages correctly (paged equals unpaged)
+    const mixed = await program("view", "SELECT id, amount FROM reqs ORDER BY amount, name DESC", {}, schemas);
+    const whole = (await runView(s, mixed, caller())).rows.map((r) => r.id);
+    const walked: string[] = [];
+    for (let after; ;) {
+      const page = await runView(s, mixed, caller(), { pageSize: 333, ...(after ? { cursor: after } : {}) });
+      walked.push(...page.rows.map((r) => r.id));
+      if (!(after = page.next)) break;
+    }
+    expect(whole.length).toBe(5000);
+    expect(walked).toEqual(whole);
     // the default list order: updated_at descending (Admin), unscoped and scoped
     await served("SELECT id FROM reqs ORDER BY updated_at DESC", "_mantle_ix_reqs_updated");
     await served("SELECT id FROM notes ORDER BY updated_at DESC", "_mantle_ix_notes_updated");
@@ -89,12 +98,14 @@ it.skipIf(!PG_URL)("a database booted before the updated_at index gets it on the
     const plan = { name: "notes", names: {}, schema: { type: "object" }, ...notes };
     await convergeStorage(db.connect, { notes: plan }, { fingerprint: "X" });
     const c = await db.connect();
-    await c.query({ text: "DROP INDEX _mantle_ix_notes_updated" });
-    expect((await convergeStorage(db.connect, { notes: plan }, { fingerprint: "X" })).skipped).toBe(true);
-    // the layout version is part of the boot state: simulate a database booted by the previous layout
-    await c.query({ text: "UPDATE _mantle_boot_state SET value = split_part(value, '|', 1) || '|' || split_part(value, '|', 2) WHERE key = 'fingerprint'" });
-    expect((await convergeStorage(db.connect, { notes: plan }, { fingerprint: "X" })).skipped).toBe(false);
-    const r = await c.query({ text: "SELECT 1 FROM pg_indexes WHERE schemaname = current_schema() AND indexname = '_mantle_ix_notes_updated'" });
-    expect(r.rows.length).toBe(1);
+    try {
+      await c.query({ text: "DROP INDEX _mantle_ix_notes_updated" });
+      expect((await convergeStorage(db.connect, { notes: plan }, { fingerprint: "X" })).skipped).toBe(true);
+      // the layout version is part of the boot state: simulate a database booted by the previous layout
+      await c.query({ text: "UPDATE _mantle_boot_state SET value = split_part(value, '|', 1) || '|' || split_part(value, '|', 2) WHERE key = 'fingerprint'" });
+      expect((await convergeStorage(db.connect, { notes: plan }, { fingerprint: "X" })).skipped).toBe(false);
+      const r = await c.query({ text: "SELECT 1 FROM pg_indexes WHERE schemaname = current_schema() AND indexname = '_mantle_ix_notes_updated'" });
+      expect(r.rows.length).toBe(1);
+    } finally { await c.end(); }
   } finally { await db.drop(); }
 }, 60_000);

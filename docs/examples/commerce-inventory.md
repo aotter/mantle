@@ -321,7 +321,24 @@ Points worth noticing:
 - **`expired-orders` is `internal`:** callable only through
   `ctx.store.view` or `runtime.store`. SQL compares `expiresAt` with `now()`.
 - **`picking-list`** unnests order lines with `json_each`, the one comma join
-  the dialect allows.
+  the D1 dialect allows. This example's SQL is D1 (SQLite) SQL. On PostgreSQL
+  the same View reads:
+
+  ```sql
+  SELECT o.orderToken, o.customerName, o.shippingAddress,
+         item.value ->> 'productSlug' AS "productSlug",
+         item.value ->> 'title' AS "productTitle",
+         item.value ->> 'quantity' AS quantity
+  FROM orders o, jsonb_array_elements(o.items) WITH ORDINALITY AS item(value, n)
+  WHERE o.orderStatus = 'paid'
+  ORDER BY o.created_at, item.n LIMIT 200
+  ```
+
+  `jsonb_array_elements_text(o.items) WITH ORDINALITY AS j(value, n)` is the
+  form for text elements. A sorted View over a row source needs the alias and
+  `WITH ORDINALITY`; Mantle pages by `n`. The
+  [rewrite table](../handbook/concepts/runtime-and-adapters.md#the-postgresql-dialect)
+  lists the other SQLite spellings PostgreSQL refuses.
 
 ## Handlers
 

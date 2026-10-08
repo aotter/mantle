@@ -157,8 +157,11 @@ Using ChatGPT Sites? Follow [Mantle on ChatGPT Sites](docs/handbook/cloudflare/c
 | [The reference service](docs/examples/reference-service/README.md) | A whole service to read and run. |
 
 SQLite (D1) and PostgreSQL are the built-in dialects, PostgreSQL the
-reference; Cloudflare and Bun are the preset hosts. Upgrading from 0.1.x:
-[the upgrade guide](docs/upgrade-0.1-to-0.2.md).
+reference. Each dialect is its own target: a manifest is written in its
+dialect's SQL, and PostgreSQL uses node-postgres on every host. Cloudflare and
+Bun are the preset hosts. Upgrading from 0.1.x:
+[the upgrade guide](docs/upgrade-0.1-to-0.2.md); an existing PostgreSQL
+service also reads [the release notes](docs/handbook/releases/index.md).
 
 <details>
 <summary>Package reference</summary>

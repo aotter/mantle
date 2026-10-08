@@ -59,6 +59,9 @@ it("the cursor is a row comparison exactly when every key is NOT NULL and they s
     expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at DESC NULLS FIRST", ["2026-01-01T00:00:00Z", "a"])).toMatch(ROW);
     // the first page has no cursor to compare
     expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at", undefined)).not.toContain("_p._k0 >");
+    // a forged cursor (a null element, or the wrong length) cannot take the row form: it falls back to the expanded one
+    expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at", [null, "a"])).not.toMatch(ROW);
+    expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at", ["2026-01-01T00:00:00Z"])).not.toMatch(ROW);
   } finally { useCompileSide(undefined); }
 });
 

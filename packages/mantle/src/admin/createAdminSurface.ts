@@ -205,6 +205,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   };
   const me = async (caller: Staff) => {
     // the session user this request already resolved; a token or credential caller has none and reads the row
+    // ponytail: with a sessionCache or cookieCache the snapshot may be stale, so login and image can lag a profile edit (display only; role is re-read); the upgrade is a fresh read here if that matters
     const u = sessionUserOf(caller) ?? await directory?.getUser?.(caller.subject);
     return { userId: caller.subject, role: caller.role, login: u ? u.githubLogin || u.name || u.email || null : null, image: u?.image ?? null };
   };

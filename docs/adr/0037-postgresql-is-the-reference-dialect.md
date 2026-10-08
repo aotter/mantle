@@ -74,7 +74,8 @@ amendment.
 ### 4. A narrowing hook
 
 - `postgresStorage` and `sqliteStorage` take `restrict?: (plan, context) => readonly SqlDiagnostic[]`. Core runs it on every
-  program's IR after the dialect's own check, at runtime (ADR-0035: the runtime never trusts an IR). It can only refuse.
+  program's IR after the dialect's own check, at runtime (ADR-0035: the runtime never trusts an IR). Since the SQL compile
+  cache, an accepted verdict is cached with the compiled program, so `restrict` runs again only for a program Core compiles anew. It can only refuse.
 - It is for an operator that runs other people's plans. A self-hosted service does not set it.
 
 ### 5. Every PostgreSQL transaction has a statement timeout

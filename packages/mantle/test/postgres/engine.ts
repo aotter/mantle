@@ -21,7 +21,7 @@ export async function freshSchema(opts: { url?: string; pipeline?: boolean; stat
   await admin.query(`CREATE SCHEMA ${schema}`);
   await admin.end();
   const connect: PgConnect = async () => {
-    const c = new pg.Client({ connectionString: opts.url ?? PG_URL, options: `-c search_path=${schema} -c statement_timeout=${opts.statementTimeoutMs ?? 10_000} -c TimeZone=UTC`, ...(opts.pipeline ?? PG_PIPELINE ? { pipeline: true } : {}) } as pg.ClientConfig);
+    const c = new pg.Client({ connectionString: opts.url ?? PG_URL, options: `-c search_path=${schema} -c statement_timeout=${opts.statementTimeoutMs ?? 10_000} -c TimeZone=UTC`, ...(opts.pipeline ?? PG_PIPELINE ? { pipeline: true } : {}) });
     await c.connect();
     return c as unknown as PgClient;
   };

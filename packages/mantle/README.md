@@ -2,7 +2,7 @@
 
 Mantle is a manifest-driven service core. A service declares Schemas, Views,
 Procedures and Triggers in YAML. Views and Procedures are SQL
-(PostgreSQL syntax). `mantle generate` compiles them into a sealed plan and a
+in the project's dialect (PostgreSQL's own syntax, or D1's SQLite subset). `mantle generate` compiles them into a sealed plan and a
 typed module. The runtime serves the plan through one Store, which adds each
 caller's scope, TTL, publishing state and optimistic locks to every statement.
 

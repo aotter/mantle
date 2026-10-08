@@ -111,3 +111,26 @@ describe("createMantleAuth — oauthProvider.extensions passthrough", () => {
     expect(await response.json()).toMatchObject({ error: "unsupported_grant_type" });
   });
 });
+
+describe("createMantleAuth — jwt plugin", () => {
+  it("get-session answers no set-auth-jwt header when the OAuth provider is configured (nothing reads it; signing it cost a jwks read per request)", async () => {
+    const { d1: database, driver } = sqlite();
+    const codes = new Map<string, string>();
+    const auth = createMantleAuth(baseOptions({
+      database, driver, baseURL: "http://localhost",
+      methods: [{ kind: "email-otp", sender: { send: async ({ to, text }) => void codes.set(to, /\b(\d{6})\b/.exec(text)![1]!) } }],
+      oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/oauth/consent", scopes: ["mcp"] },
+    }));
+    const post = (path: string, body: unknown) =>
+      auth.handler(new Request(`http://localhost/api/auth${path}`, { method: "POST", headers: { "content-type": "application/json", origin: "http://localhost", "x-real-ip": "1.1.1.1" }, body: JSON.stringify(body) }));
+    expect((await post("/email-otp/send-verification-otp", { email: "a@x.test", type: "sign-in" })).status).toBe(200);
+    await new Promise((r) => setTimeout(r, 20)); // the send is a background task
+    const signedIn = await post("/sign-in/email-otp", { email: "a@x.test", otp: codes.get("a@x.test") });
+    expect(signedIn.status).toBe(200);
+    const cookie = signedIn.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+    const res = await auth.handler(new Request("http://localhost/api/auth/get-session", { headers: { cookie, "x-real-ip": "1.1.1.1" } }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ user: { email: "a@x.test" } });
+    expect(res.headers.get("set-auth-jwt")).toBeNull();
+  });
+});

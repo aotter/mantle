@@ -28,9 +28,10 @@ by hand.
   Procedures are SQL statements or a `ref`, in PostgreSQL syntax. The builtin
   handlers, the Filter AST, `params`, `$ctx` references and `x-mantle-bind` are
   gone; Schemas gain `checks`, and `searchableFields` becomes full-text search.
-- **SQL in PostgreSQL syntax.** PostgreSQL is the reference dialect
+- **SQL in the dialect's syntax.** PostgreSQL is the reference dialect
   (`@aotter/mantle/postgres`); D1 and SQLite run a subset
-  (`@aotter/mantle/d1`). A plan records its dialect.
+  (`@aotter/mantle/d1`). Each dialect is its own target (ADR-0039), and a
+  plan records its dialect.
 - **One Store.** Every read and write goes through Store, which adds caller
   scope, TTL and published-only to every statement, and an optimistic lock
   where the caller passes one; a write
@@ -63,6 +64,75 @@ by hand.
   is not a deployed service.
 - **Not yet in 0.2.0:** Mantle-rendered public pages and the MCP interaction
   App tools.
+
+### Upgrading an existing PostgreSQL service (next 0.2.0 alpha)
+
+PostgreSQL is native from this alpha (ADR-0039): each dialect is its own target,
+PostgreSQL's SQL and ordering are PostgreSQL's, and node-postgres (`pg`) is the
+PostgreSQL driver on every host. D1 and SQLite output is unchanged except where
+noted. Work through these in order before deploying.
+
+1. **Role settings (from #1383, now also checked on Bun).** Boot refuses with
+   `STORAGE_CHANGE_BLOCKED` (path `storage:settings`) unless the role Mantle
+   connects as has a statement limit and UTC:
+   `ALTER ROLE app SET statement_timeout = '10s'; ALTER ROLE app SET TimeZone = 'UTC';`
+   (10s or less). Bun's `Bun.SQL` entry used to pin its own limit and skip this
+   check. A Hyperdrive config must keep `--caching-disabled`: reads, role
+   re-reads and grant revocations run outside a transaction.
+2. **Rewrite SQLite spellings, then run `mantle generate`.** A PostgreSQL
+   manifest that uses `json_each`, `-> '$.a'`, `->> '$.a'`, `json_extract`,
+   `json_set`, `json_insert`, `json_remove` or `hex` fails validation with its
+   position and the PostgreSQL spelling. The
+   [rewrite table](../concepts/runtime-and-adapters.md#the-postgresql-dialect)
+   lists them: `json_each(t.col) j` becomes
+   `jsonb_array_elements_text(t.col) WITH ORDINALITY AS j(value, n)` (a sorted
+   View over a row source needs the alias and `WITH ORDINALITY`, and `j.id`
+   becomes `j.n`), `CAST(n AS bool)` of an integer becomes `n <> 0`, and `||`
+   needs a text operand. The PostgreSQL dialect version is now 2, so a plan
+   compiled earlier fails at boot with `PLAN_FINGERPRINT_MISMATCH`: run
+   `mantle generate` and deploy the regenerated plan.
+3. **NULL order.** Unstated `NULLS` now follows PostgreSQL: NULL last ascending,
+   first descending, for every `ORDER BY` including windows and
+   `json_group_array`. Write `NULLS FIRST` or `NULLS LAST` to keep a specific
+   order. Rows tied on the last sort key are ordered by `id` in that key's
+   direction. A cursor live across the deploy may repeat or skip rows once.
+4. **Bun entry.** Install `pg` and `@types/pg`. Replace
+   `new SQL(url, { prepare: false, ... })` with
+   `new pg.Pool({ connectionString, pipeline: true })`; `Env.SQL` becomes
+   `Env.PG`. The simplest path is to delete `src/service.ts` and `src/index.ts`
+   and re-run `mantle generate --host bun`, or copy the new preset. Removed from
+   `@aotter/mantle/bun`: `bunPostgresStorage`, `bunPgConnect`,
+   `bunDatabaseDriver`, `bunAuthDatabase`, `BunSqlPool`, `BunAuthPool`. The role
+   no longer needs `TEMPORARY`. Custom transports lose `temporaryResultMetadata`,
+   `describeResult` and `readOnly` from `PgClient` / `PgStatement`.
+5. **Generated `src/service.ts` changed.** The `database(env).run` wrapper moved
+   to the exported `mantle`, and the Bun pooled wrapper ends each client once.
+   The preset is never rewritten: re-run `mantle generate` into a scratch
+   directory and copy the difference, or delete and regenerate if unedited.
+6. **First boot does one-time work.** It runs once under the advisory lock:
+   - one `_mantle_ix_<schema>_updated` index on `([scope,] updated_at, id)` per
+     Schema, built without `CONCURRENTLY` inside the convergence transaction, so
+     writes to a large table block while it builds. Pre-create it with
+     `CREATE INDEX CONCURRENTLY _mantle_ix_<schema>_updated ON <schema> ([scope,] updated_at, id)`
+     before deploying; a matching index is accepted;
+   - each `_mantle_chk_*` check is rebuilt once (earlier releases left no
+     marker); later boots leave unchanged checks alone;
+   - the old `_mantle_jget`, `_mantle_bool` and `_mantle_json_each` functions
+     stay in place, unused: a previous release still running during a rolling
+     deploy calls them.
+7. **Boot under contention.** Concurrent boots converge once. A boot that cannot
+   get a lock within about five tries of one second fails with
+   `STORAGE_CHANGE_BLOCKED` naming the lock (another boot still converging, or a
+   long transaction on a table the plan changes), and is not retried for 10
+   seconds. A winner building a very large index can outlast its waiters, which
+   then report the blocked boot; boot again when it has finished (#1408).
+8. **Auth.** `get-session` no longer carries a `set-auth-jwt` response header
+   when the OAuth provider is configured; call the plugin's `/api/auth/token`
+   instead. `d1Driver`'s structural `D1PreparedStatement` now requires `first`
+   and `all`: a hand-rolled fake must add them.
+9. **D1.** A paged View with `json_each` in a `JOIN` arm, or with more than one
+   `json_each`, now pages by every element's `id`: its order among ties changes,
+   no row is skipped, and a cursor issued before the upgrade may need to restart.
 
 ## 0.1.4 — 2026-09-24
 

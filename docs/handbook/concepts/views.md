@@ -33,7 +33,7 @@ has the full table):
   integer literals: use `round(x)`), JSON `->>`;
 - `WHERE` with comparisons, `BETWEEN`, `IN (list | subquery)`, `EXISTS`,
   `LIKE` (case-insensitive, as in SQLite), `IS DISTINCT FROM`;
-- `INNER` and `LEFT JOIN`, subqueries, `json_each(…)`;
+- `INNER` and `LEFT JOIN`, subqueries, `json_each(…)` on D1 (PostgreSQL: `jsonb_array_elements_text(…) WITH ORDINALITY AS j(value, n)`);
 - `GROUP BY`, `HAVING`, `count`, `sum`, `min`, `max`, `avg`,
   `json_group_array`, `json_group_object`; `row_number()`, `rank()` and running
   aggregates;

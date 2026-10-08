@@ -41,6 +41,9 @@ pnpm exec mantle generate --check
 pnpm exec tsc --noEmit
 ```
 
+   An existing PostgreSQL service also follows the upgrade notes in
+   `docs/handbook/releases/index.md` (SQL rewrites, `mantle generate` for the
+   new dialect version, the regenerated `src/service.ts`).
 6. The preset (`src/service.ts`, `src/index.ts`, `src/handlers.ts`,
    `wrangler.jsonc`) is never
    rewritten. Generate into a scratch directory with the same manifests and

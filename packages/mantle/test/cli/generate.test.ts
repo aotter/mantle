@@ -257,6 +257,9 @@ describe("mantle generate", () => {
     await rm(join(dir, "src/service.ts"));
     await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "postgres" }));
     expect(await gen([], dir)).toMatchObject({ code: 1, err: expect.stringContaining("dialect 'postgres' on Cloudflare needs pg") });
+    // node-postgres is the PostgreSQL driver on Bun too
+    await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], host: "bun", dialect: "postgres" }));
+    expect(await gen([], dir)).toMatchObject({ code: 1, err: expect.stringContaining("dialect 'postgres' on Bun needs pg") });
     // restating the saved axis in another spelling rewrites nothing and keeps --check clean
     await writeFile(join(dir, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], host: "none", dialect: "d1" }));
     expect((await gen(["--dialect", "sqlite", "--host", "none"], dir)).code).toBe(0);

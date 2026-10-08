@@ -43,7 +43,7 @@ insert and when a draft is published; a draft may be saved incomplete.
 | `type: integer` | `INTEGER` | `int8` | |
 | `type: number` | `REAL` | `float8` | |
 | `type: boolean` | integer 0/1 | `bool` | `true`/`false` on the wire |
-| `type: object`, `type: array` | JSON | `jsonb` | read with `->>` or `json_each` in SQL |
+| `type: object`, `type: array` | JSON | `jsonb` | read with `->>` in SQL, or `json_each` on D1 (PostgreSQL: `jsonb_array_elements_text(…) WITH ORDINALITY AS j(value, n)`) |
 | `format: geo` | two `REAL` columns and an R*Tree | two `float8` columns | `{ lat, lng }`; query with `mantle.near` and `mantle.distance` |
 
 ### Reserved entry columns

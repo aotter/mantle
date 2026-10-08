@@ -118,6 +118,19 @@ it.skipIf(!PG_URL)("the DDL gives up on a lock it cannot get, retries, and succe
   } finally { await holder.end().catch(() => undefined); await db.drop(); }
 }, 60_000);
 
+it.skipIf(!PG_URL)("a boot that times out on the advisory lock says another boot is converging, not that a table is in use", async () => {
+  const db = await freshSchema();
+  const holder = new pg.Client({ connectionString: PG_URL, options: `-c search_path=${db.schema}` });
+  try {
+    await holder.connect();
+    await holder.query("BEGIN; SELECT pg_advisory_xact_lock(4471522036519061)");
+    const r = await convergeStorage(db.connect, v1(), { fingerprint: "a", lockTimeoutMs: 50, attempts: 2, cooldownMs: 0 });
+    expect(r.blocked[0].code).toBe("STORAGE_CHANGE_BLOCKED");
+    expect(r.blocked[0].message).toMatch(/another boot is still converging/);
+    expect(r.blocked[0].message).not.toMatch(/long transaction/);
+  } finally { await holder.query("ROLLBACK").catch(() => undefined); await holder.end(); await db.drop(); }
+}, 30_000);
+
 it.skipIf(!PG_URL)("a herd under a held lock gives up together within the retry window, not one isolate after another; readers are not stalled past it; a request after a blocked boot fails fast", async () => {
   const db = await freshSchema();
   const holder = new pg.Client({ connectionString: PG_URL, options: `-c search_path=${db.schema}` });
@@ -144,7 +157,9 @@ it.skipIf(!PG_URL)("a herd under a held lock gives up together within the retry 
     // the next request neither opens a connection nor issues DDL
     counted.n = 0;
     const again = await convergeStorage(connect, plan2, { fingerprint: "b", booted: "a", lockTimeoutMs: timeout, attempts, cooldownMs: 60_000 });
-    expect(again.blocked).toEqual(reports[0].blocked);
+    // the herd's isolates timed out on either lock, so their wording differs; the fast-failing report is one of them
+    expect(again.blocked).toHaveLength(1);
+    expect(again.blocked[0].message).toMatch(/lock stayed held/);
     expect(counted.n).toBe(0);
   } finally { await holder.end().catch(() => undefined); await db.drop(); }
 }, 60_000);
