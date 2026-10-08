@@ -219,6 +219,66 @@ export interface ViewMatch {
 /** `%text%` with the LIKE metacharacters escaped, so a search matches what was typed. */
 const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
+// ---- the row-comparison cursor ------------------------------------------------------------------------
+/** Columns every Schema's table declares NOT NULL (`postgres/storage.ts` createTable): the native ones, the scope column, and `status` when publishing. */
+const nativeNotNull = (s: { scope?: string; publishing?: boolean }, column: string) =>
+  column === "id" || column === "version" || column === "created_at" || column === "updated_at" || column === s.scope || (!!s.publishing && column === "status");
+
+/** The FROM items of a select, each with whether an outer join can null-extend it. */
+function fromItems(items: readonly N[] | undefined, nullable = false): { node: N; nullable: boolean }[] {
+  return (items ?? []).flatMap((n): { node: N; nullable: boolean }[] => {
+    const j = n.JoinExpr;
+    if (!j) return [{ node: n, nullable }];
+    return [...fromItems([j.larg], nullable || j.jointype === "JOIN_RIGHT" || j.jointype === "JOIN_FULL"), ...fromItems([j.rarg], nullable || j.jointype === "JOIN_LEFT" || j.jointype === "JOIN_FULL")];
+  });
+}
+
+/**
+ * Whether `qual.name` (or `name`, when the select reads one source) of `sel` can never be NULL: a native column of a Schema's own table
+ * (not null-extended by an outer join), or a bare pass-through of one by a subquery. Anything else (an expression, a declared field,
+ * a CTE, a row source, an ambiguous name) is unknown, and unknown means nullable.
+ * ponytail: declared required fields are nullable in the table (storage.ts adds NOT NULL to native columns only), so they count as nullable here;
+ * the upgrade is a NOT NULL for them, which needs a storage migration.
+ */
+function notNullIn(schemas: RunEnv["schemas"], sel: N, qual: string | undefined, name: string): boolean {
+  if (!sel || sel.op !== "SETOP_NONE" || sel.withClause) return false;
+  const items = fromItems(sel.fromClause);
+  const alias = (n: N) => n.RangeVar ? n.RangeVar.alias?.aliasname ?? n.RangeVar.relname : n.RangeSubselect?.alias?.aliasname ?? n.RangeFunction?.alias?.aliasname;
+  const hit = qual === undefined ? items : items.filter((i) => alias(i.node) === qual);
+  if (hit.length !== 1 || (qual === undefined && items.length !== 1) || hit[0]!.nullable) return false;
+  const { node } = hit[0]!;
+  if (node.RangeVar) {
+    const schema = node.RangeVar.mantle === "system" ? schemas[node.RangeVar.relname] : undefined;
+    return !!schema && nativeNotNull(schema, name);
+  }
+  const sub = node.RangeSubselect;
+  if (!sub || sub.alias?.colnames?.length || sub.lateral) return false;
+  const outs = (sub.subquery.SelectStmt?.targetList ?? []).filter((t: N) => (t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === name);
+  const f = outs.length === 1 ? outs[0].ResTarget.val?.ColumnRef?.fields : undefined;
+  if (!f || f.length > 2 || f.some((x: N) => !x.String)) return false;
+  return notNullIn(schemas, sub.subquery.SelectStmt, f.length === 2 ? f[0].String.sval : undefined, f.at(-1).String.sval);
+}
+
+/**
+ * PostgreSQL only: whether the cursor can be one row comparison `(k0, k1, ...) > ($1, $2, ...)`. That needs every key (the appended
+ * tiebreaks included) NOT NULL, all in one direction, and no NULLS clause other than PostgreSQL's own default.
+ */
+function rowComparable(env: RunEnv, sel: N, keys: readonly N[], hidden: readonly N[]): boolean {
+  if (!env.dialect.nativeOrder || !keys.length) return false;
+  const desc = keys[0]!.SortBy.sortby_dir === "SORTBY_DESC";
+  return keys.every((k, i) => {
+    const d = k.SortBy.sortby_dir;
+    if (d !== "SORTBY_DEFAULT" && d !== "SORTBY_ASC" && d !== "SORTBY_DESC") return false;
+    if ((d === "SORTBY_DESC") !== desc) return false;
+    // an explicit NULLS clause is the author's: only PostgreSQL's own default (LAST ascending, FIRST descending) leaves the order the index has
+    const nulls = k.SortBy.sortby_nulls;
+    if (nulls && nulls !== "SORTBY_NULLS_DEFAULT" && nulls !== (desc ? "SORTBY_NULLS_FIRST" : "SORTBY_NULLS_LAST")) return false;
+    const f = hidden[i]!.ResTarget.val?.ColumnRef?.fields;
+    if (!f || f.length > 2 || f.some((x: N) => !x.String)) return false;
+    return notNullIn(env.schemas, sel, f.length === 2 ? f[0].String.sval : undefined, f.at(-1).String.sval);
+  });
+}
+
 /**
  * Keyset pagination over a View. The sort keys (the author's plus the compiler's appended id or group key)
  * become hidden `_k<i>` columns; the cursor is the last row's keys and the next page filters on them. A NULL key
@@ -275,11 +335,17 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
       const beyond = op(desc(k) ? "<" : ">", at, param(cur[i]));
       return nullsFirst(k) ? beyond : { BoolExpr: { boolop: "OR_EXPR", args: [beyond, isNull(at, "IS_NULL")] } };
     };
+    if (rowComparable(env, sel, keys, hidden) && cur.length === keys.length && cur.every((v) => v !== null && v !== undefined)) {
+      // every key is NOT NULL and they share one direction: one row comparison, which a btree range-scans however deep the page
+      const row = (args: N[]): N => ({ RowExpr: { args, row_format: "COERCE_IMPLICIT_CAST" } });
+      conditions.push(op(desc(keys[0]!) ? "<" : ">", row(keys.map((_k, i) => col(`_k${i}`))), row(cur.map((v) => param(v)))));
+    } else {
     const args = keys.flatMap((k, i) => {
       const last = past(k, i);
       return last ? [{ BoolExpr: { boolop: "AND_EXPR", args: [...keys.slice(0, i).map((_x, j) => same(j)), last] } }] : [];
     });
     conditions.push(args.length ? { BoolExpr: { boolop: "OR_EXPR", args } } : { A_Const: { boolval: { boolval: false } } });
+    }
   }
   // an output by the name SQL gave it: an unquoted alias or column folds to lower case
   const output = (name: string) => names.find((n) => n === name) ?? names.find((n) => n === name.toLowerCase()) ?? refuseOutput(name);

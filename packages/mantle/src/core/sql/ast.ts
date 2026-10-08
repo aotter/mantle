@@ -12,7 +12,7 @@ export const target = (val: N, name?: string): N => ({ ResTarget: name ? { name,
 export const table = (relname: string, mantle: "table" | "system" = "table"): N => ({ relname, inh: true, relpersistence: "p", mantle });
 
 /** Nodes that print as one unit on both engines; anything else is an expression a printer must parenthesize as an operand. */
-const ATOMIC = new Set(["ColumnRef", "A_Const", "ParamRef", "FuncCall", "TypeCast", "CaseExpr", "CoalesceExpr", "MinMaxExpr", "Raw"]);
+const ATOMIC = new Set(["ColumnRef", "A_Const", "ParamRef", "FuncCall", "TypeCast", "CaseExpr", "CoalesceExpr", "MinMaxExpr", "RowExpr", "Raw"]);
 const atomic = (x: N | undefined) => !x || typeof x !== "object" || Object.keys(x).some((k) => ATOMIC.has(k)) ||
   (x.SubLink && ["EXPR_SUBLINK", "ARRAY_SUBLINK"].includes(x.SubLink.subLinkType));
 /** `x` in parentheses: the printers' `Raw` prints its parts inside `( )`. */
