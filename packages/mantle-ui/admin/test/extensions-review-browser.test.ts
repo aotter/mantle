@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { chromium, type Page, type Route } from "playwright";
 import { existsSync, readFileSync } from "node:fs";
 import { extname, resolve } from "node:path";
@@ -8,6 +8,8 @@ const DIST = resolve(import.meta.dirname, "../../dist/admin");
 const ORIGIN = "http://admin.test";
 // adversarial review of #1376 (rounds 1 and 2); needs the built Admin
 const run = existsSync(resolve(DIST, "index.html")) ? it : it.skip;
+// each case boots Chromium against the built Admin: well over the default 5s on a loaded CI runner
+vi.setConfig({ testTimeout: 40_000 });
 
 let SAVED_COLORS: string[] = [];
 const DEFAULT_MODULE = `
