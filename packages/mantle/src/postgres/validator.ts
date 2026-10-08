@@ -11,7 +11,7 @@ import { PROFILES, validateIr as referenceIr, validateProgram as referenceProgra
 const REFUSED: Record<string, string> = {
   typeof: "typeof() is SQLite's; PostgreSQL has pg_typeof() with other names",
   hex: "hex() is SQLite's; PostgreSQL's encode() is not on the allowlist",
-  json_each: "json_each() is SQLite's: use jsonb_array_elements_text(x) AS j(value) for an array, or jsonb_each_text(x) AS j(key, value) for an object, in FROM",
+  json_each: "json_each() is SQLite's: use jsonb_array_elements_text(x) WITH ORDINALITY AS j(value, n) for an array, or jsonb_each_text(x) WITH ORDINALITY AS j(key, value, n) for an object, in FROM",
   json_extract: "json_extract() is SQLite's: use x ->> 'key', x ->> 0 or x #>> '{a,b}'",
   json_set: "json_set() is SQLite's: build the value with jsonb_build_object() or jsonb_build_array()", json_insert: "json_insert() is SQLite's: build the value with jsonb_build_object() or jsonb_build_array()", json_remove: "json_remove() is SQLite's: use x - 'key' to drop a key",
 };

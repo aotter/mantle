@@ -112,9 +112,13 @@ noted. Work through these in order before deploying.
 6. **First boot does one-time work.** It runs once under the advisory lock:
    - one `_mantle_ix_<schema>_updated` index on `([scope,] updated_at, id)` per
      Schema, built without `CONCURRENTLY` inside the convergence transaction, so
-     writes to a large table block while it builds. Pre-create it with
-     `CREATE INDEX CONCURRENTLY _mantle_ix_<schema>_updated ON <schema> ([scope,] updated_at, id)`
-     before deploying; a matching index is accepted;
+     writes to a large table block while it builds. Pre-create it before
+     deploying, on the schema (`search_path`) Mantle uses, with both names quoted:
+     `CREATE INDEX CONCURRENTLY "_mantle_ix_<schema>_updated" ON "<schema>" (["<scope>",] updated_at, id)`.
+     A matching index is accepted. If a concurrent build fails, drop the invalid
+     index before deploying: boot accepts it by name and columns and never
+     rebuilds it. A Schema name longer than about 43 bytes gets a hashed index
+     name; read it from a fresh database's `pg_indexes` instead;
    - each `_mantle_chk_*` check is rebuilt once (earlier releases left no
      marker); later boots leave unchanged checks alone;
    - the old `_mantle_jget`, `_mantle_bool` and `_mantle_json_each` functions

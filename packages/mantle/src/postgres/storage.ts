@@ -247,7 +247,7 @@ export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<
       if (code === "55P03") {
         if (attempt < attempts) { await new Promise((r) => setTimeout(r, Math.random() * 100 * attempt)); continue; }
         const why = e instanceof Error ? e.message : String(e);
-        const report: StorageReport = { skipped: false, undeclared: [], blocked: [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED", message: `storage could not be converged: a lock stayed held for ${attempts} tries of ${lockTimeout} ms (${why}); ${(e as { advisoryLock?: boolean }).advisoryLock ? "another boot is still converging this database" : "a long transaction or query is using a table the plan changes"}. Nothing was applied; end it, or boot again when traffic is lower (not retried for ${(options.cooldownMs ?? COOL_DOWN_MS) / 1000} s)` }] };
+        const report: StorageReport = { skipped: false, undeclared: [], blocked: [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED", message: `storage could not be converged: a lock stayed held for ${attempts} tries of ${lockTimeout} ms (${why}); ${(e as { advisoryLock?: boolean }).advisoryLock ? "another boot is still converging this database; boot again once it finishes" : "a long transaction or query is using a table the plan changes; end it, or boot again when traffic is lower"}. Nothing was applied (not retried for ${(options.cooldownMs ?? COOL_DOWN_MS) / 1000} s)` }] };
         COOL_DOWN.set(connect, { state, until: Date.now() + (options.cooldownMs ?? COOL_DOWN_MS), report });
         return report;
       }
