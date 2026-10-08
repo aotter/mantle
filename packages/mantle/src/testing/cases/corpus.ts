@@ -14,9 +14,11 @@ export type Item = {
   input?: Record<string, unknown>;
   /** rows per statement */
   expect: unknown[][];
+  /** what a dialect with `nativeSql` runs instead (ADR-0039): its own spelling of a SQLite-ism, or its own result */
+  native?: Partial<Pick<Item, 'sql' | 'expect' | 'inputs' | 'input'>>;
 };
 
-const v = (id: string, sql: string, expect: unknown[], inputs?: Record<string, string>, input?: Record<string, unknown>): Item => ({ id, kind: 'view', sql, expect: [expect], inputs, input });
+const v = (id: string, sql: string, expect: unknown[], inputs?: Record<string, string>, input?: Record<string, unknown>, native?: { sql: string }): Item => ({ id, kind: 'view', sql, expect: [expect], inputs, input, native });
 const w = (id: string, sql: string, expect: unknown[][], inputs?: Record<string, string>, input?: Record<string, unknown>): Item => ({ id, kind: 'procedure', sql, expect, inputs, input });
 const ids = (...x: string[]) => x.map((id) => ({ id }));
 
@@ -26,7 +28,9 @@ export const corpus: Item[] = [
     [{ name: 'apple', s: 6, t: 9, h: 2, m: 2, neg: -5, shout: 'apple!' }]),
   // PostgreSQL: `*` binds tighter than `||`, `+` tighter than `||`; SQLite: `||` binds tighter than both
   v('precedence-concat', "SELECT 2 * 3 || 4 AS a, 1 + 2 || 3 AS b, 'x' || 1 + 1 AS c, 10 - 2 - 3 AS d, 10 - (2 - 3) AS e, -(1 + 2) * 3 AS f, (2 + 3) * 4 AS g FROM items WHERE id = 'a'",
-    [{ a: '64', b: '33', c: 'x2', d: 5, e: 11, f: -9, g: 20 }]),
+    [{ a: '64', b: '33', c: 'x2', d: 5, e: 11, f: -9, g: 20 }],
+    undefined, undefined, // PostgreSQL has no integer || integer: the operand that is text says so
+    { sql: "SELECT 2 * 3 || '4' AS a, 1 + 2 || '3' AS b, 'x' || 1 + 1 AS c, 10 - 2 - 3 AS d, 10 - (2 - 3) AS e, -(1 + 2) * 3 AS f, (2 + 3) * 4 AS g FROM items WHERE id = 'a'" }),
   v('precedence-bool', "SELECT id FROM items WHERE (stock > 4 AND NOT cat = 'y' OR stock < 3) AND NOT (stock = 7) ORDER BY id", ids('a', 'b')),
   v('case', "SELECT id, CASE WHEN stock > 6 THEN 'hi' WHEN stock > 3 THEN 'mid' ELSE 'lo' END AS lvl, CASE cat WHEN 'x' THEN 1 ELSE 0 END AS isx, COALESCE(NULL, stock) AS cs, NULLIF(stock, 5) AS ns FROM items WHERE id IN ('a', 'c') ORDER BY id",
     [{ id: 'a', lvl: 'mid', isx: 1, cs: 5, ns: null }, { id: 'c', lvl: 'hi', isx: 0, cs: 9, ns: 9 }]),
@@ -72,14 +76,18 @@ export const corpus: Item[] = [
     [{ id: 'a', oid: 'oa' }, { id: 'a', oid: 'ob' }, { id: 'b', oid: null }, { id: 'd', oid: null }]),
   v('self-join', 'SELECT a.id AS a, b.id AS b FROM items a JOIN items b ON a.cat = b.cat AND a.id < b.id ORDER BY a.id, b.id', [{ a: 'a', b: 'b' }, { a: 'a', b: 'd' }, { a: 'b', b: 'd' }]),
   v('from-subquery', 'SELECT s.id, s.stock FROM (SELECT id, stock FROM items WHERE cat = \'x\') s WHERE s.stock > 4 ORDER BY s.id', [{ id: 'a', stock: 5 }, { id: 'd', stock: 7 }]),
-  v('json-each', 'SELECT i.id, j.value AS tag FROM items i, json_each(i.tags) j WHERE j.value = input.tag ORDER BY i.id', [{ id: 'a', tag: 'red' }, { id: 'c', tag: 'red' }, { id: 'd', tag: 'red' }], { tag: 'text' }, { tag: 'red' }),
-  v('json-exists', 'SELECT i.id, i.tags ->> \'$[0]\' AS first FROM items i WHERE EXISTS (SELECT 1 FROM json_each(i.tags) j WHERE j.value = \'big\') ORDER BY i.id', [{ id: 'a', first: 'red' }]),
+  v('json-each', 'SELECT i.id, j.value AS tag FROM items i, json_each(i.tags) j WHERE j.value = input.tag ORDER BY i.id', [{ id: 'a', tag: 'red' }, { id: 'c', tag: 'red' }, { id: 'd', tag: 'red' }], { tag: 'text' }, { tag: 'red' },
+    { sql: 'SELECT i.id, j.value AS tag FROM items i, jsonb_array_elements_text(i.tags) AS j(value) WHERE j.value = input.tag ORDER BY i.id' }),
+  v('json-exists', 'SELECT i.id, i.tags ->> \'$[0]\' AS first FROM items i WHERE EXISTS (SELECT 1 FROM json_each(i.tags) j WHERE j.value = \'big\') ORDER BY i.id', [{ id: 'a', first: 'red' }],
+    undefined, undefined, { sql: "SELECT i.id, i.tags ->> 0 AS first FROM items i WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(i.tags) AS j(value) WHERE j.value = 'big') ORDER BY i.id" }),
   // ---- functions -----------------------------------------------------------------------------------------------
   v('scalar-functions', "SELECT lower('AbC') AS lo, upper('AbC') AS up, length('héllo') AS len, abs(-3) AS ab, round(2.567, 2) AS r, substr('abcdef', 2, 3) AS sub, replace('a-b', '-', '+') AS rep, trim('  x ') AS t, ltrim('  x') AS lt, rtrim('x  ') AS rt, instr('abc', 'c') AS ins, typeof(1) AS ty, hex('A') AS hx FROM items WHERE id = 'a'",
     [{ lo: 'abc', up: 'ABC', len: 5, ab: 3, r: 2.57, sub: 'bcd', rep: 'a+b', t: 'x', lt: 'x', rt: 'x', ins: 3, ty: 'integer', hx: '41' }]),
   v('json-functions', "SELECT json_extract(tags, '$[0]') AS e, json_array_length(tags) AS n, json_set(tags, '$[0]', 'z') AS s, json_insert(tags, '$[#]', 'w') AS i, json_remove(tags, '$[0]') AS r FROM items WHERE id = 'a'",
     [{ e: 'red', n: 2, s: '["z","big"]', i: '["red","big","w"]', r: '["big"]' }]),
-  v('casts', "SELECT CAST(stock AS text) AS t, round(stock) AS i, CAST(stock AS float8) AS f, CAST(stock AS bool) AS b, CAST('false' AS bool) AS bf, CAST('yes' AS bool) AS bt, stock::text || 'x' AS c FROM items WHERE id = 'a'", [{ t: '5', i: 5, f: 5, b: 1, bf: 0, bt: 1, c: '5x' }]),
+  v('casts', "SELECT CAST(stock AS text) AS t, round(stock) AS i, CAST(stock AS float8) AS f, CAST(stock AS bool) AS b, CAST('false' AS bool) AS bf, CAST('yes' AS bool) AS bt, stock::text || 'x' AS c FROM items WHERE id = 'a'", [{ t: '5', i: 5, f: 5, b: 1, bf: 0, bt: 1, c: '5x' }],
+    undefined, undefined, // PostgreSQL has no bigint -> bool cast: an integer's truth is written out
+    { sql: "SELECT CAST(stock AS text) AS t, round(stock) AS i, CAST(stock AS float8) AS f, stock <> 0 AS b, CAST('false' AS bool) AS bf, CAST('yes' AS bool) AS bt, stock::text || 'x' AS c FROM items WHERE id = 'a'" }),
   v('literal-casts', "SELECT '2026-03-08 10:00:00+00'::timestamptz AS ts, date '2026-03-08' AS d, interval '36 hours' AS iv, interval '90 minutes' AS im, '12.34'::numeric(12, 2) AS n, CAST('2026-03-08T10:00:00.123456Z' AS timestamptz) AS us FROM items WHERE id = 'a'",
     [{ ts: us(2026, 3, 8, 10), d: Date.UTC(2026, 2, 8) / 86_400_000, iv: 129_600_000_000, im: 5_400_000_000, n: 1234, us: us(2026, 3, 8, 10) + 123456 }]),
   v('mantle-refs', 'SELECT auth.uid() AS uid, auth.role() AS role, now() AS now, input.x AS x FROM items WHERE id = \'a\'', [{ uid: 'o1', role: 'staff', now: NOW, x: 3 }], { x: 'int8' }, { x: 3 }),

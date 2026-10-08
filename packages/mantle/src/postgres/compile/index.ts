@@ -4,5 +4,5 @@
  */
 /** The PostgreSQL dialect as a plan records it (ADR-0035 decision 5). `version` changes when what a PostgreSQL plan means changes. */
 export const name = "@aotter/mantle/postgres";
-export const version = "1";
+export const version = "2";
 export { validateProgram as accepts } from "../validator.js";

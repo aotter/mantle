@@ -2,7 +2,7 @@
 /**
  * What the compliance suite leaves to each dialect, checked for PostgreSQL: convergence on a second boot and on a plan change,
  * the CHECK message, a unique conflict's op, guards under concurrent writers, the site time zone, and values written from
- * json_each, which SQLite's affinity coerced and PostgreSQL needs cast.
+ * jsonb_array_elements, whose text values PostgreSQL needs cast to the column's type.
  */
 import { expect, it } from "vitest";
 import { loadModule, parseSync } from "libpg-query";
@@ -44,7 +44,7 @@ it.skipIf(!PG_URL)("a second boot reads only the fingerprint; a new field is add
   } finally { await e.drop(); }
 }, 60_000);
 
-it.skipIf(!PG_URL)("a check names its Schema and expression; a unique conflict names its op; json_each values are cast to their columns", async () => {
+it.skipIf(!PG_URL)("a check names its Schema and expression; a unique conflict names its op; values read from jsonb_array_elements are cast to their columns", async () => {
   const e = await engine();
   useCompileSide(pgCompile);
   try {
@@ -56,7 +56,7 @@ it.skipIf(!PG_URL)("a check names its Schema and expression; a unique conflict n
     const dup = await write("INSERT INTO settings (key, value) VALUES ('fresh', '1'); INSERT INTO settings (key, value) VALUES ('theme', '2')").catch((x) => x);
     expect(dup).toBeInstanceOf(DiagnosticError);
     expect(opIndexOf(dup)).toBe(1);
-    const { rows } = await write("INSERT INTO orders (item_id, qty, total) SELECT j.value ->> 'item', j.value ->> 'qty', j.value ->> 'total' FROM json_each(input.rows) j RETURNING item_id, qty, total",
+    const { rows } = await write("INSERT INTO orders (item_id, qty, total) SELECT j.value ->> 'item', j.value ->> 'qty', j.value ->> 'total' FROM jsonb_array_elements(input.rows) j RETURNING item_id, qty, total",
       { rows: "json" }, { rows: [{ item: "a", qty: 2, total: "1.50" }, { item: "b", qty: "3", total: 2 }] });
     expect(rows[0]).toEqual([{ item_id: "a", qty: 2, total: "1.50" }, { item_id: "b", qty: 3, total: "2.00" }]);
   } finally { useCompileSide(undefined); await e.drop(); }
@@ -95,12 +95,11 @@ it.skipIf(!PG_URL)("results do not depend on server settings or collation, and N
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "DateStyle … DateStyle = 'ISO, YMD'"],
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "IntervalStyle … IntervalStyle = 'postgres'"],
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "extra_float_digits … extra_float_digits = '1'"],
-      ["STORAGE_CHANGE_BLOCKED", "storage:settings", "TimeZone … TimeZone = 'UTC'"],
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "standard_conforming_strings … standard_conforming_strings = 'on'"],
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "statement_timeout … statement_timeout = '10000ms'"],
     ]);
-    // what differs and is harmless needs nothing: another date order, more float digits, another name for UTC
-    const s = site(await boot({ ...e, storage: postgresStorage({ connect: set("SET DateStyle = 'ISO, DMY'; SET extra_float_digits = 3; SET TimeZone = 'Etc/Zulu'") }) }));
+    // what differs and is harmless needs nothing: another date order, more float digits, any time zone (casts between dates and instants are PostgreSQL's, in the session's)
+    const s = site(await boot({ ...e, storage: postgresStorage({ connect: set("SET DateStyle = 'ISO, DMY'; SET extra_float_digits = 3; SET TimeZone = 'America/New_York'") }) }));
     const view = (sql: string, inputs = {}, input = {}) => program("view", sql, inputs).then((p) => runView(s, p, caller(input))).then((r) => r.rows);
     const write = (sql: string) => program("procedure", sql).then((p) => runProcedure(s, p, caller()));
     expect(await view("SELECT CAST('2026-03-08T10:00:00.5Z' AS timestamptz) AS ts, date '2026-03-08' AS d, interval '90 minutes' AS iv, 1.0 / 3 AS f FROM items WHERE id = 'a'"))
@@ -111,7 +110,10 @@ it.skipIf(!PG_URL)("results do not depend on server settings or collation, and N
     const [coll] = await e.driver.batch([{ sql: "SELECT collation_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'items' AND column_name = 'name'" }]);
     expect(coll.rows[0].collation_name).toBe("C");
     expect(await view("SELECT json_group_array(x.v) AS all FROM (SELECT json_group_array(name) AS v FROM items GROUP BY cat) x")).toEqual([{ all: [["cherry"], ["apple", "berry", "date"]] }]); // jsonb orders a shorter array first
-    expect(await view("SELECT i.tags ->> '$.a' AS a FROM items i WHERE id = 'a'")).toEqual([{ a: null }]);
+    // PostgreSQL's own operators: ->> reads a key or an index, || a text, and a bigint is compared, not cast to bool
+    expect(await view("SELECT i.tags ->> 0 AS a, 'n' || 1 AS b, i.stock <> 0 AS c FROM items i WHERE id = 'a'")).toEqual([{ a: "red", b: "n1", c: true }]);
+    await expect(view("SELECT CAST(stock AS bool) AS b FROM items WHERE id = 'a'")).rejects.toThrow(/SQLSTATE 42846/);
+    await expect(view("SELECT 2 * 3 || 4 AS a FROM items WHERE id = 'a'")).rejects.toThrow(/SQLSTATE 42883/);
     await write("INSERT INTO settings (key, value) VALUES ('theme', 'light') ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE value <> excluded.value");
     expect(await view("SELECT value FROM settings WHERE key = 'theme'")).toEqual([{ value: "light" }]);
     await expect(write("INSERT INTO requisitions (item_id, qty, state) SELECT id, stock, name, cat FROM items")).rejects.toThrow(/refused the statement/);
@@ -143,3 +145,16 @@ it.skipIf(!PG_URL)("a nested operand prints in parentheses, `AT TIME ZONE` inclu
     }
   } finally { await (client as any).end?.(); await db.drop(); }
 });
+
+it.skipIf(!PG_URL)("boot creates _mantle_expect and none of the removed emulations; a database booted before keeps them, unused", async () => {
+  const e = await engine();
+  const fns = async () => (await e.driver.batch([{ sql: "SELECT DISTINCT proname FROM pg_proc WHERE pronamespace = current_schema()::regnamespace AND proname LIKE '\\_mantle\\_%' ORDER BY 1" }]))[0].rows.map((r) => r.proname);
+  try {
+    await e.storage.prepare(planOf({}, "f1"));
+    expect(await fns()).toEqual(["_mantle_expect"]);
+    // what an earlier release left behind is neither dropped nor read: a later boot converges beside it
+    await e.driver.batch([{ sql: "CREATE FUNCTION _mantle_bool(x int8) RETURNS bool LANGUAGE sql AS 'SELECT x <> 0'" }]);
+    await e.storage.prepare(planOf({}, "f2"));
+    expect(await fns()).toEqual(["_mantle_bool", "_mantle_expect"]);
+  } finally { await e.drop(); }
+}, 60_000);

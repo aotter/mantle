@@ -1,23 +1,31 @@
 /**
- * What the PostgreSQL dialect accepts: Mantle SQL's reference profile (ADR-0037 decision 1), less SQLite's own functions,
- * which the base profile carries for D1 and PostgreSQL has no faithful spelling of. Pure JavaScript: the runtime imports it.
+ * What the PostgreSQL dialect accepts: Mantle SQL's reference profile (ADR-0037 decision 1), less SQLite's own vocabulary,
+ * which the base profile carries for D1 (ADR-0039): a construct that means something else here is refused with its position and
+ * the PostgreSQL spelling to use. Pure JavaScript: the runtime imports it.
  */
 import type { SqlContext, SqlDiagnostic, SqlNode as N, SqlPlan } from "../spec/domain/model/SqlIr.js";
 import { SqlRefusal } from "../spec/domain/service/SqlRefusal.js";
 import { PROFILES, validateIr as referenceIr, validateProgram as referenceProgram } from "../core/sql/allowlist.js";
 
-/** SQLite's own functions, which PostgreSQL has no faithful spelling of. */
+/** SQLite's own functions, and the PostgreSQL spelling of each where there is one. */
 const REFUSED: Record<string, string> = {
   typeof: "typeof() is SQLite's; PostgreSQL has pg_typeof() with other names",
-  hex: "hex() is SQLite's",
-  json_extract: "json_extract() is SQLite's: write x ->> '$.path'",
-  json_set: "json_set() is SQLite's", json_insert: "json_insert() is SQLite's", json_remove: "json_remove() is SQLite's",
+  hex: "hex() is SQLite's; PostgreSQL's encode() is not on the allowlist",
+  json_each: "json_each() is SQLite's: use jsonb_array_elements_text(x) AS j(value) for an array, or jsonb_each_text(x) AS j(key, value) for an object, in FROM",
+  json_extract: "json_extract() is SQLite's: use x ->> 'key', x ->> 0 or x #>> '{a,b}'",
+  json_set: "json_set() is SQLite's: build the value with jsonb_build_object() or jsonb_build_array()", json_insert: "json_insert() is SQLite's: build the value with jsonb_build_object() or jsonb_build_array()", json_remove: "json_remove() is SQLite's: use x - 'key' to drop a key",
 };
+/** A `$` path as ->>'s key: SQLite reads it as a path, PostgreSQL as a key named `$.a`, silently NULL. */
+const DOLLAR_PATH = /^\$(?:[.[]|$)/;
 
 function refuse(stmts: N[]): void {
   const walk = (v: any): void => {
     if (Array.isArray(v)) return v.forEach(walk);
     if (!v || typeof v !== "object") return;
+    const a = v.A_Expr;
+    const key = a?.rexpr?.A_Const?.sval?.sval;
+    if (a?.kind === "AEXPR_OP" && ["->>", "->"].includes(a.name?.at(-1)?.String?.sval) && typeof key === "string" && DOLLAR_PATH.test(key))
+      throw new SqlRefusal("SQL_UNSUPPORTED", `'${key}' is a SQLite JSON path: PostgreSQL reads it as a key named ${key}. Use x ->> 'key', x ->> 0 or x #>> '{a,b}'`, a.rexpr.A_Const.location ?? a.location);
     const f = v.FuncCall;
     if (f) {
       const name = f.funcname.map((x: N) => x.String?.sval).join(".").replace(/^pg_catalog\./, "");
@@ -29,10 +37,10 @@ function refuse(stmts: N[]): void {
   walk(stmts);
 }
 
-/** The compile side: the reference profile, then PostgreSQL's refusals, each with its source offset. */
+/** The compile side: PostgreSQL's refusals first, so a SQLite spelling is answered with its PostgreSQL one, then the reference profile. */
 export function validateProgram(stmts: N[], ctx: SqlContext & { source?: string }, locs: (number | undefined)[] = []): void {
-  referenceProgram(stmts, ctx, locs, PROFILES.reference);
   refuse(stmts);
+  referenceProgram(stmts, ctx, locs, PROFILES.reference);
 }
 
 /** The runtime's check of every program's IR. */

@@ -12,7 +12,9 @@ export async function run(r: Report, engine: Engine) {
   const s = site(b);
   const bad: string[] = [];
   const refused: string[] = [];
-  for (const item of corpus) {
+  for (const base of corpus) {
+    // a dialect with its own SQL (ADR-0039) runs its spelling of an item that uses SQLite's
+    const item = b.dialect.nativeSql && base.native ? { ...base, ...base.native } : base;
     const rt = { ...caller(item.input), role: 'staff' };
     // a construct the dialect's compile side refuses as unsupported passes by that refusal (ADR-0035 decision 8); any other
     // refusal (syntax, a column, a relation) is the corpus item failing

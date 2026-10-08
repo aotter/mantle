@@ -54,7 +54,7 @@ const SLOTS_SRC: Record<string, string> = {
   'FuncCall.funcname': 'String', 'FuncCall.args': EXPR, 'FuncCall.agg_filter': EXPR, 'FuncCall.agg_order': 'SortBy',
   'WindowDef.partitionClause': EXPR, 'WindowDef.orderClause': 'SortBy', 'WindowDef.startOffset': EXPR, 'WindowDef.endOffset': EXPR,
   'SubLink.testexpr': EXPR, 'SubLink.subselect': 'SelectStmt', 'SubLink.operName': 'String', 'SortBy.node': EXPR,
-  'RangeSubselect.subquery': 'SelectStmt', 'RangeFunction.functions': 'List', 'RangeFunction>List.items': 'FuncCall',
+  'RangeSubselect.subquery': 'SelectStmt', 'RangeFunction.functions': 'List', 'RangeFunction>List.items': 'FuncCall', 'Alias.colnames': 'String',
   'JoinExpr.larg': FROM, 'JoinExpr.rarg': FROM, 'JoinExpr.quals': EXPR,
   'OnConflictClause.targetList': 'ResTarget', 'OnConflictClause.whereClause': EXPR, 'InferClause.indexElems': 'IndexElem',
   'WithClause.ctes': 'CommonTableExpr', 'CommonTableExpr.ctequery': 'SelectStmt', 'CommonTableExpr.aliascolnames': 'String', 'MinMaxExpr.args': EXPR,
@@ -113,13 +113,15 @@ export interface Profile {
   readonly trunc: ReadonlySet<string>;
   readonly extract: ReadonlySet<string>;
   readonly casts: ReadonlySet<string>;
+  /** the functions allowed in FROM, and only there: a row source with a column per value */
+  readonly fromFuncs: ReadonlySet<string>;
 }
-const BASE_PROFILE: Profile = { name: 'base', keys: KEYS, enums: ENUM, ops: OPS, funcs: FUNCS, window: WINDOW, agg: AGG, trunc: TRUNC_UNITS, extract: EXTRACT_FIELDS, casts: CAST_TYPES };
+const BASE_PROFILE: Profile = { name: 'base', keys: KEYS, enums: ENUM, ops: OPS, funcs: FUNCS, window: WINDOW, agg: AGG, trunc: TRUNC_UNITS, extract: EXTRACT_FIELDS, casts: CAST_TYPES, fromFuncs: new Set(['json_each']) };
 
 // ---- ADR-0037 decision 2: the reference profile's additions --------------------------------------------------------------
 const MORE_KEYS: Record<string, string> = {
   SelectStmt: 'withClause larg rarg all', WithClause: 'ctes recursive', CommonTableExpr: 'ctename ctequery aliascolnames ctematerialized',
-  RangeSubselect: 'lateral', FuncCall: 'agg_filter agg_order', WindowDef: 'startOffset endOffset', MinMaxExpr: 'op args',
+  RangeSubselect: 'lateral', RangeFunction: 'ordinality', Alias: 'colnames', FuncCall: 'agg_filter agg_order', WindowDef: 'startOffset endOffset', MinMaxExpr: 'op args',
 };
 const MORE_ENUM: Record<string, (string | number | boolean)[]> = {
   'SelectStmt.op': ['SETOP_UNION', 'SETOP_INTERSECT', 'SETOP_EXCEPT'], 'A_Expr.kind': ['AEXPR_ILIKE'],
@@ -140,6 +142,8 @@ const REFERENCE_PROFILE: Profile = {
   ops: union(OPS, MORE_OPS), funcs: union(FUNCS, MORE_FUNCS), window: union(WINDOW, MORE_WINDOW), agg: union(AGG, MORE_AGG),
   trunc: union(TRUNC_UNITS, ['minute', 'quarter']), extract: union(EXTRACT_FIELDS, ['minute', 'quarter', 'week', 'isoyear', 'isodow', 'doy', 'epoch']),
   casts: union(CAST_TYPES, ['jsonb']),
+  // PostgreSQL's own row sources over jsonb (ADR-0039): `jsonb_array_elements_text(t.tags) WITH ORDINALITY AS j(value, n)`; SQLite's json_each is not among them
+  fromFuncs: new Set(['jsonb_array_elements', 'jsonb_array_elements_text', 'jsonb_each', 'jsonb_each_text']),
 };
 export const PROFILES = { base: BASE_PROFILE, reference: REFERENCE_PROFILE } as const;
 
@@ -236,6 +240,7 @@ function knownColumns(stmts: N[]): Set<string> {
   const known = new Set(['id', 'key', 'value', 'type', 'atom', 'parent', 'fullkey', 'path', ...SYSTEM]);
   for (const r of find(stmts, 'ResTarget')) if (r.name) known.add(String(r.name).toLowerCase());
   for (const r of find(stmts, 'RangeVar')) [r.relname, r.alias?.aliasname].forEach((a) => a && known.add(a.toLowerCase())); // mantle.search(<alias>, ...) names a relation
+  for (const a of find(stmts, 'alias')) for (const c of a.colnames ?? []) if (c.String?.sval) known.add(String(c.String.sval).toLowerCase()); // `j(value, n)` names a row source's columns
   for (const c of find(stmts, 'CommonTableExpr')) [c.ctename, ...(c.aliascolnames ?? []).map((x: N) => x.String?.sval)].forEach((a) => a && known.add(String(a).toLowerCase()));
   return known;
 }
@@ -393,8 +398,8 @@ const check: Record<string, Checker> = {
   },
   FuncCall: (n, ctx, path, at) => {
     const f = fname(n);
-    if (f === 'json_each') {
-      if (path.at(-2) !== 'List' || path.at(-3) !== 'RangeFunction') no('SQL_FUNCTION', 'json_each is only allowed in FROM', at);
+    if (ctx.p.fromFuncs.has(f)) {
+      if (path.at(-2) !== 'List' || path.at(-3) !== 'RangeFunction') no('SQL_FUNCTION', `${f} is only allowed in FROM`, at);
       return;
     }
     if (!ctx.p.funcs.has(f)) no('SQL_FUNCTION', `function ${f} is not on the allowlist`, at);
@@ -486,10 +491,12 @@ const check: Record<string, Checker> = {
   JoinExpr: (n, _c, _p, at) => {
     if (!n.quals) no('SQL_SHAPE', 'a JOIN needs ON', at, /\bCROSS\s+JOIN\b|\bJOIN\b/i);
   },
-  RangeFunction: (n, _c, _p, at) => {
+  RangeFunction: (n, ctx, _p, at) => {
     const fs: N[] = n.functions;
-    if (fs.length !== 1 || fs[0]?.List?.items?.length !== 2 || sv(fs[0].List.items[0].FuncCall?.funcname ?? []) !== 'json_each') no('SQL_FUNCTION', 'only json_each() is allowed in FROM', at);
-    if (fs[0]!.List.items[0].FuncCall.args?.length !== 1) no('SQL_FUNCTION', 'json_each takes one argument', at);
+    const only = `only ${[...ctx.p.fromFuncs].map((x) => `${x}()`).join(', ')} ${ctx.p.fromFuncs.size > 1 ? 'are' : 'is'} allowed in FROM`;
+    const f = fs.length === 1 && fs[0]?.List?.items?.length === 2 ? sv(fs[0].List.items[0].FuncCall?.funcname ?? []).replace(/^pg_catalog\./, '') : undefined;
+    if (!f || !ctx.p.fromFuncs.has(f)) no('SQL_FUNCTION', only, at);
+    if (fs[0]!.List.items[0].FuncCall.args?.length !== 1) no('SQL_FUNCTION', `${f} takes one argument`, at);
   },
   RangeSubselect: (n, _c, _p, at) => {
     if (!n.alias) no('SQL_SHAPE', 'a subquery in FROM needs an alias', at);
@@ -520,7 +527,7 @@ const check: Record<string, Checker> = {
     if (distinctOn && (!reference || top)) no(reference ? 'SQL_SHAPE' : 'SQL_UNSUPPORTED', reference ? 'DISTINCT ON goes inside a WITH or a subquery: Core pages the View\'s own SELECT' : 'DISTINCT ON is refused', at, /\bDISTINCT\s+ON\b/i);
     if (n.distinctClause && !distinctOn && n.sortClause) no('SQL_SHAPE', 'DISTINCT with ORDER BY is refused: the appended id key would change what is distinct', at);
     if (n.valuesLists && (path.at(-2) !== 'InsertStmt' || n.valuesLists.length !== 1)) no('SQL_SHAPE', 'VALUES is one row, in INSERT only', firstLoc(n.valuesLists) ?? at);
-    if ((n.fromClause ?? []).slice(1).some((f: N) => !f.RangeFunction && !(reference && f.RangeSubselect?.lateral))) no('SQL_SHAPE', reference ? 'a comma join is refused (except json_each and LATERAL)' : 'a comma join is refused (except json_each)', at);
+    if ((n.fromClause ?? []).slice(1).some((f: N) => !f.RangeFunction && !(reference && f.RangeSubselect?.lateral))) no('SQL_SHAPE', reference ? 'a comma join is refused (except a row source over a column, and LATERAL)' : 'a comma join is refused (except json_each)', at);
     // mantle.near()/mantle.distance(): a query ordered by mantle.distance() needs a LIMIT of at most MAX_NEAR_K
     const byDistance = JSON.stringify(n.sortClause ?? []).includes('"distance"');
     if (byDistance) {

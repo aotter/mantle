@@ -27,34 +27,20 @@ const ident = (n: string) => (new TextEncoder().encode(n).length <= 63 ? n : `${
 /** FNV-1a, 32 bits, as hex: a stable suffix that needs no crypto module. */
 const fnv = (s: string) => [...s].reduce((h, c) => Math.imul(h ^ c.codePointAt(0)!, 16777619) >>> 0, 2166136261).toString(16).padStart(8, "0");
 
-/** Mantle's functions the lowering calls. Each is plain SQL, so the planner inlines it. */
 /** The SQLSTATE `_mantle_expect` raises; the executor reads it as CONFLICT. */
 export const EXPECT_STATE = "MX409";
 
+/**
+ * Mantle's one function. ADR-0039 removed the SQLite emulations that used to sit beside it (`_mantle_jget`, `_mantle_bool`,
+ * `_mantle_json_each`); a database booted before keeps them, unreferenced and harmless, and no DROP is issued: an older release
+ * still running during a rolling deploy calls them, and a dropped function would fail its queries.
+ */
 const FUNCTIONS = [
   // a write's `expect`, checked where it ran: a different count fails the statement, and with it the transaction
   `CREATE OR REPLACE FUNCTION _mantle_expect(actual int8, expected int8) RETURNS bool LANGUAGE plpgsql VOLATILE AS $f$BEGIN
     IF actual <> expected THEN RAISE EXCEPTION USING ERRCODE = '${EXPECT_STATE}', MESSAGE = format('the write matched %s rows, not %s', actual, expected); END IF;
     RETURN true;
   END$f$`,
-  // x ->> k as SQLite reads it: a key, an index or a `$` path, over jsonb, json or JSON text
-  // a `$` path is read strict and silent, as SQLite reads it: `$.a` of an array is NULL, not the array's members' `a`
-  `CREATE OR REPLACE FUNCTION _mantle_jget(j jsonb, k text) RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $f$SELECT CASE WHEN left(k, 1) = '$' THEN jsonb_path_query_first(j, ('strict ' || k)::jsonpath, '{}', true) #>> '{}' ELSE j ->> k END$f$`,
-  `CREATE OR REPLACE FUNCTION _mantle_jget(j jsonb, k int8) RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $f$SELECT j ->> k::int4$f$`,
-  ...["text", "json"].flatMap((t) => ["text", "int8"].map((k) => `CREATE OR REPLACE FUNCTION _mantle_jget(j ${t}, k ${k}) RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $f$SELECT _mantle_jget(j::jsonb, k)$f$`)),
-  // CAST(x AS bool) by PostgreSQL's own rules for every type the subset has (PostgreSQL itself has no bigint -> bool cast)
-  `CREATE OR REPLACE FUNCTION _mantle_bool(x bool) RETURNS bool LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $f$SELECT x$f$`,
-  `CREATE OR REPLACE FUNCTION _mantle_bool(x text) RETURNS bool LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $f$SELECT x::bool$f$`,
-  ...["int4", "int8", "float8", "numeric"].map((t) => `CREATE OR REPLACE FUNCTION _mantle_bool(x ${t}) RETURNS bool LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $f$SELECT x <> 0$f$`),
-  // json_each with SQLite's columns: a scalar's value is its SQL text, an object's or array's its JSON text; id orders the elements
-  `CREATE OR REPLACE FUNCTION _mantle_json_each(j jsonb) RETURNS TABLE (key text, value text, type text, atom text, id int8) LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $f$
-    SELECT e.k,
-      CASE WHEN jsonb_typeof(e.v) IN ('object', 'array') THEN e.v::text ELSE e.v #>> '{}' END,
-      CASE jsonb_typeof(e.v) WHEN 'string' THEN 'text' WHEN 'boolean' THEN e.v::text WHEN 'number' THEN CASE WHEN e.v::text ~ '^-?[0-9]+$' THEN 'integer' ELSE 'real' END ELSE jsonb_typeof(e.v) END,
-      CASE WHEN jsonb_typeof(e.v) IN ('object', 'array') THEN NULL ELSE e.v #>> '{}' END,
-      e.n
-    FROM (SELECT (a.n - 1)::text AS k, a.v, a.n FROM jsonb_array_elements(CASE WHEN jsonb_typeof(j) = 'array' THEN j ELSE '[]' END) WITH ORDINALITY a(v, n)
-      UNION ALL SELECT o.k, o.v, o.n FROM jsonb_each(CASE WHEN jsonb_typeof(j) = 'object' THEN j ELSE '{}' END) WITH ORDINALITY o(k, v, n)) e$f$`,
 ];
 
 const SYSTEM_DDL = [
@@ -107,7 +93,13 @@ export function checkMessages(plan: Readonly<Record<string, StorageSchema>>): Ma
   return new Map(Object.entries(plan).flatMap(([name, s]) => (s.checks ?? []).map((c, i) => [ident(`_mantle_chk_${name}_${i}`), `${name}: ${checkText(c, s)}`] as [string, string])));
 }
 
-/** Text compares and sorts by code point, as on D1, whatever collation the database was created with. */
+/**
+ * Text compares and sorts by code point, whatever collation the database was created with.
+ * ponytail: this began as D1 emulation (ADR-0039 keeps the tiebreak in the column's own collation, so indexes still serve it). Dropping it
+ * only changes tables created from now on and leaves the earlier ones in "C", so one Schema family would sort text two ways by age
+ * (and a database whose collation is en_US sorts ids and names by locale); the upgrade is a deliberate rebuild of text columns and
+ * their indexes in one release, which needs the migration this PR avoids. Tracked as a follow-up issue.
+ */
 const ddlType = (type: string) => (type === "text" ? 'text COLLATE "C"' : type);
 const createTable = (name: string, s: StorageSchema) => `CREATE TABLE ${q(name)} (${[
   "_rid bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY", `id ${ddlType("text")} NOT NULL UNIQUE`, "version int8 NOT NULL DEFAULT 1",

@@ -131,8 +131,9 @@ until you do:
 wrangler hyperdrive create my-app --caching-disabled --connection-string="postgres://user:pass@host:5432/db"
 ```
 
-Reads run under the role's own statement limit, so give it one, and UTC, before
-the first boot (locally too); the boot error names any other setting:
+Reads run under the role's own statement limit, so give it one before the first
+boot (locally too); the boot error names any other setting. UTC is recommended,
+since date and instant casts use the session's zone:
 
 ```sql
 ALTER ROLE app SET statement_timeout = '10s';
@@ -161,5 +162,5 @@ address, and with it one sign-in rate limit.
 PostgreSQL on Bun is node-postgres, as on Workers (ADR-0039): the entry builds a
 `pg.Pool` with `pipeline: true`, and each request borrows one pooled client
 (`requestScoped`). Install `pg`. The role needs no privilege beyond converging its
-tables (no `TEMPORARY`); set `statement_timeout` and `TimeZone` UTC on the role,
-which boot checks.
+tables (no `TEMPORARY`); set `statement_timeout` on the role, which boot checks, and
+`TimeZone` UTC.

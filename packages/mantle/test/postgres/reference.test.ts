@@ -23,6 +23,13 @@ const VIEWS: [string, string, unknown[]][] = [
   ["jsonb_agg of jsonb_build_object with its own ORDER BY",
     "SELECT jsonb_agg(jsonb_build_object('id', id, 'stock', stock) ORDER BY stock DESC) AS j FROM items",
     [{ j: [{ id: "c", stock: 9 }, { id: "d", stock: 7 }, { id: "a", stock: 5 }, { id: "b", stock: 2 }] }]],
+  ["jsonb_array_elements_text unnests a column with its ordinality, under the caller's visibility",
+    "SELECT i.id, j.value AS tag, j.n FROM items i, jsonb_array_elements_text(i.tags) WITH ORDINALITY AS j(value, n) WHERE j.value <> 'blue' ORDER BY i.id, j.n",
+    [{ id: "a", tag: "red", n: 1 }, { id: "a", tag: "big", n: 2 }, { id: "c", tag: "red", n: 1 }, { id: "d", tag: "red", n: 1 }]],
+  ["jsonb_each_text of an object, and ->> by key and by index",
+    "SELECT i.id, e.key, e.value FROM items i, jsonb_each_text(jsonb_build_object('k', i.tags ->> 0)) AS e(key, value) WHERE i.id = 'a'",
+    [{ id: "a", key: "k", value: "red" }]],
+  ["a bigint compared, and an integer's truth written out", "SELECT id FROM items WHERE stock <> 0 AND (stock > 4)::bool ORDER BY id", [{ id: "a" }, { id: "c" }, { id: "d" }]],
   ["ILIKE and a regular expression", "SELECT id FROM items WHERE name ILIKE 'A%' OR name ~ '^b' ORDER BY id", [{ id: "a" }, { id: "b" }]],
   ["greatest, least, floor", "SELECT id, greatest(stock, 6) AS g, least(stock, 6) AS l, floor(stock / 2.0) AS f FROM items ORDER BY id",
     [{ id: "a", g: 6, l: 5, f: 2 }, { id: "b", g: 6, l: 2, f: 1 }, { id: "c", g: 9, l: 6, f: 4 }, { id: "d", g: 7, l: 6, f: 3 }]],
@@ -35,14 +42,19 @@ const VIEWS: [string, string, unknown[]][] = [
     [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, { id: "r1" }, { id: "r2" }]],
 ];
 
+// SQLite spellings (ADR-0039): refused with the PostgreSQL one to use
 const REFUSED: [string, string, RegExp][] = [
+  ["json_each", "SELECT j.value AS v FROM items i, json_each(i.tags) j", /json_each\(\) is SQLite's: use jsonb_array_elements_text\(x\) AS j\(value\)/],
+  ["a $ path of ->>", "SELECT tags ->> '$[0]' AS t FROM items", /'\$\[0\]' is a SQLite JSON path.*x ->> 'key', x ->> 0 or x #>> '\{a,b\}'/],
+  ["json_extract", "SELECT json_extract(tags, '$[0]') AS t FROM items", /json_extract\(\) is SQLite's: use x ->> 'key'/],
+  ["hex", "SELECT hex(name) AS t FROM items", /hex\(\) is SQLite's/],
   ["a View's top-level UNION", "SELECT id FROM items UNION SELECT id FROM requisitions", /UNION, INTERSECT and EXCEPT go inside a WITH or a subquery/],
   ["a View's top-level DISTINCT ON", "SELECT DISTINCT ON (cat) id FROM items ORDER BY cat", /DISTINCT ON goes inside a WITH or a subquery/],
   ["a GROUPS frame", "SELECT id, count(*) OVER (ORDER BY stock GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) AS n FROM items", /GROUPS frames and EXCLUDE are refused/],
   ["a frame offset that is not a literal", "SELECT id, count(*) OVER (ORDER BY stock ROWS BETWEEN stock PRECEDING AND CURRENT ROW) AS n FROM items", /a frame offset is a literal/],
   ["lag without OVER", "SELECT lag(id) AS p FROM items", /lag\(\) is a window function/],
   ["FILTER on a function that is not an aggregate", "SELECT lower(name) FILTER (WHERE true) AS l FROM items", /FILTER and ORDER BY belong to an aggregate/],
-  ["generate_series", "SELECT g.id FROM generate_series(1, 3) g", /only json_each\(\) is allowed in FROM/],
+  ["generate_series", "SELECT g.id FROM generate_series(1, 3) g", /only jsonb_array_elements\(\), jsonb_array_elements_text\(\), jsonb_each\(\), jsonb_each_text\(\) are allowed in FROM/],
   ["a quoted CTE name that is not lower case", 'WITH "Items" AS (SELECT id FROM items) SELECT id FROM "Items" ORDER BY id', /a CTE name is lower case/],
   ["lag with an offset that is not a literal", "SELECT id, lag(id, stock) OVER (ORDER BY id) AS p FROM items ORDER BY id", /lag's offset is an integer literal/],
 ];
@@ -143,3 +155,17 @@ it.skipIf(!PG_URL)("RETURNING <target>.* is the target's declared columns, as RE
     await expect(runProcedure(s, await program("procedure", "INSERT INTO settings (key, value) VALUES ('f', 'g') RETURNING nope.*"), caller())).rejects.toThrow();
   } finally { useCompileSide(undefined); await db.drop(); }
 }, 60_000);
+
+it("a SQLite spelling is refused at its position, with the PostgreSQL spelling", async () => {
+  const { compileSql } = await import("../../src/spec/index.js");
+  const { schemas } = await import("../../src/testing/harness.js");
+  for (const [sql, at, say] of [
+    ["SELECT j.value AS v FROM items i, json_each(i.tags) j", "SELECT j.value AS v FROM items i, ".length, "jsonb_array_elements_text"],
+    ["SELECT id FROM items WHERE tags ->> '$.a' = 'x'", "SELECT id FROM items WHERE tags ->> ".length, "x ->> 'key'"],
+  ] as const) {
+    const r = await compileSql(sql, { schemas, inputs: {}, kind: "view" }, pgCompile);
+    expect(r.ok).toBe(false);
+    expect(JSON.stringify(r)).toContain(say);
+    expect(JSON.stringify(r)).toMatch(new RegExp(`"(?:offset|position|start)":\\s*${at}\\b`));
+  }
+});

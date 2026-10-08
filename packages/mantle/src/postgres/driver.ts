@@ -123,8 +123,6 @@ export async function query(connect: PgConnect, s: PgStatement): Promise<PgOutco
  * pooled session to exactly that configuration, and a bare read has no transaction to pin anything in.
  * - DateStyle ISO and IntervalStyle postgres: the text `decodeField` parses. extra_float_digits >= 1: shortest exact floats.
  * - standard_conforming_strings on: a backslash in a printed literal is a backslash, never an escape.
- * - TimeZone UTC: not for decoding (`decodeField` reads any offset PostgreSQL prints) but for meaning, since a cast between date
- *   and timestamptz, explicit or implicit, is taken in the session's zone, and D1 takes it in UTC.
  * - statement_timeout: a read is bounded by the role's limit, so it must be set and at most Mantle's (0 asks for none).
  */
 export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<string[]> {
@@ -134,15 +132,13 @@ export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_
     const [r] = (await client.query({ text: `SELECT quote_ident(current_user) AS role, quote_ident(current_database()) AS db,
       current_setting('DateStyle') AS datestyle, current_setting('IntervalStyle') AS intervalstyle,
       current_setting('extra_float_digits')::int4 AS float_digits, current_setting('standard_conforming_strings') AS scs,
-      (SELECT setting::int4 FROM pg_settings WHERE name = 'statement_timeout') AS timeout_ms, current_setting('TimeZone') AS tz,
-      (SELECT bool_and(extract(timezone FROM t) = 0) FROM unnest('{1900-01-01 00:00+00, 1970-01-01 00:00+00, 2000-01-01 00:00+00, 2000-07-01 00:00+00}'::timestamptz[]) t) AS utc` })).rows as Record<string, any>[];
+      (SELECT setting::int4 FROM pg_settings WHERE name = 'statement_timeout') AS timeout_ms` })).rows as Record<string, any>[];
     const fix = (name: string, value: string) => `ALTER ROLE ${r!.role} SET ${name} = '${value}' (or ALTER DATABASE ${r!.db} SET …); new connections read it`;
     const ms = Math.max(0, Math.floor(timeoutMs));
     return [
       ...(/^ISO\b/i.test(r!.datestyle) ? [] : [`DateStyle is '${r!.datestyle}'; Mantle reads dates as ISO text: ${fix("DateStyle", "ISO, YMD")}`]),
       ...(r!.intervalstyle === "postgres" ? [] : [`IntervalStyle is '${r!.intervalstyle}'; Mantle reads intervals as PostgreSQL text: ${fix("IntervalStyle", "postgres")}`]),
       ...(r!.float_digits >= 1 ? [] : [`extra_float_digits is ${r!.float_digits}, which rounds float8 values: ${fix("extra_float_digits", "1")}`]),
-      ...(r!.utc ? [] : [`TimeZone is '${r!.tz}'; Mantle casts between dates and instants in UTC, as D1 does: ${fix("TimeZone", "UTC")}`]),
       ...(r!.scs === "on" ? [] : [`standard_conforming_strings is off: ${fix("standard_conforming_strings", "on")}`]),
       ...(!ms || (r!.timeout_ms > 0 && r!.timeout_ms <= ms) ? [] :
         [`statement_timeout is ${r!.timeout_ms ? `${r!.timeout_ms} ms` : "unset"}; a read runs outside a transaction under the role's limit, which must be at most ${ms} ms (statementTimeoutMs): ${fix("statement_timeout", `${ms}ms`)}`]),

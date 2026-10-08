@@ -324,7 +324,8 @@ function selectIn(n: N, c: C): N {
       if (cte && !cteOutputs(cte).includes('id')) throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a CTE, needs the CTE to output id`);
       const extra = [col(firstAlias, 'id')];
       const je = (n.fromClause ?? []).find((f: N) => f.RangeFunction);
-      if (je?.RangeFunction.alias) extra.push(col(je.RangeFunction.alias.aliasname, 'id'));
+      // json_each's own `id` orders its elements; PostgreSQL's row sources have none (WITH ORDINALITY is the author's key)
+      if (je?.RangeFunction.alias && je.RangeFunction.functions[0]?.List?.items?.[0]?.FuncCall?.funcname?.at(-1)?.String?.sval === 'json_each') extra.push(col(je.RangeFunction.alias.aliasname, 'id'));
       out.sortClause = [...out.sortClause, ...extra.filter((e) => !have.has(JSON.stringify(e))).map((e) => sort(e, dir))];
     }
   }
