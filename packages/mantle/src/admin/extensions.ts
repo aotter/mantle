@@ -375,7 +375,7 @@ function readRef(v: unknown, path: string): AdminExtensionRecordRef {
 }
 
 /**
- * Answers `{basePath}/api/x/{extension}/...` after Admin's session checks: `settings/{id}` (GET loads, PUT saves),
+ * Answers `{basePath}/api/x/{extension}/...` after Admin's session checks: `settings/{id}` (GET loads, PATCH saves),
  * `actions/{id}` (POST runs) and `api/{path}` (the extension's own API). `null` when the path is not an extension's.
  */
 export async function adminExtensionRoute(extensions: readonly AdminExtension[], request: Request, rest: string, caller: AdminExtensionCaller): Promise<Response> {
@@ -397,7 +397,8 @@ export async function adminExtensionRoute(extensions: readonly AdminExtension[],
     if (!s || !handler) throw wireError("NOT_FOUND", "no such route", P);
     if (!meetsRole(caller.role, s.role)) throw denied(s.role);
     if (request.method === "GET") return json({ value: (await handler.load(caller)) ?? null }, 200, NO_STORE);
-    if (request.method !== "PUT") throw wireError("METHOD_NOT_ALLOWED", "settings take GET or PUT", P);
+    // PATCH, as Admin's own site settings: the body is the whole value, checked against the schema
+    if (request.method !== "PATCH") throw wireError("METHOD_NOT_ALLOWED", "settings take GET or PATCH", P);
     const value = (await readJsonObject(request, P))["value"];
     const errors = checkFormValue(s.schema, value);
     if (Object.keys(errors).length > 0) return json({ error: { code: "INPUT_VALIDATION_FAILED", message: "The settings do not match their schema.", fields: errors } }, 400, NO_STORE);

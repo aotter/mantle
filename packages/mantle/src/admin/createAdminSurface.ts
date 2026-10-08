@@ -133,6 +133,17 @@ async function csv(name: string, read: (cursor?: string) => Promise<StoreSelectR
   return new Response(body, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${name}.csv"`, ...NO_STORE } });
 }
 
+/** Adds `integrity` to the shell's import map; a shell without one (a dev build) gets one holding only the integrity. */
+function withModuleIntegrity(html: string, integrity: Readonly<Record<string, string>>): string {
+  const found = /<script type="importmap">([\s\S]*?)<\/script>/.exec(html);
+  let map: { imports?: unknown; integrity?: Record<string, string> } = {};
+  try { if (found) map = JSON.parse(found[1]!) as typeof map; } catch { map = {}; }
+  // `<` cannot close the script early once escaped
+  const json = JSON.stringify({ ...map, integrity: { ...(map.integrity ?? {}), ...integrity } }).replace(/</g, "\\u003c");
+  const tag = `<script type="importmap">${json}</script>`;
+  return found ? html.replace(found[0], () => tag) : html.replace(/<head>/i, (head) => `${head}${tag}`);
+}
+
 export function createAdminSurface(runtime: MantleRuntime, options: AdminSurfaceOptions): Surface {
   const base = options.basePath.replace(/\/+$/, "");
   // the SPA is built for /admin: its chunks, its API calls and its links name that path
@@ -169,7 +180,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       const field = s.names?.[c.field] ?? c.field;
       return [k === c.field ? field : k, { schema: s.name, field }];
     }));
-    return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [], searchFields: list["searchFields"] ?? [], filterFields: list["filterFields"] ?? [] }, columns };
+    return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [], searchFields: list["searchFields"] ?? [], filterFields: list["filterFields"] ?? [], cells: (list as { cells?: Record<string, string> })["cells"] ?? {} }, columns };
   });
   // `search` and `filter.<output>` from the query string, for the outputs the View's uiSchema.list declares (ADR-0032 decision 5).
   // A filter value is coerced to the field the output reads, as a View's input is.
@@ -568,6 +579,9 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     throw wireError("NOT_FOUND", "no such route", P);
   };
 
+  // an extension module's Subresource Integrity, which the browser enforces through the shell's import map
+  const integrity = Object.fromEntries(extensions.flatMap((e) => (e.module && e.integrity ? [[e.module, e.integrity]] : [])));
+  const hasIntegrity = Object.keys(integrity).length > 0;
   const shell = async (request: Request, rel: string): Promise<Response> => {
     // the path reaches `assets` as the client sent it, so a traversal or an encoded separator stops here
     if (request.method !== "GET" || !options.assets || /(^|\/)\.\.(\/|$)|%2f|%5c|\\/i.test(rel)) throw wireError("NOT_FOUND", "no such route", P);
@@ -585,6 +599,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     headers.append("content-security-policy", "frame-ancestors 'none'");
     headers.set("x-frame-options", "DENY");
     headers.set("cache-control", "no-store");
+    if (hasIntegrity) {
+      headers.delete("content-length");
+      return new Response(withModuleIntegrity(await res.text(), integrity), { status: res.status, headers });
+    }
     return new Response(res.body, { status: res.status, headers });
   };
 

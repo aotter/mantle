@@ -422,11 +422,11 @@ describe("Admin surface: extensions", () => {
     stored = { region: "tw" };
     expect((await ask("/admin/api/x/audit/settings/retention", owner)).body).toEqual({ value: { region: "tw" } });
     expect((await ask("/admin/api/x/audit/settings/retention", editor)).status).toBe(403);
-    const bad = await ask("/admin/api/x/audit/settings/retention", owner, "PUT", { value: { region: "us", limit: 11, extra: 1 } });
+    const bad = await ask("/admin/api/x/audit/settings/retention", owner, "PATCH", { value: { region: "us", limit: 11, extra: 1 } });
     expect(bad.status).toBe(400);
     expect(bad.body.error.fields).toEqual({ region: "expected one of the listed values", limit: "expected at most 10", extra: "no such field" });
-    expect((await ask("/admin/api/x/audit/settings/retention", owner, "PUT", { value: { limit: 2 } })).body.error.fields).toEqual({ region: "required" });
-    expect((await ask("/admin/api/x/audit/settings/retention", owner, "PUT", { value: { region: "jp", limit: 3 } })).body).toEqual({ value: { region: "jp", limit: 3 } });
+    expect((await ask("/admin/api/x/audit/settings/retention", owner, "PATCH", { value: { limit: 2 } })).body.error.fields).toEqual({ region: "required" });
+    expect((await ask("/admin/api/x/audit/settings/retention", owner, "PATCH", { value: { region: "jp", limit: 3 } })).body).toEqual({ value: { region: "jp", limit: 3 } });
     expect(stored).toEqual({ region: "jp", limit: 3 });
     expect((await ask("/admin/api/x/audit/settings/retention", owner, "DELETE")).status).toBe(405);
     expect((await ask("/admin/api/x/audit/settings/nope", owner)).status).toBe(404);
@@ -480,6 +480,18 @@ describe("Admin surface: extensions", () => {
     expect(() => checkPlanUiExtensions(plan({ list: { cells: { note: "audit/swatch" } }, fields: { note: { widget: "audit/color", options: {} } } }), [{ ...audit, contributes: { fields: [{ id: "swatch", target: "field.cell/v1" }, { id: "color", target: "field.input/v1" }] } }])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_OPTIONS" }) }));
     // construction runs the same check against the runtime's plan
     expect(() => createAdminSurface(rt, { basePath: "/admin", extensions: [audit] })).not.toThrow();
+  });
+
+  it("puts module integrity into the shell's import map, merging the one the build wrote", async () => {
+    const shellWith = (html: string): AdminAssets => (path) => path.replace(/^\/+/, "") === "index.html" ? new Response(html, { headers: { "content-type": "text/html" } }) : null;
+    const signed: AdminExtension = { ...audit, integrity: "sha384-abc+/=" };
+    const built = '<!doctype html><head><base href="/admin/" /><script type="importmap">{"imports":{"react":"./shared/react.js"}}</script></head>';
+    const html = await (await createAdminSurface(rt, { basePath: "/admin", assets: shellWith(built), extensions: [signed] })(new Request("http://x/admin/c/posts"), owner)).text();
+    const map = JSON.parse(/<script type="importmap">(.*?)<\/script>/.exec(html)![1]!);
+    expect(map).toEqual({ imports: { react: "./shared/react.js" }, integrity: { "/admin-extensions/audit.js": "sha384-abc+/=" } });
+    // a shell without a map gets one; without integrity the shell is served untouched
+    expect(await (await createAdminSurface(rt, { basePath: "/admin", assets: shellWith("<html><head></head></html>"), extensions: [signed] })(new Request("http://x/admin"), owner)).text()).toContain('"integrity":{"/admin-extensions/audit.js"');
+    expect(await (await createAdminSurface(rt, { basePath: "/admin", assets: shellWith(built), extensions: [audit] })(new Request("http://x/admin"), owner)).text()).toBe(built);
   });
 
   it("diffs declarations for review", () => {

@@ -276,12 +276,21 @@ export function buildNavGroups(
             { title: t(language, "nav.staff"), url: "/admin/staff", icon: Users },
           ]
         : []),
-      // host pages, already filtered to this staff member's role by the server
-      ...(extensions ?? []).map((extension) => ({
-        title: resolveLocalizedText(extension.title, language, canonical) ?? extension.id,
-        url: `/admin/x/${encodeURIComponent(extension.id)}`,
-        icon: Puzzle,
-      })),
+      // extension pages and settings (ADR-lite 1376), already filtered to this staff member's role by the server;
+      // a page appears only when it asks for a place, a settings page always does
+      ...(extensions ?? []).flatMap((extension) => [
+        ...(extension.contributes?.pages ?? []).filter((p) => p.nav).map((p) => ({ ...p, order: p.nav!.order ?? 0, group: p.nav!.group })),
+        ...(extension.contributes?.settings ?? []).map((s) => ({ ...s, order: 0, group: "settings" as const })),
+      ].map((c) => ({
+        order: c.order,
+        group: c.group,
+        title: resolveLocalizedText(c.title, language, canonical) ?? c.id,
+        url: `/admin/x/${encodeURIComponent(extension.id)}/${encodeURIComponent(c.id)}`,
+        icon: c.group === "settings" ? SettingsIcon : Puzzle,
+      })))
+        // settings next to Admin's own settings, then the rest; a stable sort keeps declaration order within one order
+        .sort((a, b) => (a.group === b.group ? a.order - b.order : a.group === "settings" ? -1 : 1))
+        .map(({ order: _order, group: _group, ...item }) => item),
     ],
   };
 

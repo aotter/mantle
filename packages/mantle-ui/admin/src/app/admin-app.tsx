@@ -217,11 +217,11 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     return <React.Suspense fallback={<GateLoading />}><DeveloperWorkspace path={path} /></React.Suspense>;
   }
 
-  const extensionMatch = path.match(/^\/admin\/x\/([^/]+)\/?$/);
+  const extensionMatch = path.match(/^\/admin\/x\/([^/]+)\/([^/]+)\/?$/);
   if (extensionMatch) {
     return (
       <AuthenticatedLayout>
-        <ExtensionPage id={decodeURIComponent(extensionMatch[1]!)} />
+        <ExtensionPage extension={decodeURIComponent(extensionMatch[1]!)} contribution={decodeURIComponent(extensionMatch[2]!)} />
       </AuthenticatedLayout>
     );
   }

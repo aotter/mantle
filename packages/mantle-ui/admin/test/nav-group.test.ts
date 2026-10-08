@@ -1,3 +1,4 @@
+import type { AdminExtensionInfo } from "../src/lib/types";
 import { describe, expect, it } from "vitest";
 import { isGroupActive, isLinkActive, isSubLinkActive } from "../src/layout/nav-group";
 import { buildDeveloperNavGroups, buildNavGroups } from "../src/layout/authenticated-layout";
@@ -117,17 +118,32 @@ describe("member navigation", () => {
   });
 });
 
-describe("host extension pages in the sidebar", () => {
-  it("lists the pages the server returned, localized, under More", () => {
-    const groups = buildNavGroups([], [], "zh-TW", null, "contributor", false, undefined, [
-      { id: "staff-access", title: { en: "Staff access", "zh-TW": "Staff 權限" }, module: "/x/access.js" },
-    ]);
-    const more = groups[groups.length - 1]!;
-    expect(more.items).toEqual([expect.objectContaining({ title: "Staff 權限", url: "/admin/x/staff-access" })]);
+describe("extension pages and settings in the sidebar", () => {
+  const extension = (contributes: Partial<AdminExtensionInfo["contributes"]>): AdminExtensionInfo => ({
+    id: "staff-access", title: { en: "Staff access", "zh-TW": "Staff 權限" }, module: "/x/access.js",
+    contributes: { pages: [], settings: [], actions: [], panels: [], fields: [], ...contributes },
   });
 
-  it("adds nothing when the server lists no pages (or is older and sends none)", () => {
+  it("lists settings first, then pages that ask for a place in order, localized, under More", () => {
+    const groups = buildNavGroups([], [], "zh-TW", null, "contributor", false, undefined, [extension({
+      pages: [
+        { id: "audit", title: "Audit", role: "contributor", nav: { group: "more", order: 2 } },
+        { id: "grants", title: { en: "Grants", "zh-TW": "授權" }, role: "contributor", nav: { group: "more", order: 1 } },
+        { id: "hidden", title: "Hidden", role: "contributor" },
+      ],
+      settings: [{ id: "policy", title: { en: "Policy", "zh-TW": "政策" }, role: "contributor", schema: { type: "object", properties: {} } }],
+    })]);
+    const more = groups[groups.length - 1]!;
+    expect(more.items.map((item) => "url" in item ? [item.title, item.url] : [])).toEqual([
+      ["政策", "/admin/x/staff-access/policy"],
+      ["授權", "/admin/x/staff-access/grants"],
+      ["Audit", "/admin/x/staff-access/audit"],
+    ]);
+  });
+
+  it("adds nothing when the server lists no extensions (or is older and sends none)", () => {
     const before = buildNavGroups([], [], "en", null, "owner");
     expect(buildNavGroups([], [], "en", null, "owner", false, undefined, [])).toEqual(before);
+    expect(buildNavGroups([], [], "en", null, "owner", false, undefined, [extension({ panels: [{ id: "p", title: "P", role: "owner", target: "home/v1" }] })])).toEqual(before);
   });
 });
