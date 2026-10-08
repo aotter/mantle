@@ -36,7 +36,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
   const withEnv = mantle || admin;
   const core = ["createMantle", ...(identity === "none" ? [] : ["withCaller"]), "type MantleRuntime", "type MantleService", "type Surface"];
   const auth = mantle ? ["ConsoleEmailSender", "createAuthRoutes", "createCallerResolver", "createMantleAuth", "createSetupIncompleteAuth", "type MantleAuth"] : [];
-  const env = [...(bun ? [postgres ? "  readonly SQL: SQL;" : "  readonly DB: Database;"] : postgres ? ["  /** PostgreSQL through Hyperdrive; `wrangler dev` connects to its localConnectionString. */", "  readonly HYPERDRIVE: { readonly connectionString: string };"] : ["  readonly DB: D1Database;"]), ...(admin ? ["  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */", bun ? "  readonly ASSETS: (path: string) => Promise<Response | null>;" : "  readonly ASSETS: Fetcher;"] : []), ...(mantle ? ["  readonly BETTER_AUTH_SECRET?: string;", "  readonly PUBLIC_ORIGIN?: string;", "  readonly ADMIN_EMAIL?: string;"] : [])];
+  const env = [...(bun ? [postgres ? "  /** The node-postgres pool (src/index.ts). */\n  readonly PG: Pool;" : "  readonly DB: Database;"] : postgres ? ["  /** PostgreSQL through Hyperdrive; `wrangler dev` connects to its localConnectionString. */", "  readonly HYPERDRIVE: { readonly connectionString: string };"] : ["  readonly DB: D1Database;"]), ...(admin ? ["  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */", bun ? "  readonly ASSETS: (path: string) => Promise<Response | null>;" : "  readonly ASSETS: Fetcher;"] : []), ...(mantle ? ["  readonly BETTER_AUTH_SECRET?: string;", "  readonly PUBLIC_ORIGIN?: string;", "  readonly ADMIN_EMAIL?: string;"] : [])];
   const origin = mantle ? [`  const origin = env.PUBLIC_ORIGIN?.replace(/\\/+$/, "") ?? "${localOrigin}";`, "  const auth = createAuth(env, origin);"] : [];
   const caller = mantle
     ? [`  const resolver = createCallerResolver(auth${mcp ? ", { jwtBearer: { audience: `${origin}/mcp`, scopes: [\"mcp\"] } }" : ""});`, "  const authRoutes = createAuthRoutes(auth, { resolver });", "  const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);"]
@@ -59,7 +59,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     "  // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers",
     '  const rest = guard(createRestSurface(runtime, { basePath: "/api" }));',
   ];
-  const scoped = postgres && !bun;
+  const scoped = postgres;
   const call = `(routes ??= mount(runtime${withEnv ? ", env" : ""}))(request${mantle ? ", waitUntil" : ""})`;
   const route = [
     `  return async (request: Request${mantle ? ", waitUntil: (promise: Promise<unknown>) => void" : ""}): Promise<Response> => {`,
@@ -81,10 +81,10 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     `import { ${core.join(", ")} } from "@aotter/mantle";`,
     ...(admin ? ['import { createAdminSurface } from "@aotter/mantle/admin";'] : []),
     ...(auth.length ? [`import { ${auth.join(", ")} } from "@aotter/mantle/auth";`] : []),
-    ...(bun
-      ? [postgres ? 'import type { SQL } from "bun";' : 'import type { Database } from "bun:sqlite";', `import { ${postgres ? 'bunPostgresStorage' : 'bunSqliteStorage'}${mantle ? (postgres ? ', bunDatabaseDriver, bunAuthDatabase' : ', bunSqliteDriver') : ''} } from "@aotter/mantle/bun";`]
-      : postgres
-      ? [`import { ${mantle ? "pgDatabaseDriver, pgPool, " : ""}postgresStorage, requestScoped, type PgClient, type PgSession } from "@aotter/mantle/postgres";`, 'import pg from "pg";']
+    ...(postgres
+      ? [`import { ${mantle ? "pgDatabaseDriver, pgPool, " : ""}postgresStorage, requestScoped, type PgClient, type PgSession } from "@aotter/mantle/postgres";`, bun ? 'import type { Pool } from "pg";' : 'import pg from "pg";']
+      : bun
+      ? ['import type { Database } from "bun:sqlite";', `import { bunSqliteStorage${mantle ? ', bunSqliteDriver' : ''} } from "@aotter/mantle/bun";`]
       : [`import { ${mantle ? "d1Driver, " : ""}d1Storage } from "@aotter/mantle/cloudflare";`]),
     ...(mcp ? [`import { createMcpSurface${staffMcp ? ", planApp" : ""} } from "@aotter/mantle/mcp";`] : []),
     ...(staffMcp ? ['import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";'] : []),
@@ -97,18 +97,33 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     ...env,
     "}",
     "",
-    ...(postgres && !bun ? [
+    ...(postgres ? [
       "/**",
-      " * One client per request (`database(env).run` in fetch below): Hyperdrive keeps the pool, and a Worker's socket must not",
-      " * outlive its request. Work outside a request (boot, schedules) opens a client per operation.",
+      ...(bun
+        ? [" * One pooled client per request (`database(env).run` in fetch below). Work outside a request (boot, schedules) borrows one", " * per operation."]
+        : [" * One client per request (`database(env).run` in fetch below): Hyperdrive keeps the pool, and a Worker's socket must not", " * outlive its request. Work outside a request (boot, schedules) opens a client per operation."]),
       " */",
       "let session: PgSession | undefined;",
-      'const database = (env: Pick<Env, "HYPERDRIVE">) => (session ??= requestScoped(async () => {',
-      "  // pg's `pipeline: true` sends a write batch in one round trip; it stays off until Hyperdrive is verified to forward it (#1379)",
-      "  const client = new pg.Client({ connectionString: env.HYPERDRIVE.connectionString });",
-      "  await client.connect();",
-      "  return client as unknown as PgClient;",
-      "}));",
+      ...(bun ? [
+        'const database = (env: Pick<Env, "PG">) => (session ??= requestScoped(async () => {',
+        "  const client = await env.PG.connect();",
+        "  // end() hands the client back to the pool; one a failed request left in a transaction is destroyed, not reused",
+        "  return {",
+        "    pipeline: true,",
+        "    query: client.query.bind(client),",
+        "    on: client.on.bind(client),",
+        "    getTransactionStatus: () => client.getTransactionStatus(),",
+        "    end: async () => client.release(client.getTransactionStatus() !== \"I\"),",
+        "  } as unknown as PgClient;",
+        "}));",
+      ] : [
+        'const database = (env: Pick<Env, "HYPERDRIVE">) => (session ??= requestScoped(async () => {',
+        "  // pg's `pipeline: true` sends a write batch in one round trip; it stays off until Hyperdrive is verified to forward it (#1379)",
+        "  const client = new pg.Client({ connectionString: env.HYPERDRIVE.connectionString });",
+        "  await client.connect();",
+        "  return client as unknown as PgClient;",
+        "}));",
+      ]),
       "",
     ] : []),
     ...(mantle ? [
@@ -120,7 +135,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
       `    return createSetupIncompleteAuth({ message: "Sign-in is not configured: copy ${localEnv}.example to ${localEnv} locally, or choose a sign-in method in src/service.ts." });`,
       "  return createMantleAuth({",
       bun
-        ? postgres ? '    database: bunAuthDatabase(env.SQL), driver: bunDatabaseDriver(env.SQL), baseURL: origin, secret: env.BETTER_AUTH_SECRET,' : "    database: env.DB, driver: bunSqliteDriver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
+        ? postgres ? "    database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect), baseURL: origin, secret: env.BETTER_AUTH_SECRET," : "    database: env.DB, driver: bunSqliteDriver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
         : postgres
         ? "    database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
         : "    database: env.DB, driver: d1Driver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,",
@@ -152,7 +167,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     `  fetch: (request, ${scoped || withEnv ? "env" : "_env"}, { runtime${mantle ? ", waitUntil" : ""} }) => ${scoped ? `database(env).run(() => ${call})` : call},`,
     "};",
     "",
-    `export const mantle = createMantle(service, { plan, storage: (env) => ${bun ? (postgres ? "bunPostgresStorage(env.SQL)" : "bunSqliteStorage(env.DB)") : postgres ? "postgresStorage({ connect: database(env).connect })" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
+    `export const mantle = createMantle(service, { plan, storage: (env) => ${postgres ? "postgresStorage({ connect: database(env).connect })" : bun ? "bunSqliteStorage(env.DB)" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
     "",
   ].join("\n");
 }
@@ -313,13 +328,13 @@ export async function presetWarnings(root: string, selection: PresetSelection, s
 function bunEntry(selection: PresetSelection): string {
   const pg = selection.dialect === 'postgres';
   const admin = selection.features.includes('admin');
-  return `${OWNED} Bun owns the server, native database pool and background work.
-${pg ? 'import { SQL } from "bun";' : 'import { Database } from "bun:sqlite";'}
+  return `${OWNED} Bun owns the server, the database pool and background work.
+${pg ? 'import pg from "pg";' : 'import { Database } from "bun:sqlite";'}
 ${admin ? 'import { bunAdminAssets } from "@aotter/mantle/bun";\nimport { dirname } from "node:path";\nimport { fileURLToPath } from "node:url";\n' : ''}import { mantle, type Env } from "./service.js";
 
-${pg ? 'if (!process.env.DATABASE_URL || !/^postgres(?:ql)?:\\/\\//.test(process.env.DATABASE_URL)) throw new Error("DATABASE_URL must be a PostgreSQL URL");\nconst sql = new SQL(process.env.DATABASE_URL, { bigint: true, prepare: false });' : 'const db = new Database(process.env.DATABASE_FILE ?? "mantle.sqlite", { create: true });'}
+${pg ? 'if (!process.env.DATABASE_URL || !/^postgres(?:ql)?:\\/\\//.test(process.env.DATABASE_URL)) throw new Error("DATABASE_URL must be a PostgreSQL URL");\n// pipeline: one round trip per write batch (#1379). The role sets statement_timeout and TimeZone UTC; boot checks them.\nconst pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, pipeline: true } as pg.PoolConfig);\npool.on("error", console.error);' : 'const db = new Database(process.env.DATABASE_FILE ?? "mantle.sqlite", { create: true });'}
 const env: Env = {
-  ${pg ? 'SQL: sql' : 'DB: db'},
+  ${pg ? 'PG: pool' : 'DB: db'},
 ${admin ? '  ASSETS: bunAdminAssets(dirname(fileURLToPath(import.meta.resolve("@aotter/mantle-ui/admin/index.html")))),\n' : ''}${selection.identity === 'mantle' ? '  PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN, BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET, ADMIN_EMAIL: process.env.ADMIN_EMAIL,\n' : ''}};
 // the client is the socket's address; behind a proxy you list in TRUSTED_PROXIES, the address it appended to X-Forwarded-For
 const proxies = new Set((process.env.TRUSTED_PROXIES ?? "").split(",").map((s) => s.trim()).filter(Boolean));
@@ -352,7 +367,7 @@ const stop = async () => {
   stopping = true;
   await server.stop();
   while (pending.size) await Promise.allSettled([...pending]);
-  ${pg ? 'await sql.close({ timeout: 5 });' : 'db.close();'}
+  ${pg ? 'await pool.end();' : 'db.close();'}
 };
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);

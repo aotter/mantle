@@ -9,8 +9,7 @@ It does not validate a deployed Cloudflare account or publish a release.
 ## Prepare
 
 Use Bun 1.3.14, Node 22+, pnpm 9+, Chrome and PostgreSQL. Create two **disposable,
-separate databases** with a role allowed to converge tables and create temporary
-tables (native Bun metadata needs TEMPORARY; ADR-0038). Keep other data out.
+separate databases** with a role allowed to converge tables. Keep other data out.
 
 ```sh
 pnpm install --frozen-lockfile

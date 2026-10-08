@@ -416,19 +416,24 @@ export const handlers: MantleHandlers = {
 });
 
 // Bun owns native connections/assets; the composition still uses exactly the same createMantle service port.
-it('writes Bun presets for PostgreSQL and SQLite with no Cloudflare or pg imports', async () => {
+it('writes Bun presets: node-postgres over PostgreSQL, bun:sqlite over SQLite, no Cloudflare imports', async () => {
   const { presetFiles } = await import('../../src/cli/preset.js');
   const plan = { schemas: {}, procedures: {}, triggers: {} } as any;
   for (const dialect of ['postgres', 'sqlite'] as const) for (const identity of ['mantle', 'custom', 'none'] as const) {
     const files = Object.fromEntries(presetFiles('/private/tmp/bun-preset', { host: 'bun', dialect, identity, features: identity === 'none' ? [] : ['admin'] }, plan));
     expect(files['wrangler.jsonc']).toBeUndefined();
-    expect(files['src/service.ts']).toContain('@aotter/mantle/bun');
-    expect(files['src/service.ts']).not.toMatch(/@aotter\/mantle\/cloudflare|from "pg"|HYPERDRIVE|D1Database|Fetcher/);
+    expect(files['src/service.ts']).not.toMatch(/@aotter\/mantle\/cloudflare|HYPERDRIVE|D1Database|Fetcher|from "bun"|Bun\.SQL|bunPg|bunPostgres/);
+    // ADR-0039: node-postgres on every host, one client per request; bun:sqlite stays native
+    if (dialect === 'postgres') {
+      expect(files['src/service.ts']).toMatch(/from "@aotter\/mantle\/postgres"/);
+      expect(files['src/service.ts']).toContain('requestScoped(');
+      expect(files['src/service.ts']).not.toContain('@aotter/mantle/bun"');
+    } else expect(files['src/service.ts']).toContain('bunSqliteStorage');
     expect(files['src/index.ts']).toContain('Bun.serve');
     expect(files['src/index.ts']).toContain('headers.delete("x-mantle-client-ip")');
     expect(files['src/index.ts']).toContain('while (pending.size)');
     expect(files['src/service.ts']).toContain('schedules: false');
-    if (dialect === 'postgres') expect(files['src/index.ts']).toContain('prepare: false');
+    if (dialect === 'postgres') { expect(files['src/index.ts']).toContain('new pg.Pool('); expect(files['src/index.ts']).not.toMatch(/SQL\(|"bun";|prepare: false/); }
     expect(files['src/index.ts']).toContain('development: false');
     // the generated project typechecks against bun-types, with @aotter/mantle mapped to this repo's source
     const dir = await mkdtemp(join(tmpdir(), 'mantle-bun-preset-'));

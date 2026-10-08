@@ -35,9 +35,9 @@ preset does); without Admin it is `/oauth/consent`, the plain page
 then `createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } })`,
 `createAuthRoutes(auth, { resolver })` and an `AdminIdentity` over the auth's
 own methods. With dialect `postgres` the preset passes `database:
-pgPool(connect), driver: pgDatabaseDriver(connect)` over Hyperdrive; host `bun`
-passes `bunAuthDatabase(sql)` and `bunDatabaseDriver(sql)` (or the bun:sqlite
-`Database` and `bunSqliteDriver(db)`), with `ipAddressHeaders:
+pgPool(connect), driver: pgDatabaseDriver(connect)` on both hosts (Hyperdrive on
+`cloudflare`, a `pg.Pool` on `bun`); host `bun` over SQLite passes the bun:sqlite
+`Database` and `bunSqliteDriver(db)`, with `ipAddressHeaders:
 ["x-mantle-client-ip"]`, which its entry sets from the socket.
 
 ### Local sign-in

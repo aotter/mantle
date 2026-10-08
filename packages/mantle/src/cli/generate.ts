@@ -49,7 +49,7 @@ const PACKAGES: Readonly<Record<Feature | Identity, readonly string[]>> = {
   mcp: ["@modelcontextprotocol/server", "@modelcontextprotocol/ext-apps"], admin: ["@aotter/mantle-ui"], web: [],
   mantle: ["better-auth", "@better-auth/oauth-provider", "@better-auth/mcp", "@better-auth/cimd"], custom: [], none: [],
 };
-/** What a Cloudflare preset over PostgreSQL imports (Hyperdrive speaks the PostgreSQL protocol; `pg` is the driver). */
+/** What a preset over PostgreSQL imports: `pg` (node-postgres) is the only driver on every host (ADR-0039). */
 const POSTGRES_PACKAGES = ["pg"];
 
 export interface GenerateDeps {
@@ -142,7 +142,7 @@ function featureDiagnostics(root: string, config: MantleConfig): Diagnostic[] {
   for (const f of config.features) need(`feature '${f}'`, PACKAGES[f]);
   // a preset written now serves the staff MCP App, which @aotter/mantle-ui builds; a service already written is the application's
   const writesPreset = (config.host ?? "cloudflare") !== "none" && !!builtInOf(config.dialect) && !existsSync(join(root, "src/service.ts"));
-  if (writesPreset && (config.host ?? "cloudflare") === "cloudflare" && builtInOf(config.dialect) === "postgres") need("dialect 'postgres' on Cloudflare", POSTGRES_PACKAGES);
+  if (writesPreset && builtInOf(config.dialect) === "postgres") need(`dialect 'postgres' on ${config.host === "bun" ? "Bun" : "Cloudflare"}`, POSTGRES_PACKAGES);
   if (writesPreset && config.host === "bun") need("host 'bun' types", ["bun-types"]);
   if (writesPreset && config.features.includes("mcp") && config.identity !== "none" && !config.features.includes("admin")) need("the staff MCP App", ["@aotter/mantle-ui"]);
   if (config.features.includes("admin") && config.identity === "none")
