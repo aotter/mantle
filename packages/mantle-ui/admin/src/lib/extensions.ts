@@ -31,10 +31,13 @@ export function matchesWhen(when: AdminExtensionWhen | undefined, at: { schema: 
   return true;
 }
 
-/** Where a field widget comes from: the manifest's name wins over a matching `when`. */
+/** Where a field widget comes from: a widget the manifest names, even a built-in one, wins over a matching `when`. */
 export function fieldContribution(site: SiteInfo | undefined, target: "field.input/v1" | "field.cell/v1", at: { schema: string; field: string; property?: JsonSchema; ref?: unknown }): ExtensionContribution<"fields"> | undefined {
-  const named = at.ref === undefined ? undefined : contributionByRef(site, "fields", at.ref);
-  if (named) return named.target === target ? named : undefined;
+  // a manifest that names a widget (`textarea`, or a contribution this role does not reach) has decided: no `when` applies
+  if (at.ref !== undefined) {
+    const named = contributionByRef(site, "fields", at.ref);
+    return named?.target === target ? named : undefined;
+  }
   return contributionsOf(site, "fields").find((c) => c.target === target && matchesWhen(c.when, at));
 }
 

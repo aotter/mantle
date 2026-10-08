@@ -45,7 +45,10 @@ const extension = {
   id: "brand", title: "Brand", module: "/ext/brand.js",
   contributes: {
     pages: [{ id: "grants", title: "Grants", role: "editor", nav: { group: "more" } }],
-    settings: [{ id: "policy", title: "Policy", role: "owner", schema: { type: "object", properties: { limit: { type: "integer", title: "Limit", minimum: 1 } } } }],
+    settings: [
+      { id: "policy", title: "Policy", role: "owner", schema: { type: "object", properties: { limit: { type: "integer", title: "Limit", minimum: 1 } } } },
+      { id: "policy-two", title: "Policy two", role: "owner", schema: { type: "object", properties: { limit: { type: "integer", title: "Limit", minimum: 1 } } } },
+    ],
     actions: [{ id: "flag", title: "Flag", role: "editor", target: "record/v1", presentation: "confirm", when: { schema: ["organizations"] } }],
     panels: [{ id: "usage", title: "Usage", role: "contributor", target: "record.sidebar/v1", when: { schema: ["organizations"] } }],
     fields: [{ id: "color", target: "field.input/v1" }, { id: "swatch", target: "field.cell/v1" }],
@@ -70,6 +73,7 @@ async function boot(path: string): Promise<{ page: Page; calls: { method: string
   await page.addInitScript(() => localStorage.setItem("cms.preference.language", "en"));
   const calls: { method: string; path: string; body: unknown }[] = [];
   const errors: string[] = [];
+  let saved = 0;
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route(`${ORIGIN}/**`, async (route: Route) => {
     const url = new URL(route.request().url());
@@ -87,8 +91,14 @@ async function boot(path: string): Promise<{ page: Page; calls: { method: string
       if (api === "/operations") return route.fulfill({ json: { operations: [] } });
       if (api === "/entries" && method === "GET") return route.fulfill({ json: { items: [row], previous_cursor: null, next_cursor: null } });
       if (api === "/entries/org-1" && method === "GET") return route.fulfill({ json: editor });
-      if (api === "/entries/org-1" && method === "PATCH") return route.fulfill({ json: { ...editor, entry: { ...editor.entry, version: 5, data: (body as { data: unknown }).data } } });
+      // the server normalizes the color, so the widget must show what was stored, not what was typed
+      if (api === "/entries/org-1" && method === "PATCH") {
+        const data = (body as { data: Record<string, unknown> }).data;
+        saved++;
+        return route.fulfill({ json: { ...editor, entry: { ...editor.entry, version: 4 + saved, data: { ...data, color: String(data["color"]).toUpperCase() } } } });
+      }
       if (api === "/x/brand/settings/policy") return route.fulfill({ json: { value: method === "GET" ? { limit: 2 } : (body as { value: unknown }).value } });
+      if (api === "/x/brand/settings/policy-two") return route.fulfill({ json: { value: method === "GET" ? { limit: 20 } : (body as { value: unknown }).value } });
       if (api === "/x/brand/actions/flag") return route.fulfill({ json: { ok: true, result: { message: "Flagged Acme" } } });
       return route.fulfill({ json: {} });
     }
@@ -119,10 +129,21 @@ it.skipIf(!existsSync(resolve(DIST, "index.html")))("renders extension pages, se
     await page.getByRole("link", { name: "Policy", exact: true }).click();
     const limit = page.getByRole("spinbutton");
     await expect.poll(() => limit.inputValue()).toBe("2");
+    // an unsaved draft stays with its page: another settings page shows and saves its own value
+    await limit.fill("5");
+    await page.getByRole("link", { name: "Policy two", exact: true }).click();
+    await expect.poll(() => limit.inputValue()).toBe("20");
+    expect(await page.getByRole("button", { name: "Save changes" }).isDisabled()).toBe(true);
+    await limit.fill("7");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await page.getByText("Settings saved").waitFor();
+    expect(calls.filter((c) => c.method === "PATCH" && c.path.startsWith("/x/brand/settings/")).map((c) => [c.path, c.body])).toEqual([["/x/brand/settings/policy-two", { value: { limit: 7 } }]]);
+    await page.getByRole("link", { name: "Policy", exact: true }).click();
+    await expect.poll(() => limit.inputValue()).toBe("2");
     await limit.fill("5");
     await page.getByRole("button", { name: "Save changes" }).click();
     await page.getByText("Settings saved").waitFor();
-    expect(calls.filter((c) => c.path === "/x/brand/settings/policy" && c.method === "PATCH").map((c) => c.body)).toEqual([{ value: { limit: 5 } }]);
+    await expect.poll(() => calls.filter((c) => c.path === "/x/brand/settings/policy" && c.method === "PATCH").map((c) => c.body)).toEqual([{ value: { limit: 5 } }]);
 
     // a record: its panel, its confirmed action and an extension widget that edits the field
     await page.goto(`${ORIGIN}/admin/c/organizations/org-1/edit`);
@@ -135,10 +156,18 @@ it.skipIf(!existsSync(resolve(DIST, "index.html")))("renders extension pages, se
     await expect.poll(() => color.inputValue()).toBe("teal");
     await page.getByRole("button", { name: "Unlock editing" }).click();
     await color.fill("navy blue");
-    // typing keeps the widget mounted, focused and in step
+    // typing keeps the widget mounted, focused and in step: what it shows is what is saved
     expect(await color.evaluate((el) => el === document.activeElement)).toBe(true);
+    expect(await color.inputValue()).toBe("navy blue");
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect.poll(() => calls.find((c) => c.path === "/entries/org-1" && c.method === "PATCH")?.body).toMatchObject({ data: { name: "Acme", color: "navy blue" }, expectedVersion: 4 });
+    // the stored value comes back changed: the widget shows it, and keeps following later changes from either side
+    await expect.poll(() => color.inputValue()).toBe("NAVY BLUE");
+    await color.fill("navy blue");
+    expect(await color.inputValue()).toBe("navy blue");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect.poll(() => calls.filter((c) => c.path === "/entries/org-1" && c.method === "PATCH").length).toBe(2);
+    await expect.poll(() => color.inputValue()).toBe("NAVY BLUE");
   } finally {
     await close();
   }

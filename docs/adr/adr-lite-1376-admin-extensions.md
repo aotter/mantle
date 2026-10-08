@@ -131,7 +131,8 @@ Contributions and their targets (§1b covers how manifests use them):
 string[], format?: string[] }`. It contains no expressions and no record
 values, so the server can evaluate it.
 
-`role` is the minimum staff role, the same vocabulary as `requires.auth`.
+`role` is the minimum staff role, the same vocabulary as `requires.auth`. It is
+required except on `fields`, where it defaults to `contributor`.
 
 ### 1b. Manifests pick contributions through `uiSchema`
 
@@ -181,9 +182,18 @@ When both apply to one place, the manifest wins.
   - `checkPlanUiExtensions(plan, extensions)` is exported, so a deploy step or
     a test can run the same check before the service starts.
 
-**Who may be named.** A manifest may name only the project's own extensions,
-never a host's. A project then renders the same locally and when deployed. A
-host attaches its contributions with `when` instead.
+**Who may be named.** A manifest should name only the project's own
+extensions, so the project renders the same locally and when deployed; a host
+attaches its contributions with `when` instead. Core cannot enforce this: the
+extensions reach `createAdminSurface` as one list with no provenance, so it
+checks existence, target and options, not ownership. A host that must keep
+manifests from naming its contributions checks the plan's names
+(`planUiExtensionRefs`) against its own ids before it starts Admin.
+
+**A named widget is a decision.** When `uiSchema.fields.<name>.widget` names
+any widget, `textarea` included, a matching `when` does not replace it; a
+contribution the viewer's role does not reach falls back to Admin's own
+control, not to `when`.
 
 **Effect.** `uiSchema` stays presentation only. It never changes validation,
 MCP schemas or authorization. The field's JSON Schema still validates what a

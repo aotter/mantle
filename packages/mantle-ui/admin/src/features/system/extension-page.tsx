@@ -39,7 +39,8 @@ export function ExtensionPage({ extension: extensionId, contribution }: { extens
       </section>
     );
   }
-  return <ExtensionSettings extension={extension} id={settings!.id} schema={settings!.schema} title={title} eyebrow={eyebrow} />;
+  // keyed: another settings page starts from its own stored value, never this one's draft, errors or pending save
+  return <ExtensionSettings key={`${extension.id}/${settings!.id}`} extension={extension} id={settings!.id} schema={settings!.schema} title={title} eyebrow={eyebrow} />;
 }
 
 function ExtensionSettings({ extension, id, schema, title, eyebrow }: { extension: AdminExtensionInfo; id: string; schema: JsonSchema; title: string; eyebrow: string }): React.ReactElement {

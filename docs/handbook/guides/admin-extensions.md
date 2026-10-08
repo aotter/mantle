@@ -9,22 +9,33 @@ manifests](admin-ui.md)). When a project needs UI of its own, it adds an
 optionally one ES module with renderers. The contract is
 [ADR-lite 1376](../../adr/adr-lite-1376-admin-extensions.md).
 
-With feature `admin`, `mantle generate` writes `src/admin-extensions.ts`
-(yours to edit) and passes its `adminExtensions` to `createAdminSurface`.
+For a new project with feature `admin`, the preset writes
+`src/admin-extensions.ts` (yours to edit) and passes its `adminExtensions` to
+`createAdminSurface`. The preset is written once: when `src/service.ts`
+already exists, `mantle generate` leaves it alone, so add the file and
+`extensions: adminExtensions` to your `createAdminSurface` call yourself.
 
 ## What you can add
 
 | Contribution | Where it appears | Client code |
 |---|---|---|
 | `pages` | `/admin/x/{extension}/{page}`; in **More** when it declares `nav` | a renderer |
-| `settings` | `/admin/x/{extension}/{id}`, always in **More** | none: Admin renders a form from `schema` |
+| `settings` | `/admin/x/{extension}/{id}`, always in **More** | none: Admin renders a form from `schema`, which must be the form subset (a flat object whose properties are `string`, `number`, `integer` or `boolean`, with `title`, `description`, `default`, `enum`, `oneOf`, `minimum`, `maximum`, `minLength`, `maxLength`) |
 | `actions` | `record/v1` (a record's header), `list.selection/v1` (the bulk bar), `list.toolbar/v1` (a list's toolbar) | none for `run` and `confirm` (a server `run`); a renderer for `dialog` |
 | `panels` | `record.sidebar/v1` (a record's side column), `home/v1` (the home page) | a renderer |
 | `fields` | `field.input/v1` (a form control), `field.cell/v1` (a list cell) | a renderer |
 
-Every contribution has a minimum staff `role`. The server sends each staff
-member only the contributions their role reaches, and checks the session and
-role again on every extension route: hiding a button is never the only guard.
+Pages, settings, actions and panels need a minimum staff `role`; a field
+widget's `role` is optional and defaults to `contributor` (below it, Admin's
+own control is used). The server sends each staff member only the
+contributions their role reaches, and checks the session and role again on
+every extension route: hiding a button is never the only guard.
+
+- A settings page and an action are checked against their own `role`.
+- The extension's `api` and its served `source` are shared by all its
+  contributions, so they need only the **lowest** role among them: an owner-only
+  page does not make the `api` owner-only.
+
 Finer rules belong in your handlers, which receive the caller.
 
 ## A complete extension
@@ -113,7 +124,9 @@ The context holds `extension`, `contribution`, `apiBase` (your `api`
 handler), `language`, `theme`, `caller.role`, and where it applies `record`
 (`{ schema, id, version }`), `selection`, `schema`, `field`, `options` and,
 for `field.input/v1`, `onChange`. `host.navigate(path)`, `host.notify(text)`
-and `host.close()` (a dialog action) are the only ways into the console.
+and `host.close()` (a dialog action) are the supported console API. They are
+not a sandbox: a module is trusted same-origin code and can still reach the
+DOM, `fetch` and whatever the signed-in session may do (see Trust).
 
 ## Bind contributions from manifests
 
@@ -153,10 +166,11 @@ spec:
 `mantle generate` checks the shape of the names. `createAdminSurface` checks
 that each named contribution exists, has the right target and accepts its
 `options`, and refuses to start otherwise (`UI_EXTENSION_UNKNOWN`,
-`UI_EXTENSION_TARGET`, `UI_EXTENSION_OPTIONS`). A manifest names only the
-project's own extensions, so it renders the same locally and deployed; a host
-that adds extensions attaches them with `when`. When both apply to one place,
-the manifest wins. `uiSchema` stays presentation only: the field's JSON Schema
+`UI_EXTENSION_TARGET`, `UI_EXTENSION_OPTIONS`). Name only your project's own
+extensions, so the project renders the same locally and deployed; a host that
+adds extensions attaches them with `when`. Core checks that a name exists, not
+whose extension it is. When a manifest names a widget for a field (even
+`textarea`), a matching `when` does not replace it. `uiSchema` stays presentation only: the field's JSON Schema
 still validates whatever a widget sends.
 
 ## Trust

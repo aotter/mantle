@@ -4,7 +4,7 @@ import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, type StaffRole } from "../../src/spec/index.js";
 import { createMantleRuntime, type Caller, type MantleRuntime } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
-import { ADMIN_EXTENSION_JSON_SCHEMA, checkPlanUiExtensions, createAdminSurface, diffAdminExtensions, encodeMemberCursor, type AdminAssets, type AdminExtension, type AdminIdentity } from "../../src/admin/index.js";
+import { ADMIN_EXTENSION_JSON_SCHEMA, checkFormValue, checkPlanUiExtensions, formSchemaProblem, createAdminSurface, diffAdminExtensions, encodeMemberCursor, type AdminAssets, type AdminExtension, type AdminIdentity } from "../../src/admin/index.js";
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -431,6 +431,24 @@ describe("Admin surface: extensions", () => {
     expect(stored).toEqual({ region: "jp", limit: 3 });
     expect((await ask("/admin/api/x/audit/settings/retention", owner, "DELETE")).status).toBe(405);
     expect((await ask("/admin/api/x/audit/settings/nope", owner)).status).toBe(404);
+  });
+
+  it("checks settings by own properties only: constructor, __proto__ and null get no free pass (review of #1376)", async () => {
+    const schema = { type: "object", required: ["constructor"], properties: { constructor: { type: "integer", minimum: 1 }, note: { type: "string" } } } as const;
+    expect(checkFormValue(schema, { constructor: "not-an-integer" })).toEqual({ constructor: "expected an integer" });
+    expect(checkFormValue(schema, {})).toEqual({ constructor: "required" });
+    expect(checkFormValue(schema, JSON.parse('{"constructor": 2, "__proto__": {"x": 1}}'))).toEqual(JSON.parse('{"__proto__": "no such field"}'));
+    expect(checkFormValue(schema, { constructor: 2, note: null })).toEqual({ note: "expected a string" });
+    expect(checkFormValue(schema, { constructor: 2 })).toEqual({});
+    expect(formSchemaProblem(JSON.parse('{"type":"object","properties":{"__proto__":{"type":"string"}}}'))).toMatch(/__proto__/);
+    // through the real route: an invalid value never reaches save
+    const saved: unknown[] = [];
+    const ext: AdminExtension = { apiVersion: 1, id: "proto", title: "Proto", contributes: { settings: [{ id: "s", title: "S", role: "owner", schema }] }, handlers: { settings: { s: { load: () => null, save: (_c, v) => { saved.push(v); return v; } } } } };
+    const patch = (value: unknown) => createAdminSurface(rt, { basePath: "/admin", extensions: [ext] })(new Request("http://x/admin/api/x/proto/settings/s", { method: "PATCH", body: JSON.stringify({ value }), headers: { "content-type": "application/json" } }), owner);
+    expect((await patch({ constructor: "not-an-integer" })).status).toBe(400);
+    expect((await patch({})).status).toBe(400);
+    expect((await patch({ constructor: 3 })).status).toBe(200);
+    expect(saved).toEqual([{ constructor: 3 }]);
   });
 
   it("runs server actions with a checked target, and only where they are offered", async () => {

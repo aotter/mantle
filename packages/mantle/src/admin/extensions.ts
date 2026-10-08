@@ -136,6 +136,7 @@ export function formSchemaProblem(schema: unknown): string | null {
   const props = schema["properties"];
   const names = Object.keys(props);
   if (names.length === 0 || names.length > 64) return "1 to 64 properties";
+  if (names.includes("__proto__")) return "no property named __proto__";
   const required = schema["required"];
   if (required !== undefined && (!Array.isArray(required) || required.some((r) => typeof r !== "string" || !names.includes(r)))) return "required naming declared properties";
   for (const [name, p] of Object.entries(props)) {
@@ -161,7 +162,7 @@ function matchesType(type: string, v: unknown): boolean {
 
 function checkValue(p: Record<string, unknown>, v: unknown): string | null {
   const type = p["type"] as string;
-  if (!matchesType(type, v)) return `a ${type}`;
+  if (!matchesType(type, v)) return type === "integer" ? "an integer" : `a ${type}`;
   if (Array.isArray(p["enum"]) && !p["enum"].includes(v)) return "one of the listed values";
   if (Array.isArray(p["oneOf"]) && !p["oneOf"].some((o) => (o as Record<string, unknown>)["const"] === v)) return "one of the listed values";
   if (typeof v === "number") {
@@ -180,11 +181,14 @@ function checkValue(p: Record<string, unknown>, v: unknown): string | null {
 export function checkFormValue(schema: JsonSchema, value: unknown): Readonly<Record<string, string>> {
   if (!isObject(value)) return { "": "an object" };
   const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
-  const errors: Record<string, string> = {};
+  // own properties only, and no prototype: `constructor` or `__proto__` is a field name like any other
+  const errors: Record<string, string> = Object.create(null) as Record<string, string>;
+  const has = (name: string) => Object.hasOwn(value, name) && value[name] !== undefined;
   for (const k of Object.keys(value)) if (!Object.hasOwn(props, k)) errors[k] = "no such field";
-  for (const name of schema.required ?? []) if (value[name] === undefined || value[name] === null) errors[name] = "required";
+  for (const name of schema.required ?? []) if (!has(name)) errors[name] = "required";
   for (const [name, p] of Object.entries(props)) {
-    if (value[name] === undefined || value[name] === null || errors[name]) continue;
+    // null is a value, and none of the form subset's types accepts it
+    if (!has(name) || Object.hasOwn(errors, name)) continue;
     const problem = checkValue(p, value[name]);
     if (problem) errors[name] = `expected ${problem}`;
   }

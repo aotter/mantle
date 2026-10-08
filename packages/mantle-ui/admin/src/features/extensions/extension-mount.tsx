@@ -100,11 +100,14 @@ export function ExtensionMount({ extension, kind, id, place, onClose, fallback, 
     const before = previous.current;
     previous.current = { rest, value };
     if (before.rest === rest && Object.is(before.value, value)) return;
-    // the renderer's own report coming back: nothing to tell it
-    if (before.rest === rest && emitted.current && Object.is(emitted.current.value, value)) return;
+    // the renderer's own report coming back, consumed once so a later change from elsewhere is never mistaken for it
+    const echo = before.rest === rest && emitted.current !== null && Object.is(emitted.current.value, value);
+    emitted.current = null;
     const mounted = handle.current;
+    // a renderer with `update` always gets the current context, so what it shows is what will be saved
     if (mounted && typeof mounted === "object" && typeof mounted.update === "function") mounted.update(latest.current());
-    else setGeneration((g) => g + 1);
+    // without one, its own report needs no remount (which would lose focus); anything else does
+    else if (!echo) setGeneration((g) => g + 1);
   }, [rest, value]);
 
   if (failed) return <>{fallback ?? <p role="alert" className="text-sm text-muted-foreground">{t(language, "extension.failed")}</p>}</>;
