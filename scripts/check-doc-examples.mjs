@@ -12,7 +12,7 @@ const examples = join(root, "docs/examples");
 const cli = join(root, "packages/mantle/dist/cli/main.js");
 const cloudHelper = join(root, "skills/mantle/scripts/mantle-cloud.mjs");
 // handbook pages whose yaml blocks are a whole service too
-const HANDBOOK = ["start/quickstart-worker.md", "guides/typed-queries.md", "guides/admin-ui.md"];
+const HANDBOOK = ["start/quickstart-worker.md", "guides/typed-queries.md", "guides/admin-ui.md", "guides/admin-extensions.md"];
 const pages = process.argv.slice(2).length
   ? process.argv.slice(2).map((path) => resolve(path))
   : [
