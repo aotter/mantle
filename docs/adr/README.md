@@ -94,3 +94,4 @@ These retain their issue-based filenames and original decision status.
 | [#845 Frontend client](adr-lite-845-frontend-client.md) | Accepted |
 | [#861 Admin WebMCP](adr-lite-861-admin-webmcp.md) | Accepted |
 | [909 Admin UI kit](adr-lite-909-admin-ui-kit.md) | Accepted; amended by 0029 |
+| [#1379 PostgreSQL round trips](adr-lite-1379-pg-round-trips.md) | Proposed |
