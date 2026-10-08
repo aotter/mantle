@@ -1,6 +1,6 @@
 /** View.spec.uiSchema: the Admin list a View presents. */
 import type { ViewManifest } from "../model/ManifestGrammar.js";
-import type { SchemaAdminUiProblem } from "./SchemaAdminUiChecker.js";
+import { checkCells, type SchemaAdminUiProblem } from "./SchemaAdminUiChecker.js";
 
 const problem = (pointer: string, value: unknown, expected: string, message: string): SchemaAdminUiProblem => ({ pointer, value, expected, message });
 
@@ -59,13 +59,13 @@ export function checkViewAdminUi(view: ViewManifest): {
     )] };
   }
   const config = list as Record<string, unknown>;
-  const allowed = new Set(["columns", "searchFields", "filterFields"]);
+  const allowed = new Set(["columns", "searchFields", "filterFields", "cells"]);
   const unknown = Object.keys(config).find((key) => !allowed.has(key));
   if (unknown) {
     return { list: EMPTY_VIEW_LIST, problems: [problem(
       `/spec/uiSchema/list/${unknown}`,
       config[unknown],
-      "columns, searchFields, or filterFields",
+      "columns, searchFields, filterFields, or cells",
       `View.spec.uiSchema.list.${unknown} is not supported.`,
     )] };
   }
@@ -97,5 +97,8 @@ export function checkViewAdminUi(view: ViewManifest): {
     }
     normalized[key] = raw;
   }
+  // the keys must be outputs, which only the compiled SELECT knows (compilePlan checks them)
+  const cellProblem = checkCells(config["cells"], (field) => field.length > 0, "View", "a View output name");
+  if (cellProblem) return { list: EMPTY_VIEW_LIST, problems: [cellProblem] };
   return { list: normalized, problems: [] };
 }

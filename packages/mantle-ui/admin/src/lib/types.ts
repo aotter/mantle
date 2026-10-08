@@ -12,6 +12,8 @@ export type SidebarStatus = ContentStatus;
 
 export interface Collection {
   name: string;
+  /** The Schema's `uiSchema` as declared (Admin presentation only). */
+  uiSchema?: Record<string, unknown> | null;
   title: LocalizedText;
   description: LocalizedText | null;
   lifecycle: Lifecycle;
@@ -197,8 +199,29 @@ export interface SiteInfo {
   mcpUrl: string | null;
   /** What the deployment turned on; absent from an older server, which means all of it. */
   capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean };
+  /** Admin extensions this staff member's role reaches; absent from an older server. */
+  extensions?: AdminExtensionInfo[];
   media?: {
     purposes?: MediaPurposePolicy[];
+  };
+}
+
+/** Admin extensions (ADR-lite 1376): the declarations this staff member's role reaches, as the server sent them. */
+export interface AdminExtensionWhen {
+  schema?: string[];
+  field?: string[];
+  format?: string[];
+}
+export interface AdminExtensionInfo {
+  id: string;
+  title: LocalizedText;
+  module?: string;
+  contributes: {
+    pages: { id: string; title: LocalizedText; role: StaffRole; nav?: { group: "more" | "settings"; order?: number } }[];
+    settings: { id: string; title: LocalizedText; role: StaffRole; schema: JsonSchema }[];
+    actions: { id: string; title: LocalizedText; role: StaffRole; target: "record/v1" | "list.selection/v1" | "list.toolbar/v1"; presentation: "run" | "confirm" | "dialog"; destructive?: boolean; when?: AdminExtensionWhen }[];
+    panels: { id: string; title: LocalizedText; role: StaffRole; target: "record.sidebar/v1" | "home/v1"; when?: AdminExtensionWhen }[];
+    fields: { id: string; target: "field.input/v1" | "field.cell/v1"; role?: StaffRole; when?: AdminExtensionWhen }[];
   };
 }
 
@@ -282,7 +305,7 @@ export interface ViewManifestInfo {
   description: LocalizedText | null;
   input: JsonSchema | null;
   /** `searchFields` and `filterFields` are the outputs the View's search box and filters match (ADR-0032 decision 5). */
-  list: { columns: string[]; searchFields: string[]; filterFields: string[] };
+  list: { columns: string[]; searchFields: string[]; filterFields: string[]; cells?: Record<string, string> };
   columns: Record<string, { schema: string; field: string }>;
 }
 

@@ -21,6 +21,11 @@ export type ApiVersion = typeof API_VERSION;
  *  holding a media asset URL. */
 export type MediaMcpHint = "media" | "media-image" | "media-video" | "media-file";
 
+/** `<extension>/<contribution>`: how `uiSchema` names an Admin extension contribution (ADR-lite 1376). Whether it exists is
+ *  checked where the plan meets the extensions, in `createAdminSurface`. */
+export const UI_EXTENSION_REF = /^([a-z][a-z0-9-]{0,62})\/([a-z][a-z0-9-]{0,62})$/;
+export const isUiExtensionRef = (value: unknown): value is string => typeof value === "string" && UI_EXTENSION_REF.test(value);
+
 export function isMediaMcpHint(value: unknown): value is MediaMcpHint {
   return (
     value === "media" ||
