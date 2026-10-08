@@ -101,3 +101,30 @@ it("work still holding the client when the request ends releases it then; later 
   await tick();
   expect(opened.map((c) => c.ended)).toEqual([true, true]);
 });
+
+it("a client the driver reports inside a transaction is closed even when its SQL looked finished", async () => {
+  const { opened, connect } = fakes();
+  const pg = requestScoped(async () => Object.assign(await connect(), { getTransactionStatus: () => "T" }));
+  await pg.run(async () => {
+    for (const _ of [1, 2]) { const c = await pg.connect(); await c.query("SELECT 1"); await c.end(); }
+  });
+  expect(opened.map((c) => c.ended)).toEqual([true, true]);
+});
+
+it("a pipelined batch whose socket drops is OUTCOME_UNKNOWN wherever the first rejection lands; a bind pg may refuse goes one at a time", async () => {
+  const { transaction } = await import("../../src/postgres/driver.js");
+  const dropped = async () => ({ pipeline: true, query: async () => { throw new Error("Connection terminated"); }, end: async () => undefined });
+  await expect(transaction(dropped, [{ text: "UPDATE t SET n = 1" }])).rejects.toMatchObject({ statement: -1, committing: true });
+  let inFlight = 0;
+  let most = 0;
+  const counting = async () => ({
+    pipeline: true,
+    query: async () => { most = Math.max(most, ++inFlight); await tick(); inFlight--; return { rows: [], rowCount: 1, fields: [] }; },
+    end: async () => undefined,
+  });
+  await transaction(counting, [{ text: "UPDATE t SET n = $1", values: [1] }, { text: "UPDATE t SET n = $1", values: ["x"] }]);
+  expect(most).toBe(4);
+  most = 0;
+  await transaction(counting, [{ text: "UPDATE t SET n = $1", values: [{ toPostgres: () => { throw new Error("no"); } }] }]);
+  expect(most).toBe(1);
+});

@@ -24,6 +24,8 @@ export interface PgClient {
   /** The positional form Kysely (Better Auth) calls. */
   query(text: string, values?: readonly unknown[]): Promise<PgResult & { command: string }>;
   end(): Promise<void>;
+  /** node-postgres: the last ReadyForQuery's state, `I` idle, `T` in a transaction, `E` in a failed one. */
+  getTransactionStatus?(): string | null;
 }
 /** Opens one connected client. */
 export type PgConnect = () => Promise<PgClient>;
@@ -70,13 +72,12 @@ const ATTEMPTS = 5;
 /**
  * Statements in one SERIALIZABLE transaction, all or nothing. SERIALIZABLE keeps what SQLite's one writer gave every guard
  * (`WHERE NOT EXISTS`, a first sign-up becoming owner): a concurrent write that would break one fails with 40001 and the
- * whole batch is retried. `check` runs after each statement and may throw to roll everything back.
+ * whole batch is retried. A write's `expect` is checked inside its own statement (executor.ts), so nothing waits between them.
  */
-export async function transaction(connect: PgConnect, statements: readonly PgStatement[], check?: (i: number, outcome: PgOutcome) => void, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome[]> {
+export async function transaction(connect: PgConnect, statements: readonly PgStatement[], timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome[]> {
   for (let attempt = 1; ; attempt++) {
     const client = await connect();
-    // `check` reads an outcome before COMMIT is sent, so it needs the statements one at a time
-    if (client.pipeline && !check) {
+    if (client.pipeline && statements.every((s) => (s.values ?? []).every(wire))) {
       try {
         return await pipelined(client, begin(client, "BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs), statements);
       } catch (e) {
@@ -95,7 +96,6 @@ export async function transaction(connect: PgConnect, statements: readonly PgSta
         failedAt = i;
         out.push(await run(client, s));
         failedAt = -1;
-        check?.(i, out[i]!);
       }
       committing = true;
       await client.query({ text: "COMMIT" });
@@ -168,8 +168,16 @@ export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_
 }
 
 /**
- * BEGIN, every statement and COMMIT written at once. Each is its own Sync, so a failure leaves the transaction aborted: the
- * statements after it fail with 25P02 and COMMIT answers ROLLBACK. The first failure is the one reported, with its statement.
+ * A bind node-postgres encodes without throwing. One it throws on fails on the client after Parse: it sends Close and Sync, the
+ * server never sees an error, and a pipelined COMMIT would commit the statements around it. Such a batch goes one at a time.
+ */
+const wire = (v: unknown) => v == null || ["string", "number", "boolean", "bigint"].includes(typeof v) || v instanceof Date || ArrayBuffer.isView(v);
+
+/**
+ * BEGIN, every statement and COMMIT written at once. Each is its own Sync, so a failure the server answers leaves the
+ * transaction aborted: the statements after it fail with 25P02 and COMMIT answers ROLLBACK, which ends it, so no ROLLBACK
+ * follows. The first failure is the one reported, with its statement. A failure without a SQLSTATE is the socket's, and COMMIT
+ * was already written: whether it ran is unknown (`committing`), wherever the first rejection landed.
  */
 async function pipelined(client: PgClient, begin: string, statements: readonly PgStatement[]): Promise<PgOutcome[]> {
   const settled = await Promise.allSettled([
@@ -180,9 +188,7 @@ async function pipelined(client: PgClient, begin: string, statements: readonly P
   const failed = settled.findIndex((r) => r.status === "rejected");
   if (failed === -1) return settled.slice(1, -1).map((r) => (r as PromiseFulfilledResult<PgOutcome>).value);
   const e = (settled[failed] as PromiseRejectedResult).reason;
-  // a failed BEGIN may leave no transaction open; an open one is already aborted, and ROLLBACK ends it either way
-  if (failed <= statements.length) await client.query({ text: "ROLLBACK" }).catch(() => undefined);
-  throw Object.assign(e as object, { statement: failed >= 1 && failed <= statements.length ? failed - 1 : -1, committing: failed === statements.length + 1 });
+  throw Object.assign(e as object, { statement: failed >= 1 && failed <= statements.length ? failed - 1 : -1, committing: failed === statements.length + 1 || !sqlState(e) });
 }
 
 /** `?1` binds (Mantle's portable SQL) as PostgreSQL's `$1`, outside quoted strings and names. */

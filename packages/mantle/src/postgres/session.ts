@@ -25,8 +25,9 @@ interface Scope {
   client?: Promise<PgClient>;
 }
 
+// for a transport that does not report the protocol's transaction state (Bun.SQL): what the SQL text says
 const BEGINS = /^\s*(BEGIN|START\s+TRANSACTION)\b/i;
-const ENDS = /^\s*(COMMIT|ROLLBACK|END|ABORT)\b/i;
+const ENDS = /^\s*(COMMIT|ROLLBACK|END|ABORT)\s*(;|$)/i;
 const close = (c: Promise<PgClient> | undefined) => void c?.then((x) => x.end()).catch(() => undefined);
 
 export function requestScoped(connect: PgConnect): PgSession {
@@ -40,7 +41,10 @@ export function requestScoped(connect: PgConnect): PgSession {
     scope.busy = false;
   };
 
-  /** The shared client for one operation. Its `end()` hands it back; a client left in a transaction or broken is closed. */
+  /**
+   * The shared client for one operation. Its `end()` hands it back; one left in a transaction, by the protocol's own report
+   * when the driver gives it (node-postgres) or else by the SQL it ran, or with a broken socket, is closed.
+   */
   const lease = (scope: Scope, client: PgClient): PgClient => {
     let inTx = false;
     let broken = false;
@@ -62,7 +66,8 @@ export function requestScoped(connect: PgConnect): PgSession {
         released = true;
         // ponytail: a transaction left open is closed with its client rather than rolled back here, which costs the request a
         // reconnect only on a path that already failed
-        release(scope, inTx || broken);
+        const status = client.getTransactionStatus?.();
+        release(scope, broken || (status != null ? status !== "I" : inTx));
       },
     };
   };

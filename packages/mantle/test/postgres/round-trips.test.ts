@@ -85,13 +85,13 @@ it.skipIf(!PG_URL)("a request opens one connection when scoped; a read is one ro
   expect(piped["4-statement write"].trips).toBe(1);
   expect(scoped["getSession + View + write"].trips).toBe(scoped.getSession.trips + 1 + 6);
   expect(piped["getSession + View + write"].trips).toBe(piped.getSession.trips + 1 + 1);
-  // an expect that fails is checked by PostgreSQL: CONFLICT naming op 1, op 0 rolled back; pipelined, one round trip plus ROLLBACK
+  // an expect that fails is checked by PostgreSQL: CONFLICT naming op 1, op 0 rolled back; pipelined, still one round trip
   for (const { out, stockA } of Object.values(runs)) {
     expect(isConflict(out["failed expect"].result)).toBe(true);
     expect(opIndexOf(out["failed expect"].result)).toBe(1);
     expect(stockA).toBe(5 + 2);
   }
-  expect(piped["failed expect"].trips).toBe(2);
+  expect(piped["failed expect"].trips).toBe(1);
   const table = Object.keys(perOp).map((what) => `| ${what} | ${Object.values(runs).map(({ out }) => `${out[what].connections} / ${out[what].trips}${ONE_WAY_MS ? ` / ${out[what].ms.toFixed(0)} ms` : ""}`).join(" | ")} |`);
   console.log([`one-way ${ONE_WAY_MS} ms: connections / round trips${ONE_WAY_MS ? " / wall" : ""}`, `| request | ${Object.keys(MODES).join(" | ")} |`, ...table].join("\n"));
 }, 240_000);
