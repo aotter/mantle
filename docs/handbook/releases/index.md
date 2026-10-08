@@ -65,7 +65,7 @@ by hand.
 - **Not yet in 0.2.0:** Mantle-rendered public pages and the MCP interaction
   App tools.
 
-### Upgrading an existing PostgreSQL service (next 0.2.0 alpha)
+### Upgrading an existing PostgreSQL service (0.2.0-alpha.6)
 
 PostgreSQL is native from this alpha (ADR-0039): each dialect is its own target,
 PostgreSQL's SQL and ordering are PostgreSQL's, and node-postgres (`pg`) is the
