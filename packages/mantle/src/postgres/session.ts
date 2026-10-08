@@ -96,7 +96,7 @@ export function requestScoped(connect: PgConnect): PgSession {
             off = () => void on.off?.("error", onError);
             return c;
           });
-          scope.detach = shared.then(() => () => off());
+          scope.detach = shared.then(() => () => off(), () => () => {}); // a failed connect leaves nothing to detach, and no rejection unhandled
           scope.client = shared;
         }
         return lease(scope, await scope.client);

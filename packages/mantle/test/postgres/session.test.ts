@@ -152,3 +152,15 @@ it("a pooled client that outlives its request carries no listener from it: N req
     expect(warnings.filter((w) => w.name === "MaxListenersExceededWarning")).toEqual([]);
   } finally { process.off("warning", onWarning); }
 });
+
+it("a connect that fails inside a request leaves no unhandled rejection behind", async () => {
+  const unhandled: unknown[] = [];
+  const on = (e: unknown) => unhandled.push(e);
+  process.on("unhandledRejection", on);
+  try {
+    const pg = requestScoped(async () => { throw new Error("db down"); });
+    await pg.run(async () => { await expect(pg.connect()).rejects.toThrow("db down"); });
+    await tick(); await tick();
+    expect(unhandled).toEqual([]);
+  } finally { process.off("unhandledRejection", on); }
+});

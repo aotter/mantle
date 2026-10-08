@@ -189,6 +189,7 @@ async function diff(client: PgClient, plan: Readonly<Record<string, StorageSchem
     }
     // Mantle's checks follow the plan: one whose expression is unchanged is left alone (a DROP and ADD takes ACCESS EXCLUSIVE on a
     // table live traffic reads), the rest are dropped and added NOT VALID (a check binds writes, not old rows)
+    // ponytail: checks are named by position, so inserting one mid-list rebuilds the later ones; naming by expression hash avoids it
     const wantChecks = new Map((schema.checks ?? []).map((c, i) => [ident(`_mantle_chk_${name}_${i}`), checkText(c, schema)]));
     const kept = new Set<string>();
     for (const r of chk!) {
@@ -212,6 +213,10 @@ const LAYOUT = "2";
 /** Prefixes the comment on a Mantle check: the expression it was added from, so the next boot can tell whether the plan changed it. */
 const CHECK_MARK = "mantle:";
 
+/** How long a boot that gave up on a lock fails fast. ponytail: per process and per `connect`; a shared record (a _mantle_boot_state row) would also quiet other isolates. */
+const COOL_DOWN_MS = 10_000;
+const COOL_DOWN = new WeakMap<PgConnect, { state: string; until: number; report: StorageReport }>();
+
 const BOOTED = "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'";
 
 /**
@@ -222,11 +227,14 @@ const BOOTED = "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'";
  * it). The DDL runs under `lock_timeout`: ALTER TABLE queues for ACCESS EXCLUSIVE and every read after it queues behind it, so
  * it gives up after `lockTimeoutMs`, rolls back, and tries again, rather than stalling live traffic behind a long query.
  */
-export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<string, StorageSchema>>, options: { fingerprint: string; booted?: string | null; lockTimeoutMs?: number; attempts?: number }): Promise<StorageReport> {
+export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<string, StorageSchema>>, options: { fingerprint: string; booted?: string | null; lockTimeoutMs?: number; attempts?: number; cooldownMs?: number }): Promise<StorageReport> {
   // the plan and Mantle's functions: a release that changes a function re-creates it on the next boot
   const state = `${options.fingerprint}|${fnv(FUNCTIONS.join("\n"))}|${LAYOUT}`;
   const booted = options.booted !== undefined ? options.booted : (await query(connect, { text: BOOTED }).catch(() => undefined))?.rows[0]?.value;
   if (booted === state) return { skipped: true, blocked: [], undeclared: [] };
+  // a boot that gave up on a lock is not retried by every request of every isolate: for `cooldownMs` it fails fast with the same report
+  const cool = COOL_DOWN.get(connect);
+  if (cool && cool.state === state && cool.until > Date.now()) return cool.report;
   const lockTimeout = Math.max(1, Math.floor(options.lockTimeoutMs ?? 1000));
   const attempts = options.attempts ?? 5;
   for (let attempt = 1; ; attempt++) {
@@ -239,7 +247,9 @@ export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<
       if (code === "55P03") {
         if (attempt < attempts) { await new Promise((r) => setTimeout(r, Math.random() * 100 * attempt)); continue; }
         const why = e instanceof Error ? e.message : String(e);
-        return { skipped: false, undeclared: [], blocked: [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED", message: `storage could not be converged: a lock stayed held for ${attempts} tries of ${lockTimeout} ms (${why}); a long transaction or query is using a table the plan changes. Nothing was applied; end it, or boot again when traffic is lower` }] };
+        const report: StorageReport = { skipped: false, undeclared: [], blocked: [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED", message: `storage could not be converged: a lock stayed held for ${attempts} tries of ${lockTimeout} ms (${why}); a long transaction or query is using a table the plan changes. Nothing was applied; end it, or boot again when traffic is lower (not retried for ${(options.cooldownMs ?? COOL_DOWN_MS) / 1000} s)` }] };
+        COOL_DOWN.set(connect, { state, until: Date.now() + (options.cooldownMs ?? COOL_DOWN_MS), report });
+        return report;
       }
       if (code === "23505") {
         const msg = e instanceof Error ? e.message : String(e);
@@ -253,9 +263,10 @@ export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<
 async function locked(client: PgClient, plan: Readonly<Record<string, StorageSchema>>, state: string, lockTimeoutMs: number): Promise<StorageReport> {
   const run = (s: PgStatement) => client.query({ text: s.text, ...(s.values ? { values: [...s.values] } : {}) });
   // convergence builds indexes on tables that may be large: no statement timeout. The lock wait below has none either: a waiter is behind the winner's work
-  await client.query({ text: "BEGIN ISOLATION LEVEL READ COMMITTED; SET LOCAL statement_timeout = 0" });
+  // lock_timeout comes first so the advisory wait is bounded too: a herd gives up together, not one isolate after another
+  // ponytail: a winner building a large index outlasts that bound and the waiters report a blocked boot; a longer advisory wait than DDL wait is the upgrade once it is measured
+  await client.query({ text: `BEGIN ISOLATION LEVEL READ COMMITTED; SET LOCAL statement_timeout = 0; SET LOCAL lock_timeout = ${lockTimeoutMs}` });
   await run(LOCK);
-  await client.query({ text: `SET LOCAL lock_timeout = ${lockTimeoutMs}` });
   for (const text of SYSTEM_DDL) await run({ text });
   // another isolate may have converged while this one waited for the lock: this read, after it, sees its commit
   if ((await run({ text: BOOTED })).rows[0]?.value === state) {

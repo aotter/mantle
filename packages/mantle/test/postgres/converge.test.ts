@@ -111,9 +111,40 @@ it.skipIf(!PG_URL)("the DDL gives up on a lock it cannot get, retries, and succe
 
     // a reader is not stuck behind the converger's queue for longer than the timeout
     const free = setTimeout(() => void holder.query("COMMIT"), 400);
-    const ok = await convergeStorage(db.connect, plan2, { fingerprint: "b", booted: "a", lockTimeoutMs: 100, attempts: 50 });
+    const ok = await convergeStorage(async () => db.connect(), plan2, { fingerprint: "b", booted: "a", lockTimeoutMs: 100, attempts: 50, cooldownMs: 0 });
     clearTimeout(free);
     expect(ok.blocked).toEqual([]);
     expect(by(await checks(db))._mantle_chk_items_0.oid).not.toBe(before._mantle_chk_items_0.oid);
+  } finally { await holder.end().catch(() => undefined); await db.drop(); }
+}, 60_000);
+
+it.skipIf(!PG_URL)("a herd under a held lock gives up together within the retry window, not one isolate after another; readers are not stalled past it; a request after a blocked boot fails fast", async () => {
+  const db = await freshSchema();
+  const holder = new pg.Client({ connectionString: PG_URL, options: `-c search_path=${db.schema}` });
+  try {
+    await convergeStorage(db.connect, v1(), { fingerprint: "a" });
+    const plan2 = { items: items({ checks: [expr("stock >= 1"), expr("name <> ''")] }), notes: notes() };
+    await holder.connect();
+    await holder.query("BEGIN; LOCK TABLE items IN ROW EXCLUSIVE MODE");
+    const timeout = 200, attempts = 3;
+    let worst = 0, stop = false;
+    const reader = (async () => {
+      while (!stop) { const t = performance.now(); await sql(db, "SELECT 1 FROM items LIMIT 1"); worst = Math.max(worst, performance.now() - t); await new Promise((r) => setTimeout(r, 10)); }
+    })();
+    const counted = { n: 0 };
+    const connect = async () => { const c = await db.connect(); const q = c.query.bind(c); c.query = (...a) => { counted.n++; return q(...a); }; return c; };
+    const t0 = performance.now();
+    const reports = await Promise.all(Array.from({ length: 12 }, () => convergeStorage(connect, plan2, { fingerprint: "b", booted: "a", lockTimeoutMs: timeout, attempts, cooldownMs: 60_000 })));
+    const wall = performance.now() - t0;
+    stop = true; await reader;
+    expect(reports.every((r) => r.blocked.length === 1 && /lock stayed held/.test(r.blocked[0].message))).toBe(true);
+    // each isolate waits at most `attempts` times for the advisory lock and for the table, whatever the herd's size
+    expect(wall).toBeLessThan(attempts * 2 * timeout + 100 * attempts * attempts + 1500);
+    expect(worst).toBeLessThan(timeout + 600);
+    // the next request neither opens a connection nor issues DDL
+    counted.n = 0;
+    const again = await convergeStorage(connect, plan2, { fingerprint: "b", booted: "a", lockTimeoutMs: timeout, attempts, cooldownMs: 60_000 });
+    expect(again.blocked).toEqual(reports[0].blocked);
+    expect(counted.n).toBe(0);
   } finally { await holder.end().catch(() => undefined); await db.drop(); }
 }, 60_000);
