@@ -95,3 +95,25 @@ it.skipIf(!PG_URL)("an OAuth grant stored in jsonb (Better Auth's PostgreSQL sch
 it("the structural auth pool includes Kysely pool options", () => {
   expect(pgPool(async () => { throw new Error("not called"); }).options).toEqual({});
 });
+
+it.skipIf(!PG_URL)("a single read on pgDatabaseDriver is one statement in autocommit; a batch is a transaction", async () => {
+  const { connect, drop } = await freshSchema();
+  try {
+    const sent: string[] = [];
+    const counting = async () => {
+      const c = await connect();
+      const query = c.query.bind(c) as (q: { text: string }) => Promise<any>;
+      return Object.assign(c, { query: (q: { text: string }) => (sent.push(q.text), query(q)) });
+    };
+    const driver = pgDatabaseDriver(counting as typeof connect);
+    expect(await driver.first!({ sql: "SELECT ?1::text AS v", binds: ["a"] })).toEqual({ v: "a" });
+    expect(await driver.first!({ sql: "SELECT 1 AS v WHERE false" })).toBeNull();
+    expect(await driver.all!({ sql: "SELECT g AS v FROM generate_series(1, 2) g" })).toEqual([{ v: 1 }, { v: 2 }]);
+    expect(sent).toHaveLength(3);
+    sent.length = 0;
+    await driver.batch([{ sql: "SELECT 1" }]);
+    expect(sent.length).toBeGreaterThan(1);
+  } finally {
+    await drop();
+  }
+});

@@ -3,7 +3,11 @@ import type { DatabaseDriver } from "../core/driver.js";
 import { sqliteStorage } from "../d1/index.js";
 import type { SiteDefaults } from "../spec/domain/index.js";
 
-interface D1PreparedStatement { bind(...values: unknown[]): D1PreparedStatement }
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first(): Promise<Record<string, unknown> | null>;
+  all(): Promise<{ results?: Record<string, unknown>[] }>;
+}
 interface D1Database {
   prepare(sql: string): D1PreparedStatement;
   batch(statements: D1PreparedStatement[]): Promise<{ results?: Record<string, unknown>[] }[]>;
@@ -15,6 +19,8 @@ export function d1Driver(db: D1Database): DatabaseDriver {
       const out = await db.batch(statements.map((s) => db.prepare(s.sql).bind(...(s.binds ?? []))));
       return out.map((r) => ({ rows: r.results ?? [] }));
     },
+    first: (s) => db.prepare(s.sql).bind(...(s.binds ?? [])).first(),
+    all: async (s) => (await db.prepare(s.sql).bind(...(s.binds ?? [])).all()).results ?? [],
   };
 }
 

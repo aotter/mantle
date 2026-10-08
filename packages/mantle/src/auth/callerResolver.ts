@@ -7,10 +7,11 @@
 import { STAFF_ROLES, type StaffRole } from "../spec/domain/index.js";
 import type { OAuthAccessTokenVerification } from "./types.js";
 import type { Caller, CallerResolver, CredentialKind } from "../core/index.js";
+import { rememberSessionUser } from "../core/sessionUser.js";
 
 /** The three things the resolver needs of a Better Auth facade; a custom facade only has to provide these. */
 export interface AuthLike {
-  getSession(request: Request): Promise<{ session: { id: string }; user: { id: string; role?: string | null; /** the role came from the same uncached read */ roleCurrent?: true } } | null>;
+  getSession(request: Request): Promise<{ session: { id: string }; user: { id: string; email?: string; name?: string; image?: string | null; githubLogin?: string | null; role?: string | null; /** the role came from the same uncached read */ roleCurrent?: true } } | null>;
   getUserRole(userId: string): Promise<string | null>;
   verifyOAuthAccessToken(tokenOrRequest: string | Request, options: { audience: string; scopes?: readonly string[] }): Promise<OAuthAccessTokenVerification>;
 }
@@ -78,6 +79,8 @@ export function createCallerResolver(auth: AuthLike, options: CallerResolverOpti
 
     const session = await auth.getSession(request);
     if (!session) return { caller: { kind: "anonymous" } };
-    return { caller: await user(session.user.id, "session", session.session.id, null, [], session.user.roleCurrent ? (session.user.role ?? null) : undefined) };
+    const caller = await user(session.user.id, "session", session.session.id, null, [], session.user.roleCurrent ? (session.user.role ?? null) : undefined);
+    const { email, name, image, githubLogin } = session.user;
+    return { caller: email === undefined && name === undefined ? caller : rememberSessionUser(caller, { email: email ?? "", name: name ?? "", image: image ?? null, githubLogin: githubLogin ?? null }) };
   };
 }
