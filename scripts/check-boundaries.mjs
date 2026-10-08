@@ -68,7 +68,7 @@ function checkNextFolderImports() {
   // the SQLite dialect's subset check and codecs, and `cli` loads its compile side as a built-in (ADR-0036).
   const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], postgres: ["core", "spec", "d1"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], bun: ["core", "spec", "postgres", "d1"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1", "postgres/compile"] };
   const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec", "pgsql-deparser": ["d1", "postgres"] };
-  const NODE_ALLOWED = { auth: ["node:async_hooks"], testing: ["node:util"], bun: ["node:path", "node:fs/promises"] };
+  const NODE_ALLOWED = { auth: ["node:async_hooks"], postgres: ["node:async_hooks"], testing: ["node:util"], bun: ["node:path", "node:fs/promises"] };
   const root = join(ROOT, "packages/mantle/src");
   for (const [folder, reach] of Object.entries(folders)) {
     for (const file of listFiles(join(root, folder), (p) => p.endsWith(".ts") || p.endsWith(".tsx"))) {

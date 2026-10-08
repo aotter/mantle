@@ -210,8 +210,11 @@ describe("the service preset", () => {
     expect(JSON.parse(await read(dir, "mantle.config.json"))).toMatchObject({ dialect: "postgres" });
     expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/postgres", version: "1" });
     const service = await read(dir, "src/service.ts");
-    expect(service).toContain("postgresStorage({ connect: connectTo(env) })");
-    expect(service).toContain("database: pgPool(connectTo(env)), driver: pgDatabaseDriver(connectTo(env))");
+    expect(service).toContain("postgresStorage({ connect: database(env).connect })");
+    expect(service).toContain("database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect)");
+    // a request is the unit of work: one client for all of its queries; pipelining stays off until Hyperdrive is verified (#1379)
+    expect(service).toContain("database(env).run(() => (routes ??= mount(runtime, env))(request, waitUntil))");
+    expect(service).not.toMatch(/new pg\.Client\(\{[^}]*pipeline/);
     expect(service).not.toContain("D1Database");
     const wrangler = JSON.parse(await read(dir, "wrangler.jsonc"));
     expect(wrangler.d1_databases).toBeUndefined();
@@ -229,6 +232,8 @@ describe("the service preset", () => {
     await admin.connect();
     await admin.query(`CREATE DATABASE ${name}`);
     try {
+      // reads run under the database's own limit, which boot checks (#1379)
+      await admin.query(`ALTER DATABASE ${name} SET statement_timeout = '10s'`);
       const url = new URL(PG_URL);
       url.pathname = `/${name}`;
       await writeFile(join(dir, "wrangler.jsonc"), JSON.stringify({ ...wrangler, hyperdrive: [{ ...wrangler.hyperdrive[0], localConnectionString: url.href }] }));

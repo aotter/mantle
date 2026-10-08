@@ -137,9 +137,18 @@ recompile.
   Site settings and media are SQLite-only (D1, bun:sqlite).
 - `date_trunc` and `extract` compute in the site time zone
   (`postgresStorage({ connect, timeZone })`, default UTC).
-- Every statement has a `statement_timeout` of 10 seconds, pinned in each
-  transaction (`statementTimeoutMs`; 0 is none). Storage convergence has none.
-  A statement past it fails with `RESOURCE_UNAVAILABLE` and writes nothing.
+- Every statement has a `statement_timeout` of at most 10 seconds
+  (`statementTimeoutMs`; 0 is none). A write batch sets it on its transaction.
+  A read is one statement outside a transaction, under the role's own
+  `statement_timeout`, so boot requires the role to have one no larger
+  (`ALTER ROLE app SET statement_timeout = '10s'`). Storage convergence has
+  none. A statement past it fails with `RESOURCE_UNAVAILABLE` and writes nothing.
+- Boot reads the role's settings once and refuses to start, naming the
+  `ALTER ROLE … SET` to run, unless `DateStyle` is ISO, `IntervalStyle` is
+  `postgres`, `extra_float_digits` is at least 1, `standard_conforming_strings`
+  is on and `TimeZone` is UTC. These are PostgreSQL's defaults, except a server
+  initialized in another time zone. Mantle sets nothing per session, because
+  Hyperdrive resets every pooled session to the role's configuration.
 - Connect as a role that owns the service's tables but is not a superuser and
   holds no file or server privilege (`pg_read_server_files`,
   `pg_execute_server_program`). Mantle's allowlist refuses such functions; the
@@ -159,27 +168,39 @@ recompile.
 on every program at runtime. It only narrows what runs, for an operator that
 runs other people's plans; a self-hosted service leaves it out (ADR-0037).
 
-On Workers, PostgreSQL goes through Hyperdrive, which pools the connections, so
-`connect` opens a client per operation (a socket must not outlive its request):
+On Workers, PostgreSQL goes through Hyperdrive, which pools the connections.
+`connect` opens one client, and `requestScoped` makes it one per request: every
+query of a request (Store, Better Auth, auth SQL) reuses it, and it is ended
+when the request ends, as a Worker's socket must be. Outside `run` (boot,
+schedules) each operation opens its own:
 
 ```ts
 import pg from "pg";
-import { pgDatabaseDriver, pgPool, postgresStorage } from "@aotter/mantle/postgres";
+import { pgDatabaseDriver, pgPool, postgresStorage, requestScoped, type PgSession } from "@aotter/mantle/postgres";
 
-const connect = (env: Env) => async () => {
+// one per isolate: every consumer must share it
+let session: PgSession | undefined;
+const database = (env: Env) => (session ??= requestScoped(async () => {
   const client = new pg.Client({ connectionString: env.HYPERDRIVE.connectionString });
   await client.connect();
   return client;
-};
-// storage: (env) => postgresStorage({ connect: connect(env) })
-// identity: createMantleAuth({ database: pgPool(connect(env)), driver: pgDatabaseDriver(connect(env)), ... })
+}));
+// storage: (env) => postgresStorage({ connect: database(env).connect })
+// identity: createMantleAuth({ database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect), ... })
+// fetch: (request, env, ctx) => database(env).run(() => routes(request))
 ```
 
-The Worker needs `compatibility_flags: ["nodejs_compat"]` for `pg`. Mantle runs
-every read in a transaction, which Hyperdrive never answers from its cache.
-Better Auth's reads (sessions, roles) do not, so create the Hyperdrive config
-with caching disabled (`wrangler hyperdrive create … --caching-disabled`), or a
-revoked session can be accepted until the cache expires. `timeZone` must be an
+One operation holds the shared client from `connect()` to `end()`; another that
+arrives meanwhile opens its own, so nothing runs inside another's transaction.
+With `new pg.Client({ …, pipeline: true })` (pg 8.23 or later) a write batch is
+one round trip instead of N + 2; the generated Workers preset leaves it off
+until Hyperdrive is verified to forward a pipelined transaction.
+
+The Worker needs `compatibility_flags: ["nodejs_compat"]` for `pg`. Mantle's
+and Better Auth's reads run outside a transaction, which Hyperdrive would answer
+from its cache, so create the Hyperdrive config with caching disabled
+(`wrangler hyperdrive create … --caching-disabled`), or a read can miss the
+write before it and a revoked session can be accepted until the cache expires. `timeZone` must be an
 IANA name: PostgreSQL reads an offset such as `+08:00` with the opposite sign.
 
 Bun has a generated preset for both engines (`mantle generate --host bun`,

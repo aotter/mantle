@@ -16,7 +16,10 @@ pnpm exec wrangler deploy
 
 With dialect `postgres`, create the Hyperdrive config instead of the D1
 database (`pnpm exec wrangler hyperdrive create my-service --caching-disabled
---connection-string=…`) and copy its id into `hyperdrive[0].id`.
+--connection-string=…`) and copy its id into `hyperdrive[0].id`. Give the
+role a statement limit and UTC, which boot checks (`ALTER ROLE app SET
+statement_timeout = '10s'; ALTER ROLE app SET TimeZone = 'UTC'`); the boot
+error names any other setting to change.
 
 Set `PUBLIC_ORIGIN` in `wrangler.jsonc` `vars` to the deployed origin, and
 replace the console email sender first
