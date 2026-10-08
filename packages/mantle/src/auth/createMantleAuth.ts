@@ -29,6 +29,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     const context = await auth.$context;
     const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(context.tables)))), (b) => b.toString(16).padStart(2, "0")).join("");
     const done = await db.first<{ value: string }>("SELECT value FROM _mantle_boot_state WHERE key = 'auth-schema'").catch(() => null);
+    // ponytail: a matching digest still runs the explicit check (two catalog queries per isolate): it refuses a schema made incompatible after convergence even with a current ledger (test/auth/staff.test.ts); skipping it needs that detection to move to `mantle generate --check` or an admin action
     if (done?.value === digest) {
       await context.explicitSchemaCheck?.();
       return;

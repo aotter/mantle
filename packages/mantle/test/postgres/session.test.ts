@@ -128,3 +128,39 @@ it("a pipelined batch whose socket drops is OUTCOME_UNKNOWN wherever the first r
   await transaction(counting, [{ text: "UPDATE t SET n = $1", values: [{ toPostgres: () => { throw new Error("no"); } }] }]);
   expect(most).toBe(1);
 });
+
+it("a pooled client that outlives its request carries no listener from it: N requests over one client leave one listener, then none", async () => {
+  const { EventEmitter } = await import("node:events");
+  const pooled = Object.assign(new EventEmitter(), { query: async () => ({ rows: [], rowCount: 0, fields: [] }), end: async () => undefined });
+  // a pool: hands the same client to every scope, and `end()` here only releases it
+  const pg = requestScoped(async () => pooled);
+  const warnings: Error[] = [];
+  const onWarning = (w: Error) => warnings.push(w);
+  process.on("warning", onWarning);
+  try {
+    for (let i = 0; i < 25; i++) {
+      await pg.run(async () => {
+        const c = await pg.connect();
+        await c.query("SELECT 1");
+        await c.end();
+        expect(pooled.listenerCount("error")).toBe(1);
+      });
+      await tick();
+      expect(pooled.listenerCount("error")).toBe(0);
+    }
+    await tick();
+    expect(warnings.filter((w) => w.name === "MaxListenersExceededWarning")).toEqual([]);
+  } finally { process.off("warning", onWarning); }
+});
+
+it("a connect that fails inside a request leaves no unhandled rejection behind", async () => {
+  const unhandled: unknown[] = [];
+  const on = (e: unknown) => unhandled.push(e);
+  process.on("unhandledRejection", on);
+  try {
+    const pg = requestScoped(async () => { throw new Error("db down"); });
+    await pg.run(async () => { await expect(pg.connect()).rejects.toThrow("db down"); });
+    await tick(); await tick();
+    expect(unhandled).toEqual([]);
+  } finally { process.off("unhandledRejection", on); }
+});

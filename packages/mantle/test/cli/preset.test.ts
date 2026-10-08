@@ -213,7 +213,8 @@ describe("the service preset", () => {
     expect(service).toContain("postgresStorage({ connect: database(env).connect })");
     expect(service).toContain("database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect)");
     // a request is the unit of work: one client for all of its queries; pipelining stays off until Hyperdrive is verified (#1379)
-    expect(service).toContain("database(env).run(() => (routes ??= mount(runtime, env))(request, waitUntil))");
+    expect(service).toContain("fetch: (request, env, ctx) => database(env).run(() => core.fetch(request, env, ctx))");
+    expect(service).not.toContain("database(env).run(() => (routes");
     expect(service).not.toMatch(/new pg\.Client\(\{[^}]*pipeline/);
     expect(service).not.toContain("D1Database");
     const wrangler = JSON.parse(await read(dir, "wrangler.jsonc"));

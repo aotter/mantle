@@ -60,7 +60,6 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     "  // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers",
     '  const rest = guard(createRestSurface(runtime, { basePath: "/api" }));',
   ];
-  const scoped = postgres;
   const call = `(routes ??= mount(runtime${withEnv ? ", env" : ""}))(request${mantle ? ", waitUntil" : ""})`;
   const route = [
     `  return async (request: Request${mantle ? ", waitUntil: (promise: Promise<unknown>) => void" : ""}): Promise<Response> => {`,
@@ -101,8 +100,8 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     ...(postgres ? [
       "/**",
       ...(bun
-        ? [" * One pooled client per request (`database(env).run` in fetch below). Work outside a request (boot, schedules) borrows one", " * per operation."]
-        : [" * One client per request (`database(env).run` in fetch below): Hyperdrive keeps the pool, and a Worker's socket must not", " * outlive its request. Work outside a request (boot, schedules) opens a client per operation."]),
+        ? [" * One pooled client per request (`database(env).run` around the exported `mantle` below). Work outside a request (after its response) borrows one", " * per operation."]
+        : [" * One client per request (`database(env).run` around the exported `mantle` below): Hyperdrive keeps the pool, and a Worker's socket must not", " * outlive its request. Work outside a request (after its response) opens a client per operation."]),
       " */",
       "let session: PgSession | undefined;",
       ...(bun ? [
@@ -173,11 +172,20 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     "let routes: ReturnType<typeof mount> | undefined;",
     "const service: MantleService<Env> = {",
     "  handlers,",
-    // over PostgreSQL on Workers, a request is the unit of work: one client for all of its queries
-    `  fetch: (request, ${scoped || withEnv ? "env" : "_env"}, { runtime${mantle ? ", waitUntil" : ""} }) => ${scoped ? `database(env).run(() => ${call})` : call},`,
+    `  fetch: (request, ${withEnv ? "env" : "_env"}, { runtime${mantle ? ", waitUntil" : ""} }) => ${call},`,
     "};",
     "",
-    `export const mantle = createMantle(service, { plan, storage: (env) => ${postgres ? "postgresStorage({ connect: database(env).connect })" : bun ? "bunSqliteStorage(env.DB)" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
+    ...(postgres ? [
+      `const core = createMantle(service, { plan, storage: (env) => postgresStorage({ connect: database(env).connect }), schedules: ${bun ? "false" : "true"} });`,
+      "// a request is the unit of work, boot included: the first request's convergence reads share its one client, and so do the rest",
+      "export const mantle: typeof core = {",
+      "  fetch: (request, env, ctx) => database(env).run(() => core.fetch(request, env, ctx)),",
+      "  invokeSchedule: (cron, scheduledTime, env, ctx) => database(env).run(() => core.invokeSchedule(cron, scheduledTime, env, ctx)),",
+      "  runDeferredHook: (message, env, ctx) => database(env).run(() => core.runDeferredHook(message, env, ctx)),",
+      "};",
+    ] : [
+      `export const mantle = createMantle(service, { plan, storage: (env) => ${bun ? "bunSqliteStorage(env.DB)" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
+    ]),
     "",
   ].join("\n");
 }

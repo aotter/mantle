@@ -23,6 +23,8 @@ interface Scope {
   open: boolean;
   busy: boolean;
   client?: Promise<PgClient>;
+  /** Removes the idle-error listener from the shared client, so a client a pool hands to the next scope carries one listener, not one per scope. */
+  detach?: Promise<() => void>;
 }
 
 // for a client that does not report the protocol's transaction state: what the SQL text says
@@ -35,6 +37,8 @@ export function requestScoped(connect: PgConnect): PgSession {
 
   const release = (scope: Scope, discard: boolean) => {
     if (discard || !scope.open) {
+      void scope.detach?.then((off) => off(), () => undefined);
+      scope.detach = undefined;
       close(scope.client);
       scope.client = undefined;
     }
@@ -78,15 +82,21 @@ export function requestScoped(connect: PgConnect): PgSession {
       scope.busy = true;
       try {
         if (!scope.client) {
+          let off = () => {};
           const shared: Promise<PgClient> = connect().then((c) => {
             // a socket that fails while the client sits idle between operations: the next one opens another, and node-postgres
             // does not throw the event for want of a listener
-            (c as { on?(event: "error", f: () => void): unknown }).on?.("error", () => {
+            const on = c as { on?(event: "error", f: () => void): unknown; off?(event: "error", f: () => void): unknown };
+            const onError = () => {
               if (scope.client === shared) scope.client = undefined;
+              off();
               void c.end().catch(() => undefined);
-            });
+            };
+            on.on?.("error", onError);
+            off = () => void on.off?.("error", onError);
             return c;
           });
+          scope.detach = shared.then(() => () => off(), () => () => {}); // a failed connect leaves nothing to detach, and no rejection unhandled
           scope.client = shared;
         }
         return lease(scope, await scope.client);

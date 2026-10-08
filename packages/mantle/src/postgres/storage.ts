@@ -6,7 +6,7 @@
  */
 import { checkShapeProblem, storageColumns, type SqlNode } from "../spec/domain/index.js";
 import type { StorageSchema } from "../core/dialect.js";
-import { query, transaction, type PgConnect, type PgStatement } from "./driver.js";
+import { query, sqlState, type PgClient, type PgConnect, type PgStatement } from "./driver.js";
 import { pgType } from "./codec.js";
 import { print, typed } from "./print.js";
 
@@ -114,21 +114,30 @@ const spelled = (r: { udt_name: string; numeric_precision: number | null; numeri
 
 type Row = Record<string, any>;
 
-async function diff(connect: PgConnect, plan: Readonly<Record<string, StorageSchema>>) {
+/** One at a time: node-postgres deprecates a query issued while another is in flight (`Promise.all`), and pipelining is the driver's own business. */
+async function sequentially<T, R>(items: readonly T[], f: (t: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (const i of items) out.push(await f(i));
+  return out;
+}
+
+/** The catalog reads and the plan's differences, over the client that holds the convergence lock. */
+async function diff(client: PgClient, plan: Readonly<Record<string, StorageSchema>>) {
   const statements: PgStatement[] = [];
   const blocked: StorageChange[] = [];
   const undeclared: StorageChange[] = [];
   const block = (schema: string, message: string, code: StorageChange["code"] = "STORAGE_CHANGE_BLOCKED") => blocked.push({ schema, code, message });
 
-  const [tables, owned, cols, idx, chk] = (await transaction(connect, [
-    { text: "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema()" },
-    { text: "SELECT name FROM _mantle_schema_tables" },
-    { text: "SELECT table_name, column_name, udt_name, numeric_precision, numeric_scale FROM information_schema.columns WHERE table_schema = current_schema()" },
-    { text: `SELECT t.relname AS tbl, i.relname AS name, ix.indisunique AS uniq, ix.indisprimary AS pk, ix.indpred IS NOT NULL AS partial,
+  const [tables, owned, cols, idx, chk] = (await sequentially([
+    "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema()",
+    "SELECT name FROM _mantle_schema_tables",
+    "SELECT table_name, column_name, udt_name, numeric_precision, numeric_scale FROM information_schema.columns WHERE table_schema = current_schema()",
+    `SELECT t.relname AS tbl, i.relname AS name, ix.indisunique AS uniq, ix.indisprimary AS pk, ix.indpred IS NOT NULL AS partial,
         (SELECT string_agg(a.attname, ',' ORDER BY k.ord) FROM unnest(ix.indkey) WITH ORDINALITY k(attnum, ord) JOIN pg_attribute a ON a.attrelid = ix.indrelid AND a.attnum = k.attnum) AS cols
-      FROM pg_index ix JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_class t ON t.oid = ix.indrelid WHERE t.relnamespace = current_schema()::regnamespace` },
-    { text: "SELECT t.relname AS tbl, c.conname AS name FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid WHERE c.contype = 'c' AND t.relnamespace = current_schema()::regnamespace" },
-  ])).map((o) => o.rows as Row[]);
+      FROM pg_index ix JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_class t ON t.oid = ix.indrelid WHERE t.relnamespace = current_schema()::regnamespace`,
+    // the comment is the expression Mantle added the check from (CHECK_MARK): PostgreSQL prints a constraint in its own normal form, which is not the plan's
+    "SELECT t.relname AS tbl, c.conname AS name, obj_description(c.oid, 'pg_constraint') AS comment FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid WHERE c.contype = 'c' AND t.relnamespace = current_schema()::regnamespace",
+  ], (text) => client.query({ text }))).map((o) => o.rows as Row[]);
   const existing = new Set(tables!.map((r) => String(r.name)));
   const ownedNames = new Set(owned!.map((r) => String(r.name)));
 
@@ -178,9 +187,22 @@ async function diff(connect: PgConnect, plan: Readonly<Record<string, StorageSch
         else undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_INDEX", message: schema.scope && n === ident(`_mantle_scope_${name}`) ? `index ${n} is redundant: a declared index leads with ${schema.scope}; drop it by hand` : `index ${n} is in the database and not in the plan; it is kept` });
       }
     }
-    // Mantle's checks are rebuilt from the plan: dropped, then added NOT VALID (a check binds writes, not old rows)
-    for (const r of chk!) if (r.tbl === name && String(r.name).startsWith("_mantle_chk_")) statements.push({ text: `ALTER TABLE ${t} DROP CONSTRAINT IF EXISTS ${q(String(r.name))}` });
-    (schema.checks ?? []).forEach((c, i) => statements.push({ text: `ALTER TABLE ${t} ADD CONSTRAINT ${q(ident(`_mantle_chk_${name}_${i}`))} CHECK (${checkText(c, schema)}) NOT VALID` }));
+    // Mantle's checks follow the plan: one whose expression is unchanged is left alone (a DROP and ADD takes ACCESS EXCLUSIVE on a
+    // table live traffic reads), the rest are dropped and added NOT VALID (a check binds writes, not old rows)
+    // ponytail: checks are named by position, so inserting one mid-list rebuilds the later ones; naming by expression hash avoids it
+    const wantChecks = new Map((schema.checks ?? []).map((c, i) => [ident(`_mantle_chk_${name}_${i}`), checkText(c, schema)]));
+    const kept = new Set<string>();
+    for (const r of chk!) {
+      if (r.tbl !== name || !String(r.name).startsWith("_mantle_chk_")) continue;
+      const text = wantChecks.get(String(r.name));
+      if (text !== undefined && r.comment === CHECK_MARK + text) kept.add(String(r.name));
+      else statements.push({ text: `ALTER TABLE ${t} DROP CONSTRAINT IF EXISTS ${q(String(r.name))}` });
+    }
+    for (const [n, text] of wantChecks) {
+      if (kept.has(n)) continue;
+      statements.push({ text: `ALTER TABLE ${t} ADD CONSTRAINT ${q(n)} CHECK (${text}) NOT VALID` },
+        { text: `COMMENT ON CONSTRAINT ${q(n)} ON ${t} IS '${(CHECK_MARK + text).replace(/'/g, "''")}'` });
+    }
   }
   return { statements, blocked, undeclared };
 }
@@ -188,31 +210,78 @@ async function diff(connect: PgConnect, plan: Readonly<Record<string, StorageSch
 /** Bump whenever `indexes()` or `createTable()` output changes for an unchanged plan: the boot state includes it, so a booted database converges again. */
 const LAYOUT = "2";
 
-/** Converge storage to the plan. Blocked differences are reported and applied to nothing; a matching fingerprint reads nothing else. */
-export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<string, StorageSchema>>, options: { fingerprint: string }): Promise<StorageReport> {
+/** Prefixes the comment on a Mantle check: the expression it was added from, so the next boot can tell whether the plan changed it. */
+const CHECK_MARK = "mantle:";
+
+/** How long a boot that gave up on a lock fails fast. ponytail: per process and per `connect`; a shared record (a _mantle_boot_state row) would also quiet other isolates. */
+const COOL_DOWN_MS = 10_000;
+const COOL_DOWN = new WeakMap<PgConnect, { state: string; until: number; report: StorageReport }>();
+
+const BOOTED = "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'";
+
+/**
+ * Converge storage to the plan. Blocked differences are reported and applied to nothing; a matching fingerprint reads nothing else.
+ *
+ * Every isolate of a deploy boots at once, so the work is one transaction under the advisory lock, in READ COMMITTED: a waiter
+ * wakes to a fresh snapshot, reads the fingerprint again, and finds the winner's work done (a SERIALIZABLE snapshot would predate
+ * it). The DDL runs under `lock_timeout`: ALTER TABLE queues for ACCESS EXCLUSIVE and every read after it queues behind it, so
+ * it gives up after `lockTimeoutMs`, rolls back, and tries again, rather than stalling live traffic behind a long query.
+ */
+export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<string, StorageSchema>>, options: { fingerprint: string; booted?: string | null; lockTimeoutMs?: number; attempts?: number; cooldownMs?: number }): Promise<StorageReport> {
   // the plan and Mantle's functions: a release that changes a function re-creates it on the next boot
   const state = `${options.fingerprint}|${fnv(FUNCTIONS.join("\n"))}|${LAYOUT}`;
-  const booted = await query(connect, { text: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" }).catch(() => undefined);
-  if (booted?.rows[0]?.value === state) return { skipped: true, blocked: [], undeclared: [] };
-  await transaction(connect, [LOCK, ...SYSTEM_DDL.map((text) => ({ text })), ...FUNCTIONS.map((text) => ({ text })),
-    { text: "INSERT INTO _mantle_boot_state (key, value) VALUES ('instance', $1) ON CONFLICT DO NOTHING", values: [crypto.randomUUID()] }], 0);
-  for (let attempt = 0; ; attempt++) {
-    const { statements, blocked, undeclared } = await diff(connect, plan);
-    if (blocked.length) return { skipped: false, blocked, undeclared };
-    statements.push({ text: "INSERT INTO _mantle_boot_state (key, value) VALUES ('fingerprint', $1) ON CONFLICT (key) DO UPDATE SET value = excluded.value", values: [state] });
+  const booted = options.booted !== undefined ? options.booted : (await query(connect, { text: BOOTED }).catch(() => undefined))?.rows[0]?.value;
+  if (booted === state) return { skipped: true, blocked: [], undeclared: [] };
+  // a boot that gave up on a lock is not retried by every request of every isolate: for `cooldownMs` it fails fast with the same report
+  const cool = COOL_DOWN.get(connect);
+  if (cool && cool.state === state && cool.until > Date.now()) return cool.report;
+  const lockTimeout = Math.max(1, Math.floor(options.lockTimeoutMs ?? 1000));
+  const attempts = options.attempts ?? 5;
+  for (let attempt = 1; ; attempt++) {
+    const client = await connect();
     try {
-      // convergence builds indexes on tables that may be large: no statement timeout
-      await transaction(connect, [LOCK, ...statements], 0);
-      return { skipped: false, blocked: [], undeclared };
+      return await locked(client, plan, state, lockTimeout);
     } catch (e) {
-      const state = (e as { code?: string }).code;
-      // another isolate converged while this one diffed: diff again against what it left
-      if ((state === "42P07" || state === "42701" || state === "42710") && attempt < 2) continue;
-      if (state === "23505") {
+      await client.query({ text: "ROLLBACK" }).catch(() => undefined);
+      const code = sqlState(e);
+      if (code === "55P03") {
+        if (attempt < attempts) { await new Promise((r) => setTimeout(r, Math.random() * 100 * attempt)); continue; }
+        const why = e instanceof Error ? e.message : String(e);
+        const report: StorageReport = { skipped: false, undeclared: [], blocked: [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED", message: `storage could not be converged: a lock stayed held for ${attempts} tries of ${lockTimeout} ms (${why}); a long transaction or query is using a table the plan changes. Nothing was applied; end it, or boot again when traffic is lower (not retried for ${(options.cooldownMs ?? COOL_DOWN_MS) / 1000} s)` }] };
+        COOL_DOWN.set(connect, { state, until: Date.now() + (options.cooldownMs ?? COOL_DOWN_MS), report });
+        return report;
+      }
+      if (code === "23505") {
         const msg = e instanceof Error ? e.message : String(e);
-        return { skipped: false, blocked: [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED", message: `a unique index cannot be created: existing rows break it (${msg}); dedupe the data, then rerun` }], undeclared };
+        return { skipped: false, undeclared: [], blocked: [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED", message: `a unique index cannot be created: existing rows break it (${msg}); dedupe the data, then rerun` }] };
       }
       throw e;
-    }
+    } finally { await client.end().catch(() => undefined); }
   }
+}
+
+async function locked(client: PgClient, plan: Readonly<Record<string, StorageSchema>>, state: string, lockTimeoutMs: number): Promise<StorageReport> {
+  const run = (s: PgStatement) => client.query({ text: s.text, ...(s.values ? { values: [...s.values] } : {}) });
+  // convergence builds indexes on tables that may be large: no statement timeout. The lock wait below has none either: a waiter is behind the winner's work
+  // lock_timeout comes first so the advisory wait is bounded too: a herd gives up together, not one isolate after another
+  // ponytail: a winner building a large index outlasts that bound and the waiters report a blocked boot; a longer advisory wait than DDL wait is the upgrade once it is measured
+  await client.query({ text: `BEGIN ISOLATION LEVEL READ COMMITTED; SET LOCAL statement_timeout = 0; SET LOCAL lock_timeout = ${lockTimeoutMs}` });
+  await run(LOCK);
+  for (const text of SYSTEM_DDL) await run({ text });
+  // another isolate may have converged while this one waited for the lock: this read, after it, sees its commit
+  if ((await run({ text: BOOTED })).rows[0]?.value === state) {
+    await client.query({ text: "COMMIT" });
+    return { skipped: true, blocked: [], undeclared: [] };
+  }
+  for (const text of FUNCTIONS) await run({ text });
+  await run({ text: "INSERT INTO _mantle_boot_state (key, value) VALUES ('instance', $1) ON CONFLICT DO NOTHING", values: [crypto.randomUUID()] });
+  const { statements, blocked, undeclared } = await diff(client, plan);
+  if (blocked.length) {
+    await client.query({ text: "COMMIT" });
+    return { skipped: false, blocked, undeclared };
+  }
+  for (const s of statements) await run(s);
+  await run({ text: "INSERT INTO _mantle_boot_state (key, value) VALUES ('fingerprint', $1) ON CONFLICT (key) DO UPDATE SET value = excluded.value", values: [state] });
+  await client.query({ text: "COMMIT" });
+  return { skipped: false, blocked: [], undeclared };
 }
