@@ -29,8 +29,11 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     const context = await auth.$context;
     const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(context.tables)))), (b) => b.toString(16).padStart(2, "0")).join("");
     const done = await db.first<{ value: string }>("SELECT value FROM _mantle_boot_state WHERE key = 'auth-schema'").catch(() => null);
-    // the digest is written only after the migrations and the explicit check passed, so a match needs neither
-    if (done?.value === digest) return;
+    // ponytail: a matching digest still runs the explicit check (two catalog queries per isolate): it refuses a schema made incompatible after convergence even with a current ledger (test/auth/staff.test.ts); skipping it needs that detection to move to `mantle generate --check` or an admin action
+    if (done?.value === digest) {
+      await context.explicitSchemaCheck?.();
+      return;
+    }
     const migrate = async () => (await getMigrations(context.options)).runMigrations();
     // Better Auth's statements are not idempotent: an isolate racing another retries until the other has finished its tables
     for (let attempt = 1; ; attempt++) {
