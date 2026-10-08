@@ -11,7 +11,10 @@ import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { enumOptions } from "../../lib/enum-options";
 import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import { entryApiPath, entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
+import { entryApiPath, entryEditorQueryOptions, operationsQueryOptions, siteQueryOptions } from "../../lib/queries";
+import { fieldContribution } from "../../lib/extensions";
+import { ExtensionMount } from "../extensions/extension-mount";
+import { ExtensionActions, ExtensionPanels } from "../extensions/extension-contributions";
 import type {
   AdminUser,
   EntryEditorCollection,
@@ -202,6 +205,9 @@ export function EntryEditView({
               />
             ) : null}
             {!isOperational && <StatusBadge status={payload.entry.status} />}
+            <ExtensionActions target="record/v1" schema={payload.collection.name}
+              record={{ schema: payload.collection.name, id: payload.entry.id, version: payload.entry.version }}
+              onDone={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })} />
             <RowOperationsMenu
               row={payload.entry}
               collection={payload.collection}
@@ -323,6 +329,8 @@ export function EntryEditView({
               <MetaRow label={t(language, "collection.table.version")} value={`v${payload.entry.version}`} />
             </dl>
           </SectionCard>
+          <ExtensionPanels target="record.sidebar/v1" schema={payload.collection.name} uiSchema={payload.collection.uiSchema}
+            record={{ schema: payload.collection.name, id: payload.entry.id, version: payload.entry.version }} />
         </div>
       </div>
 
@@ -497,9 +505,21 @@ export function SchemaFields({
     removeItem: t(language, "entryEdit.removeItem"),
     addItem: t(language, "entryEdit.addItem"),
   };
-  // only where a plain text control would go: an enum, a number, an object or a boolean keeps its own control
+  const site = useQuery(siteQueryOptions());
   const renderField = (field: FieldSlot): React.ReactNode | undefined => {
     const fieldSchema = field.schema as JsonSchema;
+    // an Admin extension's widget (ADR-lite 1376), for a top-level field of any type: named in uiSchema, or by its `when`
+    if (field.path.length === path.length + 1) {
+      const config = (uiSchema?.["fields"] as Record<string, { widget?: unknown; options?: Record<string, unknown> }> | undefined)?.[field.name];
+      const widget = fieldContribution(site.data, "field.input/v1", { schema: collectionName, field: field.name, property: fieldSchema, ref: config?.widget });
+      if (widget) {
+        return (
+          <ExtensionMount extension={widget.extension} kind="fields" id={widget.id}
+            place={{ field: { schema: collectionName, name: field.name, value: field.value, readOnly: false, property: fieldSchema }, ...(config?.options ? { options: config.options } : {}), onChange: field.setValue }} />
+        );
+      }
+    }
+    // only where a plain text control would go: an enum, a number, an object or a boolean keeps its own control
     if (fieldSchema.enum || enumOptions(fieldSchema) || ["boolean", "number", "integer", "object"].includes(schemaType(fieldSchema))) return undefined;
     if (isMediaAssetRef(fieldSchema)) {
       return <MediaAssetField value={field.value} path={[...field.path]} collectionName={collectionName} mediaPurposes={mediaPurposes} language={language} onChange={field.setValue} />;

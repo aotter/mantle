@@ -27,6 +27,7 @@ import { MediaLibraryView } from "../features/media/media-library-view";
 import { OperationsView } from "../features/ops/operations-view";
 import { ViewPage } from "../features/ops/view-page";
 import { NotFoundView } from "../features/system/not-found-view";
+import { ExtensionPage } from "../features/system/extension-page";
 import { PreferencesView } from "../features/system/preferences-view";
 import { SettingsView } from "../features/system/settings-view";
 import { StaffView } from "../features/system/staff-view";
@@ -214,6 +215,15 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
 
   if (path.startsWith("/admin/dev")) {
     return <React.Suspense fallback={<GateLoading />}><DeveloperWorkspace path={path} /></React.Suspense>;
+  }
+
+  const extensionMatch = path.match(/^\/admin\/x\/([^/]+)\/([^/]+)\/?$/);
+  if (extensionMatch) {
+    return (
+      <AuthenticatedLayout>
+        <ExtensionPage extension={decodeURIComponent(extensionMatch[1]!)} contribution={decodeURIComponent(extensionMatch[2]!)} />
+      </AuthenticatedLayout>
+    );
   }
 
   const viewMatch = path.match(/^\/admin\/views\/([^/]+)\/?$/);
