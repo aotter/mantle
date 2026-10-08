@@ -1,6 +1,7 @@
 // A fresh PostgreSQL schema per test, on the server MANTLE_PG_URL names (CI runs a postgres service; locally
 // `MANTLE_PG_URL=postgres://user:pass@localhost/db pnpm test`). Without it, the PostgreSQL tests are skipped.
 import pg from "pg";
+import { inject } from "vitest";
 import type { PgClient, PgConnect } from "../../src/postgres/index.js";
 
 export const PG_URL = process.env.MANTLE_PG_URL;
@@ -12,7 +13,9 @@ export const PG_PIPELINE = process.env.MANTLE_PG_PIPELINE === "1";
  * of each connection; boot refuses a server whose limit is unset or above `postgresStorage`'s.
  */
 export async function freshSchema(opts: { url?: string; pipeline?: boolean; statementTimeoutMs?: number } = {}): Promise<{ connect: PgConnect; drop: () => Promise<void>; schema: string }> {
-  const schema = `t_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+  // The run's prefix (setup.ts) lets the run drop its schemas at the end; outside vitest there is none.
+  const run = (() => { try { return inject("pgRun"); } catch { return undefined; } })();
+  const schema = `t_${run ? `${run}_` : ""}${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const admin = new pg.Client(PG_URL);
   await admin.connect();
   await admin.query(`CREATE SCHEMA ${schema}`);
@@ -22,7 +25,10 @@ export async function freshSchema(opts: { url?: string; pipeline?: boolean; stat
     await c.connect();
     return c as unknown as PgClient;
   };
+  // Under vitest the run drops its schemas at the end (setup.ts): a drop now would race another file's Better Auth
+  // introspection, which reads every schema (#1399).
   const drop = async () => {
+    if (run) return;
     const c = new pg.Client(PG_URL);
     await c.connect();
     await c.query(`DROP SCHEMA ${schema} CASCADE`);
