@@ -1,10 +1,11 @@
-import { afterEach, beforeAll, expect, it } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { loadModule, parseSync } from "libpg-query";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { convergeStorage, planStorageChanges, type StorageSchema } from "../../src/d1/storage.js";
 
+// before the fixtures below parse their checks: they run while the file is collected, ahead of any hook
+await loadModule();
 const expr = (text: string) => (parseSync(`SELECT 1 WHERE ${text}`) as any).stmts[0].stmt.SelectStmt.whereClause;
-beforeAll(() => loadModule());
 
 const items: StorageSchema = { scope: "owner", ttl: "expires_at", fields: { name: "text", stock: "integer" }, checks: [expr("stock >= 0")], unique: [["name"]] };
 const notes: StorageSchema = { scope: "owner", fields: { title: "text", body: "text", loc: "geo" }, search: ["title", "body"] };
