@@ -95,11 +95,12 @@ it.skipIf(!PG_URL)("results do not depend on server settings or collation, and N
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "DateStyle … DateStyle = 'ISO, YMD'"],
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "IntervalStyle … IntervalStyle = 'postgres'"],
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "extra_float_digits … extra_float_digits = '1'"],
+      ["STORAGE_CHANGE_BLOCKED", "storage:settings", "TimeZone … TimeZone = 'UTC'"],
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "standard_conforming_strings … standard_conforming_strings = 'on'"],
       ["STORAGE_CHANGE_BLOCKED", "storage:settings", "statement_timeout … statement_timeout = '10000ms'"],
     ]);
-    // what differs and is harmless needs nothing: another date order, more float digits, any time zone (casts between dates and instants are PostgreSQL's, in the session's)
-    const s = site(await boot({ ...e, storage: postgresStorage({ connect: set("SET DateStyle = 'ISO, DMY'; SET extra_float_digits = 3; SET TimeZone = 'America/New_York'") }) }));
+    // what differs and is harmless needs nothing: another date order, more float digits, another name for UTC
+    const s = site(await boot({ ...e, storage: postgresStorage({ connect: set("SET DateStyle = 'ISO, DMY'; SET extra_float_digits = 3; SET TimeZone = 'Etc/Zulu'") }) }));
     const view = (sql: string, inputs = {}, input = {}) => program("view", sql, inputs).then((p) => runView(s, p, caller(input))).then((r) => r.rows);
     const write = (sql: string) => program("procedure", sql).then((p) => runProcedure(s, p, caller()));
     expect(await view("SELECT CAST('2026-03-08T10:00:00.5Z' AS timestamptz) AS ts, date '2026-03-08' AS d, interval '90 minutes' AS iv, 1.0 / 3 AS f FROM items WHERE id = 'a'"))
@@ -156,5 +157,14 @@ it.skipIf(!PG_URL)("boot creates _mantle_expect and none of the removed emulatio
     await e.driver.batch([{ sql: "CREATE FUNCTION _mantle_bool(x int8) RETURNS bool LANGUAGE sql AS 'SELECT x <> 0'" }]);
     await e.storage.prepare(planOf({}, "f2"));
     expect(await fns()).toEqual(["_mantle_bool", "_mantle_expect"]);
+  } finally { await e.drop(); }
+}, 60_000);
+
+it.skipIf(!PG_URL)("a session in Asia/Taipei is refused at boot: date and instant casts would differ from UTC's", async () => {
+  const e = await engine();
+  try {
+    const taipei = async () => { const c = await e.connect(); await c.query({ text: "SET TimeZone = 'Asia/Taipei'" }); return c; };
+    const refused = await postgresStorage({ connect: taipei }).prepare(planOf({}, "tz")).catch((x) => x);
+    expect(refused.diagnostics.map((d) => d.message)).toEqual([expect.stringMatching(/^TimeZone is 'Asia\/Taipei'.*ALTER ROLE \S+ SET TimeZone = 'UTC'/)]);
   } finally { await e.drop(); }
 }, 60_000);

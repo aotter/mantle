@@ -323,9 +323,19 @@ function selectIn(n: N, c: C): N {
       const cte = first!.RangeVar?.mantle === 'cte' ? [...c.ctes].reverse().find((m) => m.has(first!.RangeVar.relname))?.get(first!.RangeVar.relname) : undefined;
       if (cte && !cteOutputs(cte).includes('id')) throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a CTE, needs the CTE to output id`);
       const extra = [col(firstAlias, 'id')];
-      const je = (n.fromClause ?? []).find((f: N) => f.RangeFunction);
-      // json_each's own `id` orders its elements; PostgreSQL's row sources have none (WITH ORDINALITY is the author's key)
-      if (je?.RangeFunction.alias && je.RangeFunction.functions[0]?.List?.items?.[0]?.FuncCall?.funcname?.at(-1)?.String?.sval === 'json_each') extra.push(col(je.RangeFunction.alias.aliasname, 'id'));
+      const je = (n.fromClause ?? []).find((f: N) => f.RangeFunction)?.RangeFunction;
+      if (je?.alias) {
+        const fname = je.functions[0]?.List?.items?.[0]?.FuncCall?.funcname?.at(-1)?.String?.sval;
+        // json_each's own `id` orders its elements; PostgreSQL's row sources have none, so a paged one is keyed by its ordinality
+        if (fname === 'json_each') extra.push(col(je.alias.aliasname, 'id'));
+        else if (!je.ordinality) throw new Refused('SQL_SHAPE', `ordering ${je.alias.aliasname}, a row source, needs WITH ORDINALITY: add WITH ORDINALITY AS ${je.alias.aliasname}(value, n)`);
+        else {
+          // the ordinality column is named by the list's extra entry after the function's own columns (one, or two for jsonb_each*), else `ordinality`
+          const own = String(fname).startsWith('jsonb_each') ? 2 : 1;
+          const names: N[] = je.alias.colnames ?? [];
+          extra.push(col(je.alias.aliasname, names.length > own ? names.at(-1)!.String.sval : 'ordinality'));
+        }
+      }
       out.sortClause = [...out.sortClause, ...extra.filter((e) => !have.has(JSON.stringify(e))).map((e) => sort(e, dir))];
     }
   }

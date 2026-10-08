@@ -15,7 +15,7 @@ import { intervalMicros, parseNumeric } from "../../spec/domain/service/SqlTypes
 
 type Code = SqlDiagnosticCode;
 /** `scope`: the CTE names in scope, innermost last, by PostgreSQL's rule (see `withScope`) */
-type Ctx = SqlContext & { source?: string; known?: Set<string>; cols?: SchemaColumns; p: Profile; scope: Set<string>[]; rels?: Map<string, string>[] };
+type Ctx = SqlContext & { source?: string; known?: Set<string>; cols?: SchemaColumns; p: Profile; scope: Set<string>[]; rels?: Map<string, string>[]; fnCols?: Map<string, Set<string>> };
 
 /** node type -> the keys it may carry */
 export const KEYS_SRC: Record<string, string> = {
@@ -194,7 +194,7 @@ export function validateProgram(stmts: N[], ctx: SqlContext & { source?: string 
 function program(stmts: N[], ctx: Ctx, locs: (number | undefined)[]): void {
   if (!Array.isArray(stmts) || !stmts.length) no('SQL_SHAPE', 'an empty program');
   if (ctx.kind === 'view' && (stmts.length !== 1 || !stmts[0]!.SelectStmt)) no('SQL_SHAPE', 'a View is exactly one SELECT', locs[1]);
-  ctx = { ...ctx, known: knownColumns(stmts), cols: ctx.columns ?? schemaColumns(ctx.schemas) };
+  ctx = { ...ctx, known: knownColumns(stmts), fnCols: rowSourceColumns(stmts), cols: ctx.columns ?? schemaColumns(ctx.schemas) };
   const w: Walk = { ctx, budget: { n: 0 } };
   stmts.forEach((s, i) => {
     const t = Object.keys(s)[0] ?? '';
@@ -231,6 +231,16 @@ export function schemaColumns(schemas: SqlContext['schemas']): SchemaColumns {
   return { known, scopes, types: new Map([...types].filter((e): e is [string, string] => e[1] !== null)) };
 }
 
+/** A function row source's column list by its alias: `jsonb_each_text(x) AS j(key, value)` is j -> {key, value}. Only a function's alias may rename columns. */
+function rowSourceColumns(stmts: N[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const r of find(stmts, 'RangeFunction')) {
+    const a = r.alias;
+    if (a?.colnames?.length) out.set(String(a.aliasname).toLowerCase(), new Set(a.colnames.map((c: N) => String(c.String?.sval).toLowerCase())));
+  }
+  return out;
+}
+
 /**
  * Every name a column may have beyond the declared fields (`SchemaColumns.known`, a geo field also as _lat and _lng): `id`, the
  * system columns, json_each's, relation names and aliases, and every output name the program gives (ORDER BY and outer queries
@@ -240,7 +250,7 @@ function knownColumns(stmts: N[]): Set<string> {
   const known = new Set(['id', 'key', 'value', 'type', 'atom', 'parent', 'fullkey', 'path', ...SYSTEM]);
   for (const r of find(stmts, 'ResTarget')) if (r.name) known.add(String(r.name).toLowerCase());
   for (const r of find(stmts, 'RangeVar')) [r.relname, r.alias?.aliasname].forEach((a) => a && known.add(a.toLowerCase())); // mantle.search(<alias>, ...) names a relation
-  for (const a of find(stmts, 'alias')) for (const c of a.colnames ?? []) if (c.String?.sval) known.add(String(c.String.sval).toLowerCase()); // `j(value, n)` names a row source's columns
+  for (const cols of rowSourceColumns(stmts).values()) cols.forEach((c) => known.add(c)); // `j(value, n)` names a row source's columns
   for (const c of find(stmts, 'CommonTableExpr')) [c.ctename, ...(c.aliascolnames ?? []).map((x: N) => x.String?.sval)].forEach((a) => a && known.add(String(a).toLowerCase()));
   return known;
 }
@@ -374,6 +384,7 @@ const isInputRef = (n: N | undefined) => n?.ColumnRef?.fields?.length === 2 && n
 type Checker = (n: N, ctx: Ctx, path: string[], at: number | undefined) => void;
 const check: Record<string, Checker> = {
   RangeVar: (n, ctx, _p, at) => {
+    if (n.alias?.colnames) no('SQL_SHAPE', `a column list after ${n.alias.aliasname} is only for a row source: Schema columns keep their names`, at);
     // the parser folds an unquoted name and the CLI writes only lower case: an `ARTICLES` would be one Schema to the checks and
     // another to what keys hooks and publishing by the folded name, so a relation (a Schema or a CTE reference) is lower case
     if (typeof n.relname !== 'string' || n.relname !== n.relname.toLowerCase()) no('SQL_RELATION', `${JSON.stringify(n.relname)}: a relation is named in lower case`, at);
@@ -394,6 +405,8 @@ const check: Record<string, Checker> = {
     if (ctx.cols!.scopes.has(last)) no('SQL_COLUMN', `${f}: the scope column is not addressable`, at);
     if (f.startsWith('input.') && !(last in ctx.inputs)) no('SQL_COLUMN', `${f} is not a declared input`, at);
     if (ctx.p.name === 'base' && SQLITE_ONLY_KEYWORDS.has(last)) no('SQL_UNSUPPORTED', `${last} is an SQLite keyword: the printer would not quote it`, at);
+    const own = n.fields.length === 2 ? ctx.fnCols!.get(String(n.fields[0].String?.sval).toLowerCase()) : undefined;
+    if (own && last !== '*' && !own.has(last)) no('SQL_COLUMN', `${f}: the row source ${n.fields[0].String.sval} names its columns (${[...own].join(', ')})`, at);
     if (last !== '*' && !f.startsWith('input.') && !ctx.known!.has(last) && !ctx.cols!.known.has(last)) no('SQL_COLUMN', `${f} is not a declared field`, at);
   },
   FuncCall: (n, ctx, path, at) => {
@@ -494,11 +507,12 @@ const check: Record<string, Checker> = {
   RangeFunction: (n, ctx, _p, at) => {
     const fs: N[] = n.functions;
     const only = `only ${[...ctx.p.fromFuncs].map((x) => `${x}()`).join(', ')} ${ctx.p.fromFuncs.size > 1 ? 'are' : 'is'} allowed in FROM`;
-    const f = fs.length === 1 && fs[0]?.List?.items?.length === 2 ? sv(fs[0].List.items[0].FuncCall?.funcname ?? []).replace(/^pg_catalog\./, '') : undefined;
+    const f = fs.length === 1 && fs[0]?.List?.items?.length === 2 ? sv(fs[0].List.items[0].FuncCall?.funcname ?? []) : undefined;
     if (!f || !ctx.p.fromFuncs.has(f)) no('SQL_FUNCTION', only, at);
     if (fs[0]!.List.items[0].FuncCall.args?.length !== 1) no('SQL_FUNCTION', `${f} takes one argument`, at);
   },
   RangeSubselect: (n, _c, _p, at) => {
+    if (n.alias?.colnames) no('SQL_SHAPE', `a column list after ${n.alias.aliasname} is only for a row source: name the columns in the subquery`, at);
     if (!n.alias) no('SQL_SHAPE', 'a subquery in FROM needs an alias', at);
   },
   CommonTableExpr: (n, _c, _p, at) => {

@@ -169,3 +169,26 @@ it("a SQLite spelling is refused at its position, with the PostgreSQL spelling",
     expect(JSON.stringify(r)).toMatch(new RegExp(`"(?:offset|position|start)":\\s*${at}\\b`));
   }
 });
+
+it.skipIf(!PG_URL)("a paged View over a jsonb row source is keyed by its ordinality and loses no row; without one it is refused", async () => {
+  const db = await freshSchema();
+  useCompileSide(pgCompile);
+  try {
+    const s = site(await boot({ storage: postgresStorage({ connect: db.connect }), driver: pgDatabaseDriver(db.connect) }));
+    const p = await program("view", "SELECT i.id, j.value AS tag FROM items i, jsonb_array_elements_text(i.tags) WITH ORDINALITY AS j(value, n) ORDER BY i.id");
+    const got: string[] = [];
+    let cursor;
+    for (let i = 0; i < 10; i++) {
+      const page = await runView(s, p, caller(), { cursor, pageSize: 1 });
+      got.push(...page.rows.map((r) => `${r.id}/${r.tag}`));
+      if (!page.next) break;
+      cursor = page.next;
+    }
+    expect(got).toEqual(["a/red", "a/big", "b/blue", "c/red", "d/red"]);
+    await expect(runView(s, await program("view", "SELECT i.id, j.value AS tag FROM items i, jsonb_array_elements_text(i.tags) AS j(value) ORDER BY i.id"), caller())).rejects.toThrow(/WITH ORDINALITY AS j\(value, n\)/);
+    await expect(program("view", "SELECT x.id FROM items AS x(owner) ORDER BY x.id")).rejects.toThrow(/column list/);
+    await expect(program("view", "SELECT s.a FROM (SELECT id, stock FROM items) AS s(a, b) ORDER BY s.a")).rejects.toThrow(/column list|s.a is not a declared field/);
+    await expect(program("view", "SELECT j.nope FROM items i, jsonb_array_elements_text(i.tags) AS j(value) WHERE j.nope = 'x'")).rejects.toThrow(/names its columns/);
+    await expect(program("view", "SELECT j.value FROM items i, pg_catalog.jsonb_array_elements_text(i.tags) AS j(value)")).rejects.toThrow(/allowed in FROM/);
+  } finally { useCompileSide(undefined); await db.drop(); }
+}, 60_000);

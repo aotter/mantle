@@ -116,7 +116,7 @@ A SQLite spelling fails validation with its position and the PostgreSQL one:
 | SQLite (D1) | PostgreSQL |
 |---|---|
 | `FROM t, json_each(t.col) j`, `j.value` | `FROM t, jsonb_array_elements_text(t.col) AS j(value)` (`jsonb_array_elements` for jsonb values, `jsonb_each_text(t.col) AS j(key, value)` for an object; `WITH ORDINALITY AS j(value, n)` for the position) |
-| `ORDER BY …, j.id` of `json_each` | `WITH ORDINALITY AS j(value, n)`, then `ORDER BY …, j.n` |
+| `ORDER BY …, j.id` of `json_each` | `WITH ORDINALITY AS j(value, n)`, then `ORDER BY …, j.n` (a sorted View over a row source needs `WITH ORDINALITY`; Mantle pages by it) |
 | `x ->> '$.a.b'`, `x ->> '$[0]'` | `x #>> '{a,b}'`, `x ->> 'a'`, `x ->> 0` (a `$…` string is refused: PostgreSQL would read it as a key) |
 | `json_extract(x, '$.a')` | `x ->> 'a'` (text) or `x -> 'a'` (jsonb) |
 | `json_remove(x, '$.a')` | `x - 'a'` |
@@ -145,13 +145,11 @@ A SQLite spelling fails validation with its position and the PostgreSQL one:
   index on the sort keys (and the `updated_at` index Mantle creates) serves a
   paged sort. This is PostgreSQL's default for every `ORDER BY`, window and
   aggregate (`json_group_array`) ones included. Values never depend on
-  the server's `DateStyle` or `IntervalStyle`. Elsewhere the meaning is
-  PostgreSQL's, where D1 differs:
+  the server's `DateStyle`, `IntervalStyle` or `TimeZone`. Elsewhere the meaning
+  is PostgreSQL's, where D1 differs:
   - `LIKE` is case-sensitive.
   - Division by zero is an error.
   - `->>` returns text.
-  - A date cast to or from an instant is taken in the session's `TimeZone`;
-    set the role's to `UTC` for D1's reading.
 - `searchableFields` and `mantle.near()` scan without an index in 0.2.0, and
   `mantle.search_rank()` counts occurrences rather than computing bm25.
   Site settings and media are SQLite-only (D1, bun:sqlite).
@@ -165,10 +163,11 @@ A SQLite spelling fails validation with its position and the PostgreSQL one:
   none. A statement past it fails with `RESOURCE_UNAVAILABLE` and writes nothing.
 - Boot reads the role's settings once and refuses to start, naming the
   `ALTER ROLE … SET` to run, unless `DateStyle` is ISO, `IntervalStyle` is
-  `postgres`, `extra_float_digits` is at least 1 and `standard_conforming_strings`
-  is on: what decoding and the printed literals need, and PostgreSQL's defaults.
-  Mantle sets nothing per session, because Hyperdrive resets every pooled
-  session to the role's configuration.
+  `postgres`, `extra_float_digits` is at least 1, `standard_conforming_strings`
+  is on and `TimeZone` is UTC (date and instant casts in your SQL use the
+  session's zone). These are PostgreSQL's defaults, except a server initialized
+  in another time zone. Mantle sets nothing per session, because
+  Hyperdrive resets every pooled session to the role's configuration.
 - Connect as a role that owns the service's tables but is not a superuser and
   holds no file or server privilege (`pg_read_server_files`,
   `pg_execute_server_program`). Mantle's allowlist refuses such functions; the

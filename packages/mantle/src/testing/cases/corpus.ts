@@ -77,7 +77,7 @@ export const corpus: Item[] = [
   v('self-join', 'SELECT a.id AS a, b.id AS b FROM items a JOIN items b ON a.cat = b.cat AND a.id < b.id ORDER BY a.id, b.id', [{ a: 'a', b: 'b' }, { a: 'a', b: 'd' }, { a: 'b', b: 'd' }]),
   v('from-subquery', 'SELECT s.id, s.stock FROM (SELECT id, stock FROM items WHERE cat = \'x\') s WHERE s.stock > 4 ORDER BY s.id', [{ id: 'a', stock: 5 }, { id: 'd', stock: 7 }]),
   v('json-each', 'SELECT i.id, j.value AS tag FROM items i, json_each(i.tags) j WHERE j.value = input.tag ORDER BY i.id', [{ id: 'a', tag: 'red' }, { id: 'c', tag: 'red' }, { id: 'd', tag: 'red' }], { tag: 'text' }, { tag: 'red' },
-    { sql: 'SELECT i.id, j.value AS tag FROM items i, jsonb_array_elements_text(i.tags) AS j(value) WHERE j.value = input.tag ORDER BY i.id' }),
+    { sql: 'SELECT i.id, j.value AS tag FROM items i, jsonb_array_elements_text(i.tags) WITH ORDINALITY AS j(value, n) WHERE j.value = input.tag ORDER BY i.id' }),
   v('json-exists', 'SELECT i.id, i.tags ->> \'$[0]\' AS first FROM items i WHERE EXISTS (SELECT 1 FROM json_each(i.tags) j WHERE j.value = \'big\') ORDER BY i.id', [{ id: 'a', first: 'red' }],
     undefined, undefined, { sql: "SELECT i.id, i.tags ->> 0 AS first FROM items i WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(i.tags) AS j(value) WHERE j.value = 'big') ORDER BY i.id" }),
   // ---- functions -----------------------------------------------------------------------------------------------
