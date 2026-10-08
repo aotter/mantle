@@ -69,6 +69,11 @@ A failed check/dirty commit prevents push. A failed Git push retains packed byte
 
 ## Source gate, then pack
 
+Complete tracked backend and frontend source, builds and local HTTP acceptance
+before committing and admitting source. The ready kit confirms the authoritative
+contract; rebuild ignored output from that fixed commit. If kit review requires
+tracked source edits, admit a new commit and replace the candidate safely below.
+
 After successful `prepare`, use its fixed commit and packed backend output:
 follow `nextAction` for source admission, then continue at step 4 below. Reuse
 those bytes only while the freshly read host contract still matches their Core
