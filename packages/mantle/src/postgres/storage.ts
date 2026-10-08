@@ -28,7 +28,15 @@ const ident = (n: string) => (new TextEncoder().encode(n).length <= 63 ? n : `${
 const fnv = (s: string) => [...s].reduce((h, c) => Math.imul(h ^ c.codePointAt(0)!, 16777619) >>> 0, 2166136261).toString(16).padStart(8, "0");
 
 /** Mantle's functions the lowering calls. Each is plain SQL, so the planner inlines it. */
+/** The SQLSTATE `_mantle_expect` raises; the executor reads it as CONFLICT. */
+export const EXPECT_STATE = "MX409";
+
 const FUNCTIONS = [
+  // a write's `expect`, checked where it ran: a different count fails the statement, and with it the transaction
+  `CREATE OR REPLACE FUNCTION _mantle_expect(actual int8, expected int8) RETURNS bool LANGUAGE plpgsql VOLATILE AS $f$BEGIN
+    IF actual <> expected THEN RAISE EXCEPTION USING ERRCODE = '${EXPECT_STATE}', MESSAGE = format('the write matched %s rows, not %s', actual, expected); END IF;
+    RETURN true;
+  END$f$`,
   // x ->> k as SQLite reads it: a key, an index or a `$` path, over jsonb, json or JSON text
   // a `$` path is read strict and silent, as SQLite reads it: `$.a` of an array is NULL, not the array's members' `a`
   `CREATE OR REPLACE FUNCTION _mantle_jget(j jsonb, k text) RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $f$SELECT CASE WHEN left(k, 1) = '$' THEN jsonb_path_query_first(j, ('strict ' || k)::jsonpath, '{}', true) #>> '{}' ELSE j ->> k END$f$`,
@@ -52,6 +60,8 @@ const FUNCTIONS = [
 const SYSTEM_DDL = [
   "CREATE TABLE IF NOT EXISTS _mantle_boot_state (key text PRIMARY KEY, value text NOT NULL)",
   "CREATE TABLE IF NOT EXISTS _mantle_schema_tables (name text PRIMARY KEY)",
+  // the target an `expect` guard inserts into; its HAVING never lets a row through (executor.ts)
+  "CREATE TABLE IF NOT EXISTS _mantle_assert (ok boolean)",
 ];
 
 /** One convergence at a time per database: the others wait, then find the work done. */

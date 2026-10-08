@@ -71,6 +71,12 @@ jobs:
 
       - run: pnpm test
 
+      # #1379: the same PostgreSQL suites over node-postgres pipeline mode
+      - name: PostgreSQL suites, pipelined
+        run: pnpm --filter @aotter/mantle exec vitest run test/postgres
+        env:
+          MANTLE_PG_PIPELINE: "1"
+
       - name: Native Bun host conformance
         run: pnpm --filter @aotter/mantle test:bun
 
