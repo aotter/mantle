@@ -118,12 +118,41 @@ function split(row: StoreRow): { result: StoreRow; hook: StoreRow } {
   return { result, hook };
 }
 
+
+// ---- the compile cache ---------------------------------------------------------------------------------
+// A sealed plan's IR never changes, and the compiled form of a program (validated, policy injected) depends only on the IR, the
+// plan's inputs and schemas, the dialect (its checks, lowering and native-order flag) and the run's mode, plus the Procedure's hook
+// set. None of that is the caller: who they are reaches the statement only as binds (`uid`, `role`, `input`), resolved per request by
+// `bindValues`. So one program compiles once per such key, not once per request. Every level is a WeakMap on an object whose life is the
+// plan's (IR, inputs, schemas, dialect), and the last level is capped, so no request input grows it.
+type Slot = Map<string, Compiled[]>;
+const compiledCache = new WeakMap<object, WeakMap<object, WeakMap<object, WeakMap<object, Slot>>>>();
+const SLOT_CAP = 32;
+const level = <K extends object, V>(m: WeakMap<K, V>, k: K, make: () => V): V => { let v = m.get(k); if (!v) m.set(k, (v = make())); return v; };
+
+/**
+ * `compileProgram`, once per (IR, inputs, schemas, dialect, flavour). The negative-control and position-probe runs (`seen`,
+ * `unsafeNoVisibility`) and a Store write (`statuses`, built fresh from the request) are never cached. The returned array is the
+ * caller's own to change; the Compiled values in it are shared and must not be.
+ */
+function compileCached(env: RunEnv, p: Program, ir: object, stmts: readonly N[], ctx: CompileContext, flavour: string): Compiled[] {
+  if (env.seen || env.unsafeNoVisibility || ctx.statuses?.some((x) => x !== undefined) || p.statuses) return compileProgram(stmts, ctx);
+  const slot = level(level(level(level(compiledCache, ir, () => new WeakMap()), p.inputs, () => new WeakMap()), env.schemas, () => new WeakMap()), env.dialect, () => new Map() as Slot);
+  const key = `${p.kind}|${env.mode}|${[...(ctx.returning ?? [])].sort().join(",")}|${ctx.lockVersion ? "lock" : ""}|${flavour}`;
+  let hit = slot.get(key);
+  if (!hit) {
+    if (slot.size >= SLOT_CAP) slot.clear();
+    slot.set(key, (hit = compileProgram(stmts, ctx)));
+  }
+  return hit.slice();
+}
+
 /** A Procedure: before hooks (row ops only), one batch applied in order and all or nothing, then after hooks. */
 export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<{ readonly rows: readonly (readonly StoreRow[])[]; readonly affected: readonly number[] }> {
   const lc = env.lifecycle;
   const afterSchemas = new Set([...(lc?.after ?? [])].map((k) => k.split(".")[0]!));
   const base = ctxOf(env, p, { returning: afterSchemas, statuses: p.statuses });
-  const plan = compileProgram(p.ir, base);
+  const plan = compileCached(env, p, p.ir, p.ir, base, "all");
   const versions: Record<number, unknown> = {};
   // a hook receives the entry as Store's `select` returns it (declared names, decoded values, `{ lat, lng }`), not the storage encoding
   const entry = (schema: string, row: StoreRow): StoreRow => {
@@ -162,7 +191,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
     if (hooked) await lc!.dispatcher.before([event(i, `before_${HOOK[verbOf(c)]}`, c.schema, [row])]);
     versions[i] = row.version;
     // the statement carries the version it was decided on, so a change in between is CONFLICT
-    if (c.verb !== "insert") plan[i] = compileProgram([p.ir[i]!], { ...base, lockVersion: true, statuses: [p.statuses?.[i]] })[0]!;
+    if (c.verb !== "insert") plan[i] = compileCached(env, p, p.ir[i]!, [p.ir[i]!], { ...base, lockVersion: true, statuses: [p.statuses?.[i]] }, "one")[0]!;
   }
 
   // a row op that matched nothing is `lock` when the entry is visible at another version than the one `version = input.x` asked for
@@ -287,18 +316,54 @@ function rowComparable(env: RunEnv, sel: N, keys: readonly N[], hidden: readonly
  * A View's own LIMIT bounds every page together. A View without ORDER BY (a DISTINCT, a GROUP BY or an aggregate) cannot
  * be paged: it returns its rows when they fit one page and is refused when they do not.
  */
+/** Where a paged statement's extra bind comes from on a later request: a cursor key, the search pattern, or an equality value. */
+type Source = { readonly cursor: number } | { readonly search: true } | { readonly eq: number };
+/** The paged form of one View under one request shape: its AST is built once, and `sources` say how to bind it. */
+interface Paged { readonly ast: N; readonly sources: readonly Source[]; readonly flat: boolean; readonly names: readonly string[]; readonly nkeys: number }
+// keyed by the compiled View, so it lives and dies with the compile cache's entry; the shapes per View are capped (a page size and a
+// cursor's length come off the wire)
+const pagedCache = new WeakMap<Compiled, Map<string, Paged>>();
+const SHAPE_CAP = 64;
+
 export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor?: readonly unknown[]; pageSize?: number; match?: ViewMatch } = {}): Promise<ViewPage> {
-  const [c] = compileProgram(p.ir, ctxOf(env, p));
+  const [c] = compileCached(env, p, p.ir, p.ir, ctxOf(env, p), "view");
   if (!opts.pageSize) return { rows: await env.executor.select({ ir: c!.ast, binds: bindValues(env.dialect, c!.binds, as.bind) }) };
-  const sel = structuredClone(c!.ast.SelectStmt) as N;
+  const pageSize = opts.pageSize;
+  if (opts.cursor && !c!.ast.SelectStmt.sortClause?.length) throw refuse("SQL_SHAPE: this View has no ORDER BY, so it is one page and takes no cursor");
+  // everything the statement's text depends on besides the compiled View: the page size, which cursor keys are NULL or missing and how
+  // many there are (the row comparison needs all of them, non-null), and the search and equality columns. Values are binds, not text.
+  const cursorShape = opts.cursor ? Array.from(opts.cursor, (v) => (v === null ? "n" : v === undefined ? "u" : "v")).join("") : "-";
+  const search = opts.match?.search?.text ? opts.match.search : undefined;
+  const eq = opts.match?.eq ?? [];
+  const shape = JSON.stringify([pageSize, cursorShape, search?.columns ?? null, eq.map((e) => e.column)]);
+  const shapes = level(pagedCache, c!, () => new Map<string, Paged>());
+  let paged = shapes.get(shape);
+  if (!paged) {
+    if (shapes.size >= SHAPE_CAP) shapes.clear();
+    shapes.set(shape, (paged = pagedOf(env, c!, pageSize, opts.cursor, opts.match)));
+  }
+  const extra = paged.sources.map((x) => ("cursor" in x ? opts.cursor![x.cursor] : "search" in x ? likePattern(search!.text) : eq[x.eq]!.value));
+  const rows = await env.executor.select({ ir: paged.ast, binds: [...bindValues(env.dialect, c!.binds, as.bind), ...extra] });
+  if (paged.flat) {
+    if (rows.length > pageSize) throw refuse(`SQL_SHAPE: this View has more than ${pageSize} rows and no ORDER BY to page them by: add an ORDER BY`);
+    return { rows };
+  }
+  if (!paged.nkeys && rows.length > pageSize) throw refuse(`SQL_SHAPE: this View has more than ${pageSize} matching rows and no ORDER BY to page them by: add an ORDER BY`);
+  const page = rows.slice(0, pageSize);
+  const next = paged.nkeys && rows.length > pageSize ? Array.from({ length: paged.nkeys }, (_k, i) => page.at(-1)![`_k${i}`]) : undefined;
+  return { rows: page.map((r) => Object.fromEntries(paged.names.map((n) => [n, r[n]]))), ...(next ? { next } : {}) };
+}
+
+/** The paged statement for one request shape (see `runView`): the View wrapped with its cursor condition, search and equality filters. */
+function pagedOf(env: RunEnv, c: Compiled, pageSize: number, cursor: readonly unknown[] | undefined, match: ViewMatch | undefined): Paged {
+  const opts = { cursor, pageSize, match };
+  const sel = structuredClone(c.ast.SelectStmt) as N;
   const keys: N[] = sel.sortClause ?? [];
   if (opts.cursor && !keys.length) throw refuse("SQL_SHAPE: this View has no ORDER BY, so it is one page and takes no cursor");
   const visible: (string | undefined)[] = sel.targetList.map(outName);
   if (!keys.length && !opts.match?.search?.text && !opts.match?.eq?.length) {
     // nothing to wrap: the View's own statement, one row past the page to tell whether it fits
-    const rows = await env.executor.select({ ir: { SelectStmt: { ...sel, limitCount: { A_Const: { ival: { ival: opts.pageSize + 1 } } }, limitOption: "LIMIT_OPTION_COUNT" } }, binds: bindValues(env.dialect, c!.binds, as.bind) });
-    if (rows.length > opts.pageSize) throw refuse(`SQL_SHAPE: this View has more than ${opts.pageSize} rows and no ORDER BY to page them by: add an ORDER BY`);
-    return { rows };
+    return { ast: { SelectStmt: { ...sel, limitCount: { A_Const: { ival: { ival: pageSize + 1 } } }, limitOption: "LIMIT_OPTION_COUNT" } }, sources: [], flat: true, names: [], nkeys: 0 };
   }
   if (visible.some((n) => !n)) throw refuse("SQL_SHAPE: a paged View names every output column");
   const names = visible as string[];
@@ -319,26 +384,26 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
   const inner: N = sel.limitCount
     ? { ...sel, targetList: [...sel.targetList, ...hidden] }
     : { ...sel, targetList: [...sel.targetList, ...hidden], sortClause: undefined, limitCount: undefined, limitOption: "LIMIT_OPTION_DEFAULT" };
-  const base = c!.binds.length;
-  const extra: unknown[] = [];
-  const param = (value: unknown): N => (extra.push(value), { ParamRef: { number: base + extra.length } });
+  const base = c.binds.length;
+  const sources: Source[] = [];
+  const param = (source: Source): N => (sources.push(source), { ParamRef: { number: base + sources.length } });
   const col = (n: string): N => ref("_p", n);
   const isNull = (n: N, t: "IS_NULL" | "IS_NOT_NULL"): N => ({ NullTest: { arg: n, nulltesttype: t } });
   const conditions: N[] = [];
   if (opts.cursor) {
     const cur = opts.cursor;
-    const same = (j: number) => (cur[j] === null ? isNull(col(`_k${j}`), "IS_NULL") : op("=", col(`_k${j}`), param(cur[j])));
+    const same = (j: number) => (cur[j] === null ? isNull(col(`_k${j}`), "IS_NULL") : op("=", col(`_k${j}`), param({ cursor: j })));
     // the rows after the cursor's key i: past a NULL comes every value when NULL sorts first, nothing when it sorts last
     const past = (k: N, i: number): N | undefined => {
       const at = col(`_k${i}`);
       if (cur[i] === null) return nullsFirst(k) ? isNull(at, "IS_NOT_NULL") : undefined;
-      const beyond = op(desc(k) ? "<" : ">", at, param(cur[i]));
+      const beyond = op(desc(k) ? "<" : ">", at, param({ cursor: i }));
       return nullsFirst(k) ? beyond : { BoolExpr: { boolop: "OR_EXPR", args: [beyond, isNull(at, "IS_NULL")] } };
     };
     if (rowComparable(env, sel, keys, hidden) && cur.length === keys.length && cur.every((v) => v !== null && v !== undefined)) {
       // every key is NOT NULL and they share one direction: one row comparison, which a btree range-scans however deep the page
       const row = (args: N[]): N => ({ RowExpr: { args, row_format: "COERCE_IMPLICIT_CAST" } });
-      conditions.push(op(desc(keys[0]!) ? "<" : ">", row(keys.map((_k, i) => col(`_k${i}`))), row(cur.map((v) => param(v)))));
+      conditions.push(op(desc(keys[0]!) ? "<" : ">", row(keys.map((_k, i) => col(`_k${i}`))), row(cur.map((_v, i) => param({ cursor: i })))));
     } else {
     const args = keys.flatMap((k, i) => {
       const last = past(k, i);
@@ -351,20 +416,15 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
   const output = (name: string) => names.find((n) => n === name) ?? names.find((n) => n === name.toLowerCase()) ?? refuseOutput(name);
   const search = opts.match?.search;
   if (search?.text) {
-    const pattern = likePattern(search.text);
     conditions.push({ BoolExpr: { boolop: "OR_EXPR", args: search.columns.map((c) => ({ A_Expr: { kind: "AEXPR_LIKE", name: [{ String: { sval: "~~" } }], lexpr: col(output(c)),
-      rexpr: { FuncCall: { funcname: [{ String: { sval: "like_escape" } }], args: [param(pattern), { A_Const: { sval: { sval: "\\" } } }], funcformat: "COERCE_EXPLICIT_CALL" } } } })) } });
+      rexpr: { FuncCall: { funcname: [{ String: { sval: "like_escape" } }], args: [param({ search: true }), { A_Const: { sval: { sval: "\\" } } }], funcformat: "COERCE_EXPLICIT_CALL" } } } })) } });
   }
-  for (const { column, value } of opts.match?.eq ?? []) conditions.push(op("=", col(output(column)), param(value)));
+  (opts.match?.eq ?? []).forEach(({ column }, k) => conditions.push(op("=", col(output(column)), param({ eq: k }))));
   const outer: N = { SelectStmt: {
     targetList: [...names.map((n) => ({ ResTarget: { val: col(n), name: n } })), ...keys.map((_k, i) => ({ ResTarget: { val: col(`_k${i}`), name: `_k${i}` } }))],
     fromClause: [{ RangeSubselect: { subquery: { SelectStmt: inner }, alias: { aliasname: "_p" } } }],
     whereClause: conditions.length > 1 ? { BoolExpr: { boolop: "AND_EXPR", args: conditions } } : conditions[0],
     sortClause: keys.map((k, i) => ({ SortBy: { node: col(`_k${i}`), sortby_dir: k.SortBy.sortby_dir, sortby_nulls: nullsFirst(k) ? "SORTBY_NULLS_FIRST" : "SORTBY_NULLS_LAST" } })),
-    limitCount: { A_Const: { ival: { ival: opts.pageSize + 1 } } }, limitOption: "LIMIT_OPTION_COUNT", op: "SETOP_NONE" } };
-  const rows = await env.executor.select({ ir: outer, binds: [...bindValues(env.dialect, c!.binds, as.bind), ...extra] });
-  if (!keys.length && rows.length > opts.pageSize) throw refuse(`SQL_SHAPE: this View has more than ${opts.pageSize} matching rows and no ORDER BY to page them by: add an ORDER BY`);
-  const page = rows.slice(0, opts.pageSize);
-  const next = keys.length && rows.length > opts.pageSize ? keys.map((_k, i) => page.at(-1)![`_k${i}`]) : undefined;
-  return { rows: page.map((r) => Object.fromEntries(names.map((n) => [n, r[n]]))), ...(next ? { next } : {}) };
+    limitCount: { A_Const: { ival: { ival: pageSize + 1 } } }, limitOption: "LIMIT_OPTION_COUNT", op: "SETOP_NONE" } };
+  return { ast: outer, sources, flat: false, names, nkeys: keys.length };
 }
