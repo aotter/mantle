@@ -27,7 +27,7 @@ catalogs:
 
 catalog:
   # Shared runtime deps — tracked via lockfile, bumped by dependabot.
-  zod: ^4.5.4
+  zod: ^4.6.5
   better-auth: 1.7.7
   '@better-auth/core': 1.7.7
   '@better-auth/utils': 0.4.2
