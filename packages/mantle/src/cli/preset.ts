@@ -47,6 +47,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
   const adminOptions = [
     'basePath: "/admin"',
     bun ? "assets: env.ASSETS" : "assets: (path) => adminAsset(env.ASSETS, path)",
+    "extensions: adminExtensions",
     ...(mantle ? ["identity: { directory: auth, roles: auth, deleteUser: auth.deleteUser }"] : []),
     ...(mcp ? [`site: { mcpEndpoints: { public: "/mcp", staff: ${staffMcp ? '"/mcp/staff"' : "null"} } }`] : []),
   ];
@@ -78,7 +79,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
   return [
     `${OWNED} It composes the service (ADR-0032 decision 6).`,
     `import { ${core.join(", ")} } from "@aotter/mantle";`,
-    ...(admin ? ['import { createAdminSurface } from "@aotter/mantle/admin";'] : []),
+    ...(admin ? ['import { createAdminSurface } from "@aotter/mantle/admin";', 'import { adminExtensions } from "./admin-extensions.js";'] : []),
     ...(auth.length ? [`import { ${auth.join(", ")} } from "@aotter/mantle/auth";`] : []),
     ...(postgres
       ? [`import { ${mantle ? "pgDatabaseDriver, pgPool, " : ""}postgresStorage, requestScoped, type PgClient, type PgSession } from "@aotter/mantle/postgres";`, bun ? 'import type { Pool } from "pg";' : 'import pg from "pg";']
@@ -291,10 +292,22 @@ ADMIN_EMAIL=you@example.com
 BETTER_AUTH_SECRET=replace-with-a-random-32-byte-secret
 `;
 
+const ADMIN_EXTENSIONS = `${OWNED}
+/**
+ * Admin extensions (ADR-lite 1376): pages, settings, actions, record panels and field widgets this project adds to its
+ * Admin. A manifest's uiSchema can name a contribution as <extension>/<contribution>, e.g. \`widget: brand/color\`.
+ * See node_modules/@aotter/mantle/docs/handbook/guides/admin-extensions.md.
+ */
+import type { AdminExtension } from "@aotter/mantle/admin";
+
+export const adminExtensions: readonly AdminExtension[] = [];
+`;
+
 /** The preset's files for this selection, by path. */
 export function presetFiles(root: string, selection: PresetSelection, plan: RuntimePlan): [string, string][] {
   return [
     ["src/handlers.ts", handlers(plan)],
+    ...(selection.features.includes("admin") ? [["src/admin-extensions.ts", ADMIN_EXTENSIONS] as [string, string]] : []),
     ...(selection.identity === "custom" ? [["src/identity.ts", IDENTITY] as [string, string]] : []),
     ["src/index.ts", selection.host === "bun" ? bunEntry(selection) : ENTRY],
     ...(selection.host === "bun" ? [] : ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].some((f) => existsSync(join(root, f))) ? [] : [["wrangler.jsonc", wrangler(root, plan, selection.features.includes("admin"), selection.dialect)] as [string, string]]),

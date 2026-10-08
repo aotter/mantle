@@ -33,6 +33,10 @@
     },
     "./kit.css": "./dist/kit/kit.css",
     "./tokens.css": "./dist/kit/tokens.css",
+    "./extension": {
+      "types": "./dist/extension/index.d.ts",
+      "import": "./dist/extension/index.js"
+    },
     "./package.json": "./package.json",
     "./mcp-app/interaction.html": "./dist/mcp-app/interaction.html",
     "./mcp-app": {
@@ -50,7 +54,7 @@
   ],
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json && vite build --config vite.kit.config.ts && node scripts/emit-kit-styles.mjs && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts && vite build --config vite.preview.config.ts",
+    "build": "tsc -b tsconfig.lib.json && vite build --config vite.kit.config.ts && node scripts/emit-kit-styles.mjs && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts && vite build --config vite.shared.config.ts && vite build --config vite.preview.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json && tsc -p tsconfig.mcp-app.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "vitest run"
   },

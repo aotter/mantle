@@ -181,14 +181,17 @@ Admin presentation only; it never changes validation or MCP.
 
 | Key | Values |
 |---|---|
-| `fields.<name>.widget` | `textarea` |
+| `fields.<name>.widget` | `textarea` (a string field), or `<extension>/<contribution>`: an Admin extension's `field.input/v1` control, for any field type |
+| `fields.<name>.options` | with an extension widget only: an object checked against the contribution's `optionsSchema` |
 | `list.primaryField` | a scalar data field shown first (operational Schemas) |
 | `list.columns` | data fields and native columns, in order (operational Schemas) |
+| `list.cells` | data field or native column -> `<extension>/<contribution>`, an Admin extension's `field.cell/v1` renderer |
+| `panels` | up to 16 `<extension>/<contribution>` names: Admin extension `record.sidebar/v1` panels on the record page |
 | `list.filterField` | a string enum field that leads an index: tabs per value (operational Schemas) |
 | `nav.standalone` | `true`: also list a folded child in navigation |
 | `nav.parentField` | which `x-mantle-ref` field filters it, when several could |
 
-Other keys are refused (`SCHEMA_UI_INVALID`).
+Other keys are refused (`SCHEMA_UI_INVALID`). A contribution name is checked for shape here; whether it exists, fits the key and accepts the `options` is checked when Admin starts ([Extend Admin](../guides/admin-extensions.md)).
 
 ## Diagnostics
 

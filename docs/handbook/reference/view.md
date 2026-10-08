@@ -137,6 +137,7 @@ REST coerces each `input` query parameter to its declared type.
 | `list.columns` | the outputs the console shows, in order; CSV export uses them |
 | `list.searchFields` | outputs the console's search box matches: one case-insensitive `LIKE '%text%'` per output, ORed, with `%`, `_` and `\` in the text matched literally |
 | `list.filterFields` | outputs the console offers as filters: one `=` each, the value coerced to the output's field type |
+| `list.cells` | output -> `<extension>/<contribution>`: an Admin extension's `field.cell/v1` renderer for that column ([Extend Admin](../guides/admin-extensions.md)) |
 
 Each name must be one of the View's outputs (`VIEW_UI_INVALID` otherwise).
 The conditions wrap the View's own query, after its `WHERE` and the injected

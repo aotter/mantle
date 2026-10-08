@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ExtensionActions, ExtensionCell } from "../extensions/extension-contributions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
@@ -321,6 +322,7 @@ function CollectionList({
         canonical={canonical}
         onSuccess={refreshEntries}
       />
+      <ExtensionActions target="list.toolbar/v1" schema={collectionName} onDone={refreshEntries} />
     </div>
   );
   const header = layout === "page" ? (
@@ -603,6 +605,8 @@ function BulkActionBar({
         {t(language, "collection.bulk.selectedCount", { count: String(selectedIds.length) })}
       </span>
       <div className="ml-auto flex items-center gap-2">
+        <ExtensionActions target="list.selection/v1" size="sm" schema={collection?.name ?? ""}
+          selection={{ schema: collection?.name ?? "", ids: selectedIds }} onDone={() => { onClear(); onDone(); }} />
         {canPublish ? (
           <>
             <Button
@@ -1130,9 +1134,12 @@ function EntryRowDisplay({
           const value = row.data_preview?.[name];
           return (
             <TableCell key={name} className="text-muted-foreground">
-              {isIdField(name, schema) && typeof value === "string"
-                ? <IdValue value={value} language={language} />
-                : renderDataValue(schema, value, language, canonical)}
+              <ExtensionCell schema={collection?.name ?? ""} field={name} value={value} property={schema as Record<string, unknown> | undefined}
+                cells={(collection?.uiSchema?.["list"] as { cells?: unknown } | undefined)?.cells}>
+                {isIdField(name, schema) && typeof value === "string"
+                  ? <IdValue value={value} language={language} />
+                  : renderDataValue(schema, value, language, canonical)}
+              </ExtensionCell>
             </TableCell>
           );
         })
