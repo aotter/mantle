@@ -158,3 +158,31 @@ it("a request's page size and cursor length cannot grow the cache without bound"
     useCompileSide(undefined);
   }
 });
+
+it("cursor elements past the sort keys neither change the statement nor grow the shape key", async () => {
+  useCompileSide(pgCompile);
+  try {
+    const dialect = ENGINES.postgres.dialect;
+    const p = await program("view", "SELECT id FROM items ORDER BY id");
+    const asked = async (cursor: unknown[], cached: boolean) => {
+      const rec = recorder();
+      const site = { schemas, dialect, executor: ENGINES.postgres.executor(rec), mode: "caller", ...(cached ? {} : { seen: new Set() }) };
+      return emit(rec, () => runView(site, cached ? p : structuredClone(p), bindOf(CALLERS[1], {}), { pageSize: 3, cursor }));
+    };
+    // `id` plus the appended tiebreak is at most two keys; a longer cursor takes the expanded form, as before
+    for (const cursor of [["a", "b", "c"], ["a", "b", "c", "d", "e"], Array.from({ length: 5000 }, () => "z"), ["a", null, "c"], ["a", undefined, 1, 2]])
+      expect(await asked(cursor, true)).toBe(await asked(cursor, false));
+    // many lengths, one pattern over the keys: one entry, however long the cursor
+    const rec = recorder();
+    const site = { schemas, dialect, executor: ENGINES.postgres.executor(rec), mode: "caller" };
+    const keys = new Set<string>();
+    const spy = vi.spyOn(JSON, "stringify");
+    for (const n of [3, 10, 1000, 50000]) await runView(site, p, bindOf(CALLERS[1], {}), { pageSize: 3, cursor: Array.from({ length: n }, () => "x") });
+    for (const call of spy.mock.calls) if (typeof call[0] === "object" && Array.isArray(call[0]) && call[0][0] === 3) keys.add(String(call[0][1]));
+    spy.mockRestore();
+    expect(keys.size).toBe(1);
+    expect([...keys][0].length).toBeLessThan(8);
+  } finally {
+    useCompileSide(undefined);
+  }
+});

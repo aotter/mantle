@@ -332,7 +332,9 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
   if (opts.cursor && !c!.ast.SelectStmt.sortClause?.length) throw refuse("SQL_SHAPE: this View has no ORDER BY, so it is one page and takes no cursor");
   // everything the statement's text depends on besides the compiled View: the page size, which cursor keys are NULL or missing and how
   // many there are (the row comparison needs all of them, non-null), and the search and equality columns. Values are binds, not text.
-  const cursorShape = opts.cursor ? Array.from(opts.cursor, (v) => (v === null ? "n" : v === undefined ? "u" : "v")).join("") : "-";
+  // Only the first nkeys elements and whether the length is exactly nkeys reach the AST, so the key's size is bounded by the View, not the wire.
+  const nkeys = c!.ast.SelectStmt.sortClause?.length ?? 0;
+  const cursorShape = opts.cursor ? `${Array.from({ length: nkeys }, (_x, i) => { const v = opts.cursor![i]; return v === null ? "n" : v === undefined ? "u" : "v"; }).join("")}${opts.cursor.length === nkeys ? "=" : "!"}` : "-";
   const search = opts.match?.search?.text ? opts.match.search : undefined;
   const eq = opts.match?.eq ?? [];
   const shape = JSON.stringify([pageSize, cursorShape, search?.columns ?? null, eq.map((e) => e.column)]);
