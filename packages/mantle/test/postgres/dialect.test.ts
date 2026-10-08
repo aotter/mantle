@@ -87,9 +87,20 @@ it.skipIf(!PG_URL)("results do not depend on server settings, collation or NULL 
   const e = await engine();
   useCompileSide(pgCompile);
   try {
-    // a server whose defaults differ everywhere they could: the dialect pins what it decodes under
-    const hostile = async () => { const c = await e.connect(); await c.query({ text: "SET DateStyle = 'SQL, DMY'; SET IntervalStyle = 'iso_8601'; SET extra_float_digits = 0; SET TimeZone = 'America/New_York'" }); return c; };
-    const s = site(await boot({ ...e, storage: postgresStorage({ connect: hostile }) }));
+    // a server whose settings Mantle cannot decode under is refused at boot, each with the fix its operator runs (#1379)
+    const set = (sql: string) => async () => { const c = await e.connect(); await c.query({ text: sql }); return c; };
+    const hostile = set("SET DateStyle = 'SQL, DMY'; SET IntervalStyle = 'iso_8601'; SET extra_float_digits = 0; SET standard_conforming_strings = off; SET statement_timeout = 0; SET TimeZone = 'America/New_York'");
+    const refused = await postgresStorage({ connect: hostile }).prepare(planOf({}, "settings")).catch((x) => x);
+    expect(refused.diagnostics.map((d) => [d.code, d.path, d.message.replace(/ is .*?ALTER ROLE \S+ SET /, " … ").replace(/ \(or ALTER DATABASE.*/, "")])).toEqual([
+      ["STORAGE_CHANGE_BLOCKED", "storage:settings", "DateStyle … DateStyle = 'ISO, YMD'"],
+      ["STORAGE_CHANGE_BLOCKED", "storage:settings", "IntervalStyle … IntervalStyle = 'postgres'"],
+      ["STORAGE_CHANGE_BLOCKED", "storage:settings", "extra_float_digits … extra_float_digits = '1'"],
+      ["STORAGE_CHANGE_BLOCKED", "storage:settings", "TimeZone … TimeZone = 'UTC'"],
+      ["STORAGE_CHANGE_BLOCKED", "storage:settings", "standard_conforming_strings … standard_conforming_strings = 'on'"],
+      ["STORAGE_CHANGE_BLOCKED", "storage:settings", "statement_timeout … statement_timeout = '10000ms'"],
+    ]);
+    // what differs and is harmless needs nothing: another date order, more float digits, another name for UTC
+    const s = site(await boot({ ...e, storage: postgresStorage({ connect: set("SET DateStyle = 'ISO, DMY'; SET extra_float_digits = 3; SET TimeZone = 'Etc/Zulu'") }) }));
     const view = (sql: string, inputs = {}, input = {}) => program("view", sql, inputs).then((p) => runView(s, p, caller(input))).then((r) => r.rows);
     const write = (sql: string) => program("procedure", sql).then((p) => runProcedure(s, p, caller()));
     expect(await view("SELECT CAST('2026-03-08T10:00:00.5Z' AS timestamptz) AS ts, date '2026-03-08' AS d, interval '90 minutes' AS iv, 1.0 / 3 AS f FROM items WHERE id = 'a'"))

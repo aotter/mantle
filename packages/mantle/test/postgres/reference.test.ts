@@ -63,7 +63,7 @@ it.skipIf(!PG_URL)("the reference profile's constructs give PostgreSQL's results
 }, 60_000);
 
 it.skipIf(!PG_URL)("a statement past statement_timeout fails as RESOURCE_UNAVAILABLE, and restrict refuses a program at runtime", async () => {
-  const db = await freshSchema();
+  const db = await freshSchema({ statementTimeoutMs: 200 });
   useCompileSide(pgCompile);
   try {
     const restrict = (plan) => (JSON.stringify(plan.stmts).includes('"requisitions"') ? [{ code: "SQL_RELATION", message: "requisitions is not for this tenant" }] : []);

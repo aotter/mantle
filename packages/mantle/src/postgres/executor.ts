@@ -10,6 +10,10 @@ import { print, typed } from "./print.js";
 const fail = (code: Diagnostic["code"], message: string, conflict?: Diagnostic["conflict"]) =>
   new DiagnosticError(runtimeDiagnostic({ code, severity: "error", path: "store", message, ...(conflict ? { conflict } : {}) }));
 
+const WRITES = new Set(["InsertStmt", "UpdateStmt", "DeleteStmt", "MergeStmt"]);
+const writes = (v: unknown): boolean =>
+  Array.isArray(v) ? v.some(writes) : !!v && typeof v === "object" && Object.entries(v).some(([k, x]) => WRITES.has(k) || writes(x));
+
 export class PgStoreExecutor implements StoreExecutor {
   /** PostgreSQL takes 65535 binds; Core's validator reads this. */
   readonly maxBindings = 10_000;
@@ -33,6 +37,8 @@ export class PgStoreExecutor implements StoreExecutor {
   }
 
   async select(statement: StoreStatement): Promise<readonly StoreRow[]> {
+    // a read is a bare statement now, no READ ONLY transaction behind the allowlist: one that writes is refused here too
+    if (writes(statement.ir)) throw fail("INPUT_VALIDATION_FAILED", "SQL_WRITE: a read cannot write");
     const s = this.prepared(statement);
     return (await query(this.connect, s, this.timeoutMs).catch((e) => this.mapped(e, "select"))).rows;
   }
