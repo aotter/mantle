@@ -52,14 +52,24 @@ if (!url) { console.log('Bun PostgreSQL skipped: set MANTLE_PG_URL'); process.ex
 // ADR-0039: node-postgres is the PostgreSQL driver on Bun too. Each engine is a pg.Pool in its own schema, pooled as the generated preset does.
 const admin = new pg.Pool({ connectionString: url, max: 1 });
 const pools: pg.Pool[] = [];
-const fresh = async () => {
+const fresh = async (max = 10) => {
   const schema = `bun_${crypto.randomUUID().replace(/-/g, '')}`;
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const pool = new pg.Pool({ connectionString: url, options: `-c search_path=${schema} -c statement_timeout=10000 -c TimeZone=UTC`, pipeline: true } as pg.PoolConfig);
+  const pool = new pg.Pool({ connectionString: url, options: `-c search_path=${schema} -c statement_timeout=10000 -c TimeZone=UTC`, pipeline: true, max } as pg.PoolConfig);
   pools.push(pool);
   const connect: PgConnect = async () => {
     const client = await pool.connect();
-    return { pipeline: true, query: client.query.bind(client), on: client.on.bind(client), getTransactionStatus: () => client.getTransactionStatus(), end: async () => client.release(client.getTransactionStatus() !== 'I') } as unknown as PgClient;
+    const listeners: ((e: Error) => void)[] = [];
+    let broken = false;
+    const onError = () => { broken = true; };
+    client.on('error', onError);
+    return {
+      pipeline: true,
+      query: client.query.bind(client),
+      on: (_e: 'error', f: (e: Error) => void) => { listeners.push(f); client.on('error', f); },
+      getTransactionStatus: () => client.getTransactionStatus(),
+      end: async () => { for (const f of [onError, ...listeners]) client.removeListener('error', f); client.release(broken || client.getTransactionStatus() !== 'I'); },
+    } as unknown as PgClient;
   };
   return { pool, connect, storage: postgresStorage({ connect }), driver: pgDatabaseDriver(connect), cleanup: async () => { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); } };
 };
@@ -79,6 +89,14 @@ try {
     assert.equal(same[0], same[1], 'one connection per request');
     const [x, y] = await Promise.all([a.run(() => pid(a.connect)), b.run(() => pid(b.connect))]);
     assert.notEqual(x, y, 'two requests never share a connection');
+    // the pooled client is reused, so the wrapper's error listeners must not pile up across requests
+    const one = await fresh(1);
+    const raw = await one.pool.connect(); raw.release();
+    const before = raw.listenerCount('error');
+    const scoped = requestScoped(one.connect);
+    for (let i = 0; i < 15; i++) await scoped.run(() => pid(scoped.connect));
+    assert.equal(raw.listenerCount('error'), before, 'a pooled client keeps no error listeners from finished requests');
+    await one.cleanup();
     // a statement past its timeout ends with 57014
     await assert.rejects(query(async () => { const c = await engine.pool.connect(); await c.query('SET statement_timeout = 100'); return { query: c.query.bind(c), end: async () => c.release() } as unknown as PgClient; }, { text: 'SELECT pg_sleep(1)::text AS s' }), (e: { code?: string }) => e.code === '57014');
     console.log('Bun PostgreSQL (node-postgres): auth and request-scoped connections passed');
