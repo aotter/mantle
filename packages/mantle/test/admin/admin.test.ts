@@ -3,7 +3,7 @@ import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, type StaffRole } from "../../src/spec/index.js";
 import { createMantleRuntime, type Caller, type MantleRuntime } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
-import { createAdminSurface, encodeMemberCursor, type AdminAssets, type AdminIdentity } from "../../src/admin/index.js";
+import { ADMIN_EXTENSION_JSON_SCHEMA, checkPlanUiExtensions, createAdminSurface, diffAdminExtensions, encodeMemberCursor, type AdminAssets, type AdminExtension, type AdminIdentity } from "../../src/admin/index.js";
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -354,52 +354,143 @@ describe("Admin surface: the SPA shell", () => {
   });
 });
 
-describe("Admin surface: host extension pages", () => {
-  const pages = [
-    { id: "audit", title: { en: "Audit", "zh-TW": "稽核" }, role: "editor" as const, module: "/admin-extensions/audit.js" },
-    { id: "access", title: "Access", role: "owner" as const, module: "/admin-extensions/access.js" },
-  ];
+describe("Admin surface: extensions", () => {
   const seen: unknown[] = [];
-  const surface = () => createAdminSurface(rt, { basePath: "/admin", identity, assets, extensions: { pages, api: async (request, { caller, page, path }) => {
-    seen.push([request.method, caller.subject, page, path]);
-    return path === "missing" ? null : Response.json({ page, path });
-  } } });
-  const ask = async (path: string, caller: Caller, method = "GET") => {
-    const res = await surface()(new Request(`http://x${path}`, { method }), caller);
+  const settingsSchema = { type: "object", required: ["region"], properties: { region: { type: "string", enum: ["tw", "jp"] }, limit: { type: "integer", minimum: 1, maximum: 10 } } } as const;
+  let stored: Record<string, unknown> = { region: "tw" };
+  const audit: AdminExtension = {
+    apiVersion: 1, id: "audit", title: { en: "Audit", "zh-TW": "稽核" }, module: "/admin-extensions/audit.js",
+    contributes: {
+      pages: [{ id: "log", title: "Log", role: "editor", nav: { group: "more" } }],
+      settings: [{ id: "retention", title: "Retention", role: "owner", schema: settingsSchema }],
+      actions: [
+        { id: "flag", title: "Flag", role: "editor", target: "record/v1", presentation: "confirm", when: { schema: ["posts"] } },
+        { id: "bulk", title: "Bulk", role: "owner", target: "list.selection/v1", presentation: "run" },
+        { id: "compose", title: "Compose", role: "editor", target: "list.toolbar/v1", presentation: "dialog" },
+      ],
+      panels: [{ id: "history", title: "History", role: "contributor", target: "record.sidebar/v1", when: { schema: ["posts"] } }],
+      fields: [{ id: "swatch", target: "field.cell/v1" }, { id: "color", target: "field.input/v1", role: "editor", optionsSchema: { type: "object", properties: { palette: { type: "string", enum: ["brand", "web"] } } } }],
+    },
+    handlers: {
+      api: async (request, { caller, extension, path }) => {
+        seen.push([request.method, caller.subject, extension, path]);
+        return path === "missing" ? null : Response.json({ extension, path });
+      },
+      settings: { retention: { load: () => stored, save: (_caller, value) => { stored = { ...value }; return stored; } } },
+      actions: {
+        flag: { run: (caller, input) => { seen.push(["flag", caller.subject, input]); return { message: "Flagged" }; } },
+        bulk: { run: (_caller, input) => input.selection?.ids.length },
+      },
+    },
+  };
+  const access: AdminExtension = { apiVersion: 1, id: "access", title: "Access", contributes: { settings: [{ id: "policy", title: "Policy", role: "owner", schema: { type: "object", properties: { on: { type: "boolean" } } } }] }, handlers: { settings: { policy: { load: () => ({ on: true }), save: () => undefined } } } };
+  const surface = () => createAdminSurface(rt, { basePath: "/admin", identity, assets, extensions: [audit, access] });
+  const ask = async (path: string, caller: Caller, method = "GET", body?: unknown) => {
+    const res = await surface()(new Request(`http://x${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }) }), caller);
     return { status: res.status, headers: res.headers, body: await res.json() as any };
   };
 
-  it("lists only the pages the caller's role reaches, on /site and in bootstrap", async () => {
-    expect((await ask("/admin/api/site", owner)).body.extensions.map((p: { id: string }) => p.id)).toEqual(["audit", "access"]);
-    expect((await ask("/admin/api/site", editor)).body.extensions).toEqual([{ id: "audit", title: { en: "Audit", "zh-TW": "稽核" }, module: "/admin-extensions/audit.js" }]);
-    expect((await ask("/admin/api/site", contributor)).body.extensions).toEqual([]);
-    expect((await ask("/admin/api/bootstrap", editor)).body.site.extensions.map((p: { id: string }) => p.id)).toEqual(["audit"]);
+  it("sends each caller the declarations their role reaches, never handlers or integrity", async () => {
+    const forOwner = (await ask("/admin/api/site", owner)).body.extensions;
+    expect(forOwner.map((e: { id: string }) => e.id)).toEqual(["audit", "access"]);
+    expect(JSON.stringify(forOwner)).not.toMatch(/handlers|integrity|load|save/);
+    const forEditor = (await ask("/admin/api/site", editor)).body.extensions;
+    expect(forEditor.map((e: { id: string }) => e.id)).toEqual(["audit"]);
+    expect(forEditor[0].contributes).toMatchObject({ pages: [{ id: "log" }], settings: [], actions: [{ id: "flag" }, { id: "compose" }], panels: [{ id: "history" }], fields: [{ id: "swatch" }, { id: "color" }] });
+    const forContributor = (await ask("/admin/api/bootstrap", contributor)).body.site.extensions;
+    expect(forContributor[0].contributes).toMatchObject({ pages: [], actions: [], panels: [{ id: "history" }], fields: [{ id: "swatch" }] });
   });
 
-  it("routes a page's API after Admin's own gate and the page's role, no-store unless the host says otherwise", async () => {
+  it("routes an extension's API after the session and its lowest contribution role, no-store by default", async () => {
     seen.length = 0;
-    const ok = await ask("/admin/api/x/audit/events/today", editor, "POST");
-    expect(ok).toMatchObject({ status: 200, body: { page: "audit", path: "events/today" } });
+    const ok = await ask("/admin/api/x/audit/api/events/today", contributor, "POST");
+    expect(ok).toMatchObject({ status: 200, body: { extension: "audit", path: "events/today" } });
     expect(ok.headers.get("cache-control")).toBe("no-store");
-    expect(seen).toEqual([["POST", "u-editor", "audit", "events/today"]]);
-    expect((await ask("/admin/api/x/access", editor)).status).toBe(403);
-    expect((await ask("/admin/api/x/audit", contributor)).status).toBe(403);
-    expect((await ask("/admin/api/x/audit", anon)).status).toBe(401);
-    // A token is not a sign-in, as everywhere in Admin.
-    expect((await ask("/admin/api/x/audit", { ...owner, credential: "oauth" } as Caller)).status).toBe(403);
-    expect((await ask("/admin/api/x/nope", owner)).status).toBe(404);
-    expect((await ask("/admin/api/x/audit/missing", owner)).status).toBe(404);
-    // Only gated, known pages ever reach the host: the denied and unknown requests above did not.
+    expect((await ask("/admin/api/x/access/api/x", editor)).status).toBe(403);
+    expect((await ask("/admin/api/x/audit/api", anon)).status).toBe(401);
+    // a token is not a sign-in, as everywhere in Admin
+    expect((await ask("/admin/api/x/audit/api", { ...owner, credential: "oauth" } as Caller)).status).toBe(403);
+    expect((await ask("/admin/api/x/nope/api", owner)).status).toBe(404);
+    expect((await ask("/admin/api/x/audit/elsewhere", owner)).status).toBe(404);
+    expect((await ask("/admin/api/x/audit/api/missing", owner)).status).toBe(404);
+    // without an api handler the path is unknown
+    expect((await ask("/admin/api/x/access/api/x", owner)).status).toBe(404);
     expect(seen.map((entry) => (entry as string[])[3])).toEqual(["events/today", "missing"]);
-    // Without a host API, a page's API path is just unknown.
-    expect((await createAdminSurface(rt, { basePath: "/admin", extensions: { pages } })(new Request("http://x/admin/api/x/audit"), owner)).status).toBe(404);
   });
 
-  it("refuses pages that are not same-origin, kebab-case and unique", () => {
-    const make = (page: object) => () => createAdminSurface(rt, { basePath: "/admin", extensions: { pages: [{ id: "a", title: "A", role: "owner", module: "/a.js", ...page }] as never } });
+  it("loads and saves settings checked against their schema, for the settings role only", async () => {
+    stored = { region: "tw" };
+    expect((await ask("/admin/api/x/audit/settings/retention", owner)).body).toEqual({ value: { region: "tw" } });
+    expect((await ask("/admin/api/x/audit/settings/retention", editor)).status).toBe(403);
+    const bad = await ask("/admin/api/x/audit/settings/retention", owner, "PUT", { value: { region: "us", limit: 11, extra: 1 } });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.fields).toEqual({ region: "expected one of the listed values", limit: "expected at most 10", extra: "no such field" });
+    expect((await ask("/admin/api/x/audit/settings/retention", owner, "PUT", { value: { limit: 2 } })).body.error.fields).toEqual({ region: "required" });
+    expect((await ask("/admin/api/x/audit/settings/retention", owner, "PUT", { value: { region: "jp", limit: 3 } })).body).toEqual({ value: { region: "jp", limit: 3 } });
+    expect(stored).toEqual({ region: "jp", limit: 3 });
+    expect((await ask("/admin/api/x/audit/settings/retention", owner, "DELETE")).status).toBe(405);
+    expect((await ask("/admin/api/x/audit/settings/nope", owner)).status).toBe(404);
+  });
+
+  it("runs server actions with a checked target, and only where they are offered", async () => {
+    seen.length = 0;
+    const ran = await ask("/admin/api/x/audit/actions/flag", editor, "POST", { record: { schema: "posts", id: "p1", version: 2 } });
+    expect(ran.body).toEqual({ ok: true, result: { message: "Flagged" } });
+    expect(seen).toEqual([["flag", "u-editor", { record: { schema: "posts", id: "p1", version: 2 } }]]);
+    // `when` holds on the server too
+    expect((await ask("/admin/api/x/audit/actions/flag", editor, "POST", { record: { schema: "other", id: "p1" } })).status).toBe(404);
+    expect((await ask("/admin/api/x/audit/actions/flag", editor, "POST", { selection: { schema: "posts", ids: ["p1"] } })).status).toBe(400);
+    expect((await ask("/admin/api/x/audit/actions/flag", contributor, "POST", { record: { schema: "posts", id: "p1" } })).status).toBe(403);
+    expect((await ask("/admin/api/x/audit/actions/bulk", owner, "POST", { selection: { schema: "posts", ids: ["a", "b"] } })).body).toEqual({ ok: true, result: 2 });
+    expect((await ask("/admin/api/x/audit/actions/bulk", owner, "POST", { selection: { schema: "posts", ids: [] } })).status).toBe(400);
+    // a dialog action has no server run
+    expect((await ask("/admin/api/x/audit/actions/compose", owner, "POST", { schema: "posts" })).status).toBe(404);
+    expect((await ask("/admin/api/x/audit/actions/flag", editor, "GET")).status).toBe(405);
+  });
+
+  it("refuses declarations it cannot honor", () => {
+    const make = (ext: object) => () => createAdminSurface(rt, { basePath: "/admin", extensions: [{ ...access, ...ext }] as never });
     expect(make({})).not.toThrow();
-    for (const bad of [{ module: "https://cdn.example/a.js" }, { module: "//cdn.example/a.js" }, { module: "a.js" }, { module: "/\\evil" }, { id: "Bad Id" }, { role: "admin" }])
-      expect(make(bad)).toThrow(TypeError);
-    expect(() => createAdminSurface(rt, { basePath: "/admin", extensions: { pages: [pages[0]!, pages[0]!] } })).toThrow(/unique/);
+    const bad: object[] = [
+      { apiVersion: 2 }, { id: "Bad Id" }, { title: "" }, { module: "https://cdn.example/a.js" }, { module: "//cdn.example/a.js" }, { module: "a.js" }, { module: "/\\evil" },
+      { integrity: "md5-abc" }, { integrity: "sha384-abc" }, { extra: 1 }, { contributes: {} }, { contributes: { widgets: [] } },
+      { contributes: { pages: [{ id: "p", title: "P", role: "owner" }] } },
+      { contributes: { settings: [{ id: "policy", title: "P", role: "admin", schema: access.contributes.settings![0]!.schema }] } },
+      { contributes: { settings: [{ id: "policy", title: "P", role: "owner", schema: { type: "object", properties: { x: { type: "array" } } } }] } },
+      { contributes: { settings: [{ id: "policy", title: "P", role: "owner", schema: { type: "object", properties: { x: { type: "string", pattern: "a" } } } }] } },
+      { contributes: { actions: [{ id: "a", title: "A", role: "owner", target: "record/v2", presentation: "run" }] }, handlers: { actions: { a: { run: () => 1 } } } },
+      { contributes: { actions: [{ id: "a", title: "A", role: "owner", target: "record/v1", presentation: "run" }] } },
+      { contributes: { actions: [{ id: "a", title: "A", role: "owner", target: "record/v1", presentation: "run", when: { schema: [] } }] }, handlers: { actions: { a: { run: () => 1 } } } },
+      { contributes: { settings: access.contributes.settings, fields: [{ id: "policy", target: "field.cell/v1" }] }, module: "/a.js" },
+      { handlers: { settings: { policy: { load: () => 1, save: () => 1 }, other: { load: () => 1, save: () => 1 } } } },
+    ];
+    const refused = expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_INVALID", phase: "boot" }) });
+    for (const ext of bad) expect(make(ext), JSON.stringify(ext)).toThrow(refused);
+    expect(() => createAdminSurface(rt, { basePath: "/admin", extensions: [access, access] })).toThrow(/used twice/);
+  });
+
+  it("checks the contributions a plan's uiSchema names", () => {
+    const plan = (ui: object) => ({ schemas: { posts: { name: "posts", uiSchema: ui } }, views: {}, procedures: {} }) as never;
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "audit/color", options: { palette: "brand" } } }, list: { cells: { note: "audit/swatch" } }, panels: ["audit/history"] }), [audit])).not.toThrow();
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "textarea" } } }), [])).not.toThrow();
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "audit/nope" } } }), [audit])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_UNKNOWN", path: "schema:posts/uiSchema/fields/title/widget" }) }));
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "audit/swatch" } } }), [audit])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_TARGET" }) }));
+    expect(() => checkPlanUiExtensions(plan({ panels: ["audit/color"] }), [audit])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_TARGET" }) }));
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "audit/color", options: { palette: "neon" } } } }), [audit])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_OPTIONS" }) }));
+    expect(() => checkPlanUiExtensions(plan({ list: { cells: { note: "audit/swatch" } }, fields: { note: { widget: "audit/color", options: {} } } }), [{ ...audit, contributes: { fields: [{ id: "swatch", target: "field.cell/v1" }, { id: "color", target: "field.input/v1" }] } }])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_OPTIONS" }) }));
+    // construction runs the same check against the runtime's plan
+    expect(() => createAdminSurface(rt, { basePath: "/admin", extensions: [audit] })).not.toThrow();
+  });
+
+  it("diffs declarations for review", () => {
+    const next: AdminExtension = { ...audit, module: "/admin-extensions/audit.2.js", contributes: { ...audit.contributes, pages: [{ id: "log", title: "Log", role: "owner" }], panels: [] } };
+    expect(diffAdminExtensions([audit, access], [next])).toEqual([
+      { change: "removed", ref: "access" },
+      { change: "changed", ref: "audit", keys: ["module"] },
+      { change: "removed", ref: "audit/history" },
+      { change: "changed", ref: "audit/log", keys: ["nav", "role"] },
+    ]);
+    expect(diffAdminExtensions([], [access])).toEqual([{ change: "added", ref: "access" }, { change: "added", ref: "access/policy" }]);
+    expect(ADMIN_EXTENSION_JSON_SCHEMA.properties.contributes.properties.actions.items.properties.target.enum).toContain("list.selection/v1");
   });
 });
