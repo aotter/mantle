@@ -1,5 +1,5 @@
 import type { JsonSchema, SchemaManifest } from "../model/ManifestGrammar.js";
-import { RESERVED_ENTRY_COLUMNS, enumOptions, resolveMantleRef } from "../model/ManifestGrammar.js";
+import { RESERVED_ENTRY_COLUMNS, enumOptions, isUiExtensionRef, resolveMantleRef } from "../model/ManifestGrammar.js";
 import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
 
 export { checkViewAdminUi } from "./ViewAdminUiChecker.js";
@@ -30,8 +30,8 @@ export interface SchemaAdminUiProblem {
 }
 
 const EMPTY_LIST: SchemaListPresentation = { primaryField: null, columns: [] };
-const SCHEMA_UI_ROOTS = new Set(["fields", "list", "nav"]);
-const SCHEMA_LIST_KEYS = new Set(["filterField", "primaryField", "columns"]);
+const SCHEMA_UI_ROOTS = new Set(["fields", "list", "nav", "panels"]);
+const SCHEMA_LIST_KEYS = new Set(["filterField", "primaryField", "columns", "cells"]);
 const SCHEMA_NAV_KEYS = new Set(["standalone", "parentField"]);
 const SCALAR_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
@@ -61,7 +61,7 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
     return invalid(problem(
       `/spec/uiSchema/${unknownRoot}`,
       roots[unknownRoot],
-      "fields, list, or nav",
+      "fields, list, nav, or panels",
       `Schema.spec.uiSchema.${unknownRoot} is not supported.`,
     ));
   }
@@ -83,7 +83,7 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
       return invalid(problem(
         `/spec/uiSchema/list/${unknownList}`,
         config[unknownList],
-        "filterField, primaryField, or columns",
+        "filterField, primaryField, columns, or cells",
         `Schema.spec.uiSchema.list.${unknownList} is not supported.`,
       ));
     }
@@ -156,6 +156,11 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
       ));
     }
   }
+
+  const cellProblem = checkCells(config["cells"], (field) => NATIVE_LIST_FIELDS.has(field) || !!schema.spec.schema.properties?.[field], "Schema", "a top-level key in spec.schema.properties or a native entry column");
+  if (cellProblem) return invalid(cellProblem);
+  const panelProblem = checkPanels(roots["panels"]);
+  if (panelProblem) return invalid(panelProblem);
 
   const navResult = checkNav(schema, roots["nav"]);
   if (navResult.problem) return invalid(navResult.problem);
@@ -240,12 +245,42 @@ export function checkFormUiSchema(
       )];
     }
     const config = rawConfig as Record<string, unknown>;
+    const unknownKey = Object.keys(config).find((key) => key !== "widget" && key !== "options");
+    if (unknownKey) {
+      return [problem(
+        `/spec/uiSchema/fields/${field}/${unknownKey}`,
+        config[unknownKey],
+        "widget and, for an extension widget, options",
+        `${owner}.spec.uiSchema.fields.${field}.${unknownKey} is not supported.`,
+      )];
+    }
+    // an Admin extension's field.input/v1 contribution: any field type, its options checked against the contribution
+    if (isUiExtensionRef(config["widget"])) {
+      const options = config["options"];
+      if (options !== undefined && (!options || typeof options !== "object" || Array.isArray(options))) {
+        return [problem(
+          `/spec/uiSchema/fields/${field}/options`,
+          options,
+          "an object",
+          `${owner}.spec.uiSchema.fields.${field}.options must be an object.`,
+        )];
+      }
+      continue;
+    }
     if (config["widget"] !== "textarea") {
       return [problem(
         `/spec/uiSchema/fields/${field}/widget`,
         config["widget"],
-        '"textarea"',
-        `${owner}.spec.uiSchema.fields.${field}.widget must be 'textarea'.`,
+        '"textarea" or an Admin extension contribution <extension>/<contribution>',
+        `${owner}.spec.uiSchema.fields.${field}.widget must be 'textarea' or name an Admin extension contribution.`,
+      )];
+    }
+    if (config["options"] !== undefined) {
+      return [problem(
+        `/spec/uiSchema/fields/${field}/options`,
+        config["options"],
+        "options only with an extension widget",
+        `${owner}.spec.uiSchema.fields.${field}.options needs an extension widget.`,
       )];
     }
     if (!isString(property)) {
@@ -513,6 +548,32 @@ function isScalar(schema: JsonSchema): boolean {
 function isString(schema: JsonSchema): boolean {
   const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
   return types.includes("string") && types.every((type) => type === "string" || type === "null");
+}
+
+/** `list.cells`: field -> a `field.cell/v1` contribution. Shared with View, whose keys are its outputs (checked at compile). */
+export function checkCells(
+  cells: unknown,
+  known: (field: string) => boolean,
+  owner: "Schema" | "View",
+  expected: string,
+): SchemaAdminUiProblem | null {
+  if (cells === undefined) return null;
+  if (!cells || typeof cells !== "object" || Array.isArray(cells)) {
+    return problem("/spec/uiSchema/list/cells", cells, "an object of field -> <extension>/<contribution>", `${owner}.spec.uiSchema.list.cells must be an object.`);
+  }
+  for (const [field, ref] of Object.entries(cells)) {
+    if (!known(field)) return problem(`/spec/uiSchema/list/cells/${field}`, field, expected, `${owner}.spec.uiSchema.list.cells references unknown field '${field}'.`);
+    if (!isUiExtensionRef(ref)) return problem(`/spec/uiSchema/list/cells/${field}`, ref, "<extension>/<contribution>", `${owner}.spec.uiSchema.list.cells.${field} must name an Admin extension contribution.`);
+  }
+  return null;
+}
+
+function checkPanels(panels: unknown): SchemaAdminUiProblem | null {
+  if (panels === undefined) return null;
+  if (!Array.isArray(panels) || panels.length > 16 || !panels.every(isUiExtensionRef) || new Set(panels).size !== panels.length) {
+    return problem("/spec/uiSchema/panels", panels, "up to 16 distinct <extension>/<contribution> names", "Schema.spec.uiSchema.panels must list Admin extension contributions.");
+  }
+  return null;
 }
 
 function problem(
