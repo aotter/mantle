@@ -103,13 +103,28 @@ dialect, and boot refuses a plan compiled for another one.
 PostgreSQL (13 or later). On Cloudflare, `mantle generate --dialect postgres`
 writes the preset over Hyperdrive; on any other platform, add `"host": "none"`
 and compose `createMantle` with `postgresStorage` yourself (ADR-0036). PostgreSQL
-is Mantle SQL's reference dialect (ADR-0037): it accepts D1's subset without
-SQLite's own `typeof`, `hex`, `json_extract`, `json_set`, `json_insert` and
-`json_remove` (write `x ->> '$.path'`), plus `WITH`, set operations, `LATERAL`,
-window frames, `FILTER`, jsonb operators and the rest of the
-[View reference](../reference/view.md)'s PostgreSQL table. A manifest that uses
-them no longer compiles for D1; one that does not moves between engines with a
-recompile.
+is Mantle SQL's reference dialect (ADR-0037), and its SQL is PostgreSQL's own
+(ADR-0039): Mantle lowers nothing to imitate SQLite. It accepts D1's subset except
+SQLite's own vocabulary (below), plus `WITH`, set operations, `LATERAL`, window
+frames, `FILTER`, jsonb operators and the rest of the
+[View reference](../reference/view.md)'s PostgreSQL table. A manifest targets one
+dialect: it need not compile for D1 or return the same values there. D1 to
+PostgreSQL is a migration (export, rewrite the SQL, import), not a switch.
+
+A SQLite spelling fails validation with its position and the PostgreSQL one:
+
+| SQLite (D1) | PostgreSQL |
+|---|---|
+| `FROM t, json_each(t.col) j`, `j.value` | `FROM t, jsonb_array_elements_text(t.col) AS j(value)` (`jsonb_array_elements` for jsonb values, `jsonb_each_text(t.col) AS j(key, value)` for an object; `WITH ORDINALITY AS j(value, n)` for the position) |
+| `ORDER BY …, j.id` of `json_each` | `WITH ORDINALITY AS j(value, n)`, then `ORDER BY …, j.n` (a sorted View over a row source needs `WITH ORDINALITY`; Mantle pages by it) |
+| `x ->> '$.a.b'`, `x ->> '$[0]'` | `x #>> '{a,b}'`, `x ->> 'a'`, `x ->> 0` (a `$…` string is refused: PostgreSQL would read it as a key) |
+| `json_extract(x, '$.a')` | `x ->> 'a'` (text) or `x -> 'a'` (jsonb) |
+| `json_remove(x, '$.a')` | `x - 'a'` |
+| `json_set`, `json_insert` | build the value with `jsonb_build_object` or `jsonb_build_array` |
+| `CAST(n AS bool)` of an integer | `n <> 0` (PostgreSQL has no bigint to boolean cast; `CAST('true' AS bool)` is unchanged) |
+| `2 * 3 \|\| 4` (text by any type) | `2 * 3 \|\| '4'`, or `CAST(n AS text) \|\| …`: `\|\|` needs a text operand |
+| `hex(x)`, `typeof(x)` | no equivalent on the allowlist; refused |
+| `NULL` first when ascending | `NULL` last when ascending (PostgreSQL's; say `NULLS FIRST` to override) |
 
 - Columns have native types: `timestamptz`, `date`, `numeric(p, s)`, `boolean`,
   `jsonb`, `bigint` and `double precision`. Values are decoded by the type
@@ -120,11 +135,11 @@ recompile.
   concurrent writers as it does on SQLite's single writer.
 - `checks` are `CHECK` constraints added `NOT VALID`: they bind every later
   write and leave older rows alone, like D1's triggers.
-- `json_each`, `->>` and `CAST(x AS bool)` read as they do on D1 through small
-  SQL functions Mantle creates (`_mantle_json_each`, `_mantle_jget`,
-  `_mantle_bool`). `json_group_array` and `json_group_object` order by value.
-- Results match D1 where Mantle decides them. Text columns use `COLLATE "C"`,
-  so they compare by code point. An `ORDER BY` key without `NULLS FIRST/LAST`
+- `->>`, `||`, `CAST` and the jsonb row sources mean what PostgreSQL says; the
+  only SQL function Mantle creates is `_mantle_expect`. A database booted by an
+  earlier release keeps its `_mantle_jget`, `_mantle_bool` and `_mantle_json_each`
+  unused. `json_group_array` and `json_group_object` order by value.
+- Text columns use `COLLATE "C"`, so they compare by code point. An `ORDER BY` key without `NULLS FIRST/LAST`
   sorts NULL as PostgreSQL does: last ascending, first descending (D1 puts it
   first ascending). The `id` tiebreak follows the last key's direction, so an
   index on the sort keys (and the `updated_at` index Mantle creates) serves a
@@ -135,7 +150,6 @@ recompile.
   - `LIKE` is case-sensitive.
   - Division by zero is an error.
   - `->>` returns text.
-  - `||` prints booleans and floats as PostgreSQL does.
 - `searchableFields` and `mantle.near()` scan without an index in 0.2.0, and
   `mantle.search_rank()` counts occurrences rather than computing bm25.
   Site settings and media are SQLite-only (D1, bun:sqlite).
@@ -150,8 +164,9 @@ recompile.
 - Boot reads the role's settings once and refuses to start, naming the
   `ALTER ROLE … SET` to run, unless `DateStyle` is ISO, `IntervalStyle` is
   `postgres`, `extra_float_digits` is at least 1, `standard_conforming_strings`
-  is on and `TimeZone` is UTC. These are PostgreSQL's defaults, except a server
-  initialized in another time zone. Mantle sets nothing per session, because
+  is on and `TimeZone` is UTC (date and instant casts in your SQL use the
+  session's zone). These are PostgreSQL's defaults, except a server initialized
+  in another time zone. Mantle sets nothing per session, because
   Hyperdrive resets every pooled session to the role's configuration.
 - Connect as a role that owns the service's tables but is not a superuser and
   holds no file or server privilege (`pg_read_server_files`,

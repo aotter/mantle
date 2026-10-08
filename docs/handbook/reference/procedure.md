@@ -44,7 +44,7 @@ References: `input.<name>`, `auth.uid()`, `auth.role()`, `now()`.
 `updated_at`, `author_id`, or `id` in an `UPDATE`, in a column list, `SET` or
 `DO UPDATE SET`; on a scoped Schema an `INSERT` names no `id`. Store fills
 them (`SQL_WRITE`). Multi-row `VALUES` is refused: insert from
-`json_each(input.items)` instead. `UPDATE … FROM`, `DELETE … USING`,
+`json_each(input.items)` instead (PostgreSQL: `jsonb_array_elements(input.items)`). `UPDATE … FROM`, `DELETE … USING`,
 `INSERT OR …` and `last_insert_rowid()` are refused.
 
 **RETURNING names** fold to lower case unless quoted:

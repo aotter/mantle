@@ -124,7 +124,7 @@ export async function query(connect: PgConnect, s: PgStatement): Promise<PgOutco
  * - DateStyle ISO and IntervalStyle postgres: the text `decodeField` parses. extra_float_digits >= 1: shortest exact floats.
  * - standard_conforming_strings on: a backslash in a printed literal is a backslash, never an escape.
  * - TimeZone UTC: not for decoding (`decodeField` reads any offset PostgreSQL prints) but for meaning, since a cast between date
- *   and timestamptz, explicit or implicit, is taken in the session's zone, and D1 takes it in UTC.
+ *   and timestamptz, explicit or implicit, is taken in the session's zone, and an author's SQL cannot be checked for those casts.
  * - statement_timeout: a read is bounded by the role's limit, so it must be set and at most Mantle's (0 asks for none).
  */
 export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_TIMEOUT_MS): Promise<string[]> {
@@ -142,7 +142,7 @@ export async function sessionProblems(connect: PgConnect, timeoutMs = STATEMENT_
       ...(/^ISO\b/i.test(r!.datestyle) ? [] : [`DateStyle is '${r!.datestyle}'; Mantle reads dates as ISO text: ${fix("DateStyle", "ISO, YMD")}`]),
       ...(r!.intervalstyle === "postgres" ? [] : [`IntervalStyle is '${r!.intervalstyle}'; Mantle reads intervals as PostgreSQL text: ${fix("IntervalStyle", "postgres")}`]),
       ...(r!.float_digits >= 1 ? [] : [`extra_float_digits is ${r!.float_digits}, which rounds float8 values: ${fix("extra_float_digits", "1")}`]),
-      ...(r!.utc ? [] : [`TimeZone is '${r!.tz}'; Mantle casts between dates and instants in UTC, as D1 does: ${fix("TimeZone", "UTC")}`]),
+      ...(r!.utc ? [] : [`TimeZone is '${r!.tz}'; Mantle casts between dates and instants in UTC: ${fix("TimeZone", "UTC")}`]),
       ...(r!.scs === "on" ? [] : [`standard_conforming_strings is off: ${fix("standard_conforming_strings", "on")}`]),
       ...(!ms || (r!.timeout_ms > 0 && r!.timeout_ms <= ms) ? [] :
         [`statement_timeout is ${r!.timeout_ms ? `${r!.timeout_ms} ms` : "unset"}; a read runs outside a transaction under the role's limit, which must be at most ${ms} ms (statementTimeoutMs): ${fix("statement_timeout", `${ms}ms`)}`]),

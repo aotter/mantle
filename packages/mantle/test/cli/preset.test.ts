@@ -208,7 +208,7 @@ describe("the service preset", () => {
   it("dialect postgres: Hyperdrive wiring typechecks, and on PostgreSQL the Worker converges, serves Views and signs in", async () => {
     const dir = await project(["--dialect", "postgres"]);
     expect(JSON.parse(await read(dir, "mantle.config.json"))).toMatchObject({ dialect: "postgres" });
-    expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/postgres", version: "1" });
+    expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/postgres", version: "2" });
     const service = await read(dir, "src/service.ts");
     expect(service).toContain("postgresStorage({ connect: database(env).connect })");
     expect(service).toContain("database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect)");

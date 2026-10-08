@@ -21,6 +21,8 @@ type Step = {
   mode?: Mode;
   /** what the caller is entitled to see: the exact rows of every statement, as JSON */
   rows?: unknown[][];
+  /** the SQL a dialect with `nativeSql` runs instead (ADR-0039) */
+  native?: string;
   /** or: the statement must fail with a CONFLICT (an invisible row is a missing row) */
   conflict?: true;
 };
@@ -54,7 +56,8 @@ export const PROBES = {
     v("SELECT id FROM requisitions WHERE EXISTS (SELECT 1 FROM items WHERE name = 'apple') ORDER BY id", ids('r1', 'r2')),
     v("SELECT (SELECT count(*) FROM items) AS n, (SELECT max(stock) FROM items) AS mx FROM requisitions WHERE id = 'r1'", [{ n: 4, mx: 9 }]),
   ] },
-  json_each: { steps: [v('SELECT j.value AS v FROM items i, json_each(i.tags) j ORDER BY i.id, j.id', [{ v: 'red' }, { v: 'big' }, { v: 'blue' }, { v: 'red' }, { v: 'red' }])] },
+  json_each: { steps: [{ ...v('SELECT j.value AS v FROM items i, json_each(i.tags) j ORDER BY i.id, j.id', [{ v: 'red' }, { v: 'big' }, { v: 'blue' }, { v: 'red' }, { v: 'red' }]),
+    native: 'SELECT j.value AS v FROM items i, jsonb_array_elements_text(i.tags) WITH ORDINALITY AS j(value, n) ORDER BY i.id, j.n' }] },
   window: { steps: [v('SELECT x.id, x.rn FROM (SELECT id, row_number() OVER (ORDER BY id) AS rn FROM items) x ORDER BY x.id', [{ id: 'a', rn: 1 }, { id: 'b', rn: 2 }, { id: 'c', rn: 3 }, { id: 'd', rn: 4 }])] },
   'insert-target': { steps: [
     // o2 has a setting 'lang'; the caller's own insert of the same key does not collide (unique includes the scope) and is owned by the caller
@@ -103,7 +106,7 @@ export async function run(r: Report, engine: Engine) {
       await reset(b);
       const before = JSON.stringify(await protectedRows(b.d1));
       let p;
-      try { p = await program(step.kind, step.sql, step.inputs ?? {}); } catch (e) {
+      try { p = await program(step.kind, b.dialect.nativeSql && step.native ? step.native : step.sql, step.inputs ?? {}); } catch (e) {
         if (!/needs the PostgreSQL dialect/.test(String(e))) throw e;
         if (n === 0) refused.add(pos);
         continue;

@@ -1,9 +1,7 @@
 /**
  * The printer: pgsql-deparser as it is, plus `Raw` (the lowering's text templates) and one pass over the physical AST that
- * gives PostgreSQL the types SQLite's affinity never needed (`typed`):
- * - a value written to a column is cast to the column's type (`j.value ->> 'reps'` is text; the column is int8);
- * - `a || b` concatenates text, as it does on D1 (`2 * 3 || 4` is '64'; PostgreSQL has no int || int);
- * - `x ->> k` is `_mantle_jget(x, k)`, which takes a json(b) or a JSON text, a key, an index or a `$` path, as SQLite does.
+ * gives a write the column's type (`typed`): a value written to a column is cast to the column's type (`j.value ->> 'reps'` is
+ * text; the column is int8). Everything else prints as written: `||`, `->>` and CAST mean what PostgreSQL says (ADR-0039).
  */
 import { Deparser } from "pgsql-deparser";
 import type { SqlNode as N } from "../spec/domain/index.js";
@@ -48,18 +46,12 @@ export function columnType(s: StorageSchema, col: string): string | undefined {
   return t === "geo" ? undefined : t;
 }
 
-const name = (op: N) => op.name?.at(-1)?.String?.sval;
-const textOf = (x: N): N => ({ TypeCast: { arg: x, typeName: { names: [S("text")], typemod: -1 } } });
-
 /** The physical AST with PostgreSQL's types made explicit (see the module comment). */
 export function typed(ast: N, schemas: Readonly<Record<string, StorageSchema>>): N {
   const walk = (v: any): any => {
     if (Array.isArray(v)) return v.map(walk);
     if (!v || typeof v !== "object") return v;
     const out: any = Object.fromEntries(Object.entries(v).map(([k, c]) => [k, walk(c)]));
-    const e = out.A_Expr;
-    if (e?.kind === "AEXPR_OP" && name(e) === "->>") return { FuncCall: { funcname: [S("_mantle_jget")], args: [e.lexpr, e.rexpr], funcformat: "COERCE_EXPLICIT_CALL" } };
-    if (e?.kind === "AEXPR_OP" && name(e) === "||") return { A_Expr: { ...e, lexpr: textOf(e.lexpr), rexpr: textOf(e.rexpr) } };
     if (out.InsertStmt) insert(out.InsertStmt);
     if (out.UpdateStmt) assign(out.UpdateStmt.relation.relname, out.UpdateStmt.targetList);
     return out;

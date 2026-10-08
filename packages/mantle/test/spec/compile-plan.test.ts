@@ -147,8 +147,8 @@ describe("a field with more than one JSON Schema type", () => {
     for (const dialect of [undefined, pgCompile]) {
       for (const text of [things(`  checks: ["mixed < 5"]`), `${things()}---\n${labels}${view("SELECT t.id FROM things t JOIN labels l ON l.id = t.id WHERE t.mixed > 3")}`])
         expect(await compile(text, dialect)).toMatch(/mixed is json: compare a value read with ->>/);
-      // not refused: a numeric union, another relation's field of the same name, a subquery's output, json_each's value, IS NULL
-      for (const sql of ["SELECT id FROM things WHERE qty < 5", "SELECT l.id FROM labels l WHERE l.mixed = 'x'", "SELECT s.mixed FROM (SELECT CAST(t.qty AS text) AS mixed FROM things t) s WHERE s.mixed = 'x'", "SELECT t.id FROM things t, json_each(t.tags) WHERE value = 'x'", "SELECT id FROM things WHERE mixed IS NULL"])
+      // not refused: a numeric union, another relation's field of the same name, a subquery's output, a row source's value (json_each on D1, jsonb_array_elements_text on PostgreSQL), IS NULL
+      for (const sql of ["SELECT id FROM things WHERE qty < 5", "SELECT l.id FROM labels l WHERE l.mixed = 'x'", "SELECT s.mixed FROM (SELECT CAST(t.qty AS text) AS mixed FROM things t) s WHERE s.mixed = 'x'", "SELECT t.id FROM things t, " + (dialect ? "jsonb_array_elements_text(t.tags) AS j(value)" : "json_each(t.tags)") + " WHERE value = 'x'", "SELECT id FROM things WHERE mixed IS NULL"])
         expect(await compile(`${things()}---\n${labels}${view(sql)}`, dialect), `${dialect ? "pg" : "d1"}: ${sql}`).toBe("ok");
     }
   });

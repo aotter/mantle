@@ -1,6 +1,6 @@
-// The PostgreSQL dialect's lowering (ADR-0035 decision 3): what Core's policy rewriter hands a dialect to spell. Most of Mantle
-// SQL is PostgreSQL already, so this is short: casts and binds typed, the SQLite vocabulary of the portable subset spelled in
-// PostgreSQL, and the site time zone made explicit. AST in, AST out, no parser.
+// The PostgreSQL dialect's lowering (ADR-0035 decision 3): what Core's policy rewriter hands a dialect to spell. Mantle SQL on
+// PostgreSQL is PostgreSQL (ADR-0039), so this is short: casts and binds typed, the few Mantle-defined functions spelled, and
+// the site time zone made explicit. AST in, AST out, no parser.
 import { SqlRefusal as Refused, type SqlNode as N } from "../spec/domain/index.js";
 import { S, num } from "../core/sql/ast.js";
 import type { LoweringScope, PolicyLowering } from "../core/sql/policy.js";
@@ -65,8 +65,6 @@ export function pgLowering(timeZone: string): PolicyLowering {
         // in the site time zone, as D1 computes them
         case "date_trunc": return fn("date_trunc", [args[0]!, scope.tx(args[1]), zone]);
         case "extract": return sql(`CAST(extract(${strConst(args[0])} FROM __ts AT TIME ZONE ${lit(timeZone)}) AS int8)`, { __ts: scope.tx(args[1]) });
-        // SQLite's columns (key, value, type, id), so the portable subset's json_each reads the same: see `_mantle_json_each`
-        case "json_each": return fn("_mantle_json_each", [cast(scope.tx(args[0]), "json")]);
         // PostgreSQL leaves an aggregate's input order open; ordering by the value (an object by its key) keeps it deterministic.
         // ponytail: D1 aggregates in scan order, so the two engines may order an array differently; neither order is promised
         // json has no ordering of its own, so the order is jsonb's; a DISTINCT aggregate may order only by its argument
@@ -129,8 +127,6 @@ export function pgLowering(timeZone: string): PolicyLowering {
         parseNumeric(`numeric(${p}, ${s})`);
         if (text !== undefined) return cast(str(decodeNumeric(encodeNumeric(text, p, s), s)), `numeric(${p},${s})`);
       }
-      // a bigint has no cast to bool in PostgreSQL; `_mantle_bool` gives PostgreSQL's int4, text and numeric rules for every type
-      if (t === "bool") return fn("_mantle_bool", [scope.tx(n.arg)]);
       return { TypeCast: { ...n, arg: scope.tx(n.arg) } };
     },
     sublink: (out) => ({ SubLink: out }),

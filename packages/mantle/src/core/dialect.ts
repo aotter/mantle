@@ -49,6 +49,12 @@ export interface MantleDialect {
    * ascending, last descending, `id` ascending.
    */
   readonly nativeOrder?: boolean;
+  /**
+   * The engine's SQL is its own (ADR-0039), not SQLite's vocabulary lowered onto it: `json_each`, `->> '$.path'`, integer
+   * truthiness and `||` over non-text are refused or mean what the engine says. The compliance suite then runs the engine's
+   * spelling of those cases.
+   */
+  readonly nativeSql?: boolean;
   /** Resolves a bind the lowering added. */
   bind(spec: DialectBind, context: BindContext): unknown;
 }
