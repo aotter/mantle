@@ -542,6 +542,15 @@ const check: Record<string, Checker> = {
     if (n.distinctClause && !distinctOn && n.sortClause) no('SQL_SHAPE', 'DISTINCT with ORDER BY is refused: the appended id key would change what is distinct', at);
     if (n.valuesLists && (path.at(-2) !== 'InsertStmt' || n.valuesLists.length !== 1)) no('SQL_SHAPE', 'VALUES is one row, in INSERT only', firstLoc(n.valuesLists) ?? at);
     if ((n.fromClause ?? []).slice(1).some((f: N) => !f.RangeFunction && !(reference && f.RangeSubselect?.lateral))) no('SQL_SHAPE', reference ? 'a comma join is refused (except a row source over a column, and LATERAL)' : 'a comma join is refused (except json_each)', at);
+    // Core keys a paged row source by its ordinality (policy.ts), so one without an alias and WITH ORDINALITY would lose rows between pages
+    if (reference && n.sortClause && !n.groupClause) {
+      const rows = (f: N): N[] => (f?.JoinExpr ? [...rows(f.JoinExpr.larg), ...rows(f.JoinExpr.rarg)] : f ? [f] : []);
+      for (const r of (n.fromClause ?? []).flatMap(rows)) {
+        const fc = r.RangeFunction?.functions?.[0]?.List?.items?.[0]?.FuncCall;
+        if (fc && (!r.RangeFunction.alias || !r.RangeFunction.ordinality))
+          no('SQL_SHAPE', `ordering a row source (${sv(fc.funcname)}) needs an alias and WITH ORDINALITY: write ${sv(fc.funcname)}(...) WITH ORDINALITY AS j(value, n)`, fc.location ?? at);
+      }
+    }
     // mantle.near()/mantle.distance(): a query ordered by mantle.distance() needs a LIMIT of at most MAX_NEAR_K
     const byDistance = JSON.stringify(n.sortClause ?? []).includes('"distance"');
     if (byDistance) {
