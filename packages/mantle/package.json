@@ -93,7 +93,7 @@
     "@pgsql/types": "18.0.0",
     "libpg-query": "18.1.5",
     "pgsql-deparser": "18.3.8",
-    "yaml": "^2.9.0",
+    "yaml": "^2.9.1",
     "zod": "catalog:",
     "semver": "^7.8.5"
   },
