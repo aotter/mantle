@@ -537,6 +537,8 @@ export const ADMIN_EXTENSION_JSON_SCHEMA = {
     title: text,
     module: { type: "string", pattern: MODULE.source },
     integrity: { type: "string", pattern: INTEGRITY.source },
+    // the module's code as a string; a function returning it is code, like the handlers, and is not described here
+    source: { type: "string", minLength: 1 },
     contributes: {
       type: "object",
       additionalProperties: false,

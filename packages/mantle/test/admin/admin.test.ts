@@ -545,5 +545,7 @@ describe("Admin surface: extensions", () => {
     ]);
     expect(diffAdminExtensions([], [access])).toEqual([{ change: "added", ref: "access" }, { change: "added", ref: "access/policy" }]);
     expect(ADMIN_EXTENSION_JSON_SCHEMA.properties.contributes.properties.actions.items.properties.target.enum).toContain("list.selection/v1");
+    // a declaration whose module is a `source` string is valid, so the schema must describe it
+    expect(ADMIN_EXTENSION_JSON_SCHEMA.properties.source).toEqual({ type: "string", minLength: 1 });
   });
 });
