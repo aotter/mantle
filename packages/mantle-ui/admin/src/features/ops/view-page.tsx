@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ExtensionCell } from "../extensions/extension-contributions";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Search } from "lucide-react";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
@@ -238,9 +239,14 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                   const value = row[col];
                   return (
                     <TableCell key={col} className="text-muted-foreground">
-                      {isIdField(col, schema) && typeof value === "string"
-                        ? <IdValue value={value} language={language} />
-                        : renderDataValue(schema, value, language, canonical)}
+                      {/* an output that reads a Schema field matches a widget's `when` as that field */}
+                      <ExtensionCell schema={view?.columns?.[col]?.schema ?? ""} field={view?.columns?.[col]?.field ?? col} value={value}
+                        property={schema as Record<string, unknown> | undefined}
+                        cells={view?.list.cells?.[col] === undefined ? undefined : { [view?.columns?.[col]?.field ?? col]: view.list.cells[col] }}>
+                        {isIdField(col, schema) && typeof value === "string"
+                          ? <IdValue value={value} language={language} />
+                          : renderDataValue(schema, value, language, canonical)}
+                      </ExtensionCell>
                     </TableCell>
                   );
                 })}

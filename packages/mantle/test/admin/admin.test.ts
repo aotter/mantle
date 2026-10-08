@@ -1,9 +1,10 @@
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, type StaffRole } from "../../src/spec/index.js";
 import { createMantleRuntime, type Caller, type MantleRuntime } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
-import { createAdminSurface, encodeMemberCursor, type AdminAssets, type AdminIdentity } from "../../src/admin/index.js";
+import { ADMIN_EXTENSION_JSON_SCHEMA, checkFormValue, checkPlanUiExtensions, formSchemaProblem, createAdminSurface, diffAdminExtensions, encodeMemberCursor, type AdminAssets, type AdminExtension, type AdminIdentity } from "../../src/admin/index.js";
 
 const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -351,5 +352,200 @@ describe("Admin surface: the SPA shell", () => {
   it("has no shell without assets", async () => {
     const r = await createAdminSurface(rt, { basePath: "/admin" })(new Request("http://x/admin"), owner);
     expect(r.status).toBe(404);
+  });
+});
+
+describe("Admin surface: extensions", () => {
+  const seen: unknown[] = [];
+  const settingsSchema = { type: "object", required: ["region"], properties: { region: { type: "string", enum: ["tw", "jp"] }, limit: { type: "integer", minimum: 1, maximum: 10 } } } as const;
+  let stored: Record<string, unknown> = { region: "tw" };
+  const audit: AdminExtension = {
+    apiVersion: 1, id: "audit", title: { en: "Audit", "zh-TW": "稽核" }, module: "/admin-extensions/audit.js",
+    contributes: {
+      pages: [{ id: "log", title: "Log", role: "editor", nav: { group: "more" } }],
+      settings: [{ id: "retention", title: "Retention", role: "owner", schema: settingsSchema }],
+      actions: [
+        { id: "flag", title: "Flag", role: "editor", target: "record/v1", presentation: "confirm", when: { schema: ["posts"] } },
+        { id: "bulk", title: "Bulk", role: "owner", target: "list.selection/v1", presentation: "run" },
+        { id: "compose", title: "Compose", role: "editor", target: "list.toolbar/v1", presentation: "dialog" },
+      ],
+      panels: [{ id: "history", title: "History", role: "contributor", target: "record.sidebar/v1", when: { schema: ["posts"] } }],
+      fields: [{ id: "swatch", target: "field.cell/v1" }, { id: "color", target: "field.input/v1", role: "editor", optionsSchema: { type: "object", properties: { palette: { type: "string", enum: ["brand", "web"] } } } }],
+    },
+    handlers: {
+      api: async (request, { caller, extension, path }) => {
+        seen.push([request.method, caller.subject, extension, path]);
+        return path === "missing" ? null : Response.json({ extension, path });
+      },
+      settings: { retention: { load: () => stored, save: (_caller, value) => { stored = { ...value }; return stored; } } },
+      actions: {
+        flag: { run: (caller, input) => { seen.push(["flag", caller.subject, input]); return { message: "Flagged" }; } },
+        bulk: { run: (_caller, input) => input.selection?.ids.length },
+      },
+    },
+  };
+  const access: AdminExtension = { apiVersion: 1, id: "access", title: "Access", contributes: { settings: [{ id: "policy", title: "Policy", role: "owner", schema: { type: "object", properties: { on: { type: "boolean" } } } }] }, handlers: { settings: { policy: { load: () => ({ on: true }), save: () => undefined } } } };
+  const surface = () => createAdminSurface(rt, { basePath: "/admin", identity, assets, extensions: [audit, access] });
+  const ask = async (path: string, caller: Caller, method = "GET", body?: unknown) => {
+    const res = await surface()(new Request(`http://x${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }) }), caller);
+    return { status: res.status, headers: res.headers, body: await res.json() as any };
+  };
+
+  it("sends each caller the declarations their role reaches, never handlers or integrity", async () => {
+    const forOwner = (await ask("/admin/api/site", owner)).body.extensions;
+    expect(forOwner.map((e: { id: string }) => e.id)).toEqual(["audit", "access"]);
+    expect(JSON.stringify(forOwner)).not.toMatch(/handlers|integrity|load|save/);
+    const forEditor = (await ask("/admin/api/site", editor)).body.extensions;
+    expect(forEditor.map((e: { id: string }) => e.id)).toEqual(["audit"]);
+    expect(forEditor[0].contributes).toMatchObject({ pages: [{ id: "log" }], settings: [], actions: [{ id: "flag" }, { id: "compose" }], panels: [{ id: "history" }], fields: [{ id: "swatch" }, { id: "color" }] });
+    const forContributor = (await ask("/admin/api/bootstrap", contributor)).body.site.extensions;
+    expect(forContributor[0].contributes).toMatchObject({ pages: [], actions: [], panels: [{ id: "history" }], fields: [{ id: "swatch" }] });
+  });
+
+  it("routes an extension's API after the session and its lowest contribution role, no-store by default", async () => {
+    seen.length = 0;
+    const ok = await ask("/admin/api/x/audit/api/events/today", contributor, "POST");
+    expect(ok).toMatchObject({ status: 200, body: { extension: "audit", path: "events/today" } });
+    expect(ok.headers.get("cache-control")).toBe("no-store");
+    expect((await ask("/admin/api/x/access/api/x", editor)).status).toBe(403);
+    expect((await ask("/admin/api/x/audit/api", anon)).status).toBe(401);
+    // a token is not a sign-in, as everywhere in Admin
+    expect((await ask("/admin/api/x/audit/api", { ...owner, credential: "oauth" } as Caller)).status).toBe(403);
+    expect((await ask("/admin/api/x/nope/api", owner)).status).toBe(404);
+    expect((await ask("/admin/api/x/audit/elsewhere", owner)).status).toBe(404);
+    expect((await ask("/admin/api/x/audit/api/missing", owner)).status).toBe(404);
+    // without an api handler the path is unknown
+    expect((await ask("/admin/api/x/access/api/x", owner)).status).toBe(404);
+    expect(seen.map((entry) => (entry as string[])[3])).toEqual(["events/today", "missing"]);
+  });
+
+  it("loads and saves settings checked against their schema, for the settings role only", async () => {
+    stored = { region: "tw" };
+    expect((await ask("/admin/api/x/audit/settings/retention", owner)).body).toEqual({ value: { region: "tw" } });
+    expect((await ask("/admin/api/x/audit/settings/retention", editor)).status).toBe(403);
+    const bad = await ask("/admin/api/x/audit/settings/retention", owner, "PATCH", { value: { region: "us", limit: 11, extra: 1 } });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.fields).toEqual({ region: "expected one of the listed values", limit: "expected at most 10", extra: "no such field" });
+    expect((await ask("/admin/api/x/audit/settings/retention", owner, "PATCH", { value: { limit: 2 } })).body.error.fields).toEqual({ region: "required" });
+    expect((await ask("/admin/api/x/audit/settings/retention", owner, "PATCH", { value: { region: "jp", limit: 3 } })).body).toEqual({ value: { region: "jp", limit: 3 } });
+    expect(stored).toEqual({ region: "jp", limit: 3 });
+    expect((await ask("/admin/api/x/audit/settings/retention", owner, "DELETE")).status).toBe(405);
+    expect((await ask("/admin/api/x/audit/settings/nope", owner)).status).toBe(404);
+  });
+
+  it("checks settings by own properties only: constructor, __proto__ and null get no free pass (review of #1376)", async () => {
+    const schema = { type: "object", required: ["constructor"], properties: { constructor: { type: "integer", minimum: 1 }, note: { type: "string" } } } as const;
+    expect(checkFormValue(schema, { constructor: "not-an-integer" })).toEqual({ constructor: "expected an integer" });
+    expect(checkFormValue(schema, {})).toEqual({ constructor: "required" });
+    expect(checkFormValue(schema, JSON.parse('{"constructor": 2, "__proto__": {"x": 1}}'))).toEqual(JSON.parse('{"__proto__": "no such field"}'));
+    expect(checkFormValue(schema, { constructor: 2, note: null })).toEqual({ note: "expected a string" });
+    expect(checkFormValue(schema, { constructor: 2 })).toEqual({});
+    expect(formSchemaProblem(JSON.parse('{"type":"object","properties":{"__proto__":{"type":"string"}}}'))).toMatch(/__proto__/);
+    // through the real route: an invalid value never reaches save
+    const saved: unknown[] = [];
+    const ext: AdminExtension = { apiVersion: 1, id: "proto", title: "Proto", contributes: { settings: [{ id: "s", title: "S", role: "owner", schema }] }, handlers: { settings: { s: { load: () => null, save: (_c, v) => { saved.push(v); return v; } } } } };
+    const patch = (value: unknown) => createAdminSurface(rt, { basePath: "/admin", extensions: [ext] })(new Request("http://x/admin/api/x/proto/settings/s", { method: "PATCH", body: JSON.stringify({ value }), headers: { "content-type": "application/json" } }), owner);
+    expect((await patch({ constructor: "not-an-integer" })).status).toBe(400);
+    expect((await patch({})).status).toBe(400);
+    expect((await patch({ constructor: 3 })).status).toBe(200);
+    expect(saved).toEqual([{ constructor: 3 }]);
+  });
+
+  it("runs server actions with a checked target, and only where they are offered", async () => {
+    seen.length = 0;
+    const ran = await ask("/admin/api/x/audit/actions/flag", editor, "POST", { record: { schema: "posts", id: "p1", version: 2 } });
+    expect(ran.body).toEqual({ ok: true, result: { message: "Flagged" } });
+    expect(seen).toEqual([["flag", "u-editor", { record: { schema: "posts", id: "p1", version: 2 } }]]);
+    // `when` holds on the server too
+    expect((await ask("/admin/api/x/audit/actions/flag", editor, "POST", { record: { schema: "other", id: "p1" } })).status).toBe(404);
+    expect((await ask("/admin/api/x/audit/actions/flag", editor, "POST", { selection: { schema: "posts", ids: ["p1"] } })).status).toBe(400);
+    expect((await ask("/admin/api/x/audit/actions/flag", contributor, "POST", { record: { schema: "posts", id: "p1" } })).status).toBe(403);
+    expect((await ask("/admin/api/x/audit/actions/bulk", owner, "POST", { selection: { schema: "posts", ids: ["a", "b"] } })).body).toEqual({ ok: true, result: 2 });
+    expect((await ask("/admin/api/x/audit/actions/bulk", owner, "POST", { selection: { schema: "posts", ids: [] } })).status).toBe(400);
+    // a dialog action has no server run
+    expect((await ask("/admin/api/x/audit/actions/compose", owner, "POST", { schema: "posts" })).status).toBe(404);
+    expect((await ask("/admin/api/x/audit/actions/flag", editor, "GET")).status).toBe(405);
+  });
+
+  it("refuses declarations it cannot honor", () => {
+    const make = (ext: object) => () => createAdminSurface(rt, { basePath: "/admin", extensions: [{ ...access, ...ext }] as never });
+    expect(make({})).not.toThrow();
+    const bad: object[] = [
+      { apiVersion: 2 }, { id: "Bad Id" }, { title: "" }, { module: "https://cdn.example/a.js" }, { module: "//cdn.example/a.js" }, { module: "a.js" }, { module: "/\\evil" },
+      { integrity: "md5-abc" }, { integrity: "sha384-abc" }, { extra: 1 }, { contributes: {} }, { contributes: { widgets: [] } },
+      { contributes: { pages: [{ id: "p", title: "P", role: "owner" }] } },
+      { contributes: { settings: [{ id: "policy", title: "P", role: "admin", schema: access.contributes.settings![0]!.schema }] } },
+      { contributes: { settings: [{ id: "policy", title: "P", role: "owner", schema: { type: "object", properties: { x: { type: "array" } } } }] } },
+      { contributes: { settings: [{ id: "policy", title: "P", role: "owner", schema: { type: "object", properties: { x: { type: "string", pattern: "a" } } } }] } },
+      { contributes: { actions: [{ id: "a", title: "A", role: "owner", target: "record/v2", presentation: "run" }] }, handlers: { actions: { a: { run: () => 1 } } } },
+      { contributes: { actions: [{ id: "a", title: "A", role: "owner", target: "record/v1", presentation: "run" }] } },
+      { contributes: { actions: [{ id: "a", title: "A", role: "owner", target: "record/v1", presentation: "run", when: { schema: [] } }] }, handlers: { actions: { a: { run: () => 1 } } } },
+      { contributes: { settings: access.contributes.settings, fields: [{ id: "policy", target: "field.cell/v1" }] }, module: "/a.js" },
+      { handlers: { settings: { policy: { load: () => 1, save: () => 1 }, other: { load: () => 1, save: () => 1 } } } },
+    ];
+    const refused = expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_INVALID", phase: "boot" }) });
+    for (const ext of bad) expect(make(ext), JSON.stringify(ext)).toThrow(refused);
+    expect(() => createAdminSurface(rt, { basePath: "/admin", extensions: [access, access] })).toThrow(/used twice/);
+  });
+
+  it("checks the contributions a plan's uiSchema names", () => {
+    const plan = (ui: object) => ({ schemas: { posts: { name: "posts", uiSchema: ui } }, views: {}, procedures: {} }) as never;
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "audit/color", options: { palette: "brand" } } }, list: { cells: { note: "audit/swatch" } }, panels: ["audit/history"] }), [audit])).not.toThrow();
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "textarea" } } }), [])).not.toThrow();
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "audit/nope" } } }), [audit])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_UNKNOWN", path: "schema:posts/uiSchema/fields/title/widget" }) }));
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "audit/swatch" } } }), [audit])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_TARGET" }) }));
+    expect(() => checkPlanUiExtensions(plan({ panels: ["audit/color"] }), [audit])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_TARGET" }) }));
+    expect(() => checkPlanUiExtensions(plan({ fields: { title: { widget: "audit/color", options: { palette: "neon" } } } }), [audit])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_OPTIONS" }) }));
+    expect(() => checkPlanUiExtensions(plan({ list: { cells: { note: "audit/swatch" } }, fields: { note: { widget: "audit/color", options: {} } } }), [{ ...audit, contributes: { fields: [{ id: "swatch", target: "field.cell/v1" }, { id: "color", target: "field.input/v1" }] } }])).toThrow(expect.objectContaining({ diagnostic: expect.objectContaining({ code: "UI_EXTENSION_OPTIONS" }) }));
+    // construction runs the same check against the runtime's plan
+    expect(() => createAdminSurface(rt, { basePath: "/admin", extensions: [audit] })).not.toThrow();
+  });
+
+  it("puts module integrity into the shell's import map, merging the one the build wrote", async () => {
+    const shellWith = (html: string): AdminAssets => (path) => path.replace(/^\/+/, "") === "index.html" ? new Response(html, { headers: { "content-type": "text/html" } }) : null;
+    const signed: AdminExtension = { ...audit, integrity: "sha384-abc+/=" };
+    const built = '<!doctype html><head><base href="/admin/" /><script type="importmap">{"imports":{"react":"./shared/react.js"}}</script></head>';
+    const html = await (await createAdminSurface(rt, { basePath: "/admin", assets: shellWith(built), extensions: [signed] })(new Request("http://x/admin/c/posts"), owner)).text();
+    const map = JSON.parse(/<script type="importmap">(.*?)<\/script>/.exec(html)![1]!);
+    expect(map).toEqual({ imports: { react: "./shared/react.js" }, integrity: { "/admin-extensions/audit.js": "sha384-abc+/=" } });
+    // a shell without a map gets one; without integrity the shell is served untouched
+    expect(await (await createAdminSurface(rt, { basePath: "/admin", assets: shellWith("<html><head></head></html>"), extensions: [signed] })(new Request("http://x/admin"), owner)).text()).toContain('"integrity":{"/admin-extensions/audit.js"');
+    expect(await (await createAdminSurface(rt, { basePath: "/admin", assets: shellWith(built), extensions: [audit] })(new Request("http://x/admin"), owner)).text()).toBe(built);
+  });
+
+  it("serves a source extension's module to the staff it is for, with its integrity in the shell", async () => {
+    const code = 'import { defineAdminExtension } from "@aotter/mantle-ui/extension";\nexport default defineAdminExtension({ pages: { log: () => {} } });\n';
+    let reads = 0;
+    const own: AdminExtension = { apiVersion: 1, id: "own", title: "Own", source: () => { reads++; return code; }, contributes: { pages: [{ id: "log", title: "Log", role: "editor", nav: { group: "more" } }] } };
+    const admin = createAdminSurface(rt, { basePath: "/admin", assets: (path) => path.replace(/^\/+/, "") === "index.html" ? new Response("<html><head></head></html>", { headers: { "content-type": "text/html" } }) : null, extensions: [own] });
+    const get = (path: string, caller: Caller) => admin(new Request(`http://x${path}`), caller);
+    expect((await (await get("/admin/api/site", editor)).json() as any).extensions[0].module).toBe("/admin/extensions/own.js");
+    const served = await get("/admin/extensions/own.js", editor);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toMatch(/^text\/javascript/);
+    expect(await served.text()).toBe(code);
+    expect((await get("/admin/extensions/own.js", contributor)).status).toBe(403);
+    expect((await get("/admin/extensions/own.js", anon)).status).toBe(401);
+    expect((await get("/admin/extensions/other.js", owner)).status).toBe(404);
+    const digest = createHash("sha384").update(code).digest("base64");
+    const html = await (await get("/admin/c/posts", editor)).text();
+    expect(JSON.parse(/<script type="importmap">(.*?)<\/script>/.exec(html)![1]!).integrity).toEqual({ "/admin/extensions/own.js": `sha384-${digest}` });
+    // read once and kept
+    expect(reads).toBe(1);
+    expect(() => createAdminSurface(rt, { basePath: "/admin", extensions: [{ ...own, module: "/a.js" }] })).toThrow(/not both/);
+  });
+
+  it("diffs declarations for review", () => {
+    const next: AdminExtension = { ...audit, module: "/admin-extensions/audit.2.js", contributes: { ...audit.contributes, pages: [{ id: "log", title: "Log", role: "owner" }], panels: [] } };
+    expect(diffAdminExtensions([audit, access], [next])).toEqual([
+      { change: "removed", ref: "access" },
+      { change: "changed", ref: "audit", keys: ["module"] },
+      { change: "removed", ref: "audit/history" },
+      { change: "changed", ref: "audit/log", keys: ["nav", "role"] },
+    ]);
+    expect(diffAdminExtensions([], [access])).toEqual([{ change: "added", ref: "access" }, { change: "added", ref: "access/policy" }]);
+    expect(ADMIN_EXTENSION_JSON_SCHEMA.properties.contributes.properties.actions.items.properties.target.enum).toContain("list.selection/v1");
+    // a declaration whose module is a `source` string is valid, so the schema must describe it
+    expect(ADMIN_EXTENSION_JSON_SCHEMA.properties.source).toEqual({ type: "string", minLength: 1 });
   });
 });
