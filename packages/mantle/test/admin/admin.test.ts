@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, type StaffRole } from "../../src/spec/index.js";
@@ -492,6 +493,28 @@ describe("Admin surface: extensions", () => {
     // a shell without a map gets one; without integrity the shell is served untouched
     expect(await (await createAdminSurface(rt, { basePath: "/admin", assets: shellWith("<html><head></head></html>"), extensions: [signed] })(new Request("http://x/admin"), owner)).text()).toContain('"integrity":{"/admin-extensions/audit.js"');
     expect(await (await createAdminSurface(rt, { basePath: "/admin", assets: shellWith(built), extensions: [audit] })(new Request("http://x/admin"), owner)).text()).toBe(built);
+  });
+
+  it("serves a source extension's module to the staff it is for, with its integrity in the shell", async () => {
+    const code = 'import { defineAdminExtension } from "@aotter/mantle-ui/extension";\nexport default defineAdminExtension({ pages: { log: () => {} } });\n';
+    let reads = 0;
+    const own: AdminExtension = { apiVersion: 1, id: "own", title: "Own", source: () => { reads++; return code; }, contributes: { pages: [{ id: "log", title: "Log", role: "editor", nav: { group: "more" } }] } };
+    const admin = createAdminSurface(rt, { basePath: "/admin", assets: (path) => path.replace(/^\/+/, "") === "index.html" ? new Response("<html><head></head></html>", { headers: { "content-type": "text/html" } }) : null, extensions: [own] });
+    const get = (path: string, caller: Caller) => admin(new Request(`http://x${path}`), caller);
+    expect((await (await get("/admin/api/site", editor)).json() as any).extensions[0].module).toBe("/admin/extensions/own.js");
+    const served = await get("/admin/extensions/own.js", editor);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toMatch(/^text\/javascript/);
+    expect(await served.text()).toBe(code);
+    expect((await get("/admin/extensions/own.js", contributor)).status).toBe(403);
+    expect((await get("/admin/extensions/own.js", anon)).status).toBe(401);
+    expect((await get("/admin/extensions/other.js", owner)).status).toBe(404);
+    const digest = createHash("sha384").update(code).digest("base64");
+    const html = await (await get("/admin/c/posts", editor)).text();
+    expect(JSON.parse(/<script type="importmap">(.*?)<\/script>/.exec(html)![1]!).integrity).toEqual({ "/admin/extensions/own.js": `sha384-${digest}` });
+    // read once and kept
+    expect(reads).toBe(1);
+    expect(() => createAdminSurface(rt, { basePath: "/admin", extensions: [{ ...own, module: "/a.js" }] })).toThrow(/not both/);
   });
 
   it("diffs declarations for review", () => {

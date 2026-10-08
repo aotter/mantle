@@ -95,10 +95,16 @@ export interface AdminExtension {
   /** Kebab-case, unique per Admin, and never changed once deployed. */
   readonly id: string;
   readonly title: LocalizedText;
-  /** A same-origin ESM path whose default export is `defineAdminExtension({...})`; needed when a contribution renders. */
+  /** A same-origin ESM path the host serves, whose default export is `defineAdminExtension({...})`. */
   readonly module?: string;
   /** Subresource Integrity for `module`, enforced through Admin's import map. */
   readonly integrity?: string;
+  /**
+   * The module's code, which Admin serves itself at `{basePath}/extensions/{id}.js` to staff whose role reaches the
+   * extension, with its integrity computed. Plain ESM needs no build: Admin's import map resolves `react`,
+   * `react/jsx-runtime`, `react-dom/client`, `@aotter/mantle-ui/kit` and `@aotter/mantle-ui/extension`.
+   */
+  readonly source?: string | (() => string | Promise<string>);
   readonly contributes: AdminExtensionContributions;
   readonly handlers?: AdminExtensionHandlers;
 }
@@ -212,7 +218,7 @@ export function validateAdminExtensions(extensions: readonly AdminExtension[]): 
   for (const ext of extensions) {
     const at = `admin-extension:${isObject(ext) && typeof ext["id"] === "string" ? ext["id"] : "?"}`;
     if (!isObject(ext)) throw invalid("UI_EXTENSION_INVALID", at, "an extension is an object");
-    const extra = keysWithin(ext, ["apiVersion", "id", "title", "module", "integrity", "contributes", "handlers"]);
+    const extra = keysWithin(ext, ["apiVersion", "id", "title", "module", "integrity", "source", "contributes", "handlers"]);
     if (extra) throw invalid("UI_EXTENSION_INVALID", `${at}/${extra}`, `unknown key '${extra}'`);
     if (ext["apiVersion"] !== 1) throw invalid("UI_EXTENSION_INVALID", `${at}/apiVersion`, "apiVersion 1", ext["apiVersion"]);
     if (typeof ext["id"] !== "string" || !ID.test(ext["id"])) throw invalid("UI_EXTENSION_INVALID", `${at}/id`, "a kebab-case id", ext["id"]);
@@ -221,6 +227,8 @@ export function validateAdminExtensions(extensions: readonly AdminExtension[]): 
     if (!isText(ext["title"])) throw invalid("UI_EXTENSION_INVALID", `${at}/title`, "a title");
     // same origin only: an absolute path, never a scheme-relative or external URL
     if (ext["module"] !== undefined && (typeof ext["module"] !== "string" || !MODULE.test(ext["module"]))) throw invalid("UI_EXTENSION_INVALID", `${at}/module`, "a same-origin absolute path", ext["module"]);
+    if (ext["source"] !== undefined && typeof ext["source"] !== "string" && typeof ext["source"] !== "function") throw invalid("UI_EXTENSION_INVALID", `${at}/source`, "source is the module's code or a function returning it");
+    if (ext["source"] !== undefined && ext["module"] !== undefined) throw invalid("UI_EXTENSION_INVALID", `${at}/source`, "either module (served by the host) or source (served by Admin), not both");
     if (ext["integrity"] !== undefined && (typeof ext["integrity"] !== "string" || !INTEGRITY.test(ext["integrity"]) || ext["module"] === undefined)) throw invalid("UI_EXTENSION_INVALID", `${at}/integrity`, "sha256-, sha384- or sha512- integrity for a module", ext["integrity"]);
     const contributes = ext["contributes"];
     if (!isObject(contributes)) throw invalid("UI_EXTENSION_INVALID", `${at}/contributes`, "contributes is an object");
@@ -263,7 +271,7 @@ export function validateAdminExtensions(extensions: readonly AdminExtension[]): 
           if (problem) throw invalid("UI_EXTENSION_INVALID", `${cat}/${formKey}`, `the form subset: ${problem}`);
         }
         const rendered = kind === "pages" || kind === "panels" || kind === "fields" || (kind === "actions" && c["presentation"] === "dialog");
-        if (rendered && ext["module"] === undefined) throw invalid("UI_EXTENSION_INVALID", `${at}/module`, `'${c["id"]}' renders, so the extension needs a module`);
+        if (rendered && ext["module"] === undefined && ext["source"] === undefined) throw invalid("UI_EXTENSION_INVALID", `${at}/module`, `'${c["id"]}' renders, so the extension needs a module or a source`);
       }
     }
     if (count === 0) throw invalid("UI_EXTENSION_INVALID", `${at}/contributes`, "at least one contribution");
@@ -336,7 +344,7 @@ export function checkPlanUiExtensions(plan: Pick<RuntimePlan, "schemas" | "views
 const fieldRole = (f: AdminExtensionField): StaffRole => f.role ?? "contributor";
 
 /** The declarations (never handlers or integrity) of the contributions `role` reaches; extensions with none are left out. */
-export function adminExtensionsFor(extensions: readonly AdminExtension[], role: StaffRole) {
+export function adminExtensionsFor(extensions: readonly AdminExtension[], role: StaffRole, basePath = "/admin") {
   return extensions.flatMap((e) => {
     const reach = <T extends { readonly role?: StaffRole }>(xs: readonly T[] | undefined, roleOf: (x: T) => StaffRole) => (xs ?? []).filter((x) => meetsRole(role, roleOf(x)));
     const contributes = {
@@ -347,8 +355,40 @@ export function adminExtensionsFor(extensions: readonly AdminExtension[], role: 
       fields: reach(e.contributes.fields, fieldRole),
     };
     if (Object.values(contributes).every((xs) => xs.length === 0)) return [];
-    return [{ id: e.id, title: e.title, ...(e.module ? { module: e.module } : {}), contributes }];
+    const module = e.module ?? (e.source !== undefined ? extensionSourcePath(basePath, e.id) : undefined);
+    return [{ id: e.id, title: e.title, ...(module ? { module } : {}), contributes }];
   });
+}
+
+export const extensionSourcePath = (basePath: string, id: string) => `${basePath}/extensions/${id}.js`;
+
+const sources = new WeakMap<AdminExtension, Promise<{ code: string; integrity: string }>>();
+/** The code Admin serves for a `source` extension and its sha384 integrity, read once. */
+export function extensionSource(e: AdminExtension): Promise<{ code: string; integrity: string }> | null {
+  if (e.source === undefined) return null;
+  let found = sources.get(e);
+  if (!found) {
+    found = (async () => {
+      const code = typeof e.source === "function" ? await e.source() : e.source!;
+      if (typeof code !== "string" || code.length === 0) throw invalid("UI_EXTENSION_INVALID", `admin-extension:${e.id}/source`, "source returned no code");
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-384", new TextEncoder().encode(code)));
+      return { code, integrity: `sha384-${btoa(String.fromCharCode(...digest))}` };
+    })();
+    // a failed read may succeed later (a deploy, a transient store error): do not keep the failure
+    found.catch(() => sources.delete(e));
+    sources.set(e, found);
+  }
+  return found;
+}
+
+/** `{basePath}/extensions/{id}.js`: a `source` extension's module, for staff whose role reaches one of its contributions. */
+export async function adminExtensionModule(extensions: readonly AdminExtension[], id: string, caller: AdminExtensionCaller): Promise<Response> {
+  const ext = extensions.find((e) => e.id === id && e.source !== undefined);
+  if (!ext) throw wireError("NOT_FOUND", "no such route", P);
+  const role = apiRole(ext);
+  if (!meetsRole(caller.role, role)) throw denied(role);
+  const { code } = await extensionSource(ext)!;
+  return new Response(code, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "private, no-cache", "x-content-type-options": "nosniff" } });
 }
 
 /** The lowest role any of the extension's contributions needs: whoever sees one of them may call its API. */

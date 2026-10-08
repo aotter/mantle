@@ -12,7 +12,7 @@ import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } fr
 import { decodeMemberCursor } from "./consent.js";
 import type { AdminIdentity, MemberUserInfo, StaffUserInfo } from "./identity.js";
 import { developerConsole } from "./developerConsole.js";
-import { adminExtensionRoute, adminExtensionsFor, checkPlanUiExtensions, validateAdminExtensions, type AdminExtension } from "./extensions.js";
+import { adminExtensionModule, adminExtensionRoute, adminExtensionsFor, checkPlanUiExtensions, extensionSource, extensionSourcePath, validateAdminExtensions, type AdminExtension } from "./extensions.js";
 
 /** The built SPA: `path` is relative to the base path (`index.html` is the shell). `null` is a missing file. */
 export type AdminAssets = (path: string) => Response | null | Promise<Response | null>;
@@ -213,7 +213,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     // what this deployment turned on, so the console does not offer a page that can only answer 501
     // creation statistics are a storage capability 0.2.0 storage does not have (the route answers 501)
     const capabilities = { siteSettings: runtime.site !== undefined, media: !!library, invitationEmail: !!roles?.sendStaffInvitation, statistics: false };
-    return { ...config, publicUrl, mcpEndpoints: { public: at(mcp?.public), staff: at(mcp?.staff) }, capabilities, extensions: adminExtensionsFor(extensions, caller.role) };
+    return { ...config, publicUrl, mcpEndpoints: { public: at(mcp?.public), staff: at(mcp?.staff) }, capabilities, extensions: adminExtensionsFor(extensions, caller.role, base) };
   };
   const library = options.media && runtime.site?.media(options.media);
   const media = () => {
@@ -561,12 +561,15 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     },
   );
 
-  const api = async (request: Request, url: URL, caller: Caller): Promise<Response> => {
+  const staffOf = (caller: Caller): Staff => {
     if (caller.kind === "anonymous") throw wireError("UNAUTHENTICATED", "Sign in to use Admin.", P);
     if (caller.kind !== "user" || caller.role === null) throw wireError("AUTH_DENIED", "This account is not on the staff list.", P);
     // Admin acts as the person: a token or key minted for something narrower (an MCP client, a script) is not a sign-in
     if (caller.credential !== "session") throw wireError("AUTH_DENIED", "Admin needs a signed-in session.", P);
-    const staff = caller as Staff;
+    return caller as Staff;
+  };
+  const api = async (request: Request, url: URL, caller: Caller): Promise<Response> => {
+    const staff = staffOf(caller);
     const prefix = `${base}/api/x/`;
     if (url.pathname.startsWith(prefix)) return adminExtensionRoute(extensions, request, url.pathname.slice(prefix.length), staff);
     for (const route of routes) {
@@ -579,9 +582,13 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     throw wireError("NOT_FOUND", "no such route", P);
   };
 
-  // an extension module's Subresource Integrity, which the browser enforces through the shell's import map
-  const integrity = Object.fromEntries(extensions.flatMap((e) => (e.module && e.integrity ? [[e.module, e.integrity]] : [])));
-  const hasIntegrity = Object.keys(integrity).length > 0;
+  // an extension module's Subresource Integrity, which the browser enforces through the shell's import map; Admin computes it for a source
+  const hasIntegrity = extensions.some((e) => (e.module && e.integrity) || e.source !== undefined);
+  const integrity = async () => Object.fromEntries(await Promise.all(extensions.flatMap((e) =>
+    e.module && e.integrity ? [Promise.resolve([e.module, e.integrity] as const)]
+    : e.source !== undefined ? [extensionSource(e)!.then((s) => [extensionSourcePath(base, e.id), s.integrity] as const)] : [])));
+  // a `source` extension's code, behind the same sign-in checks as the API
+  const extensionModule = (id: string, caller: Caller) => adminExtensionModule(extensions, id, staffOf(caller));
   const shell = async (request: Request, rel: string): Promise<Response> => {
     // the path reaches `assets` as the client sent it, so a traversal or an encoded separator stops here
     if (request.method !== "GET" || !options.assets || /(^|\/)\.\.(\/|$)|%2f|%5c|\\/i.test(rel)) throw wireError("NOT_FOUND", "no such route", P);
@@ -601,7 +608,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     headers.set("cache-control", "no-store");
     if (hasIntegrity) {
       headers.delete("content-length");
-      return new Response(withModuleIntegrity(await res.text(), integrity), { status: res.status, headers });
+      return new Response(withModuleIntegrity(await res.text(), await integrity()), { status: res.status, headers });
     }
     return new Response(res.body, { status: res.status, headers });
   };
@@ -612,6 +619,8 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     const isApi = rel !== null && (rel === "api" || rel.startsWith("api/"));
     try {
       if (rel === null) throw wireError("NOT_FOUND", "no such route", P);
+      const source = rel !== null && request.method === "GET" ? /^extensions\/([a-z][a-z0-9-]{0,62})\.js$/.exec(rel) : null;
+      if (source) return await extensionModule(source[1]!, caller);
       return isApi ? await api(request, url, caller) : await shell(request, rel);
     } catch (e) {
       return failure(e, P, isApi ? NO_STORE : undefined);

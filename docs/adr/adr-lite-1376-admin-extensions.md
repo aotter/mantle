@@ -70,8 +70,8 @@ code:
   apiVersion: 1,
   id: 'access',                        // kebab-case, unique, immutable once deployed
   title: { en: 'Access', 'zh-TW': '存取權限' },
-  module: '/assets/access/admin.js',   // same-origin ESM; required only if a contribution needs client code
-  integrity: 'sha384-…',               // optional Subresource Integrity for module
+  source: ACCESS_MODULE,               // the module's code; Admin serves it at {basePath}/extensions/access.js
+  // or, served by the host instead: module: '/assets/access/admin.js', integrity?: 'sha384-…'
   contributes: {
     pages:    [{ id, title, role, nav: { group: 'more' | 'settings', order? } }],
     settings: [{ id, title, role, schema }],          // JSON Schema form, no client code
@@ -82,7 +82,7 @@ code:
   handlers: {
     api?(request, { caller, extension, path }): Promise<Response | null>,
     settings?: { [id]: { load(caller), save(caller, value) } },
-    actions?:  { [id]: { run(caller, { record?, selection? }) } },
+    actions?:  { [id]: { run(caller, { record?, selection?, schema? }) } },
   },
 }
 ```
@@ -92,17 +92,18 @@ code:
 Extensions are not a host-only feature. An agent customizing a project's Admin
 is the main author:
 
-- A project's service module may export `adminExtensions: AdminExtension[]`
-  next to its other service exports. The generated preset passes them to
+- A project exports `adminExtensions: AdminExtension[]`. The generated preset
+  writes `src/admin-extensions.ts` for it and passes it to
   `createAdminSurface`. A host that builds Admin itself (for example a hosted
   platform) reads the same export and appends its own extensions.
 - Extension ids are one namespace per Admin. A host extension whose id
   collides with a project extension fails construction, so a project can
   never shadow a host page, and the reverse.
-- `mantle verify` validates a project's declarations against the exported
-  JSON Schema, and `mantle build` bundles each `module` with the import map's
-  packages kept external (§4). The same project shows the same extensions
-  locally and when deployed; a host only adds.
+- A module needs no build step: Admin's import map provides React, the kit and
+  the extension helper (§4), so plain ESM works. `source` lets Admin serve the
+  module itself, so a project needs no static-file setup; Admin computes its
+  integrity. The same project shows the same extensions locally and when
+  deployed; a host only adds.
 
 **Trust.** A project extension's module runs in Admin's origin with the
 viewer's session. That gives it no more power than the project already has:
@@ -116,17 +117,15 @@ handlers and its storage. Two rules keep that equivalence true:
   policies) must treat the right to deploy as full trust in that project, and
   govern deployment separately.
 
-Contributions and their targets are listed below; §1b covers how manifests use them.
-
-Contributions and their targets:
+Contributions and their targets (§1b covers how manifests use them):
 
 | Contribution | Targets (`/v1`) | Client code |
 | --- | --- | --- |
-| page | its own route `/admin/x/{extension}/{page}` | `mount` |
-| settings | its own route under Settings | none. Admin renders `schema` with the kit form; `load` and `save` run on the server |
+| page | its own route `/admin/x/{extension}/{page}`; in navigation when it declares `nav` | a renderer |
+| settings | its own route `/admin/x/{extension}/{id}`, always in navigation | none. Admin renders `schema` (the form subset) with its form; `load` and `save` run on the server |
 | action | `record/v1` (record header), `list.selection/v1` (bulk), `list.toolbar/v1` | `presentation: 'run' \| 'confirm'` needs none (the server `run` is called). `'dialog'` mounts client code in an Admin dialog |
-| panel | `record.sidebar/v1`, `home/v1` | `mount` |
-| field | `field.input/v1`, `field.cell/v1` | `mount` |
+| panel | `record.sidebar/v1`, `home/v1` | a renderer |
+| field | `field.input/v1`, `field.cell/v1` | a renderer |
 
 `when` is a closed predicate over names only: `{ schema?: string[], field?:
 string[], format?: string[] }`. It contains no expressions and no record
@@ -179,8 +178,8 @@ When both apply to one place, the manifest wins.
   `options` is checked where the plan and the extensions meet:
   - `createAdminSurface` fails construction with `UI_EXTENSION_UNKNOWN`,
     `UI_EXTENSION_TARGET` or `UI_EXTENSION_OPTIONS`.
-  - `mantle verify` runs the same check when the service module exports
-    `adminExtensions`.
+  - `checkPlanUiExtensions(plan, extensions)` is exported, so a deploy step or
+    a test can run the same check before the service starts.
 
 **Who may be named.** A manifest may name only the project's own extensions,
 never a host's. A project then renders the same locally and when deployed. A
@@ -197,10 +196,12 @@ widget sends.
   `integrity` are not sent.
 - Every extension route checks a signed-in staff session and the
   contribution's role before it calls the host:
-  - `{basePath}/api/x/{extension}/{path}` → `api`
-  - `…/settings/{id}` → `load` and `save`
-  - `…/actions/{id}` → `run`
-- `save` input is validated against `schema` before the host sees it.
+  - `{basePath}/api/x/{extension}/settings/{id}`: `GET` → `load`, `PATCH { value }` → `save`
+  - `{basePath}/api/x/{extension}/actions/{id}`: `POST` → `run`, with `{ record }`, `{ selection }` or `{ schema }` for the action's target; `when.schema` is enforced here too
+  - `{basePath}/api/x/{extension}/api/{path}` → `api`, for the extension's lowest contribution role
+  - `GET {basePath}/extensions/{id}.js` → a `source` extension's module, for the same role
+- `save` input is validated against `schema` before the host sees it (400 with
+  `error.fields` otherwise).
 - `null` answers 404. Answers are `no-store` unless the host sets
   `cache-control`. Cross-site mutation protection is the `withCaller`
   wrapper's, as for every Admin route.
@@ -216,9 +217,13 @@ export default defineAdminExtension({
   pages:   { overview: (element, ctx) => cleanup },
   actions: { 'reassign': (element, ctx) => cleanup },   // dialog presentation only
   panels:  { 'history': (element, ctx) => cleanup },
-  fields:  { 'color': (element, ctx) => cleanup },
+  fields:  { 'color': (element, ctx) => ({ update(next) {}, unmount() {} }) },
 })
 ```
+
+A renderer returns nothing, a cleanup, or `{ update, unmount }`. With `update`,
+Admin passes later contexts (a new value, a new language) in place instead of
+mounting again; a field value the renderer reported itself never remounts it.
 
 - Admin imports `module` once, when a contribution that needs it is first
   shown, and calls the renderer for that contribution.
@@ -228,19 +233,23 @@ export default defineAdminExtension({
   contribution, apiBase, language, theme, caller: { role } }` plus:
   - `record: { schema, id, version }` for record targets
   - `selection: { schema, ids }` for list targets
-  - `field: { schema, name, value, readOnly }` for field targets, which also
-    get `onChange(value)`
+  - `field: { schema, name, value, readOnly, property }` for field targets,
+    and `options` from `uiSchema`; `field.input/v1` also gets `onChange(value)`
 - A small `host` object offers `navigate(path)`, `notify(message)` and
   `close()` for dialogs.
 - Nothing else from the SPA is reachable.
 
 ### 4. Shared dependencies come from Admin
 
-- Admin's HTML declares an import map for `react`, `react-dom`,
-  `@aotter/mantle-ui/kit` and `@aotter/mantle-ui/extension`, all served from
-  Admin's own assets.
-- Extension modules mark these as external. They share Admin's single React
-  and kit instance and keep its look, theme and accessibility.
+- Admin's HTML declares an import map for `react`, `react/jsx-runtime`,
+  `react-dom`, `react-dom/client`, `@aotter/mantle-ui/kit` and
+  `@aotter/mantle-ui/extension`, served beside the shell. The React entries
+  re-export Admin's own instance; the kit and the helper are real modules
+  that import React through the same map, and the kit's stylesheet loads with
+  the first extension.
+- Extension modules use these specifiers directly (or mark them external when
+  bundling). They share Admin's single React and keep its look, theme and
+  accessibility.
 - The kit and the extension helper are the whole public UI surface. The shell
   stays private (ADR-lite 909).
 
@@ -250,7 +259,8 @@ export default defineAdminExtension({
   privileges, and Core does not sandbox them.
 - `module` must be a same-origin path, so Admin keeps its existing CSP and
   framing policy.
-- `integrity`, when given, is enforced on import.
+- `integrity` (given for `module`, computed for `source`) goes into the
+  shell's import map, so the browser enforces it on import.
 - An isolated tier for untrusted extensions is reserved and is not part of
   this decision. Because contexts are serializable and the UI surface is the
   kit, an iframe or remote-rendering tier can reuse this declaration format
@@ -264,8 +274,8 @@ export default defineAdminExtension({
 - Construction validates every declaration and fails on:
   - a bad or duplicate id
   - an unknown target or `apiVersion`
-  - a non-same-origin `module`
-  - a contribution that needs code when `module` is missing
+  - a non-same-origin `module`, or both `module` and `source`
+  - a contribution that needs code when there is neither
   - a settings `schema` outside the form subset
 - Core exports the declaration's JSON Schema, so tooling and agents can check
   a declaration without running it.
@@ -291,10 +301,13 @@ export default defineAdminExtension({
 - An agent can customize a project's Admin with a small module and a
   declaration that tooling validates and diffs before deploy. A `uiSchema`
   line in the manifest binds it to a field, a list cell or a record panel.
-- The `uiSchema` vocabulary widens from fixed values to
-  `<extension>/<contribution>` names. This is a grammar change, so ADR-0002's
-  closed-enum rule needs an amendment: the name's shape is closed and checked
-  at generate time, and its existence is checked at construction.
+- The `uiSchema` vocabulary widens: `fields.<name>.widget` accepts
+  `<extension>/<contribution>` beside `textarea`, with `options`; Schemas gain
+  `list.cells` and `panels`; staff Views gain `list.cells`. This record is the
+  grammar decision CONTRIBUTING requires for new keys: the name's shape is
+  closed and checked at generate time (`SCHEMA_UI_INVALID`,
+  `VIEW_UI_INVALID`), and its existence at construction
+  (`UI_EXTENSION_UNKNOWN`, `UI_EXTENSION_TARGET`, `UI_EXTENSION_OPTIONS`).
 - Settings pages need no client code at all. This covers most host
   configuration screens and is the easiest kind for an agent to author and
   review.
