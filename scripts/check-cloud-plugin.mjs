@@ -55,6 +55,9 @@ try {
   const core = JSON.parse(readFileSync(join(root, 'packages/mantle/package.json'), 'utf8'));
   const pin = { version: core.version, revision: 'a'.repeat(40) };
   const contract = { projectId, core: pin, protocol: { current: 6, minimum: 6 } };
+  for (const protocol of [undefined, {}, { current: '6', minimum: 6 }, { current: 6, minimum: 7 }]) {
+    assert.equal(failure(['pack', 'backend', '--contract', '-'], JSON.stringify({ ...contract, protocol })).error, 'host_protocol_invalid');
+  }
   assert.equal(failure(['pack', 'backend', '--contract', '-'], JSON.stringify({ ...contract, protocol: { current: 5, minimum: 5 } })).error, 'host_outdated');
   assert.equal(failure(['pack', 'backend', '--contract', '-'], JSON.stringify({ ...contract, protocol: { current: 7, minimum: 7 } })).error, 'client_outdated');
   const packed = line(['pack', 'backend', '--contract', '-'], JSON.stringify({ content: [{ type: 'text', text: JSON.stringify({ ok: true, data: contract }) }] }));
