@@ -1,6 +1,6 @@
 # ADR-lite 1376: Admin extensions
 
-**Status:** Proposed (revision 3: the full contract, for hosts and for
+**Status:** Accepted (revision 3: the full contract, for hosts and for
 projects; replaces the pages-only draft)
 
 ## Context
