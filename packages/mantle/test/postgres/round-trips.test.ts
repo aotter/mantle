@@ -43,7 +43,7 @@ async function measure({ scope, pipeline }: { scope: boolean; pipeline: boolean 
       "INSERT INTO settings (key, value) VALUES ('rt', 'x') ON CONFLICT (key) DO UPDATE SET value = excluded.value",
     ].join("; "));
     const missing = await program("procedure", "UPDATE items SET stock = stock + 1 WHERE id = 'a'; UPDATE items SET stock = 1 WHERE id = 'nope'");
-    // a request's connections are those opened while it ran; its round trips are theirs, less each startup handshake
+    // a request's connections are those opened while it ran; its round trips are theirs (the proxy leaves out each handshake)
     const request = async (f: () => Promise<unknown>) => {
       const from = proxy.trips.length;
       const before = proxy.trips.slice();
@@ -53,7 +53,7 @@ async function measure({ scope, pipeline }: { scope: boolean; pipeline: boolean 
       await new Promise((r) => setTimeout(r, 2 * ONE_WAY_MS + 20));
       const opened = proxy.trips.slice(from);
       const reused = proxy.trips.slice(0, from).reduce((n, t, i) => n + t - before[i]!, 0);
-      return { result, ms, connections: opened.length, trips: reused + opened.reduce((n, t) => n + t - 1, 0) };
+      return { result, ms, connections: opened.length, trips: reused + opened.reduce((n, t) => n + t, 0) };
     };
     const out = {
       getSession: await request(() => auth.getSession(owner)),
