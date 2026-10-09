@@ -163,3 +163,20 @@ it.skipIf(!PG_URL)("a herd under a held lock gives up together within the retry 
     expect(counted.n).toBe(0);
   } finally { await holder.end().catch(() => undefined); await db.drop(); }
 }, 60_000);
+
+it.skipIf(!PG_URL)("a native column that is nullable on an existing table is refused with the SQL that fixes it, and boots once it is NOT NULL", async () => {
+  const db = await freshSchema();
+  try {
+    const plan = { items: items({ publishing: true }) };
+    expect((await convergeStorage(db.connect, plan, { fingerprint: "a" })).blocked).toEqual([]);
+    // an operator-built status (not NOT NULL DEFAULT 'draft'), and a table whose version lost its constraint
+    await sql(db, 'ALTER TABLE "items" ALTER COLUMN "status" DROP NOT NULL, ALTER COLUMN "status" DROP DEFAULT, ALTER COLUMN version DROP NOT NULL');
+    const r = await convergeStorage(db.connect, plan, { fingerprint: "b" });
+    expect(r.blocked.map((b) => b.code)).toEqual(["STORAGE_CHANGE_BLOCKED", "STORAGE_CHANGE_BLOCKED"]);
+    expect(r.blocked[0].message).toContain("items.version is nullable, Mantle needs NOT NULL");
+    expect(r.blocked[0].message).toContain('ALTER TABLE "items" ALTER COLUMN "version" SET NOT NULL');
+    expect(r.blocked[1].message).toContain(`ALTER COLUMN "status" SET NOT NULL, ALTER COLUMN "status" SET DEFAULT 'draft'`);
+    await sql(db, `ALTER TABLE "items" ALTER COLUMN "status" SET DEFAULT 'draft', ALTER COLUMN "status" SET NOT NULL, ALTER COLUMN version SET NOT NULL`);
+    expect((await convergeStorage(db.connect, plan, { fingerprint: "b" })).blocked).toEqual([]);
+  } finally { await db.drop(); }
+}, 30_000);

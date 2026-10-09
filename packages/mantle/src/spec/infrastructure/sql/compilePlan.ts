@@ -9,7 +9,7 @@ import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type Pla
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
-import { checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
+import { viewCacheProblem, checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
@@ -191,6 +191,8 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   const views: Record<string, PlanView> = {};
   for (const { manifest: v, source } of linked.views) {
     const plan = compiled.get(v.metadata.name);
+    const cacheProblem = plan && v.spec.cache ? viewCacheProblem(plan.stmts, schemas) : undefined;
+    if (cacheProblem) diagnostics.push(validateDiagnostic({ code: "VIEW_CACHE_INVALID", severity: "error", path: `${source.sourceId}#/${source.documentIndex}/spec/cache`, source: { ...source, path: "/spec/cache" }, message: `View '${v.metadata.name}': ${cacheProblem}.` }));
     const outputs = plan ? viewOutputs(plan, schemas) : undefined;
     const columns = outputs?.columns ?? {};
     // searchFields and filterFields become conditions on the View's outputs (ADR-0032 decision 5), so each must name one
@@ -211,7 +213,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       diagnostics.push(validateDiagnostic({ code: "VIEW_UI_INVALID", severity: "error", path: `${source.sourceId}#/${source.documentIndex}/spec/uiSchema/list/columns/${i}`, source: { ...source, path: `/spec/uiSchema/list/columns/${i}` }, value: f, expected: `one of the View's outputs: ${wire.join(", ")}`,
         message: folded ? `View '${v.metadata.name}' uiSchema.list.columns names '${f}', but the row carries '${folded}': an unquoted alias folds to lower case, so write AS "${f}".` : `View '${v.metadata.name}' uiSchema.list.columns names '${f}', which the View's SELECT does not output.` }));
     }
-    if (plan) views[v.metadata.name] = { ...plan, ...(Object.keys(columns).length ? { columns } : {}), ...(v.spec.title ? { title: v.spec.title } : {}), ...(v.spec.description ? { description: v.spec.description } : {}), ...(v.spec.uiSchema ? { uiSchema: v.spec.uiSchema } : {}), inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), source: v.spec.sql, surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}) };
+    if (plan) views[v.metadata.name] = { ...plan, ...(Object.keys(columns).length ? { columns } : {}), ...(v.spec.title ? { title: v.spec.title } : {}), ...(v.spec.description ? { description: v.spec.description } : {}), ...(v.spec.uiSchema ? { uiSchema: v.spec.uiSchema } : {}), inputs: typesOf(v.spec.input), ...(v.spec.input ? { input: v.spec.input } : {}), source: v.spec.sql, surface: v.spec.surface, ...(v.spec.requires ? { requires: v.spec.requires } : {}), ...(v.spec.cache ? { sharedMaxAge: v.spec.cache.sharedMaxAge } : {}) };
   }
   const procedures: Record<string, PlanProcedure> = {};
   const declaredSchema = new Map(linked.schemas.map((x) => [x.manifest.metadata.name.toLowerCase(), x.manifest.metadata.name]));

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { chromium } from "playwright";
+import { chromium, type Browser } from "playwright";
 import { expect, it } from "vitest";
 import type { Collection, DeveloperConsoleSnapshot } from "../src/lib/types";
 
@@ -79,12 +79,18 @@ it("loads live model data only on demand through the existing guarded paths", as
       res.end((await readFile(resolve(import.meta.dirname, "../../dist/admin/index.html"), "utf8")).replace("<head>", "<head><script>localStorage.setItem('cms.preference.language','en')</script>"));
     } catch (error) { res.statusCode = 500; res.end(String(error)); }
   });
-  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
-  const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  let browser: Browser | undefined;
+  let failed = false;
   try {
+    await new Promise<void>((done, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => { server.off("error", reject); done(); });
+    });
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true, timeout: 8_000 });
     const page = await browser.newPage();
     page.setDefaultTimeout(8_000);
+    page.setDefaultNavigationTimeout(8_000);
     await page.goto(`${origin}/admin/dev/model/schemas?selected=Schema:articles`);
     await page.getByRole("tab", { name: "Live data" }).waitFor();
     expect(reads).toEqual([]);
@@ -137,8 +143,18 @@ it("loads live model data only on demand through the existing guarded paths", as
     await page.goForward();
     await mode.filter({ hasText: "System wiring" }).waitFor();
     expect(new URL(page.url()).searchParams.get("diagram")).toBe("system");
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    await browser.close();
-    await new Promise<void>((done) => server.close(() => done()));
+    const results = await Promise.allSettled([
+      browser?.close(),
+      new Promise<void>((done, reject) => {
+        server.close((error) => error ? reject(error) : done());
+        server.closeAllConnections();
+      }),
+    ]);
+    // Both cleanup attempts run; a secondary failure never replaces the test error.
+    if (!failed) for (const result of results) if (result.status === "rejected") throw result.reason;
   }
 }, 30_000);

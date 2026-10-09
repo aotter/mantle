@@ -79,6 +79,25 @@ export function hasSubLink(v: unknown): boolean {
   return Object.entries(v).some(([k, c]) => k === "SubLink" || hasSubLink(c));
 }
 
+/** Shared-cache eligibility of validated, expanded View IR; source text is display metadata, not execution. */
+export function viewCacheProblem(stmts: readonly SqlNode[], schemas: Readonly<Record<string, SqlSchemaDef>>): string | undefined {
+  const pending: unknown[] = [...stmts];
+  while (pending.length) {
+    const node = pending.pop();
+    if (!node || typeof node !== "object") continue;
+    const n = node as SqlNode;
+    const fn = n.FuncCall?.funcname?.map((x: SqlNode) => x.String.sval).join(".").replace(/^pg_catalog\./, "");
+    if (fn === "now" || fn === "auth.uid" || fn === "auth.role") return `shared caching cannot read ${fn}()`;
+    const relation = n.RangeVar;
+    if (relation?.mantle === "table") {
+      const schema = schemas[relation.relname.toLowerCase()];
+      if (schema?.ttl || (schema && !schema.publishing)) return `shared caching cannot read ${schema.ttl ? "TTL" : "operational"} Schema '${relation.relname}'`;
+    }
+    pending.push(...Object.values(n));
+  }
+  return undefined;
+}
+
 /**
  * The columns storage creates for a Schema, each with its type: the native ones, the scope field, `status` on a publishing Schema,
  * and each field (a geo field as its `_lat` and `_lng` columns). `created_at`/`updated_at` are typed per dialect, so `native`.

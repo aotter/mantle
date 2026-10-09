@@ -40,7 +40,7 @@ SQLite and on any `sqliteStorage` driver.
 |---|---|---|
 | Expressions | columns, aliases, literals, arithmetic, `\|\|`, `CASE`, `COALESCE`, `NULLIF`, `CAST` | `CAST(x AS int)` only for an integer literal: use `round(x)`. `CAST(x AS bool)` follows PostgreSQL's text rules; an integer has no cast to boolean on PostgreSQL: write `x <> 0`. `*` expands to declared fields; a bare `*` over a subquery or `json_each` is refused: name the columns |
 | Conditions | comparisons, `AND`/`OR`/`NOT`, `BETWEEN`, `IS [NOT] NULL`, `IS DISTINCT FROM`, `IN (list \| subquery)`, `[NOT] EXISTS`, `LIKE … ESCAPE` | `LIKE` is case-insensitive (SQLite). An input array in `IN` binds once. A date-time, date or boolean column (and `created_at`, `updated_at`) is not compared with a bare string: write `CAST('…' AS timestamptz)`, `true`, or bind an input |
-| Relations | one Schema, `INNER`/`LEFT JOIN … ON` (self-joins too), a subquery in `FROM`, `json_each(<input or column>)` on D1; on PostgreSQL `jsonb_array_elements_text(<input or column>) WITH ORDINALITY AS j(value, n)` | the only comma join is `t, json_each(t.col)` on D1 (PostgreSQL: `t, jsonb_array_elements_text(t.col) WITH ORDINALITY AS j(value, n)`, [SQLite to PostgreSQL rewrites](../concepts/runtime-and-adapters.md#the-postgresql-dialect)) |
+| Relations | one Schema, `INNER`/`LEFT JOIN … ON` (self-joins too), a subquery in `FROM`, `json_each(<input or column>)` on D1; on PostgreSQL `jsonb_array_elements_text(<input or column>) WITH ORDINALITY AS j(value, n)` | the only comma join is `t, json_each(t.col)` on D1 (PostgreSQL: `t, jsonb_array_elements_text(t.col) WITH ORDINALITY AS j(value, n)`, [SQLite to PostgreSQL rewrites](../concepts/runtime-and-adapters.md#the-postgresql-dialect)). Paging appends the first relation's `id`; a subquery or CTE first in `FROM` must output it. JOIN fanout can repeat that key inside or outside a subquery: supply a unique full sort order for paging. The compiler does not prove that a derived `id` is unique. A row source alone first in `FROM` is keyed by its own `id` or ordinality |
 | Subqueries | scalar and correlated | |
 | Aggregation | `count`, `sum`, `min`, `max`, `avg`, `count(DISTINCT)`, `json_group_array([DISTINCT])`, `json_group_object`, `GROUP BY`, `HAVING` | a selected column is grouped or aggregated |
 | Windows | `row_number()`, `rank()`, `sum`/`count … OVER (PARTITION BY … ORDER BY …)` | no frame clause |
@@ -78,9 +78,11 @@ On PostgreSQL a View may also use:
 | Time | `ts AT TIME ZONE 'Asia/Taipei'`; `date_trunc` adds `minute` and `quarter`; `extract` adds `minute`, `quarter`, `week`, `isoyear`, `isodow`, `doy`, `epoch` |
 | Casts | any expression to `int4`, `int8`, `numeric(p, s)`, `date`, `timestamptz`, `jsonb`; a text literal compared with a date-time column is cast, as PostgreSQL does |
 
-Every statement on PostgreSQL has a `statement_timeout` of at most 10 seconds
-(`postgresStorage({ statementTimeoutMs })`); a View runs under the role's own,
-which boot requires to be set and no larger.
+A PostgreSQL View runs under the role's `statement_timeout`. With the default
+`postgresStorage({ statementTimeoutMs: 10_000 })`, boot requires that role
+limit to be positive and no larger than 10 seconds. Setting the option to
+zero disables that boot requirement, without changing the role's own limit.
+See [PostgreSQL runtime settings](../concepts/runtime-and-adapters.md#the-postgresql-dialect).
 
 ### Reading another View
 
@@ -130,6 +132,42 @@ Every surface takes `limit` (default 50, maximum 500) and `cursor`, and answers
 rows exist; pass it back unchanged. A cursor is bound to its View and order.
 REST coerces each `input` query parameter to its declared type.
 
+### Author a unique order for the result
+
+Keyset paging requires the complete `ORDER BY` to distinguish every result
+row. The appended `id` breaks ties for a single Schema row; it does not prove
+uniqueness after a one-to-many join or inside a derived table, CTE or another
+View. A column named `id` in a subquery can repeat. Mantle does not check the
+result for duplicate sort keys or invent a unique key for arbitrary SQL.
+
+For example, when an item has several orders, order by both identities. This
+query works on D1 and PostgreSQL; `items` declares `name`, and `orders`
+declares `item_id`:
+
+```sql
+SELECT s.id, s.name, s.order_id
+FROM (
+  SELECT i.id, i.name, o.id AS order_id
+  FROM items i JOIN orders o ON o.item_id = i.id
+) s
+ORDER BY s.id, s.order_id
+```
+
+Here `(s.id, s.order_id)` identifies each joined row. `ORDER BY s.id` alone
+does not: a later page can skip the other orders for the same item. For a
+row source, retain its element key as well as the parent key in the outer
+ordering; repeated element values are not identities. A nullable key follows
+the dialect's NULL ordering, but NULL handling does not make a repeated tuple
+unique. For grouped or set-operation results, reason about the resulting
+rows rather than assuming an input table's `id` still identifies them.
+
+Cursor paging of a result without a unique complete ordering is unsupported,
+even if its SQL compiles. The compiler does not generally prove or refuse
+that case. Add the keys that identify the result rows before using cursor
+paging. An authored `LIMIT` also needs a deterministic order at its
+boundary. Paging is not a snapshot: changing the data or sort values between
+requests can change which rows subsequent pages return.
+
 ## `uiSchema` (staff Views)
 
 | Key | Effect |
@@ -151,8 +189,18 @@ refused (`VIEW_UI_INVALID`).
 ## `cache`
 
 `{ sharedMaxAge: 1–86400 }` is accepted only on an unguarded public View whose
-SQL reads neither `auth.*` nor `now()` (`VIEW_CACHE_INVALID`). The 0.2.0 REST
-surface does not send cache headers yet; cache in front of it if you need to.
+expanded SQL reads neither `auth.*` nor `now()`, nor TTL or operational Schemas
+(`VIEW_CACHE_INVALID`). Generation and uploaded-plan verification check executable IR,
+including inlined internal Views; comments, literals and display source do not decide
+eligibility. The annotation is the author's promise that this response may be shared
+for the chosen duration, not a proof of arbitrary native SQL immutability (for example,
+implicit time-dependent casts). The value is
+carried into the plan, and the REST surface answers an anonymous caller of such
+a View with `Cache-Control: public, s-maxage=<n>` and `Vary: authorization, cookie`,
+so a shared cache does not answer a signed-in request with it. A cached answer
+lives until it expires, across a deploy too: choose `<n>` for that. A signed-in caller's
+response and every error keep `private, no-store`. The MCP surface sends no
+cache header.
 
 ## Diagnostics
 

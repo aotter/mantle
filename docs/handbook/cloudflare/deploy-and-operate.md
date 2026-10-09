@@ -72,6 +72,39 @@ If a host applies schema changes only through its own migration mechanism,
 take the SQL `mantle generate --check --database` prints and deliver it
 through that mechanism; boot then finds the database converged.
 
+### PostgreSQL convergence and long index builds
+
+Concurrent PostgreSQL boots serialize convergence with a transaction-level
+advisory lock. A waiter rereads the fingerprint after acquiring it, so it can
+skip work the preceding boot committed. Both that wait and each DDL lock wait
+currently use a one-second `lock_timeout`, with up to five attempts and
+jitter between retries. Exhausting the attempts reports
+`STORAGE_CHANGE_BLOCKED`; while the target fingerprint still differs,
+subsequent attempts through the same connection factory and target fail fast
+for ten seconds. This is not a shared cooldown across all isolates.
+
+The diagnostic distinguishes another boot still converging from a transaction
+or query holding a table lock. Convergence disables `statement_timeout` so an
+index build can run longer than the lock-wait budget. A healthy build can
+therefore outlast the waiters: they may refuse to serve until a later boot
+sees its committed fingerprint. The finite lock retries do not bound the
+duration of the index build or guarantee uninterrupted service on deploy.
+
+Plan large index changes before deploying the new plan. PostgreSQL can build
+an index with `CREATE INDEX CONCURRENTLY` outside a transaction; use the exact
+name, columns, order and uniqueness expected by the plan. For an unscoped
+Schema named `items`, Mantle's default list index is:
+
+```sql
+CREATE INDEX CONCURRENTLY "_mantle_ix_items_updated"
+  ON "items" ("updated_at", "id");
+```
+
+For a scoped Schema the scope column leads this index. Check that a concurrent
+build completed successfully and produced a valid index before deploying;
+an interrupted build can leave an invalid index behind. Run this preparation
+through your PostgreSQL deployment tooling before uploading the new Worker.
+
 ## Schedules
 
 `wrangler.jsonc` `triggers.crons` holds the Cloudflare spelling of every

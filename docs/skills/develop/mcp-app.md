@@ -73,7 +73,8 @@ at the exact version in the installed Core's `peerDependencies`, React and the k
 
 Add the App's build to the develop loop, then: `tools/list` from a client that
 declares the MCP Apps extension shows the rendered tool with
-`_meta.ui.resourceUri`; `resources/read` of that URI returns your HTML with
+`_meta.ui.resourceUri` (and `_meta["openai/outputTemplate"]`, the same URI, for
+ChatGPT); `resources/read` of that URI returns your HTML with
 `#mantle-catalog`; a call to the tool returns its result with
 `_meta["net.aotter.mantle/tool"]`. Then open it in a host that renders MCP
 Apps, signed in as a member.
