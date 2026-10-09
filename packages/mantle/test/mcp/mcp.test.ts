@@ -286,6 +286,11 @@ spec: { surface: public, requires: { guard: { procedure: observation-guard } }, 
     expect((await rpc("public", anon, "tools/list")).status).toBe(200);
   });
 
+  it("an app-only tool carries the App's visibility and not ChatGPT's outputTemplate, which would show it to the model", async () => {
+    const tools = (await rpc("public", user("c1"), "tools/list", {}, { apps: { resources: [{ name: "notes", uri: "ui://notes", html: "<html></html>", appOnly: ["ranked"] }] } })).data.result.tools;
+    expect(tools.find((t: any) => t.name === "ranked")._meta).toEqual({ ui: { resourceUri: "ui://notes", visibility: ["app"] }, "ui/resourceUri": "ui://notes" });
+  });
+
   it("sends server instructions at initialize when set, and none otherwise", async () => {
     const init = { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } };
     expect((await rpc("public", user("c1"), "initialize", init, { instructions: "Read notes before adding." })).data.result.instructions).toBe("Read notes before adding.");

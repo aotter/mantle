@@ -104,7 +104,8 @@ resources beside the tools. Each resource names the tools whose results it
 `renders`, and may name `appOnly` View tools that only the App can call. A
 client without MCP Apps support never sees app-only tools. An App tool's
 `_meta` carries `ui.resourceUri` and, for ChatGPT, the same URI under
-`openai/outputTemplate`; other tools get neither. The HTML is a static
+`openai/outputTemplate` (not on an app-only tool: ChatGPT does not read
+`visibility`); other tools get neither. The HTML is a static
 asset; caller data travels only in tool results.
 
 The preset serves Mantle's App on `/mcp/staff`:
