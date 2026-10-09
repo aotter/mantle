@@ -69,24 +69,6 @@ describe("SchemaFields values and access", () => {
     expect(clearedValue({ type: "string", enum: ["a", null] })).toBeNull();
   });
 
-  it("clears unless required, and hints a default for a missing value without selecting it", async () => {
-    const { enumChoice } = await import("../src/react/fields.js");
-    const grid = { type: "string", enum: ["grid", "carousel"] } as const;
-    const withDefault = { ...grid, default: "grid" };
-    expect(enumChoice(grid, undefined, false)).toEqual({ selected: "__empty__", clearable: true });
-    expect(enumChoice(grid, undefined, true)).toEqual({ selected: "", clearable: false });
-    expect(enumChoice({ ...grid, enum: ["grid", null] }, undefined, true).clearable).toBe(true);
-    // required: nothing selected, the default is the placeholder's hint
-    expect(enumChoice(withDefault, undefined, true)).toEqual({ selected: "", clearable: false, defaultOption: "grid" });
-    // optional and nullable: still clearable, and the empty item carries the hint
-    expect(enumChoice({ ...withDefault, nullable: true }, undefined, false)).toEqual({ selected: "__empty__", clearable: true, defaultOption: "grid" });
-    // a stored null is a choice, and a stored value is shown as itself
-    expect(enumChoice(withDefault, null, false)).toEqual({ selected: "__empty__", clearable: true });
-    expect(enumChoice(withDefault, "carousel", true)).toEqual({ selected: "carousel", clearable: false });
-    // a default that is not an option is ignored
-    expect(enumChoice({ ...grid, default: "list" }, undefined, true)).toEqual({ selected: "", clearable: false });
-  });
-
   it("shows a readOnly property read-only, and links each label to its control and description", () => {
     const html = renderToStaticMarkup(<SchemaFields schema={{ type: "object", required: ["note"], properties: { locked: { type: "string", readOnly: true }, note: { type: "string", description: "Why" } } }} value={{ locked: "x" }} onChange={() => {}} language="en" />);
     expect(html).toMatch(/role="textbox" aria-readonly="true"/);

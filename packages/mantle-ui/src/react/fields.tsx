@@ -23,8 +23,8 @@ import {
 /** Every string the fields render; hosts pass their own translations. */
 export interface FieldLabels {
   readonly emptyOption: string;
-  /** The stand-in for a missing value; `{option}` is the default option's label. Optional so host label sets keep compiling. */
-  readonly defaultOption?: string;
+  /** The choice that clears an optional enum; a host label set without it falls back to `emptyOption`. */
+  readonly clearOption?: string;
   readonly chooseOption: string;
   readonly boolean: string;
   readonly dateTimeSelect: string;
@@ -34,8 +34,8 @@ export interface FieldLabels {
 }
 
 export const defaultFieldLabels: FieldLabels = {
-  emptyOption: "Not set",
-  defaultOption: "Default ({option})",
+  emptyOption: "No value",
+  clearOption: "Not set",
   chooseOption: "Choose…",
   boolean: "Yes",
   dateTimeSelect: "Pick a date",
@@ -119,9 +119,8 @@ function SchemaField(props: SchemaFieldsProps & {
   const setValue = (next: unknown): void => props.onChange(writePath(rootValue, path, next));
   // the runtime owns bound values, and a readOnly property is not the client's to set: the form shows both, read-only
   const readOnly = typeof schema["x-mantle-bind"] === "string" || schema.readOnly === true;
+  const nullable = isNullable(schema);
   const cleared = clearedValue(schema);
-  const choice = enumChoice(schema, value, required);
-  const defaultText = choice.defaultOption === undefined ? undefined : (labels.defaultOption ?? defaultFieldLabels.defaultOption!).replace("{option}", optionLabel(schema, choice.defaultOption, language, canonical));
   const id = React.useId();
   const labelId = `${id}-label`;
   const descriptionId = `${id}-description`;
@@ -149,15 +148,16 @@ function SchemaField(props: SchemaFieldsProps & {
         </p>
       ) : schema.enum || enumOptions(schema) ? (
         <Select
-          value={choice.selected}
+          // a required field has no empty choice unless null is one of its values: it starts unchosen and the person picks one
+          value={stringForInput(value) || (required && !nullable ? "" : "__empty__")}
           // the option's declared value, so a number stays a number
           onValueChange={(next) => setValue(next === "__empty__" ? cleared : optionValue(schema, next))}
         >
           <SelectTrigger {...control} className="w-full" aria-label={label}>
-            <SelectValue placeholder={choice.clearable ? labels.chooseOption : defaultText ?? labels.chooseOption} />
+            <SelectValue placeholder={labels.chooseOption} />
           </SelectTrigger>
           <SelectContent>
-            {choice.clearable ? <SelectItem value="__empty__">{defaultText ?? labels.emptyOption}</SelectItem> : null}
+            {required && !nullable ? null : <SelectItem value="__empty__">{labels.clearOption ?? labels.emptyOption}</SelectItem>}
             {(enumOptions(schema) ?? schema.enum!.filter((v) => v !== null).map((v) => ({ value: String(v) }))).map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {optionLabel(schema, option.value, language, canonical)}
@@ -423,20 +423,6 @@ export function applyFieldEdits(controller: { edit(field: string, value: unknown
 }
 
 const isNullable = (schema: FieldSchema) => schema.nullable === true || (schema.enum ?? []).includes(null) || [schema.type].flat().includes("null");
-
-/**
- * What an enum Select shows: a required field has no empty choice unless null is one of its values (it starts unchosen
- * and the person picks one); anything else can be cleared. A missing value (undefined, not null) with a declared default
- * that is one of the options is hinted, never selected: the server applies it, and picking it must still change the value.
- */
-export function enumChoice(schema: FieldSchema, value: unknown, required: boolean): { readonly selected: string; readonly clearable: boolean; readonly defaultOption?: string } {
-  const clearable = !(required && !isNullable(schema));
-  const selected = stringForInput(value) || (clearable ? "__empty__" : "");
-  if (value !== undefined || schema.default === undefined || schema.default === null) return { selected, clearable };
-  const fallback = String(schema.default);
-  const options = enumOptions(schema)?.map((option) => option.value) ?? schema.enum?.filter((v) => v !== null).map(String);
-  return options?.includes(fallback) ? { selected, clearable, defaultOption: fallback } : { selected, clearable };
-}
 
 /** A cleared field: null where null is one of its values, else left out of the input. */
 export function clearedValue(schema: FieldSchema): null | undefined {
