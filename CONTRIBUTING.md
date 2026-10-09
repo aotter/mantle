@@ -26,6 +26,13 @@ bindings project typed lower-camel properties over the same plan; they are a DX
 option, not a prerequisite for embedding Core. Public APIs must remain usable
 and understandable by human engineers without a generated Starter.
 
+[ADR-0040](docs/adr/0040-thin-native-toolkit.md) defines the responsibility
+boundary: authors and their coding agents own application decisions; Mantle
+faithfully compiles and executes the declared contract over native hosts and
+dialects. Keep Store clean, reuse native resources for their supported lifetime,
+and justify added query work or runtime state. Existing validation,
+authorization and transaction guarantees remain required.
+
 The package topology is:
 
 | Package | Responsibility |
