@@ -498,6 +498,7 @@ export function SchemaFields({
 }): React.ReactElement {
   const labels: FieldLabels = {
     emptyOption: t(language, "entryEdit.emptyOption"),
+    defaultOption: t(language, "entryEdit.defaultOption"),
     chooseOption: t(language, "entryEdit.chooseOption"),
     boolean: t(language, "entryEdit.boolean"),
     dateTimeSelect: t(language, "entryEdit.dateTime.select"),
