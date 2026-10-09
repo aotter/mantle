@@ -324,15 +324,15 @@ function selectIn(n: N, c: C): N {
       if (cte && !cteOutputs(cte).includes('id')) throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a CTE, needs the CTE to output id`);
       // a row source first in FROM has no table's id before it: its own key orders it (#1402)
       const extra = firstAlias ? [col(firstAlias, 'id')] : [];
-      // ponytail: a table after a row source first in FROM, and a subquery or CTE whose id fans out (a JOIN in it), still repeat
-      // the key (#1402); the upgrade is a key per relation that a LEFT JOIN's NULL cannot break, or a refusal at generate time
+      // A JOIN can repeat the first relation's id, including inside a subquery or CTE.
+      // Authors must supply a unique full sort order for fanout; this does not prove its uniqueness.
       for (const f of n.fromClause ?? []) for (const r of relsOf(f)) {
         const je = r.RangeFunction;
         if (!je) continue;
         const fname = je.functions[0]?.List?.items?.[0]?.FuncCall?.funcname?.at(-1)?.String?.sval;
         // json_each's own `id` orders its elements; PostgreSQL's row sources have none, so a paged one is keyed by its ordinality
-        // an unaliased json_each alone in FROM is keyed by its own unqualified `id`
-        if (fname === 'json_each') { if (je.alias) extra.push(col(je.alias.aliasname, 'id')); else if (r === first && rels.length === 1 && n.fromClause.length === 1) extra.push(col('id')); continue; }
+        // Qualify even a bare json_each's native key so an output alias named id cannot shadow it.
+        if (fname === 'json_each') { if (je.alias) extra.push(col(je.alias.aliasname, 'id')); else if (r === first && rels.length === 1 && n.fromClause.length === 1) extra.push(col('json_each', 'id')); continue; }
         if (!je.alias || !je.ordinality) throw new Refused('SQL_SHAPE', `ordering a row source (${fname}) needs an alias and WITH ORDINALITY: write ${fname}(...) WITH ORDINALITY AS j(value, n)`);
         // the ordinality column is named by the list's extra entry after the function's own columns (one, or two for jsonb_each*), else `ordinality`
         const own = String(fname).startsWith('jsonb_each') ? 2 : 1;

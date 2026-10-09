@@ -93,3 +93,30 @@ it("a paged View whose first relation is json_each loses no row (#1402)", async 
     expect(all).toEqual(["x", "x", "z"]);
   } finally { driver.db.close(); }
 });
+
+it("a json_each native paging key is not shadowed by an output named id (#1402)", async () => {
+  const { boot, caller, program, runView, site } = await import("../../src/testing/harness.js");
+  const driver = nodeSqlite();
+  try {
+    const s = site(await boot({ storage: sqliteStorage(driver), driver }));
+    for (const sql of [
+      `SELECT value AS id FROM json_each('["z","x","x"]') ORDER BY id`,
+      `SELECT value AS id FROM json_each('["z","x","x"]') ORDER BY value`,
+      `SELECT value AS id FROM json_each('["z","x","x"]') ORDER BY 1`,
+      `SELECT j.value AS id FROM json_each('["z","x","x"]') j ORDER BY id`,
+    ]) {
+      const p = await program("view", sql);
+      for (const pageSize of [1, 2]) {
+        const all: unknown[] = [];
+        let cursor: unknown[] | undefined;
+        for (let i = 0; i < 6; i++) {
+          const page = await runView(s, p, caller(), { cursor, pageSize });
+          all.push(...page.rows);
+          if (!(cursor = page.next)) break;
+        }
+        expect(all, `${sql}; pageSize=${pageSize}`).toEqual([{ id: "x" }, { id: "x" }, { id: "z" }]);
+        expect(cursor, `${sql}; pageSize=${pageSize}`).toBeUndefined();
+      }
+    }
+  } finally { driver.db.close(); }
+});
