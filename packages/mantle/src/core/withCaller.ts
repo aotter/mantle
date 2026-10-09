@@ -1,6 +1,6 @@
 import { makeDiagnostic, redactForWire, type DiagnosticCode } from "../spec/kernel/index.js";
 import type { CallerResolver } from "./caller.js";
-import type { Surface } from "./service.js";
+import type { MantleRuntime, Surface } from "./service.js";
 import { observe } from "./observation.js";
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -29,9 +29,10 @@ export interface CallerRefusal {
  * The one authentication boundary of a service's entry (ADR-0032 decision 8): resolve the Caller once per request, then run the
  * surface. An invalid credential is answered here, before any surface runs, and is never treated as anonymous. A cookie session is
  * ambient authority, so it may not mutate across origins; a bearer token is sent on purpose and is not held to that.
+ * The entry's optional current runtime is forwarded unchanged, so cached routes do not capture another request's execution context.
  */
-export function withCaller(resolve: CallerResolver, surface: Surface, options: WithCallerOptions = {}): (request: Request) => Promise<Response> {
-  return async (request) => {
+export function withCaller(resolve: CallerResolver, surface: Surface, options: WithCallerOptions = {}): (request: Request, executionRuntime?: MantleRuntime) => Promise<Response> {
+  return async (request, executionRuntime) => {
     const rejected = (reason: CallerRefusal["reason"], status: 401 | 403, code: DiagnosticCode, message: string, path: string, challenge?: string) => {
       if (options.onRefusal) observe(options.onRefusal, { at: Date.now(), status, reason });
       return refuse(status, code, message, path, challenge);
@@ -45,7 +46,7 @@ export function withCaller(resolve: CallerResolver, surface: Surface, options: W
         if ((!site && !origin) || (site && site !== "same-origin" && site !== "none") || (origin && origin !== new URL(request.url).origin))
           return rejected("origin", 403, "AUTH_DENIED", "Cross-origin session mutation rejected.", "request:origin");
       }
-      return surface(request, r.caller);
+      return surface(request, r.caller, executionRuntime);
     }
     const status = r.status ?? 401;
     const challenge = r.challenge && options.resourceMetadata ? `${r.challenge}, resource_metadata="${options.resourceMetadata}"` : r.challenge ?? (options.resourceMetadata ? `Bearer resource_metadata="${options.resourceMetadata}"` : undefined);

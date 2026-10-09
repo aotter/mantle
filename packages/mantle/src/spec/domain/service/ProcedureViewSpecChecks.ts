@@ -57,11 +57,10 @@ function validateViewCache(raw: unknown, view: ViewManifest, idx: number): void 
       "VIEW_CACHE_INVALID",
     );
   }
-  // A shared cache must not hold a caller- or time-dependent answer. A match inside a
-  // literal over-rejects, which is the safe direction.
-  if (view.spec.surface !== "public" || view.spec.requires || /\bauth\s*\.|\bnow\s*\(/i.test(view.spec.sql)) {
+  // SQL eligibility is checked on the expanded IR by compilePlan.
+  if (view.spec.surface !== "public" || view.spec.requires) {
     throw new ManifestParseError(
-      "View.spec.cache requires an unguarded public View whose sql reads neither auth.* nor now()",
+      "View.spec.cache requires an unguarded public View",
       idx,
       "/spec/cache",
       "VIEW_CACHE_INVALID",

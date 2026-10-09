@@ -5,7 +5,7 @@ import { partitionManifests } from "./ManifestPartition.js";
 import { bestMatch, manifestPath, type ManifestFilePaths } from "./ManifestPathDiagnoser.js";
 import { checkSchemaNavTargets } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
-import { checkGuards, checkMcpToolNameCollisions, checkProcedureTarget, checkSqlHandler, checkTriggerRefs, checkViewRefs } from "./TriggerGraphChecks.js";
+import { checkGuards, checkMcpToolNameCollisions, checkProcedureTarget, checkSqlHandler, checkTriggerRefs } from "./TriggerGraphChecks.js";
 
 /**
  * Package-private implementation of the pure graph rules. The public sealed
@@ -35,10 +35,6 @@ export function validateManifestGraph(
 
   diags.push(...checkTranslatesReferences(partitioned.schemas, "validate", filePaths));
   diags.push(...checkSchemaNavTargetsGraph(partitioned.schemas, schemasByName, filePaths));
-
-  for (const v of partitioned.views) {
-    diags.push(...checkViewRefs(v, schemasByName, filePaths));
-  }
 
   for (const s of partitioned.schemas) {
     diags.push(...checkMantleRefs("Schema", s.metadata.name, "/spec/schema", s.spec.schema, schemasByName, filePaths));

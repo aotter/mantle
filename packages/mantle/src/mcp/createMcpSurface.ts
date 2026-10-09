@@ -28,6 +28,8 @@ export interface McpSurfaceOptions {
   readonly resourceMetadata?: string;
   readonly serverInfo?: { readonly name: string; readonly title?: string; readonly version?: string };
   readonly apps?: McpApps;
+  /** Server instructions sent at initialize: how the tools fit together, for every client. Absent when not set. */
+  readonly instructions?: string;
   /** POST body bound in bytes. Defaults to 1 MiB. */
   readonly maxRequestBodySize?: number;
   /** Language tried first when a description is localized. Defaults to `en`. */
@@ -45,6 +47,7 @@ export interface McpSurfaceOptions {
 
 const CONTEXT_KEY = "mantle.caller";
 const UI_KEY = "mantle.clientUi";
+const RUNTIME_KEY = "mantle.runtime";
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** The SDK advertises each schema and accepts the value as given: the runtime validates once, so every source reports the same Diagnostic. */
@@ -92,8 +95,8 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
 
   const registers = (name: string, ui: ClientUiSupport) => byName.has(name) && !(apps.appOnly.has(name) && (ui === "unsupported" || apps.resources.length === 0));
 
-  const build = (caller: Caller, ui: ClientUiSupport) => {
-    const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } } });
+  const build = (caller: Caller, ui: ClientUiSupport, executionRuntime: MantleRuntime) => {
+    const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
     const withApps = ui !== "unsupported" && apps.resources.length > 0;
     if (withApps) for (const r of apps.resources) {
       const meta = appMeta(r);
@@ -125,9 +128,9 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
             if (denied) throw new DiagnosticError(denied);
             return result(await tool.run(input));
           }
-          if (tool.kind === "procedure") return result(await runtime.invokeProcedure({ procedure: tool.source, input, caller, cause }));
+          if (tool.kind === "procedure") return result(await executionRuntime.invokeProcedure({ procedure: tool.source, input, caller, cause }));
           const { limit, cursor, ...rest } = input;
-          return result(await runtime.store.as(caller, cause).view(tool.source, { input: rest, ...(limit !== undefined ? { limit: limit as number } : {}), ...(cursor !== undefined ? { cursor: cursor as string } : {}) }));
+          return result(await executionRuntime.store.as(caller, cause).view(tool.source, { input: rest, ...(limit !== undefined ? { limit: limit as number } : {}), ...(cursor !== undefined ? { cursor: cursor as string } : {}) }));
         } catch (e) {
           code = e instanceof DiagnosticError ? e.diagnostic.code : "INTERNAL_ERROR";
           outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
@@ -141,8 +144,11 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
       const config = { ...(tool.title ? { title: tool.title } : {}), description: tool.description, inputSchema: schemaOf(tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schemaOf(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) };
       const uri = withApps ? apps.appOnly.get(tool.name) ?? apps.rendersIn.get(tool.name) : undefined;
       if (!uri) { server.registerTool(tool.name, config, run); continue; }
-      // writes both the `ui` object and the legacy flat key, so older hosts find the resource too
-      registerAppTool(server, tool.name, { ...config, _meta: { ui: { resourceUri: uri, ...(apps.appOnly.has(tool.name) ? { visibility: ["app"] } : {}) } } } as Parameters<typeof registerAppTool>[2], run as never);
+      // writes both the `ui` object and the legacy flat key, so older hosts find the resource too. `openai/outputTemplate` is
+      // ChatGPT's key for the same resource; an app-only tool goes without it, since ChatGPT does not read `visibility`
+      const appOnly = apps.appOnly.has(tool.name);
+      const meta: Record<string, unknown> = { ...(appOnly ? {} : { "openai/outputTemplate": uri }), ui: { resourceUri: uri, ...(appOnly ? { visibility: ["app"] } : {}) } };
+      registerAppTool(server, tool.name, { ...config, _meta: meta } as Parameters<typeof registerAppTool>[2], run as never);
     }
     return server;
   };
@@ -150,10 +156,11 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
   const sdk = createMcpHandler(({ authInfo }) => {
     const c = authInfo?.extra?.[CONTEXT_KEY] as Caller | undefined;
     const ui = authInfo?.extra?.[UI_KEY];
-    return build(c ?? { kind: "anonymous" }, ui === "supported" || ui === "unsupported" ? ui : "unknown");
+    const executionRuntime = (authInfo?.extra?.[RUNTIME_KEY] as MantleRuntime | undefined) ?? runtime;
+    return build(c ?? { kind: "anonymous" }, ui === "supported" || ui === "unsupported" ? ui : "unknown", executionRuntime);
   }, { legacy: "stateless", maxRequestBodySize: maxBody, maxSubscriptions: 32, onerror: (e) => console.error("[mantle mcp] request failed", e) });
 
-  const surface: Surface = async (request, caller) => {
+  const surface: Surface = async (request, caller, executionRuntime = runtime) => {
     const url = new URL(request.url);
     if ((url.pathname.replace(/\/+$/, "") || "/") !== base) return Response.json({ error: { code: "NOT_FOUND", message: "no such route" } }, { status: 404 });
     if (caller.kind !== "user" && caller.kind !== "anonymous") return challenge(403, undefined, true);
@@ -166,7 +173,7 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     // the staff surface is closed to everyone but staff, for listing as much as for calling
     // a role is not a scope: no challenge, or a client would re-authorize in a loop
     if (options.surface === "staff" && caller.kind === "user" && caller.role === null) return challenge(403, undefined, true);
-    const authInfo: AuthInfo = { token: "", clientId: caller.kind === "user" ? caller.clientId ?? "" : "", scopes: caller.kind === "user" ? [...caller.scopes] : [], extra: { [CONTEXT_KEY]: caller } };
+    const authInfo: AuthInfo = { token: "", clientId: caller.kind === "user" ? caller.clientId ?? "" : "", scopes: caller.kind === "user" ? [...caller.scopes] : [], extra: { [CONTEXT_KEY]: caller, [RUNTIME_KEY]: executionRuntime } };
     if (request.method.toUpperCase() !== "POST" || !isJsonContentType(request.headers.get("content-type"))) return sdk.fetch(request, { authInfo });
     let text: string;
     try {

@@ -175,12 +175,12 @@ it.skipIf(!PG_URL)("a paged View over jsonb row sources is keyed by their ordina
   useCompileSide(pgCompile);
   try {
     const s = site(await boot({ storage: postgresStorage({ connect: db.connect }), driver: pgDatabaseDriver(db.connect) }));
-    const pageAll = async (sql: string) => {
+    const pageAll = async (sql: string, pageSize = 1) => {
       const p = await program("view", sql);
       const got: string[] = [];
       let cursor;
       for (let i = 0; i < 12; i++) {
-        const page = await runView(s, p, caller(), { cursor, pageSize: 1 });
+        const page = await runView(s, p, caller(), { cursor, pageSize });
         got.push(...page.rows.map((r) => Object.values(r).join("/")));
         if (!page.next) break;
         cursor = page.next;
@@ -195,6 +195,12 @@ it.skipIf(!PG_URL)("a paged View over jsonb row sources is keyed by their ordina
     const two = await pageAll(`SELECT i.id, j.value, k.value AS v2 FROM items i, ${src}, jsonb_array_elements_text(i.tags) WITH ORDINALITY AS k(value, n) ORDER BY i.id`);
     expect(two).toHaveLength(7);
     expect(new Set(two).size).toBe(7);
+    // a row source first in FROM is keyed by its ordinality alone (#1402)
+    expect(await pageAll(`SELECT j.value FROM jsonb_array_elements_text('["z","x","x"]'::jsonb) WITH ORDINALITY AS j(value, n) ORDER BY j.value`)).toEqual(["x", "x", "z"]);
+    // Output aliases must not shadow the qualified native ordinality key.
+    for (const alias of ["id", "n"]) for (const pageSize of [1, 2]) {
+      expect(await pageAll(`SELECT j.value AS ${alias} FROM jsonb_array_elements_text('["z","x","x"]'::jsonb) WITH ORDINALITY AS j(value, n) ORDER BY ${alias}`, pageSize)).toEqual(["x", "x", "z"]);
+    }
     const ask = /alias and WITH ORDINALITY/;
     await expect(program("view", "SELECT i.id, j.value AS tag FROM items i, jsonb_array_elements_text(i.tags) AS j(value) ORDER BY i.id")).rejects.toThrow(ask);
     await expect(program("view", "SELECT i.id FROM items i JOIN jsonb_array_elements_text(i.tags) AS j(value) ON true ORDER BY i.id")).rejects.toThrow(ask);

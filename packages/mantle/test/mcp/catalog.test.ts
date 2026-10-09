@@ -117,8 +117,11 @@ describe("planApp on the staff surface", () => {
   };
 
   it("renders every View tool, serves the HTML with the catalog, and each rendered result names its tool", async () => {
-    const tools = (await rpc("tools/list", {})).tools as { name: string; _meta?: { ui?: { resourceUri?: string } } }[];
+    const tools = (await rpc("tools/list", {})).tools as { name: string; _meta?: { ui?: { resourceUri?: string } } & Record<string, unknown> }[];
     expect(Object.fromEntries(tools.map((t) => [t.name, t._meta?.ui?.resourceUri ?? null]))).toEqual({ approve: null, pending: "ui://mantle/staff", totals: "ui://mantle/staff", joined: "ui://mantle/staff", aliased: "ui://mantle/staff" });
+    const metas = Object.fromEntries(tools.map((t) => [t.name, t._meta]));
+    expect(metas.pending).toMatchObject({ "openai/outputTemplate": "ui://mantle/staff", ui: { resourceUri: "ui://mantle/staff" } });
+    expect(metas.approve).toBeUndefined();
     const [content] = (await rpc("resources/read", { uri: "ui://mantle/staff" })).contents;
     expect(content.mimeType).toBe(RESOURCE_MIME_TYPE);
     expect(content.text).toContain('"actions":{"approve":{"capability":"approve"');

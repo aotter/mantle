@@ -94,11 +94,9 @@ export function checkMessages(plan: Readonly<Record<string, StorageSchema>>): Ma
 }
 
 /**
- * Text compares and sorts by code point, whatever collation the database was created with.
- * ponytail: this began as D1 emulation (ADR-0039 keeps the tiebreak in the column's own collation, so indexes still serve it). Dropping it
- * only changes tables created from now on and leaves the earlier ones in "C", so one Schema family would sort text two ways by age
- * (and a database whose collation is en_US sorts ids and names by locale); the upgrade is a deliberate rebuild of text columns and
- * their indexes in one release, which needs the migration this PR avoids. Tracked as a follow-up issue.
+ * Newly created text columns retain C for compatibility (#1400). Existing columns keep their actual collation;
+ * paging and indexes follow it (ADR-0039). A future default change is a separate compatibility decision,
+ * and any existing-column/index migration belongs to the operator (ADR-0040).
  */
 const ddlType = (type: string) => (type === "text" ? 'text COLLATE "C"' : type);
 const createTable = (name: string, s: StorageSchema) => `CREATE TABLE ${q(name)} (${[
@@ -131,7 +129,7 @@ async function diff(client: PgClient, plan: Readonly<Record<string, StorageSchem
   const [tables, owned, cols, idx, chk] = (await sequentially([
     "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema()",
     "SELECT name FROM _mantle_schema_tables",
-    "SELECT table_name, column_name, udt_name, numeric_precision, numeric_scale FROM information_schema.columns WHERE table_schema = current_schema()",
+    "SELECT table_name, column_name, udt_name, numeric_precision, numeric_scale, is_nullable FROM information_schema.columns WHERE table_schema = current_schema()",
     `SELECT t.relname AS tbl, i.relname AS name, ix.indisunique AS uniq, ix.indisprimary AS pk, ix.indpred IS NOT NULL AS partial,
         (SELECT string_agg(a.attname, ',' ORDER BY k.ord) FROM unnest(ix.indkey) WITH ORDINALITY k(attnum, ord) JOIN pg_attribute a ON a.attrelid = ix.indrelid AND a.attnum = k.attnum) AS cols
       FROM pg_index ix JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_class t ON t.oid = ix.indrelid WHERE t.relnamespace = current_schema()::regnamespace`,
@@ -159,17 +157,26 @@ async function diff(client: PgClient, plan: Readonly<Record<string, StorageSchem
       statements.push({ text: createTable(name, schema) }, { text: "INSERT INTO _mantle_schema_tables (name) VALUES ($1) ON CONFLICT DO NOTHING", values: [name] }, ...want.map((i) => ({ text: i.sql })));
     } else {
       const have = new Map(cols!.filter((r) => r.table_name === name).map((r) => [String(r.column_name), spelled(r as never)]));
+      const nullable = new Set(cols!.filter((r) => r.table_name === name && r.is_nullable === "YES").map((r) => String(r.column_name)));
+      // the keyset cursor compares a row of sort keys, which silently skips a row whose key is NULL (#1403): a native column must refuse NULL
+      const notNull = (c: string, fill: string) => {
+        if (nullable.has(c)) block(name, `${name}.${c} is nullable, Mantle needs NOT NULL; backfill it, then run: ALTER TABLE ${t} ALTER COLUMN ${q(c)} SET NOT NULL${c === "status" ? `, ALTER COLUMN "status" SET DEFAULT 'draft'` : ""} (backfill: UPDATE ${t} SET ${q(c)} = ${fill} WHERE ${q(c)} IS NULL)`);
+      };
       const native = new Map([["_rid", "int8"], ["id", "text"], ["version", "int8"], ["created_at", "timestamptz"], ["updated_at", "timestamptz"], ["author_id", "text"]]);
       for (const [c, type] of native) {
         if (!have.has(c)) block(name, `${name} lacks the native column ${c}; copy the data into a table Mantle creates`);
         else if (have.get(c) !== type) block(name, `${name}.${c} is ${have.get(c)}, Mantle needs ${type}`);
+        else if (c === "id") notNull(c, "<a unique id>");
+        else if (c === "version") notNull(c, "1");
+        else if (c === "created_at" || c === "updated_at") notNull(c, "now()");
       }
       for (const c of columns(schema)) {
         const actual = have.get(c.name);
         if (actual === undefined) {
-          if (c.native) block(name, `${name} lacks the native column ${c.name}; add it, or copy the data into a table Mantle creates`);
+          if (c.native) block(name, `${name} lacks the native column ${c.name}; add it NOT NULL (ALTER TABLE ${t} ADD COLUMN ${q(c.name)} ${ddlType(c.type)} NOT NULL${c.name === "status" ? " DEFAULT 'draft'" : ""}), or copy the data into a table Mantle creates`);
           else statements.push({ text: `ALTER TABLE ${t} ADD COLUMN ${q(c.name)} ${ddlType(c.type)}` });
         } else if (actual !== c.type) block(name, `${name}.${c.name} is ${actual}, the plan says ${c.type}; a column's type is never altered`);
+        else if (c.native) notNull(c.name, c.name === "status" ? "'draft'" : "<a value>");
       }
       const declared = new Set([...native.keys(), ...columns(schema).map((c) => c.name)]);
       for (const c of have.keys()) if (!declared.has(c)) undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_COLUMN", message: `${name}.${c} is in the database and not in the plan; it is kept` });
@@ -207,13 +214,13 @@ async function diff(client: PgClient, plan: Readonly<Record<string, StorageSchem
   return { statements, blocked, undeclared };
 }
 
-/** Bump whenever `indexes()` or `createTable()` output changes for an unchanged plan: the boot state includes it, so a booted database converges again. */
-const LAYOUT = "2";
+/** Bump whenever `indexes()` or `createTable()` output, or what `diff()` checks, changes for an unchanged plan: the boot state includes it, so a booted database converges again. */
+const LAYOUT = "3";
 
 /** Prefixes the comment on a Mantle check: the expression it was added from, so the next boot can tell whether the plan changed it. */
 const CHECK_MARK = "mantle:";
 
-/** How long a boot that gave up on a lock fails fast. ponytail: per process and per `connect`; a shared record (a _mantle_boot_state row) would also quiet other isolates. */
+/** How long a boot that gave up on a lock fails fast, per process and per `connect`; no cross-isolate coordination. */
 const COOL_DOWN_MS = 10_000;
 const COOL_DOWN = new WeakMap<PgConnect, { state: string; until: number; report: StorageReport }>();
 
@@ -262,9 +269,9 @@ export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<
 
 async function locked(client: PgClient, plan: Readonly<Record<string, StorageSchema>>, state: string, lockTimeoutMs: number): Promise<StorageReport> {
   const run = (s: PgStatement) => client.query({ text: s.text, ...(s.values ? { values: [...s.values] } : {}) });
-  // convergence builds indexes on tables that may be large: no statement timeout. The lock wait below has none either: a waiter is behind the winner's work
+  // Convergence permits long index builds; the lock wait remains bounded independently of total execution time.
   // lock_timeout comes first so the advisory wait is bounded too: a herd gives up together, not one isolate after another
-  // ponytail: a winner building a large index outlasts that bound and the waiters report a blocked boot; a longer advisory wait than DDL wait is the upgrade once it is measured
+  // A healthy winner can outlast the wait budget (#1408): prepare large indexes before traffic rather than add a coordinator.
   await client.query({ text: `BEGIN ISOLATION LEVEL READ COMMITTED; SET LOCAL statement_timeout = 0; SET LOCAL lock_timeout = ${lockTimeoutMs}` });
   // a lock timeout here is the advisory lock (another boot converging); the caller words its diagnostic by it
   await run(LOCK).catch((e) => { if (sqlState(e) === "55P03") Object.assign(e as object, { advisoryLock: true }); throw e; });

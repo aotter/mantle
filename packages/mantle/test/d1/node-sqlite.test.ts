@@ -66,3 +66,57 @@ it("each driver's error shape: bun's plain SQLITE_ERROR is refused; busy, full a
   expect(await code(new Error("D1_ERROR: Network connection lost."))).toBe("OUTCOME_UNKNOWN");
   expect(await code(new Error("D1_ERROR: no such table: nope: SQLITE_ERROR"))).toBe("INPUT_VALIDATION_FAILED");
 });
+
+it("a paged View whose first relation is json_each loses no row (#1402)", async () => {
+  const { boot, caller, program, runView, site } = await import("../../src/testing/harness.js");
+  const driver = nodeSqlite();
+  try {
+    const s = site(await boot({ storage: sqliteStorage(driver), driver }));
+    const p = await program("view", `SELECT j.value FROM json_each('["z","x","x"]') j ORDER BY j.value`);
+    const got: unknown[] = [];
+    let cursor: unknown[] | undefined;
+    for (let i = 0; i < 6; i++) {
+      const page = await runView(s, p, caller(), { cursor, pageSize: 1 });
+      got.push(...page.rows.map((r: any) => r.value));
+      if (!page.next) break;
+      cursor = page.next;
+    }
+    expect(got).toEqual(["x", "x", "z"]);
+    // unaliased, alone in FROM, it is keyed by its own id
+    const bare = await program("view", `SELECT value FROM json_each('["z","x","x"]') ORDER BY value`);
+    const all: unknown[] = [];
+    for (let next: unknown[] | undefined, i = 0; i < 6; i++) {
+      const page = await runView(s, bare, caller(), { cursor: next, pageSize: 1 });
+      all.push(...page.rows.map((r: any) => r.value));
+      if (!(next = page.next)) break;
+    }
+    expect(all).toEqual(["x", "x", "z"]);
+  } finally { driver.db.close(); }
+});
+
+it("a json_each native paging key is not shadowed by an output named id (#1402)", async () => {
+  const { boot, caller, program, runView, site } = await import("../../src/testing/harness.js");
+  const driver = nodeSqlite();
+  try {
+    const s = site(await boot({ storage: sqliteStorage(driver), driver }));
+    for (const sql of [
+      `SELECT value AS id FROM json_each('["z","x","x"]') ORDER BY id`,
+      `SELECT value AS id FROM json_each('["z","x","x"]') ORDER BY value`,
+      `SELECT value AS id FROM json_each('["z","x","x"]') ORDER BY 1`,
+      `SELECT j.value AS id FROM json_each('["z","x","x"]') j ORDER BY id`,
+    ]) {
+      const p = await program("view", sql);
+      for (const pageSize of [1, 2]) {
+        const all: unknown[] = [];
+        let cursor: unknown[] | undefined;
+        for (let i = 0; i < 6; i++) {
+          const page = await runView(s, p, caller(), { cursor, pageSize });
+          all.push(...page.rows);
+          if (!(cursor = page.next)) break;
+        }
+        expect(all, `${sql}; pageSize=${pageSize}`).toEqual([{ id: "x" }, { id: "x" }, { id: "z" }]);
+        expect(cursor, `${sql}; pageSize=${pageSize}`).toBeUndefined();
+      }
+    }
+  } finally { driver.db.close(); }
+});

@@ -38,7 +38,7 @@ interface Route {
   readonly path: string;
   readonly role: StaffRole;
   /** A Response (a download, a denial) goes out as it is; anything else is the JSON body. */
-  run(c: { request: Request; url: URL; caller: Staff; params: Record<string, string> }): Promise<unknown>;
+  run(c: { request: Request; url: URL; caller: Staff; params: Record<string, string>; runtime: MantleRuntime }): Promise<unknown>;
 }
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -313,7 +313,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     }
     return out;
   };
-  const list = async (caller: Staff, q: URLSearchParams) => {
+  const list = async (caller: Staff, q: URLSearchParams, runtime: MantleRuntime) => {
     const s = schemaOf(q.get("collection"));
     const store = runtime.store.as(caller);
     const limit = q.get("limit");
@@ -359,7 +359,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       related,
     };
   };
-  const move = (status: "published" | "draft"): Route["run"] => async ({ caller, params: { id }, url }) => {
+  const move = (status: "published" | "draft"): Route["run"] => async ({ runtime, caller, params: { id }, url }) => {
     const s = schemaOf(url.searchParams.get("collection"));
     writable(s);
     const store = runtime.store.as(caller);
@@ -372,10 +372,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   const routes: Route[] = [
     { method: "GET", path: "/me", role: "contributor", run: ({ caller }) => me(caller) },
     {
-      method: "GET", path: "/bootstrap", role: "contributor", run: async ({ caller, url, url: { searchParams: q } }) => ({
+      method: "GET", path: "/bootstrap", role: "contributor", run: async ({ runtime, caller, url, url: { searchParams: q } }) => ({
         me: await me(caller), site: await site(url, caller), collections, operations: operations(caller), views: views(caller), webmcp,
         // the first page of the collection the SPA opens on
-        ...(q.get("collection") ? { entries: await list(caller, q) } : {}),
+        ...(q.get("collection") ? { entries: await list(caller, q, runtime) } : {}),
       }),
     },
     { method: "GET", path: "/collections", role: "contributor", run: async () => ({ collections }) },
@@ -404,11 +404,11 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     { method: "DELETE", path: "/media/{id}", role: "editor", run: async ({ params: { id } }) => media().delete(id!) },
     { method: "GET", path: "/views-manifest", role: "contributor", run: async ({ caller }) => ({ views: views(caller) }) },
     {
-      method: "GET", path: "/views/{name}", role: "contributor", run: ({ caller, params: { name }, url }) =>
+      method: "GET", path: "/views/{name}", role: "contributor", run: ({ runtime, caller, params: { name }, url }) =>
         runtime.store.as(caller).view(name!, { ...viewQuery(name!, staffView(name!, caller), url.searchParams, P), ...viewMatch(staffView(name!, caller), url.searchParams) }),
     },
     {
-      method: "GET", path: "/views/{name}/export", role: "contributor", run: ({ caller, params: { name }, url }) => {
+      method: "GET", path: "/views/{name}/export", role: "contributor", run: ({ runtime, caller, params: { name }, url }) => {
         const v = staffView(name!, caller);
         const { input } = viewQuery(name!, v, url.searchParams, P);
         const declared = ((v.uiSchema?.["list"] ?? {}) as Record<string, string[] | undefined>)["columns"] ?? [];
@@ -418,10 +418,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
           (rows) => (declared.length ? declared : [...new Set(rows.flatMap((r) => Object.keys(r)))]), (row, c) => row[c]);
       },
     },
-    { method: "GET", path: "/entries", role: "contributor", run: ({ caller, url }) => list(caller, url.searchParams) },
+    { method: "GET", path: "/entries", role: "contributor", run: ({ runtime, caller, url }) => list(caller, url.searchParams, runtime) },
     // before `/entries/{id}`, which has as many segments
     {
-      method: "GET", path: "/entries/export", role: "contributor", run: ({ caller, url: { searchParams: q } }) => {
+      method: "GET", path: "/entries/export", role: "contributor", run: ({ runtime, caller, url: { searchParams: q } }) => {
         const s = schemaOf(q.get("collection"));
         const query = listQuery(s, q);
         const store = runtime.store.as(caller);
@@ -430,14 +430,14 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       },
     },
     {
-      method: "GET", path: "/entries/{id}", role: "contributor", run: async ({ caller, params: { id }, url }) => {
+      method: "GET", path: "/entries/{id}", role: "contributor", run: async ({ runtime, caller, params: { id }, url }) => {
         const s = schemaOf(url.searchParams.get("collection"));
         const store = runtime.store.as(caller);
         return editor(store, s, await current(store, s, id!));
       },
     },
     {
-      method: "POST", path: "/entries", role: "contributor", run: async ({ caller, request }) => {
+      method: "POST", path: "/entries", role: "contributor", run: async ({ runtime, caller, request }) => {
         const body = await readJsonObject(request, P);
         const s = schemaOf(body["collection"]);
         writable(s);
@@ -448,7 +448,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       },
     },
     {
-      method: "PATCH", path: "/entries/{id}", role: "contributor", run: async ({ caller, params: { id }, request, url }) => {
+      method: "PATCH", path: "/entries/{id}", role: "contributor", run: async ({ runtime, caller, params: { id }, request, url }) => {
         const s = schemaOf(url.searchParams.get("collection"));
         writable(s);
         const store = runtime.store.as(caller);
@@ -466,7 +466,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     { method: "POST", path: "/entries/{id}/publish", role: "editor", run: move("published") },
     { method: "POST", path: "/entries/{id}/unpublish", role: "editor", run: move("draft") },
     {
-      method: "DELETE", path: "/entries/{id}", role: "editor", run: async ({ caller, params: { id }, url }) => {
+      method: "DELETE", path: "/entries/{id}", role: "editor", run: async ({ runtime, caller, params: { id }, url }) => {
         const s = schemaOf(url.searchParams.get("collection"));
         writable(s);
         const store = runtime.store.as(caller);
@@ -476,7 +476,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     },
     { method: "GET", path: "/operations", role: "contributor", run: async ({ caller }) => ({ operations: operations(caller) }) },
     {
-      method: "POST", path: "/operations/{name}", role: "contributor", run: async ({ caller, params: { name }, request }) => {
+      method: "POST", path: "/operations/{name}", role: "contributor", run: async ({ runtime, caller, params: { name }, request }) => {
         // an operation the caller cannot see is not there for them, so its name cannot be probed
         if (!staffProcedures.includes(name!) || !sees(plan.procedures[name!]!.requires, caller)) throw wireError("NOT_FOUND", `no staff operation '${name}'`, P);
         const input = await readJsonObject(request, P);
@@ -506,7 +506,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     { method: "GET", path: "/webmcp", role: "contributor", run: async () => webmcp },
     {
       // a browser agent's tool call, run as `/mcp/staff` runs it: the same input, an `mcp` cause, the caller's own Store
-      method: "POST", path: "/webmcp/{tool}", role: "contributor", run: async ({ caller, params: { tool: name }, request }) => {
+      method: "POST", path: "/webmcp/{tool}", role: "contributor", run: async ({ runtime, caller, params: { tool: name }, request }) => {
         const tool = staffTool.get(name!);
         if (!tool) throw wireError("NOT_FOUND", `no staff tool '${name}'`, P);
         const input = await readJsonObject(request, P);
@@ -571,7 +571,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     if (caller.credential !== "session") throw wireError("AUTH_DENIED", "Admin needs a signed-in session.", P);
     return caller as Staff;
   };
-  const api = async (request: Request, url: URL, caller: Caller): Promise<Response> => {
+  const api = async (request: Request, url: URL, caller: Caller, runtime: MantleRuntime): Promise<Response> => {
     const staff = staffOf(caller);
     const prefix = `${base}/api/x/`;
     if (url.pathname.startsWith(prefix)) return adminExtensionRoute(extensions, request, url.pathname.slice(prefix.length), staff);
@@ -579,7 +579,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       const params = route.method === request.method ? match(`${base}/api${route.path}`, url.pathname) : null;
       if (!params) continue;
       if (!meetsRole(staff.role, route.role)) return denied(route.role, `This needs the ${route.role} role.`);
-      const out = await route.run({ request, url, caller: staff, params });
+      const out = await route.run({ request, url, caller: staff, params, runtime });
       return out instanceof Response ? out : json(out, 200, NO_STORE);
     }
     throw wireError("NOT_FOUND", "no such route", P);
@@ -616,7 +616,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     return new Response(res.body, { status: res.status, headers });
   };
 
-  return async (request, caller) => {
+  return async (request, caller, executionRuntime = runtime) => {
     const url = new URL(request.url);
     const rel = url.pathname.startsWith(`${base}/`) ? url.pathname.slice(base.length + 1) : url.pathname === base ? "" : null;
     const isApi = rel !== null && (rel === "api" || rel.startsWith("api/"));
@@ -624,7 +624,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       if (rel === null) throw wireError("NOT_FOUND", "no such route", P);
       const source = rel !== null && request.method === "GET" ? /^extensions\/([a-z][a-z0-9-]{0,62})\.js$/.exec(rel) : null;
       if (source) return await extensionModule(source[1]!, caller);
-      return isApi ? await api(request, url, caller) : await shell(request, rel);
+      return isApi ? await api(request, url, caller, executionRuntime) : await shell(request, rel);
     } catch (e) {
       return failure(e, P, isApi ? NO_STORE : undefined);
     }

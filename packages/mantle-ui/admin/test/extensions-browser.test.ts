@@ -67,52 +67,59 @@ const editor = { collection, entry: { id: "org-1", collection: "organizations", 
 const TYPES: Record<string, string> = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html", ".svg": "image/svg+xml", ".png": "image/png" };
 
 async function boot(path: string): Promise<{ page: Page; calls: { method: string; path: string; body: unknown }[]; close: () => Promise<void> }> {
-  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
-  const page = await browser.newPage();
-  page.setDefaultTimeout(8_000);
-  await page.addInitScript(() => localStorage.setItem("cms.preference.language", "en"));
-  const calls: { method: string; path: string; body: unknown }[] = [];
-  const errors: string[] = [];
-  let saved = 0;
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.route(`${ORIGIN}/**`, async (route: Route) => {
-    const url = new URL(route.request().url());
-    const method = route.request().method();
-    if (url.pathname === "/ext/brand.js") return route.fulfill({ body: MODULE, contentType: "text/javascript" });
-    if (url.pathname.startsWith("/admin/api/")) {
-      const api = url.pathname.replace("/admin/api", "");
-      const body = method === "GET" ? undefined : route.request().postDataJSON();
-      calls.push({ method, path: api, body });
-      if (api === "/me") return route.fulfill({ json: { id: "owner", role: "owner", login: "owner", image: null } });
-      if (api === "/bootstrap") return route.fulfill({ json: { me: { id: "owner", role: "owner", login: "owner", image: null }, site, collections: [collection], views: [], operations: [], webmcp: { tools: [], routes: {} }, entries: { items: [row], previous_cursor: null, next_cursor: null } } });
-      if (api === "/site") return route.fulfill({ json: site });
-      if (api === "/collections") return route.fulfill({ json: { collections: [collection] } });
-      if (api === "/views-manifest") return route.fulfill({ json: { views: [] } });
-      if (api === "/operations") return route.fulfill({ json: { operations: [] } });
-      if (api === "/entries" && method === "GET") return route.fulfill({ json: { items: [row], previous_cursor: null, next_cursor: null } });
-      if (api === "/entries/org-1" && method === "GET") return route.fulfill({ json: editor });
-      // the server normalizes the color, so the widget must show what was stored, not what was typed
-      if (api === "/entries/org-1" && method === "PATCH") {
-        const data = (body as { data: Record<string, unknown> }).data;
-        saved++;
-        return route.fulfill({ json: { ...editor, entry: { ...editor.entry, version: 4 + saved, data: { ...data, color: String(data["color"]).toUpperCase() } } } });
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true, timeout: 8_000 });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(8_000);
+    page.setDefaultNavigationTimeout(8_000);
+    await page.addInitScript(() => localStorage.setItem("cms.preference.language", "en"));
+    const calls: { method: string; path: string; body: unknown }[] = [];
+    const errors: string[] = [];
+    let saved = 0;
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route(`${ORIGIN}/**`, async (route: Route) => {
+      const url = new URL(route.request().url());
+      const method = route.request().method();
+      if (url.pathname === "/ext/brand.js") return route.fulfill({ body: MODULE, contentType: "text/javascript" });
+      if (url.pathname.startsWith("/admin/api/")) {
+        const api = url.pathname.replace("/admin/api", "");
+        const body = method === "GET" ? undefined : route.request().postDataJSON();
+        calls.push({ method, path: api, body });
+        if (api === "/me") return route.fulfill({ json: { id: "owner", role: "owner", login: "owner", image: null } });
+        if (api === "/bootstrap") return route.fulfill({ json: { me: { id: "owner", role: "owner", login: "owner", image: null }, site, collections: [collection], views: [], operations: [], webmcp: { tools: [], routes: {} }, entries: { items: [row], previous_cursor: null, next_cursor: null } } });
+        if (api === "/site") return route.fulfill({ json: site });
+        if (api === "/collections") return route.fulfill({ json: { collections: [collection] } });
+        if (api === "/views-manifest") return route.fulfill({ json: { views: [] } });
+        if (api === "/operations") return route.fulfill({ json: { operations: [] } });
+        if (api === "/entries" && method === "GET") return route.fulfill({ json: { items: [row], previous_cursor: null, next_cursor: null } });
+        if (api === "/entries/org-1" && method === "GET") return route.fulfill({ json: editor });
+        // the server normalizes the color, so the widget must show what was stored, not what was typed
+        if (api === "/entries/org-1" && method === "PATCH") {
+          const data = (body as { data: Record<string, unknown> }).data;
+          saved++;
+          return route.fulfill({ json: { ...editor, entry: { ...editor.entry, version: 4 + saved, data: { ...data, color: String(data["color"]).toUpperCase() } } } });
+        }
+        if (api === "/x/brand/settings/policy") return route.fulfill({ json: { value: method === "GET" ? { limit: 2 } : (body as { value: unknown }).value } });
+        if (api === "/x/brand/settings/policy-two") return route.fulfill({ json: { value: method === "GET" ? { limit: 20 } : (body as { value: unknown }).value } });
+        if (api === "/x/brand/actions/flag") return route.fulfill({ json: { ok: true, result: { message: "Flagged Acme" } } });
+        return route.fulfill({ json: {} });
       }
-      if (api === "/x/brand/settings/policy") return route.fulfill({ json: { value: method === "GET" ? { limit: 2 } : (body as { value: unknown }).value } });
-      if (api === "/x/brand/settings/policy-two") return route.fulfill({ json: { value: method === "GET" ? { limit: 20 } : (body as { value: unknown }).value } });
-      if (api === "/x/brand/actions/flag") return route.fulfill({ json: { ok: true, result: { message: "Flagged Acme" } } });
-      return route.fulfill({ json: {} });
-    }
-    const rel = url.pathname.replace(/^\/admin\/?/, "");
-    const file = resolve(DIST, rel);
-    if (rel && file.startsWith(DIST) && existsSync(file) && extname(file)) return route.fulfill({ body: readFileSync(file), contentType: TYPES[extname(file)] ?? "application/octet-stream" });
-    return route.fulfill({ body: readFileSync(resolve(DIST, "index.html")), contentType: "text/html" });
-  });
-  await page.goto(`${ORIGIN}${path}`);
-  return { page, calls, close: async () => { await browser.close(); expect(errors).toEqual([]); } };
+      const rel = url.pathname.replace(/^\/admin\/?/, "");
+      const file = resolve(DIST, rel);
+      if (rel && file.startsWith(DIST) && existsSync(file) && extname(file)) return route.fulfill({ body: readFileSync(file), contentType: TYPES[extname(file)] ?? "application/octet-stream" });
+      return route.fulfill({ body: readFileSync(resolve(DIST, "index.html")), contentType: "text/html" });
+    });
+    await page.goto(`${ORIGIN}${path}`);
+    return { page, calls, close: async () => { await browser.close(); expect(errors).toEqual([]); } };
+  } catch (error) {
+    await browser.close().catch(() => undefined);
+    throw error;
+  }
 }
 
 it.skipIf(!existsSync(resolve(DIST, "index.html")))("renders extension pages, settings, actions, panels and widgets with Admin's own React", async () => {
   const { page, calls, close } = await boot("/admin/c/organizations");
+  let failed = false;
   try {
     // a list cell from uiSchema.list.cells
     await page.getByText("swatch:teal").waitFor();
@@ -168,7 +175,11 @@ it.skipIf(!existsSync(resolve(DIST, "index.html")))("renders extension pages, se
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect.poll(() => calls.filter((c) => c.path === "/entries/org-1" && c.method === "PATCH").length).toBe(2);
     await expect.poll(() => color.inputValue()).toBe("NAVY BLUE");
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    await close();
+    if (failed) await close().catch(() => undefined);
+    else await close();
   }
 }, 40_000);

@@ -66,6 +66,41 @@ describe("verifyPlan", () => {
     expect(await verifyPlan(await compile(pgCompile), pg())).toEqual([]);
   });
 
+  it.each([undefined, pgCompile])("checks uploaded shared-cache IR independently of display source (%s)", async (dialect) => {
+    const schema = (extra = "") => `apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: records }
+spec:
+  title: Records
+  schema: { type: object, properties: { body: { type: string }, expires: { type: string, format: date-time } } }
+${extra}`;
+    const view = (sql: string, name = "cached", surface = "public") => `---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: ${name} }
+spec: { surface: ${surface}, sql: ${JSON.stringify(sql)} }
+`;
+    const uploaded = async (text: string, source = "SELECT 'safe' AS body") => {
+      const r = await compilePlan({ sources: [{ sourceId: "memory:cache", text }] }, dialect);
+      if (!r.ok) throw new Error(JSON.stringify(r.diagnostics));
+      return reseal(r.plan, (p) => ({ ...p, views: { ...p.views, cached: { ...p.views.cached!, sharedMaxAge: 60, source } } }));
+    };
+    const storage = dialect ? pg() : d1();
+    for (const [sql, extra] of [["SELECT now() AS body", ""], ["SELECT pg_catalog.now() AS body", ""], ["SELECT auth.uid() AS body", ""], ["SELECT auth.role() AS body", ""], ["SELECT body FROM records", "  lifecycle: operational\n"], ["SELECT body FROM records", "  ttl: { field: expires, expireAfterSeconds: 0 }\n"]]) {
+      const result = await verifyPlan(await uploaded(schema(extra) + view(sql!)), storage);
+      expect(result, sql).toEqual([expect.objectContaining({ path: "plan#/views/cached/sharedMaxAge", message: expect.stringContaining("VIEW_CACHE_INVALID") })]);
+    }
+    // Changing display-only source cannot make safe executable IR unsafe either.
+    expect(await verifyPlan(await uploaded(schema() + view("SELECT body FROM records"), "SELECT now(), auth.uid() FROM unsafe"), storage)).toEqual([]);
+    expect(await verifyPlan(await uploaded(schema("  lifecycle: operational\n") + view("SELECT 'records now() auth.uid()' AS body")), storage)).toEqual([]);
+    if (dialect) {
+      expect(await verifyPlan(await uploaded(schema("  lifecycle: operational\n") + view("WITH records AS (SELECT 'fixed' AS body) SELECT body FROM records")), storage)).toEqual([]);
+      const nested = view("SELECT body FROM records", "inner-source", "internal") + view("SELECT body FROM inner_source");
+      expect(await verifyPlan(await uploaded(schema() + nested), storage)).toEqual([]);
+      expect(await verifyPlan(await uploaded(schema("  lifecycle: operational\n") + nested), storage)).toEqual([expect.objectContaining({ path: "plan#/views/cached/sharedMaxAge" })]);
+    }
+  });
+
   it("refuses what boot refuses: a plan changed after it was sealed, or compiled for another dialect", async () => {
     const plan = await compile();
     const tampered = { ...plan, views: {} };
@@ -416,6 +451,13 @@ spec:
     expect(await verifyPlan(await cols({ name: { schema: "items", field: "name" }, at: { schema: "items", field: "created_at" } }), d1())).toEqual([]);
     for (const bad of [{ name: { schema: "nope", field: "name" } }, { name: { schema: "items", field: "nope" } }, { name: { schema: "toString", field: "name" } }, { name: null }, { name: "items.name" }])
       expect(await paths(await cols(bad))).toEqual(["plan#/views/stock/columns"]);
+  });
+
+  it("refuses a shared cache the manifest would refuse: REST sends it to anonymous callers", async () => {
+    const base = await plan();
+    const cached = (view: object) => reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, ...view } as never } }));
+    for (const bad of [{ sharedMaxAge: "60, immutable" }, { sharedMaxAge: 0 }, { sharedMaxAge: 60 }, { sharedMaxAge: 60, surface: "public", source: "SELECT now() AS t" }, { sharedMaxAge: 60, surface: "public" }])
+      expect(await paths(await cached(bad))).toEqual(["plan#/views/stock/sharedMaxAge"]);
   });
 
   it("checks a View's uiSchema.list as the CLI does: lists of the View's outputs", async () => {
