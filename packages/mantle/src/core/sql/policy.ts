@@ -265,6 +265,18 @@ export function tx(v: any, c: C): any {
 /** A SELECT's output names; a set operation's are its first branch's. */
 const outputsOf = (sel: N): string[] => (sel.op && sel.op !== 'SETOP_NONE' ? outputsOf(sel.larg) : (sel.targetList ?? []).map((t: N) => t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval));
 /** A CTE's: its column list renames its body's. */
+/**
+ * A subquery's `id` is unique when each branch reads a table's own id from that one relation: any JOIN or row source can repeat it.
+ * ponytail: ids are generated, so a UNION of different tables is trusted not to collide (one table against itself is not caught), and a
+ * CTE's own body is not looked into; the upgrade is a uniqueness proof that follows the CTE and compares the branches' sources.
+ */
+const uniqueId = (sel: N): boolean => {
+  if (sel.op && sel.op !== 'SETOP_NONE') return uniqueId(sel.larg) && uniqueId(sel.rarg);
+  const from = sel.fromClause ?? [];
+  if (from.length !== 1 || !from[0].RangeVar) return false;
+  const t = (sel.targetList ?? []).find((x: N) => (x.ResTarget.name ?? x.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === 'id');
+  return t?.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval === 'id';
+};
 const cteOutputs = (cte: N): string[] => (cte.aliascolnames?.length ? cte.aliascolnames.map((x: N) => x.String.sval) : outputsOf(cte.ctequery.SelectStmt));
 
 /**
@@ -317,13 +329,17 @@ function selectIn(n: N, c: C): N {
     const dir = c.nativeOrder && out.sortClause.at(-1)?.SortBy.sortby_dir === 'SORTBY_DESC' ? 'SORTBY_DESC' : 'SORTBY_DEFAULT';
     const have = new Set(out.sortClause.map((k: N) => JSON.stringify(k.SortBy.node)));
     if (n.groupClause) out.sortClause = [...out.sortClause, ...tx(n.groupClause, c).filter((g: N) => !have.has(JSON.stringify(g))).map((g: N) => sort(g, dir))];
-    else if (firstAlias) {
+    else if (firstAlias || first?.RangeFunction) {
       if (first!.RangeSubselect && !outputsOf(first!.RangeSubselect.subquery.SelectStmt).includes('id'))
         throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a subquery in FROM, needs the subquery to output id`);
+      // the keyset cursor skips rows that share a key, so the subquery's id must be one row's own: a join or a row source in it fans it out
+      if (first!.RangeSubselect && !uniqueId(first!.RangeSubselect.subquery.SelectStmt))
+        throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a subquery in FROM, needs a unique id: select a relation's own id from a single relation (no JOIN or row source), or ORDER BY a unique column inside a WITH`);
       const cte = first!.RangeVar?.mantle === 'cte' ? [...c.ctes].reverse().find((m) => m.has(first!.RangeVar.relname))?.get(first!.RangeVar.relname) : undefined;
       if (cte && !cteOutputs(cte).includes('id')) throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a CTE, needs the CTE to output id`);
-      const extra = [col(firstAlias, 'id')];
-      // ponytail: a row source FIRST in FROM (no table before it) and a fan-out subquery ordered by s.id are not keyed by this; the upgrade is a per-source key like this one
+      // a row source first in FROM has no table's id before it: its ordinality alone keys the rows
+      const extra = firstAlias ? [col(firstAlias, 'id')] : [];
+      // ponytail: a CTE first in FROM is only checked for outputting id, not for it being unique; the upgrade is the subquery check above
       for (const f of n.fromClause ?? []) for (const r of relsOf(f)) {
         const je = r.RangeFunction;
         if (!je) continue;

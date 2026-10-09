@@ -66,3 +66,21 @@ it("each driver's error shape: bun's plain SQLITE_ERROR is refused; busy, full a
   expect(await code(new Error("D1_ERROR: Network connection lost."))).toBe("OUTCOME_UNKNOWN");
   expect(await code(new Error("D1_ERROR: no such table: nope: SQLITE_ERROR"))).toBe("INPUT_VALIDATION_FAILED");
 });
+
+it("a paged View whose first relation is json_each loses no row (#1402)", async () => {
+  const { boot, caller, program, runView, site } = await import("../../src/testing/harness.js");
+  const driver = nodeSqlite();
+  try {
+    const s = site(await boot({ storage: sqliteStorage(driver), driver }));
+    const p = await program("view", `SELECT j.value FROM json_each('["z","x","x"]') j ORDER BY j.value`);
+    const got: unknown[] = [];
+    let cursor: unknown[] | undefined;
+    for (let i = 0; i < 6; i++) {
+      const page = await runView(s, p, caller(), { cursor, pageSize: 1 });
+      got.push(...page.rows.map((r: any) => r.value));
+      if (!page.next) break;
+      cursor = page.next;
+    }
+    expect(got).toEqual(["x", "x", "z"]);
+  } finally { driver.db.close(); }
+});
