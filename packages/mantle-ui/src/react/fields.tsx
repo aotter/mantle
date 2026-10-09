@@ -23,6 +23,8 @@ import {
 /** Every string the fields render; hosts pass their own translations. */
 export interface FieldLabels {
   readonly emptyOption: string;
+  /** The choice that clears an optional enum; a host label set without it falls back to `emptyOption`. */
+  readonly clearOption?: string;
   readonly chooseOption: string;
   readonly boolean: string;
   readonly dateTimeSelect: string;
@@ -33,6 +35,7 @@ export interface FieldLabels {
 
 export const defaultFieldLabels: FieldLabels = {
   emptyOption: "No value",
+  clearOption: "Not set",
   chooseOption: "Choose…",
   boolean: "Yes",
   dateTimeSelect: "Pick a date",
@@ -154,7 +157,7 @@ function SchemaField(props: SchemaFieldsProps & {
             <SelectValue placeholder={labels.chooseOption} />
           </SelectTrigger>
           <SelectContent>
-            {required && !nullable ? null : <SelectItem value="__empty__">{labels.emptyOption}</SelectItem>}
+            {required && !nullable ? null : <SelectItem value="__empty__">{labels.clearOption ?? labels.emptyOption}</SelectItem>}
             {(enumOptions(schema) ?? schema.enum!.filter((v) => v !== null).map((v) => ({ value: String(v) }))).map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {optionLabel(schema, option.value, language, canonical)}
