@@ -1,9 +1,10 @@
 # ADR-0007: AI-as-primary-author — three pre-serve loops, two role surfaces
 
 **Status:** Carried over from POC v0.0.x; amended for the shipped v0.1 CLI,
-testing, plugin, and MCP surfaces (incorporates POC ADR-0013).
+testing, plugin, and MCP surfaces (incorporates POC ADR-0013). The runtime-complexity
+premise below is amended by [ADR-0040](0040-thin-native-toolkit.md).
 
-**Date:** 2026-05-03; last amended 2026-08-03
+**Date:** 2026-05-03; last amended 2026-10-09
 
 **Deciders**: phsu
 
@@ -21,13 +22,19 @@ single design grammar:
 
 > **Agents write config; the runtime carries the complexity.**
 
-Hard problems — schema validation, OAuth, locale canonicalization,
-cache invalidation, transactional state — live in the runtime, where
-they're written once by people who understand them. The authoring
-surface is YAML the agent fills in, with structured diagnostics
-catching mistakes before they become production failures. Non-coders
-benefit from agent leverage *safely* because the load-bearing logic
-isn't in their hands.
+**Amendment (2026-10-09, ADR-0040):** This historical premise does not assign
+application design or operations to Core. Authors and their coding agents own
+application semantics and native configuration. Mantle faithfully compiles and
+executes the declared contract, enforces its existing guarantees and reuses
+native resources. It does not conceal application decisions in automatic
+runtime repair or coordination layers.
+
+The toolkit owns faithful manifest compilation, its declared validation and
+policy guarantees, and correct integration with native transactions and
+selected identity/transport libraries. The author and coding agent own
+application logic, query semantics, caching choices and deployment operations.
+Structured diagnostics and inspectable generated source help them meet those
+responsibilities; the runtime does not take them over.
 
 This ADR documents what that thesis means concretely for mantle's
 authoring contract.

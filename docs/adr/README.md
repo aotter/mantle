@@ -40,6 +40,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0037](0037-postgresql-is-the-reference-dialect.md) | PostgreSQL is the reference dialect: one closed allowlist in Core (base and reference profiles), D1 runs the base subset; a View reads an internal View; `restrict` narrows at runtime; a statement timeout on PostgreSQL; Cloud's PostgreSQL connection stays with the platform. | Accepted for 0.2.0 |
 | [0038](0038-bun-native-host.md) | Bun is a native host: `@aotter/mantle/bun` owns the native SQLite and PostgreSQL drivers and Admin files; `host: bun` defaults to `dialect: postgres`; the CLI writes a `Bun.serve` entry once. | Accepted for 0.2.0 |
 | [0039](0039-postgresql-is-native.md) | PostgreSQL is native, not a D1 emulation: each dialect is its own target, PostgreSQL ordering and SQL are PostgreSQL's, and node-postgres is the only PostgreSQL driver on every host. | Accepted; supersedes parts of 0035, 0037 and 0038 |
+| [0040](0040-thin-native-toolkit.md) | Mantle is a thin config-as-code toolkit: author-owned application decisions, native resource reuse and semantics, a clean Store boundary, and explicit execution costs. | Accepted direction; amends 0007 |
 
 ## Reading order
 
