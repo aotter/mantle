@@ -175,7 +175,7 @@ async function diff(client: PgClient, plan: Readonly<Record<string, StorageSchem
       for (const c of columns(schema)) {
         const actual = have.get(c.name);
         if (actual === undefined) {
-          if (c.native) block(name, `${name} lacks the native column ${c.name}; add it, or copy the data into a table Mantle creates`);
+          if (c.native) block(name, `${name} lacks the native column ${c.name}; add it NOT NULL (ALTER TABLE ${t} ADD COLUMN ${q(c.name)} ${ddlType(c.type)} NOT NULL${c.name === "status" ? " DEFAULT 'draft'" : ""}), or copy the data into a table Mantle creates`);
           else statements.push({ text: `ALTER TABLE ${t} ADD COLUMN ${q(c.name)} ${ddlType(c.type)}` });
         } else if (actual !== c.type) block(name, `${name}.${c.name} is ${actual}, the plan says ${c.type}; a column's type is never altered`);
         else if (c.native) notNull(c.name, c.name === "status" ? "'draft'" : "<a value>");
@@ -216,8 +216,8 @@ async function diff(client: PgClient, plan: Readonly<Record<string, StorageSchem
   return { statements, blocked, undeclared };
 }
 
-/** Bump whenever `indexes()` or `createTable()` output changes for an unchanged plan: the boot state includes it, so a booted database converges again. */
-const LAYOUT = "2";
+/** Bump whenever `indexes()` or `createTable()` output, or what `diff()` checks, changes for an unchanged plan: the boot state includes it, so a booted database converges again. */
+const LAYOUT = "3";
 
 /** Prefixes the comment on a Mantle check: the expression it was added from, so the next boot can tell whether the plan changed it. */
 const CHECK_MARK = "mantle:";
