@@ -181,7 +181,8 @@ describe("REST surface", () => {
     expect(rt.plan.views["cached-pages"]!.sharedMaxAge).toBe(60);
     const surface = api(rt, { basePath: "/api" });
     const get = async (path: string, caller: Caller) => surface(new Request(`http://x${path}`), caller);
-    expect((await get("/api/views/cached-pages", { kind: "anonymous" })).headers.get("cache-control")).toBe("public, s-maxage=60");
+    const shared = await get("/api/views/cached-pages", { kind: "anonymous" });
+    expect([shared.headers.get("cache-control"), shared.headers.get("vary")]).toEqual(["public, s-maxage=60", "authorization, cookie"]);
     const signedIn = await get("/api/views/cached-pages", user("cache-owner"));
     expect([signedIn.status, signedIn.headers.get("cache-control")]).toEqual([200, "private, no-store"]);
     const bad = await get("/api/views/cached-pages?min=abc", { kind: "anonymous" });
