@@ -121,6 +121,24 @@ spec:
   sql: "SELECT title FROM notes WHERE rank >= input.minRank ORDER BY title"
 ---
 apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: pages }
+spec:
+  title: Pages
+  schema:
+    type: object
+    properties: { title: { type: string }, rank: { type: integer } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: cached-pages }
+spec:
+  surface: public
+  cache: { sharedMaxAge: 60 }
+  input: { type: object, properties: { min: { type: integer } } }
+  sql: "SELECT title FROM pages WHERE rank >= coalesce(input.min, 0) ORDER BY title"
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: hidden }
 spec: { surface: internal, sql: "SELECT id FROM notes ORDER BY id" }
@@ -157,6 +175,17 @@ describe("REST surface", () => {
       expect(response.status).toBe(status);
       expect(response.headers.get("cache-control")).toBe("private, no-store");
     }
+  });
+
+  it("sends a public s-maxage only to an anonymous caller of a cacheable View, never to a signed-in caller or on an error", async () => {
+    expect(rt.plan.views["cached-pages"]!.sharedMaxAge).toBe(60);
+    const surface = api(rt, { basePath: "/api" });
+    const get = async (path: string, caller: Caller) => surface(new Request(`http://x${path}`), caller);
+    expect((await get("/api/views/cached-pages", { kind: "anonymous" })).headers.get("cache-control")).toBe("public, s-maxage=60");
+    const signedIn = await get("/api/views/cached-pages", user("cache-owner"));
+    expect([signedIn.status, signedIn.headers.get("cache-control")]).toEqual([200, "private, no-store"]);
+    const bad = await get("/api/views/cached-pages?min=abc", { kind: "anonymous" });
+    expect([bad.status, bad.headers.get("cache-control")]).toEqual([400, "private, no-store"]);
   });
 
   it("runs an HTTP Trigger with the JSON body, and binds path params to the input by their declared type", async () => {

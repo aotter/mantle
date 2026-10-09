@@ -151,8 +151,11 @@ refused (`VIEW_UI_INVALID`).
 ## `cache`
 
 `{ sharedMaxAge: 1–86400 }` is accepted only on an unguarded public View whose
-SQL reads neither `auth.*` nor `now()` (`VIEW_CACHE_INVALID`). The 0.2.0 REST
-surface does not send cache headers yet; cache in front of it if you need to.
+SQL reads neither `auth.*` nor `now()` (`VIEW_CACHE_INVALID`). The value is
+carried into the plan, and the REST surface answers an anonymous caller of such
+a View with `Cache-Control: public, s-maxage=<n>`. A signed-in caller's
+response and every error keep `private, no-store`. The MCP surface sends no
+cache header.
 
 ## Diagnostics
 

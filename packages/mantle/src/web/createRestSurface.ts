@@ -32,7 +32,9 @@ export function createRestSurface(runtime: MantleRuntime, options: RestSurfaceOp
       if (view !== undefined) {
         const v = plan.views[view];
         if (!v || v.surface !== "public") throw wireError("NOT_FOUND", `no public View '${view}'`, "rest");
-        return json(await runtime.store.as(caller).view(view, viewQuery(view, v, url.searchParams, "rest")), 200, NO_STORE);
+        const rows = await runtime.store.as(caller).view(view, viewQuery(view, v, url.searchParams, "rest"));
+        // only an anonymous read of a cacheable View is shared-cacheable; a signed-in caller's answer never is
+        return json(rows, 200, v.sharedMaxAge !== undefined && caller.kind === "anonymous" ? { "cache-control": `public, s-maxage=${v.sharedMaxAge}` } : NO_STORE);
       }
 
       for (const route of routes) {
