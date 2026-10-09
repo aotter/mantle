@@ -3,9 +3,9 @@
  * database or the handlers (ADR-0034 decision 7: Cloud validates the IR and never parses SQL). Worker-safe: no SQL parser.
  */
 import { DiagnosticError, makeDiagnostic, type Diagnostic } from "../../spec/kernel/index.js";
-import { MAX_TTL_SECONDS, ManifestParseError, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, checkShapeProblem, fieldTypes, storageColumnClash, storageColumns, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
+import { MAX_TTL_SECONDS, ManifestParseError, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, checkShapeProblem, viewCacheProblem, fieldTypes, storageColumnClash, storageColumns, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
 import { validateJsonSchema } from "../../spec/domain/service/SchemaSpecChecks.js";
-import { checkGuards, checkProcedureTarget, checkTriggerRefs, checkViewRefs } from "../../spec/domain/service/TriggerGraphChecks.js";
+import { checkGuards, checkProcedureTarget, checkTriggerRefs } from "../../spec/domain/service/TriggerGraphChecks.js";
 import { MAX_NODES, schemaColumns } from "../sql/allowlist.js";
 import { compileProgram, type Mode } from "../sql/compile.js";
 import { outName } from "../sql/run.js";
@@ -86,6 +86,10 @@ async function verify(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "di
     }
   for (const [name, v] of Object.entries(plan.views)) {
     const compiled = check(`plan#/views/${name}`, v.stmts, v.inputs, "view", v.surface === "public" ? "public" : "caller");
+    if (compiled && v.sharedMaxAge !== undefined && !out.some((d) => d.path === `plan#/views/${name}/sharedMaxAge`)) {
+      const problem = viewCacheProblem(v.stmts, plan.schemas);
+      if (problem) out.push(refused(`plan#/views/${name}/sharedMaxAge`, `VIEW_CACHE_INVALID: ${problem}`));
+    }
     // searchFields and filterFields are matched against the outputs of the statement the policy wrote, by runView's rule
     const outputs = (compiled?.[0]?.ast.SelectStmt?.targetList ?? []).map(outName);
     const list = listOf(v.uiSchema);
@@ -241,13 +245,8 @@ function planShape(plan: RuntimePlan): Diagnostic[] {
     // a shared cache, as the manifest checks it: REST sends it to anonymous callers, so it must not hold a caller- or time-dependent answer
     if (v.sharedMaxAge !== undefined) {
       const m = v.sharedMaxAge as unknown;
-      if (!Number.isInteger(m) || (m as number) < 1 || (m as number) > 86_400 || v.surface !== "public" || v.requires || typeof v.source !== "string" || /\bauth\s*\.|\bnow\s*\(/i.test(v.source))
-        out.push(refused(`${path}/sharedMaxAge`, "VIEW_CACHE_INVALID: an integer from 1 to 86400, on an unguarded public View whose sql reads neither auth.* nor now()"));
-      else {
-        const schemas = new Map(Object.values(plan.schemas).map((x) => [x.name, { metadata: { name: x.name }, spec: { ttl: x.ttl, lifecycle: x.publishing ? "publishing" : "operational" } } as unknown as SchemaManifest]));
-        for (const d of checkViewRefs({ metadata: { name }, spec: { cache: { sharedMaxAge: m }, sql: v.source } } as unknown as ViewManifest, schemas))
-          out.push(refused(`${path}/sharedMaxAge`, `VIEW_CACHE_INVALID: ${d.message}`));
-      }
+      if (!Number.isInteger(m) || (m as number) < 1 || (m as number) > 86_400 || v.surface !== "public" || v.requires)
+        out.push(refused(`${path}/sharedMaxAge`, "VIEW_CACHE_INVALID: an integer from 1 to 86400, on an unguarded public View"));
     }
     // Admin's list, as the CLI checks it: an object of name lists, on a staff View
     if (v.uiSchema !== undefined) {

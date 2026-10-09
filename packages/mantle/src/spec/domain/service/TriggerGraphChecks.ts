@@ -39,40 +39,6 @@ export function checkProcedureTarget(
   return [];
 }
 
-/**
- * Whether native SQL names a Schema's table (bare, `"quoted"`, `` `quoted` ``
- * or `[bracketed]`). Mantle tables are named after their Schema, so every
- * read of a TTL table spells its name. A match inside a literal or comment
- * over-rejects, which is the safe direction.
- */
-function referencesTable(sql: string, table: string): boolean {
-  const name = table.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return new RegExp(`(?<![\\p{L}\\p{N}_$])${name}(?![\\p{L}\\p{N}_$])`, "iu").test(sql);
-}
-
-export function checkViewRefs(
-  v: ViewManifest,
-  schemasByName: ReadonlyMap<string, SchemaManifest>,
-  filePaths?: ManifestFilePaths,
-): Diagnostic[] {
-  // Schema, column and input references are checked where the SQL is parsed (compilePlan).
-  // A shared cache is the one rule that needs the referenced Schemas, and it reads the
-  // statement's table names the same way the old native SQL check did.
-  if (!v.spec.cache) return [];
-  return [...schemasByName.values()]
-    .filter((schema) =>
-      referencesTable(v.spec.sql, schema.metadata.name)
-      && (schema.spec.ttl || (schema.spec.lifecycle ?? "publishing") !== "publishing"))
-    .map((schema) => validateDiagnostic({
-      code: "VIEW_CACHE_INVALID",
-      severity: "error",
-      path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
-      value: schema.metadata.name,
-      expected: "no shared cache over a TTL or operational Schema",
-      message: `View '${v.metadata.name}' cannot cache ${schema.spec.ttl ? "TTL" : "operational"} Schema '${schema.metadata.name}'.`,
-    }));
-}
-
 export function checkSqlHandler(
   p: ProcedureManifest,
   filePaths?: ManifestFilePaths,

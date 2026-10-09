@@ -9,7 +9,7 @@ import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type Pla
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
-import { checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
+import { viewCacheProblem, checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
@@ -191,6 +191,8 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   const views: Record<string, PlanView> = {};
   for (const { manifest: v, source } of linked.views) {
     const plan = compiled.get(v.metadata.name);
+    const cacheProblem = plan && v.spec.cache ? viewCacheProblem(plan.stmts, schemas) : undefined;
+    if (cacheProblem) diagnostics.push(validateDiagnostic({ code: "VIEW_CACHE_INVALID", severity: "error", path: `${source.sourceId}#/${source.documentIndex}/spec/cache`, source: { ...source, path: "/spec/cache" }, message: `View '${v.metadata.name}': ${cacheProblem}.` }));
     const outputs = plan ? viewOutputs(plan, schemas) : undefined;
     const columns = outputs?.columns ?? {};
     // searchFields and filterFields become conditions on the View's outputs (ADR-0032 decision 5), so each must name one

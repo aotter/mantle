@@ -108,7 +108,7 @@ describe("validateManifests()", () => {
     }
   });
 
-  it("accepts top-level date-time TTL and refuses a shared cache over a TTL or operational Schema", () => {
+  it("accepts top-level date-time TTL; SQL cache eligibility is checked by compilePlan", () => {
     const expiring = schema("events", { schema: { type: "object", properties: {
       expiresAt: { type: "string", format: "date-time", nullable: true },
     } }, ttl: { field: "expiresAt", expireAfterSeconds: 0 } });
@@ -116,8 +116,8 @@ describe("validateManifests()", () => {
     const codes = (...manifests: Manifest[]) => validateManifests({ manifests }).diagnostics.map((d) => d.code);
     expect(validateManifests({ manifests: [expiring, view("current", "events")] }).errorCount).toBe(0);
     expect(codes(schema("posts"), view("cachedPosts", "posts", cache))).not.toContain("VIEW_CACHE_INVALID");
-    expect(codes(expiring, view("cachedEvents", "events", cache))).toContain("VIEW_CACHE_INVALID");
-    expect(codes(schema("sessions", { lifecycle: "operational" }), view("cachedSessions", "sessions", cache))).toContain("VIEW_CACHE_INVALID");
+    expect(codes(expiring, view("cachedEvents", "events", cache))).not.toContain("VIEW_CACHE_INVALID");
+    expect(codes(schema("sessions", { lifecycle: "operational" }), view("cachedSessions", "sessions", cache))).not.toContain("VIEW_CACHE_INVALID");
     for (const ttl of [{ field: "missing", expireAfterSeconds: 0 }, { field: "expiresAt", expireAfterSeconds: -1 }]) {
       expect(codes({ ...expiring, spec: { ...expiring.spec, ttl } })).toContain("SCHEMA_TTL_INVALID");
     }
@@ -1003,8 +1003,6 @@ spec:
   it.each([
     ["staff", "surface: staff\n  sql: SELECT 1"],
     ["guarded", "surface: public\n  sql: SELECT 1\n  requires: can-read"],
-    ["caller-bound", "surface: public\n  sql: SELECT id FROM posts WHERE owner = auth.uid()"],
-    ["time-bound", "surface: public\n  sql: SELECT id FROM posts WHERE at > now()"],
   ])("rejects shared cache on a %s View", (_case, body) => {
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View

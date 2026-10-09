@@ -57,6 +57,45 @@ spec: { surface: public, cache: { sharedMaxAge: 60 }, sql: "SELECT body FROM not
     expect(res.plan.views["v"]!.sharedMaxAge).toBe(60);
   });
 
+  it.each([undefined, pgCompile])("checks shared caching against expanded IR (%s)", async (dialect) => {
+    const schema = (extra = "") => `apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: records }
+spec:
+  title: Records
+  schema: { type: object, properties: { body: { type: string }, expires: { type: string, format: date-time } } }
+${extra}`;
+    const namedView = (name: string, sql: string, cache = true) => `---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: ${name} }
+spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMaxAge: 60 }," : ""} sql: ${JSON.stringify(sql)} }
+`;
+    const check = (text: string) => compilePlan({ sources: [{ sourceId: "memory:cache", text }] }, dialect);
+    for (const [sql, extra] of [
+      ["SELECT now() AS at", ""], ["SELECT pg_catalog.now() AS at", ""],
+      ["SELECT auth.uid() AS caller", ""], ["SELECT auth.role() AS role", ""],
+      ["SELECT body FROM records", "  lifecycle: operational\n"],
+      ["SELECT body FROM records", "  ttl: { field: expires, expireAfterSeconds: 0 }\n"],
+    ]) {
+      const result = await check(schema(extra) + namedView("cached", sql!));
+      expect(result.ok, sql).toBe(false);
+      if (!result.ok) expect(result.diagnostics.some((d) => d.code === "VIEW_CACHE_INVALID"), JSON.stringify(result.diagnostics)).toBe(true);
+    }
+    // The parser cannot decide eligibility by matching text inside literals, comments or a CTE name.
+    for (const sql of ["SELECT 'now() auth.uid() records' AS label /* now() */", "SELECT body FROM records"])
+      expect((await check(schema() + namedView("cached", sql))).ok).toBe(true);
+    if (dialect) {
+      expect((await check(schema("  lifecycle: operational\n") + namedView("cached", "WITH records AS (SELECT 'fixed' AS body) SELECT body FROM records"))).ok).toBe(true);
+      for (const [sql, extra] of [["SELECT now() AS body", ""], ["SELECT body FROM records", "  lifecycle: operational\n"], ["SELECT body FROM records", "  ttl: { field: expires, expireAfterSeconds: 0 }\n"]]) {
+        const result = await check(schema(extra) + namedView("inner-source", sql!, false) + namedView("middle-source", "SELECT body FROM inner_source", false) + namedView("cached", "SELECT body FROM middle_source"));
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.diagnostics).toEqual([expect.objectContaining({ code: "VIEW_CACHE_INVALID", source: expect.objectContaining({ path: "/spec/cache" }) })]);
+      }
+      expect((await check(schema() + namedView("inner-source", "SELECT body FROM records", false) + namedView("cached", "SELECT body FROM inner_source"))).ok).toBe(true);
+    }
+  });
+
   it("carries Schema checks as IR, and the fingerprint follows the plan", async () => {
     const withCheck = (c: string) => SCHEMA.replace("  lifecycle: operational", `  lifecycle: operational\n  checks: ["${c}"]`);
     const a = await compile(withCheck("length(body) > 0"));

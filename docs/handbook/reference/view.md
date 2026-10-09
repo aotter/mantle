@@ -151,7 +151,12 @@ refused (`VIEW_UI_INVALID`).
 ## `cache`
 
 `{ sharedMaxAge: 1–86400 }` is accepted only on an unguarded public View whose
-SQL reads neither `auth.*` nor `now()` (`VIEW_CACHE_INVALID`). The value is
+expanded SQL reads neither `auth.*` nor `now()`, nor TTL or operational Schemas
+(`VIEW_CACHE_INVALID`). Generation and uploaded-plan verification check executable IR,
+including inlined internal Views; comments, literals and display source do not decide
+eligibility. The annotation is the author's promise that this response may be shared
+for the chosen duration, not a proof of arbitrary native SQL immutability (for example,
+implicit time-dependent casts). The value is
 carried into the plan, and the REST surface answers an anonymous caller of such
 a View with `Cache-Control: public, s-maxage=<n>` and `Vary: authorization, cookie`,
 so a shared cache does not answer a signed-in request with it. A cached answer
