@@ -62,7 +62,7 @@ actual tables and indexes, compares them with the plan, and:
 | Difference | Boot |
 |---|---|
 | a missing table, field column, index, or unique index that builds | creates it (on SQLite, `STRICT` tables with their check and FTS triggers) |
-| a unique index that fails on existing rows, a column with another type, a changed index, a missing native column | refuses with `STORAGE_CHANGE_BLOCKED`, naming the change and a SQL hint |
+| a unique index that fails on existing rows, a column with another type, a changed index, a missing native column, a native column (`id`, `version`, `created_at`, `updated_at`, the scope field, `status`) that is nullable on PostgreSQL | refuses with `STORAGE_CHANGE_BLOCKED`, naming the change and a SQL hint (for a nullable native column: backfill, then `SET NOT NULL`) |
 | a column or non-unique index the plan no longer declares | keeps it and warns; nothing is ever dropped |
 
 A renamed field is a new empty column beside the old one: copy the data
