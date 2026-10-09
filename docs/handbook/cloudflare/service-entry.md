@@ -19,45 +19,72 @@ With identity `mantle` and every feature (the
 file, unchanged):
 
 ```ts
-function mount(runtime: MantleRuntime, env: Env) {
-  const auth = createAuth(env, origin);                       // createMantleAuth, or a setup-incomplete stub
-  const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } });
-  const authRoutes = createAuthRoutes(auth, { resolver });
-  const guard = (surface, options?) => withCaller(resolver, surface, options);
-  const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { … }, site: { mcpEndpoints: { public: "/mcp", staff: "/mcp/staff" } } }));
-  const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
-  // MCP Apps hosts render each staff View's rows, and the operations on one row, in the chat
-  const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }, resourceMetadata }), { resourceMetadata });
-  const rest = guard(createRestSurface(runtime, { basePath: "/api" }));
-  return async (request, waitUntil) => {
-    const owned = await authRoutes(request, { waitUntil });
-    if (owned) return owned;
-    if (under("/admin")) return admin(request);
-    if (under("/mcp/staff")) return staffMcp(request);
-    if (under("/mcp")) return mcp(request);
-    return rest(request);
+export function createService() {
+  function mount(runtime: MantleRuntime, env: Env) {
+    const auth = createAuth(env, origin);                       // createMantleAuth, or a setup-incomplete stub
+    const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } });
+    const authRoutes = createAuthRoutes(auth, { resolver });
+    const guard = (surface, options?) => withCaller(resolver, surface, options);
+    const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { … }, site: { mcpEndpoints: { public: "/mcp", staff: "/mcp/staff" } } }));
+    const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
+    // MCP Apps hosts render each staff View's rows, and the operations on one row, in the chat
+    const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }, resourceMetadata }), { resourceMetadata });
+    const rest = guard(createRestSurface(runtime, { basePath: "/api" }));
+    return async (request, runtime, waitUntil) => {
+      await auth.ready?.catch((error) => { routes = undefined; throw error; });
+      const owned = await authRoutes(request, { waitUntil });
+      if (owned) return owned;
+      if (under("/admin")) return admin(request, runtime);
+      if (under("/mcp/staff")) return staffMcp(request, runtime);
+      if (under("/mcp")) return mcp(request, runtime);
+      return rest(request, runtime);
+    };
+  }
+
+  let routes: ReturnType<typeof mount> | undefined;
+  const service: MantleService<Env> = {
+    handlers,
+    fetch: (request, env, { runtime, waitUntil }) => (routes ??= mount(runtime, env))(request, runtime, waitUntil),
   };
+
+  return createMantle(service, { plan, storage: (env) => d1Storage(env.DB), schedules: true });
 }
 
-const service: MantleService<Env> = {
-  handlers,
-  fetch: (request, env, { runtime, waitUntil }) => (routes ??= mount(runtime, env))(request, waitUntil),
-};
-
-export const mantle = createMantle(service, { plan, storage: (env) => d1Storage(env.DB), schedules: true });
+export const mantle = createService();
 ```
 
 - `Env` lists the bindings and vars the service reads. Add yours there.
-- The surfaces are built once per isolate, on the first request.
+- Each `createService()` call owns its routes, auth startup and database session.
+  Surfaces and MCP transport are built once per instance; execution receives
+  the current request runtime. The native PostgreSQL pool stays owned by the host.
 - With identity `custom` the resolver is your `src/identity.ts`; with `none`
   every surface gets `{ kind: "anonymous" }` and no auth routes are mounted.
+
+## Existing generated entries
+
+`generate` leaves existing `src/service.ts` files alone. To adopt the lifetime
+fix, wrap the composition in `createService()` as above, including `routes`,
+`mount`, its auth-start retry reset, and the PostgreSQL `session` / `database`
+closure. Return the existing `createMantle` result (and its PostgreSQL request
+wrappers), then export `mantle = createService()` once. Keep your native pool
+in the host entry; the factory does not construct another pool.
+
+The function returned by `mount` now takes `(request, runtime, waitUntil)`.
+Pass that current runtime to each cached guarded surface:
+`admin(request, runtime)`, `mcp(request, runtime)`, and `rest(request, runtime)`.
+For anonymous composition, forward it with
+`surface(request, { kind: "anonymous" }, runtime)`. The optional third argument
+is for a request facade from the same service instance as the surface's plan
+and storage. Standalone runtime callers can keep the two-argument form.
+Do not substitute a mutable module variable for the execution runtime or
+recreate the MCP handler on every request: it owns live transport state.
 
 ## Add your own routes
 
 Put them in the function `mount` returns, where they belong in the order:
 
 ```ts
-return async (request, waitUntil) => {
+return async (request, runtime, waitUntil) => {
   const { pathname } = new URL(request.url);
   await auth.ready?.catch((error) => { routes = undefined; throw error; }); // first, before any route answers
   if (pathname === "/healthz") return new Response("ok");            // no caller

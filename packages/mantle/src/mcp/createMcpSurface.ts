@@ -45,6 +45,7 @@ export interface McpSurfaceOptions {
 
 const CONTEXT_KEY = "mantle.caller";
 const UI_KEY = "mantle.clientUi";
+const RUNTIME_KEY = "mantle.runtime";
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** The SDK advertises each schema and accepts the value as given: the runtime validates once, so every source reports the same Diagnostic. */
@@ -92,7 +93,7 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
 
   const registers = (name: string, ui: ClientUiSupport) => byName.has(name) && !(apps.appOnly.has(name) && (ui === "unsupported" || apps.resources.length === 0));
 
-  const build = (caller: Caller, ui: ClientUiSupport) => {
+  const build = (caller: Caller, ui: ClientUiSupport, executionRuntime: MantleRuntime) => {
     const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } } });
     const withApps = ui !== "unsupported" && apps.resources.length > 0;
     if (withApps) for (const r of apps.resources) {
@@ -125,9 +126,9 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
             if (denied) throw new DiagnosticError(denied);
             return result(await tool.run(input));
           }
-          if (tool.kind === "procedure") return result(await runtime.invokeProcedure({ procedure: tool.source, input, caller, cause }));
+          if (tool.kind === "procedure") return result(await executionRuntime.invokeProcedure({ procedure: tool.source, input, caller, cause }));
           const { limit, cursor, ...rest } = input;
-          return result(await runtime.store.as(caller, cause).view(tool.source, { input: rest, ...(limit !== undefined ? { limit: limit as number } : {}), ...(cursor !== undefined ? { cursor: cursor as string } : {}) }));
+          return result(await executionRuntime.store.as(caller, cause).view(tool.source, { input: rest, ...(limit !== undefined ? { limit: limit as number } : {}), ...(cursor !== undefined ? { cursor: cursor as string } : {}) }));
         } catch (e) {
           code = e instanceof DiagnosticError ? e.diagnostic.code : "INTERNAL_ERROR";
           outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
@@ -150,10 +151,11 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
   const sdk = createMcpHandler(({ authInfo }) => {
     const c = authInfo?.extra?.[CONTEXT_KEY] as Caller | undefined;
     const ui = authInfo?.extra?.[UI_KEY];
-    return build(c ?? { kind: "anonymous" }, ui === "supported" || ui === "unsupported" ? ui : "unknown");
+    const executionRuntime = (authInfo?.extra?.[RUNTIME_KEY] as MantleRuntime | undefined) ?? runtime;
+    return build(c ?? { kind: "anonymous" }, ui === "supported" || ui === "unsupported" ? ui : "unknown", executionRuntime);
   }, { legacy: "stateless", maxRequestBodySize: maxBody, maxSubscriptions: 32, onerror: (e) => console.error("[mantle mcp] request failed", e) });
 
-  const surface: Surface = async (request, caller) => {
+  const surface: Surface = async (request, caller, executionRuntime = runtime) => {
     const url = new URL(request.url);
     if ((url.pathname.replace(/\/+$/, "") || "/") !== base) return Response.json({ error: { code: "NOT_FOUND", message: "no such route" } }, { status: 404 });
     if (caller.kind !== "user" && caller.kind !== "anonymous") return challenge(403, undefined, true);
@@ -166,7 +168,7 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
     // the staff surface is closed to everyone but staff, for listing as much as for calling
     // a role is not a scope: no challenge, or a client would re-authorize in a loop
     if (options.surface === "staff" && caller.kind === "user" && caller.role === null) return challenge(403, undefined, true);
-    const authInfo: AuthInfo = { token: "", clientId: caller.kind === "user" ? caller.clientId ?? "" : "", scopes: caller.kind === "user" ? [...caller.scopes] : [], extra: { [CONTEXT_KEY]: caller } };
+    const authInfo: AuthInfo = { token: "", clientId: caller.kind === "user" ? caller.clientId ?? "" : "", scopes: caller.kind === "user" ? [...caller.scopes] : [], extra: { [CONTEXT_KEY]: caller, [RUNTIME_KEY]: executionRuntime } };
     if (request.method.toUpperCase() !== "POST" || !isJsonContentType(request.headers.get("content-type"))) return sdk.fetch(request, { authInfo });
     let text: string;
     try {

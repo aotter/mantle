@@ -42,7 +42,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     ? [`  const resolver = createCallerResolver(auth${mcp ? ", { jwtBearer: { audience: `${origin}/mcp`, scopes: [\"mcp\"] } }" : ""});`, "  const authRoutes = createAuthRoutes(auth, { resolver });", "  const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);"]
     : identity === "custom"
       ? ["  const guard = (surface: Surface) => withCaller(resolveCaller, surface);"]
-      : ["  // no identity: every caller is anonymous", "  const guard = (surface: Surface) => (request: Request) => surface(request, { kind: \"anonymous\" });"];
+      : ["  // no identity: every caller is anonymous", "  const guard = (surface: Surface) => (request: Request, runtime: MantleRuntime) => surface(request, { kind: \"anonymous\" }, runtime);"];
   const meta = mantle && mcp ? ["  const resourceMetadata = `${origin}/.well-known/oauth-protected-resource/mcp`;"] : [];
   const adminOptions = [
     'basePath: "/admin"',
@@ -60,23 +60,23 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     "  // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers",
     '  const rest = guard(createRestSurface(runtime, { basePath: "/api" }));',
   ];
-  const call = `(routes ??= mount(runtime${withEnv ? ", env" : ""}))(request${mantle ? ", waitUntil" : ""})`;
+  const call = `(routes ??= mount(runtime${withEnv ? ", env" : ""}))(request, runtime${mantle ? ", waitUntil" : ""})`;
   const route = [
-    `  return async (request: Request${mantle ? ", waitUntil: (promise: Promise<unknown>) => void" : ""}): Promise<Response> => {`,
+    `  return async (request: Request, runtime: MantleRuntime${mantle ? ", waitUntil: (promise: Promise<unknown>) => void" : ""}): Promise<Response> => {`,
     "    const { pathname } = new URL(request.url);",
     "    const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);",
-    ...(mantle ? ["    // Better Auth's context is per isolate: the request that starts it waits for it, or the next one hangs on it; a failed start is mounted again",
+    ...(mantle ? ["    // Auth startup is shared by this service instance; a failed start is mounted again by its next request",
       "    await auth.ready?.catch((error) => {",
       "      routes = undefined;",
       "      throw error;",
       "    });", "    const owned = await authRoutes(request, { waitUntil });", "    if (owned) return owned;"] : []),
-    ...(admin ? ['    if (under("/admin")) return admin(request);'] : []),
-    ...(staffMcp ? ['    if (under("/mcp/staff")) return staffMcp(request);'] : []),
-    ...(mcp ? ['    if (under("/mcp")) return mcp(request);'] : []),
-    "    return rest(request);",
+    ...(admin ? ['    if (under("/admin")) return admin(request, runtime);'] : []),
+    ...(staffMcp ? ['    if (under("/mcp/staff")) return staffMcp(request, runtime);'] : []),
+    ...(mcp ? ['    if (under("/mcp")) return mcp(request, runtime);'] : []),
+    "    return rest(request, runtime);",
     "  };",
   ];
-  return [
+  const lines = [
     `${OWNED} It composes the service (ADR-0032 decision 6).`,
     `import { ${core.join(", ")} } from "@aotter/mantle";`,
     ...(admin ? ['import { createAdminSurface } from "@aotter/mantle/admin";', 'import { adminExtensions } from "./admin-extensions.js";'] : []),
@@ -97,6 +97,8 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     ...env,
     "}",
     "",
+    "/** One composition per storage owner; its routes, auth and native database session are reused across requests. */",
+    "export function createService() {",
     ...(postgres ? [
       "/**",
       ...(bun
@@ -182,16 +184,23 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     ...(postgres ? [
       `const core = createMantle(service, { plan, storage: (env) => postgresStorage({ connect: database(env).connect }), schedules: ${bun ? "false" : "true"} });`,
       "// a request is the unit of work, boot included: the first request's convergence reads share its one client, and so do the rest",
-      "export const mantle: typeof core = {",
+      "const mantle: typeof core = {",
       "  fetch: (request, env, ctx) => database(env).run(() => core.fetch(request, env, ctx)),",
       "  invokeSchedule: (cron, scheduledTime, env, ctx) => database(env).run(() => core.invokeSchedule(cron, scheduledTime, env, ctx)),",
       "  runDeferredHook: (message, env, ctx) => database(env).run(() => core.runDeferredHook(message, env, ctx)),",
       "};",
+      "return mantle;",
     ] : [
-      `export const mantle = createMantle(service, { plan, storage: (env) => ${bun ? "bunSqliteStorage(env.DB)" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
+      `return createMantle(service, { plan, storage: (env) => ${bun ? "bunSqliteStorage(env.DB)" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
     ]),
+    "}",
     "",
-  ].join("\n");
+    "export const mantle = createService();",
+    "",
+  ];
+  const start = lines.indexOf("export function createService() {");
+  const end = lines.lastIndexOf("}");
+  return lines.map((line, i) => i > start && i < end && line ? `  ${line}` : line).join("\n");
 }
 
 function handlers(plan: RuntimePlan): string {

@@ -6,8 +6,11 @@ import type { MantleDialect } from "./dialect.js";
 import type { MantleSite } from "./site.js";
 import type { MantleStore, StoreExecutor } from "./store.js";
 
-/** A surface is a Fetch function, created with its base path (`createMcpSurface(runtime, { basePath })`). */
-export type Surface = (request: Request, caller: Caller) => Promise<Response>;
+/**
+ * A cached surface keeps its plan/transport; an entry passes the current request runtime of that same service instance for execution.
+ * Omit the third argument for a standalone runtime. The application owns this binding; it is never supplied by the wire.
+ */
+export type Surface = (request: Request, caller: Caller, executionRuntime?: MantleRuntime) => Promise<Response>;
 
 /** The sealed plan (version 6), compiled by the CLI: see `RuntimePlan` in spec. */
 export type { RuntimePlan };

@@ -24,7 +24,7 @@ export function createRestSurface(runtime: MantleRuntime, options: RestSurfaceOp
     .flatMap(([name, t]) => (t.source.kind === "http" ? [{ name, method: t.source.method, path: t.source.path, procedure: t.procedure }] : []))
     .sort((a, b) => params(a.path) - params(b.path));
 
-  return async (request, caller) => {
+  return async (request, caller, executionRuntime = runtime) => {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
@@ -32,7 +32,7 @@ export function createRestSurface(runtime: MantleRuntime, options: RestSurfaceOp
       if (view !== undefined) {
         const v = plan.views[view];
         if (!v || v.surface !== "public") throw wireError("NOT_FOUND", `no public View '${view}'`, "rest");
-        return json(await runtime.store.as(caller).view(view, viewQuery(view, v, url.searchParams, "rest")), 200, NO_STORE);
+        return json(await executionRuntime.store.as(caller).view(view, viewQuery(view, v, url.searchParams, "rest")), 200, NO_STORE);
       }
 
       for (const route of routes) {
@@ -42,7 +42,7 @@ export function createRestSurface(runtime: MantleRuntime, options: RestSurfaceOp
         const props = plan.procedures[route.procedure]?.input.properties ?? {};
         const body = await readJsonObject(request, "rest");
         const input = { ...body, ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, coerce(v, props[k] as JsonSchema | undefined, k, "rest")])) };
-        return json(await runtime.invokeProcedure({ procedure: route.procedure, input, caller, cause: { kind: "http", id: crypto.randomUUID() } }), 200, NO_STORE);
+        return json(await executionRuntime.invokeProcedure({ procedure: route.procedure, input, caller, cause: { kind: "http", id: crypto.randomUUID() } }), 200, NO_STORE);
       }
       throw wireError("NOT_FOUND", "no such route", "rest");
     } catch (e) {
