@@ -228,7 +228,7 @@ describe("boot", () => {
     await other.dispose();
     expect((await boot()).bootReport()).toEqual({ fingerprint: plan.fingerprint, coreVersion: "0.2.0" });
   });
-}, 60_000);
+});
 
 describe("invokeProcedure", () => {
   let rt: MantleRuntime;
@@ -326,7 +326,7 @@ describe("invokeProcedure", () => {
     cyclic.parent = cyclic;
     expect((await failure(rt.invokeProcedure({ ...inv("chain", { depth: 0 }, user("o1")), cause: cyclic })))?.diagnostic.code).toBe("INVOCATION_DEPTH_EXCEEDED");
   });
-}, 60_000);
+});
 
 describe("createMantle", () => {
   it("keeps each concurrent request's service, handler and lifecycle background work on its own context", async () => {
@@ -393,4 +393,4 @@ describe("createMantle", () => {
     await expect(m.fetch(new Request("http://x/"), {})).rejects.toThrow("storage down");
     expect((await m.fetch(new Request("http://x/"), {})).status).toBe(200);
   });
-}, 60_000);
+});
