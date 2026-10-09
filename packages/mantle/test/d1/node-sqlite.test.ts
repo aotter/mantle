@@ -82,7 +82,14 @@ it("a paged View whose first relation is json_each loses no row (#1402)", async 
       cursor = page.next;
     }
     expect(got).toEqual(["x", "x", "z"]);
-    // without an alias it has no key to page by
-    await expect(runView(s, await program("view", `SELECT value FROM json_each('["z","x","x"]') ORDER BY value`), caller(), { pageSize: 1 })).rejects.toThrow(/needs an alias/);
+    // unaliased, alone in FROM, it is keyed by its own id
+    const bare = await program("view", `SELECT value FROM json_each('["z","x","x"]') ORDER BY value`);
+    const all: unknown[] = [];
+    for (let next: unknown[] | undefined, i = 0; i < 6; i++) {
+      const page = await runView(s, bare, caller(), { cursor: next, pageSize: 1 });
+      all.push(...page.rows.map((r: any) => r.value));
+      if (!(next = page.next)) break;
+    }
+    expect(all).toEqual(["x", "x", "z"]);
   } finally { driver.db.close(); }
 });

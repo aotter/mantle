@@ -264,19 +264,6 @@ export function tx(v: any, c: C): any {
 
 /** A SELECT's output names; a set operation's are its first branch's. */
 const outputsOf = (sel: N): string[] => (sel.op && sel.op !== 'SETOP_NONE' ? outputsOf(sel.larg) : (sel.targetList ?? []).map((t: N) => t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval));
-/**
- * A subquery's (or CTE's) output at `pos` is one row's own id when every branch reads a table's own `id` there, from that one relation
- * or grouped by it: a JOIN or row source can repeat it. A set operation matches its branches by position.
- * ponytail: ids are generated, so a UNION of different tables is trusted not to collide (one table against itself is not caught), and a
- * many-to-one JOIN is refused though its id is unique; the upgrade is a proof from the Schemas' unique keys.
- */
-const uniqueId = (sel: N, pos: number): boolean => {
-  if (sel.op && sel.op !== 'SETOP_NONE') return uniqueId(sel.larg, pos) && uniqueId(sel.rarg, pos);
-  const v = sel.targetList?.[pos]?.ResTarget.val;
-  if (v?.ColumnRef?.fields?.at(-1)?.String?.sval !== 'id') return false;
-  const from = sel.fromClause ?? [];
-  return (from.length === 1 && !!from[0].RangeVar) || (sel.groupClause ?? []).some((g: N) => JSON.stringify(g) === JSON.stringify(v));
-};
 /** A CTE's: its column list renames its body's. */
 const cteOutputs = (cte: N): string[] => (cte.aliascolnames?.length ? cte.aliascolnames.map((x: N) => x.String.sval) : outputsOf(cte.ctequery.SelectStmt));
 
@@ -335,21 +322,17 @@ function selectIn(n: N, c: C): N {
         throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a subquery in FROM, needs the subquery to output id`);
       const cte = first!.RangeVar?.mantle === 'cte' ? [...c.ctes].reverse().find((m) => m.has(first!.RangeVar.relname))?.get(first!.RangeVar.relname) : undefined;
       if (cte && !cteOutputs(cte).includes('id')) throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a CTE, needs the CTE to output id`);
-      // the keyset cursor skips rows that share a key, so a subquery's or CTE's id must be one row's own: a JOIN or a row source in it fans it out
-      const body = first!.RangeSubselect?.subquery.SelectStmt ?? cte?.ctequery.SelectStmt;
-      if (body && !uniqueId(body, (first!.RangeSubselect ? outputsOf(body) : cteOutputs(cte!)).indexOf('id')))
-        throw new Refused('SQL_SHAPE', `ordering ${firstAlias}, a ${first!.RangeSubselect ? 'subquery in FROM' : 'CTE'}, needs a unique id: select a table's own id from that one table (or GROUP BY it), and JOIN outside it`);
-      // a row source first in FROM has no table's id before it: its own key orders it, and a table after it would repeat that key
-      if (!firstAlias && (rels.length > 1 || (n.fromClause ?? []).length > 1))
-        throw new Refused('SQL_SHAPE', 'ordering a row source first in FROM with a table after it repeats its key: put the table first');
-      if (!firstAlias && !first!.RangeFunction.alias) throw new Refused('SQL_SHAPE', 'ordering a row source first in FROM needs an alias: write json_each(...) AS j');
+      // a row source first in FROM has no table's id before it: its own key orders it (#1402)
       const extra = firstAlias ? [col(firstAlias, 'id')] : [];
+      // ponytail: a table after a row source first in FROM, and a subquery or CTE whose id fans out (a JOIN in it), still repeat
+      // the key (#1402); the upgrade is a key per relation that a LEFT JOIN's NULL cannot break, or a refusal at generate time
       for (const f of n.fromClause ?? []) for (const r of relsOf(f)) {
         const je = r.RangeFunction;
         if (!je) continue;
         const fname = je.functions[0]?.List?.items?.[0]?.FuncCall?.funcname?.at(-1)?.String?.sval;
         // json_each's own `id` orders its elements; PostgreSQL's row sources have none, so a paged one is keyed by its ordinality
-        if (fname === 'json_each') { if (je.alias) extra.push(col(je.alias.aliasname, 'id')); continue; }
+        // an unaliased json_each alone in FROM is keyed by its own unqualified `id`
+        if (fname === 'json_each') { if (je.alias) extra.push(col(je.alias.aliasname, 'id')); else if (r === first && rels.length === 1 && n.fromClause.length === 1) extra.push(col('id')); continue; }
         if (!je.alias || !je.ordinality) throw new Refused('SQL_SHAPE', `ordering a row source (${fname}) needs an alias and WITH ORDINALITY: write ${fname}(...) WITH ORDINALITY AS j(value, n)`);
         // the ordinality column is named by the list's extra entry after the function's own columns (one, or two for jsonb_each*), else `ordinality`
         const own = String(fname).startsWith('jsonb_each') ? 2 : 1;

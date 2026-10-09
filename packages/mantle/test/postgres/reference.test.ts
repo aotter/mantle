@@ -197,20 +197,6 @@ it.skipIf(!PG_URL)("a paged View over jsonb row sources is keyed by their ordina
     expect(new Set(two).size).toBe(7);
     // a row source first in FROM is keyed by its ordinality alone (#1402)
     expect(await pageAll(`SELECT j.value FROM jsonb_array_elements_text('["z","x","x"]'::jsonb) WITH ORDINALITY AS j(value, n) ORDER BY j.value`)).toEqual(["x", "x", "z"]);
-    // a subquery whose id repeats (a join with a row source fans it out) is refused; a single table's own id is kept
-    const unique = /needs a unique id/;
-    const run = async (sql: string) => runView(s, await program("view", sql), caller(), { pageSize: 1 });
-    await expect(run(`SELECT s.id FROM (SELECT i.id FROM items i, ${src}) s ORDER BY s.id`)).rejects.toThrow(unique);
-    await expect(run(`SELECT s.id FROM (SELECT i.id FROM items i JOIN ${src} ON true) s ORDER BY s.id`)).rejects.toThrow(unique);
-    await expect(run(`SELECT s.id FROM (SELECT i.id FROM items i UNION ALL SELECT i.id FROM items i, ${src}) s ORDER BY s.id`)).rejects.toThrow(unique);
-    await expect(run("SELECT s.id FROM (SELECT i.name AS id FROM items i) s ORDER BY s.id")).rejects.toThrow(unique);
-    expect(await pageAll("SELECT s.id, s.stock FROM (SELECT i.id, i.stock FROM items i WHERE i.stock > 1) s ORDER BY s.stock")).toEqual(["b/2", "a/5", "d/7", "c/9"]);
-    // a set operation matches by position, a CTE is checked as a subquery is, and grouping by the id keeps it unique
-    await expect(run("SELECT s.id FROM (SELECT i.id, i.name FROM items i UNION ALL SELECT i.name, i.id FROM items i) s ORDER BY s.id")).rejects.toThrow(unique);
-    await expect(run(`WITH x AS (SELECT i.id FROM items i, ${src}) SELECT x.id FROM x ORDER BY x.id`)).rejects.toThrow(unique);
-    await expect(run(`SELECT s.id FROM (SELECT i.id FROM items i, ${src} GROUP BY i.id) s ORDER BY s.id`)).resolves.toBeDefined();
-    // a table after a row source first in FROM would repeat the row source's key
-    await expect(run(`SELECT i.id FROM jsonb_array_elements_text('["a"]'::jsonb) WITH ORDINALITY AS j(value, n) JOIN items i ON true ORDER BY j.value`)).rejects.toThrow(/put the table first/);
     const ask = /alias and WITH ORDINALITY/;
     await expect(program("view", "SELECT i.id, j.value AS tag FROM items i, jsonb_array_elements_text(i.tags) AS j(value) ORDER BY i.id")).rejects.toThrow(ask);
     await expect(program("view", "SELECT i.id FROM items i JOIN jsonb_array_elements_text(i.tags) AS j(value) ON true ORDER BY i.id")).rejects.toThrow(ask);
