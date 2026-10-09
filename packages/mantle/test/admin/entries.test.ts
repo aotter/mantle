@@ -57,6 +57,19 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
+metadata: { name: child-items }
+spec:
+  title: Child items
+  lifecycle: operational
+  uiSchema: { list: { primaryField: title, columns: [position] } }
+  indexes: [[parentId, position]]
+  schema:
+    type: object
+    required: [parentId, title, position]
+    properties: { parentId: { type: string }, title: { type: string }, position: { type: integer } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
 metadata: { name: ledger }
 spec:
   title: Ledger
@@ -261,6 +274,26 @@ describe("Admin entries: the list", () => {
     expect(await seen(editor)).toHaveLength(1);
     const [mine] = (await call("GET", "/admin/api/entries?collection=notes", editor)).body.items;
     expect((await call("GET", at(mine.id, "notes"), owner)).status).toBe(404); // another staff member's row is not there for the owner either
+  });
+});
+
+describe("Admin entries: scope with a compound-index sort (#1316)", () => {
+  it("lists a scoped collection ordered by an indexed field", async () => {
+    for (const [parentId, position] of [["p1", 2], ["p1", 1], ["p2", 0], ["p1", 3]] as const) await create("child-items", { parentId, title: `t${position}`, position });
+    const r = await call("GET", "/admin/api/entries?collection=child-items&scope_field=parentId&scope_value=p1&sort=position&direction=asc", editor);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.items.map((i: any) => i.data_preview.title)).toEqual(["t1", "t2", "t3"]);
+    for (const direction of ["asc", "desc"]) {
+      const seen: string[] = [];
+      let cursor = "";
+      do {
+        const page = await call("GET", `/admin/api/entries?collection=child-items&scope_field=parentId&scope_value=p1&sort=position&direction=${direction}&limit=2${cursor}`, editor);
+        expect(page.status, JSON.stringify(page.body)).toBe(200);
+        seen.push(...page.body.items.map((i: any) => i.data_preview.title));
+        cursor = page.body.next_cursor ? `&cursor=${encodeURIComponent(page.body.next_cursor)}` : "";
+      } while (cursor);
+      expect(seen).toEqual(direction === "asc" ? ["t1", "t2", "t3"] : ["t3", "t2", "t1"]);
+    }
   });
 });
 
