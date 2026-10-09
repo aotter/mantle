@@ -46,6 +46,17 @@ describe("compilePlan", () => {
     expect(res.plan).toMatchObject({ version: 6, dialect: { name: "@aotter/mantle/d1", version: "1" }, fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) });
   });
 
+  it("carries a View's cache.sharedMaxAge into the plan", async () => {
+    const res = await compile(`${SCHEMA.replace("  lifecycle: operational\n", "").replace("  scope: { ownerId: auth.uid() }\n", "")}---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: v }
+spec: { surface: public, cache: { sharedMaxAge: 60 }, sql: "SELECT body FROM notes" }
+`);
+    if (!res.ok) throw new Error(JSON.stringify(res.diagnostics));
+    expect(res.plan.views["v"]!.sharedMaxAge).toBe(60);
+  });
+
   it("carries Schema checks as IR, and the fingerprint follows the plan", async () => {
     const withCheck = (c: string) => SCHEMA.replace("  lifecycle: operational", `  lifecycle: operational\n  checks: ["${c}"]`);
     const a = await compile(withCheck("length(body) > 0"));

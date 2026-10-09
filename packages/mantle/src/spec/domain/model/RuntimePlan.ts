@@ -46,6 +46,8 @@ export interface PlanView extends SqlPlan {
   readonly source: string;
   readonly surface: "public" | "staff" | "internal";
   readonly requires?: AuthorizationRequirements;
+  /** `spec.cache.sharedMaxAge`: REST lets a shared cache keep an anonymous read this many seconds. Only an unguarded public View has it. */
+  readonly sharedMaxAge?: number;
   /** Output name -> the Schema field it reads unchanged (`SELECT t.f`, `t.f AS f`, `*`, `created_at`) or a `sum`/`min`/`max` of it; the Store decodes these as `select` does. */
   readonly columns?: Readonly<Record<string, { readonly schema: string; readonly field: string }>>;
 }

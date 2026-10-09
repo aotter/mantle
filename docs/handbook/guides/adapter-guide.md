@@ -1,4 +1,7 @@
-# Running Mantle on another engine or host
+---
+description: How to run Mantle on another SQLite host or engine - the DatabaseDriver contract (numbered binds, rethrown engine errors), schedules, custom dialects, and what is untested.
+---
+# Another host or engine
 
 0.1.x had per-host adapters (`@aotter/mantle-cloudflare`, `-bun`, `-vercel`,
 `-indexeddb`) built on ADR-0011's storage ports. 0.2.0 replaced them
@@ -33,6 +36,9 @@ connect })` from `@aotter/mantle/postgres`.
 
 Binds are numbered `?1`, `?2` in the order given; a driver whose engine binds
 only anonymous `?` rewrites them in order (the CLI's `node:sqlite` driver does).
+When a statement fails, `batch` rolls back and rethrows the engine's own error
+unchanged, with its `code` (or `errcode`): the executor tells a refused
+statement from one that never reached the engine by it.
 
 ## Another engine
 
@@ -41,7 +47,7 @@ A dialect is an npm package with a compile side (`<dialect>/compile`:
 whose executor runs the plan). Name it in `mantle.config.json` (`dialect`);
 the plan records it and boot refuses another. A dialect is supported when it
 passes `runStorageConformance` from `@aotter/mantle/testing` on a real engine.
-See ADR-0035 and [Runtime, Store and dialects](handbook/concepts/runtime-and-adapters.md).
+See ADR-0035 and [Runtime, Store and dialects](../concepts/runtime-and-adapters.md).
 
 ## Surfaces and identity
 
@@ -49,8 +55,8 @@ They are host-neutral Fetch functions: `createRestSurface`,
 `createMcpSurface`, `createAdminSurface` (with `assets` from
 `@aotter/mantle-ui/admin`) and `createAuthRoutes`, each behind
 `withCaller(resolver, …)`. Mount them on whatever router the host uses. See
-[The service and its entry](handbook/cloudflare/service-entry.md) and
-[Authentication](handbook/cloudflare/authentication.md).
+[The service and its entry](../cloudflare/service-entry.md) and
+[Authentication](../cloudflare/authentication.md).
 
 ## Not in 0.2.0
 
