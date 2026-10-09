@@ -82,5 +82,7 @@ it("a paged View whose first relation is json_each loses no row (#1402)", async 
       cursor = page.next;
     }
     expect(got).toEqual(["x", "x", "z"]);
+    // without an alias it has no key to page by
+    await expect(runView(s, await program("view", `SELECT value FROM json_each('["z","x","x"]') ORDER BY value`), caller(), { pageSize: 1 })).rejects.toThrow(/needs an alias/);
   } finally { driver.db.close(); }
 });
