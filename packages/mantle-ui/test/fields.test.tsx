@@ -69,6 +69,16 @@ describe("SchemaFields values and access", () => {
     expect(clearedValue({ type: "string", enum: ["a", null] })).toBeNull();
   });
 
+  it("offers a clearing choice only where nothing is required or defaulted, and shows the default for a missing value", async () => {
+    const { enumChoice } = await import("../src/react/fields.js");
+    const grid = { type: "string", enum: ["grid", "carousel"] } as const;
+    expect(enumChoice(grid, undefined, false)).toEqual({ selected: "__empty__", clearable: true });
+    expect(enumChoice(grid, undefined, true)).toEqual({ selected: "", clearable: false });
+    expect(enumChoice({ ...grid, enum: ["grid", null] }, undefined, true).clearable).toBe(true);
+    expect(enumChoice({ ...grid, default: "grid" }, undefined, false)).toEqual({ selected: "grid", clearable: false });
+    expect(enumChoice({ ...grid, default: "grid" }, "carousel", false).selected).toBe("carousel");
+  });
+
   it("shows a readOnly property read-only, and links each label to its control and description", () => {
     const html = renderToStaticMarkup(<SchemaFields schema={{ type: "object", required: ["note"], properties: { locked: { type: "string", readOnly: true }, note: { type: "string", description: "Why" } } }} value={{ locked: "x" }} onChange={() => {}} language="en" />);
     expect(html).toMatch(/role="textbox" aria-readonly="true"/);
