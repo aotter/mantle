@@ -418,6 +418,13 @@ spec:
       expect(await paths(await cols(bad))).toEqual(["plan#/views/stock/columns"]);
   });
 
+  it("refuses a shared cache the manifest would refuse: REST sends it to anonymous callers", async () => {
+    const base = await plan();
+    const cached = (view: object) => reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, ...view } as never } }));
+    for (const bad of [{ sharedMaxAge: "60, immutable" }, { sharedMaxAge: 0 }, { sharedMaxAge: 60 }, { sharedMaxAge: 60, surface: "public", source: "SELECT now() AS t" }, { sharedMaxAge: 60, surface: "public" }])
+      expect(await paths(await cached(bad))).toEqual(["plan#/views/stock/sharedMaxAge"]);
+  });
+
   it("checks a View's uiSchema.list as the CLI does: lists of the View's outputs", async () => {
     const base = await plan();
     const ui = (uiSchema: unknown) => reseal(base, (p) => ({ ...p, views: { ...p.views, stock: { ...p.views.stock!, uiSchema } as never } }));

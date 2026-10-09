@@ -62,7 +62,7 @@ actual tables and indexes, compares them with the plan, and:
 | Difference | Boot |
 |---|---|
 | a missing table, field column, index, or unique index that builds | creates it (on SQLite, `STRICT` tables with their check and FTS triggers) |
-| a unique index that fails on existing rows, a column with another type, a changed index, a missing native column | refuses with `STORAGE_CHANGE_BLOCKED`, naming the change and a SQL hint |
+| a unique index that fails on existing rows, a column with another type, a changed index, a missing native column, a native column (`id`, `version`, `created_at`, `updated_at`, the scope field, `status`) that is nullable on PostgreSQL | refuses with `STORAGE_CHANGE_BLOCKED`, naming the change and a SQL hint (for a nullable native column: backfill, then `SET NOT NULL`) |
 | a column or non-unique index the plan no longer declares | keeps it and warns; nothing is ever dropped |
 
 A renamed field is a new empty column beside the old one: copy the data
@@ -227,7 +227,10 @@ Bun has a generated preset for both engines (`mantle generate --host bun`,
 ADR-0038, ADR-0039): over PostgreSQL it is the Workers composition on a `pg.Pool`;
 over SQLite `bunSqliteDriver` gives Better Auth the same store. A `DatabaseDriver` is one method, so another engine
 (libSQL, for example) is a few lines of application code on `host: none`: the
-entry calls `createMantle` and its own server.
+entry calls `createMantle` and its own server. See
+[Another host or engine](../guides/adapter-guide.md) for the driver contract
+(numbered binds, rethrown engine errors with their code), schedules through
+`invokeSchedule`, and what is untested.
 
 `site` turns on the site capability (site settings and media); see
 [Site defaults and site_config](../reference/site-config.md).
