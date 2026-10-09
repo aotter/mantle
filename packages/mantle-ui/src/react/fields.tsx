@@ -23,8 +23,8 @@ import {
 /** Every string the fields render; hosts pass their own translations. */
 export interface FieldLabels {
   readonly emptyOption: string;
-  /** The stand-in for a missing value; `{option}` is the default option's label. */
-  readonly defaultOption: string;
+  /** The stand-in for a missing value; `{option}` is the default option's label. Optional so host label sets keep compiling. */
+  readonly defaultOption?: string;
   readonly chooseOption: string;
   readonly boolean: string;
   readonly dateTimeSelect: string;
@@ -121,7 +121,7 @@ function SchemaField(props: SchemaFieldsProps & {
   const readOnly = typeof schema["x-mantle-bind"] === "string" || schema.readOnly === true;
   const cleared = clearedValue(schema);
   const choice = enumChoice(schema, value, required);
-  const defaultText = choice.defaultOption === undefined ? undefined : labels.defaultOption.replace("{option}", optionLabel(schema, choice.defaultOption, language, canonical));
+  const defaultText = choice.defaultOption === undefined ? undefined : (labels.defaultOption ?? defaultFieldLabels.defaultOption!).replace("{option}", optionLabel(schema, choice.defaultOption, language, canonical));
   const id = React.useId();
   const labelId = `${id}-label`;
   const descriptionId = `${id}-description`;
