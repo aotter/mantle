@@ -102,7 +102,9 @@ agent acts as the signed-in person, who can run every staff tool by hand.
 `createMcpSurface(runtime, { …, apps: { resources: [...] } })` serves `ui://`
 resources beside the tools. Each resource names the tools whose results it
 `renders`, and may name `appOnly` View tools that only the App can call. A
-client without MCP Apps support never sees app-only tools. The HTML is a static
+client without MCP Apps support never sees app-only tools. An App tool's
+`_meta` carries `ui.resourceUri` and, for ChatGPT, the same URI under
+`openai/outputTemplate`; other tools get neither. The HTML is a static
 asset; caller data travels only in tool results.
 
 The preset serves Mantle's App on `/mcp/staff`:
@@ -130,6 +132,13 @@ tool call under the caller's own token. A rendered result names its tool in
 On the public surface, a member-facing App is the application's to build; the
 SDK attaches none. The `develop` skill's
 [MCP App recipe](../../skills/develop/mcp-app.md) lists the pieces.
+
+## Server instructions
+
+`createMcpSurface` optionally takes `instructions`, a plain string sent in the
+`initialize` result: how the tools fit together (for example, read the data
+before coaching). Clients put it in front of the model. It is set per surface,
+so `/mcp` and `/mcp/staff` can say different things, and is absent when not set.
 
 ## Native metadata observations
 

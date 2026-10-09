@@ -28,6 +28,8 @@ export interface McpSurfaceOptions {
   readonly resourceMetadata?: string;
   readonly serverInfo?: { readonly name: string; readonly title?: string; readonly version?: string };
   readonly apps?: McpApps;
+  /** Server instructions sent at initialize: how the tools fit together, for every client. Absent when not set. */
+  readonly instructions?: string;
   /** POST body bound in bytes. Defaults to 1 MiB. */
   readonly maxRequestBodySize?: number;
   /** Language tried first when a description is localized. Defaults to `en`. */
@@ -93,7 +95,7 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
   const registers = (name: string, ui: ClientUiSupport) => byName.has(name) && !(apps.appOnly.has(name) && (ui === "unsupported" || apps.resources.length === 0));
 
   const build = (caller: Caller, ui: ClientUiSupport) => {
-    const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } } });
+    const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
     const withApps = ui !== "unsupported" && apps.resources.length > 0;
     if (withApps) for (const r of apps.resources) {
       const meta = appMeta(r);
@@ -141,8 +143,8 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
       const config = { ...(tool.title ? { title: tool.title } : {}), description: tool.description, inputSchema: schemaOf(tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schemaOf(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) };
       const uri = withApps ? apps.appOnly.get(tool.name) ?? apps.rendersIn.get(tool.name) : undefined;
       if (!uri) { server.registerTool(tool.name, config, run); continue; }
-      // writes both the `ui` object and the legacy flat key, so older hosts find the resource too
-      registerAppTool(server, tool.name, { ...config, _meta: { ui: { resourceUri: uri, ...(apps.appOnly.has(tool.name) ? { visibility: ["app"] } : {}) } } } as Parameters<typeof registerAppTool>[2], run as never);
+      // writes both the `ui` object and the legacy flat key, so older hosts find the resource too; `openai/outputTemplate` is ChatGPT's key for the same resource
+      registerAppTool(server, tool.name, { ...config, _meta: { "openai/outputTemplate": uri, ui: { resourceUri: uri, ...(apps.appOnly.has(tool.name) ? { visibility: ["app"] } : {}) } } } as unknown as Parameters<typeof registerAppTool>[2], run as never);
     }
     return server;
   };

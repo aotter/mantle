@@ -286,6 +286,12 @@ spec: { surface: public, requires: { guard: { procedure: observation-guard } }, 
     expect((await rpc("public", anon, "tools/list")).status).toBe(200);
   });
 
+  it("sends server instructions at initialize when set, and none otherwise", async () => {
+    const init = { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } };
+    expect((await rpc("public", user("c1"), "initialize", init, { instructions: "Read notes before adding." })).data.result.instructions).toBe("Read notes before adding.");
+    expect((await rpc("public", user("c1"), "initialize", init)).data.result).not.toHaveProperty("instructions");
+  });
+
   it("closes a surface whose every tool needs identity to anonymous from initialize on, so a client signs in when it connects", async () => {
     const mcp = await subsetSurface(/name: (notes|add-note|mcp-add)\b/, RM);
     for (const request of [post("initialize"), post("tools/list"), new Request("https://x.test/mcp", { headers: { accept: "text/event-stream" } })]) {
