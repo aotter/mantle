@@ -35,6 +35,27 @@ export async function run(r: Report, engine: Engine) {
     cursor = page.next;
   }
   r.equal('cursor: pages of 2 cover the report in order, without repeats or gaps, and the last page has no next cursor', pages, [all.slice(0, 2), all.slice(2, 4)]);
+  // The handbook's derived-table example authors the complete row identity. A parent's id alone repeats after this join.
+  for (const projection of ['s.id, s.name, s.order_id', 's.id, s.name']) {
+    const joined = await program('view', `SELECT ${projection} FROM (
+      SELECT i.id, i.name, o.id AS order_id FROM items i JOIN orders o ON o.item_id = i.id
+    ) s ORDER BY s.id, s.order_id`);
+    const expected = projection.includes('s.order_id')
+      ? [{ id: 'a', name: 'apple', order_id: 'oa' }, { id: 'a', name: 'apple', order_id: 'ob' }]
+      : [{ id: 'a', name: 'apple' }, { id: 'a', name: 'apple' }];
+    r.equal(`authored join identity: unpaged ${projection}`, (await runView(s, joined, caller())).rows, expected);
+    for (const pageSize of [1, 2, 3]) {
+      const rows: any[] = [];
+      let after: unknown[] | undefined;
+      for (let pageNumber = 0; pageNumber < 4; pageNumber++) {
+        const page = await runView(s, joined, caller(), { cursor: after, pageSize });
+        rows.push(...page.rows);
+        if (!page.next) break;
+        after = page.next;
+      }
+      r.equal(`authored join identity: page size ${pageSize} preserves ${projection}, including repeated projected rows`, rows, expected);
+    }
+  }
   // a forged cursor cannot reveal another owner's row (the keys only filter the caller's own result); ties on the first key are broken by the group key
   const forged = await runView(s, p, caller({ min: 0 }), { cursor: [0, 'LEAK-zeta', 'LEAK-zeta'], pageSize: 5 });
   const inTie = await runView(s, p, caller({ min: 0 }), { cursor: [0, 'berry', 'berry'], pageSize: 5 });

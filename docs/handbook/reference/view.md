@@ -78,9 +78,11 @@ On PostgreSQL a View may also use:
 | Time | `ts AT TIME ZONE 'Asia/Taipei'`; `date_trunc` adds `minute` and `quarter`; `extract` adds `minute`, `quarter`, `week`, `isoyear`, `isodow`, `doy`, `epoch` |
 | Casts | any expression to `int4`, `int8`, `numeric(p, s)`, `date`, `timestamptz`, `jsonb`; a text literal compared with a date-time column is cast, as PostgreSQL does |
 
-Every statement on PostgreSQL has a `statement_timeout` of at most 10 seconds
-(`postgresStorage({ statementTimeoutMs })`); a View runs under the role's own,
-which boot requires to be set and no larger.
+A PostgreSQL View runs under the role's `statement_timeout`. With the default
+`postgresStorage({ statementTimeoutMs: 10_000 })`, boot requires that role
+limit to be positive and no larger than 10 seconds. Setting the option to
+zero disables that boot requirement, without changing the role's own limit.
+See [PostgreSQL runtime settings](../concepts/runtime-and-adapters.md#the-postgresql-dialect).
 
 ### Reading another View
 
@@ -129,6 +131,42 @@ Every surface takes `limit` (default 50, maximum 500) and `cursor`, and answers
 `{ "rows": [...], "nextCursor": "…" }`. `nextCursor` appears only when more
 rows exist; pass it back unchanged. A cursor is bound to its View and order.
 REST coerces each `input` query parameter to its declared type.
+
+### Author a unique order for the result
+
+Keyset paging requires the complete `ORDER BY` to distinguish every result
+row. The appended `id` breaks ties for a single Schema row; it does not prove
+uniqueness after a one-to-many join or inside a derived table, CTE or another
+View. A column named `id` in a subquery can repeat. Mantle does not check the
+result for duplicate sort keys or invent a unique key for arbitrary SQL.
+
+For example, when an item has several orders, order by both identities. This
+query works on D1 and PostgreSQL; `items` declares `name`, and `orders`
+declares `item_id`:
+
+```sql
+SELECT s.id, s.name, s.order_id
+FROM (
+  SELECT i.id, i.name, o.id AS order_id
+  FROM items i JOIN orders o ON o.item_id = i.id
+) s
+ORDER BY s.id, s.order_id
+```
+
+Here `(s.id, s.order_id)` identifies each joined row. `ORDER BY s.id` alone
+does not: a later page can skip the other orders for the same item. For a
+row source, retain its element key as well as the parent key in the outer
+ordering; repeated element values are not identities. A nullable key follows
+the dialect's NULL ordering, but NULL handling does not make a repeated tuple
+unique. For grouped or set-operation results, reason about the resulting
+rows rather than assuming an input table's `id` still identifies them.
+
+Cursor paging of a result without a unique complete ordering is unsupported,
+even if its SQL compiles. The compiler does not generally prove or refuse
+that case. Add the keys that identify the result rows before using cursor
+paging. An authored `LIMIT` also needs a deterministic order at its
+boundary. Paging is not a snapshot: changing the data or sort values between
+requests can change which rows subsequent pages return.
 
 ## `uiSchema` (staff Views)
 

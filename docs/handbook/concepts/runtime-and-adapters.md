@@ -139,12 +139,20 @@ A SQLite spelling fails validation with its position and the PostgreSQL one:
   only SQL function Mantle creates is `_mantle_expect`. A database booted by an
   earlier release keeps its `_mantle_jget`, `_mantle_bool` and `_mantle_json_each`
   unused. `json_group_array` and `json_group_object` order by value.
-- Text columns use `COLLATE "C"`, so they compare by code point. An `ORDER BY` key without `NULLS FIRST/LAST`
+- Schema text columns Mantle creates use `COLLATE "C"`; a new text field
+  added to an existing Schema table does too. This preserves the existing
+  storage default independently of the database's locale. It is not a
+  locale-aware alphabetical sort. Existing columns keep their actual
+  collation: convergence neither checks nor migrates it, and Mantle does not
+  adopt unrelated tables. The paging tiebreak uses the column's own collation
+  so an index with that collation can serve it. Changing collation is an
+  operator-planned change to ordering and indexes, not an automatic upgrade.
+  An `ORDER BY` key without `NULLS FIRST/LAST`
   sorts NULL as PostgreSQL does: last ascending, first descending (D1 puts it
   first ascending). The `id` tiebreak follows the last key's direction, so an
-  index on the sort keys (and the `updated_at` index Mantle creates) serves a
-  paged sort. This is PostgreSQL's default for every `ORDER BY`, window and
-  aggregate (`json_group_array`) ones included. Values never depend on
+  matching index on the sort keys (and the `updated_at` index Mantle creates)
+  can serve a paged sort. This NULL order is PostgreSQL's default for every
+  `ORDER BY`, window and aggregate (`json_group_array`) ones included. Values never depend on
   the server's `DateStyle`, `IntervalStyle` or `TimeZone`. Elsewhere the meaning
   is PostgreSQL's, where D1 differs:
   - `LIKE` is case-sensitive.
@@ -155,19 +163,25 @@ A SQLite spelling fails validation with its position and the PostgreSQL one:
   Site settings and media are SQLite-only (D1, bun:sqlite).
 - `date_trunc` and `extract` compute in the site time zone
   (`postgresStorage({ connect, timeZone })`, default UTC).
-- Every statement has a `statement_timeout` of at most 10 seconds
-  (`statementTimeoutMs`; 0 is none). A write batch sets it on its transaction.
-  A read is one statement outside a transaction, under the role's own
-  `statement_timeout`, so boot requires the role to have one no larger
-  (`ALTER ROLE app SET statement_timeout = '10s'`). Storage convergence has
-  none. A statement past it fails with `RESOURCE_UNAVAILABLE` and writes nothing.
+- `statementTimeoutMs` defaults to 10 seconds. A write batch sets it with
+  `SET LOCAL` on its transaction. A read is one autocommit statement under
+  the role's own `statement_timeout`; with a nonzero configured limit, boot
+  requires a positive role limit no larger than it
+  (`ALTER ROLE app SET statement_timeout = '10s'`). Setting
+  `statementTimeoutMs: 0` disables the write limit and that boot requirement;
+  it does not change the role limit a read uses. Storage convergence disables
+  the statement timeout and separately bounds lock waits
+  ([deploy guidance](../cloudflare/deploy-and-operate.md#postgresql-convergence-and-long-index-builds)).
+  A statement timeout fails with `RESOURCE_UNAVAILABLE`; a timed-out write
+  batch rolls back.
 - Boot reads the role's settings once and refuses to start, naming the
   `ALTER ROLE … SET` to run, unless `DateStyle` is ISO, `IntervalStyle` is
   `postgres`, `extra_float_digits` is at least 1, `standard_conforming_strings`
   is on and `TimeZone` is UTC (date and instant casts in your SQL use the
   session's zone). These are PostgreSQL's defaults, except a server initialized
-  in another time zone. Mantle sets nothing per session, because
-  Hyperdrive resets every pooled session to the role's configuration.
+  in another time zone. Configure these on the database role rather than
+  relying on per-client `SET` commands surviving Hyperdrive's pooled-session
+  reset; verify that behavior on the deployed binding as described below.
 - Connect as a role that owns the service's tables but is not a superuser and
   holds no file or server privilege (`pg_read_server_files`,
   `pg_execute_server_program`). Mantle's allowlist refuses such functions; the
@@ -213,6 +227,15 @@ arrives meanwhile opens its own, so nothing runs inside another's transaction.
 With `new pg.Client({ …, pipeline: true })` (pg 8.23 or later) a write batch is
 one round trip instead of N + 2; the generated Workers preset leaves it off
 until Hyperdrive is verified to forward a pipelined transaction.
+
+Real Hyperdrive verification remains an integration task
+([#1391](https://github.com/aotter/mantle/issues/1391)); a local PostgreSQL run
+does not establish the proxy's behavior. Keep the generated sequential mode
+while validating a deployed binding with caching disabled: role settings
+after pooled-session reuse, a bare read immediately after a write, and an
+atomic rollback when a write or an `expect` fails. A separate verification
+with `pipeline: true` must cover those same cases before enabling it. The
+preset's existence is not evidence that those deployed checks have passed.
 
 The Worker needs `compatibility_flags: ["nodejs_compat"]` for `pg`. Mantle's
 and Better Auth's reads run outside a transaction, which Hyperdrive would answer
