@@ -227,7 +227,10 @@ Bun has a generated preset for both engines (`mantle generate --host bun`,
 ADR-0038, ADR-0039): over PostgreSQL it is the Workers composition on a `pg.Pool`;
 over SQLite `bunSqliteDriver` gives Better Auth the same store. A `DatabaseDriver` is one method, so another engine
 (libSQL, for example) is a few lines of application code on `host: none`: the
-entry calls `createMantle` and its own server.
+entry calls `createMantle` and its own server. See
+[Another host or engine](../guides/adapter-guide.md) for the driver contract
+(numbered binds, rethrown engine errors with their code), schedules through
+`invokeSchedule`, and what is untested.
 
 `site` turns on the site capability (site settings and media); see
 [Site defaults and site_config](../reference/site-config.md).

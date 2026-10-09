@@ -15,7 +15,8 @@
         { "text": "Agent installation and handoff", "link": "/guides/agent-setup" },
         { "text": "Query from TypeScript", "link": "/guides/typed-queries" },
         { "text": "Customize Admin from manifests", "link": "/guides/admin-ui" },
-        { "text": "Extend Admin", "link": "/guides/admin-extensions" }
+        { "text": "Extend Admin", "link": "/guides/admin-extensions" },
+        { "text": "Another host or engine", "link": "/guides/adapter-guide" }
       ]
     },
     {
