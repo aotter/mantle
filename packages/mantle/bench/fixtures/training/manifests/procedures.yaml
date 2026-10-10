@@ -1,0 +1,43 @@
+# Two ref-handler Procedures that combine several Views, and one inline write.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: training-report }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [since, exercise]
+    properties:
+      since: { type: string, format: date-time }
+      exercise: { type: string }
+  output: { type: object }
+  handler: { ref: trainingReport }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: checkin-wall }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [workoutId]
+    properties:
+      workoutId: { type: string }
+  output: { type: object }
+  handler: { ref: checkinWall }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: set-duration }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [workoutId, durationMin]
+    properties:
+      workoutId: { type: string }
+      durationMin: { type: integer }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE workouts SET durationMin = input.durationMin WHERE id = input.workoutId

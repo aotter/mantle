@@ -1,0 +1,60 @@
+# Every View is public over scoped Schemas and requires a signed-in user: the caller sees only their own rows.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: workout-list }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  sql: |
+    SELECT w.id, w.startedAt, w.splitType, w.durationMin, (SELECT count(*) FROM sets s WHERE s.workoutId = w.id) AS setCount FROM workouts w ORDER BY w.startedAt DESC
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: workout-sets }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object, required: [workoutId], properties: { workoutId: { type: string } } }
+  sql: |
+    SELECT s.id, s.exercise, s.block, s.position, s.weightKg, s.reps, s.rir, s.tag FROM sets s WHERE s.workoutId = input.workoutId ORDER BY s.block, s.position, s.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: personal-records }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  sql: |
+    SELECT s.exercise, max(s.weightKg * (1 + s.reps / 30.0)) AS e1rm, max(s.weightKg) AS topKg, count(*) AS sets FROM sets s WHERE s.tag <> 'warmup' GROUP BY s.exercise ORDER BY e1rm DESC, s.exercise
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: exercise-history }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object, required: [exercise], properties: { exercise: { type: string } } }
+  sql: |
+    SELECT w.id, w.startedAt, max(s.weightKg) AS topKg, sum(s.weightKg * s.reps) AS tonnage FROM sets s JOIN workouts w ON w.id = s.workoutId WHERE s.exercise = input.exercise AND s.tag <> 'warmup' GROUP BY w.id, w.startedAt ORDER BY w.startedAt DESC, w.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: weekly-volume }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  sql: |
+    SELECT date_trunc('week', w.startedAt) AS week, count(DISTINCT w.id) AS workouts, sum(s.weightKg * s.reps) AS tonnage FROM workouts w JOIN sets s ON s.workoutId = w.id GROUP BY date_trunc('week', w.startedAt) ORDER BY week DESC
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: training-summary }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  input: { type: object, required: [since], properties: { since: { type: string, format: date-time } } }
+  sql: |
+    WITH recent AS (SELECT w.id FROM workouts w WHERE w.startedAt >= input.since),
+    volume AS (SELECT s.exercise, sum(s.weightKg * s.reps) AS tonnage, count(*) AS sets, max(s.weightKg) AS topKg FROM sets s JOIN recent r ON r.id = s.workoutId WHERE s.tag <> 'warmup' GROUP BY s.exercise),
+    ranked AS (SELECT v.exercise AS id, v.exercise, v.tonnage, v.sets, v.topKg, rank() OVER (ORDER BY v.tonnage DESC) AS rnk FROM volume v)
+    SELECT r.exercise, e.muscle, r.tonnage, r.sets, r.topKg, r.rnk FROM ranked r LEFT JOIN exercises e ON e.name = r.exercise ORDER BY r.rnk, r.exercise
