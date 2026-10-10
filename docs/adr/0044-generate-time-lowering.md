@@ -81,7 +81,7 @@ caller is reaches the statement only as binds.
    existing compile cache bypass).
 7. **Validators.** The Procedure and View input/output validators are built
    eagerly per plan at `createMantle()` (module scope in the generated
-   preset), not on the first call. This lands in its own change; generating
+   preset), not on the first call (`planValidators`, a `WeakMap` per plan). This landed in its own change; generating
    validator code instead would be a second JSON Schema implementation beside
    zod's importer.
 
