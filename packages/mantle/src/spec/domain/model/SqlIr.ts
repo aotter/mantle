@@ -52,7 +52,7 @@ export interface SqlContext {
   readonly public?: boolean;
   /**
    * The Views a FROM may name (ADR-0037 decision 3), by name with `-` as `_`: an internal View's validated tagged SELECT, which the
-   * compiler expands as native CTE dependencies, or why that View cannot be read. Compile side only.
+   * compiler expands as D1 CTE dependencies or native FROM subqueries, or why that View cannot be read. Compile side only.
    */
   readonly views?: Readonly<Record<string, { readonly select?: SqlNode; readonly refusal?: string }>>;
 }

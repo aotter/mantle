@@ -124,7 +124,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     };
   }
   const diagnostics: Diagnostic[] = [];
-  // ADR-0037 decision 3: the Views a FROM may name, by name with `-` as `_`; an internal View without input or requires becomes a native CTE
+  // ADR-0037 decision 3: the Views a FROM may name, by name with `-` as `_`; an internal View without input or requires becomes native SQL
   const refs: Record<string, { select?: SqlNode; refusal?: string }> = {};
   const refName = (name: string) => name.toLowerCase().replace(/-/g, "_");
   const refOf = new Map(linked.views.map((x) => [refName(x.manifest.metadata.name), x]));

@@ -42,8 +42,9 @@ for (const engine of ["sqlite", "postgres"]) describe.skipIf(engine === "postgre
     const result = await compilePlan(source(...documents), engine === "postgres" ? pgCompile : undefined);
     expect(result.ok, JSON.stringify(result.diagnostics)).toBe(true);
     const plan = result.plan, select = plan.views.page.stmts[0].SelectStmt;
-    expect(select.withClause.ctes).toHaveLength(2);
-    expect(JSON.stringify(select).match(/"relname":"notes"/g)).toHaveLength(1);
+    if (engine === "sqlite") expect(select.withClause.ctes).toHaveLength(2);
+    else expect(select.withClause).toBeUndefined();
+    expect(JSON.stringify(select).match(/"relname":"notes"/g)).toHaveLength(engine === "sqlite" ? 1 : 2);
     expect(plan.views["renamed-columns"].columns.deadline).toEqual({ schema: "notes", field: "due" });
     expect(plan.views.page.columns.due).toEqual({ schema: "notes", field: "due" });
     expect(JSON.stringify(select)).not.toContain('"mantle":"view"');

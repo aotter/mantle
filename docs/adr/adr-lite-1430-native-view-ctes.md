@@ -4,9 +4,13 @@
 
 **Amends:** ADR-0037 decisions 1–3; follows ADR-0040 and ADR-0042.
 
-The compiler represents a readable named View dependency as a native SELECT
-CTE, once per outermost SELECT subtree, instead of copying its SELECT at every
-reference. Dependencies remain internal Views without input or requires;
+On D1, the compiler represents a readable named View dependency as a native
+SELECT CTE, once per outermost SELECT subtree, instead of copying its SELECT
+at every reference. PostgreSQL retains native FROM subqueries: measured
+repeated-dependency CTEs changed limited index scans into full CTE/heap scans,
+hash joins and sorts. Other dialects retain the existing subquery representation.
+The existing compile-side dialect name selects this lowering; no new option or
+runtime capability is added. Dependencies remain internal Views without input or requires;
 Schema-name precedence and cycle refusal remain. INSERT SELECT uses its SELECT;
 scalar subqueries in other writes retain separate SELECT-local dependencies.
 
@@ -16,7 +20,7 @@ and other reference-only constructs are not added to base. Data-changing CTEs
 remain refused everywhere. This adds no manifest key or runtime IR node.
 
 Compilation retains validated tagged dependency sources only until it emits
-the sealed native AST. CTE names avoid authored identifiers. An authored CTE
+the sealed native AST. On D1, generated CTE names avoid authored identifiers. An authored CTE
 that would capture a physical table read is renamed with its lexical references,
 preserving its original implicit or explicit alias. This also accounts for
 SQLite's forward-reference behavior. Authored CTE bodies stay in their original
@@ -30,7 +34,8 @@ columns; root paging does not treat a derived row as a physical Schema row.
 ORDER, LIMIT and input binding remain at their original SELECTs. Complete unique
 paging order remains the author's responsibility.
 
-Native engines decide whether to inline or materialize; Mantle adds no hint,
+Authored CTEs remain authored CTEs on both engines. Native engines decide
+whether to inline or materialize them; Mantle adds no hint,
 cost optimizer, index choice, cache, dependency manager or runtime state. The
 existing closed function lists exclude volatile functions such as random(),
 clock_timestamp() and nextval(); now() and auth values are bound per invocation.

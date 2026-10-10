@@ -88,9 +88,10 @@ See [PostgreSQL runtime settings](../concepts/runtime-and-adapters.md#the-postgr
 
 A View's `FROM` may name an internal View (`surface: internal`, no `input`, no
 `requires`) by its name with `-` written `_`: `FROM free_window w`. The
-compiler emits native CTE dependencies within each outermost SELECT, so scope
-and every check apply inside them on every dialect. Repeated references share
-the dependency; the native engine decides whether to inline or materialize it. A View that reads itself, directly or through
+D1 compiler emits shared native CTE dependencies within each outermost SELECT.
+PostgreSQL retains FROM subqueries so its planner can push predicates and LIMIT
+through repeated references. Scope and every check apply inside dependencies
+on both dialects; the engine owns the resulting plan. A View that reads itself, directly or through
 others, is refused; a View named like a Schema is not readable this way (the name reads the Schema). Write a rule many
 Views share (a plan's visible window, a definition of "active") once this way.
 

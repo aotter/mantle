@@ -3,7 +3,7 @@
 **Status:** Accepted for 0.2.0. Amends ADR-0034 decisions 2 and 8 and ADR-0035 decisions 1, 4 and 6, and replaces the
 PostgreSQL dialect amendment's "What it accepts".
 
-> **2026-10-10 amendment:** [Native View CTEs](adr-lite-1430-native-view-ctes.md) adds ordinary nonrecursive SELECT CTEs to base and replaces copied named-View subqueries with native CTE dependencies.
+> **2026-10-10 amendment:** [Native View CTEs](adr-lite-1430-native-view-ctes.md) adds ordinary nonrecursive SELECT CTEs to base and replaces copied named-View subqueries with native CTE dependencies on D1; PostgreSQL retains FROM subqueries.
 
 **Date:** 2026-10-02
 

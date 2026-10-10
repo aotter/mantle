@@ -66,11 +66,11 @@ function tagRelations(v: any): any {
   return out;
 }
 
-/** A named dependency is native SQL structure, shared inside its outermost SELECT rather than copied per reference. */
-function expandViews(v: any, views: NonNullable<SqlContext["views"]>): any {
-  if (Array.isArray(v)) return v.map((x) => expandViews(x, views));
+/** Share named dependencies as native CTEs on D1; retain PostgreSQL's predicate-pushable FROM subqueries. */
+function expandViews(v: any, views: NonNullable<SqlContext["views"]>, share: boolean): any {
+  if (Array.isArray(v)) return v.map((x) => expandViews(x, views, share));
   if (!v || typeof v !== "object") return v;
-  if (!v.SelectStmt) return Object.fromEntries(Object.entries(v).map(([k, c]) => [k, expandViews(c, views)]));
+  if (!v.SelectStmt) return Object.fromEntries(Object.entries(v).map(([k, c]) => [k, expandViews(c, views, share)]));
   const used = new Set<string>(), tables = new Set<string>();
   const reserve = (n: any): void => {
     if (!n || typeof n !== "object") return;
@@ -90,6 +90,7 @@ function expandViews(v: any, views: NonNullable<SqlContext["views"]>): any {
     if (!n || typeof n !== "object") return n;
     const rv = n.RangeVar;
     if (rv?.mantle === "view") {
+      if (!share) return { RangeSubselect: { subquery: { SelectStmt: walk(views[rv.relname]!.select) }, alias: rv.alias ?? { aliasname: rv.relname } } };
       let name = names.get(rv.relname);
       if (!name) {
         names.set(rv.relname, name = fresh());
@@ -133,7 +134,7 @@ export async function compileSql(sql: string, ctx: SqlContext, dialect: SqlDiale
     const parsed = await parsePgSql(sql);
     const tagged = tagRelations(parsed.stmts) as SqlNode[];
     refuseForEveryDialect(tagged, ctx, parsed.locations);
-    const stmts = expandViews(tagged, ctx.views ?? {}) as SqlNode[];
+    const stmts = expandViews(tagged, ctx.views ?? {}, dialect.name === d1.name) as SqlNode[];
     dialect.accepts(stmts, { ...ctx, source: sql }, parsed.locations);
     return { ok: true, plan: { grammar: PG_GRAMMAR, stmts: stripLocations(stmts) }, ...(ctx.kind === "view" ? { reference: stripLocations(tagged)[0]!.SelectStmt } : {}) };
   } catch (e) {
