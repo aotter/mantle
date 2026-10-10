@@ -5,6 +5,7 @@
  */
 import { DiagnosticError, makeDiagnostic } from "../spec/kernel/index.js";
 import type { DatabaseDriver } from "../core/driver.js";
+import { readRows } from "./read.js";
 
 export interface Migration {
   readonly id: string;
@@ -17,27 +18,26 @@ const LEDGER = "_mantle_migrations";
 
 /** Applies each migration not yet in the ledger, its statements and its ledger row in one batch, so it lands whole or not at all. */
 export async function runMigrations(driver: DatabaseDriver, migrations: readonly Migration[]): Promise<void> {
-  await driver.batch([{ sql: `CREATE TABLE IF NOT EXISTS ${LEDGER} (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)` }]);
-  const [applied] = await driver.batch([{ sql: `SELECT id FROM ${LEDGER}` }]);
-  const seen = new Set(applied!.rows.map((r) => String(r.id)));
+  if (!(await readRows(driver, { sql: "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = ?1", binds: [LEDGER] })).length)
+    await driver.batch([{ sql: `CREATE TABLE IF NOT EXISTS ${LEDGER} (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)` }]);
+  const applied = await readRows(driver, { sql: `SELECT id FROM ${LEDGER}` });
+  const seen = new Set(applied.map((r) => String(r.id)));
   for (const m of migrations) {
     if (seen.has(m.id)) continue;
     if (m.tables?.length) {
-      const [found, won] = await driver.batch([
-        { sql: `SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) IN (${m.tables.map((_, i) => `?${i + 1}`).join(", ")})`, binds: m.tables.map((t) => t.toLowerCase()) },
-        { sql: `SELECT id FROM ${LEDGER} WHERE id = ?1`, binds: [m.id] },
-      ]);
+      const found = await readRows(driver, { sql: `SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) IN (${m.tables.map((_, i) => `?${i + 1}`).join(", ")})`, binds: m.tables.map((t) => t.toLowerCase()) });
+      const won = await readRows(driver, { sql: `SELECT id FROM ${LEDGER} WHERE id = ?1`, binds: [m.id] });
       // the migration and its ledger row land in one batch, so a table without the row was never ours
-      if (won!.rows.length) { seen.add(m.id); continue; }
-      if (found!.rows.length)
-        throw new DiagnosticError(found!.rows.map((r) => makeDiagnostic({ code: "STORAGE_TABLE_NOT_OWNED", phase: "boot", severity: "error", path: `storage:${String(r.name)}`, message: `table ${String(r.name)} exists and Mantle's migration ${m.id} did not create it, so it is not read or written; rename it or move it away` })));
+      if (won.length) { seen.add(m.id); continue; }
+      if (found.length)
+        throw new DiagnosticError(found.map((r) => makeDiagnostic({ code: "STORAGE_TABLE_NOT_OWNED", phase: "boot", severity: "error", path: `storage:${String(r.name)}`, message: `table ${String(r.name)} exists and Mantle's migration ${m.id} did not create it, so it is not read or written; rename it or move it away` })));
     }
     try {
       await driver.batch([...splitSqlStatements(m.sql).map((sql) => ({ sql })), { sql: `INSERT INTO ${LEDGER} (id, applied_at) VALUES (?1, ?2)`, binds: [m.id, Date.now()] }]);
     } catch (error) {
       // a concurrent isolate applied it first: the ledger row is the proof, anything else is a real failure
-      const [won] = await driver.batch([{ sql: `SELECT id FROM ${LEDGER} WHERE id = ?1`, binds: [m.id] }]);
-      if (!won!.rows.length) throw error;
+      const won = await readRows(driver, { sql: `SELECT id FROM ${LEDGER} WHERE id = ?1`, binds: [m.id] });
+      if (!won.length) throw error;
     }
     seen.add(m.id);
   }

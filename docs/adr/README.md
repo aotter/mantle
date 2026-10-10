@@ -41,6 +41,8 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0038](0038-bun-native-host.md) | Bun is a native host: `@aotter/mantle/bun` owns the native SQLite and PostgreSQL drivers and Admin files; `host: bun` defaults to `dialect: postgres`; the CLI writes a `Bun.serve` entry once. | Accepted for 0.2.0 |
 | [0039](0039-postgresql-is-native.md) | PostgreSQL is native, not a D1 emulation: each dialect is its own target, PostgreSQL ordering and SQL are PostgreSQL's, and node-postgres is the only PostgreSQL driver on every host. | Accepted; supersedes parts of 0035, 0037 and 0038 |
 | [0040](0040-thin-native-toolkit.md) | Mantle is a thin config-as-code toolkit: author-owned application decisions, native resource reuse and semantics, a clean Store boundary, and explicit execution costs. | Accepted direction; amends 0007 |
+| [0041](0041-native-driver-and-application-hook-ownership.md) | Native driver execution; remove request sessions, write pipelines/retries and before-hook policing; separate native SQLite handles. | Accepted for #1426; breaking cleanup |
+| [0042](0042-native-query-work-cleanup.md) | Native product reads, query lowering, owned media ordering, fresh Auth proofs and immutable Admin descriptions. | Accepted for #1428 |
 
 ## Reading order
 

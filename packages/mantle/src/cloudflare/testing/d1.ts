@@ -52,8 +52,8 @@ export class LocalD1 {
     await this.send("exec", stmts.map((s) => (typeof s === "string" ? { sql: s } : s)));
   }
 
-  async all(sql: string, ...binds: unknown[]): Promise<readonly Record<string, unknown>[]> {
-    return (await this.batch([{ sql, binds }]))[0]!.rows;
+  async all(statement: string | D1Statement, ...binds: unknown[]): Promise<readonly Record<string, unknown>[]> {
+    return (await this.batch([typeof statement === "string" ? { sql: statement, binds } : statement]))[0]!.rows;
   }
 
   dispose(): Promise<void> {

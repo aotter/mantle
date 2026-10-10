@@ -160,7 +160,14 @@ set TRUSTED_PROXIES to its addresses: otherwise every client shares the proxy's
 address, and with it one sign-in rate limit.
 
 PostgreSQL on Bun is node-postgres, as on Workers (ADR-0039): the entry builds a
-`pg.Pool` with `pipeline: true`, and each request borrows one pooled client
-(`requestScoped`). Install `pg`. The role needs no privilege beyond converging its
+`pg.Pool`, and each operation borrows/releases a native client. Better Auth
+uses that native Pool directly; no Mantle request-session wrapper is involved.
+Install `pg`. The role needs no privilege beyond converging its
 tables (no `TEMPORARY`); set `statement_timeout` and `TimeZone` UTC on the role,
 which boot checks.
+
+The authenticated SQLite entry opens `DB` and `AUTH_DB` against the same file
+in WAL mode. Better Auth alone uses `AUTH_DB`; Store and ancillary auth SQL
+use `DB`. It rejects `:memory:` for this composition. Store reads do not
+wait for an Auth transaction or take a write lock. Close both handles after
+shutdown. See [native driver migration](../guides/native-execution.md).

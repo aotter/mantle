@@ -205,6 +205,17 @@ describe("Admin entries: writes through Store", () => {
     expect((await call("POST", at(fr.id, "article-translations", "/publish"), editor)).body.entry.status).toBe("published");
   });
 
+  it("a reused surface retains fresh relationship rows between requests", async () => {
+    const parent = await create("articles", { slug: "fresh-rel", title: "Root", body: "b" });
+    const surface = createAdminSurface(rt, { basePath: "/admin" });
+    const read = async () => (await (await surface(new Request(`http://x${at(parent.id, "articles")}`), editor)).json()) as { related: { entries: { id: string }[] }[] };
+    expect((await read()).related[0]!.entries).toEqual([]);
+    const child = await create("article-translations", { slug: "fresh-rel", locale: "fr", title: "Racine" });
+    expect((await read()).related[0]!.entries.map((r) => r.id)).toEqual([child.id]);
+    await rt.store.write([{ delete: "article-translations", where: { id: child.id } }]);
+    expect((await read()).related[0]!.entries).toEqual([]);
+  });
+
   it("the editor payload carries the parent and the related translations", async () => {
     const parent = await create("articles", { slug: "r1", title: "Root", body: "b" });
     const de = await create("article-translations", { slug: "r1", locale: "de", title: "Wurzel" });

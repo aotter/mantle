@@ -9,7 +9,7 @@ const bucket = {
   head: async (k: string) => objects.get(k) ?? null,
   get: async (k: string) => objects.get(k) ?? null,
   put: async (k: string, body: ReadableStream, o: { httpMetadata: { contentType: string }; customMetadata: Record<string, string> }) => { objects.set(k, { size: objects.get(`uploads/${k}`)?.size ?? -1, body, ...o }); return {}; },
-  delete: async (k: string) => { deleted.push(k); objects.delete(k); },
+  delete: async (key: string | string[]) => { for (const k of Array.isArray(key) ? key : [key]) { deleted.push(k); objects.delete(k); } },
 };
 const signer = { sign: async (url: string, init: { method: string }) => ({ url: `${url}&X-Amz-Signature=${init.method}` }) };
 const media = r2MediaStorage({ bucket, signer, endpoint: "https://b.acc.r2.cloudflarestorage.com/", publicBase: "https://cdn.test/" });
@@ -64,4 +64,66 @@ it("an object PUT again between the check and the copy is refused, and the varia
     expect(await code(commit([spec, alt]))).toBe("MEDIA_OBJECT_NOT_FOUND");
   } finally { bucket.get = get; }
   expect(objects.has("cover/g1/primary.jpg")).toBe(false);
+});
+
+it("starts native heads together, waits for all of them before copying, and deletes upload keys once", async () => {
+  const alt = { ...spec, mimeType: "image/webp", role: "alternate" as const, storageKey: "uploads/cover/g1/alternate.webp" };
+  put(spec.storageKey, "image/jpeg", 9); put(alt.storageKey, "image/webp", 5);
+  const originalHead = bucket.head, originalDelete = bucket.delete;
+  let resume!: () => void;
+  const gate = new Promise<void>((r) => { resume = r; });
+  const heads: string[] = [], deletes: (string | string[])[] = [];
+  bucket.head = async (k) => { heads.push(k); if (k === spec.storageKey) await gate; return originalHead(k); };
+  bucket.delete = async (keys) => { deletes.push(keys); await originalDelete(keys); };
+  try {
+    const pending = commit([spec, alt]);
+    await Promise.resolve();
+    expect(heads).toEqual([spec.storageKey, alt.storageKey]);
+    expect(objects.has("cover/g1/alternate.webp")).toBe(false);
+    resume(); await pending;
+    expect(deletes).toEqual([[spec.storageKey, alt.storageKey]]);
+  } finally { resume(); bucket.head = originalHead; bucket.delete = originalDelete; }
+});
+
+it("cleans possible public writes and cancels the body when native put fails", async () => {
+  put(spec.storageKey, "image/jpeg", 9);
+  const originalPut = bucket.put;
+  bucket.put = async (key, body, options) => { await originalPut(key, body, options); throw new Error("put response lost"); };
+  try {
+    await expect(commit()).rejects.toThrow("put response lost");
+    expect(objects.has("cover/g1/primary.jpg")).toBe(false);
+    expect(await objects.get(spec.storageKey)!.body.getReader().read()).toEqual({ done: true, value: undefined });
+  } finally { bucket.put = originalPut; }
+});
+
+it("cleans copied public variants if the native upload-key batch deletion fails", async () => {
+  put(spec.storageKey, "image/jpeg", 9);
+  const originalDelete = bucket.delete;
+  bucket.delete = async (keys) => { if (Array.isArray(keys)) throw new Error("delete failed"); await originalDelete(keys); };
+  try { await expect(commit()).rejects.toThrow("delete failed"); expect(objects.has("cover/g1/primary.jpg")).toBe(false); }
+  finally { bucket.delete = originalDelete; }
+});
+
+it("cancels a fetched body even when native put throws before returning its Promise", async () => {
+  put(spec.storageKey, "image/jpeg", 9);
+  const originalPut = bucket.put;
+  bucket.put = () => { throw new Error("synchronous native put failure"); };
+  try {
+    await expect(commit()).rejects.toThrow("synchronous native put failure");
+    expect(await objects.get(spec.storageKey)!.body.getReader().read()).toEqual({ done: true, value: undefined });
+    expect(deleted).toEqual(["cover/g1/primary.jpg"]);
+  } finally { bucket.put = originalPut; }
+});
+
+it("settles synchronous cleanup failures and preserves the original copy failure", async () => {
+  const alt = { ...spec, mimeType: "image/webp", role: "alternate" as const, storageKey: "uploads/cover/g1/alternate.webp" };
+  put(spec.storageKey, "image/jpeg", 9); put(alt.storageKey, "image/webp", 5);
+  const originalPut = bucket.put, originalDelete = bucket.delete;
+  const attempted: (string | string[])[] = [];
+  bucket.put = async (key, body, options) => { if (key.includes('alternate')) throw new Error('original copy failure'); return originalPut(key, body, options); };
+  bucket.delete = (key) => { attempted.push(key); throw new Error('synchronous cleanup failure'); };
+  try {
+    await expect(commit([spec, alt])).rejects.toThrow('original copy failure');
+    expect(attempted).toEqual(['cover/g1/primary.jpg','cover/g1/alternate.webp']);
+  } finally { bucket.put = originalPut; bucket.delete = originalDelete; }
 });

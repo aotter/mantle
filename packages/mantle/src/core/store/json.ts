@@ -41,17 +41,16 @@ export interface Column {
 const physical = (c: Column) => (c.type === "geo" ? [`${c.col}_lat`, `${c.col}_lng`] : [c.col]);
 /** The hidden output a select reads one half of a geo field under. */
 export const geoKey = (out: string, half: "lat" | "lng") => `_geo_${half}_${out}`;
-/** A selected row with each geo field's two halves joined back into `{ lat, lng }`, or null when either is missing. */
-export function geoValue(row: Readonly<Record<string, unknown>>, columns: readonly Column[]): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...row };
-  for (const c of columns) {
-    if (c.type !== "geo") continue;
-    const lat = out[geoKey(c.out, "lat")], lng = out[geoKey(c.out, "lng")];
-    delete out[geoKey(c.out, "lat")];
-    delete out[geoKey(c.out, "lng")];
-    out[c.out] = lat == null || lng == null ? null : { lat, lng };
-  }
-  return out;
+/** Decode the selected columns, joining a geo field's hidden halves in the same projection. */
+export function decodeRow(row: Readonly<Record<string, unknown>>, columns: readonly Column[], codec: StoreCodec): Record<string, unknown> {
+  return Object.fromEntries(columns.map((c) => {
+    let value = row[c.out];
+    if (c.type === "geo") {
+      const lat = row[geoKey(c.out, "lat")], lng = row[geoKey(c.out, "lng")];
+      value = lat == null || lng == null ? null : { lat, lng };
+    }
+    return [c.out, codec.decode(c.type, value)];
+  }));
 }
 
 const bool = (boolop: string, args: N[]): N => ({ BoolExpr: { boolop, args } });
@@ -247,7 +246,7 @@ export class StoreJson {
     if (q.cursor !== undefined && typeof q.cursor !== "string") throw invalid("Store cursor must be a string.");
     const where = [...(q.where === undefined ? [] : [this.where(q.where, def)]), ...(q.search === undefined ? [] : [this.search(q.search, name, def)])];
     const ir: N = { SelectStmt: {
-      // a geo field is two columns, read under hidden names and joined back into `{ lat, lng }` by `geoValue`
+      // a geo field is two columns, read under hidden names and joined back into `{ lat, lng }` by `decodeRow`
       targetList: columns.flatMap((c) => (c.type === "geo" ? [target(ref(`${c.col}_lat`), geoKey(c.out, "lat")), target(ref(`${c.col}_lng`), geoKey(c.out, "lng"))] : [target(ref(c.col), c.out)])), fromClause: [{ RangeVar: table(name) }],
       ...(where.length ? { whereClause: where.length === 1 ? where[0] : bool("AND_EXPR", where) } : {}),
       sortClause: [{ SortBy: { node: ref(order.column.col), sortby_dir: dir === "asc" ? "SORTBY_ASC" : "SORTBY_DESC", sortby_nulls: "SORTBY_NULLS_DEFAULT" } }], ...SELECT } };

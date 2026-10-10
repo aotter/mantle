@@ -29,8 +29,8 @@ export interface Invocation {
 }
 
 /**
- * Handed to every handler. In a guard or a before hook `store.write` and `invoke` fail (before hooks are
- * read-only checks).
+ * Handed to every handler. Authorization guards cannot write or invoke. Before hooks
+ * use the normal caller-bound capabilities; their business logic and side effects belong to the application.
  */
 export interface HandlerContext<Env = unknown> {
   readonly caller: Caller;

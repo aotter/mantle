@@ -1,5 +1,7 @@
 # ADR-0038: Bun is a native host
 
+> **2026-10-10 amendment:** [ADR-0041](0041-native-driver-and-application-hook-ownership.md) governs native driver execution, SQLite handle ownership and application-owned before hooks. Its explicit removals supersede the corresponding historical guarantees below.
+
 **Status:** Accepted for 0.2.0. Amends ADR-0036's reserved Bun host.
 
 ## Decision

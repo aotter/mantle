@@ -157,14 +157,14 @@ const handlers: MantleHandlers<never> = {
     calls.push({ name: "noLocked", ctx, input });
     const row = ctx.cause.kind === "lifecycle" ? ctx.cause.rows[0] : undefined;
     if (row?.name === "locked") throw new DiagnosticError({ code: "LIFECYCLE_HOOK_REJECTED", phase: "runtime", severity: "error", path: "hook", message: "locked", value: undefined, expected: undefined, candidates: undefined, suggestion: undefined });
-    await expect(ctx.store.write([{ delete: "items", where: { id: "x" } }])).rejects.toThrow(/may not write/);
-    await expect(ctx.invoke("audit", {})).rejects.toThrow(/may not invoke/);
     return {};
   },
   guardOffice: async (_i: unknown, ctx: HandlerContext) => {
     calls.push({ name: "guardOffice", ctx, input: _i });
     if (ctx.caller.kind !== "user" || ctx.caller.subject !== "boss") throw new DiagnosticError({ code: "AUTH_DENIED", phase: "runtime", severity: "error", path: "guard", message: "not the boss", value: undefined, expected: undefined, candidates: undefined, suggestion: undefined });
     await expect(ctx.store.write([{ delete: "items", where: { id: "x" } }])).rejects.toThrow(/may not write/);
+    await expect(ctx.invoke("audit", {})).rejects.toThrow(/may not invoke/);
+    expect(ctx.store).not.toHaveProperty("sweepExpired");
     return {};
   },
   staffOnly: (input: { n?: number }) => ({ n: (input.n ?? 0) + 1 }),
@@ -254,7 +254,7 @@ describe("invokeProcedure", () => {
     expect((await failure(rt.store.as({ kind: "anonymous" }).view("my-items")))?.diagnostic.code).toBe("UNAUTHENTICATED");
   });
 
-  it("runs lifecycle hooks: after hook with rows and a stable cause id, before hook that can veto and cannot write", async () => {
+  it("runs lifecycle hooks: after hook with rows and a stable cause id, before hook that can veto", async () => {
     calls.length = 0;
     const id = await add("o1", "hooked", 1);
     const a = calls.find((c) => c.name === "audit")!;
@@ -267,6 +267,42 @@ describe("invokeProcedure", () => {
     const e = await failure(rt.invokeProcedure(inv("rename", { id: locked, name: "free" }, user("o1"))));
     expect(e?.diagnostic.code).toBe("LIFECYCLE_HOOK_REJECTED");
     expect((await rt.store.as(user("o1")).select({ from: "items", columns: ["name"], where: { id: locked } })).rows).toEqual([{ name: "locked" }]);
+  });
+
+  it("a before hook may write and invoke with the original caller; its committed effects survive its veto", async () => {
+    const caller = user("hook-effects");
+    const hooked = await boot({ handlers: { ...handlers, noLocked: async (_input: unknown, ctx: HandlerContext) => {
+      expect(ctx.caller).toEqual(caller);
+      await ctx.store.write([{ insert: "items", values: { name: "hook-write", stock: 1 } }]);
+      await ctx.invoke("add-item", { name: "hook-invoke", stock: 1 });
+      expect((await failure(ctx.invoke("staff-only", {})))?.diagnostic.code).toBe("AUTH_DENIED");
+      throw new DiagnosticError({ code: "LIFECYCLE_HOOK_REJECTED", phase: "runtime", severity: "error", path: "hook", message: "veto after effects", value: undefined, expected: undefined, candidates: undefined, suggestion: undefined });
+    } } as never });
+    const s = hooked.store.as(caller);
+    const [{ id }] = await s.write([{ insert: "items", values: { name: "outer", stock: 1 } }]);
+    expect((await failure(s.write([{ update: "items", where: { id: id! }, set: { name: "not-applied" } }])))?.diagnostic.code).toBe("LIFECYCLE_HOOK_REJECTED");
+    expect((await s.select({ from: "items", columns: ["name"] })).rows.map((r) => r.name).sort()).toEqual(["hook-invoke", "hook-write", "outer"]);
+    expect((await hooked.store.as(user("another-owner")).select({ from: "items", where: { id: id! } })).rows).toEqual([]);
+    const nested = calls.findLast((c) => c.name === "audit" && c.ctx.caller.kind === "user" && c.ctx.caller.subject === caller.subject)!;
+    expect(nested.ctx.cause.parent).toMatchObject({ kind: "internal", parent: { kind: "lifecycle", hook: "before_update" } });
+  });
+
+  it.each([false, true])("a hook mutation adds no implicit OCC and preserves caller OCC (explicit=%s)", async (explicit) => {
+    let mutated = false;
+    const hooked = await boot({ handlers: { ...handlers, noLocked: async (_input: unknown, ctx: HandlerContext) => {
+      if (!mutated && ctx.cause.kind === "lifecycle") {
+        mutated = true;
+        expect(ctx.cause.rows[0]).toMatchObject({ name: "before", version: 1 });
+        await ctx.store.write([{ update: "items", where: { id: ctx.cause.rows[0]!.id as string }, set: { name: "hook" } }]);
+      }
+      return {};
+    } } as never });
+    const s = hooked.store.as(user(`hook-occ-${explicit}`));
+    const [{ id }] = await s.write([{ insert: "items", values: { name: "before", stock: 1 } }]);
+    const write = s.write([{ update: "items", where: { id: id!, ...(explicit ? { version: 1 } : {}) }, set: { name: "outer" } }]);
+    if (explicit) expect((await failure(write))?.diagnostic).toMatchObject({ code: "CONFLICT", conflict: { reason: "lock" } });
+    else expect(await write).toMatchObject([{ id, version: 3 }]);
+    expect((await s.select({ from: "items", columns: ["name", "version"], where: { id: id! } })).rows).toEqual([{ name: explicit ? "hook" : "outer", version: explicit ? 2 : 3 }]);
   });
 
   it("a rollback emits no after event, and an after hook that fails leaves the committed result", async () => {

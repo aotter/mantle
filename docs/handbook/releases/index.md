@@ -65,6 +65,18 @@ by hand.
 - **Not yet in 0.2.0:** Mantle-rendered public pages and the MCP interaction
   App tools.
 
+### Native driver and before-hook cleanup (#1426)
+
+This breaking source migration removes request-scoped PostgreSQL sessions,
+custom write pipelining/retries, SQLite lock polling and before-hook runtime
+policing. Copy the new native preset wiring; existing generated source is not
+overwritten. Authenticated Bun SQLite uses separate Store/Auth handles to the
+same WAL file. Operational before hooks no longer add an implicit version
+lock; explicit OCC, publishing checks and authorization guards remain.
+See [native execution migration](../guides/native-execution.md) and ADR-0041.
+The alpha.6 instructions below describe that release; ADR-0041 supersedes its
+requestScoped/pipeline/shared-SQLite-handle directions after this cleanup.
+
 ### Upgrading an existing PostgreSQL service (0.2.0-alpha.6)
 
 PostgreSQL is native from this alpha (ADR-0039): each dialect is its own target,

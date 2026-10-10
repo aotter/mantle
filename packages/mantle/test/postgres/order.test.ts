@@ -62,6 +62,11 @@ it.skipIf(!PG_URL)("a declared index and the default updated_at index serve page
     // a cursor (a value, then past the NULLs) keeps the index
     await served("SELECT id, amount FROM reqs ORDER BY amount", "_mantle_ix_reqs_0", { cursor: [7, "r000507"] });
     await served("SELECT id, amount FROM reqs ORDER BY amount DESC", "_mantle_ix_reqs_0", { cursor: [null, "r004990"] });
+    // A non-NULL cursor in native DESC NULLS FIRST can seek on the leading nullable key.
+    const bounded = await runView(s, await program("view", "SELECT id, amount FROM reqs ORDER BY amount DESC", {}, schemas), caller(), { pageSize: 50, cursor: [2, "r004002"] });
+    expect(bounded.rows[0]).toEqual({ id: "r003502", amount: 2 });
+    const boundedPlan = await explain(seen.at(-1));
+    expect(boundedPlan.find((n) => n["Index Name"])?.["Index Cond"]).toMatch(/amount <= '?2/);
     // a mixed-direction sort cannot ride the ascending index: it sorts, but still pages correctly (paged equals unpaged)
     const mixed = await program("view", "SELECT id, amount FROM reqs ORDER BY amount, name DESC", {}, schemas);
     const whole = (await runView(s, mixed, caller())).rows.map((r) => r.id);

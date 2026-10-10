@@ -25,7 +25,7 @@ export interface Program {
   readonly checks?: readonly (((current: StoreRow) => void | Promise<void>) | undefined)[];
 }
 
-/** Which (schema, operation) pairs have a lifecycle Trigger, as `schema.insert|update|delete` keys. */
+/** Which (schema, operation) pairs have a lifecycle Trigger, as `schema.insert|update|delete|publish` keys. */
 export interface LifecycleHooks {
   readonly dispatcher: LifecycleDispatcher;
   readonly before: ReadonlySet<string>;
@@ -150,8 +150,7 @@ function compileCached(env: RunEnv, p: Program, ir: object, stmts: readonly N[],
 /** A Procedure: before hooks (row ops only), one batch applied in order and all or nothing, then after hooks. */
 export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<{ readonly rows: readonly (readonly StoreRow[])[]; readonly affected: readonly number[] }> {
   const lc = env.lifecycle;
-  const afterSchemas = new Set([...(lc?.after ?? [])].map((k) => k.split(".")[0]!));
-  const base = ctxOf(env, p, { returning: afterSchemas, statuses: p.statuses });
+  const base = ctxOf(env, p, { returning: lc?.after, statuses: p.statuses });
   const plan = compileCached(env, p, p.ir, p.ir, base, "all");
   const versions: Record<number, unknown> = {};
   // a hook receives the entry as Store's `select` returns it (declared names, decoded values, `{ lat, lng }`), not the storage encoding
@@ -189,9 +188,12 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
       await p.checks?.[i]?.(row);
     }
     if (hooked) await lc!.dispatcher.before([event(i, `before_${HOOK[verbOf(c)]}`, c.schema, [row])]);
-    versions[i] = row.version;
-    // the statement carries the version it was decided on, so a change in between is CONFLICT
-    if (c.verb !== "insert") plan[i] = compileCached(env, p, p.ir[i]!, [p.ir[i]!], { ...base, lockVersion: true, statuses: [p.statuses?.[i]] }, "one")[0]!;
+    // Publishing decisions remain pinned to the row checked above. A hook snapshot alone adds no OCC;
+    // any version predicate explicitly supplied by the caller stays in the original statement.
+    if (lifecycle) {
+      versions[i] = row.version;
+      plan[i] = compileCached(env, p, p.ir[i]!, [p.ir[i]!], { ...base, lockVersion: true, statuses: [p.statuses?.[i]] }, "one")[0]!;
+    }
   }
 
   // a row op that matched nothing is `lock` when the entry is visible at another version than the one `version = input.x` asked for
@@ -295,7 +297,7 @@ function notNullIn(schemas: RunEnv["schemas"], sel: N, qual: string | undefined,
  * PostgreSQL only: whether the cursor can be one row comparison `(k0, k1, ...) > ($1, $2, ...)`. That needs every key (the appended
  * tiebreaks included) NOT NULL, all in one direction, and no NULLS clause other than PostgreSQL's own default.
  */
-function rowComparable(env: RunEnv, sel: N, keys: readonly N[], hidden: readonly N[]): boolean {
+function rowComparable(env: RunEnv, keys: readonly N[], notNull: readonly boolean[]): boolean {
   if (!env.dialect.nativeOrder || !keys.length) return false;
   const desc = keys[0]!.SortBy.sortby_dir === "SORTBY_DESC";
   return keys.every((k, i) => {
@@ -305,9 +307,7 @@ function rowComparable(env: RunEnv, sel: N, keys: readonly N[], hidden: readonly
     // an explicit NULLS clause is the author's: only PostgreSQL's own default (LAST ascending, FIRST descending) leaves the order the index has
     const nulls = k.SortBy.sortby_nulls;
     if (nulls && nulls !== "SORTBY_NULLS_DEFAULT" && nulls !== (desc ? "SORTBY_NULLS_FIRST" : "SORTBY_NULLS_LAST")) return false;
-    const f = hidden[i]!.ResTarget.val?.ColumnRef?.fields;
-    if (!f || f.length > 2 || f.some((x: N) => !x.String)) return false;
-    return notNullIn(env.schemas, sel, f.length === 2 ? f[0].String.sval : undefined, f.at(-1).String.sval);
+    return notNull[i]!;
   });
 }
 
@@ -397,19 +397,28 @@ function pagedOf(env: RunEnv, c: Compiled, pageSize: number, cursor: readonly un
   const conditions: N[] = [];
   if (opts.cursor) {
     const cur = opts.cursor;
+    const notNull = hidden.map((h) => {
+      const f = h.ResTarget.val?.ColumnRef?.fields;
+      return !!f && f.length <= 2 && f.every((x: N) => x.String)
+        && notNullIn(env.schemas, sel, f.length === 2 ? f[0].String.sval : undefined, f.at(-1).String.sval);
+    });
     const same = (j: number) => (cur[j] === null ? isNull(col(`_k${j}`), "IS_NULL") : op("=", col(`_k${j}`), param({ cursor: j })));
     // the rows after the cursor's key i: past a NULL comes every value when NULL sorts first, nothing when it sorts last
     const past = (k: N, i: number): N | undefined => {
       const at = col(`_k${i}`);
       if (cur[i] === null) return nullsFirst(k) ? isNull(at, "IS_NOT_NULL") : undefined;
       const beyond = op(desc(k) ? "<" : ">", at, param({ cursor: i }));
-      return nullsFirst(k) ? beyond : { BoolExpr: { boolop: "OR_EXPR", args: [beyond, isNull(at, "IS_NULL")] } };
+      return notNull[i] || nullsFirst(k) ? beyond : { BoolExpr: { boolop: "OR_EXPR", args: [beyond, isNull(at, "IS_NULL")] } };
     };
-    if (rowComparable(env, sel, keys, hidden) && cur.length === keys.length && cur.every((v) => v !== null && v !== undefined)) {
+    if (rowComparable(env, keys, notNull) && cur.length === keys.length && cur.every((v) => v !== null && v !== undefined)) {
       // every key is NOT NULL and they share one direction: one row comparison, which a btree range-scans however deep the page
       const row = (args: N[]): N => ({ RowExpr: { args, row_format: "COERCE_IMPLICIT_CAST" } });
       conditions.push(op(desc(keys[0]!) ? "<" : ">", row(keys.map((_k, i) => col(`_k${i}`))), row(cur.map((_v, i) => param({ cursor: i })))));
     } else {
+      // A leading range lets the native planner seek. Keep equal keys for later tiebreaks, and never cut off a NULL tail.
+      // Large tie groups can still scan many rows; the author owns the index and unique complete ordering.
+      if (cur[0] !== null && cur[0] !== undefined && (notNull[0] || nullsFirst(keys[0]!)))
+        conditions.push(op(desc(keys[0]!) ? "<=" : ">=", col("_k0"), param({ cursor: 0 })));
       const args = keys.flatMap((k, i) => {
         const last = past(k, i);
         return last ? [{ BoolExpr: { boolop: "AND_EXPR", args: [...keys.slice(0, i).map((_x, j) => same(j)), last] } }] : [];

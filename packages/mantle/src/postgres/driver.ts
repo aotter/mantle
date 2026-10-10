@@ -1,13 +1,5 @@
-/**
- * The PostgreSQL connection port. Structural types of node-postgres (`pg`), so Mantle depends on no driver: the host passes
- * `connect`, which opens one client (`new Client(env.HYPERDRIVE.connectionString)` on Workers, where Hyperdrive pools the
- * connections and a socket must not outlive its request). Every operation opens a client and ends it; `requestScoped`
- * (session.ts) makes that one client per request.
- *
- * A transaction only where atomicity needs one (#1379): a read is one bare statement, one round trip. A write batch is
- * BEGIN … COMMIT; a client that pipelines (node-postgres `new Client({ pipeline: true })`) gets all of it written before the
- * first answer is read, one round trip, and one that does not takes N + 2. Nothing depends on per-transaction session state:
- * what decoding needs is the role's or the database's configuration, checked once at boot (`bootRead`).
+/** Native node-postgres execution: one acquired client per operation, released to its application-owned Pool or ended.
+ * Writes use one native SERIALIZABLE transaction. Serialization/deadlock failures surface without automatic retry.
  */
 import type { DatabaseDriver, SqlResult, SqlStatement } from "../core/driver.js";
 import { decodeField } from "./codec.js";
@@ -15,15 +7,12 @@ import { decodeField } from "./codec.js";
 export interface PgField { readonly name: string; readonly dataTypeID: number; readonly dataTypeModifier?: number }
 export interface PgResult { readonly rows: Record<string, unknown>[]; readonly rowCount: number | null; readonly fields: readonly PgField[] }
 export interface PgClient {
-  /** node-postgres pipeline mode: queries issued without awaiting share the wire. */
-  readonly pipeline?: boolean;
-  execute?(statement: PgStatement): Promise<PgOutcome>;
   query(config: { text: string; values?: unknown[]; types?: { getTypeParser(oid: number, format?: string): (text: string) => unknown } }): Promise<PgResult>;
   /** The positional form Kysely (Better Auth) calls. */
   query(text: string, values?: readonly unknown[]): Promise<PgResult & { command: string }>;
   end(): Promise<void>;
-  /** node-postgres: the last ReadyForQuery's state, `I` idle, `T` in a transaction, `E` in a failed one. */
-  getTransactionStatus?(): string | null;
+  /** Present on the official PoolClient; never replace its native release. */
+  release?(error?: Error | boolean): void;
 }
 /** Opens one connected client. */
 export type PgConnect = () => Promise<PgClient>;
@@ -46,13 +35,11 @@ export interface PgStatement {
 export interface PgOutcome { readonly rows: Record<string, unknown>[]; readonly count: number }
 
 async function run(client: PgClient, s: PgStatement): Promise<PgOutcome> {
-  if (client.execute) return client.execute(s);
   const r = await client.query({ text: s.text, values: [...(s.values ?? [])], types: RAW });
   const rows = r.rows.map((row) => Object.fromEntries(r.fields.map((f) => [f.name, decodeField(f.dataTypeID, row[f.name] as string | null, f.dataTypeModifier)])));
   return { rows, count: r.rowCount ?? rows.length };
 }
 
-const SERIALIZATION = new Set(["40001", "40P01"]);
 /** ADR-0037 decision 5: a statement that runs away (a recursive CTE, a regular expression) ends here. 0 is no limit. */
 export const STATEMENT_TIMEOUT_MS = 10_000;
 /**
@@ -60,50 +47,36 @@ export const STATEMENT_TIMEOUT_MS = 10_000;
  * indexes); a read has the role's, which boot checked.
  */
 const begin = (head: string, timeoutMs: number) => `${head}; SET LOCAL statement_timeout = ${Math.max(0, Math.floor(timeoutMs))}`;
-const ATTEMPTS = 5;
+/** Return only healthy clients to a native Pool; standalone Clients always close. */
+export async function releaseClient(client: PgClient, discard = false): Promise<void> {
+  if (client.release) client.release(discard);
+  else await client.end();
+}
 
-/**
- * Statements in one SERIALIZABLE transaction, all or nothing. SERIALIZABLE keeps what SQLite's one writer gave every guard
- * (`WHERE NOT EXISTS`, a first sign-up becoming owner): a concurrent write that would break one fails with 40001 and the
- * whole batch is retried. A write's `expect` is checked inside its own statement (executor.ts), so nothing waits between them.
- */
+/** A single native SERIALIZABLE transaction; no SDK retry, pipeline or request-level sharing. */
 export async function transaction(connect: PgConnect, statements: readonly PgStatement[], timeoutMs = STATEMENT_TIMEOUT_MS): Promise<PgOutcome[]> {
-  for (let attempt = 1; ; attempt++) {
-    // a retry waits a random while first: writers that failed together, retried at once, collide again (a pipelined batch,
-    // one round trip long, does so every time) and run out of attempts
-    if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, Math.random() * 10 * 2 ** attempt));
-    const client = await connect();
-    if (client.pipeline && statements.every((s) => (s.values ?? []).every(wire))) {
-      try {
-        return await pipelined(client, begin("BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs), statements);
-      } catch (e) {
-        if (SERIALIZATION.has(sqlState(e) ?? "") && attempt < ATTEMPTS) continue;
-        throw e;
-      } finally {
-        await client.end().catch(() => undefined);
-      }
+  const client = await connect();
+  let failedAt = -1;
+  let committing = false;
+  let discard = false;
+  try {
+    await client.query({ text: begin("BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs) });
+    const out: PgOutcome[] = [];
+    for (const [i, s] of statements.entries()) {
+      failedAt = i;
+      out.push(await run(client, s));
+      failedAt = -1;
     }
-    let failedAt = -1;
-    let committing = false;
-    try {
-      await client.query({ text: begin("BEGIN ISOLATION LEVEL SERIALIZABLE", timeoutMs) });
-      const out: PgOutcome[] = [];
-      for (const [i, s] of statements.entries()) {
-        failedAt = i;
-        out.push(await run(client, s));
-        failedAt = -1;
-      }
-      committing = true;
-      await client.query({ text: "COMMIT" });
-      return out;
-    } catch (e) {
-      await client.query({ text: "ROLLBACK" }).catch(() => undefined);
-      if (SERIALIZATION.has(sqlState(e) ?? "") && attempt < ATTEMPTS) continue;
-      // `committing`: only a failure during COMMIT leaves the outcome unknown; anything before it applied nothing
-      throw Object.assign(e as object, { statement: failedAt, committing });
-    } finally {
-      await client.end().catch(() => undefined);
-    }
+    committing = true;
+    await client.query({ text: "COMMIT" });
+    return out;
+  } catch (e) {
+    discard = !sqlState(e) || /^08/.test(sqlState(e)!);
+    await client.query({ text: "ROLLBACK" }).catch(() => { discard = true; });
+    // A rollback reply cannot resolve an earlier unanswered COMMIT; never replay that write.
+    throw Object.assign(e instanceof Error ? e : new Error(String(e)), { statement: failedAt, committing });
+  } finally {
+    await releaseClient(client, discard).catch(() => undefined);
   }
 }
 
@@ -114,7 +87,10 @@ export async function transaction(connect: PgConnect, statements: readonly PgSta
  */
 export async function query(connect: PgConnect, s: PgStatement): Promise<PgOutcome> {
   const client = await connect();
-  try { return await run(client, s); } finally { await client.end().catch(() => undefined); }
+  let discard = false;
+  try { return await run(client, s); }
+  catch (e) { discard = !sqlState(e) || /^08/.test(sqlState(e)!); throw e; }
+  finally { await releaseClient(client, discard).catch(() => undefined); }
 }
 
 /**
@@ -155,31 +131,7 @@ export async function bootRead(connect: PgConnect, timeoutMs = STATEMENT_TIMEOUT
         [`statement_timeout is ${r!.timeout_ms ? `${r!.timeout_ms} ms` : "unset"}; a read runs outside a transaction under the role's limit, which must be at most ${ms} ms (statementTimeoutMs): ${fix("statement_timeout", `${ms}ms`)}`]),
     ];
     return { problems, booted: typeof r!.booted === "string" ? r!.booted : null };
-  } finally { await client.end().catch(() => undefined); }
-}
-
-/**
- * A bind node-postgres encodes without throwing. One it throws on fails on the client after Parse: it sends Close and Sync, the
- * server never sees an error, and a pipelined COMMIT would commit the statements around it. Such a batch goes one at a time.
- */
-const wire = (v: unknown) => v == null || ["string", "number", "boolean", "bigint"].includes(typeof v) || v instanceof Date || ArrayBuffer.isView(v);
-
-/**
- * BEGIN, every statement and COMMIT written at once. Each is its own Sync, so a failure the server answers leaves the
- * transaction aborted: the statements after it fail with 25P02 and COMMIT answers ROLLBACK, which ends it, so no ROLLBACK
- * follows. The first failure is the one reported, with its statement. A failure without a SQLSTATE is the socket's, and COMMIT
- * was already written: whether it ran is unknown (`committing`), wherever the first rejection landed.
- */
-async function pipelined(client: PgClient, begin: string, statements: readonly PgStatement[]): Promise<PgOutcome[]> {
-  const settled = await Promise.allSettled([
-    client.query({ text: begin }),
-    ...statements.map((s) => run(client, s)),
-    client.query({ text: "COMMIT" }),
-  ]);
-  const failed = settled.findIndex((r) => r.status === "rejected");
-  if (failed === -1) return settled.slice(1, -1).map((r) => (r as PromiseFulfilledResult<PgOutcome>).value);
-  const e = (settled[failed] as PromiseRejectedResult).reason;
-  throw Object.assign(e as object, { statement: failed >= 1 && failed <= statements.length ? failed - 1 : -1, committing: failed === statements.length + 1 || !sqlState(e) });
+  } finally { await releaseClient(client).catch(() => undefined); }
 }
 
 /** `?1` binds (Mantle's portable SQL) as PostgreSQL's `$1`, outside quoted strings and names. */
@@ -209,7 +161,8 @@ export function pgPool(connect: PgConnect): PgAuthPool {
     options: {},
     async connect() {
       const client = await connect();
-      return Object.assign(client, { release: () => void client.end().catch(() => undefined) });
+      if (client.release) return client;
+      return { query: client.query.bind(client), release: () => void client.end().catch(() => undefined) };
     },
     async end() {},
   } as unknown as PgAuthPool;

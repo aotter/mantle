@@ -6,7 +6,7 @@
  */
 import { checkShapeProblem, storageColumns, type SqlNode } from "../spec/domain/index.js";
 import type { StorageSchema } from "../core/dialect.js";
-import { query, sqlState, type PgClient, type PgConnect, type PgStatement } from "./driver.js";
+import { query, releaseClient, sqlState, type PgClient, type PgConnect, type PgStatement } from "./driver.js";
 import { pgType } from "./codec.js";
 import { print, typed } from "./print.js";
 
@@ -246,10 +246,12 @@ export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<
   const attempts = options.attempts ?? 5;
   for (let attempt = 1; ; attempt++) {
     const client = await connect();
+    let discard = false;
     try {
       return await locked(client, plan, state, lockTimeout);
     } catch (e) {
-      await client.query({ text: "ROLLBACK" }).catch(() => undefined);
+      discard = !sqlState(e) || /^08/.test(sqlState(e)!);
+      await client.query({ text: "ROLLBACK" }).catch(() => { discard = true; });
       const code = sqlState(e);
       if (code === "55P03") {
         if (attempt < attempts) { await new Promise((r) => setTimeout(r, Math.random() * 100 * attempt)); continue; }
@@ -263,7 +265,7 @@ export async function convergeStorage(connect: PgConnect, plan: Readonly<Record<
         return { skipped: false, undeclared: [], blocked: [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED", message: `a unique index cannot be created: existing rows break it (${msg}); dedupe the data, then rerun` }] };
       }
       throw e;
-    } finally { await client.end().catch(() => undefined); }
+    } finally { await releaseClient(client, discard).catch(() => undefined); }
   }
 }
 

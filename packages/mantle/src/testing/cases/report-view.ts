@@ -79,4 +79,25 @@ export async function run(r: Report, engine: Engine) {
     await paged('SELECT id, note FROM items ORDER BY note'), nativeOrder ? ['c', 'd', 'a', 'b'] : ['a', 'b', 'c', 'd']);
   r.equal(`NULL order, descending, paged one row at a time (${nativeOrder ? 'native: NULL first, id descending' : 'SQLite: NULL last, id ascending'})`,
     await paged('SELECT id, note FROM items ORDER BY note DESC'), nativeOrder ? ['b', 'a', 'd', 'c'] : ['d', 'c', 'a', 'b']);
+  // Compare with each engine's own whole query, including null-extended native NOT NULL keys and authored LIMIT.
+  for (const sql of [
+    ...['ASC', 'DESC'].flatMap((dir) => ['FIRST', 'LAST'].map((nulls) => `SELECT id, note FROM items ORDER BY note ${dir} NULLS ${nulls}, id DESC`)),
+    'SELECT id FROM items ORDER BY updated_at DESC, id ASC',
+    'SELECT id FROM items ORDER BY updated_at ASC, id DESC LIMIT 3',
+    'SELECT i.id, o.id AS order_id FROM items i LEFT JOIN orders o ON o.item_id = i.id ORDER BY o.updated_at DESC NULLS LAST, i.id, o.id',
+    'SELECT s.id, s.order_id FROM (SELECT i.id, o.id AS order_id, o.updated_at AS at FROM items i LEFT JOIN orders o ON o.item_id = i.id) s ORDER BY s.at DESC NULLS FIRST, s.id, s.order_id',
+  ]) {
+    const q = await program('view', sql);
+    const whole = (await runView(s, q, caller())).rows;
+    const walked: any[] = [];
+    let after: unknown[] | undefined;
+    for (let i = 0; i < 10; i++) {
+      const page = await runView(s, q, caller(), { cursor: after, pageSize: 1 });
+      walked.push(...page.rows);
+      if (!page.next) break;
+      after = page.next;
+    }
+    r.equal(`native cursor parity: ${sql}`, walked, whole);
+  }
+
 }

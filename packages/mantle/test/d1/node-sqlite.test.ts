@@ -120,3 +120,25 @@ it("a json_each native paging key is not shadowed by an output named id (#1402)"
     }
   } finally { driver.db.close(); }
 });
+
+it("a deep mixed-direction native cursor seeks on its leading key while retaining tied ids", async () => {
+  const { boot, caller, program, runView, site } = await import("../../src/testing/harness.js");
+  const { print } = await import("../../src/d1/print.js");
+  const driver = nodeSqlite();
+  try {
+    const b = await boot({ storage: sqliteStorage(driver), driver });
+    driver.db.exec("CREATE INDEX cursor_seek ON items(owner, updated_at DESC, id ASC); WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<20000) INSERT INTO items(id, owner, created_at, updated_at, stock) SELECT 'deep-' || printf('%05d', x), 'o1', 0, x/2, 1 FROM n; ANALYZE items");
+    let statement: any;
+    const s = site({ ...b, executor: { ...b.executor, select: (st) => { statement = st; return b.executor.select(st); } } });
+    const p = await program("view", "SELECT id FROM items ORDER BY updated_at DESC, items.id ASC");
+    const page = await runView(s, p, caller(), { pageSize: 3, cursor: [500, "deep-01000"] });
+    expect(page.rows.map((row) => row.id)).toEqual(["deep-01001", "deep-00998", "deep-00999"]);
+    const plan = driver.db.prepare(`EXPLAIN QUERY PLAN ${print(statement.ir)}`).all(...statement.binds);
+    expect(plan.map((row) => row.detail).join("\n")).toMatch(/SEARCH items USING INDEX cursor_seek \(owner=\? AND updated_at<\?\)/);
+    expect(print(statement.ir)).not.toMatch(/_k[01]"?\s+IS NULL/i);
+    // The inclusive bound retains a large tie group; it does not promise constant work within that group.
+    driver.db.exec("UPDATE items SET updated_at = 1 WHERE id LIKE 'deep-%'");
+    const tied = await runView(s, p, caller(), { pageSize: 3, cursor: [1, "deep-19000"] });
+    expect(tied.rows.map((row) => row.id)).toEqual(["deep-19001", "deep-19002", "deep-19003"]);
+  } finally { driver.db.close(); }
+});
