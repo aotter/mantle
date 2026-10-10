@@ -4,6 +4,7 @@
  * have one implementation.
  */
 import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
+import type { ZodType } from "zod";
 import { firstZodIssueAsJsonPointer, jsonSchemaToZod, safeParseJson, NATIVE_OUTPUT_TYPES, SqlRefusal, type AuthorizationRequirements, type JsonSchema, type SqlNode as N } from "../../spec/domain/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause } from "../invocation.js";
@@ -22,6 +23,8 @@ export interface StoreView {
   readonly inputs: Readonly<Record<string, string>>;
   /** The View's input JSON Schema: a call's input is checked against it (required, unknown keys, types) before it runs. */
   readonly input?: JsonSchema;
+  /** `input` compiled ahead of the first call; when absent it is built on first use. */
+  readonly inputSchema?: ZodType;
   readonly public?: boolean;
   /** Checked against a caller-bound Store (the host's own `runtime.store` is trusted and skips it). */
   readonly requires?: AuthorizationRequirements;
@@ -160,7 +163,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       // the input as its schema reads it (defaults filled), as a Procedure binds it
       let input: unknown = options.input;
       if (v.input) {
-        let z = viewInputs.get(v);
+        let z = v.inputSchema ?? viewInputs.get(v);
         if (!z) viewInputs.set(v, (z = jsonSchemaToZod(v.input)));
         const r = safeParseJson(z, options.input ?? {});
         if (!r.success) {

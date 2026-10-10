@@ -3,9 +3,8 @@
  * Boot checks the plan, the handlers and the storage; `invokeProcedure` is the one path every source runs through.
  */
 import { DiagnosticError, makeDiagnostic, readJsonPointer, type Diagnostic, type DiagnosticCode } from "../../spec/kernel/index.js";
-import { RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, jsonSchemaToZod, planFingerprint, safeParseJson, type LifecycleHook, type RuntimePlan, type TriggerManifest, ManifestParseError } from "../../spec/domain/index.js";
+import { RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, planFingerprint, safeParseJson, type LifecycleHook, type RuntimePlan, type TriggerManifest, ManifestParseError } from "../../spec/domain/index.js";
 import { validateTriggerSpec } from "../../spec/domain/service/TriggerSpecChecks.js";
-import type { ZodType } from "zod";
 import { systemCaller } from "../caller.js";
 import { MAX_INVOCATION_DEPTH, type HandlerContext, type Invocation, type InvocationCause, type LifecycleDispatcher, type LifecycleEvent, type MantleHandlers } from "../invocation.js";
 import { sqlInput } from "../sql/compile.js";
@@ -14,6 +13,7 @@ import { bindFor, createStore } from "../store/createStore.js";
 import type { CallerStore } from "../store.js";
 import type { MantleBootReport, MantleRuntime, MantleStorageAdapter } from "../service.js";
 import { evaluateAuthAll } from "./auth.js";
+import { planValidators } from "./validators.js";
 import { lifecycleHookSets, lifecycleKey } from "./hooks.js";
 import { loweringStatus, seedPlan } from "../sql/lowered.js";
 
@@ -131,19 +131,19 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   if (loweredStatus === "used") seedPlan(plan, dialect, lifecycle?.after);
   else if (plan.lowered && loweredStatus !== "restricted") console.warn(`[mantle boot] lowered statements not used (${loweredStatus}); regenerate the plan with this Mantle (\`mantle generate\`)`);
 
+  const validators = planValidators(plan); // built once per plan; `createMantle` already did it at construction
+
   const now = args.now ?? (() => Date.now() * 1000);
   const store = createStore({
     executor, dialect, schemas: plan.schemas, lifecycle, now,
     newId: args.newId ?? (() => crypto.randomUUID().replaceAll("-", "")),
-    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input } : {}), ...(v.columns ? { columns: v.columns } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
+    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input, inputSchema: validators.views.get(name) } : {}), ...(v.columns ? { columns: v.columns } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
     guardView: async (procedure, caller, input, cause) => { await invoke({ procedure, input, caller, cause: child(cause, procedure) }, true); },
   });
 
   // ---- invocation ---------------------------------------------------------------------------------------------------------------
-  const zod = new Map<string, ZodType>();
-  const schemaOf = (key: string, schema: Parameters<typeof jsonSchemaToZod>[0]) => zod.get(key) ?? (zod.set(key, jsonSchemaToZod(schema)), zod.get(key)!);
-  const check = (kind: "input" | "output", name: string, path: string, value: unknown, schema: Parameters<typeof jsonSchemaToZod>[0]) => {
-    const r = safeParseJson(schemaOf(`${name}#${kind}`, schema), value);
+  const check = (kind: "input" | "output", name: string, path: string, value: unknown) => {
+    const r = safeParseJson(validators.procedures.get(name)![kind], value);
     if (r.success) return r.data;
     const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
     throw new DiagnosticError(makeDiagnostic({
@@ -165,7 +165,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     if (!proc) throw fail("PROCEDURE_NOT_FOUND", path, `unknown Procedure '${inv.procedure}'`, "runtime");
     const denial = evaluateAuthAll(proc.requires, inv.caller, path);
     if (denial) throw new DiagnosticError(denial);
-    const input = check("input", inv.procedure, path, inv.input, proc.input);
+    const input = check("input", inv.procedure, path, inv.input);
 
     // a dynamic guard sees the validated input and the same caller, reads only, and may not itself be guarded
     const guardName = proc.requires?.guard?.procedure;
@@ -196,7 +196,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
       console.error(`[mantle procedure ${inv.procedure}] unhandled failure`, e);
       throw fail("INTERNAL_ERROR", path, "An internal error occurred.", "runtime");
     }
-    return check("output", inv.procedure, path, result, proc.output);
+    return check("output", inv.procedure, path, result);
   }
 
   return {
