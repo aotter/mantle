@@ -6,7 +6,7 @@ import { requiredEnumStates } from "./procedureFlow.js";
  */
 import { makeDiagnostic, redactForWire } from "../spec/kernel/index.js";
 import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, enumOptions, resolveMantleRef, mcpTools, type JsonSchema, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
-import { evaluateAuthAll, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type StoreRow, type StoreScalar, type StoreSelect, type StoreSelectResult, type StoreWhere, type Surface } from "../core/index.js";
+import { evaluateAuthAll, readerOf, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type FindQuery, type SchemaReader, type StoreRow, type StoreScalar, type StoreSelectResult, type Surface } from "../core/index.js";
 import { siteConfigOf } from "../core/siteConfig.js";
 import { sessionUserOf } from "../core/sessionUser.js";
 import { coerce, failure, json, match, readJsonObject, viewQuery, wireError } from "../core/wire.js";
@@ -261,8 +261,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     if (native) throw bad(`\`data\` may not set '${native}': status moves by publish and unpublish, and Store owns the rest`);
     return d as Record<string, unknown>;
   };
+  /** `{ field: value }` on a bare object: a field name comes from a URL or a manifest. */
+  const onlyEq = (field: string, value: unknown) => { const where: Record<string, unknown> = Object.create(null); where[field] = value; return where; };
   const current = async (store: CallerStore, s: PlanSchema, id: string) => {
-    const [row] = (await store.select({ from: s.name, where: { id }, limit: 1 })).rows;
+    const row = await readerOf(store.db, s.name).get(id);
     if (!row) throw wireError("NOT_FOUND", `no ${s.name} entry '${id}'`, P);
     return row;
   };
@@ -276,30 +278,48 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       .find((k) => k && typeof data[k] === "string" && data[k] !== "");
     return key ? (data[key] as string) : null;
   };
-  const listQuery = (s: PlanSchema, q: URLSearchParams): StoreSelect => {
+  /**
+   * The reader query of one list or export request, or `null` when its equalities contradict each other (a status filter and a
+   * `filter_field=status` of another value, say): AND is then unsatisfiable and no read is made. An equality on a column already
+   * constrained to the same value is merged, because a reader's `where` holds one condition per column.
+   */
+  const listQuery = (s: PlanSchema, q: URLSearchParams): FindQuery | null => {
     if (q.get("cursor_direction") === "backward") throw bad("entries page forward only: keep the cursors already seen to go back");
-    const where: StoreWhere[] = [];
+    // a URL may name `__proto__`, so the computed keys land on a bare object
+    const where: Record<string, unknown> = Object.create(null);
+    const seen = new Map<string, unknown>();
+    // native columns are exact; a Schema field is its lowercase name. A native name and a field spelled like it stay two conditions.
+    const add = (field: string, value: unknown) => {
+      const canonical = NATIVE.includes(field) ? `native:${field}` : `field:${field.toLowerCase()}`;
+      if (seen.has(canonical)) return Object.is(seen.get(canonical), value);
+      seen.set(canonical, value);
+      where[field] = value;
+      return true;
+    };
     const status = q.get("status");
-    if (s.publishing && status && status !== "all") where.push({ status });
-    for (const k of ["filter", "scope"]) {
-      const field = q.get(`${k}_field`), value = q.get(`${k}_value`);
-      if (!field !== !value) throw bad(`${k}_field and ${k}_value go together`);
-      if (field) where.push({ [field]: coerce(value!, propsOf(s.schema)[field], field, P) as StoreScalar });
-    }
+    const satisfiable = [
+      ...(s.publishing && status && status !== "all" ? [["status", status] as const] : []),
+      ...["filter", "scope"].flatMap((k) => {
+        const field = q.get(`${k}_field`), value = q.get(`${k}_value`);
+        if (!field !== !value) throw bad(`${k}_field and ${k}_value go together`);
+        return field ? [[field, coerce(value!, propsOf(s.schema)[field], field, P) as StoreScalar] as const] : [];
+      }),
+    ].map(([field, value]) => add(field, value)).every(Boolean);
+    if (!satisfiable) return null;
     const search = q.get("search")?.trim();
-    return { from: s.name, ...(where.length ? { where: { and: where } } : {}), ...(search ? { search } : {}), orderBy: { [q.get("sort") || "updatedAt"]: q.get("direction") === "asc" ? "asc" : "desc" } };
+    return { ...(Object.keys(where).length ? { where } : {}), ...(search ? { search } : {}), orderBy: { [q.get("sort") || "updatedAt"]: q.get("direction") === "asc" ? "asc" : "desc" } };
   };
-  const everyPage = async (store: CallerStore, q: StoreSelect) => {
+  const everyPage = async (reader: SchemaReader, q: FindQuery) => {
     const rows: StoreRow[] = [];
     let cursor: string | undefined;
     do {
-      const page = await store.select({ ...q, ...(cursor ? { cursor } : {}) });
+      const page = await reader.find({ ...q, ...(cursor ? { cursor } : {}) });
       rows.push(...page.rows);
       cursor = page.nextCursor;
     } while (cursor);
     return rows;
   };
-  /** Each row's translation locales: a second select per translation Schema, `in` the page's keys, in chunks under the bind limit. */
+  /** Each row's translation locales: a second read per translation Schema, `in` the page's keys, in chunks under the bind limit. */
   const localesOf = async (store: CallerStore, s: PlanSchema, rows: readonly StoreRow[]) => {
     const out = new Map<string, Set<string>>(rows.map((r) => [String(r["id"]), new Set()]));
     for (const t of schemas.filter((x) => x.translates?.parent === s.name && x.fields["locale"])) {
@@ -307,7 +327,9 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       const keys = [...new Set(rows.map((r) => r[on]).filter((v) => v !== null && v !== undefined && v !== ""))] as StoreScalar[];
       const byKey = new Map<unknown, Set<string>>();
       for (let i = 0; i < keys.length; i += 50) {
-        for (const tr of await everyPage(store, { from: t.name, columns: [on, "locale"], where: { [on]: { in: keys.slice(i, i + 50) } }, limit: 500 })) {
+        const where: Record<string, unknown> = Object.create(null);
+        where[on] = { in: keys.slice(i, i + 50) };
+        for (const tr of await everyPage(readerOf(store.db, t.name), { columns: [on, "locale"], where, limit: 500 })) {
           if (typeof tr["locale"] === "string") byKey.set(tr[on], (byKey.get(tr[on]) ?? new Set()).add(tr["locale"]));
         }
       }
@@ -320,7 +342,9 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     const store = runtime.store.as(caller);
     const limit = q.get("limit");
     const cursor = q.get("cursor");
-    const page = await store.select({ ...listQuery(s, q), ...(limit ? { limit: coerce(limit, { type: "integer" }, "limit", P) as number } : {}), ...(cursor ? { cursor } : {}) });
+    const query = listQuery(s, q);
+    // contradictory filters match nothing: answer without a read (and without checking `sort`, `limit` or `cursor`)
+    const page = query ? await readerOf(store.db, s.name).find({ ...query, ...(limit ? { limit: coerce(limit, { type: "integer" }, "limit", P) as number } : {}), ...(cursor ? { cursor } : {}) }) : { rows: [] as readonly StoreRow[], nextCursor: undefined };
     const locales = await localesOf(store, s, page.rows);
     const ui = projection(s).list;
     const preview = [...(ui.primaryField ? [ui.primaryField] : []), ...ui.columns];
@@ -349,10 +373,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     const up = projection(s).parent;
     const upValue = up ? join(row[up.childField]) : null;
     const parentSchema = up && upValue !== null ? schemaOf(up.collection) : undefined;
-    const [parent] = parentSchema ? (await store.select({ from: parentSchema.name, where: { [up!.parentField]: upValue }, limit: 1 })).rows : [];
+    const parent = parentSchema ? await readerOf(store.db, parentSchema.name).first({ where: onlyEq(up!.parentField, upValue) }) : null;
     const related = await Promise.all(relationships.get(s)!.map(async ({ t, kind, parentField, childField }) => {
       const parentValue = join(row[parentField]);
-      const rows = parentValue === null ? [] : (await store.select({ from: t.name, where: { [childField]: parentValue }, limit: 50 })).rows;
+      const rows = parentValue === null ? [] : (await readerOf(store.db, t.name).find({ where: onlyEq(childField, parentValue), limit: 50 })).rows;
       return { collection: projection(t), relationship: { kind, parentField, childField, parentValue }, entries: rows.map((r) => entryOf(t, r)) };
     }));
     return {
@@ -427,7 +451,9 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
         const query = listQuery(s, q);
         const store = runtime.store.as(caller);
         const columns = ["id", ...(s.publishing ? ["status"] : []), "version", "updated_at", ...Object.keys(propsOf(s.schema)).filter((f) => f.toLowerCase() !== s.scope && s.fields[f.toLowerCase()] !== "geo")];
-        return csv(s.name, (cursor) => store.select({ ...query, limit: 500, ...(cursor ? { cursor } : {}) }), () => columns, (row, c) => (c === "updated_at" ? ms(row["updatedAt"]) : row[c]));
+        const reader = readerOf(store.db, s.name);
+        // contradictory filters match nothing: a header-only file
+        return csv(s.name, async (cursor) => (query ? reader.find({ ...query, limit: 500, ...(cursor ? { cursor } : {}) }) : { rows: [] }), () => columns, (row, c) => (c === "updated_at" ? ms(row["updatedAt"]) : row[c]));
       },
     },
     {
