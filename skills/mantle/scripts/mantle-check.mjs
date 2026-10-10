@@ -69,12 +69,17 @@ if (!compiled.ok) {
 
 const planPath = join(project, ".mantle/generated/plan.json");
 const generated = existsSync(planPath) ? readJson(planPath) : null;
-const planFile = !generated ? "missing" : generated.sourceHash === sourceHash && generated.plan?.fingerprint === compiled.plan.fingerprint ? "fresh" : "stale";
+// `mantle generate` adds `lowered` (printed statements, ADR-0044) to the compiled plan and re-seals it, so the file is the compiled plan when,
+// without `lowered`, it seals to the compiled fingerprint, and its lowered statements (if any) are this Core's
+const { fingerprint: _sealed, lowered, ...program } = generated?.plan ?? {};
+const sameProgram = !!generated?.plan && (await spec.planFingerprint(program)) === compiled.plan.fingerprint && (lowered === undefined || lowered.mantle === core.version);
+const planFile = !generated ? "missing" : generated.sourceHash === sourceHash && sameProgram ? "fresh" : "stale";
 
 out({
   ok: planFile === "fresh",
   coreVersion: core.version,
-  fingerprint: compiled.plan.fingerprint,
+  // the plan that would be uploaded: the file's own seal when it is fresh (it covers the lowered statements), the compiled plan's otherwise
+  fingerprint: planFile === "fresh" ? generated.plan.fingerprint : compiled.plan.fingerprint,
   sourceHash,
   planFile,
   // Offline validation cannot prove access, provisioning, or a deployed release.
