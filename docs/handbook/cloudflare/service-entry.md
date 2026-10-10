@@ -152,7 +152,7 @@ bound. Add the rest:
 | A secret | `wrangler secret put NAME` (`.dev.vars` locally) | `env.NAME` |
 | A plain var | `vars: { NAME: "…" }` | `env.NAME` |
 | Email | `send_email: [{ name: "EMAIL" }]` | your `EmailSender` for sign-in, or a handler's `ctx.env.EMAIL` |
-| KV, Queues, Durable Objects | their usual keys | your own code; Mantle reads none of them |
+| KV, Queues, Durable Objects | their usual keys | your own code; Mantle reads none of them (a Durable Object can hold its own Mantle store: [Durable Object per tenant](durable-object-tenant.md)) |
 
 Handlers receive the same `env` as `ctx.env`. Mantle-owned rows are reached
 only through Store; never write a Schema's table with `env.DB` directly. Your

@@ -245,7 +245,9 @@ over SQLite `bunSqliteDriver` gives Better Auth the same store. A `DatabaseDrive
 entry calls `createMantle` and its own server. See
 [Another host or engine](../guides/adapter-guide.md) for the driver contract
 (numbered binds, rethrown engine errors with their code), schedules through
-`invokeSchedule`, and what is untested.
+`invokeSchedule`, and what is untested. A SQLite-backed Durable Object can hold
+its own store through the experimental `durableObjectStorage`: see
+[Durable Object per tenant](../cloudflare/durable-object-tenant.md).
 
 `site` turns on the site capability (site settings and media); see
 [Site defaults and site_config](../reference/site-config.md).
