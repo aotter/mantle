@@ -72,8 +72,11 @@ caller is reaches the statement only as binds.
    every upload.** `verifyPlan` re-lowers the plan and requires canonical
    equality with `plan.lowered`, otherwise it reports `LOWERING_MISMATCH` at
    `plan#/lowered`; it bounds `lowered` first (known programs only, bounded
-   size). Under `restrict`, or for another Mantle or dialect, it skips that
-   comparison, because the runtime does not use them. Probe runs (`seen`,
+   size). A lowering `verifyPlan` cannot re-derive (another Mantle version or
+   dialect, or a dialect that cannot print) is refused, never skipped, because
+   a runtime of that version would seed it unchecked and `lowered.mantle` is
+   only a string the plan's author writes. The comparison is skipped only
+   under `restrict`, where no runtime uses lowered statements. Probe runs (`seen`,
    `unsafeNoVisibility`) and Store writes with statuses never use seeds (the
    existing compile cache bypass).
 7. **Validators.** The Procedure and View input/output validators are built
