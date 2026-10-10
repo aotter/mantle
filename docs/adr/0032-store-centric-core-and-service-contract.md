@@ -364,6 +364,8 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 
     > **Amendment (MCP App catalog):** row actions reach an MCP App through the catalog `planApp` embeds in the App's HTML (ADR-0029 amendment), not through results; `read_entry` and `preview_entry` stay out, and a locked action reviews the row as listed.
 
+- **2026-10-10, experimental Durable Object SQLite driver (#1395).** `@aotter/mantle/cloudflare` exports `durableObjectDriver(storage)`, `durableObjectStorage(storage, options?)` and the structural type `DurableObjectSqliteStorage`, all `@experimental`; see [ADR-lite #1395](adr-lite-1395-durable-object-driver.md). Recorded here per "How to apply" item 3.
+
 ## Implementation status
 
 Proposed. Nothing in decisions 1–13 is implemented beyond the ADR-0030 slices already on `develop`.
