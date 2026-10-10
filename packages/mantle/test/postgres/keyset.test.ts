@@ -31,7 +31,7 @@ const EXPANDED = /^\(?\(?_p\._k0 [<>]=? /;
 it("the cursor is a row comparison exactly when every key is NOT NULL and they share one direction", async () => {
   try {
     // native columns are NOT NULL, and the appended id tiebreak follows the last key
-    expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at DESC", ["2026-01-01T00:00:00Z", "a"])).toBe("(_p._k0, _p._k1) < ($1, $2) ORDER BY _p._k0 DESC NULLS FIRST, _p._k1 DESC NULLS FIRST LIMIT 4");
+    expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at DESC", ["2026-01-01T00:00:00Z", "a"])).toBe("(_p._k0, _p._k1) < ($1, $2) ORDER BY _p._k0 DESC NULLS FIRST, _p._k1 DESC NULLS FIRST LIMIT $3");
     expect(await cursorSql("SELECT id FROM reqs ORDER BY updated_at, created_at", ["2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z", "a"])).toMatch(/^\(_p\._k0, _p\._k1, _p\._k2\) > \(\$1, \$2, \$3\) ORDER BY/);
     expect(await cursorSql("SELECT id FROM reqs ORDER BY id", ["a", "a"])).toMatch(ROW);
     // a scope column and a publishing status are NOT NULL; so is a native column read through a subquery

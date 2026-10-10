@@ -142,10 +142,21 @@ export interface MantleStore {
  */
 export type CallerStore = Omit<MantleStore, "as" | "sweepExpired"> & { readonly sweepExpired?: MantleStore["sweepExpired"] };
 
+/** A statement's text as its dialect printed it at `mantle generate` (ADR-0044). */
+export interface PrintedStatement {
+  readonly sql: string;
+  /** The policy AST has a RETURNING clause. */
+  readonly returns: boolean;
+  /** A write's table, lower case. */
+  readonly target?: string;
+}
+
 /** One compiled statement: validated IR with policy already injected, and numbered binds `?1`, `?2`. */
 export interface StoreStatement {
   readonly ir: SqlNode;
   readonly binds: readonly unknown[];
+  /** When set, the executor runs `sql` and reads nothing else from `ir`, which may be computed on access (ADR-0044). */
+  readonly printed?: PrintedStatement;
   /** Checked inside the batch with `changes()`; a mismatch is `CONFLICT` naming this statement. */
   readonly expect?: number;
 }

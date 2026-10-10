@@ -1,7 +1,7 @@
 import type { RuntimePlan } from "../model/RuntimePlan.js";
 
 /** JSON with sorted keys, so equal plans serialize to equal text whatever built them. */
-function canonical(v: unknown): string {
+export function canonical(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
   if (v && typeof v === "object")
     return `{${Object.keys(v).sort().filter((k) => (v as Record<string, unknown>)[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(",")}}`;

@@ -32,3 +32,10 @@ export function parenthesized(key: "A_Expr" | "NullTest" | "BooleanTest" | "SubL
     : paren(r);
   return { ...n, ...(n.lexpr ? { lexpr: paren(n.lexpr) } : {}), ...(r ? { rexpr } : {}) };
 }
+
+/** The table a write statement targets, lower-cased, or undefined for a read. */
+export function writeTarget(ast: N): string | undefined {
+  const node = ast as Record<string, { relation?: { relname?: string } }>;
+  const stmt = node.InsertStmt ?? node.UpdateStmt ?? node.DeleteStmt;
+  return stmt?.relation?.relname?.toLowerCase();
+}
