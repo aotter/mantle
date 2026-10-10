@@ -99,3 +99,4 @@ These retain their issue-based filenames and original decision status.
 | [#861 Admin WebMCP](adr-lite-861-admin-webmcp.md) | Accepted |
 | [909 Admin UI kit](adr-lite-909-admin-ui-kit.md) | Accepted; amended by 0029 |
 | [#1376 Admin extensions](adr-lite-1376-admin-extensions.md) | Accepted |
+| [#1395 Durable Object SQLite driver](adr-lite-1395-durable-object-driver.md) | Accepted; experimental |

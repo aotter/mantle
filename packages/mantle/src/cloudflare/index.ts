@@ -1,7 +1,8 @@
-/** `@aotter/mantle/cloudflare`: the D1 driver. Structural types, so this needs no `@cloudflare/workers-types`. */
+/** `@aotter/mantle/cloudflare`: the D1 driver, and an experimental Durable Object SQLite driver. Structural types, so this needs no `@cloudflare/workers-types`. */
 import type { DatabaseDriver } from "../core/driver.js";
 import { sqliteStorage } from "../d1/index.js";
 import type { SiteDefaults } from "../spec/domain/index.js";
+import { durableObjectDriver, type DurableObjectSqliteStorage } from "./durableObject.js";
 
 interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement;
@@ -26,5 +27,8 @@ export function d1Driver(db: D1Database): DatabaseDriver {
 
 /** D1 storage for `createMantle`: `storage: (env) => d1Storage(env.DB)`. */
 export const d1Storage = (db: D1Database, options?: { timeZone?: string; site?: SiteDefaults }) => sqliteStorage(d1Driver(db), { ...options, maxBindings: 100 });
+/** @experimental Storage for a `createMantle` owned by one Durable Object: `storage: () => durableObjectStorage(ctx.storage)`. */
+export const durableObjectStorage = (storage: DurableObjectSqliteStorage, options?: { timeZone?: string; site?: SiteDefaults }) => sqliteStorage(durableObjectDriver(storage), { ...options, maxBindings: 100 });
+export { durableObjectDriver, type DurableObjectSqliteStorage };
 export { r2MediaStorage, type R2MediaStorageOptions } from "./r2Media.js";
 export { toCloudflareCron } from "../spec/domain/service/CloudflareCron.js";
