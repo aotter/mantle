@@ -21,6 +21,22 @@ Better Auth's `getMigrations`, which mantle-auth already runs for its own tables
 
 ## Decision
 
+### Proposed amendment: separate PostgreSQL deployment and runtime preparation
+
+Managed hosts may use `postgresStorage` on their deployment connection and
+`postgresRuntimeStorage` on a role without DDL privileges. Both use the same
+physical diff. Runtime preparation validates connection settings, the prepared
+Core function/layout signature, table ownership and physical compatibility in a
+read-only snapshot. It refuses any missing storage or difference requiring DDL;
+it never converges, writes the boot fingerprint or rewrites Core functions.
+
+An older compatible plan may boot after an additive deployment without replacing
+the newer deployment fingerprint. A matching fingerprint does not bypass the
+runtime adapter's physical checks. Hosts remain responsible for accepted-plan
+receipts, compatible changes across every retained revision, migration ordering
+and rollback. This amendment does not authorize destructive changes or add a
+host-specific registry to Core.
+
 ### 1. The database is the state; the plan is the target
 
 For each Schema, the target is the plan's table: native columns, one column per scalar field, and the declared indexes. The actual state is read from the database (`sqlite_schema`, `PRAGMA table_info`, `PRAGMA index_list`, `PRAGMA index_info`), never from a Mantle record of past operations.
