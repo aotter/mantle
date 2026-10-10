@@ -87,7 +87,7 @@ it("an ON CONFLICT target that names the scope field, or leaves it out, is the s
   await call("log-named", { clientKey: "k1", note: "second" }, user("a")); // DO NOTHING: the retry changes nothing
   await call("log-named", { clientKey: "k1", note: "other owner" }, user("b")); // the same key is another owner's own row
   await call("log-implied", { clientKey: "k1", note: "updated" }, user("a"));
-  const notes = async (s: string) => (await rt.store.as(user(s)).select({ from: "workouts", columns: ["note"] })).rows.map((r) => r.note);
+  const notes = async (s: string) => (await rt.store.as(user(s)).db.workouts.find({ columns: ["note"] })).rows.map((r) => r.note);
   expect(await notes("a")).toEqual(["updated"]);
   expect(await notes("b")).toEqual(["other owner"]);
 });

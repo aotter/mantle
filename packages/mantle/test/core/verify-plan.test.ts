@@ -101,6 +101,18 @@ spec: { surface: ${surface}, sql: ${JSON.stringify(sql)} }
     }
   });
 
+  it("refuses two Schemas that become one reader (ADR-0043), with the diagnostic's own code and the Schema's path, in verifyPlan and at boot", async () => {
+    const plan = await compile();
+    const colliding = await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, order_lines: { ...p.schemas.items!, name: "order_lines" }, orderlines: { ...p.schemas.items!, name: "orderLines" } } }));
+    const out = await verifyPlan(colliding, d1());
+    expect(out.map((d) => [d.code, d.path])).toEqual([["SCHEMA_READER_NAME_COLLISION", "plan#/schemas/orderlines"]]);
+    expect(out[0]!.message).toMatch(/order_lines.*orderLines|orderLines.*order_lines/);
+    await expect(createMantleRuntime({ plan: colliding, handlers: { audit: () => ({}) }, storage: d1() })).rejects.toMatchObject({ diagnostic: { code: "SCHEMA_READER_NAME_COLLISION", path: "plan#/schemas/orderlines" } });
+    // a reserved name is refused the same way
+    const reserved = await reseal(plan, (p) => ({ ...p, schemas: { ...p.schemas, then: { ...p.schemas.items!, name: "then" } } }));
+    expect((await verifyPlan(reserved, d1())).map((d) => d.code)).toEqual(["SCHEMA_READER_NAME_COLLISION"]);
+  });
+
   it("refuses what boot refuses: a plan changed after it was sealed, or compiled for another dialect", async () => {
     const plan = await compile();
     const tampered = { ...plan, views: {} };

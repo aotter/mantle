@@ -156,7 +156,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs, rowsOnly 
   const base = ctxOf(env, p, { returning: lc?.after, statuses: p.statuses });
   const plan = compileCached(env, p, p.ir, p.ir, base, "all");
   const versions: Record<number, unknown> = {};
-  // a hook receives the entry as Store's `select` returns it (declared names, decoded values, `{ lat, lng }`), not the storage encoding
+  // a hook receives the entry as a Store reader returns it (declared names, decoded values, `{ lat, lng }`), not the storage encoding
   const entry = (schema: string, row: StoreRow): StoreRow => {
     const def = env.schemas[schema]!;
     const out: Record<string, unknown> = {};
@@ -338,9 +338,12 @@ interface Paged { readonly ast: N; readonly sources: readonly Source[]; readonly
 const pagedCache = new WeakMap<Compiled, Map<string, Paged>>();
 const SHAPE_CAP = 64;
 
-export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor?: readonly unknown[]; pageSize?: number; match?: ViewMatch } = {}): Promise<ViewPage> {
+export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor?: readonly unknown[]; pageSize?: number; match?: ViewMatch; row?: (r: StoreRow) => StoreRow } = {}): Promise<ViewPage> {
   const [c] = compileCached(env, p, p.ir, p.ir, ctxOf(env, p), "view");
-  if (!opts.pageSize) return { rows: await env.executor.select({ ir: c!.ast, binds: bindValues(env.dialect, c!.binds, as.bind) }) };
+  if (!opts.pageSize) {
+    const all = await env.executor.select({ ir: c!.ast, binds: bindValues(env.dialect, c!.binds, as.bind) });
+    return { rows: opts.row ? all.map(opts.row) : all };
+  }
   const pageSize = opts.pageSize;
   if (opts.cursor && !c!.ast.SelectStmt.sortClause?.length) throw refuse("SQL_SHAPE: this View has no ORDER BY, so it is one page and takes no cursor");
   // everything the statement's text depends on besides the compiled View: the page size, which cursor keys are NULL or missing and how
@@ -361,12 +364,13 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
   const rows = await env.executor.select({ ir: paged.ast, binds: [...bindValues(env.dialect, c!.binds, as.bind), ...extra] });
   if (paged.flat) {
     if (rows.length > pageSize) throw refuse(`SQL_SHAPE: this View has more than ${pageSize} rows and no ORDER BY to page them by: add an ORDER BY`);
-    return { rows };
+    return { rows: opts.row ? rows.map(opts.row) : rows };
   }
   if (!paged.nkeys && rows.length > pageSize) throw refuse(`SQL_SHAPE: this View has more than ${pageSize} matching rows and no ORDER BY to page them by: add an ORDER BY`);
   const page = rows.slice(0, pageSize);
   const next = paged.nkeys && rows.length > pageSize ? Array.from({ length: paged.nkeys }, (_k, i) => page.at(-1)![`_k${i}`]) : undefined;
-  return { rows: page.map((r) => Object.fromEntries(paged.names.map((n) => [n, r[n]]))), ...(next ? { next } : {}) };
+  // `row` reads only the names it declares, so the hidden key columns drop out in the same pass
+  return { rows: page.map(opts.row ?? ((r) => Object.fromEntries(paged.names.map((n) => [n, r[n]])))), ...(next ? { next } : {}) };
 }
 
 /** The paged statement for one request shape (see `runView`): the View wrapped with its cursor condition, search and equality filters. */

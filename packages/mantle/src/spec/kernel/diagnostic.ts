@@ -63,6 +63,8 @@ export const DIAGNOSTIC_CODES = [
   "UI_EXTENSION_TARGET",
   "UI_EXTENSION_OPTIONS",
   "SCHEMA_NAME_CASE_COLLISION",
+  // ADR-0043: two Schemas project to one `store.db` reader name, or a name is reserved.
+  "SCHEMA_READER_NAME_COLLISION",
   "FIELD_NAME_CASE_COLLISION",
   "MANIFEST_ROOT_NOT_FOUND",
   "MANIFEST_READ_FAILED",

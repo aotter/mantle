@@ -43,7 +43,7 @@ it("the TTL field is an author-written timestamp: a row is invisible once it is 
   const at = (secondsAgo: number) => new Date(NOW / 1000 - secondsAgo * 1000).toISOString();
   for (const [label, ago] of [["fresh", 10], ["edge", 59], ["old", 61], ["older", 3600]] as const) await rt.invokeProcedure({ procedure: "touch", input: { label, at: at(ago) }, caller: user, cause: { kind: "http", id: label } });
   await rt.store.as(user).write([{ insert: "sessions", values: { label: "never" } }]);
-  const labels = async () => (await rt.store.as(user).select({ from: "sessions", columns: ["label"], orderBy: { label: "asc" } })).rows.map((r) => r.label);
+  const labels = async () => (await rt.store.as(user).db.sessions.find({ columns: ["label"], orderBy: { label: "asc" } })).rows.map((r) => r.label);
   expect(await labels()).toEqual(["edge", "fresh", "never"]);
   expect(await rt.store.sweepExpired({ collection: "sessions", delete: false })).toEqual({ scanned: 2, removed: 0 });
   expect(await rt.store.sweepExpired({ collection: "sessions" })).toEqual({ scanned: 2, removed: 2 });

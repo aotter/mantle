@@ -1,6 +1,7 @@
 import { validateDiagnostic, type Diagnostic } from "../../kernel/diagnostic.js";
 import { MANTLE_REF_KEYWORD, RESERVED_PROCEDURE_INPUT_NAMES, resolveMantleRef, type JsonSchema, type Manifest, type ProcedureManifest, type SchemaManifest, type TriggerManifest, type ViewManifest } from "../model/ManifestGrammar.js";
 import { checkTranslatesReferences } from "./CrossSchemaChecker.js";
+import { readerNameProblems } from "./ReaderNames.js";
 import { partitionManifests } from "./ManifestPartition.js";
 import { bestMatch, manifestPath, type ManifestFilePaths } from "./ManifestPathDiagnoser.js";
 import { checkSchemaNavTargets } from "./SchemaAdminUiChecker.js";
@@ -32,6 +33,7 @@ export function validateManifestGraph(
   diags.push(...checkDuplicates("Trigger", partitioned.triggers, filePaths));
   diags.push(...checkSchemaReservedWireNames(partitioned.schemas, filePaths));
   diags.push(...checkCaseCollisions(partitioned.schemas, [...partitioned.views, ...partitioned.procedures], filePaths));
+  diags.push(...checkReaderNames(partitioned.schemas, filePaths));
 
   diags.push(...checkTranslatesReferences(partitioned.schemas, "validate", filePaths));
   diags.push(...checkSchemaNavTargetsGraph(partitioned.schemas, schemasByName, filePaths));
@@ -237,6 +239,13 @@ function checkCaseCollisions(schemas: readonly SchemaManifest[], programs: reado
       message: `${m.kind} '${m.metadata.name}' declares the inputs '${name}' and '${other}', which differ only by case; SQL names them the same input. Rename one.`,
     })));
   return out;
+}
+
+/** `store.db.<name>` is one reader per Schema (ADR-0043 decision 2): two Schemas that project to one name, or a reserved name, are refused. */
+function checkReaderNames(schemas: readonly SchemaManifest[], filePaths?: ManifestFilePaths): Diagnostic[] {
+  return readerNameProblems(schemas.map((s) => s.metadata.name)).map((p) => validateDiagnostic({
+    code: "SCHEMA_READER_NAME_COLLISION", severity: "error", path: manifestPath("Schema", p.name, "/metadata/name", filePaths), value: p.name, message: p.message,
+  }));
 }
 
 function checkDuplicates<M extends { kind: string; metadata: { name: string } }>(

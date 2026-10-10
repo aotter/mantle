@@ -125,7 +125,7 @@ describe("after hooks", () => {
 
 describe("the wire", () => {
   it("returns the entry's timestamps as ISO date-times from Store and from a View", async () => {
-    const [r] = (await rt.store.select({ from: "requests", columns: ["createdAt", "updatedAt"], limit: 1 })).rows;
+    const [r] = (await rt.store.db.requests.find({ columns: ["createdAt", "updatedAt"], limit: 1 })).rows;
     expect(r!.createdAt).toMatch(ISO);
     expect(r!.updatedAt).toMatch(ISO);
     expect((await rt.store.view("recent")).rows[0]!.created_at).toMatch(ISO);

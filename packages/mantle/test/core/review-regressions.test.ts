@@ -84,17 +84,17 @@ describe("lifecycle hooks", () => {
 describe("Store", () => {
   it("writes and reads a string in a json column", async () => {
     await rt.store.write([{ insert: "kinds", values: { kind: "a", tag: "x" } }]);
-    expect((await rt.store.select({ from: "kinds", columns: ["kind", "tag"] })).rows).toEqual([{ kind: "a", tag: "x" }]);
+    expect((await rt.store.db.kinds.find({ columns: ["kind", "tag"] })).rows).toEqual([{ kind: "a", tag: "x" }]);
   });
 
   it("fills a JSON Schema default the insert leaves out", async () => {
     await rt.store.write([{ insert: "tasks", values: { title: "t" } }]);
-    expect((await rt.store.select({ from: "tasks", columns: ["title", "priority"] })).rows).toEqual([{ title: "t", priority: 3 }]);
+    expect((await rt.store.db.tasks.find({ columns: ["title", "priority"] })).rows).toEqual([{ title: "t", priority: 3 }]);
   });
 
   it("writes and reads a geo field as { lat, lng }, and refuses a value out of range", async () => {
     await rt.store.write([{ insert: "places", values: { name: "taipei", loc: { lat: 25.03, lng: 121.56 } } }, { insert: "places", values: { name: "nowhere" } }]);
-    const rows = (await rt.store.select({ from: "places", columns: ["name", "loc"], orderBy: { name: "asc" } })).rows;
+    const rows = (await rt.store.db.places.find({ columns: ["name", "loc"], orderBy: { name: "asc" } })).rows;
     expect(rows).toEqual([{ name: "nowhere", loc: null }, { name: "taipei", loc: { lat: 25.03, lng: 121.56 } }]);
     await expect(rt.store.write([{ insert: "places", values: { name: "bad", loc: { lat: 91, lng: 0 } } }])).rejects.toThrow(/lat, lng/);
   });

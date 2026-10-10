@@ -81,30 +81,57 @@ are `string | null`, and an expression, or another native column such as `id`,
 is `unknown`. Page with `limit` (default 50, at most 500) and the opaque
 `cursor` from `nextCursor`.
 
-## `select` and `write`
+## Readers (`db`)
 
-For a query that needs no declared View, `select` takes a JSON query over one
-Schema:
+Every Schema has a reader on `ctx.db` (the same object as `ctx.store.db`, also
+`runtime.store.db` and `runtime.store.as(caller).db`), named by the lower-camel
+form of the Schema's name: `tickets` is `ctx.db.tickets`, `ticket-events` is
+`ctx.db.ticketEvents`. A name that has no such form (a non-ASCII name, or one
+starting with a digit) is the Schema's lower-case name, `ctx.db["2fa"]`. Two
+Schemas that become one name, and the reserved names `constructor`, `then`,
+`__proto__`, `prototype`, `toString`, `valueOf` and `hasOwnProperty`, are
+refused with `SCHEMA_READER_NAME_COLLISION`.
 
 ```ts
-const { rows } = await ctx.store.select({
-  from: "tickets",
-  columns: ["id", "subject"],
+const ticket = await ctx.db.tickets.get(id);                       // one row or null
+const next = await ctx.db.tickets.first({ where: { ticketState: "open" }, orderBy: { createdAt: "asc" } });
+const { rows, nextCursor } = await ctx.db.tickets.find({
   where: { ticketState: "open", subject: { like: "%refund%" } },
-  orderBy: { updatedAt: "desc" },
+  columns: ["id", "subject"],                                      // the row is Pick<Row, "id" | "subject">
   limit: 20,
 });
 ```
 
-- `where`: `{ column: value }` is equality and sibling keys are AND; also
-  `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`, and
-  `and`, `or`, `not`. `in` takes a list or `{ select, from, where }`.
-- `orderBy`: one column; `id` breaks ties. Default `{ updatedAt: "desc" }`.
-- `search`: text matched against `searchableFields` (and `id`).
-- Native columns are camelCase here (`createdAt`, `authorId`), while SQL spells
-  them snake_case (`created_at`).
+- `get(id, { columns })`, `first(query)` and `find(query)`. A query is
+  `{ where, columns, orderBy, search }`; `find` also takes `limit` (1 to 500,
+  default 50) and the opaque `cursor` from `nextCursor`.
+- `where` is **AND only**: `{ column: value }` is equality, `{ column: null }`
+  is `IS NULL`, and `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`
+  compares. `in` and `notIn` take a non-empty list without `null`. For `or`,
+  `not`, a subquery, a join or an aggregate, declare a View and call
+  `store.view`.
+- `orderBy` is one column, and `id` breaks ties. The default is
+  `{ updatedAt: "desc" }`. `search` is matched against `searchableFields` (and
+  `id`).
+- A row has the native columns (`id`, `version`, `createdAt`, `updatedAt`,
+  `status` on a `publishing` Schema, `authorId` or `null`) and every field the
+  Schema declares except its scope field, each as its type or `null` (a column
+  is not required in storage, so a read can find it empty).
+- A reader returns every status of a `publishing` Schema, drafts included:
+  published-only is the rule for a public View. Scope, TTL and `requires` apply
+  as they do to every Store read.
+- Each query shape is converted and compiled once per Store, then reused for
+  every caller; only the values change between calls. Values are checked on
+  every call.
 
-`write` applies every operation or none, in order:
+Without generated types, `runtime.store.db` is a `StoreDb` of untyped readers.
+`readerOf(store.db, "tickets")` (from `@aotter/mantle`) returns the reader of a
+Schema by name, in any case.
+
+## `write`
+
+Reads go through a reader (above) or a View. `write` applies every operation or
+none, in order:
 
 ```ts
 await ctx.store.write([
@@ -119,6 +146,12 @@ await ctx.store.write([
   reveal it: give such rows a field of your own that is unique with the scope
   field (`uniqueIndexes: [[owner, clientKey]]`) when other rows of the same
   write must point at them, or when a retry must find them.
+- A write `where` keeps the full grammar that a reader does not take:
+  `{ column: value }` is equality and sibling keys are AND; also
+  `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`, and
+  `and`, `or`, `not`. `in` takes a list or `{ select, from, where }`, whose
+  subquery is scoped like any Store read. Native columns are camelCase here
+  (`createdAt`, `authorId`), while SQL spells them snake_case (`created_at`).
 - `update` with `set` and `where`; `delete` with `where`. A `where` that pins
   `id` is a row op: it may carry `lock` (the version the caller saw), and
   writing no row is `CONFLICT`.
