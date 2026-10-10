@@ -1,10 +1,11 @@
 // @ts-nocheck test code over loosely typed IR and rows
-// The Store (ADR-0032 decision 1): JSON select and write through the same policy, OCC and hooks as SQL; row and set
+// The Store (ADR-0032 decision 1): per-Schema readers (ADR-0043) and JSON write through the same policy, OCC and hooks as SQL; row and set
 // ops, `lock` and `expect`, one opaque cursor, scope and TTL, `as(caller)`, the TTL sweep, and refusals.
 import type { Report } from '../report.js';
 import type { Engine } from '../harness.js';
 import { createStore } from '../../core/store/createStore.js';
 import { encodeCursor } from '../../core/store/cursor.js';
+import { readerOf } from '../../core/store/readers.js';
 import { NOW, boot, caller, program, schemas } from '../harness.js';
 
 const user = (subject) => ({ kind: 'user', subject, role: null, scopes: [], credential: 'session', credentialId: null, clientId: null });
@@ -16,7 +17,7 @@ const invalid = (e) => e?.diagnostic?.code === 'INPUT_VALIDATION_FAILED';
 const EPOCH = '1970-01-01T00:00:00.000000Z';
 
 export async function run(r: Report, engine: Engine) {
-  r.section('Store: JSON select and write, OCC, set ops, cursor, scope, TTL');
+  r.section('Store: readers and write, OCC, set ops, cursor, scope, TTL');
   const b = await boot(engine);
   const view = await program('view', 'SELECT id, name FROM items ORDER BY name', {});
   let n = 0;
@@ -26,36 +27,24 @@ export async function run(r: Report, engine: Engine) {
 
   // ---- reads: scope, TTL, projection, decoding ---------------------------------------------------------------------
   r.equal("o1 sees its unexpired items in name order; another owner's and the expired row are absent; json decodes, native columns are named as ADR-0030 does",
-    (await me.select({ from: 'items', columns: ['id', 'name', 'tags', 'createdAt'], orderBy: { name: 'asc' } })).rows,
+    (await me.db.items.find({ columns: ['id', 'name', 'tags', 'createdAt'], orderBy: { name: 'asc' } })).rows,
     [{ id: 'a', name: 'apple', tags: ['red', 'big'], createdAt: EPOCH }, { id: 'b', name: 'berry', tags: ['blue'], createdAt: EPOCH }, { id: 'c', name: 'cherry', tags: ['red'], createdAt: EPOCH }, { id: 'd', name: 'date', tags: ['red'], createdAt: EPOCH }]);
   r.equal('the host store (runtime.store) sees every owner but still not the expired row; an anonymous caller sees nothing of a scoped Schema',
-    [(await store.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 500 })).rows.map((x) => x.id), (await store.as({ kind: 'anonymous' }).select({ from: 'items', columns: ['id'] })).rows],
+    [(await store.db.items.find({ columns: ['id'], orderBy: { id: 'asc' }, limit: 500 })).rows.map((x) => x.id), (await store.as({ kind: 'anonymous' }).db.items.find({ columns: ['id'] })).rows],
     [['X_z1', 'X_z2', 'a', 'b', 'c', 'd'], []]);
-  r.equal('where: eq, ne, gt, in, notIn, like, isNull, not, or, and, and an in-subquery that is scoped too',
-    await Promise.all([
-      me.select({ from: 'items', columns: ['id'], where: { cat: 'y' }, orderBy: { id: 'asc' } }),
-      me.select({ from: 'items', columns: ['id'], where: { stock: { gt: 5 }, cat: { ne: 'y' } }, orderBy: { id: 'asc' } }),
-      me.select({ from: 'items', columns: ['id'], where: { id: { in: ['a', 'X_z1'] } }, orderBy: { id: 'asc' } }),
-      me.select({ from: 'items', columns: ['id'], where: { name: { like: '%rr%' }, note: { isNull: true } }, orderBy: { id: 'asc' } }),
-      me.select({ from: 'items', columns: ['id'], where: { or: [{ id: 'a' }, { not: { cat: 'x' } }] }, orderBy: { id: 'asc' } }),
-      me.select({ from: 'orders', columns: ['id'], where: { item_id: { in: { select: 'id', from: 'items', where: { cat: 'x' } } } }, orderBy: { id: 'asc' } }),
-    ]).then((x) => x.map((y) => y.rows.map((z) => z.id))),
-    [['c'], ['d'], ['a'], ['b'], ['a', 'c'], ['oa', 'ob']]);
-
   // ---- search (ADR-0035 decision 7): the declared search fields through mantle.search, or the id --------------------------
   r.equal("search: a three-character Chinese substring through the trigram index, a two-character one by scan, an exact id, and the id alone on a Schema with no search fields; another owner's and the expired notes are absent",
     await Promise.all([
-      me.select({ from: 'notes', columns: ['id'], search: '小籠包', orderBy: { id: 'asc' } }),
-      me.select({ from: 'notes', columns: ['id'], search: '小籠', orderBy: { id: 'asc' } }),
-      me.select({ from: 'notes', columns: ['id'], search: 'n4', orderBy: { id: 'asc' } }),
-      me.select({ from: 'items', columns: ['id'], search: 'a', orderBy: { id: 'asc' } }),
+      me.db.notes.find({ columns: ['id'], search: '小籠包', orderBy: { id: 'asc' } }),
+      me.db.notes.find({ columns: ['id'], search: '小籠', orderBy: { id: 'asc' } }),
+      me.db.notes.find({ columns: ['id'], search: 'n4', orderBy: { id: 'asc' } }),
+      me.db.items.find({ columns: ['id'], search: 'a', orderBy: { id: 'asc' } }),
     ]).then((x) => x.map((y) => y.rows.map((z) => z.id))),
     [['n1'], ['n1'], ['n4'], ['a']]);
-  r.equal('search matches an id exactly: a LIKE wildcard or a prefix of an id matches nothing', await Promise.all(['%', '_', 'n'].map(async (q) => (await me.select({ from: 'items', columns: ['id'], search: q })).rows)), [[], [], []]);
-  r.check('search takes a non-empty string', invalid(await fail(() => me.select({ from: 'notes', search: ' ' }))) && invalid(await fail(() => me.select({ from: 'notes', search: 3 }))));
+  r.equal('search matches an id exactly: a LIKE wildcard or a prefix of an id matches nothing', await Promise.all(['%', '_', 'n'].map(async (q) => (await me.db.items.find({ columns: ['id'], search: q })).rows)), [[], [], []]);
+  r.check('search takes a non-empty string', invalid(await fail(() => me.db.notes.find({ search: ' ' }))) && invalid(await fail(() => me.db.notes.find({ search: 3 }))));
 
-  // ---- readers (ADR-0043): store.db.<schema>.get | first | find, over the same policy as select -------------------------------
-  const p1sel = await me.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 3 });
+  // ---- readers (ADR-0043): store.db.<schema>.get | first | find, with scope, TTL and decoding applied -------------------------------
   const ids = (page) => page.rows.map((x) => x.id);
   const found = (reader, where, extra = {}) => reader.find({ columns: ['id'], ...(where ? { where } : {}), orderBy: { id: 'asc' }, ...extra }).then(ids);
   const o2 = store.as(user('o2'));
@@ -82,8 +71,8 @@ export async function run(r: Report, engine: Engine) {
     [['name', 'id'], 'berry', null, null, null]);
   const rp1 = await me.db.items.find({ columns: ['id'], orderBy: { id: 'asc' }, limit: 3 });
   const rp2 = await me.db.items.find({ columns: ['id'], orderBy: { id: 'asc' }, limit: 3, cursor: rp1.nextCursor });
-  r.equal('readers: cursor paging 3 then 1, and a cursor from select (the same format) continues a reader',
-    [ids(rp1), ids(rp2), rp2.nextCursor, ids(await me.db.items.find({ columns: ['id'], orderBy: { id: 'asc' }, limit: 3, cursor: p1sel.nextCursor }))], [['a', 'b', 'c'], ['d'], undefined, ['d']]);
+  r.equal('readers: cursor paging 3 then 1, the last page has no cursor',
+    [ids(rp1), ids(rp2), rp2.nextCursor], [['a', 'b', 'c'], ['d'], undefined]);
   r.equal("readers: scope follows the caller (o1 and o2 see disjoint rows), the host sees both, an anonymous caller sees nothing",
     [await found(me.db.items, undefined), await found(o2.db.items, undefined), await found(store.db.items, undefined, { limit: 500 }), await found(store.as({ kind: 'anonymous' }).db.items, undefined)],
     [['a', 'b', 'c', 'd'], ['X_z1', 'X_z2'], ['X_z1', 'X_z2', 'a', 'b', 'c', 'd'], []]);
@@ -97,12 +86,11 @@ export async function run(r: Report, engine: Engine) {
   r.check('readers refuse with INPUT_VALIDATION_FAILED: or, an in-subquery, an array value, an empty where, gt null, limit 0 and 501, an unknown or json column, a blank search, a non-string id', readerRefusals.every(invalid), readerRefusals.map((e) => e?.message?.slice(0, 60)));
 
   // ---- cursor: one opaque format, bound to the query ----------------------------------------------------------------------
-  const p1 = await me.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 3 });
-  const p2 = await me.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 3, cursor: p1.nextCursor });
+  const p1 = rp1, p2 = rp2;
   r.equal('cursor: two pages of 3 then 1, no repeats; the last page has no cursor; the cursor is an opaque v1 string', [p1.rows.map((x) => x.id), p2.rows.map((x) => x.id), p2.nextCursor, /^v1\./.test(p1.nextCursor)], [['a', 'b', 'c'], ['d'], undefined, true]);
-  const stolen = await fail(() => me.select({ from: 'items', columns: ['id'], orderBy: { name: 'asc' }, limit: 3, cursor: p1.nextCursor }));
-  r.check("a cursor from another query (other sort column) is refused, and a made-up cursor is refused", invalid(stolen) && invalid(await fail(() => me.select({ from: 'items', cursor: 'v1.garbage' }))), stolen?.message);
-  const forged = await fail(() => me.select({ from: 'items', columns: ['id'], cursor: encodeCursor('items:updated_at:desc', [{ x: 1 }, 'a']) }));
+  const stolen = await fail(() => me.db.items.find({ columns: ['id'], orderBy: { name: 'asc' }, limit: 3, cursor: p1.nextCursor }));
+  r.check("a cursor from another query (other sort column) is refused, and a made-up cursor is refused", invalid(stolen) && invalid(await fail(() => me.db.items.find({ cursor: 'v1.garbage' }))), stolen?.message);
+  const forged = await fail(() => me.db.items.find({ columns: ['id'], cursor: encodeCursor('items:updated_at:desc', [{ x: 1 }, 'a']) }));
   r.check('a well-formed cursor whose keys are not scalars is refused as input, not as a driver error', invalid(forged), forged?.message);
   const vp = await me.view('names', { limit: 2 });
   r.equal('a View pages through the same cursor and returns rows in order', [vp.rows.map((x) => x.name), (await me.view('names', { limit: 2, cursor: vp.nextCursor })).rows.map((x) => x.name)], [['apple', 'berry'], ['cherry', 'date']]);
@@ -119,6 +107,21 @@ export async function run(r: Report, engine: Engine) {
   r.equal("another owner's row: CONFLICT reason \"expect\" (an invisible row is a missing row, never \"lock\")", [conflict(hidden), (await stock('X_z1')).stock], [{ opIndex: 0, reason: 'expect' }, 50]);
   const [del] = await me.write([{ delete: 'items', where: { id: ins.id }, lock: 2 }]);
   r.equal('delete with lock returns { id, version }, and the row is gone', [del.version, (await stock(ins.id))], [2, undefined]);
+
+  // ---- write where: the full grammar (or, not, subqueries) that a reader does not take -------------------------------------------
+  const [ornot] = await me.write([{ update: 'items', set: { note: 'ornot' }, where: { or: [{ id: 'a' }, { not: { cat: 'x' } }] } }]);
+  r.equal("a write where takes or and not: a and c are updated (affected 2); another owner's cat y row X_z2 is untouched", [ornot, (await b.d1.all("SELECT id FROM items WHERE note = 'ornot' ORDER BY id")).map((x) => x.id), (await b.d1.all("SELECT note FROM items WHERE id = 'X_z2'"))[0].note], [{ affected: 2 }, ['a', 'c'], null]);
+  const [cross] = await me.write([{ insert: 'orders', values: { item_id: 'X_z1', qty: 1 } }]);
+  const [sub] = await me.write([{ update: 'orders', set: { qty: 7 }, where: { item_id: { in: { select: 'id', from: 'items', where: { cat: 'x' } } } } }]);
+  r.equal("a write where takes an in-subquery that is scoped too: o1's orders on its own x items (oa, ob) are updated; its order on another owner's item, on the expired item and every other owner's order keep their qty",
+    [sub, (await b.d1.all('SELECT id, qty FROM orders ORDER BY id')).filter((x) => Number(x.qty) === 7).map((x) => x.id), (await b.d1.all("SELECT qty FROM orders WHERE id IN ('X_oz', 'X_oz2', 'oe', ?1) ORDER BY id", [cross.id])).map((x) => Number(x.qty)).sort((p, q) => p - q)],
+    [{ affected: 2 }, ['oa', 'ob'], [1, 5, 9, 99]]);
+  await me.write([{ delete: 'orders', where: { id: cross.id } }]);
+  const nest = (n) => Array.from({ length: n }).reduce((w) => ({ and: [w] }), { id: 'a' });
+  const tooMany = { and: Array.from({ length: 257 }, () => ({ id: 'a' })) };
+  r.check('a write where nested 17 deep or with 257 conditions is refused with INPUT_VALIDATION_FAILED, and nothing is written',
+    invalid(await fail(() => me.write([{ update: 'items', set: { note: 'deep' }, where: nest(17) }]))) && invalid(await fail(() => me.write([{ update: 'items', set: { note: 'many' }, where: tooMany }])))
+    && (await b.d1.all("SELECT count(*) AS c FROM items WHERE note IN ('deep', 'many')"))[0].c == 0);
 
   // ---- set ops, expect, atomicity --------------------------------------------------------------------------------------------------
   const [setOp] = await me.write([{ update: 'items', set: { note: 'bulk' }, where: { cat: 'x' } }]);
@@ -146,11 +149,11 @@ export async function run(r: Report, engine: Engine) {
 
   // ---- refusals -------------------------------------------------------------------------------------------------------------------------
   const refused = await Promise.all([
-    () => me.select({ from: 'nope' }), () => me.select({ from: 'items', columns: ['nope'] }), () => me.select({ from: 'items', where: { tags: 'x' } }),
-    () => me.select({ from: 'items', limit: 501 }), () => me.select({ from: 'items', orderBy: { name: 'asc', id: 'asc' } }), () => me.select({ from: 'items', where: { status: 'x' } }),
+    () => readerOf(me.db, 'nope'), () => me.db.items.find({ columns: ['nope'] }), () => me.db.items.find({ where: { tags: 'x' } }),
+    () => me.db.items.find({ limit: 501 }), () => me.db.items.find({ orderBy: { name: 'asc', id: 'asc' } }), () => me.db.items.find({ where: { status: 'x' } }),
     () => me.write([{ insert: 'items', values: { id: 'mine', name: 'x' } }]), () => me.write([{ insert: 'items', values: { owner: 'o2', name: 'x' } }]),
     () => me.write([{ update: 'items', set: { version: 9 }, where: { id: 'a' } }]), () => me.write([]),
-    () => me.select({ from: 'items', where: { stock: { gt: 'x' } } }), () => me.select({ from: 'items', where: {} }),
+    () => me.db.items.find({ where: { stock: { gt: 'x' } } }), () => me.db.items.find({ where: {} }),
   ].map(fail));
   r.check('refused with INPUT_VALIDATION_FAILED: unknown Schema and column, non-scalar where, limit 501, two sort columns, status on a Schema without publishing, a caller-chosen id or the owner on a scoped insert, writing version, an empty write, a wrongly typed value, an empty where', refused.every(invalid), refused.map((e) => e?.message?.slice(0, 60)));
 

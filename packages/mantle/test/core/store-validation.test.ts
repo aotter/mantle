@@ -75,7 +75,7 @@ it("null clears a field the Schema does not require, and stays refused for one i
   await s.write([{ update: "tickets", set: { due: "2026-10-02T00:00:00Z" }, where: { id } }]);
   // a row read back and written whole, as an editor does: the unset field comes back null and goes back null
   await s.write([{ update: "tickets", set: { due: null, subject: "toner cartridge" }, where: { id } }]);
-  expect((await s.select({ from: "tickets", columns: ["subject", "due"], where: { id } })).rows).toEqual([{ subject: "toner cartridge", due: null }]);
+  expect((await s.db.tickets.find({ columns: ["subject", "due"], where: { id } })).rows).toEqual([{ subject: "toner cartridge", due: null }]);
   expect(await message(s.write([{ update: "tickets", set: { subject: null }, where: { id } }]))).toMatch(/subject/);
   expect(await message(s.write([{ insert: "tickets", values: { subject: "x-ray", priority: null } }]))).toMatch(/priority/);
 });
@@ -92,5 +92,5 @@ it("a column named in another case is checked as declared, and an upsert's updat
   expect(await message(upsert({ qty: null }))).toMatch(/qty/);
   expect(await message(upsert({ qty: -1 }))).toMatch(/qty/);
   await upsert({ qty: 5 });
-  expect((await s.select({ from: "stock", columns: ["qty"], where: { sku: "A" } })).rows).toEqual([{ qty: 5 }]);
+  expect((await s.db.stock.find({ columns: ["qty"], where: { sku: "A" } })).rows).toEqual([{ qty: 5 }]);
 });

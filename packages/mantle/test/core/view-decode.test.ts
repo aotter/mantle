@@ -37,7 +37,7 @@ beforeAll(async () => {
 afterAll(() => d1.dispose());
 
 it("a View returns Schema fields decoded and named as select does, paged or not", async () => {
-  const [entry] = (await rt.store.select({ from: "Events", columns: ["id", "title", "startsAt", "day", "done", "meta"] })).rows;
+  const [entry] = (await rt.store.db.events.find({ columns: ["id", "title", "startsAt", "day", "done", "meta"] })).rows;
   for (const limit of [undefined, 10]) {
     const opts = limit ? { limit } : {};
     expect((await rt.store.view("star", opts)).rows).toEqual([{ title: "a", startsAt: entry!.startsAt, day: entry!.day, done: true, meta: { k: [1] } }]);

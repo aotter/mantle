@@ -324,7 +324,12 @@ describe("Admin entries: CSV", () => {
   it("a page that fails after the download began ends it as failed, with a trace", async () => {
     const store = rt.store.as(editor);
     let n = 0;
-    const flaky = { ...rt, store: { ...rt.store, as: () => ({ ...store, select: async (q: never) => (++n > 1 ? Promise.reject(new Error("D1 limit")) : { ...(await store.select(q)), nextCursor: "more" }) }) } } as unknown as MantleRuntime;
+    const flaky = { ...rt, store: { ...rt.store, as: () => ({ ...store, db: new Proxy(store.db, { get: (target, key, receiver) => {
+      const reader = Reflect.get(target, key, receiver);
+      return typeof key === "string" && reader && typeof reader === "object"
+        ? { ...reader, find: async (q: never) => (++n > 1 ? Promise.reject(new Error("D1 limit")) : { ...(await reader.find(q)), nextCursor: "more" }) }
+        : reader;
+    } }) }) } } as unknown as MantleRuntime;
     const log = console.error;
     const seen: unknown[][] = [];
     console.error = (...a: unknown[]) => void seen.push(a);

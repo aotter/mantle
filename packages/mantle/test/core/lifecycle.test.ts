@@ -105,7 +105,7 @@ afterAll(() => d1.dispose());
 
 const store = () => rt.store.as(user);
 const failure = async (p: Promise<unknown>) => (await p.then(() => undefined, (e) => e)) as DiagnosticError | undefined;
-const status = async (id: string) => (await store().select({ from: "articles", columns: ["status"], where: { id } })).rows[0]?.status;
+const status = async (id: string) => (await store().db.articles.find({ columns: ["status"], where: { id } })).rows[0]?.status;
 const draft = async (values: Record<string, unknown>) => ((await store().write([{ insert: "articles", values }]))[0] as { id: string }).id;
 
 it("an insert is a draft that may be incomplete; a publish must leave a complete entry, and fails without changing anything", async () => {
@@ -161,7 +161,7 @@ it("a publishing decision stays pinned when its before hook changes the checked 
   const id = await draft({ title: "checked", body: "body" });
   seen.length = 0;
   expect((await failure(hooked.store.as(user).write([{ update: "articles", where: { id }, set: { status: "published" } }])))?.diagnostic.code).toBe("CONFLICT");
-  expect((await store().select({ from: "articles", columns: ["title", "status", "version"], where: { id } })).rows).toEqual([{ title: "hook changed", status: "draft", version: 2 }]);
+  expect((await store().db.articles.find({ columns: ["title", "status", "version"], where: { id } })).rows).toEqual([{ title: "hook changed", status: "draft", version: 2 }]);
   expect(seen.map((s) => s.hook)).toEqual(["after_update"]);
 });
 
@@ -179,9 +179,9 @@ it("an input named id is a value, not the target: a reversed comparison edits th
   const other = await draft({ title: "wip", body: "b" });
   const edit = (id: string) => rt.invokeProcedure({ procedure: "edit-reversed", input: { id, title: "HACKED" }, caller: user, cause: { kind: "http", id: "r" } });
   expect((await failure(edit(published)))?.diagnostic.code).toBe("CONFLICT");
-  expect((await store().select({ from: "articles", columns: ["title"], where: { id: published } })).rows).toEqual([{ title: "live" }]);
+  expect((await store().db.articles.find({ columns: ["title"], where: { id: published } })).rows).toEqual([{ title: "live" }]);
   await edit(other);
-  expect((await store().select({ from: "articles", columns: ["title"], where: { id: other } })).rows).toEqual([{ title: "HACKED" }]);
+  expect((await store().db.articles.find({ columns: ["title"], where: { id: other } })).rows).toEqual([{ title: "HACKED" }]);
 });
 
 it("a status change carries no other values, so no edit can hide inside a publish", async () => {
@@ -200,5 +200,5 @@ it("a translation publishes only after its parent (translates)", async () => {
   expect((await failure(publish("page-translations", tr)))?.diagnostic.code).toBe("CONFLICT"); // the parent is still a draft
   await publish("pages", parent);
   await publish("page-translations", tr);
-  expect((await store().select({ from: "page-translations", columns: ["status"], where: { id: tr } })).rows).toEqual([{ status: "published" }]);
+  expect((await store().db.pageTranslations.find({ columns: ["status"], where: { id: tr } })).rows).toEqual([{ status: "published" }]);
 });
