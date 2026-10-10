@@ -95,3 +95,7 @@ role changes, official invitation errors, complete staff lists and R2 cleanup.
 Four local procurement apps, native Bun SQLite/PostgreSQL, the full workspace
 check and the exact packed Worker consumer validate integration. No cloud
 performance, billing or cross-engine consistency guarantee is asserted.
+
+## 2026-10-10 amendment — Schema readers (ADR-0043)
+
+The rejected shortcut "No full Program interning" (Consequences) is scoped. **Store read shapes are interned** per ADR-0043: each reader shape keeps one `Program`, so the compile, paged-statement and printed-SQL caches hit. **Views, Procedures and writes are not interned** by this decision: a View's `Program` is already the plan's own, a Procedure's and a write's are built per request.

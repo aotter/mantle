@@ -108,3 +108,5 @@ specific guarantees affected; do not create a general subsystem for one case.
 This records the architecture direction. It changes no runtime code, manifest
 grammar, paging behavior, pooling, collation defaults or migration policy.
 Individual fixes and compatibility changes need separately reviewed changes.
+
+ADR-0043: Store reads execute one compiled shape per request shape.
