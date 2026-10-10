@@ -226,7 +226,7 @@ describe("boot", () => {
     await other.exec("CREATE TABLE items (id TEXT)");
     expect((await failure(boot({ storage: sqliteStorage(other) })))?.diagnostic.code).toBe("STORAGE_TABLE_NOT_OWNED");
     await other.dispose();
-    expect((await boot()).bootReport()).toEqual({ fingerprint: plan.fingerprint, coreVersion: "0.2.0" });
+    expect((await boot()).bootReport()).toEqual({ fingerprint: plan.fingerprint, coreVersion: "0.2.0", lowered: "absent" });
   });
 });
 

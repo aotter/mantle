@@ -1931,6 +1931,561 @@
         "procedure": "weekly-digest"
       }
     },
-    "fingerprint": "e3e18eb517297a5fe1ed9b4ba182271694858f261e20026f22f2e8615751ce56"
+    "fingerprint": "4f86cd4ccb7ac3300c5306b085db02381298ea57a1428b0541782f253f4b2ecd",
+    "lowered": {
+      "mantle": "0.2.0-alpha.6",
+      "dialect": {
+        "name": "@aotter/mantle/d1",
+        "version": "1",
+        "key": ""
+      },
+      "views": {
+        "catalog": {
+          "public": {
+            "sql": "SELECT id, sku, name, pricecents, stock FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS items ORDER BY name, items.id",
+            "binds": [],
+            "kind": "read",
+            "nkeys": 2,
+            "paged": {
+              "[\"-\",null,[]]": {
+                "sql": "SELECT _p.id AS id, _p.sku AS sku, _p.name AS name, _p.pricecents AS pricecents, _p.stock AS stock, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT id, sku, name, pricecents, stock, name AS _k0, items.id AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS items ) AS _p ORDER BY _p._k0 NULLS FIRST, _p._k1 NULLS FIRST LIMIT ?1",
+                "sources": [
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "id",
+                  "sku",
+                  "name",
+                  "pricecents",
+                  "stock"
+                ],
+                "nkeys": 2
+              },
+              "[\"vv=\",null,[]]": {
+                "sql": "SELECT _p.id AS id, _p.sku AS sku, _p.name AS name, _p.pricecents AS pricecents, _p.stock AS stock, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT id, sku, name, pricecents, stock, name AS _k0, items.id AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS items ) AS _p WHERE _p._k0 >= ?1 AND ((_p._k0 > ?2) OR (_p._k0 = ?4 AND _p._k1 > ?3)) ORDER BY _p._k0 NULLS FIRST, _p._k1 NULLS FIRST LIMIT ?5",
+                "sources": [
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 1
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "id",
+                  "sku",
+                  "name",
+                  "pricecents",
+                  "stock"
+                ],
+                "nkeys": 2
+              }
+            }
+          }
+        },
+        "search-items": {
+          "public": {
+            "sql": "SELECT i.id, i.name, i.stock FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i WHERE (CASE WHEN length((CAST(?1 AS text))) >= 3 THEN \"i\"._rid IN (SELECT rowid FROM \"_mantle_fts_items\" WHERE \"_mantle_fts_items\" = '\"' || replace((CAST(?1 AS text)), '\"', '\"\"') || '\"') ELSE (\"i\".\"name\" LIKE '%' || replace(replace(replace((CAST(?1 AS text)), '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!' OR \"i\".\"sku\" LIKE '%' || replace(replace(replace((CAST(?1 AS text)), '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!') END) ORDER BY (coalesce((SELECT bm25(\"_mantle_fts_items\") FROM \"_mantle_fts_items\" WHERE \"_mantle_fts_items\" = '\"' || replace((CAST(?1 AS text)), '\"', '\"\"') || '\"' AND rowid = \"i\"._rid), 0)), i.name, i.id",
+            "binds": [
+              {
+                "k": "input",
+                "name": "q",
+                "type": "text"
+              }
+            ],
+            "kind": "read",
+            "nkeys": 3,
+            "paged": {
+              "[\"-\",null,[]]": {
+                "sql": "SELECT _p.id AS id, _p.name AS name, _p.stock AS stock, _p._k0 AS _k0, _p._k1 AS _k1, _p._k2 AS _k2 FROM ( SELECT i.id, i.name, i.stock, (coalesce((SELECT bm25(\"_mantle_fts_items\") FROM \"_mantle_fts_items\" WHERE \"_mantle_fts_items\" = '\"' || replace((CAST(?1 AS text)), '\"', '\"\"') || '\"' AND rowid = \"i\"._rid), 0)) AS _k0, i.name AS _k1, i.id AS _k2 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i WHERE (CASE WHEN length((CAST(?1 AS text))) >= 3 THEN \"i\"._rid IN (SELECT rowid FROM \"_mantle_fts_items\" WHERE \"_mantle_fts_items\" = '\"' || replace((CAST(?1 AS text)), '\"', '\"\"') || '\"') ELSE (\"i\".\"name\" LIKE '%' || replace(replace(replace((CAST(?1 AS text)), '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!' OR \"i\".\"sku\" LIKE '%' || replace(replace(replace((CAST(?1 AS text)), '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!') END) ) AS _p ORDER BY _p._k0 NULLS FIRST, _p._k1 NULLS FIRST, _p._k2 NULLS FIRST LIMIT ?2",
+                "sources": [
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "id",
+                  "name",
+                  "stock"
+                ],
+                "nkeys": 3
+              },
+              "[\"vvv=\",null,[]]": {
+                "sql": "SELECT _p.id AS id, _p.name AS name, _p.stock AS stock, _p._k0 AS _k0, _p._k1 AS _k1, _p._k2 AS _k2 FROM ( SELECT i.id, i.name, i.stock, (coalesce((SELECT bm25(\"_mantle_fts_items\") FROM \"_mantle_fts_items\" WHERE \"_mantle_fts_items\" = '\"' || replace((CAST(?1 AS text)), '\"', '\"\"') || '\"' AND rowid = \"i\"._rid), 0)) AS _k0, i.name AS _k1, i.id AS _k2 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i WHERE (CASE WHEN length((CAST(?1 AS text))) >= 3 THEN \"i\"._rid IN (SELECT rowid FROM \"_mantle_fts_items\" WHERE \"_mantle_fts_items\" = '\"' || replace((CAST(?1 AS text)), '\"', '\"\"') || '\"') ELSE (\"i\".\"name\" LIKE '%' || replace(replace(replace((CAST(?1 AS text)), '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!' OR \"i\".\"sku\" LIKE '%' || replace(replace(replace((CAST(?1 AS text)), '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!') END) ) AS _p WHERE _p._k0 >= ?2 AND ((_p._k0 > ?3) OR (_p._k0 = ?5 AND _p._k1 > ?4) OR (_p._k0 = ?7 AND _p._k1 = ?8 AND _p._k2 > ?6)) ORDER BY _p._k0 NULLS FIRST, _p._k1 NULLS FIRST, _p._k2 NULLS FIRST LIMIT ?9",
+                "sources": [
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 1
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 2
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 1
+                  },
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "id",
+                  "name",
+                  "stock"
+                ],
+                "nkeys": 3
+              }
+            }
+          }
+        },
+        "my-orders": {
+          "public": {
+            "sql": "SELECT o.id, o.qty, o.orderstatus, i.name AS item, o.version FROM ( SELECT id, version, created_at, updated_at, author_id, itemid, qty, orderstatus, placedat FROM orders WHERE orders.owner = ?1 ) AS o JOIN ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i ON i.id = o.itemid ORDER BY o.created_at DESC, o.id",
+            "binds": [
+              {
+                "k": "uid"
+              }
+            ],
+            "kind": "read",
+            "nkeys": 2,
+            "paged": {
+              "[\"-\",null,[]]": {
+                "sql": "SELECT _p.id AS id, _p.qty AS qty, _p.orderstatus AS orderstatus, _p.item AS item, _p.version AS version, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT o.id, o.qty, o.orderstatus, i.name AS item, o.version, o.created_at AS _k0, o.id AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, itemid, qty, orderstatus, placedat FROM orders WHERE orders.owner = ?1 ) AS o JOIN ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i ON i.id = o.itemid ) AS _p ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?2",
+                "sources": [
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "id",
+                  "qty",
+                  "orderstatus",
+                  "item",
+                  "version"
+                ],
+                "nkeys": 2
+              },
+              "[\"vv=\",null,[]]": {
+                "sql": "SELECT _p.id AS id, _p.qty AS qty, _p.orderstatus AS orderstatus, _p.item AS item, _p.version AS version, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT o.id, o.qty, o.orderstatus, i.name AS item, o.version, o.created_at AS _k0, o.id AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, itemid, qty, orderstatus, placedat FROM orders WHERE orders.owner = ?1 ) AS o JOIN ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i ON i.id = o.itemid ) AS _p WHERE _p._k0 <= ?2 AND ((_p._k0 < ?3) OR (_p._k0 = ?5 AND _p._k1 > ?4)) ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?6",
+                "sources": [
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 1
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "id",
+                  "qty",
+                  "orderstatus",
+                  "item",
+                  "version"
+                ],
+                "nkeys": 2
+              }
+            }
+          }
+        },
+        "sales-by-item": {
+          "caller": {
+            "sql": "SELECT i.name, count(o.id) AS orders, COALESCE(sum(o.qty), 0) AS units FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i LEFT JOIN ( SELECT id, version, created_at, updated_at, author_id, itemid, qty, orderstatus, placedat FROM orders WHERE orders.owner = ?1 ) AS o ON o.itemid = i.id AND o.orderstatus = 'placed' GROUP BY i.name ORDER BY units DESC, i.name",
+            "binds": [
+              {
+                "k": "uid"
+              }
+            ],
+            "kind": "read",
+            "nkeys": 2,
+            "paged": {
+              "[\"-\",null,[]]": {
+                "sql": "SELECT _p.name AS name, _p.orders AS orders, _p.units AS units, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT i.name, count(o.id) AS orders, COALESCE(sum(o.qty), 0) AS units, COALESCE(sum(o.qty), 0) AS _k0, i.name AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i LEFT JOIN ( SELECT id, version, created_at, updated_at, author_id, itemid, qty, orderstatus, placedat FROM orders WHERE orders.owner = ?1 ) AS o ON o.itemid = i.id AND o.orderstatus = 'placed' GROUP BY i.name ) AS _p ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?2",
+                "sources": [
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "name",
+                  "orders",
+                  "units"
+                ],
+                "nkeys": 2
+              },
+              "[\"vv=\",null,[]]": {
+                "sql": "SELECT _p.name AS name, _p.orders AS orders, _p.units AS units, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT i.name, count(o.id) AS orders, COALESCE(sum(o.qty), 0) AS units, COALESCE(sum(o.qty), 0) AS _k0, i.name AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i LEFT JOIN ( SELECT id, version, created_at, updated_at, author_id, itemid, qty, orderstatus, placedat FROM orders WHERE orders.owner = ?1 ) AS o ON o.itemid = i.id AND o.orderstatus = 'placed' GROUP BY i.name ) AS _p WHERE ((_p._k0 < ?2 OR _p._k0 IS NULL)) OR (_p._k0 = ?4 AND _p._k1 > ?3) ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?5",
+                "sources": [
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 1
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "name",
+                  "orders",
+                  "units"
+                ],
+                "nkeys": 2
+              }
+            }
+          },
+          "trusted": {
+            "sql": "SELECT i.name, count(o.id) AS orders, COALESCE(sum(o.qty), 0) AS units FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i LEFT JOIN ( SELECT id, version, created_at, updated_at, author_id, itemid, qty, orderstatus, placedat FROM orders ) AS o ON o.itemid = i.id AND o.orderstatus = 'placed' GROUP BY i.name ORDER BY units DESC, i.name",
+            "binds": [],
+            "kind": "read",
+            "nkeys": 2,
+            "paged": {
+              "[\"-\",null,[]]": {
+                "sql": "SELECT _p.name AS name, _p.orders AS orders, _p.units AS units, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT i.name, count(o.id) AS orders, COALESCE(sum(o.qty), 0) AS units, COALESCE(sum(o.qty), 0) AS _k0, i.name AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i LEFT JOIN ( SELECT id, version, created_at, updated_at, author_id, itemid, qty, orderstatus, placedat FROM orders ) AS o ON o.itemid = i.id AND o.orderstatus = 'placed' GROUP BY i.name ) AS _p ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?1",
+                "sources": [
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "name",
+                  "orders",
+                  "units"
+                ],
+                "nkeys": 2
+              },
+              "[\"vv=\",null,[]]": {
+                "sql": "SELECT _p.name AS name, _p.orders AS orders, _p.units AS units, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT i.name, count(o.id) AS orders, COALESCE(sum(o.qty), 0) AS units, COALESCE(sum(o.qty), 0) AS _k0, i.name AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS i LEFT JOIN ( SELECT id, version, created_at, updated_at, author_id, itemid, qty, orderstatus, placedat FROM orders ) AS o ON o.itemid = i.id AND o.orderstatus = 'placed' GROUP BY i.name ) AS _p WHERE ((_p._k0 < ?1 OR _p._k0 IS NULL)) OR (_p._k0 = ?3 AND _p._k1 > ?2) ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?4",
+                "sources": [
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 1
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "name",
+                  "orders",
+                  "units"
+                ],
+                "nkeys": 2
+              }
+            }
+          }
+        },
+        "recent-activity": {
+          "caller": {
+            "sql": "SELECT kind, subject, detail FROM ( SELECT id, version, created_at, updated_at, author_id, kind, subject, detail FROM activity ) AS activity ORDER BY created_at DESC, activity.id LIMIT 50",
+            "binds": [],
+            "kind": "read",
+            "nkeys": 2,
+            "paged": {
+              "[\"-\",null,[]]": {
+                "sql": "SELECT _p.kind AS kind, _p.subject AS subject, _p.detail AS detail, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT kind, subject, detail, created_at AS _k0, activity.id AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, kind, subject, detail FROM activity ) AS activity ORDER BY created_at DESC, activity.id LIMIT 50 ) AS _p ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?1",
+                "sources": [
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "kind",
+                  "subject",
+                  "detail"
+                ],
+                "nkeys": 2
+              },
+              "[\"vv=\",null,[]]": {
+                "sql": "SELECT _p.kind AS kind, _p.subject AS subject, _p.detail AS detail, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT kind, subject, detail, created_at AS _k0, activity.id AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, kind, subject, detail FROM activity ) AS activity ORDER BY created_at DESC, activity.id LIMIT 50 ) AS _p WHERE _p._k0 <= ?1 AND ((_p._k0 < ?2) OR (_p._k0 = ?4 AND _p._k1 > ?3)) ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?5",
+                "sources": [
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 1
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "kind",
+                  "subject",
+                  "detail"
+                ],
+                "nkeys": 2
+              }
+            }
+          },
+          "trusted": {
+            "sql": "SELECT kind, subject, detail FROM ( SELECT id, version, created_at, updated_at, author_id, kind, subject, detail FROM activity ) AS activity ORDER BY created_at DESC, activity.id LIMIT 50",
+            "binds": [],
+            "kind": "read",
+            "nkeys": 2,
+            "paged": {
+              "[\"-\",null,[]]": {
+                "sql": "SELECT _p.kind AS kind, _p.subject AS subject, _p.detail AS detail, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT kind, subject, detail, created_at AS _k0, activity.id AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, kind, subject, detail FROM activity ) AS activity ORDER BY created_at DESC, activity.id LIMIT 50 ) AS _p ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?1",
+                "sources": [
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "kind",
+                  "subject",
+                  "detail"
+                ],
+                "nkeys": 2
+              },
+              "[\"vv=\",null,[]]": {
+                "sql": "SELECT _p.kind AS kind, _p.subject AS subject, _p.detail AS detail, _p._k0 AS _k0, _p._k1 AS _k1 FROM ( SELECT kind, subject, detail, created_at AS _k0, activity.id AS _k1 FROM ( SELECT id, version, created_at, updated_at, author_id, kind, subject, detail FROM activity ) AS activity ORDER BY created_at DESC, activity.id LIMIT 50 ) AS _p WHERE _p._k0 <= ?1 AND ((_p._k0 < ?2) OR (_p._k0 = ?4 AND _p._k1 > ?3)) ORDER BY _p._k0 DESC NULLS LAST, _p._k1 NULLS FIRST LIMIT ?5",
+                "sources": [
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "cursor": 1
+                  },
+                  {
+                    "cursor": 0
+                  },
+                  {
+                    "limit": true
+                  }
+                ],
+                "names": [
+                  "kind",
+                  "subject",
+                  "detail"
+                ],
+                "nkeys": 2
+              }
+            }
+          }
+        }
+      },
+      "procedures": {
+        "place-order": {
+          "caller": [
+            {
+              "sql": "INSERT INTO orders (itemid, qty, orderstatus, placedat, owner, created_at, updated_at, author_id, id) SELECT _v.*, ?4, ?2, ?2, ?4, lower(hex(randomblob(16))) FROM ( SELECT id, CAST(?1 AS integer), 'placed', ?2 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS items WHERE id = CAST(?3 AS text) ) AS _v WHERE (1 = 1) RETURNING id, qty, orderstatus, id AS _mantle_h_id, version AS _mantle_h_version, created_at AS _mantle_h_created_at, updated_at AS _mantle_h_updated_at, author_id AS _mantle_h_author_id, itemid AS _mantle_h_itemid, qty AS _mantle_h_qty, orderstatus AS _mantle_h_orderstatus, placedat AS _mantle_h_placedat",
+              "binds": [
+                {
+                  "k": "input",
+                  "name": "qty",
+                  "type": "integer"
+                },
+                {
+                  "k": "now"
+                },
+                {
+                  "k": "input",
+                  "name": "itemid",
+                  "type": "text"
+                },
+                {
+                  "k": "uid"
+                }
+              ],
+              "kind": "set",
+              "schema": "orders",
+              "verb": "insert",
+              "hooked": true,
+              "returns": true,
+              "target": "orders"
+            },
+            {
+              "sql": "UPDATE items SET stock = stock - CAST(?1 AS integer), version = version + 1, updated_at = ?3 WHERE id = CAST(?2 AS text)",
+              "binds": [
+                {
+                  "k": "input",
+                  "name": "qty",
+                  "type": "integer"
+                },
+                {
+                  "k": "input",
+                  "name": "itemid",
+                  "type": "text"
+                },
+                {
+                  "k": "now"
+                }
+              ],
+              "kind": "row",
+              "schema": "items",
+              "verb": "update",
+              "target": "items"
+            }
+          ],
+          "trusted": [
+            {
+              "sql": "INSERT INTO orders (itemid, qty, orderstatus, placedat, owner, created_at, updated_at, author_id, id) SELECT _v.*, ?4, ?2, ?2, ?4, lower(hex(randomblob(16))) FROM ( SELECT id, CAST(?1 AS integer), 'placed', ?2 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS items WHERE id = CAST(?3 AS text) ) AS _v WHERE (1 = 1) RETURNING id, qty, orderstatus, id AS _mantle_h_id, version AS _mantle_h_version, created_at AS _mantle_h_created_at, updated_at AS _mantle_h_updated_at, author_id AS _mantle_h_author_id, itemid AS _mantle_h_itemid, qty AS _mantle_h_qty, orderstatus AS _mantle_h_orderstatus, placedat AS _mantle_h_placedat",
+              "binds": [
+                {
+                  "k": "input",
+                  "name": "qty",
+                  "type": "integer"
+                },
+                {
+                  "k": "now"
+                },
+                {
+                  "k": "input",
+                  "name": "itemid",
+                  "type": "text"
+                },
+                {
+                  "k": "uid"
+                }
+              ],
+              "kind": "set",
+              "schema": "orders",
+              "verb": "insert",
+              "hooked": true,
+              "returns": true,
+              "target": "orders"
+            },
+            {
+              "sql": "UPDATE items SET stock = stock - CAST(?1 AS integer), version = version + 1, updated_at = ?3 WHERE id = CAST(?2 AS text)",
+              "binds": [
+                {
+                  "k": "input",
+                  "name": "qty",
+                  "type": "integer"
+                },
+                {
+                  "k": "input",
+                  "name": "itemid",
+                  "type": "text"
+                },
+                {
+                  "k": "now"
+                }
+              ],
+              "kind": "row",
+              "schema": "items",
+              "verb": "update",
+              "target": "items"
+            }
+          ]
+        },
+        "restock": {
+          "caller": [
+            {
+              "sql": "INSERT INTO items (sku, name, stock, created_at, updated_at, author_id, id) SELECT _v.*, ?4, ?4, ?5, lower(hex(randomblob(16))) FROM ( VALUES (CAST(?1 AS text), CAST(?2 AS text), CAST(?3 AS integer)) ) AS _v WHERE (1 = 1) ON CONFLICT (sku) DO UPDATE SET stock = items.stock + excluded.stock, version = version + 1, updated_at = ?4 RETURNING id, sku, stock",
+              "binds": [
+                {
+                  "k": "input",
+                  "name": "sku",
+                  "type": "text"
+                },
+                {
+                  "k": "input",
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "k": "input",
+                  "name": "qty",
+                  "type": "integer"
+                },
+                {
+                  "k": "now"
+                },
+                {
+                  "k": "uid"
+                }
+              ],
+              "kind": "set",
+              "schema": "items",
+              "verb": "insert",
+              "returns": true,
+              "target": "items"
+            }
+          ],
+          "trusted": [
+            {
+              "sql": "INSERT INTO items (sku, name, stock, created_at, updated_at, author_id, id) SELECT _v.*, ?4, ?4, ?5, lower(hex(randomblob(16))) FROM ( VALUES (CAST(?1 AS text), CAST(?2 AS text), CAST(?3 AS integer)) ) AS _v WHERE (1 = 1) ON CONFLICT (sku) DO UPDATE SET stock = items.stock + excluded.stock, version = version + 1, updated_at = ?4 RETURNING id, sku, stock",
+              "binds": [
+                {
+                  "k": "input",
+                  "name": "sku",
+                  "type": "text"
+                },
+                {
+                  "k": "input",
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "k": "input",
+                  "name": "qty",
+                  "type": "integer"
+                },
+                {
+                  "k": "now"
+                },
+                {
+                  "k": "uid"
+                }
+              ],
+              "kind": "set",
+              "schema": "items",
+              "verb": "insert",
+              "returns": true,
+              "target": "items"
+            }
+          ]
+        }
+      }
+    }
   }
 }

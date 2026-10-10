@@ -12,7 +12,10 @@ import process, { cwd as processCwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
 import { satisfies, validRange } from "semver";
 import type { DatabaseDriver } from "../core/driver.js";
+import { d1Dialect } from "../d1/dialect.js";
 import { planStorageChanges } from "../d1/storage.js";
+import { postgresDialect } from "../postgres/dialect.js";
+import { withLowering } from "../core/sql/lowered.js";
 import { compileLinkedPlan, parseManifestSources, validateDiagnostic, ValidateManifestsUseCase, type Diagnostic, type SqlDialect } from "../spec/index.js";
 import * as d1 from "../d1/compile/index.js";
 import * as pg from "../postgres/compile/index.js";
@@ -297,8 +300,13 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
 
   const missing = featureDiagnostics(root, config);
   if (missing.length) return (print(missing), 1);
+  // the built-in dialects print every View and inline Procedure now, as the runtime would (ADR-0044); a third-party dialect has no runtime side here and lowers nothing.
+  // PostgreSQL lowers for UTC, the preset's default: a service on another time zone runs the plan without it
+  const runtimeDialect = dialect === pg ? postgresDialect() : dialect === d1 ? d1Dialect : undefined;
+  const { plan, warnings: loweringWarnings } = runtimeDialect ? await withLowering(compiled.plan, runtimeDialect) : { plan: compiled.plan, warnings: [] };
+  for (const w of loweringWarnings) stderr.write(`warning: LOWERING_SKIPPED ${w}\n`);
   // the grammar has no rule across cron fields, so the Cloudflare preset's refusals come before anything is written
-  const unmappable = Object.entries(compiled.plan.triggers).flatMap(([name, t]) => {
+  const unmappable = Object.entries(plan.triggers).flatMap(([name, t]) => {
     if (host === "bun" && t.source.kind === "schedule" && t.source.enabled !== false) return [`Trigger ${name}: Bun has no built-in cron dispatcher. Use host none with an explicit scheduler, or disable this Trigger before generating the Bun preset.\n`];
     if (host !== "cloudflare" || t.source.kind !== "schedule" || t.source.enabled === false) return [];
     try {
@@ -312,8 +320,8 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   // the source hash is the manifests as authored, keyed by name so the project's location never enters it
   const sourceHash = createHash("sha256").update(JSON.stringify(files.map((f) => [f.name, f.text]))).digest("hex");
   const outputs: [string, string][] = [
-    [join(OUT, "plan.json"), json({ sourceHash, plan: compiled.plan })],
-    [join(OUT, "mantle.ts"), emitMantleModule(compiled.plan, validation.linked)],
+    [join(OUT, "plan.json"), json({ sourceHash, plan })],
+    [join(OUT, "mantle.ts"), emitMantleModule(plan, validation.linked)],
   ];
   // the config is rewritten only when the selection changes, and keeps whatever else it holds
   const changed = (a: MantleConfig | undefined, b: MantleConfig) => !a || a.identity !== b.identity || a.features.join() !== b.features.join() || a.host !== b.host || a.dialect !== b.dialect;
@@ -330,7 +338,7 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
       await mkdir(dirname(join(root, path)), { recursive: true });
       await writeFile(join(root, path), text, "utf8");
     }
-    stdout.write(`Generated ${OUT}/plan.json and ${OUT}/mantle.ts (fingerprint ${compiled.plan.fingerprint.slice(0, 12)}; identity ${config.identity}; features ${config.features.join(", ") || "none"}${host === "cloudflare" ? "" : `; host ${host}`}${builtIn ? "" : `; dialect ${dialect.name}`}).\n`);
+    stdout.write(`Generated ${OUT}/plan.json and ${OUT}/mantle.ts (fingerprint ${plan.fingerprint.slice(0, 12)}; identity ${config.identity}; features ${config.features.join(", ") || "none"}${host === "cloudflare" ? "" : `; host ${host}`}${builtIn ? "" : `; dialect ${dialect.name}`}).\n`);
     if (!preset) {
       if (host === "cloudflare") stdout.write(`No preset for the dialect ${dialect.name}: compose src/service.ts with its storage adapter.\n`);
       return 0;
@@ -338,13 +346,13 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
     const selection = { ...config, host, dialect: preset };
     let written: string[];
     try {
-      written = await writePreset(root, selection, compiled.plan);
+      written = await writePreset(root, selection, plan);
     } catch (err) {
       return (stderr.write(`${err instanceof Error ? err.message : String(err)}; rerun mantle generate to finish the preset.\n`), 2);
     }
     // host and dialect cannot change on a rerun (select refuses it), so only the identity and features can drift from src/service.ts
     const selectionChanged = !!saved && (saved.config.identity !== config.identity || saved.config.features.join() !== config.features.join());
-    for (const w of await presetWarnings(root, selection, selectionChanged, compiled.plan)) stderr.write(`warning: ${w}\n`);
+    for (const w of await presetWarnings(root, selection, selectionChanged, plan)) stderr.write(`warning: ${w}\n`);
     if (written.length) stdout.write(`Wrote the service preset, which is yours to edit: ${written.join(", ")}.\n`);
     return 0;
   }
@@ -359,7 +367,7 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
 
   if (!builtIn || (!deps.driver && values.database === undefined)) return code;
   try {
-    const storage = await planStorageChanges(deps.driver ?? (await openSqliteFile(resolve(root, values.database!))), compiled.plan.schemas, { fingerprint: compiled.plan.fingerprint });
+    const storage = await planStorageChanges(deps.driver ?? (await openSqliteFile(resolve(root, values.database!))), plan.schemas, { fingerprint: plan.fingerprint });
     for (const u of storage.undeclared) stdout.write(`-- ${u.code} ${u.schema}: ${u.message}\n`);
     if (storage.skipped) stdout.write("-- Storage: this database already booted this plan's fingerprint; boot applies nothing.\n");
     else if (storage.blocked.length) {

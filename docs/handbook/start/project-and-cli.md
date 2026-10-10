@@ -105,6 +105,18 @@ position in the statement.
 `--check` is the gate for CI and for agents: run `mantle generate`, then
 `mantle generate --check`, then your typecheck.
 
+### Lowered statements in `plan.json`
+
+For the built-in dialects, `plan.json` also carries `plan.lowered`: every
+View and inline SQL Procedure, printed for the plan's dialect (ADR-0044). It
+is covered by the fingerprint, so editing it makes `--check` report the plan
+as stale. It is tied to the Mantle version that wrote it: after you upgrade
+`@aotter/mantle`, run `mantle generate` again, or the runtime ignores it and
+compiles on first use (`runtime.bootReport().lowered` names the reason).
+PostgreSQL plans are lowered for UTC, the preset's default time zone. A
+third-party dialect gets none. Generate prints a `LOWERING_SKIPPED` warning
+for a program the runtime would refuse.
+
 ### Schedules and Cloudflare crons
 
 On host `cloudflare`, schedule Triggers use POSIX cron. `mantle generate` translates each enabled

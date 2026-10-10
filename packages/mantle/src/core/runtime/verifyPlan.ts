@@ -3,11 +3,12 @@
  * database or the handlers (ADR-0034 decision 7: Cloud validates the IR and never parses SQL). Worker-safe: no SQL parser.
  */
 import { DiagnosticError, makeDiagnostic, type Diagnostic } from "../../spec/kernel/index.js";
-import { MAX_TTL_SECONDS, ManifestParseError, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, checkShapeProblem, viewCacheProblem, fieldTypes, storageColumnClash, storageColumns, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
+import { MAX_TTL_SECONDS, ManifestParseError, canonical, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, checkShapeProblem, viewCacheProblem, fieldTypes, storageColumnClash, storageColumns, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
 import { validateJsonSchema } from "../../spec/domain/service/SchemaSpecChecks.js";
 import { checkGuards, checkProcedureTarget, checkTriggerRefs } from "../../spec/domain/service/TriggerGraphChecks.js";
 import { MAX_NODES, schemaColumns } from "../sql/allowlist.js";
 import { compileProgram, type Mode } from "../sql/compile.js";
+import { loweringStatus, lowerPlan } from "../sql/lowered.js";
 import { outName } from "../sql/run.js";
 import type { MantleStorageAdapter } from "../service.js";
 import { createMantleRuntime } from "./createRuntime.js";
@@ -25,6 +26,10 @@ export const PLAN_LIMITS = {
   triggers: 2048,
   /** JSON objects and arrays in one program's IR (a check, a View, an inline Procedure): the allowlist walks at most `MAX_NODES` nodes, each a few of these */
   programIrValues: 8 * MAX_NODES,
+  /** JSON objects and arrays in `lowered` (ADR-0044): its bind recipes and paging metadata, counted before it is compared or seeded */
+  loweredValues: 64 * MAX_NODES,
+  /** characters of printed SQL in `lowered` */
+  loweredSqlChars: 8_000_000,
 } as const;
 
 const BOOTED = Symbol("booted");
@@ -97,6 +102,19 @@ async function verify(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "di
       for (const f of Array.isArray(list?.[key]) ? (list[key] as unknown[]) : []) if (typeof f === "string" && !outputs.includes(f) && !outputs.includes(f.toLowerCase())) out.push(refused(`plan#/views/${name}/uiSchema/list/${key}`, `VIEW_UI_INVALID: ${JSON.stringify(f)} is not an output of the View`));
   }
   for (const [name, p] of Object.entries(plan.procedures)) if ("sql" in p.handler) check(`plan#/procedures/${name}`, p.handler.sql.stmts, p.inputs, "procedure", "caller");
+  // the statements a runtime will run without checking them (ADR-0044): what this Mantle and dialect print for the plan's programs, or nothing.
+  // Only against a plan that is otherwise sound (a refused program is left out of the lowering, so the comparison would only repeat that).
+  // A lowering this Mantle cannot re-derive (another Mantle version, another dialect, a dialect that cannot print) is refused, never skipped: a
+  // runtime of that version would seed it unchecked. Only under `restrict`, where no runtime uses lowered statements, is the comparison skipped
+  if (!out.length && plan.lowered !== undefined) {
+    const status = loweringStatus(plan, storage.dialect);
+    if (status === "used") {
+      const { fingerprint: _fingerprint, lowered, ...body } = plan;
+      if (canonical(lowerPlan(body, storage.dialect).lowered) !== canonical(lowered))
+        out.push(refused("plan#/lowered", "LOWERING_MISMATCH: the plan's lowered statements are not what this Mantle and dialect print for its programs; regenerate the plan (`mantle generate`)"));
+    } else if (status !== "restricted")
+      out.push(refused("plan#/lowered", `LOWERING_MISMATCH: lowered statements this Mantle cannot re-derive (${status}); regenerate the plan with this Mantle or remove lowered`));
+  }
   return out;
 }
 
@@ -133,7 +151,35 @@ function bounds(plan: RuntimePlan): Diagnostic[] {
   }
   for (const [name, v] of Object.entries(plan.views)) program(`plan#/views/${name}`, v?.stmts);
   for (const [name, p] of Object.entries(plan.procedures)) if (p?.handler && "sql" in p.handler) program(`plan#/procedures/${name}`, p.handler.sql?.stmts);
+  if (plan.lowered !== undefined) {
+    // checked before it is compared or seeded, as the programs are: it names only the plan's own programs, and holds no more than they could print
+    const l = plan.lowered as unknown as Record<string, unknown> | null;
+    const programs = (x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : undefined);
+    const views = programs(l?.["views"]), procedures = programs(l?.["procedures"]);
+    if (!l || typeof l !== "object" || !views || !procedures) out.push(refused("plan#/lowered", "LOWERING_MISMATCH: lowered is an object with views and procedures"));
+    else {
+      for (const name of Object.keys(views)) if (!Object.hasOwn(plan.views, name)) out.push(refused(`plan#/lowered/views/${name}`, "LOWERING_MISMATCH: lowered names a View the plan does not have"));
+      for (const name of Object.keys(procedures)) if (!Object.hasOwn(plan.procedures, name)) out.push(refused(`plan#/lowered/procedures/${name}`, "LOWERING_MISMATCH: lowered names a Procedure the plan does not have"));
+      if (jsonValues(l, L.loweredValues) > L.loweredValues) over("plan#/lowered", "JSON values in the lowered statements", L.loweredValues);
+      else if (sqlChars(l) > L.loweredSqlChars) over("plan#/lowered", "characters of lowered SQL", L.loweredSqlChars);
+    }
+  }
   return out;
+}
+
+/** The characters of every `sql` string in `value`, counted up to `cap` (past it the count stops): iterative, so any depth is safe. */
+function sqlChars(value: unknown): number {
+  let n = 0;
+  const stack: unknown[] = [value];
+  while (stack.length && n <= PLAN_LIMITS.loweredSqlChars) {
+    const v = stack.pop();
+    if (v === null || typeof v !== "object") continue;
+    for (const [k, c] of Object.entries(v)) {
+      if (k === "sql" && typeof c === "string") n += c.length;
+      else if (c !== null && typeof c === "object") stack.push(c);
+    }
+  }
+  return n;
 }
 
 /** The CLI's own JSON Schema check (depth, size, `$ref`, `pattern`, `enum`) on one of the plan's: its refusal, or undefined. */

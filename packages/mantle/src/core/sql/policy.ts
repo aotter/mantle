@@ -5,6 +5,7 @@ import { SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/inde
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from '../dialect.js';
 import { classify } from '../../spec/domain/index.js';
+import type { PrintedStatement } from '../store.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
 
 type Schemas = Record<string, SchemaDef>;
@@ -83,6 +84,10 @@ export type Compiled = {
   hooked: boolean;
   /** the update publishes the entry: publish hooks fire instead of update hooks */
   publish: boolean;
+  /** Set on a statement lowered at generate time (ADR-0044): its printed text. `ast` is then computed on first access. */
+  printed?: PrintedStatement;
+  /** A lowered View's sort-key count, so a run need not read the AST. */
+  nkeys?: number;
 };
 
 

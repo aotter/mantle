@@ -14,6 +14,8 @@ import { bindFor, createStore } from "../store/createStore.js";
 import type { CallerStore } from "../store.js";
 import type { MantleBootReport, MantleRuntime, MantleStorageAdapter } from "../service.js";
 import { evaluateAuthAll } from "./auth.js";
+import { lifecycleHookSets, lifecycleKey } from "./hooks.js";
+import { loweringStatus, seedPlan } from "../sql/lowered.js";
 
 export const CORE_VERSION = "0.2.0";
 
@@ -42,16 +44,12 @@ export interface MantleRuntimeArgs {
 const fail = (code: DiagnosticCode, path: string, message: string, phase: Diagnostic["phase"] = "boot", extra: Partial<Diagnostic> = {}) =>
   new DiagnosticError(makeDiagnostic({ code, phase, severity: "error", path, message, ...extra }));
 
-const VERB = { create: "insert", update: "update", delete: "delete", publish: "publish" } as const;
 const depthOf = (c: InvocationCause | undefined): number => {
   let depth = 0;
   for (; c && depth <= MAX_INVOCATION_DEPTH; c = c.parent) depth++;
   return depth;
 };
 const child = (parent: InvocationCause, procedure: string): InvocationCause => ({ kind: "internal", id: `${parent.id}>${procedure}`, parent });
-
-/** The key of the Schema a lifecycle Trigger names, as the dispatcher keys its hooks: the name in lower case, an own key. */
-const lifecycleKey = (plan: RuntimePlan, schema: string): string | undefined => (Object.hasOwn(plan.schemas, schema.toLowerCase()) ? schema.toLowerCase() : undefined);
 
 export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<MantleRuntime> {
   const { plan } = args;
@@ -110,20 +108,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   const { executor, site } = await args.storage.prepare(plan);
 
   // ---- lifecycle: Store hands mutations to this dispatcher; Procedures are only reached through invokeProcedure ---------------
-  const byHook = new Map<string, [string, string][]>();
-  const before = new Set<string>();
-  const after = new Set<string>();
-  for (const [name, t] of triggers) {
-    if (t.source.kind !== "lifecycle") continue;
-    for (const hook of t.source.on) {
-      const [stage, op] = hook.split("_") as ["before" | "after", keyof typeof VERB];
-      // a statement names its table the way SQL folds it, so hooks are keyed by the lower-cased Schema name
-      const schema = lifecycleKey(plan, t.source.schema)!;
-      (stage === "before" ? before : after).add(`${schema}.${VERB[op]}`);
-      const key = `${schema}|${hook}`;
-      byHook.set(key, [...(byHook.get(key) ?? []), [name, t.procedure]]);
-    }
-  }
+  const { before, after, byHook } = lifecycleHookSets(plan);
   const fire = (e: LifecycleEvent, [trigger, procedure]: [string, string]) =>
     invoke({ procedure, input: {}, caller: e.caller, cause: { kind: "lifecycle", id: `${e.id}:${trigger}`, ...(e.parent ? { parent: e.parent } : {}), trigger, hook: e.hook as LifecycleHook, schema: plan.schemas[e.schema]?.name ?? e.schema, rows: e.rows } });
   const dispatcher: LifecycleDispatcher = {
@@ -140,6 +125,11 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     },
   };
   const lifecycle: LifecycleHooks | undefined = before.size || after.size ? { dispatcher, before, after } : undefined;
+
+  // ---- lowered statements: seeded into the compile cache, or ignored and said so (ADR-0044) ---------------------------------------
+  const loweredStatus = loweringStatus(plan, dialect);
+  if (loweredStatus === "used") seedPlan(plan, dialect, lifecycle?.after);
+  else if (plan.lowered && loweredStatus !== "restricted") console.warn(`[mantle boot] lowered statements not used (${loweredStatus}); regenerate the plan with this Mantle (\`mantle generate\`)`);
 
   const now = args.now ?? (() => Date.now() * 1000);
   const store = createStore({
@@ -213,7 +203,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     plan,
     store,
     invokeProcedure: (invocation) => invoke(invocation),
-    bootReport: (): MantleBootReport => ({ fingerprint, coreVersion: CORE_VERSION }),
+    bootReport: (): MantleBootReport => ({ fingerprint, coreVersion: CORE_VERSION, lowered: loweredStatus }),
     ...(site ? { site } : {}),
   };
 }
