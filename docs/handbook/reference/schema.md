@@ -144,7 +144,7 @@ Top-level string fields for full-text search. On SQLite, an FTS5 trigram
 index kept in step by triggers: a query of three characters or more matches
 substrings (Chinese included); a shorter one scans. On PostgreSQL, a
 case-insensitive substring scan (`ILIKE`) over the fields. Used by `mantle.search(t, q)` in SQL,
-`search` in `ctx.store.select`, and Admin's search box. `id` is always
+`search` in a `ctx.db` reader, and Admin's search box. `id` is always
 searched by Store's `search`. Date and date-time fields are refused.
 
 ## `scope`

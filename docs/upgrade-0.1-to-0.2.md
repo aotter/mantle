@@ -162,7 +162,7 @@ The generated types list exactly the plan's refs.
 | `ctx.event`, `ctx.schedule` | `ctx.cause` (`kind`: `http`, `mcp`, `internal`, `schedule`, `lifecycle`); `ctx.cause.cron` is POSIX, so shift any cron string the code compares |
 | `ctx.event.entry` | **a loop** over `ctx.cause.rows` (one statement can touch many rows; never `rows[0]`). Rows are flat: `entry.data.x` → `row.x` |
 | `ctx.store.view(name, { params, page, show, search, filters })` | `ctx.store.view(name, { input, limit, cursor, search, filters })`; `search` and `filters` match only the View's `uiSchema.list.searchFields` and `filterFields` |
-| `runtime.entries`, `runtime.executeView`, `ctx.writeAtomically` | `ctx.store.select`, `ctx.store.view`, `ctx.store.write([...ops])` (all or nothing), `ctx.store.id()` |
+| `runtime.entries`, `runtime.executeView`, `ctx.writeAtomically` | `ctx.db.<schema>.get / first / find`, `ctx.store.view`, `ctx.store.write([...ops])` (all or nothing), `ctx.store.id()` |
 | `runtime.store.as(ctx)` | `runtime.store.as(caller)` |
 | calling another Procedure through a `getRuntime` closure | `await ctx.invoke("procedure-name", input)` (keeps the caller, re-checks its auth) |
 
