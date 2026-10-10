@@ -28,7 +28,7 @@ Native SQL statement counts stay unchanged: one for simple reads, five for Hall/
 
 The actual unchanged application also runs in local Wrangler before/after with matched official Auth peers (1.7.7) and Core/UI versions. Hall, report, Admin bootstrap, complete CSV and MCP Hall responses match byte for byte; anonymous guards remain enforced. HTTP timing evidence follows below. Private snapshots, row hashes and raw responses remain outside the public repository.
 
-Three quiet HTTP rounds per variant use five warmups and thirty measured requests per route: 900 measured authenticated responses total. The exact complete-body hashes match across every variant/sample without normalization. Times include local HTTP, synthetic authentication, workerd, D1 and reading the complete response body.
+The HTTP comparison is audit `86dd29e` before → cumulative candidate after. Three quiet HTTP rounds per variant use five warmups and thirty measured requests per route: 900 measured authenticated responses total. The exact complete-body hashes match across every variant/sample without normalization. Times include local HTTP, synthetic authentication, workerd, D1 and reading the complete response body.
 
 | Route | Before round p50 ms | After round p50 ms | Before round p95 ms | After round p95 ms | Before D1 calls/statements/batches | After D1 calls/statements/batches |
 |---|---|---|---|---|---|---|

@@ -46,7 +46,7 @@ connections are distinct metrics. These shared-machine local observations do
 not establish cloud Hyperdrive latency, D1 billing, universal page cost or
 cross-database performance parity. No pool tuning, hidden retry, scheduler,
 request-client manager or cloud resource was introduced. Raw credential-bearing
-flow logs are withheld; all published evidence uses synthetic data.
+flow logs are withheld; the procurement evidence above uses synthetic data.
 
 Reproduce the repository checks with a disposable PostgreSQL database:
 
