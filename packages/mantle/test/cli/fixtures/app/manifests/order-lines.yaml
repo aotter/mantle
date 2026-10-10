@@ -1,0 +1,10 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: order_lines }
+spec:
+  title: Order lines
+  lifecycle: operational
+  schema:
+    type: object
+    required: [sku]
+    properties: { sku: { type: string }, qty: { type: integer } }
