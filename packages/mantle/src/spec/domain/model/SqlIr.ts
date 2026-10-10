@@ -51,8 +51,8 @@ export interface SqlContext {
   /** a public View: a caller sees published rows only, even across a join */
   readonly public?: boolean;
   /**
-   * The Views a FROM may name (ADR-0037 decision 3), by name with `-` as `_`: an internal View's compiled SELECT, which the
-   * compiler inlines as a subquery, or why that View cannot be read. Compile side only.
+   * The Views a FROM may name (ADR-0037 decision 3), by name with `-` as `_`: an internal View's validated tagged SELECT, which the
+   * compiler expands as D1 CTE dependencies or native FROM subqueries, or why that View cannot be read. Compile side only.
    */
   readonly views?: Readonly<Record<string, { readonly select?: SqlNode; readonly refusal?: string }>>;
 }

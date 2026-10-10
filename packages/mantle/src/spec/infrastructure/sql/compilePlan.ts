@@ -60,7 +60,7 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
     scope.set(c.ctename, renamed ? Object.fromEntries(renamed.flatMap((n, i) => (body.columns[body.positions?.[i] ?? ""] ? [[n, body.columns[body.positions![i]!]!]] : []))) : body.columns);
   }
   const rels = new Map<string, string | undefined>();
-  // a FROM subquery's outputs that read a Schema field unchanged keep its type (an inlined View's, ADR-0037 decision 3)
+  // a FROM subquery's outputs that read a Schema field unchanged keep its type (including a named View dependency's)
   const subs = new Map<string, Columns>();
   const walk = (n: SqlNode): void => {
     if (n.JoinExpr) return (walk(n.JoinExpr.larg), walk(n.JoinExpr.rarg));
@@ -124,7 +124,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     };
   }
   const diagnostics: Diagnostic[] = [];
-  // ADR-0037 decision 3: the Views a FROM may name, by name with `-` as `_`; an internal View without input or requires is inlined
+  // ADR-0037 decision 3: the Views a FROM may name, by name with `-` as `_`; an internal View without input or requires becomes native SQL
   const refs: Record<string, { select?: SqlNode; refusal?: string }> = {};
   const refName = (name: string) => name.toLowerCase().replace(/-/g, "_");
   const refOf = new Map(linked.views.map((x) => [refName(x.manifest.metadata.name), x]));
@@ -139,7 +139,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   const ctxOf = (kind: SqlContext["kind"], input: JsonSchema | undefined, isPublic = false): SqlContext => ({ schemas, inputs: typesOf(input), kind, public: isPublic, views: refs });
   const compile = async (kind: SqlContext["kind"], sql: string, input: JsonSchema | undefined, source: SourceLocation, pointer: string, isPublic = false) => {
     const res = await compileSql(sql, ctxOf(kind, input, isPublic), dialect);
-    if (res.ok) return res.plan;
+    if (res.ok) return res;
     diagnostics.push(toDiagnostic(res.diagnostic, source, pointer));
   };
 
@@ -183,10 +183,11 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   for (const { manifest: v, source } of order) {
     // a View that reads one that failed (or a cycle) is not compiled: the first diagnostic is the one to fix
     if ((reads.get(v.metadata.name) ?? []).some((r) => !refs[r]?.select)) continue;
-    const plan = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
+    const result = await compile("view", v.spec.sql, v.spec.input, source, "/spec/sql", v.spec.surface === "public");
+    const plan = result?.plan;
     compiled.set(v.metadata.name, plan);
     const ref = refName(v.metadata.name);
-    if (plan && readable.has(ref)) refs[ref] = { select: plan.stmts[0]!.SelectStmt };
+    if (plan && readable.has(ref)) refs[ref] = { select: result!.reference };
   }
   const views: Record<string, PlanView> = {};
   for (const { manifest: v, source } of linked.views) {
@@ -235,7 +236,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   for (const { manifest: p, source } of linked.procedures) {
     const common = { ...(p.spec.title ? { title: p.spec.title } : {}), ...(p.spec.description ? { description: p.spec.description } : {}), ...(p.spec.uiSchema ? { uiSchema: p.spec.uiSchema } : {}), input: p.spec.input, output: p.spec.output, inputs: typesOf(p.spec.input), ...(p.spec.requires ? { requires: p.spec.requires } : {}), ...(p.spec.mcp ? { mcp: p.spec.mcp } : {}) };
     if ("ref" in p.spec.handler) { procedures[p.metadata.name] = { ...common, ...(p.spec.target ? { target: p.spec.target } : {}), handler: { ref: p.spec.handler.ref } }; continue; }
-    const plan = await compile("procedure", p.spec.handler.sql, p.spec.input, source, "/spec/handler/sql");
+    const plan = (await compile("procedure", p.spec.handler.sql, p.spec.input, source, "/spec/handler/sql"))?.plan;
     const target = p.spec.target ?? (plan ? inferTarget(p, plan.stmts) : undefined);
     if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan, source: p.spec.handler.sql } };
   }

@@ -4,7 +4,8 @@ import { expect, it } from "vitest";
 import { program } from "../../src/testing/harness.js";
 
 const POSTGRES_ONLY = [
-  "WITH s AS (SELECT id FROM items) SELECT id FROM s ORDER BY id",
+  "WITH RECURSIVE s AS (SELECT id FROM items) SELECT id FROM s ORDER BY id",
+  "WITH s AS MATERIALIZED (SELECT id FROM items) SELECT id FROM s ORDER BY id",
   "SELECT u.id FROM (SELECT id FROM items UNION ALL SELECT id FROM requisitions) u ORDER BY u.id",
   "SELECT i.id, x.first FROM items i JOIN LATERAL (SELECT o.id AS first FROM orders o WHERE o.item_id = i.id ORDER BY o.id LIMIT 1) x ON true ORDER BY i.id",
   "SELECT id, max(stock) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) AS m FROM items ORDER BY id",

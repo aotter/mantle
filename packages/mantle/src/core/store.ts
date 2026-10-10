@@ -166,4 +166,6 @@ export interface StoreExecutor {
   select(statement: StoreStatement): Promise<readonly StoreRow[]>;
   /** All or nothing, in order. A failure throws `DiagnosticError` and applies nothing. */
   apply(batch: readonly StoreStatement[]): Promise<readonly StoreApplied[]>;
+  /** The same atomic writes when the caller consumes only RETURNING rows. */
+  applyRows?(batch: readonly StoreStatement[]): Promise<readonly (readonly StoreRow[])[]>;
 }

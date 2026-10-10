@@ -69,7 +69,7 @@ function walk(v: unknown, ctes: ReadonlySet<string>, at: number | undefined, ctx
 
 /**
  * A relation is a CTE in scope, a declared Schema, or an internal View (ADR-0037 decision 3), by PostgreSQL's name rules
- * (unquoted names are already folded). A View is tagged `view`; the compiler inlines it before any dialect sees the tree.
+ * (unquoted names are already folded). A View is tagged `view`; the compiler expands it into native SQL before the dialect validates the tree.
  */
 function relation(n: N, ctes: ReadonlySet<string>, at: number | undefined, ctx: SqlContext, written: boolean): void {
   const name = String(n.relname);

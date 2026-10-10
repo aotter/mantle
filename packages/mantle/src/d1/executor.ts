@@ -82,17 +82,27 @@ export class SqliteStoreExecutor implements StoreExecutor {
     return res!.rows;
   }
 
-  async apply(batch: readonly Statement[]): ReturnType<StoreExecutor["apply"]> {
+  private async batch(batch: readonly Statement[], counts: boolean) {
     const sent: SqlStatement[] = [];
     const at: number[] = [];
     batch.forEach((s, i) => {
       at[i] = sent.length;
       sent.push(this.prepared(s));
-      // count with SQLite's changes(), not D1's meta.changes, which includes rows that triggers wrote
-      sent.push({ sql: "SELECT changes() AS n" });
+      // An immediate native assertion proves the exact count; unknown counts still use changes(), not trigger-inclusive D1 metadata.
       if (s.expect !== undefined) sent.push({ sql: `INSERT INTO _mantle_assert (op, ok) SELECT ${i}, changes() = ${Number(s.expect)}` });
+      else if (counts) sent.push({ sql: "SELECT changes() AS n" });
     });
     const res = await this.driver.batch(sent).catch(mapError("apply", batch.map((s) => writeTarget(s.ir))));
-    return batch.map((_s, i) => ({ affected: Number(res[at[i]! + 1]!.rows[0]!.n), rows: res[at[i]!]!.rows }));
+    return { at, res };
+  }
+
+  async apply(batch: readonly Statement[]): ReturnType<StoreExecutor["apply"]> {
+    const { at, res } = await this.batch(batch, true);
+    return batch.map((s, i) => ({ affected: s.expect ?? Number(res[at[i]! + 1]!.rows[0]!.n), rows: res[at[i]!]!.rows }));
+  }
+
+  async applyRows(batch: readonly Statement[]): Promise<readonly (readonly StoreRow[])[]> {
+    const { at, res } = await this.batch(batch, false);
+    return at.map((i) => res[i]!.rows);
   }
 }

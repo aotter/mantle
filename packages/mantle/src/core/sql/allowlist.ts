@@ -19,10 +19,11 @@ type Ctx = SqlContext & { source?: string; known?: Set<string>; cols?: SchemaCol
 
 /** node type -> the keys it may carry */
 export const KEYS_SRC: Record<string, string> = {
-  SelectStmt: 'targetList fromClause whereClause groupClause havingClause sortClause limitCount distinctClause valuesLists limitOption op',
+  SelectStmt: 'targetList fromClause whereClause groupClause havingClause sortClause limitCount distinctClause valuesLists limitOption op withClause',
   InsertStmt: 'relation cols selectStmt onConflictClause returningClause override',
   UpdateStmt: 'relation targetList whereClause returningClause',
   DeleteStmt: 'relation whereClause returningClause',
+  WithClause: 'ctes', CommonTableExpr: 'ctename ctequery aliascolnames ctematerialized',
   ReturningClause: 'exprs', ResTarget: 'name val', ColumnRef: 'fields', String: 'sval', A_Star: '',
   A_Const: 'ival fval sval boolval isnull', A_Expr: 'kind name lexpr rexpr',
   BoolExpr: 'boolop args', NullTest: 'arg nulltesttype', CaseExpr: 'arg args defresult', CaseWhen: 'expr result',
@@ -71,6 +72,7 @@ export const ENUM: Record<string, (string | number | boolean)[]> = {
   'BoolExpr.boolop': ['AND_EXPR', 'OR_EXPR', 'NOT_EXPR'], 'NullTest.nulltesttype': ['IS_NULL', 'IS_NOT_NULL'],
   'SubLink.subLinkType': ['EXISTS_SUBLINK', 'EXPR_SUBLINK', 'ANY_SUBLINK'], 'JoinExpr.jointype': ['JOIN_INNER', 'JOIN_LEFT'],
   'SortBy.sortby_dir': ['SORTBY_DEFAULT', 'SORTBY_ASC', 'SORTBY_DESC'], 'SortBy.sortby_nulls': ['SORTBY_NULLS_DEFAULT', 'SORTBY_NULLS_FIRST', 'SORTBY_NULLS_LAST'],
+  'CommonTableExpr.ctematerialized': ['CTEMaterializeDefault'],
   'FuncCall.funcformat': ['COERCE_EXPLICIT_CALL', 'COERCE_SQL_SYNTAX'],
   'WindowDef.frameOptions': [1058], // 1058 = the default frame; any frame clause is refused
   'OnConflictClause.action': ['ONCONFLICT_NOTHING', 'ONCONFLICT_UPDATE'], 'TypeName.typemod': [-1],
@@ -391,12 +393,12 @@ const check: Record<string, Checker> = {
     const name: string = n.relname;
     if (name.startsWith('_mantle') || name === 'input' || name === 'auth') no('SQL_RELATION', `${name} is not a declared Schema`, at);
     const reference = ctx.p.name === 'reference';
-    // a `cte` tag is honored only for a CTE in scope here (the runtime never trusts an IR's tags); base has no WITH at all
-    if (n.mantle === 'cte') { if (reference && ctx.scope.some((s) => s.has(n.relname))) return; no('SQL_RELATION', `${name}: a cte reference is not defined in scope`, at); }
-    if (!ctx.schemas[name]) no('SQL_RELATION', `${name} is not a declared Schema`, at);
-    if (n.mantle !== undefined && n.mantle !== 'table') no('SQL_RELATION', `${name}: relation not name-resolved`, at);
     if (n.alias && ['input', 'auth', 'excluded'].includes(n.alias.aliasname)) no('SQL_RELATION', `${n.alias.aliasname} is a reserved alias`, at);
     if (!reference) for (const ident of [name, n.alias?.aliasname]) if (ident && SQLITE_ONLY_KEYWORDS.has(ident)) no('SQL_UNSUPPORTED', `${ident} is an SQLite keyword: the printer would not quote it`, at);
+    // a `cte` tag is honored only for a CTE in scope here (the runtime never trusts an IR's tags)
+    if (n.mantle === 'cte') { if (ctx.scope.some((s) => s.has(n.relname))) return; no('SQL_RELATION', `${name}: a cte reference is not defined in scope`, at); }
+    if (!ctx.schemas[name]) no('SQL_RELATION', `${name} is not a declared Schema`, at);
+    if (n.mantle !== undefined && n.mantle !== 'table') no('SQL_RELATION', `${name}: relation not name-resolved`, at);
   },
   ColumnRef: (n, ctx, _p, at) => {
     const f = sv(n.fields), last = f.split('.').pop()!.toLowerCase();
@@ -515,11 +517,13 @@ const check: Record<string, Checker> = {
     if (n.alias?.colnames) no('SQL_SHAPE', `a column list after ${n.alias.aliasname} is only for a row source: name the columns in the subquery`, at);
     if (!n.alias) no('SQL_SHAPE', 'a subquery in FROM needs an alias', at);
   },
-  CommonTableExpr: (n, _c, _p, at) => {
+  CommonTableExpr: (n, ctx, _p, at) => {
     if (!n.ctequery?.SelectStmt) no('SQL_SHAPE', 'a CTE body is a SELECT: a write inside WITH is refused', at);
     // the printer writes a CTE's name and its column names unquoted: each is a plain lower-case identifier
-    for (const name of [n.ctename, ...(n.aliascolnames ?? []).map((c: N) => c?.String?.sval)])
+    for (const name of [n.ctename, ...(n.aliascolnames ?? []).map((c: N) => c?.String?.sval)]) {
       if (typeof name !== 'string' || !/^[a-z_][a-z0-9_]*$/.test(name)) no('SQL_SHAPE', `a CTE name is lower case, a plain identifier: ${JSON.stringify(name)}`, at);
+      if (ctx.p.name === 'base' && SQLITE_ONLY_KEYWORDS.has(name)) no('SQL_UNSUPPORTED', `${name} is an SQLite keyword: the printer would not quote it`, at);
+    }
   },
   BoolExpr: (n, _c, _p, at) => {
     const k = (n.args ?? []).length;

@@ -148,7 +148,10 @@ function compileCached(env: RunEnv, p: Program, ir: object, stmts: readonly N[],
 }
 
 /** A Procedure: before hooks (row ops only), one batch applied in order and all or nothing, then after hooks. */
-export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<{ readonly rows: readonly (readonly StoreRow[])[]; readonly affected: readonly number[] }> {
+type ProcedureRows = { readonly rows: readonly (readonly StoreRow[])[] };
+export function runProcedure(env: RunEnv, p: Program, as: RunAs, rowsOnly: true): Promise<ProcedureRows>;
+export function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<ProcedureRows & { readonly affected: readonly number[] }>;
+export async function runProcedure(env: RunEnv, p: Program, as: RunAs, rowsOnly = false): Promise<ProcedureRows & { readonly affected?: readonly number[] }> {
   const lc = env.lifecycle;
   const base = ctxOf(env, p, { returning: lc?.after, statuses: p.statuses });
   const plan = compileCached(env, p, p.ir, p.ir, base, "all");
@@ -209,22 +212,29 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
     if (!row || row.version === expected) return e;
     return new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: e.message, conflict: { opIndex: i!, reason: "lock" } }));
   };
-  const res = await env.executor.apply(plan.map((c, i) => ({
+  const batch = plan.map((c, i) => ({
     ir: c.ast,
     binds: bindValues(env.dialect, c.binds, as.bind, { version: versions[i] }),
     ...((p.expects?.[i] ?? (c.kind === "row" ? 1 : undefined)) === undefined ? {} : { expect: p.expects?.[i] ?? 1 }),
-  }))).catch(async (e) => { throw await lockReason(e); });
+  }));
+  let affected: readonly number[] | undefined;
+  const res = await (rowsOnly && env.executor.applyRows
+    ? env.executor.applyRows(batch)
+    : env.executor.apply(batch).then((applied) => {
+      if (!rowsOnly) affected = applied.map((r) => r.affected);
+      return applied.map((r) => r.rows);
+    })).catch(async (e) => { throw await lockReason(e); });
 
-  const parts = res.map((r, i) => (plan[i]!.hooked ? r.rows.map(split) : undefined));
+  const parts = res.map((r, i) => (plan[i]!.hooked ? r.map(split) : undefined));
   // a statement without RETURNING returns no rows, whatever its hook was given
-  const rows = res.map((r, i) => (!parts[i] ? r.rows : p.ir[i]![Object.keys(p.ir[i]!)[0]!].returningClause ? parts[i]!.map((x) => x.result) : []));
+  const rows = res.map((r, i) => (!parts[i] ? r : p.ir[i]![Object.keys(p.ir[i]!)[0]!].returningClause ? parts[i]!.map((x) => x.result) : []));
   if (lc) for (const [i, c] of plan.entries()) {
-    if (!c.schema || !c.verb || !lc.after.has(key(c)) || !res[i]!.rows.length) continue; // a statement that writes no row calls no hook
+    if (!c.schema || !c.verb || !lc.after.has(key(c)) || !res[i]!.length) continue; // a statement that writes no row calls no hook
     const cause = parts[i]!.map((x) => x.hook) as unknown as [StoreRow, ...StoreRow[]];
     // a failure of an after hook never changes the committed result (ADR-0032 decision 3); the dispatcher reports its own failures
     await lc.dispatcher.after([event(i, `after_${HOOK[verbOf(c)]}`, c.schema, cause)]).catch(() => undefined);
   }
-  return { rows, affected: res.map((r) => r.affected) };
+  return rowsOnly ? { rows } : { rows, affected: affected! };
 }
 
 // ---- Views and cursors --------------------------------------------------------------------------------
