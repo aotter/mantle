@@ -178,7 +178,8 @@ it("cursor elements past the sort keys neither change the statement nor grow the
     const keys = new Set<string>();
     const spy = vi.spyOn(JSON, "stringify");
     for (const n of [3, 10, 1000, 50000]) await runView(site, p, bindOf(CALLERS[1], {}), { pageSize: 3, cursor: Array.from({ length: n }, () => "x") });
-    for (const call of spy.mock.calls) if (typeof call[0] === "object" && Array.isArray(call[0]) && call[0][0] === 3) keys.add(String(call[0][1]));
+    // the shape key is [cursor pattern, search columns, equality columns]: the page size is a bind, not part of it
+    for (const call of spy.mock.calls) if (Array.isArray(call[0]) && call[0].length === 3 && call[0][1] === null && typeof call[0][0] === "string") keys.add(call[0][0]);
     spy.mockRestore();
     expect(keys.size).toBe(1);
     expect([...keys][0].length).toBeLessThan(8);

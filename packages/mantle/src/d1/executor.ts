@@ -2,6 +2,7 @@
 import { DiagnosticError, runtimeDiagnostic, type Diagnostic } from "../spec/kernel/index.js";
 import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
 import type { StoreExecutor, StoreRow } from "../core/store.js";
+import { writeTarget } from "../core/sql/ast.js";
 import { print } from "./print.js";
 
 type Statement = Parameters<StoreExecutor["select"]>[0];
@@ -11,13 +12,6 @@ const fail = (code: Diagnostic["code"], message: string, conflict?: Diagnostic["
 
 function mapError(kind: "select" | "apply", writes: readonly (string | undefined)[] = []) {
   return (e: unknown): never => mapped(e, kind, writes);
-}
-
-/** The table a statement writes, lower-cased, or undefined for a read. */
-function writeTarget(ir: Statement["ir"]): string | undefined {
-  const node = (ir as Record<string, { relation?: { relname?: string } }>);
-  const stmt = node.InsertStmt ?? node.UpdateStmt ?? node.DeleteStmt;
-  return stmt?.relation?.relname?.toLowerCase();
 }
 
 /** SQLite's primary codes that say nothing about the statement: a lock, memory, I/O, a full disk, an interrupt. */
@@ -70,7 +64,8 @@ export class SqliteStoreExecutor implements StoreExecutor {
 
   private prepared(s: Statement): SqlStatement {
     if (s.binds.length > this.maxBindings) throw fail("INPUT_VALIDATION_FAILED", `a statement binds ${s.binds.length} values; the limit is ${this.maxBindings}`);
-    let sql = this.printed.get(s.ir);
+    // a statement lowered at generate carries its text; `ir` is not read, so a lowered one is never built (ADR-0044)
+    let sql = s.printed?.sql ?? this.printed.get(s.ir);
     if (sql === undefined) this.printed.set(s.ir, (sql = print(s.ir)));
     return { sql, binds: s.binds };
   }
@@ -92,7 +87,7 @@ export class SqliteStoreExecutor implements StoreExecutor {
       if (s.expect !== undefined) sent.push({ sql: `INSERT INTO _mantle_assert (op, ok) SELECT ${i}, changes() = ${Number(s.expect)}` });
       else if (counts) sent.push({ sql: "SELECT changes() AS n" });
     });
-    const res = await this.driver.batch(sent).catch(mapError("apply", batch.map((s) => writeTarget(s.ir))));
+    const res = await this.driver.batch(sent).catch(mapError("apply", batch.map((s) => (s.printed ? s.printed.target : writeTarget(s.ir)))));
     return { at, res };
   }
 
