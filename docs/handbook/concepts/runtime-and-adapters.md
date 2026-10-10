@@ -180,8 +180,23 @@ A SQLite spelling fails validation with its position and the PostgreSQL one:
 | `d1Storage(env.DB, { timeZone?, site? })` | `@aotter/mantle/cloudflare` | Cloudflare D1, the one the preset uses |
 | `sqliteStorage(driver, { timeZone?, maxBindings?, site?, restrict? })` | `@aotter/mantle/d1` | any `DatabaseDriver`: `{ batch(statements) }`, all or nothing |
 | `postgresStorage({ connect, timeZone?, statementTimeoutMs?, restrict? })` | `@aotter/mantle/postgres` | `connect` opens one node-postgres (`pg`) client: Hyperdrive on Workers, a `pg.Pool` on Bun (ADR-0039) |
+| `postgresRuntimeStorage({ connect, timeZone?, statementTimeoutMs?, restrict? })` | `@aotter/mantle/postgres` | Read-only storage preparation for hosts that migrate with a separate deployment connection |
 | `bunSqliteStorage(db, { timeZone?, site?, restrict? })` | `@aotter/mantle/bun` | a bun:sqlite `Database`; foreign keys are turned on |
 
+Use `postgresStorage` on the deployment connection to prepare PostgreSQL tables,
+then `postgresRuntimeStorage` with a runtime role that cannot perform DDL. The
+runtime adapter checks connection settings and the prepared Core function/layout
+signature, and compares physical tables, ownership, native column types, declared
+indexes and checks in a read-only snapshot. Missing required storage or any
+difference needing DDL refuses boot. Extra columns and non-unique indexes remain
+allowed, so an older compatible plan can cold-boot after an additive migration.
+The adapter does not rewrite the deployment fingerprint or apply migrations.
+
+Physical compatibility is not permission to publish a revision. The host owns
+accepted-plan receipts, migration ordering, retained-revision compatibility and
+rollback policy. Tightening constraints or changing Core's function/layout
+signature can invalidate old plans; inspect all retained revisions before
+migrating. This adapter does not make arbitrary schema changes safe.
 `restrict(plan, context)` returns refusals of its own, run after the dialect's
 on every program at runtime. It only narrows what runs, for an operator that
 runs other people's plans; a self-hosted service leaves it out (ADR-0037).

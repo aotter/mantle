@@ -8,7 +8,7 @@ import { bootRead, type PgConnect } from "./driver.js";
 import { PgStoreExecutor } from "./executor.js";
 import { pgLowering } from "./lower.js";
 import { bindBox } from "../d1/lower.js";
-import { checkMessages, convergeStorage } from "./storage.js";
+import { checkMessages, convergeStorage, verifyStorage } from "./storage.js";
 import { validateIr } from "./validator.js";
 
 export interface PostgresStorageOptions {
@@ -47,6 +47,15 @@ export function postgresDialect(timeZone = "UTC"): MantleDialect {
 }
 
 export function postgresStorage(options: PostgresStorageOptions): MantleStorageAdapter {
+  return storage(options, false);
+}
+
+/** Read-only preparation for a managed host that migrates through a separate deployment connection. */
+export function postgresRuntimeStorage(options: PostgresStorageOptions): MantleStorageAdapter {
+  return storage(options, true);
+}
+
+function storage(options: PostgresStorageOptions, readOnly: boolean): MantleStorageAdapter {
   const ms = options.statementTimeoutMs;
   if (ms !== undefined && !(Number.isInteger(ms) && ms >= 0)) throw new RangeError(`statementTimeoutMs must be a whole number of milliseconds (0 is no limit), not ${ms}`);
   return {
@@ -55,7 +64,8 @@ export function postgresStorage(options: PostgresStorageOptions): MantleStorageA
       const { problems: settings, booted } = await bootRead(options.connect, ms);
       if (settings.length)
         throw new DiagnosticError(settings.map((message) => makeDiagnostic({ code: "STORAGE_CHANGE_BLOCKED", phase: "boot", severity: "error", path: "storage:settings", message })));
-      const report = await convergeStorage(options.connect, plan.schemas, { fingerprint: plan.fingerprint, booted });
+      const report = readOnly ? await verifyStorage(options.connect, plan.schemas)
+        : await convergeStorage(options.connect, plan.schemas, { fingerprint: plan.fingerprint, booted });
       if (report.blocked.length)
         throw new DiagnosticError(report.blocked.map((b) => makeDiagnostic({ code: b.code === "STORAGE_TABLE_NOT_OWNED" ? "STORAGE_TABLE_NOT_OWNED" : "STORAGE_CHANGE_BLOCKED", phase: "boot", severity: "error", path: `storage:${b.schema}`, message: b.message })));
       for (const u of report.undeclared) console.warn(`[mantle storage] ${u.code}: ${u.message}`);

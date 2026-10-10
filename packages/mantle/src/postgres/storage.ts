@@ -219,6 +219,30 @@ const COOL_DOWN = new WeakMap<PgConnect, { state: string; until: number; report:
 
 const BOOTED = "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'";
 
+/** Read the same diff without applying it or changing the current deployment's boot state. */
+export async function verifyStorage(connect: PgConnect, plan: Readonly<Record<string, StorageSchema>>): Promise<StorageReport> {
+  const refused = (message: string): StorageReport => ({ skipped: false, undeclared: [], blocked: [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED", message }] });
+  const client = await connect();
+  let begun = false;
+  try {
+    await client.query({ text: "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY" });
+    begun = true;
+    const state = (await client.query({ text: BOOTED })).rows[0]?.value;
+    const parts = typeof state === "string" ? state.split("|") : [];
+    if (parts.length !== 3 || !/^[a-f0-9]{64}$/.test(parts[0]!) || parts[1] !== fnv(FUNCTIONS.join("\n")) || parts[2] !== LAYOUT)
+      return refused("Storage has not been prepared by this Core function and layout version; prepare it through the deployment connection.");
+    const { statements, blocked, undeclared } = await diff(client, plan);
+    return { skipped: false, undeclared, blocked: [...blocked, ...statements.length ?
+      [{ schema: "*", code: "STORAGE_CHANGE_BLOCKED" as const, message: `The plan requires ${statements.length} storage changes; prepare it through the deployment connection.` }] : []] };
+  } catch (error) {
+    if (sqlState(error) === "42P01") return refused("Storage preparation metadata is missing; prepare it through the deployment connection.");
+    throw error;
+  } finally {
+    if (begun) await client.query({ text: "ROLLBACK" }).catch(() => undefined);
+    await client.end().catch(() => undefined);
+  }
+}
+
 /**
  * Converge storage to the plan. Blocked differences are reported and applied to nothing; a matching fingerprint reads nothing else.
  *
