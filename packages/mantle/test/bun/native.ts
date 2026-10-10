@@ -13,6 +13,8 @@ import { join } from 'node:path';
 import { createMantleAuth } from '../../src/auth/index.ts';
 import { postgresStorage, pgDatabaseDriver, type PgConnect } from '../../src/postgres/index.ts';
 import { query } from '../../src/postgres/driver.ts';
+import { prepareSite } from '../../src/d1/site.ts';
+import { convergeStorage } from '../../src/d1/storage.ts';
 
 /** OTP sign-in of the bootstrap owner: returns the staff list's first role. */
 async function signInOwner(auth: ReturnType<typeof createMantleAuth>, codes: Map<string, string>, email: string) {
@@ -42,6 +44,15 @@ console.log(`Bun SQLite: ${sqlite.checks.length} conformance checks passed`);
   assert.equal(authDb.query('PRAGMA foreign_keys').get()!.foreign_keys, 1, 'the generated Auth handle enables native foreign keys without a Mantle driver');
   const driver = bunSqliteDriver(db);
   try {
+    const product = await prepareSite(driver, { title: 'committed' });
+    const media = product.media({ createUpload: async () => { throw new Error('unused'); }, commitUpload: async () => { throw new Error('unused'); }, deleteObject: async () => {} });
+    db.query("INSERT INTO media_assets (id,created_at,variants) VALUES ('asset',1,'[]')").run();
+    // An EXPLAIN probe is not a cached application query; finalize its native statement before another handle migrates.
+    const explain = db.prepare('EXPLAIN QUERY PLAN SELECT id,created_at FROM media_assets ORDER BY created_at DESC,id DESC LIMIT 51 OFFSET 0');
+    const mediaPlan = explain.all();
+    explain.finalize();
+    assert.equal(mediaPlan.some((r) => String(r.detail).includes('media_assets_by_created_id')), true, 'native media order uses the owned index');
+    assert.equal(mediaPlan.some((r) => String(r.detail).includes('TEMP B-TREE')), false, 'native media order needs no temporary sort');
     const fixture = site(await boot({ storage: bunSqliteStorage(db), driver }));
     const view = await program('view', "SELECT stock FROM items WHERE id = 'a'");
     const read = () => runView(fixture, view, caller());
@@ -68,6 +79,10 @@ console.log(`Bun SQLite: ${sqlite.checks.length} conformance checks passed`);
     });
     await held;
     try {
+      assert.equal((await product.read()).title, 'committed', 'site read does not take an immediate write lock');
+      assert.equal((await media.list({})).rows[0]!.id, 'asset', 'media list uses native read under an external WAL writer');
+      assert.equal((await media.get('asset')).id, 'asset', 'media get uses native read under an external WAL writer');
+      assert.equal((await prepareSite(driver, { title: 'committed' })).read instanceof Function, true, 'an already migrated product boot makes no unnecessary writes');
       assert.deepEqual((await read()).rows, [{ stock: 5 }], 'separate native Store handle reads committed data during Better Auth transaction');
       assert.equal(db.inTransaction, false);
       assert.equal(await auth.getUserRole(ownerId), 'owner', 'ancillary auth SQL uses Store handle and sees committed role while Better Auth owns a transaction');
@@ -88,6 +103,25 @@ console.log(`Bun SQLite: ${sqlite.checks.length} conformance checks passed`);
     assert.deepEqual((await read()).rows, [{ stock: 99 }]);
     console.log('Bun SQLite: native cached View, real Better Auth async isolation, fail-fast shared handle and WAL writer passed');
   } finally { authDb.close(); db.close(); await rm(dir, {recursive:true, force:true}); }
+}
+
+{
+  const db = new Database(':memory:');
+  const driver = bunSqliteDriver(db);
+  let batches = 0;
+  const observed = { ...driver, batch: async (statements: Parameters<typeof driver.batch>[0]) => { batches++; return driver.batch(statements); } };
+  try {
+    await convergeStorage(observed, { warm: { fields: { text: 'text' } } }, { fingerprint: 'warm' });
+    batches = 0;
+    assert.equal((await convergeStorage(observed, { warm: { fields: { text: 'text' } } }, { fingerprint: 'warm' })).skipped, true);
+    assert.equal(batches, 0, 'warm fingerprint checks use native reads without no-op writes');
+    db.exec('DROP TRIGGER _mantle_assert_t');
+    assert.equal((await convergeStorage(observed, { warm: { fields: { text: 'text' } } }, { fingerprint: 'warm' })).skipped, false, 'partial system schema cannot use the fingerprint shortcut');
+    assert.equal(db.query("SELECT count(*) AS n FROM sqlite_schema WHERE name='_mantle_assert_t'").get()!.n, 1);
+    db.exec('DROP TABLE _mantle_tz');
+    assert.equal((await convergeStorage(observed, { warm: { fields: { text: 'text' } } }, { fingerprint: 'warm' })).skipped, false);
+    assert.ok(Number(db.query('SELECT count(*) AS n FROM _mantle_tz').get()!.n) > 0, 'a missing timezone table is rebuilt even when the stored zone matches');
+  } finally { db.close(); }
 }
 
 const url = process.env.MANTLE_PG_URL;

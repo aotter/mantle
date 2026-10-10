@@ -49,3 +49,19 @@ it("the TTL field is an author-written timestamp: a row is invisible once it is 
   expect(await rt.store.sweepExpired({ collection: "sessions" })).toEqual({ scanned: 2, removed: 2 });
   expect((await d1.all("SELECT count(*) AS c FROM sessions"))[0]).toEqual({ c: 3 });
 });
+
+
+it("a suppressed native delete preserves candidate scanned count and the full-page cursor", async () => {
+  const at = new Date(NOW / 1000 - 120_000).toISOString();
+  for (const label of ["remove-1", "remove-2", "keep-last", "next-page"])
+    await rt.invokeProcedure({ procedure: "touch", input: { label, at }, caller: user, cause: { kind: "http", id: label } });
+  await d1.exec("CREATE TRIGGER keep_expired BEFORE DELETE ON sessions WHEN old.label = 'keep-last' BEGIN SELECT RAISE(IGNORE); END");
+  try {
+    const preview = await rt.store.sweepExpired({ collection: "sessions", limit: 3, delete: false });
+    expect(preview).toMatchObject({ scanned: 3, removed: 0, nextCursor: expect.any(String) });
+    const removed = await rt.store.sweepExpired({ collection: "sessions", limit: 3 });
+    expect(removed).toEqual({ ...preview, removed: 2 });
+    expect(await rt.store.sweepExpired({ collection: "sessions", limit: 3, cursor: removed.nextCursor })).toEqual({ scanned: 1, removed: 1 });
+    expect(await d1.all("SELECT label FROM sessions WHERE label = 'keep-last'")).toEqual([{ label: "keep-last" }]);
+  } finally { await d1.exec("DROP TRIGGER keep_expired"); }
+});

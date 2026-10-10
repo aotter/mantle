@@ -18,14 +18,19 @@ it("checks an incompatible auth schema after convergence and refuses sessions ev
 
 it("staff management acts as the signed-in owner through Better Auth's admin API", async () => {
   const { d1, driver } = sqlite();
+  const queries: string[] = [];
+  const database = d1 as unknown as { prepare(sql: string): unknown };
+  const prepare = database.prepare.bind(database);
+  database.prepare = (sql) => { queries.push(sql); return prepare(sql); };
   const codes = new Map<string, string>();
   const auth = createMantleAuth({
     database: d1, driver, baseURL: "http://localhost", secret: "x".repeat(40), ipAddressHeaders: ["x-real-ip"],
     methods: [{ kind: "email-otp", sender: { send: async ({ to, text }) => void codes.set(to, /\b(\d{6})\b/.exec(text)![1]!) } }],
     bootstrapOwner: { match: "email", value: "owner@x.test" },
   });
+  let requestIp = 0; // independent native rate-limit keys; this fixture shares Better Auth's process-wide limiter
   const post = (path: string, body: unknown, headers: HeadersInit = {}) =>
-    auth.handler(new Request(`http://localhost/api/auth${path}`, { method: "POST", headers: { "content-type": "application/json", origin: "http://localhost", "x-real-ip": "1.1.1.1", ...headers }, body: JSON.stringify(body) }));
+    auth.handler(new Request(`http://localhost/api/auth${path}`, { method: "POST", headers: { "content-type": "application/json", origin: "http://localhost", "x-real-ip": `1.2.3.${++requestIp}`, ...headers }, body: JSON.stringify(body) }));
   const signIn = async (email: string) => {
     expect((await post("/email-otp/send-verification-otp", { email, type: "sign-in" })).status).toBe(200);
     await new Promise((r) => setTimeout(r, 20)); // the send is a background task
@@ -39,10 +44,15 @@ it("staff management acts as the signed-in owner through Better Auth's admin API
   expect(me).toMatchObject({ email: "owner@x.test", role: "owner", githubLogin: null, emailVerified: true });
   expect(me!.createdAt).toBeInstanceOf(Date);
 
+  queries.length = 0;
   const invited = await auth.inviteUser(owner, " Ed@X.test ", "editor");
+  expect(queries.some((sql) => /count\(/i.test(sql))).toBe(false); // no listUsers prelookup on successful create
   expect(invited.kind).toBe("created");
   expect(await auth.inviteUser(owner, "ed@x.test", "contributor")).toEqual({ kind: "exists", id: invited.id });
   expect((await auth.listUsers(owner)).map((u) => [u.email, u.role, u.emailVerified])).toEqual([["owner@x.test", "owner", true], ["ed@x.test", "editor", false]]);
+
+  const editor = await signIn("ed@x.test");
+  await expect(auth.inviteUser(editor, "owner@x.test", "editor")).rejects.toMatchObject({ status: "FORBIDDEN" });
 
   expect(await auth.setUserRole(owner, invited.id, "contributor")).toBe(true);
   expect(await auth.getUserRole(invited.id)).toBe("contributor");
@@ -56,6 +66,8 @@ it("staff management acts as the signed-in owner through Better Auth's admin API
   await expect(auth.setUserRole(member, invited.id, "owner")).rejects.toMatchObject({ status: "FORBIDDEN" });
   await expect(auth.listUsers(new Request("http://localhost/"))).rejects.toMatchObject({ status: "UNAUTHORIZED" });
   await expect(auth.inviteUser(member, "x@x.test", "owner")).rejects.toMatchObject({ status: "FORBIDDEN" });
+  await expect(auth.inviteUser(member, "owner@x.test", "owner")).rejects.toMatchObject({ status: "FORBIDDEN" });
+  await expect(auth.inviteUser(owner, "not-an-email", "editor")).rejects.toMatchObject({ status: "BAD_REQUEST", body: { code: "INVALID_EMAIL" } });
 
   // Better Auth pages 100 users at a time; the staff list is every one of them
   const at = new Date(Date.UTC(2026, 0, 1)).toISOString();

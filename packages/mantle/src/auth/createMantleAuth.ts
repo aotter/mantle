@@ -68,9 +68,10 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
           localJwksCacheKey,
         );
         if (config.oauthProvider?.mcpResource && (audience === config.oauthProvider.mcpResource || config.oauthProvider.resources?.includes(audience))) {
-          await assertActiveUserGrant(config.driver, claims, audience);
+          const currentRole = await assertActiveUserGrant(config.driver, claims, audience);
+          return { claims, currentRole };
         }
-        return claims;
+        return { claims };
       }
     : null;
   let nextDcrCleanupAt = 0;
@@ -427,11 +428,18 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
       await prepareAuth();
       const normalized = email.trim().toLowerCase();
       const headers = request.headers;
-      const { users } = await api.listUsers({ headers, query: { filterField: "email", filterValue: normalized, limit: 1 } }) as { users: { id: string }[] };
-      if (users[0]) return { kind: "exists", id: users[0].id };
-      // `name` is the address's local part until the invitee's first sign-in brings a real one; the row starts unverified
-      const { user } = await api.createUser({ headers, body: { email: normalized, name: normalized.split("@")[0] || normalized, role } }) as { user: { id: string } };
-      return { kind: "created", id: user.id };
+      try {
+        // Better Auth owns validation, permission checks and the create transaction.
+        const { user } = await api.createUser({ headers, body: { email: normalized, name: normalized.split("@")[0] || normalized, role } }) as { user: { id: string } };
+        return { kind: "created", id: user.id };
+      } catch (error) {
+        const e = error as { status?: unknown; body?: { code?: unknown } };
+        // The pinned official admin create endpoint uses this exact error for a duplicate email.
+        if (e.status !== "BAD_REQUEST" || e.body?.code !== "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL") throw error;
+        const { users } = await api.listUsers({ headers, query: { filterField: "email", filterValue: normalized, limit: 1 } }) as { users: { id: string }[] };
+        if (!users[0]) throw error; // the user disappeared after create's existence check
+        return { kind: "exists", id: users[0].id };
+      }
     },
     ...(config.staffInvitationSender ? {
       sendStaffInvitation: async (email: string, role: StaffRole) => {

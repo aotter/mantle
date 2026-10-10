@@ -157,7 +157,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   const collections = schemas.filter((s) => !s.translates).map(projection);
   const staffProcedures = [...new Set(Object.values(plan.triggers).flatMap((t) => (t.source.kind === "mcp" && t.source.surface === "staff" ? [t.procedure] : [])))];
   const sees = (requires: Parameters<typeof evaluateAuthAll>[0], caller: Staff) => evaluateAuthAll(requires, caller, P) === null;
-  const operations = (caller: Staff) => staffProcedures.filter((name) => sees(plan.procedures[name]!.requires, caller)).map((name) => {
+  const operationDescriptions = staffProcedures.map((name) => {
     const p = plan.procedures[name]!;
     const requiredStates = p.target && "sql" in p.handler ? requiredEnumStates(p.handler.sql.stmts, p.target.schema, plan.schemas[p.target.schema.toLowerCase()]?.schema ?? {}) : [];
     return {
@@ -166,13 +166,14 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       interactions: p.target ? [{ collection: p.target.schema, bind: [{ input: p.target.id, field: "id" }], ...(p.target.version ? { version: p.target.version } : {}), mutates: true }] : [],
     };
   });
+  const operations = (caller: Staff) => operationDescriptions.filter((op) => sees(plan.procedures[op.name]!.requires, caller));
   const staffView = (name: string, caller: Staff) => {
     const v = plan.views[name];
     // a View the caller cannot see is not there for them, so its name and its rule cannot be probed
     if (!v || v.surface !== "staff" || !sees(v.requires, caller)) throw wireError("NOT_FOUND", `no staff View '${name}'`, P);
     return v;
   };
-  const views = (caller: Staff) => Object.entries(plan.views).filter(([, v]) => v.surface === "staff" && sees(v.requires, caller)).map(([name, v]) => {
+  const viewDescriptions = Object.entries(plan.views).filter(([, v]) => v.surface === "staff").map(([name, v]) => {
     const list = (v.uiSchema?.["list"] ?? {}) as Record<string, string[] | undefined>;
     // `columns`: the output that reads a Schema field unchanged, so Admin labels and formats it as that field; named as the rows and the
     // JSON Schema name them, not by the plan's lower-cased keys
@@ -183,6 +184,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     }));
     return { name, title: v.title ?? null, description: v.description ?? null, input: v.input ?? null, list: { columns: list["columns"] ?? [], searchFields: list["searchFields"] ?? [], filterFields: list["filterFields"] ?? [], cells: (list as { cells?: Record<string, string> })["cells"] ?? {} }, columns };
   });
+  const views = (caller: Staff) => viewDescriptions.filter((v) => sees(plan.views[v.name]!.requires, caller));
   // `search` and `filter.<output>` from the query string, for the outputs the View's uiSchema.list declares (ADR-0032 decision 5).
   // A filter value is coerced to the field the output reads, as a View's input is.
   const viewMatch = (v: PlanView, q: URLSearchParams): { search?: string; filters?: Record<string, string | number | boolean> } => {
@@ -335,6 +337,12 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
       next_cursor: page.nextCursor ?? null,
     };
   };
+  const relationships = new Map(schemas.map((s) => [s, [
+    ...(s.translates ? [{ t: s, kind: "translation", parentField: s.translates.on, childField: s.translates.on }] : []),
+    ...schemas.filter((c) => c !== s).flatMap((c) => c.translates?.parent === s.name
+      ? [{ t: c, kind: "translation", parentField: c.translates.on, childField: c.translates.on }]
+      : Object.entries(propsOf(c.schema)).flatMap(([f, p]) => { const ref = resolveMantleRef(p); return ref?.schema === s.name ? [{ t: c, kind: "field", parentField: ref.field, childField: f }] : []; })),
+  ]]));
   /** The editor's payload: the entry, its parent, and the related sections (translations, and Schemas that reference it by id or a unique field). */
   const editor = async (store: CallerStore, s: PlanSchema, row: StoreRow) => {
     const join = (v: unknown) => (v === undefined || v === "" ? null : v as StoreScalar);
@@ -342,13 +350,7 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
     const upValue = up ? join(row[up.childField]) : null;
     const parentSchema = up && upValue !== null ? schemaOf(up.collection) : undefined;
     const [parent] = parentSchema ? (await store.select({ from: parentSchema.name, where: { [up!.parentField]: upValue }, limit: 1 })).rows : [];
-    const rels = [
-      ...(s.translates ? [{ t: s, kind: "translation", parentField: s.translates.on, childField: s.translates.on }] : []),
-      ...schemas.filter((c) => c !== s).flatMap((c) => c.translates?.parent === s.name
-        ? [{ t: c, kind: "translation", parentField: c.translates.on, childField: c.translates.on }]
-        : Object.entries(propsOf(c.schema)).flatMap(([f, p]) => { const ref = resolveMantleRef(p); return ref?.schema === s.name ? [{ t: c, kind: "field", parentField: ref.field, childField: f }] : []; })),
-    ];
-    const related = await Promise.all(rels.map(async ({ t, kind, parentField, childField }) => {
+    const related = await Promise.all(relationships.get(s)!.map(async ({ t, kind, parentField, childField }) => {
       const parentValue = join(row[parentField]);
       const rows = parentValue === null ? [] : (await store.select({ from: t.name, where: { [childField]: parentValue }, limit: 50 })).rows;
       return { collection: projection(t), relationship: { kind, parentField, childField, parentValue }, entries: rows.map((r) => entryOf(t, r)) };
@@ -372,11 +374,10 @@ export function createAdminSurface(runtime: MantleRuntime, options: AdminSurface
   const routes: Route[] = [
     { method: "GET", path: "/me", role: "contributor", run: ({ caller }) => me(caller) },
     {
-      method: "GET", path: "/bootstrap", role: "contributor", run: async ({ runtime, caller, url, url: { searchParams: q } }) => ({
-        me: await me(caller), site: await site(url, caller), collections, operations: operations(caller), views: views(caller), webmcp,
-        // the first page of the collection the SPA opens on
-        ...(q.get("collection") ? { entries: await list(caller, q, runtime) } : {}),
-      }),
+      method: "GET", path: "/bootstrap", role: "contributor", run: async ({ runtime, caller, url, url: { searchParams: q } }) => {
+        const [identity, settings, entries] = await Promise.all([me(caller), site(url, caller), q.get("collection") ? list(caller, q, runtime) : undefined]);
+        return { me: identity, site: settings, collections, operations: operations(caller), views: views(caller), webmcp, ...(entries ? { entries } : {}) };
+      },
     },
     { method: "GET", path: "/collections", role: "contributor", run: async () => ({ collections }) },
     {

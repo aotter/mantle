@@ -14,7 +14,7 @@ import { num, op, ref, table } from "../sql/ast.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv, type ViewMatch } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
-import { StoreJson, geoValue, validateValues, type StoreSchemas } from "./json.js";
+import { StoreJson, decodeRow, validateValues, type StoreSchemas } from "./json.js";
 
 /** A compiled View: its IR and declared input types. `public` shows published rows only (ADR-0032 decision 8). */
 export interface StoreView {
@@ -71,11 +71,6 @@ async function guard<T>(f: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Decode what the engine stores back to the declared JSON type (timestamps, dates, numerics, booleans, json). */
-function decode(dialect: MantleDialect, row: StoreRow, types: ReadonlyMap<string, string>): StoreRow {
-  return Object.fromEntries(Object.entries(row).map(([k, v]) => [k, types.has(k) ? dialect.codec.decode(types.get(k)!, v) : v]));
-}
-
 /** `caller` undefined is the host (trusted): no scope, TTL still applies. */
 export function bindFor(now: number, caller: Caller | undefined): { mode: Mode; bind: BindContext } {
   if (!caller || caller.kind === "system") return { mode: "trusted", bind: { uid: caller ? `system:${caller.reason}` : null, now } };
@@ -103,8 +98,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
       const cursor = q.cursor === undefined ? undefined : decodeCursor(binding, q.cursor);
       const program: Program = { kind: "view", inputs: json.inputs, ir: [s.ir] };
       const page = await runView(env(mode), program, as({ ...b, input: json.values }), { pageSize: s.pageSize, ...(cursor ? { cursor } : {}) });
-      const types = new Map(s.columns.map((c) => [c.out, c.type]));
-      return { rows: page.rows.map((r) => decode(deps.dialect, geoValue(r, s.columns), types)), ...(page.next ? { nextCursor: encodeCursor(binding, page.next) } : {}) };
+      return { rows: page.rows.map((r) => decodeRow(r, s.columns, deps.dialect.codec)), ...(page.next ? { nextCursor: encodeCursor(binding, page.next) } : {}) };
     }),
 
     write: (ops) => guard(async (): Promise<readonly StoreWriteResult[]> => {
@@ -238,6 +232,8 @@ async function sweepExpired(deps: StoreDeps, request: import("../store.js").Swee
     sortClause: [{ SortBy: { node: ref("_rid"), sortby_dir: "SORTBY_ASC", sortby_nulls: "SORTBY_NULLS_DEFAULT" } }],
     limitCount: num(limit), limitOption: "LIMIT_OPTION_COUNT", op: "SETOP_NONE" } });
   const binds = [deps.dialect.codec.encode("timestamptz", deps.now() - def.ttlSeconds * 1_000_000)];
+  // Keep selected candidates separate from deleted rows: native triggers may suppress a DELETE,
+  // so RETURNING alone cannot preserve scanned or the full-page candidate cursor.
   const statements = [{ ir: pick(), binds }];
   if (request.delete !== false) {
     statements.push({ ir: { DeleteStmt: { relation: rel().RangeVar, whereClause: { SubLink: { subLinkType: "ANY_SUBLINK", testexpr: ref("_rid"), subselect: pick() } } } }, binds });

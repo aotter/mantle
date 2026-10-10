@@ -70,4 +70,26 @@ export async function run(r: Report, engine: Engine) {
   try { await runProcedure(own, await program('procedure', "INSERT INTO orders (item_id, qty) VALUES ('a', (SELECT stock FROM items WHERE id = 'a'))"), caller()); } catch (e) { subq = e as Error; }
   const plain = await runProcedure(own, await program('procedure', "INSERT INTO orders (item_id, qty) VALUES ('a', 1) RETURNING qty"), caller());
   r.check('an insert with a before create hook may not read data in its VALUES, and constant values are fine', isRefusal(subq, 'SQL_SHAPE') && plain.rows[0].length === 1, subq?.message);
+  // Hidden after-hook columns belong to the actual operation, even when an unchanged Program hits the compile cache.
+  const afterRows: any[] = [];
+  const afterUpdate = site(b, { after: { requisitions: { update: ({ rows }) => { afterRows.push(...rows); } } } });
+  const update = await program('procedure', "UPDATE requisitions SET state = 'done' WHERE state = 'x' RETURNING id");
+  const irrelevant = await runProcedure(site(b, { after: { requisitions: { insert: () => { throw new Error('wrong verb'); } } } }), update, caller());
+  r.check('a different-verb after hook adds no hidden RETURNING', !JSON.stringify(irrelevant.batch).includes('_mantle_h_') && irrelevant.rows[0].length === 2);
+  await b.d1.exec(["UPDATE requisitions SET state = 'x' WHERE owner = 'o1'"]);
+  const relevant = await runProcedure(afterUpdate, update, caller());
+  r.check('the same Program with the matching hook returns whole rows to the hook and authored columns to the caller',
+    JSON.stringify(relevant.batch).includes('_mantle_h_') && afterRows.length === 2 && afterRows.every((row) => row.state === 'done' && row.version === 4)
+      && relevant.rows[0].every((row) => Object.keys(row).join() === 'id'), afterRows);
+  const noReturning = await runProcedure(afterUpdate, await program('procedure', "UPDATE requisitions SET state = 'again' WHERE state = 'done'"), caller());
+  r.check('a hooked set operation without author RETURNING still returns no rows', noReturning.rows[0].length === 0 && afterRows.length === 4);
+
+  const ordered: any[] = [];
+  const sequential = site(b, { before: { items: { update: async ({ row }) => {
+    ordered.push({ id: row.id, stock: row.stock });
+    if (row.id === 'a') await b.d1.exec(["UPDATE items SET stock = 77 WHERE id = 'b'"]);
+  } } } });
+  await runProcedure(sequential, await program('procedure', "UPDATE items SET stock = 3 WHERE id = 'a'; UPDATE items SET stock = 4 WHERE id = 'b'"), caller());
+  r.equal('each ordered before hook reads after earlier hooks have committed their own writes', ordered, [{ id: 'a', stock: 9 }, { id: 'b', stock: 77 }]);
+
 }

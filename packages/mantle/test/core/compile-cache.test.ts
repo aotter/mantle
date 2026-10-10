@@ -186,3 +186,21 @@ it("cursor elements past the sort keys neither change the statement nor grow the
     useCompileSide(undefined);
   }
 });
+
+it("after RETURNING follows publish versus update, including lifecycle recompilation", async () => {
+  const { compileProgram } = await import("../../src/core/sql/compile.js");
+  for (const e of Object.values(ENGINES)) {
+    useCompileSide(e.compile);
+    try {
+      const p = await program("procedure", "UPDATE posts SET title = input.title WHERE id = input.id RETURNING id", { id: "text", title: "text" });
+      for (const status of [undefined, "published", "draft"]) for (const hook of ["publish", "update", "delete"]) for (const lockVersion of [false, true]) {
+        const [compiled] = compileProgram(p.ir, { dialect: e.dialect, schemas, inputs: p.inputs, kind: p.kind, statuses: [status], returning: new Set([`posts.${hook}`]), lockVersion });
+        const expected = hook === (status === "published" ? "publish" : "update");
+        expect(compiled.hooked).toBe(expected);
+        const exprs = compiled.ast.UpdateStmt.returningClause.exprs;
+        expect(exprs.some((x) => x.ResTarget.name?.startsWith("_mantle_h_"))).toBe(expected);
+        expect(exprs[0].ResTarget.val.ColumnRef.fields[0].String.sval).toBe("id");
+      }
+    } finally { useCompileSide(undefined); }
+  }
+});

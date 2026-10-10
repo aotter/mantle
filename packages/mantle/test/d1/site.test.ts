@@ -15,7 +15,8 @@ it("creates the three product tables once, each with its 0.1.x ledger id, and tw
   const d1 = await db();
   expect((await Promise.allSettled([prepareSite(d1, {}), prepareSite(d1, {})])).map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
   await prepareSite(d1, {});
-  expect(await d1.all("SELECT id FROM _mantle_migrations ORDER BY id")).toEqual([{ id: "0001-init" }, { id: "0002-media-assets" }, { id: "0003-pending-media-uploads" }]);
+  expect(await d1.all("SELECT id FROM _mantle_migrations ORDER BY id")).toEqual([{ id: "0001-init" }, { id: "0002-media-assets" }, { id: "0003-pending-media-uploads" }, { id: "0004-media-assets-order" }]);
+  expect(await d1.all("SELECT name FROM sqlite_schema WHERE type = 'index' AND name LIKE 'media_assets_by_%' ORDER BY name")).toEqual([{ name: "media_assets_by_created_id" }, { name: "media_assets_by_owner_created" }]);
   expect(await d1.all("SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('site_config', 'media_assets', 'pending_media_uploads') ORDER BY name"))
     .toEqual([{ name: "media_assets" }, { name: "pending_media_uploads" }, { name: "site_config" }]);
 });
@@ -31,6 +32,16 @@ it("refuses a product table Mantle did not create, and takes one its own _mantle
   await owned.exec("CREATE TABLE site_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
   await owned.exec("INSERT INTO site_config VALUES ('title', 'Old'); INSERT INTO _mantle_migrations VALUES ('0001-init', 0)");
   expect(await (await prepareSite(owned, { title: "New" })).read()).toMatchObject({ title: "Old" });
+});
+
+it("preserves an application index with the legacy globally shared name", async () => {
+  const d1 = await db();
+  await d1.exec("CREATE TABLE application_records (id TEXT); CREATE INDEX media_assets_by_owner_created ON application_records (id)");
+  await prepareSite(d1, {});
+  expect(await d1.all("SELECT tbl_name FROM sqlite_schema WHERE type = 'index' AND name = 'media_assets_by_owner_created'"))
+    .toEqual([{ tbl_name: "application_records" }]);
+  expect(await d1.all("SELECT tbl_name FROM sqlite_schema WHERE type = 'index' AND name = 'media_assets_by_created_id'"))
+    .toEqual([{ tbl_name: "media_assets" }]);
 });
 
 it("a Schema may not take a product table's name", async () => {

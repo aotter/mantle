@@ -27,12 +27,12 @@ export type PolicyOpts = {
   schemas: Schemas;
   inputs: Record<string, string>;
   mode?: Mode;
-  /** add `AND version = ?` (the version the before hook saw) to a row op's WHERE */
+  /** add `AND version = ?` (the version checked by the publishing lifecycle) to a row op's WHERE */
   lockVersion?: boolean;
   /** the status an update moves the entry to (the lifecycle decided it is legal); SQL cannot write `status` */
   status?: string;
-  /** schemas that have an after hook: their writes get RETURNING */
-  returning?: Set<string>;
+  /** Schema + semantic verb keys (`posts.publish`, `items.update`) whose after hooks need whole rows. */
+  returning?: ReadonlySet<string>;
   /** NEGATIVE CONTROL ONLY: print no visibility predicate, so a probe that cannot fail is caught */
   unsafeNoVisibility?: boolean;
   /** records every relation position the pass printed a wrapper for (the probe checks it is complete) */
@@ -108,6 +108,7 @@ const starCols = (s: SchemaDef) => declaredCols(s);
 // ---- policy ---------------------------------------------------------------------------------------
 type SelInfo = { container: RelationPosition; hasWindow: boolean; hasJsonEach: boolean; scope: Map<string, string>; searchQ: Map<string, N> };
 type C = PolicyOpts & {
+  hooked: boolean;
   binds: BindSpec[];
   keys: Map<string, number>;
   edge: string;
@@ -373,12 +374,12 @@ function expandStar(n: N, info: SelInfo, c: C): N {
 
 const AGGREGATES = new Set(['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object', 'string_agg', 'jsonb_agg', 'jsonb_object_agg']);
 const alias$ = (rel: N) => rel.alias?.aliasname ?? rel.relname;
-function returning(rc: N | undefined, s: SchemaDef, schema: string, c: C, target: string): N | undefined {
+function returning(rc: N | undefined, s: SchemaDef, c: C, target: string): N | undefined {
   // `*` and `<target>.*` are the target's declared columns, as in a SELECT; any other star is left for PostgreSQL to refuse
   const own = (f: N[] | undefined) => !!f?.at(-1)?.A_Star && (f.length === 1 || f[0]?.String?.sval === target);
   const exprs = (rc?.exprs ?? []).flatMap((e: N) => (own(e.ResTarget.val?.ColumnRef?.fields) ? starCols(s).map((f) => res(col(f))) : [e]));
   // an after hook gets the whole row whatever the author returns: its own columns, which the result never carries (ADR-0032 decision 3)
-  if (c.returning?.has(schema)) exprs.push(...readable(s).map((f) => res(col(f), `${HOOK_PREFIX}${f}`)));
+  if (c.hooked) exprs.push(...readable(s).map((f) => res(col(f), `${HOOK_PREFIX}${f}`)));
   return exprs.length ? { exprs } : undefined;
 }
 function dmlScope(rel: N, c: C) {
@@ -393,7 +394,7 @@ function update(n: N, c: C): N {
   c.sel.pop();
   out.targetList.push(bump(), touch(c), ...(c.status ? [res(param$(c, { k: 'const', value: c.status }), 'status')] : []));
   out.whereClause = and(out.whereClause, visible(s, a, c), c.lockVersion && op('=', col(a, 'version'), param$(c, { k: 'version' })));
-  out.returningClause = returning(out.returningClause, s, n.relation.relname, c, alias$(n.relation));
+  out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { UpdateStmt: out };
 }
 function del(n: N, c: C): N {
@@ -403,7 +404,7 @@ function del(n: N, c: C): N {
   const out = deep(n, c, 'DeleteStmt');
   c.sel.pop();
   out.whereClause = and(out.whereClause, visible(s, a, c), c.lockVersion && op('=', col(a, 'version'), param$(c, { k: 'version' })));
-  out.returningClause = returning(out.returningClause, s, n.relation.relname, c, alias$(n.relation));
+  out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { DeleteStmt: out };
 }
 function insert(n: N, c: C): N {
@@ -439,17 +440,19 @@ function insert(n: N, c: C): N {
       oc.whereClause = and(oc.whereClause, visible(s, n.relation.relname, c)); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one
     }
   }
-  out.returningClause = returning(out.returningClause, s, n.relation.relname, c, alias$(n.relation));
+  out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { InsertStmt: out };
 }
 
 // ---- entry point -------------------------------------------------------------------------------------
 export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
-  const c: C = { ...opts, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
-  const ast = tx(stmt, c);
   const t = Object.keys(stmt)[0]!;
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
   // the Schema as hooks, publishing and the context key it: SQL folds the name (the allowlist admits only a lower-case one)
   const schema = verb ? String(stmt[t].relation.relname).toLowerCase() : undefined;
-  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked: !!schema && !!opts.returning?.has(schema), publish: opts.status === 'published' };
+  const publish = opts.status === 'published';
+  const hooked = !!schema && !!opts.returning?.has(`${schema}.${publish ? 'publish' : verb}`);
+  const c: C = { ...opts, hooked, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
+  const ast = tx(stmt, c);
+  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked, publish };
 }
