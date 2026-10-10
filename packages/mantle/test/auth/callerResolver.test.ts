@@ -51,6 +51,18 @@ describe("createCallerResolver", () => {
     expect(verify).toHaveBeenCalledWith(expect.any(Request), { audience: "https://mcp", scopes: ["a"] });
   });
 
+  it("OAuth reuses only a verified current role, including NULL, and falls back without proof", async () => {
+    const getUserRole = vi.fn(async () => "owner");
+    for (const currentRole of ["editor", null] as const) {
+      const resolve = createCallerResolver(auth({ getUserRole, verifyOAuthAccessToken: async () => ({ ...okToken, currentRole }) }), { jwtBearer: { audience: "https://mcp" } });
+      expect(await resolve(req({ authorization: "Bearer t" }))).toMatchObject({ caller: { role: currentRole } });
+    }
+    expect(getUserRole).not.toHaveBeenCalled();
+    const resolve = createCallerResolver(auth({ getUserRole, verifyOAuthAccessToken: async () => okToken }), { jwtBearer: { audience: "https://mcp" } });
+    expect(await resolve(req({ authorization: "Bearer t" }))).toMatchObject({ caller: { role: "owner" } });
+    expect(getUserRole).toHaveBeenCalledOnce();
+  });
+
   it("a presented credential that fails is invalid, and never falls back to a valid session cookie", async () => {
     const withSession = { getSession: async () => ({ session: { id: "s" }, user: { id: "u" } }) };
     expect(await createCallerResolver(auth(withSession), { jwtBearer: { audience: "a" } })(req({ authorization: "Bearer bad" }))).toEqual({ invalid: true, challenge: 'Bearer error="invalid_token"', status: 401 });

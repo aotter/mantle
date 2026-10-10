@@ -9,6 +9,7 @@ import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { print } from "./print.js";
 import { transitions, tzStatements } from "./tz.js";
+import { readRows } from "./read.js";
 
 export type { StorageSchema };
 
@@ -152,12 +153,15 @@ export async function convergeStorage(
 ): Promise<StorageReport> {
   const timeZone = options.timeZone ?? "UTC";
   const state = `${options.fingerprint}|${timeZone}`;
-  await driver.batch([...SYSTEM_DDL.map((sql) => ({ sql })), { sql: "INSERT OR IGNORE INTO _mantle_boot_state (key, value) VALUES ('instance', ?1)", binds: [crypto.randomUUID()] }]);
-  const [stored] = await driver.batch([{ sql: "SELECT key, value FROM _mantle_boot_state WHERE key IN ('fingerprint', 'timezone')" }]);
-  const booted = new Map(stored!.rows.map((r) => [r.key, r.value]));
-  if (booted.get("fingerprint") === state) return { skipped: true, blocked: [], undeclared: [] };
+  const system = await readRows(driver, { sql: "SELECT name, type FROM sqlite_schema WHERE name IN ('_mantle_assert', '_mantle_assert_t', '_mantle_tz', '_mantle_boot_state', '_mantle_schema_tables')" });
+  const ready = system.length === 5 && system.every((r) => r.type === (r.name === "_mantle_assert_t" ? "trigger" : "table"));
+  if (!ready) await driver.batch(SYSTEM_DDL.map((sql) => ({ sql })));
+  const stored = await readRows(driver, { sql: "SELECT key, value FROM _mantle_boot_state WHERE key IN ('fingerprint', 'timezone', 'instance')" });
+  const booted = new Map(stored.map((r) => [r.key, r.value]));
+  if (!booted.has("instance")) await driver.batch([{ sql: "INSERT OR IGNORE INTO _mantle_boot_state (key, value) VALUES ('instance', ?1)", binds: [crypto.randomUUID()] }]);
+  if (ready && booted.get("fingerprint") === state) return { skipped: true, blocked: [], undeclared: [] };
   // the zone's transitions cost hundreds of milliseconds of CPU to compute: only a changed zone rewrites them, not every plan change
-  const tz = booted.get("timezone") === timeZone ? [] : [...tzStatements(transitions(timeZone)).map((sql) => ({ sql })), { sql: "INSERT OR REPLACE INTO _mantle_boot_state (key, value) VALUES ('timezone', ?1)", binds: [timeZone] }];
+  const tz = booted.get("timezone") === timeZone && system.some((r) => r.name === "_mantle_tz" && r.type === "table") ? [] : [...tzStatements(transitions(timeZone)).map((sql) => ({ sql })), { sql: "INSERT OR REPLACE INTO _mantle_boot_state (key, value) VALUES ('timezone', ?1)", binds: [timeZone] }];
 
   for (let attempt = 0; ; attempt++) {
     const { statements, blocked, undeclared, uniques } = await diff(driver, plan);
@@ -192,11 +196,11 @@ const RESERVED_TABLES = new Set([
  * zone rows are left to boot.
  */
 export async function planStorageChanges(driver: DatabaseDriver, plan: Readonly<Record<string, StorageSchema>>, options: { fingerprint?: string } = {}): Promise<{ skipped: boolean; sql: string[]; blocked: readonly StorageChange[]; undeclared: readonly StorageChange[] }> {
-  const [sys] = await driver.batch([{ sql: "SELECT name FROM sqlite_schema WHERE name IN ('_mantle_boot_state', '_mantle_schema_tables')" }]);
-  const have = new Set(sys!.rows.map((r) => r.name));
+  const sys = await readRows(driver, { sql: "SELECT name FROM sqlite_schema WHERE name IN ('_mantle_boot_state', '_mantle_schema_tables')" });
+  const have = new Set(sys.map((r) => r.name));
   if (options.fingerprint !== undefined && have.has("_mantle_boot_state")) {
-    const [b] = await driver.batch([{ sql: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" }]);
-    if (String(b!.rows[0]?.value ?? "").startsWith(`${options.fingerprint}|`)) return { skipped: true, sql: [], blocked: [], undeclared: [] };
+    const b = await readRows(driver, { sql: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" });
+    if (String(b[0]?.value ?? "").startsWith(`${options.fingerprint}|`)) return { skipped: true, sql: [], blocked: [], undeclared: [] };
   }
   const { statements, blocked, undeclared } = await diff(driver, plan);
   const inline = (s: SqlStatement) => (s.binds ? s.sql.replace(/\?(\d+)/g, (_, n: string) => lit(String(s.binds![Number(n) - 1]))) : s.sql);
@@ -210,11 +214,11 @@ async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, Storag
   const uniques: { schema: string; index: string }[] = [];
   const block = (schema: string, message: string, code: StorageChange["code"] = "STORAGE_CHANGE_BLOCKED") => blocked.push({ schema, code, message });
 
-  const [objects] = await driver.batch([{ sql: "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\'" }]);
+  const objects = await readRows(driver, { sql: "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\'" });
   // SQLite identifiers are case-insensitive, so ownership and lookup are too.
-  const byName = new Map<string, Row>(objects!.rows.map((r) => [String(r.name).toLowerCase(), r]));
+  const byName = new Map<string, Row>(objects.map((r) => [String(r.name).toLowerCase(), r]));
   // a dry run creates nothing, so on a database Mantle never booted the registry does not exist yet
-  const owned = !byName.has("_mantle_schema_tables") ? [] : (await driver.batch([{ sql: "SELECT name FROM _mantle_schema_tables" }]))[0]!.rows;
+  const owned = !byName.has("_mantle_schema_tables") ? [] : await readRows(driver, { sql: "SELECT name FROM _mantle_schema_tables" });
   const ownedNames = new Set(owned.map((r) => String(r.name).toLowerCase()));
 
   // a search or geo table is named for its Schema (and field): two declarations that would name one object are refused

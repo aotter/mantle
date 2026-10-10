@@ -62,7 +62,7 @@ export async function assertActiveUserGrant(
   driver: DatabaseDriver,
   claims: Record<string, unknown>,
   audience: string,
-): Promise<void> {
+): Promise<string | null> {
   const db = dbOf(driver);
   const userId = claims["sub"];
   const clientId = claims["azp"];
@@ -76,8 +76,9 @@ export async function assertActiveUserGrant(
   ) {
     throw new Error("OAuth token is not bound to a user session.");
   }
-  const result = await db.first<{ resources: unknown; scopes: unknown }>('SELECT c.resources, c.scopes FROM "oauthConsent" AS c ' +
+  const result = await db.first<{ resources: unknown; scopes: unknown; role: string | null }>('SELECT c.resources, c.scopes, u.role FROM "oauthConsent" AS c ' +
         'JOIN session AS s ON s.id = ? AND s."userId" = c."userId" AND s."expiresAt" > ? ' +
+        'JOIN "user" AS u ON u.id = c."userId" ' +
         'WHERE c.id = ? AND c."userId" = ? AND c."clientId" = ?', sessionId, new Date().toISOString(), consentId, userId, clientId);
   const tokenScopes = scopesFromClaim(claims["scope"]);
   const resources = parseStoredStringArray(result?.resources);
@@ -85,6 +86,7 @@ export async function assertActiveUserGrant(
   const active = resources?.includes(audience) === true && scopes !== null &&
     tokenScopes.every((scope) => scopes.includes(scope));
   if (!active) throw new Error("OAuth authorization grant is no longer active.");
+  return result!.role;
 }
 
 type LocalJwksFetcher = Exclude<
@@ -112,7 +114,7 @@ export async function verifyOAuthJwt(
     readonly audience: string;
     readonly scopes?: readonly string[];
   },
-  verify: ((token: string, audience: string) => Promise<Record<string, unknown>>) | null,
+  verify: ((token: string, audience: string) => Promise<{ claims: Record<string, unknown>; currentRole?: string | null }>) | null,
   getDpopReplayStore?: () => Promise<DpopReplayStore>,
 ): Promise<OAuthAccessTokenVerification> {
   const request = typeof tokenOrRequest === "string" ? null : tokenOrRequest;
@@ -131,7 +133,7 @@ export async function verifyOAuthJwt(
     return { ok: false, status: 401, reason: "invalid-token" };
   }
   try {
-    const claims = await verify(token, options.audience);
+    const { claims, currentRole } = await verify(token, options.audience);
     await enforceDpopBinding({
       payload: claims,
       authorization,
@@ -163,6 +165,7 @@ export async function verifyOAuthJwt(
       clientId: typeof claims["azp"] === "string" ? claims["azp"] : null,
       credentialId: typeof claims["jti"] === "string" ? claims["jti"] : null,
       scopes,
+      ...(currentRole !== undefined ? { currentRole } : {}),
     };
   } catch (error) {
     if (isDpopBindingError(error)) {

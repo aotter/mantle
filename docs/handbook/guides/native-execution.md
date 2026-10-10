@@ -99,3 +99,10 @@ more than the removed wrappers. Measure SQL messages, commands, bindings,
 transactions, checkouts and physical connections separately. Do not add a
 second pool, retry scheduler, stream-scope manager or parity shim to hide that
 tradeoff.
+
+Product site/media reads also use native read ports. Warm SQLite preparation
+avoids no-op DDL when system objects and the existing fingerprint are ready;
+this does not add detection of arbitrary external table/index drift. Media
+ordering receives a Core-owned index without changing its numeric cursor.
+Custom structural R2 bindings must implement the official native
+`delete(string | string[])` shape. See [ADR-0042](../../adr/0042-native-query-work-cleanup.md).

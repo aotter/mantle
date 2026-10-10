@@ -270,7 +270,7 @@ spec: { surface: ${surface}, sql: ${JSON.stringify(sql)} }
     expect((await verifyPlan(await reseal(ok.plan, (p) => { p.schemas.items!.checks = [qualified as never]; return p; }), d1())).map((d) => d.message).join()).toMatch(/pg_catalog\.lower\(\) is printed/);
     const star = { ...uid, A_Expr: { ...uid.A_Expr, rexpr: { FuncCall: { funcname: [{ String: { sval: "lower" } }], agg_star: true } } } };
     expect((await verifyPlan(await reseal(ok.plan, (p) => { p.schemas.items!.checks = [star as never]; return p; }), d1())).map((d) => d.message).join()).toMatch(/takes one argument/);
-  });
+  }, 30_000); // Includes compiler integration and two cold workerd starts.
 
   it("refuses what SQLite cannot run as printed (*, DISTINCT, like_escape) and accepts nested conditions, which the printers parenthesize", async () => {
     const withView = (sql: string) => MANIFESTS.replace('sql: "SELECT name, sum(stock) OVER (ORDER BY name) AS running FROM items ORDER BY name"', `sql: ${JSON.stringify(sql)}`);

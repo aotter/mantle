@@ -6,6 +6,7 @@ import { DiagnosticError, makeDiagnostic, type Diagnostic, type DiagnosticCode }
 import { expandPolicyRequired, type MediaPurposePolicy } from "../spec/domain/index.js";
 import type { DatabaseDriver } from "../core/driver.js";
 import type { MediaAsset, MediaLibrary, MediaStorage, MediaVariantRole } from "../core/site.js";
+import { readRows } from "./read.js";
 
 const P = "media";
 const fail = (code: DiagnosticCode, message: string, extra: Partial<Diagnostic> = {}) =>
@@ -73,7 +74,7 @@ const save = (a: MediaAsset) => ({
 });
 
 export function mediaLibrary(driver: DatabaseDriver, storage: MediaStorage, purposes: () => Promise<readonly MediaPurposePolicy[]>, now = Date.now): MediaLibrary {
-  const one = async (sql: string, binds: unknown[]) => (await driver.batch([{ sql, binds }]))[0]!.rows[0];
+  const one = async (sql: string, binds: unknown[]) => driver.first ? await driver.first({ sql, binds }) : (await readRows(driver, { sql, binds }))[0];
   const get = async (id: string) => {
     const r = await one(`SELECT ${COLUMNS} FROM media_assets WHERE id = ?1`, [id]);
     if (!r) throw fail("MEDIA_ASSET_NOT_FOUND", `no media asset '${id}'`);
@@ -138,9 +139,9 @@ export function mediaLibrary(driver: DatabaseDriver, storage: MediaStorage, purp
       if (!Number.isInteger(n) || n < 1 || n > 500 || !Number.isSafeInteger(offset) || offset < 0 || (cursor !== undefined && String(offset) !== cursor)) throw bad("limit 1..500 and a cursor this list returned");
       const term = search?.replace(/[\\%_]/g, (c) => `\\${c}`);
       const where = term ? "WHERE id LIKE ?3 ESCAPE '\\' OR alt LIKE ?3 ESCAPE '\\' OR caption LIKE ?3 ESCAPE '\\'" : "";
-      const [page] = await driver.batch([{ sql: `SELECT ${COLUMNS} FROM media_assets ${where} ORDER BY created_at DESC, id DESC LIMIT ?1 OFFSET ?2`, binds: [n + 1, offset, ...(term ? [`%${term}%`] : [])] }]);
-      const rows = page!.rows.slice(0, n).map(assetOf);
-      return { rows, ...(page!.rows.length > n ? { nextCursor: String(offset + n) } : {}) };
+      const page = await readRows(driver, { sql: `SELECT ${COLUMNS} FROM media_assets ${where} ORDER BY created_at DESC, id DESC LIMIT ?1 OFFSET ?2`, binds: [n + 1, offset, ...(term ? [`%${term}%`] : [])] });
+      const rows = page.slice(0, n).map(assetOf);
+      return { rows, ...(page.length > n ? { nextCursor: String(offset + n) } : {}) };
     },
 
     get,

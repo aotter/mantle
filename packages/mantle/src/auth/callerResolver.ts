@@ -74,7 +74,7 @@ export function createCallerResolver(auth: AuthLike, options: CallerResolverOpti
         const scope = v.missingScopes?.length ? `, scope="${v.missingScopes.join(" ")}"` : "";
         return invalid(`${scheme} error="${error}"${scope}`, v.status);
       }
-      return { caller: await user(v.userId, "oauth", v.credentialId, v.clientId, v.scopes) };
+      return { caller: await user(v.userId, "oauth", v.credentialId, v.clientId, v.scopes, v.currentRole) };
     }
 
     const session = await auth.getSession(request);

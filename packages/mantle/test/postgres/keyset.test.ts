@@ -2,7 +2,7 @@
 /**
  * The paged View's cursor on PostgreSQL: when every sort key (the appended tiebreaks included) is NOT NULL and they share one direction,
  * the cursor is one row comparison `(k0, k1) > ($1, $2)`, which a btree range-scans however deep the page; any other sort keeps the
- * expanded OR form. Golden SQL says which one a View gets, paging says both return exactly the unpaged rows, EXPLAIN says the index serves the row form.
+ * expanded OR form, optionally preceded by a safe inclusive leading bound. Golden SQL says which one a View gets, paging says both return exactly the unpaged rows, EXPLAIN says the index serves the row form.
  */
 import { expect, it } from "vitest";
 import { RUNTIME_PLAN_VERSION } from "../../src/spec/index.js";
@@ -26,7 +26,7 @@ async function cursorSql(sql: string, cursor: unknown[]) {
   return print(typed(seen.at(-1).ir, schemas)).replace(/^.*\) AS _p WHERE /, "");
 }
 const ROW = /^\(_p\._k0(, _p\._k\d)*\) [<>] \(\$\d+(, \$\d+)*\) ORDER BY/;
-const EXPANDED = /^\(?\(?_p\._k0 [<>] /;
+const EXPANDED = /^\(?\(?_p\._k0 [<>]=? /;
 
 it("the cursor is a row comparison exactly when every key is NOT NULL and they share one direction", async () => {
   try {

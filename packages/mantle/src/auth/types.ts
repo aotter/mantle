@@ -341,6 +341,8 @@ export type OAuthAccessTokenVerification =
       readonly userId: string;
       readonly clientId: string | null;
       readonly credentialId: string | null;
+      /** Fresh role from the verified live user grant; absent means callers must look it up. Never a JWT role claim. */
+      readonly currentRole?: string | null;
       readonly scopes: readonly string[];
     }
   | {
@@ -465,7 +467,10 @@ export interface MantleAuth {
     userId: string,
     role: StaffRole | null,
   ) => Promise<boolean>;
-  /** Invite a staff member by email: pre-create the user row
+  /** Invite a staff member by email. Requires a signed-in owner Request
+   *  with Better Auth create-user and set-role permissions, even when the
+   *  email already exists; permission failures never return `exists`.
+   *  Pre-create the user row
    *  (`emailVerified: 0`) with the role already assigned, so the
    *  invitee's FIRST sign-in with that email lands with the role in
    *  effect — no second assignment step. Magic-link / email-OTP

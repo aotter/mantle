@@ -178,6 +178,15 @@ describe("Admin surface: the staff gate", () => {
 });
 
 describe("Admin surface: reads", () => {
+  it("one surface filters immutable operation/View descriptions for each caller", async () => {
+    const surface = createAdminSurface(rt, { basePath: "/admin" });
+    const read = async (path: string, caller: Caller, key: string) => ((await (await surface(new Request(`http://x/admin/api/${path}`), caller)).json()) as Record<string, { name: string }[]>)[key]!.map((v) => v.name);
+    for (const caller of [owner, contributor, owner, editor]) {
+      expect(await read("operations", caller, "operations")).toEqual(caller === owner ? ["retitle", "purge"] : ["retitle"]);
+      expect(await read("views-manifest", caller, "views")).toEqual(caller === owner ? ["all-posts", "owner-posts"] : ["all-posts"]);
+    }
+  });
+
   it("/me joins the caller with the directory, and has null fields without one", async () => {
     expect((await call("GET", "/admin/api/me", owner)).body).toEqual({ userId: "u-owner", role: "owner", login: "Olive", image: "https://x.test/o.png" });
     // a cookie session's user is already in hand: the directory is not asked again
@@ -231,6 +240,19 @@ describe("Admin surface: reads", () => {
   it("Store refuses a search or filter the View does not declare", async () => {
     await expect(rt.store.view("owner-posts", { search: "p" })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
     await expect(rt.store.view("all-posts", { filters: { title: "t1" } })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  });
+
+  it("bootstrap starts its independent entry read while the identity read is pending", async () => {
+    let entriesStarted!: () => void;
+    const started = new Promise<void>((resolve) => { entriesStarted = resolve; });
+    const runtime = { ...rt, store: { ...rt.store, as: (caller: Caller) => {
+      const store = rt.store.as(caller);
+      return { ...store, select: (...args: Parameters<typeof store.select>) => { entriesStarted(); return store.select(...args); } };
+    } } };
+    const surface = createAdminSurface(runtime, { basePath: "/admin", identity: { directory: { ...identity.directory!, getUser: async (id) => { await started; return identity.directory!.getUser!(id); } } } });
+    const response = await surface(new Request("http://x/admin/api/bootstrap?collection=posts&limit=1"), owner);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ me: { login: "Olive" }, entries: { items: [expect.any(Object)] } });
   });
 
   it("bootstrap folds me, site, collections, operations, views and the WebMCP catalog into one answer", async () => {

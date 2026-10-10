@@ -13,6 +13,7 @@ import type { MantleSite } from "../core/site.js";
 import { siteConfigOf } from "../core/siteConfig.js";
 import { mediaLibrary } from "./media.js";
 import { runMigrations, type Migration } from "./migrations.js";
+import { readRows } from "./read.js";
 
 export const CORE_MIGRATIONS: readonly Migration[] = [
   // 0.1.x's 0001-init also created Better Auth's tables; mantle-auth now migrates those itself
@@ -27,6 +28,10 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     sql: `CREATE TABLE IF NOT EXISTS pending_media_uploads (id TEXT PRIMARY KEY, record TEXT NOT NULL, expires_at INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS pending_media_uploads_expires_at ON pending_media_uploads (expires_at)`,
   },
+  {
+    id: "0004-media-assets-order",
+    sql: "CREATE INDEX media_assets_by_created_id ON media_assets (created_at DESC, id DESC)",
+  },
 ];
 
 const nonBlank = (v: string | undefined) => (v ? v : undefined);
@@ -37,8 +42,8 @@ const upsert = (key: string, value: string): SqlStatement => ({ sql: "INSERT INT
 export async function prepareSite(driver: DatabaseDriver, defaults: SiteDefaults): Promise<MantleSite> {
   assertSiteDefaultsCanonical(defaults);
   await runMigrations(driver, CORE_MIGRATIONS);
-  const [stored] = await driver.batch([{ sql: "SELECT key, value FROM site_config" }]);
-  const have = new Map(stored!.rows.map((r) => [String(r.key), String(r.value)]));
+  const stored = await readRows(driver, { sql: "SELECT key, value FROM site_config" });
+  const have = new Map(stored.map((r) => [String(r.key), String(r.value)]));
   const writes: SqlStatement[] = [];
   for (const [key, value] of [["brand", defaults.brand], ["title", defaults.title], ["description", defaults.description]] as const)
     if (value && !have.has(key)) writes.push({ sql: "INSERT INTO site_config (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING", binds: [key, value] });
@@ -51,7 +56,7 @@ export async function prepareSite(driver: DatabaseDriver, defaults: SiteDefaults
   for (const [key, value] of synced) if (value !== undefined && have.get(key) !== value) writes.push(upsert(key, value));
   if (writes.length) await driver.batch(writes);
 
-  const read = async () => siteConfigOf((await driver.batch([{ sql: "SELECT key, value FROM site_config" }]))[0]!.rows);
+  const read = async () => siteConfigOf(await readRows(driver, { sql: "SELECT key, value FROM site_config" }));
   return {
     read,
     async updateSettings(values) {
