@@ -26,16 +26,16 @@ Read medians improved in these samples, while replacement writes regressed versu
 
 Native SQL statement counts stay unchanged: one for simple reads, five for Hall/report and full workout pagination, three for full weekly-volume pagination, and six/six/ten for log/replay/replace. Native transactions are counted separately from SQL statements and implicit BEGIN/COMMIT. Cached-query requests are not measured cache hits.
 
-The actual unchanged application also runs in local Wrangler before/after with matched official Auth peers (1.7.7) and Core/UI versions. Hall, report, Admin bootstrap, complete CSV and MCP Hall responses match byte for byte; anonymous guards remain enforced. HTTP timing evidence follows below. Private snapshots, row hashes and raw responses remain outside the public repository.
+The actual unchanged application also runs in local Wrangler before/after with matched Core/UI versions and official Auth peers (1.7.7). All four Auth package versions are asserted through module resolution from Core’s own package context before each run. These measurements supersede an earlier fixture that checked only top-level versions while Core’s nested peers still resolved 1.7.2. Since the snapshot excludes Auth tables, its copied Auth readiness marker is cleared before boot; the unchanged SDK then runs the official Auth migration and schema validation before synthetic sessions are inserted. Hall, report, Admin bootstrap, complete CSV and MCP Hall responses match byte for byte; anonymous guards remain enforced. HTTP timing evidence follows below. Private snapshots, row hashes and raw responses remain outside the public repository.
 
 The HTTP comparison is audit `86dd29e` before → cumulative candidate after. Three quiet HTTP rounds per variant use five warmups and thirty measured requests per route: 900 measured authenticated responses total. The exact complete-body hashes match across every variant/sample without normalization. Times include local HTTP, synthetic authentication, workerd, D1 and reading the complete response body.
 
 | Route | Before round p50 ms | After round p50 ms | Before round p95 ms | After round p95 ms | Before D1 calls/statements/batches | After D1 calls/statements/batches |
 |---|---|---|---|---|---|---|
-| hall | 37.13, 33.89, 36.19 | 39.56, 29.50, 33.06 | 73.03, 101.57, 104.88 | 58.51, 37.45, 101.41 | 9/9/5 | 7/7/0 |
-| report | 20.01, 17.10, 20.34 | 16.08, 29.85, 19.21 | 29.58, 25.00, 45.67 | 20.95, 39.97, 44.65 | 7/7/5 | 6/6/0 |
-| admin:bootstrap | 12.13, 10.43, 11.13 | 12.39, 12.06, 11.73 | 20.80, 14.16, 25.54 | 25.09, 27.34, 19.56 | 3/3/1 | 2/2/0 |
-| admin:csv | 13.29, 10.86, 12.17 | 16.14, 11.07, 10.88 | 26.08, 13.91, 31.48 | 24.01, 19.59, 22.20 | 3/3/1 | 2/2/0 |
-| mcp:hall | 31.45, 33.63, 30.47 | 62.03, 38.53, 31.81 | 77.14, 68.70, 36.73 | 104.75, 69.75, 66.44 | 7/7/5 | 6/6/0 |
+| hall | 66.18, 40.73, 34.27 | 62.08, 39.69, 42.03 | 136.13, 91.58, 52.55 | 127.17, 159.90, 93.71 | 9/9/5 | 7/7/0 |
+| report | 42.88, 19.92, 22.08 | 34.18, 21.02, 17.86 | 67.03, 36.26, 39.79 | 58.99, 29.19, 26.78 | 7/7/5 | 6/6/0 |
+| admin:bootstrap | 18.08, 25.81, 14.29 | 11.80, 13.05, 10.89 | 34.28, 38.68, 27.81 | 24.95, 19.10, 20.13 | 3/3/1 | 2/2/0 |
+| admin:csv | 27.83, 28.95, 27.72 | 11.49, 13.96, 12.06 | 44.74, 45.43, 42.37 | 16.44, 23.35, 19.79 | 3/3/1 | 2/2/0 |
+| mcp:hall | 67.00, 72.23, 46.85 | 44.51, 52.85, 62.34 | 123.63, 182.67, 75.86 | 76.10, 132.70, 124.64 | 7/7/5 | 6/6/0 |
 
-D1 query work consistently decreases, but HTTP latency does not consistently improve. MCP Hall is slower in these candidate samples; Admin bootstrap also has a higher median of round medians. CSV is buffered only by the observation wrapper, so these are completed-body times, not first-byte/streaming latency. No cloud RTT, billing or larger-dataset claim follows from this small local snapshot.
+D1 query work consistently decreases, but HTTP latency does not consistently improve. Hall has a slightly higher candidate median of round medians (42.03 versus 40.73 ms); the other four routes have lower medians of round medians. Individual rounds and tails still vary substantially, including a slower candidate MCP Hall third round. CSV is buffered only by the observation wrapper, so these are completed-body times, not first-byte/streaming latency. No cloud RTT, billing or larger-dataset claim follows from this small local snapshot.
