@@ -42,7 +42,12 @@ plan:
   unique index that existing rows break, a field whose type changed, an index
   whose columns changed under the same name, an undeclared unique index.
 - **Kept, with a warning**: a column or non-unique index the plan no longer
-  declares. Nothing is dropped.
+  declares. Nothing is dropped. A `_mantle_scope_<schema>` index left by a
+  pre-release 0.2 build is reported this way as redundant: a declared index
+  already leads with the scope. Drop it yourself with
+  `DROP INDEX "_mantle_scope_<schema>"` (`wrangler d1 execute`, or
+  `DROP INDEX CONCURRENTLY` on PostgreSQL) to reclaim space and write cost.
+  Boot never drops it.
 
 Before deploying, see what boot will do against a local SQLite file, such as
 Wrangler's local D1 under `.wrangler/state/v3/d1/` after it has run the

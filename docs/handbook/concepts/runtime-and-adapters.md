@@ -85,13 +85,13 @@ and converges storage.
 
 - `date-time` (and `created_at` / `updated_at`) is stored as microseconds,
   `date` as days, `numeric(p, s)` as an integer of the smallest unit, so
-  arithmetic is exact on D1. On the wire a date-time is an ISO string.
+  arithmetic is exact on D1. On the wire a declared date-time is an ISO string in UTC with six fractional digits ([Date-time values](../reference/schema.md#date-time-values)).
 - `checks` are enforced by triggers. `x-mantle-ref` is checked by
   `mantle generate` and used by Admin; storage does not enforce it in 0.2.0.
   `searchableFields` uses
   an FTS5 trigram index; `format: geo` uses an R*Tree.
 - `date_trunc` and `extract` compute in the site time zone
-  (`d1Storage(db, { timeZone })`, default UTC).
+  (`d1Storage(db, { timeZone })`, default UTC). For per-member calendars store a member-local bucket instead ([Per-member calendar buckets](../reference/schema.md#per-member-calendar-buckets)).
 
 `mantle.config.json` names the dialect (`sqlite`, `postgres`, or another dialect package, which must pass
 `runStorageConformance` from `@aotter/mantle/testing`). A plan records its
@@ -162,7 +162,7 @@ A SQLite spelling fails validation with its position and the PostgreSQL one:
   `mantle.search_rank()` counts occurrences rather than computing bm25.
   Site settings and media are SQLite-only (D1, bun:sqlite).
 - `date_trunc` and `extract` compute in the site time zone
-  (`postgresStorage({ connect, timeZone })`, default UTC).
+  (`postgresStorage({ connect, timeZone })`, default UTC). For per-member calendars store a member-local bucket instead ([Per-member calendar buckets](../reference/schema.md#per-member-calendar-buckets)).
 - `statementTimeoutMs` defaults to 10 seconds. A write batch sets it with
   `SET LOCAL` on its transaction. A read is one autocommit statement under
   the role's own `statement_timeout`; with a nonzero configured limit, boot
