@@ -1,6 +1,6 @@
 # ADR-lite: Durable Object SQLite driver (experimental)
 
-**Status:** Accepted direction for issue #1395. Follows ADR-0032 decision 6 and "How to apply" item 2 (host integrations are maintained examples, not Core contracts), ADR-0040 §2 and ADR-0041.
+**Status:** Accepted direction for issue #1395. Follows ADR-0032 decision 6 and "How to apply" item 2 (host integrations are maintained examples, not Core contracts) and item 3 (the new public names are recorded in its Amendments), ADR-0040 §2 and ADR-0041.
 
 ## Decision
 
