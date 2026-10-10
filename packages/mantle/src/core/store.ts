@@ -52,6 +52,52 @@ export interface StoreSelect {
   readonly search?: string;
 }
 
+// ---- Schema readers (ADR-0043) -----------------------------------------------------------------------------------
+
+/** One comparison of a reader's `where`; `in` and `notIn` take a list (a subquery is a View). */
+export interface ReadComparison<T> {
+  readonly eq?: T | null;
+  readonly ne?: T | null;
+  readonly gt?: T;
+  readonly gte?: T;
+  readonly lt?: T;
+  readonly lte?: T;
+  readonly like?: string;
+  readonly in?: readonly T[];
+  readonly notIn?: readonly T[];
+  readonly isNull?: boolean;
+}
+
+/** A reader's `where`: AND only. `{ column: value }` is equality, `null` is IS NULL; or/not/subqueries are Views. */
+export type ReadWhere<Row> = { readonly [K in keyof Row]?: Row[K] | null | ReadComparison<NonNullable<Row[K]>> };
+
+export interface ReadQuery<Row = StoreRow> {
+  readonly where?: ReadWhere<Row>;
+  /** Projection; omitted returns native columns plus every Schema field. */
+  readonly columns?: readonly (keyof Row & string)[];
+  /** At most one column; `id` breaks ties. Defaults to `{ updatedAt: "desc" }`. */
+  readonly orderBy?: { readonly [K in keyof Row]?: "asc" | "desc" };
+  /** Rows whose declared `searchableFields` contain this text, or whose `id` is it (ADR-0035 decision 7). */
+  readonly search?: string;
+}
+
+export interface FindQuery<Row = StoreRow> extends ReadQuery<Row> {
+  /** 1 to 500, default 50. */
+  readonly limit?: number;
+  /** The same opaque, versioned format as ever, bound to the Schema and `orderBy`. */
+  readonly cursor?: string;
+}
+
+/** What `store.db.<schema>` is: three reads that share one compiled statement per query shape (ADR-0043). */
+export interface SchemaReader<Row = StoreRow> {
+  get<C extends keyof Row & string = keyof Row & string>(id: string, options?: { readonly columns?: readonly C[] }): Promise<Pick<Row, C> | null>;
+  first<C extends keyof Row & string = keyof Row & string>(query?: ReadQuery<Row> & { readonly columns?: readonly C[] }): Promise<Pick<Row, C> | null>;
+  find<C extends keyof Row & string = keyof Row & string>(query?: FindQuery<Row> & { readonly columns?: readonly C[] }): Promise<StoreSelectResult<Pick<Row, C>>>;
+}
+
+/** One reader per Schema, under the lower-camel projection of its name. Generated bindings type it per app (`Db`). */
+export type StoreDb = Readonly<Record<string, SchemaReader>>;
+
 /** How `store.view` runs a View. `search` and `filters` match only the outputs the View's `uiSchema.list.searchFields` and `filterFields` name (ADR-0032 decision 5). */
 export interface StoreViewOptions {
   readonly input?: Readonly<Record<string, unknown>>;
@@ -125,6 +171,9 @@ export interface SweepExpiredResult {
 export interface MantleStore {
   /** Bind to one request's caller; scope follows the caller. `cause` is the invocation being served, so hooks the Store fires chain to it. */
   as(caller: Caller, cause?: InvocationCause): CallerStore;
+  /** One reader per Schema (ADR-0043): `store.db.<schema>.get | first | find`. */
+  readonly db: StoreDb;
+  /** @deprecated Use store.db.<schema> (ADR-0043); removed in the next alpha. */
   select(query: StoreSelect): Promise<StoreSelectResult>;
   /** Apply every operation or none, in order, as one storage transaction. Results follow operation order. */
   write(ops: readonly StoreWriteOp[]): Promise<readonly StoreWriteResult[]>;

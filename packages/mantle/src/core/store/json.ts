@@ -18,6 +18,8 @@ export interface StoreSchema extends StorageSchema {
   readonly schema?: JsonSchema;
   /** A translation publishes only once its parent is published. */
   readonly translates?: { readonly parent: string; readonly on: string };
+  /** The Schema's declared name (a plan Schema carries it); the reader name is projected from it (ADR-0043). */
+  readonly name?: string;
 }
 export type StoreSchemas = Readonly<Record<string, StoreSchema>>;
 
@@ -41,16 +43,36 @@ export interface Column {
 const physical = (c: Column) => (c.type === "geo" ? [`${c.col}_lat`, `${c.col}_lng`] : [c.col]);
 /** The hidden output a select reads one half of a geo field under. */
 export const geoKey = (out: string, half: "lat" | "lng") => `_geo_${half}_${out}`;
-/** Decode the selected columns, joining a geo field's hidden halves in the same projection. */
-export function decodeRow(row: Readonly<Record<string, unknown>>, columns: readonly Column[], codec: StoreCodec): Record<string, unknown> {
-  return Object.fromEntries(columns.map((c) => {
-    let value = row[c.out];
-    if (c.type === "geo") {
-      const lat = row[geoKey(c.out, "lat")], lng = row[geoKey(c.out, "lng")];
-      value = lat == null || lng == null ? null : { lat, lng };
+/**
+ * Decode the selected columns, joining a geo field's hidden halves in the same projection. The per-column work (names, hidden geo
+ * keys) is computed once, so a reader's memoised shape decodes each row in one pass.
+ */
+export function rowDecoder(columns: readonly Column[], codec: StoreCodec): (row: Readonly<Record<string, unknown>>) => Record<string, unknown> {
+  const cols = columns.map((c) => ({ out: c.out, type: c.type, lat: geoKey(c.out, "lat"), lng: geoKey(c.out, "lng") }));
+  const proto = cols.some((c) => c.out === "__proto__");
+  return (row) => {
+    const o: Record<string, unknown> = {};
+    for (const c of cols) {
+      let value = row[c.out];
+      if (c.type === "geo") {
+        const lat = row[c.lat], lng = row[c.lng];
+        value = lat == null || lng == null ? null : { lat, lng };
+      }
+      const decoded = codec.decode(c.type, value);
+      if (proto && c.out === "__proto__") Object.defineProperty(o, c.out, { value: decoded, enumerable: true, writable: true, configurable: true });
+      else o[c.out] = decoded;
     }
-    return [c.out, codec.decode(c.type, value)];
-  }));
+    return o;
+  };
+}
+export const decodeRow = (row: Readonly<Record<string, unknown>>, columns: readonly Column[], codec: StoreCodec): Record<string, unknown> => rowDecoder(columns, codec)(row);
+
+/** A JSON value against the type of the column it is bound to: the type predicate, then the codec's own encoding check. */
+export function checkValue(codec: StoreCodec, type: string, v: unknown, what: string): void {
+  const ok = type === "bool" ? typeof v === "boolean" : type === "text" || type === "date" ? typeof v === "string"
+    : type.startsWith("numeric(") || type === "json" ? true : typeof v === "number" && Number.isFinite(v) || (type === "timestamptz" && typeof v === "string");
+  if (!ok) throw invalid(`${what} expects a value of type ${type}.`);
+  try { codec.encode(type, v); } catch (e) { throw invalid(`${what}: ${e instanceof Error ? e.message : String(e)}`); }
 }
 
 const bool = (boolop: string, args: N[]): N => ({ BoolExpr: { boolop, args } });
@@ -100,6 +122,9 @@ function withDefaults(def: StoreSchema, values: Readonly<Record<string, unknown>
 export class StoreJson {
   readonly inputs: Record<string, string> = {};
   readonly values: Record<string, unknown> = {};
+  readonly tags: string[] = [];
+  readonly types: string[] = [];
+  readonly whats: string[] = [];
   constructor(private readonly schemas: StoreSchemas, private readonly codec: StoreCodec) {}
 
   private schema(name: unknown): { name: string; def: StoreSchema } {
@@ -121,15 +146,19 @@ export class StoreJson {
     return { col: name.toLowerCase(), type, out: def.names?.[name.toLowerCase()] ?? name };
   }
 
-  /** A JSON value as a typed input reference. */
-  private val(type: string, v: unknown, what: string): N {
-    const ok = type === "bool" ? typeof v === "boolean" : type === "text" || type === "date" ? typeof v === "string"
-      : type.startsWith("numeric(") || type === "json" ? true : typeof v === "number" && Number.isFinite(v) || (type === "timestamptz" && typeof v === "string");
-    if (!ok) throw invalid(`${what} expects a value of type ${type}.`);
-    try { this.codec.encode(type, v); } catch (e) { throw invalid(`${what}: ${e instanceof Error ? e.message : String(e)}`); }
+  /**
+   * A JSON value as a typed input reference. The converter records, per input and in order, the `tag` of the column and operator that
+   * bound it, its type and what it was: a reader's walk (`walkRead`) is checked against the tags, and a memoised shape re-checks a
+   * later call's values against the types.
+   */
+  private val(type: string, v: unknown, what: string, tag = ""): N {
+    checkValue(this.codec, type, v, what);
     const name = `v${Object.keys(this.inputs).length}`;
     this.inputs[name] = type;
     this.values[name] = v;
+    this.tags.push(tag);
+    this.types.push(type);
+    this.whats.push(what);
     return ref("input", name);
   }
 
@@ -160,49 +189,50 @@ export class StoreJson {
       if (key === "not") return bool("NOT_EXPR", [this.where(value as StoreWhere, def, depth + 1)]);
       const c = this.column(def, key, "a where", true);
       const col = ref(c.col);
-      if (typeof value !== "object" || value === null) return this.compare("eq", col, c, value as StoreScalar);
+      if (typeof value !== "object" || value === null) return this.compare("eq", col, c, value as StoreScalar, depth, key);
       const cmps = Object.entries(value);
       if (!cmps.length) throw invalid(`Column '${key}' has an empty comparison.`);
       const cmp = cmps.map(([o, operand]) => {
         if (operand === undefined) throw invalid(`'${o}' on '${key}' is undefined; omit it or use isNull.`);
         if (!OPERATORS.has(o)) throw invalid(`Unknown Store operator '${o}' on '${key}'.`);
         if (++this.budget > 256) throw invalid("Store where has more than 256 conditions.");
-        return this.compare(o, col, c, operand, depth);
+        return this.compare(o, col, c, operand, depth, key);
       });
       return cmp.length === 1 ? cmp[0]! : bool("AND_EXPR", cmp);
     });
     return parts.length === 1 ? parts[0]! : bool("AND_EXPR", parts);
   }
 
-  private compare(o: string, col: N, c: Column, v: unknown, depth = 0): N {
+  private compare(o: string, col: N, c: Column, v: unknown, depth: number, key: string): N {
     const what = `'${o}' on '${c.out}'`;
+    const tag = JSON.stringify([key, o]);
     switch (o) {
       case "isNull":
         if (typeof v !== "boolean") throw invalid(`${what} takes a boolean.`);
         return nullTest(col, v ? "IS_NULL" : "IS_NOT_NULL");
       case "eq": case "ne":
         if (v === null) return nullTest(col, o === "eq" ? "IS_NULL" : "IS_NOT_NULL");
-        return op(o === "eq" ? "=" : "<>", col, this.val(c.type, v, what));
+        return op(o === "eq" ? "=" : "<>", col, this.val(c.type, v, what, tag));
       case "like":
         if (c.type !== "text" || typeof v !== "string") throw invalid(`${what} expects a string column and pattern.`);
         if (new TextEncoder().encode(v).byteLength > 1024) throw invalid(`${what} accepts at most 1024 UTF-8 bytes.`);
-        return { A_Expr: { kind: "AEXPR_LIKE", name: [S("~~")], lexpr: col, rexpr: this.val("text", v, what) } };
+        return { A_Expr: { kind: "AEXPR_LIKE", name: [S("~~")], lexpr: col, rexpr: this.val("text", v, what, tag) } };
       case "in": case "notIn": {
-        const inn = this.membership(col, c, v, what, depth);
+        const inn = this.membership(col, c, v, what, depth, tag);
         return o === "in" ? inn : bool("NOT_EXPR", [inn]);
       }
       default: {
         if (v === null) throw invalid(`${what} cannot compare with null.`);
-        return op({ gt: ">", gte: ">=", lt: "<", lte: "<=" }[o]!, col, this.val(c.type, v, what));
+        return op({ gt: ">", gte: ">=", lt: "<", lte: "<=" }[o]!, col, this.val(c.type, v, what, tag));
       }
     }
   }
 
-  private membership(col: N, c: Column, v: unknown, what: string, depth: number): N {
+  private membership(col: N, c: Column, v: unknown, what: string, depth: number, tag: string): N {
     if (Array.isArray(v)) {
       if (!v.length) throw invalid(`${what} takes a non-empty array.`);
       for (const item of v) if (item === null) throw invalid(`${what} cannot contain null; use isNull.`);
-      return { A_Expr: { kind: "AEXPR_IN", name: [S("=")], lexpr: col, rexpr: { List: { items: v.map((item) => this.val(c.type, item, what)) } } } };
+      return { A_Expr: { kind: "AEXPR_IN", name: [S("=")], lexpr: col, rexpr: { List: { items: v.map((item) => this.val(c.type, item, what, tag)) } } } };
     }
     if (typeof v !== "object" || v === null) throw invalid("'in' / 'notIn' take an array or a { select, from, where } subquery.");
     const sub = v as { select?: unknown; from?: unknown; where?: StoreWhere };
@@ -219,14 +249,18 @@ export class StoreJson {
   /** `mantle.search` over the declared search fields, or the id itself: the dialect lowers the first (D1: FTS5 trigram). */
   private search(text: unknown, name: string, def: StoreSchema): N {
     if (typeof text !== "string" || !text.trim()) throw invalid("Store search takes a non-empty string.");
-    const id = op("=", ref("id"), this.val("text", text, "search"));
+    const tag = JSON.stringify(["", "search"]);
+    const id = op("=", ref("id"), this.val("text", text, "search", tag));
     if (!def.search?.length) return id;
-    const call: N = { FuncCall: { funcname: [S("mantle"), S("search")], args: [ref(name), this.val("text", text, "search")], funcformat: "COERCE_EXPLICIT_CALL" } };
+    const call: N = { FuncCall: { funcname: [S("mantle"), S("search")], args: [ref(name), this.val("text", text, "search", tag)], funcformat: "COERCE_EXPLICIT_CALL" } };
     return bool("OR_EXPR", [call, id]);
   }
 
-  /** A select: the projection names every output column, so it can be paged. */
-  select(q: StoreSelect): { ir: N; columns: readonly Column[]; order: { column: Column; dir: "asc" | "desc" }; pageSize: number; from: string } {
+  /** `Store.select`, kept for the deprecation window (ADR-0043); a reader's miss path calls `read`. */
+  select(q: StoreSelect): ReturnType<StoreJson["read"]> { return this.read(q); }
+
+  /** A read: the projection names every output column, so it can be paged. */
+  read(q: StoreSelect): { ir: N; columns: readonly Column[]; order: { column: Column; dir: "asc" | "desc" }; pageSize: number; from: string } {
     if (typeof q !== "object" || q === null || Array.isArray(q)) throw invalid("Store select takes an object.");
     const bad = Object.keys(q).find((k) => !["from", "columns", "where", "orderBy", "limit", "cursor", "search"].includes(k));
     if (bad) throw invalid(`Unknown Store select key '${bad}'.`);
@@ -311,4 +345,168 @@ export class StoreJson {
     const w = this.where(where, def);
     return lock === undefined ? w : bool("AND_EXPR", [w, op("=", ref("version"), this.val("integer", lock, "'lock'"))]);
   }
+}
+
+// ---- the reader walk (ADR-0043 decision 4) -----------------------------------------------------------------------
+
+const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+const isScalar = (x: unknown): x is string | number | boolean => typeof x === "string" || typeof x === "number" || typeof x === "boolean";
+const AND_ONLY = "Reader where is AND only: write or/not/subqueries as a View and read it with store.view (ADR-0043).";
+const nextPow2 = (n: number) => 2 ** Math.ceil(Math.log2(n));
+
+/**
+ * The length an `in` / `notIn` list is padded to: the next power of two, so lists of 5 to 8 share one statement. It never passes the
+ * statement's bind limit when the unpadded list fit (past half the limit the list keeps its own length).
+ */
+export const padLen = (n: number, maxBindings: number): number => Math.min(nextPow2(n), Math.max(n, Math.floor(maxBindings / 2)));
+
+export interface ReadWalk {
+  /** The shape: everything the statement's text depends on, never a caller's value. */
+  readonly key: string;
+  /** The binds, in the order the converter creates its inputs. */
+  readonly values: unknown[];
+  /** The (column, operator) that binds each value, as the converter tags it. */
+  readonly tags: string[];
+  /** The normalised query the converter reads (null-prototype records): the only thing it sees of the caller's object. */
+  readonly query: { columns?: string[]; where?: Record<string, unknown>; orderBy: Record<string, "asc" | "desc">; search?: string };
+  /** What a `find` was given, read once and unchecked: they are per call, not part of the shape. */
+  readonly limit?: unknown;
+  readonly cursor?: unknown;
+}
+
+const READ_KEYS = ["where", "columns", "orderBy", "search"];
+
+/**
+ * One pass over a reader's query: validates its structure, reads every caller property exactly once, and returns the shape key, the
+ * bind values and a normalised copy. A hit then needs no converter, and no getter or proxy can make the key and the IR disagree.
+ * Columns are not resolved here (a miss resolves them): the key is the structure and the column names, quoted.
+ * `limit` and `cursor` are per call, not part of the shape, and are checked by the caller.
+ */
+export function walkRead(def: StoreSchema, kind: "get" | "first" | "find", q: unknown, maxBindings: number): ReadWalk {
+  if (q !== undefined && !isObject(q)) throw invalid(`A reader ${kind} takes an object.`);
+  const src = (q ?? {}) as Record<string, unknown>;
+  const own = Object.keys(src);
+  const bad = own.find((k) => !(kind === "find" ? [...READ_KEYS, "limit", "cursor"] : READ_KEYS).includes(k));
+  if (bad) throw invalid(`Unknown reader ${kind} key '${bad}'.`);
+  const read = (k: string): unknown => (own.includes(k) ? src[k] : undefined);
+
+  const values: unknown[] = [];
+  const tags: string[] = [];
+  const entries: [string, [string, number][]][] = [];
+  let conditions = 0;
+  const whereQuery: Record<string, unknown> = Object.create(null);
+  const where = read("where");
+  if (own.includes("where") && where === undefined) throw invalid("Store where is undefined; omit it or provide a condition.");
+  if (where !== undefined) {
+    if (!isObject(where)) throw invalid("A Store where condition must be an object.");
+    const keys = Object.keys(where);
+    if (!keys.length) throw invalid("A Store where condition must not be empty.");
+    conditions++;
+    for (const key of keys) {
+      if (key === "and" || key === "or" || key === "not") throw invalid(AND_ONLY);
+      const value = where[key];
+      if (value === undefined) throw invalid(`Store where '${key}' is undefined; omit the key or use isNull.`);
+      if (value === null) { entries.push([key, [["eq", 0]]]); whereQuery[key] = null; continue; }
+      if (isScalar(value)) { entries.push([key, [["eq", 1]]]); values.push(value); tags.push(JSON.stringify([key, "eq"])); whereQuery[key] = value; continue; }
+      if (Array.isArray(value)) throw invalid(`Store where '${key}' takes a value or a comparison: use { in: [...] }.`);
+      if (!isObject(value)) throw invalid(`Store where '${key}' takes a value or a comparison.`);
+      const ops = Object.keys(value);
+      if (!ops.length) throw invalid(`Column '${key}' has an empty comparison.`);
+      const markers: [string, number][] = [];
+      const cmp: Record<string, unknown> = Object.create(null);
+      for (const o of ops) {
+        const operand = value[o];
+        if (operand === undefined) throw invalid(`'${o}' on '${key}' is undefined; omit it or use isNull.`);
+        if (!OPERATORS.has(o)) throw invalid(`Unknown Store operator '${o}' on '${key}'.`);
+        if (++conditions > 256) throw invalid("Store where has more than 256 conditions.");
+        const tag = JSON.stringify([key, o]);
+        const what = `'${o}' on '${key}'`;
+        if (o === "isNull") {
+          if (typeof operand !== "boolean") throw invalid(`${what} takes a boolean.`);
+          markers.push([o, operand ? 2 : 3]);
+          cmp[o] = operand;
+        } else if (o === "eq" || o === "ne") {
+          if (operand !== null && !isScalar(operand)) throw invalid(`${what} takes a string, number, boolean or null.`);
+          markers.push([o, operand === null ? 0 : 1]);
+          if (operand !== null) { values.push(operand); tags.push(tag); }
+          cmp[o] = operand;
+        } else if (o === "in" || o === "notIn") {
+          if (!Array.isArray(operand)) throw invalid(`${what} takes an array; a subquery is a View: read it with store.view (ADR-0043).`);
+          const n = operand.length;
+          if (!n) throw invalid(`${what} takes a non-empty array.`);
+          const items: unknown[] = [];
+          for (let i = 0; i < n; i++) {
+            const item = operand[i];
+            if (item === null) throw invalid(`${what} cannot contain null; use isNull.`);
+            if (!isScalar(item)) throw invalid(`${what} takes strings, numbers or booleans.`);
+            items.push(item);
+          }
+          const padded = padLen(n, maxBindings);
+          while (items.length < padded) items.push(items[n - 1]);
+          markers.push([o, padded]);
+          values.push(...items);
+          items.forEach(() => tags.push(tag));
+          cmp[o] = items;
+        } else if (o === "like") {
+          if (typeof operand !== "string") throw invalid(`${what} expects a string column and pattern.`);
+          if (new TextEncoder().encode(operand).byteLength > 1024) throw invalid(`${what} accepts at most 1024 UTF-8 bytes.`);
+          markers.push([o, 1]);
+          values.push(operand);
+          tags.push(tag);
+          cmp[o] = operand;
+        } else {
+          if (operand === null) throw invalid(`${what} cannot compare with null.`);
+          if (!isScalar(operand)) throw invalid(`${what} takes a string, number or boolean.`);
+          markers.push([o, 1]);
+          values.push(operand);
+          tags.push(tag);
+          cmp[o] = operand;
+        }
+      }
+      entries.push([key, markers]);
+      whereQuery[key] = cmp;
+    }
+    if (conditions > 256) throw invalid("Store where has more than 256 conditions.");
+  }
+
+  const rawColumns = read("columns");
+  let columns: string[] | undefined;
+  if (rawColumns !== undefined) {
+    if (!Array.isArray(rawColumns) || !rawColumns.length) throw invalid("Store columns takes a non-empty array.");
+    const names: string[] = [];
+    for (let i = 0; i < rawColumns.length; i++) {
+      const c = rawColumns[i];
+      if (typeof c !== "string") throw invalid("Store columns takes column names.");
+      names.push(c);
+    }
+    columns = [...new Set(names)];
+  }
+
+  const rawOrder = read("orderBy");
+  let order: [string, "asc" | "desc"] = ["updatedAt", "desc"];
+  if (rawOrder !== undefined) {
+    if (!isObject(rawOrder) || Object.keys(rawOrder).length !== 1) throw invalid("Store orderBy takes exactly one column.");
+    const col = Object.keys(rawOrder)[0]!;
+    const dir = rawOrder[col];
+    if (dir !== "asc" && dir !== "desc") throw invalid(`orderBy '${col}' must be 'asc' or 'desc'.`);
+    order = [col, dir];
+  }
+
+  const rawSearch = read("search");
+  let search: string | undefined;
+  if (rawSearch !== undefined) {
+    if (typeof rawSearch !== "string" || !rawSearch.trim()) throw invalid("Store search takes a non-empty string.");
+    search = rawSearch;
+    // the converter binds the id equality first, then the search argument when the Schema declares search fields
+    const tag = JSON.stringify(["", "search"]);
+    (def.search?.length ? [search, search] : [search]).forEach((v) => { values.push(v); tags.push(tag); });
+  }
+
+  const key = JSON.stringify([kind, columns ?? 0, entries.map(([col, markers]) => [col, ...markers]), order, search === undefined ? 0 : 1]);
+  const orderBy: Record<string, "asc" | "desc"> = Object.create(null);
+  orderBy[order[0]] = order[1];
+  return {
+    key, values, tags, limit: read("limit"), cursor: read("cursor"),
+    query: { ...(columns ? { columns } : {}), ...(where === undefined ? {} : { where: whereQuery }), orderBy, ...(search === undefined ? {} : { search }) },
+  };
 }

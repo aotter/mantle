@@ -32,22 +32,25 @@ export interface Invocation {
  * Handed to every handler. Authorization guards cannot write or invoke. Before hooks
  * use the normal caller-bound capabilities; their business logic and side effects belong to the application.
  */
-export interface HandlerContext<Env = unknown> {
+export interface HandlerContext<Env = unknown, S extends { readonly db: object } = CallerStore> {
   readonly caller: Caller;
   readonly cause: InvocationCause;
   readonly env: Env;
   waitUntil(promise: Promise<unknown>): void;
-  readonly store: CallerStore;
+  readonly store: S;
+  /** The Store's schema readers (ADR-0043): `ctx.db === ctx.store.db`. */
+  readonly db: S["db"];
   /** The one Procedure-to-Procedure entry: keeps the caller, chains `cause.parent`, re-runs the target's auth and guard. */
   invoke(procedure: string, input: unknown): Promise<unknown>;
 }
 
 /** `input` is validated against the Procedure's `input` schema before the call, the return against `output`. */
-export type HandlerFn<I = unknown, O = unknown, Env = unknown> = (input: I, ctx: HandlerContext<Env>) => O | Promise<O>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type HandlerFn<I = unknown, O = unknown, Env = unknown, S extends { readonly db: object } = CallerStore> = (input: I, ctx: HandlerContext<Env, S>) => O | Promise<O>;
 
 /** Codegen narrows this to exactly the plan's refs (`HANDLER_NOT_REGISTERED` / `HANDLER_NOT_DECLARED`). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type MantleHandlers<Env = unknown> = Readonly<Record<string, HandlerFn<any, any, Env>>>;
+export type MantleHandlers<Env = unknown> = Readonly<Record<string, HandlerFn<any, any, Env, any>>>;
 
 /** One hook call: one statement and one Trigger. */
 export interface LifecycleEvent {
