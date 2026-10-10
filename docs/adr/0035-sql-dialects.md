@@ -152,3 +152,8 @@ Proposed.
 >
 >   Elsewhere the meaning is PostgreSQL's (`LIKE` case, division by zero, `->>` returning text).
 > - **Not yet:** site settings and media (D1 only), a trigram or GiST index behind `searchableFields` and `format: geo`, and `mantle generate --check`'s storage dry run (D1 only).
+
+## 2026-10-10 amendment — Schema readers (ADR-0043)
+
+- **Decision 7:** `StoreSelect.search` is the reader's `search` (`find({ search })` and `first({ search })`): the same text match over the declared search fields, or the id, under the caller's visibility. The compliance cases run on readers.
+- **Lowering:** the runtime lowering described above still holds. Readers lower a query shape on its first use and keep the compiled shape (ADR-0043); the plan format and fingerprint are unchanged.

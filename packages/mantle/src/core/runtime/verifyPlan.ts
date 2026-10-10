@@ -3,7 +3,7 @@
  * database or the handlers (ADR-0034 decision 7: Cloud validates the IR and never parses SQL). Worker-safe: no SQL parser.
  */
 import { DiagnosticError, makeDiagnostic, type Diagnostic } from "../../spec/kernel/index.js";
-import { MAX_TTL_SECONDS, ManifestParseError, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, checkShapeProblem, viewCacheProblem, fieldTypes, storageColumnClash, storageColumns, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
+import { MAX_TTL_SECONDS, ManifestParseError, NATIVE_OUTPUT_TYPES, SqlRefusal, checkViewAdminUi, checkShapeProblem, viewCacheProblem, fieldTypes, storageColumnClash, storageColumns, isFieldType, isTtlSeconds, mcpTools, sideTableClashes, readerNameProblems, type JsonSchema, type ProcedureManifest, type RuntimePlan, type SchemaManifest, type SqlNode, type TriggerManifest, type ViewManifest } from "../../spec/domain/index.js";
 import { validateJsonSchema } from "../../spec/domain/service/SchemaSpecChecks.js";
 import { checkGuards, checkProcedureTarget, checkTriggerRefs } from "../../spec/domain/service/TriggerGraphChecks.js";
 import { MAX_NODES, schemaColumns } from "../sql/allowlist.js";
@@ -232,6 +232,9 @@ function planShape(plan: RuntimePlan): Diagnostic[] {
     if (s.search !== undefined && !(Array.isArray(s.search) && s.search.length && s.search.every((x) => isName(x) && fields[x] === "text"))) bad("search columns are declared text fields");
     for (const cols of [...(s.unique ?? []), ...(s.indexes ?? [])]) if (!Array.isArray(cols) || !cols.length || !cols.every((x) => column(x) && fields[x as string] !== "json")) bad("unique and index columns are scalar columns storage creates (no geo or json field, status only when publishing)");
   }
+  // `store.db.<name>` is one reader per Schema (ADR-0043 decision 2); the code is the diagnostic's own, as validate and boot carry it
+  for (const p of readerNameProblems(Object.values(plan.schemas).flatMap((s) => (typeof s.name === "string" ? [s.name] : []))))
+    out.push(makeDiagnostic({ code: "SCHEMA_READER_NAME_COLLISION", phase: "boot", severity: "error", path: `plan#/schemas/${p.name.toLowerCase()}`, message: p.message }));
   for (const c of sideTableClashes(plan.schemas)) out.push(refused(`plan#/schemas/${c.schema}`, `SQL_SHAPE: ${c.message}`));
 
   for (const [name, v] of Object.entries(plan.views)) {

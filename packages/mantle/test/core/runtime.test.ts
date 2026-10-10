@@ -164,10 +164,16 @@ const handlers: MantleHandlers<never> = {
     if (ctx.caller.kind !== "user" || ctx.caller.subject !== "boss") throw new DiagnosticError({ code: "AUTH_DENIED", phase: "runtime", severity: "error", path: "guard", message: "not the boss", value: undefined, expected: undefined, candidates: undefined, suggestion: undefined });
     await expect(ctx.store.write([{ delete: "items", where: { id: "x" } }])).rejects.toThrow(/may not write/);
     await expect(ctx.invoke("audit", {})).rejects.toThrow(/may not invoke/);
+    // a guard reads through the same readers: ctx.db is ctx.store.db, on the read-only Store too
+    expect(ctx.db).toBe(ctx.store.db);
+    await expect(ctx.db.items.find({ columns: ["id"] })).resolves.toMatchObject({ rows: expect.any(Array) });
     expect(ctx.store).not.toHaveProperty("sweepExpired");
     return {};
   },
-  staffOnly: (input: { n?: number }) => ({ n: (input.n ?? 0) + 1 }),
+  staffOnly: (input: { n?: number }, ctx: HandlerContext) => {
+    expect(ctx.db).toBe(ctx.store.db); // ADR-0043
+    return { n: (input.n ?? 0) + 1 };
+  },
   chain: async (input: { depth?: number }, ctx: HandlerContext) => (input.depth === 0 ? {} : ctx.invoke("chain", { depth: (input.depth ?? 99) - 1 })),
   nightly: (_i: unknown, ctx: HandlerContext) => { calls.push({ name: "nightly", ctx, input: _i }); return {}; },
   // a hook that writes again: every level is one deeper in the cause chain, so the depth limit ends it
@@ -200,6 +206,15 @@ describe("boot", () => {
     expect((await failure(boot({ handlers: missing as never })))?.diagnostic).toMatchObject({ code: "HANDLER_NOT_REGISTERED", candidates: expect.any(Array) });
     expect((await failure(boot({ handlers: { ...handlers, extra: () => ({}) } as never })))?.diagnostic.code).toBe("HANDLER_NOT_DECLARED");
     expect((await failure(boot({ schedules: false })))?.diagnostic.code).toBe("SCHEDULE_NOT_WIRED");
+  });
+
+  it("refuses a re-sealed plan whose Schemas collide as readers or take a reserved reader name (ADR-0043)", async () => {
+    const { fingerprint: _f, ...body } = plan;
+    for (const schemas of [{ ...plan.schemas, order_lines: { ...plan.schemas.items!, name: "order_lines" }, orderlines: { ...plan.schemas.items!, name: "orderLines" } }, { ...plan.schemas, then: { ...plan.schemas.items!, name: "then" } }]) {
+      const patched = { ...body, schemas };
+      const sealed = { ...patched, fingerprint: await planFingerprint(patched) } as RuntimePlan;
+      expect((await failure(boot({ plan: sealed })))?.diagnostic.code).toBe("SCHEMA_READER_NAME_COLLISION");
+    }
   });
 
   it("refuses a re-sealed plan whose hook target or guard is an inline program (defence in depth: mantle validate refuses it first)", async () => {

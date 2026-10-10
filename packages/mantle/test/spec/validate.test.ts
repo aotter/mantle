@@ -1422,3 +1422,22 @@ describe("unsafePattern", () => {
       expect([bad, unsafePattern(bad)]).not.toEqual([bad, undefined]);
   });
 });
+
+describe("Schema reader names (ADR-0043)", () => {
+  const codes = (...names: string[]) => validateManifests({ manifests: names.map((n) => schema(n)) }).diagnostics.map((d) => d.code);
+  it("refuses two Schemas that become one reader, naming both", () => {
+    for (const pair of [["order_lines", "orderLines"], ["a-b", "a_b"]]) expect(codes(...pair)).toEqual(["SCHEMA_READER_NAME_COLLISION"]);
+    const d = validateManifests({ manifests: [schema("order_lines"), schema("orderLines")] }).diagnostics[0]!;
+    expect(d.message).toContain("order_lines");
+    expect(d.message).toContain("orderLines");
+  });
+  it("refuses a reserved reader name", () => {
+    for (const name of ["then", "constructor", "prototype", "toString", "valueOf", "hasOwnProperty"]) expect(codes(name), name).toEqual(["SCHEMA_READER_NAME_COLLISION"]);
+  });
+  it("accepts a name whose projection is not an identifier: its plan key is the property, so a valid app is never refused", () => {
+    for (const name of ["organization_members", "ticket-events", "Posts", "BlogPost", "2fa", "---", "組織成員"]) expect(codes(name), name).toEqual([]);
+  });
+  it("leaves two names that differ only by case to SCHEMA_NAME_CASE_COLLISION alone", () => {
+    expect(codes("notes", "Notes")).toEqual(["SCHEMA_NAME_CASE_COLLISION"]);
+  });
+});

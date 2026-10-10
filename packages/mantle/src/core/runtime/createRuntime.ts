@@ -3,7 +3,7 @@
  * Boot checks the plan, the handlers and the storage; `invokeProcedure` is the one path every source runs through.
  */
 import { DiagnosticError, makeDiagnostic, readJsonPointer, type Diagnostic, type DiagnosticCode } from "../../spec/kernel/index.js";
-import { RUNTIME_PLAN_VERSION, SqlRefusal, firstZodIssueAsJsonPointer, jsonSchemaToZod, planFingerprint, safeParseJson, type LifecycleHook, type RuntimePlan, type TriggerManifest, ManifestParseError } from "../../spec/domain/index.js";
+import { RUNTIME_PLAN_VERSION, SqlRefusal, readerNameProblems, firstZodIssueAsJsonPointer, jsonSchemaToZod, planFingerprint, safeParseJson, type LifecycleHook, type RuntimePlan, type TriggerManifest, ManifestParseError } from "../../spec/domain/index.js";
 import { validateTriggerSpec } from "../../spec/domain/service/TriggerSpecChecks.js";
 import type { ZodType } from "zod";
 import { systemCaller } from "../caller.js";
@@ -89,6 +89,10 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   }
   if (!args.schedules && triggers.some(([, t]) => t.source.kind === "schedule" && t.source.enabled !== false))
     throw fail("SCHEDULE_NOT_WIRED", at, "the plan has an enabled schedule Trigger and this entry does not wire schedules (pass schedules: true)");
+
+  // `store.db.<name>` is one reader per Schema (ADR-0043 decision 2): a collision or a reserved name would shadow another Schema's reads
+  const readerProblem = readerNameProblems(Object.values(plan.schemas).flatMap((s) => (typeof s.name === "string" ? [s.name] : [])))[0];
+  if (readerProblem) throw fail("SCHEMA_READER_NAME_COLLISION", `${at}#/schemas/${readerProblem.name.toLowerCase()}`, readerProblem.message);
 
   // Lifecycle targets receive their event through a ref handler; guards are ref handlers with a read-only context.
   const inline = (name: string) => !("ref" in (plan.procedures[name]?.handler ?? { ref: "" }));
@@ -188,9 +192,10 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
         const bound = store.as(inv.caller, inv.cause); // writes chain to this invocation, so hooks they fire count toward the depth limit
         // only the system caller reaches TTL maintenance: no request can produce one (ADR-0032 decision 8)
         const scoped = inv.caller.kind === "system" && !guard ? { ...bound, sweepExpired: store.sweepExpired } : bound;
+        const handlerStore = guard ? readOnly(scoped) : scoped;
         const ctx: HandlerContext = {
           caller: inv.caller, cause: inv.cause, env: args.env, waitUntil: (promise) => args.waitUntil?.(promise, inv.cause),
-          store: guard ? readOnly(scoped) : scoped,
+          store: handlerStore, db: handlerStore.db, // a guard's read-only Store keeps its readers
           invoke: (procedure, i) => (guard ? Promise.reject(fail("AUTH_DENIED", path, "a guard may not invoke a Procedure", "runtime")) : invoke({ procedure, input: i, caller: inv.caller, cause: child(inv.cause, procedure) })),
         };
         result = await (args.handlers[proc.handler.ref] as (i: unknown, c: HandlerContext) => unknown)(input, ctx);
