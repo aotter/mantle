@@ -341,10 +341,10 @@ describe("the generated module type-checks against Core", () => {
   }, 60_000);
 
   it("a View's required input, an unknown Schema, a written scope field and a native column are errors", async () => {
-    await writeFile(join(dir, "src/handlers.ts"), handlers.replace('{ input: { min: 1 }, limit: 10 }', "{ limit: 10 }").replace('from: "items"', 'from: "nope"').replace('values: { name:', 'values: { owner: "x", name:').replace('set: { status: "published" }', 'set: { version: 2 }'));
+    await writeFile(join(dir, "src/handlers.ts"), handlers.replace('{ input: { min: 1 }, limit: 10 }', "{ limit: 10 }").replace("ctx.store.db.items", "ctx.store.db.nope").replace('values: { name:', 'values: { owner: "x", name:').replace('set: { status: "published" }', 'set: { version: 2 }'));
     const errors = (await compile(dir)).join("\n");
     expect(errors).toMatch(/Property 'input' is missing/);
-    expect(errors).toMatch(/"nope"/);
+    expect(errors).toMatch(/Property 'nope' does not exist/); // no reader for an unknown Schema
     expect(errors).toMatch(/'owner' does not exist/); // Store fills the scope field; a write may not name it
     expect(errors).toMatch(/'version' does not exist/); // nor a native column other than status
   }, 60_000);
