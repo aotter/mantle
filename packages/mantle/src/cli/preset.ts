@@ -36,7 +36,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
   const withEnv = mantle || admin;
   const core = ["createMantle", ...(identity === "none" ? [] : ["withCaller"]), "type MantleRuntime", "type MantleService", "type Surface"];
   const auth = mantle ? ["ConsoleEmailSender", "createAuthRoutes", "createCallerResolver", "createMantleAuth", "createSetupIncompleteAuth", "type MantleAuth"] : [];
-  const env = [...(bun ? [postgres ? "  /** The node-postgres pool (src/index.ts). */\n  readonly PG: Pool;" : "  readonly DB: Database;"] : postgres ? ["  /** PostgreSQL through Hyperdrive; `wrangler dev` connects to its localConnectionString. */", "  readonly HYPERDRIVE: { readonly connectionString: string };"] : ["  readonly DB: D1Database;"]), ...(admin ? ["  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */", bun ? "  readonly ASSETS: (path: string) => Promise<Response | null>;" : "  readonly ASSETS: Fetcher;"] : []), ...(mantle ? ["  readonly BETTER_AUTH_SECRET?: string;", "  readonly PUBLIC_ORIGIN?: string;", "  readonly ADMIN_EMAIL?: string;"] : [])];
+  const env = [...(bun ? [postgres ? "  /** The node-postgres pool (src/index.ts). */\n  readonly PG: Pool;" : "  readonly DB: Database;", ...(mantle && !postgres ? ["  /** Separate native handle to the same file; Better Auth owns its async transactions. */", "  readonly AUTH_DB: Database;"] : [])] : postgres ? ["  /** PostgreSQL through Hyperdrive; `wrangler dev` connects to its localConnectionString. */", "  readonly HYPERDRIVE: { readonly connectionString: string };"] : ["  readonly DB: D1Database;"]), ...(admin ? ["  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */", bun ? "  readonly ASSETS: (path: string) => Promise<Response | null>;" : "  readonly ASSETS: Fetcher;"] : []), ...(mantle ? ["  readonly BETTER_AUTH_SECRET?: string;", "  readonly PUBLIC_ORIGIN?: string;", "  readonly ADMIN_EMAIL?: string;"] : [])];
   const origin = mantle ? [`  const origin = env.PUBLIC_ORIGIN?.replace(/\\/+$/, "") ?? "${localOrigin}";`, "  const auth = createAuth(env, origin);"] : [];
   const caller = mantle
     ? [`  const resolver = createCallerResolver(auth${mcp ? ", { jwtBearer: { audience: `${origin}/mcp`, scopes: [\"mcp\"] } }" : ""});`, "  const authRoutes = createAuthRoutes(auth, { resolver });", "  const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);"]
@@ -82,7 +82,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     ...(admin ? ['import { createAdminSurface } from "@aotter/mantle/admin";', 'import { adminExtensions } from "./admin-extensions.js";'] : []),
     ...(auth.length ? [`import { ${auth.join(", ")} } from "@aotter/mantle/auth";`] : []),
     ...(postgres
-      ? [`import { ${mantle ? "pgDatabaseDriver, pgPool, " : ""}postgresStorage, requestScoped, type PgClient, type PgSession } from "@aotter/mantle/postgres";`, bun ? 'import type { Pool } from "pg";' : 'import pg from "pg";']
+      ? [`import { ${mantle ? "pgDatabaseDriver, " + (bun ? "" : "pgPool, ") : ""}postgresStorage, type PgConnect } from "@aotter/mantle/postgres";`, bun ? 'import type { Pool } from "pg";' : 'import pg from "pg";']
       : bun
       ? ['import type { Database } from "bun:sqlite";', `import { bunSqliteStorage${mantle ? ', bunSqliteDriver' : ''} } from "@aotter/mantle/bun";`]
       : [`import { ${mantle ? "d1Driver, " : ""}d1Storage } from "@aotter/mantle/cloudflare";`]),
@@ -97,47 +97,17 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     ...env,
     "}",
     "",
-    "/** One composition per storage owner; its routes, auth and native database session are reused across requests. */",
+    "/** One composition per storage owner; its routes, auth and native database resources are reused across requests. */",
     "export function createService() {",
     ...(postgres ? [
-      "/**",
-      ...(bun
-        ? [" * One pooled client per request (`database(env).run` around the exported `mantle` below). Work outside a request (after its response) borrows one", " * per operation."]
-        : [" * One client per request (`database(env).run` around the exported `mantle` below): Hyperdrive keeps the pool, and a Worker's socket must not", " * outlive its request. Work outside a request (after its response) opens a client per operation."]),
-      " */",
-      "let session: PgSession | undefined;",
-      ...(bun ? [
-        "// ponytail: this wrapper could move into @aotter/mantle/postgres as a pgPoolConnect(pool) helper once a second host needs it",
-        'const database = (env: Pick<Env, "PG">) => (session ??= requestScoped(async () => {',
-        "  const client = await env.PG.connect();",
-        "  // the pooled client outlives the request, so every listener added during this checkout is removed in end(); one that saw a socket",
-        "  // error is destroyed, as is one a failed request left in a transaction",
-        "  const listeners: ((e: Error) => void)[] = [];",
-        "  let broken = false;",
-        "  let released = false;",
-        "  const onError = () => { broken = true; };",
-        '  client.on("error", onError);',
-        "  return {",
-        "    pipeline: true,",
-        "    query: client.query.bind(client),",
-        '    on: (_event: "error", f: (e: Error) => void) => { listeners.push(f); client.on("error", f); },',
-        "    getTransactionStatus: () => client.getTransactionStatus(),",
-        "    end: async () => {",
-        "      // a stale second end() must not release a client another request has since checked out",
-        "      if (released) return;",
-        "      released = true;",
-        '      for (const f of [onError, ...listeners]) client.removeListener("error", f);',
-        '      client.release(broken || client.getTransactionStatus() !== "I");',
-        "    },",
-        "  } as unknown as PgClient;",
-        "}));",
-      ] : [
-        'const database = (env: Pick<Env, "HYPERDRIVE">) => (session ??= requestScoped(async () => {',
-        "  // pg's `pipeline: true` sends a write batch in one round trip; it stays off until Hyperdrive is verified to forward it (#1379)",
+      bun
+        ? 'const database = (env: Pick<Env, "PG">): PgConnect => () => env.PG.connect();'
+        : 'const database = (env: Pick<Env, "HYPERDRIVE">): PgConnect => async () => {',
+      ...(bun ? [] : [
         "  const client = new pg.Client({ connectionString: env.HYPERDRIVE.connectionString });",
         "  await client.connect();",
-        "  return client as unknown as PgClient;",
-        "}));",
+        "  return client;",
+        "};",
       ]),
       "",
     ] : []),
@@ -150,9 +120,9 @@ function service({ identity, features, dialect, host }: PresetSelection): string
       `    return createSetupIncompleteAuth({ message: "Sign-in is not configured: copy ${localEnv}.example to ${localEnv} locally, or choose a sign-in method in src/service.ts." });`,
       "  return createMantleAuth({",
       bun
-        ? postgres ? "    database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect), baseURL: origin, secret: env.BETTER_AUTH_SECRET," : "    database: env.DB, driver: bunSqliteDriver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
+        ? postgres ? "    database: env.PG, driver: pgDatabaseDriver(database(env)), baseURL: origin, secret: env.BETTER_AUTH_SECRET," : "    database: env.AUTH_DB, driver: bunSqliteDriver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
         : postgres
-        ? "    database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
+        ? "    database: pgPool(database(env)), driver: pgDatabaseDriver(database(env)), baseURL: origin, secret: env.BETTER_AUTH_SECRET,"
         : "    database: env.DB, driver: d1Driver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,",
       '    methods: [{ kind: "email-otp", sender: new ConsoleEmailSender() }],',
       '    bootstrapOwner: { match: "email", value: env.ADMIN_EMAIL },',
@@ -181,18 +151,7 @@ function service({ identity, features, dialect, host }: PresetSelection): string
     `  fetch: (request, ${withEnv ? "env" : "_env"}, { runtime${mantle ? ", waitUntil" : ""} }) => ${call},`,
     "};",
     "",
-    ...(postgres ? [
-      `const core = createMantle(service, { plan, storage: (env) => postgresStorage({ connect: database(env).connect }), schedules: ${bun ? "false" : "true"} });`,
-      "// a request is the unit of work, boot included: the first request's convergence reads share its one client, and so do the rest",
-      "const mantle: typeof core = {",
-      "  fetch: (request, env, ctx) => database(env).run(() => core.fetch(request, env, ctx)),",
-      "  invokeSchedule: (cron, scheduledTime, env, ctx) => database(env).run(() => core.invokeSchedule(cron, scheduledTime, env, ctx)),",
-      "  runDeferredHook: (message, env, ctx) => database(env).run(() => core.runDeferredHook(message, env, ctx)),",
-      "};",
-      "return mantle;",
-    ] : [
-      `return createMantle(service, { plan, storage: (env) => ${bun ? "bunSqliteStorage(env.DB)" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
-    ]),
+    `return createMantle(service, { plan, storage: (env) => ${postgres ? "postgresStorage({ connect: database(env) })" : bun ? "bunSqliteStorage(env.DB)" : "d1Storage(env.DB)"}, schedules: ${bun ? "false" : "true"} });`,
     "}",
     "",
     "export const mantle = createService();",
@@ -371,13 +330,15 @@ export async function presetWarnings(root: string, selection: PresetSelection, s
 function bunEntry(selection: PresetSelection): string {
   const pg = selection.dialect === 'postgres';
   const admin = selection.features.includes('admin');
+  const sqliteAuth = !pg && selection.identity === 'mantle';
   return `${OWNED} Bun owns the server, the database pool and background work.
 ${pg ? 'import pg from "pg";' : 'import { Database } from "bun:sqlite";'}
 ${admin ? 'import { bunAdminAssets } from "@aotter/mantle/bun";\nimport { dirname } from "node:path";\nimport { fileURLToPath } from "node:url";\n' : ''}import { mantle, type Env } from "./service.js";
 
-${pg ? 'if (!process.env.DATABASE_URL || !/^postgres(?:ql)?:\\/\\//.test(process.env.DATABASE_URL)) throw new Error("DATABASE_URL must be a PostgreSQL URL");\n// pipeline: one round trip per write batch (#1379). The role sets statement_timeout and TimeZone UTC; boot checks them.\nconst pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, pipeline: true });\npool.on("error", console.error);' : 'const db = new Database(process.env.DATABASE_FILE ?? "mantle.sqlite", { create: true });'}
+${pg ? 'if (!process.env.DATABASE_URL || !/^postgres(?:ql)?:\\/\\//.test(process.env.DATABASE_URL)) throw new Error("DATABASE_URL must be a PostgreSQL URL");\nconst pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });\npool.on("error", console.error);' : `const filename = process.env.DATABASE_FILE ?? "mantle.sqlite";${sqliteAuth ? '\nif (!filename || filename === ":memory:") throw new Error("Bun Mantle auth requires a file-backed DATABASE_FILE for its separate SQLite handles");' : ''}\nconst db = new Database(filename, { create: true });${sqliteAuth ? '\ndb.exec("PRAGMA journal_mode = WAL");\nconst authDb = new Database(filename, { create: true });' : ''}`}
+
 const env: Env = {
-  ${pg ? 'PG: pool' : 'DB: db'},
+  ${pg ? 'PG: pool' : `DB: db${sqliteAuth ? ',\n  AUTH_DB: authDb' : ''}`},
 ${admin ? '  ASSETS: bunAdminAssets(dirname(fileURLToPath(import.meta.resolve("@aotter/mantle-ui/admin/index.html")))),\n' : ''}${selection.identity === 'mantle' ? '  PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN, BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET, ADMIN_EMAIL: process.env.ADMIN_EMAIL,\n' : ''}};
 // the client is the socket's address; behind a proxy you list in TRUSTED_PROXIES, the address it appended to X-Forwarded-For
 const proxies = new Set((process.env.TRUSTED_PROXIES ?? "").split(",").map((s) => s.trim()).filter(Boolean));
@@ -410,7 +371,7 @@ const stop = async () => {
   stopping = true;
   await server.stop();
   while (pending.size) await Promise.allSettled([...pending]);
-  ${pg ? 'await pool.end();' : 'db.close();'}
+  ${pg ? 'await pool.end();' : `db.close();${sqliteAuth ? '\n  authDb.close();' : ''}`}
 };
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);

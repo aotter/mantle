@@ -84,8 +84,11 @@ Choose in this order, stopping at the first that works:
   types `ctx.env`); the generated type
   lists exactly the plan's refs. Read and write only through `ctx.store`.
 - After hooks: loop over `ctx.cause.rows`; never read only `rows[0]`.
-- Before hooks and guards are read-only and reject by throwing
-  `DiagnosticError` (from `@aotter/mantle`); any other throw is a 500.
+- Guards are read-only and cannot invoke Procedures. Before hooks use the
+  normal caller-bound Store/invoke; their business logic and side effects are
+  application-owned. Throwing `DiagnosticError` prevents the outer batch, but
+  prior hook writes remain committed. Declare OCC explicitly; only publishing
+  retains its own implicit version protection. Other throws are a 500.
 - `ctx.caller.kind === "user"` means signed in; a schedule runs as `system`.
   Never test `!== "anonymous"`.
 - `ctx.invoke(name, input)` calls another Procedure with the same caller.

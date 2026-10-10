@@ -55,9 +55,12 @@ The target is a `ref` Procedure (`LIFECYCLE_TARGET_NOT_REF`). `ctx.cause` is
 `{ kind: "lifecycle", trigger, hook, schema, rows, id }`.
 
 - A **before** hook runs before the batch, receives the one row (for an insert,
-  the row about to be written), reads only, and rejects by throwing; nothing is
-  applied. The write then locks the version the hook saw. Before hooks on one
-  operation run in Trigger-name order.
+  the row about to be written), and rejects the outer batch by throwing. It
+  receives the normal caller-bound Store and can invoke authorized Procedures.
+  Its already committed side effects are not undone if the outer batch fails.
+  The snapshot adds no implicit version lock: declare OCC when required.
+  Publishing retains its separate version protection. Before hooks on one
+  operation run in Trigger-name order; authors own side effects and races.
 - An **after** hook runs after the commit, once per statement and Trigger, with
   every written row in `rows` (each with `id` and `version`). A failure is
   logged and never undoes the write. `id` is stable for a replay.

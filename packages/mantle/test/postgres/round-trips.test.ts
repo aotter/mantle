@@ -1,31 +1,24 @@
 // @ts-nocheck test code over loosely typed results
-/**
- * #1379, per request: the connections a request opens and the round trips it takes, counted by a TCP proxy, for Better Auth's
- * getSession and listUsers, a View read, a 4-statement write and an authenticated request (all three). Unscoped, every
- * operation opens a connection; in `requestScoped`, a request opens one. A read is one round trip either way; a write batch is
- * N + 2, or 1 when the client pipelines. MANTLE_PG_ONE_WAY_MS adds latency each way and prints the table with wall times.
- */
+/** Native per-operation acquisition: TCP proxy counts messages without a request scheduler or write pipeline. */
 import { expect, it } from "vitest";
 import { createMantleAuth } from "../../src/auth/index.js";
-import { pgDatabaseDriver, pgPool, postgresStorage, requestScoped } from "../../src/postgres/index.js";
+import { pgDatabaseDriver, pgPool, postgresStorage } from "../../src/postgres/index.js";
 import * as pgCompile from "../../src/postgres/compile/index.js";
 import { boot, caller, isConflict, opIndexOf, program, runProcedure, runView, site, useCompileSide } from "../../src/testing/harness.js";
 import { PG_URL, freshSchema } from "./engine.js";
 import { roundTripProxy } from "./proxy.js";
 
 const ONE_WAY_MS = Number(process.env.MANTLE_PG_ONE_WAY_MS ?? 0);
-const MODES = { "per operation": { scope: false, pipeline: false }, "request-scoped": { scope: true, pipeline: false }, "request-scoped, pipelined": { scope: true, pipeline: true } };
 
-async function measure({ scope, pipeline }: { scope: boolean; pipeline: boolean }) {
+async function measure() {
   const proxy = await roundTripProxy(new URL(PG_URL!), ONE_WAY_MS);
-  const db = await freshSchema({ url: proxy.url, pipeline });
-  const session = requestScoped(db.connect);
+  const db = await freshSchema({ url: proxy.url });
   useCompileSide(pgCompile);
   try {
-    const s = site(await boot({ storage: postgresStorage({ connect: session.connect }), driver: pgDatabaseDriver(session.connect) }));
+    const s = site(await boot({ storage: postgresStorage({ connect: db.connect }), driver: pgDatabaseDriver(db.connect) }));
     const codes = new Map<string, string>();
     const auth = createMantleAuth({
-      database: pgPool(session.connect), driver: pgDatabaseDriver(session.connect), baseURL: "http://localhost", secret: "x".repeat(40), ipAddressHeaders: ["x-real-ip"],
+      database: pgPool(db.connect), driver: pgDatabaseDriver(db.connect), baseURL: "http://localhost", secret: "x".repeat(40), ipAddressHeaders: ["x-real-ip"],
       methods: [{ kind: "email-otp", sender: { send: async ({ to, text }) => void codes.set(to, /\b(\d{6})\b/.exec(text)![1]!) } }],
       bootstrapOwner: { match: "email", value: "owner@x.test" },
     });
@@ -48,7 +41,7 @@ async function measure({ scope, pipeline }: { scope: boolean; pipeline: boolean 
       const from = proxy.trips.length;
       const before = proxy.trips.slice();
       const t0 = performance.now();
-      const result = await (scope ? session.run(f) : f()).catch((e) => e);
+      const result = await f().catch((e) => e);
       const ms = performance.now() - t0;
       await new Promise((r) => setTimeout(r, 2 * ONE_WAY_MS + 20));
       const opened = proxy.trips.slice(from);
@@ -68,30 +61,14 @@ async function measure({ scope, pipeline }: { scope: boolean; pipeline: boolean 
   } finally { useCompileSide(undefined); await db.drop(); await proxy.close(); }
 }
 
-it.skipIf(!PG_URL)("a request opens one connection when scoped; a read is one round trip, a write batch N + 2 or 1 pipelined", async () => {
-  const runs = {};
-  for (const [name, mode] of Object.entries(MODES)) runs[name] = await measure(mode);
-  for (const { out } of Object.values(runs)) for (const [what, m] of Object.entries(out)) if (what !== "failed expect") expect(m.result, what).not.toBeInstanceOf(Error);
-  const [perOp, scoped, piped] = Object.values(runs).map((r) => r.out);
-  expect(perOp["View read"]).toMatchObject({ connections: 1, trips: 1 });
-  expect(perOp["4-statement write"]).toMatchObject({ connections: 1, trips: 6 });
-  // Better Auth asks its pool for a client per query: each its own connection, unscoped
-  expect(perOp.listUsers.connections).toBeGreaterThan(1);
-  for (const m of Object.values(scoped).concat(Object.values(piped))) expect(m.connections).toBe(1);
-  for (const what of Object.keys(scoped)) expect(scoped[what].trips, what).toBeLessThanOrEqual(perOp[what].trips);
-  expect(scoped["View read"].trips).toBe(1);
-  expect(scoped["4-statement write"].trips).toBe(6);
-  expect(piped["View read"].trips).toBe(1);
-  expect(piped["4-statement write"].trips).toBe(1);
-  expect(scoped["getSession + View + write"].trips).toBe(scoped.getSession.trips + 1 + 6);
-  expect(piped["getSession + View + write"].trips).toBe(piped.getSession.trips + 1 + 1);
-  // an expect that fails is checked by PostgreSQL: CONFLICT naming op 1, op 0 rolled back; pipelined, still one round trip
-  for (const { out, stockA } of Object.values(runs)) {
-    expect(isConflict(out["failed expect"].result)).toBe(true);
-    expect(opIndexOf(out["failed expect"].result)).toBe(1);
-    expect(stockA).toBe(5 + 2);
-  }
-  expect(piped["failed expect"].trips).toBe(1);
-  const table = Object.keys(perOp).map((what) => `| ${what} | ${Object.values(runs).map(({ out }) => `${out[what].connections} / ${out[what].trips}${ONE_WAY_MS ? ` / ${out[what].ms.toFixed(0)} ms` : ""}`).join(" | ")} |`);
-  console.log([`one-way ${ONE_WAY_MS} ms: connections / round trips${ONE_WAY_MS ? " / wall" : ""}`, `| request | ${Object.keys(MODES).join(" | ")} |`, ...table].join("\n"));
+it.skipIf(!PG_URL)("native reads acquire per operation, writes run sequentially and failed expect rolls back", async () => {
+  const { out, stockA } = await measure();
+  for (const [what, m] of Object.entries(out)) if (what !== "failed expect") expect(m.result, what).not.toBeInstanceOf(Error);
+  expect(out["View read"]).toMatchObject({ connections: 1, trips: 1 });
+  expect(out["4-statement write"]).toMatchObject({ connections: 1, trips: 6 });
+  expect(out.listUsers.connections).toBeGreaterThan(1);
+  expect(isConflict(out["failed expect"].result)).toBe(true);
+  expect(opIndexOf(out["failed expect"].result)).toBe(1);
+  expect(stockA).toBe(7);
+  console.log(Object.fromEntries(Object.entries(out).map(([name, {result, ...counts}]) => [name, counts])));
 }, 240_000);

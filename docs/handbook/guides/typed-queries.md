@@ -11,7 +11,7 @@ generated `Store`.
 
 | Store | Where | Scope |
 |---|---|---|
-| `ctx.store` | inside a `ref` handler | bound to the invocation's caller. A guard or a before hook gets a read-only one |
+| `ctx.store` | inside a `ref` handler | bound to the invocation's caller. Only an authorization guard gets a read-only one |
 | `runtime.store.as(caller)` | service code that has resolved a caller | that caller |
 | `runtime.store` | trusted host code (imports, maintenance) | none: no caller scope. TTL still applies |
 

@@ -210,10 +210,10 @@ describe("the service preset", () => {
     expect(JSON.parse(await read(dir, "mantle.config.json"))).toMatchObject({ dialect: "postgres" });
     expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/postgres", version: "2" });
     const service = await read(dir, "src/service.ts");
-    expect(service).toContain("postgresStorage({ connect: database(env).connect })");
-    expect(service).toContain("database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect)");
-    // a request is the unit of work: one client for all of its queries; pipelining stays off until Hyperdrive is verified (#1379)
-    expect(service).toContain("fetch: (request, env, ctx) => database(env).run(() => core.fetch(request, env, ctx))");
+    expect(service).toContain("postgresStorage({ connect: database(env) })");
+    expect(service).toContain("database: pgPool(database(env)), driver: pgDatabaseDriver(database(env))");
+    // Native clients are acquired per operation; the preset owns no request session or pipeline.
+    expect(service).not.toContain("requestScoped");
     expect(service).not.toContain("database(env).run(() => (routes");
     expect(service).not.toMatch(/new pg\.Client\(\{[^}]*pipeline/);
     expect(service).not.toContain("D1Database");
@@ -427,9 +427,19 @@ it('writes Bun presets: node-postgres over PostgreSQL, bun:sqlite over SQLite, n
     // ADR-0039: node-postgres on every host, one client per request; bun:sqlite stays native
     if (dialect === 'postgres') {
       expect(files['src/service.ts']).toMatch(/from "@aotter\/mantle\/postgres"/);
-      expect(files['src/service.ts']).toContain('requestScoped(');
+      expect(files['src/service.ts']).not.toContain('requestScoped(');
+      expect(files['src/service.ts']).toContain('() => env.PG.connect()');
+      if (identity === 'mantle') expect(files['src/service.ts']).toContain('database: env.PG');
       expect(files['src/service.ts']).not.toContain('@aotter/mantle/bun"');
-    } else expect(files['src/service.ts']).toContain('bunSqliteStorage');
+    } else {
+      expect(files['src/service.ts']).toContain('bunSqliteStorage');
+      if (identity === 'mantle') {
+        expect(files['src/service.ts']).toContain('database: env.AUTH_DB, driver: bunSqliteDriver(env.DB)');
+        expect(files['src/index.ts']).toContain('AUTH_DB: authDb');
+        expect(files['src/index.ts']).toContain('journal_mode = WAL');
+        expect(files['src/index.ts']).toContain('filename === ":memory:"');
+      }
+    }
     expect(files['src/index.ts']).toContain('Bun.serve');
     expect(files['src/index.ts']).toContain('headers.delete("x-mantle-client-ip")');
     expect(files['src/index.ts']).toContain('while (pending.size)');

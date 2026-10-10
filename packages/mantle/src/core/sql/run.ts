@@ -189,9 +189,12 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs): Promise<
       await p.checks?.[i]?.(row);
     }
     if (hooked) await lc!.dispatcher.before([event(i, `before_${HOOK[verbOf(c)]}`, c.schema, [row])]);
-    versions[i] = row.version;
-    // the statement carries the version it was decided on, so a change in between is CONFLICT
-    if (c.verb !== "insert") plan[i] = compileCached(env, p, p.ir[i]!, [p.ir[i]!], { ...base, lockVersion: true, statuses: [p.statuses?.[i]] }, "one")[0]!;
+    // Publishing decisions remain pinned to the row checked above. A hook snapshot alone adds no OCC;
+    // any version predicate explicitly supplied by the caller stays in the original statement.
+    if (lifecycle) {
+      versions[i] = row.version;
+      plan[i] = compileCached(env, p, p.ir[i]!, [p.ir[i]!], { ...base, lockVersion: true, statuses: [p.statuses?.[i]] }, "one")[0]!;
+    }
   }
 
   // a row op that matched nothing is `lock` when the entry is visible at another version than the one `version = input.x` asked for

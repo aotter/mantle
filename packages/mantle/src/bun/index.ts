@@ -23,23 +23,23 @@ export function bunAdminAssets(root: string): (path: string) => Promise<Response
 
 /** Structural bun:sqlite database. One native synchronous transaction per batch. */
 export interface BunSqliteDatabase {
-  prepare(sql: string): { all(...binds: any[]): Record<string, unknown>[] };
+  query(sql: string): { all(...binds: any[]): Record<string, unknown>[]; get(...binds: any[]): Record<string, unknown> | null };
   transaction<T>(run: () => T): { immediate(): T };
   readonly inTransaction: boolean;
 }
-/**
- * One native synchronous transaction per batch. Foreign keys are on, as on D1 (Better Auth's tables cascade). Better Auth holds
- * its own transactions open across awaits on the same handle: a batch waits for one to end, or it would become a savepoint
- * inside it and an acknowledged write could roll back with it. A batch itself never yields, so nothing interleaves with it.
- */
+/** Native cached queries and synchronous write batches. Never share this handle across an async transaction. */
 export function bunSqliteDriver(db: BunSqliteDatabase): import('../core/driver.js').DatabaseDriver {
-  db.prepare('PRAGMA foreign_keys = ON').all();
+  db.query('PRAGMA foreign_keys = ON').all();
+  const ready = () => {
+    if (db.inTransaction) throw new Error('bun:sqlite: this handle is already in a transaction; use a separate handle for asynchronous transactions');
+  };
   return {
     async batch(statements) {
-      for (const deadline = Date.now() + 5_000; db.inTransaction; await new Promise((r) => setTimeout(r, 1)))
-        if (Date.now() > deadline) throw new Error('bun:sqlite: a transaction on this handle stayed open for 5 s');
-      return db.transaction(() => statements.map((s) => ({ rows: db.prepare(s.sql).all(...(s.binds ?? [])) }))).immediate();
+      ready();
+      return db.transaction(() => statements.map((s) => ({ rows: db.query(s.sql).all(...(s.binds ?? [])) }))).immediate();
     },
+    async all(statement) { ready(); return db.query(statement.sql).all(...(statement.binds ?? [])); },
+    async first(statement) { ready(); return db.query(statement.sql).get(...(statement.binds ?? [])) ?? null; },
   };
 }
 export const bunSqliteStorage = (db: BunSqliteDatabase, options?: Parameters<typeof sqliteStorage>[1]) => sqliteStorage(bunSqliteDriver(db), options);

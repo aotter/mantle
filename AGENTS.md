@@ -5,6 +5,9 @@
   checkout.
 - To change or review this SDK, read [`CONTRIBUTING.md`](CONTRIBUTING.md) and
   the relevant accepted ADRs before editing.
+- For implementation, apply [Ponytail](.agents/skills/ponytail/SKILL.md): native
+  primitives first; deletion before new wrappers. For complexity review use
+  [Ponytail Review](.agents/skills/ponytail-review/SKILL.md), alongside correctness review.
 - To version, publish, or tag a release, additionally read the
   canonical [release skill](.agents/skills/mantle-release/SKILL.md). Do not
   release unless the user explicitly asks.

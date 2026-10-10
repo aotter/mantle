@@ -1,5 +1,7 @@
 # ADR-0040: Mantle is a thin toolkit over native hosts and dialects
 
+> **2026-10-10 amendment:** [ADR-0041](0041-native-driver-and-application-hook-ownership.md) governs native driver execution, SQLite handle ownership and application-owned before hooks. Its explicit removals supersede the corresponding historical guarantees below.
+
 **Status:** Accepted direction; implementation changes require their own review.
 
 **Date:** 2026-10-09
