@@ -43,19 +43,21 @@ export class PgStoreExecutor implements StoreExecutor {
 
   private prepared(s: StoreStatement, i = -1): PgStatement {
     if (s.binds.length > this.maxBindings) throw fail("INPUT_VALIDATION_FAILED", `a statement binds ${s.binds.length} values; the limit is ${this.maxBindings}`);
-    if (s.expect === undefined) return { text: this.print(s.ir).text, values: s.binds };
+    const printed = s.printed ? { text: s.printed.sql, returns: s.printed.returns } : undefined;
+    if (s.expect === undefined) return { text: (printed ?? this.print(s.ir)).text, values: s.binds };
     // printed into the SQL, so only a whole number; any other never matched a count, so it fails as a mismatch always did
     if (!Number.isSafeInteger(s.expect)) throw fail("CONFLICT", `CONFLICT op=${i}: the write matched a different number of rows than it expected`, { opIndex: i, reason: "expect" });
     // the count is checked by the statement itself, so nothing waits on it between statements: a data-modifying CTE always
     // runs to completion, and an aggregate without GROUP BY is one group even over no rows, so the guard always runs
-    const { text: inner, returns } = this.print(s.ir);
+    const { text: inner, returns } = printed ?? this.print(s.ir);
     const text = `WITH _mantle_w AS (${inner}${returns ? "" : " RETURNING 1"}), _mantle_x AS (INSERT INTO _mantle_assert (ok) SELECT true FROM _mantle_w HAVING NOT _mantle_expect(count(*), ${s.expect})) SELECT * FROM _mantle_w`;
     return { text, values: s.binds, ...(returns ? {} : { discardRows: true }) };
   }
 
   async select(statement: StoreStatement): Promise<readonly StoreRow[]> {
     // a read is a bare statement now, no READ ONLY transaction behind the allowlist: one that writes is refused here too
-    if (!this.readChecked.has(statement.ir)) {
+    // a printed statement is a View the dialect checked at generate (ADR-0044); its `ir` is not built
+    if (!statement.printed && !this.readChecked.has(statement.ir)) {
       if (writes(statement.ir)) throw fail("INPUT_VALIDATION_FAILED", "SQL_WRITE: a read cannot write");
       this.readChecked.add(statement.ir);
     }

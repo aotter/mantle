@@ -11,7 +11,7 @@ import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResu
 import type { MantleDialect } from "../dialect.js";
 import { sqlInput, type BindContext, type Mode } from "../sql/compile.js";
 import { num, op, ref, table } from "../sql/ast.js";
-import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv, type ViewMatch } from "../sql/run.js";
+import { VIEW_PAGE_SIZE, runProcedure, runView, type LifecycleHooks, type Program, type RunEnv, type ViewMatch } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
 import { StoreJson, decodeRow, validateValues, type StoreSchemas } from "./json.js";
@@ -170,7 +170,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
         input = r.data;
       }
       if (caller && v.guard) await deps.guardView?.(v.guard, caller, (input ?? {}) as Readonly<Record<string, unknown>>, parent ?? { kind: "internal", id: `store:${deps.newId()}` });
-      const limit = options.limit ?? 50;
+      const limit = options.limit ?? VIEW_PAGE_SIZE;
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");
       const { mode, bind: b } = bindFor(deps.now(), caller);
       const cursor = options.cursor === undefined ? undefined : decodeCursor(`view:${name}`, options.cursor);

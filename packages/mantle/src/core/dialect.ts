@@ -31,7 +31,7 @@ export type RestrictSql = (plan: SqlPlan, context: SqlContext) => readonly SqlDi
 /** The dialect with `restrict` run after its own check. */
 export function restricted(dialect: MantleDialect, restrict?: RestrictSql): MantleDialect {
   if (!restrict) return dialect;
-  return { ...dialect, check: (plan, context) => { const own = dialect.check(plan, context); return own.length ? own : restrict(plan, context); } };
+  return { ...dialect, restricted: true, check: (plan, context) => { const own = dialect.check(plan, context); return own.length ? own : restrict(plan, context); } };
 }
 
 /** Core's policy rewriter adds visibility and ownership to every relation position; the dialect spells the rest (`lowering`). */
@@ -57,4 +57,13 @@ export interface MantleDialect {
   readonly nativeSql?: boolean;
   /** Resolves a bind the lowering added. */
   bind(spec: DialectBind, context: BindContext): unknown;
+  /**
+   * The dialect's printer: the very function its executor prints with (ADR-0044 decision 3). `mantle generate` prints every View and
+   * inline Procedure through it. Absent, a plan for this dialect carries no lowered statements.
+   */
+  print?(ast: SqlNode, schemas: Readonly<Record<string, StorageSchema>>): string;
+  /** What else the printed text depends on (PostgreSQL: the time zone); compared with `plan.lowered.dialect.key`. */
+  readonly lowerKey?: string;
+  /** Set by `restricted()`: an operator's refusals run on every program, so lowered statements are never used (ADR-0044 decision 5). */
+  readonly restricted?: boolean;
 }

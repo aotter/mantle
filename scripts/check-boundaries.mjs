@@ -66,7 +66,7 @@ function checkNextFolderImports() {
   // Core holds no engine code (ADR-0035 decision 3): SQLite lives in `d1`, and only `spec`'s front end (the built-in
   // dialect's compile side), `cloudflare` and `cli` reach it. `testing` runs over the dialect interface. `postgres` reuses
   // the SQLite dialect's subset check and codecs, and `cli` loads its compile side as a built-in (ADR-0036).
-  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], postgres: ["core", "spec", "d1"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], bun: ["core", "spec", "postgres", "d1"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1", "postgres/compile"] };
+  const folders = { core: ["spec"], spec: ["d1/compile"], d1: ["core", "spec"], postgres: ["core", "spec", "d1"], testing: ["core", "spec"], cloudflare: ["core", "spec", "d1"], bun: ["core", "spec", "postgres", "d1"], auth: ["core", "spec", "admin"], admin: ["core", "spec"], mcp: ["core", "spec"], web: ["core", "spec"], cli: ["core", "spec", "d1", "postgres/compile", "postgres/dialect.js"] };
   const libs = { "better-auth": "auth", "@better-auth/": "auth", "@modelcontextprotocol/": "mcp", "hono": "web", "@cloudflare/": "cloudflare", "wrangler": "cloudflare", "react": "admin", "libpg-query": "spec", "pgsql-deparser": ["d1", "postgres"] };
   const NODE_ALLOWED = { auth: ["node:async_hooks"], postgres: ["node:async_hooks"], testing: ["node:util"], bun: ["node:path", "node:fs/promises"] };
   const root = join(ROOT, "packages/mantle/src");
