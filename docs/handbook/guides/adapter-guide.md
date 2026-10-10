@@ -49,6 +49,14 @@ the plan records it and boot refuses another. A dialect is supported when it
 passes `runStorageConformance` from `@aotter/mantle/testing` on a real engine.
 See ADR-0035 and [Runtime, Store and dialects](../concepts/runtime-and-adapters.md).
 
+A dialect can also expose `print(ast, schemas)` (the function its executor
+prints with) and, when its printed text depends on more than its name and
+version, a `lowerKey` (PostgreSQL: the time zone). With `print`, `mantle
+generate` lowers the plan's Views and inline Procedures for it (ADR-0044) and a
+runtime seeds them; without it, a plan for the dialect carries no lowered
+statements and compiles on first use. Generate reaches only the built-in
+dialects' runtime sides today.
+
 ## Surfaces and identity
 
 They are host-neutral Fetch functions: `createRestSurface`,
