@@ -21,7 +21,7 @@ import.
 | `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |
 | `@aotter/mantle/auth` | `createMantleAuth` (Better Auth), `createCallerResolver`, `createAuthRoutes` |
 | `@aotter/mantle/admin` | `createAdminSurface` |
-| `@aotter/mantle/mcp` | `createMcpSurface` |
+| `@aotter/mantle/mcp` | `createMcpSurface`, `mcpTools` |
 | `@aotter/mantle/web` | `createRestSurface` |
 | `@aotter/mantle/testing` | `runStorageConformance`, the dialect compliance suite |
 

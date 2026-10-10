@@ -81,7 +81,7 @@ Two npm packages, always published together at one version.
 | `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |
 | `@aotter/mantle/auth` | `createMantleAuth`, `createSetupIncompleteAuth`, `createCallerResolver`, `createAuthRoutes`, `ConsoleEmailSender`, `appleClientSecret` |
 | `@aotter/mantle/admin` | `createAdminSurface`, `AdminIdentity` |
-| `@aotter/mantle/mcp` | `createMcpSurface`, `planApp` and `appCatalog` (the MCP App's catalog) |
+| `@aotter/mantle/mcp` | `createMcpSurface`, `mcpTools` and its `McpTool` type (the same function `/spec` exports, for a bundle that may not import `/spec`), `planApp` and `appCatalog` (the MCP App's catalog) |
 | `@aotter/mantle/web` | `createRestSurface` |
 | `@aotter/mantle/bun` | `bunSqliteStorage`, `bunSqliteDriver`, `bunAdminAssets` |
 | `@aotter/mantle/testing` | `runStorageConformance`, the dialect compliance suite |
