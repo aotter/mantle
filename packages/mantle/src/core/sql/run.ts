@@ -156,7 +156,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs, rowsOnly 
   const base = ctxOf(env, p, { returning: lc?.after, statuses: p.statuses });
   const plan = compileCached(env, p, p.ir, p.ir, base, "all");
   const versions: Record<number, unknown> = {};
-  // a hook receives the entry as Store's `select` returns it (declared names, decoded values, `{ lat, lng }`), not the storage encoding
+  // a hook receives the entry as a Store reader returns it (declared names, decoded values, `{ lat, lng }`), not the storage encoding
   const entry = (schema: string, row: StoreRow): StoreRow => {
     const def = env.schemas[schema]!;
     const out: Record<string, unknown> = {};

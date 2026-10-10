@@ -14,7 +14,7 @@ import { num, op, ref, table } from "../sql/ast.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv, type ViewMatch } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
-import { StoreJson, checkValue, decodeRow, rowDecoder, validateValues, walkRead, type StoreSchemas } from "./json.js";
+import { StoreJson, checkValue, rowDecoder, validateValues, walkRead, type StoreSchemas } from "./json.js";
 import { READER_SHAPES, createReaderSet, dbFor, readerOf, type ReaderSet, type ReadKind, type Shape } from "./readers.js";
 
 /** A compiled View: its IR and declared input types. `public` shows published rows only (ADR-0032 decision 8). */
@@ -133,18 +133,6 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent: InvocationCau
 
   return {
     db,
-    /** @deprecated Use store.db.<schema> (ADR-0043); removed in the next alpha. */
-    select: (q) => guard(async (): Promise<StoreSelectResult> => {
-      const json = new StoreJson(deps.schemas, deps.dialect.codec);
-      const s = json.select(q);
-      const binding = `${s.from}:${s.order.column.col}:${s.order.dir}`;
-      const { mode, bind: b } = bindFor(deps.now(), caller);
-      const cursor = q.cursor === undefined ? undefined : decodeCursor(binding, q.cursor);
-      const program: Program = { kind: "view", inputs: json.inputs, ir: [s.ir] };
-      const page = await runView(env(mode), program, as({ ...b, input: json.values }), { pageSize: s.pageSize, ...(cursor ? { cursor } : {}) });
-      return { rows: page.rows.map((r) => decodeRow(r, s.columns, deps.dialect.codec)), ...(page.next ? { nextCursor: encodeCursor(binding, page.next) } : {}) };
-    }),
-
     write: (ops) => guard(async (): Promise<readonly StoreWriteResult[]> => {
       if (!Array.isArray(ops) || !ops.length) throw invalid("A write takes a non-empty list of operations.");
       const json = new StoreJson(deps.schemas, deps.dialect.codec);

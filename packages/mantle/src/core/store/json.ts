@@ -9,7 +9,7 @@ import type { ZodType } from "zod";
 import { classify } from "../../spec/domain/index.js";
 import { S, op, ref, table, target } from "../sql/ast.js";
 import type { StorageSchema, StoreCodec } from "../dialect.js";
-import type { StoreScalar, StoreSelect, StoreWhere, StoreWriteOp } from "../store.js";
+import type { StoreScalar, StoreWhere, StoreWriteOp } from "../store.js";
 
 /** A Schema as the Store sees it: `names` maps a lower-cased column to the name its JSON Schema declares. */
 export interface StoreSchema extends StorageSchema {
@@ -22,6 +22,17 @@ export interface StoreSchema extends StorageSchema {
   readonly name?: string;
 }
 export type StoreSchemas = Readonly<Record<string, StoreSchema>>;
+
+/** What a reader's miss path hands `read`: the reader query plus the Schema key it was made for. */
+export interface ReadRequest {
+  readonly from: string;
+  readonly columns?: readonly string[];
+  readonly where?: StoreWhere;
+  readonly orderBy?: Readonly<Record<string, "asc" | "desc">>;
+  readonly limit?: number;
+  readonly cursor?: string;
+  readonly search?: string;
+}
 
 const invalid = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
 
@@ -65,7 +76,6 @@ export function rowDecoder(columns: readonly Column[], codec: StoreCodec): (row:
     return o;
   };
 }
-export const decodeRow = (row: Readonly<Record<string, unknown>>, columns: readonly Column[], codec: StoreCodec): Record<string, unknown> => rowDecoder(columns, codec)(row);
 
 /** A JSON value against the type of the column it is bound to: the type predicate, then the codec's own encoding check. */
 export function checkValue(codec: StoreCodec, type: string, v: unknown, what: string): void {
@@ -256,14 +266,11 @@ export class StoreJson {
     return bool("OR_EXPR", [call, id]);
   }
 
-  /** `Store.select`, kept for the deprecation window (ADR-0043); a reader's miss path calls `read`. */
-  select(q: StoreSelect): ReturnType<StoreJson["read"]> { return this.read(q); }
-
   /** A read: the projection names every output column, so it can be paged. */
-  read(q: StoreSelect): { ir: N; columns: readonly Column[]; order: { column: Column; dir: "asc" | "desc" }; pageSize: number; from: string } {
-    if (typeof q !== "object" || q === null || Array.isArray(q)) throw invalid("Store select takes an object.");
+  read(q: ReadRequest): { ir: N; columns: readonly Column[]; order: { column: Column; dir: "asc" | "desc" }; pageSize: number; from: string } {
+    if (typeof q !== "object" || q === null || Array.isArray(q)) throw invalid("Store read takes an object.");
     const bad = Object.keys(q).find((k) => !["from", "columns", "where", "orderBy", "limit", "cursor", "search"].includes(k));
-    if (bad) throw invalid(`Unknown Store select key '${bad}'.`);
+    if (bad) throw invalid(`Unknown Store read key '${bad}'.`);
     if (Object.hasOwn(q, "where") && q.where === undefined) throw invalid("Store where is undefined; omit it or provide a condition.");
     const { name, def } = this.schema(q.from);
     if (q.columns !== undefined && (!Array.isArray(q.columns) || !q.columns.length)) throw invalid("Store columns takes a non-empty array.");
@@ -280,7 +287,7 @@ export class StoreJson {
     if (q.cursor !== undefined && typeof q.cursor !== "string") throw invalid("Store cursor must be a string.");
     const where = [...(q.where === undefined ? [] : [this.where(q.where, def)]), ...(q.search === undefined ? [] : [this.search(q.search, name, def)])];
     const ir: N = { SelectStmt: {
-      // a geo field is two columns, read under hidden names and joined back into `{ lat, lng }` by `decodeRow`
+      // a geo field is two columns, read under hidden names and joined back into `{ lat, lng }` by `rowDecoder`
       targetList: columns.flatMap((c) => (c.type === "geo" ? [target(ref(`${c.col}_lat`), geoKey(c.out, "lat")), target(ref(`${c.col}_lng`), geoKey(c.out, "lng"))] : [target(ref(c.col), c.out)])), fromClause: [{ RangeVar: table(name) }],
       ...(where.length ? { whereClause: where.length === 1 ? where[0] : bool("AND_EXPR", where) } : {}),
       sortClause: [{ SortBy: { node: ref(order.column.col), sortby_dir: dir === "asc" ? "SORTBY_ASC" : "SORTBY_DESC", sortby_nulls: "SORTBY_NULLS_DEFAULT" } }], ...SELECT } };
