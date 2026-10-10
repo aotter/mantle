@@ -76,7 +76,9 @@ export class SqliteStoreExecutor implements StoreExecutor {
   }
 
   async select(statement: Statement): Promise<readonly StoreRow[]> {
-    const [res] = await this.driver.batch([this.prepared(statement)]).catch(mapError("select"));
+    const s = this.prepared(statement);
+    if (this.driver.all) return this.driver.all(s).catch(mapError("select"));
+    const [res] = await this.driver.batch([s]).catch(mapError("select"));
     return res!.rows;
   }
 

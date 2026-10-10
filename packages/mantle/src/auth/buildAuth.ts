@@ -196,7 +196,7 @@ export function buildAuth(config: CreateMantleAuthOptions) {
     // Mantle converges lazily. Better Auth 1.7.7's automatic check runs at
     // construction, before those tables exist. Keep its explicit schema check
     // and run it in prepareAuth after convergence, before any auth operation.
-    database: { validateSchema: false },
+    database: { validateSchema: false, joins: true },
     // Host adapter supplies the trusted ingress header(s). Never default to XFF.
     ipAddress: { ipAddressHeaders: [...ipAddressHeaders] },
     ...(appleNeedsCrossSite

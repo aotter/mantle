@@ -200,42 +200,34 @@ A SQLite spelling fails validation with its position and the PostgreSQL one:
 on every program at runtime. It only narrows what runs, for an operator that
 runs other people's plans; a self-hosted service leaves it out (ADR-0037).
 
-On Workers, PostgreSQL goes through Hyperdrive, which pools the connections.
-`connect` opens one client, and `requestScoped` makes it one per request: every
-query of a request (Store, Better Auth, auth SQL) reuses it, and it is ended
-when the request ends, as a Worker's socket must be. Outside `run` (boot,
-schedules) each operation opens its own:
+On Workers, PostgreSQL goes through Hyperdrive, which owns pooling. Each
+operation opens a native Client; its transaction or query closes that Client.
+On Bun, the application owns one native Pool, and each operation releases its
+PoolClient. No request-scoped client manager is involved (ADR-0041).
 
 ```ts
 import pg from "pg";
-import { pgDatabaseDriver, pgPool, postgresStorage, requestScoped, type PgSession } from "@aotter/mantle/postgres";
+import { postgresStorage } from "@aotter/mantle/postgres";
 
-// one per isolate: every consumer must share it
-let session: PgSession | undefined;
-const database = (env: Env) => (session ??= requestScoped(async () => {
+const connect = async () => {
   const client = new pg.Client({ connectionString: env.HYPERDRIVE.connectionString });
   await client.connect();
   return client;
-}));
-// storage: (env) => postgresStorage({ connect: database(env).connect })
-// identity: createMantleAuth({ database: pgPool(database(env).connect), driver: pgDatabaseDriver(database(env).connect), ... })
-// fetch: (request, env, ctx) => database(env).run(() => routes(request))
+};
+const storage = postgresStorage({ connect });
 ```
 
-One operation holds the shared client from `connect()` to `end()`; another that
-arrives meanwhile opens its own, so nothing runs inside another's transaction.
-With `new pg.Client({ …, pipeline: true })` (pg 8.23 or later) a write batch is
-one round trip instead of N + 2; the generated Workers preset leaves it off
-until Hyperdrive is verified to forward a pipelined transaction.
+For Bun, use `connect: () => pool.connect()` and pass the native Pool directly
+to Better Auth. A write batch uses one acquired client for native SERIALIZABLE
+BEGIN, sequential statements, and COMMIT. There is no custom pipeline or
+automatic serialization/deadlock retry. Failed transactions attempt rollback;
+unusable clients are discarded, and a lost COMMIT response is OUTCOME_UNKNOWN.
 
-Real Hyperdrive verification remains an integration task
-([#1391](https://github.com/aotter/mantle/issues/1391)); a local PostgreSQL run
-does not establish the proxy's behavior. Keep the generated sequential mode
-while validating a deployed binding with caching disabled: role settings
-after pooled-session reuse, a bare read immediately after a write, and an
-atomic rollback when a write or an `expect` fails. A separate verification
-with `pipeline: true` must cover those same cases before enabling it. The
-preset's existence is not evidence that those deployed checks have passed.
+Real Hyperdrive verification remains an integration task; local Wrangler PG
+connects directly and does not establish cloud proxy behavior. Verify role
+settings after pooled-session reuse, a bare read after a write, revocation
+freshness and atomic rollback on the deployed binding with caching disabled.
+See [migration](../guides/native-execution.md) for existing application source.
 
 The Worker needs `compatibility_flags: ["nodejs_compat"]` for `pg`. Mantle's
 and Better Auth's reads run outside a transaction, which Hyperdrive would answer

@@ -72,12 +72,13 @@ it.skipIf(!PG_URL)("date_trunc and extract compute in the site time zone", async
   } finally { useCompileSide(undefined); await e.drop(); }
 }, 60_000);
 
-it.skipIf(!PG_URL)("a guard holds under concurrent writers: SERIALIZABLE retries the loser, as SQLite's one writer serializes it", async () => {
+it.skipIf(!PG_URL)("native SERIALIZABLE protects a guard; conflicts surface without automatic retry", async () => {
   const e = await engine();
   try {
     await e.driver.batch([{ sql: "CREATE TABLE guard (k text)" }]);
     const claim = { sql: "INSERT INTO guard (k) SELECT ?1 WHERE NOT EXISTS (SELECT 1 FROM guard)" };
-    await Promise.all(Array.from({ length: 8 }, (_x, i) => e.driver.batch([{ ...claim, binds: [`w${i}`] }])));
+    const outcomes = await Promise.allSettled(Array.from({ length: 8 }, (_x, i) => e.driver.batch([{ ...claim, binds: [`w${i}`] }])));
+    for (const r of outcomes) if (r.status === "rejected") expect(r.reason.code).toBe("40001");
     const [n] = await e.driver.batch([{ sql: "SELECT count(*) AS n FROM guard" }]);
     expect(n.rows[0].n).toBe(1);
   } finally { await e.drop(); }

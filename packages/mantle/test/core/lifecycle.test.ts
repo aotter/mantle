@@ -147,6 +147,24 @@ it("a publish fires the publish hooks, not the update hooks; a before hook can v
   expect(await status(vetoed)).toBe("draft");
 });
 
+it("a publishing decision stays pinned when its before hook changes the checked row", async () => {
+  const hooked = await createMantleRuntime({ plan: rt.plan, storage: sqliteStorage(d1), handlers: {
+    ...handlers,
+    gate: async (_input: unknown, ctx: HandlerContext) => {
+      if (ctx.cause.kind === "lifecycle") {
+        expect(ctx.cause.rows[0]).toMatchObject({ title: "checked", status: "draft", version: 1 });
+        await ctx.store.write([{ update: "articles", where: { id: ctx.cause.rows[0]!.id as string }, set: { title: "hook changed" } }]);
+      }
+      return {};
+    },
+  } as never });
+  const id = await draft({ title: "checked", body: "body" });
+  seen.length = 0;
+  expect((await failure(hooked.store.as(user).write([{ update: "articles", where: { id }, set: { status: "published" } }])))?.diagnostic.code).toBe("CONFLICT");
+  expect((await store().select({ from: "articles", columns: ["title", "status", "version"], where: { id } })).rows).toEqual([{ title: "hook changed", status: "draft", version: 2 }]);
+  expect(seen.map((s) => s.hook)).toEqual(["after_update"]);
+});
+
 it("a public View shows published entries only", async () => {
   const live = (await rt.store.as({ kind: "anonymous" }).view("live")).rows.map((r) => r.title);
   expect(live).toContain("hooked");

@@ -1,5 +1,7 @@
 # ADR-0034: Store is authored as SQL and compiled to IR by the CLI
 
+> **2026-10-10 amendment:** [ADR-0041](0041-native-driver-and-application-hook-ownership.md) governs native driver execution, SQLite handle ownership and application-owned before hooks. Its explicit removals supersede the corresponding historical guarantees below.
+
 **Status:** Accepted for 0.2.0 (#1188), after the spike (#1203). Amends ADR-0030, ADR-0032 decisions 1, 2, 3, 4, 5, 10 and 13, and ADR-0033. Amended by [ADR-0035](0035-sql-dialects.md) and [ADR-0037](0037-postgresql-is-the-reference-dialect.md).
 
 **Date:** 2026-09-29

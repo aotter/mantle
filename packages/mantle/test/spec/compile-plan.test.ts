@@ -167,7 +167,7 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
     expect(!shape.ok && shape.diagnostics[0]?.code).toBe("VIEW_UI_INVALID");
   });
 
-  it("refuses an inline program as a lifecycle hook target (it would write inside a before hook)", async () => {
+  it("refuses an inline program as a lifecycle hook target (events are delivered to ref handlers)", async () => {
     const trigger = `---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger

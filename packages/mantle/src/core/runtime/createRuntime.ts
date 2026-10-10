@@ -90,7 +90,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   if (!args.schedules && triggers.some(([, t]) => t.source.kind === "schedule" && t.source.enabled !== false))
     throw fail("SCHEDULE_NOT_WIRED", at, "the plan has an enabled schedule Trigger and this entry does not wire schedules (pass schedules: true)");
 
-  // hook targets and guards are consumer code: an inline program would write inside a before hook or a guard, which fails open
+  // Lifecycle targets receive their event through a ref handler; guards are ref handlers with a read-only context.
   const inline = (name: string) => !("ref" in (plan.procedures[name]?.handler ?? { ref: "" }));
   for (const [name, t] of triggers)
     if (t.source.kind === "lifecycle" && inline(t.procedure)) throw fail("LIFECYCLE_TARGET_NOT_REF", `${at}#/triggers/${name}`, `lifecycle Trigger '${name}' targets '${t.procedure}', which is an inline program`);
@@ -164,7 +164,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     }));
   };
   const readOnly = (s: CallerStore): CallerStore => ({
-    ...s, write: () => Promise.reject(fail("AUTH_DENIED", "store", "a guard or a before hook may not write", "runtime")),
+    ...s, write: () => Promise.reject(fail("AUTH_DENIED", "store", "a guard may not write", "runtime")),
   });
 
   async function invoke(inv: Invocation, guard = false): Promise<unknown> {
@@ -181,19 +181,17 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     const guardName = proc.requires?.guard?.procedure;
     if (guardName && !guard) await invoke({ procedure: guardName, input, caller: inv.caller, cause: child(inv.cause, guardName) }, true);
 
-    const isBefore = inv.cause.kind === "lifecycle" && inv.cause.hook.startsWith("before_");
-    const ro = guard || isBefore;
-    if (ro && "sql" in proc.handler) throw fail("LIFECYCLE_TARGET_NOT_REF", path, "a guard or a before hook may not be an inline program", "runtime");
+    if (guard && "sql" in proc.handler) throw fail("GUARD_PROCEDURE_NOT_REF", path, "a guard may not be an inline program", "runtime");
     let result: unknown;
     try {
       if ("ref" in proc.handler) {
         const bound = store.as(inv.caller, inv.cause); // writes chain to this invocation, so hooks they fire count toward the depth limit
         // only the system caller reaches TTL maintenance: no request can produce one (ADR-0032 decision 8)
-        const scoped = inv.caller.kind === "system" && !ro ? { ...bound, sweepExpired: store.sweepExpired } : bound;
+        const scoped = inv.caller.kind === "system" && !guard ? { ...bound, sweepExpired: store.sweepExpired } : bound;
         const ctx: HandlerContext = {
           caller: inv.caller, cause: inv.cause, env: args.env, waitUntil: (promise) => args.waitUntil?.(promise, inv.cause),
-          store: ro ? readOnly(scoped) : scoped,
-          invoke: (procedure, i) => (ro ? Promise.reject(fail("AUTH_DENIED", path, "a guard or a before hook may not invoke a Procedure", "runtime")) : invoke({ procedure, input: i, caller: inv.caller, cause: child(inv.cause, procedure) })),
+          store: guard ? readOnly(scoped) : scoped,
+          invoke: (procedure, i) => (guard ? Promise.reject(fail("AUTH_DENIED", path, "a guard may not invoke a Procedure", "runtime")) : invoke({ procedure, input: i, caller: inv.caller, cause: child(inv.cause, procedure) })),
         };
         result = await (args.handlers[proc.handler.ref] as (i: unknown, c: HandlerContext) => unknown)(input, ctx);
       } else {

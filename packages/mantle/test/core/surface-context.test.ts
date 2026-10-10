@@ -1,5 +1,4 @@
 import { DatabaseSync } from "node:sqlite";
-import { EventEmitter } from "node:events";
 import ts from "typescript";
 import { beforeAll, describe, expect, it } from "vitest";
 import { compilePlan } from "../../src/spec/index.js";
@@ -9,7 +8,6 @@ import { createRestSurface } from "../../src/web/index.js";
 import { createAdminSurface } from "../../src/admin/index.js";
 import { createMcpSurface } from "../../src/mcp/index.js";
 import { presetFiles } from "../../src/cli/preset.js";
-import { requestScoped } from "../../src/postgres/session.js";
 
 const manifests = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -251,32 +249,31 @@ it("one cached MCP handler retains subscription limits across execution facades 
   }
 });
 
-it("the generated Bun factory uses each host pool and reuses one checked-out client per request", async () => {
+it("the generated Bun factory uses each host native pool and releases every operation", async () => {
   const stores = [storage(), storage()];
   const pools = stores.map((_store, owner) => {
     const counts = { checkouts: 0, releases: 0 };
-    const client = Object.assign(new EventEmitter(), {
+    const client = {
       query: async () => ({ rows: [{ owner }], fields: [], rowCount: 1 }),
-      getTransactionStatus: () => "I",
       release: () => { counts.releases++; },
-    });
+    };
     return { counts, pool: { async connect() { counts.checkouts++; return client; } } };
   });
   const source = Object.fromEntries(presetFiles("/tmp/generated-pool-test", { host: "bun", identity: "none", dialect: "postgres", features: [] }, plan))["src/service.ts"]!;
   const handlers = { add: async (input: { name: string }, ctx: HandlerContext) => { await ctx.store.write([{ insert: "items", values: input }]); return {}; }, audit: () => ({}) };
-  // Only the engine is substituted. The generated native pool checkout/release and requestScoped wrapper are real.
+  // Only the engine is substituted; the generated native pool acquisition is real.
   const modules: Record<string, unknown> = {
     "@aotter/mantle": { createMantle },
-    "@aotter/mantle/postgres": { requestScoped, postgresStorage: ({ connect }: { connect: () => Promise<any> }) => ({
+    "@aotter/mantle/postgres": { postgresStorage: ({ connect }: { connect: () => Promise<any> }) => ({
       dialect: stores[0]!.adapter.dialect,
       async prepare(plan: RuntimePlan) {
         const lease = await connect();
         let owner: number;
-        try { owner = (await lease.query("storage owner")).rows[0].owner; } finally { await lease.end(); }
+        try { owner = (await lease.query("storage owner")).rows[0].owner; } finally { lease.release(); }
         const prepared = await stores[owner!]!.adapter.prepare(plan);
         const borrow = async <T,>(run: () => Promise<T>) => {
           const client = await connect();
-          try { await client.query("operation"); return await run(); } finally { await client.end(); }
+          try { await client.query("operation"); return await run(); } finally { client.release(); }
         };
         return { ...prepared, executor: { ...prepared.executor,
           select: (...args: Parameters<typeof prepared.executor.select>) => borrow(() => prepared.executor.select(...args)),
@@ -293,6 +290,6 @@ it("the generated Bun factory uses each host pool and reuses one checked-out cli
   try {
     for (const [app, i, name] of [[a, 0, "a"], [b, 1, "b"], [a, 0, "a2"]] as const) expect((await app.fetch(write("rest", name), { PG: pools[i]!.pool })).status).toBe(200);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(pools.map((p) => p.counts)).toEqual([{ checkouts: 2, releases: 2 }, { checkouts: 1, releases: 1 }]);
+    expect(pools.map((p) => p.counts)).toEqual([{ checkouts: 3, releases: 3 }, { checkouts: 2, releases: 2 }]);
   } finally { stores.forEach((store) => store.close()); }
 });

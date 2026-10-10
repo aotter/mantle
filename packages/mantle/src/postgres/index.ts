@@ -4,4 +4,3 @@
  */
 export { postgresStorage, postgresDialect, type PostgresStorageOptions } from "./adapter.js";
 export { pgDatabaseDriver, pgPool, type PgAuthPool, type PgClient, type PgConnect } from "./driver.js";
-export { requestScoped, type PgSession } from "./session.js";

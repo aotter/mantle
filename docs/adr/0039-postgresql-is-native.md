@@ -1,5 +1,7 @@
 # ADR-0039: PostgreSQL is native, and node-postgres is its only driver
 
+> **2026-10-10 amendment:** [ADR-0041](0041-native-driver-and-application-hook-ownership.md) governs native driver execution, SQLite handle ownership and application-owned before hooks. Its explicit removals supersede the corresponding historical guarantees below.
+
 **Status:** Accepted (2026-10-08).
 
 **Date:** 2026-10-08.
