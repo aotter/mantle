@@ -78,7 +78,7 @@ Two npm packages, always published together at one version.
 | `@aotter/mantle/spec` | the grammar types, `compilePlan`, `mcpTools` (the CLI side; it bundles the SQL parser, so a Worker or handler imports `DiagnosticError` from the root) |
 | `@aotter/mantle/d1`, `/d1/compile` | the `sqlite` dialect: `sqliteStorage` over any `DatabaseDriver`; its compile side |
 | `@aotter/mantle/postgres`, `/postgres/compile` | the `postgres` dialect: `postgresStorage`, `postgresDialect`, `pgDatabaseDriver`, `pgPool`, the `PgClient` and `PgConnect` types; its compile side |
-| `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron` |
+| `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron`; experimental `durableObjectStorage`, `durableObjectDriver` |
 | `@aotter/mantle/auth` | `createMantleAuth`, `createSetupIncompleteAuth`, `createCallerResolver`, `createAuthRoutes`, `ConsoleEmailSender`, `appleClientSecret` |
 | `@aotter/mantle/admin` | `createAdminSurface`, `AdminIdentity` |
 | `@aotter/mantle/mcp` | `createMcpSurface`, `mcpTools` and its `McpTool` type (the same function `/spec` exports, for a bundle that may not import `/spec`), `planApp` and `appCatalog` (the MCP App's catalog) |

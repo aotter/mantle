@@ -52,6 +52,7 @@
         { "text": "The service and its entry", "link": "/cloudflare/service-entry" },
         { "text": "Authentication", "link": "/cloudflare/authentication" },
         { "text": "Media uploads with R2", "link": "/cloudflare/media-r2" },
+        { "text": "Durable Object per tenant", "link": "/cloudflare/durable-object-tenant" },
         { "text": "Deploy and operate", "link": "/cloudflare/deploy-and-operate" },
         { "text": "Mantle on ChatGPT Sites", "link": "/cloudflare/chatgpt-sites" }
       ]
