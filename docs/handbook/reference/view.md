@@ -170,6 +170,105 @@ paging. An authored `LIMIT` also needs a deterministic order at its
 boundary. Paging is not a snapshot: changing the data or sort values between
 requests can change which rows subsequent pages return.
 
+The compiler appends `id` even when a unique index already orders the rows.
+Schema columns are nullable, so a unique index can hold the same tuple twice
+when one key is NULL, and an unscoped caller (staff, `runtime.store`) sees every
+owner's rows. Ending the index with the order keys still lets the database
+search it; D1's plan may show `USE TEMP B-TREE FOR LAST TERM OF ORDER BY`,
+which sorts only within ties of the earlier keys.
+
+### Long aggregate ranges
+
+A View with `GROUP BY … ORDER BY` pages with a cursor on its group keys, and
+every page reruns the whole aggregation before it filters past the cursor. An
+all-time weekly series read in nine pages aggregates the full history nine
+times; one benchmark read about 56,000 D1 rows per page. Two fixes:
+
+1. **Bound the range with inputs**, such as `WHERE s.performed_at >= input.from`,
+   so a page aggregates only what it shows.
+2. **Keep a rollup Schema** for long ranges: one row per member, week and
+   exercise, written by the same Procedure that writes the source rows. The
+   Procedure's statements are one batch, so the rollup never disagrees with its
+   source.
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: weekly_volume }
+spec:
+  title: Weekly volume
+  scope: { owner: auth.uid() }
+  uniqueIndexes: [[owner, localWeek, exerciseKey]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [owner, localWeek, exerciseKey, volume]
+    properties:
+      owner: { type: string, maxLength: 80 }
+      localWeek: { type: string, pattern: "^[0-9]{4}-W[0-9]{2}$", maxLength: 8 }
+      exerciseKey: { type: string, maxLength: 80 }
+      volume: { type: number }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: rebuild-week }
+spec:
+  input:
+    type: object
+    additionalProperties: false
+    required: [localWeek]
+    properties:
+      localWeek: { type: string, pattern: "^[0-9]{4}-W[0-9]{2}$", maxLength: 8 }
+  output: { type: object }
+  handler:
+    sql: |
+      DELETE FROM weekly_volume WHERE localWeek = input.localWeek;
+      INSERT INTO weekly_volume (localWeek, exerciseKey, volume)
+        SELECT localWeek, exerciseKey, sum(weight * reps) FROM sets
+        WHERE localWeek = input.localWeek GROUP BY localWeek, exerciseKey
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: weekly-volume }
+spec:
+  surface: public
+  sql: SELECT localWeek, exerciseKey, volume FROM weekly_volume ORDER BY localWeek, exerciseKey
+```
+
+This assumes a scoped `sets` Schema with `localWeek`, `exerciseKey`, `weight`
+and `reps` (see [Per-member calendar buckets](./schema.md#per-member-calendar-buckets)).
+Put the same two statements after the `INSERT INTO sets …` in the Procedure that
+logs, edits or deletes a set, so the touched week is recomputed in the same
+batch. Store adds the scope to every statement, so each member recomputes only
+their own rows. The reading View pages by an index search on the unique index.
+An incremental `INSERT … ON CONFLICT (localWeek, exerciseKey) DO UPDATE SET
+volume = weekly_volume.volume + EXCLUDED.volume` also compiles, but it is
+correct only for inserts, not edits or deletes.
+
+Three things to keep in mind:
+
+- **Backfill is per member.** Store stamps the scope column from the caller's
+  `auth.uid()`, and a write may not name it, so a system caller cannot write
+  rows for each member. Backfill by running the recompute once per member and
+  week with that member's user Caller (for example from a host script through
+  `runtime.invokeProcedure`), or as a one-off outside Store with SQL
+  (`wrangler d1 execute`, `psql`) that fills every column Store would: `id`,
+  the scope column, `created_at`, `updated_at`, `author_id` and `version`.
+- **Every write path must maintain the rollup.** Admin edits go through Store
+  but do not run your Procedure. Set `schema.readOnly: true` on the source
+  Schema so every write goes through the Procedures (see
+  [Procurement](../../examples/procurement.md)). A lifecycle Trigger
+  (`after_create`, `after_update`, `after_delete`) can recompute from the rows
+  in `ctx.cause.rows`, but after hooks are best effort, run after the commit in
+  a new transaction and never undo the source write, so the rollup is
+  eventually consistent there.
+- **An unscoped read of a rollup sees every owner.** That includes staff Views
+  and `runtime.store`.
+
+The manifests above were compiled with `mantle generate --identity none
+--features web --dialect sqlite` followed by `generate --check`, the steps
+`scripts/check-doc-examples.mjs` runs.
+
 ## `uiSchema` (staff Views)
 
 | Key | Effect |
