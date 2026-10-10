@@ -62,7 +62,10 @@ MANTLE_PG_URL="$DISPOSABLE_POSTGRES_URL" pnpm --filter @aotter/mantle test:bun
 ```
 
 The Bun suite verifies native engines, separate SQLite connection isolation,
-prompt same-handle rejection, auth bootstrap, and native Pool release. Runtime
+prompt same-handle rejection, auth bootstrap, and native Pool release. A real
+Better Auth transaction held across an await on the shared native PG Pool
+leaves ancillary reads on the committed role; after commit they see the new
+role. A separately acknowledged Store write survives a later Auth rollback. Runtime
 and lifecycle suites verify hook side effects/veto, caller authorization,
 explicit OCC, retained publishing protection, and read-only guards. Generated
 preset tests and Worker consumer checks validate the published composition.

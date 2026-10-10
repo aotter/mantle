@@ -106,11 +106,34 @@ try {
   const engine = await fresh();
   try {
     const codes = new Map<string, string>();
-    const auth = createMantleAuth({ database: engine.pool, driver: engine.driver, baseURL: 'http://localhost', secret: crypto.randomUUID() + crypto.randomUUID(), ipAddressHeaders: ['x-real-ip'], methods: [{ kind: 'email-otp', sender: { send: async ({ to, text }) => void codes.set(to, /\b(\d{6})\b/.exec(text)![1]!) } }], bootstrapOwner: { match: 'email', value: 'owner@bun.test' } });
+    const config = { database: engine.pool, driver: engine.driver, baseURL: 'http://localhost', secret: crypto.randomUUID() + crypto.randomUUID(), ipAddressHeaders: ['x-real-ip'], methods: [{ kind: 'email-otp' as const, sender: { send: async ({ to, text }: {to: string; text: string}) => void codes.set(to, /\b(\d{6})\b/.exec(text)![1]!) } }], bootstrapOwner: { match: 'email' as const, value: 'owner@bun.test' } };
+    const auth = createMantleAuth(config);
     assert.equal(await signInOwner(auth, codes, 'owner@bun.test'), 'owner', 'node-postgres auth signs in the bootstrap owner under Bun');
     await engine.driver.batch([{sql: 'CREATE TABLE rollback_check (n int UNIQUE)'}]);
     await assert.rejects(engine.driver.batch([{sql: 'INSERT INTO rollback_check VALUES (1)'}, {sql: 'INSERT INTO rollback_check VALUES (1)'}]), (e: {code?:string}) => e.code === '23505');
     assert.deepEqual(await engine.driver.all!({sql:'SELECT n FROM rollback_check'}), [], 'native failed transaction rolled back');
+    const ownerId = String((await engine.pool.query("SELECT id FROM \"user\" WHERE role = 'owner'")).rows[0]!.id);
+    const { adapter } = await buildAuth(config).$context;
+    for (const rollback of [false, true]) {
+      let entered!: () => void, resume!: () => void;
+      const held = new Promise<void>(r => { entered = r; });
+      const gate = new Promise<void>(r => { resume = r; });
+      const pending = adapter.transaction(async trx => {
+        await trx.update({ model: 'user', where: [{ field: 'id', value: ownerId }], update: { role: rollback ? 'owner' : 'editor' } });
+        entered();
+        await gate;
+        if (rollback) throw new Error('intentional auth rollback');
+      });
+      await held;
+      try {
+        assert.equal(await auth.getUserRole(ownerId), rollback ? 'editor' : 'owner', 'the same official Pool gives ancillary SQL a separate client, hiding uncommitted auth changes');
+        if (rollback) await engine.driver.batch([{ sql: 'INSERT INTO rollback_check VALUES (7)' }]);
+      } finally { resume(); }
+      if (rollback) await assert.rejects(pending, /intentional auth rollback/);
+      else await pending;
+      assert.equal(await auth.getUserRole(ownerId), 'editor', 'committed role is fresh, and the later auth rollback cannot undo it');
+    }
+    assert.deepEqual(await engine.driver.all!({ sql: 'SELECT n FROM rollback_check' }), [{ n: 7 }], 'a Store write committed on the same native Pool survives another client\'s auth rollback');
     assert.equal(engine.pool.waitingCount, 0);
     assert.equal(engine.pool.idleCount, engine.pool.totalCount, 'native PoolClient release returns all acquired clients');
     // concurrent acquisitions are the native pool contract, with no Mantle request coordinator
@@ -119,6 +142,6 @@ try {
     a.release(); b.release();
     // a statement past its timeout ends with 57014
     await assert.rejects(query(async () => { const c = await engine.pool.connect(); await c.query('SET statement_timeout = 100'); return c; }, { text: 'SELECT pg_sleep(1)::text AS s' }), (e: { code?: string }) => e.code === '57014');
-    console.log('Bun PostgreSQL (node-postgres): auth, native pool acquisition/release and rollback passed');
+    console.log('Bun PostgreSQL (node-postgres): auth, shared native Pool dirty-read isolation, independent write/rollback and release passed');
   } finally { await engine.cleanup(); }
 } finally { await Promise.allSettled(pools.map((p) => p.end())); await admin.end(); }
