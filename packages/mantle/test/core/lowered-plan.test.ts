@@ -215,11 +215,18 @@ describe("verifyPlan", () => {
     }
   });
 
-  it("compares only what this Mantle and dialect would run: a restricted dialect, another version or another dialect is not compared", async () => {
+  it("skips the comparison only under restrict; a lowering it cannot re-derive (another version or dialect) is refused", async () => {
     const tampered = await reseal(lowered, (p) => { p.lowered.views["low-stock"].caller.sql = "SELECT 1"; return p; });
     expect(await verifyPlan(tampered, sqliteStorage({} as never, { restrict: () => [] }))).toEqual([]);
     const other = await reseal(tampered, (p) => ({ ...p, lowered: { ...p.lowered, mantle: "9.9.9" } }));
-    expect(await verifyPlan(other, sqliteStorage({} as never))).toEqual([]);
+    const found = await verifyPlan(other, sqliteStorage({} as never));
+    expect(found.map((d) => d.path)).toEqual(["plan#/lowered"]);
+    expect(found[0].message).toMatch(/^LOWERING_MISMATCH:.*mantle-version/);
+    // another dialect's lowering (here its version), on a verifier of this one
+    const otherDialect = await reseal(tampered, (p) => ({ ...p, lowered: { ...p.lowered, dialect: { ...p.lowered.dialect, version: "other" } } }));
+    expect((await verifyPlan(otherDialect, sqliteStorage({} as never))).map((d) => d.path)).toEqual(["plan#/lowered"]);
+    // restrict still skips it: no runtime under restrict seeds lowered statements
+    expect(await verifyPlan(other, sqliteStorage({} as never, { restrict: () => [] }))).toEqual([]);
   });
 
   it("bounds a lowered section before it reads it: unknown programs, and no object", async () => {

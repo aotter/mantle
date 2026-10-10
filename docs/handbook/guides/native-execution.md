@@ -114,7 +114,8 @@ disables lowered statements, because `restrict` must see every program. Run
 `mantle generate --check` in CI so a plan is never older than the Mantle that
 serves it. An operator that runs other people's plans passes `restrict`, or
 runs `verifyPlan` on every upload, which reports `LOWERING_MISMATCH` when the
-lowered text is not what this Mantle prints for the plan. See
+lowered text is not what this Mantle prints for the plan, or is one it cannot
+re-derive (another version or dialect). See
 [ADR-0044](../../adr/0044-generate-time-lowering.md) and
 [the measurements](../../benchmarks/lowered-cold-start.md).
 

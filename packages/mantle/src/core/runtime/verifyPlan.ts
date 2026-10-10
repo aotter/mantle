@@ -103,12 +103,17 @@ async function verify(plan: RuntimePlan, storage: Pick<MantleStorageAdapter, "di
   }
   for (const [name, p] of Object.entries(plan.procedures)) if ("sql" in p.handler) check(`plan#/procedures/${name}`, p.handler.sql.stmts, p.inputs, "procedure", "caller");
   // the statements a runtime will run without checking them (ADR-0044): what this Mantle and dialect print for the plan's programs, or nothing.
-  // Only against a plan that is otherwise sound (a refused program is left out of the lowering, so the comparison would only repeat that), and only
-  // where the runtime would use them: under `restrict`, or for another Mantle or dialect, it does not
-  if (!out.length && plan.lowered !== undefined && loweringStatus(plan, storage.dialect) === "used") {
-    const { fingerprint: _fingerprint, lowered, ...body } = plan;
-    if (canonical(lowerPlan(body, storage.dialect).lowered) !== canonical(lowered))
-      out.push(refused("plan#/lowered", "LOWERING_MISMATCH: the plan's lowered statements are not what this Mantle and dialect print for its programs; regenerate the plan (`mantle generate`)"));
+  // Only against a plan that is otherwise sound (a refused program is left out of the lowering, so the comparison would only repeat that).
+  // A lowering this Mantle cannot re-derive (another Mantle version, another dialect, a dialect that cannot print) is refused, never skipped: a
+  // runtime of that version would seed it unchecked. Only under `restrict`, where no runtime uses lowered statements, is the comparison skipped
+  if (!out.length && plan.lowered !== undefined) {
+    const status = loweringStatus(plan, storage.dialect);
+    if (status === "used") {
+      const { fingerprint: _fingerprint, lowered, ...body } = plan;
+      if (canonical(lowerPlan(body, storage.dialect).lowered) !== canonical(lowered))
+        out.push(refused("plan#/lowered", "LOWERING_MISMATCH: the plan's lowered statements are not what this Mantle and dialect print for its programs; regenerate the plan (`mantle generate`)"));
+    } else if (status !== "restricted")
+      out.push(refused("plan#/lowered", `LOWERING_MISMATCH: lowered statements this Mantle cannot re-derive (${status}); regenerate the plan with this Mantle or remove lowered`));
   }
   return out;
 }
