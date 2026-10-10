@@ -350,6 +350,56 @@ describe("the generated module type-checks against Core", () => {
   }, 60_000);
 });
 
+describe("the generated Db and Rows (ADR-0043)", () => {
+  const compile = async (dir: string) => {
+    const program = ts.createProgram([join(dir, "src/service.ts")], {
+      strict: true, noEmit: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler,
+      lib: ["lib.es2023.d.ts"], types: ["node"], typeRoots: [TYPES], resolveJsonModule: true, skipLibCheck: true, noUncheckedIndexedAccess: true,
+      paths: { "@aotter/mantle": [join(SRC, "core/index.ts")], "@aotter/mantle/d1": [join(SRC, "d1/index.ts")], "@aotter/mantle/spec": [join(SRC, "spec/index.ts")] },
+    });
+    return ts.getPreEmitDiagnostics(program).map((d) => `${d.file ? d.file.fileName.slice(dir.length) : ""}: ${ts.flattenDiagnosticMessageText(d.messageText, "\n")}`).join("\n");
+  };
+  let dir: string;
+  let handlers: string;
+  beforeAll(async () => {
+    dir = await project();
+    await gen(CUSTOM, dir);
+    handlers = await read(dir, "src/handlers.ts");
+  });
+  /** The fixture's handlers with one more statement in `audit`. */
+  const withLine = (line: string) => handlers.replace("    return {};", `    ${line}\n    return {};`);
+
+  it("names one reader per Schema in lower camel, with typed rows", async () => {
+    const mod = await read(dir, ".mantle/generated/mantle.ts");
+    expect(mod).toContain('readonly "orderLines": SchemaReader<Rows["order_lines"]>;');
+    expect(mod).toContain('readonly "authorId": string | null;');
+    expect(await compile(dir)).toBe("");
+  }, 60_000);
+
+  it("narrows a projection with Pick, and types a field as its type or null", async () => {
+    await writeFile(join(dir, "src/handlers.ts"), withLine('const it = await ctx.db.items.first({ columns: ["name"] }); const x: number | undefined = it?.stock;'));
+    expect(await compile(dir)).toMatch(/Property 'stock' does not exist/);
+    await writeFile(join(dir, "src/handlers.ts"), withLine("const it = await ctx.db.items.first(); const n: string = it!.name;"));
+    expect(await compile(dir)).toMatch(/'string \| null' is not assignable to type 'string'/);
+  }, 60_000);
+
+  it("refuses an unknown reader and an unknown column", async () => {
+    await writeFile(join(dir, "src/handlers.ts"), withLine("await ctx.db.nope.first();"));
+    expect(await compile(dir)).toMatch(/Property 'nope' does not exist/);
+    await writeFile(join(dir, "src/handlers.ts"), withLine("await ctx.db.items.find({ where: { nope: 1 } });"));
+    expect(await compile(dir)).toMatch(/'nope' does not exist/);
+  }, 60_000);
+
+  it("refuses to generate two Schemas that share a reader name, writing nothing", async () => {
+    const bad = await project();
+    await writeFile(join(bad, "manifests/order-lines.yaml"), (await read(bad, "manifests/order-lines.yaml")) + "---\n" + (await read(bad, "manifests/order-lines.yaml")).replace("order_lines", "orderLines"));
+    const r = await gen(CUSTOM, bad);
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("SCHEMA_READER_NAME_COLLISION");
+    await expect(read(bad, ".mantle/generated/mantle.ts")).rejects.toThrow();
+  });
+});
+
 describe("mantle generate --check storage dry-run", () => {
   let d1: LocalD1;
   beforeAll(async () => { d1 = await LocalD1.create(); });
