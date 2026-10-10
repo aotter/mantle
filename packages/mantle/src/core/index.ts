@@ -7,6 +7,7 @@ export * from "./service.js";
 export * from "./withCaller.js";
 export * from "./site.js";
 export * from "./store.js";
+export { readerOf } from "./store/readers.js";
 export * from "./email.js";
 export * from "./runtime/auth.js";
 export type { RestrictSql } from "./dialect.js";

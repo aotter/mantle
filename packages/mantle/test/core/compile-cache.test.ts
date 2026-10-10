@@ -204,3 +204,43 @@ it("after RETURNING follows publish versus update, including lifecycle recompila
     } finally { useCompileSide(undefined); }
   }
 });
+
+// ---- readers (ADR-0043): a memoised shape emits what a fresh Store's first call emits ---------------------------------------
+{
+  const { createStore } = await import("../../src/core/store/createStore.js");
+  const { encodeCursor } = await import("../../src/core/store/cursor.js");
+  const USERS = [{ kind: "anonymous" }, ...["o1", "o2"].map((subject) => ({ kind: "user", subject, role: null, scopes: [], credential: "session", credentialId: null, clientId: null })), { kind: "system", reason: "test" }];
+  const READS = [
+    ["get", ["a"]], ["get", ["b", { columns: ["name", "id"] }]],
+    ["first", [{ where: { cat: "x" } }]], ["first", [{ where: { cat: "y", stock: { gte: 1 } }, orderBy: { name: "asc" } }]],
+    ["find", [{ where: { cat: "x" }, limit: 3 }]], ["find", [{ where: { cat: "y" }, limit: 3 }]],
+    ["find", [{ where: { id: { in: ["a", "b", "c"] } }, columns: ["id"] }]], ["find", [{ where: { id: { in: ["d", "e", "f", "g", "h"] } }, columns: ["id"] }]],
+    ["find", [{ where: { note: { isNull: true }, stock: { lt: 9 } }, orderBy: { id: "asc" } }]], ["find", [{ where: { note: null } }]],
+    ["find", [{ search: "apple", limit: 2 }]], ["find", [{ orderBy: { id: "asc" }, limit: 2, cursor: encodeCursor("items:id:asc", ["a"]) }]],
+  ];
+  for (const [name, e] of Object.entries(ENGINES)) {
+    it(`${name}: reader SQL and binds are a fresh Store's, whichever caller or mode warmed the shape first`, async () => {
+      const open = () => {
+        const rec = recorder();
+        return { rec, store: createStore({ executor: e.executor(rec), dialect: e.dialect, schemas, views: {}, now: () => NOW, newId: () => "id" }) };
+      };
+      const run = async (store, rec, caller, [kind, args]) => {
+        const reader = (caller ? store.as(caller) : store).db.items;
+        return emit(rec, () => reader[kind](...args));
+      };
+      // the reference: a Store of its own for every (caller, read), so its first call compiles
+      const reference = new Map();
+      for (const [ci, c] of [undefined, ...USERS].entries()) for (const [ri, read] of READS.entries()) {
+        const { rec, store } = open();
+        reference.set(`${ci}|${ri}`, await run(store, rec, c, read));
+      }
+      expect(reference.get("2|4")).toMatch(/select/i); // the reads really emit statements
+      for (const order of [[undefined, ...USERS], [...USERS].reverse(), [undefined]]) {
+        const { rec, store } = open();
+        for (let round = 0; round < 2; round++)
+          for (const c of order) for (const [ri, read] of READS.entries())
+            expect(await run(store, rec, c, read), `${name} ${c?.kind ?? "host"} ${c?.subject ?? ""} read ${ri} round ${round}`).toBe(reference.get(`${[undefined, ...USERS].indexOf(c)}|${ri}`));
+      }
+    }, 120_000);
+  }
+}

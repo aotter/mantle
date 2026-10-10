@@ -54,6 +54,48 @@ export async function run(r: Report, engine: Engine) {
   r.equal('search matches an id exactly: a LIKE wildcard or a prefix of an id matches nothing', await Promise.all(['%', '_', 'n'].map(async (q) => (await me.select({ from: 'items', columns: ['id'], search: q })).rows)), [[], [], []]);
   r.check('search takes a non-empty string', invalid(await fail(() => me.select({ from: 'notes', search: ' ' }))) && invalid(await fail(() => me.select({ from: 'notes', search: 3 }))));
 
+  // ---- readers (ADR-0043): store.db.<schema>.get | first | find, over the same policy as select -------------------------------
+  const p1sel = await me.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 3 });
+  const ids = (page) => page.rows.map((x) => x.id);
+  const found = (reader, where, extra = {}) => reader.find({ columns: ['id'], ...(where ? { where } : {}), orderBy: { id: 'asc' }, ...extra }).then(ids);
+  const o2 = store.as(user('o2'));
+  r.equal('readers: eq, ne, gt, gte, lt, lte, like, in (scope hides the other owner), notIn',
+    await Promise.all([
+      found(me.db.items, { cat: 'y' }), found(me.db.items, { cat: { ne: 'y' } }), found(me.db.items, { stock: { gt: 5 } }), found(me.db.items, { stock: { gte: 7 } }),
+      found(me.db.items, { stock: { lt: 5 } }), found(me.db.items, { stock: { lte: 5 } }), found(me.db.items, { name: { like: '%rr%' } }),
+      found(me.db.items, { id: { in: ['a', 'X_z1'] } }), found(me.db.items, { id: { notIn: ['a', 'b'] } }),
+    ]),
+    [['c'], ['a', 'b', 'd'], ['c', 'd'], ['c', 'd'], ['b'], ['a', 'b'], ['b', 'c'], ['a'], ['c', 'd']]);
+  r.equal('readers: { column: null } and isNull are the same IS NULL; isNull false and ne null are IS NOT NULL; a value is equality',
+    await Promise.all([found(me.db.items, { note: null }), found(me.db.items, { note: { isNull: true } }), found(me.db.items, { note: { isNull: false } }), found(me.db.items, { note: { ne: null } }), found(me.db.items, { note: 'nc' })]),
+    [['a', 'b'], ['a', 'b'], ['c', 'd'], ['c', 'd'], ['c']]);
+  r.equal('readers: an in list of 3, 5 and 9 (padded to 4, 8 and 16) returns the rows of the unpadded list, and notIn pads too',
+    await Promise.all([
+      found(me.db.items, { id: { in: ['a', 'b', 'c'] } }), found(me.db.items, { id: { in: ['a', 'b', 'c', 'd', 'zz'] } }),
+      found(me.db.items, { id: { in: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'] } }), found(me.db.items, { id: { notIn: ['a', 'b', 'c'] } }),
+    ]),
+    [['a', 'b', 'c'], ['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd'], ['d']]);
+  r.equal('readers: search over the declared search fields (a trigram substring) and the id alone on a Schema with none',
+    [await found(me.db.notes, undefined, { search: '小籠包' }), await found(me.db.items, undefined, { search: 'a' })], [['n1'], ['a']]);
+  r.equal('readers: columns project exactly what is named, in order; get and first return one row or null',
+    [Object.keys((await me.db.items.first({ columns: ['name', 'id'], orderBy: { id: 'asc' } }))), (await me.db.items.get('b')).name, await me.db.items.get('nope'), await me.db.items.get('X_z1'), await me.db.items.first({ where: { cat: 'nope' } })],
+    [['name', 'id'], 'berry', null, null, null]);
+  const rp1 = await me.db.items.find({ columns: ['id'], orderBy: { id: 'asc' }, limit: 3 });
+  const rp2 = await me.db.items.find({ columns: ['id'], orderBy: { id: 'asc' }, limit: 3, cursor: rp1.nextCursor });
+  r.equal('readers: cursor paging 3 then 1, and a cursor from select (the same format) continues a reader',
+    [ids(rp1), ids(rp2), rp2.nextCursor, ids(await me.db.items.find({ columns: ['id'], orderBy: { id: 'asc' }, limit: 3, cursor: p1sel.nextCursor }))], [['a', 'b', 'c'], ['d'], undefined, ['d']]);
+  r.equal("readers: scope follows the caller (o1 and o2 see disjoint rows), the host sees both, an anonymous caller sees nothing",
+    [await found(me.db.items, undefined), await found(o2.db.items, undefined), await found(store.db.items, undefined, { limit: 500 }), await found(store.as({ kind: 'anonymous' }).db.items, undefined)],
+    [['a', 'b', 'c', 'd'], ['X_z1', 'X_z2'], ['X_z1', 'X_z2', 'a', 'b', 'c', 'd'], []]);
+  r.equal("readers: a publishing Schema's reader returns drafts as well as published rows (published-only is a public View's rule), and never the expired row",
+    await found(me.db.posts, undefined), ['X_p2', 'p1']);
+  const readerRefusals = await Promise.all([
+    () => me.db.items.find({ where: { or: [{ id: 'a' }] } }), () => me.db.items.find({ where: { id: { in: { select: 'id', from: 'items' } } } }), () => me.db.items.find({ where: { cat: ['x'] } }),
+    () => me.db.items.find({ where: {} }), () => me.db.items.find({ where: { stock: { gt: null } } }), () => me.db.items.find({ limit: 501 }), () => me.db.items.find({ limit: 0 }),
+    () => me.db.items.find({ columns: ['nope'] }), () => me.db.items.find({ where: { tags: 'x' } }), () => me.db.items.find({ search: ' ' }), () => me.db.items.get(3),
+  ].map(fail));
+  r.check('readers refuse with INPUT_VALIDATION_FAILED: or, an in-subquery, an array value, an empty where, gt null, limit 0 and 501, an unknown or json column, a blank search, a non-string id', readerRefusals.every(invalid), readerRefusals.map((e) => e?.message?.slice(0, 60)));
+
   // ---- cursor: one opaque format, bound to the query ----------------------------------------------------------------------
   const p1 = await me.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 3 });
   const p2 = await me.select({ from: 'items', columns: ['id'], orderBy: { id: 'asc' }, limit: 3, cursor: p1.nextCursor });

@@ -14,7 +14,8 @@ import { num, op, ref, table } from "../sql/ast.js";
 import { runProcedure, runView, type LifecycleHooks, type Program, type RunEnv, type ViewMatch } from "../sql/run.js";
 import { evaluateAuthAll } from "../runtime/auth.js";
 import { decodeCursor, encodeCursor } from "./cursor.js";
-import { StoreJson, decodeRow, validateValues, type StoreSchemas } from "./json.js";
+import { StoreJson, checkValue, decodeRow, rowDecoder, validateValues, walkRead, type StoreSchemas } from "./json.js";
+import { READER_SHAPES, createReaderSet, dbFor, readerOf, type ReaderSet, type ReadKind, type Shape } from "./readers.js";
 
 /** A compiled View: its IR and declared input types. `public` shows published rows only (ADR-0032 decision 8). */
 export interface StoreView {
@@ -79,7 +80,7 @@ export function bindFor(now: number, caller: Caller | undefined): { mode: Mode; 
 }
 
 /** `parent` is the invocation this Store serves: hooks it fires chain to it, so the depth limit and cause ids hold across writes. */
-function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCause): CallerStore {
+function make(deps: StoreDeps, caller: Caller | undefined, parent: InvocationCause | undefined, readers: ReaderSet): CallerStore {
   const env = (mode: Mode): RunEnv => ({ executor: deps.executor, dialect: deps.dialect, schemas: deps.schemas, mode, lifecycle: deps.lifecycle });
   let writes = 0;
   const as = (bound: BindContext) => ({
@@ -89,7 +90,50 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
     cause: parent ?? ({ kind: "internal", id: `store:${deps.newId()}` } as const),
   });
 
+  // a read never numbers a write: the `seq` of the next write is the same whatever was read before it
+  const asRead = (bound: BindContext) => ({ bind: bound, caller: caller ?? ({ kind: "system", reason: "host" } as const), cause: parent ?? ({ kind: "internal", id: `store:${deps.newId()}` } as const) });
+
+  /**
+   * One reader call (ADR-0043 decision 4): the walk gives the shape key and the binds; a memoised shape is checked, bound and run,
+   * a new one is converted and compiled once and kept only after it ran. The IR is caller-free, so the memo is shared by every `as()`.
+   */
+  const run = (schemaKey: string, kind: ReadKind, q: unknown) => guard(async (): Promise<StoreSelectResult> => {
+    const codec = deps.dialect.codec;
+    const w = walkRead(deps.schemas[schemaKey]!, kind, q, deps.executor.maxBindings);
+    if (kind === "find" && w.limit !== undefined && (!Number.isSafeInteger(w.limit) || (w.limit as number) < 1 || (w.limit as number) > 500)) throw invalid("Store limit must be an integer from 1 to 500.");
+    if (w.cursor !== undefined && typeof w.cursor !== "string") throw invalid("Store cursor must be a string.");
+    const mk = `${schemaKey}\u0000${w.key}`;
+    let shape: Shape | undefined = readers.memo.get(mk);
+    let fresh = false;
+    if (shape) w.values.forEach((v, i) => checkValue(codec, shape!.types[i]!, v, shape!.whats[i]!));
+    else {
+      const json = new StoreJson(deps.schemas, codec);
+      const s = json.read({ from: schemaKey, ...w.query } as never);
+      // the walk and the converter are two traversals: a shape is kept only when they agree on every bind and what binds it
+      if (json.tags.length !== w.tags.length || json.tags.some((t, i) => t !== w.tags[i] || !Object.is(json.values[`v${i}`], w.values[i])))
+        throw new DiagnosticError(runtimeDiagnostic({ code: "INTERNAL_ERROR", severity: "error", path: "store", message: "reader walk and converter disagree" }));
+      Object.freeze(json.inputs);
+      shape = { program: { kind: "view", inputs: json.inputs, ir: [s.ir] }, binding: `${s.from}:${s.order.column.col}:${s.order.dir}`, decode: rowDecoder(s.columns, codec) as Shape["decode"], types: json.types, whats: json.whats };
+      fresh = true;
+    }
+    const input: Record<string, unknown> = Object.create(null);
+    w.values.forEach((v, i) => { input[`v${i}`] = v; });
+    const { mode, bind: b } = bindFor(deps.now(), caller);
+    const cursor = w.cursor === undefined ? undefined : decodeCursor(shape.binding, w.cursor as string);
+    // a get names one id, so it needs no page: the compiled statement runs as it is
+    const pageSize = kind === "get" ? undefined : kind === "first" ? 1 : (w.limit as number | undefined) ?? 50;
+    const page = await runView(env(mode), shape.program, asRead({ ...b, input }), { ...(pageSize ? { pageSize } : {}), ...(cursor ? { cursor } : {}), row: shape.decode });
+    if (fresh) {
+      if (readers.memo.size >= READER_SHAPES) readers.memo.delete(readers.memo.keys().next().value!);
+      readers.memo.set(mk, shape);
+    }
+    return { rows: page.rows, ...(page.next ? { nextCursor: encodeCursor(shape.binding, page.next) } : {}) };
+  });
+  const db = dbFor(readers, run);
+
   return {
+    db,
+    /** @deprecated Use store.db.<schema> (ADR-0043); removed in the next alpha. */
     select: (q) => guard(async (): Promise<StoreSelectResult> => {
       const json = new StoreJson(deps.schemas, deps.dialect.codec);
       const s = json.select(q);
@@ -137,8 +181,12 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent?: InvocationCa
               const { parent: parentSchema, on } = def.translates;
               const key = entry[on];
               // the parent counts when any entry sharing the key is published (nothing makes `on` unique on the parent)
-              const found = key === undefined ? [] : (await make(deps, caller, parent).select({ from: parentSchema, columns: ["id"], where: { [on]: key as string, status: "published" }, limit: 1 })).rows;
-              if (!found.length)
+              // this Store's own reader: the same caller, parent and shapes as the write
+              const where: Record<string, unknown> = Object.create(null);
+              where[on] = key;
+              where["status"] = "published";
+              const found = key === undefined ? undefined : await readerOf(db, parentSchema).first({ columns: ["id"], where });
+              if (!found)
                 throw new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: `CONFLICT: publish the ${parentSchema} entry with the same ${on} first; a translation publishes only after its parent.` }));
             }
           };
@@ -200,12 +248,14 @@ export function bindStoreCause(store: MantleStore, cause: InvocationCause): Call
 }
 
 export function createStore(deps: StoreDeps): MantleStore {
+  // one reader set per Store: its shape memo is shared by the host, every `as()` and every per-request binding
+  const readers = createReaderSet(deps.schemas);
   const store: MantleStore = {
-    ...make(deps, undefined),
-    as: (caller, cause) => make(deps, caller, cause),
+    ...make(deps, undefined, undefined, readers),
+    as: (caller, cause) => make(deps, caller, cause, readers),
     sweepExpired: (request) => sweepExpired(deps, request),
   };
-  causeBindings.set(store, (cause) => make(deps, undefined, cause));
+  causeBindings.set(store, (cause) => make(deps, undefined, cause, readers));
   return store;
 }
 
