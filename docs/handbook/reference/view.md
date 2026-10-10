@@ -172,7 +172,7 @@ requests can change which rows subsequent pages return.
 
 The compiler appends `id` even when a unique index already orders the rows.
 Schema columns are nullable, so a unique index can hold the same tuple twice
-when one key is NULL, and an unscoped caller (staff, `runtime.store`) sees every
+when one key is NULL, and an unscoped caller (`runtime.store`, the system caller) sees every
 owner's rows. Ending the index with the order keys still lets the database
 search it; D1's plan may show `USE TEMP B-TREE FOR LAST TERM OF ORDER BY`,
 which sorts only within ties of the earlier keys.
@@ -262,8 +262,9 @@ Three things to keep in mind:
   in `ctx.cause.rows`, but after hooks are best effort, run after the commit in
   a new transaction and never undo the source write, so the rollup is
   eventually consistent there.
-- **An unscoped read of a rollup sees every owner.** That includes staff Views
-  and `runtime.store`.
+- **An unscoped read of a rollup sees every owner:** `runtime.store`, a
+  schedule or other system-caller Procedure. Staff are scoped like any member
+  and see only their own rollup rows.
 
 The manifests above were compiled with `mantle generate --identity none
 --features web --dialect sqlite` followed by `generate --check`, the steps
