@@ -1,4 +1,4 @@
-// Store read cost: `store.select` (before), Schema readers (after, ADR-0043) and the same statement run natively.
+// Store read cost: `store.select` (before, only on a build that still has it), Schema readers (after, ADR-0043) and the same statement run natively.
 //
 //   pnpm --filter @aotter/mantle build && node packages/mantle/spike/bench-readers.mjs [--cold-only|--warm-only]
 //
@@ -101,7 +101,8 @@ async function warm() {
         }
         return over;
       };
-      const select = await measure(shape.select);
+      // `Store.select` is gone (ADR-0043); the baseline exists only on a build that still has it
+      const select = typeof me.select === "function" ? await measure(shape.select) : [NaN];
       await shape.reader(me, 1, ctx); // the shape's first call converts and compiles; the counters see only what follows
       // counters: a warm reader runs no conversion and no dialect check
       const read = StoreJson.prototype.read;
