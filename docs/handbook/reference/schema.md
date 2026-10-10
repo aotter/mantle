@@ -38,13 +38,71 @@ insert and when a draft is published; a draft may be saved incomplete.
 | Property | Stored as (`sqlite`) | Stored as (`postgres`) | Notes |
 |---|---|---|---|
 | `type: string` | `TEXT` | `text` | |
-| `type: string, format: date-time` | integer microseconds | `timestamptz` | an ISO string on the wire; compare with `now()` and `interval` in SQL |
+| `type: string, format: date-time` | integer microseconds | `timestamptz` | an ISO string on the wire; compare with `now()` and `interval` in SQL; see [Date-time values](#date-time-values) |
 | `type: string, format: date` | integer days | `date` | `"2026-10-01"` on the wire |
 | `type: integer` | `INTEGER` | `int8` | |
 | `type: number` | `REAL` | `float8` | |
 | `type: boolean` | integer 0/1 | `bool` | `true`/`false` on the wire |
 | `type: object`, `type: array` | JSON | `jsonb` | read with `->>` in SQL, or `json_each` on D1 (PostgreSQL: `jsonb_array_elements_text(…) WITH ORDINALITY AS j(value, n)`) |
 | `format: geo` | two `REAL` columns and an R*Tree | two `float8` columns | `{ lat, lng }`; query with `mantle.near` and `mantle.distance` |
+
+### Date-time values
+
+**On the wire.** A declared `date-time` field, `created_at` and `updated_at`
+come back as UTC with exactly six fractional digits, such as
+`2026-10-01T04:00:00.500000Z`, on both dialects. So does an output that reads
+such a column unchanged (and `min`, `max` or `sum` of one column). A computed
+output differs by dialect. On PostgreSQL, `now()`, `date_trunc` and casts are
+typed by the database and come back in the same shape (`infinity` and BC dates
+stay as PostgreSQL writes them). On D1 a computed expression has no declared
+field to decode with, so a View that selects `date_trunc('week', t.at)` or
+`now()` returns integer microseconds since 1970. Select the column itself when
+you need the ISO string, or format the number in the application.
+
+**Accepted input.** An ISO 8601 string with an explicit `Z` or `±hh`, `±hh:mm`
+or `±hhmm` offset, seconds optional, 0 to 6 fractional digits, and `T` or a
+space between date and time. A string without an offset is refused
+(`SQL_TYPE`).
+
+**Range.** A value is microseconds since 1970 and must be a safe integer
+(within ±2^53 microseconds): from `1684-07-28T00:12:25.260Z` to
+`2255-06-05T23:47:34.740Z`. A string or numeric bind outside it is refused. A
+sentinel such as `0000-01-01T00:00:00Z` for an open lower bound is therefore
+refused; use a bound inside the range, such as `1970-01-01T00:00:00Z`, or leave
+the input NULL and write `input.from IS NULL OR t.at >= input.from`.
+
+**Comparing strings.** Mantle's own outputs are fixed-width UTC, so two of them
+compare correctly as strings. A JavaScript `toISOString()` value
+(`…43.377Z`) is not equal to Mantle's `…43.377000Z`, and as a string it sorts
+after it (`Z` is greater than `0`). Compare in SQL, or normalize both sides to
+one format first. A `Date` keeps milliseconds only, so a round trip through
+`Date` drops microseconds.
+
+### Per-member calendar buckets
+
+`date_trunc` and `extract` compute in one site time zone
+(`d1Storage(db, { timeZone })`, `postgresStorage({ timeZone })`). On D1 each
+call looks up the zone's offset table (`_mantle_tz`) twice per row. A View that
+buckets by day or week therefore reads the site's calendar, not the member's,
+and pays those lookups on every row.
+
+When the calendar must be the member's, compute the bucket when the row is
+written and store it. The application knows the member's time zone and passes
+the bucket as a Procedure input:
+
+```yaml
+properties:
+  localDate: { type: string, format: date }                              # stored as integer days
+  localWeek: { type: string, pattern: "^[0-9]{4}-W[0-9]{2}$", maxLength: 8 }   # ISO week; sorts as text
+```
+
+Index it after the scope (`indexes: [[owner, localWeek]]`, or a rollup's
+`uniqueIndexes: [[owner, localWeek, exerciseKey]]`) and `GROUP BY localWeek`:
+no time-zone lookup runs. In one real benchmark such a View was about five
+times faster, and each member gets their own calendar. A member who changes
+time zone keeps the buckets already written; whether to rewrite them is a
+product decision. For long ranges see
+[Long aggregate ranges](./view.md#long-aggregate-ranges).
 
 ### Reserved entry columns
 
