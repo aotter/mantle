@@ -247,7 +247,12 @@ describe("Admin surface: reads", () => {
     const started = new Promise<void>((resolve) => { entriesStarted = resolve; });
     const runtime = { ...rt, store: { ...rt.store, as: (caller: Caller) => {
       const store = rt.store.as(caller);
-      return { ...store, select: (...args: Parameters<typeof store.select>) => { entriesStarted(); return store.select(...args); } };
+      // every reader of this caller's db announces its first read
+      const db = new Proxy(store.db, { get: (target, key, receiver) => {
+        const reader = Reflect.get(target, key, receiver);
+        return typeof key === "string" && reader && typeof reader === "object" ? { ...reader, find: (...args: Parameters<typeof reader.find>) => { entriesStarted(); return reader.find(...args); } } : reader;
+      } });
+      return { ...store, db };
     } } };
     const surface = createAdminSurface(runtime, { basePath: "/admin", identity: { directory: { ...identity.directory!, getUser: async (id) => { await started; return identity.directory!.getUser!(id); } } } });
     const response = await surface(new Request("http://x/admin/api/bootstrap?collection=posts&limit=1"), owner);
@@ -270,7 +275,7 @@ describe("Admin surface: operations", () => {
   });
 
   it("runs a visible operation; an invisible or non-staff one is 404, not 403", async () => {
-    const [row] = (await rt.store.select({ from: "posts", where: { slug: "p1" } })).rows;
+    const [row] = (await rt.store.db.posts.find({ where: { slug: "p1" } })).rows;
     const r = await call("POST", "/admin/api/operations/retitle", contributor, { id: row!["id"], title: "renamed" });
     expect(r).toMatchObject({ status: 200, body: { ok: true, output: { results: [[{ title: "renamed" }]] } } });
     expect((await call("POST", "/admin/api/operations/purge", editor, {})).status).toBe(404);

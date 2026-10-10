@@ -4,7 +4,7 @@ export const handlers: MantleHandlers = {
   audit: async (_input, ctx) => {
     const page = await ctx.store.view("my-items", { input: { min: 1 }, limit: 10 });
     const label: unknown = page.rows[0]?.label;
-    const [item] = (await ctx.store.select({ from: "items", where: { name: String(label) } })).rows;
+    const [item] = (await ctx.store.db.items.find({ where: { name: String(label) } })).rows;
     // readers (ADR-0043): `ctx.db` is `ctx.store.db`, typed per Schema
     const mine = await ctx.db.items.find({ where: { name: String(label) } });
     const post = await ctx.store.db.posts.get("p1");

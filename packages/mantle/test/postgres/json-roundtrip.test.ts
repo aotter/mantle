@@ -29,7 +29,7 @@ it.skipIf(!PG_URL)('JSON scalar strings and mixed-type inputs keep their type th
       const result = await runtime.invokeProcedure({ procedure: 'create-record', input: { payload, scalar: scalarValue }, caller, cause: { kind: 'internal', id: crypto.randomUUID() } }) as { results: Array<Array<{ id: string; payload: unknown; scalar: unknown }>> };
       const row = result.results[0]![0]!;
       expect(row).toMatchObject({ payload, scalar: scalarValue });
-      const selected = await runtime.store.as(caller).select({ from: 'records', where: { id: row.id } });
+      const selected = await runtime.store.as(caller).db.records.find({ where: { id: row.id } });
       expect(selected.rows[0]).toMatchObject({ payload, scalar: scalarValue });
       const viewed = await runtime.store.as(caller).view('records-view');
       expect(viewed.rows.find((r) => r.id === row.id)).toMatchObject({ payload, scalar: scalarValue });
