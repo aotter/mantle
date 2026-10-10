@@ -59,6 +59,17 @@ it("adds no index of its own for the scope, and calls one left from before redun
   expect((await run(d1, { items }, "f2")).undeclared.map((u) => u.message)).toEqual(["index _mantle_scope_items is redundant: a declared index leads with owner; drop it by hand"]);
 });
 
+it("a fresh scoped Schema led only by a unique index plans exactly its declared indexes", async () => {
+  const d1 = await db();
+  const log: StorageSchema = { scope: "owner", fields: { week: "text", ex: "text", v: "integer" }, unique: [["owner", "week", "ex"]], indexes: [["owner", "week"]] };
+  const plan = await planStorageChanges(d1, { log });
+  expect(plan.sql.filter((s) => /^CREATE (UNIQUE )?INDEX/.test(s) && s.includes(' ON "log" '))).toEqual([
+    'CREATE UNIQUE INDEX IF NOT EXISTS "_mantle_uq_log_0" ON "log" ("owner", "week", "ex")',
+    'CREATE INDEX IF NOT EXISTS "_mantle_ix_log_0" ON "log" ("owner", "week")',
+  ]);
+  expect(plan.sql.join("\n")).not.toContain("_mantle_scope_");
+});
+
 it("blocks a changed column type, an undeclared unique index and a table Mantle did not create, and applies nothing", async () => {
   const d1 = await db();
   await d1.exec("CREATE TABLE items (id TEXT, owner TEXT)", "CREATE TABLE other (id TEXT)");

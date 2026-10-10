@@ -35,6 +35,8 @@ it.skipIf(!PG_URL)("a second boot reads only the fingerprint; a new field is add
     // the scope gets no index of its own (the grammar has one lead with it); one left from before is called redundant
     const [ix] = await e.driver.batch([{ sql: "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'notes'" }]);
     expect(ix.rows.map((r) => r.indexname)).not.toContain("_mantle_scope_notes");
+    // a fresh scoped Schema converges to exactly its declared unique index and the updated_at index, nothing for the scope
+    expect(ix.rows.map((r) => r.indexname).filter((n) => n.startsWith("_mantle_")).sort()).toEqual(["_mantle_ix_notes_updated", "_mantle_uq_notes_0"]);
     await e.driver.batch([{ sql: "CREATE INDEX _mantle_scope_notes ON notes (owner)" }]);
     expect((await convergeStorage(e.connect, { notes: { ...notes, fields: { title: "text", stars: "integer" } } }, { fingerprint: "f2b" })).undeclared.map((u) => u.message))
       .toEqual(["index _mantle_scope_notes is redundant: a declared index leads with owner; drop it by hand"]);
