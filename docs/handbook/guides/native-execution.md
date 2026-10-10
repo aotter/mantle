@@ -49,7 +49,9 @@ The authenticated preset opens two official bun:sqlite handles to the same
 file: `DB` for Store and ancillary auth SQL, `AUTH_DB` exclusively for Better Auth.
 Fresh-role and bootstrap SQL must not bypass Better Auth's mutex by using its
 async transaction handle; they read committed data on `DB`.
-Use WAL mode and close both handles after shutdown. The authenticated
+Use WAL mode and close both handles after shutdown. Initialize `AUTH_DB`
+with `authDb.exec("PRAGMA foreign_keys = ON")` before handing it to Better Auth;
+its native Bun adapter does not enable SQLite foreign keys automatically. The authenticated
 two-handle preset rejects `:memory:`; two independent memory handles do not
 share a database. A storage-only in-memory database remains supported.
 

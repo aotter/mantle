@@ -49,7 +49,9 @@ application code safe through a read-only facade and implicit version pinning.
 - An authenticated Bun SQLite preset opens two native handles to the same
   file in WAL mode: Store and ancillary auth SQL use `DB`; Better Auth
   exclusively owns `AUTH_DB`. Better Auth owns its own transaction/mutex behavior; Mantle
-  adds no coordinator. The two-handle composition rejects `:memory:` because
+  adds no coordinator. Enable native foreign keys on `AUTH_DB` explicitly,
+  preserving the constraints previously enabled on the shared handle.
+  The two-handle composition rejects `:memory:` because
   independent memory handles are different databases. Native SQLite locks
   and busy behavior remain native; Mantle adds no wait/retry loop.
 - D1 uses native bindings. Its reads use native `all` rather than a one-item

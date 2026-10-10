@@ -436,6 +436,7 @@ it('writes Bun presets: node-postgres over PostgreSQL, bun:sqlite over SQLite, n
       if (identity === 'mantle') {
         expect(files['src/service.ts']).toContain('database: env.AUTH_DB, driver: bunSqliteDriver(env.DB)');
         expect(files['src/index.ts']).toContain('AUTH_DB: authDb');
+        expect(files['src/index.ts']).toContain('authDb.exec("PRAGMA foreign_keys = ON")');
         expect(files['src/index.ts']).toContain('journal_mode = WAL');
         expect(files['src/index.ts']).toContain('filename === ":memory:"');
       }
