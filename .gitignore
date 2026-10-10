@@ -34,3 +34,5 @@ coverage/
 .release-tarballs/
 .github-package-tarballs/
 .claude/worktrees/
+# Benchmark harness: local result files (packages/mantle/bench). Its cache lives in the OS temp dir.
+packages/mantle/bench/results/
