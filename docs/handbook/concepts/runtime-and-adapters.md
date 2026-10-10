@@ -105,7 +105,7 @@ writes the preset over Hyperdrive; on any other platform, add `"host": "none"`
 and compose `createMantle` with `postgresStorage` yourself (ADR-0036). PostgreSQL
 is Mantle SQL's reference dialect (ADR-0037), and its SQL is PostgreSQL's own
 (ADR-0039): Mantle lowers nothing to imitate SQLite. It accepts D1's subset except
-SQLite's own vocabulary (below), plus `WITH`, set operations, `LATERAL`, window
+SQLite's own vocabulary (below), plus recursive `WITH`, CTE materialization hints, set operations, `LATERAL`, window
 frames, `FILTER`, jsonb operators and the rest of the
 [View reference](../reference/view.md)'s PostgreSQL table. A manifest targets one
 dialect: it need not compile for D1 or return the same values there. D1 to

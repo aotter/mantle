@@ -41,7 +41,7 @@ SQLite and on any `sqliteStorage` driver.
 | Expressions | columns, aliases, literals, arithmetic, `\|\|`, `CASE`, `COALESCE`, `NULLIF`, `CAST` | `CAST(x AS int)` only for an integer literal: use `round(x)`. `CAST(x AS bool)` follows PostgreSQL's text rules; an integer has no cast to boolean on PostgreSQL: write `x <> 0`. `*` expands to declared fields; a bare `*` over a subquery or `json_each` is refused: name the columns |
 | Conditions | comparisons, `AND`/`OR`/`NOT`, `BETWEEN`, `IS [NOT] NULL`, `IS DISTINCT FROM`, `IN (list \| subquery)`, `[NOT] EXISTS`, `LIKE … ESCAPE` | `LIKE` is case-insensitive (SQLite). An input array in `IN` binds once. A date-time, date or boolean column (and `created_at`, `updated_at`) is not compared with a bare string: write `CAST('…' AS timestamptz)`, `true`, or bind an input |
 | Relations | one Schema, `INNER`/`LEFT JOIN … ON` (self-joins too), a subquery in `FROM`, `json_each(<input or column>)` on D1; on PostgreSQL `jsonb_array_elements_text(<input or column>) WITH ORDINALITY AS j(value, n)` | the only comma join is `t, json_each(t.col)` on D1 (PostgreSQL: `t, jsonb_array_elements_text(t.col) WITH ORDINALITY AS j(value, n)`, [SQLite to PostgreSQL rewrites](../concepts/runtime-and-adapters.md#the-postgresql-dialect)). Paging appends the first relation's `id`; a subquery or CTE first in `FROM` must output it. JOIN fanout can repeat that key inside or outside a subquery: supply a unique full sort order for paging. The compiler does not prove that a derived `id` is unique. A row source alone first in `FROM` is keyed by its own `id` or ordinality |
-| Subqueries | scalar and correlated | |
+| Subqueries and CTEs | scalar and correlated; ordinary nonrecursive `WITH … AS (SELECT …)` | CTE references follow lexical scope; each physical Schema read retains caller and visibility policy |
 | Aggregation | `count`, `sum`, `min`, `max`, `avg`, `count(DISTINCT)`, `json_group_array([DISTINCT])`, `json_group_object`, `GROUP BY`, `HAVING` | a selected column is grouped or aggregated |
 | Windows | `row_number()`, `rank()`, `sum`/`count … OVER (PARTITION BY … ORDER BY …)` | no frame clause |
 | Order and paging | `ORDER BY … [NULLS FIRST \| LAST]`, `LIMIT`, `DISTINCT` | `id` is appended as the last sort key (on PostgreSQL in the last key's direction); `LIMIT` needs `ORDER BY` and bounds every page together; a sort key may be NULL (an unstated `NULLS` follows the dialect: D1 puts NULL first ascending and last descending, PostgreSQL last ascending and first descending, and the cursor follows the same rule); `ORDER BY 1` sorts by the first output; `DISTINCT` with `ORDER BY` is refused. A View without `ORDER BY` (a `DISTINCT`, an aggregate, a `GROUP BY`) is one page: it takes no cursor and is refused when it has more rows than the page |
@@ -49,7 +49,7 @@ SQLite and on any `sqliteStorage` driver.
 | Time | `now()`, `date_trunc('hour'\|'day'\|'week'\|'month'\|'year', ts)`, `extract(year\|month\|day\|dow\|hour FROM ts)`, `ts ± interval '<n> seconds\|minutes\|hours'`, `ts - ts` | site time zone; `ts - ts` is microseconds. Calendar intervals (`day`, `month`) are refused: bind the boundary as an input |
 | Search and places | `mantle.search(t, q)`, `mantle.search_rank(t)`, `mantle.near(t.f, lat, lng, meters)`, `mantle.distance(t.f, lat, lng)` | `near` takes a literal radius of at most 50 km; ordering by `distance` needs `LIMIT` ≤ 100 and has no cursor |
 
-Refused on D1: `WITH`, `LATERAL`, `UNION`/`INTERSECT`/`EXCEPT`, window frames,
+Refused on D1: `WITH RECURSIVE`, `MATERIALIZED`/`NOT MATERIALIZED` hints, `LATERAL`, `UNION`/`INTERSECT`/`EXCEPT`, window frames,
 `FILTER`, `DISTINCT ON`, `ILIKE`, regular expressions and jsonb operators. The
 PostgreSQL dialect accepts each of them (next section), and D1 says so in its
 refusal: "needs the PostgreSQL dialect".
@@ -88,8 +88,9 @@ See [PostgreSQL runtime settings](../concepts/runtime-and-adapters.md#the-postgr
 
 A View's `FROM` may name an internal View (`surface: internal`, no `input`, no
 `requires`) by its name with `-` written `_`: `FROM free_window w`. The
-compiler inlines its `SELECT` as a subquery, so scope and every check apply
-inside it, on every dialect. A View that reads itself, directly or through
+compiler emits native CTE dependencies within each outermost SELECT, so scope
+and every check apply inside them on every dialect. Repeated references share
+the dependency; the native engine decides whether to inline or materialize it. A View that reads itself, directly or through
 others, is refused; a View named like a Schema is not readable this way (the name reads the Schema). Write a rule many
 Views share (a plan's visible window, a definition of "active") once this way.
 
@@ -191,7 +192,7 @@ refused (`VIEW_UI_INVALID`).
 `{ sharedMaxAge: 1–86400 }` is accepted only on an unguarded public View whose
 expanded SQL reads neither `auth.*` nor `now()`, nor TTL or operational Schemas
 (`VIEW_CACHE_INVALID`). Generation and uploaded-plan verification check executable IR,
-including inlined internal Views; comments, literals and display source do not decide
+including internal View dependencies; comments, literals and display source do not decide
 eligibility. The annotation is the author's promise that this response may be shared
 for the chosen duration, not a proof of arbitrary native SQL immutability (for example,
 implicit time-dependent casts). The value is

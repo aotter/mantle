@@ -197,7 +197,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
       } else {
         const { mode, bind } = bindFor(now(), inv.caller);
         const env: RunEnv = { executor, dialect, schemas: plan.schemas, mode, lifecycle };
-        const ran = await runProcedure(env, { kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: sqlInput(proc.input, input) } });
+        const ran = await runProcedure(env, { kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: sqlInput(proc.input, input) } }, true);
         result = { results: ran.rows };
       }
     } catch (e) {

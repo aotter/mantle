@@ -142,3 +142,88 @@ it("a deep mixed-direction native cursor seeks on its leading key while retainin
     expect(tied.rows.map((row) => row.id)).toEqual(["deep-19001", "deep-19002", "deep-19003"]);
   } finally { driver.db.close(); }
 });
+
+
+it("native assertions prove expected counts without a redundant SELECT changes()", async () => {
+  const { boot, caller, program, runProcedure, site } = await import("../../src/testing/harness.js");
+  const driver = nodeSqlite();
+  const batches: any[] = [];
+  const traced = { ...driver, batch: (ss) => { batches.push(ss); return driver.batch(ss); } };
+  try {
+    const b = await boot({ storage: sqliteStorage(traced), driver: traced });
+    batches.length = 0;
+    const p = await program("procedure", "UPDATE items SET note = 'one' WHERE cat = 'y' RETURNING id; UPDATE items SET note = 'three' WHERE cat = 'x'; UPDATE items SET note = 'zero' WHERE cat = 'missing'");
+    await runProcedure(site(b), { ...p, expects: [1, undefined, 0] }, caller());
+    const sql = batches.at(-1).map((s) => s.sql);
+    expect(sql).toHaveLength(6);
+    expect(sql.filter((s) => s === "SELECT changes() AS n")).toHaveLength(1);
+    expect(sql[1]).toContain("SELECT 0, changes() = 1");
+    expect(sql[5]).toContain("SELECT 2, changes() = 0");
+  } finally { driver.db.close(); }
+});
+
+it("SQLProcedure uses rows-only execution, preserving fallback and exact Store.write counts", async () => {
+  const { compilePlan } = await import("../../src/spec/index.js");
+  const { createMantleRuntime, systemCaller } = await import("../../src/core/index.js");
+  const source = `apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: counters }
+spec:
+  title: Counters
+  lifecycle: operational
+  schema: { type: object, properties: { value: { type: integer } } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: increment }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { sql: "UPDATE counters SET value = value + 1 RETURNING value" }
+`;
+  const compiled = await compilePlan({ sources: [{ sourceId: "counts:test", text: source }] });
+  if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+  for (const nativeRows of [true, false]) {
+    const driver = nodeSqlite();
+    try {
+      const base = sqliteStorage(driver);
+      let full = 0, rows = 0;
+      const storage = { ...base, prepare: async (plan) => {
+        const prepared = await base.prepare(plan);
+        const ex = prepared.executor;
+        return { ...prepared, executor: {
+          maxBindings: ex.maxBindings, select: (s) => ex.select(s),
+          apply: (b) => { full++; return ex.apply(b); },
+          ...(nativeRows ? { applyRows: (b) => { rows++; return ex.applyRows!(b); } } : {}),
+        } };
+      } };
+      const runtime = await createMantleRuntime({ plan: compiled.plan, handlers: {}, storage });
+      await runtime.store.write([{ insert: "counters", values: { value: 1 } }]);
+      full = 0;
+      expect(await runtime.invokeProcedure({ procedure: "increment", input: {}, caller: systemCaller("test"), cause: { kind: "internal", id: "counts" } })).toEqual({ results: [[{ value: 2 }]] });
+      expect([rows, full]).toEqual(nativeRows ? [1, 0] : [0, 1]);
+      expect(await runtime.store.write([{ update: "counters", set: { value: 3 }, where: { value: 2 } }])).toEqual([{ affected: 1 }]);
+      expect(full).toBe(nativeRows ? 1 : 2);
+    } finally { driver.db.close(); }
+  }
+});
+
+it("rows-only native batches keep expectations, RETURNING and late rollback", async () => {
+  const { boot, caller, program } = await import("../../src/testing/harness.js");
+  const driver = nodeSqlite();
+  const sent: any[] = [];
+  const traced = { ...driver, batch: (ss) => { sent.push(ss); return driver.batch(ss); } };
+  try {
+    const b = await boot({ storage: sqliteStorage(traced), driver: traced });
+    driver.db.exec("CREATE TABLE row_audit(id TEXT); CREATE TRIGGER row_audit_t AFTER UPDATE ON items BEGIN INSERT INTO row_audit VALUES(new.id); END; CREATE TRIGGER row_ignore BEFORE UPDATE ON items WHEN new.note='suppress' BEGIN SELECT RAISE(IGNORE); END");
+    const p = await program("procedure", "UPDATE items SET note = 'rows-only' WHERE cat = 'y' RETURNING id; UPDATE items SET note = 'suppress' WHERE cat = 'x' RETURNING id");
+    const { runProcedure } = await import("../../src/core/sql/run.js");
+    const as = { caller: { kind: "user", subject: "o1", role: null, scopes: [], credential: "session", credentialId: null, clientId: null }, cause: { kind: "internal", id: "rows" }, bind: caller() };
+    const env = { executor: b.executor, dialect: b.dialect, schemas: b.schemas };
+    expect(await runProcedure(env, { ...p, expects: [1, 0] }, as, true)).toEqual({ rows: [[{ id: "c" }], []] });
+    expect(sent.at(-1).map((s) => s.sql).some((sql) => sql === "SELECT changes() AS n")).toBe(false);
+    await expect(runProcedure(env, { ...p, expects: [1, 1] }, as, true)).rejects.toMatchObject({ diagnostic: { code: "CONFLICT", conflict: { opIndex: 1 } } });
+    expect(driver.db.prepare("SELECT version FROM items WHERE id='c'").get().version).toBe(2);
+    expect(driver.db.prepare("SELECT count(*) AS n FROM row_audit").get().n).toBe(1);
+  } finally { driver.db.close(); }
+});

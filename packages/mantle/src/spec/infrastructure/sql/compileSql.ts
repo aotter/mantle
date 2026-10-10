@@ -18,24 +18,26 @@ export interface SqlDialect {
   accepts(stmts: SqlNode[], context: SqlContext & { source: string }, locations: (number | undefined)[]): void;
 }
 
-/**
- * The relation names a source reads, less every name it defines as a CTE, or none when it does not parse: the compiler
- * orders Views by them. ponytail: a CTE named like a View hides that View for the whole source, not only in the CTE's scope.
- */
+/** Relations outside lexical CTE scope: the compiler orders named Views by these dependencies. */
 export async function relationNames(sql: string): Promise<Set<string>> {
-  const names = new Set<string>(), ctes = new Set<string>();
-  const walk = (v: any): void => {
-    if (Array.isArray(v)) return v.forEach(walk);
+  const names = new Set<string>();
+  const walk = (v: any, scope = new Set<string>()): void => {
+    if (Array.isArray(v)) return v.forEach((x) => walk(x, scope));
     if (!v || typeof v !== "object") return;
-    if (typeof v.relname === "string") names.add(v.relname);
-    if (typeof v.ctename === "string") ctes.add(v.ctename);
-    Object.values(v).forEach(walk);
+    if (typeof v.relname === "string" && !scope.has(v.relname)) names.add(v.relname);
+    const w = v.withClause;
+    if (w) {
+      const declared = w.ctes.map((x: SqlNode) => x.CommonTableExpr.ctename);
+      w.ctes.forEach((x: SqlNode, i: number) => walk(x.CommonTableExpr.ctequery, new Set([...scope, ...(w.recursive ? declared : declared.slice(0, i))])));
+      scope = new Set([...scope, ...declared]);
+    }
+    for (const [key, child] of Object.entries(v)) if (key !== "withClause") walk(child, scope);
   };
   try { walk((await parsePgSql(sql)).stmts); } catch { /* compileSql reports it */ }
-  return new Set([...names].filter((n) => !ctes.has(n)));
+  return names;
 }
 
-export type CompileSqlResult = { readonly ok: true; readonly plan: SqlPlan } | { readonly ok: false; readonly diagnostic: SqlDiagnostic };
+export type CompileSqlResult = { readonly ok: true; readonly plan: SqlPlan; /** Compile-only dependency source; never sealed into a RuntimePlan. */ readonly reference?: SqlNode } | { readonly ok: false; readonly diagnostic: SqlDiagnostic };
 
 /** UTF-8 byte offset (what libpg-query reports) to offset, 1-based line and column, and the token there. */
 export function locate(source: string, byteOffset: number): Pick<SqlDiagnostic, "offset" | "line" | "column" | "token"> {
@@ -64,13 +66,57 @@ function tagRelations(v: any): any {
   return out;
 }
 
-/** Every relation tagged `view` becomes its View's compiled SELECT, as a FROM subquery under the name it was read by. */
-function inlineViews(v: any, views: SqlContext["views"]): any {
-  if (Array.isArray(v)) return v.map((x) => inlineViews(x, views));
+/** A named dependency is native SQL structure, shared inside its outermost SELECT rather than copied per reference. */
+function expandViews(v: any, views: NonNullable<SqlContext["views"]>): any {
+  if (Array.isArray(v)) return v.map((x) => expandViews(x, views));
   if (!v || typeof v !== "object") return v;
-  const rv = v.RangeVar;
-  if (rv?.mantle === "view") return { RangeSubselect: { subquery: { SelectStmt: structuredClone(views![rv.relname]!.select) }, alias: { aliasname: rv.alias?.aliasname ?? rv.relname } } };
-  return Object.fromEntries(Object.entries(v).map(([k, c]) => [k, inlineViews(c, views)]));
+  if (!v.SelectStmt) return Object.fromEntries(Object.entries(v).map(([k, c]) => [k, expandViews(c, views)]));
+  const used = new Set<string>(), tables = new Set<string>();
+  const reserve = (n: any): void => {
+    if (!n || typeof n !== "object") return;
+    if (n.RangeVar?.mantle === "table") tables.add(n.RangeVar.relname);
+    for (const [key, child] of Object.entries(n)) {
+      if (["relname", "ctename", "aliasname"].includes(key)) used.add(String(child));
+      reserve(child);
+    }
+  };
+  reserve(v);
+  for (const ref of Object.values(views)) reserve(ref.select);
+  let serial = 0;
+  const fresh = () => { let name: string; do { name = `_view_${serial++}`; } while (used.has(name)); used.add(name); return name; };
+  const names = new Map<string, string>(), definitions: SqlNode[] = [];
+  const walk = (n: any, scope = new Map<string, string>()): any => {
+    if (Array.isArray(n)) return n.map((x) => walk(x, scope));
+    if (!n || typeof n !== "object") return n;
+    const rv = n.RangeVar;
+    if (rv?.mantle === "view") {
+      let name = names.get(rv.relname);
+      if (!name) {
+        names.set(rv.relname, name = fresh());
+        // A dependency was validated in its own lexical scope, not under the caller's authored WITH.
+        const select = walk(views[rv.relname]!.select);
+        definitions.push({ CommonTableExpr: { ctename: name, ctequery: { SelectStmt: select }, ctematerialized: "CTEMaterializeDefault" } });
+      }
+      return { RangeVar: { ...rv, mantle: "cte", relname: name, alias: rv.alias ?? { aliasname: rv.relname } } };
+    }
+    if (rv?.mantle === "cte" && scope.has(rv.relname) && scope.get(rv.relname) !== rv.relname)
+      return { RangeVar: { ...rv, relname: scope.get(rv.relname), alias: rv.alias ?? { aliasname: rv.relname } } };
+    const w = n.withClause;
+    if (!w) return Object.fromEntries(Object.entries(n).map(([k, c]) => [k, walk(c, scope)]));
+    // Rename authored CTEs too: neither later SQLite siblings nor a recursive WITH may capture a dependency's table read.
+    const local = new Map<string, string>(w.ctes.map((x: SqlNode) => [x.CommonTableExpr.ctename, tables.has(x.CommonTableExpr.ctename) ? fresh() : x.CommonTableExpr.ctename]));
+    const inner = new Map([...scope, ...local]);
+    const prior = new Map(scope);
+    const ctes = w.ctes.map(({ CommonTableExpr: c }: SqlNode) => {
+      const query = walk(c.ctequery, w.recursive ? inner : prior);
+      prior.set(c.ctename, local.get(c.ctename)!);
+      return { CommonTableExpr: { ...c, ctename: local.get(c.ctename), ctequery: query } };
+    });
+    return { ...Object.fromEntries(Object.entries(n).filter(([k]) => k !== "withClause").map(([k, c]) => [k, walk(c, inner)])), withClause: { ...w, ctes } };
+  };
+  const out = walk(v);
+  if (definitions.length) out.SelectStmt.withClause = { ...out.SelectStmt.withClause, ctes: [...definitions, ...(out.SelectStmt.withClause?.ctes ?? [])] };
+  return out;
 }
 
 /** Drop what only diagnostics need. */
@@ -87,9 +133,9 @@ export async function compileSql(sql: string, ctx: SqlContext, dialect: SqlDiale
     const parsed = await parsePgSql(sql);
     const tagged = tagRelations(parsed.stmts) as SqlNode[];
     refuseForEveryDialect(tagged, ctx, parsed.locations);
-    const stmts = ctx.views ? (inlineViews(tagged, ctx.views) as SqlNode[]) : tagged;
+    const stmts = expandViews(tagged, ctx.views ?? {}) as SqlNode[];
     dialect.accepts(stmts, { ...ctx, source: sql }, parsed.locations);
-    return { ok: true, plan: { grammar: PG_GRAMMAR, stmts: stripLocations(stmts) } };
+    return { ok: true, plan: { grammar: PG_GRAMMAR, stmts: stripLocations(stmts) }, ...(ctx.kind === "view" ? { reference: stripLocations(tagged)[0]!.SelectStmt } : {}) };
   } catch (e) {
     if (e instanceof SqlRefusal) return { ok: false, diagnostic: toDiagnostic(e, sql) };
     throw e;

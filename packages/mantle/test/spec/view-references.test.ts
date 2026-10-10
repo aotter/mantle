@@ -1,5 +1,5 @@
 // @ts-nocheck test code over loosely typed plans and rows
-/** ADR-0037 decision 3: a View reads an internal View; it is inlined, so policy and every check apply inside it. */
+/** ADR-0037 decision 3: a View reads an internal View; its native CTE retains policy and every check. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan } from "../../src/spec/index.js";
@@ -25,13 +25,13 @@ describe("View references", () => {
   beforeAll(async () => { d1 = await LocalD1.create(); }, 60_000);
   afterAll(() => d1.dispose());
 
-  it("inlines an internal View, under the caller's scope, keeping its outputs' types", async () => {
+  it("shares an internal View through a native CTE, under the caller's scope, keeping its outputs' types", async () => {
     const res = await compile(
       view("open-notes", "SELECT id, title, due FROM notes WHERE title <> 'done'"),
       view("next-notes", "SELECT o.id, o.title, o.due FROM open_notes o ORDER BY o.due", "  surface: public\n  requires: { auth: { all: [ctx.user] } }\n"),
     );
     expect(res.ok, JSON.stringify(res.diagnostics)).toBe(true);
-    expect(JSON.stringify(res.plan.views["next-notes"].stmts)).toContain('"RangeSubselect"');
+    expect(JSON.stringify(res.plan.views["next-notes"].stmts)).toContain('"CommonTableExpr"');
     expect(res.plan.views["next-notes"].columns?.due).toEqual({ schema: "notes", field: "due" });
     const rt = await createMantleRuntime({ plan: res.plan, handlers: {}, storage: sqliteStorage(d1) });
     for (const [owner, title, due] of [["a", "write", "2026-01-02T00:00:00Z"], ["a", "done", "2026-01-01T00:00:00Z"], ["b", "theirs", "2026-01-01T00:00:00Z"], ["a", "read", "2026-01-01T00:00:00Z"]])

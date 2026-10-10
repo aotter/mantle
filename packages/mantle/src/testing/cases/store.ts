@@ -5,7 +5,7 @@ import type { Report } from '../report.js';
 import type { Engine } from '../harness.js';
 import { createStore } from '../../core/store/createStore.js';
 import { encodeCursor } from '../../core/store/cursor.js';
-import { NOW, boot, program, schemas } from '../harness.js';
+import { NOW, boot, caller, program, schemas } from '../harness.js';
 
 const user = (subject) => ({ kind: 'user', subject, role: null, scopes: [], credential: 'session', credentialId: null, clientId: null });
 const fail = async (f) => { try { await f(); return undefined; } catch (e) { return e; } };
@@ -116,4 +116,46 @@ export async function run(r: Report, engine: Engine) {
   const dry = await store.sweepExpired({ collection: 'items', delete: false });
   const swept = await store.sweepExpired({ collection: 'items' });
   r.equal('sweepExpired: a dry run counts the one expired row, the sweep removes it (only it), and a second sweep finds nothing', [dry, swept, (await store.sweepExpired({ collection: 'items' })).scanned, (await b.d1.all("SELECT count(*) AS c FROM items WHERE id = 'X_e1'"))[0].c], [{ scanned: 1, removed: 0 }, { scanned: 1, removed: 1 }, 0, 0]);
+  if (b.dialect.name === '@aotter/mantle/d1') await sqliteCounts(r, b, me);
+}
+
+
+/** Native SQLite changes() excludes trigger writes and reflects suppressed writes, including zero. */
+async function sqliteCounts(r: Report, b, me) {
+  await b.d1.exec([
+    "CREATE TABLE count_audit (id TEXT)",
+    "CREATE TRIGGER count_side_effect AFTER UPDATE ON items BEGIN INSERT INTO count_audit VALUES (new.id); INSERT INTO count_audit VALUES (new.id); END",
+    "CREATE TRIGGER count_suppress BEFORE UPDATE ON items WHEN new.note = 'suppress' BEGIN SELECT RAISE(IGNORE); END",
+  ]);
+  const result = await me.write([
+    { update: 'items', set: { note: 'count-one' }, where: { cat: 'y' }, expect: 1 },
+    { update: 'items', set: { note: 'count-three' }, where: { cat: 'x' }, expect: 3 },
+    { update: 'items', set: { note: 'suppress' }, where: { cat: 'x' }, expect: 0 },
+    { update: 'items', set: { note: 'count-unknown' }, where: { cat: 'y' } },
+  ]);
+  r.equal('native expected 1/n/0 and unknown counts exclude side-effect and suppressed trigger writes', result,
+    [{ affected: 1 }, { affected: 3 }, { affected: 0 }, { affected: 1 }]);
+  r.equal('native ordered writes and trigger side effects really execute',
+    [(await b.d1.all("SELECT note FROM items WHERE id = 'c'"))[0].note, (await b.d1.all('SELECT count(*) AS n FROM count_audit'))[0].n], ['count-unknown', 10]);
+  const before = await b.d1.all('SELECT id, note, version FROM items ORDER BY id');
+  const rejected = await fail(() => me.write([
+    { update: 'items', set: { note: 'rolled-back' }, where: { cat: 'y' }, expect: 1 },
+    { update: 'items', set: { note: 'suppress' }, where: { cat: 'x' }, expect: 3 },
+  ]));
+  r.equal('a late native suppression mismatch names the correct op and rolls back earlier writes and their triggers',
+    [conflict(rejected), await b.d1.all('SELECT id, note, version FROM items ORDER BY id'), (await b.d1.all('SELECT count(*) AS n FROM count_audit'))[0].n],
+    [{ opIndex: 1, reason: 'expect' }, before, 10]);
+  const p = await program('procedure', "UPDATE items SET note = 'returning-one' WHERE cat = 'y' RETURNING id, note; UPDATE items SET note = 'returning-three' WHERE cat = 'x' RETURNING id, note");
+  const { runProcedure } = await import('../../core/sql/run.js');
+  const env = { executor: b.executor, dialect: b.dialect, schemas: b.schemas };
+  const as = { caller: user('o1'), cause: { kind: 'internal', id: 'count-returning' }, bind: caller() };
+  const returning = await runProcedure(env, { ...p, expects: [1, 3] }, as, true);
+  r.equal('native ordered expected writes preserve actual RETURNING rows', returning.rows.map((rows) => rows.sort((a, b) => a.id.localeCompare(b.id))),
+    [[{ id: 'c', note: 'returning-one' }], ['a', 'b', 'd'].map((id) => ({ id, note: 'returning-three' }))]);
+  const committed = await b.d1.all('SELECT id, note, version FROM items ORDER BY id');
+  const audit = (await b.d1.all('SELECT count(*) AS n FROM count_audit'))[0].n;
+  const rowsFailure = await fail(() => runProcedure(env, { ...p, expects: [1, 2] }, as, true));
+  r.equal('rows-only native execution still rolls back all rows and trigger writes after a late assertion failure',
+    [conflict(rowsFailure), await b.d1.all('SELECT id, note, version FROM items ORDER BY id'), (await b.d1.all('SELECT count(*) AS n FROM count_audit'))[0].n],
+    [{ opIndex: 1, reason: 'expect' }, committed, audit]);
 }
