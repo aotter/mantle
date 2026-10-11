@@ -8,6 +8,7 @@ import type { RuntimePlan } from "../spec/domain/index.js";
 import { STAFF_ROLES, LIFECYCLE_HOOKS } from "../spec/domain/index.js";
 import { systemCaller } from "./caller.js";
 import { MAX_INVOCATION_DEPTH, type Invocation, type InvocationCause } from "./invocation.js";
+import { planValidators } from "./runtime/validators.js";
 import { createMantleRuntime } from "./runtime/createRuntime.js";
 import { bindStoreCause } from "./store/createStore.js";
 import type { MantleRuntime, MantleService, MantleStorageAdapter } from "./service.js";
@@ -61,6 +62,7 @@ function deferredInvocation(message: unknown): Invocation {
 
 export function createMantle<Env>(service: MantleService<Env>, options: MantleOptions<Env>): Mantle<Env> {
   let booted: Promise<MantleRuntime> | undefined;
+  planValidators(options.plan); // plan-only CPU work at construction (module scope on Workers), not in the first request (ADR-0044)
   const retainers = new WeakMap<InvocationCause, (p: Promise<unknown>) => void>();
 
   const runtimeFor = async (env: Env, ctx?: WaitUntil): Promise<MantleRuntime> => {
