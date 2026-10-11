@@ -47,6 +47,15 @@ spec:
   input: {type: object, required: [id, title, version], properties: {id: {type: string}, title: {type: string}, version: {type: integer}}}
   output: {type: object, required: [results], properties: {results: {type: array}}}
   handler: {sql: 'UPDATE notes SET title = input.title WHERE id = input.id AND version = input.version RETURNING id, title'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: create-note-pair}
+spec:
+  requires: {auth: {all: [ctx.user]}}
+  input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}
+  output: {type: object, required: [results], properties: {results: {type: array}}}
+  handler: {sql: 'INSERT INTO notes (title) VALUES (input.title); INSERT INTO notes (title) VALUES (input.title) RETURNING id'}
 `;
 async function canonical(target: Target, text = source) {
   const sqlite = target === "bun-sqlite" || target === "cloudflare-d1";
@@ -73,9 +82,9 @@ describe("native generation", () => {
     expect(text).not.toContain("jsonSchemaToZod");
     expect(text).toContain("??= z.object");
     for (const mode of ["caller", "trusted"] as const) expect(text).toContain(JSON.stringify(input.lowered.views["notes-list"]![mode]!.sql));
-    if (target === "bun-sqlite") { expect(text).toContain("db.transaction(execute)()"); expect(text).toContain("SELECT changes() AS n"); }
+    if (target === "bun-sqlite") { expect(text).toContain("db.transaction(execute)()"); expect(text).toContain("results = execute()"); expect(text).toContain(".length !== 1"); expect(text).not.toContain("SELECT changes()"); }
     else if (target === "cloudflare-d1") { expect(text).toContain("db.batch(["); expect(text).toContain("INSERT INTO _mantle_assert (op,ok)"); expect(text).toContain("changes() = 1"); }
-    else { expect(text).toContain("BEGIN ISOLATION LEVEL SERIALIZABLE"); expect(text).toContain('db.query("ROLLBACK")'); expect(text).toContain(".rowCount !== 1"); }
+    else { expect(text).toContain("BEGIN ISOLATION LEVEL SERIALIZABLE"); expect(text).toContain('db.query("ROLLBACK")'); expect(text).toContain(".rowCount !== 1"); expect(text.match(/BEGIN ISOLATION/g)!.length).toBe(1); }
     expect(generate(input)).toEqual(generated);
   });
   test("unsupported programs fail generation with paths rather than omitting behavior", async () => {
@@ -120,13 +129,41 @@ for (const checked of [false,true]) test(`${checked ? "checked" : "bare"} PG tra
         return { rows: [], fields: [], rowCount: 1 };
       } };
       let caught: any;
-      try { await module.procedures["create-note"](db, caller, { title: "test" }); } catch (error) { caught = error; }
+      try { await module.procedures["create-note-pair"](db, caller, { title: "test" }); } catch (error) { caught = error; }
       if (!checked && ["begin","execute","commit-known"].includes(failure)) { expect(caught).toBe(original); if(failure !== "begin") expect(calls.at(-1)).toBe("ROLLBACK"); }
       else if (failure === "begin") { expect(caught.code).toBe("RESOURCE_UNAVAILABLE"); expect(caught.cause).toBe(original); expect(calls.length).toBe(1); }
       else if (failure === "execute") { expect(caught.code).toBe("RESOURCE_UNAVAILABLE"); expect(caught.cause).toBe(original); expect(caught.message).not.toContain("native-execute"); expect(calls.at(-1)).toBe("ROLLBACK"); }
       else if (failure === "rollback") { expect(caught.code).toBe("OUTCOME_UNKNOWN"); expect(caught.cause.errors).toEqual([original, rollback]); }
       else if (failure === "commit-known") { expect(caught.code).toBe("RESOURCE_UNAVAILABLE"); expect(caught.cause).toBe(original); expect(calls.at(-1)).toBe("ROLLBACK"); expect(calls.filter(sql => sql.startsWith("BEGIN")).length).toBe(1); }
       else { expect(caught.code).toBe("OUTCOME_UNKNOWN"); expect(caught.cause).toBe(original); expect(calls.at(-1)).toBe("ROLLBACK"); expect(calls.filter(sql => sql === "ROLLBACK").length).toBe(1); }
+    }
+  } finally { await unlink(path); }
+});
+
+for (const checked of [false,true]) test(`${checked ? "checked" : "bare"} single-statement PG writes autocommit and signal uncertain ownership`, async () => {
+  const generated = generate(await canonical("bun-postgres"));
+  if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+  const path = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
+  await writeFile(path, generated.files[checked ? "checked.ts" : "generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"'));
+  const caller = { kind: "user", subject: "test-user", role: null, scopes: [], credential: "session", credentialId: null, clientId: null };
+  try {
+    const module = await import(path.href);
+    for (const failure of ["none", "zero-rows", "server", "timeout", "socket"] as const) {
+      const original = Object.assign(new Error(`native-${failure}`), failure === "server" ? { code: "23505", severity: "ERROR" } : failure === "timeout" ? { code: "57014", severity: "ERROR" } : failure === "socket" ? { code: "EPIPE" } : {});
+      const calls: string[] = [];
+      const db = { query: async (query: string | {text: string}) => {
+        calls.push(typeof query === "string" ? query : query.text);
+        if (["server", "timeout", "socket"].includes(failure)) throw original;
+        return { rows: [], fields: [], rowCount: failure === "zero-rows" ? 0 : 1 };
+      } };
+      let caught: any;
+      try { await module.procedures["update-note"](db, caller, { id: "n1", title: "t", version: 1 }); } catch (error) { caught = error; }
+      expect(calls.length).toBe(1);
+      if (failure === "none") expect(caught).toBeUndefined();
+      else if (failure === "zero-rows") expect(caught.code).toBe("CONFLICT");
+      else if (failure === "socket") { expect(caught.code).toBe("OUTCOME_UNKNOWN"); expect(caught.cause).toBe(original); }
+      else if (!checked) expect(caught).toBe(original);
+      else expect(caught.code).toBe(failure === "server" ? "CONFLICT" : "OUTCOME_UNKNOWN");
     }
   } finally { await unlink(path); }
 });

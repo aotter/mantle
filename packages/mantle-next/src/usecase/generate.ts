@@ -201,7 +201,7 @@ function emit({ target, plan, lowered, viewKeys }: GenerateInput, native: boolea
           if (s.kind === "read" || s.returns) {
             lines.push(`    const rows${lines.length} = ${read(s.sql, binds)};`);
             const name = `rows${lines.length - 1}`;
-            if (s.kind === "row") lines.push(`    if ((db.query("SELECT changes() AS n").get() as {n:number}).n !== 1) throw new ContractError("CONFLICT", "Expected one affected row.", ${q(path)});`);
+            if (s.kind === "row") lines.push(`    if (${name}.length !== 1) throw new ContractError("CONFLICT", "Expected one affected row.", ${q(path)});`);
             lines.push(`    results.push(${name} as unknown[]);`);
           } else {
             const name = `changed${lines.length}`;
@@ -218,10 +218,25 @@ function emit({ target, plan, lowered, viewKeys }: GenerateInput, native: boolea
       }
       lines.push("    return results;"); return lines;
     };
-    const operation = ["  const execute = " + (target === "bun-sqlite" ? "()" : "async ()") + " => {", '    if (caller.kind === "system") {', ...branch(modes.trusted), "    }", ...branch(modes.caller), "  };" ];
+    const trustedLines = branch(modes.trusted), callerLines = branch(modes.caller);
+    const operation = ["  const execute = " + (target === "bun-sqlite" ? "()" : "async ()") + " => {", ...(trustedLines.join() === callerLines.join() ? [] : ['    if (caller.kind === "system") {', ...trustedLines, "    }"]), ...callerLines, "  };" ];
+    // One statement is atomic on its own: a row op touches at most one row (one-row INSERT or unique `id =`), so a failed
+    // count check after autocommit has changed nothing. Skipping BEGIN/COMMIT saves two PostgreSQL round trips.
+    const single = modes.caller.length === 1 && modes.trusted.length === 1;
     declarations.push(...operation);
-    if (target === "bun-sqlite") declarations.push("  let results: unknown[][];", native ? "  results = db.transaction(execute)();" : `  try { results = db.transaction(execute)(); } catch (error) { throw databaseError(error, "write", ${q(path)}, "sqlite"); }`);
+    const run = single ? "execute()" : "db.transaction(execute)()";
+    if (target === "bun-sqlite") declarations.push("  let results: unknown[][];", native ? `  results = ${run};` : `  try { results = ${run}; } catch (error) { throw databaseError(error, "write", ${q(path)}, "sqlite"); }`);
     else if (target === "cloudflare-d1") declarations.push("  let results: unknown[][];", native ? "  results = await execute();" : `  try { results = await execute(); } catch (error) { throw databaseError(error, "write", ${q(path)}, "sqlite"); }`);
+    else if (single) declarations.push(
+      "  let results: unknown[][];",
+      "  try { results = await execute(); } catch (error) {",
+      "    if (error instanceof ContractError) throw error;",
+      // A server ErrorResponse (SQLSTATE + severity) means the statement rolled back, timeouts included;
+      // anything else (socket loss, EPIPE) may have committed.
+      '    const server = error as {code?: unknown; severity?: unknown} | null;',
+      '    if (typeof server?.code !== "string" || !/^[0-9A-Z]{5}$/.test(server.code) || typeof server.severity !== "string") {',
+      `      throw new ContractError("OUTCOME_UNKNOWN", "Statement outcome is unknown; discard this client before further use.", ${q(path)}, { cause: error });`,
+      "    }", native ? "    throw error;" : `    throw databaseError(error, "write", ${q(path)}, "postgres");`, "  }");
     else declarations.push(
       native ? '  await db.query("BEGIN ISOLATION LEVEL SERIALIZABLE");' : `  try { await db.query("BEGIN ISOLATION LEVEL SERIALIZABLE"); } catch (error) { throw databaseError(error, "read", ${q(path)}, "postgres"); }`,
       "  let results: unknown[][];",
