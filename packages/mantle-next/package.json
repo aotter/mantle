@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
+  "engines": { "node": ">=22.14.0" },
   "files": ["dist", "README.md"],
   "exports": {
     ".": "./dist/usecase/generate.js",
@@ -18,10 +19,8 @@
     "test:native": "bun scripts/verify-native.ts",
     "bench": "bun scripts/bench.ts",
     "check:size": "bun run build && bun scripts/check-size.ts",
-    "check:package": "bun run build && bun scripts/check-package.ts",
-    "baseline:footprint": "bun run build && bun scripts/baseline-footprint.ts"
+    "check:package": "bun run build && bun scripts/check-package.ts"
   },
-  "dependencies": { "zod": "catalog:" },
   "devDependencies": {
     "@aotter/mantle": "workspace:*",
     "@types/node": "catalog:",

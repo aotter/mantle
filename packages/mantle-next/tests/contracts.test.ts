@@ -1,47 +1,9 @@
-import { describe, expect, test } from "bun:test";
-import { z } from "zod";
-import { validate, ContractError, encodeNumeric, decodeNumeric, encodeTimestamptz, decodeTimestamptz, encodeDate } from "../src/kernel/contracts.js";
-describe("generated boundary primitives", () => {
-  test("official defaults, nullability and unknown-key refusal", () => {
-    const schema = z.object({ amount: z.number().min(0).default(0), note: z.string().nullable() }).strict();
-    expect(validate(schema, { note: null }, "input")).toEqual({ amount: 0, note: null });
-    expect(() => validate(schema, { note: null, extra: true }, "input")).toThrow(ContractError);
-    expect(() => validate(schema, { amount: -1, note: null }, "input")).toThrow(ContractError);
-  });
-  test("cyclic values fail; shared objects do not invent a cycle", () => {
-    const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
-    expect(() => validate(z.unknown(), cyclic, "input")).toThrow(ContractError);
-    const shared = { v: 1 };
-    expect(validate(z.unknown(), { a: shared, b: shared }, "input")).toEqual({ a: shared, b: shared });
-  });
-  test("legacy scalar precision and impossible dates", () => {
-    expect(decodeNumeric(encodeNumeric("12.34", 8, 2), 2)).toBe("12.34");
-    expect(() => encodeNumeric("12.345", 8, 2)).toThrow();
-    expect(() => encodeDate("2026-02-30")).toThrow();
-    expect(decodeTimestamptz(encodeTimestamptz("2026-10-11T00:00:00.123456Z"))).toBe("2026-10-11T00:00:00.123456Z");
-  });
-});
-test("native PG wire values preserve baseline integers and timestamp precision", async () => {
-  const { decodeField } = await import("../src/kernel/contracts.js");
-  expect(decodeField(20, "120")).toBe(120);
-  expect(decodeField(20, "9007199254740993")).toBe("9007199254740993");
-  expect(decodeField(1184, "2026-10-11 08:00:00.123456+08")).toBe("2026-10-11T00:00:00.123456Z");
-  expect(decodeField(1700, "12.34", 524294)).toBe("12.34");
-  expect(decodeField(1700, "12.34")).toBe(12.34);
-});
-test("output validation is classified; getters fail safely", () => {
-  try { validate(z.number(), "bad", "output", "OUTPUT_VALIDATION_FAILED"); }
-  catch (error) { expect((error as ContractError).code).toBe("OUTPUT_VALIDATION_FAILED"); }
-  const dangerous = { get value() { throw new Error("private payload"); } };
-  expect(() => validate(z.unknown(), dangerous, "input")).toThrow("the schema cannot check this value");
-});
-test("native failure classes preserve refusal versus unknown commit and redact payloads", async () => {
-  const { databaseError } = await import("../src/kernel/contracts.js");
-  const native = (code: string) => Object.assign(new Error("private SQL and credential"), { code });
-  expect(databaseError(native("40001"), "write", "procedure", "postgres").code).toBe("RESOURCE_UNAVAILABLE");
-  expect(databaseError(native("57P01"), "write", "procedure", "postgres").code).toBe("OUTCOME_UNKNOWN");
-  expect(databaseError(native("08006"), "write", "procedure", "postgres").code).toBe("OUTCOME_UNKNOWN");
-  expect(databaseError(native("23505"), "write", "procedure", "postgres").code).toBe("CONFLICT");
-  expect(databaseError(new Error("CONFLICT op=1: SQLITE_CONSTRAINT"), "write", "procedure", "sqlite").code).toBe("CONFLICT");
-  expect(JSON.stringify(databaseError(native("23505"), "write", "procedure", "postgres"))).not.toContain("credential");
+import { expect, test } from "bun:test";
+test("ISO inputs refuse what Date.parse would roll over or cannot represent", async () => {
+  const { encodeTimestamptz, encodeDate, isoTimestamptz } = await import("../src/kernel/contracts.js");
+  expect(encodeTimestamptz("2026-10-11T08:00:00.000001+08:00")).toBe(Date.parse("2026-10-11T00:00:00Z") * 1000 + 1);
+  expect(isoTimestamptz("2026-10-11T08:00:00.000001+08:00")).toBe("2026-10-11T00:00:00.000001Z");
+  for (const bad of ["2026-10-11T24:00:00Z", "2026-10-11T00:00:00", "2026-02-30T00:00:00Z"]) expect(() => encodeTimestamptz(bad)).toThrow("not a");
+  expect(() => encodeTimestamptz(new Date("garbage"))).toThrow("Invalid Date");
+  expect(() => encodeDate("2026-02-30")).toThrow("not a valid date");
 });

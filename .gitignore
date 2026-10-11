@@ -38,5 +38,4 @@ coverage/
 packages/mantle/bench/results/
 # Next local generated test consumers and private timing artifacts.
 packages/mantle-next/tests/apps/.generated/
-packages/mantle-next/tests/apps/generated/
 packages/mantle-next/results/
