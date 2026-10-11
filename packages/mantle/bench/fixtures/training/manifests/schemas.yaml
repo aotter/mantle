@@ -1,0 +1,56 @@
+# Swolhalla-shaped operational Schemas: a shared exercise dictionary, and per-owner workouts and sets.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: exercises }
+spec:
+  title: Exercises
+  lifecycle: operational
+  uniqueIndexes: [[name]]
+  schema:
+    type: object
+    required: [name, muscle, equipment]
+    properties:
+      name: { type: string }
+      muscle: { type: string }
+      equipment: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: workouts }
+spec:
+  title: Workouts
+  lifecycle: operational
+  scope: { owner: auth.uid() }
+  indexes: [[owner, startedAt]]
+  schema:
+    type: object
+    required: [owner, startedAt, splitType, durationMin, sessionRpe, location]
+    properties:
+      owner: { type: string }
+      startedAt: { type: string, format: date-time }
+      splitType: { type: string }
+      durationMin: { type: integer }
+      sessionRpe: { type: number }
+      location: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: sets }
+spec:
+  title: Sets
+  lifecycle: operational
+  scope: { owner: auth.uid() }
+  indexes: [[owner, workoutId], [owner, exercise]]
+  schema:
+    type: object
+    required: [owner, workoutId, exercise, block, position, weightKg, reps, rir, tag]
+    properties:
+      owner: { type: string }
+      workoutId: { type: string }
+      exercise: { type: string }
+      block: { type: integer }
+      position: { type: integer }
+      weightKg: { type: number }
+      reps: { type: integer }
+      rir: { type: integer }
+      tag: { type: string, enum: [warmup, working, drop] }

@@ -25,7 +25,12 @@
     "check:release": "node scripts/release-tag-order.mjs --self-test",
     "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm check:doc-examples && pnpm check:cloud-plugin && pnpm typecheck && pnpm test && pnpm check:worker-consumer",
     "check:cloud-plugin": "node scripts/check-cloud-plugin.mjs",
-    "check:worker-consumer": "node scripts/check-worker-consumer.mjs"
+    "check:worker-consumer": "node scripts/check-worker-consumer.mjs",
+    "bench": "pnpm --filter @aotter/mantle bench",
+    "bench:cold": "pnpm --filter @aotter/mantle bench:cold",
+    "bench:warm": "pnpm --filter @aotter/mantle bench:warm",
+    "bench:check": "pnpm --filter @aotter/mantle bench:check",
+    "bench:compare": "pnpm --filter @aotter/mantle bench:compare"
   },
   "devDependencies": {
     "typescript": "catalog:"
