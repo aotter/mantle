@@ -9,7 +9,7 @@
  * The cache is keyed by the plan's own objects and the dialect object, so a seed serves the runtime (and the one storage adapter,
  * whose dialect object it is) that booted this plan; a second adapter compiles for itself.
  */
-import { planFingerprint, type LoweredPage, type LoweredStatement, type LoweredView, type PlanLowered, type RuntimePlan, type SqlNode as N } from "../../spec/domain/index.js";
+import { planFingerprint, type LoweredPage, type LoweredProcedureStatement, type LoweredStatement, type LoweredView, type PlanLowered, type RuntimePlan, type SqlNode as N } from "../../spec/domain/index.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
 import { lifecycleHookSets } from "../runtime/hooks.js";
 import { MANTLE_VERSION } from "../version.js";
@@ -17,7 +17,7 @@ import { schemaColumns } from "./allowlist.js";
 import { writeTarget } from "./ast.js";
 import { compileProgram, type CompileContext } from "./compile.js";
 import type { BindSpec, Compiled, Mode } from "./policy.js";
-import { compiledKey, pageShape, pagedOf, seedCompiled, seedPaged, type Paged, type Program } from "./run.js";
+import { compilePreRead, compiledKey, pageShape, pagedOf, seedCompiled, seedPaged, type Paged, type Program } from "./run.js";
 
 type Env = { readonly dialect: MantleDialect; readonly schemas: Readonly<Record<string, StorageSchema>> };
 type Warn = (message: string) => void;
@@ -66,11 +66,22 @@ export function lowerView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mod
   return { ...stmtOf(c, print(c.ast, env.schemas)), nkeys, paged };
 }
 
-/** One inline Procedure under one mode (flavour "all", with the plan's after hooks as `returning`), printed. Undefined when the runtime would refuse it. */
-export function lowerProcedure(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, returning: ReadonlySet<string> | undefined, columns = schemaColumns(env.schemas), warn?: Warn, at = ""): LoweredStatement[] | undefined {
+/** One inline Procedure under one mode: "all", plus before-hook reads and publishing "one" writes, through the same printer. Undefined when the runtime would refuse it. */
+export function lowerProcedure(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, returning: ReadonlySet<string> | undefined, columns = schemaColumns(env.schemas), warn?: Warn, at = "", before: ReadonlySet<string> = new Set()): LoweredProcedureStatement[] | undefined {
   try {
     const print = printer(env.dialect);
-    return compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "procedure", mode, returning }).map((c) => stmtOf(c, print(c.ast, env.schemas)));
+    const ctx = { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "procedure" as const, mode, returning };
+    return compileProgram(p.ir, ctx).map((c, i) => {
+      const s: LoweredProcedureStatement = stmtOf(c, print(c.ast, env.schemas));
+      if (!c.schema || !c.verb) return s;
+      const lifecycle = env.schemas[c.schema]?.publishing && c.kind === "row" && c.verb !== "insert";
+      const hooked = before.has(`${c.schema}.${c.publish ? "publish" : c.verb}`);
+      if (!hooked && !lifecycle) return s;
+      if (hooked && c.kind !== "row") throw new Error("a before hook requires a row operation");
+      const read = compilePreRead({ ...env, mode }, p, p.ir[i]!, c);
+      const one = lifecycle ? compileProgram([p.ir[i]!], { ...ctx, lockVersion: true, statuses: [undefined] })[0]! : undefined;
+      return { ...s, preRead: read ? stmtOf(read, print(read.ast, env.schemas)) : null, ...(one ? { one: stmtOf(one, print(one.ast, env.schemas)) } : {}) };
+    });
   } catch (e) {
     warn?.(`${at} (${mode}): ${message(e)}`);
     return undefined;
@@ -94,7 +105,7 @@ export function lowerPlan(plan: Body, dialect: MantleDialect): { lowered: PlanLo
   const procedures = Object.entries(plan.procedures).flatMap(([name, proc]) => {
     if (!("sql" in proc.handler)) return [];
     const { inputs } = proc, ir = proc.handler.sql.stmts;
-    const lowered = Object.fromEntries(PROCEDURE_MODES.flatMap((mode) => { const x = lowerProcedure(env, { inputs, ir }, mode, returning, columns, warn, `plan#/procedures/${name}`); return x ? [[mode, x]] : []; }));
+    const lowered = Object.fromEntries(PROCEDURE_MODES.flatMap((mode) => { const x = lowerProcedure(env, { inputs, ir }, mode, returning, columns, warn, `plan#/procedures/${name}`, before); return x ? [[mode, x]] : []; }));
     return Object.keys(lowered).length ? [[name, lowered]] : [];
   });
   return { lowered: { mantle: MANTLE_VERSION, dialect: { name: dialect.name, version: dialect.version, key: dialect.lowerKey ?? "" }, views: Object.fromEntries(views), procedures: Object.fromEntries(procedures) }, warnings };
@@ -128,8 +139,9 @@ export function loweringStatus(plan: RuntimePlan, dialect: MantleDialect): Lower
 // ---- seeding -------------------------------------------------------------------------------------------------------
 
 const KINDS = new Set(["read", "row", "set"]);
-function checkStatement(s: LoweredStatement, where: string): void {
+function checkStatement(s: LoweredStatement, where: string, auxiliary = false): void {
   if (!s || typeof s.sql !== "string" || !Array.isArray(s.binds) || !KINDS.has(s.kind)) throw new Error(`${where} is not a lowered statement`);
+  if (auxiliary && ("preRead" in s || "one" in s)) throw new Error(`${where} has nested lifecycle statements`);
 }
 
 /** The compile of a program, once, on first use. */
@@ -203,6 +215,21 @@ export function seedPlan(plan: RuntimePlan, dialect: MantleDialect, returning: R
         const full = lazily(() => compileProgram(p.ir, { dialect, schemas: plan.schemas, inputs: p.inputs, kind: "procedure", mode: mode as Mode, returning }));
         const entries = stmts.map((s, i) => loweredCompiled(s, () => full()[i]!));
         installs.push(() => { seedCompiled(env, p, compiledKey("procedure", mode, returning, undefined, "all"), entries); });
+        for (const [i, s] of stmts.entries()) {
+          const ir = p.ir[i]!;
+          if (s.preRead !== undefined) {
+            if (s.preRead !== null) checkStatement(s.preRead, `lowered Procedure '${name}' (${mode}) preRead ${i}`, true);
+            const real = lazily(() => compilePreRead({ ...env, mode: mode as Mode }, p, ir, full()[i]!)!);
+            const read = s.preRead === null ? [] : [loweredCompiled(s.preRead, real)];
+            installs.push(() => { seedCompiled(env, p, compiledKey("procedure", mode, undefined, undefined, "preRead"), read, ir); });
+          }
+          if (s.one !== undefined) {
+            checkStatement(s.one, `lowered Procedure '${name}' (${mode}) one ${i}`, true);
+            const real = lazily(() => compileProgram([ir], { dialect, schemas: plan.schemas, inputs: p.inputs, kind: "procedure", mode: mode as Mode, returning, lockVersion: true, statuses: [undefined] })[0]!);
+            const one = loweredCompiled(s.one, real);
+            installs.push(() => { seedCompiled(env, p, compiledKey("procedure", mode, returning, true, "one"), [one], ir); });
+          }
+        }
       }
     }
     for (const install of installs) install();

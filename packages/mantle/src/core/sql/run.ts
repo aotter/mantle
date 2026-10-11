@@ -93,15 +93,14 @@ const NOT_ALLOWED = {
 } as const;
 
 /** The row a before hook or the lifecycle sees: the visible current row of an update or delete, or the values an insert supplies. */
-async function preRead(env: RunEnv, p: Program, i: number, c: Compiled, as: RunAs): Promise<StoreRow> {
-  const stmt = p.ir[i]!;
+export function compilePreRead(env: Pick<RunEnv, "dialect" | "schemas" | "mode" | "seen" | "unsafeNoVisibility">, p: Pick<Program, "inputs">, stmt: N, c: Compiled): Compiled | undefined {
   let read: N;
   if (c.verb === "insert") {
     const cols: N[] = stmt.InsertStmt.cols;
     const values: N[] = stmt.InsertStmt.selectStmt.SelectStmt.valuesLists[0].List.items;
     // the hook sees these values in a read of its own, so they must not depend on data that can change before the commit
     if (hasSubLink(values)) throw refuse(`SQL_SHAPE: an insert into ${c.schema}, which has a before create hook, may not read data in its VALUES`);
-    if (!values.length) return {}; // an insert that names no column: the hook sees an empty entry
+    if (!values.length) return undefined; // an insert that names no column: the hook sees an empty entry
     read = select(values.map((val, k) => ({ ResTarget: { name: cols[k]!.ResTarget.name, val } })));
   } else {
     const t = (f: string) => ref("t", f);
@@ -111,8 +110,16 @@ async function preRead(env: RunEnv, p: Program, i: number, c: Compiled, as: RunA
       { A_Expr: { kind: "AEXPR_OP", name: [S("=")], lexpr: t("id"), rexpr: idOf(stmt) } },
     );
   }
-  const rc = applyPolicy(read, { schemas: env.schemas, inputs: p.inputs, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility, lower: env.dialect.lowering });
-  const [row] = await env.executor.select({ ir: rc.ast, binds: bindValues(env.dialect, rc.binds, as.bind) });
+  return applyPolicy(read, { schemas: env.schemas, inputs: p.inputs, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility, lower: env.dialect.lowering });
+}
+
+async function preRead(env: RunEnv, p: Program, i: number, c: Compiled, as: RunAs): Promise<StoreRow> {
+  const [rc] = compileCached(env, p, p.ir[i]!, [], ctxOf(env, p), "preRead", () => {
+    const read = compilePreRead(env, p, p.ir[i]!, c);
+    return read ? [read] : [];
+  });
+  if (!rc) return {};
+  const [row] = await env.executor.select(statement(rc, bindValues(env.dialect, rc.binds, as.bind)));
   if (c.verb !== "insert" && !row) throw conflict(i); // no visible row: fail closed, and the hook never learns whether it exists
   return row ?? {};
 }
@@ -150,8 +157,8 @@ const slotOf = (env: Pick<RunEnv, "dialect" | "schemas">, p: Pick<Program, "inpu
  * real compile wins, so seeding is idempotent. Returns what the slot now holds. The cache lives per (IR, inputs, schemas, dialect)
  * object, so a seed serves only the runtime whose plan objects and dialect object these are: not a second adapter's.
  */
-export function seedCompiled(env: Pick<RunEnv, "dialect" | "schemas">, p: Pick<Program, "inputs" | "ir">, key: string, compiled: Compiled[]): Compiled[] {
-  const slot = slotOf(env, p, p.ir);
+export function seedCompiled(env: Pick<RunEnv, "dialect" | "schemas">, p: Pick<Program, "inputs" | "ir">, key: string, compiled: Compiled[], ir: object = p.ir): Compiled[] {
+  const slot = slotOf(env, p, ir);
   let hit = slot.get(key);
   if (!hit) {
     if (slot.size >= SLOT_CAP) slot.clear();
@@ -165,14 +172,14 @@ export function seedCompiled(env: Pick<RunEnv, "dialect" | "schemas">, p: Pick<P
  * `unsafeNoVisibility`) and a Store write (`statuses`, built fresh from the request) are never cached. The returned array is the
  * caller's own to change; the Compiled values in it are shared and must not be.
  */
-function compileCached(env: RunEnv, p: Program, ir: object, stmts: readonly N[], ctx: CompileContext, flavour: string): Compiled[] {
-  if (env.seen || env.unsafeNoVisibility || ctx.statuses?.some((x) => x !== undefined) || p.statuses) return compileProgram(stmts, ctx);
+function compileCached(env: RunEnv, p: Program, ir: object, stmts: readonly N[], ctx: CompileContext, flavour: string, make?: () => Compiled[]): Compiled[] {
+  if (env.seen || env.unsafeNoVisibility || ctx.statuses?.some((x) => x !== undefined) || p.statuses) return make ? make() : compileProgram(stmts, ctx);
   const slot = slotOf(env, p, ir);
   const key = compiledKey(p.kind, env.mode, ctx.returning, ctx.lockVersion, flavour);
   let hit = slot.get(key);
   if (!hit) {
     if (slot.size >= SLOT_CAP) slot.clear();
-    slot.set(key, (hit = compileProgram(stmts, ctx)));
+    slot.set(key, (hit = make ? make() : compileProgram(stmts, ctx)));
   }
   return hit.slice();
 }

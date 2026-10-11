@@ -162,6 +162,19 @@ function bounds(plan: RuntimePlan): Diagnostic[] {
       for (const name of Object.keys(procedures)) if (!Object.hasOwn(plan.procedures, name)) out.push(refused(`plan#/lowered/procedures/${name}`, "LOWERING_MISMATCH: lowered names a Procedure the plan does not have"));
       if (jsonValues(l, L.loweredValues) > L.loweredValues) over("plan#/lowered", "JSON values in the lowered statements", L.loweredValues);
       else if (sqlChars(l) > L.loweredSqlChars) over("plan#/lowered", "characters of lowered SQL", L.loweredSqlChars);
+      else for (const [name, modes] of Object.entries(procedures)) {
+        for (const [mode, stmts] of Object.entries(programs(modes) ?? {})) {
+          if (!Array.isArray(stmts)) continue; // the ordinary lowering comparison refuses the enclosing shape
+          for (const [i, stmt] of stmts.entries()) for (const key of ["preRead", "one"] as const) {
+            const s = programs(stmt)?.[key];
+            if (s === undefined || (key === "preRead" && s === null)) continue;
+            const a = programs(s);
+            // Auxiliary statements are one level only; both existing aggregate limits above include their SQL and bind recipes.
+            if (!a || typeof a["sql"] !== "string" || !Array.isArray(a["binds"]) || !["read", "row", "set"].includes(String(a["kind"])) || "preRead" in a || "one" in a)
+              out.push(refused(`plan#/lowered/procedures/${name}/${mode}/${i}/${key}`, "LOWERING_MISMATCH: a lifecycle auxiliary is one lowered statement, without nested auxiliaries"));
+          }
+        }
+      }
     }
   }
   return out;

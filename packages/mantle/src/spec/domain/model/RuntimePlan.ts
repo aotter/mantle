@@ -89,6 +89,12 @@ export interface LoweredStatement {
   readonly target?: string;
 }
 
+/** Auxiliary lifecycle statements for an inline write, under the same mode. Null is an empty insert's hook entry. */
+export interface LoweredProcedureStatement extends LoweredStatement {
+  readonly preRead?: LoweredStatement | null;
+  readonly one?: LoweredStatement;
+}
+
 /** A paged statement of a View under one request shape, printed. The page size is a bind (`limit`), so one statement serves every page size. */
 export interface LoweredPage {
   readonly sql: string;
@@ -115,7 +121,7 @@ export interface PlanLowered {
   /** The dialect's name and version, and its `lowerKey` ("" when absent): a runtime on another uses none of it. */
   readonly dialect: { readonly name: string; readonly version: string; readonly key: string };
   readonly views: Readonly<Record<string, Readonly<Partial<Record<LoweredMode, LoweredView>>>>>;
-  readonly procedures: Readonly<Record<string, Readonly<Partial<Record<"caller" | "trusted", readonly LoweredStatement[]>>>>>;
+  readonly procedures: Readonly<Record<string, Readonly<Partial<Record<"caller" | "trusted", readonly LoweredProcedureStatement[]>>>>>;
 }
 
 export interface RuntimePlan {
