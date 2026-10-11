@@ -4,7 +4,7 @@
 
 **Date:** 2026-10-11
 
-**Amends:** ADR-0044. Reader seeds, when accepted, also amend ADR-0043 decision 4.
+**Amends:** ADR-0044 and ADR-0043 decision 4 (bounded generated reader seeds).
 
 ## Context
 
@@ -19,7 +19,7 @@ Generate already knows the sealed plan, dialect, bind recipes and output columns
 5. Generated per-View row functions combine projection, declared-name renames and necessary dialect conversion in one pass. Hidden paging keys remain available only for cursor construction. Unknown output shapes fall back. Safe own-property semantics, including `__proto__`, duplicate output/rename behavior and native JSON/date/numeric conversions remain identical.
 6. Generated bind functions resolve the same recipe in the same order, using typed dialect encoders. Caller identity, time, version and dynamic values remain invocation arguments. Permissions are never frozen from one caller. Input folding, cursor and pagination sources, defaults, errors and native codec differences must match the existing path.
 7. Standalone schema validators are emitted only for constructs for which differential tests prove exact current behavior: result/default/unknown-key behavior and first diagnostic pointer/message, including JSON safety bounds. Unsupported schemas use existing lazy validators. No change to the validation contract is hidden in a performance PR.
-8. Common reader and staff-list shapes may be generated as bounded constants, never eagerly compiled or copied into every runtime memo. Reader seed adoption requires the pending ADR-0043 decision. Other dynamic shapes preserve current first-use behavior and bounded memo rules.
+8. Common reader and staff-list shapes may be generated as bounded constants, never eagerly compiled or copied into every runtime memo. Reader seed adoption follows the bounded reader decision below. Other dynamic shapes preserve current first-use behavior and bounded memo rules.
 9. MCP configuration and boot lookup tables may be emitted or retained on first use where measurements justify it. Authentication, authorization, transports and native storage still own their existing responsibilities. No pools, scheduling, retries or cross-database consistency layer are introduced.
 
 ### Bundled fingerprint trust
@@ -32,7 +32,7 @@ Generate may emit a finite documented set of common reader shapes using the exis
 
 ## Delivery and validation
 
-Each work item in #1447 has a coherent PR and measured result. First implement fingerprint registration (subject to the choice), Procedure lowering, row functions and binders. Measure those before choosing the next expensive work. Dependencies are explicit; PRs target develop and remain unmerged until reviewed.
+Each work item in #1447 has a coherent PR and measured result. First implement fingerprint registration, Procedure lowering, row functions and binders. Measure those before choosing the next expensive work. Dependencies are explicit; PRs target develop and remain unmerged until reviewed.
 
 For each accelerator test generated and fallback paths against the same values and native codecs, including failures. Test disabled gates and generate/check staleness. Run required package checks, packed consumers and local Wrangler benchmarks. Benchmark before/after on the same machine without competing jobs, cold import/boot/first invocation separately from warm calls. Report generated size and any regressions; do not declare native parity while a measured gap remains.
 
