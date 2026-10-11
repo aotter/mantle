@@ -107,5 +107,105 @@ export const generated: GeneratedRuntime = {
   let value: any;
   return [(value = input["sku"], value == null ? null : String(value)), (value = input["name"], value == null ? null : String(value)), (value = input["qty"], value == null ? null : encodeInteger(value)), (value = ctx.now, value == null ? null : encodeTimestamptz(value)), ctx.uid];
 }] } } },
+  pageBinders: { ["catalog"]: { "public": { ["[\"-\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [page0];
+}, ["[\"vv=\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.cursor![0];
+  const page1 = extra.cursor![0];
+  const page2 = extra.cursor![1];
+  const page3 = extra.cursor![0];
+  const page4 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [page0, page1, page2, page3, page4];
+} } }, ["search-items"]: { "public": { ["[\"-\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [(value = input["q"], value == null ? null : String(value)), page0];
+}, ["[\"vvv=\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.cursor![0];
+  const page1 = extra.cursor![0];
+  const page2 = extra.cursor![1];
+  const page3 = extra.cursor![0];
+  const page4 = extra.cursor![2];
+  const page5 = extra.cursor![0];
+  const page6 = extra.cursor![1];
+  const page7 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [(value = input["q"], value == null ? null : String(value)), page0, page1, page2, page3, page4, page5, page6, page7];
+} } }, ["my-orders"]: { "public": { ["[\"-\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [ctx.uid, page0];
+}, ["[\"vv=\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.cursor![0];
+  const page1 = extra.cursor![0];
+  const page2 = extra.cursor![1];
+  const page3 = extra.cursor![0];
+  const page4 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [ctx.uid, page0, page1, page2, page3, page4];
+} } }, ["sales-by-item"]: { "caller": { ["[\"-\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [ctx.uid, page0];
+}, ["[\"vv=\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.cursor![0];
+  const page1 = extra.cursor![1];
+  const page2 = extra.cursor![0];
+  const page3 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [ctx.uid, page0, page1, page2, page3];
+} }, "trusted": { ["[\"-\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [page0];
+}, ["[\"vv=\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.cursor![0];
+  const page1 = extra.cursor![1];
+  const page2 = extra.cursor![0];
+  const page3 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [page0, page1, page2, page3];
+} } }, ["recent-activity"]: { "caller": { ["[\"-\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [page0];
+}, ["[\"vv=\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.cursor![0];
+  const page1 = extra.cursor![0];
+  const page2 = extra.cursor![1];
+  const page3 = extra.cursor![0];
+  const page4 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [page0, page1, page2, page3, page4];
+} }, "trusted": { ["[\"-\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [page0];
+}, ["[\"vv=\",null,[]]"]: (ctx: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect): unknown[] => {
+  const page0 = extra.cursor![0];
+  const page1 = extra.cursor![0];
+  const page2 = extra.cursor![1];
+  const page3 = extra.cursor![0];
+  const page4 = extra.pageSize + 1;
+  const input = ctx.input ?? {};
+  let value: any;
+  return [page0, page1, page2, page3, page4];
+} } } },
   inputs: { "view": { ["catalog"]: (input: unknown): Record<string, unknown> => { const given = (input ?? {}) as Record<string, unknown>; return {  }; }, ["search-items"]: (input: unknown): Record<string, unknown> => { const given = (input ?? {}) as Record<string, unknown>; return { ["q"]: Object.hasOwn(given, "q") ? given["q"] : undefined }; }, ["my-orders"]: (input: unknown): Record<string, unknown> => { const given = (input ?? {}) as Record<string, unknown>; return {  }; }, ["sales-by-item"]: (input: unknown): Record<string, unknown> => { const given = (input ?? {}) as Record<string, unknown>; return {  }; }, ["recent-activity"]: (input: unknown): Record<string, unknown> => { const given = (input ?? {}) as Record<string, unknown>; return {  }; } }, "procedure": { ["place-order"]: (input: unknown): Record<string, unknown> => { const given = (input ?? {}) as Record<string, unknown>; return { ["itemid"]: Object.hasOwn(given, "itemId") ? given["itemId"] : undefined, ["qty"]: Object.hasOwn(given, "qty") ? given["qty"] : undefined }; }, ["restock"]: (input: unknown): Record<string, unknown> => { const given = (input ?? {}) as Record<string, unknown>; return { ["sku"]: Object.hasOwn(given, "sku") ? given["sku"] : undefined, ["name"]: Object.hasOwn(given, "name") ? given["name"] : undefined, ["qty"]: Object.hasOwn(given, "qty") ? given["qty"] : undefined }; } } },
 };

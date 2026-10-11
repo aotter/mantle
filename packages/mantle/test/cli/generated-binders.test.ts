@@ -159,7 +159,7 @@ it("emits the complete lowered program/mode table and preserves page extras on c
 it("uses generated page binders for exact shapes and preserves fallback SQL and binds", async () => {
   const { compile, user } = await import("../core/lowered-fixture.js");
   const { withLowering, seedPlan } = await import("../../src/core/sql/lowered.js");
-  const { runView } = await import("../../src/core/sql/run.js");
+  const { runView, pageShape } = await import("../../src/core/sql/run.js");
   for (const original of [d1Dialect, postgresDialect()]) {
     const compiler = original === d1Dialect ? undefined : await import("../../src/postgres/compile/index.js");
     const raw = await compile(compiler);
@@ -188,7 +188,7 @@ it("uses generated page binders for exact shapes and preserves fallback SQL and 
       const before = calls;
       await runView({ ...env, mode, generatedPageBinders: pages }, p, as, opts);
       expect(sent).toEqual(expected);
-      const supported = !opts.cursor?.includes(null) && !((opts.match?.eq?.length ?? 0) > 1);
+      const supported = Object.hasOwn(pages["low-stock"][mode], pageShape(plan.lowered!.views["low-stock"]![mode]!.nkeys, opts.cursor, opts.match));
       expect(calls - before, JSON.stringify({ mode, opts, keys: Object.keys(pages["low-stock"][mode]) })).toBe(supported ? 1 : 0);
       expect(encodes === 0).toBe(supported);
     }
