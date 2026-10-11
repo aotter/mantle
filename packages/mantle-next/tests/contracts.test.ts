@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
+import * as z from "zod/mini";
 import { validate, ContractError, encodeNumeric, decodeNumeric, encodeTimestamptz, decodeTimestamptz, encodeDate } from "../src/kernel/contracts.js";
 describe("generated boundary primitives", () => {
   test("official defaults, nullability and unknown-key refusal", () => {
-    const schema = z.object({ amount: z.number().min(0).default(0), note: z.string().nullable() }).strict();
+    const schema = z.strictObject({ amount: z._default(z.number().check(z.gte(0)), 0), note: z.nullable(z.string()) });
     expect(validate(schema, { note: null }, "input")).toEqual({ amount: 0, note: null });
     expect(() => validate(schema, { note: null, extra: true }, "input")).toThrow(ContractError);
     expect(() => validate(schema, { amount: -1, note: null }, "input")).toThrow(ContractError);

@@ -20,7 +20,7 @@ test("Next imports point inward; kernel has no host or compiler dependencies", a
         if (imported === "..") expect(layer, `${file}: compiler assembly belongs to infrastructure`).toBe("infrastructure");
         else expect(ranks[imported] ?? Infinity, `${file}: ${name}`).toBeLessThanOrEqual(ranks[layer]!);
       } else if (layer === "kernel") {
-        expect(name, `${file}: kernel must stay portable`).toBe("zod");
+        expect(["zod/mini", "zod/v4/locales/en.js"], `${file}: kernel must stay portable`).toContain(name);
       }
     }
   }

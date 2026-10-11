@@ -1,7 +1,7 @@
 import type { LoweredStatement } from "@aotter/mantle/spec";
 import { describe, expect, test } from "bun:test";
 import { writeFile, unlink } from "node:fs/promises";
-import { z } from "zod";
+import * as z from "zod/mini";
 import { emitValidator } from "../src/domain/validation.js";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 import { Database } from "bun:sqlite";
@@ -80,7 +80,7 @@ describe("native generation", () => {
     expect(text).not.toContain("runView");
     expect(text).not.toContain("runProcedure");
     expect(text).not.toContain("jsonSchemaToZod");
-    expect(text).toContain("??= z.object");
+    expect(text).toContain("??= z.strictObject");
     for (const mode of ["caller", "trusted"] as const) expect(text).toContain(JSON.stringify(input.lowered.views["notes-list"]![mode]!.sql));
     if (target === "bun-sqlite") { expect(text).toContain("db.transaction(execute)()"); expect(text).toContain("results = execute()"); expect(text).toContain(".length !== 1"); expect(text).not.toContain("SELECT changes()"); }
     else if (target === "cloudflare-d1") { expect(text).toContain("db.batch(["); expect(text).toContain("INSERT INTO _mantle_assert (op,ok)"); expect(text).toContain("changes() = 1"); }

@@ -1,5 +1,6 @@
 /** Boundary primitives only. No plan, SQL interpreter or resource ownership. */
-import type { ZodType } from "zod";
+import { config, type ZodMiniType } from "zod/mini";
+import en from "zod/v4/locales/en.js";
 type StaffRole = "owner" | "editor" | "contributor";
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
 
@@ -29,11 +30,14 @@ export class ContractError extends Error {
 }
 
 /** Validate with a generated official Zod schema. Never import/compile JSON Schema here. */
-export function validate<T>(schema: ZodType<T>, value: unknown, path: string, code = "INPUT_VALIDATION_FAILED"): T {
+let english = false;
+export function validate<T>(schema: ZodMiniType<T>, value: unknown, path: string, code = "INPUT_VALIDATION_FAILED"): T {
   try {
     assertJsonLimits(value, path);
     const result = schema.safeParse(value);
     if (result.success) return result.data;
+    // Zod Mini ships without messages; load English once, on the first failure only.
+    if (!english) { english = true; config(en()); return validate(schema, value, path, code); }
     const issue = result.error.issues[0];
     const pointer = issue?.path.map((part) => String(part).replace(/~/g, "~0").replace(/\//g, "~1")).join("/");
     throw new ContractError(code, code === "OUTPUT_VALIDATION_FAILED" ? "Procedure output does not match its declared schema." : issue?.message ?? "validation failed", path + (pointer ? "/" + pointer : ""));
