@@ -39,7 +39,7 @@ At the frozen implementation, independently rerun Next checks passed 22 tests / 
 
 ## Contracts checked directly
 
-SQL Procedure output is `{ results: rowsPerStatement }`, as in baseline `createRuntime`. A row-classified statement expects one affected row; set statements do not acquire an invented one-row expectation. D1 places its count assertion in the same native batch. Bun SQLite checks changes inside its native transaction. PG checks `rowCount` before COMMIT. A later assertion failure therefore remains inside the batch transaction boundary.
+SQL Procedure output is `{ results: rowsPerStatement }`, as in baseline `createRuntime`. A row-classified statement expects one affected row; set statements do not acquire an invented one-row expectation. D1 places its count assertion in the same native batch. Bun SQLite checks the RETURNING row count (or `run().changes`) inside its native transaction. PG checks `rowCount` before COMMIT. A later assertion failure therefore remains inside the batch transaction boundary. Single-statement Procedures skip the transaction: the statement is atomic and a row op changes at most one row (see contract.md, "Single-statement writes").
 
 Declared authorization runs before input/database work. Each predicate still requires a user caller; a system caller does not satisfy it. Only the explicit system branch selects trusted SQL. Public Views use public-mode SQL even for system callers, preserving the distinction between published visibility and trusted mode. Caller UID and role bind values are operation-local, not mutable shared state. Scope SQL remains the existing compiler's generation output.
 

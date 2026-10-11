@@ -84,6 +84,18 @@ errors. It imports no Zod and performs no input/output validation or JSON scan.
 Auth/OCC failures and uncertain transaction outcomes remain explicit generated
 checks. SQL policy and atomic transactions are preserved.
 
+**Single-statement writes:** a Procedure with one statement is atomic on its own
+and runs in autocommit, with no BEGIN/COMMIT on PG or native transaction on Bun
+SQLite. A row-classified statement touches at most one row (one-row INSERT or
+unique `id =`), so a failed count check after autocommit has changed nothing.
+On PG it runs at the server's default isolation, not SERIALIZABLE: a concurrent
+OCC loser re-evaluates its `version =` predicate, matches zero rows and returns
+`CONFLICT` instead of SQLSTATE 40001. A server ErrorResponse (SQLSTATE and
+severity, timeouts included) is a known rollback and is rethrown natively; any
+other failure (lost socket) is `OUTCOME_UNKNOWN`. Checked entries still classify
+a 57-class timeout conservatively as `OUTCOME_UNKNOWN`. Multi-statement
+Procedures keep the SERIALIZABLE transaction and COMMIT-outcome handling.
+
 Generation option `checked: true` (CLI `--checked`) emits a separate `checked.ts`
 and `checked/views` / `checked/procedures` entries for previous input defaults,
 validation, scalar codecs and failure envelopes. The same emitter selects the

@@ -37,8 +37,9 @@ checked modules; API output writers must handle obsolete artifacts themselves.
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain
-row expectations inside native atomic transactions. PG uses SERIALIZABLE with
-no automatic retries. The application owns PoolClient checkout/release or
+row expectations inside native atomic transactions. A single-statement Procedure
+is one atomic statement and runs without BEGIN/COMMIT (one PG round trip); a
+multi-statement Procedure uses SERIALIZABLE on PG, with no automatic retries. The application owns PoolClient checkout/release or
 Client connect/end. Discard the client after OUTCOME_UNKNOWN; never assume a
 lost commit answer means rollback. In selected checked entries, output validation runs after commit, as in
 0.2. Bare queries return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
