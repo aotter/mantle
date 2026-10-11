@@ -261,6 +261,13 @@ metadata: {name: events-list}
 spec:
   surface: internal
   sql: SELECT e.at, e.day, e.created_at FROM events e ORDER BY at
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: events-span}
+spec:
+  surface: internal
+  sql: SELECT count(e.at) AS n, max(e.at) AS latest, min(e.day) AS first FROM events e
 `;
 
 test("declared timestamps and dates come back in wire form from the SQL itself", async () => {
@@ -279,6 +286,8 @@ test("declared timestamps and dates come back in wire form from the SQL itself",
     db.query("INSERT INTO events (id, version, created_at, updated_at, owner, at, day) VALUES ('b', 1, 0, 0, 'u', ?, ?)").run(-1, -1);
     const app = await import(file.href);
     const caller = {kind:"user",subject:"u",role:null,scopes:[],credential:"session",credentialId:null,clientId:null};
+    // Only min/max keep the column's type; count is an integer and stays one.
+    expect(await app.views["events-span"](db,caller,{})).toEqual([{n:2,latest:"2026-10-11T00:00:00.123456Z",first:"1969-12-31"}]);
     expect(await app.views["events-list"](db,caller,{})).toEqual([
       {at:"1969-12-31T23:59:59.999999Z",day:"1969-12-31",created_at:"1970-01-01T00:00:00.000000Z"},
       {at:"2026-10-11T00:00:00.123456Z",day:"2026-10-12",created_at:"1970-01-01T00:00:00.000000Z"},

@@ -13,7 +13,7 @@
 - [ ] Workers library global initialization CPU and first-use regression gates; CLI readiness is not library load time.
 - [x] Supported SQL-slice scope/auth/input/output behavior verified against native implementations.
 - [x] Native atomic rollback, explicit OCC and error outcomes verified on each target.
-- [ ] Paging/cursor API compatibility completed (open); scalar codecs tested and unsupported contracts fail generate.
+- [ ] Paging/cursor API compatibility completed (open); declared date-time/date wire form tested and unsupported contracts fail generate.
 - [x] Four real local applications run side by side; raw paired timing evidence retained.
 - [x] Cold-start and warm work measured with retained raw samples and appropriate host clocks.
 - [ ] Native performance acceptance: resolve supported positive gaps and measurement uncertainty; see the performance evidence.
@@ -23,7 +23,10 @@
 Completion of this first increment does not imply all 0.2 modules are migrated.
 The compatibility inventory and measured results determine readiness to replace it.
 
-Evidence: clean `82454430` revised native boundary passed 44 focused tests / 385 assertions,
+Checked removal (2026-10-11): 34 focused tests plus 5 PG-gated, the size and package
+gates, and 15 real host/engine checks per target on all four targets.
+
+Historical evidence: clean `82454430` revised native boundary passed 44 focused tests / 385 assertions,
 strict four-target consumers, and 140 real host/engine semantic checks
 (21 checked + 14 bare per target), plus native/checked footprint/package gates.
 Two independent adversarial reviews found no remaining correctness blockers.
