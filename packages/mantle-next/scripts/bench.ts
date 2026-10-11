@@ -18,7 +18,11 @@ export async function pairedReadBenchmark(generated: () => Promise<unknown>, nat
     const values = samples.filter(row => row.variant === variant).map(row => row.microseconds).sort((a, b) => a - b);
     return { variant, samples: values.length, p50Microseconds: values[Math.ceil(values.length * .5) - 1], p95Microseconds: values[Math.ceil(values.length * .95) - 1] };
   });
-  return { scope: "same-driver local read; native includes equivalent row projection; exploratory paired samples", summary, samples };
+  return {
+    scope: "same-driver local read; native includes equivalent row projection; exploratory paired samples",
+    clockCaveat: "Bun performance.now measures elapsed function time. Worker performance.now advances with I/O events and can omit or misattribute post-I/O CPU; Worker samples are I/O-event intervals, not complete function latency. Use an external host clock for Worker performance acceptance.",
+    summary, samples,
+  };
 }
 
 if (import.meta.main) {

@@ -62,4 +62,10 @@ procurement fixtures and native SQL oracles. It creates fresh PostgreSQL schemas
 SQL/time/driver behavior is compared per engine, not normalized across engines.
 Cloudflare tests create no cloud resources. Formal benchmark runs need a quiet
 machine and a fresh private output directory; raw samples must accompany claims.
+Worker `performance.now()` advances with I/O events and cannot account reliably
+for row processing after an await. Its per-call samples are I/O-event intervals,
+not complete function latency. Assess Worker overhead with an external host clock,
+paired batches consuming the same complete rows, and a native/native control;
+report HTTP and connection amortization separately. Local Wrangler results do not
+establish deployed Cloudflare latency.
 This package is not a released replacement for Mantle 0.2.
