@@ -46,7 +46,7 @@ export function emitBinder(binds: readonly BindSpec[], dialect: "sqlite" | "post
       case "dialect": return `dialect.bind(${quote(b)}, ctx)`;
     }
   });
-  const parameter = page ? "{ cursor?: readonly unknown[]; pageSize: number; search?: string; eq?: readonly { value: unknown }[] }" : "{ version?: unknown; cursor?: readonly unknown[] } = {}";
+  const parameter = page ? "{ cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }" : "{ version?: unknown; cursor?: readonly unknown[] } = {}";
   const locals = page?.expressions.map((expression, i) => `  const page${i} = ${expression};\n`).join("") ?? "";
   const values = [...entries, ...(page?.expressions.map((_, i) => `page${i}`) ?? [])];
   return `(ctx: BindContext, extra: ${parameter}, dialect: MantleDialect): unknown[] => {\n${locals}  const input = ctx.input ?? {};\n  let value: any;\n  return [${values.join(", ")}];\n}`;
@@ -72,7 +72,7 @@ export function emitBinders(plan: RuntimePlan): { imports: string[]; binders: st
     }).join(", ")} }`).join(", ")} }`;
   });
   const pageBinders = `{ ${Object.entries(lowered.views).map(([name, modes]) => `[${quote(name)}]: { ${Object.entries(modes).map(([mode, view]) => `${quote(mode)}: { ${Object.entries(view.paged).map(([shape, page]) => {
-    const expressions = page.sources.map(source => "cursor" in source ? `extra.cursor![${source.cursor}]` : "search" in source ? "extra.search!" : "limit" in source ? "extra.pageSize + 1" : `extra.eq![${source.eq}]!.value`);
+    const expressions = page.sources.map(source => "cursor" in source ? `extra.cursor![${source.cursor}]` : "search" in source ? (helpers.add("likePattern"), "likePattern(extra.search!.text)") : "limit" in source ? "extra.pageSize + 1" : `extra.eq![${source.eq}]!.value`);
     return `[${quote(shape)}]: ${emitBinder(view.binds as readonly BindSpec[], dialect, helpers, { expressions })}`;
   }).join(", ")} }`).join(", ")} }`).join(", ")} }`;
   const projectors = (["view", "procedure"] as const).map((kind) => {
@@ -80,7 +80,7 @@ export function emitBinders(plan: RuntimePlan): { imports: string[]; binders: st
     return `${quote(kind)}: { ${Object.entries(programs).filter(([, p]) => kind === "view" || ("handler" in p && "sql" in p.handler)).map(([name, p]) => `[${quote(name)}]: ${emitInputProjector(p.input)}`).join(", ")} }`;
   });
   return {
-    imports: helpers.size ? [`import { ${[...helpers].sort().join(", ")} } from "@aotter/mantle/${dialect === "sqlite" ? "d1" : "postgres"}";`] : [],
+    imports: [...(helpers.has("likePattern") ? ['import { likePattern } from "@aotter/mantle";'] : []), ...([...helpers].some(name => name !== "likePattern") ? [`import { ${[...helpers].filter(name => name !== "likePattern").sort().join(", ")} } from "@aotter/mantle/${dialect === "sqlite" ? "d1" : "postgres"}";`] : [])],
     binders: `{ ${groups.join(", ")} }`, projectors: `{ ${projectors.join(", ")} }`, pageBinders,
   };
 }

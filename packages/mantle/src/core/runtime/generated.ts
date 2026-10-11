@@ -8,7 +8,7 @@ import { MANTLE_VERSION } from "../version.js";
 
 export type GeneratedRow = (row: StoreRow, codec: StoreCodec) => StoreRow;
 export type GeneratedBinder = (context: BindContext, extra: { version?: unknown; cursor?: readonly unknown[] }, dialect: MantleDialect) => unknown[];
-export type GeneratedPagedBinder = (context: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: string; eq?: readonly { value: unknown }[] }, dialect: MantleDialect) => unknown[];
+export type GeneratedPagedBinder = (context: BindContext, extra: { cursor?: readonly unknown[]; pageSize: number; search?: { readonly text: string }; eq?: readonly { value: unknown }[] }, dialect: MantleDialect) => unknown[];
 type PageBinders = Readonly<Record<string, Readonly<Partial<Record<Mode, Readonly<Record<string, GeneratedPagedBinder>>>>>>>;
 type ProgramBinders = Readonly<Record<string, Readonly<Partial<Record<Mode, readonly GeneratedBinder[]>>>>>;
 type InputProjectors = Readonly<Record<string, (input: unknown) => Readonly<Record<string, unknown>> | undefined>>;

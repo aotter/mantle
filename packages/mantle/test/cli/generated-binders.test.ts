@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
 import { emitBinder, emitBinders, emitInputProjector } from "../../src/cli/emitBinders.js";
+import { likePattern } from "../../src/core/sql/run.js";
 import { bindValues, sqlInput, type BindContext } from "../../src/core/sql/compile.js";
 import type { BindSpec } from "../../src/core/sql/policy.js";
 import type { MantleDialect } from "../../src/core/dialect.js";
@@ -166,7 +167,7 @@ it("uses generated page binders for exact shapes and preserves fallback SQL and 
     const configured = { ...raw, views: { ...raw.views, "low-stock": { ...view, uiSchema: { list: { searchFields: ["id"], filterFields: ["stock"] } } } } };
     const { plan } = await withLowering(configured, original);
     const emitted = emitBinders(plan)!;
-    const pages = sourceFunction(`() => (${emitted.pageBinders})`, { ...sqlite, ...(original === d1Dialect ? {} : pg) })();
+    const pages = sourceFunction(`() => (${emitted.pageBinders})`, { ...sqlite, ...(original === d1Dialect ? {} : pg), likePattern })();
     let calls = 0, encodes = 0;
     for (const modes of Object.values(pages) as any[]) for (const shapes of Object.values(modes) as any[]) for (const [key, f] of Object.entries(shapes) as [string, Function][]) shapes[key] = (...args: unknown[]) => { calls++; return f(...args); };
     const dialect = { ...original, codec: { ...original.codec, encode: (type: string, value: unknown) => { encodes++; return original.codec.encode(type, value); } } };
@@ -208,4 +209,23 @@ it("evaluates page extras before base codecs without a runtime map or array spre
   const eq = [{ get value() { seen.push("eq"); return "filter"; } }];
   expect(generated({ ...ctx, input: { n: 7 } }, { cursor, pageSize: 2, eq }, d1Dialect)).toEqual([7, null, 3, "filter"]);
   expect(seen).toEqual(["cursor", "eq", "base"]);
+});
+
+it("preserves each search/cursor/filter getter access and error before base binding", () => {
+  const recipe: BindSpec[] = [{ k: "input", type: "integer", name: "n" }];
+  const generated = sourceFunction(emitBinder(recipe, "sqlite", new Set(), { expressions: ["extra.cursor![0]", "likePattern(extra.search!.text)", "extra.eq![0]!.value", "likePattern(extra.search!.text)"] }), { encodeInteger: sqlite.encodeInteger, likePattern });
+  for (const throws of [false, true]) {
+    const run = (native: boolean) => {
+      const seen: string[] = []; let n = 0;
+      const extra = { pageSize: 2, cursor: { get 0() { seen.push("cursor"); return null; } }, search: { get text() { seen.push("search"); if (++n === 2 && throws) throw Error("second search"); return `value${n}%`; } }, eq: [{ get value() { seen.push("eq"); return 4; } }] };
+      const context = { ...ctx, input: { get n() { seen.push("base"); return 7; } } };
+      const result = outcome(() => {
+        if (native) return generated(context, extra, d1Dialect);
+        const values = [extra.cursor[0], likePattern(extra.search.text), extra.eq[0]!.value, likePattern(extra.search.text)];
+        return [...bindValues(d1Dialect, recipe, context), ...values];
+      });
+      return { result, seen };
+    };
+    expect(run(true)).toEqual(run(false));
+  }
 });

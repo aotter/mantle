@@ -3,7 +3,7 @@ export * from "./createMantle.js";
 export * from "./driver.js";
 export * from "./invocation.js";
 export * from "./runtime/createRuntime.js";
-export { registerGenerated, type GeneratedRuntime, type GeneratedRow, type GeneratedBinder } from "./runtime/generated.js";
+export { registerGenerated, type GeneratedRuntime, type GeneratedRow, type GeneratedBinder, type GeneratedPagedBinder } from "./runtime/generated.js";
 export type { StoreCodec, MantleDialect } from "./dialect.js";
 export type { BindContext } from "./sql/compile.js";
 export * from "./service.js";
@@ -18,3 +18,5 @@ export * from "./runtime/verifyPlan.js";
 // what host and handler code throws and checks, from the root: the `/spec` barrel bundles the SQL parser into a Worker
 export { DiagnosticError, makeDiagnostic, runtimeDiagnostic, type Diagnostic, type DiagnosticCode } from "../spec/kernel/index.js";
 export { STAFF_ROLES, isStaffRole, type StaffRole } from "../spec/domain/index.js";
+
+export { likePattern } from "./sql/run.js";

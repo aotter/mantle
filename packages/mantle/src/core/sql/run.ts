@@ -305,7 +305,7 @@ export interface ViewMatch {
 }
 
 /** `%text%` with the LIKE metacharacters escaped, so a search matches what was typed. */
-const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+export const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 // ---- the row-comparison cursor ------------------------------------------------------------------------
 /**
@@ -426,7 +426,7 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
   }
   const generatedPage = pageBinder(env, p, shape);
   let binds: unknown[];
-  if (generatedPage) binds = generatedPage(as.bind, { cursor: opts.cursor, pageSize, ...(search ? { search: likePattern(search.text) } : {}), eq }, env.dialect);
+  if (generatedPage) binds = generatedPage(as.bind, { cursor: opts.cursor, pageSize, search, eq }, env.dialect);
   else {
     const extra = paged.sources.map((x) => ("cursor" in x ? opts.cursor![x.cursor] : "search" in x ? likePattern(search!.text) : "limit" in x ? pageSize + 1 : eq[x.eq]!.value));
     binds = [...(binder(env, p, 0)?.(as.bind, {}, env.dialect) ?? bindValues(env.dialect, c!.binds, as.bind)), ...extra];
