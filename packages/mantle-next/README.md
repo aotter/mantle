@@ -24,12 +24,14 @@ Caller to `views[name](db, caller, input)` or
 
 Default queries contain no validator, scalar decoder, row projection or generic
 database-error wrapper. Validate untrusted input before calling them; redact
-native errors at application transports. JSON binds are JSON text; SQLite bool,
-date, timestamp and fixed numeric binds use native storage values. Bound fields
+native errors at application transports. JSON binds are JSON text; SQLite bool
+and fixed numeric binds use native storage values. Bound fields
 must be supplied explicitly (null for absence). Rows use SQL names and official
 driver representations (PG int8 strings, SQLite 0/1 booleans), except declared
-date-time and date columns: the SQL returns them as ISO strings in UTC with six
-fractional digits and `YYYY-MM-DD` on every target. `databaseError` from
+date-time and date columns: the SQL returns them (Views and `RETURNING`) as ISO
+strings in UTC with six fractional digits and `YYYY-MM-DD` on every target, and
+inputs bound to them take the same ISO text (or a `Date`); an offset-less
+timestamp or a nonexistent day is refused with `SQL_TYPE` before the write. `databaseError` from
 `@aotter/mantle-next/contracts` is an optional helper for redacting native errors
 at your transport.
 

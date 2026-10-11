@@ -43,7 +43,11 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
       case "input": {
         const field = fieldNames.find(name => name.toLowerCase() === String(b.name).toLowerCase());
         if (field === undefined) refuse(path, `Input bind '${b.name}' has no declared field.`);
-        return `given[${q(field ?? b.name)}]`;
+        const value = `given[${q(field ?? b.name)}]`, type = String(b.type);
+        if (type !== "timestamptz" && type !== "date") return value;
+        const helper = (isSqlite ? "encode" : "iso") + (type === "date" ? "Date" : "Timestamptz");
+        helpers.add(helper);
+        return `(${value} == null ? null : ${helper}(${value}))`;
       }
       default: refuse(path, `Bind recipe '${b.k}' needs an explicit native implementation.`); return "undefined";
     }
@@ -65,9 +69,9 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
       const bind = binds.find(b => b.k === "input" && name.toLowerCase() === String(b.name).toLowerCase());
       if (!bind || bind.k !== "input") return `readonly ${q(name)}${schema.required?.includes(name) ? "" : "?"}: ${typeOf(field)};`;
       const type = String(bind.type);
-      const driverType = type === "json" ? "string" : isSqlite
-        ? ["bool", "date", "timestamptz"].includes(type) || parseNumeric(type) ? "number" : typeOf(field)
-        : ["date", "timestamptz"].includes(type) ? "Date | string" : parseNumeric(type) ? "number | string" : typeOf(field);
+      const driverType = type === "json" ? "string" : ["date", "timestamptz"].includes(type) ? "string | Date" : isSqlite
+        ? type === "bool" || parseNumeric(type) ? "number" : typeOf(field)
+        : parseNumeric(type) ? "number | string" : typeOf(field);
       const nullable = field.nullable === true || Array.isArray(field.type) && field.type.includes("null") || !schema.required?.includes(name);
       // D1 cannot bind undefined. Bound fields are explicit, null represents absence.
       return `readonly ${q(name)}: ${driverType}${nullable ? " | null" : ""};`;

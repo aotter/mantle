@@ -28,3 +28,9 @@ Latency/CPU measurements are an agent development acceptance step, not a normal
 shared-runner CI timing assertion. Do not add them to `test` or CI without an
 explicit runner/protocol decision. Do not provision/upload cloud resources for
 these checks: this task is authorized for local Wrangler only.
+
+Exemption (granted 2026-10-11): production Workers startup and first-request
+latency (`startup_time_ms`, cold isolates on the real edge) cannot be measured
+locally. Such measurements may deploy temporary `spike-` Workers/D1 on the
+maintainer's Cloudflare account. Record what was deployed, and delete every
+`spike-` resource when the measurement ends.

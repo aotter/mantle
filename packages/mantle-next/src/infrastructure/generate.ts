@@ -8,7 +8,7 @@ import { lowerPlan } from "../../../mantle/dist/core/sql/lowered.js";
 import { compileProgram } from "../../../mantle/dist/core/sql/compile.js";
 import { schemaColumns } from "../../../mantle/dist/core/sql/allowlist.js";
 import { flattenView } from "../domain/flattenView.js";
-import { outputType, wireScalars } from "../domain/wireScalars.js";
+import { outputType, wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { initialStorageSql as sqliteSchema } from "../../../mantle/dist/d1/storage.js";
 import { initialStorageSql as postgresSchema } from "../../../mantle/dist/postgres/storage.js";
 import { generate } from "../usecase/generate.js";
@@ -36,6 +36,17 @@ export async function generateFromSources(request: { readonly target: Target; re
       const ast = keys ? wireScalars(flat, keys, types, !postgres) : flat;
       if (typeof ast === "string") { refusals.push({ code: "GENERATE_UNSUPPORTED", path: `views/${name}`, message: ast }); continue; }
       if (ast !== raw!.ast) Object.assign(statement!, { sql: dialect.print!(ast, compiled.plan.schemas) });
+    }
+  }
+  for (const [name, procedure] of Object.entries(compiled.plan.procedures)) {
+    if (!("sql" in procedure.handler)) continue;
+    for (const [mode, statements] of Object.entries(lowered.procedures[name] ?? {})) {
+      const compiledStatements = compileProgram(procedure.handler.sql.stmts, { dialect, schemas: compiled.plan.schemas, columns, inputs: procedure.inputs, kind: "procedure", mode: mode as "caller" | "trusted" });
+      for (const [i, c] of compiledStatements.entries()) {
+        const ast = wireReturning(c.ast, compiled.plan.schemas, !postgres);
+        if (typeof ast === "string") refusals.push({ code: "GENERATE_UNSUPPORTED", path: `procedures/${name}`, message: ast });
+        else if (ast !== c.ast) Object.assign(statements![i]!, { sql: dialect.print!(ast, compiled.plan.schemas) });
+      }
     }
   }
   if (refusals.length) return { ok: false, diagnostics: refusals };

@@ -25,9 +25,8 @@ export async function verifyBareApplication(
   // The authored fixture, not the generated SQL, is the oracle for the wire form of declared timestamps and dates.
   const wire = (row: Record<string, unknown>) => ({ ...row, submittedat: fixtures[0]!.submittedAt, neededon: fixtures[0]!.neededOn });
   const totals = 'SELECT COUNT(*) AS "requestCount", SUM(amount) AS "totalAmount" FROM purchase_requests WHERE ownerid = ?';
-  // Seeded through the generated write with driver-ready values: bare writes take no codecs either.
-  for (const {ownerId, ...input} of fixtures) await call("procedure", "create-purchase", ownerId, {...input, approved: sqlite ? Number(input.approved) : input.approved,
-    submittedAt: sqlite ? 1791676800123456 : input.submittedAt, neededOn: sqlite ? Date.parse(input.neededOn) / 86400000 : input.neededOn, payload: JSON.stringify(input.payload)});
+  // Seeded through the generated write: timestamps and dates in wire form on every target, other values driver-ready.
+  for (const {ownerId, ...input} of fixtures) await call("procedure", "create-purchase", ownerId, {...input, approved: sqlite ? Number(input.approved) : input.approved, payload: JSON.stringify(input.payload)});
   for (const subject of owners) {
     assert.deepEqual(await call("view", "purchase-list", subject, {}), (await native(sql, [subject])).map(wire), "bare rows equal the native driver's, declared timestamps and dates in wire form"); checks++;
     assert.deepEqual(await call("view", "purchase-totals", subject, {}), await native(totals, [subject]), "bare computed values equal native driver types"); checks++;
@@ -39,10 +38,16 @@ export async function verifyBareApplication(
   await assert.rejects(() => call("view", "purchase-list", null, {})); checks++;
   const {ownerId: _owner, ...fixture} = fixtures[0]!;
   const input = {...fixture, requestNumber:"BARE-NATIVE", approved:sqlite ? 1 : true,
-    submittedAt:sqlite ? 1791676800123456 : fixture.submittedAt,
-    neededOn:sqlite ? Date.parse(fixture.neededOn) / 86400000 : fixture.neededOn,
+    submittedAt:"2026-10-11T08:00:00.000001+08:00",
     payload:JSON.stringify([1,2,{native:true}]), sortBucket:null};
-  await call("procedure", "create-purchase", owner, input);
+  const created = await call("procedure", "create-purchase", owner, input) as { results: Record<string, unknown>[][] };
+  assert.equal(created.results[0]![0]!.submittedat, "2026-10-11T00:00:00.000001Z", "RETURNING gives the wire form, any input offset normalized to UTC");
+  assert.equal(created.results[0]![0]!.neededon, fixture.neededOn); checks++;
+  // A timestamp without an offset and a day that does not exist are refused before the write, never rolled over.
+  for (const bad of [{submittedAt:"2026-10-11T00:00:00"}, {neededOn:"2026-02-30"}]) {
+    await assert.rejects(() => call("procedure", "create-purchase", owner, {...input, ...bad, requestNumber:"BARE-BAD"}), (error: any) => error?.code === "SQL_TYPE");
+  }
+  assert.deepEqual(await native('SELECT id FROM purchase_requests WHERE requestnumber = ?', ["BARE-BAD"]), []); checks++;
   const [row] = await native('SELECT id, title, amount, version, approved, payload FROM purchase_requests WHERE ownerid = ? AND requestnumber = ?', [owner,input.requestNumber]);
   assert.ok(row); assert.equal(row.approved, sqlite ? 1 : true);
   assert.deepEqual(sqlite ? JSON.parse(String(row.payload)) : row.payload, [1,2,{native:true}]); checks++;

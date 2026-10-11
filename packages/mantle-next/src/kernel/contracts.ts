@@ -27,6 +27,38 @@ export class ContractError extends Error {
   }
 }
 
+/**
+ * Declared date-time and date inputs are ISO on every target (the handbook's wire form). A timestamp needs an explicit
+ * Z or offset; a day that does not exist (2026-02-30) is refused rather than rolled over. SQLite stores microseconds
+ * and days; PostgreSQL receives the canonical text, so it keeps every microsecond.
+ */
+export function encodeTimestamptz(v: string | Date): number {
+  if (v instanceof Date) return v.getTime() * 1000;
+  const m = /^(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d(?::\d\d)?)(?:\.(\d{1,6}))?(Z|[+-]\d\d(?::?\d\d)?)$/.exec(String(v).trim());
+  if (!m) throw new ContractError("SQL_TYPE", `'${v}' is not a timestamp with an explicit offset`);
+  const [, day, time, fraction, offset] = m as unknown as string[];
+  const zone = offset === "Z" ? "Z" : offset!.length === 3 ? `${offset}:00` : offset!.includes(":") ? offset! : `${offset!.slice(0, 3)}:${offset!.slice(3)}`;
+  const secs = Date.parse(`${day}T${time!.length === 5 ? time + ":00" : time}${zone}`);
+  encodeDate(day!);
+  const micros = secs * 1000 + Number((fraction ?? "").padEnd(6, "0"));
+  if (Number.isNaN(secs) || !Number.isSafeInteger(micros)) throw new ContractError("SQL_TYPE", `'${v}' is not a valid timestamp`);
+  return micros;
+}
+export function encodeDate(v: string | Date): number {
+  const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(v instanceof Date ? v.toISOString().slice(0, 10) : String(v));
+  if (!m) throw new ContractError("SQL_TYPE", `'${v}' is not a date`);
+  const [, y, mo, d] = m as unknown as string[];
+  const dt = new Date(0);
+  dt.setUTCFullYear(+y!, +mo! - 1, +d!); // Date.UTC would read years 0 to 99 as 1900 to 1999
+  if (dt.getUTCDate() !== +d! || dt.getUTCMonth() !== +mo! - 1) throw new ContractError("SQL_TYPE", `'${v}' is not a valid date`);
+  return dt.getTime() / 86_400_000;
+}
+export function isoTimestamptz(v: string | Date): string {
+  const us = encodeTimestamptz(v), ms = Math.floor(us / 1000);
+  return new Date(ms).toISOString().replace("Z", String(us - ms * 1000).padStart(3, "0") + "Z");
+}
+export const isoDate = (v: string | Date): string => new Date(encodeDate(v) * 86_400_000).toISOString().slice(0, 10);
+
 /** For the application boundary: bare queries rethrow native errors, which must not reach HTTP users as they are. */
 /** Classify native failures without interpreting SQL or leaking engine messages. */
 export function databaseError(error: unknown, operation: "read" | "write", path: string, dialect: "sqlite" | "postgres"): ContractError {
