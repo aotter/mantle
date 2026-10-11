@@ -4,6 +4,8 @@ import type { PlanLowered, RuntimePlan } from "@aotter/mantle/spec";
 export type Target = "bun-sqlite" | "bun-postgres" | "cloudflare-d1" | "cloudflare-postgres";
 export interface GenerateInput {
   readonly target: Target;
+  /** Emit selected legacy validation/codec entry points as checked.ts. Default is native only. */
+  readonly checked?: boolean;
   readonly plan: RuntimePlan;
   readonly lowered: PlanLowered;
   /** Compiler-resolved output names, supplied by infrastructure; dynamic outputs remain undefined. */

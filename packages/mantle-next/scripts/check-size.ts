@@ -11,10 +11,11 @@ const directory = await mkdtemp(resolve(base, "tests/apps/.size-"));
 const budgets = JSON.parse(await readFile(resolve(base, "size-budgets.json"), "utf8"));
 const text = await readFile(resolve(base, "tests/apps/purchase.yaml"), "utf8");
 try {
-  for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const) {
-    const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "purchase.yaml", text }] } });
+  for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const) for (const checked of [false,true]) {
+    const generated = await generateFromSources({ checked, target, sources: { sources: [{ sourceId: "purchase.yaml", text }] } });
     assert.ok(generated.ok, JSON.stringify(!generated.ok && generated.diagnostics));
-    const app = resolve(directory, target);
+    const key = target + (checked ? "-checked" : "");
+    const app = resolve(directory, key);
     await mkdir(app);
     for (const [name, text] of Object.entries(generated.files)) {
       await mkdir(dirname(resolve(app, name)), { recursive: true });
@@ -24,7 +25,7 @@ try {
     // No test oracle/seed/benchmark code in the deployment bundle. Caller is a
     // fixed fixture identity, not an example of production credential handling.
     await writeFile(resolve(app, "worker.ts"), `
-import { views, procedures } from './generated.ts';
+import { views, procedures } from './${checked ? 'checked' : 'generated'}.ts';
 ${postgres ? "import { Client } from 'pg';" : ""}
 export default { async fetch(request, env) {
   const [kind, name] = new URL(request.url).pathname.slice(1).split('/');
@@ -50,9 +51,10 @@ export default { async fetch(request, env) {
     const map = JSON.parse(await readFile(resolve(app, "bundle", modules[0]! + ".map"), "utf8"));
     assert.ok(!map.sources.some((source: string) => /(?:^|\/)mantle\/(?:src|dist)\//.test(source) || /@aotter\/mantle(?:\/|$)/.test(source)), "old compiler/runtime in Worker bundle");
     assert.ok(!map.sources.some((source: string) => /\/zod\/.*\/locales\/(?!en\.js)[^/]+\.js$/.test(source)), "unused Zod locales in Worker bundle");
-    const report = { target, uncompressedBytes: bytes.length, gzipBytes: gzipSync(bytes).length, budgetBytes: budgets[target] };
+    if (!checked) assert.ok(!map.sources.some((source:string) => /\/zod\//.test(source) || /(?:^|\/)checked\.ts$/.test(source)), "selected boundary entered bare query bundle");
+    const report = { target, surface:checked ? "checked" : "native", uncompressedBytes: bytes.length, gzipBytes: gzipSync(bytes).length, budgetBytes: budgets[key] };
     console.log(JSON.stringify(report));
-    if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, target), { recursive: true, errorOnExist: true, force: false });
-    assert.ok(bytes.length <= budgets[target], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
+    if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, key), { recursive: true, errorOnExist: true, force: false });
+    assert.ok(bytes.length <= budgets[key], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
   }
 } finally { await rm(directory, { recursive: true, force: true }); }

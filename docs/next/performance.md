@@ -1,4 +1,4 @@
-# Generated native execution: measured evidence
+# Historical checked-slice Generated native execution: measured evidence
 
 Measured clean source: `66122a822bf6f83151afcc69c9e420cdfdb1d922`,
 2026-10-11. This is the four-target SQL slice, not full 0.2 compatibility or
@@ -87,3 +87,27 @@ a coordinated quiet machine and a fresh output directory. The public benchmark
 records its clock limitation and provenance. Intervals use exploratory paired
 hierarchical bootstrap; three rounds and small cold samples cannot guarantee
 stable tails, absence of drift or performance equivalence.
+
+
+## Revised native query measurements
+
+The default query boundary has changed. Previous timings above refer to the
+checked implementation, not the new bare API. New `bench` runs record separate
+checked and bare samples; bare native controls use the driver's default parameter
+and result behavior. Each target runs 21 checked checks and 14 independent bare
+checks before timings. Do not infer a before/after speedup from different row
+counts or responsibilities.
+
+Worker acceptance additionally records parent-clock HTTP batches: four rotating
+variants (generated, native with identical generated SQL, handwritten native,
+identical handwritten native A/A), three rounds of thirty
+batches per variant, twenty sequential reads per request, ten warmup batches per
+variant. It verifies identical complete final rows for every batch. Timing includes
+HTTP, final-row serialization and PG connection/search-path setup, amortized over
+twenty reads; the native app owns these resources. It is not pure query CPU or a
+cloud latency claim. Internal Worker timers remain I/O-event intervals only.
+The exact-SQL control captures one generated driver call before measurement and
+asserts its owner bind and absence of a custom type parser. SQL and its hash are
+retained; generated-vs-direct differences may include SQL lowering, while the
+canonical control holds SQL constant. Raw samples and artifact/harness hashes accompany each formal run. This local
+acceptance protocol is outside regular CI timing gates.

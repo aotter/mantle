@@ -1,8 +1,8 @@
 # Acceptance goals
 
-- [ ] Revised default query: native parameter/result/error behavior, without validators, JSON scans or generic row/error normalization.
-- [ ] Selected boundary entries preserve external validation/defaults and required transport contracts without entering bare query bundles.
-- [ ] Native controls match the revised query contract; separate controls cover selected boundaries.
+- [x] Revised default query: native parameter/result/error behavior, without validators, JSON scans or generic row/error normalization.
+- [x] Selected boundary entries preserve external validation/defaults and required transport contracts without entering bare query bundles.
+- [x] Native controls match the revised query contract; separate controls cover selected boundaries.
 
 - [x] Generate actual v2 manifests using the existing parser/linker/policy/printers.
 - [x] All four targets generate typed functions with literal SQL and native calls.
@@ -23,10 +23,12 @@
 Completion of this first increment does not imply all 0.2 modules are migrated.
 The compatibility inventory and measured results determine readiness to replace it.
 
-Evidence: clean `771cc141` passed 37 focused tests / 322 assertions, strict
-four-target consumers, 84 native semantic checks and footprint/package gates.
+Evidence: revised native boundary passed 44 focused tests / 385 assertions,
+strict four-target consumers, and 140 real host/engine semantic checks
+(21 checked + 14 bare per target), plus native/checked footprint/package gates.
 Two independent adversarial reviews found no remaining correctness blockers.
-The local D1 cold CPU watchdog failed; native startup acceptance remains open.
+The historical checked D1 cold CPU watchdog failed; revised native startup
+acceptance awaits its own baseline.
 Full `pnpm check` stops at a baseline Cloud helper `plan_stale` mismatch.
 Separately, workspace typechecks and the packed Worker consumer passed; the full
 UI run remains non-green despite isolated rerun passes. See

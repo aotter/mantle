@@ -1,4 +1,6 @@
 {
-  "cloudflare-d1": 139264,
-  "cloudflare-postgres": 245760
+  "cloudflare-d1": 20480,
+  "cloudflare-postgres": 122880,
+  "cloudflare-d1-checked": 139264,
+  "cloudflare-postgres-checked": 245760
 }

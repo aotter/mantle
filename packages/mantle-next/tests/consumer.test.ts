@@ -17,7 +17,7 @@ beforeAll(async () => {
   directory = await mkdtemp(join(base, "consumer-"));
   const text = await readFile(new URL("apps/purchase.yaml", import.meta.url), "utf8");
   for (const target of targets) {
-    const generated = await generateFromSources({target, sources:{sources:[{sourceId:"purchase.yaml",text}]}});
+    const generated = await generateFromSources({checked:true,target, sources:{sources:[{sourceId:"purchase.yaml",text}]}});
     if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
     const destination = join(directory, target);
     await mkdir(destination);
@@ -26,7 +26,7 @@ beforeAll(async () => {
       await mkdir(dirname(join(destination, name)), { recursive: true });
       await writeFile(join(destination, name), text);
     }
-    files.push(file);
+    files.push(file, join(destination, "checked.ts"));
     selectedFiles.push(join(destination, "views/purchase-totals.ts"), join(destination, "procedures/create-purchase.ts"));
   }
 });
@@ -45,7 +45,7 @@ test("four generated consumers typecheck against official native driver types", 
 }, 15_000);
 
 for (const [index, target] of targets.entries()) test(`${target} consumer browser bundle contains no old runtime or compiler`, async () => {
-  const bundle = await Bun.build({ entrypoints: [files[index]!], target: "browser", sourcemap: "external" });
+  const bundle = await Bun.build({ entrypoints: [files[index * 2]!], target: "browser", sourcemap: "external" });
   expect(bundle.success).toBe(true);
   const map = bundle.outputs.find(output => output.path.endsWith(".map"));
   expect(map).toBeDefined();
@@ -64,6 +64,8 @@ for (const [index, target] of targets.entries()) test(`${target} direct View ent
   expect(code).not.toContain("purchase-calendar");
   expect(code).not.toContain("create-purchase");
   expect(code).not.toContain("submittedDay");
+  expect(code).not.toMatch(/safeParse|assertJsonLimits|decodeField|getTypeParser|OUTPUT_VALIDATION_FAILED|RESOURCE_UNAVAILABLE/);
+  expect(code).not.toContain("zod");
 });
 
 test("CLI regeneration cannot route removed operation entries to renumbered functions", async () => {
@@ -75,14 +77,20 @@ test("CLI regeneration cannot route removed operation entries to renumbered func
   const author = async (names: string[]) => writeFile(manifest, [...schemas, ...examples.flatMap(atom => names.map(name => ({...atom, metadata:{name:atom.kind === "Procedure" ? "create-" + name : name}})))].map(atom => JSON.stringify(atom)).join("\n---\n"));
   const cli = fileURLToPath(new URL("../src/infrastructure/cli.ts", import.meta.url));
   await author(["a", "b"]);
-  execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {stdio:"pipe"});
+  execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest, "--checked"], {stdio:"pipe"});
   await author(["b"]);
   execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {stdio:"pipe"});
   const retained = await Bun.build({entrypoints:[join(destination,"views/b.ts"),join(destination,"procedures/create-b.ts")],target:"browser"});
   expect(retained.success).toBe(true);
   const load = (file: string) => execFileSync(process.execPath, ["-e", `await import(${JSON.stringify(pathToFileURL(file).href)})`], {stdio:"pipe"});
+  expect(() => load(join(destination,"checked.ts"))).toThrow();
+  expect(() => load(join(destination,"checked/views/a.ts"))).toThrow();
   load(join(destination,"views/b.ts"));
   load(join(destination,"procedures/create-b.ts"));
   expect(() => load(join(destination,"views/a.ts"))).toThrow();
   expect(() => load(join(destination,"procedures/create-a.ts"))).toThrow();
+  const owned = "export const applicationOwned = true;\n";
+  await writeFile(join(destination,"checked.ts"),owned);
+  expect(() => execFileSync(process.execPath,[cli,"cloudflare-d1",destination,manifest],{stdio:"pipe"})).toThrow();
+  expect(await readFile(join(destination,"checked.ts"),"utf8")).toBe(owned);
 }, 15_000);

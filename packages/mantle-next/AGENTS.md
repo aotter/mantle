@@ -1,8 +1,9 @@
 # Next development acceptance
 
 Read the accepted responsibility decision in `../../docs/next/contract.md`.
-The current implementation is still the older checked slice; do not treat its
-query-time helpers as permanent compatibility requirements.
+The default artifact is a bare native query. The older checked contract is
+explicitly selected at generation with `--checked`; never import it into the bare
+entry or treat its helpers as mandatory native execution work.
 
 Use native primitives and generation before adding request-time work. Bare typed
 queries accept application-validated inputs and a verified Caller. External

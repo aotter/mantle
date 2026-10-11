@@ -59,7 +59,8 @@ for target in ["cloudflare-d1", "cloudflare-postgres"]:
                         timings.append((time.perf_counter_ns() - tick) / 1e6)
                         assert response.status == 200, body
                         if path == "/contract":
-                            assert json.loads(body) == [{"requestCount": 2, "totalAmount": 15.5}], body
+                            expected = [{"requestCount": "2", "totalAmount": "15.5"}] if target == "cloudflare-postgres" and variant != "whole-before" else [{"requestCount": 2, "totalAmount": 15.5}]
+                            assert json.loads(body) == expected, body
                         connection.close()
                 finally:
                     child.send_signal(signal.SIGINT)
@@ -88,4 +89,4 @@ for target in ["cloudflare-d1", "cloudflare-postgres"]:
         native = (native_a + native_b) / 2
         allowance = max(floor, 2 * abs(native_a-native_b))
         assert measured["select-direct"][metric] <= native * 1.10 + allowance, (target, metric, "local cold regression")
-    assert measured["whole-after"]["processCPUms"] <= measured["whole-before"]["processCPUms"] * 1.10 + 5, (target, "import-form startup regression")
+    assert measured["whole-after"]["processCPUms"] <= measured["whole-before"]["processCPUms"] * 1.10 + 5, (target, "whole native startup regression")

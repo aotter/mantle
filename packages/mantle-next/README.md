@@ -17,23 +17,37 @@ Import a selected function from `views/<encoded-name>.ts` or
 types) to exclude other operations from the request bundle. Apply initial DDL explicitly to an
 empty development database; this artifact is not a destructive migration or a
 production convergence tool. Generation does no database I/O. Application code
-passes an official connected client/SQLite handle/D1 binding and a verified
+passes driver-ready parameters, an official connected client/SQLite handle/D1 binding and a verified
 Caller to `views[name](db, caller, input)` or
 `procedures[name](db, caller, input)`.
+
+Default queries contain no validator, scalar decoder, row projection or generic
+database-error wrapper. Validate untrusted input before calling them; redact
+native errors at application transports. JSON binds are JSON text; SQLite bool,
+date, timestamp and fixed numeric binds use native storage values. Bound fields
+must be supplied explicitly (null for absence). Rows use SQL names and official
+driver representations, including PG Date/int8 strings. No cross-DB conversion
+is promised.
+
+Use `--checked` (or `checked: true` in generateFromSources) to additionally emit
+`checked.ts` and `checked/views` / `checked/procedures` for the former defaults,
+validators, codecs and safe failure envelopes. These are separate generated SQL
+entries and never enter bare imports. CLI regeneration disables stale owned
+checked modules; API output writers must handle obsolete artifacts themselves.
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain
 row expectations inside native atomic transactions. PG uses SERIALIZABLE with
 no automatic retries. The application owns PoolClient checkout/release or
 Client connect/end. Discard the client after OUTCOME_UNKNOWN; never assume a
-lost commit answer means rollback. Output validation runs after commit, as in
-0.2. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
+lost commit answer means rollback. In selected checked entries, output validation runs after commit, as in
+0.2. Bare queries return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
 declarations requiring them fail generation. See the complete
 [compatibility ledger](../../docs/next/compatibility.md).
 
 There is no old-runtime fallback, request-time plan verification, dynamic query
 compiler, custom pool, lock polling or hook sandbox. Scalar parsing and boundary
-validation are retained because they are observable contracts. Known output
+validation are explicit checked contracts. Known output
 names and bindings are emitted as straight-line code. Per-query PG wire metadata
 is needed for computed SQL values whose native type is only known from the result.
 
@@ -74,6 +88,6 @@ establish deployed Cloudflare latency.
 See the [measured evidence and remaining performance goal](../../docs/next/performance.md).
 The [size and startup gates](../../docs/next/size-and-startup.md) distinguish
 the passing package/bundle gates from pending startup CPU acceptance. The local
-D1 process CPU watchdog currently fails. The packed generator also still needs
+checked-slice D1 process CPU watchdog failed; the revised native baseline is separate. The packed generator also still needs
 its workspace compiler dependency made standalone before publication.
 This package is not a released replacement for Mantle 0.2.

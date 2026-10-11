@@ -13,7 +13,7 @@ import { initialStorageSql as postgresSchema } from "../../../mantle/dist/postgr
 import { generate } from "../usecase/generate.js";
 import type { GenerateResult, Target } from "../domain/model.js";
 
-export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet }): Promise<GenerateResult> {
+export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; readonly checked?: boolean }): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");
   const compiled = await compilePlan(request.sources, postgres ? postgresCompiler : sqliteCompiler);
   if (!compiled.ok) return { ok: false, diagnostics: compiled.diagnostics.map(({ code, path, message }) => ({ code, path, message })) };
@@ -33,7 +33,7 @@ export async function generateFromSources(request: { readonly target: Target; re
     const output = viewOutputs(view, compiled.plan.schemas);
     return [name, output.positions?.length === output.keys?.length ? output.keys : undefined];
   }));
-  const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys });
+  const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys, checked: request.checked });
   if (!result.ok) return result;
   const ddl = (postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas);
   return { ok: true, files: { ...result.files, "schema.sql": ddl.join(";\n\n") + ";\n" } };

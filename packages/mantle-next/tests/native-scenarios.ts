@@ -108,3 +108,55 @@ export async function verifyNativeApplication(
   ) : undefined;
   return { checks, seededRows: fixtures.length, ...(benchmark ? { benchmark } : {}) };
 }
+
+
+/** Bare queries compare driver-native values, never legacy row coercion. */
+export async function verifyBareApplication(
+  call: (kind: "view" | "procedure", name: string, owner: string | null, input: Record<string, unknown>) => Promise<unknown>,
+  native: (sql: string, values?: readonly unknown[]) => Promise<Record<string, unknown>[]>,
+  sqlite: boolean,
+  includeBench = false,
+) {
+  let checks = 0;
+  const owner = owners[0];
+  const sql = 'SELECT id, requestnumber, title, amount, approved, sortbucket, requestedunits, submittedat, neededon, payload FROM purchase_requests WHERE ownerid = ? ORDER BY id';
+  const totals = 'SELECT COUNT(*) AS "requestCount", SUM(amount) AS "totalAmount" FROM purchase_requests WHERE ownerid = ?';
+  for (const subject of owners) {
+    assert.deepEqual(await call("view", "purchase-list", subject, {}), await native(sql, [subject]), "bare rows equal default driver without codecs or aliases"); checks++;
+    assert.deepEqual(await call("view", "purchase-totals", subject, {}), await native(totals, [subject]), "bare computed values equal native driver types"); checks++;
+    const scalars = sqlite
+      ? 'SELECT 1234 AS "fixedAmount", 1791676800123456 AS "microsecondTime", 42 AS "safeInteger" FROM purchase_requests WHERE ownerid = ? ORDER BY id'
+      : `SELECT '12.34'::numeric(12,2) AS "fixedAmount", CAST('2026-10-11T00:00:00.123456Z' AS timestamptz) AS "microsecondTime", CAST(42 AS int8) AS "safeInteger" FROM purchase_requests WHERE ownerid = ? ORDER BY id`;
+    assert.deepEqual(await call("view", "purchase-scalars", subject, {}), await native(scalars, [subject]), "native scalar representations including PG Date/int8"); checks++;
+  }
+  await assert.rejects(() => call("view", "purchase-list", null, {})); checks++;
+  const {ownerId: _owner, ...fixture} = fixtures[0]!;
+  const input = {...fixture, requestNumber:"BARE-NATIVE", approved:sqlite ? 1 : true,
+    submittedAt:sqlite ? 1791676800123456 : fixture.submittedAt,
+    neededOn:sqlite ? Date.parse(fixture.neededOn) / 86400000 : fixture.neededOn,
+    payload:JSON.stringify([1,2,{native:true}]), sortBucket:null};
+  await call("procedure", "create-purchase", owner, input);
+  const [row] = await native('SELECT id, title, amount, version, approved, payload FROM purchase_requests WHERE ownerid = ? AND requestnumber = ?', [owner,input.requestNumber]);
+  assert.ok(row); assert.equal(row.approved, sqlite ? 1 : true);
+  assert.deepEqual(sqlite ? JSON.parse(String(row.payload)) : row.payload, [1,2,{native:true}]); checks++;
+  const update = {id:row.id,expectedVersion:Number(row.version),title:"Bare atomic edit",amount:3.25};
+  await assert.rejects(() => call("procedure","update-purchase-double",owner,update));
+  assert.deepEqual(await native('SELECT id, title, amount, version, approved, payload FROM purchase_requests WHERE id = ?', [row.id]), [row], "bare OCC failure rolls back earlier statement"); checks++;
+  await call("procedure","update-purchase-expected",owner,update);
+  const [changed] = await native('SELECT title, amount, version FROM purchase_requests WHERE id = ?', [row.id]);
+  assert.equal(changed.title,update.title); assert.equal(Number(changed.amount),3.25); assert.equal(Number(changed.version),Number(row.version)+1); checks++;
+  await assert.rejects(() => call("procedure","update-purchase-expected",owner,update)); checks++;
+  await assert.rejects(() => call("procedure","update-purchase-expected",owners[1],{...update,expectedVersion:Number(changed.version)}));
+  assert.deepEqual(await native('SELECT title, amount, version FROM purchase_requests WHERE id = ?', [row.id]), [changed]); checks++;
+  await assert.rejects(() => call("procedure","create-purchase-pair",owner,{...input,requestNumber:"BARE-ROLLBACK"}));
+  assert.deepEqual(await native('SELECT id FROM purchase_requests WHERE requestnumber = ?', ["BARE-ROLLBACK"]), []); checks++;
+  // No query-level output validator: the SQL commits and returns native results.
+  const result = await call("procedure","create-purchase-invalid-output",owner,{...input,requestNumber:"BARE-OUTPUT"});
+  assert.ok(result && typeof result === "object" && "results" in result);
+  assert.equal((await native('SELECT id FROM purchase_requests WHERE requestnumber = ?', ["BARE-OUTPUT"])).length,1); checks++;
+  const benchmark = includeBench ? await pairedReadBenchmark(
+    () => call("view","purchase-list",owner,{}),
+    async () => { if (!owner) throw new Error("UNAUTHENTICATED"); return native(sql,[owner]); },
+  ) : undefined;
+  return {checks,...(benchmark ? {benchmark} : {})};
+}

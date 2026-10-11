@@ -20,31 +20,28 @@ const selected = atoms.filter(atom => atom.kind === "Schema" || atom.metadata.na
 const report: { target: string; variant: string; uncompressedBytes: number }[] = [];
 for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const) {
   const postgres = target === "cloudflare-postgres";
-  for (const variant of ["whole-before", "whole-after", "select-from-whole", "select-direct", "generate-selected", "native-selected", "driver-only", "select-10", "select-100", "direct-100"] as const) {
+  for (const variant of ["whole-before", "whole-after", "whole-checked", "select-from-whole", "select-direct", "generate-selected", "native-selected", "driver-only", "select-10", "select-100", "direct-100"] as const) {
     const app = resolve(output, target, variant);
     await mkdir(app, { recursive: true });
     const count = variant === "select-10" ? 10 : variant === "select-100" || variant === "direct-100" ? 100 : 1;
     const manifest = variant === "generate-selected" || variant === "select-10" || variant === "select-100" || variant === "direct-100"
       ? [...selected.filter(atom => atom.kind === "Schema"), ...Array.from({length:count}, (_,index) => ({...selected.find(atom => atom.kind === "View"), metadata:{name:index === 0 ? "purchase-totals" : `purchase-totals-${index}`}}))].map(atom => JSON.stringify(atom)).join("\n---\n") : text;
-    const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "purchase.yaml", text: manifest }] } });
+    const generated = await generateFromSources({ checked:variant === "whole-before" || variant === "whole-checked", target, sources: { sources: [{ sourceId: "purchase.yaml", text: manifest }] } });
     assert.ok(generated.ok, JSON.stringify(!generated.ok && generated.diagnostics));
-    const code = generated.files["generated.ts"]!;
+    const code = generated.files[variant === "whole-before" || variant === "whole-checked" ? "checked.ts" : "generated.ts"]!;
     for (const [name, content] of Object.entries(generated.files)) {
       await mkdir(dirname(resolve(app, name)), { recursive: true });
       await writeFile(resolve(app, name), content);
     }
     await writeFile(resolve(app, "generated.ts"), variant === "whole-before" ? code.replace('import * as z from "zod";', 'import { z } from "zod";') : code);
     // Independent native reference for this aggregate View, not the full API.
-    // Same official Zod empty-object schema, user scope, literal SQL and result
-    // shape. It imports no Mantle package. Full error parity is not asserted here.
+    // Same user scope, literal SQL, driver-default result and trusted inputs.
+    // It imports no Mantle package or validator; transport guarantees are separate.
     await writeFile(resolve(app, "native.ts"), `
-import * as z from 'zod';
-let schema;
 export async function operation(db, caller, input) {
   if (caller.kind !== 'user') throw new Error('UNAUTHENTICATED');
-  (schema ??= z.object({}).strict()).parse(input);
   const sql = ${JSON.stringify(`SELECT COUNT(*) AS "requestCount", SUM(amount) AS "totalAmount" FROM purchase_requests WHERE ownerid = ${postgres ? "$1" : "?1"}`)};
-  ${postgres ? "const result = await db.query({text:sql,values:[caller.subject],types:{getTypeParser:()=>value=>value}}); return result.rows.map(row=>({requestCount:row.requestCount == null ? null : Number.isSafeInteger(Number(row.requestCount)) ? Number(row.requestCount) : row.requestCount,totalAmount:row.totalAmount == null ? null : Number(row.totalAmount)}));" : "return (await db.prepare(sql).bind(caller.subject).all()).results;"}
+  ${postgres ? "return (await db.query({text:sql,values:[caller.subject]})).rows;" : "return (await db.prepare(sql).bind(caller.subject).all()).results;"}
 }
 `);
     const whole = variant.startsWith("whole-");
@@ -91,7 +88,7 @@ await writeFile(resolve(output, "sizes.json"), JSON.stringify(report, null, 2));
 for (const target of ["cloudflare-d1", "cloudflare-postgres"]) {
   const rows = report.filter(row => row.target === target);
   const direct = rows.find(row => row.variant === "select-direct")!.uncompressedBytes;
-  assert.ok(direct <= (target === "cloudflare-d1" ? 80 * 1024 : 176 * 1024), "selected entry grew beyond baseline budget");
-  assert.ok(direct <= rows.find(row => row.variant === "native-selected")!.uncompressedBytes + 4096, "aggregate View exceeds the native reference by 4 KiB");
+  assert.ok(direct <= (target === "cloudflare-d1" ? 4 * 1024 : 100 * 1024), "selected entry grew beyond baseline budget");
+  assert.ok(direct <= rows.find(row => row.variant === "native-selected")!.uncompressedBytes + 1024, "aggregate View exceeds the native reference by 1 KiB");
   assert.ok(rows.find(row => row.variant === "direct-100")!.uncompressedBytes <= direct + 128, "unselected Views enter the direct operation bundle");
 }

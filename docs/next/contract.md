@@ -78,12 +78,36 @@ protection and client disposal responsibility; native errors must not be exposed
 to HTTP users without application-boundary handling. Removing generic error
 normalization does not authorize dropping transaction outcome evidence.
 
-**Implementation status:** current generated functions still validate inputs,
-validate Procedure output, classify database failures and apply scalar codecs.
-They do not yet implement this revised default boundary. These checks must be
-relocated or removed before claiming the default query equivalent to native.
-The previous size/latency measurements describe that older generated artifact;
-they are not acceptance evidence for the revised design.
+**Implementation:** default `generated.ts` now binds driver-native parameters,
+returns native rows without a projection/decoder and preserves native database
+errors. It imports no Zod and performs no input/output validation or JSON scan.
+Auth/OCC failures and uncertain transaction outcomes remain explicit generated
+checks. SQL policy and atomic transactions are preserved.
+
+Generation option `checked: true` (CLI `--checked`) emits a separate `checked.ts`
+and `checked/views` / `checked/procedures` entries for previous input defaults,
+validation, scalar codecs and failure envelopes. The same emitter selects the
+source at build time; no request-time flag, fallback or executor exists. Checked
+entries are independently generated SQL, not wrappers that re-run a bare query.
+Importing a bare entry does not import checked code. Unsupported validation may
+refuse a requested checked build but cannot veto a native-only build. A native
+caller owns external validation and error redaction.
+
+Driver-ready JSON parameters are text on both targets: node-postgres treats a
+JavaScript array as a PostgreSQL array, so native JSON binds must be serialized by
+the application. SQLite bool/date/timestamp/numeric parameters use their declared
+storage representations. Bound optional fields become explicit required values,
+with null representing absence; D1 cannot bind undefined. Native output keys are
+SQL names rather than a post-query camel-case projection. PG uses the driver's
+default type parsers (including Date and int8 strings); custom application parser
+configuration changes application-owned behavior. Procedures expose raw
+`{ results }`, not a claim of validated authored output.
+
+CLI regeneration removes only an owned generated checked module when checked is
+disabled; stale checked stubs then fail import. An application-owned checked.ts
+causes refusal, never deletion. Writers using the pure generation API must replace
+the output tree or remove obsolete owned checked artifacts themselves. Previous
+checked measurements remain historical evidence, not acceptance of this new API.
 
 When Auth composition is implemented, it resolves a trusted Caller once at the
 application entry. The first slice accepts an application-supplied Caller and
