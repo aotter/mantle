@@ -76,7 +76,7 @@ an extra per-row projection merely to repair names already known at generation.
 Declared authorization, ownership/TTL SQL policy, explicit OCC and atomic writes
 remain required. Generate them as the native application would implement them.
 Transaction rollback and uncertain COMMIT handling must still preserve data-loss
-protection and client disposal responsibility; native errors are rethrown, and
+protection and client disposal responsibility; native errors are rethrown (a unique-index clash is `CONFLICT`, below), and
 redaction before they reach HTTP users belongs to the application boundary (no helper). Removing generic error
 normalization does not authorize dropping transaction outcome evidence.
 
@@ -93,7 +93,7 @@ unique `id =`), so a failed count check after autocommit has changed nothing.
 On PG it runs at the server's default isolation, not SERIALIZABLE: a concurrent
 OCC loser re-evaluates its `version =` predicate, matches zero rows and returns
 `CONFLICT` instead of SQLSTATE 40001. A server ErrorResponse (SQLSTATE and
-severity) is a known rollback and is rethrown natively, except connection,
+severity) is a known rollback and is rethrown natively, except a unique violation (23505, SQLite's `UNIQUE constraint failed`), which is `CONFLICT` with the native error as `cause` on every target, and except connection,
 resource and shutdown classes (08, 28, 53, 57, 58, XX), which, like any failure
 without a server response (lost socket), are `OUTCOME_UNKNOWN`. SQLSTATE is
 `errno` on Bun.SQL and `code` on node-postgres. Multi-statement Procedures run in
@@ -160,10 +160,9 @@ time; a bundle contains one dialect module and one driver module.
 
 - **Dialect** (`kernel/dialect/sqlite.ts`, `postgres.ts`): how SQL is spelled and
   values are stored: `param(n)` (`?n`/`$n`), `ident`, `escapeLike` and the ESCAPE
-  clause, `like(ci)`, NULL placement for keyset order (NULL is the smallest value in
-  both), the wire-form templates `wireTimestamp`/`wireDate` (generic over the operand;
+  clause, `like(ci)`, the wire-form templates `wireTimestamp`/`wireDate` (generic over the operand;
   the 1970 floor arithmetic exists once), and bind values (`now`, `cutoff`, the ISO
-  input encoders in `kernel/scalars.ts`, bool, JSON text).
+  input encoders in `kernel/scalars.ts`, bool, JSON text) and `unique(error)`, how the engine words a unique-index clash.
 - **Driver** (`kernel/driver/bun-sqlite.ts`, `d1.ts`, `postgres.ts`): how a handle is
   called: `read`, `run` (`{ rows, changes }`) and `procedure`, each with only the
   atomicity the engine really has (D1 batch with the `_mantle_assert` row check, mapped to
@@ -177,25 +176,35 @@ time; a bundle contains one dialect module and one driver module.
 - **Condition** (`kernel/where.ts`): one column/operator/value fragment builder, used by
   the Store and by the Better Auth adapter, which keeps only OR grouping, contains/starts/ends
   patterns and joins.
-- **Store** (`kernel/store.ts`; generated as `store(db, caller).collection(schema)`, the Mongo-driver shape: one
-  generic runtime, a small fact record per Schema). **The row rules are spelled once, in Core**
-  (`@aotter/mantle/spec`: `rowPolicy(schema, mode)` and `writePolicy(schema, kind)`, data: terms of column, `eq`/`ttl`,
-  and a bind recipe). Core's policy rewriter renders the terms to its AST; the generator evaluates the same functions at
-  build time into each collection's descriptor (table, columns `[name, SQL column, type, flags]`, the terms for a caller
-  and for a system caller, and the write fills, sets and version lock); the runtime renders them to SQL with the dialect.
-  No SQL text is generated per Schema. Methods: `findById`, `find` (AND-only typed `where`: eq ne gt gte lt lte like in
-  notIn isNull, null is IS NULL; keyset `cursor`, base64url, bound to table, orderBy and direction, NULL-aware), `first`,
-  `count`, `insert`, `update(id, set, { lock })`, `delete(id, { lock })`. A read is
-  `SELECT <columns with wire forms> FROM <table> r WHERE <rowPolicy> AND <where> ORDER BY ... LIMIT`, placeholders numbered
-  after the policy's. A write names only the columns given plus the policy's (`version = version + 1`, `updated_at`, and for an
-  insert scope, `created_at`, `author_id` and a generated 32-hex id), guarded by the row rules and the version; zero rows is
-  `CONFLICT`. Identifiers come from the descriptor, quoted by the dialect; a caller's names are only looked up in it, so
-  an unknown, system or scope column is refused (`INPUT_VALIDATION_FAILED`). The generator types each collection (row,
-  `where` values, writable columns, an insert's required columns, and `orderBy`: `id` and the first column of an index after the
-  scope column); of these only the `orderBy` restriction and the required insert columns are type-only, so the runtime knows no
-  index. An insert with no subject fails on the NOT NULL scope column. Trusted mode has no scope equality, so such an index does not serve a
-  cross-owner sort. Publishing Schemas have a read Store only. **The Store does not check `requires`**: it enforces row
-  rules only, so authorize before calling it (0.2 semantics). The scope column is not exposed, so it cannot be named.
+- **Store** (`kernel/store.ts`; generated as `store(db, caller).collection(table)`, the document-database-driver shape: one
+  generic runtime, one shared rules object and a small fact per Schema). **The row rules are spelled once, in Core**
+  (`@aotter/mantle/spec`: `rowPolicy(schema, mode)` and `writePolicy(schema, kind)`, data: terms of column, `eq`/`ttl`, and a
+  bind recipe). Core's policy rewriter renders the terms to its AST. The generator evaluates the same functions once for a
+  placeholder scope (`$scope`) and TTL (`$ttl`) into `RULES` (caller and trusted terms, the insert fills, the update sets, the
+  version lock, and Core's own new-id lowering printed for the dialect), and for every Schema proves that `expand(RULES, fact)`
+  equals Core's `rowPolicy` (caller, trusted) and `writePolicy` (insert, update with lock, delete lock): generation is refused otherwise.
+  A fact is `{ s?, ttl?: [column, seconds], pub?, ts?, d? }`, keyed by table name, about 2-60 bytes; the runtime renders the
+  terms to SQL with the dialect. No SQL text is generated per Schema. Methods: `findById`, `find` (AND-only typed `where`: eq
+  ne gt gte lt lte like in notIn isNull, null is IS NULL; keyset `cursor`, percent-encoded JSON bound to table, `orderBy` and
+  direction), `first`, `count`, `insert`, `update(id, set, { lock })`, `delete(id, { lock })`.
+  - **Storage names.** Rows, `where`, `set`, `orderBy` and cursors use table column names (`requestnumber`, `created_at`),
+    as `SELECT *` returns them. A read is `SELECT r.*, <wire forms of the date-time and date columns> FROM <table> r WHERE
+    <rowPolicy> AND <where> ORDER BY ... LIMIT`, placeholders numbered after the policy's; the replacements are listed after
+    `*` under the same name and every target's driver keeps the last of two same-named columns. The scope column and `_rid` are
+    deleted from each row (Core never reads back the scope column). A write returns `RETURNING *` with the same replacements.
+  - **Identifiers are quoted, not checked.** Every column name is quoted by the dialect; an unknown column is a database
+    error. No runtime allowlist exists. The generated types restrict column names, value types, operators, the writable
+    columns (no `null` for a required non-null column; a JSON column takes an object or array) and `orderBy` to `id` and the
+    indexed NOT NULL columns (a system column, or required and not nullable in the Schema; Mantle's DDL does not enforce it).
+    The keyset cursor has no NULL handling; ties break on `id`. The runtime refuses a write naming a system column (`id`,
+    `version`, `created_at`, `updated_at`, `author_id`, `status`, `_rid`) or the scope column, compared case-insensitively.
+  - **Writes.** A write names only the columns given plus the policy's (`version = version + 1`, `updated_at`, and for an
+    insert scope, `created_at`, `author_id` and an id), guarded by the row rules and the version; zero rows is `CONFLICT`, and so
+    is a unique-index clash. The id is Core's lowering of `newId` (the expression its compiled INSERTs use). An insert with no
+    subject fails on the NOT NULL scope column. Date-time and date columns come from the fact and take the ISO encoders and casts;
+    a boolean and a JSON object are told by their JS type. Trusted mode has no scope equality, so such an index does not serve a
+    cross-owner sort. Publishing Schemas have a read Store only. **The Store does not check `requires`**: it enforces row rules
+    only, so authorize before calling it (0.2 semantics).
 
 ## Architecture and acceptance
 

@@ -1,6 +1,7 @@
 /** Cloudflare D1: no interactive transactions, so a Procedure is one `batch` whose row checks go through `_mantle_assert`. */
 import type { Bound } from "../binds.js";
 import { ContractError } from "../contracts.js";
+import { unique } from "../dialect/sqlite.js";
 
 interface Statement { bind(...values: any[]): Statement; all(): Promise<{ results: any[]; meta: { changes?: number } }> }
 export interface Reader { prepare(sql: string): Statement }
@@ -21,6 +22,7 @@ export async function procedure(db: Handle, steps: readonly Bound[], path: strin
   });
   let out;
   try { out = await db.batch(batch as never[]); } catch (error) {
+    if (unique(error)) throw new ContractError("CONFLICT", "A unique constraint of the Schema was violated.", path, { cause: error });
     throw /CONFLICT op=\d/.test(String((error as Error)?.message)) ? new ContractError("CONFLICT", "Expected one affected row.", path, { cause: error }) : error;
   }
   return at.map(i => out[i]!.results);

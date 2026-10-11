@@ -25,6 +25,6 @@ export const nativeType = (type: string | undefined, sqlite: boolean): string =>
     ? type === "bool" ? "number" : type === "json" ? "string" : scalarType(type)
     : ["integer", "int8"].includes(type) ? "number | string" : scalarType(type);
 
-/** The value a caller of the typed Store passes for a column of this type. */
+/** The value a caller of the typed Store passes for a column of this type. JSON is an object or array (the Store tells it by its JS type, so a bare string would be bound as text). */
 /** @internal */
-export const inputType = (type: string): string => type === "timestamptz" ? "string | Date" : scalarType(type);
+export const inputType = (type: string): string => type === "timestamptz" ? "string | Date" : type === "json" ? "object" : scalarType(type);

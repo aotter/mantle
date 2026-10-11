@@ -8,6 +8,8 @@ export interface GenerateInput {
   readonly lowered: PlanLowered;
   /** Compiler-resolved output names, supplied by infrastructure; dynamic outputs remain undefined. */
   readonly viewKeys: Readonly<Record<string, readonly string[] | undefined>>;
+  /** Core's new entry id for this dialect, as an SQL expression (its `lowering.newId()`, printed). */
+  readonly newId: string;
 }
 export interface GenerateDiagnostic {
   readonly code: string;

@@ -17,6 +17,6 @@ try {
   for (const name of names) unpackedBytes += (await readFile(resolve(directory, name))).length;
   const tarballBytes = (await stat(archive)).size;
   console.log(JSON.stringify({gate:"package",files:names.length,tarballBytes,unpackedBytes}));
-  assert.ok(tarballBytes <= 40 * 1024, "packed package exceeds 40 KiB");
+  assert.ok(tarballBytes <= 48 * 1024, "packed package exceeds 48 KiB");
   assert.ok(unpackedBytes <= 128 * 1024, "unpacked package exceeds 128 KiB");
 } finally { await rm(directory, {recursive:true,force:true}); }

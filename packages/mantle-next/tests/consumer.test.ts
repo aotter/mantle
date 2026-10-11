@@ -29,7 +29,7 @@ beforeAll(async () => {
     files.push(file);
     selectedFiles.push(join(destination, "views/purchase-totals.ts"), join(destination, "procedures/create-purchase.ts"));
   }
-  // Bun.SQL is the official PostgreSQL handle; node-postgres reaches it through the documented adapter.
+  // Bun.SQL is the official PostgreSQL handle; postgres.js satisfies the same shape as it is.
   const caller = "{ kind: 'user', subject: 's', role: null, scopes: [], credential: 'session', credentialId: null, clientId: null } as const";
   const drivers = join(directory, "drivers.ts");
   await writeFile(drivers, [
@@ -46,14 +46,22 @@ beforeAll(async () => {
     `await worker["purchase-totals"](postgres("postgres://localhost/x"), ${caller}, {});`,
     // the typed Store: where/orderBy/set are checked against the Schema
     `const store = bunStore(sql, ${caller}).collection("purchase_requests");`,
-    'const page = await store.find({ where: { approved: true, amount: { gte: 1 }, sortBucket: { in: ["a"] }, submittedAt: { lt: new Date() } }, orderBy: "sortBucket", order: "desc", limit: 5, cursor: "c" });',
+    'const page = await store.find({ where: { approved: true, amount: { gte: 1 }, sortbucket: { in: ["a"] }, submittedat: { lt: new Date() } }, orderBy: "title", order: "desc", limit: 5, cursor: "c" });',
     'const row: string | undefined = page.rows[0]?.title ?? undefined;',
-    'await store.update("id", { title: "t", payload: { a: 1 }, sortBucket: null }, { lock: 1 });',
+    'await store.update("id", { title: "t", payload: { a: 1 }, sortbucket: null }, { lock: 1 });',
     '// @ts-expect-error json columns cannot be ordered by',
     'await store.find({ orderBy: "payload" });',
     '// @ts-expect-error version is no indexed column: ordering by it is a type error',
     'await store.find({ orderBy: "version" });',
-    'await store.insert({ requestNumber: "r", title: "t", amount: 1, approved: true, sortBucket: null, requestedUnits: 1, submittedAt: "2026-10-11T00:00:00Z", neededOn: "2026-10-11", payload: {} });',
+    '// @ts-expect-error sortbucket is indexed but nullable: the keyset cursor has no NULL handling, so the type does not offer it',
+    'await store.find({ orderBy: "sortbucket" });',
+    '// @ts-expect-error the scope and system columns are not writable',
+    'await store.update("id", { ownerid: "x", version: 3 }, { lock: 1 });',
+    '// @ts-expect-error a required, non-null column cannot be set to null',
+    'await store.update("id", { title: null }, { lock: 1 });',
+    '// @ts-expect-error a JSON column takes an object or array',
+    'await store.update("id", { payload: "text" }, { lock: 1 });',
+    'await store.insert({ requestnumber: "r", title: "t", amount: 1, approved: true, sortbucket: null, requestedunits: 1, submittedat: "2026-10-11T00:00:00Z", neededon: "2026-10-11", payload: {} });',
     '// @ts-expect-error a required column is missing',
     'await store.insert({ title: "t" });',
     'await store.delete("id", { lock: 1 });',

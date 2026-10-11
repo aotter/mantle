@@ -49,7 +49,7 @@ Every follow-up must name its target matrix, acceptance tests and owner before c
 | HTTP and schedule Triggers | Refused via Trigger rejection | Validated invocation, authenticated source, schedule readiness and cause/depth rules. Infrastructure/generator |
 | Initial schema DDL | Slice: explicit SQL artifact | Native CHECK/unique constraints, system assertion table, auxiliary structures and correct target application. Infrastructure |
 | Existing-storage migration/convergence | Open | Ownership ledger/fingerprint checks, collision/data-loss protection, partial migration recovery; initial CREATE is not convergence. Infrastructure |
-| Stable diagnostics and observation/cause | Partial: native errors rethrown, uncertain outcomes classified | Safe codes/paths/failure facts across transports; preserve uncertain outcomes and internal-only causes/SQL; no accidental native error exposure. Contracts/surfaces |
+| Stable diagnostics and observation/cause | Partial: native errors rethrown (a unique clash is CONFLICT), uncertain outcomes classified | Safe codes/paths/failure facts across transports; preserve uncertain outcomes and internal-only causes/SQL; no accidental native error exposure. Contracts/surfaces |
 | REST/Web public Views and HTTP Procedures | Open; no composition | Existing envelopes, authorization, bounds, paging, caching/response contracts and complete body parity. Surfaces |
 | MCP tools/resources/apps | Open; no composition | Actual official SDK validation, catalogs, role filtering, full results/error envelopes and resource metadata. Surfaces |
 | Admin operations, bootstrap, CSV and interaction bindings | Open; no composition | Scoped complete responses, paging/CSV, caller-observed OCC binding and recovery, role filtering. Surfaces |

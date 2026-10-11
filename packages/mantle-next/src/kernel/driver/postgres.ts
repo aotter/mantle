@@ -1,6 +1,7 @@
-/** Bun.SQL's PostgreSQL shape (`Postgres`); node-postgres reaches it through an adapter (tests/apps/pg-port.ts). */
+/** Bun.SQL's PostgreSQL shape (`Postgres`); postgres.js satisfies it as it is. */
 import type { Bound } from "../binds.js";
 import { ContractError, type Postgres, type PostgresResult } from "../contracts.js";
+import { sqlstate, unique } from "../dialect/postgres.js";
 
 export const read = async (db: Pick<Postgres, "unsafe">, sql: string, binds: readonly unknown[]): Promise<PostgresResult> => db.unsafe(sql, binds as unknown[]);
 export async function run(db: Pick<Postgres, "unsafe">, sql: string, binds: readonly unknown[]): Promise<{ rows: PostgresResult; changes: number }> {
@@ -11,12 +12,11 @@ export async function run(db: Pick<Postgres, "unsafe">, sql: string, binds: read
 /**
  * The error to throw when a PostgreSQL write fails where it may already have committed (autocommit, or COMMIT).
  * A server ErrorResponse (SQLSTATE + severity) outside connection/resource classes rolled back; anything else, such as a
- * lost socket, is OUTCOME_UNKNOWN. SQLSTATE is `errno` on Bun.SQL and `code` on node-postgres and postgres.js.
+ * lost socket, is OUTCOME_UNKNOWN.
  */
 export function postgresOutcome(error: unknown, path: string): unknown {
-  const value = error as { errno?: unknown; code?: unknown; severity?: unknown } | null;
-  const state = typeof value?.errno === "string" ? value.errno : value?.code;
-  if (typeof state === "string" && /^[0-9A-Z]{5}$/.test(state) && typeof value?.severity === "string" && !/^(08|28|53|57|58|XX)/.test(state)) return error;
+  const state = sqlstate(error);
+  if (typeof state === "string" && /^[0-9A-Z]{5}$/.test(state) && typeof (error as { severity?: unknown })?.severity === "string" && !/^(08|28|53|57|58|XX)/.test(state)) return error;
   return new ContractError("OUTCOME_UNKNOWN", "The write outcome is unknown; reconcile before retrying.", path, { cause: error });
 }
 
@@ -29,7 +29,7 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
   const execute = async (handle: Pick<Postgres, "unsafe">) => {
     const results: unknown[][] = [];
     for (const s of steps) {
-      const { rows, changes } = await run(handle, s.sql, s.binds);
+      const { rows, changes } = await run(handle, s.sql, s.binds).catch(error => { throw unique(error) ? new ContractError("CONFLICT", "A unique constraint of the Schema was violated.", path, { cause: error }) : error; });
       if (s.row && changes !== 1) throw new ContractError("CONFLICT", "Expected one affected row.", path);
       results.push(rows);
     }

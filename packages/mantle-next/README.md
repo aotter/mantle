@@ -24,7 +24,7 @@ Caller to `views[name](db, caller, input)` or
 
 Default queries contain no validator, scalar decoder, row projection or generic
 database-error wrapper. Validate untrusted input before calling them; redact
-native errors at application transports (they are rethrown as they are). JSON binds are JSON text; SQLite bool
+native errors at application transports (they are rethrown as they are, except a unique-index clash, which is `CONFLICT` with the native error as its cause). JSON binds are JSON text; SQLite bool
 and fixed numeric binds use native storage values. Bound fields are explicit (null for absence). Rows use SQL names and official
 driver representations (PG int8 strings, SQLite 0/1 booleans), except declared
 date-time and date columns: the SQL returns them (Views and `RETURNING`) as ISO
@@ -32,12 +32,18 @@ strings in UTC with six fractional digits and `YYYY-MM-DD` on every target, and
 inputs bound to them take the same ISO text (a valid `Date` also works for date-time); an offset-less
 timestamp or a nonexistent day is refused with `SQL_TYPE` before the write.
 
-Every Schema is also a typed **Store** collection: `store(db, caller).collection("purchase_requests")` with
-`findById`, `find` (AND-only `where`, keyset `cursor`), `first`, `count`, `insert(values)`, OCC `update(id, set, { lock })`
-and `delete(id, { lock })`. One shared runtime renders every collection from a small generated fact record (columns plus
-Core's `rowPolicy`/`writePolicy` evaluated at build time); it prints no per-Schema SQL. The runtime refuses
-unknown, system and scope columns, unknown operators and wrongly shaped values (`INPUT_VALIDATION_FAILED`); TypeScript alone
-restricts `orderBy` to `id` and indexed columns and requires an insert's required columns.
+Every Schema is also a typed **Store** collection, in the shape of a document-database driver:
+`store(db, caller).collection("purchase_requests")` with `findById`, `find` (AND-only `where`, keyset `cursor`), `first`,
+`count`, `insert(values)`, OCC `update(id, set, { lock })` and `delete(id, { lock })`. One shared runtime serves every
+collection from one shared rules object (Core's `rowPolicy`/`writePolicy`, evaluated at build time and proven equal for every
+Schema) and a fact of a few bytes per Schema (scope column, TTL, date-time and date columns); it prints no per-Schema SQL.
+Rows, `where`, `set` and `orderBy` use the table's **storage column names** (`requestnumber`, `created_at`), as `SELECT *`
+returns them, except that the scope column and `_rid` are never returned. Column names are always quoted by the dialect, so an
+unknown one is a database error, never SQL; column names, value types, operators, writable columns and `orderBy` (`id` and
+indexed NOT NULL columns) are enforced by the generated types only. At run time the Store refuses unknown operators, wrongly
+shaped values, a bad `limit` or cursor, and a write that names a system column or the scope column
+(`INPUT_VALIDATION_FAILED`). An insert's id is Core's new-id expression, and a unique-index clash on insert or update (and in
+a Procedure) is `CONFLICT`.
 **The Store does not check `requires`**: it enforces row rules (scope, TTL, version), not a View's or Procedure's
 authorization predicates, which are 0.2 semantics. Authorize before calling it. See the contract.
 

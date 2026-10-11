@@ -1,6 +1,6 @@
 /**
- * The Store on one real driver: scope, trusted mode, TTL, keyset paging, every operator, refusals, OCC, placeholder
- * continuation and wire forms, each checked against an independent model of the seeded rows and native SQL. Runs under
+ * The Store on one real driver: scope, trusted mode, TTL, keyset paging, every operator, refusals and inert hostile input, OCC,
+ * unique CONFLICT, placeholder continuation and wire forms (rows are keyed by storage column names), each checked against an independent model of the seeded rows and native SQL. Runs under
  * bun:test (bun:sqlite, a D1 shim, Bun.SQL) and in verify-native (the four real hosts), so it uses node:assert only.
  */
 import assert from "node:assert/strict";
@@ -33,6 +33,9 @@ const model = (owner: string, i: number): Omit<Model, "id"> => ({
 const ROWS = 60;
 const num = (v: unknown) => Number(v);
 const refused = (p: Promise<unknown>, code = "INPUT_VALIDATION_FAILED") => assert.rejects(p, (e: any) => e?.code === code, `expected ${code}`);
+/** Only the generated types stop these; at run time they must be inert: a database error or no rows, never a changed row. */
+const inert = async (p: Promise<any>) => { const r = await p.then(v => v, () => undefined); assert.ok(r === undefined || r === 0 || r.rows?.length === 0, `not inert: ${JSON.stringify(r)}`); };
+const COLUMNS = ["amount", "approved", "author_id", "created_at", "id", "neededon", "payload", "requestedunits", "requestnumber", "sortbucket", "submittedat", "title", "updated_at", "version"];
 
 export async function verifyStore(env: StoreEnv) {
   let checks = 0;
@@ -51,13 +54,13 @@ export async function verifyStore(env: StoreEnv) {
   };
 
   // ---- scope: another owner's rows do not exist for a caller
-  assert.equal(await a.count({ requestNumber: { like: "S-%" } }), ROWS); ok();
-  assert.equal((await a.find({ limit: 500 })).rows.every((r: any) => String(r.requestNumber).startsWith(`S-${A}-`) || String(r.requestNumber).startsWith("REQ-")), true); ok();
+  assert.equal(await a.count({ requestnumber: { like: "S-%" } }), ROWS); ok();
+  assert.equal((await a.find({ limit: 500 })).rows.every((r: any) => String(r.requestnumber).startsWith(`S-${A}-`) || String(r.requestnumber).startsWith("REQ-")), true); ok();
   const bRow = rowsB[3]!;
   assert.equal(await a.findById(bRow.id), null); ok();
   assert.equal(await a.first({ where: { id: bRow.id } }), null); ok();
   assert.equal((await a.find({ where: { id: { in: [bRow.id, rowsA[0]!.id] } } })).rows.length, 1); ok();
-  await refused(a.find({ where: { ownerId: B } as never })); // the scope column is not exposed, so it cannot be named
+  assert.equal((await a.find({ where: { ownerid: B } as never })).rows.length, 0); // the scope column can be named, but the caller's own scope still applies
   await refused(a.update(bRow.id, { title: "taken" }, { lock: 1 }), "CONFLICT"); ok();
   assert.equal((await b.findById(bRow.id)).title, bRow.title); ok();
   // anonymous: Core's scope predicate matches nothing; an unscoped Schema stays readable
@@ -65,91 +68,102 @@ export async function verifyStore(env: StoreEnv) {
   assert.deepEqual([...(await anon.purchase_requests.find()).rows], []); assert.equal(await anon.purchase_requests.count(), 0); ok();
 
   // ---- trusted mode: no scope predicate, both owners
-  assert.equal(await sys.count({ requestNumber: { like: "S-%" } }), ROWS * 2); ok();
+  assert.equal(await sys.count({ requestnumber: { like: "S-%" } }), ROWS * 2); ok();
+  assert.equal(await sys.count({ ownerid: B, requestnumber: { like: "S-%" } } as never), ROWS); ok();
   assert.equal((await sys.findById(bRow.id)).title, bRow.title); ok();
 
-  // ---- keyset paging: every column the Schema indexes, both directions, ties and NULLs, any page size
+  // ---- keyset paging: every NOT NULL indexed column (the only ones the generated type offers), both directions, ties, any page size
   const sorted = (rows: Model[], key: string, dir: "asc" | "desc") => [...rows].sort((x, y) => {
     const kx = (x as any)[key], ky = (y as any)[key];
-    const c = kx === ky ? (x.id < y.id ? -1 : 1) : kx === null ? -1 : ky === null ? 1 : kx < ky ? -1 : 1; // NULL is the smallest value
+    const c = kx === ky ? (x.id < y.id ? -1 : 1) : kx < ky ? -1 : 1;
     return dir === "asc" ? c : -c;
   }).map(r => r.id);
-  for (const key of ["id", "sortBucket", "amount", "approved", "requestedUnits", "submittedAt", "neededOn", "title", "requestNumber"]) {
-    const expected = (dir: "asc" | "desc") => sorted(rowsA.map(r => ({ ...r, approved: r.approved ? 1 : 0 }) as never), key, dir);
+  for (const [key, field] of [["id", "id"], ["amount", "amount"], ["approved", "approved"], ["requestedunits", "requestedUnits"], ["submittedat", "submittedAt"], ["neededon", "neededOn"], ["title", "title"], ["requestnumber", "requestNumber"]] as const) {
+    const expected = (dir: "asc" | "desc") => sorted(rowsA.map(r => ({ ...r, approved: r.approved ? 1 : 0 }) as never), field, dir);
     for (const dir of ["asc", "desc"] as const) for (const limit of [1, 7, 25, 60, 500]) {
-      const got = (await drain(a, { where: { requestNumber: { like: "S-%" } }, orderBy: key, order: dir }, limit)).map(r => r.id);
+      const got = (await drain(a, { where: { requestnumber: { like: "S-%" } }, orderBy: key, order: dir }, limit)).map(r => r.id);
       assert.deepEqual(got, expected(dir), `${key} ${dir} pages of ${limit}`);
     }
   }
   ok();
   // a filter stays in force on every page, and the last page has no cursor
-  const filtered = await drain(a, { where: { approved: true, sortBucket: null }, orderBy: "sortBucket" }, 3);
-  assert.equal(filtered.length, rowsA.filter(r => r.approved && r.sortBucket === null).length); ok();
+  const filtered = await drain(a, { where: { approved: true, sortbucket: null }, orderBy: "title" }, 3);
+  assert.equal(filtered.length, rowsA.filter(r => r.approved && r.sortBucket === null).length); assert.ok(filtered.every((r: any) => r.sortbucket === null && (r.approved === 1 || r.approved === true))); ok();
   const last = await a.find({ limit: ROWS }); assert.equal(last.cursor === null || last.rows.length === ROWS, true); ok();
   // a cursor belongs to its query, and a forged one cannot leave the scope
   const first = await a.find({ orderBy: "title", limit: 5 });
   await refused(a.find({ orderBy: "amount", cursor: first.cursor! })); await refused(a.find({ orderBy: "title", order: "desc", cursor: first.cursor! }));
   await refused(a.find({ cursor: "%%%" })); await refused(a.find({ cursor: btoa("[1,2]") }));
-  const forged = btoa(JSON.stringify(["purchase_requests", "id", "asc", bRow.id, bRow.id]));
+  const forged = encodeURIComponent(JSON.stringify(["purchase_requests", "id", "asc", bRow.id, bRow.id]));
   assert.ok((await a.find({ cursor: forged, limit: 500 })).rows.every((r: any) => !rowsB.some(x => x.id === r.id))); ok();
 
   // ---- operators
-  const n = (where: Record<string, unknown>) => a.count({ requestNumber: { like: "S-%" }, ...where });
+  const n = (where: Record<string, unknown>) => a.count({ requestnumber: { like: "S-%" }, ...where });
   const m = (f: (x: Model) => boolean) => rowsA.filter(f).length;
-  assert.equal(await n({ sortBucket: null }), m(x => x.sortBucket === null));
-  assert.equal(await n({ sortBucket: { isNull: true } }), m(x => x.sortBucket === null));
-  assert.equal(await n({ sortBucket: { isNull: false } }), m(x => x.sortBucket !== null));
-  assert.equal(await n({ sortBucket: { eq: null } }), m(x => x.sortBucket === null));
-  assert.equal(await n({ sortBucket: { ne: null } }), m(x => x.sortBucket !== null));
-  assert.equal(await n({ sortBucket: { ne: "bucket-1" } }), m(x => x.sortBucket !== null && x.sortBucket !== "bucket-1")); // SQL <>: NULL rows do not match
-  assert.equal(await n({ sortBucket: { in: ["bucket-1", "bucket-2"] } }), m(x => x.sortBucket === "bucket-1" || x.sortBucket === "bucket-2"));
-  assert.equal(await n({ sortBucket: { notIn: ["bucket-1"] } }), m(x => x.sortBucket !== null && x.sortBucket !== "bucket-1"));
-  assert.equal(await n({ sortBucket: { in: [] } }), 0); assert.equal(await n({ sortBucket: { notIn: [] } }), ROWS);
+  assert.equal(await n({ sortbucket: null }), m(x => x.sortBucket === null));
+  assert.equal(await n({ sortbucket: { isNull: true } }), m(x => x.sortBucket === null));
+  assert.equal(await n({ sortbucket: { isNull: false } }), m(x => x.sortBucket !== null));
+  assert.equal(await n({ sortbucket: { eq: null } }), m(x => x.sortBucket === null));
+  assert.equal(await n({ sortbucket: { ne: null } }), m(x => x.sortBucket !== null));
+  assert.equal(await n({ sortbucket: { ne: "bucket-1" } }), m(x => x.sortBucket !== null && x.sortBucket !== "bucket-1")); // SQL <>: NULL rows do not match
+  assert.equal(await n({ sortbucket: { in: ["bucket-1", "bucket-2"] } }), m(x => x.sortBucket === "bucket-1" || x.sortBucket === "bucket-2"));
+  assert.equal(await n({ sortbucket: { notIn: ["bucket-1"] } }), m(x => x.sortBucket !== null && x.sortBucket !== "bucket-1"));
+  assert.equal(await n({ sortbucket: { in: [] } }), 0); assert.equal(await n({ sortbucket: { notIn: [] } }), ROWS);
   assert.equal(await n({ title: { like: "Item 1%" } }), m(x => x.title.startsWith("Item 1")));
   assert.equal(await n({ title: { like: "Item _" } }), m(x => /^Item \d$/.test(x.title)));
   assert.equal(await n({ amount: { gte: 5, lt: 12.5 } }), m(x => x.amount >= 5 && x.amount < 12.5));
   assert.equal(await n({ amount: { gt: 5, lte: 12.5 } }), m(x => x.amount > 5 && x.amount <= 12.5));
   assert.equal(await n({ amount: { eq: 2.5 } }), m(x => x.amount === 2.5)); assert.equal(await n({ amount: { ne: 2.5 } }), m(x => x.amount !== 2.5));
   assert.equal(await n({ approved: true }), m(x => x.approved)); assert.equal(await n({ approved: { ne: true } }), m(x => !x.approved));
-  assert.equal(await n({ requestedUnits: { in: [1, 2, 99] } }), m(x => x.requestedUnits <= 2));
-  assert.equal(await n({ submittedAt: { gte: "2026-10-11T00:04:00.123456Z" } }), m(x => x.submittedAt >= "2026-10-11T00:04:00.123456Z"));
-  assert.equal(await n({ submittedAt: new Date("2026-10-11T00:03:00.123Z") }), 0); // Date works; microseconds differ
-  assert.equal(await n({ submittedAt: { lt: new Date("2026-10-11T00:03:00.200Z") } }), m(x => x.submittedAt < "2026-10-11T00:03:00.200000Z"));
-  assert.equal(await n({ neededOn: "2026-10-13" }), m(x => x.neededOn === "2026-10-13")); assert.equal(await n({ neededOn: { in: ["2026-10-12", "2026-10-15"] } }), m(x => x.neededOn === "2026-10-12" || x.neededOn === "2026-10-15"));
+  assert.equal(await n({ requestedunits: { in: [1, 2, 99] } }), m(x => x.requestedUnits <= 2));
+  assert.equal(await n({ submittedat: { gte: "2026-10-11T00:04:00.123456Z" } }), m(x => x.submittedAt >= "2026-10-11T00:04:00.123456Z"));
+  assert.equal(await n({ submittedat: new Date("2026-10-11T00:03:00.123Z") }), 0); // Date works; microseconds differ
+  assert.equal(await n({ submittedat: { lt: new Date("2026-10-11T00:03:00.200Z") } }), m(x => x.submittedAt < "2026-10-11T00:03:00.200000Z"));
+  assert.equal(await n({ neededon: "2026-10-13" }), m(x => x.neededOn === "2026-10-13")); assert.equal(await n({ neededon: { in: ["2026-10-12", "2026-10-15"] } }), m(x => x.neededOn === "2026-10-12" || x.neededOn === "2026-10-15"));
   assert.equal(await n({ title: "Item 3", amount: 2.5, approved: false }), m(x => x.title === "Item 3" && x.amount === 2.5 && !x.approved));
-  assert.equal(await a.count({ createdAt: { gte: "2020-01-01T00:00:00Z" }, requestNumber: { like: "S-%" } }), ROWS); ok();
+  assert.equal(await a.count({ created_at: { gte: "2020-01-01T00:00:00Z" }, requestnumber: { like: "S-%" } }), ROWS); ok();
 
-  // ---- refusals: only declared columns, operators and shapes reach SQL
+  // ---- refusals and inert input: operators, shapes, limits and system columns are refused; a column name is only ever a quoted identifier
   const hostile = "'; DROP TABLE purchase_requests; --";
-  await refused(a.find({ where: { [hostile]: 1 } as never })); await refused(a.find({ where: { title: { "= 1 OR 1=1 --": 1 } } as never }));
-  await refused(a.find({ where: { payload: "x" } as never })); await refused(a.find({ where: { title: undefined } as never }));
-  await refused(a.find({ where: { title: { like: 5 } } as never })); await refused(a.find({ where: { amount: { like: "1%" } } as never }));
-  await refused(a.find({ where: { amount: { gt: null } } as never })); await refused(a.find({ where: { title: { in: "x" } } as never }));
-  await refused(a.find({ where: { title: { isNull: "yes" } } as never })); await refused(a.find({ where: { approved: "true" } as never }));
+  const total = async () => num((await env.native("SELECT COUNT(*) AS c FROM purchase_requests WHERE requestnumber LIKE ?", ["S-%"]))[0]!.c);
+  await refused(a.find({ where: { title: { "= 1 OR 1=1 --": 1 } } as never })); await refused(a.find({ where: { title: undefined } as never }));
   await refused(a.find({ where: { title: { a: 1 } } as never })); await refused(a.find({ where: { title: {} } as never }));
-  await refused(a.find({ orderBy: "payload" as never })); await refused(a.find({ orderBy: "ownerId" as never })); await refused(a.find({ orderBy: hostile as never }));
   await refused(a.find({ order: "sideways" as never })); await refused(a.find({ limit: 0 })); await refused(a.find({ limit: 501 })); await refused(a.find({ limit: 1.5 }));
-  await refused(a.findById({} as never)); await refused(a.update("x", { ownerId: B } as never, { lock: 1 })); await refused(a.update("x", { version: 9 } as never, { lock: 1 }));
-  await refused(a.update("x", { id: "y" } as never, { lock: 1 })); await refused(a.update("x", {}, { lock: 1 })); await refused(a.update("x", { title: "t" }, { lock: "1; DROP" as never })); await refused(a.update("x", { title: undefined } as never, { lock: 1 }));
+  await refused(a.find({ order: "asc; DROP TABLE x" as never }));
+  await refused(a.findById({} as never));
+  // an unknown column (hostile text, a dotted name, another table's column) is a database error: it never becomes SQL
+  for (const name of [hostile, "title\" = 1 OR \"1", "r.title", "purchase_requests.title", "nosuchcolumn"]) {
+    await assert.rejects(a.find({ where: { [name]: 1 } as never })); await assert.rejects(a.find({ orderBy: name as never })); await assert.rejects(a.count({ [name]: { like: "x" } } as never));
+  }
+  await inert(a.find({ where: { amount: { gt: null } } as never })); await inert(a.find({ where: { payload: "x" } as never })); await inert(a.find({ where: { title: { in: "x" } } as never }));
   assert.equal((await a.find({ where: { title: hostile } })).rows.length, 0);
-  assert.equal(num((await env.native("SELECT COUNT(*) AS c FROM purchase_requests WHERE requestnumber LIKE ?", ["S-%"]))[0]!.c), ROWS * 2); ok();
+  // system columns and the scope column are never written, however they are spelled (SQLite matches names without case)
+  const wr = (await a.first({ where: { requestnumber: rowsA[2]!.requestNumber } }))!;
+  for (const name of ["ownerid", "OwnerId", "OWNERID", "id", "Id", "version", "VERSION", "created_at", "Created_At", "updated_at", "author_id", "_rid", "status"]) {
+    await refused(a.update(wr.id, { [name]: B } as never, { lock: wr.version })); await refused(a.insert({ [name]: B } as never));
+  }
+  await refused(a.update("x", {}, { lock: 1 })); await refused(a.update("x", { title: "t" }, { lock: "1; DROP" as never })); await refused(a.update("x", { title: undefined } as never, { lock: 1 }));
+  // a dotted write column is a database error and moves nothing
+  for (const name of ["purchase_requests.ownerid", "r.ownerid", "title\" = 'x', \"ownerid"]) { await assert.rejects(a.update(wr.id, { [name]: B } as never, { lock: wr.version })); await assert.rejects(a.insert({ [name]: B } as never)); }
+  assert.deepEqual((await env.native("SELECT ownerid, title, version FROM purchase_requests WHERE id = ?", [wr.id]))[0], { ownerid: A, title: wr.title, version: wr.version });
+  assert.equal(await total(), ROWS * 2); ok();
 
   // ---- wire forms: ISO UTC with six digits and plain dates from SQL itself; booleans and JSON are the driver's own
-  const r = (await a.first({ where: { requestNumber: rowsA[1]!.requestNumber } }))!;
-  assert.equal(r.submittedAt, rowsA[1]!.submittedAt); assert.equal(r.neededOn, rowsA[1]!.neededOn); assert.match(r.createdAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/);
-  assert.equal(r.approved, env.sqlite ? 0 : false); assert.deepEqual(env.sqlite ? JSON.parse(r.payload) : r.payload, { n: r.requestNumber });
+  const r = (await a.first({ where: { requestnumber: rowsA[1]!.requestNumber } }))!;
+  assert.equal(r.submittedat, rowsA[1]!.submittedAt); assert.equal(r.neededon, rowsA[1]!.neededOn); assert.match(r.created_at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/);
+  assert.equal(r.approved, env.sqlite ? 0 : false); assert.deepEqual(env.sqlite ? JSON.parse(r.payload) : r.payload, { n: r.requestnumber });
   assert.deepEqual(await a.findById(r.id), r); ok();
-  const direct = (await env.native("SELECT requestnumber FROM purchase_requests WHERE id = ?", [r.id]))[0]!; assert.equal(direct.requestnumber, r.requestNumber); ok();
+  const direct = (await env.native("SELECT requestnumber FROM purchase_requests WHERE id = ?", [r.id]))[0]!; assert.equal(direct.requestnumber, r.requestnumber); ok();
 
   // ---- update: scope + explicit OCC, one statement, the new row back
-  const u = await a.update(r.id, { title: "renamed", amount: 99.5, approved: true, submittedAt: "2027-01-02T03:04:05.654321Z", neededOn: "2027-02-03", payload: { a: 1 }, sortBucket: null }, { lock: r.version });
-  assert.equal(u.title, "renamed"); assert.equal(num(u.amount), 99.5); assert.equal(num(u.version), num(r.version) + 1); assert.equal(u.submittedAt, "2027-01-02T03:04:05.654321Z"); assert.equal(u.neededOn, "2027-02-03");
-  assert.equal(u.sortBucket, null); assert.equal(u.approved, env.sqlite ? 1 : true); assert.deepEqual(env.sqlite ? JSON.parse(u.payload) : u.payload, { a: 1 }); assert.equal(u.requestNumber, r.requestNumber); ok();
+  const u = await a.update(r.id, { title: "renamed", amount: 99.5, approved: true, submittedat: "2027-01-02T03:04:05.654321Z", neededon: "2027-02-03", payload: { a: 1 }, sortbucket: null }, { lock: r.version });
+  assert.equal(u.title, "renamed"); assert.equal(num(u.amount), 99.5); assert.equal(num(u.version), num(r.version) + 1); assert.equal(u.submittedat, "2027-01-02T03:04:05.654321Z"); assert.equal(u.neededon, "2027-02-03");
+  assert.equal(u.sortbucket, null); assert.equal(u.approved, env.sqlite ? 1 : true); assert.deepEqual(env.sqlite ? JSON.parse(u.payload) : u.payload, { a: 1 }); assert.equal(u.requestnumber, r.requestnumber); ok();
   assert.deepEqual(await a.findById(r.id), u); ok();
   await refused(a.update(r.id, { title: "stale" }, { lock: r.version }), "CONFLICT"); assert.equal((await a.findById(r.id)).title, "renamed"); ok();
   await refused(a.update("no-such-id", { title: "t" }, { lock: 1 }), "CONFLICT"); ok();
-  const keep = await a.update(r.id, { title: "only title" }, { lock: u.version }); assert.equal(keep.amount, u.amount); assert.equal(keep.submittedAt, u.submittedAt); assert.deepEqual(env.sqlite ? JSON.parse(keep.payload) : keep.payload, { a: 1 }); ok();
-  await a.update(r.id, { sortBucket: "back" }, { lock: keep.version }); ok();
+  const keep = await a.update(r.id, { title: "only title" }, { lock: u.version }); assert.equal(keep.amount, u.amount); assert.equal(keep.submittedat, u.submittedat); assert.deepEqual(env.sqlite ? JSON.parse(keep.payload) : keep.payload, { a: 1 }); ok();
+  await a.update(r.id, { sortbucket: "back" }, { lock: keep.version }); ok();
   // the trusted write has no scope predicate; the foreign row moves from its own version
   const owned = (await b.findById(bRow.id)), moved = await sys.update(bRow.id, { title: "system edit" }, { lock: owned.version });
   assert.equal(moved.title, "system edit"); assert.equal((await b.findById(bRow.id)).title, "system edit"); ok();
@@ -163,24 +177,35 @@ export async function verifyStore(env: StoreEnv) {
   assert.deepEqual((await env.stores(system).session_notes.find({ orderBy: "body", where: { body: { in: ["live", "forever", "gone"] } } })).rows.map((x: any) => x.body), ["forever", "live"]); ok();
   assert.equal((await env.stores(user(B)).session_notes.find()).rows.length, 0);
   const live = (await notes.first({ where: { body: "live" } }))!;
-  assert.ok((await notes.update(live.id, { expiresAt: null }, { lock: live.version })).expiresAt === null); ok();
+  assert.ok((await notes.update(live.id, { expiresat: null }, { lock: live.version })).expiresat === null); ok();
   assert.equal((await env.native("SELECT id FROM session_notes WHERE body = ?", ["gone"])).length, 1);
   for (const [sku, name, price] of [["c-1", "pen", 1.5], ["c-2", "ink", 4], ["c-3", "pad", 2]] as const) await env.call("create-catalog-item", user(A), { sku, name, price });
   const catalog = (caller: Caller) => env.stores(caller).catalog_items;
   for (const caller of [user(A), user(B), anonymous, system]) assert.deepEqual((await catalog(caller).find({ orderBy: "name" })).rows.map((x: any) => x.name), ["ink", "pad", "pen"]);
   ok();
 
-  // ---- insert and delete: Core's fills (scope, author, clock, generated id), refusals, OCC and scope on delete
-  const made = await a.insert({ requestNumber: "I-1", title: "inserted", amount: 1.5, approved: false, requestedUnits: 2, submittedAt: "2026-10-11T00:00:00.5Z", neededOn: "2026-10-11", payload: { k: 1 }, sortBucket: null });
-  assert.match(made.id, /^[0-9a-f]{32}$/); assert.equal(num(made.version), 1); assert.equal(made.authorId, A); assert.equal(made.submittedAt, "2026-10-11T00:00:00.500000Z");
-  assert.match(made.createdAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/); assert.equal(made.createdAt, made.updatedAt);
+  // ---- insert and delete: Core's fills (scope, author, clock, generated id), refusals, OCC and scope on delete, unique CONFLICT
+  const row = (n: string, extra: object = {}) => ({ requestnumber: n, title: "inserted", amount: 1.5, approved: false, requestedunits: 2, submittedat: "2026-10-11T00:00:00.5Z", neededon: "2026-10-11", payload: { k: 1 }, sortbucket: null, ...extra });
+  const made = await a.insert(row("I-1"));
+  assert.match(made.id, /^[0-9a-f]{32}$/); assert.match(rowsA[0]!.id, /^[0-9a-f]{32}$/, "Core's compiled INSERT ids have the same shape"); assert.equal(num(made.version), 1); assert.equal(made.author_id, A); assert.equal(made.submittedat, "2026-10-11T00:00:00.500000Z");
+  assert.match(made.created_at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/); assert.equal(made.created_at, made.updated_at);
+  assert.deepEqual(Object.keys(made).sort(), COLUMNS); assert.deepEqual(Object.keys((await a.findById(made.id))).sort(), COLUMNS); assert.deepEqual(Object.keys((await sys.findById(made.id))).sort(), COLUMNS);
   assert.equal(await b.findById(made.id), null); assert.equal((await sys.findById(made.id)).title, "inserted"); assert.equal((await env.native("SELECT ownerid FROM purchase_requests WHERE id = ?", [made.id]))[0]!.ownerid, A); ok();
-  await refused(a.insert({ id: "mine" } as never)); await refused(a.insert({ ownerId: B } as never)); await refused(a.insert({ version: 7 } as never)); await refused(a.insert({ createdAt: "2020-01-01T00:00:00Z" } as never)); await refused(a.insert({ title: undefined } as never));
-  await assert.rejects(a.insert({ requestNumber: "I-1", title: "again", amount: 1, approved: false, requestedUnits: 1, submittedAt: "2026-10-11T00:00:00Z", neededOn: "2026-10-11", payload: {}, sortBucket: null })); // unique (owner, requestNumber)
-  await assert.rejects(anon.purchase_requests.insert({ requestNumber: "anon", title: "t", amount: 1, approved: false, requestedUnits: 1, submittedAt: "2026-10-11T00:00:00Z", neededOn: "2026-10-11", payload: {}, sortBucket: null })); // no subject: the scope column is NOT NULL
-  const note = await notes.insert({ body: "inserted note", expiresAt: new Date(Date.now() + hour) }); assert.equal(note.body, "inserted note");
+  await refused(a.insert({ title: undefined } as never));
+  // a unique-index clash is CONFLICT on insert and on update, as in a generated Procedure
+  await refused(a.insert(row("I-1", { title: "again" })), "CONFLICT");
+  const other = await a.insert(row("I-2")); await refused(a.update(other.id, { requestnumber: "I-1" }, { lock: other.version }), "CONFLICT");
+  assert.equal((await a.findById(other.id)).requestnumber, "I-2"); await a.delete(other.id, { lock: other.version });
+  assert.equal((await b.insert(row("I-1", { title: "b's" }))).title, "b's"); // unique per owner
+  // a keyset cursor carries any text (it is percent-encoded JSON)
+  const uni = [await a.insert(row("U-1", { title: "測試 é" })), await a.insert(row("U-2", { title: "測試 ü" }))];
+  const upage = await a.find({ where: { requestnumber: { like: "U-%" } }, orderBy: "title", limit: 1 });
+  assert.equal(upage.rows[0].id, uni[0]!.id); assert.equal((await a.find({ where: { requestnumber: { like: "U-%" } }, orderBy: "title", limit: 1, cursor: upage.cursor! })).rows[0].id, uni[1]!.id);
+  for (const u of uni) await a.delete(u.id, { lock: u.version });
+  await assert.rejects(anon.purchase_requests.insert(row("anon"))); // no subject: the scope column is NOT NULL
+  const note = await notes.insert({ body: "inserted note", expiresat: new Date(Date.now() + hour) }); assert.equal(note.body, "inserted note");
   assert.equal((await notes.findById(note.id)).id, note.id); assert.equal((await env.stores(user(B)).session_notes.findById(note.id)), null);
-  const item = await catalog(user(B)).insert({ sku: "c-9", name: "tape", price: 3 }); assert.equal(item.authorId, B); assert.equal((await catalog(user(A)).findById(item.id)).sku, "c-9"); ok();
+  const item = await catalog(user(B)).insert({ sku: "c-9", name: "tape", price: 3 }); assert.equal(item.author_id, B); assert.equal((await catalog(user(A)).findById(item.id)).sku, "c-9"); ok();
   await refused(b.delete(made.id, { lock: 1 }), "CONFLICT"); await refused(a.delete(made.id, { lock: 2 }), "CONFLICT"); await refused(a.delete("no-such-id", { lock: 1 }), "CONFLICT");
   await refused(a.delete(made.id, { lock: "x" as never })); await refused(a.delete({} as never, { lock: 1 }));
   assert.equal(await a.delete(made.id, { lock: made.version }), undefined); assert.equal(await a.findById(made.id), null); assert.equal(await sys.findById(made.id), null); ok();
@@ -193,11 +218,11 @@ export async function verifyStore(env: StoreEnv) {
     assert.deepEqual(got, await env.view(name, caller, {}), `${name} as ${caller.kind}`);
     assert.equal(got.length > 0, rows, `${name} as ${caller.kind}: ${rows ? "vacuous" : "leaks rows"}`);
   };
-  const purchases = { amount: { gte: 2.5 }, title: { like: "Item 1%" }, approved: false, submittedAt: { gte: "2026-10-11T00:01:00.123456Z" }, neededOn: { lt: "2026-10-18" }, sortBucket: { ne: "bucket-1" }, requestedUnits: { in: [1, 2, 3, 4] }, createdAt: { gte: "2020-01-01T00:00:00Z" } };
+  const purchases = { amount: { gte: 2.5 }, title: { like: "Item 1%" }, approved: false, submittedat: { gte: "2026-10-11T00:01:00.123456Z" }, neededon: { lt: "2026-10-18" }, sortbucket: { ne: "bucket-1" }, requestedunits: { in: [1, 2, 3, 4] }, created_at: { gte: "2020-01-01T00:00:00Z" } };
   for (const caller of [user(A), user(B), system, anonymous]) {
     const s = stores(caller), scoped = caller.kind !== "anonymous", ttl = caller.kind === "system" || (caller.kind === "user" && caller.subject === A);
     await same("eq-purchases-all", caller, s.purchase_requests, {}, scoped); await same("eq-purchases-filtered", caller, s.purchase_requests, purchases, scoped);
-    await same("eq-notes-all", caller, s.session_notes, {}, ttl); await same("eq-notes-filtered", caller, s.session_notes, { body: { in: ["live", "forever", "gone"] }, expiresAt: null }, ttl);
+    await same("eq-notes-all", caller, s.session_notes, {}, ttl); await same("eq-notes-filtered", caller, s.session_notes, { body: { in: ["live", "forever", "gone"] }, expiresat: null }, ttl);
     await same("eq-catalog-all", caller, s.catalog_items, {}, true); await same("eq-catalog-filtered", caller, s.catalog_items, { price: { gte: 2 }, name: { ne: "pen" } }, true);
   }
   ok();
@@ -216,8 +241,8 @@ export async function verifyStore(env: StoreEnv) {
     assert.equal(c.values.length, 2); assert.ok(c.sql.includes(`r."body" = ${ph(2)}`), c.sql);
     c = await seen(user(A), s => s.purchase_requests.findById("x")); assert.deepEqual(c.values, [A, "x"]); assert.ok(c.sql.includes(`r."id" = ${ph(2)}`));
     c = await seen(system, s => s.purchase_requests.findById("x")); assert.deepEqual(c.values, ["x"]); assert.ok(c.sql.includes(`r."id" = ${ph(1)}`));
-    const page = await a.find({ orderBy: "sortBucket", limit: 5 });
-    c = await seen(user(A), s => s.purchase_requests.find({ orderBy: "sortBucket", limit: 5, cursor: page.cursor, where: { title: { like: "Item%" } } }));
+    const page = await a.find({ orderBy: "title", limit: 5 });
+    c = await seen(user(A), s => s.purchase_requests.find({ orderBy: "title", limit: 5, cursor: page.cursor, where: { title: { like: "Item%" } } }));
     const top = Math.max(...[...c.sql.matchAll(env.sqlite ? /\?(\d+)/g : /\$(\d+)/g)].map(x => Number(x[1]))); assert.equal(top, c.values.length, c.sql);
     ok();
   }

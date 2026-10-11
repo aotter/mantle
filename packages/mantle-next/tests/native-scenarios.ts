@@ -48,8 +48,8 @@ export async function verifyBareApplication(
   const [row] = await native('SELECT id, title, amount, version, approved, payload FROM purchase_requests WHERE ownerid = ? AND requestnumber = ?', [owner,input.requestNumber]);
   assert.ok(row); assert.equal(row.approved, sqlite ? 1 : true);
   assert.deepEqual(sqlite ? JSON.parse(String(row.payload)) : row.payload, [1,2,{native:true}]); checks++;
-  // Single-statement writes autocommit: a server-reported failure is a known rollback, returned as the native error.
-  await assert.rejects(() => call("procedure", "create-purchase", owner, input), (error: any) => sqlite ? error?.code !== "OUTCOME_UNKNOWN" && /UNIQUE/.test(String(error?.message)) : (typeof error?.errno === "string" ? error.errno : error?.code) === "23505"); checks++;
+  // Single-statement writes autocommit: a unique-index clash is a known rollback and reads as CONFLICT, with the native error as its cause.
+  await assert.rejects(() => call("procedure", "create-purchase", owner, input), (error: any) => error?.code === "CONFLICT" && /UNIQUE|23505|duplicate/i.test(String(error.cause?.message) + (typeof error.cause?.errno === "string" ? error.cause.errno : error.cause?.code))); checks++;
   const update = {id:row.id,expectedVersion:Number(row.version),title:"Bare atomic edit",amount:3.25};
   await assert.rejects(() => call("procedure","update-purchase-double",owner,update));
   assert.deepEqual(await native('SELECT id, title, amount, version, approved, payload FROM purchase_requests WHERE id = ?', [row.id]), [row], "bare OCC failure rolls back earlier statement"); checks++;

@@ -25,7 +25,7 @@ const typeOf = (s: JsonSchema | undefined): string => {
     default: return "unknown";
   }
 };
-export function generate({ target, plan, lowered, viewKeys }: GenerateInput): GenerateResult {
+export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInput): GenerateResult {
   const diagnostics: GenerateDiagnostic[] = [];
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
   const isSqlite = sqlite(target);
@@ -134,7 +134,7 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input, Procedure${index}Output as Output`);
   }
-  const stores = emitStores(plan.schemas, isSqlite);
+  const stores = emitStores(plan.schemas, isSqlite, newId, refuse);
   if (diagnostics.length) return { ok: false, diagnostics };
   const base = "@aotter/mantle-next/";
   const dbType = target === "bun-sqlite" ? `import type { Handle as Database } from "${base}driver/bun-sqlite";` : target === "cloudflare-d1" ? `import type { Handle as Database } from "${base}driver/d1";` : `import type { Postgres as Database } from "${base}contracts";`;
@@ -146,5 +146,5 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     ...(driverImports.length ? [`import { ${driverImports.join(", ")} } from "${base}driver/${driver}";`] : []),
     ...(stores ? [`import * as DRIVER from "${base}driver/${driver}";`, `import { createStore } from "${base}store";`] : []),
     `import { ${["binds", ...(used.has("bound") ? ["bound"] : [])].join(", ")} } from "${base}binds";`,
-    `const D = { ${[...values].sort().join(", ")} };`, ...declarations, ...(stores ? [`export type Tables = ${stores.tables};`, `export const store = /* @__PURE__ */ createStore<Database, Tables>(DIALECT, DRIVER, ${stores.descriptors});`] : []), `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ""].join("\n") } };
+    `const D = { ${[...values].sort().join(", ")} };`, ...declarations, ...(stores ? [`export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`, `export const store = /* @__PURE__ */ createStore<Database, Tables>(DIALECT, DRIVER, RULES, ${stores.facts});`] : []), `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ""].join("\n") } };
 }

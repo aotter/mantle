@@ -20,8 +20,6 @@ export interface Dialect {
   likeEscape: string;
   /** The LIKE keyword; PostgreSQL's is case-sensitive unless `insensitive`. */
   like(insensitive: boolean): string;
-  /** NULL placement that makes NULL the smallest value in either direction, as SQLite orders (PostgreSQL's default is the opposite). */
-  nulls(direction: "asc" | "desc"): string;
   /** A declared date-time / date in its wire form (ISO UTC with six digits, `YYYY-MM-DD`): text parts interleaved with the operand. */
   wireTimestamp<T>(v: T): (string | T)[];
   wireDate<T>(v: T): (string | T)[];

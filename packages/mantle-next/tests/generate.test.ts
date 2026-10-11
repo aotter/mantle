@@ -1,7 +1,7 @@
 import type { LoweredStatement } from "@aotter/mantle/spec";
 import { describe, expect, test } from "bun:test";
 import { writeFile, unlink } from "node:fs/promises";
-import { generateFromSources } from "../src/infrastructure/generate.js";
+import { coreNewId, generateFromSources } from "../src/infrastructure/generate.js";
 import { Database } from "bun:sqlite";
 import { compilePlan, viewOutputs } from "@aotter/mantle/spec";
 import * as postgresCompile from "@aotter/mantle/postgres/compile";
@@ -64,7 +64,7 @@ async function canonical(target: Target, text = source) {
   const compiled = await compilePlan({ sources: [{ sourceId: "notes.yaml", text }] }, sqlite ? undefined : postgresCompile);
   if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
   const { lowered } = lowerPlan(compiled.plan, dialect);
-  return { target, plan: compiled.plan, lowered, viewKeys: Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys])) };
+  return { target, plan: compiled.plan, lowered, newId: coreNewId(dialect, compiled.plan.schemas), viewKeys: Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys])) };
 }
 describe("native generation", () => {
   for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const) test(target, async () => {
@@ -97,7 +97,7 @@ describe("native generation", () => {
   });
 });
 
-test("bare PG writes on the Bun.SQL shape keep native errors and signal uncertain outcomes", async () => {
+test("bare PG writes on the Bun.SQL shape read a unique clash as CONFLICT and signal uncertain outcomes", async () => {
   const generated = generate(await canonical("bun-postgres"));
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const path = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
@@ -109,7 +109,7 @@ test("bare PG writes on the Bun.SQL shape keep native errors and signal uncertai
   try {
     const module = await import(path.href);
     // One statement, autocommit: no begin(), one round trip.
-    for (const [failure, expected] of [["none", undefined], ["zero", "CONFLICT"], ["23505", "native"], ["23505-bun", "native"], ["57014", "OUTCOME_UNKNOWN"], ["socket", "OUTCOME_UNKNOWN"]] as const) {
+    for (const [failure, expected] of [["none", undefined], ["zero", "CONFLICT"], ["23505", "CONFLICT"], ["23505-bun", "CONFLICT"], ["57014", "OUTCOME_UNKNOWN"], ["socket", "OUTCOME_UNKNOWN"]] as const) {
       const error = failure === "socket" ? socket() : failure.startsWith("2") || failure.startsWith("5") ? server(failure.slice(0, 5), failure.endsWith("bun")) : undefined;
       const calls: string[] = [];
       const db = { unsafe: async (text: string) => { calls.push(text); if (error) throw error; return Object.assign([], { count: failure === "zero" ? 0 : 1 }); }, begin: async () => { calls.push("BEGIN"); throw Error("unexpected begin"); } };
@@ -117,11 +117,10 @@ test("bare PG writes on the Bun.SQL shape keep native errors and signal uncertai
       try { await module.procedures["update-note"](db, caller, { id: "n1", title: "t", version: 1 }); } catch (e) { caught = e; }
       expect(calls.length).toBe(1); expect(calls[0]).toStartWith("UPDATE");
       if (expected === undefined) expect(caught).toBeUndefined();
-      else if (expected === "native") expect(caught).toBe(error);
       else { expect(caught.code).toBe(expected); if (error) expect(caught.cause).toBe(error); }
     }
     // Two statements: begin() owns the connection and ROLLBACK; only a failed COMMIT is uncertain.
-    for (const [failure, expected] of [["execute", "native"], ["commit-40001", "native"], ["commit-57P01", "OUTCOME_UNKNOWN"], ["commit-socket", "OUTCOME_UNKNOWN"]] as const) {
+    for (const [failure, expected] of [["execute", "CONFLICT"], ["commit-40001", "native"], ["commit-57P01", "OUTCOME_UNKNOWN"], ["commit-socket", "OUTCOME_UNKNOWN"]] as const) {
       const error = failure === "execute" ? server("23505") : failure === "commit-socket" ? socket() : server(failure.slice(7));
       const calls: string[] = [];
       const tx = { unsafe: async (text: string) => { calls.push(text); if (failure === "execute") throw error; return Object.assign([], { count: 1 }); } };
@@ -288,15 +287,27 @@ test("declared timestamps and dates come back in wire form from the SQL itself",
   }
 });
 
-test("the Store's descriptor is Core's row rules as data: no printed SQL, no synthetic operations", async () => {
+test("the Store's rules are Core's, emitted once; a Schema adds only a small fact", async () => {
   for (const target of ["bun-sqlite", "bun-postgres"] as const) {
     const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "notes.yaml", text: source }] } });
     if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
-    const text = generated.files["generated.ts"]!, store = text.slice(text.indexOf("createStore<"));
-    expect(text).toContain(`caller: [["owner","eq",{"k":"uid"}]], trusted: []`);
+    const text = generated.files["generated.ts"]!, store = text.slice(text.indexOf("const RULES"));
+    expect(text).toContain(`"caller":[["$scope","eq",{"k":"uid"}],["$ttl","ttl",{"k":"cutoff","seconds":0}]]`);
     expect(text).toContain(`"sets":[["version","bump"],["updated_at",{"k":"now"}]],"lock":["version","eq",{"k":"version"}]`);
+    expect(text).toContain(target === "bun-sqlite" ? `"newId":"lower(hex(randomblob(16)))"` : `"newId":"replace((gen_random_uuid())::text, '-', '')"`); // Core's own lowering of a new id
+    expect(store).toContain(`"notes": {"s":"owner"}`);
     expect(store).not.toMatch(/SELECT|FROM|CASE WHEN/); expect(text).not.toContain("mantle-store-");
     expect(text).toContain("export const views = { [\"notes-list\"]: view0 };");
     expect(Object.keys(generated.files).filter(name => name.startsWith("stores/"))).toEqual([]);
   }
+});
+test("generation is refused when a Schema's rules would not be Core's", async () => {
+  const { emitStores } = await import("../src/usecase/stores.js");
+  const schema = { name: "t", fields: { c: "timestamptz" }, names: {}, schema: { type: "object" }, scope: "owner", ttl: "c" };
+  const refused: string[] = [];
+  expect(emitStores({ t: schema as never }, true, "x", (_, message) => refused.push(message))).toBeDefined();
+  expect(refused.length).toBe(1); expect(refused[0]).toContain("differ from the shared rules"); // ttlSeconds is absent: Core's term has no seconds
+  const fine: string[] = [];
+  emitStores({ t: { ...schema, ttlSeconds: 60 } as never }, true, "x", (_, message) => fine.push(message));
+  expect(fine).toEqual([]);
 });
