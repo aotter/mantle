@@ -7,10 +7,10 @@
 import type { BetterAuthOptions } from "@better-auth/core";
 import { getAuthTables, type DBFieldAttribute } from "@better-auth/core/db";
 import { getSchema } from "better-auth/db";
+import { ident } from "../kernel/dialect/common.js";
 
 export type AuthDialect = "sqlite" | "postgres";
 
-const ident = (name: string) => name.split(".").map(part => `"${part.replaceAll('"', '""')}"`).join(".");
 
 function columnType(field: DBFieldAttribute, dialect: AuthDialect): string {
   const pg = dialect === "postgres";

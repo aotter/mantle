@@ -7,6 +7,7 @@ import { compilePlan, viewOutputs } from "@aotter/mantle/spec";
 import * as postgresCompile from "@aotter/mantle/postgres/compile";
 import { generate } from "../src/usecase/generate.js";
 import type { Target } from "../src/domain/model.js";
+import { link } from "./apps/link.js";
 
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -73,14 +74,16 @@ describe("native generation", () => {
     const text = generated.files["generated.ts"]!;
     expect(text).toContain('["notes-list"]: view0');
     expect(text).toContain('["create-note"]: procedure0');
-    expect(text).toContain("caller.subject");
+    expect(text).toContain('{"k":"uid"}'); // Core's bind recipe, evaluated by the shared kernel/binds
     expect(text).not.toContain("RuntimePlan");
     expect(text).not.toContain("runView");
     expect(text).not.toContain("runProcedure");
     for (const mode of ["caller", "trusted"] as const) expect(text).toContain(JSON.stringify(input.lowered.views["notes-list"]![mode]!.sql));
-    if (target === "bun-sqlite") { expect(text).toContain("db.transaction(execute)(db)"); expect(text).toContain("const results = execute(db)"); expect(text).toContain(".length !== 1"); expect(text).not.toContain("SELECT changes()"); }
-    else if (target === "cloudflare-d1") { expect(text).toContain("db.batch(["); expect(text).toContain("INSERT INTO _mantle_assert (op,ok)"); expect(text).toContain("changes() = 1"); }
-    else { expect(text).toContain('db.begin("isolation level serializable"'); expect(text).toContain(".count !== 1"); expect(text.match(/db\.begin\(/g)!.length).toBe(1); }
+    // The driver module owns the native call and the atomicity it really has; generated code owns none of it.
+    for (const native of ["db.query(", "db.prepare(", ".unsafe(", "db.batch(", "db.begin(", "db.transaction(", "_mantle_assert", "postgresOutcome"]) expect(text).not.toContain(native);
+    const driver = target === "bun-sqlite" ? "driver/bun-sqlite" : target === "cloudflare-d1" ? "driver/d1" : "driver/bun-sql";
+    expect(text).toContain(`from "@aotter/mantle-next/${driver}"`);
+    expect(text).toContain(`from "@aotter/mantle-next/dialect/${target.endsWith("postgres") ? "postgres" : "sqlite"}"`);
     expect(generate(input)).toEqual(generated);
   });
   test("unsupported programs fail generation with paths rather than omitting behavior", async () => {
@@ -98,7 +101,7 @@ test("bare PG writes on the Bun.SQL shape keep native errors and signal uncertai
   const generated = generate(await canonical("bun-postgres"));
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const path = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
-  await writeFile(path, generated.files["generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"'));
+  await writeFile(path, link(generated.files["generated.ts"]!));
   const caller = { kind: "user", subject: "test-user", role: null, scopes: [], credential: "session", credentialId: null, clientId: null };
   // Bun.SQL reports SQLSTATE in errno; node-postgres/postgres.js in code.
   const server = (state: string, bun = false) => Object.assign(new Error("native-" + state), bun ? { errno: state, code: "ERR_POSTGRES_SERVER_ERROR", severity: "ERROR" } : { code: state, severity: "ERROR" });
@@ -154,20 +157,17 @@ test("PG declared integer output types include native unsafe-int8 strings", asyn
   }
 });
 
-test("emission removes unused input locals and binds directly for SQLite hosts", async () => {
+test("generated Views and Procedures bind through the shared evaluator", async () => {
   for (const target of ["bun-sqlite", "cloudflare-d1", "bun-postgres", "cloudflare-postgres"] as const) {
     const generated = generate(await canonical(target));
     if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
     const text = generated.files["generated.ts"]!;
     const view = text.slice(text.indexOf("async function view0"), text.indexOf("export type Procedure0Input"));
-    expect(view).not.toContain("const given");
-    expect(view).not.toContain("const input");
-    if (target === "bun-sqlite") { expect(view).toContain(".all(uid)"); expect(view).toContain(".all()"); }
-    else if (target === "cloudflare-d1") { expect(view).toContain(".bind(uid)"); expect(view).toContain(".bind()"); }
-    else expect(view).toContain(", [uid])");
+    expect(view).toContain("read(db, m.sql, binds(D, m.binds, caller, raw))");
+    expect(text).toContain("bound(D, procedure0Caller, caller, raw)");
+    expect(text).not.toContain("const given");
+    expect(text).not.toContain("encodeTimestamptz");
     expect(text).not.toContain("...[");
-    expect(text).toContain("const given = raw;");
-    expect(text).toContain('given["title"]');
   }
 });
 
@@ -175,9 +175,9 @@ test("native binds directly use authored input names", async () => {
   const text = source.replace('input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}', 'input: {type: object, properties: {NoteTitle: {type: string, nullable: true}}, additionalProperties: false}').replace('VALUES (input.title)', "VALUES (coalesce(input.noteTitle, input.noteTitle, ''Nullable fallback''))");
   const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"names.yaml",text}]}});
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
-  expect(generated.files["generated.ts"]).toContain('given["NoteTitle"]');
+  expect(generated.files["generated.ts"]).toContain('"name":"NoteTitle"');
   const file = new URL(`.generated-${crypto.randomUUID()}.ts`,import.meta.url);
-  await writeFile(file,generated.files["generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"'));
+  await writeFile(file,link(generated.files["generated.ts"]!));
   const db = new Database(":memory:");
   const caller = {kind:"user",subject:"test-owner",role:null,scopes:[],credential:"session",credentialId:null,clientId:null};
   try {
@@ -199,7 +199,7 @@ for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare
   const code = generated.files["generated.ts"]!;
   expect(code).not.toContain(".map(");
   const file = new URL(`.bare-${crypto.randomUUID()}.ts`, import.meta.url);
-  await writeFile(file,code.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"'));
+  await writeFile(file,link(code));
   const rows = [{id:"native-id",title:null}];
   const caller = {kind:"user",subject:"test-user",role:null,scopes:[],credential:"session",credentialId:null,clientId:null};
   let failure: unknown;
@@ -265,7 +265,7 @@ test("declared timestamps and dates come back in wire form from the SQL itself",
   expect(code).toContain('readonly "at": string | null; readonly "day": string | null; readonly "created_at": string | null;');
   expect(code).not.toContain(".map(");
   const file = new URL(`.wire-${crypto.randomUUID()}.ts`,import.meta.url);
-  await writeFile(file,code.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"'));
+  await writeFile(file,link(code));
   const db = new Database(":memory:");
   try {
     db.exec(generated.files["schema.sql"]!);

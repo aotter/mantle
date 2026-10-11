@@ -8,50 +8,38 @@
 import { createAdapterFactory, type CleanedWhere, type CustomAdapter, type DBAdapterFactoryConfig, type JoinConfig } from "@better-auth/core/db/adapter";
 import type { BetterAuthOptions } from "@better-auth/core";
 import type { SQL } from "bun";
+import type { Dialect } from "../kernel/dialect/common.js";
+import * as postgres from "../kernel/dialect/postgres.js";
+import * as sqlite from "../kernel/dialect/sqlite.js";
+import * as bunSql from "../kernel/driver/bun-sql.js";
+import * as d1 from "../kernel/driver/d1.js";
+import { condition as spell } from "../kernel/where.js";
 
 type Row = Record<string, unknown>;
-type Dialect = "sqlite" | "postgres";
 /** Runs one statement; `changes` is the affected-row count. */
 type Exec = (text: string, values: unknown[]) => Promise<{ rows: Row[]; changes: number }>;
 /** The slice of D1 the adapter calls (a real `D1Database` satisfies it). */
-export interface D1Like {
-  prepare(text: string): { bind(...values: unknown[]): { all(): Promise<{ results: Row[]; meta: { changes?: number } }> } };
-}
+export type D1Like = d1.Reader;
 
-const ident = (name: string) => name.split(".").map(part => `"${part.replaceAll('"', '""')}"`).join(".");
-const escapeLike = (value: string) => value.replace(/[\\%_]/g, "\\$&");
-
-function customAdapter(dialect: Dialect, exec: Exec) {
+function customAdapter(d: Dialect, exec: Exec) {
+  const { ident } = d;
   return ({ getFieldName, schema, getDefaultModelName }: Parameters<Parameters<typeof createAdapterFactory>[0]["adapter"]>[0]): CustomAdapter => {
-    const pg = dialect === "postgres";
     /** One statement under construction: text plus its parameters. */
     const stmt = () => {
       const values: unknown[] = [];
       const bind = (value: unknown) => {
         values.push(value === undefined ? null : value);
-        return pg ? `$${values.length}` : "?";
+        return d.param(values.length);
       };
       const condition = (modelKey: string, w: CleanedWhere): string => {
         const col = ident(getFieldName({ model: modelKey, field: w.field }));
         const { value, operator } = w;
         const fold = w.mode === "insensitive" && (typeof value === "string" || (Array.isArray(value) && value.every(v => typeof v === "string")));
-        const lhs = fold ? `LOWER(${col})` : col;
-        const rhs = (v: unknown) => (fold ? `LOWER(${bind(v)})` : bind(v));
-        if (operator === "in" || operator === "not_in") {
-          const list = Array.isArray(value) ? value : [value];
-          if (!list.length) return operator === "in" ? "1 = 0" : "1 = 1";
-          return `${lhs} ${operator === "in" ? "IN" : "NOT IN"} (${list.map(rhs).join(", ")})`;
-        }
         if (operator === "contains" || operator === "starts_with" || operator === "ends_with") {
-          const text = escapeLike(String(value));
-          const pattern = operator === "contains" ? `%${text}%` : operator === "starts_with" ? `${text}%` : `%${text}`;
-          return `${col} ${fold && pg ? "ILIKE" : "LIKE"} ${bind(pattern)} ESCAPE '\\'`;
+          const text = d.escapeLike(String(value));
+          return spell(d, col, "like", operator === "contains" ? `%${text}%` : operator === "starts_with" ? `${text}%` : `%${text}`, bind, fold);
         }
-        if (operator === "eq" || operator === "ne") {
-          if (value === null) return `${col} IS ${operator === "eq" ? "" : "NOT "}NULL`;
-          return `${lhs} ${operator === "eq" ? "=" : "<>"} ${rhs(value)}`;
-        }
-        return `${col} ${{ gt: ">", gte: ">=", lt: "<", lte: "<=" }[operator]} ${bind(value)}`;
+        return spell(d, col, operator === "not_in" ? "notIn" : operator, value, bind, fold);
       };
       /** `WHERE (and...) AND (or...)`, the Kysely adapter's grouping; empty without conditions. */
       const where = (modelKey: string, conditions: CleanedWhere[] | undefined, extra?: string) => {
@@ -184,35 +172,27 @@ function customAdapter(dialect: Dialect, exec: Exec) {
   };
 }
 
-function build(dialect: Dialect, adapterId: string, adapterName: string, exec: Exec, transaction: DBAdapterFactoryConfig["transaction"]) {
-  const pg = dialect === "postgres";
+function build(d: Dialect, adapterId: string, adapterName: string, exec: Exec, transaction: DBAdapterFactoryConfig["transaction"]) {
   return createAdapterFactory({
     config: {
-      adapterId, adapterName, supportsBooleans: pg, supportsDates: pg, supportsJSON: pg, supportsArrays: false, supportsUUIDs: pg, transaction,
+      adapterId, adapterName, supportsBooleans: d.nativeTypes, supportsDates: d.nativeTypes, supportsJSON: d.nativeTypes, supportsArrays: false, supportsUUIDs: d.nativeTypes, transaction,
       // Bun.SQL returns int8/numeric as strings; a `number` field must reach Better Auth as a number (the rate limiter adds to `lastRequest`). Ids stay strings.
       customTransformOutput: ({ data, fieldAttributes, field }) => (fieldAttributes.type === "number" && typeof data === "string" && field !== "id" && !fieldAttributes.references ? Number(data) : data),
     },
-    adapter: customAdapter(dialect, exec),
+    adapter: customAdapter(d, exec),
   });
 }
 
 /** Cloudflare D1 (SQLite). D1 has no interactive transactions, so `transaction` is off and the atomic operations are single statements. */
 export function d1Adapter(db: D1Like) {
-  const exec: Exec = async (text, values) => {
-    const { results, meta } = await db.prepare(text).bind(...values).all();
-    return { rows: results ?? [], changes: meta?.changes ?? 0 };
-  };
-  return build("sqlite", "d1", "Mantle D1 Adapter", exec, false);
+  return build(sqlite, "d1", "Mantle D1 Adapter", (text, values) => d1.run(db, text, values), false);
 }
 
 /** Bun.SQL against PostgreSQL. Transactions use `sql.begin`, which pins every statement to one connection. */
 export function bunSqlAdapter(sql: SQL) {
-  const executor = (handle: Pick<SQL, "unsafe">): Exec => async (text, values) => {
-    const rows = (await handle.unsafe(text, values as never[])) as Row[] & { count?: number | null };
-    return { rows: [...rows], changes: Number(rows.count ?? 0) };
-  };
+  const executor = (handle: Pick<SQL, "unsafe">): Exec => (text, values) => bunSql.run(handle as never, text, values);
   // Each `betterAuth` instance gets its own factory; its transactions rebuild the adapter on the pinned connection with the same options.
   return (options: BetterAuthOptions) =>
-    build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(sql), cb =>
-      sql.begin(tx => cb(build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(tx), false)(options))))(options);
+    build(postgres, "bun-sql", "Mantle Bun.SQL Adapter", executor(sql), cb =>
+      sql.begin(tx => cb(build(postgres, "bun-sql", "Mantle Bun.SQL Adapter", executor(tx), false)(options))))(options);
 }

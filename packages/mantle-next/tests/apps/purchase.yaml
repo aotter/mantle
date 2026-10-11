@@ -76,6 +76,36 @@
         "ownerId",
         "sortBucket",
         "id"
+      ],
+      [
+        "ownerId",
+        "amount",
+        "id"
+      ],
+      [
+        "ownerId",
+        "approved",
+        "id"
+      ],
+      [
+        "ownerId",
+        "requestedUnits",
+        "id"
+      ],
+      [
+        "ownerId",
+        "submittedAt",
+        "id"
+      ],
+      [
+        "ownerId",
+        "neededOn",
+        "id"
+      ],
+      [
+        "ownerId",
+        "title",
+        "id"
       ]
     ]
   }

@@ -1,0 +1,49 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: session_notes}
+spec:
+  title: Expiring notes
+  lifecycle: operational
+  scope: {owner: auth.uid()}
+  ttl: {field: expiresAt, expireAfterSeconds: 0}
+  indexes: [[owner, body]]
+  schema:
+    type: object
+    required: [owner, body, expiresAt]
+    properties:
+      owner: {type: string}
+      body: {type: string}
+      expiresAt: {type: [string, "null"], format: date-time}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: create-session-note}
+spec:
+  requires: {auth: {all: [ctx.user]}}
+  input: {type: object, required: [body, expiresAt], properties: {body: {type: string}, expiresAt: {type: [string, "null"], format: date-time}}, additionalProperties: false}
+  output: {type: object, required: [results], properties: {results: {type: array}}}
+  handler: {sql: 'INSERT INTO session_notes (body, expiresAt) VALUES (input.body, input.expiresAt) RETURNING id'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: catalog_items}
+spec:
+  title: Shared catalog
+  lifecycle: operational
+  indexes: [[name]]
+  schema:
+    type: object
+    required: [sku, name, price]
+    properties:
+      sku: {type: string}
+      name: {type: string}
+      price: {type: number}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: create-catalog-item}
+spec:
+  requires: {auth: {all: [ctx.user]}}
+  input: {type: object, required: [sku, name, price], properties: {sku: {type: string}, name: {type: string}, price: {type: number}}, additionalProperties: false}
+  output: {type: object, required: [results], properties: {results: {type: array}}}
+  handler: {sql: 'INSERT INTO catalog_items (sku, name, price) VALUES (input.sku, input.name, input.price) RETURNING id'}

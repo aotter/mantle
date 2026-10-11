@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { writeFile, unlink } from "node:fs/promises";
 import { generateFromSources } from "../src/infrastructure/generate.js";
+import { link } from "./apps/link.js";
 
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -19,7 +20,7 @@ test("canonical UTC DDL supplies timezone offsets used by generated date SQL", a
   expect(generated.files["schema.sql"]).toContain("(-9007199254740991, 0)");
   expect(generated.files["generated.ts"]).toContain("_mantle_tz");
   const file = new URL(`.date-${crypto.randomUUID()}.ts`, import.meta.url);
-  await writeFile(file, generated.files["generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"'));
+  await writeFile(file, link(generated.files["generated.ts"]!));
   const db = new Database(":memory:");
   try {
     db.exec(generated.files["schema.sql"]!);
