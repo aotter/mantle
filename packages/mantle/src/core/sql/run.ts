@@ -56,10 +56,11 @@ export interface RunAs {
 const refuse = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
 const conflict = (opIndex: number) => new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: `CONFLICT op=${opIndex}`, conflict: { opIndex, reason: "expect" } }));
 
-const binder = (env: RunEnv, p: Program, index: number) =>
-  !env.seen && !env.unsafeNoVisibility && !p.statuses && p.name !== undefined
-    ? env.generatedBinders?.[p.kind]?.[p.name]?.[env.mode ?? "caller"]?.[index]
-    : undefined;
+const binder = (env: RunEnv, p: Program, index: number) => {
+  if (env.seen || env.unsafeNoVisibility || p.statuses || p.name === undefined) return undefined;
+  const programs = env.generatedBinders?.[p.kind];
+  return programs && Object.hasOwn(programs, p.name) ? programs[p.name]?.[env.mode ?? "caller"]?.[index] : undefined;
+};
 
 const ctxOf = (env: RunEnv, p: Program, extra: Partial<CompileContext> = {}): CompileContext => ({
   dialect: env.dialect, schemas: env.schemas, inputs: p.inputs, kind: p.kind, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility, ...extra,

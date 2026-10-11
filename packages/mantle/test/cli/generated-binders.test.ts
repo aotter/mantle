@@ -118,6 +118,8 @@ it("emits the complete lowered program/mode table and preserves page extras on c
     expect(generatedCalls).toBe(9);
     for (const negative of [{ ...env, seen: new Set<any>() }, { ...env, unsafeNoVisibility: true }]) await runView({ ...negative, generatedBinders: table }, p, as);
     await runView({ ...env, generatedBinders: table }, { ...p, name: undefined }, as);
+    // A name omitted by lowering must not pick up Object.prototype.constructor or its restricted caller property.
+    await runView({ ...env, generatedBinders: table }, { ...p, name: "constructor" }, as);
     await runProcedure({ ...env, generatedBinders: table }, { ...write, statuses: [] }, writeAs);
     expect(generatedCalls).toBe(9);
     // Publishing switches this statement to the version-pinned "one" recipe after preRead.
