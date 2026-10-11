@@ -143,6 +143,15 @@ const SYSTEM_DDL = [
   "CREATE TABLE IF NOT EXISTS _mantle_schema_tables (name TEXT PRIMARY KEY) STRICT",
 ];
 
+/** Build-time initial schema artifact. Applying or migrating it is the application's responsibility. */
+export function initialStorageSql(plan: Readonly<Record<string, StorageSchema>>): readonly string[] {
+  // This initial artifact compiles with UTC, not an application-selected regional time zone.
+  return [SYSTEM_DDL[0]!, SYSTEM_DDL[1]!, SYSTEM_DDL[2]!, "INSERT OR IGNORE INTO _mantle_tz (from_us, offset_us) VALUES (-9007199254740991, 0)", ...Object.entries(plan).flatMap(([name, schema]) => {
+    const d = desired(name, schema);
+    return [createTable(d), ...d.indexes.map((i) => i.sql), ...d.virtuals.map((i) => i.sql), ...d.triggers.map((i) => i.sql)];
+  })];
+}
+
 type Row = Record<string, unknown>;
 
 /** Converge storage to the plan. Blocked differences are reported and applied to nothing; a matching fingerprint reads nothing else. */

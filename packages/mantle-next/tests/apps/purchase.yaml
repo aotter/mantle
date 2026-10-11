@@ -1,0 +1,563 @@
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "Schema",
+  "metadata": {
+    "name": "purchase_requests"
+  },
+  "spec": {
+    "title": "Synthetic purchase requests",
+    "lifecycle": "operational",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string"
+        },
+        "requestNumber": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "approved": {
+          "type": "boolean"
+        },
+        "sortBucket": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestedUnits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "neededOn": {
+          "type": "string",
+          "format": "date"
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "ownerId",
+        "requestNumber",
+        "title",
+        "amount",
+        "approved",
+        "sortBucket",
+        "requestedUnits",
+        "submittedAt",
+        "neededOn",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "scope": {
+      "ownerId": "auth.uid()"
+    },
+    "uniqueIndexes": [
+      [
+        "ownerId",
+        "requestNumber"
+      ]
+    ],
+    "indexes": [
+      [
+        "ownerId",
+        "sortBucket",
+        "id"
+      ]
+    ]
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "View",
+  "metadata": {
+    "name": "purchase-list"
+  },
+  "spec": {
+    "surface": "public",
+    "sql": "SELECT r.id, r.requestNumber, r.title, r.amount, r.approved, r.sortBucket, r.requestedUnits, r.submittedAt, r.neededOn, r.payload FROM purchase_requests r ORDER BY r.id",
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "View",
+  "metadata": {
+    "name": "purchase-totals"
+  },
+  "spec": {
+    "surface": "public",
+    "sql": "SELECT COUNT(*) AS \"requestCount\", SUM(r.amount) AS \"totalAmount\" FROM purchase_requests r",
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "View",
+  "metadata": {
+    "name": "purchase-shared"
+  },
+  "spec": {
+    "surface": "internal",
+    "sql": "SELECT r.id, r.title, r.amount FROM purchase_requests r"
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "View",
+  "metadata": {
+    "name": "purchase-shared-list"
+  },
+  "spec": {
+    "surface": "public",
+    "sql": "SELECT r.id, r.title, r.amount FROM purchase_shared r ORDER BY r.id",
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    }
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "Procedure",
+  "metadata": {
+    "name": "create-purchase"
+  },
+  "spec": {
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "requestNumber": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "approved": {
+          "type": "boolean"
+        },
+        "sortBucket": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestedUnits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "neededOn": {
+          "type": "string",
+          "format": "date"
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "requestNumber",
+        "title",
+        "amount",
+        "approved",
+        "sortBucket",
+        "requestedUnits",
+        "submittedAt",
+        "neededOn",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object"
+    },
+    "handler": {
+      "sql": "INSERT INTO purchase_requests (requestNumber, title, amount, approved, sortBucket, requestedUnits, submittedAt, neededOn, payload) VALUES (input.requestNumber, input.title, input.amount, input.approved, input.sortBucket, input.requestedUnits, input.submittedAt, input.neededOn, input.payload) RETURNING id, requestNumber, title, amount, approved, sortBucket, requestedUnits, submittedAt, neededOn, payload"
+    }
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "Procedure",
+  "metadata": {
+    "name": "update-purchase"
+  },
+  "spec": {
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "amount"
+      ],
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object"
+    },
+    "handler": {
+      "sql": "UPDATE purchase_requests SET title = input.title, amount = input.amount WHERE id = input.id RETURNING id, title, amount"
+    }
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "Procedure",
+  "metadata": {
+    "name": "create-purchase-pair"
+  },
+  "spec": {
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "requestNumber": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "approved": {
+          "type": "boolean"
+        },
+        "sortBucket": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestedUnits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "neededOn": {
+          "type": "string",
+          "format": "date"
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "requestNumber",
+        "title",
+        "amount",
+        "approved",
+        "sortBucket",
+        "requestedUnits",
+        "submittedAt",
+        "neededOn",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object"
+    },
+    "handler": {
+      "sql": "INSERT INTO purchase_requests (requestNumber, title, amount, approved, sortBucket, requestedUnits, submittedAt, neededOn, payload) VALUES (input.requestNumber, input.title, input.amount, input.approved, input.sortBucket, input.requestedUnits, input.submittedAt, input.neededOn, input.payload); INSERT INTO purchase_requests (requestNumber, title, amount, approved, sortBucket, requestedUnits, submittedAt, neededOn, payload) VALUES (input.requestNumber, input.title, input.amount, input.approved, input.sortBucket, input.requestedUnits, input.submittedAt, input.neededOn, input.payload) RETURNING id"
+    }
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "Procedure",
+  "metadata": {
+    "name": "update-purchase-expected"
+  },
+  "spec": {
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "expectedVersion",
+        "title",
+        "amount"
+      ],
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object"
+    },
+    "handler": {
+      "sql": "UPDATE purchase_requests SET title = input.title, amount = input.amount WHERE id = input.id AND version = input.expectedVersion RETURNING id, title, amount, version"
+    }
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "Procedure",
+  "metadata": {
+    "name": "update-purchase-double"
+  },
+  "spec": {
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "expectedVersion",
+        "title",
+        "amount"
+      ],
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object"
+    },
+    "handler": {
+      "sql": "UPDATE purchase_requests SET title = input.title, amount = input.amount WHERE id = input.id AND version = input.expectedVersion RETURNING id, title, amount, version; UPDATE purchase_requests SET title = input.title, amount = input.amount WHERE id = input.id AND version = input.expectedVersion RETURNING id, title, amount, version"
+    }
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "View",
+  "metadata": {
+    "name": "purchase-scalars"
+  },
+  "spec": {
+    "surface": "public",
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    },
+    "sql": "SELECT '12.34'::numeric(12, 2) AS \"fixedAmount\", CAST('2026-10-11T00:00:00.123456Z' AS timestamptz) AS \"microsecondTime\", CAST(42 AS int8) AS \"safeInteger\" FROM purchase_requests r ORDER BY r.id"
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "Procedure",
+  "metadata": {
+    "name": "create-purchase-invalid-output"
+  },
+  "spec": {
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "requestNumber": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "approved": {
+          "type": "boolean"
+        },
+        "sortBucket": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestedUnits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "neededOn": {
+          "type": "string",
+          "format": "date"
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "requestNumber",
+        "title",
+        "amount",
+        "approved",
+        "sortBucket",
+        "requestedUnits",
+        "submittedAt",
+        "neededOn",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "confirmation": {
+          "type": "string",
+          "const": "confirmed"
+        }
+      },
+      "required": [
+        "confirmation"
+      ],
+      "additionalProperties": false
+    },
+    "handler": {
+      "sql": "INSERT INTO purchase_requests (requestNumber, title, amount, approved, sortBucket, requestedUnits, submittedAt, neededOn, payload) VALUES (input.requestNumber, input.title, input.amount, input.approved, input.sortBucket, input.requestedUnits, input.submittedAt, input.neededOn, input.payload) RETURNING id, requestNumber, title, amount, approved, sortBucket, requestedUnits, submittedAt, neededOn, payload"
+    }
+  }
+}
+---
+{
+  "apiVersion": "cms.mantle.aotter.net/v2",
+  "kind": "View",
+  "metadata": {
+    "name": "purchase-calendar"
+  },
+  "spec": {
+    "surface": "public",
+    "requires": {
+      "auth": {
+        "all": [
+          "ctx.user"
+        ]
+      }
+    },
+    "sql": "SELECT date_trunc('day', r.submittedAt) AS \"submittedDay\" FROM purchase_requests r ORDER BY r.id"
+  }
+}

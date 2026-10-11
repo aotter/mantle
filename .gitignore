@@ -36,3 +36,6 @@ coverage/
 .claude/worktrees/
 # Benchmark harness: local result files (packages/mantle/bench). Its cache lives in the OS temp dir.
 packages/mantle/bench/results/
+# Next local generated test consumers and private timing artifacts.
+packages/mantle-next/tests/apps/.generated/
+packages/mantle-next/results/

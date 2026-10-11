@@ -104,6 +104,15 @@ const createTable = (name: string, s: StorageSchema) => `CREATE TABLE ${q(name)}
   "created_at timestamptz NOT NULL", "updated_at timestamptz NOT NULL DEFAULT now()", `author_id ${ddlType("text")}`,
   ...columns(s).map((c) => `${q(c.name)} ${ddlType(c.type)}${c.name === "status" ? " NOT NULL DEFAULT 'draft'" : c.native ? " NOT NULL" : ""}`),
 ].join(", ")})`;
+
+/** Build-time initial schema artifact. Applying or migrating it is the application's responsibility. */
+export function initialStorageSql(plan: Readonly<Record<string, StorageSchema>>): readonly string[] {
+  return Object.entries(plan).flatMap(([name, schema]) => [
+    // No Admin surface is selected by this SQL-only artifact; emit authored indexes only.
+    createTable(name, schema), ...indexes(name, schema).filter((i) => i.name !== ident(`_mantle_ix_${name}_updated`)).map((i) => i.sql),
+    ...(schema.checks ?? []).map((check, i) => `ALTER TABLE ${q(name)} ADD CONSTRAINT ${q(ident(`_mantle_chk_${name}_${i}`))} CHECK (${checkText(check, schema)})`),
+  ]);
+}
 const tooLong = (n: string) => new TextEncoder().encode(n).length > 63;
 
 /** `information_schema`'s spelling of a column type, to compare with the plan's. */
