@@ -81,9 +81,57 @@ are `string | null`, and an expression, or another native column such as `id`,
 is `unknown`. Page with `limit` (default 50, at most 500) and the opaque
 `cursor` from `nextCursor`.
 
+## Readers (`db`)
+
+Every Schema has a reader on `ctx.db` (the same object as `ctx.store.db`, also
+`runtime.store.db` and `runtime.store.as(caller).db`), named by the lower-camel
+form of the Schema's name: `tickets` is `ctx.db.tickets`, `ticket-events` is
+`ctx.db.ticketEvents`. A name that has no such form (a non-ASCII name, or one
+starting with a digit) is the Schema's lower-case name, `ctx.db["2fa"]`. Two
+Schemas that become one name, and the reserved names `constructor`, `then`,
+`__proto__`, `prototype`, `toString`, `valueOf` and `hasOwnProperty`, are
+refused with `SCHEMA_READER_NAME_COLLISION`.
+
+```ts
+const ticket = await ctx.db.tickets.get(id);                       // one row or null
+const next = await ctx.db.tickets.first({ where: { ticketState: "open" }, orderBy: { createdAt: "asc" } });
+const { rows, nextCursor } = await ctx.db.tickets.find({
+  where: { ticketState: "open", subject: { like: "%refund%" } },
+  columns: ["id", "subject"],                                      // the row is Pick<Row, "id" | "subject">
+  limit: 20,
+});
+```
+
+- `get(id, { columns })`, `first(query)` and `find(query)`. A query is
+  `{ where, columns, orderBy, search }`; `find` also takes `limit` (1 to 500,
+  default 50) and the opaque `cursor` from `nextCursor`.
+- `where` is **AND only**: `{ column: value }` is equality, `{ column: null }`
+  is `IS NULL`, and `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`
+  compares. `in` and `notIn` take a non-empty list without `null`. For `or`,
+  `not`, a subquery, a join or an aggregate, declare a View and call
+  `store.view`.
+- `orderBy` is one column, and `id` breaks ties. The default is
+  `{ updatedAt: "desc" }`. `search` is matched against `searchableFields` (and
+  `id`).
+- A row has the native columns (`id`, `version`, `createdAt`, `updatedAt`,
+  `status` on a `publishing` Schema, `authorId` or `null`) and every field the
+  Schema declares except its scope field, each as its type or `null` (a column
+  is not required in storage, so a read can find it empty).
+- A reader returns every status of a `publishing` Schema, drafts included:
+  published-only is the rule for a public View. Scope, TTL and `requires` apply
+  as they do to every Store read.
+- Each query shape is converted and compiled once per Store, then reused for
+  every caller; only the values change between calls. Values are checked on
+  every call.
+
+Without generated types, `runtime.store.db` is a `StoreDb` of untyped readers.
+`readerOf(store.db, "tickets")` (from `@aotter/mantle`) returns the reader of a
+Schema by name, in any case.
+
 ## `select` and `write`
 
-For a query that needs no declared View, `select` takes a JSON query over one
+`select` is deprecated and is removed in the next alpha: use a reader. For a
+query that needs no declared View, `select` takes a JSON query over one
 Schema:
 
 ```ts
@@ -96,7 +144,8 @@ const { rows } = await ctx.store.select({
 });
 ```
 
-- `where`: `{ column: value }` is equality and sibling keys are AND; also
+- `where` (writes keep all of this; reads through a reader are AND only):
+  `{ column: value }` is equality and sibling keys are AND; also
   `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`, and
   `and`, `or`, `not`. `in` takes a list or `{ select, from, where }`.
 - `orderBy`: one column; `id` breaks ties. Default `{ updatedAt: "desc" }`.

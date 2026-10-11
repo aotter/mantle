@@ -38,3 +38,10 @@ MongoDB-flavoured operators (`deleteMany`, `$in`) were considered first and reje
 ## New folder rationale
 
 `usecase/store/` holds the Store facade that binds storage capability, the View executor and the id generator to one caller context; it has no storage or platform imports.
+
+## 2026-10-10 amendment — Schema readers (ADR-0043)
+
+[ADR-0043](0043-schema-readers.md) replaces `Store.select` with per-Schema readers (`store.db.<schema>.get | first | find`).
+
+- The read `where` grammar is **AND only** through readers: an equality, a comparison (`eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `like`, `in` and `notIn` over a list, `isNull`). `or`, `not`, `in` subqueries, joins and aggregates are written as Views. **Writes keep** `and`/`or`/`not` and subqueries.
+- **Consequences, the codemod:** the promise that the grammar slice ships with a `mantle-update` codemod is **withdrawn**. ADR-0032 had already dropped the bin; ADR-0043 adds none for the move from `select` to readers.

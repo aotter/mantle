@@ -384,3 +384,11 @@ storage schema or provider ownership changes. Application-owned/generated
 service files pass their chosen adapter to both Admin and staff MCP; the
 preset cannot invent object-storage credentials. Admin WebMCP continues to
 list manifest tools; its native media operations remain REST-backed.
+
+## 2026-10-10 amendment — Schema readers (ADR-0043)
+
+[ADR-0043](0043-schema-readers.md) changes the Store surface and the handler context.
+
+- **Decision 1:** the Store surface is `db` readers, `write`, `view`, `id` and `sweepExpired` (and `as` on `MantleStore`). `select` is removed; between PR A and PR B of #1432 it is `@deprecated` and works as before.
+- **Decision 7:** `HandlerContext` gains `db`, and `ctx.db === ctx.store.db`. `HandlerContext`, `HandlerFn` and `MantleHandlers` take a store type parameter (`HandlerContext<Env, S>`), so the generated `Handler` types `ctx.store` and `ctx.db` per plan while Core's untyped context stays assignable.
+- **Implementation status:** readers, the shape memo, `ctx.db` and the reader-name checks are implemented by #1432 PR A; the removal of `select` by PR B.
