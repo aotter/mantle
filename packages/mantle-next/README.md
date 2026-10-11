@@ -35,7 +35,7 @@ timestamp or a nonexistent day is refused with `SQL_TYPE` before the write.
 Every Schema also gets a typed **Store** (`stores[schema](db, caller)`: `findById`, `find` with AND-only
 `where` and keyset `cursor`, `first`, `count`, OCC `update(id, set, { lock })`). Its policy is Core's own
 lowering of `SELECT r.* FROM <schema> r` and of one `UPDATE`; it only appends `WHERE`, `ORDER BY`, `LIMIT`.
-`orderBy` takes `id` and indexed columns. See the [contract](../../docs/next/contract.md).
+`orderBy`: `id` and indexed columns. See the contract.
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain

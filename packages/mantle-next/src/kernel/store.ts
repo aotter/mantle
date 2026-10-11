@@ -56,6 +56,7 @@ export function createStore<H, R, F, S, O extends string>(d: Dialect, drv: Drive
     if (!c || !(c[3] & flag)) throw bad(`${name} is not ${what}`);
     return c;
   };
+  const ids: string[] = [];
   const sql = (c: Col) => `r.${d.ident(c[1])}`;
   /** A filter value as the engine stores it. */
   const value = (c: Col, v: unknown, cursor = false): unknown => {
@@ -128,7 +129,7 @@ export function createStore<H, R, F, S, O extends string>(d: Dialect, drv: Drive
         if (typeof id !== "string") throw bad("id is a string");
         const values = base();
         values.push(id);
-        return ((await run(`${desc.select}${source.from} WHERE r."id" = ${d.param(k + 1)} LIMIT 1`, values))[0] ?? null) as R | null;
+        return ((await run(ids[+(source === desc.trusted)] ??= `${desc.select}${source.from} WHERE r."id" = ${d.param(k + 1)} LIMIT 1`, values))[0] ?? null) as R | null;
       },
       find,
       async first(q = {}) { return (await find({ ...q, limit: 1 } as Query<F, O>)).rows[0] ?? null; },
