@@ -94,7 +94,7 @@ upgrade; that is rare and stated here.
   cache's "no request input grows it" invariant: the number of shapes is a function of the
   requests, which is why it is bounded. A column named in two cases (`Name`, `name`) is two shapes
   with one IR each; that costs a slot, not correctness.
-- Shapes compile on first use. The plan format and its fingerprint are unchanged.
+- Shapes compile on first use. ADR-0045 additionally permits finite generated get/default-first/default-find seeds, prepared on first use and retained in this same memo only after a successful run. Every value and caller check remains live; unsupported shapes keep this fallback. Generated artifacts are application code, outside the plan format.
 - `in` and `notIn` lists are padded to a power of two by repeating the last item, never past half
   the executor's bind limit (`padLen`), so lists of 5 to 8 share one statement.
 - On a hit each value is checked by the same predicate and codec the converter uses, and the bind

@@ -33,7 +33,7 @@ Plan-derived work runs, in this order of preference:
    policy rewrite, then the dialect's printer, for every View (modes: a public
    View in `public`, any other in `caller` and `trusted`) and every inline
    Procedure (modes `caller` and `trusted`, flavour "all", with the plan's
-   after-hook set as `returning`). It stores `plan.lowered`:
+   after-hook set as `returning`). ADR-0045 also lowers per-statement preRead and lock-version one auxiliaries, with canonical verification and runtime fallback. It stores `plan.lowered`:
    `{ mantle, dialect: { name, version, key }, views, procedures }`. Only
    printed text, bind recipes and paging metadata are stored, never ASTs, so
    the plan and boot hashing stay small. `plan.lowered` is optional and covered
@@ -43,14 +43,11 @@ Plan-derived work runs, in this order of preference:
    Admin's 500, MCP and handler limits. The page shape key is the cursor's NULL
    pattern and length, the search columns and the equality columns. The seeded
    shapes are no cursor, and a cursor whose every key is non-null (one per
-   View, from its key count). Every other shape (a NULL key in the cursor,
-   search and filters, Store JSON reads, #1432's readers) compiles on first use, as
-   before.
+   View, from its key count). ADR-0045 adds bounded common staff search/single-filter shapes, capped at 16 total per View mode, and finite reader seeds. Other shapes, including NULL cursors, retain first-use compilation.
 3. **One printer.** A dialect may expose `print(ast, schemas)`, the function its
    executor prints with. Generate and the runtime print through it, and Core
    imports no engine printer. A dialect without `print` gets no `lowered`.
-4. **Seeds, not a second path.** At boot the runtime seeds the compile cache
-   and the paged cache with entries that carry their printed text. The
+4. **Seeds, not a second path.** As amended by ADR-0045, boot validates all lowered metadata atomically but allocates no Compiled/Paged descriptors. On an ordinary named program cache miss, only that program and mode seed the existing compile and paged caches. The
    executors run that text (`StoreStatement.printed`). The policy AST of a
    seeded entry is a lazy getter that compiles through the ordinary path only
    when something reads it. A seeded entry produces SQL and binds byte-identical
@@ -109,8 +106,7 @@ Plan-derived work runs, in this order of preference:
   --check` in CI (it compares the regenerated `plan.json` byte for byte) and,
   in this repository, a test that runs `generate --check` and `verifyPlan` on the
   committed reference-service plan.
-- Per-isolate cost moves from compile to cache seeding: allocation proportional
-  to the number of lowered programs, no AST walks. Seeds live in the compile
+- Per-isolate descriptor allocation follows programs and modes actually used, rather than every lowered entry. Metadata validation remains at boot, with no policy AST walks. Seeds live in the compile
   cache, which is keyed by the plan's own objects and the dialect object, so
   they serve the one storage adapter whose dialect object the runtime booted
   with, not a second adapter on the same plan.
