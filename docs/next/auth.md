@@ -17,8 +17,10 @@ import { emailOTP, jwt } from "better-auth/plugins";
 import { admin } from "better-auth/plugins/admin";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { d1Adapter } from "@aotter/mantle-next/auth/adapter";
+import type { BetterAuthOptions } from "better-auth";
 
-export const createAuth = (env: Env) => betterAuth({
+// Plain options: `mantle-next generate --auth` reads them without constructing Better Auth.
+export const authOptions = (env: Env) => ({
   database: d1Adapter(env.DB),
   secret: env.AUTH_SECRET,
   // Include the auth path: the resource client checks a token's issuer against baseURL (#1462).
@@ -32,7 +34,8 @@ export const createAuth = (env: Env) => betterAuth({
     // MCP clients get access tokens for your resource; pass the same value as resolveCaller's audience.
     oauthProvider({ loginPage: "/login", consentPage: "/consent", resources: [`${env.ORIGIN}/mcp`] }),
   ],
-});
+}) satisfies BetterAuthOptions;
+export const createAuth = (env: Env) => betterAuth(authOptions(env));
 ```
 
 Anything Mantle 0.2's `createMantleAuth` decided for you (first user becomes owner, invitations, cookie prefix) is now
@@ -89,6 +92,6 @@ bun build src/worker.ts --splitting --format esm --target browser --minify --out
 
 ## Schema
 
-`mantle-next generate <target> <out> <manifest>… --auth ./auth.ts` imports the module's `auth` export (a
-`betterAuth()` instance) or calls its `createAuth` with an empty env, and appends Better Auth's tables to `schema.sql`. Nothing runs DDL at runtime; migrations
+`mantle-next generate <target> <out> <manifest>… --auth ./auth.ts` calls the module's `authOptions` with an empty env
+(the tables depend on plugins and options, not env values; nothing is constructed) and appends Better Auth's tables to `schema.sql`. Nothing runs DDL at runtime; migrations
 are yours (#1463).

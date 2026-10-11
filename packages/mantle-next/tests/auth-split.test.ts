@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { generateFromSources } from "../src/infrastructure/generate.js";
-import { auth } from "./apps/auth/auth.js";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { authOptions } from "./apps/auth/auth.js";
 
 test("the entry module never contains Better Auth: it is split out behind import()", async () => {
   const build = await Bun.build({ entrypoints: [new URL("apps/auth/worker.ts", import.meta.url).pathname], target: "browser", format: "esm", splitting: true, minify: true });
@@ -31,7 +35,7 @@ spec:
   indexes: [[title]]
   schema: {type: object, required: [title], properties: {title: {type: string}}}
 `;
-  const generated = await generateFromSources({ target: "cloudflare-d1", sources: { sources: [{ sourceId: "n.yaml", text: source }] }, auth: auth.options });
+  const generated = await generateFromSources({ target: "cloudflare-d1", sources: { sources: [{ sourceId: "n.yaml", text: source }] }, auth: authOptions({ DB: undefined as never, ORIGIN: "https://app.example" }) });
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const sql = generated.files["schema.sql"]!;
   for (const table of ["user", "session", "verification", "jwks", "oauthClient"]) expect(sql).toContain(`CREATE TABLE IF NOT EXISTS "${table}"`);
@@ -46,4 +50,15 @@ test("field index names match Better Auth's own rule, including the hashed long 
   const { fieldIndexName } = await import("../src/auth/schema.js");
   for (const [table, column] of [["session", "userId"], ["oauthAccessToken", "a".repeat(80)], ["t".repeat(70), "c"]] as const)
     expect(fieldIndexName(table, column)).toBe(getDatabaseFieldIndexName(table, column, false));
+});
+
+test("CLI --auth reads authOptions(env) without constructing Better Auth", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "next-auth-cli-"));
+  try {
+    const manifest = join(dir, "m.yaml");
+    await writeFile(manifest, "apiVersion: cms.mantle.aotter.net/v2\nkind: Schema\nmetadata: {name: notes}\nspec:\n  title: Notes\n  lifecycle: operational\n  indexes: [[title]]\n  schema: {type: object, required: [title], properties: {title: {type: string}}}\n");
+    const cli = new URL("../src/infrastructure/cli.ts", import.meta.url).pathname;
+    execFileSync(process.execPath, [cli, "cloudflare-d1", join(dir, "out"), manifest, "--auth", new URL("apps/auth/auth.ts", import.meta.url).pathname], { stdio: "pipe" });
+    expect(await readFile(join(dir, "out/schema.sql"), "utf8")).toContain('CREATE TABLE IF NOT EXISTS "oauthClient"');
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

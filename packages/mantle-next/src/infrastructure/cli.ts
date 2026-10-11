@@ -14,10 +14,11 @@ if (!targets.includes(target as Target) || !destination || !paths.length) {
   process.exitCode = 1;
 } else {
   const sources = await Promise.all(paths.map(async (path) => ({ sourceId: path, text: await readFile(path, "utf8") })));
-  // `auth` (a betterAuth() instance) or `createAuth(env)`: the tables depend on plugins and options, never on env values.
+  // `authOptions(env)`: plain options, so nothing is constructed (betterAuth() itself can touch the database). The tables
+  // depend on plugins and options, never on env values, so an empty env is passed. An `auth` instance is accepted too.
   const loaded = authModule ? await import(pathToFileURL(resolve(authModule)).href) : undefined;
-  const auth = loaded && (loaded.auth ?? loaded.createAuth?.(new Proxy({}, { get: () => undefined })))?.options;
-  if (authModule && !auth) throw new Error(`${authModule} must export \`auth\` (a betterAuth() instance) or \`createAuth(env)\`.`);
+  const auth = loaded && (loaded.authOptions?.(new Proxy({}, { get: () => undefined })) ?? loaded.auth?.options);
+  if (authModule && !auth) throw new Error(`${authModule} must export \`authOptions(env)\` (or \`auth\`, a betterAuth() instance).`);
   const result = await generateFromSources({ target: target as Target, sources: { sources }, auth });
   if (!result.ok) {
     console.error(JSON.stringify(result.diagnostics, null, 2));
