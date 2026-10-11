@@ -1,16 +1,25 @@
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { generateFromSources } from "./generate.js";
 import type { Target } from "../domain/model.js";
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
 const args = process.argv.slice(2);
+// --auth <module>: the module exporting the application's `auth` (a betterAuth() instance); its tables join schema.sql.
+const at = args.indexOf("--auth");
+const authModule = at >= 0 ? args.splice(at, 2)[1] : undefined;
 const [target, destination, ...paths] = args;
 if (!targets.includes(target as Target) || !destination || !paths.length) {
-  console.error("Usage: mantle-next <bun-sqlite|bun-postgres|cloudflare-d1|cloudflare-postgres> <output-directory> <manifest>...");
+  console.error("Usage: mantle-next <bun-sqlite|bun-postgres|cloudflare-d1|cloudflare-postgres> <output-directory> <manifest>... [--auth <module>]");
   process.exitCode = 1;
 } else {
   const sources = await Promise.all(paths.map(async (path) => ({ sourceId: path, text: await readFile(path, "utf8") })));
-  const result = await generateFromSources({ target: target as Target, sources: { sources } });
+  // `authOptions(env)`: plain options, so nothing is constructed (betterAuth() itself can touch the database). The tables
+  // depend on plugins and options, never on env values, so an empty env is passed. An `auth` instance is accepted too.
+  const loaded = authModule ? await import(pathToFileURL(resolve(authModule)).href) : undefined;
+  const auth = loaded && (loaded.authOptions?.(new Proxy({}, { get: () => undefined })) ?? loaded.auth?.options);
+  if (authModule && !auth) throw new Error(`${authModule} must export \`authOptions(env)\` (or \`auth\`, a betterAuth() instance).`);
+  const result = await generateFromSources({ target: target as Target, sources: { sources }, auth });
   if (!result.ok) {
     console.error(JSON.stringify(result.diagnostics, null, 2));
     process.exitCode = 1;

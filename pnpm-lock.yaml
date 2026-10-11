@@ -133,6 +133,15 @@ importers:
       '@aotter/mantle':
         specifier: workspace:*
         version: link:../mantle
+      '@better-auth/core':
+        specifier: 'catalog:'
+        version: 1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.28.17)(nanostores@1.3.0)
+      '@better-auth/oauth-provider':
+        specifier: 'catalog:'
+        version: 1.7.7(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.7(pg@8.23.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.3(@types/node@26.1.1)(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1))))(better-call@1.4.0(zod@4.6.5))
+      '@better-auth/test-utils':
+        specifier: 1.7.7
+        version: 1.7.7(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.28.17)(nanostores@1.3.0))(better-auth@1.7.7(pg@8.23.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.3(@types/node@26.1.1)(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1))))(vitest@5.0.3(@types/node@26.1.1)(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1)))
       '@cloudflare/workers-types':
         specifier: ^5.20261008.1
         version: 5.20261008.1
@@ -142,6 +151,9 @@ importers:
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
+      better-auth:
+        specifier: 'catalog:'
+        version: 1.7.7(pg@8.23.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.3(@types/node@26.1.1)(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1)))
       bun-types:
         specifier: 1.3.14
         version: 1.3.14
@@ -484,6 +496,13 @@ packages:
       '@better-auth/core': ^1.7.7
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.2
+
+  '@better-auth/test-utils@1.7.7':
+    resolution: {integrity: sha512-110vhQ9r/va7h/4ABIcejoy+p/lwBgoyEI8d4N1RRZ8Zh4T8IiDnGsOCj/VUVP3WBAy2vIZcd3rajZtjkg9yAw==}
+    peerDependencies:
+      '@better-auth/core': ^1.7.7
+      better-auth: ^1.7.7
+      vitest: ^4.0.0 || ^5.0.0
 
   '@better-auth/utils@0.4.2':
     resolution: {integrity: sha512-AUxrvu+HaaODsUyzDxFgwd/8RZ1yZaYo42LXKSrU2oGgR38pS1ij8nqQKNgtTWoYGpNevNXtCfgTy6loHveW9A==}
@@ -4589,6 +4608,12 @@ snapshots:
       '@better-auth/core': 1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.28.17)(nanostores@1.3.0)
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.2
+
+  '@better-auth/test-utils@1.7.7(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.28.17)(nanostores@1.3.0))(better-auth@1.7.7(pg@8.23.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.3(@types/node@26.1.1)(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1))))(vitest@5.0.3(@types/node@26.1.1)(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1)))':
+    dependencies:
+      '@better-auth/core': 1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.28.17)(nanostores@1.3.0)
+      better-auth: 1.7.7(pg@8.23.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.3(@types/node@26.1.1)(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1)))
+      vitest: 5.0.3(@types/node@26.1.1)(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1))
 
   '@better-auth/utils@0.4.2':
     dependencies:

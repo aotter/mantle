@@ -12,8 +12,10 @@ import { initialStorageSql as sqliteSchema } from "../../../mantle/dist/d1/stora
 import { initialStorageSql as postgresSchema } from "../../../mantle/dist/postgres/storage.js";
 import { generate } from "../usecase/generate.js";
 import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/model.js";
+import type { BetterAuthOptions } from "better-auth/types";
+import { authSchemaSql } from "../auth/schema.js";
 
-export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet }): Promise<GenerateResult> {
+export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; /** The application's Better Auth options: their tables join schema.sql. */ readonly auth?: BetterAuthOptions }): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");
   const compiled = await compilePlan(request.sources, postgres ? postgresCompiler : sqliteCompiler);
   if (!compiled.ok) return { ok: false, diagnostics: compiled.diagnostics.map(({ code, path, message }) => ({ code, path, message })) };
@@ -49,6 +51,6 @@ export async function generateFromSources(request: { readonly target: Target; re
   if (refusals.length) return { ok: false, diagnostics: refusals };
   const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys });
   if (!result.ok) return result;
-  const ddl = (postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas);
+  const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   return { ok: true, files: { ...result.files, "schema.sql": ddl.join(";\n\n") + ";\n" } };
 }
