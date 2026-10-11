@@ -34,7 +34,7 @@ export function lowerReaderSeeds(schemas: StoreSchemas, dialect: MantleDialect):
       const program = { inputs: json.inputs, ir: [s.ir] };
       const lowered = Object.fromEntries((["caller", "trusted"] as const).flatMap(mode => {
         const v = lowerView({ schemas, dialect }, program, mode);
-        return v ? [[mode, v]] : [];
+        return v ? [[mode, kind === "get" ? { ...v, paged: {} } : v]] : [];
       }));
       // A refused mode must use the ordinary path, rather than a partial generated shape.
       if (!Object.hasOwn(lowered, "caller") || !Object.hasOwn(lowered, "trusted")) continue;

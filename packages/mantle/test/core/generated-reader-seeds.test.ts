@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { sqliteStorage } from "../../src/d1/index.js";
 import { createStore } from "../../src/core/store/createStore.js";
 import { lowerReaderSeeds } from "../../src/core/store/readerSeeds.js";
+import { emitReaderSeeds } from "../../src/cli/emitReaderSeeds.js";
+import ts from "typescript";
 import { StoreJson } from "../../src/core/store/json.js";
 import { encodeCursor } from "../../src/core/store/cursor.js";
 import { readerMemoSize } from "../../src/core/store/readers.js";
@@ -24,10 +26,19 @@ async function open() {
 describe("generated bounded reader seeds", () => {
   afterEach(() => vi.restoreAllMocks());
   it("has three finite shapes per schema; first/find share their canonical artifact", async () => {
-    const { readerSeeds } = await open();
+    const { readerSeeds, dialect } = await open();
     expect(Object.keys(readerSeeds)).toHaveLength(Object.keys(schemas).length * 3);
     for (const key of Object.keys(schemas)) {
       const entries = Object.entries(readerSeeds).filter(([name]) => name.startsWith(`${key}\0`));
+      expect(entries[1][1]).toBe(entries[2][1]);
+      for (const lowered of Object.values(entries[0][1].lowered)) expect(lowered.paged).toEqual({});
+    }
+    const source = emitReaderSeeds({ schemas }, dialect);
+    const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+    const exports = {};
+    new Function("exports", js)(exports);
+    for (const key of Object.keys(schemas)) {
+      const entries = Object.entries(exports.readerSeeds).filter(([name]) => name.startsWith(`${key}\0`));
       expect(entries[1][1]).toBe(entries[2][1]);
     }
   });
