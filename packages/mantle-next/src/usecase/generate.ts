@@ -93,11 +93,17 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     const keys = Object.hasOwn(viewKeys, name) ? viewKeys[name] : undefined;
     if (!keys || new Set(keys).size !== keys.length) { refuse(path, "Dynamic or repeated View outputs need an explicit generated row contract."); continue; }
     const output: string[] = [], fields: string[] = [];
+    const outputNames = new Set<string>();
     for (const [columnIndex, key] of keys.entries()) {
       const field = view.columns && Object.hasOwn(view.columns, key) ? view.columns[key] : undefined;
       const schema = field && plan.schemas[field.schema];
       const type = schema && (schema.fields[field!.field] ?? (["created_at", "updated_at"].includes(field!.field) ? "timestamptz" : undefined));
       const out = schema && key === field!.field ? schema.names[field!.field] ?? key : key;
+      if (outputNames.has(out)) {
+        refuse(path, `Projected View output '${out}' repeats after authored-name mapping.`);
+        continue;
+      }
+      outputNames.add(out);
       let expression = isSqlite ? `row[${q(key)}]` : `decodeField(result.fields[${columnIndex}]!.dataTypeID, row[${q(key)}] as string | null, result.fields[${columnIndex}]!.dataTypeModifier)`;
       if (type === "geo") refuse(path, "Native geo projection is not implemented.");
       if (isSqlite) {
