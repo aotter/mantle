@@ -8,6 +8,14 @@ The first slice generates typed SQL View and inline SQL Procedure functions for 
 
 There is no optional application composition in this slice: no generated Auth resolver, REST/MCP/Admin routes, UI, ref-handler dispatch or lifecycle/schedule wiring. Passing a trusted Caller from application code tests SQL policy; it is not proof of end-to-end authentication. Four target generators are implemented in source; native test results must separately identify the exact generated artifact and targets actually exercised. This document does not certify unrun tests or performance.
 
+The revised [query responsibility decision](contract.md#revised-query-responsibility-decision-2026-10-11)
+makes bare typed queries an application-trusted native API. Input/output validation,
+legacy scalar conversion and safe transport errors belong to selected boundary
+entries. Existing implementations below describe the older checked slice until
+relocated; they do not make those checks requirements of the bare query. This is
+an explicit API responsibility change, not completed implementation or permission
+to omit validation at external application boundaries.
+
 Statuses below describe implementation scope, not a passed compatibility gate:
 
 - **Slice:** present in the initial implementation; acceptance remains conditional on semantic tests and review fixes.

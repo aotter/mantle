@@ -1,5 +1,9 @@
 # Acceptance goals
 
+- [ ] Revised default query: native parameter/result/error behavior, without validators, JSON scans or generic row/error normalization.
+- [ ] Selected boundary entries preserve external validation/defaults and required transport contracts without entering bare query bundles.
+- [ ] Native controls match the revised query contract; separate controls cover selected boundaries.
+
 - [x] Generate actual v2 manifests using the existing parser/linker/policy/printers.
 - [x] All four targets generate typed functions with literal SQL and native calls.
 - [x] Generated request bundle has no old Mantle engine/compiler dependency.

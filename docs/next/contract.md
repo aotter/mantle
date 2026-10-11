@@ -41,14 +41,54 @@ and dialect printers as build dependencies. They must never enter the request
 bundle. Each dialect retains its own native behavior; cross-DB equivalence is
 not promised.
 
-The request code is a generated function plus necessary contract checks.
-The small contract harness owns only boundary validation and scalar encoding;
-it must not own resource scheduling or interpret authored query structures.
-Checks for facts already known during generation belong in generation. Validators
-are emitted for the schema and initialized on use, not rebuilt per request.
-When Auth composition is implemented, it resolves a trusted Caller once at the application entry.
-The first slice accepts an application-supplied Caller and does not verify credentials. SQL binds the
-caller subject directly; a system caller is application-owned and never wire input.
+### Revised query responsibility decision (2026-10-11)
+
+Generated query code must have the same execution work as independently written
+native code for the same declared SQL policy and transaction. A helper is not
+required merely because the old runtime owned it. The user explicitly approved
+moving validation to the application boundary and reconsidering old query-time
+checks; preserving the old internal execution contract is not the goal.
+
+The default typed query accepts application-validated parameters and a verified
+Caller, binds literal SQL using the official driver, and returns that target's
+native result types. Generated TypeScript is a compile-time contract, not a
+validator for untrusted data. The application must validate external input before
+calling it. Generate-time schema/SQL diagnostics remain mandatory.
+
+Optional generated boundary entries own untrusted-input validation and defaults,
+transport-safe error formatting, and compatibility conversions where selected.
+These entries must not be dependencies of a bare query import. The bare query
+must not recursively scan JSON, construct validators, revalidate known database
+rows, normalize errors across databases, or require universal row decoding.
+JSON parsing at a transport cannot produce cycles; direct in-process values are
+owned by their application caller. Input bounds still belong at the actual
+external boundary. Arbitrary JSON defaults and computed result types must be
+handled explicitly by that boundary rather than assumed from TypeScript.
+
+Driver-native PostgreSQL types and SQLite/D1 types need not match. Legacy scalar
+representations may be offered by an explicit compatibility entry; they do not
+justify overriding every PG type parser or adding a generic decoder to the bare
+query. Authored output names should be emitted into SQL where valid, avoiding
+an extra per-row projection merely to repair names already known at generation.
+
+Declared authorization, ownership/TTL SQL policy, explicit OCC and atomic writes
+remain required. Generate them as the native application would implement them.
+Transaction rollback and uncertain COMMIT handling must still preserve data-loss
+protection and client disposal responsibility; native errors must not be exposed
+to HTTP users without application-boundary handling. Removing generic error
+normalization does not authorize dropping transaction outcome evidence.
+
+**Implementation status:** current generated functions still validate inputs,
+validate Procedure output, classify database failures and apply scalar codecs.
+They do not yet implement this revised default boundary. These checks must be
+relocated or removed before claiming the default query equivalent to native.
+The previous size/latency measurements describe that older generated artifact;
+they are not acceptance evidence for the revised design.
+
+When Auth composition is implemented, it resolves a trusted Caller once at the
+application entry. The first slice accepts an application-supplied Caller and
+does not verify credentials. SQL binds the caller subject directly; a system
+caller is application-owned and never wire input.
 
 Application handlers own business rules and before-hook side effects. Declared
 hook ordering and veto behavior must be preserved when implemented; no sandbox,
