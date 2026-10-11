@@ -9,7 +9,7 @@ import { firstZodIssueAsJsonPointer, jsonSchemaToZod, safeParseJson, NATIVE_OUTP
 import type { Caller } from "../caller.js";
 import type { InvocationCause } from "../invocation.js";
 import type { CallerStore, MantleStore, StoreExecutor, StoreRow, StoreSelectResult, StoreViewOptions, StoreWriteResult } from "../store.js";
-import type { MantleDialect } from "../dialect.js";
+import type { MantleDialect, StoreCodec } from "../dialect.js";
 import { sqlInput, type BindContext, type Mode } from "../sql/compile.js";
 import { num, op, ref, table } from "../sql/ast.js";
 import { VIEW_PAGE_SIZE, runProcedure, runView, type LifecycleHooks, type Program, type RunEnv, type ViewMatch } from "../sql/run.js";
@@ -33,6 +33,8 @@ export interface StoreView {
   readonly guard?: string;
   /** Outputs that read a Schema field unchanged: decoded and named as `select` returns them. */
   readonly columns?: Readonly<Record<string, { readonly schema: string; readonly field: string }>>;
+  /** Generated projection/decoding for a statically named View; dynamic outputs retain the generic path. */
+  readonly row?: (row: StoreRow, codec: StoreCodec) => StoreRow;
   /** `uiSchema.list.searchFields` and `filterFields`: the outputs `search` and `filters` may match (ADR-0032 decision 5). */
   readonly searchFields?: readonly string[];
   readonly filterFields?: readonly string[];
@@ -218,13 +220,13 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent: InvocationCau
         const c = v.columns?.[column] ?? v.columns?.[column.toLowerCase()];
         const def = c && deps.schemas[c.schema];
         return def ? deps.dialect.codec.encode((Object.hasOwn(def.fields, c.field) ? def.fields[c.field] : NATIVE_OUTPUT_TYPES[c.field])!, value) : value;
-      }) });
+      }), ...(v.row ? { row: (row: StoreRow) => v.row!(row, deps.dialect.codec) } : {}) });
       const decodeView = (row: StoreRow) => Object.fromEntries(Object.entries(row).map(([k, value]) => {
         const c = v.columns && Object.hasOwn(v.columns, k) ? v.columns[k]! : undefined;
         const def = c && deps.schemas[c.schema];
         return def ? [k === c.field ? def.names?.[c.field] ?? k : k, deps.dialect.codec.decode((Object.hasOwn(def.fields, c.field) ? def.fields[c.field] : NATIVE_OUTPUT_TYPES[c.field])!, value)] : [k, value];
       }));
-      return { rows: (v.columns ? page.rows.map(decodeView) : page.rows) as never, ...(page.next ? { nextCursor: encodeCursor(`view:${name}`, page.next) } : {}) };
+      return { rows: (v.row ? page.rows : v.columns ? page.rows.map(decodeView) : page.rows) as never, ...(page.next ? { nextCursor: encodeCursor(`view:${name}`, page.next) } : {}) };
     }),
 
     id: deps.newId,
