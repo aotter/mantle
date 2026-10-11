@@ -3,3 +3,5 @@
  * rendering and codec, FTS5 and R*Tree lowering, and trigger-based convergence, over any SQLite-family `DatabaseDriver`.
  */
 export { sqliteStorage } from "./adapter.js";
+/** Scalar decoders used by generated View row functions. */
+export { decodeJson, decodeNumeric, decodeDate, decodeTimestamptz } from "./codec.js";

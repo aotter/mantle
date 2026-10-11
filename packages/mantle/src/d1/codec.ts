@@ -71,7 +71,7 @@ export function encodeDate(v: string | Date): number {
 export const decodeDate = (days: number) => new Date(days * 86_400_000).toISOString().slice(0, 10);
 
 /** A json column's text as its value. Text that is not JSON (a bare string a SQL literal wrote) reads back as that string, never a throw. */
-function decodeJson(v: unknown): unknown {
+export function decodeJson(v: unknown): unknown {
   if (typeof v !== 'string') return v;
   try { return JSON.parse(v); } catch { return v; }
 }
