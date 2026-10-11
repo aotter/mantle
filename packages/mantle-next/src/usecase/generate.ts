@@ -48,14 +48,18 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     }
     return `(value = ${value}, value == null ? null : ${expression})`;
   };
-  const bind = (s: LoweredStatement, path: string) => `${isSqlite ? "" : "["}${s.binds.map(b => {
+  const bind = (s: LoweredStatement, path: string, fieldNames: readonly string[]) => `${isSqlite ? "" : "["}${s.binds.map(b => {
     switch (b.k) {
       case "uid": return "uid";
       case "role": return "role";
       case "now": return encode("timestamptz", "now", path);
       case "cutoff": return encode("timestamptz", `now - ${q(b.seconds)} * 1_000_000`, path);
       case "const": return q(b.value) ?? "undefined";
-      case "input": return encode(String(b.type), `input[${q(b.name)}]`, path);
+      case "input": {
+        const field = fieldNames.find(name => name.toLowerCase() === String(b.name).toLowerCase());
+        if (field === undefined) refuse(path, `Input bind '${b.name}' has no declared field.`);
+        return encode(String(b.type), `given[${q(field ?? b.name)}]`, path);
+      }
       default: refuse(path, `Bind recipe '${b.k}' needs an explicit native implementation.`); return "undefined";
     }
   }).join(", ")}${isSqlite ? "" : "]"}`;
@@ -76,12 +80,16 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
   };
   const usesInput = (statements: readonly LoweredStatement[]) => statements.some(s => s.binds.some(b => b.k === "input"));
   const checkedInput = (validator: string, path: string, statements: readonly LoweredStatement[]) => `  ${usesInput(statements) ? "const given = " : ""}validate(${validator}, raw, ${q(path + "/input")})${usesInput(statements) ? " as Record<string, unknown>" : ""};`;
-  const context = (statements: readonly LoweredStatement[], fields: readonly string[], decodeValue = false) => [
+  const inputFields = (schema: JsonSchema | undefined, path: string) => {
+    const fields = Object.keys(schema?.properties ?? {});
+    if (new Set(fields.map(field => field.toLowerCase())).size !== fields.length) refuse(path, "Input properties must have unique case-insensitive names.");
+    return fields;
+  };
+  const context = (statements: readonly LoweredStatement[]) => [
     ...(statements.some(s => s.binds.some(b => b.k === "uid")) ? ['  const uid = caller.kind === "user" ? caller.subject : caller.kind === "system" ? `system:${caller.reason}` : null;'] : []),
     ...(statements.some(s => s.binds.some(b => b.k === "role")) ? ['  const role = caller.kind === "user" ? caller.role : null;'] : []),
     ...(statements.some(s => s.binds.some(b => b.k === "now" || b.k === "cutoff")) ? ["  const now = Date.now() * 1000;"] : []),
-    ...(decodeValue || statements.some(s => s.binds.some(b => b.k === "input" || b.k === "now" || b.k === "cutoff")) ? ["  let value: any;"] : []),
-    ...(usesInput(statements) ? [`  const input = { ${fields.map(key => `[${q(key.toLowerCase())}]: given[${q(key)}]`).join(", ")} };`] : []),
+    ...(statements.some(s => s.binds.some(b => b.k === "input" || b.k === "now" || b.k === "cutoff")) ? ["  let value: any;"] : []),
   ];
   const read = (sql: string, binds: string): string => target === "bun-sqlite" ? `db.query(${q(sql)}).all(${binds})` : target === "cloudflare-d1" ? `(await db.prepare(${q(sql)}).bind(${binds}).all()).results` : `await db.query({ text: ${q(sql)}, values: ${binds}, types: rawTypes })`;
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
@@ -116,11 +124,12 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
         }
       }
       output.push(`readonly ${q(out)}: ${type ? `${!isSqlite && ["integer", "int8"].includes(type) ? "number | string" : scalarType(type)} | null` : "unknown"};`);
-      fields.push(`[${q(out)}]: ${expression}`);
+      fields.push(`${out === "__proto__" ? `[${q(out)}]` : q(out)}: ${expression}`);
     }
     declarations.push(`export type View${index}Input = ${typeOf(view.input ?? { type: "object", additionalProperties: false })};`, `export type View${index}Row = { ${output.join(" ")} };`);
     const validator = validation(`${fn}Input`, view.input, path + "/input");
-    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), checkedInput(validator, path, [c, ...(trusted ? [trusted] : [])]), ...context([c, ...(trusted ? [trusted] : [])], Object.keys(view.input?.properties ?? {}), fields.some(field => field.includes("value ="))), "  try {", `  const ${isSqlite ? "rows" : "result"} = (${mode === "caller" ? `caller.kind === "system" ? ${read(trusted!.sql, bind(trusted!, path))} : ` : ""}${read(c.sql, bind(c, path))})${isSqlite ? " as Record<string, unknown>[]" : ""};`, `  return ${isSqlite ? "rows" : "result.rows"}.map(row => ({ ${fields.join(", ")} })) as View${index}Row[];`, `  } catch (error) { throw databaseError(error, "read", ${q(path)}, ${q(isSqlite ? "sqlite" : "postgres")}); }`, "}");
+    const fieldNames = inputFields(view.input, path + "/input");
+    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), checkedInput(validator, path, [c, ...(trusted ? [trusted] : [])]), ...context([c, ...(trusted ? [trusted] : [])]), "  try {", `  const ${isSqlite ? "rows" : "result"} = (${mode === "caller" ? `caller.kind === "system" ? ${read(trusted!.sql, bind(trusted!, path, fieldNames))} : ` : ""}${read(c.sql, bind(c, path, fieldNames))})${isSqlite ? " as Record<string, unknown>[]" : ""};`, `  return ${isSqlite ? "rows" : "result.rows"}.map(row => ${fields.some(field => field.includes("value =")) ? `{ let value: any; return { ${fields.join(", ")} }; }` : `({ ${fields.join(", ")} })`}) as View${index}Row[];`, `  } catch (error) { throw databaseError(error, "read", ${q(path)}, ${q(isSqlite ? "sqlite" : "postgres")}); }`, "}");
     views.push(`[${q(name)}]: ${fn}`);
   }
   for (const [index, [name, procedure]] of Object.entries(plan.procedures).sort().entries()) {
@@ -131,20 +140,21 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     if (modes.caller.some(s => s.hooked || s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing and lifecycle hooks require explicit native execution.");
     declarations.push(`export type Procedure${index}Input = ${typeOf(procedure.input)};`, `export type Procedure${index}Output = ${typeOf(procedure.output)};`);
     const inputValidator = validation(`${fn}Input`, procedure.input, path + "/input"), outputValidator = validation(`${fn}Output`, procedure.output, path + "/output");
-    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Procedure${index}Output> {`, ...auth(procedure.requires, path), checkedInput(inputValidator, path, [...modes.caller, ...modes.trusted]), ...context([...modes.caller, ...modes.trusted], Object.keys(procedure.input.properties ?? {})));
+    const fieldNames = inputFields(procedure.input, path + "/input");
+    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Procedure${index}Output> {`, ...auth(procedure.requires, path), checkedInput(inputValidator, path, [...modes.caller, ...modes.trusted]), ...context([...modes.caller, ...modes.trusted]));
     const branch = (statements: readonly LoweredStatement[]): string[] => {
       if (target === "cloudflare-d1") {
         const batch: string[] = [], rows: string[] = [];
         for (const [i, statement] of statements.entries()) {
           rows.push(`batch[${batch.length}]!.results`);
-          batch.push(`db.prepare(${q(statement.sql)}).bind(${bind(statement, path)})`);
+          batch.push(`db.prepare(${q(statement.sql)}).bind(${bind(statement, path, fieldNames)})`);
           if (statement.kind === "row") batch.push(`db.prepare(${q(`INSERT INTO _mantle_assert (op,ok) SELECT ${i}, changes() = 1`)})`);
         }
         return [`    const batch = await db.batch([${batch.join(", ")}]);`, `    return [${rows.join(", ")}];`];
       }
       const lines = ["    const results: unknown[][] = [];"];
       for (const s of statements) {
-        const binds = bind(s, path);
+        const binds = bind(s, path, fieldNames);
         if (target === "bun-sqlite") {
           if (s.kind === "read" || s.returns) {
             lines.push(`    const rows${lines.length} = ${read(s.sql, binds)};`);

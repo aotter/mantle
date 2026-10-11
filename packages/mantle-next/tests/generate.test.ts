@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { writeFile, unlink } from "node:fs/promises";
 import { z } from "zod";
 import { emitValidator } from "../src/domain/validation.js";
+import { generateFromSources } from "../src/infrastructure/generate.js";
+import { Database } from "bun:sqlite";
 import { compilePlan, viewOutputs } from "@aotter/mantle/spec";
 import * as postgresCompile from "@aotter/mantle/postgres/compile";
 import { generate } from "../src/usecase/generate.js";
@@ -194,9 +196,10 @@ test("emission removes unused input locals and binds directly for SQLite hosts",
     else if (target === "cloudflare-d1") { expect(view).toContain(".bind(uid)"); expect(view).toContain(".bind()"); }
     else expect(view).toContain("values: [uid]");
     expect(text).not.toContain("...[");
-    // Procedures still use validated, case-normalized inputs and scalar bind temporaries.
+    // Procedures bind checked authored fields directly and retain scalar bind temporaries.
     expect(text).toContain("const given = validate(procedure0Input");
-    expect(text).toContain('const input = { ["title"]: given["title"] }');
+    expect(text).not.toContain("const input =");
+    expect(text).toContain('value = given["title"]');
     expect(text).toContain("let value: any");
   }
 });
@@ -210,4 +213,53 @@ test("PostgreSQL deployment requirements are explicit data without per-call SET"
     expect(text).not.toContain('db.query("SET');
     expect(text).not.toContain("ALTER ROLE");
   }
+});
+
+test("row emission uses static keys, row-local decoder scratch and safe __proto__", async () => {
+  const booleanSource = source.replaceAll('title: {type: string}', 'title: {type: boolean}');
+  const generated = generate(await canonical("bun-sqlite", booleanSource));
+  if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+  const text = generated.files["generated.ts"]!;
+  const view = text.slice(text.indexOf("async function view0"), text.indexOf("export type Procedure0Input"));
+  expect(view).toContain('.map(row => { let value: any; return { "id":');
+  expect(view).toContain('"title": (value = row["title"]');
+  expect(view.slice(0,view.indexOf(".map(row"))).not.toContain("let value");
+  expect(text.slice(text.indexOf("async function procedure0"))).toContain("let value: any");
+  const dangerous = generate(await canonical("bun-sqlite", source.replace('SELECT id, title FROM notes', 'SELECT id, title AS "__proto__" FROM notes')));
+  if (!dangerous.ok) throw Error(JSON.stringify(dangerous.diagnostics));
+  expect(dangerous.files["generated.ts"]).toContain('["__proto__"]: row["__proto__"]');
+  const file = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
+  await writeFile(file,dangerous.files["generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"'));
+  try {
+    const app = await import(file.href);
+    const row = Object.defineProperty({id:"test"},"__proto__",{value:{unsafe:true},enumerable:true});
+    const [output] = await app.views["notes-list"]({query:()=>({all:()=>[row]})},{kind:"anonymous"},{});
+    expect(Object.hasOwn(output,"__proto__")).toBe(true);
+    expect(output.__proto__).toEqual({unsafe:true});
+    expect(Object.getPrototypeOf(output)).toBe(Object.prototype);
+  } finally { await unlink(file); }
+});
+
+test("native binds directly use authored input names and checked defaults", async () => {
+  const text = source.replace('input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}', 'input: {type: object, properties: {NoteTitle: {type: string, nullable: true, default: Generated default}}, additionalProperties: false}').replace('VALUES (input.title)', "VALUES (coalesce(input.noteTitle, input.noteTitle, ''Nullable fallback''))");
+  const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"default.yaml",text}]}});
+  if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+  expect(generated.files["generated.ts"]).toContain('value = given["NoteTitle"]');
+  expect(generated.files["generated.ts"]).not.toContain("const input =");
+  const file = new URL(`.generated-${crypto.randomUUID()}.ts`,import.meta.url);
+  await writeFile(file,generated.files["generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"'));
+  const db = new Database(":memory:");
+  const caller = {kind:"user",subject:"test-owner",role:null,scopes:[],credential:"session",credentialId:null,clientId:null};
+  try {
+    db.exec(generated.files["schema.sql"]!);
+    const app = await import(file.href);
+    await app.procedures["create-note"](db,caller,{});
+    await app.procedures["create-note"](db,caller,{NoteTitle:"Authored case"});
+    await app.procedures["create-note"](db,caller,{NoteTitle:null});
+    expect(db.query("SELECT title FROM notes ORDER BY title").all()).toEqual([{title:"Authored case"},{title:"Generated default"},{title:"Nullable fallback"}]);
+  } finally { db.close(); await unlink(file); }
+  const original = await canonical("bun-sqlite");
+  const ambiguous = generate({...original,plan:{...original.plan,procedures:{...original.plan.procedures,"create-note":{...original.plan.procedures["create-note"]!,input:{type:"object",properties:{Title:{type:"string"},title:{type:"string"}}}}}}});
+  expect(ambiguous.ok).toBe(false);
+  if (!ambiguous.ok) expect(ambiguous.diagnostics.some(d=>d.path==="procedures/create-note/input" && d.message.includes("case-insensitive"))).toBe(true);
 });
