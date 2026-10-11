@@ -31,7 +31,10 @@ a Node HTTP handler, and so on. Schedules call
 `mantle.invokeSchedule(posixCron, scheduledTime, env)` from the host's own
 scheduler, and the service passes `schedules: true`. Set `"host": "none"`
 and adapt `src/service.ts` from a preset. These hosts are not tested end to
-end in 0.2.0. PostgreSQL on such a host is the same with `postgresStorage({
+end in 0.2.0. On a SQLite-backed Durable Object use the experimental
+`durableObjectStorage` from `@aotter/mantle/cloudflare`; see
+[Durable Object per tenant](../cloudflare/durable-object-tenant.md).
+PostgreSQL on such a host is the same with `postgresStorage({
 connect })` from `@aotter/mantle/postgres`.
 
 Binds are numbered `?1`, `?2` in the order given; a driver whose engine binds
