@@ -11,9 +11,10 @@ There is no optional application composition in this slice: no generated Auth re
 The revised [query responsibility decision](contract.md#revised-query-responsibility-decision-2026-10-11)
 makes bare typed queries an application-trusted native API. Input/output validation,
 legacy scalar conversion and safe transport errors belong to selected boundary
-entries. The older checked slice is now selected with `--checked`; default bare queries
-use driver-ready binds and native rows/errors. Rows below that require validation
-or legacy conversion apply to the checked boundary, not to the bare query. This is
+entries. The checked slice was removed on 2026-10-11; bare queries use driver-ready binds
+and native rows/errors, with declared date-time and date outputs formatted by the
+SQL. Rows below that require validation or legacy conversion belong to the
+application boundary. This is
 an explicit API responsibility change, not completed implementation or permission
 to omit validation at external application boundaries.
 

@@ -13,13 +13,13 @@ spec:
 `;
 
 test("canonical UTC DDL supplies timezone offsets used by generated date SQL", async () => {
-  const generated = await generateFromSources({checked:true,target:"bun-sqlite",sources:{sources:[{sourceId:"utc.yaml",text:source}]}});
+  const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"utc.yaml",text:source}]}});
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   expect(generated.files["schema.sql"]).toContain("CREATE TABLE IF NOT EXISTS _mantle_tz");
   expect(generated.files["schema.sql"]).toContain("(-9007199254740991, 0)");
-  expect(generated.files["checked.ts"]).toContain("_mantle_tz");
+  expect(generated.files["generated.ts"]).toContain("_mantle_tz");
   const file = new URL(`.date-${crypto.randomUUID()}.ts`, import.meta.url);
-  await writeFile(file, generated.files["checked.ts"]!);
+  await writeFile(file, generated.files["generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"'));
   const db = new Database(":memory:");
   try {
     db.exec(generated.files["schema.sql"]!);

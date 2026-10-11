@@ -21,8 +21,7 @@ also works for Views and single-statement Procedures; a multi-statement Procedur
 opens its own transaction, which Bun refuses inside another (no write happens). Other
 drivers are application-owned adapters to that shape; Workers PostgreSQL (for
 example Mantle Cloud over Hyperdrive) adapts node-postgres, and the tested recipe
-is `tests/apps/pg-port.ts`. Checked PostgreSQL entries still take a node-postgres
-Client (see below). SQLite uses bun:sqlite; D1 uses its platform binding. Pool,
+is `tests/apps/pg-port.ts`. SQLite uses bun:sqlite; D1 uses its platform binding. Pool,
 connection lifetime, database isolation, locks and retries remain native and
 application-owned. No cloud provisioning.
 
@@ -71,8 +70,8 @@ owned by their application caller. Input bounds still belong at the actual
 external boundary. Arbitrary JSON defaults and computed result types must be
 handled explicitly by that boundary rather than assumed from TypeScript.
 
-Driver-native PostgreSQL types and SQLite/D1 types need not match. Legacy scalar
-representations may be offered by an explicit compatibility entry; they do not
+Driver-native PostgreSQL types and SQLite/D1 types need not match, except for
+declared date-time and date outputs (below), which the SQL formats. That does not
 justify overriding every PG type parser or adding a generic decoder to the bare
 query. Authored output names should be emitted into SQL where valid, avoiding
 an extra per-row projection merely to repair names already known at generation.
@@ -104,14 +103,22 @@ without a server response (lost socket), are `OUTCOME_UNKNOWN`. SQLSTATE is
 `begin("isolation level serializable", ...)`: a failure before the callback
 returns was rolled back by `begin`; only a failed COMMIT is classified as above.
 
-Generation option `checked: true` (CLI `--checked`) emits a separate `checked.ts`
-and `checked/views` / `checked/procedures` entries for previous input defaults,
-validation, scalar codecs and failure envelopes. The same emitter selects the
-source at build time; no request-time flag, fallback or executor exists. Checked
-entries are independently generated SQL, not wrappers that re-run a bare query.
-Importing a bare entry does not import checked code. Unsupported validation may
-refuse a requested checked build but cannot veto a native-only build. A native
-caller owns external validation and error redaction.
+**Checked removed (2026-10-11):** the optional `checked` boundary (`--checked`,
+`checked.ts`, Zod validators, scalar codecs, failure envelopes) is gone. It
+duplicated the bare query and held PostgreSQL to node-postgres for type OIDs.
+Validation, defaults and error redaction belong to the application boundary;
+`databaseError` stays exported from contracts as an optional redaction helper that
+generated code never imports.
+
+**Date-time wire form:** a View output that is a declared `date-time` column
+(including `created_at`/`updated_at`) returns the handbook's wire form, an ISO
+string in UTC with six fractional digits; a declared `date` returns `YYYY-MM-DD`.
+The generator wraps those SELECT items before the dialect's own printer prints them
+(`to_char` on PostgreSQL, `strftime`/`date` with floor arithmetic on SQLite), so the
+database formats them and no row decoder runs. Bun.SQL's `Date` would drop
+microseconds. Computed values (`now()`, `date_trunc`, `CAST`, aggregates) carry no
+declared type and stay driver-native, as the handbook says for `now()`. Other
+declared scalars are driver-native.
 
 Driver-ready JSON parameters are text on both targets: node-postgres treats a
 JavaScript array as a PostgreSQL array, so native JSON binds must be serialized by
@@ -124,12 +131,6 @@ SQL names rather than a post-query camel-case projection. PG uses the driver's
 default type parsers (including Date and int8 strings); custom application parser
 configuration changes application-owned behavior. Procedures expose raw
 `{ results }`, not a claim of validated authored output.
-
-CLI regeneration removes only an owned generated checked module when checked is
-disabled; stale checked stubs then fail import. An application-owned checked.ts
-causes refusal, never deletion. Writers using the pure generation API must replace
-the output tree or remove obsolete owned checked artifacts themselves. Previous
-checked measurements remain historical evidence, not acceptance of this new API.
 
 When Auth composition is implemented, it resolves a trusted Caller once at the
 application entry. The first slice accepts an application-supplied Caller and

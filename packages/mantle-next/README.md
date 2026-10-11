@@ -27,14 +27,11 @@ database-error wrapper. Validate untrusted input before calling them; redact
 native errors at application transports. JSON binds are JSON text; SQLite bool,
 date, timestamp and fixed numeric binds use native storage values. Bound fields
 must be supplied explicitly (null for absence). Rows use SQL names and official
-driver representations, including PG Date/int8 strings. No cross-DB conversion
-is promised.
-
-Use `--checked` (or `checked: true` in generateFromSources) to additionally emit
-`checked.ts` and `checked/views` / `checked/procedures` for the former defaults,
-validators, codecs and safe failure envelopes. These are separate generated SQL
-entries and never enter bare imports. CLI regeneration disables stale owned
-checked modules; API output writers must handle obsolete artifacts themselves.
+driver representations (PG int8 strings, SQLite 0/1 booleans), except declared
+date-time and date columns: the SQL returns them as ISO strings in UTC with six
+fractional digits and `YYYY-MM-DD` on every target. `databaseError` from
+`@aotter/mantle-next/contracts` is an optional helper for redacting native errors
+at your transport.
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain
@@ -50,14 +47,13 @@ transaction, and Bun refuses `begin` inside another.
 PostgreSQL drivers other than Bun.SQL implement the two-method `Postgres` shape
 from `@aotter/mantle-next/contracts`. For node-postgres on Workers/Hyperdrive,
 see `tests/apps/pg-port.ts`: hand it one connected Client per request; `begin`
-must keep every statement on that client and COMMIT only after the callback. In selected checked entries, output validation runs after commit, as in
-0.2. Bare queries return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
+must keep every statement on that client and COMMIT only after the callback. Procedures return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
 declarations requiring them fail generation. See the complete
 [compatibility ledger](../../docs/next/compatibility.md).
 
 There is no old-runtime fallback, request-time plan verification, dynamic query
-compiler, custom pool, lock polling or hook sandbox. Scalar parsing and boundary
-validation are explicit checked contracts. Known output
+compiler, custom pool, lock polling or hook sandbox. Boundary validation belongs to the
+application. Known output
 names and bindings are emitted as straight-line code. Per-query PG wire metadata
 is needed for computed SQL values whose native type is only known from the result.
 

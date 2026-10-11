@@ -14,7 +14,17 @@ consumers and optional surfaces. Match native contracts and driver work before
 comparing performance; fewer guarantees is not a valid faster implementation.
 The SQL slice alone cannot establish full 0.2 compatibility.
 
-## Revised bare query baseline (`82454430`)
+## Bare query after checked removal (2026-10-11)
+
+| Full fixture Worker | Bytes | Gzip | Ceiling |
+| --- | ---: | ---: | ---: |
+| D1 | 14,391 | 2,040 | 20,480 |
+| PostgreSQL, official driver included | 109,095 | 31,909 | 122,880 |
+
+The size gate now rejects any Zod in the bundle. The npm package unpacks to
+65,093 bytes.
+
+## Revised bare query baseline (`82454430`, historical)
 
 The default query now uses driver-ready parameters and native rows/errors. Zod,
 JSON scanning, scalar codecs, row projection and generic database-error mapping

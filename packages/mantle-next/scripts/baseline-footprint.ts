@@ -13,27 +13,27 @@ assert.ok(output, "set MANTLE_NEXT_FOOTPRINT_OUTPUT to a fresh local evidence di
 await mkdir(output, { recursive: false });
 await mkdir(resolve(output, "node_modules/@aotter"), { recursive: true });
 await symlink(base, resolve(output, "node_modules/@aotter/mantle-next"), "dir");
-for (const name of ["zod", "pg"]) await symlink(resolve(base, "node_modules", name), resolve(output, "node_modules", name), "dir");
+for (const name of ["pg"]) await symlink(resolve(base, "node_modules", name), resolve(output, "node_modules", name), "dir");
 const text = await readFile(resolve(base, "tests/apps/purchase.yaml"), "utf8");
 const atoms = text.split(/^---\s*$/m).map(part => JSON.parse(part));
 const selected = atoms.filter(atom => atom.kind === "Schema" || atom.metadata.name === "purchase-totals");
 const report: { target: string; variant: string; uncompressedBytes: number }[] = [];
 for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const) {
   const postgres = target === "cloudflare-postgres";
-  for (const variant of ["whole-before", "whole-after", "whole-checked", "select-from-whole", "select-direct", "generate-selected", "native-selected", "driver-only", "select-10", "select-100", "direct-100"] as const) {
+  for (const variant of ["whole-after", "select-from-whole", "select-direct", "generate-selected", "native-selected", "driver-only", "select-10", "select-100", "direct-100"] as const) {
     const app = resolve(output, target, variant);
     await mkdir(app, { recursive: true });
     const count = variant === "select-10" ? 10 : variant === "select-100" || variant === "direct-100" ? 100 : 1;
     const manifest = variant === "generate-selected" || variant === "select-10" || variant === "select-100" || variant === "direct-100"
       ? [...selected.filter(atom => atom.kind === "Schema"), ...Array.from({length:count}, (_,index) => ({...selected.find(atom => atom.kind === "View"), metadata:{name:index === 0 ? "purchase-totals" : `purchase-totals-${index}`}}))].map(atom => JSON.stringify(atom)).join("\n---\n") : text;
-    const generated = await generateFromSources({ checked:variant === "whole-before" || variant === "whole-checked", target, sources: { sources: [{ sourceId: "purchase.yaml", text: manifest }] } });
+    const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "purchase.yaml", text: manifest }] } });
     assert.ok(generated.ok, JSON.stringify(!generated.ok && generated.diagnostics));
-    const code = generated.files[variant === "whole-before" || variant === "whole-checked" ? "checked.ts" : "generated.ts"]!;
+    const code = generated.files["generated.ts"]!;
     for (const [name, content] of Object.entries(generated.files)) {
       await mkdir(dirname(resolve(app, name)), { recursive: true });
       await writeFile(resolve(app, name), content);
     }
-    await writeFile(resolve(app, "generated.ts"), variant === "whole-before" ? code.replace('import * as z from "zod";', 'import { z } from "zod";') : code);
+    await writeFile(resolve(app, "generated.ts"), code);
     // Independent native reference for this aggregate View, not the full API.
     // Same user scope, literal SQL, driver-default result and trusted inputs.
     // It imports no Mantle package or validator; transport guarantees are separate.
@@ -76,7 +76,7 @@ export default { async fetch(request, env) {
     for (const [file, result] of Object.entries(meta.outputs) as [string, any][]) {
       if (!file.endsWith(".js")) continue;
       for (const [name, contribution] of Object.entries(result.inputs) as [string, any][]) {
-        const group = /\/zod\//.test(name) ? /\/locales\//.test(name) ? "zod-locales" : "zod" : name.includes("kernel/contracts") ? "contracts" : name.endsWith("generated.ts") ? "generated" : name.endsWith("native.ts") ? "native" : "driver-and-entry";
+        const group = name.includes("kernel/contracts") ? "contracts" : name.endsWith("generated.ts") ? "generated" : name.endsWith("native.ts") ? "native" : "driver-and-entry";
         groups[group] = (groups[group] ?? 0) + contribution.bytesInOutput;
       }
     }

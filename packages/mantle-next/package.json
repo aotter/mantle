@@ -9,8 +9,7 @@
   "exports": {
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
-    "./contracts": "./dist/kernel/contracts.js",
-    "./checked": "./dist/kernel/checked.js"
+    "./contracts": "./dist/kernel/contracts.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.lib.json",
@@ -23,7 +22,6 @@
     "check:package": "bun run build && bun scripts/check-package.ts",
     "baseline:footprint": "bun run build && bun scripts/baseline-footprint.ts"
   },
-  "dependencies": { "zod": "catalog:" },
   "devDependencies": {
     "@aotter/mantle": "workspace:*",
     "@types/node": "catalog:",
