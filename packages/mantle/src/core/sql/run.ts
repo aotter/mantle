@@ -11,9 +11,11 @@ import type { PrintedStatement, StoreExecutor, StoreRow, StoreStatement } from "
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
 import { NATIVE } from "../store/json.js";
 import { S, op, ref } from "./ast.js";
-import { applyPolicy, HOOK_PREFIX, type Compiled } from "./policy.js";
+import { applyPolicy, HOOK_PREFIX, type Compiled, type Mode } from "./policy.js";
 
 export interface Program {
+  /** A named, plan-owned program; dynamic Store programs have no name. */
+  readonly name?: string;
   readonly kind: "view" | "procedure";
   readonly inputs: Readonly<Record<string, string>>;
   readonly ir: readonly N[];
@@ -35,6 +37,8 @@ export interface LifecycleHooks {
 export interface RunEnv extends Pick<CompileContext, "dialect" | "schemas" | "mode" | "seen"> {
   readonly executor: StoreExecutor;
   readonly lifecycle?: LifecycleHooks;
+  /** Validated plan seeds, installed only on a named program's ordinary cache miss. */
+  readonly seedLowered?: (program: Program, mode: Mode) => void;
   /** NEGATIVE CONTROL ONLY: print no visibility predicate, so a probe that cannot fail is caught. */
   readonly unsafeNoVisibility?: boolean;
 }
@@ -177,6 +181,10 @@ function compileCached(env: RunEnv, p: Program, ir: object, stmts: readonly N[],
   const slot = slotOf(env, p, ir);
   const key = compiledKey(p.kind, env.mode, ctx.returning, ctx.lockVersion, flavour);
   let hit = slot.get(key);
+  if (!hit && p.name && env.seedLowered) {
+    env.seedLowered(p, env.mode ?? "caller");
+    hit = slot.get(key);
+  }
   if (!hit) {
     if (slot.size >= SLOT_CAP) slot.clear();
     slot.set(key, (hit = make ? make() : compileProgram(stmts, ctx)));

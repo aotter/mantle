@@ -41,6 +41,7 @@ export interface StoreView {
 }
 
 export interface StoreDeps {
+  readonly seedLowered?: RunEnv["seedLowered"];
   /** Application-generated, dialect-gated finite reader shapes; never accepted from uploaded plan JSON. */
   readonly readerSeeds?: Readonly<Record<string, ReaderSeed>>;
   readonly executor: StoreExecutor;
@@ -88,7 +89,7 @@ export function bindFor(now: number, caller: Caller | undefined): { mode: Mode; 
 
 /** `parent` is the invocation this Store serves: hooks it fires chain to it, so the depth limit and cause ids hold across writes. */
 function make(deps: StoreDeps, caller: Caller | undefined, parent: InvocationCause | undefined, readers: ReaderSet): CallerStore {
-  const env = (mode: Mode): RunEnv => ({ executor: deps.executor, dialect: deps.dialect, schemas: deps.schemas, mode, lifecycle: deps.lifecycle });
+  const env = (mode: Mode): RunEnv => ({ executor: deps.executor, dialect: deps.dialect, schemas: deps.schemas, mode, lifecycle: deps.lifecycle, seedLowered: deps.seedLowered });
   let writes = 0;
   const as = (bound: BindContext) => ({
     bind: bound,
@@ -225,7 +226,7 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent: InvocationCau
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw invalid("View limit must be an integer from 1 to 500.");
       const { mode, bind: b } = bindFor(deps.now(), caller);
       const cursor = options.cursor === undefined ? undefined : decodeCursor(`view:${name}`, options.cursor);
-      const page = await runView(env(v.public ? "public" : mode), { kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: sqlInput(v.input, input) }), { pageSize: limit, ...(cursor ? { cursor } : {}), match: viewMatch(name, v, options, (column, value) => {
+      const page = await runView(env(v.public ? "public" : mode), { name, kind: "view", inputs: v.inputs, ir: v.ir }, as({ ...b, input: sqlInput(v.input, input) }), { pageSize: limit, ...(cursor ? { cursor } : {}), match: viewMatch(name, v, options, (column, value) => {
         // an output that reads a Schema field compares in that field's storage encoding (a boolean is 0/1, a date-time microseconds)
         const c = v.columns?.[column] ?? v.columns?.[column.toLowerCase()];
         const def = c && deps.schemas[c.schema];

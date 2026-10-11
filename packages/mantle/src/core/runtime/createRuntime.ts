@@ -132,14 +132,14 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
 
   // ---- lowered statements: seeded into the compile cache, or ignored and said so (ADR-0044) ---------------------------------------
   const loweredStatus = loweringStatus(plan, dialect);
-  if (loweredStatus === "used") seedPlan(plan, dialect, lifecycle?.after);
-  else if (plan.lowered && loweredStatus !== "restricted") console.warn(`[mantle boot] lowered statements not used (${loweredStatus}); regenerate the plan with this Mantle (\`mantle generate\`)`);
+  const seedLowered = loweredStatus === "used" ? seedPlan(plan, dialect, lifecycle?.after) : undefined;
+  if (loweredStatus !== "used" && plan.lowered && loweredStatus !== "restricted") console.warn(`[mantle boot] lowered statements not used (${loweredStatus}); regenerate the plan with this Mantle (\`mantle generate\`)`);
 
   const validators = planValidators(plan); // each built on first use, shared by every runtime over this plan
 
   const now = args.now ?? (() => Date.now() * 1000);
   const store = createStore({
-    executor, dialect, schemas: plan.schemas, lifecycle, now,
+    executor, dialect, schemas: plan.schemas, lifecycle, now, seedLowered,
     newId: args.newId ?? (() => crypto.randomUUID().replaceAll("-", "")),
     views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input, inputSchema: () => validators.view(name)! } : {}), ...(v.columns ? { columns: v.columns } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
     guardView: async (procedure, caller, input, cause) => { await invoke({ procedure, input, caller, cause: child(cause, procedure) }, true); },
@@ -191,8 +191,8 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
         result = await (args.handlers[proc.handler.ref] as (i: unknown, c: HandlerContext) => unknown)(input, ctx);
       } else {
         const { mode, bind } = bindFor(now(), inv.caller);
-        const env: RunEnv = { executor, dialect, schemas: plan.schemas, mode, lifecycle };
-        const ran = await runProcedure(env, { kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: sqlInput(proc.input, input) } }, true);
+        const env: RunEnv = { executor, dialect, schemas: plan.schemas, mode, lifecycle, seedLowered };
+        const ran = await runProcedure(env, { name: inv.procedure, kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: sqlInput(proc.input, input) } }, true);
         result = { results: ran.rows };
       }
     } catch (e) {

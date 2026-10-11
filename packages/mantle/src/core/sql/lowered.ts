@@ -1,7 +1,7 @@
 /**
  * Generate-time lowering (ADR-0044). `mantle generate` runs the runtime's own pipeline (dialect check, policy, the dialect's printer)
- * over every View and inline Procedure and records the printed statements in `plan.lowered`. At boot, `seedPlan` puts "lowered
- * Compiled" entries into the compile cache and the paged cache (`run.ts`): the executors run the printed text, and the policy AST
+ * over every View and inline Procedure and records the printed statements in `plan.lowered`. At boot, `seedPlan` validates that
+ * metadata; on a named program's first cache miss it puts "lowered Compiled" entries into the existing caches (`run.ts`): the executors run the printed text, and the policy AST
  * is built, through the ordinary compile path, only if a shape that was not lowered needs it. So the first call of a sealed View or
  * inline Procedure in a cold isolate does no dialect check, no `applyPolicy` and no print.
  *
@@ -15,9 +15,9 @@ import { lifecycleHookSets } from "../runtime/hooks.js";
 import { MANTLE_VERSION } from "../version.js";
 import { schemaColumns } from "./allowlist.js";
 import { writeTarget } from "./ast.js";
-import { compileProgram, type CompileContext } from "./compile.js";
+import { compileProgram } from "./compile.js";
 import type { BindSpec, Compiled, Mode } from "./policy.js";
-import { compilePreRead, compiledKey, pageShape, pagedOf, seedCompiled, seedPaged, type Paged, type Program } from "./run.js";
+import { compilePreRead, compiledKey, pageShape, pagedOf, seedCompiled, seedPaged, type Paged, type Program, type RunEnv } from "./run.js";
 
 type Env = { readonly dialect: MantleDialect; readonly schemas: Readonly<Record<string, StorageSchema>> };
 type Warn = (message: string) => void;
@@ -159,8 +159,12 @@ function loweredCompiled(s: LoweredStatement, real: () => Compiled, nkeys?: numb
   return c;
 }
 
-function loweredPaged(page: LoweredPage, ast: () => N): Paged {
+function checkPage(page: LoweredPage): void {
   if (!page || typeof page.sql !== "string" || !Array.isArray(page.sources) || !Array.isArray(page.names) || typeof page.nkeys !== "number") throw new Error("a paged statement is malformed");
+}
+
+function loweredPaged(page: LoweredPage, ast: () => N): Paged {
+  checkPage(page);
   const p = { sources: page.sources, flat: !!page.flat, names: page.names, nkeys: page.nkeys, printed: { sql: page.sql, returns: false } } as unknown as Paged;
   Object.defineProperty(p, "ast", { enumerable: true, configurable: false, get: ast });
   return p;
@@ -174,9 +178,18 @@ function cursorOf(shape: string, nkeys: number): readonly unknown[] | undefined 
   throw new Error(`page shape ${shape} is not a lowered shape`);
 }
 
-/** Prepare a View seed without installing it; callers can validate every entry before changing caches. */
-export function seedLoweredView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, lv: LoweredView, real: () => Compiled): () => void {
+/** Validate View metadata without building descriptors or changing caches. */
+export function checkLoweredView(lv: LoweredView): void {
   checkStatement(lv, "lowered View");
+  for (const [shape, page] of Object.entries(lv.paged ?? {})) {
+    cursorOf(shape, lv.nkeys);
+    checkPage(page);
+  }
+}
+
+/** Prepare descriptors on first use; the resulting installer uses the existing compile/paged caches. */
+export function seedLoweredView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, lv: LoweredView, real: () => Compiled): () => void {
+  checkLoweredView(lv);
   const compile = lazily(real);
   const c0 = loweredCompiled(lv, compile, lv.nkeys);
   const pageds = Object.entries(lv.paged ?? {}).map(([shape, page]) => {
@@ -190,56 +203,67 @@ export function seedLoweredView(env: Env, p: Pick<Program, "inputs" | "ir">, mod
 }
 
 /**
- * Seeds the compile cache and the paged cache from `plan.lowered`, which `loweringStatus` said is usable. Every entry is built before
- * any is installed, and a malformed or unmatched one abandons the whole seed with a warning: boot never fails here, the programs just
- * compile on first use as they do without `lowered`. `plan.views`, `plan.procedures` and `plan.schemas` must be the objects the Store
- * and the runtime run with, and `dialect` the storage's own, because the cache is keyed by them.
+ * Validates all lowered metadata before returning a first-use installer. A malformed or unmatched unused entry still abandons the
+ * whole seed with a warning at boot. No Compiled/Paged descriptors or cache levels are allocated until one named program needs them.
+ * The installer adopts only its selected mode, with exact plan IR/input identities, into the existing bounded compile/paged caches.
  */
-export function seedPlan(plan: RuntimePlan, dialect: MantleDialect, returning: ReadonlySet<string> | undefined): void {
+export function seedPlan(plan: RuntimePlan, dialect: MantleDialect, returning: ReadonlySet<string> | undefined): RunEnv["seedLowered"] {
   try {
     const l = plan.lowered!;
     const env: Env = { dialect, schemas: plan.schemas };
-    const installs: (() => void)[] = [];
     for (const [name, modes] of Object.entries(l.views)) {
       const v = Object.hasOwn(plan.views, name) ? plan.views[name]! : undefined;
       if (!v) throw new Error(`lowered View '${name}' is not a View of the plan`);
-      const p = { inputs: v.inputs, ir: v.stmts };
       for (const [mode, lv] of Object.entries(modes)) {
         if (!(VIEW_MODES as readonly string[]).includes(mode)) throw new Error(`lowered View '${name}' has the unknown mode '${mode}'`);
-        checkStatement(lv, `lowered View '${name}' (${mode})`);
-        const compile = lazily(() => compileProgram(v.stmts, { dialect, schemas: plan.schemas, inputs: v.inputs, kind: "view", mode: mode as Mode } satisfies CompileContext)[0]!);
-        installs.push(seedLoweredView(env, p, mode as Mode, lv, compile));
+        checkLoweredView(lv);
       }
     }
     for (const [name, modes] of Object.entries(l.procedures)) {
       const proc = Object.hasOwn(plan.procedures, name) ? plan.procedures[name]! : undefined;
       if (!proc || !("sql" in proc.handler)) throw new Error(`lowered Procedure '${name}' is not an inline Procedure of the plan`);
-      const p = { inputs: proc.inputs, ir: proc.handler.sql.stmts };
       for (const [mode, stmts] of Object.entries(modes)) {
         if (!(PROCEDURE_MODES as readonly string[]).includes(mode)) throw new Error(`lowered Procedure '${name}' has the unknown mode '${mode}'`);
-        if (!Array.isArray(stmts) || stmts.length !== p.ir.length) throw new Error(`lowered Procedure '${name}' (${mode}) does not match its statements`);
-        stmts.forEach((s, i) => checkStatement(s, `lowered Procedure '${name}' (${mode}) statement ${i}`));
-        const full = lazily(() => compileProgram(p.ir, { dialect, schemas: plan.schemas, inputs: p.inputs, kind: "procedure", mode: mode as Mode, returning }));
-        const entries = stmts.map((s, i) => loweredCompiled(s, () => full()[i]!));
-        installs.push(() => { seedCompiled(env, p, compiledKey("procedure", mode, returning, undefined, "all"), entries); });
+        if (!Array.isArray(stmts) || stmts.length !== proc.handler.sql.stmts.length) throw new Error(`lowered Procedure '${name}' (${mode}) does not match its statements`);
         for (const [i, s] of stmts.entries()) {
-          const ir = p.ir[i]!;
-          if (s.preRead !== undefined) {
-            if (s.preRead !== null) checkStatement(s.preRead, `lowered Procedure '${name}' (${mode}) preRead ${i}`, true);
-            const real = lazily(() => compilePreRead({ ...env, mode: mode as Mode }, p, ir, full()[i]!)!);
-            const read = s.preRead === null ? [] : [loweredCompiled(s.preRead, real)];
-            installs.push(() => { seedCompiled(env, p, compiledKey("procedure", mode, undefined, undefined, "preRead"), read, ir); });
-          }
-          if (s.one !== undefined) {
-            checkStatement(s.one, `lowered Procedure '${name}' (${mode}) one ${i}`, true);
-            const real = lazily(() => compileProgram([ir], { dialect, schemas: plan.schemas, inputs: p.inputs, kind: "procedure", mode: mode as Mode, returning, lockVersion: true, statuses: [undefined] })[0]!);
-            const one = loweredCompiled(s.one, real);
-            installs.push(() => { seedCompiled(env, p, compiledKey("procedure", mode, returning, true, "one"), [one], ir); });
-          }
+          checkStatement(s, `lowered Procedure '${name}' (${mode}) statement ${i}`);
+          if (s.preRead !== undefined && s.preRead !== null) checkStatement(s.preRead, `lowered Procedure '${name}' (${mode}) preRead ${i}`, true);
+          if (s.one !== undefined) checkStatement(s.one, `lowered Procedure '${name}' (${mode}) one ${i}`, true);
         }
       }
     }
-    for (const install of installs) install();
+    return (p, mode) => {
+      if (!p.name) return;
+      if (p.kind === "view") {
+        const v = Object.hasOwn(plan.views, p.name) ? plan.views[p.name]! : undefined;
+        const lv = Object.hasOwn(l.views, p.name) ? l.views[p.name]![mode] : undefined;
+        if (!v || !lv || p.ir !== v.stmts || p.inputs !== v.inputs) return;
+        seedLoweredView(env, p, mode, lv, () => compileProgram(p.ir, { ...env, inputs: p.inputs, kind: "view", mode })[0]!)();
+        return;
+      }
+      if (mode === "public") return;
+      const proc = Object.hasOwn(plan.procedures, p.name) ? plan.procedures[p.name]! : undefined;
+      const stmts = Object.hasOwn(l.procedures, p.name) ? l.procedures[p.name]![mode] : undefined;
+      if (!proc || !("sql" in proc.handler) || !stmts || p.ir !== proc.handler.sql.stmts || p.inputs !== proc.inputs) return;
+      const ctx = { ...env, inputs: p.inputs, kind: "procedure" as const, mode, returning };
+      const full = lazily(() => compileProgram(p.ir, ctx));
+      const entries = stmts.map((s, i) => loweredCompiled(s, () => full()[i]!));
+      const installs = [() => { seedCompiled(env, p, compiledKey("procedure", mode, returning, undefined, "all"), entries); }];
+      for (const [i, s] of stmts.entries()) {
+        const ir = p.ir[i]!;
+        if (s.preRead !== undefined) {
+          const real = lazily(() => compilePreRead({ ...env, mode }, p, ir, full()[i]!)!);
+          const read = s.preRead === null ? [] : [loweredCompiled(s.preRead, real)];
+          installs.push(() => { seedCompiled(env, p, compiledKey("procedure", mode, undefined, undefined, "preRead"), read, ir); });
+        }
+        if (s.one !== undefined) {
+          const real = lazily(() => compileProgram([ir], { ...ctx, lockVersion: true, statuses: [undefined] })[0]!);
+          const one = loweredCompiled(s.one, real);
+          installs.push(() => { seedCompiled(env, p, compiledKey("procedure", mode, returning, true, "one"), [one], ir); });
+        }
+      }
+      for (const install of installs) install();
+    };
   } catch (e) {
     console.warn(`[mantle boot] lowered statements not used (${message(e)}); regenerate the plan with this Mantle (\`mantle generate\`)`);
   }

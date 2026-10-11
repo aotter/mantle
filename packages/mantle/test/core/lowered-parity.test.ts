@@ -86,7 +86,8 @@ function seeded(e, item, p, returning: ReadonlySet<string> | undefined) {
     if (Object.keys(modes).length) lowered.procedures.x = modes;
   }
   plan.lowered = JSON.parse(JSON.stringify(lowered)); // the plan crosses JSON
-  seedPlan(plan, e.dialect, returning);
+  const seed = seedPlan(plan, e.dialect, returning);
+  for (const mode of MODES) seed?.({ ...p, name: "x" }, mode);
   return plan.lowered;
 }
 
@@ -182,7 +183,8 @@ for (const [name, e] of Object.entries(ENGINES)) {
         views: { x: Object.fromEntries(["caller", "trusted"].map((m) => [m, lowerView(env, p, m)])) } };
       const plan = { schemas, views: { x: { stmts: sealed.ir, inputs: sealed.inputs, surface: "staff" } }, procedures: {}, triggers: {}, lowered: JSON.parse(JSON.stringify(lowered)) };
       check.mockClear();
-      seedPlan(plan, dialect, undefined);
+      const seed = seedPlan(plan, dialect, undefined);
+      for (const mode of ["caller", "trusted"]) seed?.({ ...sealed, name: "x" }, mode);
       const nkeys = plan.lowered.views.x.caller.nkeys;
       expect(nkeys).toBeGreaterThan(0);
       for (const mode of ["caller", "trusted"]) {
