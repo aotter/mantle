@@ -116,10 +116,9 @@ string in UTC with six fractional digits; a declared `date` returns `YYYY-MM-DD`
 The generator wraps those SELECT items before the dialect's own printer prints them
 (`to_char` on PostgreSQL, `strftime`/`date` with floor arithmetic on SQLite), so the
 database formats them and no row decoder runs. Bun.SQL's `Date` would drop
-microseconds. A write's `RETURNING` of such a column gets the same form (`RETURNING *`
-is refused for it). Inputs bound to a declared date-time or date take the same ISO
-text (or a `Date`) on every target: a timestamp needs `Z` or an offset, a day that
-does not exist is refused with `SQL_TYPE` before the write, and SQLite receives
+microseconds. A write's `RETURNING` of such a column gets the same form. Inputs bound to a declared date-time take the same ISO text (or a
+valid `Date`), and a declared date takes `YYYY-MM-DD` text, on every target: a
+timestamp needs `Z` or an offset and hours 00-23, a day that does not exist is refused with `SQL_TYPE` before the write, and SQLite receives
 microseconds and days while PostgreSQL receives the canonical text. Computed values
 (`now()`, `date_trunc`, `CAST`) carry no declared type and stay driver-native; on
 PostgreSQL through Bun.SQL that is a `Date`, which drops microseconds. Other

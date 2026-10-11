@@ -42,11 +42,8 @@ export function wireScalars(ast: SqlNode, keys: readonly string[], types: readon
   return typeof out === "string" ? out : { ...ast, SelectStmt: out };
 }
 
-/**
- * The same wire form for a write's RETURNING list: a plain column of the written table is wrapped by its declared type.
- * `RETURNING *` cannot be, so it is refused when that table has a timestamp or date column (every table has created_at).
- */
-export function wireReturning(ast: SqlNode, schemas: RuntimePlan["schemas"], sqlite: boolean): SqlNode | string {
+/** The same wire form for a write's RETURNING list (Core has already expanded `*`): a column of the written table is wrapped by its declared type. */
+export function wireReturning(ast: SqlNode, schemas: RuntimePlan["schemas"], sqlite: boolean): SqlNode {
   const [kind, stmt] = Object.entries(ast)[0] ?? [];
   const list = stmt?.returningClause?.exprs;
   if (!list?.length || !["InsertStmt", "UpdateStmt", "DeleteStmt"].includes(kind!)) return ast;
@@ -57,7 +54,6 @@ export function wireReturning(ast: SqlNode, schemas: RuntimePlan["schemas"], sql
   const exprs = [];
   for (const t of list) {
     const fields = t.ResTarget?.val?.ColumnRef?.fields;
-    if (fields?.at(-1)?.A_Star) return "RETURNING * cannot return timestamps and dates in wire form; list the columns.";
     const col = fields?.at(-1)?.String?.sval;
     const val = col === undefined ? undefined : wire(typeOf(col), sqlite, t.ResTarget.val);
     if (val) changed = true;

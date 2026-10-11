@@ -33,8 +33,12 @@ export class ContractError extends Error {
  * and days; PostgreSQL receives the canonical text, so it keeps every microsecond.
  */
 export function encodeTimestamptz(v: string | Date): number {
-  if (v instanceof Date) return v.getTime() * 1000;
-  const m = /^(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d(?::\d\d)?)(?:\.(\d{1,6}))?(Z|[+-]\d\d(?::?\d\d)?)$/.exec(String(v).trim());
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) throw new ContractError("SQL_TYPE", "Invalid Date is not a timestamp");
+    return v.getTime() * 1000;
+  }
+  // hours 00-23: Date.parse would roll T24:00 over to the next day
+  const m = /^(\d{4}-\d\d-\d\d)[T ]((?:[01]\d|2[0-3]):\d\d(?::\d\d)?)(?:\.(\d{1,6}))?(Z|[+-]\d\d(?::?\d\d)?)$/.exec(String(v).trim());
   if (!m) throw new ContractError("SQL_TYPE", `'${v}' is not a timestamp with an explicit offset`);
   const [, day, time, fraction, offset] = m as unknown as string[];
   const zone = offset === "Z" ? "Z" : offset!.length === 3 ? `${offset}:00` : offset!.includes(":") ? offset! : `${offset!.slice(0, 3)}:${offset!.slice(3)}`;
@@ -44,8 +48,9 @@ export function encodeTimestamptz(v: string | Date): number {
   if (Number.isNaN(secs) || !Number.isSafeInteger(micros)) throw new ContractError("SQL_TYPE", `'${v}' is not a valid timestamp`);
   return micros;
 }
-export function encodeDate(v: string | Date): number {
-  const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(v instanceof Date ? v.toISOString().slice(0, 10) : String(v));
+/** A date is the string a calendar shows; a Date instant has no single calendar day, so it is not accepted. */
+export function encodeDate(v: string): number {
+  const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(String(v));
   if (!m) throw new ContractError("SQL_TYPE", `'${v}' is not a date`);
   const [, y, mo, d] = m as unknown as string[];
   const dt = new Date(0);
@@ -57,17 +62,21 @@ export function isoTimestamptz(v: string | Date): string {
   const us = encodeTimestamptz(v), ms = Math.floor(us / 1000);
   return new Date(ms).toISOString().replace("Z", String(us - ms * 1000).padStart(3, "0") + "Z");
 }
-export const isoDate = (v: string | Date): string => new Date(encodeDate(v) * 86_400_000).toISOString().slice(0, 10);
+export const isoDate = (v: string): string => new Date(encodeDate(v) * 86_400_000).toISOString().slice(0, 10);
 
-/** For the application boundary: bare queries rethrow native errors, which must not reach HTTP users as they are. */
-/** Classify native failures without interpreting SQL or leaking engine messages. */
+/**
+ * For the application boundary: bare queries rethrow native errors, which must not reach HTTP users as they are.
+ * Classifies a native failure without interpreting SQL or leaking engine messages.
+ */
 export function databaseError(error: unknown, operation: "read" | "write", path: string, dialect: "sqlite" | "postgres"): ContractError {
   if (error instanceof ContractError) return error;
   const value = (error ?? {}) as { code?: unknown; errno?: unknown; errcode?: unknown; name?: string; message?: string };
   const message = error instanceof Error ? error.message : String(error);
   let code = operation === "write" ? "OUTCOME_UNKNOWN" : "RESOURCE_UNAVAILABLE";
   if (dialect === "postgres") {
-    const state = typeof value.code === "string" && /^[0-9A-Z]{5}$/.test(value.code) ? value.code : undefined;
+    // SQLSTATE is `errno` on Bun.SQL (whose `code` is ERR_POSTGRES_SERVER_ERROR) and `code` on node-postgres
+    const raw = typeof value.errno === "string" ? value.errno : value.code;
+    const state = typeof raw === "string" && /^[0-9A-Z]{5}$/.test(raw) ? raw : undefined;
     if (state === "23505" || state === "MX409") code = "CONFLICT";
     else if (state && /^(22|23|42)/.test(state)) code = "INPUT_VALIDATION_FAILED";
     else if (state && /^(08|28|53|57|58|XX)/.test(state)) code = operation === "write" ? "OUTCOME_UNKNOWN" : "RESOURCE_UNAVAILABLE";

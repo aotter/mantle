@@ -23,6 +23,7 @@ test("canonical UTC DDL supplies timezone offsets used by generated date SQL", a
   const db = new Database(":memory:");
   try {
     db.exec(generated.files["schema.sql"]!);
+    db.exec(generated.files["schema.sql"]!); // re-applying the initial artifact is harmless
     const app = await import(file.href);
     const rows = await app.views["utc-day"](db,{kind:"anonymous"},{});
     expect(rows).toEqual([{day:Date.parse("2026-10-11T00:00:00Z")*1000}]);

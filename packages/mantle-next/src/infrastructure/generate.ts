@@ -44,8 +44,7 @@ export async function generateFromSources(request: { readonly target: Target; re
       const compiledStatements = compileProgram(procedure.handler.sql.stmts, { dialect, schemas: compiled.plan.schemas, columns, inputs: procedure.inputs, kind: "procedure", mode: mode as "caller" | "trusted" });
       for (const [i, c] of compiledStatements.entries()) {
         const ast = wireReturning(c.ast, compiled.plan.schemas, !postgres);
-        if (typeof ast === "string") refusals.push({ code: "GENERATE_UNSUPPORTED", path: `procedures/${name}`, message: ast });
-        else if (ast !== c.ast) Object.assign(statements![i]!, { sql: dialect.print!(ast, compiled.plan.schemas) });
+        if (ast !== c.ast) Object.assign(statements![i]!, { sql: dialect.print!(ast, compiled.plan.schemas) });
       }
     }
   }

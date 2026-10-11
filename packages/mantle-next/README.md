@@ -30,7 +30,7 @@ must be supplied explicitly (null for absence). Rows use SQL names and official
 driver representations (PG int8 strings, SQLite 0/1 booleans), except declared
 date-time and date columns: the SQL returns them (Views and `RETURNING`) as ISO
 strings in UTC with six fractional digits and `YYYY-MM-DD` on every target, and
-inputs bound to them take the same ISO text (or a `Date`); an offset-less
+inputs bound to them take the same ISO text (a valid `Date` also works for date-time); an offset-less
 timestamp or a nonexistent day is refused with `SQL_TYPE` before the write. `databaseError` from
 `@aotter/mantle-next/contracts` is an optional helper for redacting native errors
 at your transport.
