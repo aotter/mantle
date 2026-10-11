@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
+  "engines": { "node": ">=22.14.0" },
   "files": ["dist", "README.md"],
   "exports": {
     ".": "./dist/usecase/generate.js",

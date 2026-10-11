@@ -10,7 +10,7 @@ try {
   execFileSync("pnpm", ["pack", "--pack-destination", directory], { cwd:resolve(import.meta.dir,".."), stdio:"pipe" });
   const archive = resolve(directory, (await readdir(directory)).find(name => name.endsWith(".tgz"))!);
   const names = execFileSync("tar", ["-tzf", archive], {encoding:"utf8"}).trim().split("\n");
-  const allowed = /^package\/(?:package\.json|README\.md|LICENSE|dist\/[A-Za-z0-9_/-]+\.(?:js|d\.ts)(?:\.map)?)$/;
+  const allowed = /^package\/(?:package\.json|README\.md|LICENSE|dist\/[A-Za-z0-9_/-]+\.(?:js|d\.ts))$/;
   assert.ok(names.every(name => allowed.test(name)), `unexpected package files: ${names.filter(name => !allowed.test(name))}`);
   execFileSync("tar", ["-xzf", archive, "-C", directory]);
   let unpackedBytes = 0;
@@ -18,6 +18,5 @@ try {
   const tarballBytes = (await stat(archive)).size;
   console.log(JSON.stringify({gate:"package",files:names.length,tarballBytes,unpackedBytes}));
   assert.ok(tarballBytes <= 40 * 1024, "packed package exceeds 40 KiB");
-  // 144 KiB: the Bun.SQL-shaped Postgres port, outcome helper and their source maps (no new dependency).
-  assert.ok(unpackedBytes <= 144 * 1024, "unpacked package exceeds 144 KiB");
+  assert.ok(unpackedBytes <= 96 * 1024, "unpacked package exceeds 96 KiB");
 } finally { await rm(directory, {recursive:true,force:true}); }

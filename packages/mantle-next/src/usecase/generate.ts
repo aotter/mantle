@@ -139,6 +139,7 @@ function emit({ target, plan, lowered, viewKeys }: GenerateInput, native: boolea
     return sql;
   };
   const read = (sql: string, binds: string): string => target === "bun-sqlite" ? `db.query(${q(sql)}).all(${binds})` : target === "cloudflare-d1" ? `(await db.prepare(${q(sql)}).bind(${binds}).all()).results` : pgPort ? `await db.unsafe(${q(sql)}, ${binds})` : `await db.query({ text: ${q(sql)}, values: ${binds}${native ? "" : ", types: rawTypes"} })`;
+  // Entries import then export: Bun 1.3 drops a bare `export { x as default } from` binding under "sideEffects": false.
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
     const path = `views/${name}`, fn = `view${index}`;
     const modes = lowered.views[name];
@@ -186,7 +187,7 @@ function emit({ target, plan, lowered, viewKeys }: GenerateInput, native: boolea
     declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), checkedInput(validator, path, [c, ...(trusted ? [trusted] : [])]), ...context([c, ...(trusted ? [trusted] : [])]), ...(native ? [] : ["  try {"]), `  const ${isSqlite || pgPort ? "rows" : "result"} = (${mode === "caller" ? `caller.kind === "system" ? ${read(sqlOf(trusted!, path), bind(trusted!, path, fieldNames))} : ` : ""}${read(sqlOf(c, path), bind(c, path, fieldNames))})${isSqlite ? " as Record<string, unknown>[]" : ""};`, ...(native ? [`  return ${isSqlite || pgPort ? "rows" : "result.rows"} as View${index}Row[];`] : [`  return ${isSqlite ? "rows" : "result.rows"}.map(row => ${fields.some(field => field.includes("value =")) ? `{ let value: any; return { ${fields.join(", ")} }; }` : `({ ${fields.join(", ")} })`}) as View${index}Row[];`, `  } catch (error) { throw databaseError(error, "read", ${q(path)}, ${q(isSqlite ? "sqlite" : "postgres")}); }`]), "}");
     views.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
-    entries[`views/${encodeURIComponent(name)}.ts`] = `export { ${exportName("view", name)} as default } from "../generated.js";\nexport type { View${index}Input as Input, View${index}Row as Row } from "../generated.js";\n`;
+    entries[`views/${encodeURIComponent(name)}.ts`] = `import { ${exportName("view", name)} as operation } from "../generated.js";\nexport default operation;\nexport type { View${index}Input as Input, View${index}Row as Row } from "../generated.js";\n`;
   }
   for (const [index, [name, procedure]] of Object.entries(plan.procedures).sort().entries()) {
     const path = `procedures/${name}`, fn = `procedure${index}`;
@@ -271,7 +272,7 @@ function emit({ target, plan, lowered, viewKeys }: GenerateInput, native: boolea
     declarations.push(native ? `  return { results } as Procedure${index}Output;` : `  return validate(${outputValidator}, { results }, ${q(path + "/output")}, "OUTPUT_VALIDATION_FAILED") as Procedure${index}Output;`, "}");
     procedures.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
-    entries[`procedures/${encodeURIComponent(name)}.ts`] = `export { ${exportName("procedure", name)} as default } from "../generated.js";\nexport type { Procedure${index}Input as Input, Procedure${index}Output as Output } from "../generated.js";\n`;
+    entries[`procedures/${encodeURIComponent(name)}.ts`] = `import { ${exportName("procedure", name)} as operation } from "../generated.js";\nexport default operation;\nexport type { Procedure${index}Input as Input, Procedure${index}Output as Output } from "../generated.js";\n`;
   }
   if (diagnostics.length) return { ok: false, diagnostics };
   const dbType = target === "bun-sqlite" ? 'import type { Database } from "bun:sqlite";' : target === "cloudflare-d1" ? 'import type { D1Database as Database } from "@cloudflare/workers-types";' : native ? 'import type { Postgres as Database } from "@aotter/mantle-next/contracts";' : `import type { ${target === "bun-postgres" ? "Client, PoolClient" : "Client"} } from "pg";\ntype Database = ${target === "bun-postgres" ? "Client | PoolClient" : "Client"};`;
