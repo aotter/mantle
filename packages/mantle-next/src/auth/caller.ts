@@ -13,7 +13,7 @@ const isBanned = (user: User) => !!user.banned && (user.banExpires == null || ne
 export interface AuthInstance {
   readonly options: BetterAuthOptions;
   readonly $context: Promise<unknown>;
-  readonly api: { getSession(input: { headers: Headers; query?: { disableCookieCache?: boolean } }): Promise<{ session: { id: string }; user: User } | null> };
+  readonly api: { getSession(input: { headers: Headers; query?: { disableCookieCache?: boolean }; returnHeaders: true }): Promise<{ headers: Headers | null; response: { session: { id: string }; user: User } | null }> };
 }
 
 export interface AuthLoader<A extends AuthInstance = AuthInstance> {
@@ -49,8 +49,10 @@ const roleOf = (user: User) => (user.role && STAFF.has(user.role) ? user.role as
  *   token is UNAUTHENTICATED, never anonymous. The user (role, ban) is read from the database on every request.
  * - Otherwise a session cookie, validated by `auth.api.getSession` without the cookie cache, so revocation and role
  *   changes apply on the next request. No session cookie means anonymous, without loading Better Auth.
+ *   When Better Auth extends the session (`updateAge`) it sets a fresh cookie: pass the outgoing response's headers as
+ *   `responseHeaders` and those Set-Cookie lines are appended, so the browser cookie slides with the session.
  */
-export async function resolveCaller(request: Request, auth: AuthLoader, options: { readonly audience?: string | readonly string[] } = {}): Promise<Caller> {
+export async function resolveCaller(request: Request, auth: AuthLoader, options: { readonly audience?: string | readonly string[]; readonly responseHeaders?: Headers } = {}): Promise<Caller> {
   const authorization = request.headers.get("authorization");
   if (authorization && /^(bearer|dpop) /i.test(authorization)) {
     if (!options.audience) throw new ContractError("UNAUTHENTICATED", "This route does not accept access tokens.");
@@ -72,7 +74,8 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
   if (!request.headers.has("cookie")) return { kind: "anonymous" };
   const { getSessionCookie } = await import("better-auth/cookies");
   if (!getSessionCookie(request, { cookiePrefix: auth.cookiePrefix })) return { kind: "anonymous" };
-  const found = await (await auth.get()).api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
+  const { headers, response: found } = await (await auth.get()).api.getSession({ headers: request.headers, query: { disableCookieCache: true }, returnHeaders: true });
+  for (const cookie of headers?.getSetCookie() ?? []) options.responseHeaders?.append("set-cookie", cookie);
   // Better Auth's getSession does not look at `banned` for an existing session; the bearer path above already refuses it.
   if (!found || isBanned(found.user)) return { kind: "anonymous" };
   return { kind: "user", subject: found.user.id, role: roleOf(found.user), scopes: [], credential: "session", credentialId: found.session.id, clientId: null };

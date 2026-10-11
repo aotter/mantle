@@ -115,6 +115,59 @@ function atomicity(label: string, setup: () => Promise<{ adapter: ReturnType<Ret
   });
 }
 
+/** Behaviour of the native SQL itself: number fields, join projection, per-parent join limits. */
+function sql(label: string, setup: (options: BetterAuthOptions) => Promise<{ adapter: ReturnType<ReturnType<typeof d1Adapter>>; done?: () => Promise<void> }>, enabled = true) {
+  const joinOptions: BetterAuthOptions = { rateLimit: { storage: "database" }, advanced: { database: { joins: true } } };
+  describe.skipIf(!enabled)(`${label}: native SQL behaviour`, () => {
+    test("a bigint number field round-trips as a JS number", async () => {
+      const { adapter, done } = await setup(joinOptions);
+      const lastRequest = Date.now();
+      await adapter.create({ model: "rateLimit", data: { key: "k", count: 1, lastRequest } });
+      const row = await adapter.findOne<{ lastRequest: number; count: number }>({ model: "rateLimit", where: [{ field: "key", value: "k" }] });
+      expect(typeof row!.lastRequest).toBe("number");
+      expect(row!.lastRequest + 1000 - lastRequest).toBe(1000);
+      expect(typeof row!.count).toBe("number");
+      await done?.();
+    });
+    test("select with join keeps the id, join key and sort column in the primary query", async () => {
+      const { adapter, done } = await setup(joinOptions);
+      const expiresAt = new Date(Date.now() + 60_000);
+      for (const email of ["b@x.io", "a@x.io"]) {
+        const user = await adapter.create<{ id: string }>({ model: "user", data: { name: email, email, emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
+        for (let i = 0; i < 2; i++) await adapter.create({ model: "session", data: { token: `${email}${i}`, userId: user.id, expiresAt, createdAt: new Date(), updatedAt: new Date() } });
+      }
+      const rows = await adapter.findMany<{ name: string; email?: string; session: unknown[] }>({ model: "user", select: ["name"], sortBy: { field: "email", direction: "asc" }, limit: 10, join: { session: true } });
+      expect(rows.map(r => r.name)).toEqual(["a@x.io", "b@x.io"]);
+      expect(rows.map(r => r.session.length)).toEqual([2, 2]);
+      expect(rows[0]!.email).toBeUndefined();
+      await done?.();
+    });
+    test("a one-to-many join returns at most `limit` rows per parent, chosen in SQL", async () => {
+      const { adapter, done } = await setup(joinOptions);
+      const expiresAt = new Date(Date.now() + 60_000);
+      const make = async (email: string, sessions: number) => {
+        const user = await adapter.create<{ id: string }>({ model: "user", data: { name: email, email, emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
+        for (let i = 0; i < sessions; i++) await adapter.create({ model: "session", data: { token: `${email}${i}`, userId: user.id, expiresAt, createdAt: new Date(), updatedAt: new Date() } });
+      };
+      await make("many@x.io", 7);
+      await make("few@x.io", 2);
+      await make("none@x.io", 0);
+      const rows = await adapter.findMany<{ email: string; session: unknown[] }>({ model: "user", sortBy: { field: "email", direction: "asc" }, limit: 10, join: { session: { limit: 3 } } });
+      expect(rows.map(r => [r.email, r.session.length])).toEqual([["few@x.io", 2], ["many@x.io", 3], ["none@x.io", 0]]);
+      await done?.();
+    });
+  });
+}
+sql("D1", async options => {
+  resetSqlite(options);
+  return { adapter: d1Adapter(d1)(options) };
+});
+sql("Bun.SQL", async options => {
+  const pg = await pgSchema();
+  await pg.reset(options);
+  return { adapter: bunSqlAdapter(pg.sql)(options) as never, done: pg.drop };
+}, !!pgUrl);
+
 test("delete of a missing row resolves", async () => {
   resetSqlite({});
   await d1Adapter(d1)({}).delete({ model: "user", where: [{ field: "id", value: "missing" }] });

@@ -6,7 +6,6 @@
  */
 import type { BetterAuthOptions } from "@better-auth/core";
 import { getAuthTables, type DBFieldAttribute } from "@better-auth/core/db";
-import { getDatabaseFieldIndexName } from "@better-auth/core/db/internal";
 import { getSchema } from "better-auth/db";
 
 export type AuthDialect = "sqlite" | "postgres";
@@ -25,6 +24,21 @@ function columnType(field: DBFieldAttribute, dialect: AuthDialect): string {
     case "string[]": case "number[]": return "text";
     default: return "text";
   }
+}
+
+/**
+ * Better Auth's name for a field-level index (`<table>_<column>_idx`; past PostgreSQL's 63-byte identifier limit the middle is
+ * cut and an FNV-1a hash of the full name is spliced in). Its helper lives in `@better-auth/core/db/internal`, which is not public
+ * API, so the same rule is restated here: a database already migrated by Better Auth's CLI keeps matching names, and
+ * `IF NOT EXISTS` skips the index instead of duplicating it.
+ */
+export function fieldIndexName(table: string, column: string): string {
+  const full = `${table}_${column}_idx`;
+  if (new TextEncoder().encode(full).length <= 63) return full;
+  let hash = 2166136261;
+  for (let i = 0; i < full.length; i++) hash = Math.imul(hash ^ full.charCodeAt(i), 16777619);
+  const suffix = `_${(hash >>> 0).toString(16).padStart(8, "0")}_idx`;
+  return full.slice(0, 63 - suffix.length) + suffix;
 }
 
 type Tables = [string, ReturnType<typeof getSchema>[string]][];
@@ -69,7 +83,7 @@ export function authSchemaSql(options: BetterAuthOptions, dialect: AuthDialect):
         field.unique && "UNIQUE",
         field.references && `REFERENCES ${ident(field.references.model)}(${ident(referenced(field.references))}) ON DELETE ${(field.references.onDelete ?? "cascade").toUpperCase()}`,
       ].filter(Boolean).join(" "));
-      if (field.index && !field.unique) indexes.push(`CREATE INDEX IF NOT EXISTS ${ident(getDatabaseFieldIndexName(name, column, false))} ON ${ident(name)} (${ident(column)})`);
+      if (field.index && !field.unique) indexes.push(`CREATE INDEX IF NOT EXISTS ${ident(fieldIndexName(name, column))} ON ${ident(name)} (${ident(column)})`);
     }
     statements.push(`CREATE TABLE IF NOT EXISTS ${ident(name)} (${columns.join(", ")})`);
     for (const index of table.indexes ?? []) indexes.push(`CREATE ${index.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${ident(index.name)} ON ${ident(name)} (${index.columns.map(ident).join(", ")})`);

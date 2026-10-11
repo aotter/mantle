@@ -39,3 +39,11 @@ spec:
   db.exec(sql); db.exec(sql);
   expect(db.query(`SELECT name FROM sqlite_master WHERE name = 'user'`).all()).toHaveLength(1);
 });
+
+test("field index names match Better Auth's own rule, including the hashed long form", async () => {
+  // Test-only use of Better Auth's internal helper: production code reproduces it from public data.
+  const { getDatabaseFieldIndexName } = await import("@better-auth/core/db/internal");
+  const { fieldIndexName } = await import("../src/auth/schema.js");
+  for (const [table, column] of [["session", "userId"], ["oauthAccessToken", "a".repeat(80)], ["t".repeat(70), "c"]] as const)
+    expect(fieldIndexName(table, column)).toBe(getDatabaseFieldIndexName(table, column, false));
+});

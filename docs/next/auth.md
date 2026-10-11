@@ -52,8 +52,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/catalog") return Response.json(await views.catalog(env.DB, { kind: "anonymous" }, {})); // public: no auth at all
     if (url.pathname.startsWith("/api/auth/")) return (await auth.get()).handler(request);
-    const caller = await resolveCaller(request, auth, { audience: `${env.ORIGIN}/mcp` });
-    // … generated Views and Procedures with `caller`
+    const headers = new Headers(); // receives a refreshed session cookie, so the session slides
+    const caller = await resolveCaller(request, auth, { audience: `${env.ORIGIN}/mcp`, responseHeaders: headers });
+    // … generated Views and Procedures with `caller`, then: return Response.json(result, { headers })
   },
 };
 ```

@@ -196,6 +196,18 @@ describe("resolveCaller: session cookie", () => {
     const { cookie, userId } = await app.signIn();
     for (let i = 0; i < 3; i++) expect(await resolveCaller(app.request({ cookie }), app.loader)).toMatchObject({ kind: "user", subject: userId });
   });
+
+  test("a session due for refresh hands its fresh Set-Cookie to responseHeaders, so the cookie slides", async () => {
+    const app = await makeApp();
+    const { cookie } = await app.signIn();
+    // Within updateAge of expiry: Better Auth extends the session and re-sets the cookie.
+    app.sqlite.run("UPDATE session SET expiresAt = ?", [new Date(Date.now() + 60_000).toISOString()]);
+    const responseHeaders = new Headers();
+    expect((await resolveCaller(app.request({ cookie }), app.loader, { responseHeaders })).kind).toBe("user");
+    expect(responseHeaders.getSetCookie().some(c => c.includes("session_token="))).toBe(true);
+    const { expiresAt } = app.sqlite.query("SELECT expiresAt FROM session").get() as { expiresAt: string };
+    expect(Date.parse(expiresAt)).toBeGreaterThan(Date.now() + 86_400_000);
+  });
 });
 
 const b64url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");

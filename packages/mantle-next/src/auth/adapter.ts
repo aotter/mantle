@@ -106,7 +106,7 @@ function customAdapter(dialect: Dialect, exec: Exec) {
           if (config.relation === "one-to-one") entry![model] = obj;
           else {
             const list = entry![model] as Row[];
-            if (list.length < (config.limit ?? 100) && !list.some(item => item.id !== undefined && item.id === obj.id)) list.push(obj);
+            if (!list.some(item => item.id !== undefined && item.id === obj.id)) list.push(obj);
           }
         });
       });
@@ -114,20 +114,32 @@ function customAdapter(dialect: Dialect, exec: Exec) {
     };
 
     const select = async (model: string, modelKey: string, o: { where?: CleanedWhere[]; select?: string[]; limit?: number; offset?: number; sortBy?: { field: string; direction: string }; join?: JoinConfig }) => {
-      const order = (s: ReturnType<typeof stmt>, prefix = "") => (o.sortBy?.field ? ` ORDER BY ${prefix}${ident(getFieldName({ model: modelKey, field: o.sortBy.field }))} ${o.sortBy.direction === "desc" ? "DESC" : "ASC"}` : "");
+      const column = (field: string) => getFieldName({ model: modelKey, field });
+      const sortColumn = o.sortBy?.field ? ident(column(o.sortBy.field)) : null;
+      const order = (prefix = "") => (sortColumn ? ` ORDER BY ${prefix}${sortColumn} ${o.sortBy!.direction === "desc" ? "DESC" : "ASC"}` : "");
+      // With a join the primary subquery also needs the id (rows fold by it), every join key and the sort column; they are dropped again below.
+      const wanted = o.select?.length ? o.select.map(column) : null;
+      const needed = o.join ? [column("id"), ...Object.values(o.join).map(c => c.on.from), ...(o.sortBy ? [column(o.sortBy.field)] : [])] : [];
       const { rows } = await run(s => {
-        const list = o.select?.length ? o.select.map(f => ident(getFieldName({ model: modelKey, field: f }))).join(", ") : "*";
+        const list = wanted ? [...new Set([...wanted, ...needed])].map(ident).join(", ") : "*";
         const paging = `${o.limit !== undefined ? ` LIMIT ${Math.trunc(o.limit)}` : ""}${o.offset ? ` OFFSET ${Math.trunc(o.offset)}` : ""}`;
-        const primary = `SELECT ${list} FROM ${ident(model)}${s.where(modelKey, o.where)}${order(s)}${paging}`;
+        const primary = `SELECT ${list} FROM ${ident(model)}${s.where(modelKey, o.where)}${order()}${paging}`;
         if (!o.join) return primary;
         const entries = Object.entries(o.join);
-        const columns = joinColumns(o.join);
-        const joinSql = entries.map(([joined, c], i) => ` LEFT JOIN ${ident(joined)} AS "j${i}" ON "j${i}".${ident(c.on.to)} = "primary".${ident(c.on.from)}`).join("");
-        const joinSelect = entries.flatMap((_, i) => columns[i]!.map(c => `"j${i}".${ident(c)} AS ${ident(`__j${i}__${c}`)}`)).join(", ");
-        return `SELECT "primary".*, ${joinSelect} FROM (${primary}) AS "primary"${joinSql}${order(s, '"primary".')}`;
+        const names = joinColumns(o.join);
+        // The CTE is MATERIALIZED so an unordered LIMIT picks the same parents in both of its uses. One-to-many: number each parent's joined rows in SQL and keep the first `limit`, so only that many rows ever leave the database.
+        const joinSql = entries.map(([joined, c], i) => {
+          const source = c.relation === "one-to-one" ? ident(joined)
+            : `(SELECT *, ROW_NUMBER() OVER (PARTITION BY ${ident(c.on.to)} ORDER BY ${idOf(c.modelKey ?? getDefaultModelName(joined))}) AS "__rn" FROM ${ident(joined)} WHERE ${ident(c.on.to)} IN (SELECT ${ident(c.on.from)} FROM "primary"))`;
+          return ` LEFT JOIN ${source} AS "j${i}" ON "j${i}".${ident(c.on.to)} = "primary".${ident(c.on.from)}${c.relation === "one-to-one" ? "" : ` AND "j${i}"."__rn" <= ${Math.trunc(c.limit ?? 100)}`}`;
+        }).join("");
+        const joinSelect = entries.flatMap((_, i) => names[i]!.map(c => `"j${i}".${ident(c)} AS ${ident(`__j${i}__${c}`)}`)).join(", ");
+        return `WITH "primary" AS MATERIALIZED (${primary}) SELECT "primary".*, ${joinSelect} FROM "primary"${joinSql}${order('"primary".')}`;
       });
       if (!o.join) return rows;
-      return foldJoins(rows, o.join, getFieldName({ model: modelKey, field: "id" }));
+      const folded = foldJoins(rows, o.join, column("id"));
+      if (wanted) for (const row of folded) for (const extra of needed) if (!wanted.includes(extra)) delete row[extra];
+      return folded;
     };
 
     return {
@@ -175,7 +187,11 @@ function customAdapter(dialect: Dialect, exec: Exec) {
 function build(dialect: Dialect, adapterId: string, adapterName: string, exec: Exec, transaction: DBAdapterFactoryConfig["transaction"]) {
   const pg = dialect === "postgres";
   return createAdapterFactory({
-    config: { adapterId, adapterName, supportsBooleans: pg, supportsDates: pg, supportsJSON: pg, supportsArrays: false, supportsUUIDs: pg, transaction },
+    config: {
+      adapterId, adapterName, supportsBooleans: pg, supportsDates: pg, supportsJSON: pg, supportsArrays: false, supportsUUIDs: pg, transaction,
+      // Bun.SQL returns int8/numeric as strings; a `number` field must reach Better Auth as a number (the rate limiter adds to `lastRequest`). Ids stay strings.
+      customTransformOutput: ({ data, fieldAttributes, field }) => (fieldAttributes.type === "number" && typeof data === "string" && field !== "id" && !fieldAttributes.references ? Number(data) : data),
+    },
     adapter: customAdapter(dialect, exec),
   });
 }
@@ -195,8 +211,8 @@ export function bunSqlAdapter(sql: SQL) {
     const rows = (await handle.unsafe(text, values as never[])) as Row[] & { count?: number | null };
     return { rows: [...rows], changes: Number(rows.count ?? 0) };
   };
-  let options: BetterAuthOptions | null = null;
-  const factory = build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(sql), cb =>
-    sql.begin(tx => cb(build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(tx), false)(options!))));
-  return (opts: BetterAuthOptions) => factory((options = opts));
+  // Each `betterAuth` instance gets its own factory; its transactions rebuild the adapter on the pinned connection with the same options.
+  return (options: BetterAuthOptions) =>
+    build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(sql), cb =>
+      sql.begin(tx => cb(build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(tx), false)(options))))(options);
 }
