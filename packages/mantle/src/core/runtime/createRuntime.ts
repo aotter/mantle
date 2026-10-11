@@ -135,19 +135,19 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   if (loweredStatus === "used") seedPlan(plan, dialect, lifecycle?.after);
   else if (plan.lowered && loweredStatus !== "restricted") console.warn(`[mantle boot] lowered statements not used (${loweredStatus}); regenerate the plan with this Mantle (\`mantle generate\`)`);
 
-  const validators = planValidators(plan); // built once per plan; `createMantle` already did it at construction
+  const validators = planValidators(plan); // each built on first use, shared by every runtime over this plan
 
   const now = args.now ?? (() => Date.now() * 1000);
   const store = createStore({
     executor, dialect, schemas: plan.schemas, lifecycle, now,
     newId: args.newId ?? (() => crypto.randomUUID().replaceAll("-", "")),
-    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input, inputSchema: validators.views.get(name) } : {}), ...(v.columns ? { columns: v.columns } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
+    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input, inputSchema: () => validators.view(name)! } : {}), ...(v.columns ? { columns: v.columns } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
     guardView: async (procedure, caller, input, cause) => { await invoke({ procedure, input, caller, cause: child(cause, procedure) }, true); },
   });
 
   // ---- invocation ---------------------------------------------------------------------------------------------------------------
   const check = (kind: "input" | "output", name: string, path: string, value: unknown) => {
-    const r = safeParseJson(validators.procedures.get(name)![kind], value);
+    const r = safeParseJson(validators.procedure(name, kind), value);
     if (r.success) return r.data;
     const { instancePath, message } = firstZodIssueAsJsonPointer(r.error);
     throw new DiagnosticError(makeDiagnostic({

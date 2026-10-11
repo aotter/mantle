@@ -21,6 +21,14 @@ caller is reaches the statement only as binds.
 
 ## Decision
 
+Plan-derived work runs, in this order of preference:
+
+- at `mantle generate`, emitted as code or data in the generated output;
+- when it cannot be generated, on its first use, kept per plan;
+- never at module scope for the whole plan. Workers' guidance is to keep
+  expensive work out of global scope, and the TLS-handshake pre-warm does not
+  cover a startup that already loads Mantle.
+
 1. **Generate lowers.** `mantle generate` runs the dialect check, then the
    policy rewrite, then the dialect's printer, for every View (modes: a public
    View in `public`, any other in `caller` and `trusted`) and every inline
@@ -79,11 +87,12 @@ caller is reaches the statement only as binds.
    under `restrict`, where no runtime uses lowered statements. Probe runs (`seen`,
    `unsafeNoVisibility`) and Store writes with statuses never use seeds (the
    existing compile cache bypass).
-7. **Validators.** The Procedure and View input/output validators are built
-   eagerly per plan at `createMantle()` (module scope in the generated
-   preset), not on the first call (`planValidators`, a `WeakMap` per plan). This landed in its own change; generating
-   validator code instead would be a second JSON Schema implementation beside
-   zod's importer.
+7. **Validators.** Built on first use, one per entry, kept per plan
+   (`planValidators`, a `WeakMap`). Building every validator at `createMantle()`
+   put 30–40 ms into each cold isolate on Swolhalla's plan (26 Procedures,
+   24 Views), against about 10 ms for the entries a first request reaches.
+   Generated standalone validators, with no zod at runtime, are the next step
+   under the order above.
 
 ## Consequences
 

@@ -119,12 +119,10 @@ re-derive (another version or dialect). See
 [ADR-0044](../../adr/0044-generate-time-lowering.md) and
 [the measurements](../../benchmarks/lowered-cold-start.md).
 
-The Procedure and View input/output validators are built once per plan, when
-`createMantle()` runs, so on Workers that work happens at module scope and not
-in the first request. On Node or Bun it happens at process start. Every
-validator of the plan is built up front, so a very large plan pays for all of
-them at construction; calling `createMantle()` again with the same plan object
-reuses them.
+The Procedure and View input/output validators are built once per plan, each
+the first time a call needs it, so a cold isolate pays only for the entries its
+first request reaches, not for the whole plan. Runtimes over the same plan
+object share what was built.
 
 ## Database targets and performance
 
