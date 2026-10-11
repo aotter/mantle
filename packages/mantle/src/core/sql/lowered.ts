@@ -162,6 +162,21 @@ function cursorOf(shape: string, nkeys: number): readonly unknown[] | undefined 
   throw new Error(`page shape ${shape} is not a lowered shape`);
 }
 
+/** Prepare a View seed without installing it; callers can validate every entry before changing caches. */
+export function seedLoweredView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, lv: LoweredView, real: () => Compiled): () => void {
+  checkStatement(lv, "lowered View");
+  const compile = lazily(real);
+  const c0 = loweredCompiled(lv, compile, lv.nkeys);
+  const pageds = Object.entries(lv.paged ?? {}).map(([shape, page]) => {
+    const cursor = cursorOf(shape, lv.nkeys);
+    return [shape, loweredPaged(page, () => pagedOf(env, compile(), cursor, undefined).ast)] as const;
+  });
+  return () => {
+    const [c] = seedCompiled(env, p, compiledKey("view", mode, undefined, undefined, "view"), [c0]);
+    if (c === c0) for (const [shape, paged] of pageds) seedPaged(c0, shape, paged);
+  };
+}
+
 /**
  * Seeds the compile cache and the paged cache from `plan.lowered`, which `loweringStatus` said is usable. Every entry is built before
  * any is installed, and a malformed or unmatched one abandons the whole seed with a warning: boot never fails here, the programs just
@@ -181,15 +196,7 @@ export function seedPlan(plan: RuntimePlan, dialect: MantleDialect, returning: R
         if (!(VIEW_MODES as readonly string[]).includes(mode)) throw new Error(`lowered View '${name}' has the unknown mode '${mode}'`);
         checkStatement(lv, `lowered View '${name}' (${mode})`);
         const compile = lazily(() => compileProgram(v.stmts, { dialect, schemas: plan.schemas, inputs: v.inputs, kind: "view", mode: mode as Mode } satisfies CompileContext)[0]!);
-        const c0 = loweredCompiled(lv, compile, lv.nkeys);
-        const pageds = Object.entries(lv.paged ?? {}).map(([shape, page]) => {
-          const cursor = cursorOf(shape, lv.nkeys);
-          return [shape, loweredPaged(page, () => pagedOf(env, compile(), cursor, undefined).ast)] as const;
-        });
-        installs.push(() => {
-          const [c] = seedCompiled(env, p, compiledKey("view", mode, undefined, undefined, "view"), [c0]);
-          if (c === c0) for (const [shape, paged] of pageds) seedPaged(c0, shape, paged);
-        });
+        installs.push(seedLoweredView(env, p, mode as Mode, lv, compile));
       }
     }
     for (const [name, modes] of Object.entries(l.procedures)) {

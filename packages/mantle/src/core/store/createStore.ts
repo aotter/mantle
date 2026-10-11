@@ -18,6 +18,8 @@ import { decodeCursor, encodeCursor } from "./cursor.js";
 import { StoreJson, checkValue, rowDecoder, validateValues, walkRead, type StoreSchemas } from "./json.js";
 import { READER_SHAPES, createReaderSet, dbFor, readerOf, type ReaderSet, type ReadKind, type Shape } from "./readers.js";
 
+import { readerShape, type ReaderSeed } from "./readerSeeds.js";
+
 /** A compiled View: its IR and declared input types. `public` shows published rows only (ADR-0032 decision 8). */
 export interface StoreView {
   readonly ir: readonly N[];
@@ -39,6 +41,8 @@ export interface StoreView {
 }
 
 export interface StoreDeps {
+  /** Application-generated, dialect-gated finite reader shapes; never accepted from uploaded plan JSON. */
+  readonly readerSeeds?: Readonly<Record<string, ReaderSeed>>;
   readonly executor: StoreExecutor;
   readonly dialect: MantleDialect;
   readonly schemas: StoreSchemas;
@@ -109,6 +113,14 @@ function make(deps: StoreDeps, caller: Caller | undefined, parent: InvocationCau
     let shape: Shape | undefined = readers.memo.get(mk);
     let fresh = false;
     if (shape) w.values.forEach((v, i) => checkValue(codec, shape!.types[i]!, v, shape!.whats[i]!));
+    else if (deps.readerSeeds && Object.hasOwn(deps.readerSeeds, mk)) {
+      const seed = deps.readerSeeds[mk]!;
+      if (seed.tags.length !== w.tags.length || seed.tags.some((tag, i) => tag !== w.tags[i]))
+        throw new DiagnosticError(runtimeDiagnostic({ code: "INTERNAL_ERROR", severity: "error", path: "store", message: "generated reader walk and converter disagree" }));
+      w.values.forEach((v, i) => checkValue(codec, seed.types[i]!, v, seed.whats[i]!));
+      shape = readerShape(seed, deps.schemas, schemaKey, deps.dialect);
+      fresh = true;
+    }
     else {
       const json = new StoreJson(deps.schemas, codec);
       const s = json.read({ from: schemaKey, ...w.query } as never);
