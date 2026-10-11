@@ -15,7 +15,11 @@ preview native release notes and correct PR metadata, align package/plugin
 versions (the consumer cold-start commands stay untagged — see
 docs/release-process.md step 2), inspect the packed docs/skills payload, run `pnpm check` and review
 its exact SHA. The reference consumer gate runs
-from packed packages outside workspace links. Merge into develop for every
+from packed packages outside workspace links. Bump `MANTLE_VERSION`
+(`packages/mantle/src/core/version.ts`) with `package.json`, and regenerate
+`docs/examples/reference-service` (its `plan.json` names the version in its
+lowered statements, ADR-0044); `test/core/version.test.ts` and
+`test/cli/reference-plan.test.ts` fail otherwise. Merge into develop for every
 version; 0.2 work on `0.2.x` reaches a release only after a `0.2.x` -> develop
 PR merges (docs/release-process.md). Beta, RC and stable then follow "Promote to main" in
 docs/release-process.md: pin

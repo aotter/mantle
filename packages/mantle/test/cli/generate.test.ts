@@ -246,6 +246,50 @@ describe("mantle generate", () => {
     expect(JSON.parse(await read(dir, ".mantle/generated/plan.json")).plan.dialect).toEqual({ name: "@aotter/mantle/d1", version: "1" });
   });
 
+  it("lowers every View and inline Procedure for the built-in dialect (ADR-0044), and --check reports edited lowered text as stale", async () => {
+    const dir = await project();
+    expect((await gen(CUSTOM, dir)).code).toBe(0);
+    const { plan } = JSON.parse(await read(dir, ".mantle/generated/plan.json"));
+    expect(plan.lowered).toMatchObject({ mantle: JSON.parse(await readFile(join(SRC, "../package.json"), "utf8")).version, dialect: { name: "@aotter/mantle/d1", key: "" } });
+    const inline = Object.entries(plan.procedures).filter(([, p]) => "sql" in (p as { handler: object }).handler).map(([name]) => name);
+    expect(Object.keys(plan.lowered.views)).toEqual(Object.keys(plan.views));
+    expect(Object.keys(plan.lowered.procedures)).toEqual(inline);
+    expect(inline.length).toBeGreaterThan(0);
+    // the fingerprint covers it, and the lowered key comes last, so the plan's own key order is unchanged
+    expect(Object.keys(plan).at(-1)).toBe("lowered");
+    expect((await gen(["--check"], dir)).code).toBe(0);
+    const edited = structuredClone(JSON.parse(await read(dir, ".mantle/generated/plan.json")));
+    const [view] = Object.values(edited.plan.lowered.views) as { [mode: string]: { sql: string } }[];
+    Object.values(view!)[0]!.sql += " -- edited";
+    await writeFile(join(dir, ".mantle/generated/plan.json"), `${JSON.stringify(edited, null, 2)}\n`);
+    const stale = await gen(["--check"], dir);
+    expect(stale.code).toBe(1);
+    expect(stale.err).toContain("stale: .mantle/generated/plan.json");
+    // generate writes it back
+    expect((await gen([], dir)).code).toBe(0);
+    expect((await gen(["--check"], dir)).code).toBe(0);
+  });
+
+  it("lowers a PostgreSQL plan for UTC, and a third-party dialect's plan not at all", async () => {
+    const pg = await project(["@aotter/mantle", "pg"]);
+    await writeFile(join(pg, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], host: "none", dialect: "postgres" }));
+    expect((await gen([], pg)).code).toBe(0);
+    const generated = JSON.parse(await read(pg, ".mantle/generated/plan.json")).plan;
+    expect(generated.lowered.dialect).toMatchObject({ name: "@aotter/mantle/postgres", key: "UTC" });
+    expect(Object.values(generated.lowered.views).length).toBeGreaterThan(0);
+    expect((await gen(["--check"], pg)).code).toBe(0);
+
+    const acme = await project();
+    const mod = join(acme, "node_modules", "@acme", "dialect");
+    await mkdir(mod, { recursive: true });
+    await writeFile(join(mod, "package.json"), JSON.stringify({ name: "@acme/dialect", type: "module", exports: { "./compile": "./compile.js" } }));
+    await writeFile(join(mod, "compile.js"), 'export const name = "@acme/dialect"; export const version = "9"; export function accepts() {}');
+    await writeFile(join(acme, "mantle.config.json"), JSON.stringify({ version: 2, identity: "custom", features: ["web"], dialect: "@acme/dialect" }));
+    await rm(join(acme, "src/service.ts"));
+    expect((await gen([], acme)).code).toBe(0);
+    expect(JSON.parse(await read(acme, ".mantle/generated/plan.json")).plan.lowered).toBeUndefined();
+  });
+
   it("the dialect's names: sqlite and d1 are the SQLite dialect, postgres needs pg; a v2 host is read, an unknown one refused", async () => {
     for (const name of ["sqlite", "d1"]) {
       const dir = await project();

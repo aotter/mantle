@@ -18,6 +18,8 @@ export type { RuntimePlan };
 export interface MantleBootReport {
   readonly fingerprint: string;
   readonly coreVersion: string;
+  /** Whether the plan's generate-time lowered statements run (ADR-0044): "used", or why not. */
+  readonly lowered?: "used" | "absent" | "restricted" | "mantle-version" | "dialect" | "unsupported";
 }
 
 export interface MantleRuntime {

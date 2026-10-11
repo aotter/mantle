@@ -3,16 +3,18 @@
 //   prepare(ctx)      optional; returns JSON-serializable `args`; runs once, outside every measurement
 //   rows(result)      the number of rows the call produced (guards a scope or seed bug making Mantle look fast)
 //   zeroWarm          counter keys that must be 0 on a warm call (check mode fails otherwise)
-//   zeroFirst         counter keys that must be 0 on the first call (empty today; the generate-time lowering work sets it)
+//   zeroFirst         counter keys that must be 0 on the first call (LOWERED: statements `mantle generate` lowered, ADR-0044)
 // Items do not import Mantle.
 const ALL = ["compile", "check", "policy", "paged", "print", "zod", "storeIr"];
+// a sealed View or inline Procedure runs its lowered statement on the first call; a reader still builds its first shape (#1433 follow-up)
+const LOWERED = ["compile", "check", "policy", "paged", "print"];
 const CAUSE = { kind: "internal", id: "bench" };
 
 const rowsOf = (page) => page.rows.length;
 const countsOf = (result) => result.counts.reduce((a, b) => a + b, 0);
 
 const view = (name, options, extra = {}) => ({
-  name: `view:${name}${extra.suffix ?? ""}`, kind: "view", caller: "member", minRows: 1, zeroWarm: ALL, zeroFirst: [],
+  name: `view:${name}${extra.suffix ?? ""}`, kind: "view", caller: "member", minRows: 1, zeroWarm: ALL, zeroFirst: LOWERED,
   call: (ctx, args) => ctx.store.view(name, typeof options === "function" ? options(ctx, args) : options), rows: rowsOf, ...extra.item,
 });
 
@@ -32,7 +34,7 @@ export default [
   // date_trunc('week') and a grouped paged View are the slow shapes on SQLite (#1291): fewer samples keep the run bounded
   view("weekly-volume", { limit: 50 }, { item: { samples: 20, warmup: 3, coldSamples: 4 } }),
   {
-    name: "view:weekly-volume:all-pages", kind: "view", caller: "member", minRows: 1, zeroWarm: ALL, zeroFirst: [], samples: 20, warmup: 3, coldSamples: 3,
+    name: "view:weekly-volume:all-pages", kind: "view", caller: "member", minRows: 1, zeroWarm: ALL, zeroFirst: LOWERED, samples: 20, warmup: 3, coldSamples: 3,
     async call(ctx) {
       let total = 0;
       for (let cursor, i = 0; i < 20; i++) {
@@ -46,7 +48,7 @@ export default [
   },
   view("training-summary", (ctx) => ({ input: { since: ctx.fixture.since }, limit: 100 })),
   {
-    name: "procedure:training-report", kind: "procedure-ref", caller: "member", minRows: 1, zeroWarm: ALL, zeroFirst: [], samples: 40, warmup: 5, coldSamples: 4,
+    name: "procedure:training-report", kind: "procedure-ref", caller: "member", minRows: 1, zeroWarm: ALL, zeroFirst: LOWERED, samples: 40, warmup: 5, coldSamples: 4,
     call: (ctx) => ctx.runtime.invokeProcedure({ procedure: "training-report", input: { since: ctx.fixture.since, exercise: ctx.fixture.exercise }, caller: ctx.caller, cause: CAUSE }),
     rows: countsOf,
   },
@@ -57,7 +59,7 @@ export default [
   },
   {
     // an UPDATE plus the _mantle_assert insert; "idempotent" means the same row counts each time, not the same bytes (version and updated_at move)
-    name: "procedure:set-duration", kind: "procedure-inline", caller: "member", minRows: 0, zeroWarm: ALL, zeroFirst: [],
+    name: "procedure:set-duration", kind: "procedure-inline", caller: "member", minRows: 0, zeroWarm: ALL, zeroFirst: LOWERED,
     call: (ctx) => ctx.runtime.invokeProcedure({ procedure: "set-duration", input: { workoutId: ctx.fixture.latestWorkoutId, durationMin: 60 }, caller: ctx.caller, cause: CAUSE }),
     rows: () => 0,
   },

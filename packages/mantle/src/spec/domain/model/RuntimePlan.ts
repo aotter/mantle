@@ -72,6 +72,52 @@ export interface PlanTrigger {
   readonly procedure: string;
 }
 
+/** A statement as the dialect printed it at `mantle generate` (ADR-0044). Binds are Core's BindSpec as JSON. */
+export interface LoweredStatement {
+  readonly sql: string;
+  readonly binds: readonly { readonly k: string; readonly [key: string]: unknown }[];
+  readonly kind: "read" | "row" | "set";
+  readonly schema?: string;
+  readonly verb?: "insert" | "update" | "delete";
+  /** Omitted when false. */
+  readonly hooked?: true;
+  /** Omitted when false. */
+  readonly publish?: true;
+  /** The policy AST has a RETURNING clause. */
+  readonly returns?: true;
+  /** A write's table, lower case (D1's unique-conflict op mapping). */
+  readonly target?: string;
+}
+
+/** A paged statement of a View under one request shape, printed. The page size is a bind (`limit`), so one statement serves every page size. */
+export interface LoweredPage {
+  readonly sql: string;
+  /** Where each extra bind comes from on a request, after the View's own binds: a cursor key, the search pattern, an equality value or the page size + 1. */
+  readonly sources: readonly ({ readonly cursor: number } | { readonly search: true } | { readonly eq: number } | { readonly limit: true })[];
+  readonly flat?: true;
+  readonly names: readonly string[];
+  readonly nkeys: number;
+}
+
+export interface LoweredView extends LoweredStatement {
+  /** The length of the policy AST's sort clause. */
+  readonly nkeys: number;
+  /** By Core's page shape key (`pageShape`): no cursor, and a cursor whose every key is non-null. */
+  readonly paged: Readonly<Record<string, LoweredPage>>;
+}
+
+export type LoweredMode = "caller" | "public" | "trusted";
+
+/** What `mantle generate` printed for the plan's dialect (ADR-0044): text, bind recipes and paging metadata, never ASTs. */
+export interface PlanLowered {
+  /** The `@aotter/mantle` version that lowered. */
+  readonly mantle: string;
+  /** The dialect's name and version, and its `lowerKey` ("" when absent): a runtime on another uses none of it. */
+  readonly dialect: { readonly name: string; readonly version: string; readonly key: string };
+  readonly views: Readonly<Record<string, Readonly<Partial<Record<LoweredMode, LoweredView>>>>>;
+  readonly procedures: Readonly<Record<string, Readonly<Partial<Record<"caller" | "trusted", readonly LoweredStatement[]>>>>>;
+}
+
 export interface RuntimePlan {
   readonly version: typeof RUNTIME_PLAN_VERSION;
   /** The dialect the SQL was compiled for (ADR-0035 decision 5); boot refuses a storage of another. */
@@ -82,6 +128,8 @@ export interface RuntimePlan {
   readonly views: Readonly<Record<string, PlanView>>;
   readonly procedures: Readonly<Record<string, PlanProcedure>>;
   readonly triggers: Readonly<Record<string, PlanTrigger>>;
+  /** Optional, covered by the fingerprint, and ignored by a runtime it does not match (ADR-0044). */
+  readonly lowered?: PlanLowered;
 }
 
 /** The native columns a View may output that decode like a field of this type: the entry's timestamps. */
