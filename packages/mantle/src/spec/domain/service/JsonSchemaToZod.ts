@@ -7,9 +7,14 @@ import type { JsonSchema } from "../model/ManifestGrammar.js";
  * length-before-pattern order here; JSON Schema semantics belong to Zod.
  */
 export function jsonSchemaToZod(schema: JsonSchema): ZodType {
+  return jsonSchemaValidator((z) => z.fromJSONSchema(normalizeNullable(schema) as never));
+}
+
+/** Finish a generated official Zod factory with the same construction errors and value-safety checks as JSON Schema import. */
+export function jsonSchemaValidator(factory: (zod: typeof z) => ZodType): ZodType {
   let imported: ZodType;
   try {
-    imported = lengthBeforePattern(z.fromJSONSchema(normalizeNullable(schema) as never));
+    imported = lengthBeforePattern(factory(z));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     imported = z.never({ error: `Invalid JSON Schema: ${message}` });

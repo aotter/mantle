@@ -13,21 +13,28 @@ export interface PlanValidators {
   view(name: string): ZodType | undefined;
 }
 
-const built = new WeakMap<RuntimePlan, PlanValidators>();
+/** Generated factories stay lazy; registration selects this exact plan's table before it reaches the validator cache. */
+export interface GeneratedValidators {
+  readonly procedure?: Readonly<Record<string, Readonly<Partial<Record<"input" | "output", () => ZodType>>>>>;
+  readonly view?: Readonly<Record<string, () => ZodType>>;
+}
 
-export function planValidators(plan: RuntimePlan): PlanValidators {
-  const cached = built.get(plan);
+const built = new WeakMap<object, PlanValidators>();
+
+export function planValidators(plan: RuntimePlan, generated?: GeneratedValidators): PlanValidators {
+  const key = generated ?? plan;
+  const cached = built.get(key);
   if (cached) return cached;
   const made = new Map<string, ZodType>();
-  const once = (key: string, schema: Parameters<typeof jsonSchemaToZod>[0]) => {
+  const once = (key: string, schema: Parameters<typeof jsonSchemaToZod>[0], factory?: () => ZodType) => {
     let z = made.get(key);
-    if (!z) made.set(key, (z = jsonSchemaToZod(schema)));
+    if (!z) made.set(key, (z = factory ? factory() : jsonSchemaToZod(schema)));
     return z;
   };
   const v: PlanValidators = {
-    procedure: (name, kind) => once(`p\u0000${kind}\u0000${name}`, plan.procedures[name]![kind]),
-    view: (name) => { const input = plan.views[name]?.input; return input ? once(`v\u0000${name}`, input) : undefined; },
+    procedure: (name, kind) => once(`p\u0000${kind}\u0000${name}`, plan.procedures[name]![kind], generated?.procedure && Object.hasOwn(generated.procedure, name) ? generated.procedure[name]?.[kind] : undefined),
+    view: (name) => { const input = plan.views[name]?.input; return input ? once(`v\u0000${name}`, input, generated?.view && Object.hasOwn(generated.view, name) ? generated.view[name] : undefined) : undefined; },
   };
-  built.set(plan, v);
+  built.set(key, v);
   return v;
 }
