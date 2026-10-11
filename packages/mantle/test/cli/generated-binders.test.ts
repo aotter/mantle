@@ -72,6 +72,20 @@ it("projects only declared own input names, folding exactly as sqlInput includin
   expect(sourceFunction(emitInputProjector(undefined))({ injected: true })).toEqual({});
 });
 
+it("omits unused ref handler projectors with valid case-distinct JavaScript inputs", async () => {
+  const { compile } = await import("../core/lowered-fixture.js");
+  const { withLowering } = await import("../../src/core/sql/lowered.js");
+  const { plan } = await withLowering(await compile(), d1Dialect);
+  const procedure = Object.values(plan.procedures)[0]!;
+  const withRef = { ...plan, procedures: { ...plan.procedures, refInput: { ...procedure,
+    handler: { ref: "handler" }, input: { type: "object" as const, properties: { foo: { type: "string" as const }, Foo: { type: "string" as const } } },
+  } } };
+  const emitted = emitBinders(withRef)!;
+  const projects = sourceFunction(`() => (${emitted.projectors})`)();
+  expect(Object.hasOwn(projects.procedure, "refInput")).toBe(false);
+  expect(emitted.projectors).not.toContain('given["Foo"]');
+});
+
 it("emits the complete lowered program/mode table and preserves page extras on cold and warm calls", async () => {
   const { compile, user } = await import("../core/lowered-fixture.js");
   const { withLowering } = await import("../../src/core/sql/lowered.js");

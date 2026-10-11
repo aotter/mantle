@@ -70,7 +70,7 @@ export function emitBinders(plan: RuntimePlan): { imports: string[]; binders: st
   });
   const projectors = (["view", "procedure"] as const).map((kind) => {
     const programs = kind === "view" ? plan.views : plan.procedures;
-    return `${quote(kind)}: { ${Object.entries(programs).map(([name, p]) => `[${quote(name)}]: ${emitInputProjector(p.input)}`).join(", ")} }`;
+    return `${quote(kind)}: { ${Object.entries(programs).filter(([, p]) => kind === "view" || ("handler" in p && "sql" in p.handler)).map(([name, p]) => `[${quote(name)}]: ${emitInputProjector(p.input)}`).join(", ")} }`;
   });
   return {
     imports: helpers.size ? [`import { ${[...helpers].sort().join(", ")} } from "@aotter/mantle/${dialect === "sqlite" ? "d1" : "postgres"}";`] : [],
