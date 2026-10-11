@@ -9,7 +9,9 @@
   "exports": {
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
-    "./contracts": "./dist/kernel/contracts.js"
+    "./contracts": "./dist/kernel/contracts.js",
+    "./auth": "./dist/auth/caller.js",
+    "./auth/adapter": "./dist/auth/adapter.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.lib.json",
@@ -21,7 +23,21 @@
     "check:size": "bun run build && bun scripts/check-size.ts",
     "check:package": "bun run build && bun scripts/check-package.ts"
   },
+  "peerDependencies": {
+    "@better-auth/core": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "better-auth": "catalog:peer"
+  },
+  "peerDependenciesMeta": {
+    "@better-auth/core": { "optional": true },
+    "@better-auth/oauth-provider": { "optional": true },
+    "better-auth": { "optional": true }
+  },
   "devDependencies": {
+    "@better-auth/core": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "@better-auth/test-utils": "1.7.7",
+    "better-auth": "catalog:",
     "@aotter/mantle": "workspace:*",
     "@types/node": "catalog:",
     "@types/pg": "8.23.1",

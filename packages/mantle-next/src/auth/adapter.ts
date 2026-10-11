@@ -1,0 +1,202 @@
+/**
+ * Better Auth `database` adapters on the same native handle as the data layer: a Cloudflare D1 binding or Bun.SQL.
+ * No Kysely. Rules (where semantics, joins, field/model mapping, value transforms) come from Better Auth's own
+ * `createAdapterFactory`; this file only turns its already-normalised calls into parameterised SQL.
+ * `consumeOne` and `incrementOne` are single statements: D1 has no transactions, and they guard OTP consumption and
+ * attempt counting.
+ */
+import { createAdapterFactory, type CleanedWhere, type CustomAdapter, type DBAdapterFactoryConfig, type JoinConfig } from "@better-auth/core/db/adapter";
+import type { BetterAuthOptions } from "@better-auth/core";
+import type { SQL } from "bun";
+
+type Row = Record<string, unknown>;
+type Dialect = "sqlite" | "postgres";
+/** Runs one statement; `changes` is the affected-row count. */
+type Exec = (text: string, values: unknown[]) => Promise<{ rows: Row[]; changes: number }>;
+/** The slice of D1 the adapter calls (a real `D1Database` satisfies it). */
+export interface D1Like {
+  prepare(text: string): { bind(...values: unknown[]): { all(): Promise<{ results: Row[]; meta: { changes?: number } }> } };
+}
+
+const ident = (name: string) => name.split(".").map(part => `"${part.replaceAll('"', '""')}"`).join(".");
+const escapeLike = (value: string) => value.replace(/[\\%_]/g, "\\$&");
+
+function customAdapter(dialect: Dialect, exec: Exec) {
+  return ({ getFieldName, schema, getDefaultModelName }: Parameters<Parameters<typeof createAdapterFactory>[0]["adapter"]>[0]): CustomAdapter => {
+    const pg = dialect === "postgres";
+    /** One statement under construction: text plus its parameters. */
+    const stmt = () => {
+      const values: unknown[] = [];
+      const bind = (value: unknown) => {
+        values.push(value === undefined ? null : value);
+        return pg ? `$${values.length}` : "?";
+      };
+      const condition = (modelKey: string, w: CleanedWhere): string => {
+        const col = ident(getFieldName({ model: modelKey, field: w.field }));
+        const { value, operator } = w;
+        const fold = w.mode === "insensitive" && (typeof value === "string" || (Array.isArray(value) && value.every(v => typeof v === "string")));
+        const lhs = fold ? `LOWER(${col})` : col;
+        const rhs = (v: unknown) => (fold ? `LOWER(${bind(v)})` : bind(v));
+        if (operator === "in" || operator === "not_in") {
+          const list = Array.isArray(value) ? value : [value];
+          if (!list.length) return operator === "in" ? "1 = 0" : "1 = 1";
+          return `${lhs} ${operator === "in" ? "IN" : "NOT IN"} (${list.map(rhs).join(", ")})`;
+        }
+        if (operator === "contains" || operator === "starts_with" || operator === "ends_with") {
+          const text = escapeLike(String(value));
+          const pattern = operator === "contains" ? `%${text}%` : operator === "starts_with" ? `${text}%` : `%${text}`;
+          return `${col} ${fold && pg ? "ILIKE" : "LIKE"} ${bind(pattern)} ESCAPE '\\'`;
+        }
+        if (operator === "eq" || operator === "ne") {
+          if (value === null) return `${col} IS ${operator === "eq" ? "" : "NOT "}NULL`;
+          return `${lhs} ${operator === "eq" ? "=" : "<>"} ${rhs(value)}`;
+        }
+        return `${col} ${{ gt: ">", gte: ">=", lt: "<", lte: "<=" }[operator]} ${bind(value)}`;
+      };
+      /** `WHERE (and...) AND (or...)`, the Kysely adapter's grouping; empty without conditions. */
+      const where = (modelKey: string, conditions: CleanedWhere[] | undefined, extra?: string) => {
+        const group = (connector: "AND" | "OR") => {
+          const parts = (conditions ?? []).filter(w => (w.connector === "OR" ? "OR" : "AND") === connector).map(w => condition(modelKey, w));
+          return parts.length ? `(${parts.join(` ${connector} `)})` : null;
+        };
+        const parts = [group("AND"), group("OR"), extra ?? null].filter(Boolean);
+        return parts.length ? ` WHERE ${parts.join(" AND ")}` : "";
+      };
+      return { values, bind, where };
+    };
+    const run = async (build: (s: ReturnType<typeof stmt>) => string) => {
+      const s = stmt();
+      const text = build(s);
+      return exec(text, s.values);
+    };
+    const idOf = (modelKey: string) => ident(getFieldName({ model: modelKey, field: "id" }));
+    /** `<id> IN (SELECT <id> FROM t WHERE ... LIMIT 1)`: the statement touches at most one row. */
+    const oneRow = (s: ReturnType<typeof stmt>, table: string, modelKey: string, where: CleanedWhere[]) =>
+      `${idOf(modelKey)} IN (SELECT ${idOf(modelKey)} FROM ${ident(table)}${s.where(modelKey, where)} LIMIT 1)`;
+    const assign = (s: ReturnType<typeof stmt>, values: Row, increment: Record<string, number> = {}) =>
+      [...Object.entries(values).filter(([, v]) => v !== undefined).map(([c, v]) => `${ident(c)} = ${s.bind(v)}`), ...Object.entries(increment).map(([c, n]) => `${ident(c)} = ${ident(c)} + ${s.bind(n)}`)].join(", ");
+
+    /** Joined rows come back as flat `__j<i>__<column>` aliases; fold them into `row[joinModel]` (object or array). */
+    const joinColumns = (join: JoinConfig) =>
+      Object.entries(join).map(([model, config]) => {
+        const fields = schema[config.modelKey ?? getDefaultModelName(model)]?.fields ?? {};
+        return [...new Set(["id", ...Object.entries(fields).map(([field, attr]) => attr.fieldName || field)])];
+      });
+    const foldJoins = (rows: Row[], join: JoinConfig, idColumn: string) => {
+      const entries = Object.entries(join);
+      const grouped = new Map<unknown, Row>();
+      rows.forEach((raw, index) => {
+        const main: Row = {};
+        const joined: Row[] = entries.map(() => ({}));
+        for (const [key, value] of Object.entries(raw)) {
+          const m = /^__j(\d+)__(.*)$/s.exec(key);
+          if (m) joined[Number(m[1])]![m[2]!] = value;
+          else main[key] = value;
+        }
+        const key = main[idColumn] ?? index;
+        let entry = grouped.get(key);
+        if (!entry) {
+          entry = { ...main };
+          entries.forEach(([model, config]) => (entry![model] = config.relation === "one-to-one" ? null : []));
+          grouped.set(key, entry);
+        }
+        entries.forEach(([model, config], i) => {
+          const obj = joined[i]!;
+          if (!Object.values(obj).some(v => v !== null && v !== undefined)) return;
+          if (config.relation === "one-to-one") entry![model] = obj;
+          else {
+            const list = entry![model] as Row[];
+            if (list.length < (config.limit ?? 100) && !list.some(item => item.id !== undefined && item.id === obj.id)) list.push(obj);
+          }
+        });
+      });
+      return [...grouped.values()];
+    };
+
+    const select = async (model: string, modelKey: string, o: { where?: CleanedWhere[]; select?: string[]; limit?: number; offset?: number; sortBy?: { field: string; direction: string }; join?: JoinConfig }) => {
+      const order = (s: ReturnType<typeof stmt>, prefix = "") => (o.sortBy?.field ? ` ORDER BY ${prefix}${ident(getFieldName({ model: modelKey, field: o.sortBy.field }))} ${o.sortBy.direction === "desc" ? "DESC" : "ASC"}` : "");
+      const { rows } = await run(s => {
+        const list = o.select?.length ? o.select.map(f => ident(getFieldName({ model: modelKey, field: f }))).join(", ") : "*";
+        const paging = `${o.limit !== undefined ? ` LIMIT ${Math.trunc(o.limit)}` : ""}${o.offset ? ` OFFSET ${Math.trunc(o.offset)}` : ""}`;
+        const primary = `SELECT ${list} FROM ${ident(model)}${s.where(modelKey, o.where)}${order(s)}${paging}`;
+        if (!o.join) return primary;
+        const entries = Object.entries(o.join);
+        const columns = joinColumns(o.join);
+        const joinSql = entries.map(([joined, c], i) => ` LEFT JOIN ${ident(joined)} AS "j${i}" ON "j${i}".${ident(c.on.to)} = "primary".${ident(c.on.from)}`).join("");
+        const joinSelect = entries.flatMap((_, i) => columns[i]!.map(c => `"j${i}".${ident(c)} AS ${ident(`__j${i}__${c}`)}`)).join(", ");
+        return `SELECT "primary".*, ${joinSelect} FROM (${primary}) AS "primary"${joinSql}${order(s, '"primary".')}`;
+      });
+      if (!o.join) return rows;
+      return foldJoins(rows, o.join, getFieldName({ model: modelKey, field: "id" }));
+    };
+
+    return {
+      async create({ data, model }) {
+        const keys = Object.keys(data).filter(k => data[k] !== undefined);
+        const { rows } = await run(s => `INSERT INTO ${ident(model)}${keys.length ? ` (${keys.map(ident).join(", ")}) VALUES (${keys.map(k => s.bind(data[k])).join(", ")})` : " DEFAULT VALUES"} RETURNING *`);
+        return rows[0] as never;
+      },
+      async findOne({ model, modelKey = model, where, select: fields, join }) {
+        return ((await select(model, modelKey, { where, select: fields, limit: 1, join }))[0] ?? null) as never;
+      },
+      async findMany({ model, modelKey = model, where, limit, select: fields, sortBy, offset, join }) {
+        return (await select(model, modelKey, { where, select: fields, limit, offset, sortBy, join })) as never;
+      },
+      async update({ model, modelKey = model, where, update }) {
+        if (!where.length) return null;
+        const { rows } = await run(s => `UPDATE ${ident(model)} SET ${assign(s, update as Row)}${s.where(modelKey, where)} RETURNING *`);
+        return (rows[0] ?? null) as never;
+      },
+      async updateMany({ model, modelKey = model, where, update }) {
+        return (await run(s => `UPDATE ${ident(model)} SET ${assign(s, update)}${s.where(modelKey, where)}`)).changes;
+      },
+      async delete({ model, modelKey = model, where }) {
+        await run(s => `DELETE FROM ${ident(model)}${s.where(modelKey, where)}`);
+      },
+      async deleteMany({ model, modelKey = model, where }) {
+        return (await run(s => `DELETE FROM ${ident(model)}${s.where(modelKey, where)}`)).changes;
+      },
+      async consumeOne({ model, modelKey = model, where }) {
+        const { rows } = await run(s => `DELETE FROM ${ident(model)}${s.where(modelKey, where, oneRow(s, model, modelKey, where))} RETURNING *`);
+        return (rows[0] ?? null) as never;
+      },
+      async incrementOne({ model, modelKey = model, where, increment, set }) {
+        const { rows } = await run(s => `UPDATE ${ident(model)} SET ${assign(s, set ?? {}, increment)}${s.where(modelKey, where, oneRow(s, model, modelKey, where))} RETURNING *`);
+        return (rows[0] ?? null) as never;
+      },
+      async count({ model, modelKey = model, where }) {
+        const { rows } = await run(s => `SELECT COUNT(*) AS "count" FROM ${ident(model)}${s.where(modelKey, where)}`);
+        return Number(rows[0]!.count);
+      },
+    };
+  };
+}
+
+function build(dialect: Dialect, adapterId: string, adapterName: string, exec: Exec, transaction: DBAdapterFactoryConfig["transaction"]) {
+  const pg = dialect === "postgres";
+  return createAdapterFactory({
+    config: { adapterId, adapterName, supportsBooleans: pg, supportsDates: pg, supportsJSON: pg, supportsArrays: false, supportsUUIDs: pg, transaction },
+    adapter: customAdapter(dialect, exec),
+  });
+}
+
+/** Cloudflare D1 (SQLite). D1 has no interactive transactions, so `transaction` is off and the atomic operations are single statements. */
+export function d1Adapter(db: D1Like) {
+  const exec: Exec = async (text, values) => {
+    const { results, meta } = await db.prepare(text).bind(...values).all();
+    return { rows: results ?? [], changes: meta?.changes ?? 0 };
+  };
+  return build("sqlite", "d1", "Mantle D1 Adapter", exec, false);
+}
+
+/** Bun.SQL against PostgreSQL. Transactions use `sql.begin`, which pins every statement to one connection. */
+export function bunSqlAdapter(sql: SQL) {
+  const executor = (handle: Pick<SQL, "unsafe">): Exec => async (text, values) => {
+    const rows = (await handle.unsafe(text, values as never[])) as Row[] & { count?: number | null };
+    return { rows: [...rows], changes: Number(rows.count ?? 0) };
+  };
+  let options: BetterAuthOptions | null = null;
+  const factory = build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(sql), cb =>
+    sql.begin(tx => cb(build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(tx), false)(options!))));
+  return (opts: BetterAuthOptions) => factory((options = opts));
+}
