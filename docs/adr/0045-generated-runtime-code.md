@@ -1,6 +1,6 @@
 # ADR-0045: Generated runtime code for plan-derived work
 
-**Status:** Proposed for #1447. Fingerprint and reader-shape decisions await the operator's explicit choice; other items preserve ADR-0044's existing trust boundary.
+**Status:** Accepted direction by the operator for #1447; implementation and measurement proceed in separate PRs. Bundled fingerprint assertion and bounded first-use reader seeds were explicitly accepted in the 2026-10-11 discussion.
 
 **Date:** 2026-10-11
 
@@ -22,9 +22,13 @@ Generate already knows the sealed plan, dialect, bind recipes and output columns
 8. Common reader and staff-list shapes may be generated as bounded constants, never eagerly compiled or copied into every runtime memo. Reader seed adoption requires the pending ADR-0043 decision. Other dynamic shapes preserve current first-use behavior and bounded memo rules.
 9. MCP configuration and boot lookup tables may be emitted or retained on first use where measurements justify it. Authentication, authorization, transports and native storage still own their existing responsibilities. No pools, scheduling, retries or cross-database consistency layer are introduced.
 
-### Pending fingerprint choice
+### Bundled fingerprint trust
 
-Only explicitly registered bundled code can assert its generated fingerprint in place of a boot hash, subject to decision 2. This changes detection of application-side mutation after generation: the deployment owner is responsible for preserving its bundle. Before enabling it, the operator must accept this boundary. If rejected, boot hashing remains for all plans; other generated execution artifacts do not depend on skipping it.
+Only explicitly registered bundled code can assert its generated fingerprint in place of a boot hash, subject to decision 2. This changes detection of application-side mutation after generation: the deployment owner is responsible for preserving its bundle and must treat the registered plan as immutable. The fingerprint string and WeakMap are not content verification. Uploaded, restricted, unregistered or incompatible plans still hash; no deep freeze or second hash is added to the fast path.
+
+### Bounded reader seeds
+
+Generate may emit a finite documented set of common reader shapes using the existing converter/lowerer/printer. A shape is adopted on first use into the existing 256-entry FIFO memo, not all at boot and not in a second unbounded cache. Every invocation still walks the request once and checks values, caller policy and cursor. Generated verification replaces runtime compilation for supported shapes; the existing successful-run insertion rule remains for memo adoption. Unknown shapes and refused operations retain the current fallback and do not grow the memo.
 
 ## Delivery and validation
 
