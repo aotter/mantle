@@ -11,7 +11,10 @@ pnpm --filter @aotter/mantle-next build
 pnpm --filter @aotter/mantle-next generate cloudflare-d1 /tmp/purchase-generated tests/apps/purchase.yaml
 ```
 
-Outputs are `generated.ts` and `schema.sql`. Apply initial DDL explicitly to an
+Outputs include `generated.ts`, `schema.sql` and direct operation entries.
+Import a selected function from `views/<encoded-name>.ts` or
+`procedures/<encoded-name>.ts` (default export, with Input/Row or Input/Output
+types) to exclude other operations from the request bundle. Apply initial DDL explicitly to an
 empty development database; this artifact is not a destructive migration or a
 production convergence tool. Generation does no database I/O. Application code
 passes an official connected client/SQLite handle/D1 binding and a verified
@@ -70,5 +73,7 @@ report HTTP and connection amortization separately. Local Wrangler results do no
 establish deployed Cloudflare latency.
 See the [measured evidence and remaining performance goal](../../docs/next/performance.md).
 The [size and startup gates](../../docs/next/size-and-startup.md) distinguish
-the executable offline bundle regression check from pending startup CPU acceptance.
+the passing package/bundle gates from pending startup CPU acceptance. The local
+D1 process CPU watchdog currently fails. The packed generator also still needs
+its workspace compiler dependency made standalone before publication.
 This package is not a released replacement for Mantle 0.2.
