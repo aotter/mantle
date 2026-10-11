@@ -64,33 +64,6 @@ export function isoTimestamptz(v: string | Date): string {
 }
 export const isoDate = (v: string): string => new Date(encodeDate(v) * 86_400_000).toISOString().slice(0, 10);
 
-/**
- * For the application boundary: bare queries rethrow native errors, which must not reach HTTP users as they are.
- * Classifies a native failure without interpreting SQL or leaking engine messages.
- */
-export function databaseError(error: unknown, operation: "read" | "write", path: string, dialect: "sqlite" | "postgres"): ContractError {
-  if (error instanceof ContractError) return error;
-  const value = (error ?? {}) as { code?: unknown; errno?: unknown; errcode?: unknown; name?: string; message?: string };
-  const message = error instanceof Error ? error.message : String(error);
-  let code = operation === "write" ? "OUTCOME_UNKNOWN" : "RESOURCE_UNAVAILABLE";
-  if (dialect === "postgres") {
-    // SQLSTATE is `errno` on Bun.SQL (whose `code` is ERR_POSTGRES_SERVER_ERROR) and `code` on node-postgres
-    const raw = typeof value.errno === "string" ? value.errno : value.code;
-    const state = typeof raw === "string" && /^[0-9A-Z]{5}$/.test(raw) ? raw : undefined;
-    if (state === "23505" || state === "MX409") code = "CONFLICT";
-    else if (state && /^(22|23|42)/.test(state)) code = "INPUT_VALIDATION_FAILED";
-    else if (state && /^(08|28|53|57|58|XX)/.test(state)) code = operation === "write" ? "OUTCOME_UNKNOWN" : "RESOURCE_UNAVAILABLE";
-    else if (state === "40001" || state === "40P01") code = "RESOURCE_UNAVAILABLE";
-    else if (state) code = "INPUT_VALIDATION_FAILED";
-  } else {
-    const primary = typeof value.errcode === "number" ? value.errcode & 255 : value.name === "SQLiteError" && typeof value.errno === "number" ? value.errno & 255 : undefined;
-    const text = message + " " + String(value.code ?? "");
-    if (/CONFLICT op=\d+|UNIQUE constraint failed/.test(message)) code = "CONFLICT";
-    else if (!/SQLITE_(BUSY|LOCKED|NOMEM|IOERR|FULL|INTERRUPT)/.test(text) && !(primary !== undefined && [5, 6, 7, 9, 10, 13].includes(primary)) && (/SQLITE_[A-Z_]+/.test(text) || primary !== undefined)) code = "INPUT_VALIDATION_FAILED";
-  }
-  return new ContractError(code, code === "CONFLICT" ? "The write conflicted with database state." : code === "OUTCOME_UNKNOWN" ? "The write outcome is unknown; reconcile before retrying." : "The database operation failed.", path, { cause: error });
-}
-
 /** One result of `unsafe`: the rows (typed by the generated function), plus the affected count. */
 export type PostgresResult = any[] & { readonly count: number | null };
 /**

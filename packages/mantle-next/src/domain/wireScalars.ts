@@ -5,8 +5,12 @@ export function outputType(plan: RuntimePlan, view: string, key: string): string
   const columns = plan.views[view]?.columns;
   const field = columns && Object.hasOwn(columns, key) ? columns[key] : undefined;
   const schema = field && plan.schemas[field.schema];
-  return schema && (schema.fields[field!.field] ?? (["created_at", "updated_at"].includes(field!.field) ? "timestamptz" : undefined));
+  return schema && declaredType(schema.fields, field!.field);
 }
+
+/** A column's declared type; the two system timestamps are not declared fields. */
+const declaredType = (fields: Readonly<Record<string, string>>, column: string): string | undefined =>
+  fields[column] ?? (column === "created_at" || column === "updated_at" ? "timestamptz" : undefined);
 
 const raw = (...parts: (string | SqlNode)[]): SqlNode => ({ Raw: { parts } });
 
@@ -49,13 +53,12 @@ export function wireReturning(ast: SqlNode, schemas: RuntimePlan["schemas"], sql
   if (!list?.length || !["InsertStmt", "UpdateStmt", "DeleteStmt"].includes(kind!)) return ast;
   const schema = schemas[stmt.relation?.relname];
   if (!schema) return ast;
-  const typeOf = (col: string) => schema.fields[col] ?? (["created_at", "updated_at"].includes(col) ? "timestamptz" : undefined);
   let changed = false;
   const exprs = [];
   for (const t of list) {
     const fields = t.ResTarget?.val?.ColumnRef?.fields;
     const col = fields?.at(-1)?.String?.sval;
-    const val = col === undefined ? undefined : wire(typeOf(col), sqlite, t.ResTarget.val);
+    const val = col === undefined ? undefined : wire(declaredType(schema.fields, col), sqlite, t.ResTarget.val);
     if (val) changed = true;
     exprs.push(val ? { ResTarget: { ...t.ResTarget, name: t.ResTarget.name ?? col, val } } : t);
   }

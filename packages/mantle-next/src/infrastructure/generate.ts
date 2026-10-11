@@ -7,7 +7,6 @@ import { postgresDialect } from "../../../mantle/dist/postgres/dialect.js";
 import { lowerPlan } from "../../../mantle/dist/core/sql/lowered.js";
 import { compileProgram } from "../../../mantle/dist/core/sql/compile.js";
 import { schemaColumns } from "../../../mantle/dist/core/sql/allowlist.js";
-import { flattenView } from "../domain/flattenView.js";
 import { outputType, wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { initialStorageSql as sqliteSchema } from "../../../mantle/dist/d1/storage.js";
 import { initialStorageSql as postgresSchema } from "../../../mantle/dist/postgres/storage.js";
@@ -26,14 +25,13 @@ export async function generateFromSources(request: { readonly target: Target; re
   }));
   const columns = schemaColumns(compiled.plan.schemas);
   const refusals: GenerateDiagnostic[] = [];
-  // Re-print each View through the dialect's own printer: PostgreSQL flattens the policy wrapper, and both format declared scalars.
+  // Re-print a View through the dialect's own printer when its declared date-time and date outputs are formatted in SQL.
   for (const [name, view] of Object.entries(compiled.plan.views)) {
     const keys = viewKeys[name];
     const types = keys?.map(key => outputType(compiled.plan, name, key)) ?? [];
     for (const [mode, statement] of Object.entries(lowered.views[name] ?? {})) {
       const [raw] = compileProgram(view.stmts, { dialect, schemas: compiled.plan.schemas, columns, inputs: view.inputs, kind: "view", mode: mode as "caller" | "public" | "trusted" });
-      const flat = postgres ? flattenView(raw!.ast, compiled.plan.schemas) : raw!.ast;
-      const ast = keys ? wireScalars(flat, keys, types, !postgres) : flat;
+      const ast = keys ? wireScalars(raw!.ast, keys, types, !postgres) : raw!.ast;
       if (typeof ast === "string") { refusals.push({ code: "GENERATE_UNSUPPORTED", path: `views/${name}`, message: ast }); continue; }
       if (ast !== raw!.ast) Object.assign(statement!, { sql: dialect.print!(ast, compiled.plan.schemas) });
     }

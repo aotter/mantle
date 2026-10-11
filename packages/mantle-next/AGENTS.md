@@ -18,8 +18,8 @@ For changes to generation, request helpers or dependencies:
 3. For performance acceptance, reserve a quiet local slot, use a clean committed
    artifact, predeclare rounds/order/margins, retain all raw samples and hashes,
    and compare matching native work with native A/A controls. Measure bare query
-   and selected boundary separately. Existing exploratory intervals are not an
-   automated equivalence gate; current startup watchdog is a local diagnostic.
+   and selected boundary separately. Exploratory intervals are not an
+   automated equivalence gate.
 4. Record pass, regression or inconclusive explicitly. Do not relax budgets,
    discard outliers or repeat until a favorable result. Native equivalence and
    pure module CPU remain open until appropriate evidence exists.

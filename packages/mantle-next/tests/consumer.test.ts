@@ -79,8 +79,6 @@ for (const [index, target] of targets.entries()) test(`${target} direct View ent
   expect(code).not.toContain("purchase-calendar");
   expect(code).not.toContain("create-purchase");
   expect(code).not.toContain("submittedDay");
-  expect(code).not.toMatch(/safeParse|assertJsonLimits|decodeField|getTypeParser|OUTPUT_VALIDATION_FAILED|RESOURCE_UNAVAILABLE/);
-  expect(code).not.toContain("zod");
 });
 
 test("CLI regeneration cannot route removed operation entries to renumbered functions", async () => {

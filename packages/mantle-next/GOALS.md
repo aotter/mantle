@@ -1,39 +1,13 @@
 # Acceptance goals
 
-- [x] Revised default query: native parameter/result/error behavior, without validators, JSON scans or generic row/error normalization.
-- [x] Selected boundary entries preserve external validation/defaults and required transport contracts without entering bare query bundles.
-- [x] Native controls match the revised query contract; separate controls cover selected boundaries.
+- [x] Bare native query: driver-native parameters, rows and errors; no validators, JSON scans or generic row/error normalization.
+- [x] Actual v2 manifests compile with the existing parser/linker/policy/printers; four targets generate typed functions with literal SQL.
+- [x] Generated request bundles have no old Mantle engine/compiler dependency; strict dependency direction is checked automatically.
+- [x] Offline Wrangler bundle gate (whole fixture API, official PG driver), selected-operation scaling and package file/size gates.
+- [x] Scope/auth/OCC, native atomic rollback and error outcomes verified against native implementations on all four real engines/hosts.
+- [x] Declared date-time/date wire form tested; unsupported contracts fail generate.
+- [ ] Paging/cursor API compatibility (open).
+- [ ] Workers startup CPU and first-use regression gates; native performance acceptance with retained raw samples.
 
-- [x] Generate actual v2 manifests using the existing parser/linker/policy/printers.
-- [x] All four targets generate typed functions with literal SQL and native calls.
-- [x] Generated request bundle has no old Mantle engine/compiler dependency.
-- [x] Offline Wrangler deployment bundle regression gate for the whole fixture API, including the official PG driver.
-- [x] Package distribution file/size gate and selected-operation bundle scaling gate.
-- [x] Retained 168-sample local cold baseline, including the failed D1 process CPU watchdog.
-- [ ] Workers library global initialization CPU and first-use regression gates; CLI readiness is not library load time.
-- [x] Supported SQL-slice scope/auth/input/output behavior verified against native implementations.
-- [x] Native atomic rollback, explicit OCC and error outcomes verified on each target.
-- [ ] Paging/cursor API compatibility completed (open); declared date-time/date wire form tested and unsupported contracts fail generate.
-- [x] Four real local applications run side by side; raw paired timing evidence retained.
-- [x] Cold-start and warm work measured with retained raw samples and appropriate host clocks.
-- [ ] Native performance acceptance: resolve supported positive gaps and measurement uncertainty; see the performance evidence.
-- [x] Strict dependency direction checked automatically.
-- [x] Correctness and Ponytail reviews addressed; broad-check blocker recorded.
-
-Completion of this first increment does not imply all 0.2 modules are migrated.
-The compatibility inventory and measured results determine readiness to replace it.
-
-Checked removal (2026-10-11): 34 focused tests plus 5 PG-gated, the size and package
-gates, and 15 real host/engine checks per target on all four targets.
-
-Historical evidence: clean `82454430` revised native boundary passed 44 focused tests / 385 assertions,
-strict four-target consumers, and 140 real host/engine semantic checks
-(21 checked + 14 bare per target), plus native/checked footprint/package gates.
-Two independent adversarial reviews found no remaining correctness blockers.
-The historical checked D1 cold CPU watchdog failed; revised native startup
-baseline passed its unchanged local watchdog (168 samples); pure library CPU
-and formal equivalence remain open.
-Full `pnpm check` stops at a baseline Cloud helper `plan_stale` mismatch.
-Separately, workspace typechecks and the packed Worker consumer passed; the full
-UI run remains non-green despite isolated rerun passes. See
-[review](../../docs/next/review.md) and [performance](../../docs/next/performance.md).
+Completing this increment does not migrate all 0.2 modules: the
+[compatibility ledger](../../docs/next/compatibility.md) decides readiness to replace it.

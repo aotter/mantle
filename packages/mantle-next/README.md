@@ -24,16 +24,14 @@ Caller to `views[name](db, caller, input)` or
 
 Default queries contain no validator, scalar decoder, row projection or generic
 database-error wrapper. Validate untrusted input before calling them; redact
-native errors at application transports. JSON binds are JSON text; SQLite bool
+native errors at application transports (they are rethrown as they are). JSON binds are JSON text; SQLite bool
 and fixed numeric binds use native storage values. Bound fields
 must be supplied explicitly (null for absence). Rows use SQL names and official
 driver representations (PG int8 strings, SQLite 0/1 booleans), except declared
 date-time and date columns: the SQL returns them (Views and `RETURNING`) as ISO
 strings in UTC with six fractional digits and `YYYY-MM-DD` on every target, and
 inputs bound to them take the same ISO text (a valid `Date` also works for date-time); an offset-less
-timestamp or a nonexistent day is refused with `SQL_TYPE` before the write. `databaseError` from
-`@aotter/mantle-next/contracts` is an optional helper for redacting native errors
-at your transport.
+timestamp or a nonexistent day is refused with `SQL_TYPE` before the write.
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain
@@ -59,19 +57,10 @@ application. Known output
 names and bindings are emitted as straight-line code. Per-query PG wire metadata
 is needed for computed SQL values whose native type is only known from the result.
 
-PostgreSQL resources are an explicit trusted application/deployment boundary.
-Generated PG modules export `postgresRequirements`, plain native GUC defaults:
-DateStyle ISO/YMD, IntervalStyle postgres, TimeZone UTC,
-standard_conforming_strings on, extra_float_digits 1, statement_timeout 10000ms.
-Configure these through PostgreSQL's native ROLE or DATABASE settings before
-serving queries. Any ISO date order, float precision >= 1 and stricter positive
-timeout satisfy the same prerequisites. An explicit unbounded timeout is an
-application policy decision, as the previous adapter's timeout=0 was. Bun may
-also use official driver connection options where session lifetime permits.
-Hyperdrive resets pooled sessions: do not assume client SETs/startup options
-persist on its origin sessions. The generated functions neither configure nor
-verify every connection; deployment owns this precondition just as it owns the
-verified Caller and initial schema. No per-read settings query is added.
+PostgreSQL session settings (DateStyle ISO/YMD, IntervalStyle postgres, TimeZone UTC,
+standard_conforming_strings on, extra_float_digits 1, a positive statement_timeout) are
+deployment configuration on the ROLE or DATABASE; Hyperdrive does not keep client SETs.
+Generated functions neither set nor verify them. See the [contract](../../docs/next/contract.md).
 
 Checks:
 
@@ -87,16 +76,7 @@ procurement fixtures and native SQL oracles. It creates fresh PostgreSQL schemas
 SQL/time/driver behavior is compared per engine, not normalized across engines.
 Cloudflare tests create no cloud resources. Formal benchmark runs need a quiet
 machine and a fresh private output directory; raw samples must accompany claims.
-Worker `performance.now()` advances with I/O events and cannot account reliably
-for row processing after an await. Its per-call samples are I/O-event intervals,
-not complete function latency. Assess Worker overhead with an external host clock,
-paired batches consuming the same complete rows, and a native/native control;
-report HTTP and connection amortization separately. Local Wrangler results do not
-establish deployed Cloudflare latency.
-See the [measured evidence and remaining performance goal](../../docs/next/performance.md).
-The [size and startup gates](../../docs/next/size-and-startup.md) distinguish
-the passing package/bundle gates from pending startup CPU acceptance. The local
-checked-slice D1 process CPU watchdog failed; the revised native local watchdog
-passed. Pure module CPU and formal equivalence remain open. The packed generator also still needs
-its workspace compiler dependency made standalone before publication.
+The [size and startup gates](../../docs/next/size-and-startup.md) cover the
+bundle and package budgets. The packed generator still needs its workspace compiler
+dependency made standalone before publication.
 This package is not a released replacement for Mantle 0.2.

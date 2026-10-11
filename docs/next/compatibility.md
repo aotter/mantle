@@ -8,15 +8,7 @@ The first slice generates typed SQL View and inline SQL Procedure functions for 
 
 There is no optional application composition in this slice: no generated Auth resolver, REST/MCP/Admin routes, UI, ref-handler dispatch or lifecycle/schedule wiring. Passing a trusted Caller from application code tests SQL policy; it is not proof of end-to-end authentication. Four target generators are implemented in source; native test results must separately identify the exact generated artifact and targets actually exercised. This document does not certify unrun tests or performance.
 
-The revised [query responsibility decision](contract.md#revised-query-responsibility-decision-2026-10-11)
-makes bare typed queries an application-trusted native API. Input/output validation,
-legacy scalar conversion and safe transport errors belong to selected boundary
-entries. The checked slice was removed on 2026-10-11; bare queries use driver-ready binds
-and native rows/errors, with declared date-time and date outputs formatted by the
-SQL. Rows below that require validation or legacy conversion belong to the
-application boundary. This is
-an explicit API responsibility change, not completed implementation or permission
-to omit validation at external application boundaries.
+Bare typed queries are an application-trusted native API (see the [query responsibility decision](contract.md#revised-query-responsibility-decision-2026-10-11)); rows that need validation or legacy conversion belong to the application boundary.
 
 Statuses below describe implementation scope, not a passed compatibility gate:
 
@@ -36,9 +28,7 @@ Every follow-up must name its target matrix, acceptance tests and owner before c
 | Caller mode, trusted system mode, declared auth predicates | Slice | User/anonymous/system matrix; denied access before SQL; system satisfies no user predicate. No wire can choose trusted mode. Generator |
 | Credential verification, fresh roles/scopes, OAuth/session behavior | Open; no Auth composition | Official provider wiring; invalid credential never falls back; role/grant revocation and complete Auth responses. Infrastructure |
 | Scope/TTL/public publishing policy | Slice via compiled policy | Every physical relation, nested query, conflict branch and public read; private projection and negative controls. Generator |
-| Input validation and defaults | Slice: generated official Zod constructors for supported schemas | Full supported-schema differential corpus, accessor/cycle/depth behavior and bounded regex safety; unsupported keywords must refuse. Contracts/generator |
-| Procedure output validation and safe errors | Slice, under review | Correct OUTPUT code and redaction; defaults/cloning; committed-state test for validation failure after execution. Contracts/generator |
-| Typed parameter encoding and row decoding | Slice, under review | Integer precision, numeric scale, JSON, bool, temporal precision, NULL/optional fields and computed outputs on both engines. Generator/contracts |
+| Input/output validation, defaults, row conversion and safe errors | Application boundary; not generated | Application validates untrusted input, owns defaults and redacts native errors before any transport. Application |
 | Full-row SQL Views | Slice; intentionally distinct API | Complete projected result/order and authored LIMIT, not page-envelope parity. Generator |
 | Store View paging and opaque cursors | Open | First/deep/all pages, NULLs/ties/mixed directions/grouping/joins; query binding; default/max limits; root result uniqueness. Generator |
 | Staff View search and filters | Open | Declared fields, escaped LIKE, typed equality, combined filters and cursor shapes. Generator |
@@ -59,7 +49,7 @@ Every follow-up must name its target matrix, acceptance tests and owner before c
 | HTTP and schedule Triggers | Refused via Trigger rejection | Validated invocation, authenticated source, schedule readiness and cause/depth rules. Infrastructure/generator |
 | Initial schema DDL | Slice: explicit SQL artifact | Native CHECK/unique constraints, system assertion table, auxiliary structures and correct target application. Infrastructure |
 | Existing-storage migration/convergence | Open | Ownership ledger/fingerprint checks, collision/data-loss protection, partial migration recovery; initial CREATE is not convergence. Infrastructure |
-| Stable diagnostics and observation/cause | Partial boundary errors | Safe codes/paths/failure facts across transports; preserve uncertain outcomes and internal-only causes/SQL; no accidental native error exposure. Contracts/surfaces |
+| Stable diagnostics and observation/cause | Partial: native errors rethrown, uncertain outcomes classified | Safe codes/paths/failure facts across transports; preserve uncertain outcomes and internal-only causes/SQL; no accidental native error exposure. Contracts/surfaces |
 | REST/Web public Views and HTTP Procedures | Open; no composition | Existing envelopes, authorization, bounds, paging, caching/response contracts and complete body parity. Surfaces |
 | MCP tools/resources/apps | Open; no composition | Actual official SDK validation, catalogs, role filtering, full results/error envelopes and resource metadata. Surfaces |
 | Admin operations, bootstrap, CSV and interaction bindings | Open; no composition | Scoped complete responses, paging/CSV, caller-observed OCC binding and recovery, role filtering. Surfaces |

@@ -60,15 +60,11 @@ native result types. Generated TypeScript is a compile-time contract, not a
 validator for untrusted data. The application must validate external input before
 calling it. Generate-time schema/SQL diagnostics remain mandatory.
 
-Optional generated boundary entries own untrusted-input validation and defaults,
-transport-safe error formatting, and compatibility conversions where selected.
-These entries must not be dependencies of a bare query import. The bare query
-must not recursively scan JSON, construct validators, revalidate known database
-rows, normalize errors across databases, or require universal row decoding.
-JSON parsing at a transport cannot produce cycles; direct in-process values are
-owned by their application caller. Input bounds still belong at the actual
-external boundary. Arbitrary JSON defaults and computed result types must be
-handled explicitly by that boundary rather than assumed from TypeScript.
+The bare query must not recursively scan JSON, construct validators, revalidate
+known database rows, normalize errors across databases, or require universal row
+decoding. Direct in-process values are owned by their application caller; input
+bounds, JSON defaults and computed result types are handled explicitly by the
+application boundary rather than assumed from TypeScript.
 
 Driver-native PostgreSQL types and SQLite/D1 types need not match, except for
 declared date-time and date outputs (below), which the SQL formats. That does not
@@ -79,8 +75,8 @@ an extra per-row projection merely to repair names already known at generation.
 Declared authorization, ownership/TTL SQL policy, explicit OCC and atomic writes
 remain required. Generate them as the native application would implement them.
 Transaction rollback and uncertain COMMIT handling must still preserve data-loss
-protection and client disposal responsibility; native errors must not be exposed
-to HTTP users without application-boundary handling. Removing generic error
+protection and client disposal responsibility; native errors are rethrown, and
+redaction before they reach HTTP users belongs to the application boundary (no helper). Removing generic error
 normalization does not authorize dropping transaction outcome evidence.
 
 **Implementation:** default `generated.ts` now binds driver-native parameters,
@@ -103,12 +99,8 @@ without a server response (lost socket), are `OUTCOME_UNKNOWN`. SQLSTATE is
 `begin("isolation level serializable", ...)`: a failure before the callback
 returns was rolled back by `begin`; only a failed COMMIT is classified as above.
 
-**Checked removed (2026-10-11):** the optional `checked` boundary (`--checked`,
-`checked.ts`, Zod validators, scalar codecs, failure envelopes) is gone. It
-duplicated the bare query and held PostgreSQL to node-postgres for type OIDs.
-Validation, defaults and error redaction belong to the application boundary;
-`databaseError` stays exported from contracts as an optional redaction helper that
-generated code never imports.
+The optional `checked` boundary was removed on 2026-10-11: validation, defaults and
+error redaction belong to the application.
 
 **Date-time wire form:** a View output that is a declared `date-time` column
 (including `created_at`/`updated_at`) returns the handbook's wire form, an ISO
@@ -148,14 +140,11 @@ hook, lifecycle, reader shape, or feature must produce an actionable generate
 error rather than silently execute without its contract. This experimental
 package cannot replace 0.2 until the compatibility ledger is complete.
 
-PostgreSQL session prerequisites move to native deployment configuration, not
-a replacement runtime boot. Generated `postgresRequirements` data records the
-baseline defaults: ISO date text, postgres intervals, UTC casts, standard
-strings, exact float text and a 10-second native statement limit. ROLE/DATABASE
-settings are required with Hyperdrive pooling; application session SETs must not
-be assumed persistent. Stricter positive limits are valid; the old explicit
-unbounded policy remains an application decision. No request-time verification,
-connection manager or timeout/retry scheduler is introduced.
+PostgreSQL session prerequisites are deployment configuration (ROLE/DATABASE
+settings; Hyperdrive does not keep session SETs): `DateStyle` ISO, YMD;
+`IntervalStyle` postgres; `TimeZone` UTC; `standard_conforming_strings` on;
+`extra_float_digits` 1; a positive `statement_timeout` (10 s by default). Nothing
+at request time sets or verifies them.
 
 Storage migrations are explicit deployment artifacts. No request or module import
 may converge storage or inspect every schema. Optional Better Auth, REST, MCP,
@@ -172,10 +161,8 @@ emitted strings are output, not generator dependencies.
 
 Every supported feature needs a side-by-side semantic test against independently
 written native SQL on the same engine and fixture. Compare SQL/bind work, full
-results, errors, and committed state. Performance comparisons must match scope,
-validation, transactions and response shape. Measure warm and cold separately,
-retain raw paired samples, report median/p95 plus uncertainty, and do not infer
-cloud parity from local Wrangler. No artificial delay or weakened oracle.
+results, errors, and committed state. Performance comparisons follow the protocol
+in `packages/mantle-next/AGENTS.md`; no artificial delay or weakened oracle.
 
 Existing ADRs remain historical and continue governing the old package. For Next,
 this decision supersedes only the old interpreter/plan-at-runtime topology and

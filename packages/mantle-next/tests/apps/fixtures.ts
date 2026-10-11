@@ -15,12 +15,3 @@ export const fixtures = owners.flatMap((ownerId, owner) =>
   })),
 );
 
-/** Expected business projection, independent of emitted SQL/binds/decoders. */
-export function expectedPurchases(ownerId: string) {
-  return fixtures.filter(row => row.ownerId === ownerId).map(({ ownerId: _owner, ...row }) => row);
-}
-
-export function expectedTotals(ownerId: string) {
-  const rows = expectedPurchases(ownerId);
-  return { requestCount: rows.length, totalAmount: rows.reduce((total, row) => total + row.amount, 0) };
-}

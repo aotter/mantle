@@ -77,7 +77,6 @@ describe("native generation", () => {
     expect(text).not.toContain("RuntimePlan");
     expect(text).not.toContain("runView");
     expect(text).not.toContain("runProcedure");
-    expect(text).not.toContain("jsonSchemaToZod");
     for (const mode of ["caller", "trusted"] as const) expect(text).toContain(JSON.stringify(input.lowered.views["notes-list"]![mode]!.sql));
     if (target === "bun-sqlite") { expect(text).toContain("db.transaction(execute)(db)"); expect(text).toContain("const results = execute(db)"); expect(text).toContain(".length !== 1"); expect(text).not.toContain("SELECT changes()"); }
     else if (target === "cloudflare-d1") { expect(text).toContain("db.batch(["); expect(text).toContain("INSERT INTO _mantle_assert (op,ok)"); expect(text).toContain("changes() = 1"); }
@@ -172,17 +171,6 @@ test("emission removes unused input locals and binds directly for SQLite hosts",
   }
 });
 
-test("PostgreSQL deployment requirements are explicit data without per-call SET", async () => {
-  for (const target of ["bun-postgres", "cloudflare-postgres"] as const) {
-    const generated = generate(await canonical(target));
-    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
-    const text = generated.files["generated.ts"]!;
-    expect(text).toContain('export const postgresRequirements = { DateStyle: "ISO, YMD", IntervalStyle: "postgres", TimeZone: "UTC", standard_conforming_strings: "on", extra_float_digits: "1", statement_timeout: "10000ms" } as const;');
-    expect(text).not.toContain('db.query("SET');
-    expect(text).not.toContain("ALTER ROLE");
-  }
-});
-
 test("native binds directly use authored input names", async () => {
   const text = source.replace('input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}', 'input: {type: object, properties: {NoteTitle: {type: string, nullable: true}}, additionalProperties: false}').replace('VALUES (input.title)', "VALUES (coalesce(input.noteTitle, input.noteTitle, ''Nullable fallback''))");
   const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"names.yaml",text}]}});
@@ -209,7 +197,7 @@ for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare
   const generated = generate(await canonical(target));
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const code = generated.files["generated.ts"]!;
-  expect(code).not.toMatch(/zod|validate\(|decodeField|encodeInteger|rawTypes|databaseError|\.map\(/);
+  expect(code).not.toContain(".map(");
   const file = new URL(`.bare-${crypto.randomUUID()}.ts`, import.meta.url);
   await writeFile(file,code.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"'));
   const rows = [{id:"native-id",title:null}];

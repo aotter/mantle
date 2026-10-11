@@ -8,7 +8,7 @@ async function files(path: string): Promise<string[]> {
   const entries = await readdir(path, { withFileTypes: true });
   return (await Promise.all(entries.map(entry => entry.isDirectory() ? files(resolve(path, entry.name)) : entry.name.endsWith(".ts") ? [resolve(path, entry.name)] : []))).flat();
 }
-test("Next imports point inward; kernel has no host or compiler dependencies", async () => {
+test("Next imports point inward; kernel imports nothing external", async () => {
   for (const file of await files(root)) {
     const layer = relative(root, file).split("/")[0]!;
     const parsed = ts.createSourceFile(file, await readFile(file, "utf8"), ts.ScriptTarget.Latest, true);
@@ -19,9 +19,7 @@ test("Next imports point inward; kernel has no host or compiler dependencies", a
         const imported = relative(root, resolve(dirname(file), name)).split("/")[0]!;
         if (imported === "..") expect(layer, `${file}: compiler assembly belongs to infrastructure`).toBe("infrastructure");
         else expect(ranks[imported] ?? Infinity, `${file}: ${name}`).toBeLessThanOrEqual(ranks[layer]!);
-      } else if (layer === "kernel") {
-        throw new Error(`${file}: kernel must stay portable, imports ${name}`);
-      }
+      } else expect(layer, `${file}: kernel imports ${name}`).not.toBe("kernel");
     }
   }
 });

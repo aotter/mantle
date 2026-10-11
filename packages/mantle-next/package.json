@@ -19,8 +19,7 @@
     "test:native": "bun scripts/verify-native.ts",
     "bench": "bun scripts/bench.ts",
     "check:size": "bun run build && bun scripts/check-size.ts",
-    "check:package": "bun run build && bun scripts/check-package.ts",
-    "baseline:footprint": "bun run build && bun scripts/baseline-footprint.ts"
+    "check:package": "bun run build && bun scripts/check-package.ts"
   },
   "devDependencies": {
     "@aotter/mantle": "workspace:*",
