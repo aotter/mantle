@@ -54,3 +54,40 @@ The generated path is concrete SQL and functions with native driver calls; the o
 The first slice remains narrower than the full goal: official Zod constructors still parse values, ref handlers and dynamic readers are absent, and no optional Auth/REST/MCP/Admin/UI composition is generated. These are explicit open compatibility responsibilities, not evidence that the architecture is a complete replacement.
 
 No additional P1 scope/auth or transaction-order defect was found in this source pass. Known COMMIT rejection and timezone regressions passed. Further source changes require a fresh exact-head native run. Performance acceptance is reported separately; this review does not certify it.
+
+## Final source and check evidence
+
+Earlier emission behavior was reviewed at `b54e0672`; `d5936122` adds only the
+Worker clock caveat. Astra verified the actual draft PR's remote `d5936122` head;
+the independent 6.1 Sol correctness/Ponytail review found no new actionable defect.
+Mapped output-name collisions now fail generation. Input names are resolved at
+generation and bind directly from validated input; row keys are static and decoder
+scratch is row-local. `__proto__` remains an own computed property. Actual SQLite
+tests cover repeated authored camelCase inputs, defaults and explicit NULL values.
+These emission changes introduce no execution registry or metadata interpreter.
+
+Next build/typecheck and 32 tests / 299 assertions passed, including strict
+four-target consumers and bundle/dependency checks. At clean `66122a82`, all four
+actual targets passed 21 native semantic checks each, and repeated those checks
+during the matched warm run. Cold samples also checked complete results.
+
+Workspace typechecks and the packed original-package Worker reference consumer
+passed. The full core run had 1016 passes and one timeout; its entire 42-test file
+passed an isolated rerun without changing timeouts. The UI single-worker full run
+had 228 passes and two initial-value polling failures; the six-test failing file
+passed unchanged in both isolated candidate and baseline runs. This is rerun
+evidence, not a claim that a single full UI run was green. Full `pnpm check` still
+stops at the baseline-reproduced Cloud helper `plan_stale` mismatch.
+
+See [performance evidence](performance.md) for measured costs and acceptance gaps.
+
+The generation-only PG View simplification at `66122a82` was reviewed independently
+by Astra and 6.1 Sol. It flattens only a root identity policy wrapper over one known
+physical relation. Explicit exposed-column checks prevent private-column access;
+uncertain query shapes retain the original AST. Scope predicates and parameter
+numbers remain intact. Actual PG comparisons verify complete rows, OID/type
+modifiers, caller/public/trusted modes, TTL, NULLs, ordering, LIMIT and aggregates;
+a missing-owner negative control proves the oracle detects leakage. Integration
+checks preserve bind recipes, paging metadata and all Procedure SQL. No request
+code imports this 51-line helper. Performance benefit is measured separately;
+structural SQL simplification alone is not proof of improvement.
