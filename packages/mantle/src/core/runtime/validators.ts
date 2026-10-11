@@ -20,10 +20,17 @@ export interface GeneratedValidators {
 }
 
 const built = new WeakMap<object, PlanValidators>();
+const generatedBuilt = new WeakMap<RuntimePlan, WeakMap<object, PlanValidators>>();
 
 export function planValidators(plan: RuntimePlan, generated?: GeneratedValidators): PlanValidators {
+  let cache = built;
+  if (generated) {
+    const existing = generatedBuilt.get(plan);
+    cache = existing ?? new WeakMap<object, PlanValidators>();
+    if (!existing) generatedBuilt.set(plan, cache);
+  }
   const key = generated ?? plan;
-  const cached = built.get(key);
+  const cached = cache.get(key);
   if (cached) return cached;
   const made = new Map<string, ZodType>();
   const once = (key: string, schema: Parameters<typeof jsonSchemaToZod>[0], factory?: () => ZodType) => {
@@ -32,9 +39,12 @@ export function planValidators(plan: RuntimePlan, generated?: GeneratedValidator
     return z;
   };
   const v: PlanValidators = {
-    procedure: (name, kind) => once(`p\u0000${kind}\u0000${name}`, plan.procedures[name]![kind], generated?.procedure && Object.hasOwn(generated.procedure, name) ? generated.procedure[name]?.[kind] : undefined),
+    procedure: (name, kind) => {
+      const factories = generated?.procedure && Object.hasOwn(generated.procedure, name) ? generated.procedure[name] : undefined;
+      return once(`p\u0000${kind}\u0000${name}`, plan.procedures[name]![kind], factories && Object.hasOwn(factories, kind) ? factories[kind] : undefined);
+    },
     view: (name) => { const input = plan.views[name]?.input; return input ? once(`v\u0000${name}`, input, generated?.view && Object.hasOwn(generated.view, name) ? generated.view[name] : undefined) : undefined; },
   };
-  built.set(key, v);
+  cache.set(key, v);
   return v;
 }
