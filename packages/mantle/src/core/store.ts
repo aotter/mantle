@@ -1,6 +1,6 @@
 /**
  * Store: the only path to Mantle-owned entry storage (ADR-0032 decision 1, ADR-0034).
- * `select` and `write` keep ADR-0030's JSON shape; the runtime turns it into the same SQL IR
+ * Reads go through per-Schema readers (`db`, ADR-0043) and `write` keeps ADR-0030's JSON shape; the runtime turns it into the same SQL IR
  * as a manifest's SQL, injects scope, TTL, published-only and OCC, then hands it to a StoreExecutor.
  */
 import type { SqlNode } from "../spec/domain/index.js";
@@ -35,21 +35,6 @@ export interface StoreWhere {
   readonly or?: readonly StoreWhere[];
   readonly not?: StoreWhere;
   readonly [column: string]: StoreScalar | StoreComparison | StoreWhere | readonly StoreWhere[] | undefined;
-}
-
-export interface StoreSelect {
-  readonly from: string;
-  /** Projection; omitted returns native columns plus every Schema field. */
-  readonly columns?: readonly string[];
-  readonly where?: StoreWhere;
-  /** At most one column; `id` breaks ties. Defaults to `{ updatedAt: "desc" }`. */
-  readonly orderBy?: Readonly<Record<string, "asc" | "desc">>;
-  /** Default 50, maximum 500. */
-  readonly limit?: number;
-  /** One opaque, versioned format bound to `from` and `orderBy` (ADR-0032 decision 1). */
-  readonly cursor?: string;
-  /** Rows whose declared `searchableFields` contain this text, or whose `id` is it (ADR-0035 decision 7). Ordering stays `orderBy`. */
-  readonly search?: string;
 }
 
 // ---- Schema readers (ADR-0043) -----------------------------------------------------------------------------------
@@ -173,8 +158,6 @@ export interface MantleStore {
   as(caller: Caller, cause?: InvocationCause): CallerStore;
   /** One reader per Schema (ADR-0043): `store.db.<schema>.get | first | find`. */
   readonly db: StoreDb;
-  /** @deprecated Use store.db.<schema> (ADR-0043); removed in the next alpha. */
-  select(query: StoreSelect): Promise<StoreSelectResult>;
   /** Apply every operation or none, in order, as one storage transaction. Results follow operation order. */
   write(ops: readonly StoreWriteOp[]): Promise<readonly StoreWriteResult[]>;
   /** Run a named View as REST and MCP would. `input` is the View's declared `input`. */

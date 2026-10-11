@@ -17,7 +17,7 @@ export const TARGETS = [
   { key: "paged", fn: "pagedOf", files: ["dist/core/sql/run.js"], what: "paged form of a View (cache miss)" },
   { key: "print", fn: "print", files: ["dist/d1/print.js", "dist/postgres/print.js"], what: "IR to SQL text" },
   { key: "zod", fn: "jsonSchemaToZod", files: ["dist/spec/domain/service/JsonSchemaToZod.js"], what: "JSON Schema to zod validator" },
-  { key: "storeIr", fn: "select", files: ["dist/core/store/json.js"], what: "StoreJson.select builds fresh IR (matched by file: run.js has other `select`s)" },
+  { key: "storeIr", fn: "rowDecoder", files: ["dist/core/store/json.js"], what: "a Schema reader builds a new shape (memo miss: IR, compile and row decoder)" },
   { key: "deparse", fn: "deparse", anyUrl: "/pgsql-deparser/", info: true, what: "pgsql-deparser calls (informational)" },
 ];
 

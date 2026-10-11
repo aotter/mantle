@@ -18,8 +18,8 @@ export const handlers = {
       await ctx.store.view("workout-list", { limit: 10 }),
       await ctx.store.view("workout-sets", { input: { workoutId: input.workoutId }, limit: 200 }),
       await ctx.store.view("personal-records", { limit: 10 }),
-      // a dynamic Store read: it builds new IR on every call
-      await ctx.store.select({ from: "sets", columns: ["exercise", "weightKg", "reps"], where: { workoutId: input.workoutId, tag: "working" }, orderBy: { position: "asc" }, limit: 100 }),
+      // a Schema reader: its shape is built once, then memoised
+      await ctx.db.sets.find({ columns: ["exercise", "weightKg", "reps"], where: { workoutId: input.workoutId, tag: "working" }, orderBy: { position: "asc" }, limit: 100 }),
     ];
     return { counts: total(results) };
   },

@@ -85,7 +85,8 @@ which would count each check twice.
   against D1 over RPC where the round trip dominates; read the absolute overhang in µs.
 - `cpu/call µs m/n` is process CPU per call for Mantle and for the replay.
 - Warm counters `c/k/p/pg/pr/z/s` are compile/check/policy/paged/print/zod/storeIr. A warm View or inline Procedure should be
-  all zero; `select:sets-by-workout` (Store.select) is not, because `StoreJson.select` builds fresh IR on every call.
+  all zero, and so should a Schema reader: `storeIr` counts reader shapes built (a memo miss), so it is 1 on a first call and 0 warm.
+  `select:sets-by-workout` keeps its baseline name; since #1432 it is a `ctx.db.sets.find` reader, not `Store.select`.
 - `boot` includes `planFingerprint` hashing of the whole plan (done on every boot) and the convergence reads; do not
   attribute it to SQL or policy.
 - `first Mantle CPU` is first call minus the time spent inside the driver.
@@ -111,7 +112,7 @@ in `src/core/sql/run.ts`), rebuild, and run `pnpm bench:check --items view:worko
 Modelled on Swolhalla: one member (`m1`, a user Caller) with 3 years of training, 624 workouts and 18,720 sets, plus four
 noise owners (4,000 sets), so a scope bug cannot make Mantle look fast. Six public Views (workout list, per-workout sets,
 personal records over GROUP BY, exercise history over a join, weekly volume over `date_trunc`, and a CTE + window + join
-summary), measured as twelve items including a paged-list page and a walk over every weekly-volume page, two ref-handler Procedures that combine several Views, one inline write, and one `Store.select` item. The data is
+summary), measured as twelve items including a paged-list page and a walk over every weekly-volume page, two ref-handler Procedures that combine several Views, one inline write, and one Schema reader item. The data is
 deterministic (`seed.mjs`, mulberry32). `test/bench/fixture.test.ts` compiles the manifests for both dialects and runs every
 item on an in-memory runtime.
 

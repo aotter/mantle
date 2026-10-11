@@ -229,7 +229,7 @@ describe("Admin entries: writes through Store", () => {
 });
 
 describe("Admin entries: the list", () => {
-  it("each row names its translation locales, from a second select over the page's keys", async () => {
+  it("each row names its translation locales, from a second read over the page's keys", async () => {
     const a = await create("articles", { slug: "loc", title: "Locales", body: "b" });
     await create("articles", { slug: "none", title: "No locales", body: "b" });
     const locales = ["de", "fr", "ja", "es"];
@@ -248,6 +248,56 @@ describe("Admin entries: the list", () => {
     expect(await ids("filter_field=rank&filter_value=7&status=published")).toEqual([]);
     expect((await call("GET", "/admin/api/entries?collection=articles&filter_field=rank", editor)).status).toBe(400);
     expect((await call("GET", "/admin/api/entries?collection=articles&search=needle", editor)).body.items[0]).toMatchObject({ title: "Haystack", status: "draft", locale: null, translation_locales: [] });
+  });
+
+  /** The admin surface over a runtime whose readers count their `find` calls. */
+  const counting = () => {
+    const calls = { n: 0 };
+    const runtime = { ...rt, store: { ...rt.store, as: (caller: Caller) => {
+      const store = rt.store.as(caller);
+      const db = new Proxy(store.db, { get: (target, key, receiver) => {
+        const reader = Reflect.get(target, key, receiver);
+        return typeof key === "string" && reader && typeof reader === "object" ? { ...reader, find: (q: never) => { calls.n++; return reader.find(q); } } : reader;
+      } });
+      return { ...store, db };
+    } } } as unknown as MantleRuntime;
+    const get = (path: string) => createAdminSurface(runtime, { basePath: "/admin" })(new Request(`http://x/admin/api/${path}`), editor);
+    return { calls, get };
+  };
+
+  it("a status filter and a filter_field on the status column merge when equal, and contradict to an empty page without a read", async () => {
+    const draft = await create("articles", { slug: "merge-1", title: "Merge me", body: "b" });
+    const { calls, get } = counting();
+    const same = await (await get("entries?collection=articles&status=draft&filter_field=status&filter_value=draft")).json() as { items: { id: string }[] };
+    expect(same.items.map((i) => i.id)).toContain(draft.id);
+    expect(calls.n).toBeGreaterThan(0);
+    calls.n = 0;
+    const other = await (await get("entries?collection=articles&status=draft&filter_field=status&filter_value=published")).json();
+    expect(other).toEqual({ items: [], next_cursor: null });
+    expect(calls.n).toBe(0);
+  });
+
+  it("the same contradiction on the export is a header-only CSV", async () => {
+    const { calls, get } = counting();
+    const res = await get("entries/export?collection=articles&status=draft&filter_field=status&filter_value=published");
+    expect(res.status).toBe(200);
+    expect((await res.text()).replace(/^\uFEFF/, "").split("\r\n").filter(Boolean)).toEqual(["id,status,version,updated_at,slug,title,body,rank"]);
+    expect(calls.n).toBe(0);
+  });
+
+  it("a scope_field and a filter_field on one column merge when equal and contradict otherwise", async () => {
+    const m = await create("metrics", { name: "merge-m", value: 1 });
+    const { calls, get } = counting();
+    const same = await (await get("entries?collection=metrics&filter_field=name&filter_value=merge-m&scope_field=name&scope_value=merge-m")).json() as { items: { id: string }[] };
+    expect(same.items.map((i) => i.id)).toEqual([m.id]);
+    calls.n = 0;
+    expect(await (await get("entries?collection=metrics&filter_field=name&filter_value=merge-m&scope_field=name&scope_value=other")).json()).toEqual({ items: [], next_cursor: null });
+    expect(calls.n).toBe(0);
+  });
+
+  it("a __proto__ filter is refused and pollutes nothing", async () => {
+    expect((await call("GET", "/admin/api/entries?collection=metrics&filter_field=__proto__&filter_value=x", editor)).status).toBe(400);
+    expect(({} as Record<string, unknown>)["x"]).toBeUndefined();
   });
 
   it("pages forward only: next_cursor and no previous cursor; a backward request is 400", async () => {
@@ -324,7 +374,12 @@ describe("Admin entries: CSV", () => {
   it("a page that fails after the download began ends it as failed, with a trace", async () => {
     const store = rt.store.as(editor);
     let n = 0;
-    const flaky = { ...rt, store: { ...rt.store, as: () => ({ ...store, select: async (q: never) => (++n > 1 ? Promise.reject(new Error("D1 limit")) : { ...(await store.select(q)), nextCursor: "more" }) }) } } as unknown as MantleRuntime;
+    const flaky = { ...rt, store: { ...rt.store, as: () => ({ ...store, db: new Proxy(store.db, { get: (target, key, receiver) => {
+      const reader = Reflect.get(target, key, receiver);
+      return typeof key === "string" && reader && typeof reader === "object"
+        ? { ...reader, find: async (q: never) => (++n > 1 ? Promise.reject(new Error("D1 limit")) : { ...(await reader.find(q)), nextCursor: "more" }) }
+        : reader;
+    } }) }) } } as unknown as MantleRuntime;
     const log = console.error;
     const seen: unknown[][] = [];
     console.error = (...a: unknown[]) => void seen.push(a);

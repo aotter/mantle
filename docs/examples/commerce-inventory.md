@@ -361,7 +361,7 @@ const fail = (code: "CONFLICT" | "INPUT_VALIDATION_FAILED", path: string, messag
 async function stockOps(ctx: Ctx, lines: readonly Line[], kind: "reserve" | "sale" | "release", orderToken: string): Promise<Op[]> {
   const qty = new Map<string, number>();
   for (const l of lines) qty.set(l.productSlug, (qty.get(l.productSlug) ?? 0) + l.quantity);
-  const { rows } = await ctx.store.select({ from: "inventory", where: { productSlug: { in: [...qty.keys()] } } });
+  const { rows } = await ctx.db.inventory.find({ where: { productSlug: { in: [...qty.keys()] } } });
   const ops: Op[] = [];
   for (const [slug, q] of qty) {
     const row = rows.find((r) => r.productSlug === slug) ?? fail("INPUT_VALIDATION_FAILED", "/items", `no stock record for ${slug}`);
@@ -378,7 +378,7 @@ export const handlers: MantleHandlers<Env> = {
   placeOrder: async (input, ctx) => {
     // re-price from published products only; a draft or unknown slug is refused
     const slugs = [...new Set(input.items.map((l) => l.productSlug))];
-    const { rows: products } = await ctx.store.select({ from: "products", where: { slug: { in: slugs }, status: "published" } });
+    const { rows: products } = await ctx.db.products.find({ where: { slug: { in: slugs }, status: "published" } });
     const lines = input.items.map((l) => {
       const p = products.find((r) => r.slug === l.productSlug) ?? fail("INPUT_VALIDATION_FAILED", "/items", `${l.productSlug} is not for sale`);
       return { productSlug: l.productSlug, title: String(p.title), quantity: l.quantity, unitPriceMinor: Number(p.priceMinor), currency: String(p.currency) };
@@ -401,7 +401,7 @@ export const handlers: MantleHandlers<Env> = {
   },
 
   settleOrder: async ({ orderToken }, ctx) => {
-    const [order] = (await ctx.store.select({ from: "orders", where: { orderToken } })).rows;
+    const [order] = (await ctx.db.orders.find({ where: { orderToken } })).rows;
     if (!order) return { outcome: "missing" };
     if (order.orderStatus !== "pending_payment") return { outcome: order.orderStatus === "cancelled" ? "expired" : "already_paid" };
     const lines = order.items as unknown as Line[];

@@ -122,7 +122,7 @@ describe("failures with no answer are not Diagnostics of a refusal", () => {
     down = true;
     try {
       expect((await fail(store().write([{ insert: "counters", values: { n: 1 } }])))?.code).toBe("OUTCOME_UNKNOWN");
-      expect((await fail(store().select({ from: "counters" })))?.code).toBe("RESOURCE_UNAVAILABLE");
+      expect((await fail(store().db.counters.find()))?.code).toBe("RESOURCE_UNAVAILABLE");
     } finally { down = false; }
   });
 });
@@ -134,7 +134,7 @@ describe("the system caller, hooks and depth (mutation checks)", () => {
     await store().write([setStatus("pages", page, "published")]);
     expect((await fail(sys.write([{ update: "pages", set: { headline: "x" }, where: { id: page } }])))?.code).toBe("CONFLICT");
     const old = await w("counters", { n: 1, seenAt: "2026-09-30T11:00:00Z" }); // an hour before the runtime's clock, window 60 s
-    expect((await sys.select({ from: "counters", columns: ["id"], where: { id: old } })).rows).toEqual([]);
+    expect((await sys.db.counters.find({ columns: ["id"], where: { id: old } })).rows).toEqual([]);
   });
 
   it("after triggers run in name order, and one that throws does not stop the next", async () => {

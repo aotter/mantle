@@ -281,7 +281,7 @@ describe("invokeProcedure", () => {
     const locked = await add("o1", "locked", 1);
     const e = await failure(rt.invokeProcedure(inv("rename", { id: locked, name: "free" }, user("o1"))));
     expect(e?.diagnostic.code).toBe("LIFECYCLE_HOOK_REJECTED");
-    expect((await rt.store.as(user("o1")).select({ from: "items", columns: ["name"], where: { id: locked } })).rows).toEqual([{ name: "locked" }]);
+    expect((await rt.store.as(user("o1")).db.items.find({ columns: ["name"], where: { id: locked } })).rows).toEqual([{ name: "locked" }]);
   });
 
   it("a before hook may write and invoke with the original caller; its committed effects survive its veto", async () => {
@@ -296,8 +296,8 @@ describe("invokeProcedure", () => {
     const s = hooked.store.as(caller);
     const [{ id }] = await s.write([{ insert: "items", values: { name: "outer", stock: 1 } }]);
     expect((await failure(s.write([{ update: "items", where: { id: id! }, set: { name: "not-applied" } }])))?.diagnostic.code).toBe("LIFECYCLE_HOOK_REJECTED");
-    expect((await s.select({ from: "items", columns: ["name"] })).rows.map((r) => r.name).sort()).toEqual(["hook-invoke", "hook-write", "outer"]);
-    expect((await hooked.store.as(user("another-owner")).select({ from: "items", where: { id: id! } })).rows).toEqual([]);
+    expect((await s.db.items.find({ columns: ["name"] })).rows.map((r) => r.name).sort()).toEqual(["hook-invoke", "hook-write", "outer"]);
+    expect((await hooked.store.as(user("another-owner")).db.items.find({ where: { id: id! } })).rows).toEqual([]);
     const nested = calls.findLast((c) => c.name === "audit" && c.ctx.caller.kind === "user" && c.ctx.caller.subject === caller.subject)!;
     expect(nested.ctx.cause.parent).toMatchObject({ kind: "internal", parent: { kind: "lifecycle", hook: "before_update" } });
   });
@@ -317,7 +317,7 @@ describe("invokeProcedure", () => {
     const write = s.write([{ update: "items", where: { id: id!, ...(explicit ? { version: 1 } : {}) }, set: { name: "outer" } }]);
     if (explicit) expect((await failure(write))?.diagnostic).toMatchObject({ code: "CONFLICT", conflict: { reason: "lock" } });
     else expect(await write).toMatchObject([{ id, version: 3 }]);
-    expect((await s.select({ from: "items", columns: ["name", "version"], where: { id: id! } })).rows).toEqual([{ name: explicit ? "hook" : "outer", version: explicit ? 2 : 3 }]);
+    expect((await s.db.items.find({ columns: ["name", "version"], where: { id: id! } })).rows).toEqual([{ name: explicit ? "hook" : "outer", version: explicit ? 2 : 3 }]);
   });
 
   it("a rollback emits no after event, and an after hook that fails leaves the committed result", async () => {
@@ -326,14 +326,14 @@ describe("invokeProcedure", () => {
     expect(calls.filter((c) => c.name === "audit")).toEqual([]);
     const boom = await add("o1", "boom", 1);
     expect(calls.filter((c) => c.name === "audit")).toHaveLength(1);
-    expect((await rt.store.as(user("o1")).select({ from: "items", columns: ["id"], where: { id: boom } })).rows).toEqual([{ id: boom }]);
+    expect((await rt.store.as(user("o1")).db.items.find({ columns: ["id"], where: { id: boom } })).rows).toEqual([{ id: boom }]);
   });
 
   it("the system caller bypasses scope but not TTL, and satisfies no auth predicate", async () => {
     const id = await add("o7", "system-visible", 1);
     const sys = rt.store.as(systemCaller("maintenance"));
-    expect((await sys.select({ from: "items", columns: ["id"], where: { id } })).rows).toEqual([{ id }]);
-    expect((await rt.store.as(user("o8")).select({ from: "items", columns: ["id"], where: { id } })).rows).toEqual([]);
+    expect((await sys.db.items.find({ columns: ["id"], where: { id } })).rows).toEqual([{ id }]);
+    expect((await rt.store.as(user("o8")).db.items.find({ columns: ["id"], where: { id } })).rows).toEqual([]);
   });
 
   it("hooks a handler's writes fire chain to its invocation: the depth limit ends a recursive hook, and event ids are unique per write", async () => {
@@ -351,10 +351,10 @@ describe("invokeProcedure", () => {
     const id = await add("o1", "star", 1);
     const star = (await rt.store.as(user("o1")).view("star-items", { limit: 500 })).rows.find((r) => r.name === "star")!;
     expect(Object.keys(star)).not.toContain("owner");
-    const [row] = (await rt.store.as(user("o1")).select({ from: "items", where: { id } })).rows;
+    const [row] = (await rt.store.as(user("o1")).db.items.find({ where: { id } })).rows;
     expect(row).toMatchObject({ id, name: "star" });
     expect(Object.keys(row!)).not.toContain("owner");
-    expect(Object.keys((await rt.store.select({ from: "items", where: { id } })).rows[0]!)).not.toContain("owner");
+    expect(Object.keys((await rt.store.db.items.find({ where: { id } })).rows[0]!)).not.toContain("owner");
   });
 
   it("a View's guard runs before the View", async () => {

@@ -163,10 +163,10 @@ describe("the walk binds what the converter binds", () => {
       expect(refusal).toBeUndefined();
       expect(json.tags).toEqual(w.tags);
       expect(Object.values(json.values)).toEqual(w.values);
-      // and the reader returns the rows a conversion of the unpadded query does
+      // and a hit returns the rows the miss did
       const me = store.as(user("o1"));
-      const [got, want] = [await me.db.items.find({ ...q, limit: 500 }), await me.select({ from: "items", ...q, limit: 500 })];
-      expect(got.rows).toEqual(want.rows);
+      const [got, again] = [await me.db.items.find({ ...q, limit: 500 }), await me.db.items.find({ ...q, limit: 500 })];
+      expect(again.rows).toEqual(got.rows);
     }
   }, 120_000);
 
@@ -259,25 +259,24 @@ describe("get, first and find", () => {
     const p1 = await items.find({ columns: ["id"], orderBy: { id: "asc" }, limit: 2 });
     const p2 = await items.find({ columns: ["id"], orderBy: { id: "asc" }, limit: 2, cursor: p1.nextCursor });
     expect([ids(p1), ids(p2), p2.nextCursor]).toEqual([["a", "b"], ["c", "d"], undefined]);
-    // a cursor from store.select decodes in a reader
-    const sel = await store.as(user("o1")).select({ from: "items", columns: ["id"], orderBy: { id: "asc" }, limit: 2 });
-    expect(ids(await items.find({ columns: ["id"], orderBy: { id: "asc" }, limit: 2, cursor: sel.nextCursor }))).toEqual(["c", "d"]);
+    // a cursor is bound to its Schema and order, and is the one format of every read
+    expect(p1.nextCursor).toEqual(expect.any(String));
   });
 
-  it("treats search: undefined as absent, and decodes like select: json, geo, date-times, bools, numerics; no hidden columns", async () => {
+  it("treats search: undefined as absent, and decodes alike through get, first and find: json, geo, date-times, bools, numerics; no hidden columns", async () => {
     const { store } = await open();
     const me = store.as(user("o1"));
     await me.db.items.find({ columns: ["id"] });
     await me.db.items.find({ columns: ["id"], search: undefined });
     expect(readerMemoSize(store)).toBe(1);
     const row = await me.db.items.get("a");
-    expect(row).toEqual((await me.select({ from: "items", where: { id: "a" } })).rows[0]);
+    expect(row).toEqual((await me.db.items.find({ where: { id: "a" } })).rows[0]);
     expect(row.tags).toEqual(["red", "big"]);
     const place = (await me.db.places.first({ where: { id: "pl300" } }));
-    expect(place).toEqual((await me.select({ from: "places", where: { id: "pl300" } })).rows[0]);
+    expect(place).toEqual((await me.db.places.find({ where: { id: "pl300" } })).rows[0]);
     expect(place.loc).toMatchObject({ lng: expect.any(Number), lat: expect.any(Number) });
     const order = await me.db.orders.get("oa");
-    expect(order).toEqual((await me.select({ from: "orders", where: { id: "oa" } })).rows[0]);
+    expect(order).toEqual((await me.db.orders.find({ where: { id: "oa" } })).rows[0]);
     expect(Object.keys(place).filter((k) => /^(_k|_geo_)/.test(k))).toEqual([]);
   });
 

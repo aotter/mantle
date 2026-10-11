@@ -126,7 +126,7 @@ and for one op in Trigger-name order.
 
 **After hooks** run only after a commit, once per statement and Trigger, with
 every row the statement wrote in `ctx.cause.rows`. Each row is the whole entry
-as `ctx.store.select` returns it (`id`, `version`, `createdAt`, `updatedAt`,
+as a `ctx.db` reader returns it (`id`, `version`, `createdAt`, `updatedAt`,
 `authorId`, every declared field), whatever the statement's own `RETURNING`
 asked for: that only shapes the Procedure's result. Loop over them; never read
 only `rows[0]`. A failure is logged and never undoes the commit, and a write

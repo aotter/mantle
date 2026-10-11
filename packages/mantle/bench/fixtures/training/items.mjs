@@ -51,8 +51,7 @@ export default [
     rows: countsOf,
   },
   {
-    // zeroWarm is empty until Store.select stops rebuilding IR on every call (#1432)
-    name: "procedure:checkin-wall", kind: "procedure-ref", caller: "member", minRows: 1, zeroWarm: [], zeroFirst: [],
+    name: "procedure:checkin-wall", kind: "procedure-ref", caller: "member", minRows: 1, zeroWarm: ALL, zeroFirst: [],
     call: (ctx) => ctx.runtime.invokeProcedure({ procedure: "checkin-wall", input: { workoutId: ctx.fixture.latestWorkoutId }, caller: ctx.caller, cause: CAUSE }),
     rows: countsOf,
   },
@@ -63,8 +62,9 @@ export default [
     rows: () => 0,
   },
   {
-    name: "select:sets-by-workout", kind: "select", caller: "member", minRows: 1, zeroWarm: [], zeroFirst: [],
-    call: (ctx) => ctx.store.select({ from: "sets", columns: ["exercise", "weightKg", "reps"], where: { workoutId: ctx.fixture.latestWorkoutId, tag: "working" }, orderBy: { position: "asc" }, limit: 100 }),
+    // a Schema reader (ADR-0043); the name is kept from the Store.select baseline so bench:compare pairs the two
+    name: "select:sets-by-workout", kind: "reader", caller: "member", minRows: 1, zeroWarm: ALL, zeroFirst: [],
+    call: (ctx) => ctx.store.db.sets.find({ columns: ["exercise", "weightKg", "reps"], where: { workoutId: ctx.fixture.latestWorkoutId, tag: "working" }, orderBy: { position: "asc" }, limit: 100 }),
     rows: rowsOf,
   },
 ];

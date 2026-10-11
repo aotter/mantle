@@ -128,32 +128,10 @@ Without generated types, `runtime.store.db` is a `StoreDb` of untyped readers.
 `readerOf(store.db, "tickets")` (from `@aotter/mantle`) returns the reader of a
 Schema by name, in any case.
 
-## `select` and `write`
+## `write`
 
-`select` is deprecated and is removed in the next alpha: use a reader. For a
-query that needs no declared View, `select` takes a JSON query over one
-Schema:
-
-```ts
-const { rows } = await ctx.store.select({
-  from: "tickets",
-  columns: ["id", "subject"],
-  where: { ticketState: "open", subject: { like: "%refund%" } },
-  orderBy: { updatedAt: "desc" },
-  limit: 20,
-});
-```
-
-- `where` (writes keep all of this; reads through a reader are AND only):
-  `{ column: value }` is equality and sibling keys are AND; also
-  `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`, and
-  `and`, `or`, `not`. `in` takes a list or `{ select, from, where }`.
-- `orderBy`: one column; `id` breaks ties. Default `{ updatedAt: "desc" }`.
-- `search`: text matched against `searchableFields` (and `id`).
-- Native columns are camelCase here (`createdAt`, `authorId`), while SQL spells
-  them snake_case (`created_at`).
-
-`write` applies every operation or none, in order:
+Reads go through a reader (above) or a View. `write` applies every operation or
+none, in order:
 
 ```ts
 await ctx.store.write([
@@ -168,6 +146,12 @@ await ctx.store.write([
   reveal it: give such rows a field of your own that is unique with the scope
   field (`uniqueIndexes: [[owner, clientKey]]`) when other rows of the same
   write must point at them, or when a retry must find them.
+- A write `where` keeps the full grammar that a reader does not take:
+  `{ column: value }` is equality and sibling keys are AND; also
+  `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`, and
+  `and`, `or`, `not`. `in` takes a list or `{ select, from, where }`, whose
+  subquery is scoped like any Store read. Native columns are camelCase here
+  (`createdAt`, `authorId`), while SQL spells them snake_case (`created_at`).
 - `update` with `set` and `where`; `delete` with `where`. A `where` that pins
   `id` is a row op: it may carry `lock` (the version the caller saw), and
   writing no row is `CONFLICT`.
