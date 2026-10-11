@@ -8,5 +8,7 @@ export default defineConfig({
   test: {
     include: ["test/**/*.test.{ts,tsx}", "admin/{src,test}/**/*.test.{ts,tsx}"],
     typecheck: { enabled: false },
+    // one cold Chrome launch before the browser tests, whose own launches keep an 8 s budget
+    globalSetup: ["test/chrome-warmup.ts"],
   },
 });
