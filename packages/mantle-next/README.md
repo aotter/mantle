@@ -69,4 +69,6 @@ paired batches consuming the same complete rows, and a native/native control;
 report HTTP and connection amortization separately. Local Wrangler results do not
 establish deployed Cloudflare latency.
 See the [measured evidence and remaining performance goal](../../docs/next/performance.md).
+The [size and startup gates](../../docs/next/size-and-startup.md) distinguish
+the executable offline bundle regression check from pending startup CPU acceptance.
 This package is not a released replacement for Mantle 0.2.

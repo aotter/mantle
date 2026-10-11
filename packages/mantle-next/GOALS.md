@@ -3,6 +3,9 @@
 - [x] Generate actual v2 manifests using the existing parser/linker/policy/printers.
 - [x] All four targets generate typed functions with literal SQL and native calls.
 - [x] Generated request bundle has no old Mantle engine/compiler dependency.
+- [x] Offline Wrangler deployment bundle regression gate for the whole fixture API, including the official PG driver.
+- [ ] Package distribution file/size gate and selected-operation bundle scaling gate.
+- [ ] Workers library global initialization CPU and first-use regression gates; CLI readiness is not library load time.
 - [x] Supported SQL-slice scope/auth/input/output behavior verified against native implementations.
 - [x] Native atomic rollback, explicit OCC and error outcomes verified on each target.
 - [ ] Paging/cursor API compatibility completed (open); scalar codecs tested and unsupported contracts fail generate.

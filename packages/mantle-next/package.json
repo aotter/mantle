@@ -12,10 +12,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.lib.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test tests/*.test.ts",
+    "test": "bun test tests/*.test.ts && bun run check:size",
     "generate": "bun src/infrastructure/cli.ts",
     "test:native": "bun scripts/verify-native.ts",
-    "bench": "bun scripts/bench.ts"
+    "bench": "bun scripts/bench.ts",
+    "check:size": "bun run build && bun scripts/check-size.ts"
   },
   "dependencies": { "zod": "catalog:" },
   "devDependencies": {
