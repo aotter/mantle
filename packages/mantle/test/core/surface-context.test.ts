@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { compilePlan } from "../../src/spec/index.js";
 import { createMantle, createMantleRuntime, withCaller, type Caller, type DatabaseDriver, type HandlerContext, type RuntimePlan, type Surface } from "../../src/core/index.js";
 import { sqliteStorage } from "../../src/d1/index.js";
@@ -8,6 +8,7 @@ import { createRestSurface } from "../../src/web/index.js";
 import { createAdminSurface } from "../../src/admin/index.js";
 import { createMcpSurface } from "../../src/mcp/index.js";
 import { presetFiles } from "../../src/cli/preset.js";
+import * as storeBindings from "../../src/core/store/createStore.js";
 
 const manifests = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -54,6 +55,43 @@ beforeAll(async () => {
   const result = await compilePlan({ sources: [{ sourceId: "surface-context", text: manifests }] });
   if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
   plan = result.plan;
+});
+
+it("creates the host Store and its cause only on first access within each request", async () => {
+  const db = storage();
+  const stores: unknown[] = [];
+  const pending: Promise<unknown>[] = [];
+  const app = createMantle({
+    handlers: { add: () => ({}), audit: (_input: unknown, ctx: HandlerContext) => { ctx.waitUntil(Promise.resolve(ctx.cause.id)); return {}; } },
+    async fetch(request, _env, { runtime }) {
+      const path = new URL(request.url).pathname;
+      if (path === "/invoke") await runtime.invokeProcedure({ procedure: "audit", input: {}, caller: { kind: "anonymous" }, cause: { kind: "http", id: "current-request" } });
+      if (path === "/store") {
+        const first = runtime.store;
+        expect(runtime.store).toBe(first);
+        stores.push(first);
+      }
+      return new Response("ok");
+    },
+  }, { plan, storage: () => db.adapter });
+  const fetch = (path: string) => app.fetch(new Request(`https://service.test${path}`), {}, { waitUntil: p => { pending.push(p); } });
+  await fetch("/warm"); // boot work is separate from the per-request wrapper
+  const uuid = vi.spyOn(crypto, "randomUUID");
+  const bind = vi.spyOn(storeBindings, "bindStoreCause");
+  try {
+    await fetch("/auth-response"); // a service can answer without touching its runtime Store
+    await fetch("/invoke");
+    expect(uuid).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+    expect(await Promise.all(pending)).toEqual(["current-request"]);
+    await fetch("/store");
+    expect(uuid).toHaveBeenCalledTimes(1);
+    expect(bind).toHaveBeenCalledTimes(1);
+    await fetch("/store");
+    expect(uuid).toHaveBeenCalledTimes(2);
+    expect(bind).toHaveBeenCalledTimes(2);
+    expect(stores[0]).not.toBe(stores[1]);
+  } finally { uuid.mockRestore(); bind.mockRestore(); db.close(); }
 });
 
 function storage() {

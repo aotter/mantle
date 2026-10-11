@@ -75,8 +75,7 @@ export function createMantle<Env>(service: MantleService<Env>, options: MantleOp
     }).catch((e) => { booted = undefined; throw e; }); // a failed boot is retried by the next request
     const runtime = await booted;
     const retain = ctx ? (p: Promise<unknown>) => ctx.waitUntil(p) : () => undefined;
-    const hostCause: InvocationCause = { kind: "internal", id: `host:${crypto.randomUUID()}` };
-    retainers.set(hostCause, retain);
+    let store: MantleRuntime["store"] | undefined;
     return {
       ...runtime,
       invokeProcedure: (inv) => {
@@ -84,14 +83,19 @@ export function createMantle<Env>(service: MantleService<Env>, options: MantleOp
         retainers.set(cause, retain);
         return runtime.invokeProcedure({ ...inv, cause });
       },
-      store: {
-        ...runtime.store,
-        ...bindStoreCause(runtime.store, hostCause),
-        as: (caller, cause = { kind: "internal", id: `store:${crypto.randomUUID()}` }) => {
-          const boundCause = { ...cause };
-          retainers.set(boundCause, retain);
-          return runtime.store.as(caller, boundCause);
-        },
+      get store() {
+        if (store) return store;
+        const hostCause: InvocationCause = { kind: "internal", id: `host:${crypto.randomUUID()}` };
+        retainers.set(hostCause, retain);
+        return store = {
+          ...runtime.store,
+          ...bindStoreCause(runtime.store, hostCause),
+          as: (caller, cause = { kind: "internal", id: `store:${crypto.randomUUID()}` }) => {
+            const boundCause = { ...cause };
+            retainers.set(boundCause, retain);
+            return runtime.store.as(caller, boundCause);
+          },
+        };
       },
     };
   };
