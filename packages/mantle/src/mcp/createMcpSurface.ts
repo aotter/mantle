@@ -95,12 +95,21 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
 
   const registers = (name: string, ui: ClientUiSupport) => byName.has(name) && !(apps.appOnly.has(name) && (ui === "unsupported" || apps.resources.length === 0));
 
+  // Only plan/options-derived registration data is retained. Servers and callbacks below remain request-bound.
+  const toolConfig = (tool: McpTool | MediaMcpTool) => ({ ...(tool.title ? { title: tool.title } : {}), description: tool.description, inputSchema: schemaOf(tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schemaOf(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) });
+  type Config = ReturnType<typeof toolConfig>;
+  const configs = new Map<string, { plain: Config; app?: Config & { _meta: Record<string, unknown> } }>();
+  const resourceConfigs = () => apps.resources.map((r) => {
+    const meta = appMeta(r);
+    return { r, meta, config: { ...(r.title ? { title: r.title } : {}), ...(r.description ? { description: r.description } : {}), ...(meta ? { _meta: meta } : {}) } };
+  });
+  let resources: ReturnType<typeof resourceConfigs> | undefined;
+
   const build = (caller: Caller, ui: ClientUiSupport, executionRuntime: MantleRuntime) => {
     const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
     const withApps = ui !== "unsupported" && apps.resources.length > 0;
-    if (withApps) for (const r of apps.resources) {
-      const meta = appMeta(r);
-      registerAppResource(server, r.name, r.uri, { ...(r.title ? { title: r.title } : {}), ...(r.description ? { description: r.description } : {}), ...(meta ? { _meta: meta } : {}) },
+    if (withApps) for (const { r, meta, config } of (resources ??= resourceConfigs())) {
+      registerAppResource(server, r.name, r.uri, config,
         async () => ({ contents: [{ uri: r.uri, mimeType: RESOURCE_MIME_TYPE, text: await appHtml(r), ...(meta ? { _meta: meta } : {}) }] }));
     }
     for (const tool of tools) {
@@ -141,14 +150,19 @@ export function createMcpSurface(runtime: MantleRuntime, options: McpSurfaceOpti
           if (options.onObservation) observe(options.onObservation, { ...metadata, phase: "completion", at: Date.now(), outcome, durationMs: Math.max(0, performance.now() - started), ...(code ? { code } : {}) });
         }
       };
-      const config = { ...(tool.title ? { title: tool.title } : {}), description: tool.description, inputSchema: schemaOf(tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schemaOf(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) };
+      let retained = configs.get(tool.name);
+      if (!retained) { retained = { plain: toolConfig(tool) }; configs.set(tool.name, retained); }
+      const config = retained.plain;
       const uri = withApps ? apps.appOnly.get(tool.name) ?? apps.rendersIn.get(tool.name) : undefined;
       if (!uri) { server.registerTool(tool.name, config, run); continue; }
       // writes both the `ui` object and the legacy flat key, so older hosts find the resource too. `openai/outputTemplate` is
       // ChatGPT's key for the same resource; an app-only tool goes without it, since ChatGPT does not read `visibility`
-      const appOnly = apps.appOnly.has(tool.name);
-      const meta: Record<string, unknown> = { ...(appOnly ? {} : { "openai/outputTemplate": uri }), ui: { resourceUri: uri, ...(appOnly ? { visibility: ["app"] } : {}) } };
-      registerAppTool(server, tool.name, { ...config, _meta: meta } as Parameters<typeof registerAppTool>[2], run as never);
+      if (!retained.app) {
+        const appOnly = apps.appOnly.has(tool.name);
+        const meta: Record<string, unknown> = { ...(appOnly ? {} : { "openai/outputTemplate": uri }), ui: { resourceUri: uri, ...(appOnly ? { visibility: ["app"] } : {}) } };
+        retained.app = { ...config, _meta: meta };
+      }
+      registerAppTool(server, tool.name, retained.app as Parameters<typeof registerAppTool>[2], run as never);
     }
     return server;
   };

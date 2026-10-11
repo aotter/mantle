@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CLIENT_CAPABILITIES_META_KEY } from "@modelcontextprotocol/server";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { McpServer, CLIENT_CAPABILITIES_META_KEY } from "@modelcontextprotocol/server";
+import { EXTENSION_ID, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { LocalD1 } from "../../src/cloudflare/testing/d1.js";
 import { compilePlan, DiagnosticError, makeDiagnostic } from "../../src/spec/index.js";
 import { createMantleRuntime, type Caller, type MantleRuntime } from "../../src/core/index.js";
@@ -172,6 +173,59 @@ const subsetSurface = async (keep: RegExp, resourceMetadata?: string) => {
 const names = async (surface: "public" | "staff", caller: Caller) => ((await rpc(surface, caller, "tools/list")).data.result.tools as { name: string }[]).map((t) => t.name).sort();
 
 describe("MCP surface", () => {
+  it("lazily reuses registration schemas across UI modes while keeping callers and runtimes request-bound", async () => {
+    const registrations = vi.spyOn(McpServer.prototype, "registerTool");
+    let htmlReads = 0;
+    const surface = createMcpSurface(rt, { basePath: "/mcp", surface: "public", apps: { resources: [{
+      name: "notes", uri: "ui://notes", html: () => `<html>${++htmlReads}</html>`, renders: ["add_note"], appOnly: ["ranked"],
+    }] } });
+    const request = async (caller: Caller, method: string, params: Record<string, unknown> = {}, executionRuntime = rt) => {
+      const response = await surface(new Request("https://x.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), caller, executionRuntime);
+      const text = await response.text();
+      const json = JSON.parse(text.includes("data:") ? text.split("\n").find(line => line.startsWith("data:"))!.slice(5) : text);
+      return { status: response.status, ...json };
+    };
+    const unsupported = { [CLIENT_CAPABILITIES_META_KEY]: {} };
+    const supported = { [CLIENT_CAPABILITIES_META_KEY]: { extensions: { [EXTENSION_ID]: { mimeTypes: [RESOURCE_MIME_TYPE] } } } };
+    try {
+      expect(registrations).not.toHaveBeenCalled();
+      const first = await request(user("cached-a"), "tools/list", { _meta: unsupported });
+      expect(first.result.tools.some((tool: { name: string }) => tool.name === "ranked")).toBe(false);
+      const plain = registrations.mock.calls.find(([name]) => name === "add_note")![1];
+      registrations.mockClear();
+      const second = await request(user("cached-b"), "tools/list", { _meta: supported });
+      expect(second.result.tools.find((tool: { name: string }) => tool.name === "ranked")._meta.ui.visibility).toEqual(["app"]);
+      const app = registrations.mock.calls.find(([name]) => name === "add_note")![1];
+      expect(app.inputSchema).toBe(plain.inputSchema);
+      expect(app.outputSchema).toBe(plain.outputSchema);
+      expect(app._meta).toHaveProperty("openai/outputTemplate", "ui://notes");
+      registrations.mockClear();
+      await request(user("cached-a"), "tools/list", { _meta: unsupported });
+      expect(registrations.mock.calls.find(([name]) => name === "add_note")![1]).toBe(plain);
+      expect(plain._meta).toBeUndefined();
+      expect(htmlReads).toBe(0);
+      for (const expected of [1, 2]) {
+        const response = await request(user("cached-a"), "resources/read", { uri: "ui://notes", _meta: supported });
+        expect(response.result.contents[0].text).toBe(`<html>${expected}</html>`);
+      }
+      const invoke = vi.fn(rt.invokeProcedure);
+      const alternateRuntime = { ...rt, invokeProcedure: invoke };
+      const calls = await Promise.all(["cached-a", "cached-b"].map(subject => request(user(subject), "tools/call", {
+        name: "add_note", arguments: { title: subject }, _meta: unsupported,
+      }, alternateRuntime)));
+      expect(calls.every(call => call.status === 200 && !call.result.isError)).toBe(true);
+      expect(invoke.mock.calls.map(([call]) => call.caller)).toEqual(expect.arrayContaining([user("cached-a"), user("cached-b")]));
+      for (const subject of ["cached-a", "cached-b"]) {
+        const response = await request(user(subject), "tools/call", { name: "my_notes", arguments: {}, _meta: supported });
+        expect(response.result.structuredContent.rows.map((row: { title: string }) => row.title)).toEqual([subject]);
+      }
+      const denied = await request(user("cached-b", { credential: "oauth", scopes: ["mcp"] }), "tools/call", { name: "scoped_add", arguments: { title: "denied" } }, alternateRuntime);
+      expect(denied.status).toBe(403);
+      expect(invoke).toHaveBeenCalledTimes(2);
+    } finally { registrations.mockRestore(); }
+  });
+
   it("observes a native guard denial once without executing its guarded read", async () => {
     const plan = await compilePlan({ sources: [{ sourceId: "memory:observer-guard", text: `${MANIFESTS.split("\n---\n")[0]}\n---
 apiVersion: cms.mantle.aotter.net/v2
