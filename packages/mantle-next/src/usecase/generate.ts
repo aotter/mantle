@@ -21,6 +21,8 @@ const typeOf = (s: JsonSchema | undefined): string => {
     default: return "unknown";
   }
 };
+// Stable, injective build-only export names; stale entry files cannot bind a new ordinal.
+const exportName = (kind: string, name: string) => kind + "_" + Array.from(name, c => c.codePointAt(0)!.toString(16)).join("_");
 const scalarType = (type: string) => type === "bool" ? "boolean" : ["integer", "int4", "int8", "real", "float8"].includes(type) ? "number" : type === "json" ? "unknown" : type === "geo" ? "{lat:number;lng:number}" : "string";
 
 export function generate({ target, plan, lowered, viewKeys }: GenerateInput): GenerateResult {
@@ -64,6 +66,7 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     }
   }).join(", ")}${isSqlite ? "" : "]"}`;
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [];
+  const entries: Record<string, string> = {};
   const auth = (requires: typeof plan.views[string]["requires"], path: string): string[] => {
     if (requires?.guard) refuse(path, "Procedure guards require a generated native dispatch implementation.");
     return (requires?.auth?.all ?? []).map((p, index) => {
@@ -131,6 +134,8 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     const fieldNames = inputFields(view.input, path + "/input");
     declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), checkedInput(validator, path, [c, ...(trusted ? [trusted] : [])]), ...context([c, ...(trusted ? [trusted] : [])]), "  try {", `  const ${isSqlite ? "rows" : "result"} = (${mode === "caller" ? `caller.kind === "system" ? ${read(trusted!.sql, bind(trusted!, path, fieldNames))} : ` : ""}${read(c.sql, bind(c, path, fieldNames))})${isSqlite ? " as Record<string, unknown>[]" : ""};`, `  return ${isSqlite ? "rows" : "result.rows"}.map(row => ${fields.some(field => field.includes("value =")) ? `{ let value: any; return { ${fields.join(", ")} }; }` : `({ ${fields.join(", ")} })`}) as View${index}Row[];`, `  } catch (error) { throw databaseError(error, "read", ${q(path)}, ${q(isSqlite ? "sqlite" : "postgres")}); }`, "}");
     views.push(`[${q(name)}]: ${fn}`);
+    declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
+    entries[`views/${encodeURIComponent(name)}.ts`] = `export { ${exportName("view", name)} as default } from "../generated.js";\nexport type { View${index}Input as Input, View${index}Row as Row } from "../generated.js";\n`;
   }
   for (const [index, [name, procedure]] of Object.entries(plan.procedures).sort().entries()) {
     const path = `procedures/${name}`, fn = `procedure${index}`;
@@ -196,8 +201,10 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
       `    throw new ContractError("OUTCOME_UNKNOWN", "Commit outcome is unknown; discard this client before further use.", ${q(path)}, { cause: error });`, "  }");
     declarations.push(`  return validate(${outputValidator}, { results }, ${q(path + "/output")}, "OUTPUT_VALIDATION_FAILED") as Procedure${index}Output;`, "}");
     procedures.push(`[${q(name)}]: ${fn}`);
+    declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
+    entries[`procedures/${encodeURIComponent(name)}.ts`] = `export { ${exportName("procedure", name)} as default } from "../generated.js";\nexport type { Procedure${index}Input as Input, Procedure${index}Output as Output } from "../generated.js";\n`;
   }
   if (diagnostics.length) return { ok: false, diagnostics };
   const dbType = target === "bun-sqlite" ? 'import type { Database } from "bun:sqlite";' : target === "cloudflare-d1" ? 'import type { D1Database as Database } from "@cloudflare/workers-types";' : `import type { ${target === "bun-postgres" ? "Client, PoolClient" : "Client"} } from "pg";\ntype Database = ${target === "bun-postgres" ? "Client | PoolClient" : "Client"};`;
-  return { ok: true, files: { "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, 'import { z } from "zod";', 'import type { Caller } from "@aotter/mantle-next/contracts";', `import { ${[...helpers].sort().join(", ")} } from "@aotter/mantle-next/contracts";`, ...(!isSqlite ? ["// Application/deployment-owned PostgreSQL settings; functions never apply SET or own connections.", 'export const postgresRequirements = { DateStyle: "ISO, YMD", IntervalStyle: "postgres", TimeZone: "UTC", standard_conforming_strings: "on", extra_float_digits: "1", statement_timeout: "10000ms" } as const;', "const rawTypes = { getTypeParser: (_oid: number, _format?: string) => (text: string) => text };"] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ""].join("\n") } };
+  return { ok: true, files: { ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, 'import * as z from "zod";', 'import type { Caller } from "@aotter/mantle-next/contracts";', `import { ${[...helpers].sort().join(", ")} } from "@aotter/mantle-next/contracts";`, ...(!isSqlite ? ["// Application/deployment-owned PostgreSQL settings; functions never apply SET or own connections.", 'export const postgresRequirements = { DateStyle: "ISO, YMD", IntervalStyle: "postgres", TimeZone: "UTC", standard_conforming_strings: "on", extra_float_digits: "1", statement_timeout: "10000ms" } as const;', "const rawTypes = { getTypeParser: (_oid: number, _format?: string) => (text: string) => text };"] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ""].join("\n") } };
 }

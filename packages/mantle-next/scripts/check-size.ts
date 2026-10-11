@@ -1,8 +1,8 @@
 /** Offline deployment bundles: the whole purchase API, including official pg. */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 
@@ -16,7 +16,10 @@ try {
     assert.ok(generated.ok, JSON.stringify(!generated.ok && generated.diagnostics));
     const app = resolve(directory, target);
     await mkdir(app);
-    await writeFile(resolve(app, "generated.ts"), generated.files["generated.ts"]!);
+    for (const [name, text] of Object.entries(generated.files)) {
+      await mkdir(dirname(resolve(app, name)), { recursive: true });
+      await writeFile(resolve(app, name), text);
+    }
     const postgres = target === "cloudflare-postgres";
     // No test oracle/seed/benchmark code in the deployment bundle. Caller is a
     // fixed fixture identity, not an example of production credential handling.
@@ -35,7 +38,7 @@ export default { async fetch(request, env) {
 } };
 `);
     await writeFile(resolve(app, "wrangler.json"), JSON.stringify({ name: "mantle-next-size-local", main: "worker.ts", compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat"] }));
-    execFileSync("node", [resolve(base, "node_modules/wrangler/bin/wrangler.js"), "deploy", "--dry-run", "--minify", "--config", resolve(app, "wrangler.json"), "--outdir", resolve(app, "bundle")], {
+    execFileSync("node", [resolve(base, "node_modules/wrangler/bin/wrangler.js"), "deploy", "--dry-run", "--minify", "--metafile", resolve(app, "meta.json"), "--config", resolve(app, "wrangler.json"), "--outdir", resolve(app, "bundle")], {
       cwd: base, env: { ...process.env, WRANGLER_SEND_METRICS: "false" }, stdio: "pipe",
     });
     const names = await readdir(resolve(app, "bundle"));
@@ -46,8 +49,10 @@ export default { async fetch(request, env) {
     const bytes = await readFile(resolve(app, "bundle", modules[0]!));
     const map = JSON.parse(await readFile(resolve(app, "bundle", modules[0]! + ".map"), "utf8"));
     assert.ok(!map.sources.some((source: string) => /(?:^|\/)mantle\/(?:src|dist)\//.test(source) || /@aotter\/mantle(?:\/|$)/.test(source)), "old compiler/runtime in Worker bundle");
+    assert.ok(!map.sources.some((source: string) => /\/zod\/.*\/locales\/(?!en\.js)[^/]+\.js$/.test(source)), "unused Zod locales in Worker bundle");
     const report = { target, uncompressedBytes: bytes.length, gzipBytes: gzipSync(bytes).length, budgetBytes: budgets[target] };
     console.log(JSON.stringify(report));
+    if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, target), { recursive: true, errorOnExist: true, force: false });
     assert.ok(bytes.length <= budgets[target], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
   }
 } finally { await rm(directory, { recursive: true, force: true }); }

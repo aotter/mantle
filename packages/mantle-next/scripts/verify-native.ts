@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile, mkdtemp, open } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Database } from "bun:sqlite";
@@ -32,8 +32,15 @@ for (const target of selected ? [selected as Target] : targets) {
   assert.ok(generated.ok, JSON.stringify(!generated.ok && generated.diagnostics));
   const directory = resolve(base, "tests/apps/.generated", target);
   await mkdir(directory, { recursive: true });
-  for (const [name, text] of Object.entries(generated.files)) await writeFile(resolve(directory, name), text);
+  for (const [name, text] of Object.entries(generated.files)) {
+    await mkdir(dirname(resolve(directory, name)), { recursive: true });
+    await writeFile(resolve(directory, name), text);
+  }
   const app = await import(pathToFileURL(resolve(directory, "generated.ts")).href);
+  for (const kind of ["views", "procedures"]) for (const name of Object.keys(app[kind])) {
+    const entry = await import(pathToFileURL(resolve(directory, kind, encodeURIComponent(name) + ".ts")).href);
+    assert.equal(entry.default, app[kind][name], "direct entry must reference the same checked native function");
+  }
   const ddl = generated.files["schema.sql"]!;
   let result: unknown;
   if (target === "bun-sqlite") {

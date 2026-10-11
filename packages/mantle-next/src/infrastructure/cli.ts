@@ -1,5 +1,5 @@
 import { readFile, mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { generateFromSources } from "./generate.js";
 import type { Target } from "../domain/model.js";
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
@@ -15,6 +15,9 @@ if (!targets.includes(target as Target) || !destination || !paths.length) {
     process.exitCode = 1;
   } else {
     await mkdir(destination, { recursive: true });
-    for (const [name, source] of Object.entries(result.files)) await writeFile(resolve(destination, name), source);
+    for (const [name, source] of Object.entries(result.files)) {
+      await mkdir(dirname(resolve(destination, name)), { recursive: true });
+      await writeFile(resolve(destination, name), source);
+    }
   }
 }

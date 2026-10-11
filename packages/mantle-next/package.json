@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
+  "files": ["dist", "README.md"],
   "exports": {
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
@@ -12,11 +13,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.lib.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test tests/*.test.ts && bun run check:size",
+    "test": "bun test tests/*.test.ts && bun run check:size && bun scripts/check-package.ts",
     "generate": "bun src/infrastructure/cli.ts",
     "test:native": "bun scripts/verify-native.ts",
     "bench": "bun scripts/bench.ts",
-    "check:size": "bun run build && bun scripts/check-size.ts"
+    "check:size": "bun run build && bun scripts/check-size.ts",
+    "check:package": "bun run build && bun scripts/check-package.ts",
+    "baseline:footprint": "bun run build && bun scripts/baseline-footprint.ts"
   },
   "dependencies": { "zod": "catalog:" },
   "devDependencies": {
