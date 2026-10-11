@@ -57,6 +57,15 @@ hook, lifecycle, reader shape, or feature must produce an actionable generate
 error rather than silently execute without its contract. This experimental
 package cannot replace 0.2 until the compatibility ledger is complete.
 
+PostgreSQL session prerequisites move to native deployment configuration, not
+a replacement runtime boot. Generated `postgresRequirements` data records the
+baseline defaults: ISO date text, postgres intervals, UTC casts, standard
+strings, exact float text and a 10-second native statement limit. ROLE/DATABASE
+settings are required with Hyperdrive pooling; application session SETs must not
+be assumed persistent. Stricter positive limits are valid; the old explicit
+unbounded policy remains an application decision. No request-time verification,
+connection manager or timeout/retry scheduler is introduced.
+
 Storage migrations are explicit deployment artifacts. No request or module import
 may converge storage or inspect every schema. Optional Better Auth, REST, MCP,
 Admin and UI stay outside the query core. Preserve their public behavior as they

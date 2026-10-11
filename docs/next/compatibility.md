@@ -35,6 +35,7 @@ Every follow-up must name its target matrix, acceptance tests and owner before c
 | SQL Procedures, row/set operations, RETURNING | Slice | Ordered full result arrays, no-RETURNING empty arrays, trigger-suppressed counts, whole-batch rollback. Generator |
 | Explicit OCC and expected affected counts | Slice, under review | Caller-observed token, row-zero conflict, foreign-row nondisclosure, native in-transaction assertions; no retries. Generator/contracts |
 | Scoped inserts/upsert and native uniqueness | Slice via compiler/DDL | Ownership injection, generated identities, scoped conflict targets, create race and expired-row policy. Generator/infrastructure |
+| PostgreSQL session preconditions and bounded statements | Slice: explicit native deployment requirements | ISO/postgres text formats, UTC casts, standard strings, float precision and native default timeout; Hyperdrive role/database configuration; no per-request settings manager. Infrastructure/host |
 | Native transaction/error outcomes | Slice, under review | D1 atomic batch, SQLite native transaction, PG SERIALIZABLE; uncertain COMMIT and rollback failure, safe classification, disposal ownership. Generator/contracts/host |
 | Ref Procedures and typed handler context | Refused | Caller/cause propagation, input/output checks, application side effects, nested invocation depth. Generator |
 | Dynamic authorization guards | Refused | Validated input, read-only Store/no-invoke, same caller and guard ordering. Generator |

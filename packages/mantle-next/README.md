@@ -34,6 +34,20 @@ validation are retained because they are observable contracts. Known output
 names and bindings are emitted as straight-line code. Per-query PG wire metadata
 is needed for computed SQL values whose native type is only known from the result.
 
+PostgreSQL resources are an explicit trusted application/deployment boundary.
+Generated PG modules export `postgresRequirements`, plain native GUC defaults:
+DateStyle ISO/YMD, IntervalStyle postgres, TimeZone UTC,
+standard_conforming_strings on, extra_float_digits 1, statement_timeout 10000ms.
+Configure these through PostgreSQL's native ROLE or DATABASE settings before
+serving queries. Any ISO date order, float precision >= 1 and stricter positive
+timeout satisfy the same prerequisites. An explicit unbounded timeout is an
+application policy decision, as the previous adapter's timeout=0 was. Bun may
+also use official driver connection options where session lifetime permits.
+Hyperdrive resets pooled sessions: do not assume client SETs/startup options
+persist on its origin sessions. The generated functions neither configure nor
+verify every connection; deployment owns this precondition just as it owns the
+verified Caller and initial schema. No per-read settings query is added.
+
 Checks:
 
 ```sh
