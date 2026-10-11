@@ -83,7 +83,7 @@ describe("fixture on a runtime", () => {
       expect((await noise.store.view("workout-list", { limit: 500 })).rows).toHaveLength(NOISE_WORKOUTS);
       expect((await noise.store.view("workout-sets", { input: { workoutId: fixture.latestWorkoutId } })).rows).toHaveLength(0);
       expect((await noise.store.view("workout-sets", { input: { workoutId: "w-o2-0001" } })).rows).toHaveLength(20);
-      expect((await noise.store.select({ from: "sets", limit: 500 })).rows).toHaveLength(500);
+      expect((await noise.store.db.sets.find({ limit: 500 })).rows).toHaveLength(500);
       const member = ctxFor("member");
       expect((await member.store.view("workout-list", { limit: 500 })).rows).toHaveLength(500);
     } finally {

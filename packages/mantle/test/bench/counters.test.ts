@@ -60,7 +60,7 @@ describe("live coverage", () => {
 describe("mapCoverage with the script source", () => {
   it("a function V8 never reported is still defined when the file's text defines it, and missing when it does not", () => {
     const scripts = [script("dist/core/store/json.js", ["other", 1]), script("dist/core/sql/compile.js", ["other", 1])];
-    const sources = { [`${ROOT}dist/core/store/json.js`]: "class StoreJson {\n    select(q) {\n        return 1;\n    }\n}", [`${ROOT}dist/core/sql/compile.js`]: "export function renamedCompile(a) {}" };
+    const sources = { [`${ROOT}dist/core/store/json.js`]: "export function rowDecoder(columns, codec) {\n    return 1;\n}", [`${ROOT}dist/core/sql/compile.js`]: "export function renamedCompile(a) {}" };
     const { status } = mapCoverage(scripts, ROOT, { seen: new Map() }, (url) => sources[url]);
     expect(status.storeIr).toBe("ok");
     expect(status.compile).toBe("missing");
