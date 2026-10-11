@@ -1,6 +1,6 @@
 /**
  * `mantle generate` and `mantle generate --check` (ADR-0032 decision 12 and amendment "mantle generate"): manifests and
- * `mantle.config.json` in, `.mantle/generated/plan.json` and `.mantle/generated/mantle.ts` out. It never installs a package.
+ * `mantle.config.json` in, `.mantle/generated/plan.json`, `mantle.ts` and `runtime.ts` out. It never installs a package.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -21,6 +21,7 @@ import * as d1 from "../d1/compile/index.js";
 import * as pg from "../postgres/compile/index.js";
 import { translateParseArgsError } from "../spec/infrastructure/cli/parseArgsError.js";
 import { emitMantleModule } from "./emitModule.js";
+import { emitRuntimeModule } from "./emitRuntime.js";
 import { toCloudflareCron } from "../spec/domain/service/CloudflareCron.js";
 import { presetWarnings, writePreset } from "./preset.js";
 
@@ -232,7 +233,7 @@ async function openSqliteFile(path: string): Promise<DatabaseDriver> {
 
 const print = (ds: readonly Diagnostic[]) => ds.forEach((d) => stderr.write(`${d.code} ${d.path}: ${d.message}\n`));
 
-const HELP = `mantle generate — compile manifests to .mantle/generated/plan.json and mantle.ts, and write the
+const HELP = `mantle generate — compile manifests to .mantle/generated/plan.json, mantle.ts and runtime.ts, and write the
 service preset (src/service.ts, src/index.ts, wrangler.jsonc, ...) once, when src/service.ts does not exist
 
 Usage: mantle generate [options]
@@ -322,6 +323,7 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   const outputs: [string, string][] = [
     [join(OUT, "plan.json"), json({ sourceHash, plan })],
     [join(OUT, "mantle.ts"), emitMantleModule(plan, validation.linked)],
+    [join(OUT, "runtime.ts"), emitRuntimeModule(plan)],
   ];
   // the config is rewritten only when the selection changes, and keeps whatever else it holds
   const changed = (a: MantleConfig | undefined, b: MantleConfig) => !a || a.identity !== b.identity || a.features.join() !== b.features.join() || a.host !== b.host || a.dialect !== b.dialect;

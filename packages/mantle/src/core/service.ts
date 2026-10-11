@@ -20,6 +20,8 @@ export interface MantleBootReport {
   readonly coreVersion: string;
   /** Whether the plan's generate-time lowered statements run (ADR-0044): "used", or why not. */
   readonly lowered?: "used" | "absent" | "restricted" | "mantle-version" | "dialect" | "unsupported";
+  /** Generated application code, or the reason the ordinary path is used (ADR-0045). */
+  readonly generated?: import("./runtime/generated.js").GeneratedStatus;
 }
 
 export interface MantleRuntime {
