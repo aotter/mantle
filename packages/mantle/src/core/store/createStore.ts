@@ -89,7 +89,7 @@ export function bindFor(now: number, caller: Caller | undefined): { mode: Mode; 
 
 /** `parent` is the invocation this Store serves: hooks it fires chain to it, so the depth limit and cause ids hold across writes. */
 function make(deps: StoreDeps, caller: Caller | undefined, parent: InvocationCause | undefined, readers: ReaderSet): CallerStore {
-  const env = (mode: Mode): RunEnv => ({ executor: deps.executor, dialect: deps.dialect, schemas: deps.schemas, mode, lifecycle: deps.lifecycle, generatedBinders: deps.generated?.binders });
+  const env = (mode: Mode): RunEnv => ({ executor: deps.executor, dialect: deps.dialect, schemas: deps.schemas, mode, lifecycle: deps.lifecycle, generatedBinders: deps.generated?.binders, generatedPageBinders: deps.generated?.pageBinders });
   let writes = 0;
   const as = (bound: BindContext) => ({
     bind: bound,

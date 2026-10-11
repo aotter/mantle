@@ -193,7 +193,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
         result = await (args.handlers[proc.handler.ref] as (i: unknown, c: HandlerContext) => unknown)(input, ctx);
       } else {
         const { mode, bind } = bindFor(now(), inv.caller);
-        const env: RunEnv = { executor, dialect, schemas: plan.schemas, mode, lifecycle, generatedBinders: generated?.binders };
+        const env: RunEnv = { executor, dialect, schemas: plan.schemas, mode, lifecycle, generatedBinders: generated?.binders, generatedPageBinders: generated?.pageBinders };
         const project = generated?.inputs?.procedure && Object.hasOwn(generated.inputs.procedure, inv.procedure) ? generated.inputs.procedure[inv.procedure] : undefined;
         const ran = await runProcedure(env, { name: inv.procedure, kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: project ? project(input) : sqlInput(proc.input, input) } }, true);
         result = { results: ran.rows };

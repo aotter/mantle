@@ -154,3 +154,58 @@ it("emits the complete lowered program/mode table and preserves page extras on c
     expect(emitBinders({ ...plan, lowered: { ...plan.lowered!, dialect: { name: "third-party", version: "1", key: "" } } })).toBeUndefined();
   }
 });
+
+it("uses generated page binders for exact shapes and preserves fallback SQL and binds", async () => {
+  const { compile, user } = await import("../core/lowered-fixture.js");
+  const { withLowering, seedPlan } = await import("../../src/core/sql/lowered.js");
+  const { runView } = await import("../../src/core/sql/run.js");
+  for (const original of [d1Dialect, postgresDialect()]) {
+    const compiler = original === d1Dialect ? undefined : await import("../../src/postgres/compile/index.js");
+    const raw = await compile(compiler);
+    const view = raw.views["low-stock"]!;
+    const configured = { ...raw, views: { ...raw.views, "low-stock": { ...view, uiSchema: { list: { searchFields: ["id"], filterFields: ["stock"] } } } } };
+    const { plan } = await withLowering(configured, original);
+    const emitted = emitBinders(plan)!;
+    const pages = sourceFunction(`() => (${emitted.pageBinders})`, { ...sqlite, ...(original === d1Dialect ? {} : pg) })();
+    let calls = 0, encodes = 0;
+    for (const modes of Object.values(pages) as any[]) for (const shapes of Object.values(modes) as any[]) for (const [key, f] of Object.entries(shapes) as [string, Function][]) shapes[key] = (...args: unknown[]) => { calls++; return f(...args); };
+    const dialect = { ...original, codec: { ...original.codec, encode: (type: string, value: unknown) => { encodes++; return original.codec.encode(type, value); } } };
+    seedPlan(plan, dialect, undefined);
+    const sent: unknown[] = [];
+    const env = { dialect, schemas: plan.schemas, executor: { select: async (s: any) => { sent.push({ sql: s.printed?.sql ?? dialect.print!(s.ir, plan.schemas), binds: [...s.binds] }); return []; }, apply: async () => [] } };
+    const p = { name: "low-stock", kind: "view" as const, inputs: view.inputs, ir: plan.views["low-stock"]!.stmts };
+    for (const mode of ["caller", "trusted"] as const) for (const opts of [
+      { pageSize: 1 },
+      { pageSize: 3, cursor: [3, "last", "last"] },
+      { pageSize: 2, match: { search: { columns: ["id"], text: "a%_\\tail" }, eq: [{ column: "stock", value: 3 }] } },
+      { pageSize: 4, cursor: [null, "last", "last"] },
+      { pageSize: 5, match: { eq: [{ column: "stock", value: 1 }, { column: "id", value: "other" }] } },
+    ]) for (let warm = 0; warm < 2; warm++) {
+      const as = { caller: user(`owner${warm}`), cause: { id: "read", kind: "invoke" } as any, bind: { ...ctx, uid: `owner${warm}`, role: warm ? "editor" : null, input: { max: warm + 10 } } };
+      sent.length = 0; await runView({ ...env, mode }, p, as, opts);
+      const expected = [...sent]; sent.length = 0; encodes = 0;
+      const before = calls;
+      await runView({ ...env, mode, generatedPageBinders: pages }, p, as, opts);
+      expect(sent).toEqual(expected);
+      const supported = !opts.cursor?.includes(null) && !((opts.match?.eq?.length ?? 0) > 1);
+      expect(calls - before, JSON.stringify({ mode, opts, keys: Object.keys(pages["low-stock"][mode]) })).toBe(supported ? 1 : 0);
+      expect(encodes === 0).toBe(supported);
+    }
+    const as = { caller: user("probe"), cause: { id: "read", kind: "invoke" } as any, bind: { ...ctx, input: { max: 9 } } };
+    const before = calls;
+    for (const probe of [{ seen: new Set<any>() }, { unsafeNoVisibility: true }]) await runView({ ...env, ...probe, generatedPageBinders: pages }, p, as, { pageSize: 2 });
+    await runView({ ...env, generatedPageBinders: pages }, { ...p, name: "constructor" }, as, { pageSize: 2 });
+    expect(calls).toBe(before);
+  }
+});
+
+it("evaluates page extras before base codecs without a runtime map or array spread", () => {
+  const source = emitBinder([{ k: "input", type: "integer", name: "n" }], "sqlite", new Set(), { expressions: ["extra.cursor![0]", "extra.pageSize + 1", "extra.eq![0]!.value"] });
+  expect(source).not.toContain(".map("); expect(source).not.toContain("...");
+  const seen: string[] = [];
+  const generated = sourceFunction(source, { encodeInteger: (v: unknown) => { seen.push("base"); return sqlite.encodeInteger(v); } });
+  const cursor = { get 0() { seen.push("cursor"); return null; } };
+  const eq = [{ get value() { seen.push("eq"); return "filter"; } }];
+  expect(generated({ ...ctx, input: { n: 7 } }, { cursor, pageSize: 2, eq }, d1Dialect)).toEqual([7, null, 3, "filter"]);
+  expect(seen).toEqual(["cursor", "eq", "base"]);
+});

@@ -19,7 +19,7 @@ export function emitRuntimeModule(plan: RuntimePlan): string {
     `  mantle: ${JSON.stringify(MANTLE_VERSION)},`,
     `  dialect: ${JSON.stringify(dialect)},`,
     "  viewRows,",
-    ...(binds ? [`  binders: ${binds.binders},`, `  inputs: ${binds.projectors},`] : []),
+    ...(binds ? [`  binders: ${binds.binders},`, `  pageBinders: ${binds.pageBinders},`, `  inputs: ${binds.projectors},`] : []),
     "};", "",
   ].join("\n");
 }

@@ -39,6 +39,7 @@ export interface RunEnv extends Pick<CompileContext, "dialect" | "schemas" | "mo
   readonly executor: StoreExecutor;
   /** Selected by the runtime's exact-plan gate; never held on a shared compiled entry. */
   readonly generatedBinders?: GeneratedRuntime["binders"];
+  readonly generatedPageBinders?: GeneratedRuntime["pageBinders"];
   readonly lifecycle?: LifecycleHooks;
   /** NEGATIVE CONTROL ONLY: print no visibility predicate, so a probe that cannot fail is caught. */
   readonly unsafeNoVisibility?: boolean;
@@ -60,6 +61,14 @@ const binder = (env: RunEnv, p: Program, index: number) => {
   if (env.seen || env.unsafeNoVisibility || p.statuses || p.name === undefined) return undefined;
   const programs = env.generatedBinders?.[p.kind];
   return programs && Object.hasOwn(programs, p.name) ? programs[p.name]?.[env.mode ?? "caller"]?.[index] : undefined;
+};
+
+const pageBinder = (env: RunEnv, p: Program, shape: string) => {
+  if (env.seen || env.unsafeNoVisibility || p.statuses || p.name === undefined) return undefined;
+  const programs = env.generatedPageBinders;
+  const modes = programs && Object.hasOwn(programs, p.name) ? programs[p.name] : undefined;
+  const shapes = modes && Object.hasOwn(modes, env.mode ?? "caller") ? modes[env.mode ?? "caller"] : undefined;
+  return shapes && Object.hasOwn(shapes, shape) ? shapes[shape] : undefined;
 };
 
 const ctxOf = (env: RunEnv, p: Program, extra: Partial<CompileContext> = {}): CompileContext => ({
@@ -415,8 +424,14 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
     if (shapes.size >= SHAPE_CAP) shapes.clear();
     shapes.set(shape, (paged = pagedOf(env, c!, opts.cursor, opts.match)));
   }
-  const extra = paged.sources.map((x) => ("cursor" in x ? opts.cursor![x.cursor] : "search" in x ? likePattern(search!.text) : "limit" in x ? pageSize + 1 : eq[x.eq]!.value));
-  const rows = await env.executor.select(statement(paged, [...(binder(env, p, 0)?.(as.bind, {}, env.dialect) ?? bindValues(env.dialect, c!.binds, as.bind)), ...extra]));
+  const generatedPage = pageBinder(env, p, shape);
+  let binds: unknown[];
+  if (generatedPage) binds = generatedPage(as.bind, { cursor: opts.cursor, pageSize, ...(search ? { search: likePattern(search.text) } : {}), eq }, env.dialect);
+  else {
+    const extra = paged.sources.map((x) => ("cursor" in x ? opts.cursor![x.cursor] : "search" in x ? likePattern(search!.text) : "limit" in x ? pageSize + 1 : eq[x.eq]!.value));
+    binds = [...(binder(env, p, 0)?.(as.bind, {}, env.dialect) ?? bindValues(env.dialect, c!.binds, as.bind)), ...extra];
+  }
+  const rows = await env.executor.select(statement(paged, binds));
   if (paged.flat) {
     if (rows.length > pageSize) throw refuse(`SQL_SHAPE: this View has more than ${pageSize} rows and no ORDER BY to page them by: add an ORDER BY`);
     return { rows: opts.row ? rows.map(opts.row) : rows };
