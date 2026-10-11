@@ -21,6 +21,12 @@ export function pgType(type: string): string {
   throw new Refused("SQL_TYPE", `unknown type ${type}`);
 }
 
+/** Check an integer before it reaches the native driver. Shared with generated binders. */
+export function encodeInteger(v: unknown): unknown {
+  if (!Number.isSafeInteger(v)) throw new Refused("SQL_TYPE", `${v} is not a safe integer`);
+  return v;
+}
+
 /** JS value -> the parameter sent for an input of this declared type. */
 export function encodeInput(type: string, v: any): unknown {
   if (v === null || v === undefined) return null;
@@ -28,8 +34,7 @@ export function encodeInput(type: string, v: any): unknown {
   if (num) return decodeNumeric(encodeNumeric(v, num.p, num.s), num.s);
   switch (type) {
     case "int4": case "int8": case "integer":
-      if (!Number.isSafeInteger(v)) throw new Refused("SQL_TYPE", `${v} is not a safe integer`);
-      return v;
+      return encodeInteger(v);
     case "float8": case "real": return v;
     case "bool": return !!v;
     case "text": case "geo": return String(v);

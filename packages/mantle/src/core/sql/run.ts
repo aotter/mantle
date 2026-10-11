@@ -7,6 +7,7 @@ import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/index.js";
 import { decideLifecycleWrite, hasSubLink, isIdCol, pinnedTarget, type ContentState, type SqlNode as N } from "../../spec/domain/index.js";
 import type { Caller } from "../caller.js";
 import type { InvocationCause, LifecycleDispatcher } from "../invocation.js";
+import type { GeneratedRuntime } from "../runtime/generated.js";
 import type { PrintedStatement, StoreExecutor, StoreRow, StoreStatement } from "../store.js";
 import { bindValues, compileProgram, type BindContext, type CompileContext } from "./compile.js";
 import { NATIVE } from "../store/json.js";
@@ -14,6 +15,8 @@ import { S, op, ref } from "./ast.js";
 import { applyPolicy, HOOK_PREFIX, type Compiled } from "./policy.js";
 
 export interface Program {
+  /** Present only for a named sealed View or inline Procedure. */
+  readonly name?: string;
   readonly kind: "view" | "procedure";
   readonly inputs: Readonly<Record<string, string>>;
   readonly ir: readonly N[];
@@ -34,6 +37,8 @@ export interface LifecycleHooks {
 
 export interface RunEnv extends Pick<CompileContext, "dialect" | "schemas" | "mode" | "seen"> {
   readonly executor: StoreExecutor;
+  /** Selected by the runtime's exact-plan gate; never held on a shared compiled entry. */
+  readonly generatedBinders?: GeneratedRuntime["binders"];
   readonly lifecycle?: LifecycleHooks;
   /** NEGATIVE CONTROL ONLY: print no visibility predicate, so a probe that cannot fail is caught. */
   readonly unsafeNoVisibility?: boolean;
@@ -50,6 +55,11 @@ export interface RunAs {
 
 const refuse = (message: string) => new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message }));
 const conflict = (opIndex: number) => new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: `CONFLICT op=${opIndex}`, conflict: { opIndex, reason: "expect" } }));
+
+const binder = (env: RunEnv, p: Program, index: number) =>
+  !env.seen && !env.unsafeNoVisibility && !p.statuses && p.name !== undefined
+    ? env.generatedBinders?.[p.kind]?.[p.name]?.[env.mode ?? "caller"]?.[index]
+    : undefined;
 
 const ctxOf = (env: RunEnv, p: Program, extra: Partial<CompileContext> = {}): CompileContext => ({
   dialect: env.dialect, schemas: env.schemas, inputs: p.inputs, kind: p.kind, mode: env.mode, seen: env.seen, unsafeNoVisibility: env.unsafeNoVisibility, ...extra,
@@ -242,7 +252,7 @@ export async function runProcedure(env: RunEnv, p: Program, as: RunAs, rowsOnly 
     if (!row || row.version === expected) return e;
     return new DiagnosticError(runtimeDiagnostic({ code: "CONFLICT", severity: "error", path: "store", message: e.message, conflict: { opIndex: i!, reason: "lock" } }));
   };
-  const batch = plan.map((c, i) => statement(c, bindValues(env.dialect, c.binds, as.bind, { version: versions[i] }),
+  const batch = plan.map((c, i) => statement(c, (!Object.hasOwn(versions, i) ? binder(env, p, i) : undefined)?.(as.bind, { version: versions[i] }, env.dialect) ?? bindValues(env.dialect, c.binds, as.bind, { version: versions[i] }),
     (p.expects?.[i] ?? (c.kind === "row" ? 1 : undefined)) === undefined ? undefined : p.expects?.[i] ?? 1));
   let affected: readonly number[] | undefined;
   const res = await (rowsOnly && env.executor.applyRows
@@ -388,7 +398,7 @@ export function seedPaged(c: Compiled, shape: string, paged: Paged): void {
 export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor?: readonly unknown[]; pageSize?: number; match?: ViewMatch; row?: (r: StoreRow) => StoreRow } = {}): Promise<ViewPage> {
   const [c] = compileCached(env, p, p.ir, p.ir, ctxOf(env, p), "view");
   if (!opts.pageSize) {
-    const all = await env.executor.select(statement(c!, bindValues(env.dialect, c!.binds, as.bind)));
+    const all = await env.executor.select(statement(c!, (binder(env, p, 0)?.(as.bind, {}, env.dialect) ?? bindValues(env.dialect, c!.binds, as.bind))));
     return { rows: opts.row ? all.map(opts.row) : all };
   }
   const pageSize = opts.pageSize;
@@ -405,7 +415,7 @@ export async function runView(env: RunEnv, p: Program, as: RunAs, opts: { cursor
     shapes.set(shape, (paged = pagedOf(env, c!, opts.cursor, opts.match)));
   }
   const extra = paged.sources.map((x) => ("cursor" in x ? opts.cursor![x.cursor] : "search" in x ? likePattern(search!.text) : "limit" in x ? pageSize + 1 : eq[x.eq]!.value));
-  const rows = await env.executor.select(statement(paged, [...bindValues(env.dialect, c!.binds, as.bind), ...extra]));
+  const rows = await env.executor.select(statement(paged, [...(binder(env, p, 0)?.(as.bind, {}, env.dialect) ?? bindValues(env.dialect, c!.binds, as.bind)), ...extra]));
   if (paged.flat) {
     if (rows.length > pageSize) throw refuse(`SQL_SHAPE: this View has more than ${pageSize} rows and no ORDER BY to page them by: add an ORDER BY`);
     return { rows: opts.row ? rows.map(opts.row) : rows };

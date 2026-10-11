@@ -4,3 +4,6 @@
  */
 export { postgresStorage, postgresDialect, type PostgresStorageOptions } from "./adapter.js";
 export { pgDatabaseDriver, pgPool, type PgAuthPool, type PgClient, type PgConnect } from "./driver.js";
+/** Checked scalar codecs used by generated bind functions. */
+export { encodeInteger } from "./codec.js";
+export { encodeNumeric, encodeDate, encodeTimestamptz, decodeNumeric, decodeDate, decodeTimestamptz } from "../d1/codec.js";

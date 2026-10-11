@@ -76,6 +76,12 @@ export function decodeJson(v: unknown): unknown {
   try { return JSON.parse(v); } catch { return v; }
 }
 
+/** Check an integer before it reaches the native driver. Shared with generated binders. */
+export function encodeInteger(v: unknown): unknown {
+  if (!Number.isSafeInteger(v)) throw new Refused("SQL_TYPE", `${v} is not a safe integer: D1 rounds integers past 2^53`);
+  return v;
+}
+
 /** JS value -> the value bound for an input of this declared type. */
 export function encodeInput(type: string, v: any): unknown {
   if (v === null || v === undefined) return null;
@@ -83,8 +89,7 @@ export function encodeInput(type: string, v: any): unknown {
   if (num) return encodeNumeric(v, num.p, num.s);
   switch (type) {
     case 'int4': case 'int8': case 'integer':
-      if (!Number.isSafeInteger(v)) throw new Refused('SQL_TYPE', `${v} is not a safe integer: D1 rounds integers past 2^53`);
-      return v;
+      return encodeInteger(v);
     case 'float8': case 'real': return v;
     case 'bool': return v ? 1 : 0;
     case 'text': return String(v);
