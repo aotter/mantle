@@ -111,3 +111,36 @@ asserts its owner bind and absence of a custom type parser. SQL and its hash are
 retained; generated-vs-direct differences may include SQL lowering, while the
 canonical control holds SQL constant. Raw samples and artifact/harness hashes accompany each formal run. This local
 acceptance protocol is outside regular CI timing gates.
+
+
+### Formal revised run: `82454430`
+
+Build immediately preceded the formal clean-source run. Four targets passed 140
+semantic checks in total. Internal warm protocol retained 9,600 samples (checked
+and bare, two variants each, 600 per variant/target). Workers additionally retained
+720 parent-clock batches: 90 each for four variants on two targets, 20 reads per
+batch (14,400 measured queries). All final batch row arrays matched.
+
+| p50 microseconds | Generated bare | Handwritten native | Exact generated-SQL native | Identical handwritten A/A |
+| --- | ---: | ---: | ---: | ---: |
+| Bun SQLite, complete call | 179.275 | 177.977 | — | — |
+| Bun PG, complete call | 1336.434 | 1336.425 | — | — |
+| Local Worker D1, external batch /20 | 2023.368 | 2063.562 | 2063.463 | 2055.977 |
+| Local Worker PG, external batch /20 | 2465.448 | 2403.939 | 2430.820 | 2605.344 |
+
+Nearest-rank p50 is used. Worker PG still has a positive p50 difference; do not
+hide it by reporting only negative paired means. Exploratory paired hierarchical
+bootstrap (three rounds of thirty, 10,000 draws, seed 1459) gives generated-minus-
+handwritten paired means of -284us D1 [-732,+152] and -90us PG [-574,+313].
+Against exact generated SQL these are -94us [-391,+263] and -14us [-426,+318].
+Native/native controls are +154us D1 [-363,+664] and -232us PG [-839,+132]. Few
+rounds and wide intervals do not establish equivalence or a fixed framework tax.
+
+Batch p95 is not single-read tail latency. First nineteen query result arrays
+materialize but are discarded; only the final array is serialized/compared.
+Branching and URL parsing differ slightly between generated/canonical routes, so
+even the exact-SQL control measures the complete HTTP path, not isolated function
+CPU. These results are scoped to the local fixture and do not certify deployed
+Cloudflare, Swolhalla migration or full 0.2 feature compatibility. Raw samples,
+full summaries, SQL/source/artifact hashes and exploratory analysis remain in the
+private evidence lab. No retries were used to select favorable outcomes.

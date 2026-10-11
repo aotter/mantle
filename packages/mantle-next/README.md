@@ -88,6 +88,7 @@ establish deployed Cloudflare latency.
 See the [measured evidence and remaining performance goal](../../docs/next/performance.md).
 The [size and startup gates](../../docs/next/size-and-startup.md) distinguish
 the passing package/bundle gates from pending startup CPU acceptance. The local
-checked-slice D1 process CPU watchdog failed; the revised native baseline is separate. The packed generator also still needs
+checked-slice D1 process CPU watchdog failed; the revised native local watchdog
+passed. Pure module CPU and formal equivalence remain open. The packed generator also still needs
 its workspace compiler dependency made standalone before publication.
 This package is not a released replacement for Mantle 0.2.

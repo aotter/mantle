@@ -23,12 +23,13 @@
 Completion of this first increment does not imply all 0.2 modules are migrated.
 The compatibility inventory and measured results determine readiness to replace it.
 
-Evidence: revised native boundary passed 44 focused tests / 385 assertions,
+Evidence: clean `82454430` revised native boundary passed 44 focused tests / 385 assertions,
 strict four-target consumers, and 140 real host/engine semantic checks
 (21 checked + 14 bare per target), plus native/checked footprint/package gates.
 Two independent adversarial reviews found no remaining correctness blockers.
 The historical checked D1 cold CPU watchdog failed; revised native startup
-acceptance awaits its own baseline.
+baseline passed its unchanged local watchdog (168 samples); pure library CPU
+and formal equivalence remain open.
 Full `pnpm check` stops at a baseline Cloud helper `plan_stale` mismatch.
 Separately, workspace typechecks and the packed Worker consumer passed; the full
 UI run remains non-green despite isolated rerun passes. See
