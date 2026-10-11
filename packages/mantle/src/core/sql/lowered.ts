@@ -9,7 +9,8 @@
  * The cache is keyed by the plan's own objects and the dialect object, so a seed serves the runtime (and the one storage adapter,
  * whose dialect object it is) that booted this plan; a second adapter compiles for itself.
  */
-import { planFingerprint, type LoweredPage, type LoweredStatement, type LoweredView, type PlanLowered, type RuntimePlan, type SqlNode as N } from "../../spec/domain/index.js";
+import { DiagnosticError } from "../../spec/kernel/index.js";
+import { SqlRefusal, planFingerprint, type LoweredPage, type LoweredStatement, type LoweredView, type PlanLowered, type RuntimePlan, type SqlNode as N } from "../../spec/domain/index.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
 import { lifecycleHookSets } from "../runtime/hooks.js";
 import { MANTLE_VERSION } from "../version.js";
@@ -17,7 +18,7 @@ import { schemaColumns } from "./allowlist.js";
 import { writeTarget } from "./ast.js";
 import { compileProgram, type CompileContext } from "./compile.js";
 import type { BindSpec, Compiled, Mode } from "./policy.js";
-import { compiledKey, pageShape, pagedOf, seedCompiled, seedPaged, type Paged, type Program } from "./run.js";
+import { compiledKey, pageShape, pagedOf, seedCompiled, seedPaged, type Paged, type Program, type ViewMatch } from "./run.js";
 
 type Env = { readonly dialect: MantleDialect; readonly schemas: Readonly<Record<string, StorageSchema>> };
 type Warn = (message: string) => void;
@@ -43,8 +44,24 @@ const stmtOf = (c: Compiled, sql: string): LoweredStatement => {
 const message = (e: unknown) => (e instanceof Error ? e.message.split("\n")[0]! : String(e));
 const printer = (dialect: MantleDialect) => dialect.print!.bind(dialect);
 
-/** One View under one mode, printed, with its paged statements for the default shapes (no cursor, and a cursor whose every key is non-null). Undefined when the runtime would refuse the View. */
-export function lowerView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, columns = schemaColumns(env.schemas), warn?: Warn, at = ""): LoweredView | undefined {
+/** Includes the ordinary first/next pages; optional list shapes never fill the runtime's 64-entry cache. */
+export const LOWERED_VIEW_SHAPE_LIMIT = 16;
+type ListFields = { readonly searchFields?: readonly string[]; readonly filterFields?: readonly string[] };
+
+/** Common requests only, in declared order. Multi-filter subsets and their orderings compile on first use. */
+function* pageMatches(list: ListFields | undefined): Generator<ViewMatch | undefined> {
+  yield undefined;
+  const fields = (v: unknown): v is readonly string[] => Array.isArray(v) && v.every((x) => typeof x === "string" && x.length > 0);
+  const columns = list?.searchFields;
+  const search = fields(columns) && columns.length ? { columns, text: "x" } : undefined;
+  const filters = fields(list?.filterFields) ? list.filterFields : [];
+  if (search) yield { search };
+  for (const column of filters) yield { eq: [{ column, value: 0 }] };
+  if (search) for (const column of filters) yield { search, eq: [{ column, value: 0 }] };
+}
+
+/** One View under one mode, printed, with bounded common list shapes (no cursor, and a cursor whose every key is non-null). Undefined when the runtime would refuse the View. */
+export function lowerView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, columns = schemaColumns(env.schemas), warn?: Warn, at = "", list?: ListFields): LoweredView | undefined {
   const print = printer(env.dialect);
   let c: Compiled;
   try {
@@ -55,12 +72,15 @@ export function lowerView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mod
   }
   const nkeys: number = c.ast.SelectStmt.sortClause?.length ?? 0;
   const paged: Record<string, LoweredPage> = {};
-  for (const cursor of [undefined, ...(nkeys ? [Array<unknown>(nkeys).fill(0)] : [])]) {
+  let attempted = 0;
+  shapes: for (const match of pageMatches(list)) for (const cursor of [undefined, ...(nkeys ? [Array<unknown>(nkeys).fill(0)] : [])]) {
+    if (++attempted > LOWERED_VIEW_SHAPE_LIMIT) break shapes;
     try {
-      const pg = pagedOf(env, c, cursor, undefined);
-      paged[pageShape(nkeys, cursor, undefined)] = { sql: print(pg.ast, env.schemas), sources: pg.sources, ...(pg.flat ? { flat: true as const } : {}), names: pg.names, nkeys: pg.nkeys };
+      const pg = pagedOf(env, c, cursor, match);
+      paged[pageShape(nkeys, cursor, match)] = { sql: print(pg.ast, env.schemas), sources: pg.sources, ...(pg.flat ? { flat: true as const } : {}), names: pg.names, nkeys: pg.nkeys };
     } catch (e) {
-      warn?.(`${at} (${mode}, ${cursor ? "next page" : "first page"}): ${message(e)}`); // the same refusal comes at run time
+      if (!match) warn?.(`${at} (${mode}, ${cursor ? "next page" : "first page"}): ${message(e)}`); // the same refusal comes at run time
+      else if (!(e instanceof SqlRefusal) && !(e instanceof DiagnosticError && e.diagnostic.message?.startsWith("SQL_SHAPE:"))) throw e;
     }
   }
   return { ...stmtOf(c, print(c.ast, env.schemas)), nkeys, paged };
@@ -88,7 +108,7 @@ export function lowerPlan(plan: Body, dialect: MantleDialect): { lowered: PlanLo
 
   const views = Object.entries(plan.views).flatMap(([name, v]) => {
     const modes = v.surface === "public" ? (["public"] as const) : (["caller", "trusted"] as const);
-    const lowered = Object.fromEntries(modes.flatMap((mode) => { const x = lowerView(env, { inputs: v.inputs, ir: v.stmts }, mode, columns, warn, `plan#/views/${name}`); return x ? [[mode, x]] : []; }));
+    const lowered = Object.fromEntries(modes.flatMap((mode) => { const x = lowerView(env, { inputs: v.inputs, ir: v.stmts }, mode, columns, warn, `plan#/views/${name}`, v.surface === "staff" ? v.uiSchema?.["list"] as ListFields | undefined : undefined); return x ? [[mode, x]] : []; }));
     return Object.keys(lowered).length ? [[name, lowered]] : [];
   });
   const procedures = Object.entries(plan.procedures).flatMap(([name, proc]) => {
@@ -154,12 +174,16 @@ function loweredPaged(page: LoweredPage, ast: () => N): Paged {
   return p;
 }
 
-/** The cursor a page shape stands for: `-` none, `vv=` all keys non-null (Core reads only that pattern of it). Any other shape is not one `lowerView` writes. */
-function cursorOf(shape: string, nkeys: number): readonly unknown[] | undefined {
-  const pattern = (JSON.parse(shape) as [string])[0];
-  if (pattern === "-") return undefined;
-  if (pattern === `${"v".repeat(nkeys)}=`) return Array<unknown>(nkeys).fill(0);
-  throw new Error(`page shape ${shape} is not a lowered shape`);
+/** Restore only generated cursor shapes and the exact ordered columns from the shape key. Values remain request binds. */
+function pageOf(shape: string, nkeys: number): { cursor: readonly unknown[] | undefined; match: ViewMatch | undefined } {
+  const parsed: unknown = JSON.parse(shape);
+  const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
+  if (!Array.isArray(parsed) || parsed.length !== 3 || (parsed[1] !== null && !strings(parsed[1])) || !strings(parsed[2])) throw new Error(`page shape ${shape} is malformed`);
+  const [pattern, columns, filters] = parsed;
+  const cursor = pattern === "-" ? undefined : pattern === `${"v".repeat(nkeys)}=` ? Array<unknown>(nkeys).fill(0) : null;
+  if (cursor === null) throw new Error(`page shape ${shape} is not a lowered shape`);
+  const match = columns !== null || filters.length ? { ...(columns !== null ? { search: { columns, text: "x" } } : {}), eq: filters.map((column: string) => ({ column, value: 0 })) } : undefined;
+  return { cursor, match };
 }
 
 /**
@@ -183,8 +207,8 @@ export function seedPlan(plan: RuntimePlan, dialect: MantleDialect, returning: R
         const compile = lazily(() => compileProgram(v.stmts, { dialect, schemas: plan.schemas, inputs: v.inputs, kind: "view", mode: mode as Mode } satisfies CompileContext)[0]!);
         const c0 = loweredCompiled(lv, compile, lv.nkeys);
         const pageds = Object.entries(lv.paged ?? {}).map(([shape, page]) => {
-          const cursor = cursorOf(shape, lv.nkeys);
-          return [shape, loweredPaged(page, () => pagedOf(env, compile(), cursor, undefined).ast)] as const;
+          const { cursor, match } = pageOf(shape, lv.nkeys);
+          return [shape, loweredPaged(page, () => pagedOf(env, compile(), cursor, match).ast)] as const;
         });
         installs.push(() => {
           const [c] = seedCompiled(env, p, compiledKey("view", mode, undefined, undefined, "view"), [c0]);

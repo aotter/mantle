@@ -8,7 +8,7 @@ import { validateJsonSchema } from "../../spec/domain/service/SchemaSpecChecks.j
 import { checkGuards, checkProcedureTarget, checkTriggerRefs } from "../../spec/domain/service/TriggerGraphChecks.js";
 import { MAX_NODES, schemaColumns } from "../sql/allowlist.js";
 import { compileProgram, type Mode } from "../sql/compile.js";
-import { loweringStatus, lowerPlan } from "../sql/lowered.js";
+import { LOWERED_VIEW_SHAPE_LIMIT, loweringStatus, lowerPlan } from "../sql/lowered.js";
 import { outName } from "../sql/run.js";
 import type { MantleStorageAdapter } from "../service.js";
 import { createMantleRuntime } from "./createRuntime.js";
@@ -160,6 +160,9 @@ function bounds(plan: RuntimePlan): Diagnostic[] {
     else {
       for (const name of Object.keys(views)) if (!Object.hasOwn(plan.views, name)) out.push(refused(`plan#/lowered/views/${name}`, "LOWERING_MISMATCH: lowered names a View the plan does not have"));
       for (const name of Object.keys(procedures)) if (!Object.hasOwn(plan.procedures, name)) out.push(refused(`plan#/lowered/procedures/${name}`, "LOWERING_MISMATCH: lowered names a Procedure the plan does not have"));
+      for (const [name, modes] of Object.entries(views)) for (const [mode, view] of Object.entries(programs(modes) ?? {})) {
+        if (count(programs(view)?.["paged"]) > LOWERED_VIEW_SHAPE_LIMIT) over(`plan#/lowered/views/${name}/${mode}/paged`, "page shapes in one lowered View mode", LOWERED_VIEW_SHAPE_LIMIT);
+      }
       if (jsonValues(l, L.loweredValues) > L.loweredValues) over("plan#/lowered", "JSON values in the lowered statements", L.loweredValues);
       else if (sqlChars(l) > L.loweredSqlChars) over("plan#/lowered", "characters of lowered SQL", L.loweredSqlChars);
     }
