@@ -1,16 +1,22 @@
 /** Generated application code, registered by exact plan identity (ADR-0045). */
 import type { RuntimePlan } from "../../spec/domain/index.js";
+import type { MantleDialect, StoreCodec } from "../dialect.js";
 import type { StoreRow } from "../store.js";
-import type { StoreCodec, MantleDialect } from "../dialect.js";
+import type { BindContext } from "../sql/compile.js";
+import type { Mode } from "../sql/policy.js";
 import { MANTLE_VERSION } from "../version.js";
 
 export type GeneratedRow = (row: StoreRow, codec: StoreCodec) => StoreRow;
+export type GeneratedBinder = (context: BindContext, extra: { version?: unknown; cursor?: readonly unknown[] }, dialect: MantleDialect) => unknown[];
+type ProgramBinders = Readonly<Record<string, Readonly<Partial<Record<Mode, readonly GeneratedBinder[]>>>>>;
+type InputProjectors = Readonly<Record<string, (input: unknown) => Readonly<Record<string, unknown>> | undefined>>;
 export interface GeneratedRuntime {
-  readonly viewRows?: Readonly<Record<string, GeneratedRow>>;
   readonly fingerprint: string;
   readonly mantle: string;
   readonly dialect: { readonly name: string; readonly version: string; readonly key: string };
-
+  readonly viewRows?: Readonly<Record<string, GeneratedRow>>;
+  readonly binders?: Readonly<Partial<Record<"view" | "procedure", ProgramBinders>>>;
+  readonly inputs?: Readonly<Partial<Record<"view" | "procedure", InputProjectors>>>;
 }
 
 const registered = new WeakMap<RuntimePlan, GeneratedRuntime>();

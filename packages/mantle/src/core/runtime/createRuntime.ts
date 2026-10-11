@@ -15,8 +15,8 @@ import type { MantleBootReport, MantleRuntime, MantleStorageAdapter } from "../s
 import { evaluateAuthAll } from "./auth.js";
 import { planValidators } from "./validators.js";
 import { lifecycleHookSets, lifecycleKey } from "./hooks.js";
-import { generatedFor, generatedStatus } from "./generated.js";
 import { loweringStatus, seedPlan } from "../sql/lowered.js";
+import { generatedFor, generatedStatus } from "./generated.js";
 
 export const CORE_VERSION = "0.2.0";
 
@@ -141,9 +141,9 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
 
   const now = args.now ?? (() => Date.now() * 1000);
   const store = createStore({
-    executor, dialect, schemas: plan.schemas, lifecycle, now,
+    executor, dialect, schemas: plan.schemas, lifecycle, now, generated,
     newId: args.newId ?? (() => crypto.randomUUID().replaceAll("-", "")),
-    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input, inputSchema: () => validators.view(name)! } : {}), ...(v.columns ? { columns: v.columns } : {}), ...(generated?.viewRows && Object.hasOwn(generated.viewRows, name) ? { row: generated.viewRows[name] } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
+    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input, inputSchema: () => validators.view(name)! } : {}), ...(v.columns ? { columns: v.columns } : {}), ...(generated?.viewRows && Object.hasOwn(generated.viewRows, name) ? { row: generated.viewRows[name] } : {}), ...(generated?.inputs?.view && Object.hasOwn(generated.inputs.view, name) ? { projectInput: generated.inputs.view[name] } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
     guardView: async (procedure, caller, input, cause) => { await invoke({ procedure, input, caller, cause: child(cause, procedure) }, true); },
   });
 
@@ -193,8 +193,9 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
         result = await (args.handlers[proc.handler.ref] as (i: unknown, c: HandlerContext) => unknown)(input, ctx);
       } else {
         const { mode, bind } = bindFor(now(), inv.caller);
-        const env: RunEnv = { executor, dialect, schemas: plan.schemas, mode, lifecycle };
-        const ran = await runProcedure(env, { kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: sqlInput(proc.input, input) } }, true);
+        const env: RunEnv = { executor, dialect, schemas: plan.schemas, mode, lifecycle, generatedBinders: generated?.binders };
+        const project = generated?.inputs?.procedure && Object.hasOwn(generated.inputs.procedure, inv.procedure) ? generated.inputs.procedure[inv.procedure] : undefined;
+        const ran = await runProcedure(env, { name: inv.procedure, kind: "procedure", inputs: proc.inputs, ir: proc.handler.sql.stmts }, { caller: inv.caller, cause: inv.cause, bind: { ...bind, input: project ? project(input) : sqlInput(proc.input, input) } }, true);
         result = { results: ran.rows };
       }
     } catch (e) {
