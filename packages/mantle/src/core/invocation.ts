@@ -45,7 +45,6 @@ export interface HandlerContext<Env = unknown, S extends { readonly db: object }
 }
 
 /** `input` is validated against the Procedure's `input` schema before the call, the return against `output`. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type HandlerFn<I = unknown, O = unknown, Env = unknown, S extends { readonly db: object } = CallerStore> = (input: I, ctx: HandlerContext<Env, S>) => O | Promise<O>;
 
 /** Codegen narrows this to exactly the plan's refs (`HANDLER_NOT_REGISTERED` / `HANDLER_NOT_DECLARED`). */
