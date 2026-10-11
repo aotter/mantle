@@ -1,9 +1,11 @@
 /** Generated application code, registered by exact plan identity (ADR-0045). */
 import type { RuntimePlan } from "../../spec/domain/index.js";
 import type { MantleDialect } from "../dialect.js";
+import type { GeneratedValidators } from "./validators.js";
 import { MANTLE_VERSION } from "../version.js";
 
 export interface GeneratedRuntime {
+  readonly validators?: GeneratedValidators;
   readonly fingerprint: string;
   readonly mantle: string;
   readonly dialect: { readonly name: string; readonly version: string; readonly key: string };

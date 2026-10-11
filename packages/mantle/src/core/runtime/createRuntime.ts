@@ -137,7 +137,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   if (loweredStatus === "used") seedPlan(plan, dialect, lifecycle?.after);
   else if (plan.lowered && loweredStatus !== "restricted") console.warn(`[mantle boot] lowered statements not used (${loweredStatus}); regenerate the plan with this Mantle (\`mantle generate\`)`);
 
-  const validators = planValidators(plan); // each built on first use, shared by every runtime over this plan
+  const validators = planValidators(plan, generated?.validators); // each built on first use, with trusted artifacts isolated from fallback
 
   const now = args.now ?? (() => Date.now() * 1000);
   const store = createStore({

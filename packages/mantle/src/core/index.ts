@@ -17,3 +17,5 @@ export { DiagnosticError, makeDiagnostic, runtimeDiagnostic, type Diagnostic, ty
 export { STAFF_ROLES, isStaffRole, type StaffRole } from "../spec/domain/index.js";
 
 export { registerGenerated, type GeneratedRuntime } from "./runtime/generated.js";
+export { jsonSchemaValidator } from "../spec/domain/index.js";
+export type { GeneratedValidators } from "./runtime/validators.js";
