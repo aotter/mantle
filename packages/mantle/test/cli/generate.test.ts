@@ -93,6 +93,13 @@ describe("mantle generate", () => {
     await expect(read(dir, "mantle.config.json")).rejects.toThrow();
     expect((await gen(CUSTOM, dir)).code).toBe(0);
     expect((await gen(["--check"], dir)).code).toBe(0);
+    const runtimeBefore = await read(dir, ".mantle/generated/runtime.ts");
+    await writeFile(join(dir, ".mantle/generated/runtime.ts"), `${runtimeBefore}\n// edited\n`);
+    const runtimeStale = await gen(["--check"], dir);
+    expect(runtimeStale.code).toBe(1);
+    expect(runtimeStale.err).toContain("stale: .mantle/generated/runtime.ts");
+    expect(await read(dir, ".mantle/generated/runtime.ts")).toContain("// edited");
+    expect((await gen(CUSTOM, dir)).code).toBe(0);
     const before = await read(dir, ".mantle/generated/mantle.ts");
     await writeFile(join(dir, "manifests/procedures.yaml"), (await read(dir, "manifests/procedures.yaml")).replace("handler: { ref: note }", "handler: { ref: noteV2 }"));
     const stale = await gen(["--check"], dir);

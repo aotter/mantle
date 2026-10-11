@@ -15,6 +15,7 @@ import type { MantleBootReport, MantleRuntime, MantleStorageAdapter } from "../s
 import { evaluateAuthAll } from "./auth.js";
 import { planValidators } from "./validators.js";
 import { lifecycleHookSets, lifecycleKey } from "./hooks.js";
+import { generatedFor, generatedStatus } from "./generated.js";
 import { loweringStatus, seedPlan } from "../sql/lowered.js";
 
 export const CORE_VERSION = "0.2.0";
@@ -57,8 +58,9 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
 
   // ---- boot: the plan is what was sealed, and what was expected ---------------------------------------------------------
   if (plan.version !== RUNTIME_PLAN_VERSION) throw fail("PLAN_FINGERPRINT_MISMATCH", at, `plan version ${plan.version} is not the version this Core runs (${RUNTIME_PLAN_VERSION})`);
+  const generated = generatedFor(plan, args.storage.dialect, args.expectedFingerprint);
   const { fingerprint, ...body } = plan;
-  if ((await planFingerprint(body)) !== fingerprint) throw fail("PLAN_FINGERPRINT_MISMATCH", at, "the plan does not match its fingerprint: it changed after it was sealed");
+  if (!generated && (await planFingerprint(body)) !== fingerprint) throw fail("PLAN_FINGERPRINT_MISMATCH", at, "the plan does not match its fingerprint: it changed after it was sealed");
   if (args.expectedFingerprint !== undefined && args.expectedFingerprint !== fingerprint)
     throw fail("PLAN_FINGERPRINT_MISMATCH", at, `the plan's fingerprint is ${fingerprint}, expected ${args.expectedFingerprint}`);
 
@@ -208,7 +210,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
     plan,
     store,
     invokeProcedure: (invocation) => invoke(invocation),
-    bootReport: (): MantleBootReport => ({ fingerprint, coreVersion: CORE_VERSION, lowered: loweredStatus }),
+    bootReport: (): MantleBootReport => ({ fingerprint, coreVersion: CORE_VERSION, lowered: loweredStatus, generated: generatedStatus(plan, dialect, args.expectedFingerprint) }),
     ...(site ? { site } : {}),
   };
 }

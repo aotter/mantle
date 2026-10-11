@@ -15,3 +15,5 @@ export * from "./runtime/verifyPlan.js";
 // what host and handler code throws and checks, from the root: the `/spec` barrel bundles the SQL parser into a Worker
 export { DiagnosticError, makeDiagnostic, runtimeDiagnostic, type Diagnostic, type DiagnosticCode } from "../spec/kernel/index.js";
 export { STAFF_ROLES, isStaffRole, type StaffRole } from "../spec/domain/index.js";
+
+export { registerGenerated, type GeneratedRuntime } from "./runtime/generated.js";
