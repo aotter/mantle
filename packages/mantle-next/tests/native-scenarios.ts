@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { pairedReadBenchmark } from "../scripts/bench.js";
 import { fixtures, owners } from "./apps/fixtures.js";
 
-export function postgresOracleSql(sql: string) {
-  let parameter = 0;
-  return sql.replace(/\?/g, () => `$${++parameter}`);
-}
+export { postgresOracleSql } from "./apps/oracle.js";
 
 /** What a native application writes to return the wire form: ISO timestamps with microseconds and plain dates, formatted by the database. */
 export const handwrittenListSql = (sqlite: boolean) => sqlite

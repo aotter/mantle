@@ -7,17 +7,9 @@ import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
 import type { BetterAuthOptions } from "@better-auth/core";
-import { bunSqlAdapter, d1Adapter, type D1Like } from "../src/auth/adapter.js";
+import { bunSqlAdapter, d1Adapter } from "../src/auth/adapter.js";
+import { d1Shim } from "./apps/d1-shim.js";
 import { authSchemaSql } from "../src/auth/schema.js";
-
-/** The slice of D1 the adapter uses, over bun:sqlite (D1 runs SQLite with foreign keys enforced). */
-function d1Shim(sqlite: Database): D1Like & { batch(statements: { all(): Promise<unknown> }[]): Promise<unknown[]> } {
-  const statement = (text: string, values: unknown[] = []) => ({
-    bind: (...next: unknown[]) => statement(text, next),
-    all: async () => ({ results: sqlite.query(text).all(...(values as never[])) as Record<string, unknown>[], meta: { changes: (sqlite.query("SELECT changes() AS c").get() as { c: number }).c } }),
-  });
-  return { prepare: text => statement(text), batch: statements => Promise.all(statements.map(s => s.all())) };
-}
 
 // The official suite is written for vitest: `test.skipIf(c)(name, { timeout }, ({ onTestFailed, skip }) => ...)`. Bun maps the
 // "vitest" import to bun:test, which passes no such context, so wrap that one call shape to supply it (`skip` only returns

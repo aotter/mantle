@@ -12,8 +12,8 @@ pnpm --filter @aotter/mantle-next generate cloudflare-d1 /tmp/purchase-generated
 ```
 
 Outputs include `generated.ts`, `schema.sql` and direct operation entries.
-Import a selected function from `views/<encoded-name>.ts` or
-`procedures/<encoded-name>.ts` (default export, with Input/Row or Input/Output
+Import a selected function from `views/<encoded-name>.ts`,
+`procedures/<encoded-name>.ts` or `stores/<schema>.ts` (default export, with its
 types) to exclude other operations from the request bundle. Apply initial DDL explicitly to an
 empty development database; this artifact is not a destructive migration or a
 production convergence tool. Generation does no database I/O. Application code
@@ -25,13 +25,19 @@ Caller to `views[name](db, caller, input)` or
 Default queries contain no validator, scalar decoder, row projection or generic
 database-error wrapper. Validate untrusted input before calling them; redact
 native errors at application transports (they are rethrown as they are). JSON binds are JSON text; SQLite bool
-and fixed numeric binds use native storage values. Bound fields
-must be supplied explicitly (null for absence). Rows use SQL names and official
+and fixed numeric binds use native storage values. Bound fields are explicit (null for absence). Rows use SQL names and official
 driver representations (PG int8 strings, SQLite 0/1 booleans), except declared
 date-time and date columns: the SQL returns them (Views and `RETURNING`) as ISO
 strings in UTC with six fractional digits and `YYYY-MM-DD` on every target, and
 inputs bound to them take the same ISO text (a valid `Date` also works for date-time); an offset-less
 timestamp or a nonexistent day is refused with `SQL_TYPE` before the write.
+
+Every Schema also gets a typed **Store** (`stores[schema](db, caller)`: `findById`,
+`find` with AND-only `where`, keyset `cursor` paging, `first`, `count`, and an OCC
+`update(id, set, { lock })`). Its policy is Core's: the base read is Core's lowering of
+`SELECT r.* FROM <schema> r`, the update is Core's lowering of one `UPDATE` with a
+presence flag per writable column; the Store only appends `WHERE`, `ORDER BY`, `LIMIT`.
+`orderBy` accepts `id` and indexed columns. See the [contract](../../docs/next/contract.md).
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain
@@ -53,9 +59,8 @@ declarations requiring them fail generation. See the complete
 
 There is no old-runtime fallback, request-time plan verification, dynamic query
 compiler, custom pool, lock polling or hook sandbox. Boundary validation belongs to the
-application. Known output
-names and bindings are emitted as straight-line code. Per-query PG wire metadata
-is needed for computed SQL values whose native type is only known from the result.
+application. Output names are emitted into the SQL; binds are Core's recipes, evaluated by
+the shared `kernel/binds`. Computed PG values need per-query wire metadata for a known native type.
 
 PostgreSQL session settings (DateStyle ISO/YMD, IntervalStyle postgres, TimeZone UTC,
 standard_conforming_strings on, extra_float_digits 1, a positive statement_timeout) are

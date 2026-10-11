@@ -35,13 +35,27 @@ beforeAll(async () => {
   await writeFile(drivers, [
     'import { SQL } from "bun";', 'import { Client } from "pg";',
     `import { pgPort } from ${JSON.stringify(fileURLToPath(new URL("apps/pg-port.js", import.meta.url)))};`,
-    'import { views as bun, procedures as bunWrites } from "./bun-postgres/generated.js";',
+    'import { Database } from "bun:sqlite";',
+    'import { views as bun, procedures as bunWrites, stores as bunStores } from "./bun-postgres/generated.js";',
+    'import { stores as sqliteStores } from "./bun-sqlite/generated.js";',
     'import { views as worker } from "./cloudflare-postgres/generated.js";',
     'const sql = new SQL("postgres://localhost/x");',
     `await bun["purchase-totals"](sql, ${caller}, {});`,
     `await sql.begin(async (tx) => bun["purchase-totals"](tx, ${caller}, {}));`,
     `await bunWrites["create-purchase-pair"](sql, ${caller}, { requestNumber: "r", title: "t", amount: 1, approved: true, sortBucket: null, requestedUnits: 1, submittedAt: new Date(), neededOn: "2026-10-11", payload: "{}" });`,
     `await worker["purchase-totals"](pgPort(new Client()), ${caller}, {});`,
+    // the typed Store: where/orderBy/set are checked against the Schema
+    `const store = bunStores.purchase_requests(sql, ${caller});`,
+    'const page = await store.find({ where: { approved: true, amount: { gte: 1 }, sortBucket: { in: ["a"] }, submittedAt: { lt: new Date() } }, orderBy: "sortBucket", order: "desc", limit: 5, cursor: "c" });',
+    'const row: string | undefined = page.rows[0]?.title ?? undefined;',
+    'await store.update("id", { title: "t", payload: { a: 1 }, sortBucket: null }, { lock: 1 });',
+    '// @ts-expect-error json columns cannot be ordered by',
+    'await store.find({ orderBy: "payload" });',
+    '// @ts-expect-error amount is a number',
+    'await store.update("id", { amount: "x" }, { lock: 1 });',
+    '// @ts-expect-error unknown column',
+    'await store.count({ nope: 1 });',
+    `await sqliteStores.purchase_requests(new Database(":memory:"), ${caller}).findById("x");`,
   ].join("\n"));
   selectedFiles.push(drivers);
 });

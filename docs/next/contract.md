@@ -151,6 +151,47 @@ may converge storage or inspect every schema. Optional Better Auth, REST, MCP,
 Admin and UI stay outside the query core. Preserve their public behavior as they
 are added; do not make a read import their entire composition.
 
+## Shared runtime core (spike, tracking aotter/mantle#1465)
+
+Generated Views, generated Procedures, the Store and the Better Auth adapter share
+one kernel, split on two independent axes. Nothing branches on the engine at run
+time; a bundle contains one dialect module and one driver module.
+
+- **Dialect** (`kernel/dialect/sqlite.ts`, `postgres.ts`): how SQL is spelled and
+  values are stored: `param(n)` (`?n`/`$n`), `ident`, `escapeLike` and the ESCAPE
+  clause, `like(ci)`, NULL placement for keyset order (NULL is the smallest value in
+  both), the wire-form templates `wireTimestamp`/`wireDate` (generic over the operand;
+  the 1970 floor arithmetic exists once), and bind values (`now`, `cutoff`, the ISO
+  input encoders in `kernel/scalars.ts`, bool, JSON text).
+- **Driver** (`kernel/driver/bun-sqlite.ts`, `d1.ts`, `bun-sql.ts`): how a handle is
+  called: `read`, `run` (`{ rows, changes }`) and `procedure`, each with only the
+  atomicity the engine really has (D1 batch with the `_mantle_assert` row check, mapped to
+  `CONFLICT`; bun:sqlite `db.transaction`; Bun.SQL autocommit for one statement,
+  `begin(serializable)` and `postgresOutcome` for several). No common transaction interface.
+- **Binds** (`kernel/binds.ts`): Core's bind recipes (`uid`, `role`, `now`, `cutoff`,
+  `const`, `input` with ISO encoding) evaluated by one function for generated Views,
+  generated Procedures and the Store. Generated code carries the recipes as data, so
+  binds are no longer emitted as straight-line code (about 0.1 microsecond per call on
+  bun:sqlite; see the spike report).
+- **Condition** (`kernel/where.ts`): one column/operator/value fragment builder, used by
+  the Store and by the Better Auth adapter, which keeps only OR grouping, contains/starts/ends
+  patterns and joins.
+- **Store** (`kernel/store.ts`, generated per Schema as `stores[schema](db, caller)`):
+  `findById`, `find` (AND-only typed `where`: eq ne gt gte lt lte like in notIn isNull, null
+  is IS NULL; keyset `cursor`, base64url, bound to schema, orderBy and direction, NULL-aware),
+  `first`, `count`, `update(id, set, { lock })`. **It owns no policy.** For each Schema the
+  generator adds two synthetic programs beside the authored ones and runs them through the same
+  compile, lowering and wire-form passes: `SELECT r.<columns> FROM <schema> r` (Core wraps the relation in
+  its scope, TTL and published predicates, in caller and trusted mode) and one `UPDATE ... SET col = CASE WHEN
+  input.s_col THEN input.v_col ELSE col END ... WHERE id = input.i_id AND version = input.i_lock RETURNING ...`
+  (one statement per Schema, whatever subset of columns a call sets; Core adds scope, TTL, the version bump and
+  `updated_at`). The descriptor carries those printed statements and recipes; the Store appends
+  ` WHERE ... ORDER BY ... LIMIT` outside the `AS r` wrapper and numbers its placeholders after the base's own.
+  A system Caller uses the trusted statements. `orderBy` is limited to `id` and to the first column of an
+  index after the scope column (what the caller's scoped read can walk); trusted mode has no scope
+  equality, so such an index does not serve a cross-owner sort. Publishing Schemas have a read Store only.
+  The scope column is not exposed, so it cannot be filtered or ordered by.
+
 ## Architecture and acceptance
 
 `kernel <- domain <- usecase <- infrastructure`. Kernel contains portable

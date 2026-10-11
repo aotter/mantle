@@ -1,6 +1,7 @@
 /** One column/operator/value condition, spelled by the dialect. The Store and the Better Auth adapter both build theirs here. */
 import type { Dialect } from "./dialect/common.js";
 
+/** @internal */
 export type Operator = "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "in" | "notIn" | "like";
 const COMPARE = { gt: ">", gte: ">=", lt: "<", lte: "<=" } as const;
 
@@ -8,6 +9,7 @@ const COMPARE = { gt: ">", gte: ">=", lt: "<", lte: "<=" } as const;
  * `column` is already quoted. `bind` registers one parameter and returns its placeholder. `insensitive` folds both sides of
  * eq/ne/in/notIn with LOWER (text only) and picks the dialect's case-insensitive LIKE. A null eq/ne is IS [NOT] NULL.
  * `like` takes a finished pattern (`escapeLike` the literal parts).
+ * @internal
  */
 export function condition(d: Pick<Dialect, "like" | "likeEscape">, column: string, operator: Operator, value: unknown, bind: (value: unknown) => string, insensitive = false): string {
   const lhs = insensitive ? `LOWER(${column})` : column;

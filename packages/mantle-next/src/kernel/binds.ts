@@ -14,25 +14,27 @@ export type Recipe =
 export interface Step { readonly sql: string; readonly binds: readonly Recipe[]; readonly row?: boolean }
 export type Bound = { readonly sql: string; readonly binds: readonly unknown[]; readonly row?: boolean };
 
-export function binds(d: Pick<Dialect, "now" | "cutoff" | "timestamp" | "date">, recipes: readonly Recipe[], caller: Caller, input?: Readonly<Record<string, unknown>>, ms = 0): unknown[] {
+/** The dialect functions the recipes in use call; generated code passes only those. */
+export type Values = Partial<Pick<Dialect, "now" | "cutoff" | "timestamp" | "date">>;
+export function binds(d: Values, recipes: readonly Recipe[], caller: Caller, input?: Readonly<Record<string, unknown>>, ms = 0): unknown[] {
   const out: unknown[] = [];
   for (const r of recipes) {
     switch (r.k) {
       case "uid": out.push(caller.kind === "user" ? caller.subject : caller.kind === "system" ? `system:${caller.reason}` : null); break;
       case "role": out.push(caller.kind === "user" ? caller.role : null); break;
-      case "now": out.push(d.now(ms ||= Date.now())); break;
-      case "cutoff": out.push(d.cutoff(ms ||= Date.now(), r.seconds)); break;
+      case "now": out.push(d.now!(ms ||= Date.now())); break;
+      case "cutoff": out.push(d.cutoff!(ms ||= Date.now(), r.seconds)); break;
       case "const": out.push(r.value); break;
       case "input": {
         const v = input![r.name];
-        out.push(r.type === "timestamptz" ? (v == null ? null : d.timestamp(v as string | Date)) : r.type === "date" ? (v == null ? null : d.date(v as string)) : v);
+        out.push(r.type === "timestamptz" ? (v == null ? null : d.timestamp!(v as string | Date)) : r.type === "date" ? (v == null ? null : d.date!(v as string)) : v);
       }
     }
   }
   return out;
 }
 /** Every step's binds, evaluated for a Procedure. */
-export function bound(d: Pick<Dialect, "now" | "cutoff" | "timestamp" | "date">, steps: readonly Step[], caller: Caller, input?: Readonly<Record<string, unknown>>): Bound[] {
+export function bound(d: Values, steps: readonly Step[], caller: Caller, input?: Readonly<Record<string, unknown>>): Bound[] {
   const ms = Date.now(); // one clock for the whole Procedure
   return steps.map(s => ({ sql: s.sql, binds: binds(d, s.binds, caller, input, ms), row: s.row }));
 }

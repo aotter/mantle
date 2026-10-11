@@ -12,16 +12,13 @@ export interface Handle {
 }
 
 export const read = (db: Handle, sql: string, binds: readonly unknown[]): unknown[] => db.query(sql).all(...binds);
-/** A statement that returns columns (SELECT, RETURNING) gives rows, and its affected count is their number. */
-export function run(db: Handle, sql: string, binds: readonly unknown[]): { rows: unknown[]; changes: number } {
-  const statement = db.query(sql);
-  if (statement.columnNames.length) { const rows = statement.all(...binds); return { rows, changes: rows.length }; }
-  return { rows: [], changes: Number(statement.run(...binds).changes) };
-}
-/** One statement is atomic on its own; several run in a transaction, and a statement that must change one row and does not rolls it back. */
+/** One statement is atomic on its own; several run in a transaction, and a row statement that does not change exactly one row rolls it back. */
 export async function procedure(db: Handle, steps: readonly Bound[], path: string): Promise<unknown[][]> {
   const execute = (handle: Handle) => steps.map(s => {
-    const { rows, changes } = run(handle, s.sql, s.binds);
+    const statement = handle.query(s.sql);
+    // a statement with columns (SELECT, RETURNING) gives rows, and their number is its affected count
+    const rows = statement.columnNames.length ? statement.all(...s.binds) : [];
+    const changes = statement.columnNames.length ? rows.length : Number(statement.run(...s.binds).changes);
     if (s.row && changes !== 1) throw new ContractError("CONFLICT", "Expected one affected row.", path);
     return rows;
   });

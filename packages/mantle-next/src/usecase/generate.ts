@@ -2,6 +2,7 @@
 import { parseNumeric, type JsonSchema, type LoweredStatement } from "@aotter/mantle/spec";
 import type { GenerateDiagnostic, GenerateInput, GenerateResult, Target } from "../domain/model.js";
 import { nativeType, outputType } from "../domain/columns.js";
+import { entry, exportName } from "../domain/entry.js";
 import { recipesOf } from "../domain/recipes.js";
 import { emitStores } from "./stores.js";
 
@@ -23,9 +24,6 @@ const typeOf = (s: JsonSchema | undefined): string => {
     default: return "unknown";
   }
 };
-// Stable, injective build-only export names; stale entry files cannot bind a new ordinal.
-const exportName = (kind: string, name: string) => kind + "_" + Array.from(name, c => c.codePointAt(0)!.toString(16)).join("_");
-
 export function generate({ target, plan, lowered, viewKeys, stores = [] }: GenerateInput): GenerateResult {
   const diagnostics: GenerateDiagnostic[] = [];
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
@@ -78,10 +76,15 @@ export function generate({ target, plan, lowered, viewKeys, stores = [] }: Gener
     return sql;
   };
   /** A statement as a constant: its text and how to bind it. */
-  const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false) => `{ sql: ${q(sqlOf(s, path))}, binds: ${q(recipesOf(s, fields, message => refuse(path, message)))}${row ? ", row: true" : ""} }`;
+  // The dialect functions the bind recipes call, so a bundle carries only those (`binds` takes this object).
+  const values = new Set<string>();
+  const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false, track = true) => {
+    const recipes = recipesOf(s, fields, message => refuse(path, message));
+    if (track) for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && (r.type === "timestamptz" || r.type === "date")) values.add(r.type === "date" ? "date" : "timestamp"); }
+    return `{ sql: ${q(sqlOf(s, path))}, binds: ${q(recipes)}${row ? ", row: true" : ""} }`;
+  };
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [];
   const entries: Record<string, string> = {};
-  // Entries import then export: Bun 1.3 drops a bare `export { x as default } from` binding under "sideEffects": false.
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
     const path = `views/${name}`, fn = `view${index}`;
     const modes = lowered.views[name];
@@ -102,10 +105,10 @@ export function generate({ target, plan, lowered, viewKeys, stores = [] }: Gener
     declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`,
       `const ${fn}Caller = ${step(c, path, fieldNames)} as const;`, ...(mode === "caller" ? [`const ${fn}Trusted = ${step(trusted!, path, fieldNames)} as const;`] : []),
       `async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path),
-      ...(mode === "caller" ? [`  const m = caller.kind === "system" ? ${fn}Trusted : ${fn}Caller;`, "  return await read(db, m.sql, binds(D, m.binds, caller, raw)) as View" + index + "Row[];"] : [`  return await read(db, ${fn}Caller.sql, binds(D, ${fn}Caller.binds, caller, raw)) as View${index}Row[];`]), "}");
+      ...(mode === "caller" ? [`  const m = caller.kind === "system" ? ${fn}Trusted : ${fn}Caller;`, `  return read(db, m.sql, binds(D, m.binds, caller, raw)) as View${index}Row[] | Promise<View${index}Row[]>;`] : [`  return read(db, ${fn}Caller.sql, binds(D, ${fn}Caller.binds, caller, raw)) as View${index}Row[] | Promise<View${index}Row[]>;`]), "}");
     views.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
-    entries[`views/${encodeURIComponent(name)}.ts`] = `import { ${exportName("view", name)} as operation } from "../generated.js";\nexport default operation;\nexport type { View${index}Input as Input, View${index}Row as Row } from "../generated.js";\n`;
+    entries[`views/${encodeURIComponent(name)}.ts`] = entry("view", name, `View${index}Input as Input, View${index}Row as Row`);
   }
   for (const [index, [name, procedure]] of Object.entries(plan.procedures).sort().entries()) {
     const path = `procedures/${name}`, fn = `procedure${index}`;
@@ -124,9 +127,9 @@ export function generate({ target, plan, lowered, viewKeys, stores = [] }: Gener
       `  return { results } as Procedure${index}Output;`, "}");
     procedures.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
-    entries[`procedures/${encodeURIComponent(name)}.ts`] = `import { ${exportName("procedure", name)} as operation } from "../generated.js";\nexport default operation;\nexport type { Procedure${index}Input as Input, Procedure${index}Output as Output } from "../generated.js";\n`;
+    entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input, Procedure${index}Output as Output`);
   }
-  const emitted = emitStores(stores, { isSqlite, step, refuse, entries });
+  const emitted = emitStores(stores, { isSqlite, step: (s, path, fields, row) => step(s, path, fields, row, false), refuse, entries });
   if (emitted.names.length) used.add("createStore");
   if (diagnostics.length) return { ok: false, diagnostics };
   const base = "@aotter/mantle-next/";
@@ -134,9 +137,10 @@ export function generate({ target, plan, lowered, viewKeys, stores = [] }: Gener
   const driverImports = [...["read", "procedure"].filter(n => used.has(n))];
   return { ok: true, files: { ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import type { Caller } from "${base}contracts";`,
     ...(used.has("ContractError") ? [`import { ContractError } from "${base}contracts";`] : []),
-    `import * as D from "${base}dialect/${isSqlite ? "sqlite" : "postgres"}";`,
+    ...(values.size ? [`import { ${[...values].sort().join(", ")} } from "${base}dialect/${isSqlite ? "sqlite" : "postgres"}";`] : []),
+    ...(emitted.names.length ? [`import * as DIALECT from "${base}dialect/${isSqlite ? "sqlite" : "postgres"}";`] : []),
     ...(driverImports.length ? [`import { ${driverImports.join(", ")} } from "${base}driver/${driver}";`] : []),
     ...(emitted.names.length ? [`import * as DRIVER from "${base}driver/${driver}";`, `import { createStore } from "${base}store";`] : []),
     `import { ${["binds", ...(used.has("bound") ? ["bound"] : [])].join(", ")} } from "${base}binds";`,
-    ...declarations, ...emitted.declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, `export const stores = { ${emitted.names.join(", ")} };`, ""].join("\n") } };
+    `const D = { ${[...values].sort().join(", ")} };`, ...declarations, ...emitted.declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, `export const stores = { ${emitted.names.join(", ")} };`, ""].join("\n") } };
 }

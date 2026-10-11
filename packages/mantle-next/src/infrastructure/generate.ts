@@ -61,7 +61,7 @@ export async function generateFromSources(request: { readonly target: Target; re
     }
   }
   const { stores, refusals: storeRefusals } = storeSources(compiled.plan, lowered as never);
-  for (const message of storeRefusals) refusals.push({ code: "GENERATE_UNSUPPORTED", path: message.slice(0, message.indexOf(":")), message: message.slice(message.indexOf(":") + 2) });
+  refusals.push(...storeRefusals);
   if (refusals.length) return { ok: false, diagnostics: refusals };
   // The synthetic programs only feed the Stores: they are not operations of the application.
   const authoredOnly = <T>(table: Record<string, T>) => Object.fromEntries(Object.entries(table).filter(([name]) => !name.startsWith(STORE_PREFIX)));

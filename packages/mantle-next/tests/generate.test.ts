@@ -287,3 +287,24 @@ test("declared timestamps and dates come back in wire form from the SQL itself",
     expect(pg.files["generated.ts"]).toContain(`to_char((e.at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\\"T\\"HH24:MI:SS.US\\"Z\\"')`);
   }
 });
+
+test("the Store's policy is Core's lowering, and its synthetic programs are not operations", async () => {
+  for (const target of ["bun-sqlite", "bun-postgres"] as const) {
+    const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "notes.yaml", text: source }] } });
+    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+    const text = generated.files["generated.ts"]!, param = target === "bun-sqlite" ? "?1" : "$1";
+    expect(Object.keys(generated.files)).toContain("stores/notes.ts");
+    // scope is inside Core's wrapper (`AS r`); the Store appends WHERE / ORDER BY / LIMIT outside it
+    expect(text).toContain(`FROM notes WHERE notes.owner = ${param} ) AS r"`);
+    expect(text).toContain("export const views = { [\"notes-list\"]: view0 };");
+    expect(text).not.toContain("mantle-store-");
+    expect(generated.files["stores/notes.ts"]).toContain("export default operation");
+  }
+});
+
+test("names reserved for the Store are refused", async () => {
+  const reserved = source.replace("metadata: {name: notes-list}", "metadata: {name: mantle-store-read-notes}");
+  const generated = await generateFromSources({ target: "bun-sqlite", sources: { sources: [{ sourceId: "notes.yaml", text: reserved }] } });
+  expect(generated.ok).toBe(false);
+  if (!generated.ok) expect(generated.diagnostics.map(d => d.code)).toContain("GENERATE_RESERVED_NAME");
+});
