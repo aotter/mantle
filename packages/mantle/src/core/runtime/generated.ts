@@ -2,12 +2,13 @@
 import type { RuntimePlan } from "../../spec/domain/index.js";
 import type { MantleDialect } from "../dialect.js";
 import { MANTLE_VERSION } from "../version.js";
+import type { ReaderSeed } from "../store/readerSeeds.js";
 
 export interface GeneratedRuntime {
   readonly fingerprint: string;
   readonly mantle: string;
   readonly dialect: { readonly name: string; readonly version: string; readonly key: string };
-
+  readonly readerSeeds?: Readonly<Record<string, ReaderSeed>>;
 }
 
 const registered = new WeakMap<RuntimePlan, GeneratedRuntime>();

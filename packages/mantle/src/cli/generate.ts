@@ -323,7 +323,7 @@ export async function runGenerate(rawArgs: readonly string[], deps: GenerateDeps
   const outputs: [string, string][] = [
     [join(OUT, "plan.json"), json({ sourceHash, plan })],
     [join(OUT, "mantle.ts"), emitMantleModule(plan, validation.linked)],
-    [join(OUT, "runtime.ts"), emitRuntimeModule(plan)],
+    [join(OUT, "runtime.ts"), emitRuntimeModule(plan, runtimeDialect)],
   ];
   // the config is rewritten only when the selection changes, and keeps whatever else it holds
   const changed = (a: MantleConfig | undefined, b: MantleConfig) => !a || a.identity !== b.identity || a.features.join() !== b.features.join() || a.host !== b.host || a.dialect !== b.dialect;

@@ -2,9 +2,12 @@
 import type { Caller, HandlerContext, InvocationCause, MantleStore, SchemaReader, StoreDelete, StoreInsert, StoreSelectResult, StoreUpdate, StoreViewOptions, StoreWriteResult } from "@aotter/mantle";
 import type { ContentState, RuntimePlan } from "@aotter/mantle/spec";
 import planFile from "./plan.json" with { type: "json" };
+import { registerGenerated } from "@aotter/mantle";
+import { generated } from "./runtime.js";
 
 /** The sealed plan, for `createMantle(service, { plan })`. */
 export const plan = planFile.plan as unknown as RuntimePlan;
+registerGenerated(plan, generated);
 /** SHA-256 of the manifest sources the plan was compiled from; not part of the fingerprint. */
 export const sourceHash: string = planFile.sourceHash;
 

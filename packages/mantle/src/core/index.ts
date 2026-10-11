@@ -17,3 +17,4 @@ export { DiagnosticError, makeDiagnostic, runtimeDiagnostic, type Diagnostic, ty
 export { STAFF_ROLES, isStaffRole, type StaffRole } from "../spec/domain/index.js";
 
 export { registerGenerated, type GeneratedRuntime } from "./runtime/generated.js";
+export type { ReaderSeed } from "./store/readerSeeds.js";
