@@ -82,7 +82,7 @@ describe("native generation", () => {
     expect(text).not.toContain("jsonSchemaToZod");
     expect(text).toContain("??= z.strictObject");
     for (const mode of ["caller", "trusted"] as const) expect(text).toContain(JSON.stringify(input.lowered.views["notes-list"]![mode]!.sql));
-    if (target === "bun-sqlite") { expect(text).toContain("db.transaction(execute)()"); expect(text).toContain("results = execute()"); expect(text).toContain(".length !== 1"); expect(text).not.toContain("SELECT changes()"); }
+    if (target === "bun-sqlite") { expect(text).toContain("db.transaction(execute)(db)"); expect(text).toContain("results = execute(db)"); expect(text).toContain(".length !== 1"); expect(text).not.toContain("SELECT changes()"); }
     else if (target === "cloudflare-d1") { expect(text).toContain("db.batch(["); expect(text).toContain("INSERT INTO _mantle_assert (op,ok)"); expect(text).toContain("changes() = 1"); }
     else { expect(text).toContain("BEGIN ISOLATION LEVEL SERIALIZABLE"); expect(text).toContain('db.query("ROLLBACK")'); expect(text).toContain(".rowCount !== 1"); expect(text.match(/BEGIN ISOLATION/g)!.length).toBe(1); }
     expect(generate(input)).toEqual(generated);
@@ -108,7 +108,7 @@ test("generated string length refusal aborts before pattern execution", () => {
   finally { RegExp.prototype.test = original; }
 });
 
-for (const checked of [false,true]) test(`${checked ? "checked" : "bare"} PG transactions preserve failures and signal uncertain ownership`, async () => {
+for (const checked of [true]) test("checked PG transactions preserve failures and signal uncertain ownership", async () => {
   const generated = generate(await canonical("bun-postgres"));
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const path = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
@@ -140,7 +140,7 @@ for (const checked of [false,true]) test(`${checked ? "checked" : "bare"} PG tra
   } finally { await unlink(path); }
 });
 
-for (const checked of [false,true]) test(`${checked ? "checked" : "bare"} single-statement PG writes autocommit and signal uncertain ownership`, async () => {
+for (const checked of [true]) test("checked single-statement PG writes autocommit and signal uncertain ownership", async () => {
   const generated = generate(await canonical("bun-postgres"));
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const path = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
@@ -162,8 +162,49 @@ for (const checked of [false,true]) test(`${checked ? "checked" : "bare"} single
       if (failure === "none") expect(caught).toBeUndefined();
       else if (failure === "zero-rows") expect(caught.code).toBe("CONFLICT");
       else if (failure === "socket") { expect(caught.code).toBe("OUTCOME_UNKNOWN"); expect(caught.cause).toBe(original); }
-      else if (!checked) expect(caught).toBe(original);
       else expect(caught.code).toBe(failure === "server" ? "CONFLICT" : "OUTCOME_UNKNOWN");
+    }
+  } finally { await unlink(path); }
+});
+
+test("bare PG writes on the Bun.SQL shape keep native errors and signal uncertain outcomes", async () => {
+  const generated = generate(await canonical("bun-postgres"));
+  if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+  const path = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
+  await writeFile(path, generated.files["generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"'));
+  const caller = { kind: "user", subject: "test-user", role: null, scopes: [], credential: "session", credentialId: null, clientId: null };
+  // Bun.SQL reports SQLSTATE in errno; node-postgres/postgres.js in code.
+  const server = (state: string, bun = false) => Object.assign(new Error("native-" + state), bun ? { errno: state, code: "ERR_POSTGRES_SERVER_ERROR", severity: "ERROR" } : { code: state, severity: "ERROR" });
+  const socket = () => Object.assign(new Error("native-socket"), { code: "ERR_POSTGRES_CONNECTION_CLOSED" });
+  try {
+    const module = await import(path.href);
+    // One statement, autocommit: no begin(), one round trip.
+    for (const [failure, expected] of [["none", undefined], ["zero", "CONFLICT"], ["23505", "native"], ["23505-bun", "native"], ["57014", "OUTCOME_UNKNOWN"], ["socket", "OUTCOME_UNKNOWN"]] as const) {
+      const error = failure === "socket" ? socket() : failure.startsWith("2") || failure.startsWith("5") ? server(failure.slice(0, 5), failure.endsWith("bun")) : undefined;
+      const calls: string[] = [];
+      const db = { unsafe: async (text: string) => { calls.push(text); if (error) throw error; return Object.assign([], { count: failure === "zero" ? 0 : 1 }); }, begin: async () => { calls.push("BEGIN"); throw Error("unexpected begin"); } };
+      let caught: any;
+      try { await module.procedures["update-note"](db, caller, { id: "n1", title: "t", version: 1 }); } catch (e) { caught = e; }
+      expect(calls.length).toBe(1); expect(calls[0]).toStartWith("UPDATE");
+      if (expected === undefined) expect(caught).toBeUndefined();
+      else if (expected === "native") expect(caught).toBe(error);
+      else { expect(caught.code).toBe(expected); if (error) expect(caught.cause).toBe(error); }
+    }
+    // Two statements: begin() owns the connection and ROLLBACK; only a failed COMMIT is uncertain.
+    for (const [failure, expected] of [["execute", "native"], ["commit-40001", "native"], ["commit-57P01", "OUTCOME_UNKNOWN"], ["commit-socket", "OUTCOME_UNKNOWN"]] as const) {
+      const error = failure === "execute" ? server("23505") : failure === "commit-socket" ? socket() : server(failure.slice(7));
+      const calls: string[] = [];
+      const tx = { unsafe: async (text: string) => { calls.push(text); if (failure === "execute") throw error; return Object.assign([], { count: 1 }); } };
+      const db = { unsafe: async () => { throw Error("statements must run inside begin()"); }, begin: async (options: string, fn: (t: unknown) => Promise<unknown>) => {
+        calls.push("BEGIN " + options);
+        try { await fn(tx); } catch (e) { calls.push("ROLLBACK"); throw e; }
+        calls.push("COMMIT"); throw error;
+      } };
+      let caught: any;
+      try { await module.procedures["create-note-pair"](db, caller, { title: "t" }); } catch (e) { caught = e; }
+      expect(calls[0]).toBe("BEGIN isolation level serializable");
+      if (expected === "native") expect(caught).toBe(error); else { expect(caught.code).toBe(expected); expect(caught.cause).toBe(error); }
+      expect(calls.at(-1)).toBe(failure === "execute" ? "ROLLBACK" : "COMMIT");
     }
   } finally { await unlink(path); }
 });
@@ -318,7 +359,7 @@ for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare
   const execute = () => { calls++; if (failure) throw failure; return rows; };
   const db = target === "bun-sqlite" ? {query:()=>({all:execute})}
     : target === "cloudflare-d1" ? {prepare:()=>({bind:()=>({all:async()=>({results:execute()})})})}
-    : {query:async(query:any)=>{expect(query.types).toBeUndefined();return {rows:execute()};}};
+    : {unsafe:async()=>execute()};
   try {
     const app = await import(file.href);
     // A cyclic extra value proves no recursive scan or schema parse runs here.

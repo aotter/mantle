@@ -140,7 +140,7 @@ test("both PostgreSQL artifacts flatten raw single-range Views and keep Procedur
     if(!result.ok) throw Error(JSON.stringify(result.diagnostics));
     const code = result.files["generated.ts"]!;
     expect(code).toContain("FROM purchase_requests AS r WHERE r.ownerid = $1 ORDER BY r.id");
-    expect(code).toContain("BEGIN ISOLATION LEVEL SERIALIZABLE");
+    expect(code).toContain(`db.begin("isolation level serializable"`);
     expect(code).not.toContain("flattenView");
     expect(code).not.toContain("compileProgram");
   }

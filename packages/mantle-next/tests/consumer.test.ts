@@ -29,6 +29,21 @@ beforeAll(async () => {
     files.push(file, join(destination, "checked.ts"));
     selectedFiles.push(join(destination, "views/purchase-totals.ts"), join(destination, "procedures/create-purchase.ts"));
   }
+  // Bun.SQL is the official PostgreSQL handle; node-postgres reaches it through the documented adapter.
+  const caller = "{ kind: 'user', subject: 's', role: null, scopes: [], credential: 'session', credentialId: null, clientId: null } as const";
+  const drivers = join(directory, "drivers.ts");
+  await writeFile(drivers, [
+    'import { SQL } from "bun";', 'import { Client } from "pg";',
+    `import { pgPort } from ${JSON.stringify(fileURLToPath(new URL("apps/pg-port.js", import.meta.url)))};`,
+    'import { views as bun, procedures as bunWrites } from "./bun-postgres/generated.js";',
+    'import { views as worker } from "./cloudflare-postgres/generated.js";',
+    'const sql = new SQL("postgres://localhost/x");',
+    `await bun["purchase-totals"](sql, ${caller}, {});`,
+    `await sql.begin(async (tx) => bun["purchase-totals"](tx, ${caller}, {}));`,
+    `await bunWrites["create-purchase-pair"](sql, ${caller}, { requestNumber: "r", title: "t", amount: 1, approved: true, sortBucket: null, requestedUnits: 1, submittedAt: new Date(), neededOn: "2026-10-11", payload: "{}" });`,
+    `await worker["purchase-totals"](pgPort(new Client()), ${caller}, {});`,
+  ].join("\n"));
+  selectedFiles.push(drivers);
 });
 afterAll(async () => { if (directory) await rm(directory, {recursive:true,force:true}); });
 

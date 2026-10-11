@@ -140,7 +140,7 @@ export async function verifyBareApplication(
   assert.ok(row); assert.equal(row.approved, sqlite ? 1 : true);
   assert.deepEqual(sqlite ? JSON.parse(String(row.payload)) : row.payload, [1,2,{native:true}]); checks++;
   // Single-statement writes autocommit: a server-reported failure is a known rollback, returned as the native error.
-  await assert.rejects(() => call("procedure", "create-purchase", owner, input), (error: any) => sqlite ? error?.code !== "OUTCOME_UNKNOWN" && /UNIQUE/.test(String(error?.message)) : error?.code === "23505"); checks++;
+  await assert.rejects(() => call("procedure", "create-purchase", owner, input), (error: any) => sqlite ? error?.code !== "OUTCOME_UNKNOWN" && /UNIQUE/.test(String(error?.message)) : (typeof error?.errno === "string" ? error.errno : error?.code) === "23505"); checks++;
   const update = {id:row.id,expectedVersion:Number(row.version),title:"Bare atomic edit",amount:3.25};
   await assert.rejects(() => call("procedure","update-purchase-double",owner,update));
   assert.deepEqual(await native('SELECT id, title, amount, version, approved, payload FROM purchase_requests WHERE id = ?', [row.id]), [row], "bare OCC failure rolls back earlier statement"); checks++;

@@ -17,7 +17,8 @@ Import a selected function from `views/<encoded-name>.ts` or
 types) to exclude other operations from the request bundle. Apply initial DDL explicitly to an
 empty development database; this artifact is not a destructive migration or a
 production convergence tool. Generation does no database I/O. Application code
-passes driver-ready parameters, an official connected client/SQLite handle/D1 binding and a verified
+passes driver-ready parameters, a database handle (Bun.SQL `SQL` for PostgreSQL, `bun:sqlite`
+Database, D1 binding) and a verified
 Caller to `views[name](db, caller, input)` or
 `procedures[name](db, caller, input)`.
 
@@ -39,9 +40,14 @@ The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain
 row expectations inside native atomic transactions. A single-statement Procedure
 is one atomic statement and runs without BEGIN/COMMIT (one PG round trip); a
-multi-statement Procedure uses SERIALIZABLE on PG, with no automatic retries. The application owns PoolClient checkout/release or
-Client connect/end. Discard the client after OUTCOME_UNKNOWN; never assume a
-lost commit answer means rollback. In selected checked entries, output validation runs after commit, as in
+multi-statement Procedure uses SERIALIZABLE on PG through `begin()`, with no
+automatic retries. Never assume a lost commit answer means rollback after
+OUTCOME_UNKNOWN; reconcile first.
+
+PostgreSQL drivers other than Bun.SQL implement the two-method `Postgres` shape
+from `@aotter/mantle-next/contracts`. For node-postgres on Workers/Hyperdrive,
+see `tests/apps/pg-port.ts`: hand it one connected Client per request; `begin`
+must keep every statement on that client and COMMIT only after the callback. In selected checked entries, output validation runs after commit, as in
 0.2. Bare queries return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
 declarations requiring them fail generation. See the complete
 [compatibility ledger](../../docs/next/compatibility.md).

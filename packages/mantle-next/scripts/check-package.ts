@@ -18,5 +18,6 @@ try {
   const tarballBytes = (await stat(archive)).size;
   console.log(JSON.stringify({gate:"package",files:names.length,tarballBytes,unpackedBytes}));
   assert.ok(tarballBytes <= 40 * 1024, "packed package exceeds 40 KiB");
-  assert.ok(unpackedBytes <= 128 * 1024, "unpacked package exceeds 128 KiB");
+  // 144 KiB: the Bun.SQL-shaped Postgres port, outcome helper and their source maps (no new dependency).
+  assert.ok(unpackedBytes <= 144 * 1024, "unpacked package exceeds 144 KiB");
 } finally { await rm(directory, {recursive:true,force:true}); }

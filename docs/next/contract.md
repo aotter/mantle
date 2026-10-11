@@ -14,11 +14,15 @@ cause: an execution interpreter between generated declarations and the driver.
 Next removes that intermediate executor rather than accelerating it.
 
 Day-one targets are Bun SQLite, Bun PostgreSQL, Cloudflare D1, and Cloudflare
-PostgreSQL. Workers validation uses local Wrangler only. PostgreSQL uses
-node-postgres; SQLite uses bun:sqlite; D1 uses its platform binding. Pool,
+PostgreSQL. Workers validation uses local Wrangler only. Bare PostgreSQL entries
+call Bun.SQL's own shape (`Postgres`: `unsafe(text, values)` and
+`begin(options, fn)`), so Bun passes its `SQL` or a transaction directly. Other
+drivers are application-owned adapters to that shape; Workers PostgreSQL (for
+example Mantle Cloud over Hyperdrive) adapts node-postgres, and the tested recipe
+is `tests/apps/pg-port.ts`. Checked PostgreSQL entries still take a node-postgres
+Client (see below). SQLite uses bun:sqlite; D1 uses its platform binding. Pool,
 connection lifetime, database isolation, locks and retries remain native and
-application-owned. Workers PostgreSQL uses an official Client with Hyperdrive's
-connection string during the supported request lifetime. No cloud provisioning.
+application-owned. No cloud provisioning.
 
 ## Current implementation boundary
 
@@ -91,10 +95,12 @@ unique `id =`), so a failed count check after autocommit has changed nothing.
 On PG it runs at the server's default isolation, not SERIALIZABLE: a concurrent
 OCC loser re-evaluates its `version =` predicate, matches zero rows and returns
 `CONFLICT` instead of SQLSTATE 40001. A server ErrorResponse (SQLSTATE and
-severity, timeouts included) is a known rollback and is rethrown natively; any
-other failure (lost socket) is `OUTCOME_UNKNOWN`. Checked entries still classify
-a 57-class timeout conservatively as `OUTCOME_UNKNOWN`. Multi-statement
-Procedures keep the SERIALIZABLE transaction and COMMIT-outcome handling.
+severity) is a known rollback and is rethrown natively, except connection,
+resource and shutdown classes (08, 28, 53, 57, 58, XX), which, like any failure
+without a server response (lost socket), are `OUTCOME_UNKNOWN`. SQLSTATE is
+`errno` on Bun.SQL and `code` on node-postgres. Multi-statement Procedures run in
+`begin("isolation level serializable", ...)`: a failure before the callback
+returns was rolled back by `begin`; only a failed COMMIT is classified as above.
 
 Generation option `checked: true` (CLI `--checked`) emits a separate `checked.ts`
 and `checked/views` / `checked/procedures` entries for previous input defaults,
@@ -107,7 +113,9 @@ caller owns external validation and error redaction.
 
 Driver-ready JSON parameters are text on both targets: node-postgres treats a
 JavaScript array as a PostgreSQL array, so native JSON binds must be serialized by
-the application. SQLite bool/date/timestamp/numeric parameters use their declared
+the application. Bare PG SQL declares each JSON parameter as text
+(`CAST(CAST($n AS text) AS jsonb)`), so Bun.SQL sends the text verbatim instead of
+JSON-encoding it again; generation refuses a JSON parameter used any other way. SQLite bool/date/timestamp/numeric parameters use their declared
 storage representations. Bound optional fields become explicit required values,
 with null representing absence; D1 cannot bind undefined. Native output keys are
 SQL names rather than a post-query camel-case projection. PG uses the driver's

@@ -124,7 +124,21 @@ function emit({ target, plan, lowered, viewKeys }: GenerateInput, native: boolea
     ...(statements.some(s => s.binds.some(b => b.k === "now" || b.k === "cutoff")) ? [native && !isSqlite ? "  const now = Date.now();" : "  const now = Date.now() * 1000;"] : []),
     ...(!native && statements.some(s => s.binds.some(b => b.k === "input" || b.k === "now" || b.k === "cutoff")) ? ["  let value: any;"] : []),
   ];
-  const read = (sql: string, binds: string): string => target === "bun-sqlite" ? `db.query(${q(sql)}).all(${binds})` : target === "cloudflare-d1" ? `(await db.prepare(${q(sql)}).bind(${binds}).all()).results` : `await db.query({ text: ${q(sql)}, values: ${binds}${native ? "" : ", types: rawTypes"} })`;
+  const pgPort = native && !isSqlite;
+  // JSON input is driver-ready text. Declaring its parameter as text makes every driver send it verbatim: Bun.SQL would
+  // otherwise JSON-encode a string bound to a jsonb parameter a second time.
+  const sqlOf = (s: LoweredStatement, path: string): string => {
+    if (!pgPort) return s.sql;
+    let sql = s.sql;
+    for (const [i, b] of s.binds.entries()) {
+      if (b.k !== "input" || String(b.type) !== "json") continue;
+      const param = `$${i + 1}`, cast = `CAST(${param} AS jsonb)`;
+      if (sql.split(cast).join("").match(new RegExp(`\\$${i + 1}(?!\\d)`))) refuse(path, `JSON input ${param} must appear only as ${cast}.`);
+      sql = sql.replaceAll(cast, `CAST(CAST(${param} AS text) AS jsonb)`);
+    }
+    return sql;
+  };
+  const read = (sql: string, binds: string): string => target === "bun-sqlite" ? `db.query(${q(sql)}).all(${binds})` : target === "cloudflare-d1" ? `(await db.prepare(${q(sql)}).bind(${binds}).all()).results` : pgPort ? `await db.unsafe(${q(sql)}, ${binds})` : `await db.query({ text: ${q(sql)}, values: ${binds}${native ? "" : ", types: rawTypes"} })`;
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
     const path = `views/${name}`, fn = `view${index}`;
     const modes = lowered.views[name];
@@ -169,7 +183,7 @@ function emit({ target, plan, lowered, viewKeys }: GenerateInput, native: boolea
     declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`);
     const validator = native ? "" : validation(`${fn}Input`, view.input, path + "/input");
     const fieldNames = inputFields(view.input, path + "/input");
-    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), checkedInput(validator, path, [c, ...(trusted ? [trusted] : [])]), ...context([c, ...(trusted ? [trusted] : [])]), ...(native ? [] : ["  try {"]), `  const ${isSqlite ? "rows" : "result"} = (${mode === "caller" ? `caller.kind === "system" ? ${read(trusted!.sql, bind(trusted!, path, fieldNames))} : ` : ""}${read(c.sql, bind(c, path, fieldNames))})${isSqlite ? " as Record<string, unknown>[]" : ""};`, ...(native ? [`  return ${isSqlite ? "rows" : "result.rows"} as View${index}Row[];`] : [`  return ${isSqlite ? "rows" : "result.rows"}.map(row => ${fields.some(field => field.includes("value =")) ? `{ let value: any; return { ${fields.join(", ")} }; }` : `({ ${fields.join(", ")} })`}) as View${index}Row[];`, `  } catch (error) { throw databaseError(error, "read", ${q(path)}, ${q(isSqlite ? "sqlite" : "postgres")}); }`]), "}");
+    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), checkedInput(validator, path, [c, ...(trusted ? [trusted] : [])]), ...context([c, ...(trusted ? [trusted] : [])]), ...(native ? [] : ["  try {"]), `  const ${isSqlite || pgPort ? "rows" : "result"} = (${mode === "caller" ? `caller.kind === "system" ? ${read(sqlOf(trusted!, path), bind(trusted!, path, fieldNames))} : ` : ""}${read(sqlOf(c, path), bind(c, path, fieldNames))})${isSqlite ? " as Record<string, unknown>[]" : ""};`, ...(native ? [`  return ${isSqlite || pgPort ? "rows" : "result.rows"} as View${index}Row[];`] : [`  return ${isSqlite ? "rows" : "result.rows"}.map(row => ${fields.some(field => field.includes("value =")) ? `{ let value: any; return { ${fields.join(", ")} }; }` : `({ ${fields.join(", ")} })`}) as View${index}Row[];`, `  } catch (error) { throw databaseError(error, "read", ${q(path)}, ${q(isSqlite ? "sqlite" : "postgres")}); }`]), "}");
     views.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
     entries[`views/${encodeURIComponent(name)}.ts`] = `export { ${exportName("view", name)} as default } from "../generated.js";\nexport type { View${index}Input as Input, View${index}Row as Row } from "../generated.js";\n`;
@@ -211,36 +225,39 @@ function emit({ target, plan, lowered, viewKeys }: GenerateInput, native: boolea
           }
         } else {
           const name = `result${lines.length}`;
-          lines.push(`    const ${name} = await db.query({ text: ${q(s.sql)}, values: ${binds}${native ? "" : ", types: rawTypes"} });`);
-          if (s.kind === "row") lines.push(`    if (${name}.rowCount !== 1) throw new ContractError("CONFLICT", "Expected one affected row.", ${q(path)});`);
-          lines.push(native ? `    results.push(${name}.rows);` : `    results.push(${name}.rows.map(row => Object.fromEntries(${name}.fields.map(field => [field.name, decodeField(field.dataTypeID, row[field.name] as string | null, field.dataTypeModifier)]))));`);
+          lines.push(pgPort ? `    const ${name} = await db.unsafe(${q(sqlOf(s, path))}, ${binds});` : `    const ${name} = await db.query({ text: ${q(s.sql)}, values: ${binds}${native ? "" : ", types: rawTypes"} });`);
+          if (s.kind === "row") lines.push(`    if (${name}.${pgPort ? "count" : "rowCount"} !== 1) throw new ContractError("CONFLICT", "Expected one affected row.", ${q(path)});`);
+          lines.push(pgPort ? `    results.push(${name});` : native ? `    results.push(${name}.rows);` : `    results.push(${name}.rows.map(row => Object.fromEntries(${name}.fields.map(field => [field.name, decodeField(field.dataTypeID, row[field.name] as string | null, field.dataTypeModifier)]))));`);
         }
       }
       lines.push("    return results;"); return lines;
     };
     const trustedLines = branch(modes.trusted), callerLines = branch(modes.caller);
-    const operation = ["  const execute = " + (target === "bun-sqlite" ? "()" : "async ()") + " => {", ...(trustedLines.join() === callerLines.join() ? [] : ['    if (caller.kind === "system") {', ...trustedLines, "    }"]), ...callerLines, "  };" ];
+    const operation = ["  const execute = " + (target === "bun-sqlite" ? "(db: Database)" : "async (db: Database)") + " => {", ...(trustedLines.join() === callerLines.join() ? [] : ['    if (caller.kind === "system") {', ...trustedLines, "    }"]), ...callerLines, "  };" ];
     // One statement is atomic on its own: a row op touches at most one row (one-row INSERT or unique `id =`), so a failed
     // count check after autocommit has changed nothing. Skipping BEGIN/COMMIT saves two PostgreSQL round trips.
     const single = modes.caller.length === 1 && modes.trusted.length === 1;
+    if (!isSqlite && (pgPort || single)) helpers.add("postgresOutcome");
     declarations.push(...operation);
-    const run = single ? "execute()" : "db.transaction(execute)()";
+    const run = single ? "execute(db)" : "db.transaction(execute)(db)";
     if (target === "bun-sqlite") declarations.push("  let results: unknown[][];", native ? `  results = ${run};` : `  try { results = ${run}; } catch (error) { throw databaseError(error, "write", ${q(path)}, "sqlite"); }`);
-    else if (target === "cloudflare-d1") declarations.push("  let results: unknown[][];", native ? "  results = await execute();" : `  try { results = await execute(); } catch (error) { throw databaseError(error, "write", ${q(path)}, "sqlite"); }`);
+    else if (target === "cloudflare-d1") declarations.push("  let results: unknown[][];", native ? "  results = await execute(db);" : `  try { results = await execute(db); } catch (error) { throw databaseError(error, "write", ${q(path)}, "sqlite"); }`);
+    else if (pgPort) declarations.push(
+      "  let results: unknown[][];",
+      ...(single ? ["  try { results = await execute(db); } catch (error) {", `    throw error instanceof ContractError ? error : postgresOutcome(error, ${q(path)});`, "  }"]
+        // Failure before the callback returns was rolled back by begin(); only a failed COMMIT can leave the outcome unknown.
+        : ["  let committing = false;", '  try { results = await db.begin("isolation level serializable", async (tx) => { const rows = await execute(tx); committing = true; return rows; }); } catch (error) {',
+          `    throw error instanceof ContractError || !committing ? error : postgresOutcome(error, ${q(path)});`, "  }"]));
     else if (single) declarations.push(
       "  let results: unknown[][];",
-      "  try { results = await execute(); } catch (error) {",
+      "  try { results = await execute(db); } catch (error) {",
       "    if (error instanceof ContractError) throw error;",
-      // A server ErrorResponse (SQLSTATE + severity) means the statement rolled back, timeouts included;
-      // anything else (socket loss, EPIPE) may have committed.
-      '    const server = error as {code?: unknown; severity?: unknown} | null;',
-      '    if (typeof server?.code !== "string" || !/^[0-9A-Z]{5}$/.test(server.code) || typeof server.severity !== "string") {',
-      `      throw new ContractError("OUTCOME_UNKNOWN", "Statement outcome is unknown; discard this client before further use.", ${q(path)}, { cause: error });`,
-      "    }", native ? "    throw error;" : `    throw databaseError(error, "write", ${q(path)}, "postgres");`, "  }");
+      `    const outcome = postgresOutcome(error, ${q(path)});`,
+      `    throw outcome instanceof ContractError ? outcome : databaseError(error, "write", ${q(path)}, "postgres");`, "  }");
     else declarations.push(
       native ? '  await db.query("BEGIN ISOLATION LEVEL SERIALIZABLE");' : `  try { await db.query("BEGIN ISOLATION LEVEL SERIALIZABLE"); } catch (error) { throw databaseError(error, "read", ${q(path)}, "postgres"); }`,
       "  let results: unknown[][];",
-      "  try { results = await execute(); } catch (error) {",
+      "  try { results = await execute(db); } catch (error) {",
       '    try { await db.query("ROLLBACK"); } catch (rollbackError) {',
       `      throw new ContractError("OUTCOME_UNKNOWN", "Rollback failed; discard this client before further use.", ${q(path)}, { cause: new AggregateError([error, rollbackError], "Execution and rollback failed.") });`,
       "    }", native ? "    throw error;" : `    throw databaseError(error, "read", ${q(path)}, "postgres");`, "  }",
@@ -257,6 +274,6 @@ function emit({ target, plan, lowered, viewKeys }: GenerateInput, native: boolea
     entries[`procedures/${encodeURIComponent(name)}.ts`] = `export { ${exportName("procedure", name)} as default } from "../generated.js";\nexport type { Procedure${index}Input as Input, Procedure${index}Output as Output } from "../generated.js";\n`;
   }
   if (diagnostics.length) return { ok: false, diagnostics };
-  const dbType = target === "bun-sqlite" ? 'import type { Database } from "bun:sqlite";' : target === "cloudflare-d1" ? 'import type { D1Database as Database } from "@cloudflare/workers-types";' : `import type { ${target === "bun-postgres" ? "Client, PoolClient" : "Client"} } from "pg";\ntype Database = ${target === "bun-postgres" ? "Client | PoolClient" : "Client"};`;
+  const dbType = target === "bun-sqlite" ? 'import type { Database } from "bun:sqlite";' : target === "cloudflare-d1" ? 'import type { D1Database as Database } from "@cloudflare/workers-types";' : native ? 'import type { Postgres as Database } from "@aotter/mantle-next/contracts";' : `import type { ${target === "bun-postgres" ? "Client, PoolClient" : "Client"} } from "pg";\ntype Database = ${target === "bun-postgres" ? "Client | PoolClient" : "Client"};`;
   return { ok: true, files: { ...entries, "generated.ts": [native ? "// Generated native application SQL. No runtime plan or interpreter." : "// Generated checked SQL. Explicit opt-in; external boundary and legacy codecs.", dbType, ...(native ? [] : ['import * as z from "zod/mini";']), 'import type { Caller } from "@aotter/mantle-next/contracts";', `import { ${[...helpers].sort().join(", ")} } from "@aotter/mantle-next/contracts";`, ...(!isSqlite ? ["// Application/deployment-owned PostgreSQL settings; functions never apply SET or own connections.", 'export const postgresRequirements = { DateStyle: "ISO, YMD", IntervalStyle: "postgres", TimeZone: "UTC", standard_conforming_strings: "on", extra_float_digits: "1", statement_timeout: "10000ms" } as const;', ...(native ? [] : ["const rawTypes = { getTypeParser: (_oid: number, _format?: string) => (text: string) => text };"])] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ""].join("\n") } };
 }

@@ -193,3 +193,27 @@ export function databaseError(error: unknown, operation: "read" | "write", path:
   }
   return new ContractError(code, code === "CONFLICT" ? "The write conflicted with database state." : code === "OUTCOME_UNKNOWN" ? "The write outcome is unknown; reconcile before retrying." : "The database operation failed.", path, { cause: error });
 }
+
+/** One result of `unsafe`: the rows (typed by the generated function), plus the affected count. */
+export type PostgresResult = any[] & { readonly count: number | null };
+/**
+ * The PostgreSQL handle bare generated code calls: Bun.SQL's own shape, so Bun passes its `SQL` (or a transaction)
+ * directly. Other drivers adapt to it (see README). `begin` must run every statement of `fn` on one connection and
+ * COMMIT only after `fn` resolves.
+ */
+export interface Postgres {
+  unsafe(text: string, values: unknown[]): PromiseLike<PostgresResult>;
+  begin(options: string, fn: (tx: Postgres) => Promise<unknown[][]>): PromiseLike<unknown[][]>;
+}
+
+/**
+ * The error to throw when a PostgreSQL write fails where it may already have committed (autocommit, or COMMIT).
+ * A server ErrorResponse (SQLSTATE + severity) outside connection/resource classes rolled back; anything else, such as a
+ * lost socket, is OUTCOME_UNKNOWN. SQLSTATE is `errno` on Bun.SQL and `code` on node-postgres and postgres.js.
+ */
+export function postgresOutcome(error: unknown, path: string): unknown {
+  const value = error as { errno?: unknown; code?: unknown; severity?: unknown } | null;
+  const state = typeof value?.errno === "string" ? value.errno : value?.code;
+  if (typeof state === "string" && /^[0-9A-Z]{5}$/.test(state) && typeof value?.severity === "string" && !/^(08|28|53|57|58|XX)/.test(state)) return error;
+  return new ContractError("OUTCOME_UNKNOWN", "The write outcome is unknown; reconcile before retrying.", path, { cause: error });
+}
