@@ -144,3 +144,35 @@ test("PG declared integer output types include native unsafe-int8 strings", asyn
     expect(generated.files["generated.ts"]).toContain(`readonly "total": ${target === "bun-postgres" ? "number | string" : "number"} | null;`);
   }
 });
+
+test("emission removes unused input locals and binds directly for SQLite hosts", async () => {
+  for (const target of ["bun-sqlite", "cloudflare-d1", "bun-postgres", "cloudflare-postgres"] as const) {
+    const generated = generate(await canonical(target));
+    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+    const text = generated.files["generated.ts"]!;
+    const view = text.slice(text.indexOf("async function view0"), text.indexOf("export type Procedure0Input"));
+    expect(view).toContain("validate(view0Input");
+    expect(view).not.toContain("const given");
+    expect(view).not.toContain("const input");
+    expect(view).not.toContain("let value");
+    if (target === "bun-sqlite") { expect(view).toContain(".all(uid)"); expect(view).toContain(".all()"); }
+    else if (target === "cloudflare-d1") { expect(view).toContain(".bind(uid)"); expect(view).toContain(".bind()"); }
+    else expect(view).toContain("values: [uid]");
+    expect(text).not.toContain("...[");
+    // Procedures still use validated, case-normalized inputs and scalar bind temporaries.
+    expect(text).toContain("const given = validate(procedure0Input");
+    expect(text).toContain('const input = { ["title"]: given["title"] }');
+    expect(text).toContain("let value: any");
+  }
+});
+
+test("PostgreSQL deployment requirements are explicit data without per-call SET", async () => {
+  for (const target of ["bun-postgres", "cloudflare-postgres"] as const) {
+    const generated = generate(await canonical(target));
+    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+    const text = generated.files["generated.ts"]!;
+    expect(text).toContain('export const postgresRequirements = { DateStyle: "ISO, YMD", IntervalStyle: "postgres", TimeZone: "UTC", standard_conforming_strings: "on", extra_float_digits: "1", statement_timeout: "10000ms" } as const;');
+    expect(text).not.toContain('db.query("SET');
+    expect(text).not.toContain("ALTER ROLE");
+  }
+});

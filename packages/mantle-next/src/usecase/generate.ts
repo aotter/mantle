@@ -48,7 +48,7 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     }
     return `(value = ${value}, value == null ? null : ${expression})`;
   };
-  const bind = (s: LoweredStatement, path: string) => `[${s.binds.map(b => {
+  const bind = (s: LoweredStatement, path: string) => `${isSqlite ? "" : "["}${s.binds.map(b => {
     switch (b.k) {
       case "uid": return "uid";
       case "role": return "role";
@@ -58,7 +58,7 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
       case "input": return encode(String(b.type), `input[${q(b.name)}]`, path);
       default: refuse(path, `Bind recipe '${b.k}' needs an explicit native implementation.`); return "undefined";
     }
-  }).join(", ")}]`;
+  }).join(", ")}${isSqlite ? "" : "]"}`;
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [];
   const auth = (requires: typeof plan.views[string]["requires"], path: string): string[] => {
     if (requires?.guard) refuse(path, "Procedure guards require a generated native dispatch implementation.");
@@ -74,14 +74,16 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     declarations.push(`let ${name}: z.ZodType | undefined;`);
     return `${name} ??= ${expression ?? "z.never()"}`;
   };
-  const context = (statements: readonly LoweredStatement[], fields: readonly string[]) => [
+  const usesInput = (statements: readonly LoweredStatement[]) => statements.some(s => s.binds.some(b => b.k === "input"));
+  const checkedInput = (validator: string, path: string, statements: readonly LoweredStatement[]) => `  ${usesInput(statements) ? "const given = " : ""}validate(${validator}, raw, ${q(path + "/input")})${usesInput(statements) ? " as Record<string, unknown>" : ""};`;
+  const context = (statements: readonly LoweredStatement[], fields: readonly string[], decodeValue = false) => [
     ...(statements.some(s => s.binds.some(b => b.k === "uid")) ? ['  const uid = caller.kind === "user" ? caller.subject : caller.kind === "system" ? `system:${caller.reason}` : null;'] : []),
     ...(statements.some(s => s.binds.some(b => b.k === "role")) ? ['  const role = caller.kind === "user" ? caller.role : null;'] : []),
     ...(statements.some(s => s.binds.some(b => b.k === "now" || b.k === "cutoff")) ? ["  const now = Date.now() * 1000;"] : []),
-    "  let value: any;",
-    `  const input = { ${fields.map(key => `[${q(key.toLowerCase())}]: given[${q(key)}]`).join(", ")} };`,
+    ...(decodeValue || statements.some(s => s.binds.some(b => b.k === "input" || b.k === "now" || b.k === "cutoff")) ? ["  let value: any;"] : []),
+    ...(usesInput(statements) ? [`  const input = { ${fields.map(key => `[${q(key.toLowerCase())}]: given[${q(key)}]`).join(", ")} };`] : []),
   ];
-  const read = (sql: string, binds: string): string => target === "bun-sqlite" ? `db.query(${q(sql)}).all(...${binds})` : target === "cloudflare-d1" ? `(await db.prepare(${q(sql)}).bind(...${binds}).all()).results` : `await db.query({ text: ${q(sql)}, values: ${binds}, types: rawTypes })`;
+  const read = (sql: string, binds: string): string => target === "bun-sqlite" ? `db.query(${q(sql)}).all(${binds})` : target === "cloudflare-d1" ? `(await db.prepare(${q(sql)}).bind(${binds}).all()).results` : `await db.query({ text: ${q(sql)}, values: ${binds}, types: rawTypes })`;
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
     const path = `views/${name}`, fn = `view${index}`;
     const modes = lowered.views[name];
@@ -112,7 +114,7 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     }
     declarations.push(`export type View${index}Input = ${typeOf(view.input ?? { type: "object", additionalProperties: false })};`, `export type View${index}Row = { ${output.join(" ")} };`);
     const validator = validation(`${fn}Input`, view.input, path + "/input");
-    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), `  const given = validate(${validator}, raw, ${q(path + "/input")}) as Record<string, unknown>;`, ...context([c, ...(trusted ? [trusted] : [])], Object.keys(view.input?.properties ?? {})), "  try {", `  const ${isSqlite ? "rows" : "result"} = (${mode === "caller" ? `caller.kind === "system" ? ${read(trusted!.sql, bind(trusted!, path))} : ` : ""}${read(c.sql, bind(c, path))})${isSqlite ? " as Record<string, unknown>[]" : ""};`, `  return ${isSqlite ? "rows" : "result.rows"}.map(row => ({ ${fields.join(", ")} })) as View${index}Row[];`, `  } catch (error) { throw databaseError(error, "read", ${q(path)}, ${q(isSqlite ? "sqlite" : "postgres")}); }`, "}");
+    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), checkedInput(validator, path, [c, ...(trusted ? [trusted] : [])]), ...context([c, ...(trusted ? [trusted] : [])], Object.keys(view.input?.properties ?? {}), fields.some(field => field.includes("value ="))), "  try {", `  const ${isSqlite ? "rows" : "result"} = (${mode === "caller" ? `caller.kind === "system" ? ${read(trusted!.sql, bind(trusted!, path))} : ` : ""}${read(c.sql, bind(c, path))})${isSqlite ? " as Record<string, unknown>[]" : ""};`, `  return ${isSqlite ? "rows" : "result.rows"}.map(row => ({ ${fields.join(", ")} })) as View${index}Row[];`, `  } catch (error) { throw databaseError(error, "read", ${q(path)}, ${q(isSqlite ? "sqlite" : "postgres")}); }`, "}");
     views.push(`[${q(name)}]: ${fn}`);
   }
   for (const [index, [name, procedure]] of Object.entries(plan.procedures).sort().entries()) {
@@ -123,13 +125,13 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
     if (modes.caller.some(s => s.hooked || s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing and lifecycle hooks require explicit native execution.");
     declarations.push(`export type Procedure${index}Input = ${typeOf(procedure.input)};`, `export type Procedure${index}Output = ${typeOf(procedure.output)};`);
     const inputValidator = validation(`${fn}Input`, procedure.input, path + "/input"), outputValidator = validation(`${fn}Output`, procedure.output, path + "/output");
-    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Procedure${index}Output> {`, ...auth(procedure.requires, path), `  const given = validate(${inputValidator}, raw, ${q(path + "/input")}) as Record<string, unknown>;`, ...context([...modes.caller, ...modes.trusted], Object.keys(procedure.input.properties ?? {})));
+    declarations.push(`async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Procedure${index}Output> {`, ...auth(procedure.requires, path), checkedInput(inputValidator, path, [...modes.caller, ...modes.trusted]), ...context([...modes.caller, ...modes.trusted], Object.keys(procedure.input.properties ?? {})));
     const branch = (statements: readonly LoweredStatement[]): string[] => {
       if (target === "cloudflare-d1") {
         const batch: string[] = [], rows: string[] = [];
         for (const [i, statement] of statements.entries()) {
           rows.push(`batch[${batch.length}]!.results`);
-          batch.push(`db.prepare(${q(statement.sql)}).bind(...${bind(statement, path)})`);
+          batch.push(`db.prepare(${q(statement.sql)}).bind(${bind(statement, path)})`);
           if (statement.kind === "row") batch.push(`db.prepare(${q(`INSERT INTO _mantle_assert (op,ok) SELECT ${i}, changes() = 1`)})`);
         }
         return [`    const batch = await db.batch([${batch.join(", ")}]);`, `    return [${rows.join(", ")}];`];
@@ -145,7 +147,7 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
             lines.push(`    results.push(${name} as unknown[]);`);
           } else {
             const name = `changed${lines.length}`;
-            lines.push(`    const ${name} = db.query(${q(s.sql)}).run(...${binds});`);
+            lines.push(`    const ${name} = db.query(${q(s.sql)}).run(${binds});`);
             if (s.kind === "row") lines.push(`    if (${name}.changes !== 1) throw new ContractError("CONFLICT", "Expected one affected row.", ${q(path)});`);
             lines.push("    results.push([]);");
           }
@@ -181,5 +183,5 @@ export function generate({ target, plan, lowered, viewKeys }: GenerateInput): Ge
   }
   if (diagnostics.length) return { ok: false, diagnostics };
   const dbType = target === "bun-sqlite" ? 'import type { Database } from "bun:sqlite";' : target === "cloudflare-d1" ? 'import type { D1Database as Database } from "@cloudflare/workers-types";' : `import type { ${target === "bun-postgres" ? "Client, PoolClient" : "Client"} } from "pg";\ntype Database = ${target === "bun-postgres" ? "Client | PoolClient" : "Client"};`;
-  return { ok: true, files: { "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, 'import { z } from "zod";', 'import type { Caller } from "@aotter/mantle-next/contracts";', `import { ${[...helpers].sort().join(", ")} } from "@aotter/mantle-next/contracts";`, ...(!isSqlite ? ["const rawTypes = { getTypeParser: (_oid: number, _format?: string) => (text: string) => text };"] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ""].join("\n") } };
+  return { ok: true, files: { "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, 'import { z } from "zod";', 'import type { Caller } from "@aotter/mantle-next/contracts";', `import { ${[...helpers].sort().join(", ")} } from "@aotter/mantle-next/contracts";`, ...(!isSqlite ? ["// Application/deployment-owned PostgreSQL settings; functions never apply SET or own connections.", 'export const postgresRequirements = { DateStyle: "ISO, YMD", IntervalStyle: "postgres", TimeZone: "UTC", standard_conforming_strings: "on", extra_float_digits: "1", statement_timeout: "10000ms" } as const;', "const rawTypes = { getTypeParser: (_oid: number, _format?: string) => (text: string) => text };"] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ""].join("\n") } };
 }
