@@ -15,3 +15,4 @@ export const date = encodeDate;
 export const bool = (v: boolean): number => Number(v);
 /** Booleans, dates, JSON and UUIDs are stored as native column types (SQLite keeps 0/1 and text). */
 export const nativeTypes = false;
+export const cast = (placeholder: string, _type: string): string => placeholder;

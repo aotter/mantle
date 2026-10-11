@@ -4,8 +4,13 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "engines": { "node": ">=22.14.0" },
-  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "exports": {
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
@@ -16,7 +21,7 @@
     "./dialect/postgres": "./dist/kernel/dialect/postgres.js",
     "./driver/bun-sqlite": "./dist/kernel/driver/bun-sqlite.js",
     "./driver/d1": "./dist/kernel/driver/d1.js",
-    "./driver/bun-sql": "./dist/kernel/driver/bun-sql.js",
+    "./driver/postgres": "./dist/kernel/driver/postgres.js",
     "./auth": "./dist/auth/caller.js",
     "./auth/adapter": "./dist/auth/adapter.js"
   },
@@ -36,21 +41,26 @@
     "better-auth": "catalog:peer"
   },
   "peerDependenciesMeta": {
-    "@better-auth/core": { "optional": true },
-    "@better-auth/oauth-provider": { "optional": true },
-    "better-auth": { "optional": true }
+    "@better-auth/core": {
+      "optional": true
+    },
+    "@better-auth/oauth-provider": {
+      "optional": true
+    },
+    "better-auth": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@aotter/mantle": "workspace:*",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/test-utils": "1.7.7",
-    "better-auth": "catalog:",
-    "@aotter/mantle": "workspace:*",
-    "@types/node": "catalog:",
-    "@types/pg": "8.23.1",
     "@cloudflare/workers-types": "^5.20261008.1",
+    "@types/node": "catalog:",
+    "better-auth": "catalog:",
     "bun-types": "1.3.14",
-    "pg": "8.23.1",
+    "postgres": "3.4.7",
     "typescript": "catalog:",
     "wrangler": "4.137.0"
   }

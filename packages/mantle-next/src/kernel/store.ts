@@ -56,7 +56,6 @@ export function createStore<H, R, F, S, O extends string>(d: Dialect, drv: Drive
     if (!c || !(c[3] & flag)) throw bad(`${name} is not ${what}`);
     return c;
   };
-  const byId: string[] = []; // `findById`'s statement per mode, built on first use
   const sql = (c: Col) => `r.${d.ident(c[1])}`;
   /** A filter value as the engine stores it. */
   const value = (c: Col, v: unknown, cursor = false): unknown => {
@@ -85,18 +84,17 @@ export function createStore<H, R, F, S, O extends string>(d: Dialect, drv: Drive
         if (!operators.length) throw bad(`${name} has no operator`);
         for (const [op, v] of operators) {
           if (!OPERATORS.has(op) || v === undefined) throw bad(`${name}.${op} is not an operator`);
-          const left = sql(c), encode = (x: unknown) => value(c, x);
+          const left = sql(c), encode = (x: unknown) => value(c, x), put = (x: unknown) => d.cast(bind(x), c[2]);
           if (op === "isNull") { if (typeof v !== "boolean") throw bad(`${name}.isNull is a boolean`); out.push(condition(d, left, v ? "eq" : "ne", null, bind)); }
-          else if (op === "in" || op === "notIn") { if (!Array.isArray(v)) throw bad(`${name}.${op} is an array`); out.push(condition(d, left, op, v.map(encode), x => bind(x))); }
+          else if (op === "in" || op === "notIn") { if (!Array.isArray(v)) throw bad(`${name}.${op} is an array`); out.push(condition(d, left, op, v.map(encode), put)); }
           else if (op === "like") { if (typeof v !== "string" || c[2] !== "text") throw bad(`${name}.like is a string on text`); out.push(condition(d, left, "like", v, bind)); }
           else if (v === null && op !== "eq" && op !== "ne") throw bad(`${name}.${op} cannot be null`);
-          else out.push(condition(d, left, op as "eq", encode(v), bind));
+          else out.push(condition(d, left, op as "eq", encode(v), put));
         }
       }
       return out;
     };
     const tail = (conds: string[]) => conds.length ? ` WHERE ${conds.join(" AND ")}` : "";
-    const mode = source === desc.trusted ? 1 : 0;
 
     const find = async (q: Query<F, O> = {}): Promise<Page<R>> => {
       const dir = q.order ?? "asc", name = (q.orderBy ?? "id") as string;
@@ -115,7 +113,7 @@ export function createStore<H, R, F, S, O extends string>(d: Dialect, drv: Drive
         const after = `${id} ${up ? ">" : "<"} ${bind(last)}`;
         if (name === "id") conds.push(after);
         else if (v === null) conds.push(up ? `(${kc} IS NOT NULL OR ${after})` : `(${kc} IS NULL AND ${after})`);
-        else { const p = bind(value(key, v, true)); conds.push(`(${kc} ${up ? ">" : "<"} ${p}${up ? "" : ` OR ${kc} IS NULL`} OR (${kc} = ${p} AND ${after}))`); }
+        else { const p = d.cast(bind(value(key, v, true)), key[2]); conds.push(`(${kc} ${up ? ">" : "<"} ${p}${up ? "" : ` OR ${kc} IS NULL`} OR (${kc} = ${p} AND ${after}))`); }
       }
       const way = up ? "ASC" : "DESC";
       const order = name === "id" ? ` ORDER BY ${id} ${way}` : ` ORDER BY ${kc} ${way}${d.nulls(dir)}, ${id} ${way}`;
@@ -130,7 +128,7 @@ export function createStore<H, R, F, S, O extends string>(d: Dialect, drv: Drive
         if (typeof id !== "string") throw bad("id is a string");
         const values = base();
         values.push(id);
-        return ((await run(byId[mode] ??= `${desc.select}${source.from} WHERE r."id" = ${d.param(k + 1)} LIMIT 1`, values))[0] ?? null) as R | null;
+        return ((await run(`${desc.select}${source.from} WHERE r."id" = ${d.param(k + 1)} LIMIT 1`, values))[0] ?? null) as R | null;
       },
       find,
       async first(q = {}) { return (await find({ ...q, limit: 1 } as Query<F, O>)).rows[0] ?? null; },

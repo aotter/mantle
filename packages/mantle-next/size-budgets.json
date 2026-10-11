@@ -1,4 +1,4 @@
 {
   "cloudflare-d1": 20480,
-  "cloudflare-postgres": 122880
+  "cloudflare-postgres": 65536
 }

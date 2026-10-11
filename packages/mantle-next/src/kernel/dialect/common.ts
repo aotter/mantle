@@ -32,5 +32,7 @@ export interface Dialect {
   date(v: string): unknown;
   bool(v: boolean): unknown;
   json(v: unknown): string;
+  /** A placeholder compared with a column of this type, so every driver sends the value verbatim (postgres.js would turn text bound to timestamptz or date into a JavaScript Date and lose microseconds). */
+  cast(placeholder: string, type: string): string;
   readonly nativeTypes: boolean;
 }

@@ -31,7 +31,7 @@ export function generate({ target, plan, lowered, viewKeys, stores = [] }: Gener
   const expected = isSqlite ? "@aotter/mantle/d1" : "@aotter/mantle/postgres";
   if (lowered.dialect.name !== expected || plan.dialect.name !== expected) refuse("target", `Target '${target}' needs canonical '${expected}' compilation and lowering.`);
   for (const name of Object.keys(plan.triggers)) refuse(`triggers/${name}`, "Native Trigger dispatch is not implemented; generation cannot omit it.");
-  const driver = target === "bun-sqlite" ? "bun-sqlite" : target === "cloudflare-d1" ? "d1" : "bun-sql";
+  const driver = target === "bun-sqlite" ? "bun-sqlite" : target === "cloudflare-d1" ? "d1" : "postgres";
   const used = new Set<string>();
   const auth = (requires: typeof plan.views[string]["requires"], path: string): string[] => {
     if (requires?.guard) refuse(path, "Procedure guards require a generated native dispatch implementation.");
@@ -62,16 +62,19 @@ export function generate({ target, plan, lowered, viewKeys, stores = [] }: Gener
     if (new Set(fields.map(field => field.toLowerCase())).size !== fields.length) refuse(path, "Input properties must have unique case-insensitive names.");
     return fields;
   };
-  // JSON input is driver-ready text. Declaring its parameter as text makes every driver send it verbatim: Bun.SQL would
-  // otherwise JSON-encode a string bound to a jsonb parameter a second time.
+  // JSON, date-time and date inputs are driver-ready text. Declaring their parameter as text makes every driver send it verbatim:
+  // Bun.SQL would JSON-encode a string bound to jsonb a second time, and postgres.js turns one bound to timestamptz or date into a
+  // JavaScript Date, which loses microseconds.
+  const TEXT_CAST: Record<string, string> = { json: "jsonb", timestamptz: "timestamptz", date: "date" };
   const sqlOf = (s: LoweredStatement, path: string): string => {
     if (isSqlite) return s.sql;
     let sql = s.sql;
     for (const [i, b] of s.binds.entries()) {
-      if (b.k !== "input" || String(b.type) !== "json") continue;
-      const param = `$${i + 1}`, cast = `CAST(${param} AS jsonb)`;
-      if (sql.split(cast).join("").match(new RegExp(`\\$${i + 1}(?!\\d)`))) refuse(path, `JSON input ${param} must appear only as ${cast}.`);
-      sql = sql.replaceAll(cast, `CAST(CAST(${param} AS text) AS jsonb)`);
+      const target = b.k === "input" ? TEXT_CAST[String(b.type)] : undefined;
+      if (!target) continue;
+      const param = `$${i + 1}`, cast = `CAST(${param} AS ${target})`;
+      if (sql.split(cast).join("").match(new RegExp(`\\$${i + 1}(?!\\d)`))) refuse(path, `Input ${param} must appear only as ${cast}.`);
+      sql = sql.replaceAll(cast, `CAST(CAST(${param} AS text) AS ${target})`);
     }
     return sql;
   };

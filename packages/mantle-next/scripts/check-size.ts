@@ -1,4 +1,4 @@
-/** Offline deployment bundles: the whole purchase API, including official pg. */
+/** Offline deployment bundles: the whole purchase API, including postgres.js. */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -26,14 +26,13 @@ try {
     // fixed fixture identity, not an example of production credential handling.
     await writeFile(resolve(app, "worker.ts"), `
 import { views, procedures } from './generated.ts';
-${postgres ? "import { Client } from 'pg';" : ""}
+${postgres ? "import postgres from 'postgres';" : ""}
 export default { async fetch(request, env) {
   const [kind, name] = new URL(request.url).pathname.slice(1).split('/');
   const operation = (kind === 'views' ? views : procedures)[name];
   if (!operation) return new Response('Unknown operation', {status:404});
-  const db = ${postgres ? "new Client({connectionString:env.HYPERDRIVE.connectionString})" : "env.DB"};
+  const db = ${postgres ? "postgres(env.HYPERDRIVE.connectionString)" : "env.DB"};
   try {
-    ${postgres ? "await db.connect();" : ""}
     return Response.json(await operation(db, {kind:'user',subject:'fixture',role:null,scopes:[],credential:'session',credentialId:null,clientId:null}, await request.json()));
   } finally { ${postgres ? "await db.end();" : ""} }
 } };

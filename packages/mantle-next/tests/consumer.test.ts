@@ -33,8 +33,8 @@ beforeAll(async () => {
   const caller = "{ kind: 'user', subject: 's', role: null, scopes: [], credential: 'session', credentialId: null, clientId: null } as const";
   const drivers = join(directory, "drivers.ts");
   await writeFile(drivers, [
-    'import { SQL } from "bun";', 'import { Client } from "pg";',
-    `import { pgPort } from ${JSON.stringify(fileURLToPath(new URL("apps/pg-port.js", import.meta.url)))};`,
+    'import { SQL } from "bun";',
+        'import postgres from "postgres";',
     'import { Database } from "bun:sqlite";',
     'import { views as bun, procedures as bunWrites, stores as bunStores } from "./bun-postgres/generated.js";',
     'import { stores as sqliteStores } from "./bun-sqlite/generated.js";',
@@ -43,7 +43,7 @@ beforeAll(async () => {
     `await bun["purchase-totals"](sql, ${caller}, {});`,
     `await sql.begin(async (tx) => bun["purchase-totals"](tx, ${caller}, {}));`,
     `await bunWrites["create-purchase-pair"](sql, ${caller}, { requestNumber: "r", title: "t", amount: 1, approved: true, sortBucket: null, requestedUnits: 1, submittedAt: new Date(), neededOn: "2026-10-11", payload: "{}" });`,
-    `await worker["purchase-totals"](pgPort(new Client()), ${caller}, {});`,
+    `await worker["purchase-totals"](postgres("postgres://localhost/x"), ${caller}, {});`,
     // the typed Store: where/orderBy/set are checked against the Schema
     `const store = bunStores.purchase_requests(sql, ${caller});`,
     'const page = await store.find({ where: { approved: true, amount: { gte: 1 }, sortBucket: { in: ["a"] }, submittedAt: { lt: new Date() } }, orderBy: "sortBucket", order: "desc", limit: 5, cursor: "c" });',

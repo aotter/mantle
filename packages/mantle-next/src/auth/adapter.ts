@@ -11,7 +11,7 @@ import type { SQL } from "bun";
 import type { Dialect } from "../kernel/dialect/common.js";
 import * as postgres from "../kernel/dialect/postgres.js";
 import * as sqlite from "../kernel/dialect/sqlite.js";
-import * as bunSql from "../kernel/driver/bun-sql.js";
+import * as bunSql from "../kernel/driver/postgres.js";
 import * as d1 from "../kernel/driver/d1.js";
 import { condition as spell } from "../kernel/where.js";
 

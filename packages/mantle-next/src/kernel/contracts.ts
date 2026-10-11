@@ -35,6 +35,6 @@ export type PostgresResult = any[] & { readonly count: number | null };
  * COMMIT only after `fn` resolves.
  */
 export interface Postgres {
-  unsafe(text: string, values: unknown[]): PromiseLike<PostgresResult>;
+  unsafe(text: string, values: any[]): PromiseLike<PostgresResult>;
   begin(options: string, fn: (tx: Postgres) => Promise<unknown[][]>): PromiseLike<unknown[][]>;
 }

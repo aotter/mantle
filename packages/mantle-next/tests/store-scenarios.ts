@@ -44,7 +44,7 @@ export async function verifyStore(env: StoreEnv) {
   const rowsA = mine(A), rowsB = mine(B);
   const drain = async (store: any, q: Record<string, unknown>, limit: number) => {
     const out: any[] = []; let cursor: string | null = null, pages = 0;
-    do { const page: { rows: any[]; cursor: string | null } = await store.find({ ...q, limit, ...(cursor ? { cursor } : {}) }); out.push(...page.rows); cursor = page.cursor; assert.ok(++pages < 1000); } while (cursor);
+    do { const page: { rows: any[]; cursor: string | null } = await store.find({ ...q, limit, ...(cursor ? { cursor } : {}) }); out.push(...page.rows); cursor = page.cursor; assert.ok(++pages < 1000, `paging never ends: ${JSON.stringify(q)} by ${limit}`); } while (cursor);
     return out;
   };
 
@@ -60,7 +60,7 @@ export async function verifyStore(env: StoreEnv) {
   assert.equal((await b.findById(bRow.id)).title, bRow.title); ok();
   // anonymous: Core's scope predicate matches nothing; an unscoped Schema stays readable
   const anon = env.stores(anonymous);
-  assert.deepEqual((await anon.purchase_requests.find()).rows, []); assert.equal(await anon.purchase_requests.count(), 0); ok();
+  assert.deepEqual([...(await anon.purchase_requests.find()).rows], []); assert.equal(await anon.purchase_requests.count(), 0); ok();
 
   // ---- trusted mode: no scope predicate, both owners
   assert.equal(await sys.count({ requestNumber: { like: "S-%" } }), ROWS * 2); ok();

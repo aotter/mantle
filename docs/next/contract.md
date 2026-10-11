@@ -18,10 +18,11 @@ PostgreSQL. Workers validation uses local Wrangler only. Bare PostgreSQL entries
 call Bun.SQL's own shape (`Postgres`: `unsafe(text, values)` and
 `begin(options, fn)`), so Bun passes its `SQL` directly. A Bun transaction handle
 also works for Views and single-statement Procedures; a multi-statement Procedure
-opens its own transaction, which Bun refuses inside another (no write happens). Other
-drivers are application-owned adapters to that shape; Workers PostgreSQL (for
-example Mantle Cloud over Hyperdrive) adapts node-postgres, and the tested recipe
-is `tests/apps/pg-port.ts`. SQLite uses bun:sqlite; D1 uses its platform binding. Pool,
+opens its own transaction, which Bun refuses inside another (no write happens). postgres.js
+satisfies the same shape with no adapter (Workers PostgreSQL over Hyperdrive:
+`postgres(env.HYPERDRIVE.connectionString)`; verified by `verify-native cloudflare-postgres`); other drivers are
+application-owned adapters. Date-time, date and JSON inputs are declared text in the SQL (and in the Store's
+comparisons), because postgres.js would otherwise turn text bound to timestamptz into a Date and lose microseconds. SQLite uses bun:sqlite; D1 uses its platform binding. Pool,
 connection lifetime, database isolation, locks and retries remain native and
 application-owned. No cloud provisioning.
 
@@ -163,7 +164,7 @@ time; a bundle contains one dialect module and one driver module.
   both), the wire-form templates `wireTimestamp`/`wireDate` (generic over the operand;
   the 1970 floor arithmetic exists once), and bind values (`now`, `cutoff`, the ISO
   input encoders in `kernel/scalars.ts`, bool, JSON text).
-- **Driver** (`kernel/driver/bun-sqlite.ts`, `d1.ts`, `bun-sql.ts`): how a handle is
+- **Driver** (`kernel/driver/bun-sqlite.ts`, `d1.ts`, `postgres.ts`): how a handle is
   called: `read`, `run` (`{ rows, changes }`) and `procedure`, each with only the
   atomicity the engine really has (D1 batch with the `_mantle_assert` row check, mapped to
   `CONFLICT`; bun:sqlite `db.transaction`; Bun.SQL autocommit for one statement,

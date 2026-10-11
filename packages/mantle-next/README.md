@@ -32,12 +32,10 @@ strings in UTC with six fractional digits and `YYYY-MM-DD` on every target, and
 inputs bound to them take the same ISO text (a valid `Date` also works for date-time); an offset-less
 timestamp or a nonexistent day is refused with `SQL_TYPE` before the write.
 
-Every Schema also gets a typed **Store** (`stores[schema](db, caller)`: `findById`,
-`find` with AND-only `where`, keyset `cursor` paging, `first`, `count`, and an OCC
-`update(id, set, { lock })`). Its policy is Core's: the base read is Core's lowering of
-`SELECT r.* FROM <schema> r`, the update is Core's lowering of one `UPDATE` with a
-presence flag per writable column; the Store only appends `WHERE`, `ORDER BY`, `LIMIT`.
-`orderBy` accepts `id` and indexed columns. See the [contract](../../docs/next/contract.md).
+Every Schema also gets a typed **Store** (`stores[schema](db, caller)`: `findById`, `find` with AND-only
+`where` and keyset `cursor`, `first`, `count`, OCC `update(id, set, { lock })`). Its policy is Core's own
+lowering of `SELECT r.* FROM <schema> r` and of one `UPDATE`; it only appends `WHERE`, `ORDER BY`, `LIMIT`.
+`orderBy` takes `id` and indexed columns. See the [contract](../../docs/next/contract.md).
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain
@@ -47,13 +45,8 @@ multi-statement Procedure uses SERIALIZABLE on PG through `begin()`, with no
 automatic retries. Never assume a lost commit answer means rollback after
 OUTCOME_UNKNOWN; reconcile first.
 
-Pass Bun's pooled `SQL` to multi-statement Procedures: they open their own
-transaction, and Bun refuses `begin` inside another.
-
-PostgreSQL drivers other than Bun.SQL implement the two-method `Postgres` shape
-from `@aotter/mantle-next/contracts`. For node-postgres on Workers/Hyperdrive,
-see `tests/apps/pg-port.ts`: hand it one connected Client per request; `begin`
-must keep every statement on that client and COMMIT only after the callback. Procedures return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
+Bun.SQL (pass its pooled `SQL` to multi-statement Procedures: they `begin` themselves) and postgres.js (`postgres(env.HYPERDRIVE.connectionString)` on Workers) satisfy the two-method
+`Postgres` shape from `@aotter/mantle-next/contracts` as they are; there is no adapter. Procedures return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
 declarations requiring them fail generation. See the complete
 [compatibility ledger](../../docs/next/compatibility.md).
 

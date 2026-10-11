@@ -2,6 +2,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
+import postgres from "postgres";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { generateFromSources } from "../src/infrastructure/generate.js";
@@ -57,6 +58,18 @@ describe("Store", () => {
     expect(report.checks).toBeGreaterThan(30);
   }, 60_000);
   const url = process.env.MANTLE_NEXT_BUN_PG_URL;
+  test.skipIf(!url)("postgres.js (the Postgres shape as it is)", async () => {
+    const { app, schema } = await generated("bun-postgres");
+    const name = `store_${crypto.randomUUID().replaceAll("-", "")}`;
+    const sql = postgres(url!, { max: 4, connection: { search_path: name }, onnotice: () => {} });
+    const admin = postgres(url!, { max: 1, onnotice: () => {} }); await admin.unsafe(`CREATE SCHEMA "${name}"`);
+    try {
+      await sql.unsafe(schema);
+      const recorder = (calls: { sql: string; values: unknown[] }[]) => ({ begin: sql.begin.bind(sql), unsafe: (text: string, values: unknown[]) => { calls.push({ sql: text, values }); return sql.unsafe(text, values as never[]); } });
+      const report = await verifyStore(env(false, app, sql, async (text, values = []) => [...await sql.unsafe(postgresOracleSql(text), values as never[])], recorder));
+      expect(report.checks).toBeGreaterThan(30);
+    } finally { await sql.end(); await admin.unsafe(`DROP SCHEMA "${name}" CASCADE`); await admin.end(); }
+  }, 120_000);
   test.skipIf(!url)("bun-postgres (Bun.SQL)", async () => {
     const { app, schema } = await generated("bun-postgres");
     const name = `store_${crypto.randomUUID().replaceAll("-", "")}`;

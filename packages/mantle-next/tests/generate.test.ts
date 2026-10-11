@@ -81,7 +81,7 @@ describe("native generation", () => {
     for (const mode of ["caller", "trusted"] as const) expect(text).toContain(JSON.stringify(input.lowered.views["notes-list"]![mode]!.sql));
     // The driver module owns the native call and the atomicity it really has; generated code owns none of it.
     for (const native of ["db.query(", "db.prepare(", ".unsafe(", "db.batch(", "db.begin(", "db.transaction(", "_mantle_assert", "postgresOutcome"]) expect(text).not.toContain(native);
-    const driver = target === "bun-sqlite" ? "driver/bun-sqlite" : target === "cloudflare-d1" ? "driver/d1" : "driver/bun-sql";
+    const driver = target === "bun-sqlite" ? "driver/bun-sqlite" : target === "cloudflare-d1" ? "driver/d1" : "driver/postgres";
     expect(text).toContain(`from "@aotter/mantle-next/${driver}"`);
     expect(text).toContain(`from "@aotter/mantle-next/dialect/${target.endsWith("postgres") ? "postgres" : "sqlite"}"`);
     expect(generate(input)).toEqual(generated);
