@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import * as z from "zod/mini";
-import { ContractError, validate, decodeField } from "../src/kernel/contracts.js";
+import { ContractError, decodeField } from "../src/kernel/contracts.js";
+import { validate } from "../src/kernel/checked.js";
 const nativeReadInput = z.strictObject({});
 import { pairedReadBenchmark } from "../scripts/bench.js";
 import { expectedPurchases, expectedTotals, fixtures, owners } from "./apps/fixtures.js";

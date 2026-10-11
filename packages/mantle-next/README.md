@@ -44,6 +44,9 @@ multi-statement Procedure uses SERIALIZABLE on PG through `begin()`, with no
 automatic retries. Never assume a lost commit answer means rollback after
 OUTCOME_UNKNOWN; reconcile first.
 
+Pass Bun's pooled `SQL` to multi-statement Procedures: they open their own
+transaction, and Bun refuses `begin` inside another.
+
 PostgreSQL drivers other than Bun.SQL implement the two-method `Postgres` shape
 from `@aotter/mantle-next/contracts`. For node-postgres on Workers/Hyperdrive,
 see `tests/apps/pg-port.ts`: hand it one connected Client per request; `begin`

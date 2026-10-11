@@ -8,7 +8,8 @@
   "exports": {
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
-    "./contracts": "./dist/kernel/contracts.js"
+    "./contracts": "./dist/kernel/contracts.js",
+    "./checked": "./dist/kernel/checked.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.lib.json",

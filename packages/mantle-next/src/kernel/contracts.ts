@@ -1,6 +1,4 @@
 /** Boundary primitives only. No plan, SQL interpreter or resource ownership. */
-import { config, type ZodMiniType } from "zod/mini";
-import en from "zod/v4/locales/en.js";
 type StaffRole = "owner" | "editor" | "contributor";
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
 
@@ -26,42 +24,6 @@ export class ContractError extends Error {
   constructor(readonly code: string, message: string, readonly path = "", options?: ErrorOptions) {
     super(message, options);
     this.name = "ContractError";
-  }
-}
-
-/** Validate with a generated official Zod schema. Never import/compile JSON Schema here. */
-let english = false;
-export function validate<T>(schema: ZodMiniType<T>, value: unknown, path: string, code = "INPUT_VALIDATION_FAILED"): T {
-  try {
-    assertJsonLimits(value, path);
-    const result = schema.safeParse(value);
-    if (result.success) return result.data;
-    // Zod Mini ships without messages; load English once, on the first failure only.
-    if (!english) { english = true; config(en()); return validate(schema, value, path, code); }
-    const issue = result.error.issues[0];
-    const pointer = issue?.path.map((part) => String(part).replace(/~/g, "~0").replace(/\//g, "~1")).join("/");
-    throw new ContractError(code, code === "OUTPUT_VALIDATION_FAILED" ? "Procedure output does not match its declared schema." : issue?.message ?? "validation failed", path + (pointer ? "/" + pointer : ""));
-  } catch (error) {
-    if (error instanceof ContractError) throw new ContractError(code, error.message, error.path);
-    throw new ContractError(code, "the schema cannot check this value", path);
-  }
-}
-
-/** Same finite JSON boundary as 0.2; paths may share objects but may not cycle. */
-function assertJsonLimits(value: unknown, path: string): void {
-  const stack: { value: unknown; depth: number; exit?: boolean }[] = [{ value, depth: 0 }];
-  const active = new WeakSet<object>();
-  let nodes = 0;
-  while (stack.length) {
-    const current = stack.pop()!;
-    if (current.value === null || typeof current.value !== "object") continue;
-    if (current.exit) { active.delete(current.value); continue; }
-    if (active.has(current.value) || current.depth > 100 || ++nodes > 10000)
-      throw new ContractError("INPUT_VALIDATION_FAILED", "value exceeds JSON validation limits or contains cycles", path);
-    active.add(current.value);
-    stack.push({ ...current, exit: true });
-    for (const child of Array.isArray(current.value) ? current.value : Object.values(current.value))
-      stack.push({ value: child, depth: current.depth + 1 });
   }
 }
 
@@ -197,8 +159,8 @@ export function databaseError(error: unknown, operation: "read" | "write", path:
 /** One result of `unsafe`: the rows (typed by the generated function), plus the affected count. */
 export type PostgresResult = any[] & { readonly count: number | null };
 /**
- * The PostgreSQL handle bare generated code calls: Bun.SQL's own shape, so Bun passes its `SQL` (or a transaction)
- * directly. Other drivers adapt to it (see README). `begin` must run every statement of `fn` on one connection and
+ * The PostgreSQL handle bare generated code calls: Bun.SQL's own shape, so Bun passes its `SQL` directly. A Bun
+ * transaction handle suits Views and single-statement Procedures; multi-statement Procedures call `begin` themselves. Other drivers adapt to it (see README). `begin` must run every statement of `fn` on one connection and
  * COMMIT only after `fn` resolves.
  */
 export interface Postgres {

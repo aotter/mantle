@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as z from "zod/mini";
-import { validate, ContractError, encodeNumeric, decodeNumeric, encodeTimestamptz, decodeTimestamptz, encodeDate } from "../src/kernel/contracts.js";
+import { validate } from "../src/kernel/checked.js";
+import { ContractError, encodeNumeric, decodeNumeric, encodeTimestamptz, decodeTimestamptz, encodeDate } from "../src/kernel/contracts.js";
 describe("generated boundary primitives", () => {
   test("official defaults, nullability and unknown-key refusal", () => {
     const schema = z.strictObject({ amount: z._default(z.number().check(z.gte(0)), 0), note: z.nullable(z.string()) });

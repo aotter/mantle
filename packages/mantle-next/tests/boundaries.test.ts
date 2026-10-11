@@ -20,7 +20,8 @@ test("Next imports point inward; kernel has no host or compiler dependencies", a
         if (imported === "..") expect(layer, `${file}: compiler assembly belongs to infrastructure`).toBe("infrastructure");
         else expect(ranks[imported] ?? Infinity, `${file}: ${name}`).toBeLessThanOrEqual(ranks[layer]!);
       } else if (layer === "kernel") {
-        expect(["zod/mini", "zod/v4/locales/en.js"], `${file}: kernel must stay portable`).toContain(name);
+        // Only the checked boundary may load Zod; bare entries import contracts alone.
+        expect(file.endsWith("kernel/checked.ts") ? ["zod/mini", "zod/v4/locales/en.js"] : [], `${file}: kernel must stay portable`).toContain(name);
       }
     }
   }

@@ -112,7 +112,7 @@ for (const checked of [true]) test("checked PG transactions preserve failures an
   const generated = generate(await canonical("bun-postgres"));
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const path = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
-  await writeFile(path, generated.files[checked ? "checked.ts" : "generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"'));
+  await writeFile(path, generated.files[checked ? "checked.ts" : "generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"').replaceAll('"@aotter/mantle-next/checked"', '"../src/kernel/checked.ts"'));
   const caller = { kind: "user", subject: "test-user", role: null, scopes: [], credential: "session", credentialId: null, clientId: null };
   try {
     const module = await import(path.href);
@@ -144,7 +144,7 @@ for (const checked of [true]) test("checked single-statement PG writes autocommi
   const generated = generate(await canonical("bun-postgres"));
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const path = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
-  await writeFile(path, generated.files[checked ? "checked.ts" : "generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"'));
+  await writeFile(path, generated.files[checked ? "checked.ts" : "generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"').replaceAll('"@aotter/mantle-next/checked"', '"../src/kernel/checked.ts"'));
   const caller = { kind: "user", subject: "test-user", role: null, scopes: [], credential: "session", credentialId: null, clientId: null };
   try {
     const module = await import(path.href);
@@ -171,7 +171,7 @@ test("bare PG writes on the Bun.SQL shape keep native errors and signal uncertai
   const generated = generate(await canonical("bun-postgres"));
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const path = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
-  await writeFile(path, generated.files["generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"'));
+  await writeFile(path, generated.files["generated.ts"]!.replaceAll('"@aotter/mantle-next/contracts"', '"../src/kernel/contracts.ts"').replaceAll('"@aotter/mantle-next/checked"', '"../src/kernel/checked.ts"'));
   const caller = { kind: "user", subject: "test-user", role: null, scopes: [], credential: "session", credentialId: null, clientId: null };
   // Bun.SQL reports SQLSTATE in errno; node-postgres/postgres.js in code.
   const server = (state: string, bun = false) => Object.assign(new Error("native-" + state), bun ? { errno: state, code: "ERR_POSTGRES_SERVER_ERROR", severity: "ERROR" } : { code: state, severity: "ERROR" });
@@ -309,7 +309,7 @@ test("row emission uses static keys, row-local decoder scratch and safe __proto_
   if (!dangerous.ok) throw Error(JSON.stringify(dangerous.diagnostics));
   expect(dangerous.files["checked.ts"]).toContain('["__proto__"]: row["__proto__"]');
   const file = new URL(`.generated-${crypto.randomUUID()}.ts`, import.meta.url);
-  await writeFile(file,dangerous.files["checked.ts"]!.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"'));
+  await writeFile(file,dangerous.files["checked.ts"]!.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"').replaceAll('"@aotter/mantle-next/checked"','"../src/kernel/checked.ts"'));
   try {
     const app = await import(file.href);
     const row = Object.defineProperty({id:"test"},"__proto__",{value:{unsafe:true},enumerable:true});
@@ -327,7 +327,7 @@ test("native binds directly use authored input names and checked defaults", asyn
   expect(generated.files["checked.ts"]).toContain('value = given["NoteTitle"]');
   expect(generated.files["checked.ts"]).not.toContain("const input =");
   const file = new URL(`.generated-${crypto.randomUUID()}.ts`,import.meta.url);
-  await writeFile(file,generated.files["checked.ts"]!.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"'));
+  await writeFile(file,generated.files["checked.ts"]!.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"').replaceAll('"@aotter/mantle-next/checked"','"../src/kernel/checked.ts"'));
   const db = new Database(":memory:");
   const caller = {kind:"user",subject:"test-owner",role:null,scopes:[],credential:"session",credentialId:null,clientId:null};
   try {
@@ -351,7 +351,7 @@ for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare
   const code = generated.files["generated.ts"]!;
   expect(code).not.toMatch(/zod|validate\(|decodeField|encodeInteger|rawTypes|databaseError|\.map\(/);
   const file = new URL(`.bare-${crypto.randomUUID()}.ts`, import.meta.url);
-  await writeFile(file,code.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"'));
+  await writeFile(file,code.replaceAll('"@aotter/mantle-next/contracts"','"../src/kernel/contracts.ts"').replaceAll('"@aotter/mantle-next/checked"','"../src/kernel/checked.ts"'));
   const rows = [{id:"native-id",title:null}];
   const caller = {kind:"user",subject:"test-user",role:null,scopes:[],credential:"session",credentialId:null,clientId:null};
   let failure: unknown;

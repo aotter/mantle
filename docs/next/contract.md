@@ -16,7 +16,9 @@ Next removes that intermediate executor rather than accelerating it.
 Day-one targets are Bun SQLite, Bun PostgreSQL, Cloudflare D1, and Cloudflare
 PostgreSQL. Workers validation uses local Wrangler only. Bare PostgreSQL entries
 call Bun.SQL's own shape (`Postgres`: `unsafe(text, values)` and
-`begin(options, fn)`), so Bun passes its `SQL` or a transaction directly. Other
+`begin(options, fn)`), so Bun passes its `SQL` directly. A Bun transaction handle
+also works for Views and single-statement Procedures; a multi-statement Procedure
+opens its own transaction, which Bun refuses inside another (no write happens). Other
 drivers are application-owned adapters to that shape; Workers PostgreSQL (for
 example Mantle Cloud over Hyperdrive) adapts node-postgres, and the tested recipe
 is `tests/apps/pg-port.ts`. Checked PostgreSQL entries still take a node-postgres
