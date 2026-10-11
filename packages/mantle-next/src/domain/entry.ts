@@ -1,4 +1,4 @@
-/** Direct entry files: one operation, Store or Procedure per module, so a request bundle excludes the others. */
+/** Direct entry files: one View or Procedure per module, so a request bundle excludes the others. */
 // Stable, injective build-only export names; stale entry files cannot bind a new ordinal.
 /** @internal */
 export const exportName = (kind: string, name: string) => kind + "_" + Array.from(name, c => c.codePointAt(0)!.toString(16)).join("_");

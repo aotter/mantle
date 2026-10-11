@@ -15,6 +15,8 @@ export interface StoreEnv {
   sqlite: boolean;
   /** The generated `stores` bound to the target's database handle for this caller. */
   stores(caller: Caller): { purchase_requests: any; session_notes: any; catalog_items: any };
+  /** A generated View on the same handle. */
+  view(name: string, caller: Caller, input: Record<string, unknown>): Promise<Record<string, unknown>[]>;
   /** A generated Procedure on the same handle. */
   call(name: string, caller: Caller, input: Record<string, unknown>): Promise<any>;
   /** Independent native SQL with `?` placeholders. */
@@ -125,7 +127,7 @@ export async function verifyStore(env: StoreEnv) {
   await refused(a.find({ where: { amount: { gt: null } } as never })); await refused(a.find({ where: { title: { in: "x" } } as never }));
   await refused(a.find({ where: { title: { isNull: "yes" } } as never })); await refused(a.find({ where: { approved: "true" } as never }));
   await refused(a.find({ where: { title: { a: 1 } } as never })); await refused(a.find({ where: { title: {} } as never }));
-  await refused(a.find({ orderBy: "payload" as never })); await refused(a.find({ orderBy: "version" as never })); await refused(a.find({ orderBy: hostile as never }));
+  await refused(a.find({ orderBy: "payload" as never })); await refused(a.find({ orderBy: "ownerId" as never })); await refused(a.find({ orderBy: hostile as never }));
   await refused(a.find({ order: "sideways" as never })); await refused(a.find({ limit: 0 })); await refused(a.find({ limit: 501 })); await refused(a.find({ limit: 1.5 }));
   await refused(a.findById({} as never)); await refused(a.update("x", { ownerId: B } as never, { lock: 1 })); await refused(a.update("x", { version: 9 } as never, { lock: 1 }));
   await refused(a.update("x", { id: "y" } as never, { lock: 1 })); await refused(a.update("x", {}, { lock: 1 })); await refused(a.update("x", { title: "t" }, { lock: "1; DROP" as never })); await refused(a.update("x", { title: undefined } as never, { lock: 1 }));
@@ -153,7 +155,7 @@ export async function verifyStore(env: StoreEnv) {
   assert.equal(moved.title, "system edit"); assert.equal((await b.findById(bRow.id)).title, "system edit"); ok();
   assert.equal(num((await env.native("SELECT COUNT(*) AS c FROM purchase_requests WHERE title = ?", ["system edit"]))[0]!.c), 1); ok();
 
-  // ---- TTL (Core's cutoff bind sits after the uid bind) and an unscoped Schema
+  // ---- TTL (the cutoff binds after the uid) and an unscoped Schema
   const hour = 3_600_000, at = (ms: number) => new Date(Date.now() + ms).toISOString();
   for (const [body, expiresAt] of [["live", at(hour)], ["forever", null], ["gone", at(-hour)]] as const) await env.call("create-session-note", user(A), { body, expiresAt });
   const notes = env.stores(user(A)).session_notes;
@@ -166,7 +168,38 @@ export async function verifyStore(env: StoreEnv) {
   for (const [sku, name, price] of [["c-1", "pen", 1.5], ["c-2", "ink", 4], ["c-3", "pad", 2]] as const) await env.call("create-catalog-item", user(A), { sku, name, price });
   const catalog = (caller: Caller) => env.stores(caller).catalog_items;
   for (const caller of [user(A), user(B), anonymous, system]) assert.deepEqual((await catalog(caller).find({ orderBy: "name" })).rows.map((x: any) => x.name), ["ink", "pad", "pen"]);
-  await refused(catalog(user(A)).find({ orderBy: "price" as never })); // not indexed: refused rather than sorted without an index
+  ok();
+
+  // ---- insert and delete: Core's fills (scope, author, clock, generated id), refusals, OCC and scope on delete
+  const made = await a.insert({ requestNumber: "I-1", title: "inserted", amount: 1.5, approved: false, requestedUnits: 2, submittedAt: "2026-10-11T00:00:00.5Z", neededOn: "2026-10-11", payload: { k: 1 }, sortBucket: null });
+  assert.match(made.id, /^[0-9a-f]{32}$/); assert.equal(num(made.version), 1); assert.equal(made.authorId, A); assert.equal(made.submittedAt, "2026-10-11T00:00:00.500000Z");
+  assert.match(made.createdAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/); assert.equal(made.createdAt, made.updatedAt);
+  assert.equal(await b.findById(made.id), null); assert.equal((await sys.findById(made.id)).title, "inserted"); assert.equal((await env.native("SELECT ownerid FROM purchase_requests WHERE id = ?", [made.id]))[0]!.ownerid, A); ok();
+  await refused(a.insert({ id: "mine" } as never)); await refused(a.insert({ ownerId: B } as never)); await refused(a.insert({ version: 7 } as never)); await refused(a.insert({ createdAt: "2020-01-01T00:00:00Z" } as never)); await refused(a.insert({ title: undefined } as never));
+  await assert.rejects(a.insert({ requestNumber: "I-1", title: "again", amount: 1, approved: false, requestedUnits: 1, submittedAt: "2026-10-11T00:00:00Z", neededOn: "2026-10-11", payload: {}, sortBucket: null })); // unique (owner, requestNumber)
+  await assert.rejects(anon.purchase_requests.insert({ requestNumber: "anon", title: "t", amount: 1, approved: false, requestedUnits: 1, submittedAt: "2026-10-11T00:00:00Z", neededOn: "2026-10-11", payload: {}, sortBucket: null })); // no subject: the scope column is NOT NULL
+  const note = await notes.insert({ body: "inserted note", expiresAt: new Date(Date.now() + hour) }); assert.equal(note.body, "inserted note");
+  assert.equal((await notes.findById(note.id)).id, note.id); assert.equal((await env.stores(user(B)).session_notes.findById(note.id)), null);
+  const item = await catalog(user(B)).insert({ sku: "c-9", name: "tape", price: 3 }); assert.equal(item.authorId, B); assert.equal((await catalog(user(A)).findById(item.id)).sku, "c-9"); ok();
+  await refused(b.delete(made.id, { lock: 1 }), "CONFLICT"); await refused(a.delete(made.id, { lock: 2 }), "CONFLICT"); await refused(a.delete("no-such-id", { lock: 1 }), "CONFLICT");
+  await refused(a.delete(made.id, { lock: "x" as never })); await refused(a.delete({} as never, { lock: 1 }));
+  assert.equal(await a.delete(made.id, { lock: made.version }), undefined); assert.equal(await a.findById(made.id), null); assert.equal(await sys.findById(made.id), null); ok();
+  await catalog(system).delete(item.id, { lock: item.version }); assert.equal(await catalog(system).findById(item.id), null); ok();
+
+  // ---- equivalence: for every Schema and mode, the generic Store's rows are the rows Core's compiled SQL returns
+  const stores = env.stores;
+  const same = async (name: string, caller: Caller, store: any, where: object, rows: boolean) => {
+    const got = (await store.find({ where, limit: 500 })).rows;
+    assert.deepEqual(got, await env.view(name, caller, {}), `${name} as ${caller.kind}`);
+    assert.equal(got.length > 0, rows, `${name} as ${caller.kind}: ${rows ? "vacuous" : "leaks rows"}`);
+  };
+  const purchases = { amount: { gte: 2.5 }, title: { like: "Item 1%" }, approved: false, submittedAt: { gte: "2026-10-11T00:01:00.123456Z" }, neededOn: { lt: "2026-10-18" }, sortBucket: { ne: "bucket-1" }, requestedUnits: { in: [1, 2, 3, 4] }, createdAt: { gte: "2020-01-01T00:00:00Z" } };
+  for (const caller of [user(A), user(B), system, anonymous]) {
+    const s = stores(caller), scoped = caller.kind !== "anonymous", ttl = caller.kind === "system" || (caller.kind === "user" && caller.subject === A);
+    await same("eq-purchases-all", caller, s.purchase_requests, {}, scoped); await same("eq-purchases-filtered", caller, s.purchase_requests, purchases, scoped);
+    await same("eq-notes-all", caller, s.session_notes, {}, ttl); await same("eq-notes-filtered", caller, s.session_notes, { body: { in: ["live", "forever", "gone"] }, expiresAt: null }, ttl);
+    await same("eq-catalog-all", caller, s.catalog_items, {}, true); await same("eq-catalog-filtered", caller, s.catalog_items, { price: { gte: 2 }, name: { ne: "pen" } }, true);
+  }
   ok();
 
   // ---- placeholders continue after the base statement's own (uid, cutoff...), in both modes

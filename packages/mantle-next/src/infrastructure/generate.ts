@@ -11,24 +11,17 @@ import { wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { outputType } from "../domain/columns.js";
 import * as sqliteDialect from "../kernel/dialect/sqlite.js";
 import * as postgresDialect_ from "../kernel/dialect/postgres.js";
-import { storeManifests, storeSources, STORE_PREFIX } from "./stores.js";
 import { initialStorageSql as sqliteSchema } from "../../../mantle/dist/d1/storage.js";
 import { initialStorageSql as postgresSchema } from "../../../mantle/dist/postgres/storage.js";
 import { generate } from "../usecase/generate.js";
-import type { GenerateDiagnostic, GenerateResult, StoreSource, Target } from "../domain/model.js";
+import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/model.js";
 import type { BetterAuthOptions } from "better-auth/types";
 import { authSchemaSql } from "../auth/schema.js";
 
 export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; /** The application's Better Auth options: their tables join schema.sql. */ readonly auth?: BetterAuthOptions }): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");
   const compiler = postgres ? postgresCompiler : sqliteCompiler;
-  const authored = await compilePlan(request.sources, compiler);
-  if (!authored.ok) return { ok: false, diagnostics: authored.diagnostics.map(({ code, path, message }) => ({ code, path, message })) };
-  const reserved = [...Object.keys(authored.plan.views), ...Object.keys(authored.plan.procedures)].filter(name => name.startsWith(STORE_PREFIX));
-  if (reserved.length) return { ok: false, diagnostics: reserved.map(name => ({ code: "GENERATE_RESERVED_NAME", path: name, message: `Names starting '${STORE_PREFIX}' are reserved for the generated Store.` })) };
-  // The Store's own programs join the authored ones, so Core compiles, lowers and wire-formats them identically.
-  const extra = storeManifests(authored.plan.schemas);
-  const compiled = extra ? await compilePlan({ sources: [...request.sources.sources, { sourceId: "mantle-store", text: extra }] }, compiler) : authored;
+  const compiled = await compilePlan(request.sources, compiler);
   if (!compiled.ok) return { ok: false, diagnostics: compiled.diagnostics.map(({ code, path, message }) => ({ code, path, message })) };
   const dialect = postgres ? postgresDialect() : d1Dialect;
   const wire = postgres ? postgresDialect_ : sqliteDialect;
@@ -60,16 +53,8 @@ export async function generateFromSources(request: { readonly target: Target; re
       }
     }
   }
-  const { stores, refusals: storeRefusals } = storeSources(compiled.plan, lowered as never);
-  refusals.push(...storeRefusals);
   if (refusals.length) return { ok: false, diagnostics: refusals };
-  // The synthetic programs only feed the Stores: they are not operations of the application.
-  const authoredOnly = <T>(table: Record<string, T>) => Object.fromEntries(Object.entries(table).filter(([name]) => !name.startsWith(STORE_PREFIX)));
-  const result = generate({
-    target: request.target, stores, viewKeys: authoredOnly(viewKeys),
-    plan: { ...compiled.plan, views: authoredOnly(compiled.plan.views), procedures: authoredOnly(compiled.plan.procedures) },
-    lowered: { ...lowered, views: authoredOnly(lowered.views), procedures: authoredOnly(lowered.procedures) },
-  });
+  const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys });
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   return { ok: true, files: { ...result.files, "schema.sql": ddl.join(";\n\n") + ";\n" } };

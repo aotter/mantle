@@ -14,4 +14,4 @@ export const date = isoDate;
 export const bool = (v: boolean): boolean => v;
 /** Booleans, dates, JSON and UUIDs are stored as native column types (SQLite keeps 0/1 and text). */
 export const nativeTypes = true;
-export const cast = (placeholder: string, type: string): string => type === "timestamptz" || type === "date" ? `CAST(CAST(${placeholder} AS text) AS ${type})` : placeholder;
+export const cast = (placeholder: string, type: string): string => type === "timestamptz" || type === "date" ? `CAST(CAST(${placeholder} AS text) AS ${type})` : type === "json" ? `CAST(CAST(${placeholder} AS text) AS jsonb)` : placeholder;

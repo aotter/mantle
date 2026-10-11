@@ -12,9 +12,9 @@ pnpm --filter @aotter/mantle-next generate cloudflare-d1 /tmp/purchase-generated
 ```
 
 Outputs include `generated.ts`, `schema.sql` and direct operation entries.
-Import a selected function from `views/<encoded-name>.ts`,
-`procedures/<encoded-name>.ts` or `stores/<schema>.ts` (default export, with its
-types) to exclude other operations from the request bundle. Apply initial DDL explicitly to an
+Import a selected function from `views/<encoded-name>.ts` or
+`procedures/<encoded-name>.ts` (default export, with its types) to exclude other
+operations from the request bundle. Apply initial DDL explicitly to an
 empty development database; this artifact is not a destructive migration or a
 production convergence tool. Generation does no database I/O. Application code
 passes driver-ready parameters, a database handle (Bun.SQL `SQL` for PostgreSQL, `bun:sqlite`
@@ -32,10 +32,14 @@ strings in UTC with six fractional digits and `YYYY-MM-DD` on every target, and
 inputs bound to them take the same ISO text (a valid `Date` also works for date-time); an offset-less
 timestamp or a nonexistent day is refused with `SQL_TYPE` before the write.
 
-Every Schema also gets a typed **Store** (`stores[schema](db, caller)`: `findById`, `find` with AND-only
-`where` and keyset `cursor`, `first`, `count`, OCC `update(id, set, { lock })`). Its policy is Core's own
-lowering of `SELECT r.* FROM <schema> r` and of one `UPDATE`; it only appends `WHERE`, `ORDER BY`, `LIMIT`.
-`orderBy`: `id` and indexed columns. See the contract.
+Every Schema is also a typed **Store** collection: `store(db, caller).collection("purchase_requests")` with
+`findById`, `find` (AND-only `where`, keyset `cursor`), `first`, `count`, `insert(values)`, OCC `update(id, set, { lock })`
+and `delete(id, { lock })`. One shared runtime renders every collection from a small generated fact record (columns plus
+Core's `rowPolicy`/`writePolicy` evaluated at build time); it prints no per-Schema SQL. The runtime refuses
+unknown, system and scope columns, unknown operators and wrongly shaped values (`INPUT_VALIDATION_FAILED`); TypeScript alone
+restricts `orderBy` to `id` and indexed columns and requires an insert's required columns.
+**The Store does not check `requires`**: it enforces row rules (scope, TTL, version), not a View's or Procedure's
+authorization predicates, which are 0.2 semantics. Authorize before calling it. See the contract.
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain

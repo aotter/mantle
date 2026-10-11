@@ -1,42 +1,42 @@
-/** One typed Store per Schema: Core's lowered base statements become a descriptor constant, passed to the shared `createStore`. */
-import type { LoweredStatement } from "@aotter/mantle/spec";
-import type { StoreSource } from "../domain/model.js";
-import { inputType, nativeType } from "../domain/columns.js";
-import { entry, exportName } from "../domain/entry.js";
-import { recipesOf } from "../domain/recipes.js";
-import { ORDER, WRITE } from "../kernel/store.js";
+/**
+ * One typed collection per Schema. Core's row rules (`rowPolicy`, `writePolicy`) are evaluated here, at build time, into a small
+ * fact record passed to the shared `createStore`; no SQL is printed and the runtime knows no Schema. Types are compile-time only.
+ */
+import { rowPolicy, writePolicy, type RuntimePlan } from "@aotter/mantle/spec";
+import { declaredType, inputType, nativeType } from "../domain/columns.js";
+import { FILTER, WRITE, type Col } from "../kernel/store.js";
 
 const q = JSON.stringify;
-const FROM = " FROM ( SELECT ";
-type Step = (s: LoweredStatement, path: string, fields: readonly string[], row?: boolean) => string;
+type Schema = RuntimePlan["schemas"][string];
+// Types the typed Store compares and writes as plain bind values. Fixed numerics are scaled integers on SQLite; geo is two columns.
+const SCALAR = new Set(["text", "real", "float8", "integer", "int4", "int8", "bool", "timestamptz", "date"]);
+
+/** The columns Core's wrapper exposes, in output order: the scope column is never among them. */
+function columns(s: Schema): Col[] {
+  const system: [string, string][] = [["id", "id"], ["version", "version"], ["created_at", "createdAt"], ["updated_at", "updatedAt"], ["author_id", "authorId"], ...(s.publishing ? [["status", "status"] as [string, string]] : [])];
+  const declared = Object.keys(s.fields).filter(f => f !== s.scope && s.fields[f] !== "geo").map((f): [string, string] => [f, s.names?.[f] ?? f]);
+  return [...system, ...declared].map(([column, name]): Col => {
+    const type = declaredType(s.fields, column) ?? (column === "version" ? "integer" : "text");
+    const scalar = SCALAR.has(type);
+    return [name, column, type, (scalar ? FILTER : 0) | (column in s.fields && !s.publishing && (scalar || type === "json") ? WRITE : 0)];
+  });
+}
 
 /** @internal */
-export function emitStores(stores: readonly StoreSource[], { isSqlite, step, refuse, entries }: { isSqlite: boolean; step: Step; refuse: (path: string, message: string) => void; entries: Record<string, string> }) {
-  const names: string[] = [], declarations: string[] = [];
-  for (const [index, store] of stores.entries()) {
-    const path = `stores/${store.schema}`;
-    // The wrapper begins at the first policy subquery; the select list before it must be the same in both modes.
-    const split = (s: LoweredStatement) => {
-      const at = s.sql.indexOf(FROM);
-      if (at < 0 || !s.sql.endsWith(") AS r")) refuse(path, "Core's base statement must be `SELECT ... FROM (<policy>) AS r` with nothing after the wrapper.");
-      return { select: s.sql.slice(0, at), from: s.sql.slice(at), binds: recipesOf(s, [], message => refuse(path, message)) };
-    };
-    const caller = split(store.read.caller), trusted = split(store.read.trusted);
-    if (caller.select !== trusted.select) refuse(path, "The caller and trusted base statements select different columns.");
-    const writable = store.cols.filter(c => c[3] & WRITE).map(c => c[1]);
-    const fields = ["i_id", "i_lock", ...writable.flatMap(c => [`v_${c}`, `s_${c}`])];
-    const update = store.update && `{ caller: ${step(store.update.caller, path + "/update", fields, true)}, trusted: ${step(store.update.trusted, path + "/update", fields, true)} }`;
-    const type = (c: StoreSource["cols"][number]) => c[0] === "id" ? "string" : `${nativeType(c[2], isSqlite)} | null`;
-    const n = `Store${index}`, name = exportName("store", store.schema);
-    declarations.push(
-      `export type ${n}Row = { ${store.cols.map(c => `readonly ${q(c[0])}: ${type(c)};`).join(" ")} };`,
-      `export type ${n}Fields = { ${store.cols.filter(c => c[3] & 1).map(c => `readonly ${q(c[0])}: ${inputType(c[2])};`).join(" ")} };`,
-      `export type ${n}Set = { ${store.cols.filter(c => c[3] & WRITE).map(c => `readonly ${q(c[0])}: ${inputType(c[2])} | null;`).join(" ")} };`,
-      `export type ${n}Order = ${store.cols.filter(c => c[3] & ORDER).map(c => q(c[0])).join(" | ") || "never"};`,
-      `const ${name} = /* @__PURE__ */ createStore<Database, ${n}Row, ${n}Fields, ${n}Set, ${n}Order>(DIALECT, DRIVER, { schema: ${q(store.schema)}, cols: ${q(store.cols)}, select: ${q(caller.select)}, caller: { from: ${q(caller.from)}, binds: ${q(caller.binds)} }, trusted: { from: ${q(trusted.from)}, binds: ${q(trusted.binds)} }${update ? `, update: ${update}` : ""} });`,
-      `export { ${name} };`);
-    names.push(`[${q(store.schema)}]: ${name}`);
-    entries[`stores/${encodeURIComponent(store.schema)}.ts`] = entry("store", store.schema, `${n}Row as Row, ${n}Fields as Fields, ${n}Set as Set, ${n}Order as Order`);
+export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean): { tables: string; descriptors: string } | undefined {
+  const all = Object.values(schemas).sort((a, b) => a.name < b.name ? -1 : 1);
+  if (!all.length) return undefined;
+  const tables: string[] = [], descriptors: string[] = [];
+  for (const s of all) {
+    const cols = columns(s);
+    // ORDER BY is allowed where the caller's scoped read can walk an index: its first column, or the one after the scope column.
+    const ordered = new Set(["id", ...[...(s.indexes ?? []), ...(s.unique ?? [])].map(i => i[0] === s.scope ? i[1] : i[0]).filter((c): c is string => !!c)]);
+    const type = (c: Col) => c[0] === "id" ? "string" : `${nativeType(c[2], isSqlite)} | null`;
+    const required = new Set(s.schema.required ?? []);
+    const of = (keep: (c: Col) => boolean, value: (c: Col) => string, optional = (_: Col) => false) => `{ ${cols.filter(keep).map(c => `readonly ${q(c[0])}${optional(c) ? "?" : ""}: ${value(c)};`).join(" ")} }`;
+    tables.push(`${q(s.name)}: { row: ${of(() => true, type)}; fields: ${of(c => !!(c[3] & FILTER), c => inputType(c[2]))}; set: ${of(c => !!(c[3] & WRITE), c => `${inputType(c[2])} | null`)}; insert: ${of(c => !!(c[3] & WRITE), c => `${inputType(c[2])} | null`, c => !required.has(c[0]))}; order: ${cols.filter(c => c[3] & FILTER && ordered.has(c[1])).map(c => q(c[0])).join(" | ") || "never"} }`);
+    const update = writePolicy(s, "update", { lock: true });
+    descriptors.push(`${q(s.name)}: { table: ${q(s.name)}, cols: ${q(cols)}, caller: ${q(rowPolicy(s, "caller"))}, trusted: ${q(rowPolicy(s, "trusted"))}${cols.some(c => c[3] & WRITE) ? `, write: ${q({ fills: writePolicy(s, "insert").fills, sets: update.sets, lock: update.lock })}` : ""} }`);
   }
-  return { names, declarations };
+  return { tables: `{ ${tables.join("; ")} }`, descriptors: `{ ${descriptors.join(", ")} }` };
 }

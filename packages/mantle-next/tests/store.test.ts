@@ -16,7 +16,7 @@ import { verifyStore, type StoreEnv } from "./store-scenarios.js";
 const directory = resolve(import.meta.dir, "apps/.generated", `store-${crypto.randomUUID()}`);
 afterAll(() => rm(directory, { recursive: true, force: true }));
 async function generated(target: Target) {
-  const sources = await Promise.all(["purchase.yaml", "store-extra.yaml"].map(async name => ({ sourceId: name, text: await readFile(resolve(import.meta.dir, "apps", name), "utf8") })));
+  const sources = await Promise.all(["purchase.yaml", "store-extra.yaml", "store-equivalence.yaml"].map(async name => ({ sourceId: name, text: await readFile(resolve(import.meta.dir, "apps", name), "utf8") })));
   const result = await generateFromSources({ target, sources: { sources } });
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   for (const [name, text] of Object.entries(result.files)) {
@@ -27,15 +27,17 @@ async function generated(target: Target) {
   return { app: await import(resolve(directory, target, "generated.ts")), schema: result.files["schema.sql"]! };
 }
 
+const collections = (app: any, db: unknown, caller: Caller) => { const store = app.store(db, caller); return { purchase_requests: store.collection("purchase_requests"), session_notes: store.collection("session_notes"), catalog_items: store.collection("catalog_items") }; };
 function env(sqlite: boolean, app: any, db: any, native: StoreEnv["native"], recorder: (calls: { sql: string; values: unknown[] }[]) => unknown): StoreEnv {
   return {
     sqlite, native,
-    stores: (caller: Caller) => ({ purchase_requests: app.stores.purchase_requests(db, caller), session_notes: app.stores.session_notes(db, caller), catalog_items: app.stores.catalog_items(db, caller) }),
+    stores: (caller: Caller) => collections(app, db, caller),
+    view: (name, caller, input) => app.views[name](db, caller, input),
     call: (name, caller, input) => app.procedures[name](db, caller, input),
     record: async (caller, run) => {
       const calls: { sql: string; values: unknown[] }[] = [];
       const spy = recorder(calls);
-      await run({ purchase_requests: app.stores.purchase_requests(spy, caller), session_notes: app.stores.session_notes(spy, caller), catalog_items: app.stores.catalog_items(spy, caller) });
+      await run(collections(app, spy, caller));
       return calls.at(-1)!;
     },
   };

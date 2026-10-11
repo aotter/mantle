@@ -4,6 +4,7 @@ import type { GenerateDiagnostic, GenerateInput, GenerateResult, Target } from "
 import { nativeType, outputType } from "../domain/columns.js";
 import { entry, exportName } from "../domain/entry.js";
 import { recipesOf } from "../domain/recipes.js";
+import * as postgres from "../kernel/dialect/postgres.js";
 import { emitStores } from "./stores.js";
 
 const q = JSON.stringify;
@@ -24,7 +25,7 @@ const typeOf = (s: JsonSchema | undefined): string => {
     default: return "unknown";
   }
 };
-export function generate({ target, plan, lowered, viewKeys, stores = [] }: GenerateInput): GenerateResult {
+export function generate({ target, plan, lowered, viewKeys }: GenerateInput): GenerateResult {
   const diagnostics: GenerateDiagnostic[] = [];
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
   const isSqlite = sqlite(target);
@@ -65,25 +66,26 @@ export function generate({ target, plan, lowered, viewKeys, stores = [] }: Gener
   // JSON, date-time and date inputs are driver-ready text. Declaring their parameter as text makes every driver send it verbatim:
   // Bun.SQL would JSON-encode a string bound to jsonb a second time, and postgres.js turns one bound to timestamptz or date into a
   // JavaScript Date, which loses microseconds.
-  const TEXT_CAST: Record<string, string> = { json: "jsonb", timestamptz: "timestamptz", date: "date" };
+  // The cast Core prints for each type; the PostgreSQL dialect spells what replaces it (the same cast the Store writes with).
+  const CORE_CAST: Record<string, string> = { json: "jsonb", timestamptz: "timestamptz", date: "date" };
   const sqlOf = (s: LoweredStatement, path: string): string => {
     if (isSqlite) return s.sql;
     let sql = s.sql;
     for (const [i, b] of s.binds.entries()) {
-      const target = b.k === "input" ? TEXT_CAST[String(b.type)] : undefined;
+      const type = b.k === "input" ? String(b.type) : "", target = CORE_CAST[type];
       if (!target) continue;
       const param = `$${i + 1}`, cast = `CAST(${param} AS ${target})`;
       if (sql.split(cast).join("").match(new RegExp(`\\$${i + 1}(?!\\d)`))) refuse(path, `Input ${param} must appear only as ${cast}.`);
-      sql = sql.replaceAll(cast, `CAST(CAST(${param} AS text) AS ${target})`);
+      sql = sql.replaceAll(cast, postgres.cast(param, type));
     }
     return sql;
   };
   /** A statement as a constant: its text and how to bind it. */
   // The dialect functions the bind recipes call, so a bundle carries only those (`binds` takes this object).
   const values = new Set<string>();
-  const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false, track = true) => {
+  const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false) => {
     const recipes = recipesOf(s, fields, message => refuse(path, message));
-    if (track) for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && (r.type === "timestamptz" || r.type === "date")) values.add(r.type === "date" ? "date" : "timestamp"); }
+    for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && (r.type === "timestamptz" || r.type === "date")) values.add(r.type === "date" ? "date" : "timestamp"); }
     return `{ sql: ${q(sqlOf(s, path))}, binds: ${q(recipes)}${row ? ", row: true" : ""} }`;
   };
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [];
@@ -132,8 +134,7 @@ export function generate({ target, plan, lowered, viewKeys, stores = [] }: Gener
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input, Procedure${index}Output as Output`);
   }
-  const emitted = emitStores(stores, { isSqlite, step: (s, path, fields, row) => step(s, path, fields, row, false), refuse, entries });
-  if (emitted.names.length) used.add("createStore");
+  const stores = emitStores(plan.schemas, isSqlite);
   if (diagnostics.length) return { ok: false, diagnostics };
   const base = "@aotter/mantle-next/";
   const dbType = target === "bun-sqlite" ? `import type { Handle as Database } from "${base}driver/bun-sqlite";` : target === "cloudflare-d1" ? `import type { Handle as Database } from "${base}driver/d1";` : `import type { Postgres as Database } from "${base}contracts";`;
@@ -141,9 +142,9 @@ export function generate({ target, plan, lowered, viewKeys, stores = [] }: Gener
   return { ok: true, files: { ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import type { Caller } from "${base}contracts";`,
     ...(used.has("ContractError") ? [`import { ContractError } from "${base}contracts";`] : []),
     ...(values.size ? [`import { ${[...values].sort().join(", ")} } from "${base}dialect/${isSqlite ? "sqlite" : "postgres"}";`] : []),
-    ...(emitted.names.length ? [`import * as DIALECT from "${base}dialect/${isSqlite ? "sqlite" : "postgres"}";`] : []),
+    ...(stores ? [`import * as DIALECT from "${base}dialect/${isSqlite ? "sqlite" : "postgres"}";`] : []),
     ...(driverImports.length ? [`import { ${driverImports.join(", ")} } from "${base}driver/${driver}";`] : []),
-    ...(emitted.names.length ? [`import * as DRIVER from "${base}driver/${driver}";`, `import { createStore } from "${base}store";`] : []),
+    ...(stores ? [`import * as DRIVER from "${base}driver/${driver}";`, `import { createStore } from "${base}store";`] : []),
     `import { ${["binds", ...(used.has("bound") ? ["bound"] : [])].join(", ")} } from "${base}binds";`,
-    `const D = { ${[...values].sort().join(", ")} };`, ...declarations, ...emitted.declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, `export const stores = { ${emitted.names.join(", ")} };`, ""].join("\n") } };
+    `const D = { ${[...values].sort().join(", ")} };`, ...declarations, ...(stores ? [`export type Tables = ${stores.tables};`, `export const store = /* @__PURE__ */ createStore<Database, Tables>(DIALECT, DRIVER, ${stores.descriptors});`] : []), `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ""].join("\n") } };
 }

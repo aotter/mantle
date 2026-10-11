@@ -170,28 +170,32 @@ time; a bundle contains one dialect module and one driver module.
   `CONFLICT`; bun:sqlite `db.transaction`; Bun.SQL autocommit for one statement,
   `begin(serializable)` and `postgresOutcome` for several). No common transaction interface.
 - **Binds** (`kernel/binds.ts`): Core's bind recipes (`uid`, `role`, `now`, `cutoff`,
-  `const`, `input` with ISO encoding) evaluated by one function for generated Views,
+  `const`, `version` (the Store's lock), `input` with ISO encoding) evaluated by one function for generated Views,
   generated Procedures and the Store. Generated code carries the recipes as data, so
   binds are no longer emitted as straight-line code (about 0.1 microsecond per call on
   bun:sqlite; see the spike report).
 - **Condition** (`kernel/where.ts`): one column/operator/value fragment builder, used by
   the Store and by the Better Auth adapter, which keeps only OR grouping, contains/starts/ends
   patterns and joins.
-- **Store** (`kernel/store.ts`, generated per Schema as `stores[schema](db, caller)`):
-  `findById`, `find` (AND-only typed `where`: eq ne gt gte lt lte like in notIn isNull, null
-  is IS NULL; keyset `cursor`, base64url, bound to schema, orderBy and direction, NULL-aware),
-  `first`, `count`, `update(id, set, { lock })`. **It owns no policy.** For each Schema the
-  generator adds two synthetic programs beside the authored ones and runs them through the same
-  compile, lowering and wire-form passes: `SELECT r.<columns> FROM <schema> r` (Core wraps the relation in
-  its scope, TTL and published predicates, in caller and trusted mode) and one `UPDATE ... SET col = CASE WHEN
-  input.s_col THEN input.v_col ELSE col END ... WHERE id = input.i_id AND version = input.i_lock RETURNING ...`
-  (one statement per Schema, whatever subset of columns a call sets; Core adds scope, TTL, the version bump and
-  `updated_at`). The descriptor carries those printed statements and recipes; the Store appends
-  ` WHERE ... ORDER BY ... LIMIT` outside the `AS r` wrapper and numbers its placeholders after the base's own.
-  A system Caller uses the trusted statements. `orderBy` is limited to `id` and to the first column of an
-  index after the scope column (what the caller's scoped read can walk); trusted mode has no scope
-  equality, so such an index does not serve a cross-owner sort. Publishing Schemas have a read Store only.
-  The scope column is not exposed, so it cannot be filtered or ordered by.
+- **Store** (`kernel/store.ts`; generated as `store(db, caller).collection(schema)`, the Mongo-driver shape: one
+  generic runtime, a small fact record per Schema). **The row rules are spelled once, in Core**
+  (`@aotter/mantle/spec`: `rowPolicy(schema, mode)` and `writePolicy(schema, kind)`, data: terms of column, `eq`/`ttl`,
+  and a bind recipe). Core's policy rewriter renders the terms to its AST; the generator evaluates the same functions at
+  build time into each collection's descriptor (table, columns `[name, SQL column, type, flags]`, the terms for a caller
+  and for a system caller, and the write fills, sets and version lock); the runtime renders them to SQL with the dialect.
+  No SQL text is generated per Schema. Methods: `findById`, `find` (AND-only typed `where`: eq ne gt gte lt lte like in
+  notIn isNull, null is IS NULL; keyset `cursor`, base64url, bound to table, orderBy and direction, NULL-aware), `first`,
+  `count`, `insert`, `update(id, set, { lock })`, `delete(id, { lock })`. A read is
+  `SELECT <columns with wire forms> FROM <table> r WHERE <rowPolicy> AND <where> ORDER BY ... LIMIT`, placeholders numbered
+  after the policy's. A write names only the columns given plus the policy's (`version = version + 1`, `updated_at`, and for an
+  insert scope, `created_at`, `author_id` and a generated 32-hex id), guarded by the row rules and the version; zero rows is
+  `CONFLICT`. Identifiers come from the descriptor, quoted by the dialect; a caller's names are only looked up in it, so
+  an unknown, system or scope column is refused (`INPUT_VALIDATION_FAILED`). The generator types each collection (row,
+  `where` values, writable columns, an insert's required columns, and `orderBy`: `id` and the first column of an index after the
+  scope column); of these only the `orderBy` restriction and the required insert columns are type-only, so the runtime knows no
+  index. An insert with no subject fails on the NOT NULL scope column. Trusted mode has no scope equality, so such an index does not serve a
+  cross-owner sort. Publishing Schemas have a read Store only. **The Store does not check `requires`**: it enforces row
+  rules only, so authorize before calling it (0.2 semantics). The scope column is not exposed, so it cannot be named.
 
 ## Architecture and acceptance
 
