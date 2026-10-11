@@ -1,9 +1,12 @@
 /** Generated application code, registered by exact plan identity (ADR-0045). */
 import type { RuntimePlan } from "../../spec/domain/index.js";
-import type { MantleDialect } from "../dialect.js";
+import type { StoreRow } from "../store.js";
+import type { StoreCodec, MantleDialect } from "../dialect.js";
 import { MANTLE_VERSION } from "../version.js";
 
+export type GeneratedRow = (row: StoreRow, codec: StoreCodec) => StoreRow;
 export interface GeneratedRuntime {
+  readonly viewRows?: Readonly<Record<string, GeneratedRow>>;
   readonly fingerprint: string;
   readonly mantle: string;
   readonly dialect: { readonly name: string; readonly version: string; readonly key: string };

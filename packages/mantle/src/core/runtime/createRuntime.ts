@@ -143,7 +143,7 @@ export async function createMantleRuntime(args: MantleRuntimeArgs): Promise<Mant
   const store = createStore({
     executor, dialect, schemas: plan.schemas, lifecycle, now,
     newId: args.newId ?? (() => crypto.randomUUID().replaceAll("-", "")),
-    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input, inputSchema: () => validators.view(name)! } : {}), ...(v.columns ? { columns: v.columns } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
+    views: Object.fromEntries(Object.entries(plan.views).map(([name, v]) => [name, { ir: v.stmts, inputs: v.inputs, ...(v.input ? { input: v.input, inputSchema: () => validators.view(name)! } : {}), ...(v.columns ? { columns: v.columns } : {}), ...(generated?.viewRows && Object.hasOwn(generated.viewRows, name) ? { row: generated.viewRows[name] } : {}), public: v.surface === "public", ...(v.requires ? { requires: v.requires } : {}), ...(v.requires?.guard ? { guard: v.requires.guard.procedure } : {}), ...listFields(v.uiSchema) }])),
     guardView: async (procedure, caller, input, cause) => { await invoke({ procedure, input, caller, cause: child(cause, procedure) }, true); },
   });
 

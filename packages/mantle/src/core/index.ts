@@ -16,4 +16,5 @@ export * from "./runtime/verifyPlan.js";
 export { DiagnosticError, makeDiagnostic, runtimeDiagnostic, type Diagnostic, type DiagnosticCode } from "../spec/kernel/index.js";
 export { STAFF_ROLES, isStaffRole, type StaffRole } from "../spec/domain/index.js";
 
-export { registerGenerated, type GeneratedRuntime } from "./runtime/generated.js";
+export { registerGenerated, type GeneratedRuntime, type GeneratedRow } from "./runtime/generated.js";
+export type { StoreCodec } from "./dialect.js";
