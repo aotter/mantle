@@ -6,9 +6,9 @@
 //   zeroFirst         counter keys that must be 0 on the first call (LOWERED: statements `mantle generate` lowered, ADR-0044)
 // Items do not import Mantle.
 const ALL = ["compile", "check", "policy", "paged", "print", "zod", "storeIr"];
-// a sealed View or inline Procedure runs its lowered statement on the first call, and createMantle built its validators at boot;
-// a reader still builds its first shape (#1433 follow-up)
-const LOWERED = ["compile", "check", "policy", "paged", "print", "zod"];
+// a sealed View or inline Procedure runs its lowered statement on the first call; its validators are built then, for that
+// entry only (ADR-0044 decision 7), and a reader still builds its first shape (#1433 follow-up)
+const LOWERED = ["compile", "check", "policy", "paged", "print"];
 const CAUSE = { kind: "internal", id: "bench" };
 
 const rowsOf = (page) => page.rows.length;

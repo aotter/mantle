@@ -1,7 +1,7 @@
 // @ts-nocheck test code over loosely typed plans and rows
 /**
- * ADR-0044 decision 7: a plan's input and output validators are built once per plan object, at `createMantle()` (module
- * scope on Workers), never on the first request.
+ * ADR-0044 decision 7 (amended): a plan's input and output validators are built once per plan object, each on its first use,
+ * so a cold isolate builds only what its first request reaches.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -26,32 +26,47 @@ const failure = (p) => p.then(() => undefined, (e) => e);
 const inv = (procedure, input) => ({ procedure, input, caller: user("o1"), cause: { kind: "http", id: "c1" } });
 
 describe("planValidators", () => {
-  it("returns the same object for the same plan and builds each schema once", async () => {
+  it("returns the same object for the same plan and builds nothing until an entry is used", () => {
     const own = structuredClone(plan);
     built.mockClear();
     const a = planValidators(own);
-    const made = built.mock.calls.length;
-    expect(made).toBe(Object.keys(own.procedures).length * 2 + Object.values(own.views).filter((v) => v.input).length);
+    expect(built).toHaveBeenCalledTimes(0);
     expect(planValidators(own)).toBe(a);
-    expect(built.mock.calls.length).toBe(made);
     expect(planValidators(structuredClone(own))).not.toBe(a); // a different plan object is a different plan
+  });
+
+  it("builds each entry once, on its first use", () => {
+    const own = structuredClone(plan);
+    const v = planValidators(own);
+    built.mockClear();
+    expect(v.procedure("add-item", "input")).toBe(v.procedure("add-item", "input"));
+    expect(built).toHaveBeenCalledTimes(1);
+    expect(v.view("low-stock")).toBe(v.view("low-stock"));
+    expect(v.view("shelf")).toBeUndefined(); // no declared input
+    expect(built).toHaveBeenCalledTimes(2);
   });
 });
 
 describe("createMantle and a first call", () => {
-  it("builds every validator at construction and constructs none on the first Procedure or View call", async () => {
+  it("builds no validator at construction, only the ones a call reaches, and shares them with the next runtime", async () => {
     const own = structuredClone(plan);
     built.mockClear();
     const service = { handlers, fetch: () => new Response("ok") };
     const m = createMantle(service, { plan: own, storage: () => sqliteStorage(d1) });
     expect(m).toBeDefined();
-    expect(built.mock.calls.length).toBeGreaterThan(0); // eager, synchronous
-    built.mockClear();
     const runtime = await createMantleRuntime({ plan: own, handlers, storage: sqliteStorage(d1), schedules: true, ...deterministic() });
-    await runtime.invokeProcedure(inv("add-item", { name: "apple", stock: 5 }));
-    await runtime.store.as(user("o1")).view("low-stock", { input: { max: 10 } });
-    await runtime.store.as(anonymous).view("shelf");
     expect(built).toHaveBeenCalledTimes(0);
+    await runtime.invokeProcedure(inv("add-item", { name: "apple", stock: 5 }));
+    const afterCall = built.mock.calls.length; // add-item, and whatever its lifecycle hooks invoke
+    const every = Object.keys(own.procedures).length * 2 + Object.values(own.views).filter((v) => v.input).length;
+    expect(afterCall).toBeGreaterThan(0);
+    expect(afterCall).toBeLessThan(every);
+    await runtime.store.as(user("o1")).view("low-stock", { input: { max: 10 } });
+    expect(built).toHaveBeenCalledTimes(afterCall + 1);
+    const again = await createMantleRuntime({ plan: own, handlers, storage: sqliteStorage(d1), schedules: true, ...deterministic() });
+    await again.invokeProcedure(inv("add-item", { name: "pear", stock: 1 }));
+    await again.store.as(user("o1")).view("low-stock", { input: { max: 3 } });
+    expect(built).toHaveBeenCalledTimes(afterCall + 1);
   });
 });
 
