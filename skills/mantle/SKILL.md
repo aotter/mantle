@@ -45,6 +45,10 @@ Use the workflow **generate → typecheck → implement listed handlers**: run
 and pass the implementations at `store(db, caller, { handlers })` (and selected
 surface options). Run `tsc --noEmit` again before local acceptance.
 
+For experimental generated applications, optional site settings/media are selected
+with `--site <module>` exporting `siteDefaults`. Apply the emitted deployment DDL;
+wire application-owned object storage as documented in `docs/next/media.md`.
+
 ## New project
 
 1. Create a directory outside the SDK checkout with Node 22+ and

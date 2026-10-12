@@ -2,6 +2,7 @@
 import type { Bound } from "../binds.js";
 import { conflict, ContractError, type Row } from "../contracts.js";
 import { unique } from "../dialect/sqlite.js";
+export { definitive } from "../dialect/sqlite.js";
 import { context, guard } from "./transaction-context.js";
 
 export interface Handle {

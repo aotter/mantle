@@ -25,6 +25,7 @@ explicitly; apply `schema.sql` directly only to a new database.
 | Admin UI, web skill/example | Planned [#1477](https://github.com/aotter/mantle/issues/1477), [#1478](https://github.com/aotter/mantle/issues/1478). |
 | Opt-in `lifecycle: publishing` | Generated status, `published_at`, staff-only transitions and published-only public reads; see [Publishing](#publishing). |
 | `ref` Procedures and typed `Handlers` | Generated `Handlers` type; pass implementations at `store(db, caller, { handlers })`; `mantle generate` lists them. See [ref Procedures](contract.md#ref-procedures). |
+| Optional site settings and media | Select `site` defaults at generation to emit the generated `site` module and deployment tables; native media upload lifecycle, app-owned R2/signing. See [media](media.md). |
 | Published package and release measurements | Planned [#1479](https://github.com/aotter/mantle/issues/1479), [#1480](https://github.com/aotter/mantle/issues/1480). |
 
 Planned means unavailable until its implementation merges: generation currently
@@ -51,8 +52,8 @@ codes and paths. Multiple declarations produce multiple diagnostics.
 | Input properties differing only in case | Rename input properties to be unique without regard to case. |
 | PostgreSQL JSON/date/date-time parameters used without the declared cast | Wrap each occurrence in the concrete `CAST(... AS <type>)` shown by the diagnostic. |
 
-Old service APIs (site/config/media), automatic migrations and boot-time
-schema convergence are outside generation; the app owns them. They are not v2
+Old service APIs, automatic migrations and boot-time
+schema convergence are outside generation; the app owns them. Site/media and email use optional modules. They are not v2
 manifest declarations. Store `or`/`not`/joins/subqueries belong in internal SQL
 Views; unsupported ordering fails the generated TypeScript contract. See
 [query responsibilities](contract.md#revised-query-responsibility-decision-2026-10-11)

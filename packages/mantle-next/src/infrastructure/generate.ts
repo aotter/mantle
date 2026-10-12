@@ -42,7 +42,7 @@ function castInputs(statement: LoweredStatement, path: string, refusals: Generat
   Object.assign(statement, { sql });
 }
 
-export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; /** The application's Better Auth options: their tables join schema.sql. */ readonly auth?: BetterAuthOptions; readonly adminExtensions?: readonly Pick<AdminExtension,"id"|"contributes">[] }): Promise<GenerateResult> {
+export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; /** Select the optional generated site/media capability and deployment tables. */ readonly site?: import("@aotter/mantle/spec").SiteDefaults; /** The application's Better Auth options: their tables join schema.sql. */ readonly auth?: BetterAuthOptions; readonly adminExtensions?: readonly Pick<AdminExtension,"id"|"contributes">[] }): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");
   const compiler = postgres ? postgresCompiler : sqliteCompiler;
   const compiled = await compilePlan(request.sources, compiler, "operational");
@@ -99,7 +99,7 @@ export async function generateFromSources(request: { readonly target: Target; re
   }
   const searchProblems = searchDiagnostics(warnings);
   refusals.push(...searchProblems);
-  const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions });
+  const result = generate({ target: request.target, site: request.site, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions });
   if (refusals.length) {
     const diagnostics = result.ok ? [] : result.diagnostics.filter(d =>
       !searchProblems.some(p => p.path === d.path) ||
@@ -108,5 +108,6 @@ export async function generateFromSources(request: { readonly target: Target; re
   }
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
-  return { ...result, files: { ...result.files, "schema.sql": ddl.join(";\n\n") + ";\n" } };
+  const { "site-schema.sql": siteSql = "", ...files } = result.files;
+  return { ...result, files: { ...files, "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql } };
 }
