@@ -3,7 +3,7 @@ import { NATIVE_NOT_NULL, notNullColumns, type RuntimePlan, type PlanSchema, typ
 import { declaredType } from "./columns.js";
 
 type Field = { schema: PlanSchema; name: string; type: string; notNull: boolean; source: object };
-type Relation = { fields: Map<string, Field>; single: boolean; unique: boolean; fixed: Set<string> };
+type Relation = { fields: Map<string, Field>; names: ReadonlySet<string>; single: boolean; unique: boolean; fixed: Set<string> };
 export type PagingProof = { types: string[]; single: boolean };
 const fieldName = (n: SqlNode) => n.ColumnRef?.fields?.at(-1)?.String?.sval;
 const scalar = (n: SqlNode): boolean => !!(n.ParamRef || n.A_Const || n.TypeCast && scalar(n.TypeCast.arg));
@@ -50,7 +50,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           const type = declaredType(schema.fields, name) ?? (name === "version" ? "integer" : "text");
           fields.set(name, { schema, name, type, notNull: NATIVE_NOT_NULL.has(name) || notNull.has(name), source });
         }
-        fact = { fields, single: false, unique: true, fixed: new Set() };
+        fact = { fields, names: new Set(fields.keys()), single: false, unique: true, fixed: new Set() };
       } else if (r) fact = ctes.get(r.relname);
       else if (sub) fact = select(sub.subquery.SelectStmt, ctes)?.relation;
       if (fact) {
@@ -71,7 +71,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       if (!r || base && !base.single && !r.single) return;
       if (!base || !r.single) base = r;
     }
-    base ??= { fields: new Map(), single: true, unique: false, fixed: new Set() };
+    base ??= { fields: new Map(), names: new Set(), single: true, unique: false, fixed: new Set() };
     const targets = new Map<string, SqlNode>((s.targetList ?? []).map((t: SqlNode) => [t.ResTarget.name ?? fieldName(t.ResTarget.val), t.ResTarget.val]));
     const resolve = (n: SqlNode, output = true): Field | undefined => {
       const fields = n?.ColumnRef?.fields;
@@ -79,8 +79,8 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
         const name = fieldName(n)!;
         if (fields.length === 2) return aliases.get(fields[0].String.sval)?.fields.get(name);
         if (output && targets.has(name)) return resolve(targets.get(name)!, false);
-        const matches = [...aliases.values()].map(r => r.fields.get(name)).filter(Boolean);
-        return matches.length === 1 ? matches[0] : undefined;
+        const matches = [...aliases.values()].filter(r => r.names.has(name));
+        return matches.length === 1 ? matches[0]!.fields.get(name) : undefined;
       }
       const f = n?.FuncCall;
       if (f && !f.over && !f.agg_filter && ["min", "max"].includes(f.funcname?.at(-1)?.String?.sval) && f.args?.length === 1 && s.groupClause?.length) return resolve(f.args[0], false);
@@ -105,7 +105,12 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
     if (sorts.length) {
       if (group.length) {
         // Full GROUP BY keys, not an id from an arbitrary row in the group, make the result unique.
-        if (!group.every(g => { const f = resolve(g); return f?.notNull && keys.some(k => same(k, f)); })) return;
+        if (!group.every(g => {
+          // GROUP BY prefers an input column over a colliding output alias; ORDER BY does the reverse.
+          const source = g.ColumnRef?.fields?.length === 1 ? [...aliases.values()].filter(r => r.names.has(fieldName(g)!)) : [];
+          const f = source.length ? source.length === 1 ? source[0]!.fields.get(fieldName(g)!) : undefined : resolve(g);
+          return f?.notNull && keys.some(k => same(k, f));
+        })) return;
       } else {
         if (!base.unique || !keys.some(k => same(k, base.fields.get("id")))) return;
         const order = keys.filter(k => k!.name !== "id") as Field[];
@@ -122,7 +127,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       }
     }
     const single = base.single || !group.length && (s.targetList ?? []).some((t: SqlNode) => aggregate(t.ResTarget.val)) || s.limitCount?.A_Const?.ival?.ival === 1 || base.unique && base.fixed.has("id");
-    return { relation: { fields, single, unique: !group.length && base.unique && !!same(fields.get("id"), base.fields.get("id")), fixed: base.fixed }, keys: keys as Field[] };
+    return { relation: { fields, names: new Set(targets.keys()), single, unique: !group.length && base.unique && !!same(fields.get("id"), base.fields.get("id")), fixed: base.fixed }, keys: keys as Field[] };
   };
   const result = select(ast.SelectStmt);
   return result && { types: result.keys.map(f => f.type), single: result.relation.single };
