@@ -70,6 +70,16 @@ spec:
  title: Fixture
  lifecycle: operational
  schema: {type: object, required: [label], properties: {label: {type: string}, place: {type: string, format: geo}}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: scalars}
+spec:
+ title: Fixture
+ lifecycle: operational
+ scope: {owner: auth.uid()}
+ indexes: [[owner, label], [owner, day], [owner, stamp]]
+ schema: {type: object, required: [owner,label,day,stamp], properties: {owner: {type: string}, label: {type: string}, day: {type: string, format: date}, stamp: {type: string, format: date-time}, document: {type: object, properties: {leaf: {type: string}}, additionalProperties: true}}}
 `;
 export const staff = { kind: "user", subject: "staff-a", role: "staff", scopes: [], credential: "session", credentialId: null, clientId: null } as const;
 const check = (ok: unknown, message: string) => {
@@ -79,6 +89,28 @@ const check = (ok: unknown, message: string) => {
 export async function exerciseEntries(fetch: (request: Request, env: object) => Promise<Response | undefined>, sql: (text: string, values?: unknown[]) => Promise<Record<string, any>[]>, queries: () => number, sqlite: boolean) {
     const response = (path: string, method = "GET", data?: unknown) => fetch(new Request("https://app.test/admin/api" + path, { method, headers: { origin: "https://app.test", "content-type": "application/json" }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) }), {});
     const json = async (path: string, method = "GET", data?: unknown) => { const r = (await response(path, method, data))!; const body = await r.json() as any; check(r.status === 200, `${method} ${path} ${r.status}: ${JSON.stringify(body)}`); return body; };
+    const scalar = { label: "safe", day: "2026-10-12", stamp: "2026-10-12T00:00:00Z" };
+    const scalarEntry = await json("/entries", "POST", { collection: "scalars", data: scalar });
+    for (const suffix of ["&sort=label&cursor=" + encodeURIComponent(JSON.stringify(["a\0b", "x"])), "&sort=label&cursor=" + encodeURIComponent(JSON.stringify(["safe", "a\0b"])), "&filter_field=label&filter_value=a%00b", "&sort=day&cursor=" + encodeURIComponent(JSON.stringify(["0000-01-01", "x"])), "&filter_field=day&filter_value=0000-01-01"]) {
+        const count = queries(), r = (await response("/entries?collection=scalars" + suffix))!;
+        check(r.status === (sqlite ? 200 : 400) && queries() - count === (sqlite ? 1 : 0), "dialect-native cursor/filter constraints");
+    }
+    {
+        const count = queries(), r = (await response("/entries/a%00b?collection=scalars"))!;
+        check(r.status === (sqlite ? 404 : 400) && queries() - count === (sqlite ? 1 : 0), "decoded entry id native constraint");
+    }
+    for (const data of [{ ...scalar, label: "a\0b" }, { ...scalar, day: "0000-01-01" }, { ...scalar, document: { leaf: "a\0b" } }, { ...scalar, document: { unknown: { deeper: "a\0b" } } }, { ...scalar, document: { ["a\0b"]: "safe" } }]) {
+        const count = queries(), r = (await response("/entries", "POST", { collection: "scalars", data }))!;
+        check(r.status === (sqlite ? 200 : 400) && (sqlite ? queries() - count >= 1 && queries() - count <= 2 : queries() === count), "dialect-native TEXT/DATE/JSON write guard");
+    }
+    const escaped = await json("/entries", "POST", { collection: "scalars", data: { ...scalar, label: "literal \\u0000", document: { leaf: "literal \\u0000", ["literal \\u0000"]: "safe" } } });
+    check(escaped.entry.data.document.leaf === "literal \\u0000", "literal backslash-u0000 is preserved");
+    if (!sqlite) {
+        for (const data of [{ label: "a\0b" }, { day: "0000-01-01" }, { document: { unknown: { deeper: "a\0b" } } }]) {
+            const count = queries(), r = (await response("/entries/" + scalarEntry.entry.id + "?collection=scalars", "PATCH", { expectedVersion: 1, data }))!;
+            check(r.status === 400 && queries() === count, "PG patch native guard before policy read");
+        }
+    }
     // Unsupported Geo validation affects selected Admin writes only; native reads and safe patches remain available.
     let geoBefore = queries();
     const geoCreate = (await response("/entries", "POST", { collection: "locations", data: { label: "Unavailable" } }))!;
