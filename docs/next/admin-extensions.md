@@ -59,6 +59,14 @@ and receive `{ request, url, env, db, caller, params, extension, path }`.
 response is 404. API responses default to `no-store`; an explicit handler cache
 header is preserved. Settings/actions stay `no-store`.
 
+Built-in JSON routes, including settings/actions, keep the 1,000,000 UTF-8 byte
+limit (about 1 MiB). A declared oversized body is refused before the DB provider
+starts. Raw extension API hooks receive the original unparsed Request; their
+body format and size limits belong to the app, so bodies over 1 MiB remain
+supported as in 0.2. Session and Origin checks still run before either route.
+The explicit raw-body route flag is separate from response cache policy and
+cannot waive a matching built-in JSON route's limit.
+
 Every API and source-module request uses Admin's current cookie-session `staff`
 gate. OAuth/API keys, anonymous callers and other roles do not gain access.
 Cookie writes retain the shared same-origin check. Handlers receive the verified

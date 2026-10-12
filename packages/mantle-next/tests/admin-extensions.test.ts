@@ -9,8 +9,27 @@ import { generateFromSources } from "../src/infrastructure/generate.js";
 import { writeGenerated } from "./apps/link.js";
 import { checkFormValue, adminExtensionRoute as coreRoute, adminExtensionsFor as corePublic, diffAdminExtensions as coreDiff, ADMIN_EXTENSION_JSON_SCHEMA as coreSchema } from "@aotter/mantle/admin";
 import { diffAdminExtensions, ADMIN_EXTENSION_JSON_SCHEMA } from "../src/kernel/admin/extension-tooling.js";
+import { admin as serveAdmin } from "../src/kernel/admin.js";
+import { extensionOptions } from "../src/kernel/admin/extensions.js";
 const origin="https://local.test",staff={kind:"user",subject:"a",role:"staff",scopes:[],credential:"session",credentialId:null,clientId:null} as const;
 const schema={type:"object" as const,properties:{constructor:{type:"integer" as const,minimum:1,minLength:20},note:{type:"string" as const,minLength:2,maxLength:4,minimum:1000},enabled:{type:"boolean" as const},choice:{type:"string" as const,oneOf:[{const:"one",title:"One"},{const:"two",title:"Two"}]}},required:["constructor","note"]};
+test("raw extension bodies belong to the app while builtin JSON limits reject before DB setup",async()=>{
+ const db=new Database(":memory:");db.exec("CREATE TABLE raw_bytes(size INTEGER)");let who:any=staff,providers=0,calls=0,original:Request|undefined;
+ const options={db:()=>{providers++;return db;},caller:()=>who},bytes=new Uint8Array(1_200_007),path="/admin/api/x/raw/api/a%20b/deep?keep=yes";
+ const ext={apiVersion:1 as const,id:"raw",title:"Raw",module:"/raw.js",contributes:{pages:[{id:"page",title:"Page",role:"staff" as const}]},handlers:{api:async(request:Request,ctx:any)=>{
+  await Promise.resolve();expect(request).toBe(original);const size=(await request.arrayBuffer()).byteLength;calls++;ctx.db.query("INSERT INTO raw_bytes VALUES (?)").run(size);
+  return Response.json({size,path:ctx.path,url:request.url,method:request.method},{status:201,statusText:"Raw accepted",headers:{"cache-control":"private, max-age=3"}});
+ }}};
+ const {handlers,...declaration}=ext,hooks=extensionOptions([{id:"raw",declaration:JSON.stringify(declaration),public:declaration,source:false,settings:[],actions:[]}],{},[ext],options);
+ const handle=serveAdmin({collections:[],views:[],operations:[],webmcp:{}},[],[],{...options,...hooks,routes:[...hooks.routes,{method:"*",path:"/operations/{name}",rawBody:true,run:async()=>{throw Error("builtin route must win");}}]});
+ const ask=(url=path,method="REPORT",requestOrigin=origin)=>{original=new Request(origin+url,{method,body:bytes,headers:{origin:requestOrigin,"content-length":String(bytes.byteLength),"content-type":"application/octet-stream"}});return handle(original,{});};
+ try{
+  const result=(await ask())!;expect(result.status).toBe(201);expect(result.statusText).toBe("Raw accepted");expect(result.headers.get("cache-control")).toBe("private, max-age=3");
+  expect(await result.json()).toEqual({size:bytes.byteLength,path:"a%20b/deep",url:origin+path,method:"REPORT"});expect(providers).toBe(1);expect(calls).toBe(1);expect(db.query("SELECT size FROM raw_bytes").all()).toEqual([{size:bytes.byteLength}]);
+  providers=0;expect((await ask("/admin/api/operations/unknown","POST"))!.status).toBe(400);expect(providers).toBe(0);expect(original!.bodyUsed).toBe(false);expect(calls).toBe(1);
+  for(const[caller,requestOrigin,status]of [[{kind:"anonymous"},origin,401],[{...staff,role:null},origin,403],[{...staff,credential:"oauth"},origin,403],[staff,"https://foreign.test",403]]as const){who=caller;expect((await ask(path,"REPORT",requestOrigin))!.status).toBe(status);expect(providers).toBe(0);expect(original!.bodyUsed).toBe(false);expect(calls).toBe(1);}
+ }finally{db.close();}
+});
 function definitions(){let reads=0,fail=false;const calls:unknown[]=[];
  const ext={apiVersion:1 as const,id:"audit",title:"Audit",source:()=>{reads++;if(fail)throw Error("never-log-loader-secret");return'export default { marker: "</script>", value: 1 };';},contributes:{pages:[{id:"page",title:"Page",role:"staff" as const}],settings:[{id:"config",title:"Config",role:"staff" as const,schema}],actions:[{id:"run",title:"Run",role:"staff" as const,target:"record/v1" as const,presentation:"run" as const,when:{schema:["notes"]}},{id:"many",title:"Many",role:"staff" as const,target:"list.selection/v1" as const,presentation:"confirm" as const},{id:"list",title:"List",role:"staff" as const,target:"list.toolbar/v1" as const,presentation:"run" as const}],fields:[{id:"input",target:"field.input/v1" as const}]},handlers:{settings:{config:{load:()=>({constructor:1,note:"ok"}),save:(caller:unknown,value:unknown,context:any)=>{calls.push(["save",caller,value]);context.db.query("INSERT INTO side_effects VALUES (?)").run("saved");return value;}}},actions:{run:{run:(caller:unknown,input:unknown)=>{calls.push(["run",caller,input]);return"done";}},many:{run:()=>"many"},list:{run:()=>"list"}},api:(_request:Request,ctx:any)=>ctx.path==="absent"?null:Response.json({path:ctx.path,caller:ctx.caller.subject},{statusText:"Extension result",headers:{"cache-control":"private, max-age=15"}})}};
  return{ext,calls,reads:()=>reads,setFail:(v:boolean)=>{fail=v}};

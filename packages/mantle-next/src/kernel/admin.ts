@@ -8,7 +8,7 @@ type Descriptor = {readonly name:string;readonly [key:string]:unknown};
 type Page = {rows:readonly Record<string,unknown>[];nextCursor?:string};
 export interface Context<Env,Database> {request:Request;url:URL;env:Env;db:Database;caller:Staff;params:Record<string,string>}
 /** Optional Admin modules add routes inside the same session/origin gate. Paths are relative to /admin/api. */
-export interface Route<Env,Database> {readonly method:string;readonly path:string;readonly preserveCacheControl?:boolean;readonly rawBody?:boolean;run(context:Context<Env,Database>):Promise<unknown>}
+export interface Route<Env,Database> {readonly method:string;readonly path:string;readonly preserveCacheControl?:boolean;/** App-owned raw Request API; JSON routes keep the boundary limit. */readonly rawBody?:boolean;run(context:Context<Env,Database>):Promise<unknown>}
 /** Request-scoped native identity facets; providers may implement only the selected methods. */
 export interface IdentityUser {id:string;email:string;name:string;role:string|null;githubLogin:string|null;emailVerified:boolean;createdAt:Date}
 export interface IdentityMethods {
