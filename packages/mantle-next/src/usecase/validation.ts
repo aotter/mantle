@@ -56,29 +56,15 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
       functions.push(`function ${fn}(value:unknown,path:string,depth:number):void {\n${lines.join("\n")}\n}`); return fn;
     };
     const validate = emit(root);
-    let code = `import { ContractError } from "@aotter/mantle-next/contracts";
-${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle-next/scalars";` : ""}
-function fail(path:string,message:string):never { throw new ContractError("INPUT_VALIDATION_FAILED",message,path); }
-${equality ? 'function equal(a:unknown,b:unknown):boolean { if(a===b) return true; if(!a||!b||typeof a!=="object"||typeof b!=="object"||Array.isArray(a)!==Array.isArray(b)) return false; const left=a as Record<string,unknown>,right=b as Record<string,unknown>,keys=Object.keys(left); return keys.length===Object.keys(right).length&&keys.every(key=>Object.hasOwn(right,key)&&equal(left[key],right[key])); }' : ""}
-${functions.join("\n")}
+    const fields = kind === "views" ? Object.entries(root.properties ?? {}).map(([key,schema])=> {
+      const type=[schema.type].flat().find(type=>type&&type!=="null");
+      return type === "boolean" || type === "integer" || type === "number" ? [key,type] : [key];
+    }) : undefined;
+    const helpers = ["fail", ...(equality ? ["equal"] : []), ...(fields ? ["query as read"] : [])];
+    const code = `import { ${helpers.join(", ")} } from "@aotter/mantle-next/validation";
+${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle-next/scalars";\n` : ""}${functions.join("\n")}
 export function validate(raw:unknown):Record<string,unknown> { ${validate}(raw,${q(base)},0); return raw as Record<string,unknown>; }
-`;
-    if (kind === "views") {
-      const fields = Object.entries(root.properties ?? {}).map(([key,schema])=> {
-        const type=[schema.type].flat().find(type=>type&&type!=="null"), path=q(base+"/"+pointer(key));
-        const value = type === "boolean" ? `boolean(raw,${path})` : type === "integer" || type === "number" ? `number(raw,${path},${type === "integer"})` : "raw";
-        return `{ const raw=params.get(${q(key)}); if(raw!==null) Object.defineProperty(input,${q(key)},{value:${value},enumerable:true}); }`;
-      });
-      code += `function number(raw:string,path:string,integer:boolean):number { const value=Number(raw); if(raw.trim()===""||!Number.isFinite(value)||integer&&!Number.isSafeInteger(value)) fail(path,"Expected a valid number."); return value; }
-${fields.some(field=>field.includes("boolean(")) ? 'function boolean(raw:string,path:string):boolean { if(raw!=="true"&&raw!=="false") fail(path,"Expected true or false."); return raw==="true"; }' : ""}
-export function query(params:URLSearchParams):{ input:Record<string,unknown>;limit?:number;cursor?:string } {
-const input:Record<string,unknown>={};
-${fields.join("\n")}
-const limit=params.get("limit"),cursor=params.get("cursor");
-return {input:validate(input),...(limit===null?{}:{limit:number(limit,${q(`${kind}/${name}/limit`)},true)}),...(cursor?{cursor}:{})};
-}
-`;
-    }
+${fields ? `export const query = (params:URLSearchParams) => read(params, validate, ${q(`${kind}/${name}`)}, ${q(fields)});\n` : ""}`;
     files[`validation/${kind}/${encodeURIComponent(name)}.ts`]=code;
   }
   return files;

@@ -20,6 +20,13 @@ handbook. Only the implementation and responsibility changes follow.
   and lifecycle Triggers; Cloud scheduling is a separate capability.
 - Retained Admin features keep their 0.2 paths; #1477 decides the retained set.
 
+Generated `rest.ts`, `mcp.ts`, `web.ts`, `paged/views/*` and `validation/*` hold
+only the app's tables: routes, tools, pages, operation bindings, compiled input
+checks and types. Request handling (matching, body and query decoding, dispatch,
+challenges, JSON-RPC, web rendering, keyset paging) lives in the package's
+`rest`, `mcp`, `web`, `paging` and `validation` kernel modules, so a runtime fix
+ships as a package update instead of a regeneration.
+
 The generated `validation/views/<name>.ts` and
 `validation/procedures/<name>.ts` export `validate(unknown)`. View validators
 also export `query(URLSearchParams)` returning `{ input, limit?, cursor? }`.
