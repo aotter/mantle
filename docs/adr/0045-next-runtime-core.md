@@ -1,6 +1,6 @@
 # ADR-0045: One runtime core for Next: dialect, driver, row rules and a generic Store
 
-**Status:** Proposed (tracking issue #1465).
+**Status:** Accepted (tracking issue #1465).
 
 **Date:** 2026-10-12
 
