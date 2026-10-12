@@ -45,12 +45,19 @@ beforeAll(async () => {
     // the typed Store: where/orderBy/set are checked against the Schema
     `const generated = bunStore(sql, ${caller});`,
     'const store = generated.collection("purchase_requests");',
+    'const integerRow = await store.findById("id");',
+    'const integer: number | string = integerRow!.requestedunits;',
+    '// @ts-expect-error declared integers must be narrowed before arithmetic',
+    'const rounded: number = integerRow!.requestedunits;',
     'const tuple = await generated.batch([store.update("id", { title: "t" }, { lock: 1 }), store.delete("id", { lock: 1 })]);',
     'const title: string | null = tuple[0].title;',
     'const deleted: void = tuple[1];',
     '// @ts-expect-error tuple order preserves the delete result',
     'const wrong: string = tuple[1];',
     `const d1 = d1Store({} as import("@cloudflare/workers-types").D1Database, ${caller});`,
+    'const d1Integer: number | string = (await d1.collection("purchase_requests").findById("id"))!.requestedunits;',
+    `const sqliteInteger: number | string = (await sqliteStore(new Database(":memory:"), ${caller}).collection("purchase_requests").findById("id"))!.requestedunits;`,
+    `const workerInteger: number | string = (await workerStore(postgres("postgres://localhost/x"), ${caller}).collection("purchase_requests").findById("id"))!.requestedunits;`,
     'const session = ({} as import("@cloudflare/workers-types").D1Database).withSession("first-unconstrained") satisfies import("@cloudflare/workers-types").D1DatabaseSession;',
     `await d1Views["purchase-totals"](session, ${caller}, {});`,
     `await d1Procedures["create-purchase-pair"](session, ${caller}, { requestNumber: "r", title: "t", amount: 1, approved: 1, sortBucket: null, requestedUnits: 1, submittedAt: new Date(), neededOn: "2026-10-11", payload: "{}" });`,
@@ -160,3 +167,16 @@ test("CLI regeneration cannot route removed operation entries to renumbered func
   expect(() => load(join(destination,"views/a.ts"))).toThrow();
   expect(() => load(join(destination,"procedures/create-a.ts"))).toThrow();
 }, 15_000);
+
+test("a direct non-integer View excludes integer wire helpers and Store metadata", async () => {
+  const atom = (kind: string, name: string, spec: object) => JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind,metadata:{name},spec});
+  const text = [atom("Schema", "labels", {title:"Labels",schema:{type:"object",properties:{label:{type:"string"}},required:["label"]}}), atom("View", "labels", {surface:"internal",sql:"SELECT id,label FROM labels ORDER BY id"})].join("\n---\n");
+  for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const) {
+    const destination = join(directory!, "no-integer-" + target);
+    await writeGenerated(destination, await generateOrThrow(target, [{sourceId:"labels.yaml",text}]), false);
+    const output = await Bun.build({entrypoints:[join(destination,"views/labels.ts")],target:"browser"});
+    expect(output.success).toBe(true);
+    const code = await output.outputs[0]!.text();
+    expect(code).not.toContain("wireInteger"); expect(code).not.toContain("9007199254740991"); expect(code).not.toContain("createStore");
+  }
+});

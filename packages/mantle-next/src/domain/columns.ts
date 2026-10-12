@@ -16,8 +16,8 @@ export function outputType(plan: RuntimePlan, view: string, key: string): string
 const scalarType = (type: string) => type === "bool" ? "boolean" : ["integer", "int4", "int8", "real", "float8"].includes(type) ? "number" : type === "json" ? "unknown" : type === "geo" ? "{lat:number;lng:number}" : "string";
 
 /**
- * The driver-native value a column of this type comes back as, `| null` unless `notNull`; declared timestamps and dates arrive as the
- * SQL's wire-form text. A column with no declared type (a computed output) is `unknown`, which already includes null. @internal
+ * The column's output, `| null` unless `notNull`; SQL preserves declared integers and formats timestamps/dates.
+ * A column with no declared type (a computed output) is `unknown`, which already includes null. @internal
  */
 export function nativeType(type: string | undefined, sqlite: boolean, notNull = false): string {
   const native = !type ? "unknown" : ["integer", "int4", "int8"].includes(type) ? "number | string" : ["date", "timestamptz"].includes(type) ? "string" : sqlite

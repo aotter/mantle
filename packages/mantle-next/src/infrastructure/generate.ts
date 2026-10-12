@@ -75,19 +75,20 @@ export async function generateFromSources(request: { readonly target: Target; re
       return ast;
     },
   });
-  if (postgres) {
+  {
     const seen = new Set<LoweredStatement>();
     for (const [kind, all] of [["views", lowered.views], ["procedures", lowered.procedures]] as const) for (const [name, modes] of Object.entries(all)) {
-      for (const statement of Object.values(modes).flat() as LoweredStatement[]) if (!seen.has(statement)) { seen.add(statement); castInputs(statement, `${kind}/${name}`, refusals);
+      for (const statement of Object.values(modes).flat() as LoweredStatement[]) if (!seen.has(statement)) { seen.add(statement); if (postgres) castInputs(statement, `${kind}/${name}`, refusals);
         if ("paged" in statement) for (const page of Object.values((statement as import("@aotter/mantle/spec").LoweredView).paged)) {
           const inputPage = { ...statement, sql:page.sql };
-          castInputs(inputPage, `${kind}/${name}`, refusals);
+          if (postgres) castInputs(inputPage, `${kind}/${name}`, refusals);
           let sql = inputPage.sql;
           for (const [i, source] of page.sources.entries()) {
             const type = "cursor" in source ? paging[name]?.types[source.cursor] : undefined;
-            if (type === "timestamptz" || type === "date") {
+            if (postgres && (type === "timestamptz" || type === "date") || !postgres && type && ["integer", "int4", "int8"].includes(type)) {
               const n = statement.binds.length + i + 1;
-              sql = sql.replace(new RegExp(`\\$${n}(?!\\d)`,"g"),cast(`$${n}`,type));
+              const placeholder = wire.param(n);
+              sql = sql.replace(new RegExp(`\\${placeholder}(?!\\d)`,"g"),wire.cast(placeholder,postgres ? type! : "integer"));
             }
           }
           Object.assign(page,{sql});

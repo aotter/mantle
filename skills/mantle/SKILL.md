@@ -160,3 +160,9 @@ To add Mantle to an application that has its own code, users and data, read
 
 Report the project path, the exact Mantle version, what you changed, the checks
 you ran with their results, and anything left for the user.
+
+Declared integer SQL outputs are `number | string` on every target (safe number,
+otherwise exact decimal string), including Store rows and version. Regenerate,
+then run `tsc --noEmit`; narrow with `typeof` or use `BigInt(value)` for arithmetic,
+and never blindly `Number()` a large integer string. Computed COUNT/AVG/CAST and
+bare boolean outputs keep their native target types; ref outputs remain app-owned.

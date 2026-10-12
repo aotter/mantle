@@ -67,3 +67,13 @@ The SDK CI runs this corpus on real PostgreSQL with both Bun.SQL and postgres.js
 MANTLE_NEXT_BUN_PG_URL=postgres://localhost/disposable \
   bun test packages/mantle-next/tests/postgres-adapter.test.ts
 ```
+
+Declared integer outputs are now safe numbers or exact large decimal strings on
+every target, via generated SQL before any driver rounding. The corpus verifies
+both signs and int64 extrema through generated Views and Store reads. Keep the
+default JSONB scalar parser: it returns the PG projection as number/string.
+Computed raw int8 and numeric outputs remain native; the same corpus verifies
+that the adapter does not round their exact strings. Manifest number fields use
+real/float8 and stay numbers; bare booleans keep SQLite/D1 0/1 versus PG boolean.
+Regenerate and typecheck consumers after switching a target; narrow integer rows
+before arithmetic or use BigInt, never blindly Number a large decimal string.

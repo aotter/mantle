@@ -25,7 +25,7 @@ export const now = (ms: number): number => ms * 1000;
 export const cutoff = (ms: number, seconds: number): number => ms * 1000 - seconds * 1_000_000;
 export const timestamp = encodeTimestamptz;
 export const date = encodeDate;
-export const cast = (placeholder: string): string => placeholder;
+export const cast = (placeholder: string, type?: string): string => type === "integer" ? `CAST(${placeholder} AS INTEGER)` : placeholder;
 export function search(table: string, fields: readonly string[], alias: string, query: string): string {
   const fts = ident(`_mantle_fts_${table}`);
   const phrase = `'"' || replace(${query}, '"', '""') || '"'`;

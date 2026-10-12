@@ -49,7 +49,7 @@ block, for every Schema repeats what the database and the generated types alread
    definition.) A test compares Store rows with Core-compiled View rows for every fixture Schema and mode.
 5. **The Store is a document-database-style driver.** One runtime (`kernel/store.ts`, with `kernel/where.ts`), one shared
    `Rules` and, per Schema, a fact of 2-60 bytes keyed by the table name: `{ s?: scope column, ttl?: [column, seconds],
-   pub?: 1, ts?: [date-time columns], d?: [date columns] }`. API: `store(db, caller).collection(name)` with `findById`,
+   pub?: 1, ts?: [date-time columns], d?: [date columns], i?: [integer columns] }`. API: `store(db, caller).collection(name)` with `findById`,
    `find`, `first`, `count`, `insert`, `update`, `delete`; `where` is a typed AND-only object; `find` pages with keyset
    cursors (percent-encoded JSON `[value, id]`, bound as parameters; a malformed one is `INPUT_VALIDATION_FAILED`).
    - **Names are storage names.** Rows, `where`, `set`, `orderBy` and cursors use the table's column names (`requestnumber`,
@@ -62,8 +62,8 @@ block, for every Schema repeats what the database and the generated types alread
      outside 1 to 500 (printed into the SQL), an `undefined` write value (a driver binds NULL), any write to a publishing Schema,
      and a write that names a system column (`id`, `version`, `created_at`, `updated_at`, `author_id`, `status`, `_rid`, compared without
      case because SQLite folds it) or the scope column.
-   - **Reads are `SELECT r.*`.** Only the date-time and date columns are replaced by the dialect's wire-form templates
-     (`wireTimestamp`/`wireDate`, the definition the generator also uses), listed after `*` under the same name: a result row
+   - **Reads are `SELECT r.*`.** Only declared integer, date-time and date columns are replaced by the dialect's wire-form templates
+     (`wireInteger`/`wireTimestamp`/`wireDate`, the definition the generator also uses), listed after `*` under the same name: a result row
      keeps the last of two same-named columns on bun:sqlite, D1, Bun.SQL and postgres.js (checked on all four). Core never
      reads back the scope column and `_rid` is storage's, so the runtime deletes those two keys from each row (a column list
      would be a per-column table). A write returns `RETURNING *` plus the same replacements.
@@ -107,3 +107,16 @@ block, for every Schema repeats what the database and the generated types alread
 - Rows of a table with a `geo` field carry its two physical columns (`*`); the row type lists `<field>_lat`/`<field>_lng`.
 - `SELECT *` order and the rule that the last of two same-named columns wins are driver behavior; the Store scenarios
   pin them on every target.
+
+## Declared integer amendment (#1526)
+
+Declared integer SELECT/RETURNING values and Store rows now use safe `number` /
+exact decimal `string` on all four targets, including system version and inherited
+translation fields. Each dialect supplies one SQL template; SQLite/D1 preserves
+unsafe int64 before the JS driver rounds it, and PG uses native JSONB scalar
+parsing. No row decoder, custom parser or extra read is introduced. Sort and cursor
+predicates keep their original native numeric expressions. The existing type
+lineage retains MIN/MAX and known integer SUM; computed COUNT/AVG/CAST, booleans
+and programmatic decimals keep their native contracts. See the current Next
+contract for safe arithmetic and the fixed package gates; historical size figures
+above are not the current release limits.
