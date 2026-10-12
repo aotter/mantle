@@ -80,7 +80,7 @@ test("mixed refused declarations are reported together", async () => {
   for (const d of result) expect(d.code).toBe("GENERATE_UNSUPPORTED");
 });
 
-for (const source of [{ kind: "http", method: "POST", path: "/api/notes" }, { kind: "mcp", surface: "staff" }] as const) {
+for (const source of [{ kind: "mcp", surface: "staff" }] as const) {
   test(`${source.kind} exposure is planned and provides an interim handler hint`, async () => {
     const result = await diagnostics([doc("Trigger", "expose", { source, target: { procedure: "read" } })]);
     expect(result).toEqual([{ code: "GENERATE_UNSUPPORTED", path: "triggers/expose", message: `${source.kind.toUpperCase()} Trigger exposure is planned; no handler is generated yet. Mount an application-owned handler until the surface is available.` }]);
@@ -105,4 +105,9 @@ console.log(JSON.stringify(await generateFromSources({ target: "bun-postgres", s
   expect(result.ok).toBe(false);
   expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/bad-cast", message: "Input $1 must appear only as CAST($1 AS jsonb). Wrap each occurrence in CAST($1 AS jsonb)." });
   expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "schemas/local/localized", message: "Localized entries are unsupported until 0.2.x. Manage locales in application-owned fields and handlers." });
+});
+
+test("HTTP Trigger exposure emits its REST handler", async () => {
+  const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"http.yaml",text:[...base,doc("Trigger","expose",{source:{kind:"http",method:"POST",path:"/api/notes"},target:{procedure:"read"}})].join("\n---\n")}]}});
+  expect(result.ok).toBe(true);if(result.ok)expect(result.files["rest.ts"]).toContain("/api/notes");
 });

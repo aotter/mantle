@@ -46,3 +46,27 @@ Cursors reuse the Store's percent-encoded JSON keyset codec. Selected View
 cursors include operation provenance; malformed, foreign and
 null-key cursors fail with `INPUT_VALIDATION_FAILED`. They are opaque navigation
 values, not credentials; authorization and row predicates run on every page.
+
+## Mounting REST
+
+`rest.ts` exports `rest({ db, caller })`, returning an async
+`(request, env) => Response | undefined`. The app supplies its native handle and
+verified Caller; requests outside `/api` fall through to the app. Public Views
+use `/api/views/<name>`; HTTP Triggers keep their declared method and path.
+Known paths with another method return 405 with an `Allow` header. All responses use
+`cache-control: private, no-store`. JSON bodies and decoded path parameters
+are validated together, with path parameters taking precedence. Bodies larger
+than 1,000,000 bytes are refused; `content-length` is checked before reading.
+A resolver exception returns a redacted 500. Cookie-origin refusals retain
+`path: "request:origin"`; REST and MCP share the kernel check.
+
+When the manifest declares ref Procedures, pass the generated `Handlers` as
+`rest({ db, caller, handlers })`; the option is type-required. Handler dispatch
+uses the generated Store, preserving the Procedure's authorization contract.
+Publishing visibility belongs to generated SQL; the REST module adds no status
+filter. The app retains ownership of authentication and its other routes.
+
+REST native acceptance is runnable with
+`MANTLE_NEXT_REST_D1=1 MANTLE_NEXT_BUN_PG_URL=<disposable-db> bun test tests/rest-native.test.ts`
+from the SDK package. D1 uses local Wrangler on port 8998; the tests clean their
+local state and PostgreSQL schema. No cloud deployment is needed.

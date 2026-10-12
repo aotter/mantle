@@ -16,14 +16,15 @@ explicitly; apply `schema.sql` directly only to a new database.
 | Typed Store collections and internal Views/Procedures | Shared Store, AND-only filters, indexed non-null keyset ordering, atomic batches; interactive transactions on SQLite/PostgreSQL. |
 | Better Auth integration and Workers builds | App owns `auth.ts` and `resolveCaller`; `mantle generate` emits native Wrangler build configuration. Keep heavy auth imports lazy. |
 | View keyset pages, generated boundary validation and HTTP error mapping | Generated `paged/views/*` and `validation/*` modules plus `wire`; see [surface deltas](surfaces.md). |
-| REST and `http` Trigger exposure; MCP and `mcp` Trigger exposure | Planned [#1471](https://github.com/aotter/mantle/issues/1471), [#1472](https://github.com/aotter/mantle/issues/1472); app mounts generated modules with `{ db, caller }`. |
+| REST and `http` Trigger exposure | Supported generated `rest.ts`; app mounts with `{ db, caller }` and required `handlers` for ref contracts. Public Views page at `/api/views/<name>`; HTTP Triggers keep method/path. |
+| MCP and `mcp` Trigger exposure | Planned [#1472](https://github.com/aotter/mantle/issues/1472); app mounts its generated module. |
 | Dynamic `web.ts`, Admin UI, web skill/example | Planned [#1473](https://github.com/aotter/mantle/issues/1473), [#1477](https://github.com/aotter/mantle/issues/1477), [#1478](https://github.com/aotter/mantle/issues/1478). |
 | Opt-in `lifecycle: publishing` | Generated status, `published_at`, staff-only transitions and published-only public reads; see [Publishing](#publishing). |
 | `ref` Procedures and typed `Handlers` | Generated `Handlers` type; pass implementations at `store(db, caller, { handlers })`; `mantle generate` lists them. See [ref Procedures](contract.md#ref-procedures). |
 | Published package and release measurements | Planned [#1479](https://github.com/aotter/mantle/issues/1479), [#1480](https://github.com/aotter/mantle/issues/1480). |
 
 Planned means unavailable until its implementation merges: generation currently
-rejects Trigger exposure rather than omit behavior; authored
+rejects MCP, schedule and lifecycle Triggers rather than omit behavior; authored
 publishing writes stay refused (use the Store and generated transitions).
 Use application-owned handlers or operational Schemas in the meantime.
 
