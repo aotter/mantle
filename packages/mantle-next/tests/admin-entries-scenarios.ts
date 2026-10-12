@@ -6,7 +6,7 @@ spec:
  title: Fixture
  lifecycle: operational
  scope: {owner: auth.uid()}
- indexes: [[owner, displayTitle]]
+ indexes: [[owner, displayTitle], [owner, score]]
  searchableFields: [displayTitle]
  ttl: {field: expiresAt, expireAfterSeconds: 0}
  uiSchema: {list: {primaryField: displayTitle, columns: [score, active, document]}}
@@ -72,8 +72,10 @@ spec:
  schema: {type: object, required: [label], properties: {label: {type: string}, place: {type: string, format: geo}}}
 `;
 export const staff = { kind: "user", subject: "staff-a", role: "staff", scopes: [], credential: "session", credentialId: null, clientId: null } as const;
-const check = (ok: unknown, message: string) => { if (!ok)
-    throw Error(message); };
+const check = (ok: unknown, message: string) => {
+    if (!ok)
+        throw Error(message);
+};
 export async function exerciseEntries(fetch: (request: Request, env: object) => Promise<Response | undefined>, sql: (text: string, values?: unknown[]) => Promise<Record<string, any>[]>, queries: () => number, sqlite: boolean) {
     const response = (path: string, method = "GET", data?: unknown) => fetch(new Request("https://app.test/admin/api" + path, { method, headers: { origin: "https://app.test", "content-type": "application/json" }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) }), {});
     const json = async (path: string, method = "GET", data?: unknown) => { const r = (await response(path, method, data))!; const body = await r.json() as any; check(r.status === 200, `${method} ${path} ${r.status}: ${JSON.stringify(body)}`); return body; };
@@ -111,6 +113,14 @@ export async function exerciseEntries(fetch: (request: Request, env: object) => 
     check(!("owner" in editor.entry.data), "scope is not exposed");
     let before = queries();
     check((await response("/entries?collection=records&search=%00"))!.status === 400 && queries() === before, "NUL refused before read");
+    before = queries();
+    await json("/entries?collection=records&sort=score&cursor=" + encodeURIComponent(JSON.stringify([sqlite ? 7 : "7", "x"])));
+    check(queries() - before === 1, "native integer cursor accepted with one SQL read");
+    for (const key of ["9".repeat(40), "9223372036854775808", "-9223372036854775809", "00", "-0", Number.MAX_SAFE_INTEGER + 1]) {
+        before = queries();
+        const cursor = encodeURIComponent(JSON.stringify([key, "x"]));
+        check((await response("/entries?collection=records&sort=score&cursor=" + cursor))!.status === 400 && queries() === before, "integer cursor range before SQL");
+    }
     for (const suffix of ["&limit=0", "&limit=501", "&sort=unknown", "&scope_field=owner", "&filter_field=__proto__&filter_value=x", "&filter_field=score&filter_value=no", "&cursor=" + encodeURIComponent(JSON.stringify([{}, id]))]) {
         before = queries();
         check((await response("/entries?collection=records" + suffix))!.status === 400 && queries() === before, "invalid query before SQL");
@@ -130,6 +140,7 @@ export async function exerciseEntries(fetch: (request: Request, env: object) => 
     check(denied!.status === 403, "cookie origin boundary");
     const changed = await json("/entries/" + id + "?collection=records", "PATCH", { expectedVersion: 1, data: { label: null } });
     check(changed.entry.version === 2 && changed.entry.data.label === null, "optional clear");
+    check((await response("/entries/" + id + "?collection=records", "PATCH", { expectedVersion: 999, data: {} }))!.status === 200, "legacy stale empty patch remains a no-op");
     check((await response("/entries/" + id + "?collection=records", "PATCH", { expectedVersion: 1, data: { displayTitle: "stale" } }))!.status === 409, "OCC conflict");
     for (const data of [{ id: "chosen" }, { owner: "other" }, { displayTitle: "x" }, { document: { extra: true } }])
         check((await response("/entries", "POST", { collection: "records", data }))!.status === 400, "native or invalid values refused");
@@ -178,12 +189,33 @@ export async function exerciseEntries(fetch: (request: Request, env: object) => 
     check((await response("/entries/" + id + "?collection=records"))!.status === 404, "delete committed");
     return { ok: true };
 }
-
 /** All direction/null/tie combinations match an independent native SQL oracle, one read per page. */
-export async function exerciseNullableOrder(table:any, sql:(text:string,values?:unknown[])=>Promise<Record<string,any>[]>, queries:()=>number, sqlite:boolean){
- for(const order of ["asc","desc"] as const)for(const nulls of ["first","last"] as const)for(const idOrder of ["asc","desc"] as const){
-  const expected=await sql(`SELECT id FROM articles WHERE owner=${sqlite?"?":"$1"} ORDER BY title ${order} NULLS ${nulls},id ${idOrder}`,[staff.subject]),ids:string[]=[];let cursor:string|undefined;
-  do{const before=queries(),page=await table.find({orderBy:"title",order,nulls,idOrder,limit:1,cursor});check(queries()-before===1,"nullable page uses one query");ids.push(...page.rows.map((row:{id:string})=>row.id));cursor=page.cursor??undefined;}while(cursor);
-  check(JSON.stringify(ids)===JSON.stringify(expected.map(row=>row.id)),"nullable keyset equals native SQL oracle");
- }
+export async function exerciseNullableOrder(table: any, sql: (text: string, values?: unknown[]) => Promise<Record<string, any>[]>, queries: () => number, sqlite: boolean) {
+    for (const order of ["asc", "desc"] as const)
+        for (const nulls of ["first", "last"] as const)
+            for (const idOrder of ["asc", "desc"] as const) {
+                const expected = await sql(`SELECT id FROM articles WHERE owner=${sqlite ? "?" : "$1"} ORDER BY title ${order} NULLS ${nulls},id ${idOrder}`, [staff.subject]), ids: string[] = [];
+                let cursor: string | undefined;
+                do {
+                    const before = queries(), page = await table.find({ orderBy: "title", order, nulls, idOrder, limit: 1, cursor });
+                    check(queries() - before === 1, "nullable page uses one query");
+                    ids.push(...page.rows.map((row: {
+                        id: string;
+                    }) => row.id));
+                    cursor = page.cursor ?? undefined;
+                } while (cursor);
+                check(JSON.stringify(ids) === JSON.stringify(expected.map(row => row.id)), "nullable keyset equals native SQL oracle");
+            }
+}
+export async function exerciseEntryRace(fetch: (request: Request, env: object) => Promise<Response | undefined>, sql: (text: string, values?: unknown[]) => Promise<Record<string, any>[]>, arm: (hook: () => Promise<unknown>) => void, sqlite: boolean) {
+    const response = async (path: string, method: string, data: unknown) => (await fetch(new Request("https://app.test/admin/api" + path, { method, headers: { origin: "https://app.test", "content-type": "application/json" }, body: JSON.stringify(data) }), {}))!;
+    const created = await response("/entries", "POST", { collection: "articles", data: { title: "Before race", slug: "race" } }), id = ((await created.json()) as any).entry.id;
+    arm(() => sql(`UPDATE articles SET status='published',version=2 WHERE id=${sqlite ? "?" : "$1"}`, [id]));
+    check((await response("/entries/" + id + "?collection=articles", "PATCH", { expectedVersion: 2, data: { title: "Unsafe" } })).status === 409, "future lock cannot bypass read draft policy");
+    check((await response("/entries", "POST", { collection: "articles", data: { title: "Duplicate", slug: "race" } })).status === 409, "native unique clash rolls back insert");
+    const rows = await sql(`SELECT title,status,version FROM articles WHERE id=${sqlite ? "?" : "$1"}`, [id]);
+    check(rows[0]!.title === "Before race" && rows[0]!.status === "published" && Number(rows[0]!.version) === 2, "published data remains untouched");
+    await sql(`UPDATE articles SET status='draft',version=3 WHERE id=${sqlite ? "?" : "$1"}`, [id]);
+    arm(() => sql(`UPDATE articles SET status='published',version=4 WHERE id=${sqlite ? "?" : "$1"}`, [id]));
+    check((await response("/entries/" + id + "?collection=articles", "PATCH", { expectedVersion: 3, data: { title: "Unsafe after lock" } })).status === 409, "atomic SQL lock rejects later publish");
 }

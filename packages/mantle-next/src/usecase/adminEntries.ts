@@ -47,7 +47,7 @@ export function emitAdminEntries({ plan, target }: GenerateInput): Record<string
         const filters = Object.keys(fields).map(name => `[${q(name)},(raw:string)=>coerce(raw,${q([props[name]?.type].flat().find(t => t && t !== "null") ?? (name === "version" ? "integer" : "string"))},${q(name)},${q(props[name]?.format ?? (["createdAt", "updatedAt"].includes(name) ? "date-time" : ""))})]`);
         const cursorCases = Object.values(sortable).map(column => {
             const native = type(column), nullable = column !== "id" && column !== "updated_at" && column !== "status" && !notNullColumns(s).has(column);
-            const scalar = native === "timestamptz" ? 'typeof value==="string"&&validTime(value)' : native === "date" ? 'typeof value==="string"&&validDate(value)' : native === "bool" ? (sqliteTarget ? 'value===0||value===1' : 'typeof value==="boolean"') : ["integer", "int4", "int8"].includes(native) ? '(typeof value==="number"&&Number.isSafeInteger(value))||(typeof value==="string"&&/^-?\\d+$/.test(value))' : ["real", "float8"].includes(native) ? 'typeof value==="number"&&Number.isFinite(value)' : 'typeof value==="string"';
+            const scalar = native === "timestamptz" ? 'typeof value==="string"&&validTime(value)' : native === "date" ? 'typeof value==="string"&&validDate(value)' : native === "bool" ? (sqliteTarget ? 'value===0||value===1' : 'typeof value==="boolean"') : ["integer", "int4", "int8"].includes(native) ? `validInteger(value,${native === "int4" ? "-2147483648n,2147483647n" : "-9223372036854775808n,9223372036854775807n"})` : ["real", "float8"].includes(native) ? 'typeof value==="number"&&Number.isFinite(value)' : 'typeof value==="string"';
             return `[${q(column)},(value:unknown)=>${nullable ? 'value===null||' : ''}(${scalar})]`;
         });
         const nullableSorts = [...new Set(Object.values(sortable).filter(column => column !== "id" && column !== "updated_at" && column !== "status" && !notNullColumns(s).has(column)))];
@@ -65,6 +65,7 @@ import {allCollections} from "./admin-descriptors.js";
 ${databaseImport(target)}
 ${parents.length ? 'import {translationLocales} from "./translations.js";' : ""}
 ${imports.join("\n")}
+const validInteger=(value:unknown,min:bigint,max:bigint)=>{if(typeof value==="number"){if(!Number.isSafeInteger(value))return false;}else if(${sqliteTarget?"true":"false"}||typeof value!=="string"||value.length>20||!/^(?:0|-?[1-9]\\d*)$/.test(value))return false;const number=BigInt(value as string|number);return number>=min&&number<=max;};
 const validTime=(value:string)=>{try{encodeTimestamptz(value);return true;}catch{return false;}};
 const validDate=(value:string)=>{try{encodeDate(value);return true;}catch{return false;}};
 const rename=(row:Record<string,unknown>,names:Record<string,string>)=>Object.fromEntries(Object.entries(row).map(([key,value])=>[Object.hasOwn(names,key)?names[key]!:key,value]));

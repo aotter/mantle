@@ -55,6 +55,12 @@ export interface EntrySchema {
 const fail = (message: string): never => invalid(message, "admin/entries");
 const missing = () => new ContractError("NOT_FOUND", "No such entry.", "admin/entries");
 const conflict = (message: string) => new ContractError("CONFLICT", message, "admin/entries");
+/** Tie the transport lock to the policy-checked row without rounding a PostgreSQL int8. */
+const lockOf = (row: Row, expected = Number(row.version)): number => {
+    if (!Number.isSafeInteger(expected) || String(expected) !== String(row.version))
+        throw conflict("The entry changed; reload it before writing.");
+    return expected;
+};
 const native = new Set(["id", "status", "version", "createdAt", "updatedAt", "authorId", "created_at", "updated_at", "author_id", "published_at", "_rid"]);
 const ms = (value: unknown) => typeof value === "number" ? value / 1000 : value == null ? null : Date.parse(String(value));
 const title = (schema: EntrySchema, row: Row) => schema.titles.map(key => row[key]).find(value => typeof value === "string" && value !== "") ?? null;
@@ -128,7 +134,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema[], storeFor: (db:
     };
     const move = (verb: "publish" | "unpublish") => async (ctx: Context<Env, DB>) => { const schema = schemaOf(ctx.url.searchParams.get("collection")); writable(schema); if (!schema.publishing)
         throw conflict("Only publishing collections have transitions."); const store = storeFor(ctx.db, ctx.caller), row = await current(store, schema, ctx.params.id!); if (verb === "publish")
-        schema.validate(Object.fromEntries(Object.entries(entry(schema, row).data).filter(([key]) => Object.hasOwn(schema.fields, key))), true); await store.procedures[schema.name + "." + verb]!({ id: ctx.params.id!, expectedVersion: row.version } as never); return editor(store, schema, await current(store, schema, ctx.params.id!)); };
+        schema.validate(Object.fromEntries(Object.entries(entry(schema, row).data).filter(([key]) => Object.hasOwn(schema.fields, key))), true); await store.procedures[schema.name + "." + verb]!({ id: ctx.params.id!, expectedVersion: lockOf(row) } as never); return editor(store, schema, await current(store, schema, ctx.params.id!)); };
     return [
         { method: "GET", path: "/entries", run: list },
         { method: "GET", path: "/entries/export", run: async (ctx) => { const schema = schemaOf(ctx.url.searchParams.get("collection")), store = storeFor(ctx.db, ctx.caller), q = query(schema, ctx.url.searchParams); return csv(schema.name, async (cursor) => { if (!q)
@@ -138,9 +144,9 @@ export function entries<Env, DB>(schemas: readonly EntrySchema[], storeFor: (db:
         { method: "PATCH", path: "/entries/{id}", run: async (ctx) => { const schema = schemaOf(ctx.url.searchParams.get("collection")); writable(schema); const store = storeFor(ctx.db, ctx.caller), row = await current(store, schema, ctx.params.id!), raw = await body(ctx.request), lock = raw.expectedVersion; if (typeof lock !== "number" || !Number.isSafeInteger(lock) || lock < 0)
                 fail("expectedVersion is required."); if (schema.publishing && row.status !== "draft")
                 throw conflict("Only drafts may be edited."); const existing = entry(schema, row).data, data = Object.fromEntries(Object.entries(dataOf(raw)).filter(([key, value]) => value !== null || existing[key] != null)); schema.validate(data, false); if (Object.keys(data).length)
-                await store.collection(schema.name).update(ctx.params.id!, schema.values(data), { lock: lock as number }); return editor(store, schema, await current(store, schema, ctx.params.id!)); } },
+                await store.collection(schema.name).update(ctx.params.id!, schema.values(data), { lock: lockOf(row, lock as number) }); return editor(store, schema, await current(store, schema, ctx.params.id!)); } },
         { method: "POST", path: "/entries/{id}/publish", run: move("publish") }, { method: "POST", path: "/entries/{id}/unpublish", run: move("unpublish") },
         { method: "DELETE", path: "/entries/{id}", run: async (ctx) => { const schema = schemaOf(ctx.url.searchParams.get("collection")); writable(schema); const store = storeFor(ctx.db, ctx.caller), row = await current(store, schema, ctx.params.id!); if (schema.publishing && row.status === "published")
-                throw conflict("Published entries must be unpublished before deletion."); await store.collection(schema.name).delete(ctx.params.id!, { lock: Number(row.version) }); return { affected: 1 }; } },
+                throw conflict("Published entries must be unpublished before deletion."); await store.collection(schema.name).delete(ctx.params.id!, { lock: lockOf(row) }); return { affected: 1 }; } },
     ];
 }
