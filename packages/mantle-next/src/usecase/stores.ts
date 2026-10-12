@@ -36,14 +36,16 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
     const required = new Set(s.schema.required ?? []), notNull = notNullColumns(s);
     const nonNull = (column: string) => NATIVE_NOT_NULL.has(column) || notNull.has(column);
     const ts = [...(s.publishing ? ["published_at"] : []), ...declared.filter(c => s.fields[c] === "timestamptz")], dates = declared.filter(c => s.fields[c] === "date");
+    const integers = declared.filter(c => ["integer", "int4", "int8"].includes(s.fields[c]!));
     const parent = s.translates && schemas[s.translates.parent.toLowerCase()];
     const inherited = parent ? Object.keys(parent.fields).filter(c => c !== parent.scope && !Object.hasOwn(s.fields,c)).flatMap(c => parent.fields[c] === "geo" ? [`${c}_lat`, `${c}_lng`] : [c]) : [];
     const inheritedType = (c:string) => parent?.fields[c] ?? "real";
     const fact: Fact = {
       ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const } : {}),
       ...(ts.length ? { ts } : {}), ...(dates.length ? { d: dates } : {}),
+      ...(integers.length ? { i: integers } : {}),
       ...(s.search?.length ? { search: s.search } : {}),
-      ...(parent ? { parent: { on: s.translates!.on.toLowerCase(), ...(parent.scope ? {scope:[parent.scope,s.scope!] as const} : {}), table: s.translates!.parent.toLowerCase(), visible: rowPolicy(s,nextMode("caller"),STAFF_ROLES,schemas).find(t=>t[1]==="parent")!, caller: rowPolicy(parent,nextMode("caller"),STAFF_ROLES,schemas), trusted: rowPolicy(parent,"trusted",STAFF_ROLES,schemas), fields: inherited, ts: inherited.filter(c=>parent.fields[c]==="timestamptz"), d: inherited.filter(c=>parent.fields[c]==="date") } } : {}),
+      ...(parent ? { parent: { on: s.translates!.on.toLowerCase(), ...(parent.scope ? {scope:[parent.scope,s.scope!] as const} : {}), table: s.translates!.parent.toLowerCase(), visible: rowPolicy(s,nextMode("caller"),STAFF_ROLES,schemas).find(t=>t[1]==="parent")!, caller: rowPolicy(parent,nextMode("caller"),STAFF_ROLES,schemas), trusted: rowPolicy(parent,"trusted",STAFF_ROLES,schemas), fields: inherited, ts: inherited.filter(c=>parent.fields[c]==="timestamptz"), d: inherited.filter(c=>parent.fields[c]==="date"), i: inherited.filter(c=>["integer","int4","int8"].includes(parent.fields[c]!)) } } : {}),
     };
     // the shared rules, with this Schema's scope and TTL put in, are Core's rules for it: or the runtime would enforce something else
     const expected = q([core(s, schemas), writePolicy(s, "delete", { lock: true }).lock]), got = q([expand(rules, fact), rules.lock]);

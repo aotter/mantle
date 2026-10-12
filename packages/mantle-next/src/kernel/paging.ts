@@ -40,7 +40,7 @@ function valid(kind: CursorKind, sqlite: boolean, key: unknown): boolean {
     case "bool": return sqlite ? key === 0 || key === 1 : typeof key === "boolean";
     case "int4": case "int": {
       const [min, max] = kind === "int4" ? [-2147483648n, 2147483647n] : [-9223372036854775808n, 9223372036854775807n];
-      return Number.isSafeInteger(key) && (kind !== "int4" || (key as number) >= -2147483648 && (key as number) <= 2147483647) || !sqlite && typeof key === "string" && /^-?\d+$/.test(key) && BigInt(key) >= min && BigInt(key) <= max;
+      return Number.isSafeInteger(key) && (kind !== "int4" || (key as number) >= -2147483648 && (key as number) <= 2147483647) || typeof key === "string" && /^-?\d+$/.test(key) && BigInt(key) >= min && BigInt(key) <= max;
     }
     case "numeric": return sqlite ? Number.isSafeInteger(key) : typeof key === "string" && /^-?\d+(?:\.\d+)?$/.test(key) && Number.isFinite(Number(key));
     case "float": return typeof key === "number" && Number.isFinite(key);

@@ -3,7 +3,7 @@ import type { RuntimePlan } from "@aotter/mantle/spec";
 
 /** A column's declared type; the two system timestamps are not declared fields. @internal */
 export const declaredType = (fields: Readonly<Record<string, string>>, column: string): string | undefined =>
-  fields[column] ?? (column === "created_at" || column === "updated_at" || column === "published_at" ? "timestamptz" : undefined);
+  fields[column] ?? (column === "version" ? "integer" : column === "created_at" || column === "updated_at" || column === "published_at" ? "timestamptz" : undefined);
 
 /** A View output's declared Mantle type, when the output is a Schema column as it is. Computed outputs have none. @internal */
 export function outputType(plan: RuntimePlan, view: string, key: string): string | undefined {
@@ -20,9 +20,9 @@ const scalarType = (type: string) => type === "bool" ? "boolean" : ["integer", "
  * SQL's wire-form text. A column with no declared type (a computed output) is `unknown`, which already includes null. @internal
  */
 export function nativeType(type: string | undefined, sqlite: boolean, notNull = false): string {
-  const native = !type ? "unknown" : ["date", "timestamptz"].includes(type) ? "string" : sqlite
+  const native = !type ? "unknown" : ["integer", "int4", "int8"].includes(type) ? "number | string" : ["date", "timestamptz"].includes(type) ? "string" : sqlite
     ? type === "bool" ? "number" : type === "json" ? "string" : scalarType(type)
-    : ["integer", "int8"].includes(type) ? "number | string" : scalarType(type);
+    : scalarType(type);
   return notNull || native === "unknown" ? native : `${native} | null`;
 }
 

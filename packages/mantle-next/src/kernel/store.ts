@@ -37,10 +37,12 @@ export interface Fact {
   /** Declared date-time and date columns (`created_at` and `updated_at` are always date-times). */
   readonly ts?: readonly string[];
   readonly d?: readonly string[];
+  /** Declared integer columns (version is always included). */
+  readonly i?: readonly string[];
   /** Declared searchable text fields; omitted collections search id only. */
   readonly search?: readonly string[];
   /** Generated parent policy and inherited read-only columns; no authored schema is interpreted. */
-  readonly parent?: { readonly on: string; readonly scope?: readonly [parent: string, child: string]; readonly visible: Term; readonly table: string; readonly caller: readonly Term[]; readonly trusted: readonly Term[]; readonly fields: readonly string[]; readonly ts: readonly string[]; readonly d: readonly string[] };
+  readonly parent?: { readonly on: string; readonly scope?: readonly [parent: string, child: string]; readonly visible: Term; readonly table: string; readonly caller: readonly Term[]; readonly trusted: readonly Term[]; readonly fields: readonly string[]; readonly ts: readonly string[]; readonly d: readonly string[]; readonly i?: readonly string[] };
 }
 export const SCOPE = "$scope", TTL = "$ttl";
 /** The columns Mantle owns: no write names them (nor the scope column), and `_rid` is never returned. */
@@ -106,7 +108,7 @@ type Tx<T extends Record<string, Table>, O> = Pick<Store<T>, "collection"> & Bou
 type Interactive<T extends Record<string, Table>, O> = { transaction<R>(fn: (tx: Tx<T, O>) => Promise<R>, options?: TransactionOptions): Promise<R> };
 
 interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; readonly from: string; readonly projection: string; byId?: string; select?: string }
-interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; returning?: string; readonly policy: (Policy | undefined)[] }
+interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; readonly i: readonly string[]; returning?: string; readonly policy: (Policy | undefined)[] }
 
 export function createStore<H, T extends Record<string, Table>, D extends Driver<H> = Driver<H>, O extends Operations<H> = {}, C extends object = never>(d: Dialect, drv: D, rules: Rules, facts: { readonly [K in keyof T]: Fact }, operations?: O): (db: H, caller: Caller, ...options: [C] extends [never] ? [] : [options: C]) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O> : {}) {
   const prepared = new Map<string, Prepared>();
@@ -114,12 +116,12 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     let p = prepared.get(name);
     if (!p) {
       const f = facts[name]!;
-      prepared.set(name, p = { name, f, scope: f.s?.toLowerCase(), x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: ["created_at", "updated_at", ...f.ts ?? []], d: f.d ?? [], policy: [] });
+      prepared.set(name, p = { name, f, scope: f.s?.toLowerCase(), x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: ["created_at", "updated_at", ...f.ts ?? []], d: f.d ?? [], i: ["version", ...f.i ?? []], policy: [] });
     }
     return p;
   };
   /** The columns whose wire form the database formats, replacing the same names `*` brings (of two same-named columns a driver keeps the last). */
-  const wires = (p: Prepared, prefix: string) => [p.ts, p.d].flatMap((columns, i) => columns.map(c => `${(i ? d.wireDate : d.wireTimestamp)(prefix + d.ident(c)).join("")} AS ${d.ident(c)}`)).join(", ");
+  const wires = (p: Prepared, prefix: string) => [p.ts, p.d, p.i].flatMap((columns, i) => columns.map(c => `${(i === 0 ? d.wireTimestamp : i === 1 ? d.wireDate : d.wireInteger)(prefix + d.ident(c)).join("")} AS ${d.ident(c)}`)).join(", ");
   const ID = d.ident("id");
   /** The row rules of one mode, numbered from 1; the SQL is rendered once per mode. */
   const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => {
@@ -131,7 +133,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     if (parent) {
       const alias = "_mantle_merge", conditions = [`${alias}.${d.ident(parent.on)} = r.${d.ident(parent.on)}`, ...(parent.scope ? [`${alias}.${d.ident(parent.scope[0])} = r.${d.ident(parent.scope[1])}`] : []), ...(trusted ? parent.trusted : parent.caller).map(t => renderTerm(d, t, alias + ".", param))];
       from += ` LEFT JOIN ${d.ident(parent.table)} ${alias} ON ${alias}.${ID} = (SELECT ${alias}.${ID} FROM ${d.ident(parent.table)} ${alias} WHERE ${conditions.join(" AND ")} ORDER BY ${alias}.${d.ident("created_at")} DESC, ${alias}.${ID} DESC LIMIT 1)`;
-      projection = parent.fields.map(c => `${(parent.ts.includes(c) ? d.wireTimestamp(alias + "." + d.ident(c)).join("") : parent.d.includes(c) ? d.wireDate(alias + "." + d.ident(c)).join("") : alias + "." + d.ident(c))} AS ${d.ident(c)}`).join(", ");
+      projection = parent.fields.map(c => `${(parent.ts.includes(c) ? d.wireTimestamp(alias + "." + d.ident(c)).join("") : parent.d.includes(c) ? d.wireDate(alias + "." + d.ident(c)).join("") : parent.i?.includes(c) ? d.wireInteger(alias + "." + d.ident(c)).join("") : alias + "." + d.ident(c))} AS ${d.ident(c)}`).join(", ");
     }
     return p.policy[+trusted] = { sql, recipes, from, projection };
   };

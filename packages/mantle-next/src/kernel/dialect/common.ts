@@ -23,6 +23,8 @@ export interface Dialect {
   /** A declared date-time / date in its wire form (ISO UTC with six digits, `YYYY-MM-DD`): text parts interleaved with the operand. */
   wireTimestamp<T>(v: T): (string | T)[];
   wireDate<T>(v: T): (string | T)[];
+  /** Declared integers: safe values are numbers; larger values are exact decimal strings. */
+  wireInteger<T>(v: T): (string | T)[];
   /** Bind values: `now()` and a TTL cutoff from epoch milliseconds, declared ISO inputs, and the typed Store inputs. */
   now(ms: number): unknown;
   cutoff(ms: number, seconds: number): unknown;
