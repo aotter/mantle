@@ -29,6 +29,7 @@
     "./publishing": "./dist/kernel/publishing.js",
     "./rest": "./dist/kernel/rest.js",
     "./mcp": "./dist/kernel/mcp.js",
+    "./mcp-apps": "./dist/kernel/mcp-apps.js",
     "./web": "./dist/kernel/web.js",
     "./validation": "./dist/kernel/validation.js",
     "./site": "./dist/kernel/site.js",

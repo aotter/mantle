@@ -163,3 +163,35 @@ The staff allowlist is `owner`, `editor`, `contributor`. MCP bodies are limited
 to 1 MiB (1,048,576 bytes). Resource metadata challenges use the origin of
 `request.url`; behind a proxy, the app must pass a Request with its public
 origin so the audience and metadata URL point to the client-visible service.
+
+### MCP Apps
+
+When a manifest exposes a View, generation also writes `mcp-app.ts`. Its
+`planApp({ surface, html, uri?, title? })` embeds the generated catalogue in
+reusable HTML; pass `mantleAppHtml` from `@aotter/mantle-ui/mcp-app` to retain
+Admin's labels, row actions, conflict handling and en/zh-TW/zh-CN interaction UI.
+It does not embed caller data or load the UI in the Worker startup bundle:
+
+```ts
+import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";
+import { planApp } from "./generated/mcp-app.js";
+import { mcp } from "./generated/mcp.js";
+const handler = mcp({ db, caller, apps: {
+  staff: { resources: [planApp({ surface: "staff", html: mantleAppHtml })] },
+} });
+```
+
+Resources are bound separately to public and staff MCP surfaces; public requests
+never receive staff resources. Custom resources accept a `ui://` URI, `html`
+(string or async loader), `renders` tool names, optional `appOnly` View names,
+CSP, permissions and `prefersBorder`. Binding errors fail when constructing the
+handler; a write cannot be an app-only tool. Visibility hides tools from clients
+without Apps support, and never bypasses the original caller or SQL policies.
+
+Capability detection follows 0.2: read `initialize.params.capabilities` or
+`params._meta["io.modelcontextprotocol/clientCapabilities"]`; explicit absence
+of the UI extension disables resources and app-only tools. Later stateless calls
+without capabilities remain `unknown` and retain resources. Supported tools
+advertise `_meta.ui.resourceUri` and `ui/resourceUri`; model-visible render tools
+also advertise `openai/outputTemplate`. Results carry
+`_meta["net.aotter.mantle/tool"]` so the App identifies the View it renders.

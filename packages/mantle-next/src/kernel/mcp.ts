@@ -1,9 +1,11 @@
 /** MCP request handling for a generated tool table; the official SDK loads on the first MCP request. */
 import { ContractError, checkOrigin, surfaceCaller, surfaceError, surfaceFailure, wire, type Caller } from "./contracts.js";
 import { convert, invalid, type Conversions } from "./surface.js";
+import { linkApps, clientUiSupport, appMeta, appHtml, RESOURCE_MIME_TYPE, type McpApps } from "./mcp-apps.js";
 
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> {
+  apps?: Readonly<Partial<Record<"public" | "staff", McpApps>>>;
   db: (env: Env) => Database;
   caller: (request: Request, env: Env) => Caller | Promise<Caller>;
 }
@@ -46,6 +48,10 @@ const union = (scopes: readonly string[], extra: readonly string[]) => [...new S
 
 /** The handler for `/mcp` (public tools) and `/mcp/staff` (tools for `staff` roles); other paths are undefined. */
 export function mcp<Env, Database, Handlers = never>(tools: readonly Tool<Database, Handlers>[], staff: readonly string[], options: Options<Env, Database> & { handlers?: Handlers }): (request: Request, env: Env) => Promise<Response | undefined> {
+  const apps = Object.fromEntries((["public", "staff"] as const).map(surface => {
+    const selected = tools.filter(tool => tool.surface === surface);
+    return [surface, linkApps(options.apps?.[surface], new Set(selected.map(t => t.name)), new Set(selected.filter(t => t.page).map(t => t.name)))];
+  }));
   return async (request, env) => {
     const url = new URL(request.url), path = url.pathname.replace(/\/+$/, ""), surface = path === "/mcp" ? "public" : path === "/mcp/staff" ? "staff" : undefined;
     if (!surface) return;
@@ -72,15 +78,26 @@ export function mcp<Env, Database, Handlers = never>(tools: readonly Tool<Databa
         if (caller.kind === "user" && caller.credential === "oauth" && scopes.some(scope => !caller.scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs additional scopes.", "mcp"), union(caller.scopes, scopes));
       }
     }
+    const linked = apps[surface]!, withApps = clientUiSupport(parsedBody) !== "unsupported" && linked.resources.length > 0;
+    const visible = selected.filter(tool => !(linked.appOnly.has(tool.name) && !withApps));
     const handler = createMcpHandler(() => {
       const server = new McpServer({ name: "aotter.mantle", version: "0.2.0" }, { capabilities: { tools: { listChanged: false } } });
-      for (const tool of selected) server.registerTool(tool.name, { description: tool.description, inputSchema: fromJsonSchema((tool.page ? paging(tool.inputSchema as object) : tool.inputSchema) as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } }) }, async (raw: unknown) => {
+      if (withApps) for (const resource of linked.resources) {
+        const meta = appMeta(resource);
+        server.registerResource(resource.name, resource.uri, { mimeType: RESOURCE_MIME_TYPE, ...(resource.title ? { title: resource.title } : {}), ...(resource.description ? { description: resource.description } : {}), ...(meta ? { _meta: meta } : {}) }, async () => ({ contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: await appHtml(resource), ...(meta ? { _meta: meta } : {}) }] }));
+      }
+      for (const tool of visible) {
+        const uri = withApps ? linked.appOnly.get(tool.name) ?? linked.rendersIn.get(tool.name) : undefined;
+        const appOnly = linked.appOnly.has(tool.name);
+        const meta = uri ? { ui: { resourceUri: uri, ...(appOnly ? { visibility: ["app"] } : {}) }, "ui/resourceUri": uri, ...(appOnly ? {} : { "openai/outputTemplate": uri }) } : undefined;
+        server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), description: tool.description, inputSchema: fromJsonSchema((tool.page ? paging(tool.inputSchema as object) : tool.inputSchema) as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } }) }, async (raw: unknown) => {
         try {
           if (tool.run) checkOrigin(request, caller);
           const data = await call(tool, raw as Record<string, unknown>, options.db(env), caller, options.handlers as Handlers);
-          return { content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
-        } catch (error) { return { isError: true, content: [{ type: "text" as const, text: JSON.stringify({ diagnostics: [surfaceError(error).error] }) }] }; }
+          return { ...(withApps && linked.rendersIn.has(tool.name) ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
+        } catch (error) { return { ...(withApps && linked.rendersIn.has(tool.name) ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), isError: true, content: [{ type: "text" as const, text: JSON.stringify({ diagnostics: [surfaceError(error).error] }) }] }; }
       });
+      }
       return server;
     }, { legacy: "stateless", maxRequestBodySize: 1024 * 1024 });
     return handler.fetch(request, { parsedBody });
