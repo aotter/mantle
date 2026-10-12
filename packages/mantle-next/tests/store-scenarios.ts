@@ -358,7 +358,11 @@ async function verifyTransactions(env: StoreEnv, ok: () => void) {
   if (!env.sqlite) {
     assert.equal(env.beginOptions.at(-1), "isolation level serializable");
     await store.transaction(async (tx: any) => { await tx.collection("session_notes").count(); }, { isolation: "read committed" });
-    assert.equal(env.beginOptions.at(-1), "isolation level read committed"); ok();
+    assert.equal(env.beginOptions.at(-1), "isolation level read committed");
+    // the level is printed into BEGIN: anything else is refused before any SQL
+    const before = env.beginOptions.length;
+    await assert.rejects(store.transaction(async () => {}, { isolation: "serializable; DROP TABLE session_notes" as never }), (e: any) => e?.code === "INPUT_VALIDATION_FAILED");
+    assert.equal(env.beginOptions.length, before); ok();
   } else {
     const order: string[] = [];
     let release!: () => void, entered!: () => void;

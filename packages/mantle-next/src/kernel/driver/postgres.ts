@@ -4,6 +4,7 @@ import type { TransactionOptions } from "../store.js";
 import { conflict, ContractError, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
 
 const transactions = new WeakSet<Postgres>();
+const ISOLATION: readonly string[] = ["serializable", "repeatable read", "read committed", "read uncommitted"];
 
 export const read = (db: Unsafe, sql: string, binds: unknown[]): PromiseLike<PostgresResult> => db.unsafe(sql, binds);
 export async function run(db: Unsafe, sql: string, binds: unknown[]): Promise<{ rows: any[]; changes: number }> {
@@ -51,7 +52,10 @@ export async function transaction<T>(db: Postgres, fn: (tx: Postgres) => Promise
   if (transactions.has(db)) throw new Error("Nested transactions are not supported.");
   let committing = false;
   try {
-    return await db.begin(`isolation level ${options.isolation ?? "serializable"}`, async handle => {
+    // printed into BEGIN, so only PostgreSQL's own four levels: a handler may pass request input here
+    const level = options.isolation ?? "serializable";
+    if (!ISOLATION.includes(level)) throw new ContractError("INPUT_VALIDATION_FAILED", `isolation '${level}' is not a PostgreSQL isolation level`, path);
+    return await db.begin(`isolation level ${level}`, async handle => {
       let active = true;
       const tx: Postgres = { unsafe: (sql, values) => {
         if (!active) throw new Error("Transaction has ended.");
