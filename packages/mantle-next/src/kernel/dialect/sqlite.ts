@@ -15,4 +15,5 @@ export const cutoff = (ms: number, seconds: number): number => ms * 1000 - secon
 export const timestamp = encodeTimestamptz;
 export const date = encodeDate;
 export const cast = (placeholder: string): string => placeholder;
-export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, wireTimestamp, wireDate, now, cutoff, timestamp, date, cast };
+export const values = { now, cutoff, timestamp, date };
+export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, wireTimestamp, wireDate, ...values, cast };

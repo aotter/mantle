@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import ts from "typescript";
+import { build } from "esbuild";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -111,22 +112,22 @@ test("four generated consumers typecheck against official native driver types", 
   expect(diagnostics.map(d => `${d.file?.fileName}:${d.start} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`).join("\n")).toBe("");
 }, 15_000);
 
-for (const [index, target] of targets.entries()) test(`${target} consumer browser bundle contains no old runtime or compiler`, async () => {
-  const bundle = await Bun.build({ entrypoints: [files[index]!], target: "browser", sourcemap: "external" });
-  expect(bundle.success).toBe(true);
-  const map = bundle.outputs.find(output => output.path.endsWith(".map"));
+for (const [index, target] of targets.entries()) test(`${target} consumer bundle contains no old runtime or compiler`, async () => {
+  const bundle = await build({ entryPoints: [files[index]!], bundle: true, platform: "neutral", format: "esm", external: ["node:*"], write: false, outdir: directory, sourcemap: "external" });
+  expect(bundle.outputFiles!.length).toBeGreaterThan(0);
+  const map = bundle.outputFiles!.find(output => output.path.endsWith(".map"));
   expect(map).toBeDefined();
-  const sources = (await map!.json()).sources as string[];
+  const sources = JSON.parse(map!.text).sources as string[];
   expect(sources.length).toBeGreaterThan(0);
   expect(sources.some(source => /(?:^|\/)mantle\/(?:src|dist)\//.test(source) || /@aotter\/mantle(?:\/|$)/.test(source))).toBe(false);
-  const code = await bundle.outputs.find(output => !output.path.endsWith(".map"))!.text();
+  const code = bundle.outputFiles!.find(output => !output.path.endsWith(".map"))!.text;
   expect(code).not.toMatch(/RuntimePlan|compilePlan|runView|runProcedure|compileCached|StoreExecutor/);
 });
 
 for (const [index, target] of targets.entries()) test(`${target} direct View entry excludes unrelated operations`, async () => {
-  const bundle = await Bun.build({ entrypoints: [selectedFiles[index * 2]!], target: "browser", minify: true });
-  expect(bundle.success).toBe(true);
-  const code = await bundle.outputs[0]!.text();
+  const bundle = await build({ entryPoints: [selectedFiles[index * 2]!], bundle: true, platform: "neutral", format: "esm", external: ["node:*"], write: false, minify: true });
+  expect(bundle.outputFiles!.length).toBeGreaterThan(0);
+  const code = bundle.outputFiles![0]!.text;
   expect(code).toContain("requestCount");
   expect(code).not.toContain("purchase-calendar");
   expect(code).not.toContain("create-purchase");
@@ -143,10 +144,16 @@ test("CLI regeneration cannot route removed operation entries to renumbered func
   const cli = fileURLToPath(new URL("../src/infrastructure/cli.ts", import.meta.url));
   await author(["a", "b"]);
   execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {cwd:directory,stdio:"pipe"});
+  await writeFile(join(destination, "views/custom.ts"), 'export default "application-owned";');
+  await writeFile(join(destination, "views/old.ts"), 'import { view_old as operation } from "../generated.js";\nexport default operation;\n');
   await author(["b"]);
   execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {cwd:directory,stdio:"pipe"});
-  const retained = await Bun.build({entrypoints:[join(destination,"views/b.ts"),join(destination,"procedures/create-b.ts")],target:"browser"});
-  expect(retained.success).toBe(true);
+  expect(existsSync(join(destination, "views/a.ts"))).toBe(false);
+  expect(existsSync(join(destination, "views/old.ts"))).toBe(false);
+  expect(existsSync(join(destination, "procedures/create-a.ts"))).toBe(false);
+  expect(await readFile(join(destination, "views/custom.ts"), "utf8")).toBe('export default "application-owned";');
+  const retained = await build({entryPoints:[join(destination,"views/b.ts"),join(destination,"procedures/create-b.ts")],bundle:true,platform:"neutral",format:"esm",external:["node:*"],write:false,outdir:destination});
+  expect(retained.outputFiles).toHaveLength(2);
   const load = (file: string) => execFileSync(process.execPath, ["-e", `await import(${JSON.stringify(pathToFileURL(file).href)})`], {stdio:"pipe"});
   load(join(destination,"views/b.ts"));
   load(join(destination,"procedures/create-b.ts"));

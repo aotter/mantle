@@ -3,11 +3,22 @@ import { relative, resolve, sep } from "node:path";
 import { build, type Metafile } from "esbuild";
 
 /** Only static imports run at startup; dynamic imports remain separate uploaded modules. */
-export function guardStartup(metafile: Metafile, entry: string): void {
+export function startupGraph(metafile: Metafile, entry: string): string[] {
   const visited = new Set<string>();
   const visit = (name: string) => {
     if (visited.has(name)) return;
     visited.add(name);
+    const output = metafile.outputs[name]!;
+    for (const imported of output.imports) {
+      if (!imported.external && imported.kind !== "dynamic-import") visit(imported.path);
+    }
+  };
+  for (const [name, output] of Object.entries(metafile.outputs)) if (output.entryPoint && resolve(output.entryPoint) === resolve(entry)) visit(name);
+  return [...visited];
+}
+
+export function guardStartup(metafile: Metafile, entry: string): void {
+  for (const name of startupGraph(metafile, entry)) {
     const output = metafile.outputs[name]!;
     for (const input of Object.keys(output.inputs)) {
       // shortcut: vendored auth outside node_modules is not recognized; use package metadata if vendoring is supported.
@@ -15,11 +26,7 @@ export function guardStartup(metafile: Metafile, entry: string): void {
         throw new Error(`Startup module ${name} contains ${input}. Load it through authLoader(() => import(...)) to keep Better Auth out of startup.`);
       }
     }
-    for (const imported of output.imports) {
-      if (!imported.external && imported.kind !== "dynamic-import") visit(imported.path);
-    }
-  };
-  for (const [name, output] of Object.entries(metafile.outputs)) if (output.entryPoint && resolve(output.entryPoint) === resolve(entry)) visit(name);
+  }
 }
 
 export async function bundle(entry: string, outdir: string): Promise<Metafile> {

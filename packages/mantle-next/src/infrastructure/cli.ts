@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, rm, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -33,6 +33,16 @@ try {
     for (const [name, source] of Object.entries(result.files)) {
       await mkdir(dirname(resolve(destination, name)), { recursive: true });
       await writeFile(resolve(destination, name), source);
+    }
+    // Remove only obsolete generated operations; application-owned files are left alone.
+    for (const kind of ["views", "procedures"]) {
+      const folder = resolve(destination, kind);
+      if (!existsSync(folder)) continue;
+      for (const name of await readdir(folder)) {
+        if (!name.endsWith(".ts") || Object.hasOwn(result.files, `${kind}/${name}`)) continue;
+        const file = resolve(folder, name), text = await readFile(file, "utf8");
+        if (text.startsWith("// Generated native operation.") || /^import \{ (?:view|procedure)_[A-Za-z0-9$]+ as operation \} from "\.\.\/generated\.js";\nexport default operation;/.test(text)) await rm(file);
+      }
     }
     if (target.startsWith("cloudflare-")) {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";

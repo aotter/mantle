@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
+import { bundle, startupGraph } from "../src/infrastructure/bundle.js";
 import { generateOrThrow, loadFixtureSources, writeGenerated } from "../tests/apps/link.js";
 
 const base = resolve(import.meta.dir, "..");
@@ -14,6 +15,28 @@ try {
   for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const) {
     const app = resolve(directory, target);
     await writeGenerated(app, await generateOrThrow(target, sources), false); // the package (dist), as a deployment resolves it
+    if (target === "cloudflare-d1") {
+      for (const [name, source] of [
+        ["collection", 'export { store } from "./generated.js";'],
+        ["direct-op", 'export { default } from "./views/purchase-list.js";'],
+      ]) {
+        const entry = resolve(app, name + ".ts"), outdir = resolve(app, name + "-bundle");
+        await writeFile(entry, source!);
+        const meta = await bundle(entry, outdir), graph = startupGraph(meta, entry);
+        assert.ok(graph.length > 0, "startup graph must include the entry");
+        const code = (await Promise.all(graph.map(file => readFile(resolve(base, file), "utf8")))).join("\n");
+        const bytes = graph.reduce((total, file) => total + meta.outputs[file]!.bytes, 0);
+        if (name === "collection") {
+          assert.ok(!/INSERT INTO purchase_requests|requestCount|submittedDay/.test(code), "operation SQL entered collection startup");
+          assert.ok(!graph.some(file => Object.keys(meta.outputs[file]!.inputs).some(input => /\/(?:views|procedures)\//.test(input))), "operation module entered collection startup");
+          assert.ok(Object.values(meta.outputs).some(output => Object.keys(output.inputs).some(input => input.endsWith("procedures/create-purchase.ts"))), "lazy operations must still be uploaded");
+        } else {
+          assert.ok(code.includes("FROM purchase_requests"), "direct operation SQL must be present");
+          assert.ok(bytes < 4 * 1024, `direct-op startup exceeds 4 KiB: ${bytes}`);
+        }
+        console.log(JSON.stringify({ target, entry: name, startupBytes: bytes }));
+      }
+    }
     const postgres = target === "cloudflare-postgres";
     // No test oracle/seed/benchmark code in the deployment bundle. Caller is a
     // fixed fixture identity, not an example of production credential handling.

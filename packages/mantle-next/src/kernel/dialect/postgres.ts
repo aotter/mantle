@@ -12,4 +12,5 @@ export const cutoff = (ms: number, seconds: number): Date => new Date(ms - secon
 export const timestamp = isoTimestamptz;
 export const date = isoDate;
 export const cast = (placeholder: string, type: string): string => type === "timestamptz" || type === "date" ? `CAST(CAST(${placeholder} AS text) AS ${type})` : type === "json" ? `CAST(CAST(${placeholder} AS text) AS jsonb)` : placeholder;
-export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, wireTimestamp, wireDate, now, cutoff, timestamp, date, cast };
+export const values = { now, cutoff, timestamp, date };
+export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, wireTimestamp, wireDate, ...values, cast };

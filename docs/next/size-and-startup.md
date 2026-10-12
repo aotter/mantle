@@ -10,6 +10,12 @@ It excludes the seed, oracle and timing harness, rejects old compiler/runtime
 and Zod sources, and measures emitted JavaScript bytes and gzip bytes against
 the budgets in `size-budgets.json`. Unexpected extra deployment modules fail rather than being
 omitted from totals. The normal package test command also runs this gate.
+The same gate uses `mantle bundle` and its static startup graph for a collection-only
+entry and a direct View entry: collection startup contains no operation SQL, and
+the direct View stays below 4 KiB. Generated maps import each operation on demand;
+split chunks still count toward uploaded bytes. Wrangler's one-module dry run
+continues to check the full deployment budget.
+
 `check:package` enforces the published file allowlist and the size ceilings in
 `scripts/check-package.ts`.
 
