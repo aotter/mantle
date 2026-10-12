@@ -218,6 +218,43 @@ refs. OCC `CONFLICT` remains unchanged; the console's write controller re-reads
 the entry before explaining it. Selected Admin modules add relative API routes
 through `routes`; they share the same caller, session and origin gate.
 
+## Design preview
+
+Generated `admin-design.ts` exports `adminDesign({ name, origin })`, a Fetch
+handler over the existing static `admin-descriptors.ts` console snapshot. It
+preserves the 0.2 design-only wire: GET `/admin/api/me` returns null role/login/image,
+`/site` returns the draft brand with empty icons/locales/capabilities, `/developer-console`
+returns the snapshot, and `/webmcp` returns empty tools/routes. Every other path,
+non-GET method or different request URL origin returns 403 `DESIGN_ONLY`. All
+responses use `no-store`. A session cookie or bearer header grants no staff role.
+No database, Caller resolver, ref handler or credential options are accepted.
+
+```ts
+import { adminDesign } from './generated/admin-design.js';
+const design = adminDesign({ name: 'My draft', origin: 'https://design.example' });
+const response = await design(request);
+```
+
+Hosts projecting an already-created draft snapshot may call
+`createAdminDesignSurface(snapshot, { name, origin })` from
+`@aotter/mantle/admin/design`. The host owns access to that draft and must pass its
+exact normalized origin. As in 0.2, this checks the request URL origin and leaves
+GET Origin headers alone; it does not add CORS access.
+
+Use the existing `adminPreviewDocument` and `readAdminPreviewRequest` from
+`@aotter/mantle-ui/admin-preview`; their implementation remains canonical in the
+UI package. `adminPreviewDocument` accepts the opt-in preview document, rewrites
+its local asset/base paths and adds the host bridge. The host must check the
+message's exact origin and iframe `source`, retain the active draft/revision
+identity, then pass its protocol envelope through `readAdminPreviewRequest`.
+That helper accepts only same-origin `/admin/api/` requests with a bounded body;
+the design handler still refuses every write. The iframe's built preview policy
+uses its immediate same-origin bridge and disables direct fetch/XHR/forms.
+Selecting a design preview does not make an authenticated Admin or live data
+sandbox. Runtime preview remains the separately authorized host's responsibility.
+Importing REST/MCP/web/bare operations never includes the design module or its
+static snapshot.
+
 ## Mounting MCP
 
 Mount the generated `mcp({ db: env => env.DB, caller })` handler in the app's

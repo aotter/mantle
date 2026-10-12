@@ -357,3 +357,12 @@ page and its boundary validation. `locale` values are ordinary strings, and
 `toCanonicalLocale` is an explicit helper rather than a Store coercion.
 
 
+
+### Design-only projection
+
+The generated `admin-design.ts` reuses build-time console descriptors and serves
+only the four GET projections documented in [surfaces.md](surfaces.md#design-preview).
+It has no database, verified Caller or operation execution path; its identity
+role is always null. Other paths/methods/origins return 403 `DESIGN_ONLY` explicitly.
+The existing UI package owns the preview document and same-origin message protocol.
+Hosts authorize the draft/revision before exposing its static snapshot.
