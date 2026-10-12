@@ -22,7 +22,7 @@ beforeAll(async () => {
     // unlinked: the consumer resolves @aotter/mantle-next/* through the package (dist), as an application does
     const generated = await generateOrThrow(target, sources);
     await writeGenerated(destination, generated, false);
-    boundaryFiles.push(...Object.keys(generated).filter(name => name.startsWith("paged/") || name.startsWith("validation/")).map(name => join(destination, name)));
+    boundaryFiles.push(...Object.keys(generated).filter(name => name.startsWith("paged/") || name.startsWith("validation/") || name === "mcp.ts").map(name => join(destination, name)));
     files.push(join(destination, "generated.ts"));
     selectedFiles.push(join(destination, "views/purchase-totals.ts"), join(destination, "procedures/create-purchase.ts"));
   }

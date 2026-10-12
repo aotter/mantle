@@ -152,6 +152,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20261008.1
         version: 5.20261008.1
+      '@modelcontextprotocol/server':
+        specifier: 2.1.0
+        version: 2.1.0
       '@types/node':
         specifier: 'catalog:'
         version: 26.1.1

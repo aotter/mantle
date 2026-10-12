@@ -1,5 +1,5 @@
 /** Compile boundary checks into each operation; no schema enters the request bundle. */
-import type { JsonSchema, RuntimePlan } from "@aotter/mantle/spec";
+import type { JsonSchema } from "@aotter/mantle/spec";
 const q = JSON.stringify;
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");
 const supported = new Set("$defs $ref $schema $id type nullable properties required additionalProperties items enum format pattern minLength maxLength minimum maximum exclusiveMinimum exclusiveMaximum multipleOf minItems maxItems title description default readOnly writeOnly examples deprecated x-mantle-ref x-mcp-hint".split(" "));
@@ -10,7 +10,7 @@ const bounds = [
 ] as const;
 const condition = (type: string): string => ({ null:"value === null", array:"Array.isArray(value)", object:'typeof value === "object" && value !== null && !Array.isArray(value)', integer:'typeof value === "number" && Number.isSafeInteger(value)', number:'typeof value === "number" && Number.isFinite(value)' })[type as "null"] ?? `typeof value === ${q(type)}`;
 
-export function emitValidation(plan: RuntimePlan, refuse: (path:string,message:string)=>void = (path,message)=>{throw Error(`${path}: ${message}`);}): Record<string,string> {
+export function emitValidation(plan: { views:Readonly<Record<string,{input?:JsonSchema}>>; procedures:Readonly<Record<string,{input?:JsonSchema}>> }, refuse: (path:string,message:string)=>void = (path,message)=>{throw Error(`${path}: ${message}`);}): Record<string,string> {
   const files: Record<string,string> = {};
   for (const [kind, operations] of [["views",plan.views],["procedures",plan.procedures]] as const) for (const [name,operation] of Object.entries(operations)) {
     const root:JsonSchema = operation.input ?? {type:"object",additionalProperties:false};

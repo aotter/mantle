@@ -22,8 +22,8 @@ export function guardStartup(metafile: Metafile, entry: string): void {
     const output = metafile.outputs[name]!;
     for (const input of Object.keys(output.inputs)) {
       // shortcut: vendored auth outside node_modules is not recognized; use package metadata if vendoring is supported.
-      if (/(?:^|\/)node_modules\/(?:better-auth(?:\/|$)|@better-auth\/)/.test(input.replaceAll("\\", "/"))) {
-        throw new Error(`Startup module ${name} contains ${input}. Load it through authLoader(() => import(...)) to keep Better Auth out of startup.`);
+      if (/(?:^|\/)node_modules\/(?:better-auth(?:\/|$)|@better-auth\/|@modelcontextprotocol\/)/.test(input.replaceAll("\\", "/"))) {
+        throw new Error(`Startup module ${name} contains ${input}. ${input.includes("@modelcontextprotocol/") ? "Load MCP through a request-time import(...)." : "Load it through authLoader(() => import(...)) to keep Better Auth out of startup."}`);
       }
     }
   }
