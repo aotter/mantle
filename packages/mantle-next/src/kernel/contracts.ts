@@ -50,7 +50,7 @@ export function wire(error: unknown) {
 
 /** One result row. */
 export type Row = Record<string, unknown>;
-/** What every generated Procedure returns: the rows of each statement, in order. */
+/** What a generated SQL Procedure returns: the rows of each statement, in order. */
 export type Output = { readonly results: ReadonlyArray<ReadonlyArray<Row>> };
 /** Deny unless `allowed`: a user is AUTH_DENIED, anyone else UNAUTHENTICATED. */
 export function deny(caller: Caller, allowed: boolean, path: string): void {

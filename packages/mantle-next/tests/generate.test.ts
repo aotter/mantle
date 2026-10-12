@@ -86,7 +86,7 @@ describe("native generation", () => {
     const unsupported = { ...input, plan: { ...input.plan, procedures: { ...input.plan.procedures, handler: { ...input.plan.procedures["create-note"]!, handler: { ref: "app-handler" } } }, triggers: { after: { source: { kind: "lifecycle", schema: "notes", on: ["after_create"] }, procedure: "handler" } } } };
     const result = generate(unsupported as never);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.diagnostics.map(d => d.path)).toEqual(expect.arrayContaining(["triggers/after", "procedures/handler"]));
+    if (!result.ok) expect(result.diagnostics.map(d => d.path)).toEqual(expect.arrayContaining(["triggers/after"]));
     const mismatch = generate({ ...input, target: "bun-postgres" });
     expect(mismatch.ok).toBe(false);
   });

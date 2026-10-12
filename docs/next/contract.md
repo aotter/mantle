@@ -29,8 +29,8 @@ application-owned. No cloud provisioning.
 
 The first PR is a four-target generated SQL slice, not a complete 0.2 replacement.
 Its View functions return full authored-SQL row arrays, not the Store paging API.
-There is no optional Auth/Web/MCP/Admin/UI composition in this slice. Ref handlers,
-guards and Triggers are currently refused. The [supported/refused list](compatibility.md)
+There is no optional Auth/Web/MCP/Admin/UI composition in this slice. Ref Procedure
+handlers are generated application contracts; guards and Triggers are currently refused. The [supported/refused list](compatibility.md)
 separates generated scope, refused declarations and planned features; none
 of those status labels substitutes for native test evidence. Issue #1459 stays open.
 
@@ -143,6 +143,23 @@ Storage migrations are explicit deployment artifacts. No request or module impor
 may converge storage or inspect every schema. Optional Better Auth, REST, MCP,
 Admin and UI stay outside the query core. Preserve their public behavior as they
 are added; do not make a read import their entire composition.
+
+## Ref Procedures
+
+Ref Procedures generate a typed `Handlers` interface, keyed by Procedure name,
+required at the wiring point `store(db, caller, { handlers })`. SQL-only Stores
+have no handlers option. The direct `procedures` map and operation entries expose
+SQL Procedures; ref Procedures are callable through the bound Store's map.
+Generated `requires` checks precede invoking `(ctx, input)`, where
+`ctx = { caller, db, store }` uses the actual caller-bound Store. Inside an
+interactive transaction, both `ctx.db` and `ctx.store` are transaction-bound;
+the context Store types expose collections and operation maps shared by both.
+Missing, extra and incompatible implementations fail TypeScript at Store wiring;
+an object missing a key at runtime is `HANDLER_NOT_REGISTERED`. Input/output schemas remain
+typed application contracts; external input validation belongs to selected
+REST/MCP boundary modules. Those surfaces take handlers in their options when
+ref Procedures are exposed. Handler failures propagate unchanged. Custom handlers
+own their side effects and explicit transaction boundaries.
 
 ## Shared runtime core
 

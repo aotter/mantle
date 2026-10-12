@@ -40,6 +40,11 @@ planned features require their implementation first. Keep auth behind
 `authLoader(() => import(...))` to pass the startup guard. Standalone publishing
 is pending; do not install the experiment from npm or migrate Core unless asked.
 
+Use the workflow **generate → typecheck → implement listed handlers**: run
+`mantle generate`, then `tsc --noEmit`. Implement every printed `Handlers` key
+and pass the implementations at `store(db, caller, { handlers })` (and selected
+surface options). Run `tsc --noEmit` again before local acceptance.
+
 ## New project
 
 1. Create a directory outside the SDK checkout with Node 22+ and

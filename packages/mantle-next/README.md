@@ -1,34 +1,29 @@
-# Mantle (experimental)
+# Mantle (experimental replacement for Core)
 
-Compile closed v2 manifests into typed native SQL for Bun SQLite, Bun PostgreSQL,
-Cloudflare D1 and Cloudflare PostgreSQL. Generated code uses the selected native
-driver and shared kernel; it imports no compiler or execution plan. No runtime
-DDL, schema checks, connection ownership or automatic migration.
-
-Build Core and this package before generation:
+Generate typed, concrete SQL functions for Bun SQLite, Bun PostgreSQL,
+Cloudflare D1 and Cloudflare PostgreSQL. The compiler uses 0.2's closed v2
+manifest grammar and canonical SQL policy/printers at build time. The generated
+application imports portable contract primitives and official drivers only.
 
 ```sh
 pnpm --dir packages/mantle run build
 pnpm --dir packages/mantle-next run build
 ```
 
-`mantle generate <target> <directory> manifests/*.yaml` emits `schema.sql`,
-`generated.ts` and direct operation entries. Apply DDL explicitly to an empty
-database; production migrations belong to the application. Import a selected
-`views/<encoded-name>.ts` or `procedures/<encoded-name>.ts` default export to
-exclude unused operations from bundles. Functions take `(db, caller, input)`;
-Views return rows and Procedures return `{ results }`. Pass verified Callers and
-application-validated inputs. Native errors require boundary redaction. See the
-[query contract](../../docs/next/contract.md) for scalar wire forms, OCC,
-authorization, atomicity and uncertain-commit outcomes.
+Outputs include `generated.ts`, `schema.sql` and direct operation entries.
+Import a selected function from `views/<encoded-name>.ts` or
+`procedures/<encoded-name>.ts` (default export, with its types) to exclude other
+operations from the request bundle. Apply initial DDL explicitly to an
+empty development database; this artifact is not a destructive migration or a
+production convergence tool. Generation does no database I/O. Application code
+passes driver-ready parameters, a database handle (Bun.SQL `SQL` for PostgreSQL, `bun:sqlite`
+Database, D1 binding) and a verified
+Caller to `views[name](db, caller, input)` or
+`procedures[name](db, caller, input)`.
 
-Store collections use storage column names:
-`store(db, caller).collection(name)` exposes `findById`, `find`, `first`, `count`,
-`insert`, OCC `update(id, set, { lock })` and `delete(id, { lock })`. Typed AND-only
-filters and indexed keyset ordering apply scope/TTL/visibility; Store does not
-check a Procedure's `requires`. `find` returns `{ rows, cursor }`; filters and
-ordering must stay fixed across pages. Indexed ordering requires NOT NULL except
-publishing's nullable `published_at`, which uses `NULLS LAST` in both directions.
+Validate untrusted input before calling queries and redact native errors at application
+transports. The [query contract](../../docs/next/contract.md#revised-query-responsibility-decision-2026-10-11)
+defines driver-ready inputs, native results, date-time/date wire forms and failure handling.
 
 For transports, `paged/views/<name>.ts` returns `{ rows, nextCursor? }` with keyset paging and
 `validation/<kind>/<name>.ts` checks input against the declared JSON Schema subset; the
@@ -42,32 +37,43 @@ state column names, value types and the writable columns, and the Store enforces
 **not** a View's or Procedure's `requires`: authorize before calling it. Design, limits and what the runtime still refuses are in
 [ADR-0045](../../docs/adr/0045-next-runtime-core.md).
 
-Schemas default to `lifecycle: operational`. Opt-in `publishing` adds status
-(default `draft`), nullable `published_at` and its scope-aware index. Generated
-`<table>.publish`, `.unpublish` and `.archive` Procedures take
-`{ id, expectedVersion }`, gate staff/system callers, and atomically check scope,
-TTL, version and source state. Publish requires the required fields. Store writes
-cannot set status or published_at; staff can edit published entries. Public Views
-always see published rows; other Views and Store expose drafts only to staff or
-system callers. Translations and lifecycle hooks are unsupported.
+A Store-only purchase Worker retains 1,450 gzip bytes of generated operations (Bun 1.3.14, minified); the existing bound operation API stays intact.
 
-For Workers, generation configures Wrangler's native split build:
+## Publishing
+
+Schemas default to `lifecycle: operational`. Opt-in `lifecycle: publishing` adds status
+(`draft` default, `published`, `archived`), nullable `published_at` and a scope-aware
+`(published_at, id)` index; `published_at` is selectable in Views and orders Store `find`
+(`NULLS LAST`). Generated `<table>.publish`, `.unpublish` and `.archive` Procedures take
+`{ id, expectedVersion }`, gate staff/system callers and run one atomic UPDATE; a failed guard is
+`CONFLICT`. Store writes cannot set status or `published_at`. Public Views see published rows only;
+other reads expose drafts only to staff or system callers.
+
+## Ref Procedures
+
+A Procedure with a `ref` handler generates a typed `Handlers` interface. `mantle generate` lists the
+handlers to implement; pass them at `store(db, caller, { handlers })` (required by type when the
+manifest declares ref Procedures) and run `tsc --noEmit`. A handler receives `{ caller, db, store }`
+bound to the same caller and transaction; the exported `procedures` map holds SQL Procedures only.
+
+## Workers build
+
+In a workspace consumer with the experimental package linked, run generation once:
 
 ```sh
 pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts
-pnpm exec wrangler dev --local
 pnpm exec wrangler deploy
+# or: pnpm exec wrangler dev --local
 ```
 
-`--entry` defaults to `src/worker.ts`, `--outdir` to `dist`; JSONC edits preserve
-comments and unrelated configuration. Fill in Worker name/date/bindings. TOML
-prints instructions. `mantle bundle` emits split ESM and refuses Better Auth in
-the static startup graph: load application auth through `import()`.
+For `cloudflare-d1` and `cloudflare-postgres`, generation configures Wrangler to run
+`mantle bundle <entry> <outdir>` automatically. Node 22 suffices. Run from the project root;
+regenerate after manifest or auth option changes.
 
-D1 session handles satisfy the generated database type. Use one session for
-queries/Store and return `session.getBookmark()` for subsequent requests; keep
-auth on the primary binding. Bun.SQL and postgres.js both satisfy the PostgreSQL
-`unsafe`/`begin` shape without adapters. Connection/pool lifetime is application-owned.
+`--entry` defaults to `src/worker.ts`, `--outdir` to `dist`. `--wrangler` defaults to the
+existing `wrangler.jsonc`, `wrangler.json` or `wrangler.toml`, otherwise `wrangler.jsonc`.
+JSONC edits preserve comments and unrelated settings and are idempotent. A new config
+needs its `name`, `compatibility_date` and bindings filled in. TOML only prints instructions.
 
 esbuild emits minified split ESM; Wrangler uploads it with `no_bundle`,
 `find_additional_modules`, `base_dir` and an ESModule rule. `nodejs_compat` is ensured.

@@ -22,9 +22,9 @@ const core = (s: Parameters<typeof rowPolicy>[0]) => {
 const probe = { scope: SCOPE, ttl: TTL, ttlSeconds: 0, publishing: true };
 
 /** @internal */
-export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, newId: string, refuse: (path: string, message: string) => void): { tables: string; rules: string; facts: string } | undefined {
+export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, newId: string, refuse: (path: string, message: string) => void, required = false): { tables: string; rules: string; facts: string } | undefined {
   const all = Object.values(schemas).sort((a, b) => a.name < b.name ? -1 : 1);
-  if (!all.length) return undefined;
+  if (!all.length && !required) return undefined;
   const rules: Rules = { ...core(probe), newId };
   const tables: string[] = [], facts: string[] = [];
   for (const s of all) {
