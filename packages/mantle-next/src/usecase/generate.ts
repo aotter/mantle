@@ -9,6 +9,7 @@ import { emitStores } from "./stores.js";
 import { emitPaging } from "./paging.js";
 import { emitValidation } from "./validation.js";
 import { refuseDeclarations } from "./refusals.js";
+import { emitHandlers } from "./handlers.js";
 
 const q = JSON.stringify;
 const sqlite = (target: Target) => target === "bun-sqlite" || target === "cloudflare-d1";
@@ -71,9 +72,11 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
     for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
     return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : ""} }`;
   };
-  const declarations: string[] = [], views: string[] = [], procedures: string[] = [];
+  const declarations: string[] = [], views: string[] = [], procedures: string[] = [], refProcedures: string[] = [];
   const entries: Record<string, string> = {};
   const base = "@aotter/mantle-next/";
+  const refNames = emitHandlers(plan, typeOf, auth, declarations, refProcedures);
+  const hasHandlers = refNames.length > 0;
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
     const path = `views/${name}`, fn = `view${index}`;
     const modes = lowered.views[name];
@@ -99,7 +102,7 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
   }
   for (const [index, [name, procedure]] of Object.entries(plan.procedures).sort().entries()) {
     const path = `procedures/${name}`, fn = `procedure${index}`;
-    if (!("sql" in procedure.handler)) { refuse(path, "Ref Procedures are planned (#1475). Use an SQL handler until then."); continue; }
+    if (!("sql" in procedure.handler)) continue;
     const modes = lowered.procedures[name];
     if (!modes?.caller || !modes.trusted) { refuse(path, "Both caller and trusted SQL must be lowered."); continue; }
     if ([...modes.caller, ...modes.trusted].some(s => s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing writes are generated: use the Store and the `<schema>.publish` / `.unpublish` / `.archive` transitions.");
@@ -115,14 +118,20 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input`, `export type { Output } from "${base}contracts";\n`);
   }
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
-  const stores = emitStores(plan.schemas, isSqlite, newId, refuse);
+  const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
   const surfaces = { ...emitPaging(plan, lowered, target, refuse), ...emitValidation(plan, refuse) };
   if (diagnostics.length) return { ok: false, diagnostics };
-  const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [`export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`, `export const store = /* @__PURE__ */ createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof procedures }>(DIALECT.dialect, DRIVER, RULES, ${stores.facts}, { views, procedures });`] : [])].join("\n");
+  const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
+  const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
+    `export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`,
+    ...(hasHandlers ? [`const storeProcedures = { ${[...procedures, ...refProcedures].join(", ")} };`] : []),
+    `${hasHandlers ? "const makeStore" : "export const store"} = /* @__PURE__ */ createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof ${storeProcedures} }${hasHandlers ? ", { handlers: Handlers }" : ""}>(DIALECT.dialect, DRIVER, RULES, ${stores.facts}, { views, procedures: ${storeProcedures} });`,
+    ...(hasHandlers ? [`export function store<const H extends Handlers>(db: Database, caller: Caller, options: { handlers: H & Record<Exclude<keyof H, keyof Handlers>, never> }): ReturnType<typeof makeStore> { return makeStore(db, caller, options); }`] : []),
+  ] : [])].join("\n");
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
-  const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(/^  deny\(/m.test(code) ? ["deny"] : []), ...(procedures.length ? ["type Output"] : [])];
+  const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny"] : []), ...(procedures.length ? ["type Output"] : [])];
   const dbType = target === "bun-sqlite" ? `import type { Handle as Database } from "${base}driver/bun-sqlite";` : target === "cloudflare-d1" ? `import type { Handle as Database } from "${base}driver/d1";` : "";
-  return { ok: true, files: { ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
+  return { ok: true, refProcedures: refNames, files: { ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
     ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...(stores ? [`import { createStore } from "${base}store";`] : []),
     `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}binds";`,
     `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" } };

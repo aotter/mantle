@@ -97,15 +97,15 @@ export interface Store<T extends Record<string, Table>> {
   collection<K extends keyof T & string>(name: K): Collection<T[K]>;
   batch<const W extends readonly Write<unknown>[]>(writes: W): Promise<{ -readonly [K in keyof W]: Awaited<W[K]> }>;
 }
-type Operations<H> = Record<string, Record<string, (db: H, caller: Caller, input: any) => Promise<any>>>;
-type BoundOperations<O> = { [K in keyof O]: { [N in keyof O[K]]: O[K][N] extends (db: any, caller: Caller, ...args: infer A) => infer R ? (...args: A) => R : never } };
+type Operations<H> = Record<string, Record<string, (db: H, caller: Caller, input: any, context: any) => Promise<any>>>;
+type BoundOperations<O> = { [K in keyof O]: { [N in keyof O[K]]: O[K][N] extends (db: any, caller: Caller, input: infer I, ...args: any[]) => infer R ? (input: I) => R : never } };
 type Tx<T extends Record<string, Table>, O> = Pick<Store<T>, "collection"> & BoundOperations<O>;
 type Interactive<T extends Record<string, Table>, O> = { transaction<R>(fn: (tx: Tx<T, O>) => Promise<R>, options?: TransactionOptions): Promise<R> };
 
 interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; byId?: string }
 interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; select?: string; returning?: string; readonly policy: (Policy | undefined)[] }
 
-export function createStore<H, T extends Record<string, Table>, D extends Driver<H> = Driver<H>, O extends Operations<H> = {}>(d: Dialect, drv: D, rules: Rules, facts: { readonly [K in keyof T]: Fact }, operations?: O): (db: H, caller: Caller) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O> : {}) {
+export function createStore<H, T extends Record<string, Table>, D extends Driver<H> = Driver<H>, O extends Operations<H> = {}, C extends object = never>(d: Dialect, drv: D, rules: Rules, facts: { readonly [K in keyof T]: Fact }, operations?: O): (db: H, caller: Caller, ...options: [C] extends [never] ? [] : [options: C]) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O> : {}) {
   const prepared = new Map<string, Prepared>();
   const prepare = (name: string): Prepared => {
     let p = prepared.get(name);
@@ -121,9 +121,9 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
   /** The row rules of one mode, numbered from 1; the SQL is rendered once per mode. */
   const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => p.policy[+trusted] ??= { sql: terms.map((t, i) => renderTerm(d, t, "r.", d.param(i + 1))).join(" AND "), recipes: terms.map(t => t[2]) };
 
-  return ((db: H, caller: Caller) => make(db, caller)) as never;
+  return ((db: H, caller: Caller, options?: object) => make(db, caller, false, options)) as never;
 
-  function make(db: H, caller: Caller, inTransaction = false) {
+  function make(db: H, caller: Caller, inTransaction = false, options?: object) {
     type Pending = { build: () => Bound; project: (rows: Row[]) => unknown; promise?: Promise<any>; claimed?: boolean };
     const pending = new WeakMap<Write<unknown>, Pending>();
     const write = (build: Pending["build"], project: Pending["project"], path: string): Write<unknown> => {
@@ -138,14 +138,14 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       pending.set(value, state);
       return value;
     };
-    return {
+    const store = {
       collection: (name: string) => collection(db, caller, prepare(name), write),
       ...Object.fromEntries(Object.keys(operations ?? {}).map(kind => {
         const cache: Record<string, unknown> = Object.create(null);
         return [kind, new Proxy(operations![kind]!, { get: (functions, name: string) => {
           if (Object.hasOwn(cache, name)) return cache[name];
           const fn = functions[name];
-          return fn && (cache[name] = (input: any) => fn(db, caller, input));
+          return fn && (cache[name] = (input: any) => fn(db, caller, input, options && { ...options, store }));
         } })];
       })),
       ...(!inTransaction && { batch: async (writes: readonly Write<unknown>[]) => {
@@ -155,11 +155,12 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         const rows = writes.length ? await drv.procedure(db, states.map(s => s!.build()), "store/batch") : [];
         return states.map((s, i) => s!.project(rows[i]!));
       } }),
-      ...(drv.transaction && { transaction: async (fn: (tx: any) => Promise<any>, options?: TransactionOptions) => {
+      ...(drv.transaction && { transaction: async (fn: (tx: any) => Promise<any>, txOptions?: TransactionOptions) => {
         if (inTransaction) throw new Error("Nested transactions are not supported.");
-        return drv.transaction!(db, tx => fn(make(tx, caller, true)), options);
+        return drv.transaction!(db, tx => fn(make(tx, caller, true, options)), txOptions);
       } }),
     };
+    return store;
   }
 
   function collection(db: H, caller: Caller, p: Prepared, write: (build: () => Bound, project: (rows: Row[]) => unknown, path: string) => Write<unknown>) {

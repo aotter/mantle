@@ -48,6 +48,8 @@ try {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";
       configureWrangler(wrangler, values.entry!, values.outdir!, destination);
     }
+    for (const name of result.refProcedures) console.log(`Ref Procedure ${JSON.stringify(name)}: implement Handlers[${JSON.stringify(name)}].`);
+    if (result.refProcedures.length) console.log("Next: run tsc --noEmit; pass the handlers at store(db, caller, { handlers }).");
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

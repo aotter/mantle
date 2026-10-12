@@ -19,11 +19,11 @@ explicitly; apply `schema.sql` directly only to a new database.
 | REST and `http` Trigger exposure; MCP and `mcp` Trigger exposure | Planned [#1471](https://github.com/aotter/mantle/issues/1471), [#1472](https://github.com/aotter/mantle/issues/1472); app mounts generated modules with `{ db, caller }`. |
 | Dynamic `web.ts`, Admin UI, web skill/example | Planned [#1473](https://github.com/aotter/mantle/issues/1473), [#1477](https://github.com/aotter/mantle/issues/1477), [#1478](https://github.com/aotter/mantle/issues/1478). |
 | Opt-in `lifecycle: publishing` | Generated status, `published_at`, staff-only transitions and published-only public reads; see [Publishing](#publishing). |
-| `ref` Procedures and typed `Handlers` | Planned [#1475](https://github.com/aotter/mantle/issues/1475); keep side effects in custom handlers. |
+| `ref` Procedures and typed `Handlers` | Generated `Handlers` type; pass implementations at `store(db, caller, { handlers })`; `mantle generate` lists them. See [ref Procedures](contract.md#ref-procedures). |
 | Published package and release measurements | Planned [#1479](https://github.com/aotter/mantle/issues/1479), [#1480](https://github.com/aotter/mantle/issues/1480). |
 
 Planned means unavailable until its implementation merges: generation currently
-rejects Trigger exposure and ref handlers rather than omit behavior; authored
+rejects Trigger exposure rather than omit behavior; authored
 publishing writes stay refused (use the Store and generated transitions).
 Use application-owned handlers or operational Schemas in the meantime.
 

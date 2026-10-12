@@ -11,6 +11,21 @@ const cli = join(base, "dist/infrastructure/cli.js");
 const manifest = join(base, "tests/apps/purchase.yaml");
 const generate = (cwd: string, ...args: string[]) => execFileSync("node", [cli, "generate", "cloudflare-d1", "generated", manifest, ...args], { cwd, encoding: "utf8" });
 
+test("generate lists every ref Procedure's Handlers key, then prompts typecheck", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "next-cli-handlers-"));
+  try {
+    const names = ["send-email", "app.notify"];
+    const source = join(dir, "refs.yaml");
+    await writeFile(source, names.map(name => JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "Procedure", metadata: { name }, spec: { input: { type: "object" }, output: { type: "object" }, handler: { ref: "app.handler" } } })).join("\n---\n"));
+    const output = execFileSync("node", [cli, "generate", "bun-sqlite", "generated", source], { cwd: dir, encoding: "utf8" });
+    for (const name of names) expect(output).toContain(`Ref Procedure ${JSON.stringify(name)}: implement Handlers[${JSON.stringify(name)}].`);
+    expect(output.trim().endsWith("Next: run tsc --noEmit; pass the handlers at store(db, caller, { handlers }).")).toBe(true);
+    const sqlOnly = generate(dir);
+    expect(sqlOnly).not.toContain("Ref Procedure");
+    expect(sqlOnly).not.toContain("Next: run tsc");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 test("generate creates valid Wrangler config; edits preserve unrelated keys, comments and idempotence", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-cli-"));
   try {

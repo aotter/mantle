@@ -98,5 +98,5 @@ export async function generateFromSources(request: { readonly target: Target; re
   if (refusals.length) return { ok: false, diagnostics: [...refusals, ...(!result.ok ? result.diagnostics : [])] };
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
-  return { ok: true, files: { ...result.files, "schema.sql": ddl.join(";\n\n") + ";\n" } };
+  return { ...result, files: { ...result.files, "schema.sql": ddl.join(";\n\n") + ";\n" } };
 }
