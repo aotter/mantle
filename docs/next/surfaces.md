@@ -409,10 +409,11 @@ ref outputs retain their native contracts. Use the generated `rest()` / `mcp()`
 module for this client wire contract; do not duplicate JSON/boolean decoding in
 application route handlers or decode PostgreSQL JSON strings a second time.
 
-PostgreSQL declared integer columns (including a selected system `version`)
-retain 0.2's wire form: safe integers become JSON numbers; unsafe values remain
-exact text. Computed outputs and native SQL Procedure/ref results retain their
-native values. This does not promise precise unsafe int64 values on D1.
+Declared integer columns, including system `version`, use the same SQL wire form
+on every target: safe integers are numbers and unsafe values are exact decimal
+strings. Native Views, Store rows and declared SQL RETURNING values preserve this
+form before the driver can round them. Computed values and app-owned ref outputs
+retain their native contracts; no transport integer decoder is needed.
 Unexpected surface failures log only a stable wire classification.
 
 MCP locale fallback reads only own locale entries, then English, then the first
@@ -489,8 +490,8 @@ the version so a racing edit/delete cannot bypass that protection. Unpublish
 restores either a published or an archived entry to a draft, matching the existing
 Admin Archived-tab action. Translations still need a visible published parent.
 
-The selected boundary maps declared field names and JSON/boolean/integer wire
-values; the bare Store remains native. Lists page forward, accept typed paired
+The selected boundary maps declared field names and SQLite JSON/boolean wire
+values; declared integers are already preserved by the Store SQL. Lists page forward, accept typed paired
 scope/filter values and indexed sortable fields, and include translation locales
 and operational previews. Nullable publishing sorts preserve the native 0.2 NULL
 placement: SQLite ascending first/descending last; PostgreSQL the reverse. SQLite's

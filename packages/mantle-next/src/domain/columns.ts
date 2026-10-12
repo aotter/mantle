@@ -17,11 +17,10 @@ export function outputType(plan: RuntimePlan, view: string, key: string): string
 
 /** Static declared transport conversions; computed outputs retain their native values. */
 export function outputConversions(plan: RuntimePlan, view: string, target: Target): WireColumns {
-  const postgres = target.endsWith("postgres");
+  if (target.endsWith("postgres")) return [];
   return Object.keys(plan.views[view]?.columns ?? {}).flatMap<WireColumns[number]>(key => {
-    const type = outputType(plan, view, key) ?? (plan.views[view]?.columns?.[key]?.field === "version" ? "integer" : undefined);
-    return postgres ? type && ["integer", "int8", "int4"].includes(type) ? [[key, "int"] as const] : []
-      : type === "json" || type === "bool" ? [[key, type] as const] : [];
+    const type = outputType(plan, view, key);
+    return type === "json" || type === "bool" ? [[key, type] as const] : [];
   });
 }
 

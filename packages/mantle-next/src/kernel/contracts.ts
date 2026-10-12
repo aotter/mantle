@@ -103,13 +103,13 @@ export function surfaceFailure(error: unknown, challenge?: string): Response {
 }
 
 /** Selected transport outputs only: no schema interpreter, no mutation of native query rows. */
-export type WireColumns = ReadonlyArray<readonly [field: string, type: "json" | "bool" | "int"]>;
+export type WireColumns = ReadonlyArray<readonly [field: string, type: "json" | "bool"]>;
 export function wireRows(rows: readonly Record<string, unknown>[], fields: WireColumns = []): readonly Record<string, unknown>[] {
   if (!fields.length) return rows;
   return rows.map(row => {
     const result = { ...row };
     for (const [key, type] of fields) if (Object.hasOwn(row, key) && row[key] != null)
-      result[key] = type === "json" ? JSON.parse(row[key] as string) : type === "bool" ? row[key] === true || row[key] === 1 : Number.isSafeInteger(Number(row[key])) ? Number(row[key]) : row[key];
+      result[key] = type === "json" ? JSON.parse(row[key] as string) : row[key] === true || row[key] === 1;
     return result;
   });
 }

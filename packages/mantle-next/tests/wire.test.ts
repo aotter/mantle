@@ -30,14 +30,20 @@ test('selected REST/MCP wire preserves aliases, JSON primitives/nulls and boolea
  try{
   await raw.unsafe(`CREATE SCHEMA ${schema}`);await raw.unsafe(`SET search_path TO ${schema}`);await raw.unsafe(files['schema.sql']!);await raw.unsafe(seed(true));
   const db={unsafe:(sql:string,values:any[])=>{queries++;return raw.unsafe(sql,values);},begin:raw.begin.bind(raw)};const app=await mount(dir,db);await verifyWire(app.fetch,app.bare,()=>queries,false);
-  expect((await app.bare('a'))[0].quantityAlias).toBe('2');
+  expect((await app.bare('a'))[0].quantityAlias).toBe(2);
   for(const [id,value] of [['safe','9007199254740991'],['unsafe','9007199254740993'],['negative','-9007199254740993']] as const){
    await raw.unsafe(`INSERT INTO wire_records(id,version,created_at,updated_at,payload,flag,quantity) VALUES('${id}',1,now(),now(),NULL,true,${value})`);
-   const native=(await app.bare(id))[0];expect(native.quantityAlias).toBe(value);const before=queries,response=(await app.fetch(new Request('https://app.test/api/views/wire-records?id='+id)))!;expect(queries-before).toBe(1);
-   const wire=(await response.json()).rows[0];expect(wire.quantityAlias).toBe(id==='safe'?Number(value):value);expect(wire.versionAlias).toBe(1);
+   const expected=id==='safe'?Number(value):value;
+   const native=(await app.bare(id))[0];expect(native.quantityAlias).toBe(expected);const before=queries,response=(await app.fetch(new Request('https://app.test/api/views/wire-records?id='+id)))!;expect(queries-before).toBe(1);
+   const wire=(await response.json()).rows[0];expect(wire.quantityAlias).toBe(expected);expect(wire.versionAlias).toBe(1);
    const beforeMcp=queries,mcp=(await app.fetch(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'wire_records',arguments:{id}}})})))!;const body=await mcp.text(),result=JSON.parse(body.startsWith('event:')?body.split('data: ')[1]!.split('\n')[0]!:body);expect(queries-beforeMcp).toBe(1);expect(result.result.structuredContent.rows[0]).toEqual(wire);
   }
-  expect(files['rest.ts']).toContain('["quantityAlias","int"],["versionAlias","int"]');expect(files['mcp.ts']).toContain('["quantityAlias","int"],["versionAlias","int"]');
+  for(const name of ['rest.ts','mcp.ts','mcp-tools.ts']) {
+   const generated=files[name];if(generated===undefined)continue;
+   expect(generated).not.toContain('wireRows');
+   expect(generated).not.toContain('["quantityAlias","int"]');
+   expect(generated).not.toContain('["versionAlias","int"]');
+  }
  }finally{await raw.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await raw.close();await rm(dir,{recursive:true,force:true});}
 },30000);
 test('wireRows preserves native input rows, missing fields and null without generic scanning',async()=>{
