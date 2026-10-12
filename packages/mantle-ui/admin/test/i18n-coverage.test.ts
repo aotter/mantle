@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { STRINGS } from "../src/app/i18n";
+import { STRINGS, t } from "../src/app/i18n";
 import { ADMIN_LANGUAGES } from "../src/app/preferences";
 
 const REQUIRED_TRANSLATED_KEYS = new Set([
@@ -38,6 +38,13 @@ const translatedKeys = Object.keys(STRINGS.en).filter((key) =>
 );
 
 describe("Required Admin translations", () => {
+  it("describes the one OSS staff role in every retained audience translation", () => {
+    for (const {value} of ADMIN_LANGUAGES) expect(t(value, "developer.graph.audienceDescription.staff")).toContain("staff");
+    expect(t("zh-CN", "staff.role.staff")).toBe("团队人员");
+    expect(t("zh-CN", "staff.role.staff.help")).toContain("团队权限");
+    expect(t("en", "staff.page.body")).not.toContain("Only site owners");
+  });
+
   for (const { value } of ADMIN_LANGUAGES) {
     it(`has every required ${value} message`, () => {
       const messages = STRINGS[value] as Record<string, string>;

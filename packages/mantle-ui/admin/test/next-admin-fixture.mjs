@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
-const sdk = process.env.MANTLE_NEXT_ROOT!;
+const sdk = process.env.MANTLE_NEXT_ROOT;
 const require = createRequire(join(sdk, "package.json"));
 const { betterAuth } = await import(require.resolve("better-auth/minimal"));
 const { admin: adminPlugin, emailOTP } = await import(require.resolve("better-auth/plugins"));
@@ -24,7 +24,8 @@ metadata: {name: tasks}
 spec:
  title: Tasks
  lifecycle: operational
- uiSchema: {list: {primaryField: title, columns: [title]}}
+ uiSchema: {list: {primaryField: title, columns: []}}
+ uniqueIndexes: [[title]]
  searchableFields: [title]
  schema: {type: object, required: [title], properties: {title: {type: string}}}
 ---
@@ -35,10 +36,42 @@ spec:
  title: Articles
  lifecycle: publishing
  schema: {type: object, required: [title], properties: {title: {type: string}}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: add-task}
+spec:
+ requires: {auth: {all: [{ctx.staff: [staff]}]}}
+ input: {type: object, required: [title], properties: {title: {type: string}, id: {type: string}, expectedVersion: {type: integer}}, additionalProperties: false}
+ output: {type: object}
+ handler: {sql: 'INSERT INTO tasks (title) VALUES (input.title) RETURNING id'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: expose-add}
+spec:
+ source: {kind: mcp, surface: staff}
+ target: {procedure: add-task}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: uncertain-task}
+spec:
+ requires: {auth: {all: [{ctx.staff: [staff]}]}}
+ input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}
+ output: {type: object}
+ handler: {ref: app.uncertain}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: expose-uncertain}
+spec:
+ source: {kind: mcp, surface: staff}
+ target: {procedure: uncertain-task}
 `;
 const dir = await mkdtemp(join(tmpdir(), "mantle-next-ui-"));
 const db = new Database(":memory:");
-let handler: (request: Request) => Promise<Response>;
+let handler;
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: request => handler(request) });
 try {
   const ac = createAccessControl(defaultStatements);
@@ -48,7 +81,7 @@ try {
     user: { additionalFields: { githubLogin: { type: "string", required: false } } },
     plugins: [
       adminPlugin({ adminRoles: ["staff"], ac, roles: { staff: ac.newRole(defaultStatements), user: ac.newRole({ user: [], session: [] }) } }),
-      emailOTP({ sendVerificationOTP: async ({ email, otp }: { email: string; otp: string }) => { console.log(JSON.stringify({ email, otp })); } }),
+      emailOTP({ sendVerificationOTP: async ({ email, otp }) => { console.log(JSON.stringify({ email, otp })); } }),
     ],
   };
   const generated = await generateFromSources({ target: "bun-sqlite", sources: { sources: [{ sourceId: "console.yaml", text: source }] }, auth: options });
@@ -65,15 +98,20 @@ try {
   for (let i = 0; i < 105; i++) await tasks.insert({ title: "Task " + String(i).padStart(3, "0") });
   await store(db, system).collection("articles").insert({ title: "Draft article" });
   const loader = authLoader(async () => auth);
-  const caller = (request: Request) => resolveCaller(request, loader);
+  const caller = (request) => resolveCaller(request, loader);
   const signIn = authRoutes(loader, { methods: [{ kind: "email-otp" }], resolver: caller });
   const { admin } = await import(join(dir, "admin.ts"));
+  const { ContractError } = await import(join(sdk, "src/kernel/contracts.ts"));
   const assets = resolve(import.meta.dirname, "../../dist/admin");
   const consoleHandler = admin({
     db: () => db, caller,
-    assets: async (path: string) => { const file = Bun.file(join(assets, path)); return await file.exists() ? new Response(file) : null; },
-    getUser: async (id: string) => context.adapter.findOne({ model: "user", where: [{ field: "id", value: id }] }),
-    identity: { directory: (c: any) => d1Identity(d1Shim(db), auth, c.caller, c.request.headers) },
+    assets: async (path) => { const file = Bun.file(join(assets, path)); return await file.exists() ? new Response(file) : null; },
+    getUser: async (id) => context.adapter.findOne({ model: "user", where: [{ field: "id", value: id }] }),
+    identity: { directory: (c) => d1Identity(d1Shim(db), auth, c.caller, c.request.headers) },
+    handlers: { "uncertain-task": async (c, input) => {
+      await c.store.collection("tasks").insert(input);
+      throw new ContractError("OUTCOME_UNKNOWN", "Fixture failure after a committed native write.");
+    } },
   });
   handler = async request => await signIn(request) ?? await consoleHandler(request, {}) ?? new Response("not found", { status: 404 });
   console.log(JSON.stringify({ ready: server.url.origin }));

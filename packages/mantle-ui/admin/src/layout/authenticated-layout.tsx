@@ -218,8 +218,8 @@ export function buildNavGroups(
   extensions?: SiteInfo["extensions"],
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter(isPrimaryNavCollection);
-  const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "operational");
-  const operationalCollections = primaryCollections.filter((c) => c.lifecycle === "operational");
+  const contentCollections = primaryCollections.filter((c) => c.lifecycle === "publishing");
+  const operationalCollections = primaryCollections.filter((c) => c.lifecycle !== "publishing");
   const homeGroup: NavGroupData = {
     items: [
       {
@@ -336,7 +336,7 @@ function collectionNavItem(c: Collection, language: AdminLanguage, canonical: st
     marker: localized ? Globe : undefined,
     markerLabel: localized ? t(language, "nav.localizedContent") : undefined,
   };
-  if (c.lifecycle === "operational" && c.filter) {
+  if (c.lifecycle !== "publishing" && c.filter) {
     return {
       ...base,
       items: [
@@ -370,6 +370,6 @@ function collectionNavItem(c: Collection, language: AdminLanguage, canonical: st
 }
 
 function statusesFor(c: Collection): ReadonlyArray<SidebarStatus> {
-  if (c.lifecycle === "operational") return [];
+  if (c.lifecycle !== "publishing") return [];
   return PUBLISHING_STATUSES;
 }

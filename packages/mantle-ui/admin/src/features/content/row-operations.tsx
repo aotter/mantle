@@ -8,7 +8,7 @@ import {
   type InvokeOutcome,
 } from "@aotter/mantle-ui";
 import { fieldLabel } from "../../lib/field-label";
-import { api, ApiError } from "../../lib/api";
+import { api, ApiError, refusalOf } from "../../lib/api";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { entryApiPath } from "../../lib/queries";
 import type { Collection, EntryEditorPayload, StaffOperation, StaffOperationInteraction } from "../../lib/types";
@@ -309,7 +309,7 @@ async function invokeOperation(name: string, values: Record<string, unknown>, si
     // An expired session was never let in, so nothing ran: sign in again.
     if (error instanceof ApiError && error.status === 401) redirectToSignIn();
     const diagnostic = error instanceof ApiError
-      ? (error.body as { diagnostic?: { code?: unknown; message?: unknown } } | null)?.diagnostic
+      ? refusalOf(error.body)
       : undefined;
     if (!diagnostic || typeof diagnostic.code !== "string") throw error;
     return {
