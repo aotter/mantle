@@ -1,5 +1,48 @@
 # Recipe: an MCP App for members
 
+## Generated native applications (alpha.7 and later)
+
+If the installed README describes generated native queries, use this recipe
+and stop before the historical Core recipe below. Read the installed MCP App
+contract and the generated `mcp-app.ts`; no RuntimePlan enters the service.
+The SDK attaches no member-facing App without explicit application wiring.
+
+```ts
+import { mcp } from '../generated/mcp.js';
+import { planApp } from '../generated/mcp-app.js';
+const memberApp = planApp({
+  surface: 'public',
+  uri: 'ui://shop/my-orders',
+  html: async () => (await import('./member-app.js')).memberHtml,
+});
+const tools = mcp({ db, caller, handlers, apps: {
+  public: { resources: [memberApp] },
+  staff: { resources: [planApp({ surface: 'staff',
+    html: async () => (await import('@aotter/mantle-ui/mcp-app')).mantleAppHtml,
+  })] },
+} });
+```
+
+`planApp` embeds generated static catalogue metadata; select the correct
+surface and import HTML lazily to keep it out of startup. For a custom resource,
+use the selected release's `uri`, `name`, `html`, `renders` and `appOnly` options,
+with explicit CSP/permissions where needed. Public and staff resource maps stay
+isolated. Render only tools declared on that surface, under the user's verified
+Caller. A resource/catalogue is not authority to call a hidden staff tool.
+Keep HTML static and secret-free; caller data arrives through tool results.
+The existing UI controller/readCatalog/toolOf/rowsOf helpers read those results;
+use the installed UI package contract, not runtime.plan or createMcpSurface.
+
+Verify tools/list metadata, resources/read HTML/catalogue, actual tool calls and
+a host-rendered member App. Test anonymous/member callers cannot list/read staff
+resources or access protected tools. Never retry unknown writes blindly; retain
+OCC and re-read state after an uncertain outcome. Commit generated output and
+run the complete generation command with `--check` before deployment.
+
+## Historical Core applications (through alpha.6)
+
+The following applies only when the installed package still uses RuntimePlan.
+
 The preset serves Mantle's App on `/mcp/staff` only. A member-facing App, on
 `/mcp`, is the application's: the SDK attaches none, because what a member
 should see in a chat (one order, a booking form, a status card) is a product
