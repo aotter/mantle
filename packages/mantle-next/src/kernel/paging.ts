@@ -22,9 +22,9 @@ export interface Paged<Database> {
   /** The View's LIMIT, else 500. */
   readonly cap: number;
   readonly sqlite: boolean;
-  readonly cursor: CursorKind;
-  /** Order keys: the column and id (2), or id only (1). */
-  readonly keys: 1 | 2;
+  readonly cursor: readonly CursorKind[];
+  /** Complete compiler-proved order tuple; zero keys is a bounded singleton. */
+  readonly keys: number;
   readonly values: Values;
   /** The driver's `read`. */
   readonly read: (db: Database, sql: string, binds: unknown[]) => PromiseLike<any[]> | any[];
@@ -53,24 +53,35 @@ function valid(kind: CursorKind, sqlite: boolean, key: unknown): boolean {
  * call it from their exported function, so importing a View runs no kernel code.
  */
 export async function page<Database, Row>(spec: Paged<Database>, db: Database, caller: Caller, input: unknown, options: Options = {}): Promise<{ rows: Row[]; nextCursor?: string }> {
-  const { path, cap } = spec, two = spec.keys === 2;
+  const { path, cap } = spec;
   spec.auth?.(caller);
   const requested = options.limit ?? Math.min(50, cap);
   if (!Number.isInteger(requested) || requested < 1) invalid("limit must be a positive integer.", path + "/limit");
   const limit = Math.min(requested, cap, 500);
   const m = caller.kind === "system" && spec.trusted ? spec.trusted : spec.caller;
   const values = binds(spec.values, m.binds, caller, input as Readonly<Record<string, unknown>>);
-  const cursor = options.cursor === undefined ? undefined : decodeCursor(options.cursor, path + "/cursor", path);
-  if (cursor && !valid(spec.cursor, spec.sqlite, cursor[0])) invalid("Cursor key has the wrong column type.", path + "/cursor");
-  let cursorValue = cursor?.[0];
-  if (cursor && (spec.cursor === "date" || spec.cursor === "timestamp")) try { cursorValue = spec.values[spec.cursor]!(cursor[0] as string); } catch { invalid("Malformed temporal cursor.", path + "/cursor"); }
-  const keys = cursor && (spec.keys === 1 ? [cursor[1]] : [cursorValue, cursor[1]]);
-  const sql = cursor ? m.next : m.first;
+  let keys: unknown[] | undefined;
+  if (options.cursor !== undefined) {
+    try {
+      const encoded = JSON.parse(decodeURIComponent(options.cursor));
+      if (!spec.keys || !Array.isArray(encoded) || encoded.length !== Math.max(2, spec.keys) + 1 || encoded.at(-1) !== path) throw 0;
+      if (spec.keys === 1 && encoded[0] !== encoded[1]) throw 0;
+      // Preserve the existing [id,id,operation] single-key and [value,id,operation] two-key formats.
+      keys = spec.keys === 1 ? [encoded[1]] : encoded.slice(0, -1);
+      for (const [i, kind] of spec.cursor.entries()) {
+        if (!valid(kind, spec.sqlite, keys[i])) throw 0;
+        if (kind === "date" || kind === "timestamp") keys[i] = spec.values[kind]!(keys[i] as string);
+      }
+    } catch { invalid("Malformed, foreign or wrongly typed cursor.", path + "/cursor"); }
+  }
+  const sql = keys ? m.next : m.first;
   const rows: Record<string, unknown>[] = await spec.read(db, sql.sql, [...values, ...sql.extra.map(i => i < 0 ? limit + 1 : keys![i])]);
   const last = rows[limit - 1];
-  const nextCursor = rows.length > limit && last ? encodeCursor(last._k0, two ? last._k1 : last._k0, path) : undefined;
+  if (!spec.keys && rows.length > limit) invalid("This unordered View exceeds one page; add a supported ORDER BY.", path);
+  const next = last && Array.from({ length: spec.keys }, (_, i) => last[`_k${i}`]);
+  const nextCursor = rows.length > limit && next ? encodeURIComponent(JSON.stringify([...next, ...(spec.keys === 1 ? next : []), path])) : undefined;
   if (rows.length > limit) rows.length = limit;
-  for (const row of rows) { delete row._k0; if (two) delete row._k1; }
+  for (const row of rows) for (let i = 0; i < spec.keys; i++) delete row[`_k${i}`];
   return { rows: rows as Row[], ...(nextCursor === undefined ? {} : { nextCursor }) };
 }
 

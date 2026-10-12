@@ -1,0 +1,42 @@
+import {test,expect} from "bun:test";
+import {Database} from "bun:sqlite";
+import {SQL} from "bun";
+import {mkdtemp,rm} from "node:fs/promises";
+import {join} from "node:path";
+import {generateOrThrow,loadFixtureSources,writeGenerated} from "./apps/link.js";
+import {generateFromSources} from "../src/infrastructure/generate.js";
+import {verifyPaging,pagingSeed} from "./paging-scenarios.js";
+async function fixture(target:"bun-sqlite"|"bun-postgres") {
+ const files=await generateOrThrow(target,await loadFixtureSources("paging.yaml"));const dir=await mkdtemp(join(import.meta.dir,"apps/.paging-native-"));await writeGenerated(dir,files);
+ const pages:Record<string,Function>={};for(const name of ["ordered","mixed","grouped","grouped-time","joined","lookup","singleton"])pages[name]=(await import(join(dir,`paged/views/${name}.ts`))).default;
+ return{files,dir,pages};
+}
+test("SQLite safe tuples/groups/singleton joins/internal pages match native SQL with one read",async()=>{
+ const {files,dir,pages}=await fixture("bun-sqlite"),db=new Database(":memory:");let calls=0;
+ try {db.exec(files["schema.sql"]!);db.exec(pagingSeed(false));
+ const fanout="SELECT a.id,a.at FROM positions a JOIN positions b ON a.session=b.session WHERE a.owner='a' AND b.owner='a' AND a.id='0000'";
+ expect((db.query(`SELECT count(*) AS n FROM (${fanout})`).get() as any).n).toBe(501);
+ expect(db.query(`SELECT * FROM (${fanout}) WHERE (at,id) > (?,?) ORDER BY at,id`).all(1791849600123456,"0000")).toEqual([]);
+ const counted={query:(sql:string)=>{calls++;return db.query(sql);}};await verifyPaging(pages,counted,async(sql)=>db.query(sql).all(),()=>calls,false);expect(calls).toBeGreaterThan(500);}
+ finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+(process.env.MANTLE_NEXT_BUN_PG_URL?test:test.skip)("PostgreSQL same native paging oracle preserves microseconds and tenant isolation",async()=>{
+ const {files,dir,pages}=await fixture("bun-postgres"),db=new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}),schema="paging_"+crypto.randomUUID().replaceAll("-","");let calls=0;
+ try{await db.unsafe(`CREATE SCHEMA ${schema}`);await db.unsafe(`SET search_path TO ${schema}`);await db.unsafe(files["schema.sql"]!);await db.unsafe(pagingSeed(true));await verifyPaging(pages,{unsafe:(sql:string,values:any[])=>{calls++;return db.unsafe(sql,values);}},sql=>db.unsafe(sql),()=>calls,true);expect(calls).toBeGreaterThan(500);}
+ finally{await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await db.close();await rm(dir,{recursive:true,force:true});}
+},30000);
+test("unsafe fanout and NULL/unknown keys remain refused; native-only internal queries remain bare",async()=>{
+ const sources=await loadFixtureSources("paging.yaml");
+ const view=(sql:string,surface="public")=>`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: unsafe}\nspec:\n  surface: ${surface}\n  sql: ${sql}\n`;
+ for(const sql of ["SELECT a.id,a.at FROM positions a JOIN positions b ON a.session=b.session ORDER BY a.at", "SELECT id, optional FROM positions ORDER BY optional", "SELECT id, lower(session) AS key FROM positions ORDER BY lower(session)","SELECT optional,count(*) AS n FROM positions GROUP BY optional ORDER BY optional"]){
+ const r=await generateFromSources({target:"bun-sqlite",sources:{sources:[{...sources[0]!,text:sources[0]!.text+view(sql)}]}});expect(r).toMatchObject({ok:false});if(!r.ok)expect(r.diagnostics.some(d=>d.path==="views/unsafe")).toBe(true);
+ }
+ const files=await generateOrThrow("bun-sqlite",[{...sources[0]!,text:sources[0]!.text+view("SELECT id,optional FROM positions ORDER BY optional","internal")}]);
+ expect(files["views/unsafe.ts"]).toBeDefined();expect(files["paged/views/unsafe.ts"]).toBeUndefined();expect(files["rest.ts"]).not.toContain("grouped-time");expect(files["mcp.ts"]).not.toContain("grouped-time");
+});
+test("a scalar subquery does not prove its outer query singleton",async()=>{
+ const sources=await loadFixtureSources("paging.yaml");
+ const extra=(sql:string)=>`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: bounded}\nspec:\n  surface: public\n  sql: ${sql}\n`;
+ const bad=await generateFromSources({target:"bun-sqlite",sources:{sources:[{...sources[0]!,text:sources[0]!.text+extra("SELECT id,(SELECT count(*) FROM positions) AS total FROM positions")}]}});
+ expect(bad).toMatchObject({ok:false});
+});

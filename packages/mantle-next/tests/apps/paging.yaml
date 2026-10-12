@@ -1,0 +1,96 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: positions}
+spec:
+  title: Positions
+  scope: {owner: auth.uid()}
+  indexes: [[owner, session, block, position], [owner, at]]
+  schema:
+    type: object
+    required: [owner, session, block, position, day, at]
+    properties:
+      owner: {type: string}
+      session: {type: string}
+      block: {type: integer}
+      position: {type: integer}
+      day: {type: string, format: date}
+      at: {type: string, format: date-time}
+      optional: {type: string, nullable: true}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: visible}
+spec:
+  surface: internal
+  sql: SELECT id, session, block, position, day, at, optional FROM positions
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: ordered}
+spec:
+  surface: public
+  requires: {auth: {all: [ctx.user]}}
+  input: {type: object, required: [session], properties: {session: {type: string}}, additionalProperties: false}
+  sql: SELECT id, block, position, at FROM visible WHERE session = input.session ORDER BY block, position
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: grouped}
+spec:
+  surface: public
+  requires: {auth: {all: [ctx.user]}}
+  sql: SELECT day, count(*) AS total FROM visible GROUP BY day ORDER BY day DESC
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: grouped-time}
+spec:
+  surface: internal
+  sql: SELECT day, max(at) AS latest FROM visible GROUP BY day ORDER BY max(at) DESC
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: latest}
+spec:
+  surface: internal
+  sql: SELECT id, at FROM positions ORDER BY at DESC LIMIT 1
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: joined}
+spec:
+  surface: public
+  requires: {auth: {all: [ctx.user]}}
+  sql: SELECT v.id, v.at, l.id AS latest_id FROM visible v LEFT JOIN latest l ON true ORDER BY v.at DESC
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: lookup}
+spec:
+  surface: public
+  requires: {auth: {all: [ctx.user]}}
+  input: {type: object, required: [id], properties: {id: {type: string}}, additionalProperties: false}
+  sql: SELECT id, at FROM visible WHERE id = input.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: constant}
+spec:
+  surface: internal
+  sql: SELECT 'constant' AS value
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: singleton}
+spec:
+  surface: public
+  sql: SELECT value FROM constant
+
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: mixed}
+spec:
+  surface: internal
+  input: {type: object, required: [session], properties: {session: {type: string}}, additionalProperties: false}
+  sql: SELECT id, block, position FROM visible WHERE session = input.session ORDER BY block DESC, position

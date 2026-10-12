@@ -28,6 +28,13 @@ defines driver-ready inputs, native results, date-time/date wire forms and failu
 For transports, `paged/views/<name>.ts` returns `{ rows, nextCursor? }` with keyset paging and
 `validation/<kind>/<name>.ts` checks input against the declared JSON Schema subset; the
 [surface deltas](../../docs/next/surfaces.md) define the REST/MCP wire contract.
+The same directly imported paging module is emitted for a proved internal View,
+without adding a public route/tool. It runs one native SELECT per page, checking
+the compiler-proved scalar key tuple and removing hidden keys. Schema tuples
+need matching indexed order after fixed equality prefixes; complete groups and
+singleton joins are also supported. Grouping still scans/aggregates its native
+source; inspect EXPLAIN and source indexes for the actual workload. Unsupported
+internal SQL retains its bare module instead of failing generation.
 
 Every Schema is also a typed **Store** collection, in the shape of a document-database driver:
 `store(db, caller).collection("purchase_requests")` with `findById`, `find` (AND-only `where`, keyset `cursor`), `first`,
