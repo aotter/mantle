@@ -1,9 +1,7 @@
 /** Build-time portable table/SQL descriptor; no RuntimePlan reaches the exported Worker entry. */
-import type { RuntimePlan, SiteDefaults } from "@aotter/mantle/spec";
-import { notNullColumns } from "@aotter/mantle/spec";
+import type { RuntimePlan, SiteDefaults } from "@aotter/mantle/compiler";
+import { notNullColumns } from "@aotter/mantle/compiler";
 import type { BetterAuthOptions } from "better-auth/types";
-import { getAuthTables } from "@better-auth/core/db";
-import { orderedTables } from "../auth/schema.js";
 import type { DumpColumn, DumpPlan, DumpTable } from "../kernel/transfer.js";
 import { ident } from "../kernel/dialect/common.js";
 import * as pg from "../kernel/dialect/postgres.js";
@@ -12,7 +10,7 @@ import { driverFor, databaseImport, isSqlite, q } from "../domain/entry.js";
 import type { Target } from "../domain/model.js";
 
 const kind = (type: string): DumpColumn[1] => ({ text: "text", integer: "int", int4: "int", int8: "int", real: "real", float8: "real", bool: "bool", json: "json", timestamptz: "timestamp", date: "date" })[type] as DumpColumn[1];
-export function emitTransfer(plan: RuntimePlan, target: Target, version: string, site?: SiteDefaults, auth?: BetterAuthOptions): Record<string, string> {
+export async function emitTransfer(plan: RuntimePlan, target: Target, version: string, site?: SiteDefaults, auth?: BetterAuthOptions): Promise<Record<string, string>> {
   const sq = isSqlite(target), dialect = sq ? sqlite : pg, tables: DumpTable[] = [], after: string[] = [], omitted: string[] = [];
   const add = (name: string, key: string, columns: DumpColumn[]) => {
     columns.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
@@ -46,6 +44,7 @@ export function emitTransfer(plan: RuntimePlan, target: Target, version: string,
     add("pending_media_uploads", "id", [["id", "text", true], ["record", "text", true], ["expires_at", "int", true]]);
   }
   if (auth) {
+    const { getAuthTables } = await import("@better-auth/core/db"), { orderedTables } = await import("./authSchema.js");
     const session = getAuthTables(auth).session?.modelName;
     const serial = auth.advanced?.database?.generateId === "serial", uuid = auth.advanced?.database?.generateId === "uuid";
     for (const [name, table] of orderedTables(auth)) {

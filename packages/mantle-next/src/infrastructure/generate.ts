@@ -116,5 +116,5 @@ export async function generateFromSources(request: { readonly target: Target; re
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? (await import("./authSchema.js")).authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
-  return { ...result, files: generatedFiles({ ...files, ...emitTransfer(compiled.plan, request.target, lowered.mantle, request.site, request.auth), "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) };
+  return { ...result, files: generatedFiles({ ...files, ...await emitTransfer(compiled.plan, request.target, lowered.mantle, request.site, request.auth), "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) };
 }
