@@ -2,17 +2,18 @@
 import { STAFF_ROLES } from "../domain/visibility.js";
 import { mcpToolNameSegment, type RuntimePlan, type PlanLowered } from "@aotter/mantle/spec";
 import type { Target } from "../domain/model.js";
+import { emitMcpMedia, mediaDefinitions } from "./mcp-media.js";
 import { emitValidation } from "./validation.js";
 import { databaseImport, q } from "../domain/entry.js";
 import { conversions } from "../domain/input.js";
 import { publishingInput } from "./publishing.js";
 import { boundaryPage, outputConversions } from "../domain/columns.js";
-export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, refuse: (path: string, message: string) => void): Record<string, string> {
+export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, refuse: (path: string, message: string) => void, media = false): Record<string, string> {
   if (!Object.values(plan.views).some(view=>view.surface!=="internal") && !Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp")) return {};
   const imports: string[] = [], tools: { fields: string[]; schema: string; surface:string }[] = [];
-  const files:Record<string,string> = {};
+  const files:Record<string,string> = media ? emitMcpMedia(refuse) : {};
   let hasRef=false,hasWire=false;
-  const names = new Set<string>();
+  const names = new Set<string>(media ? mediaDefinitions().map(tool=>"staff:"+tool.name) : []);
   const refs = Object.values(plan.procedures).some(p => "ref" in p.handler);
   const add = (name: string, kind: "views" | "procedures", surface: string, operation:Pick<RuntimePlan["views"][string],"input"|"title"|"description"|"requires">=kind === "views" ? plan.views[name]! : plan.procedures[name]!, tool=mcpToolNameSegment(name)) => {
     const ref=kind === "procedures" && !!plan.procedures[name] && "ref" in plan.procedures[name]!.handler;
@@ -63,9 +64,10 @@ ${print(tools.filter(tool=>tool.surface===surface))}
 }`).join("\n")+"\n";
   files["mcp.ts"]=`import { mcp as serve, type Options as McpOptions } from "@aotter/mantle-next/mcp";
 ${sharedTools?[databaseImport(target),...(refs?['import type { Handlers } from "./generated.js";']:[]),'import { publicTools, staffTools } from "./mcp-tools.js";'].join("\n"):toolImports.join("\n")}
-export type Options<Env = unknown> = McpOptions<Env, Database>${refs ? " & { handlers: Handlers }" : ""};
+${media ? 'import type { MediaStorage } from "@aotter/mantle-next/site";' : ""}
+export type Options<Env = unknown> = McpOptions<Env, Database>${refs ? " & { handlers: Handlers }" : ""}${media ? " & { media?: (env: Env) => MediaStorage }" : ""};
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env) => Promise<Response | undefined> {
-  return serve<Env, Database${refs ? ", Handlers" : ""}>(${sharedTools?"[...publicTools(),...staffTools()]":"[\n"+print(tools)+"\n  ]"}, ${q(STAFF_ROLES)}, options);
+  return ${media ? "async (request, env) => " : ""}serve<Env, Database${refs ? ", Handlers" : ""}>([...${sharedTools?"[...publicTools(),...staffTools()]":"[\n"+print(tools)+"\n  ]"}${media ? ", ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, \"\") === \"/mcp/staff\" ? (await import(\"./mcp-media.js\")).mediaTools(() => options.media!(env)) : [])" : ""}], ${q(STAFF_ROLES)}, options)${media ? "(request, env)" : ""};
 }
 `;
   return files;

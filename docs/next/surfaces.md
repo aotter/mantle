@@ -312,3 +312,17 @@ Unexpected surface failures log only a stable wire classification.
 
 MCP locale fallback reads only own locale entries, then English, then the first
 own entry; inherited property names never become titles or descriptions.
+
+### Staff media MCP tools
+
+With generated site configuration, `mcp({ db, caller, media: env => storage })`
+loads the media module only on a configured staff MCP request and
+adds `get_media_upload_policy`, `create_media_upload`, `commit_media_upload`,
+`list_media_assets`, `get_media_asset`, `update_media_asset` and
+`delete_media_asset` to `/mcp/staff` only. `storage` is the same `MediaStorage`
+used by the Admin media library. Omitting `media` omits all seven tools.
+The OSS `staff` role can invoke them; cookie writes retain the origin check.
+Generated boundary code checks each input and advertises the 0.2 schemas and
+read-only/destructive/open-world hints. Image bytes are PUT directly to the
+returned short-lived URLs with their required headers, then committed; bytes
+never enter MCP. Store permanent asset ids, never upload URLs.
