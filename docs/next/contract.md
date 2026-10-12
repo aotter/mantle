@@ -357,3 +357,12 @@ page and its boundary validation. `locale` values are ordinary strings, and
 `toCanonicalLocale` is an explicit helper rather than a Store coercion.
 
 
+
+### Selected Admin extensions
+
+Full extension declarations are validated at generation and settings checks are
+compiled into direct code. Request handlers receive native DB/Env/Caller context;
+no runtime plan or schema interpreter is introduced. API/source routes share the
+current staff-session gate, and cookie writes share the existing origin guard.
+Source/SRI work begins only on a selected shell/module request. Details and the
+app-owned write/OCC responsibilities: [admin-extensions.md](admin-extensions.md).

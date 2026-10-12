@@ -29,6 +29,8 @@
     "./publishing": "./dist/kernel/publishing.js",
     "./rest": "./dist/kernel/rest.js",
     "./admin": "./dist/kernel/admin.js",
+    "./admin/extensions": "./dist/kernel/admin/extensions.js",
+    "./admin/extensions/tooling": "./dist/kernel/admin/extension-tooling.js",
     "./mcp": "./dist/kernel/mcp.js",
     "./web": "./dist/kernel/web.js",
     "./validation": "./dist/kernel/validation.js",

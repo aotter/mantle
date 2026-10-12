@@ -23,6 +23,7 @@ explicitly; apply `schema.sql` directly only to a new database.
 | Generated MCP and `mcp` Trigger exposure | Public/staff tools, shared generated checks, publishing transitions on staff only; SDK loads on matching requests. Install the official MCP peer for manifests selecting this surface. |
 | Dynamic `web.ts` (`llms.txt`, sitemap, `.md` alternates, head tags) | Generated; mount `web({ ... })`; see [surface deltas](surfaces.md#optional-web-output). |
 | Admin core API | Generated handler: session gate, SPA shell, bootstrap/metadata/site reads, staff Views/search/filter/CSV and staff operations. [Mounting](surfaces.md#mounting-admin). Content authoring and optional Admin modules remain separate work packages. |
+| Admin extensions | Full generation-time declaration/binding checks, compiled form validation, native action/API context, lazy source modules and import-map SRI; [contract](admin-extensions.md). OSS roles remain `staff`. |
 | Admin UI, web skill/example | Planned Admin follow-ups and [#1478](https://github.com/aotter/mantle/issues/1478). |
 | Localized Schemas and translations | Plain-string locale values, atomic published-parent guard, SQL parent visibility and generated page locale helper; see [Translations](#translations). |
 | Opt-in `lifecycle: publishing` | Generated status, `published_at`, staff-only transitions and published-only public reads; see [Publishing](#publishing). |

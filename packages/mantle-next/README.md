@@ -114,6 +114,11 @@ See [the Admin contract](../../docs/next/surfaces.md#mounting-admin) for display
 identity, native wire adapters and selected follow-up modules. Importing another
 generated entry excludes Admin from that bundle.
 
+Select full `--admin-extensions <module>` definitions to emit `admin-extensions.ts`.
+Merge its facets into generated `admin` options; handlers get native context,
+forms get generated checks, and renderer source/SRI stays request-lazy.
+[Extension contract](../../docs/next/admin-extensions.md).
+
 ## D1 Sessions
 
 D1's session handle already satisfies generated Views/Procedures and the Store's structural `db` type:

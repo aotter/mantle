@@ -2,11 +2,12 @@
 import type { AdminExtension } from "@aotter/mantle/admin";
 import type { PlanLowered, RuntimePlan } from "@aotter/mantle/spec";
 
+export type AdminExtensionInput = Pick<AdminExtension,"id"|"contributes"> & Partial<Omit<AdminExtension,"id"|"contributes"|"handlers">> & {readonly handlers?:unknown};
 export type Target = "bun-sqlite" | "bun-postgres" | "cloudflare-d1" | "cloudflare-postgres";
 export interface GenerateInput {
   readonly target: Target;
   /** Build-time declarations used to check manifest UI bindings. */
-  readonly adminExtensions?: readonly Pick<AdminExtension, "id" | "contributes">[];
+  readonly adminExtensions?: readonly AdminExtensionInput[];
   readonly site?: import("@aotter/mantle/spec").SiteDefaults;
   readonly plan: RuntimePlan;
   readonly lowered: PlanLowered;

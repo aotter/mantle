@@ -63,6 +63,14 @@ options; verify `/admin/api/bootstrap` and a scoped staff View against the local
 native database before deploying. Read `docs/next/surfaces.md#mounting-admin` for
 optional identity/site facets, CSV, origin checks and the other Admin modules.
 
+For selected Admin extensions, use full app-owned declarations with OSS role
+`staff` and `--admin-extensions <module>`, then merge the generated helper's
+route/assets/public-metadata facets into `admin`. Generate → typecheck → implement
+the declared settings/action/API handlers using native context; preserve scope,
+OCC and transaction handling in their writes. Keep UI modules same-origin and
+source loaders lazy. Read `docs/next/admin-extensions.md` and test denied callers,
+invalid settings and browser SRI before deploying.
+
 ## New project
 
 1. Create a directory outside the SDK checkout with Node 22+ and
