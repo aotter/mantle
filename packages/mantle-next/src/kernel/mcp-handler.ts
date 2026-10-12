@@ -3,7 +3,11 @@ import { ContractError, checkOrigin, surfaceCaller, surfaceError, surfaceFailure
 import { convert, invalid } from "./surface.js";
 import type { Tool, Options } from "./mcp.js";
 type LocalizedText = string | Readonly<Record<string, string>>;
-const text = (value: LocalizedText | undefined, locale: string): string | undefined => typeof value === "string" ? value : value?.[locale] ?? value?.en ?? Object.values(value ?? {})[0];
+const text = (value: LocalizedText | undefined, locale: string): string | undefined => {
+  if (typeof value === "string") return value;
+  if (!value) return;
+  return Object.hasOwn(value, locale) ? value[locale] : Object.hasOwn(value, "en") ? value.en : Object.values(value)[0];
+};
 function observe<T>(listener: ((event: T) => void | Promise<void>) | undefined, event: T): void {
   if (listener) try { void Promise.resolve(listener(event)).catch(() => {}); } catch {}
 }

@@ -188,6 +188,10 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   caller={kind:'anonymous'};expect((await call('initialize',{},'/mcp/staff')).response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
   caller={...user,credential:'session'};await call('tools/call',{name:'add_item',arguments:{title:'CSRF'}},'/mcp',{origin:'https://evil.test'});
   expect(refusals.map(event=>event.reason)).toEqual(['credential','credential','origin']);expect(db.query('SELECT COUNT(*) n FROM items').get()).toEqual({n:1});
+  for(const locale of [undefined,'constructor','toString','fr']) {
+   const response=await mcp({db:()=>db,caller:()=>caller,locale})(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})}),{});
+   const body=await response.text(),data=JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);expect(data.result.tools[0].title).toBe('Items');expect(data.result.tools[1].description).toBe('Add a row');
+  }
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
 

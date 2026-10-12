@@ -212,3 +212,6 @@ retain 0.2's wire form: safe integers become JSON numbers; unsafe values remain
 exact text. Computed outputs and native SQL Procedure/ref results retain their
 native values. This does not promise precise unsafe int64 values on D1.
 Unexpected surface failures log only a stable wire classification.
+
+MCP locale fallback reads only own locale entries, then English, then the first
+own entry; inherited property names never become titles or descriptions.
