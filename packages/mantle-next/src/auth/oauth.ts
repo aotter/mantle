@@ -1,0 +1,111 @@
+/** Optional provider integration. Better Auth owns signatures, PKCE, redirects and token rotation. */
+import type { AuthContext, BetterAuthOptions } from "@better-auth/core";
+import type { oauthProvider } from "@better-auth/oauth-provider";
+import type { AuthInstance } from "./caller.js";
+import { nativeAuthRead } from "./adapter.js";
+import { ContractError } from "../kernel/contracts.js";
+
+const pair = (field: string, value: string) => ({ field, value });
+const array = (value: unknown): string[] | null => {
+  try { const parsed = typeof value === "string" ? JSON.parse(value) : value; return Array.isArray(parsed) && parsed.every(x => typeof x === "string") ? parsed : null; } catch { return null; }
+};
+
+/** Fail closed for legacy/unbound tokens; a newly granted consent cannot resurrect an old token lineage. */
+export async function assertActiveUserGrant(auth: AuthInstance, claims: Record<string, unknown>, audience: string | readonly string[]) {
+  const { sub, azp, sid, mantle_consent_id: id } = claims;
+  if (![sub, azp, sid, id].every(x => typeof x === "string" && x.length)) throw new ContractError("UNAUTHENTICATED", "OAuth token is not bound to a user session.");
+  const { exec, param, now, table, column, has } = nativeAuthRead(auth.options);
+  const c = (field: string) => `c.${column("oauthConsent", field)}`, s = (field: string) => `s.${column("session", field)}`, u = (field: string) => `u.${column("user", field)}`;
+  const user = (field: string) => `${has("user", field) ? u(field) : "NULL"} AS "${field}"`;
+  const { rows } = await exec(`SELECT ${c("resources")} AS resources, ${c("scopes")} AS scopes, ${u("id")} AS id, ${["role", "banned", "banExpires"].map(user).join(", ")}
+    FROM ${table("oauthConsent")} c JOIN ${table("session")} s ON ${s("id")} = ${param(1)} AND ${s("userId")} = ${c("userId")} AND ${s("expiresAt")} > ${param(2)}
+    JOIN ${table("user")} u ON ${u("id")} = ${c("userId")}
+    WHERE ${c("id")} = ${param(3)} AND ${c("userId")} = ${param(4)} AND ${c("clientId")} = ${param(5)}`, [sid, now(Date.now()), id, sub, azp]);
+  const grant = rows[0] as { id: string; resources: unknown; scopes: unknown; role: string | null; banned: boolean | null; banExpires: Date | string | number | null } | undefined;
+  const resources = array(grant?.resources), scopes = array(grant?.scopes);
+  const requested = typeof audience === "string" ? [audience] : audience;
+  const tokenAudiences = typeof claims.aud === "string" ? [claims.aud] : array(claims.aud) ?? [];
+  const tokenScopes = typeof claims.scope === "string" ? claims.scope.split(/\s+/).filter(Boolean) : array(claims.scope);
+  if (!grant || !resources || !scopes || !tokenScopes || !requested.some(x => resources.includes(x) && tokenAudiences.includes(x)) || !tokenScopes.every(x => scopes.includes(x))) throw new ContractError("UNAUTHENTICATED", "OAuth authorization grant is no longer active.");
+  return grant;
+}
+
+/** Add to the application's oauthProvider/mcp options; source of the immutable consent claim. */
+export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0]["extensions"]>[number] = {
+  claims: { accessToken: ({ referenceId }) => ({ mantle_consent_id: referenceId ?? null }) },
+};
+
+/** Merge this verification.create.before hook into app-owned betterAuth options, alongside its user hooks. */
+export function oauthGrantHooks(getAuth: () => AuthInstance): NonNullable<BetterAuthOptions["databaseHooks"]> {
+  return { verification: { create: { before: async verification => {
+    let value;
+    try { value = JSON.parse(verification.value); } catch { return; }
+    if (value?.type !== "authorization_code" || typeof value.userId !== "string" || typeof value.query?.client_id !== "string") return;
+    const { adapter } = await getAuth().$context as AuthContext;
+    const consent = await adapter.findOne<{ id: string }>({ model: "oauthConsent", where: [pair("userId", value.userId), pair("clientId", value.query.client_id)] });
+    return { data: { value: JSON.stringify({ ...value, referenceId: consent?.id ?? "" }) } };
+  } } } };
+}
+
+export interface OAuthConsentRequest { readonly clientName: string; readonly redirectUri: string; readonly scopes: readonly string[]; readonly oauthQuery: string }
+export interface OAuthConsentInfo { readonly id: string; readonly clientId: string; readonly clientName: string; readonly scopes: readonly string[] }
+
+/** Signed-query and consent APIs over the same application-owned instance and adapter (including renamed tables). */
+export function oauthConsents(auth: AuthInstance & { handler(request: Request): Promise<Response> }) {
+  const adapter = async () => (await auth.$context as AuthContext).adapter;
+  return {
+    getOAuthConsentRequest: async (request: Request): Promise<OAuthConsentRequest | null> => {
+      const url = new URL(request.url), clientId = url.searchParams.get("client_id");
+      if (!clientId || !url.search) return null;
+      const api = auth.api as unknown as { getOAuthClientPublicPrelogin(input: { headers: Headers; body: { client_id: string; oauth_query: string } }): Promise<{ client_name?: string; redirect_uris?: string[] }> };
+      const oauthQuery = url.search.slice(1);
+      const client = await api.getOAuthClientPublicPrelogin({ headers: request.headers, body: { client_id: clientId, oauth_query: oauthQuery } });
+      return { clientName: client.client_name ?? clientId, redirectUri: url.searchParams.get("redirect_uri") ?? client.redirect_uris?.[0] ?? "", scopes: (url.searchParams.get("scope") ?? "").split(/\s+/).filter(Boolean), oauthQuery };
+    },
+    completeOAuthConsent: async (request: Request, accept: boolean): Promise<string> => {
+      const oauth_query = (await request.formData()).get("oauth_query");
+      if (typeof oauth_query !== "string" || !oauth_query) throw new ContractError("INPUT_VALIDATION_FAILED", "Missing signed authorization request.");
+      const headers = new Headers(request.headers); headers.set("content-type", "application/json"); headers.delete("content-length");
+      const response = await auth.handler(new Request(new URL(`${auth.options.basePath ?? "/api/auth"}/oauth2/consent`, request.url).href, { method: "POST", headers, body: JSON.stringify({ accept, oauth_query }) }));
+      const body = await response.json() as { url?: unknown };
+      if (!response.ok || typeof body.url !== "string") throw new ContractError("INPUT_VALIDATION_FAILED", "Invalid authorization request.");
+      return body.url;
+    },
+    listOAuthConsents: async (userId: string): Promise<OAuthConsentInfo[]> => {
+      const { exec, param, table, column } = nativeAuthRead(auth.options);
+      const c = (field: string) => `c.${column("oauthConsent", field)}`, client = (field: string) => `client.${column("oauthClient", field)}`;
+      const { rows } = await exec(`SELECT ${c("id")} AS id, ${c("clientId")} AS "clientId", COALESCE(${client("name")}, ${c("clientId")}) AS "clientName", ${c("scopes")} AS scopes
+        FROM ${table("oauthConsent")} c LEFT JOIN ${table("oauthClient")} client ON ${client("clientId")} = ${c("clientId")}
+        WHERE ${c("userId")} = ${param(1)} ORDER BY ${c("updatedAt")} DESC, ${c("id")} ASC`, [userId]);
+      return rows.map(row => ({ id: row.id as string, clientId: row.clientId as string, clientName: row.clientName as string, scopes: array(row.scopes) ?? [] }));
+    },
+    revokeOAuthConsent: async (userId: string, consentId: string): Promise<boolean> => {
+      const db = await adapter();
+      const consent = await db.findOne<{ clientId: string }>({ model: "oauthConsent", where: [pair("id", consentId), pair("userId", userId)] });
+      if (!consent) return false;
+      const where = [pair("userId", userId), pair("clientId", consent.clientId)];
+      // Delete first: even if cleanup fails, every issued JWT fails the live-grant check immediately.
+      await db.deleteMany({ model: "oauthConsent", where });
+      for (const model of ["oauthRefreshToken", "oauthAccessToken"]) await db.updateMany({ model, where: [...where, { field: "revoked", value: null }], update: { revoked: new Date() } });
+      const code = (v: string) => { try { const x = JSON.parse(v); return x?.type === "authorization_code" && x.userId === userId && x.query?.client_id === consent.clientId; } catch { return false; } };
+      const codes = [{ field: "value", operator: "contains" as const, value: JSON.stringify(userId) }, { field: "value", operator: "contains" as const, value: JSON.stringify(consent.clientId) }];
+      for (let offset = 0; ;) {
+        const page = await db.findMany<{ id: string; value: string }>({ model: "verification", where: codes, limit: 100, offset, sortBy: { field: "id", direction: "asc" } });
+        const ids = page.filter(v => code(v.value)).map(v => v.id);
+        if (ids.length) await db.deleteMany({ model: "verification", where: [{ field: "id", operator: "in", value: ids }] });
+        if (page.length < 100) break;
+        offset += page.length - ids.length;
+      }
+      return true;
+    },
+  };
+}
+
+/** Optional scheduled storage hygiene, not boot work or an authorization rule. Owned/CIMD clients survive. */
+export async function pruneLegacyOAuthClients(auth: AuthInstance): Promise<number> {
+  const { adapter } = await auth.$context as AuthContext;
+  return adapter.deleteMany({ model: "oauthClient", where: [
+    { field: "clientDiscoveryId", value: null }, { field: "userId", value: null }, { field: "referenceId", value: null },
+    { field: "createdAt", operator: "lt", value: new Date(Date.now() - 90 * 86400_000) },
+  ] });
+}

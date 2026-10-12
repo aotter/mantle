@@ -15,7 +15,7 @@ explicitly; apply `schema.sql` directly only to a new database.
 | System-only TTL maintenance | Generated `<schema>.sweepExpired`, bounded cursor scans and optional dry-run; app owns `scheduled()` wiring and cron configuration. See [TTL maintenance](contract.md#ttl-maintenance). |
 | Typed SQL Views and Procedures, auth predicates, OCC, atomic writes | Generated bare queries accept validated inputs and a verified Caller; date/date-time outputs are ISO strings, native errors stay internal. |
 | Typed Store collections and internal Views/Procedures | Shared Store, AND-only filters, indexed non-null keyset ordering, atomic batches; interactive transactions on SQLite/PostgreSQL. |
-| Better Auth integration and Workers builds | App owns `auth.ts` and `resolveCaller`; `mantle generate` emits native Wrangler build configuration. Keep heavy auth imports lazy. |
+| Better Auth integration and Workers builds | App owns `auth.ts` and `resolveCaller`; optional [OAuth helpers](oauth.md) provide consent/connected apps, live grant/session checks and DPoP. `mantle generate` emits native Wrangler build configuration. Keep heavy auth imports lazy. |
 | Transactional email port, English templates and dev console sender | Optional `@aotter/mantle/email`; app supplies the sender and passes locale through. See [email wiring](email.md). |
 | View keyset pages, generated boundary validation and HTTP error mapping | Generated `paged/views/*` and `validation/*` modules plus `wire`; see [surface deltas](surfaces.md). |
 | REST and `http` Trigger exposure | Supported generated `rest.ts`; app mounts with `{ db, caller }` and required `handlers` for ref contracts. Public Views page at `/api/views/<name>`; HTTP Triggers keep method/path. |

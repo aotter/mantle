@@ -1,5 +1,4 @@
 /** Boundary primitives only. No plan, SQL interpreter or resource ownership. */
-type StaffRole = "owner" | "editor" | "contributor";
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
 
 export type Caller =
@@ -10,7 +9,7 @@ export type Caller =
       readonly subject: string;
       /** Informational. */
       readonly issuer?: string;
-      readonly role: StaffRole | null;
+      readonly role: string | null;
       readonly scopes: readonly string[];
       readonly credential: CredentialKind;
       /** Opaque record id or token JTI, never the raw credential. */
