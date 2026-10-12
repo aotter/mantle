@@ -24,11 +24,11 @@ export interface RowWrite {
 const PUBLISHED = "published";
 const NOW: RowValue = { k: "now" };
 /** The rows a caller can see: its own (unless trusted), live (TTL) and, for a public caller of a publishing Schema, published. */
-export function rowPolicy(s: RowSchema, mode: RowMode): RowTerm[] {
+export function rowPolicy(s: RowSchema, mode: RowMode, staffRoles: readonly string[] = STAFF_ROLES): RowTerm[] {
   return [
     ...(mode !== "trusted" && s.scope ? [[s.scope, "eq", { k: "uid" }] as const] : []),
     ...(s.ttl ? [[s.ttl, "ttl", { k: "cutoff", seconds: s.ttlSeconds! }] as const] : []),
-    ...(s.publishing && (mode === "public" || mode === "staff") ? [mode === "public" ? ["status", "eq", { k: "const", value: PUBLISHED }] as const : ["status", "staff", { k: "role" }, PUBLISHED, STAFF_ROLES] as const] : []),
+    ...(s.publishing && (mode === "public" || mode === "staff") ? [mode === "public" ? ["status", "eq", { k: "const", value: PUBLISHED }] as const : ["status", "staff", { k: "role" }, PUBLISHED, staffRoles] as const] : []),
   ];
 }
 

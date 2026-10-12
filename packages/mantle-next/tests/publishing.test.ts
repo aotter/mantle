@@ -1,4 +1,4 @@
-import { STAFF_ROLES } from "@aotter/mantle/spec";
+import { STAFF_ROLES } from "../src/domain/visibility.js";
 import { afterAll, expect, test } from "bun:test";
 import { SQL } from "bun";
 import { Database } from "bun:sqlite";
@@ -62,11 +62,11 @@ test("SQLite public visibility composes through joins, LEFT JOINs, subqueries an
     expect((await app.views["posts-subquery"](db, anonymous, {})).map((r: any) => r.id)).toEqual([published.id]);
     expect(Number((await app.views["posts-count"](db, anonymous, {}))[0].count)).toBe(1);
     expect((await app.views["posts-time"](db, anonymous, {}))[0].published_at).toMatch(/Z$/);
-    for (const role of [null, "owner", "editor", "contributor"]) {
+    for (const role of [null, "staff", "owner", "custom-role"]) {
       const caller = { kind: "user", subject: "reader", role, scopes: [], credential: "session", credentialId: null, clientId: null };
       const view = await app.views["posts-staff"](db, caller, {}), store = await app.store(db, caller).collection("posts").find();
       expect(view.map((r: any) => r.id)).toEqual(store.rows.map((r: any) => r.id));
-      expect(view.length).toBe(role ? 2 : 1);
+      expect(view.length).toBe(role === "staff" ? 2 : 1);
     }
   } finally { db.close(); }
 });
@@ -106,7 +106,7 @@ test("Core and Store render the staff values from policy data", async () => {
     const path = resolve(directory, "policy-data"); await writeGenerated(path, files);
     const app = await import(resolve(path, "generated.ts")); db.exec(files["schema.sql"]!);
     await app.store(db, { kind: "system", reason: "test" }).collection("posts").insert({ title: "Draft" });
-    for (const [role, expected] of [["reviewer", 1], ["editor", 0]] as const) {
+    for (const [role, expected] of [["reviewer", 1], ["staff", 0]] as const) {
       const caller = { kind: "user", subject: "reader", role, scopes: [], credential: "session", credentialId: null, clientId: null };
       expect((await app.views["posts-staff"](db, caller, {})).length).toBe(expected);
       expect(await app.store(db, caller).collection("posts").count()).toBe(expected);

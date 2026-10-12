@@ -1,3 +1,4 @@
+import type { StaffRole } from "../spec/domain/index.js";
 /**
  * `AdminIdentity` (ADR-0032 decision 8): what Admin may ask an identity provider for. Every member is optional and Admin hides
  * what is absent, so an identity that only signs people in (a custom resolver) needs none of it. Display names come from
@@ -50,12 +51,12 @@ export interface AdminIdentity {
   };
   readonly roles?: {
     /** `null` revokes staff access (the user can still sign in, but every staff-gated surface refuses). False when no row matched. */
-    setUserRole(request: Request, userId: string, role: "owner" | "editor" | "contributor" | null): Promise<boolean>;
+    setUserRole(request: Request, userId: string, role: StaffRole | null): Promise<boolean>;
     /** Pre-creates an unverified user that already holds the role, so the invitee's first sign-in lands with it. */
-    inviteUser(request: Request, email: string, role: "owner" | "editor" | "contributor"): Promise<InviteUserResult>;
+    inviteUser(request: Request, email: string, role: StaffRole): Promise<InviteUserResult>;
     /** Only an invitation nobody ever signed in to; a real user is never deleted through it. */
     revokeInvite(userId: string): Promise<boolean>;
-    sendStaffInvitation?(email: string, role: "owner" | "editor" | "contributor"): Promise<void>;
+    sendStaffInvitation?(email: string, role: StaffRole): Promise<void>;
   };
   /** Account deletion: the identity provider owns its users, so services stop running raw SQL against its tables. */
   deleteUser?(userId: string): Promise<boolean>;

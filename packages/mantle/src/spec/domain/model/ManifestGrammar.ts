@@ -444,19 +444,20 @@ export interface CtxAuthScopePredicate {
  *
  * `StaffRole` lives in spec because the manifest grammar references
  * it directly: `requires.auth.all: [{ "ctx.staff": [<role>, ...] }]`
- * — the parser checks each role string is in `STAFF_ROLES` at boot.
+ * — the parser checks each role string with `isStaffRole` at compile time.
  * The `Staff` runtime row shape (with grantedBy / grantedAt) lives in
  * `mantle-runtime`; only the closed enum is grammar.
  */
 export const STAFF_ROLES = ["owner", "editor", "contributor"] as const;
-export type StaffRole = (typeof STAFF_ROLES)[number];
+/** Next adds one OSS role; the legacy Core preset remains unchanged. */
+export type StaffRole = (typeof STAFF_ROLES)[number] | "staff";
 
 // `meetsRole` (role-rank comparison) moved to
 // `domain/service/StaffRoleHierarchy.ts` — this file is pure grammar
 // types referenced by the parser.
 
 export function isStaffRole(s: string): s is StaffRole {
-  return (STAFF_ROLES as readonly string[]).includes(s);
+  return s === "staff" || (STAFF_ROLES as readonly string[]).includes(s);
 }
 
 /* ─── Trigger ─── */

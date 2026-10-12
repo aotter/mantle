@@ -31,21 +31,21 @@ const ref = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: {name: app-note}
 spec:
-  requires: {auth: {all: [ctx.user, {ctx.staff: [editor, owner]}, {ctx.auth.scope: notes:write}]}}
+  requires: {auth: {all: [ctx.user, {ctx.staff: [staff]}, {ctx.auth.scope: notes:write}]}}
   input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}
   output: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}
   handler: {ref: app.createNote}
 `;
 beforeAll(() => mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true }));
 const targets = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const;
-const caller = { ...user("writer"), role: "editor" as const, scopes: ["notes:write"] };
+const caller = { ...user("writer"), role: "staff" as const, scopes: ["notes:write"] };
 const files = (target: typeof targets[number], text = schema + ref) => generateOrThrow(target, [{ sourceId: "handlers.yaml", text }]);
 
 for (const target of targets) test(`${target} caller-owned handlers gate dispatch and preserve context/errors`, async () => {
   const generated = await files(target);
   const app = await loadGenerated(generated["generated.ts"]!);
   const db = {};
-  for (const denied of [{ kind: "anonymous" }, { kind: "system", reason: "test" }, user("contributor"), { ...caller, scopes: [] }]) {
+  for (const denied of [{ kind: "anonymous" }, { kind: "system", reason: "test" }, user("staff"), { ...caller, scopes: [] }]) {
     await expect(app.store(db, denied, { handlers: {} }).procedures["app-note"]({ title: "t" })).rejects.toMatchObject({ code: denied.kind === "user" ? "AUTH_DENIED" : "UNAUTHENTICATED" });
   }
   for (const options of [undefined, { handlers: {} }]) {
