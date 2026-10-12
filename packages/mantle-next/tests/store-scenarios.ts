@@ -85,6 +85,8 @@ export async function verifyStore(env: StoreEnv) {
   // anonymous: Core's scope predicate matches nothing; an unscoped Schema stays readable
   const anon = env.stores(anonymous);
   assert.deepEqual([...(await anon.purchase_requests.find()).rows], []); assert.equal(await anon.purchase_requests.count(), 0); ok();
+  await refused(anon.session_notes.insert({ body: "anonymous", expiresat: null }), "UNAUTHENTICATED");
+  assert.deepEqual(await env.native("SELECT id FROM session_notes WHERE body = ?", ["anonymous"]), []); ok();
 
   // ---- trusted mode: no scope predicate, both owners
   assert.equal(await sys.count({ requestnumber: { like: "S-%" } }), ROWS * 2); ok();

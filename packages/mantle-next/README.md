@@ -40,6 +40,8 @@ state column names, value types and the writable columns, and the Store enforces
 **not** a View's or Procedure's `requires`: authorize before calling it. Design, limits and what the runtime still refuses are in
 [ADR-0045](../../docs/adr/0045-next-runtime-core.md).
 
+A Store-only purchase Worker retains 1,450 gzip bytes of generated operations (Bun 1.3.14, minified); the existing bound operation API stays intact.
+
 ## Store transactions
 
 Writes are lazy thenables: await `collection.insert/update/delete(...)` to execute once,

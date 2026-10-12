@@ -65,7 +65,7 @@ export interface Collection<T extends Table> {
   find(query?: Query<T["fields"], T["order"]>): Promise<Page<RowOf<T>>>;
   first(query?: Omit<Query<T["fields"], T["order"]>, "limit" | "cursor">): Promise<RowOf<T> | null>;
   count(where?: Where<T["fields"]>): Promise<number>;
-  /** The new row: the writable columns, with scope, author, clock and id filled by the row rules. A caller with no subject inserts nothing (the scope column is NOT NULL). */
+  /** The new row: the writable columns, with scope, author, clock and id filled by the row rules. An anonymous caller cannot insert into a scoped Schema. */
   insert(values: Insert<T>): Write<RowOf<T>>;
   /** Writes only the columns given. `lock` is the version the caller read; a different one (or a row the caller cannot see) is CONFLICT, and so is a unique-index clash. Returns the new row. */
   update(id: string, set: Readonly<Partial<T["set"]>>, options: { readonly lock: number | string }): Write<RowOf<T>>;
@@ -126,7 +126,14 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     };
     return {
       collection: (name: string) => collection(db, caller, prepare(name), write),
-      ...Object.fromEntries(Object.entries(operations ?? {}).map(([kind, functions]) => [kind, Object.fromEntries(Object.entries(functions).map(([name, fn]) => [name, (input: any) => fn(db, caller, input)]))])),
+      ...Object.fromEntries(Object.keys(operations ?? {}).map(kind => {
+        const cache: Record<string, unknown> = Object.create(null);
+        return [kind, new Proxy(operations![kind]!, { get: (functions, name: string) => {
+          if (Object.hasOwn(cache, name)) return cache[name];
+          const fn = functions[name];
+          return fn && (cache[name] = (input: any) => fn(db, caller, input));
+        } })];
+      })),
       ...(!inTransaction && { batch: async (writes: readonly Write<unknown>[]) => {
         const states = writes.map(w => pending.get(w));
         if (new Set(writes).size !== writes.length || states.some(s => !s || s.claimed)) throw new Error("Batch needs unused Writes from this Store.");
@@ -225,6 +232,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         return Number(((await rows(`SELECT COUNT(*) AS "count"${p.from}${where(conds)}`, values))[0] as { count: unknown }).count);
       },
       insert(set: object) { return write(() => {
+        if (f.s && caller.kind === "anonymous") throw new ContractError("UNAUTHENTICATED", "A scoped insert requires an authenticated caller.", `${p.name}/insert`);
         const w = writer(), names: string[] = [], marks: string[] = [];
         for (const [name, mark] of w.given(set)) { names.push(name); marks.push(mark); }
         for (const [column, v] of x.fills) { names.push(d.ident(column)); marks.push(v === "newId" ? rules.newId : w.recipe(v)); }

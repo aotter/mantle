@@ -1,6 +1,6 @@
 /** `bun:sqlite`: sync queries; interactive transactions queue all work on the same Database. */
 import type { Bound } from "../binds.js";
-import { conflict, type Row } from "../contracts.js";
+import { conflict, ContractError, type Row } from "../contracts.js";
 import { unique } from "../dialect/sqlite.js";
 import { context, guard } from "./transaction-context.js";
 
@@ -55,7 +55,12 @@ export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>)
     transactions.add(tx);
     const state: { outer?: Handle } = { outer: db };
     try { const result = await context.run(state, () => fn(tx)); db.exec("COMMIT"); return result; }
-    catch (error) { db.exec("ROLLBACK"); throw error; }
+    catch (error) {
+      try { db.exec("ROLLBACK"); } catch (rollback) {
+        throw new ContractError("OUTCOME_UNKNOWN", "Rollback failed; reconcile before retrying.", "store/transaction", { cause: new AggregateError([error, rollback]) });
+      }
+      throw error;
+    }
     finally { active = false; state.outer = undefined; }
   });
 }
