@@ -14,7 +14,7 @@ it("discovers global operations, never retries an uncertain write and reuses its
     const bodies: unknown[] = [];
     await page.route("**/admin/api/**", async route => {
       const path = new URL(route.request().url()).pathname.replace("/admin/api", "");
-      const data = path === "/me" ? { id: "owner", role: "owner", login: "owner", image: null }
+      const data = path === "/me" ? { id: "owner", role: "staff", login: "owner", image: null }
         : path === "/site" ? { brand: "Empty site", icons: [], canonicalLocale: "en" }
         : path === "/collections" ? { collections: [] }
         : path === "/views-manifest" ? { views: [] }

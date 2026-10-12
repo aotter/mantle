@@ -26,8 +26,8 @@ function ObservedAt({ time }: { time: number }): React.ReactElement {
 
 export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): React.ReactElement {
   const { language } = usePreferences();
-  const [cursor, setCursor] = React.useState<string>();
-  const [direction, setDirection] = React.useState<"forward" | "backward">("forward");
+  const [cursors, setCursors] = React.useState<string[]>([]);
+  React.useEffect(() => setCursors([]), [model.name]);
   const collections = useQuery<Collection[]>({
     queryKey: ["collections"],
     queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
@@ -36,8 +36,8 @@ export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): R
   const entries = useQuery({
     ...entriesQueryOptions({
       ...entriesQueryArgsFromSearch(model.name, ""),
-      cursor,
-      cursorDirection: direction,
+      cursor: cursors.slice(-1)[0],
+      cursorDirection: "forward",
     }),
     enabled: !!collection,
     staleTime: 0,
@@ -64,30 +64,30 @@ export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): R
             <TableHeader><TableRow>
               {([
                 t(language, "collection.table.id"),
-                t(language, "collection.table.status"),
+                ...(collection.lifecycle === "publishing" ? [t(language, "collection.table.status")] : []),
                 t(language, "collection.table.version"),
                 t(language, "collection.table.updated"),
-                ...(collection.lifecycle !== "operational" ? [t(language, "collection.table.title")] : []),
+                ...(collection.lifecycle === "publishing" ? [t(language, "collection.table.title")] : []),
                 ...fields,
               ]).map((field) => <TableHead key={field}>{field}</TableHead>)}
             </TableRow></TableHeader>
             <TableBody>{rows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell><a className="font-mono text-xs text-primary hover:underline" href={entryLandingPath(row.collection, row.id)}>{row.id}</a></TableCell>
-                <TableCell>{row.status}</TableCell>
+                {collection.lifecycle === "publishing" ? <TableCell>{row.status}</TableCell> : null}
                 <TableCell>{row.version}</TableCell>
                 <TableCell>{formatTimestampMs(row.updated_at) ?? "-"}</TableCell>
-                {collection.lifecycle !== "operational" ? <TableCell>{renderTitleText(row.title, language)}</TableCell> : null}
+                {collection.lifecycle === "publishing" ? <TableCell>{renderTitleText(row.title, language)}</TableCell> : null}
                 {fields.map((field) => <TableCell key={field}>{renderDataValue(collection.schema?.properties?.[field], row.data_preview?.[field])}</TableCell>)}
               </TableRow>
             ))}</TableBody>
           </Table>
         </div>
       ) : null}
-      {entries.data && (entries.data.previous_cursor || entries.data.next_cursor) ? (
+      {entries.data && (cursors.length || entries.data.next_cursor) ? (
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" disabled={!entries.data.previous_cursor} onClick={() => { setCursor(entries.data!.previous_cursor!); setDirection("backward"); }}>{t(language, "collection.previousPage")}</Button>
-          <Button type="button" variant="outline" disabled={!entries.data.next_cursor} onClick={() => { setCursor(entries.data!.next_cursor!); setDirection("forward"); }}>{t(language, "collection.nextPage")}</Button>
+          <Button type="button" variant="outline" disabled={!cursors.length} onClick={() => setCursors(current => current.slice(0, -1))}>{t(language, "collection.previousPage")}</Button>
+          <Button type="button" variant="outline" disabled={!entries.data.next_cursor} onClick={() => setCursors(current => [...current, entries.data!.next_cursor!])}>{t(language, "collection.nextPage")}</Button>
         </div>
       ) : null}
     </div>

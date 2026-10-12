@@ -46,7 +46,7 @@ it("loads live model data only on demand through the existing guarded paths", as
         res.setHeader("content-type", "application/json");
         res.setHeader("cache-control", "private, no-store");
         let body: unknown = {};
-        if (path === "/admin/api/me") body = { role: "owner", login: "review", image: null };
+        if (path === "/admin/api/me") body = { role: "staff", login: "review", image: null };
         else if (path === "/admin/api/site") body = { brand: "Review", title: "Review", icons: [], locales: ["en"], canonicalLocale: "en" };
         else if (path === "/admin/api/developer-console") body = snapshot;
         else if (path === "/admin/api/collections") body = { collections: [collection("articles"), collection("empty"), collection("news", "publishing")] };

@@ -187,6 +187,20 @@ const response = await console(request, env);
 are refused. HTML is `no-store`, with `nosniff`, `frame-ancestors 'none'` and
 `X-Frame-Options: DENY`; `preview.html` remains frameable. Built assets are immutable.
 Assets are app-owned and are not bundled into the query core.
+Resolve `@aotter/mantle-ui/admin/index.html` and serve its directory: configure
+Wrangler's static-assets directory in the application, or supply a Bun file
+reader in `assets`. The console footer identifies the installed `@aotter/mantle`
+version. Identity and invitation controls use only the declared OSS `staff` role;
+legacy owner/editor/contributor accounts must be migrated to that role before
+using this console.
+
+Entry lists keep a stack of opaque forward cursors in their URLs. Previous
+revisits the preceding page; sorting, filtering, parent and search changes clear
+the stack. The member directory retains its own backward-cursor contract.
+Only explicitly publishing metadata enables publishing controls, and operational
+entries with null status have no status badge. Generic operational editing still
+requires the existing explicit unlock and respects read-only metadata.
+
 
 `GET /me` returns `{ userId, role, login, image }`. Optional `getUser` supplies
 display information; unwired identity operations return 501. `GET /bootstrap`
@@ -256,8 +270,12 @@ remain on the native content buttons rather than this list. `POST /operations/<n
 validates a JSON object of at most 1,000,000 UTF-8 bytes, then returns
 `{ ok: true, output }`. SQL outputs retain `{ results }`, and ref outputs remain
 handler-owned. Pass the generated `handlers` option when the manifest declares
-refs. OCC `CONFLICT` remains unchanged; the console's write controller re-reads
-the entry before explaining it. Selected Admin modules add relative API routes
+refs. OCC `CONFLICT` remains unchanged. Entry mutations returning `CONFLICT` or
+`OUTCOME_UNKNOWN` trigger one read with a ten-second timeout before the console
+explains the refusal; successful mutations add no such read. The console never
+retries the write or replaces unsaved fields, and reading the latest entry does
+not confirm an unknown write outcome. Row-operation controllers retain their
+own authority read before explaining a refusal. Selected Admin modules add relative API routes
 through `routes`; they share the same caller, session and origin gate.
 
 `GET /admin/api/webmcp` returns the same `{ tools, routes }` catalogue used by

@@ -32,7 +32,7 @@ it("keeps the built preview on its bridge, including search and downloads, while
               const path = url.pathname;
               window.bridged.push(path + url.search);
               if (path === '/admin/api/webmcp') return Response.json({tools:[],routes:{}});
-              if (path === '/admin/api/me') return Response.json({role:'owner',login:'sandbox',image:null}, {status:${route === "/admin/unauthorized" ? 401 : 200}});
+              if (path === '/admin/api/me') return Response.json({role:'staff',login:'sandbox',image:null}, {status:${route === "/admin/unauthorized" ? 401 : 200}});
               if (path === '/admin/api/site') return Response.json({brand:'Sandbox',icons:[],locales:['en'],canonicalLocale:'en'});
               if (path === '/admin/api/collections') return Response.json({collections:[]});
               if (path === '/admin/api/operations') return Response.json({operations:[]});

@@ -6,7 +6,7 @@ import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api, downloadAdminFile } from "../../lib/api";
-import { viewsManifestQueryOptions } from "../../lib/queries";
+import { cursorPageHref, viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, JsonSchema, SiteInfo, ViewManifestInfo } from "../../lib/types";
@@ -337,12 +337,7 @@ function viewParamsHref(
 }
 
 function viewCursorHref(name: string, query: URLSearchParams, nextCursor?: string): string | undefined {
-  const cursors = query.getAll("cursor");
-  if (!nextCursor && cursors.length === 0) return undefined;
-  const next = new URLSearchParams(query);
-  next.delete("cursor");
-  for (const cursor of nextCursor ? [...cursors, nextCursor] : cursors.slice(0, -1)) next.append("cursor", cursor);
-  return viewHref(name, next);
+  return cursorPageHref(`/admin/views/${encodeURIComponent(name)}`,query,nextCursor);
 }
 
 /** The export runs the View with the same input, from the first row. */

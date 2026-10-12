@@ -281,7 +281,7 @@ async function bootAdmin(args: { operations: unknown[]; conflictCode?: string; f
       const method = route.request().method();
       if (path === "/bootstrap") {
         return route.fulfill({ json: {
-          me: { userId: "owner", role: "owner", login: "owner", image: null },
+          me: { userId: "owner", role: "staff", login: "owner", image: null },
           site: { brand: "Site", icons: [], canonicalLocale: "en", locales: ["en"], title: "Site", description: "", publicUrl: "https://site.test", mcpUrl: "https://site.test/mcp" },
           collections: [orgCollection(), memberCollection()],
           views: [],
@@ -291,7 +291,7 @@ async function bootAdmin(args: { operations: unknown[]; conflictCode?: string; f
         } });
       }
       if (path === "/me") {
-        return route.fulfill({ json: { id: "owner", role: "owner", login: "owner", image: null } });
+        return route.fulfill({ json: { id: "owner", role: "staff", login: "owner", image: null } });
       }
       if (path === "/site") {
         return route.fulfill({ json: { brand: "Site", icons: [], canonicalLocale: "en", locales: ["en"], title: "Site", description: "", publicUrl: "https://site.test", mcpUrl: "https://site.test/mcp" } });

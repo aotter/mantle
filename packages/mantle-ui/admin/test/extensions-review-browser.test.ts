@@ -49,10 +49,10 @@ export default defineAdminExtension({
 const extension = {
   id: "brand", title: "Brand", module: "/ext/brand.js",
   contributes: {
-    pages: [{ id: "grants", title: "Grants", role: "editor", nav: { group: "more" } }],
-    settings: [{ id: "policy", title: "Policy", role: "owner", schema: { type: "object", properties: { limit: { type: "integer", title: "Limit", minimum: 1 } } } }],
-    actions: [{ id: "flag", title: "Flag", role: "editor", target: "record/v1", presentation: "confirm", when: { schema: ["organizations"] } }],
-    panels: [{ id: "usage", title: "Usage", role: "contributor", target: "record.sidebar/v1", when: { schema: ["organizations"] } }],
+    pages: [{ id: "grants", title: "Grants", role: "staff", nav: { group: "more" } }],
+    settings: [{ id: "policy", title: "Policy", role: "staff", schema: { type: "object", properties: { limit: { type: "integer", title: "Limit", minimum: 1 } } } }],
+    actions: [{ id: "flag", title: "Flag", role: "staff", target: "record/v1", presentation: "confirm", when: { schema: ["organizations"] } }],
+    panels: [{ id: "usage", title: "Usage", role: "staff", target: "record.sidebar/v1", when: { schema: ["organizations"] } }],
     fields: [{ id: "color", target: "field.input/v1" }, { id: "swatch", target: "field.cell/v1" }],
   },
 };
@@ -84,8 +84,8 @@ async function boot(path: string): Promise<{ page: Page; calls: { method: string
       const api = url.pathname.replace("/admin/api", "");
       const body = method === "GET" ? undefined : route.request().postDataJSON();
       calls.push({ method, path: api, body });
-      if (api === "/me") return route.fulfill({ json: { id: "owner", role: "owner", login: "owner", image: null } });
-      if (api === "/bootstrap") return route.fulfill({ json: { me: { id: "owner", role: "owner", login: "owner", image: null }, site, collections: [collection], views: [], operations: [], webmcp: { tools: [], routes: {} }, entries: { items: [row], previous_cursor: null, next_cursor: null } } });
+      if (api === "/me") return route.fulfill({ json: { id: "owner", role: "staff", login: "owner", image: null } });
+      if (api === "/bootstrap") return route.fulfill({ json: { me: { id: "owner", role: "staff", login: "owner", image: null }, site, collections: [collection], views: [], operations: [], webmcp: { tools: [], routes: {} }, entries: { items: [row], previous_cursor: null, next_cursor: null } } });
       if (api === "/site") return route.fulfill({ json: site });
       if (api === "/collections") return route.fulfill({ json: { collections: [collection] } });
       if (api === "/views-manifest") return route.fulfill({ json: { views: [] } });

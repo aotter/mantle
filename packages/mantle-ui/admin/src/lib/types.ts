@@ -97,7 +97,7 @@ export interface EntryEditorEntry {
   id: string;
   collection: string;
   locale: string | null;
-  status: ContentStatus;
+  status: ContentStatus | null;
   version: number;
   data: Record<string, unknown>;
   updated_at: number;
@@ -122,7 +122,7 @@ export interface EntryEditorPayload {
   related: RelatedEntrySection[];
 }
 
-export type StaffRole = "owner" | "editor" | "contributor";
+export type StaffRole = "staff";
 
 export interface AdminUser {
   login: string | null;
@@ -138,7 +138,7 @@ export type AuthMethodInfo =
   | { kind: "social"; provider: string }
   | { kind: "oauth"; providerId: string; displayName?: string };
 
-/** Row from `GET /admin/api/staff` (owner-only). `createdAt` arrives
+/** Row from `GET /admin/api/staff` (staff-only). `createdAt` arrives
  *  as an ISO string over the wire. `emailVerified: false` with no
  *  `githubLogin` marks a pending invitation nobody has signed in to. */
 export interface StaffUser {
@@ -169,7 +169,7 @@ export interface EntryRow {
   id: string;
   collection: string;
   locale: string | null;
-  status: string;
+  status: string | null;
   version: number;
   title: unknown;
   updated_at: number;
@@ -180,7 +180,6 @@ export interface EntryRow {
 
 export interface ListEntriesResult {
   items: EntryRow[];
-  previous_cursor: string | null;
   next_cursor: string | null;
 }
 
