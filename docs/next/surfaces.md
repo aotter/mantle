@@ -70,3 +70,48 @@ REST native acceptance is runnable with
 `MANTLE_NEXT_REST_D1=1 MANTLE_NEXT_BUN_PG_URL=<disposable-db> bun test tests/rest-native.test.ts`
 from the SDK package. D1 uses local Wrangler on port 8998; the tests clean their
 local state and PostgreSQL schema. No cloud deployment is needed.
+
+## Optional web output
+
+`web.ts` exports `web({ db, caller, origin, title, description, locales?, pages,
+cacheControl? })`. `db` is the application-owned native handle, including callable
+PostgreSQL handles. `caller` is a verified Caller or the app's
+`(request, env) => Caller | Promise<Caller>` resolver, evaluated once per request.
+The module dispatches public Views only; it never invokes Procedures or needs handlers.
+
+```ts
+import { web } from './generated/web.js';
+const site = web({ db, caller, origin: 'https://example.com', title: 'Blog',
+  description: 'Articles', locales: ['en'],
+  pages: { '/posts/{slug}': { view: 'post-by-slug', list: 'posts', markdown: 'body' } }
+});
+const response = await site.fetch(request, env); // Response | undefined
+const tags = await site.head(request, env); // HTML string, empty for unknown/missing pages
+```
+
+Page parameter names must exactly match the View's declared input properties.
+Page and list Views must return the page parameters; list Views must accept empty input. Markdown
+must name a textual output column. HTML remains application-owned.
+
+`/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
+read the current page View. SQL alone controls visibility, including publication.
+GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses use
+`cacheControl` or `public, max-age=60`; authenticated responses use
+`private, no-store`. `If-None-Match` returns 304 only after current content is read.
+Canonical URLs use the configured origin, independently of the request host.
+Only `locales[0]` adds hreflang until translations support. Importing another generated entry does not import web output.
+
+Web indexes scan at most 50,000 rows for one sitemap and 5,000 for `llms.txt`,
+across all configured lists. Skipped `.`/`..` path segments consume the scan
+budget too. Output stops before exceeding 50 MiB of UTF-8 sitemap XML (including
+its closing tag) or 1 MiB of `llms.txt`; a sitemap index can be added separately.
+Each request also stops after 100 sitemap queries or 10 `llms.txt` queries,
+across all templates. Small authored SQL LIMITs or many templates can truncate
+output sooner. A sitemap index remains separate future work.
+
+`head` normalizes URLs from the queried row's page parameters, matching sitemap
+URLs; malformed paths, failed validation and unavailable rows return an empty
+string. A NULL Markdown field answers 404. Errors and missing Markdown responses
+use `cache-control: no-store`. A matching HTML page takes precedence over a `.md`
+alternate, including slugs ending in `.md`; a Markdown alternate may read the
+exact HTML candidate first and therefore performs at most two View queries.

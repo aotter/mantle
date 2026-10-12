@@ -18,7 +18,8 @@ explicitly; apply `schema.sql` directly only to a new database.
 | View keyset pages, generated boundary validation and HTTP error mapping | Generated `paged/views/*` and `validation/*` modules plus `wire`; see [surface deltas](surfaces.md). |
 | REST and `http` Trigger exposure | Supported generated `rest.ts`; app mounts with `{ db, caller }` and required `handlers` for ref contracts. Public Views page at `/api/views/<name>`; HTTP Triggers keep method/path. |
 | MCP and `mcp` Trigger exposure | Planned [#1472](https://github.com/aotter/mantle/issues/1472); app mounts its generated module. |
-| Dynamic `web.ts`, Admin UI, web skill/example | Planned [#1473](https://github.com/aotter/mantle/issues/1473), [#1477](https://github.com/aotter/mantle/issues/1477), [#1478](https://github.com/aotter/mantle/issues/1478). |
+| Dynamic `web.ts` (`llms.txt`, sitemap, `.md` alternates, head tags) | Generated; mount `web({ ... })`; see [surface deltas](surfaces.md#optional-web-output). |
+| Admin UI, web skill/example | Planned [#1477](https://github.com/aotter/mantle/issues/1477), [#1478](https://github.com/aotter/mantle/issues/1478). |
 | Opt-in `lifecycle: publishing` | Generated status, `published_at`, staff-only transitions and published-only public reads; see [Publishing](#publishing). |
 | `ref` Procedures and typed `Handlers` | Generated `Handlers` type; pass implementations at `store(db, caller, { handlers })`; `mantle generate` lists them. See [ref Procedures](contract.md#ref-procedures). |
 | Published package and release measurements | Planned [#1479](https://github.com/aotter/mantle/issues/1479), [#1480](https://github.com/aotter/mantle/issues/1480). |
