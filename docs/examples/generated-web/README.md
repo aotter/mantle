@@ -16,10 +16,22 @@ npm install --save-exact @aotter/mantle@<version>
 npm install --save-dev typescript @cloudflare/workers-types wrangler
 npx mantle generate cloudflare-d1 generated posts.yaml
 npx tsc --noEmit
+git init
+git add generated src/worker.ts wrangler.jsonc
+git commit -m "Generate native website contracts"
 npx wrangler d1 execute mantle-generated-web --local --file generated/schema.sql
 npx wrangler d1 execute mantle-generated-web --local --file seed.sql
 npx wrangler dev --local
 ```
+
+Keep generated TypeScript, `schema.sql` and the configured Wrangler file in
+version control. The workflow is generate → typecheck → implement any listed ref
+handlers → typecheck → commit generated output. This manifest has no ref handlers.
+For alpha.7 after the service-composition work lands, CI runs
+`mantle generate cloudflare-d1 generated posts.yaml --check` to refuse stale or
+missing generated files without writing them. Earlier linked generators do not
+yet support `--check`; use the installed version's documented commands. `dist/`
+and local Wrangler state stay ignored.
 
 For a linked pre-release SDK, use its installed `mantle` CLI instead of installing
 an unpublished version. Generation adds Wrangler's split build automatically.
