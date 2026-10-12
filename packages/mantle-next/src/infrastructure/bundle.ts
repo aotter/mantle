@@ -12,6 +12,7 @@ export function guardStartup(metafile: Metafile, entry: string): void {
     visited.add(name);
     const output = metafile.outputs[name]!;
     for (const input of Object.keys(output.inputs)) {
+      // ponytail: package identity comes from the node_modules path; a vendored copy outside node_modules is not recognized.
       const module = input.replaceAll("\\", "/").split("node_modules/").pop()!;
       if (LAZY_PACKAGES.some(pkg => pkg.endsWith("/*") ? module.startsWith(pkg.slice(0, -1)) : module === pkg || module.startsWith(`${pkg}/`))) {
         throw new Error(`Startup module ${name} contains ${input}. Load it through authLoader(() => import(...)) to keep Better Auth out of startup.`);

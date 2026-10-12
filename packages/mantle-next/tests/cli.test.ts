@@ -22,7 +22,7 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
       rules: [{ type: "ESModule", globs: ["**/*.js"], fallthrough: true }],
       build: { command: "mantle bundle src/worker.ts dist", watch_dir: ["src", "generated"] },
     });
-    const original = '{\r\n\t// keep this comment\r\n\t"name": "existing", // same line\r\n\t"vars": { "VALUE": "untouched" },\r\n\t"d1_databases": [{ "binding": "DB", "database_id": "id" }],\r\n\t"compatibility_flags": ["other_flag" /* keep flag comment */],\r\n\t"main": "old.ts",\r\n}\r\n';
+    const original = '{\r\n\t// keep this comment\r\n\t"name": "existing", // same line\r\n\t"vars": { "VALUE": "untouched" },\r\n\t"d1_databases": [{ "binding": "DB", "database_id": "id" }],\r\n\t"compatibility_flags": ["other_flag" /* keep flag comment */],\r\n\t"main": "old.ts",\r\n\t"rules": [{ "type": "Text", "globs": ["**/*.md"] }],\r\n\t"build": { "cwd": "app" },\r\n}\r\n';
     await writeFile(join(dir, "wrangler.jsonc"), original);
     generate(dir, "--entry", "worker/index.ts", "--outdir", "build");
     const edited = await readFile(join(dir, "wrangler.jsonc"), "utf8");
@@ -32,7 +32,8 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
     const updated = parse(edited);
     expect(updated.compatibility_flags).toEqual(["other_flag", "nodejs_compat"]);
     expect(updated.main).toBe("build/index.js");
-    expect(updated.build).toEqual({ command: "mantle bundle worker/index.ts build", watch_dir: ["worker", "generated"] });
+    expect(updated.build).toEqual({ cwd: "app", command: "mantle bundle worker/index.ts build", watch_dir: ["worker", "generated"] });
+    expect(updated.rules).toEqual([{ type: "Text", globs: ["**/*.md"] }, { type: "ESModule", globs: ["**/*.js"], fallthrough: true }]);
     generate(dir, "--entry", "worker/index.ts", "--outdir", "build");
     expect(await readFile(join(dir, "wrangler.jsonc"), "utf8")).toBe(edited);
     await mkdir(join(dir, "config"));

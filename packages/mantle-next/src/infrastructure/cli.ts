@@ -4,7 +4,6 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { bundle } from "./bundle.js";
 import { configureWrangler } from "./wrangler.js";
 import type { Target } from "../domain/model.js";
 
@@ -17,8 +16,8 @@ try {
   const command = positionals[0] === "bundle" || positionals[0] === "generate" ? positionals.shift()! : "generate";
   if (command === "bundle") {
     const [entry, outdir] = positionals;
-    if (!entry || !outdir || positionals.length !== 2 || process.argv.slice(2).some(arg => arg.startsWith("--"))) throw new Error(usage);
-    await bundle(entry, outdir);
+    if (!entry || !outdir || positionals.length !== 2 || values.auth || values.wrangler) throw new Error(usage);
+    await (await import("./bundle.js")).bundle(entry, outdir);
   } else {
     const [target, destination, ...paths] = positionals;
     if (!target || !targets.includes(target as Target) || !destination || !paths.length) throw new Error(usage);

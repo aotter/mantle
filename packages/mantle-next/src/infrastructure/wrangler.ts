@@ -30,8 +30,13 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
   const flags: string[] = config.compatibility_flags ?? [];
   const indent = text.match(/\n([ \t]+)"/)?.[1] ?? "  ";
   const formattingOptions = { insertSpaces: !indent.includes("\t"), tabSize: indent.length, eol: text.includes("\r\n") ? "\r\n" : "\n" };
-  for (const [key, value] of Object.entries(keys)) {
-    if (JSON.stringify(config[key]) !== JSON.stringify(value)) text = applyEdits(text, modify(text, [key], value, { formattingOptions }));
+  // Merge, never replace: the user's own module rules and build options survive.
+  const { rules: [rule], build: buildKeys, ...top } = keys;
+  const edits: [(string | number)[], unknown][] = [...Object.entries(top).map(([k, v]) => [[k], v] as [string[], unknown]), ...Object.entries(buildKeys).map(([k, v]) => [["build", k], v] as [string[], unknown])];
+  if (!(config.rules ?? []).some((r: unknown) => JSON.stringify(r) === JSON.stringify(rule))) edits.push([config.rules === undefined ? ["rules"] : ["rules", -1], config.rules === undefined ? [rule] : rule]);
+  const at = (path: (string | number)[]) => path.reduce((v: any, k) => v?.[k], config);
+  for (const [path, value] of edits) {
+    if (path.at(-1) === -1 || JSON.stringify(at(path)) !== JSON.stringify(value)) text = applyEdits(text, modify(text, path, value, { formattingOptions }));
   }
   if (!flags.includes("nodejs_compat")) {
     const path = config.compatibility_flags === undefined ? ["compatibility_flags"] : ["compatibility_flags", -1];
