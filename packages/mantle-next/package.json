@@ -12,6 +12,7 @@
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
     "./contracts": "./dist/kernel/contracts.js",
+    "./scalars": "./dist/kernel/scalars.js",
     "./binds": "./dist/kernel/binds.js",
     "./store": "./dist/kernel/store.js",
     "./dialect/sqlite": "./dist/kernel/dialect/sqlite.js",

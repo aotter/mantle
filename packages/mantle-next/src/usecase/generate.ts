@@ -5,6 +5,8 @@ import { nativeType, outputType } from "../domain/columns.js";
 import { entry, exportName } from "../domain/entry.js";
 import { recipesOf } from "../domain/recipes.js";
 import { emitStores } from "./stores.js";
+import { emitPaging } from "./paging.js";
+import { emitValidation } from "./validation.js";
 
 const q = JSON.stringify;
 const sqlite = (target: Target) => target === "bun-sqlite" || target === "cloudflare-d1";
@@ -113,12 +115,13 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input`, `export type { Output } from "${base}contracts";\n`);
   }
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse);
+  const surfaces = { ...emitPaging(plan, lowered, target, refuse), ...emitValidation(plan, refuse) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [`export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`, `export const store = /* @__PURE__ */ createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof procedures }>(DIALECT.dialect, DRIVER, RULES, ${stores.facts}, { views, procedures });`] : [])].join("\n");
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
   const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(/^  deny\(/m.test(code) ? ["deny"] : []), ...(procedures.length ? ["type Output"] : [])];
   const dbType = target === "bun-sqlite" ? `import type { Handle as Database } from "${base}driver/bun-sqlite";` : target === "cloudflare-d1" ? `import type { Handle as Database } from "${base}driver/d1";` : "";
-  return { ok: true, files: { ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
+  return { ok: true, files: { ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
     ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...(stores ? [`import { createStore } from "${base}store";`] : []),
     `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}binds";`,
     `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" } };

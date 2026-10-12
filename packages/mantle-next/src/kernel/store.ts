@@ -8,6 +8,16 @@ import { ContractError, type Caller, type Row } from "./contracts.js";
 import type { Dialect } from "./dialect/common.js";
 import { condition } from "./where.js";
 
+/** Shared keyset wire format; a selected View binds its cursor to its operation. */
+export const encodeCursor = (value: unknown, id: unknown, operation?: string): string => encodeURIComponent(JSON.stringify(operation === undefined ? [value, id] : [value, id, operation]));
+export function decodeCursor(cursor: string, path = "", operation?: string): [unknown, unknown] {
+  try {
+    const c = JSON.parse(decodeURIComponent(cursor));
+    if (Array.isArray(c) && c.length === (operation === undefined ? 2 : 3) && (operation === undefined || typeof c[1] === "string" && (typeof c[0] === "string" || typeof c[0] === "boolean" || typeof c[0] === "number" && Number.isFinite(c[0])) && c[2] === operation)) return [c[0], c[1]];
+  } catch {}
+  throw new ContractError("INPUT_VALIDATION_FAILED", "Malformed or foreign cursor.", path);
+}
+
 /** `eq`: `column = value`; `ttl`: `column IS NULL OR column > value` (Core's `RowTerm`). */
 export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe];
 /** Core's row rules for a Schema with the placeholder columns `SCOPE` and `TTL`; `expand` puts a Schema's own in. */
@@ -179,7 +189,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       const values = base(), conds = conditions(q.where, values);
       const id = `r.${ID}`, kc = `r.${d.ident(name)}`, up = dir === "asc", way = up ? "ASC" : "DESC";
       if (q.cursor !== undefined) {
-        const [v, last] = decode(q.cursor);
+        const [v, last] = decodeCursor(q.cursor, p.name + "/cursor");
         values.push(last);
         const after = `${id} ${up ? ">" : "<"} ${d.param(values.length)}`;
         if (name === "id") conds.push(after);
@@ -189,14 +199,8 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       const list = await rows(`${select()}${where(conds)} ORDER BY ${name === "id" ? "" : `${kc} ${way}, `}${id} ${way} LIMIT ${limit + 1}`, values);
       if (list.length <= limit) return { rows: clean(list), cursor: null };
       const page = list.slice(0, limit), end = page[limit - 1]!;
-      return { rows: clean(page), cursor: encodeURIComponent(JSON.stringify([end[name], end.id])) };
+      return { rows: clean(page), cursor: encodeCursor(end[name], end.id) };
     }
-
-    /** A cursor is `encodeURIComponent(JSON.stringify([value, id]))`; anything else is refused. */
-    const decode = (cursor: string): [unknown, unknown] => {
-      try { const c = JSON.parse(decodeURIComponent(cursor)); if (Array.isArray(c) && c.length === 2) return c as [unknown, unknown]; } catch {}
-      throw no("malformed cursor");
-    };
 
     /** A write: placeholders are numbered as values are pushed; a Core bind recipe is evaluated against this caller and clock. */
     const writer = (lock?: number | string) => {

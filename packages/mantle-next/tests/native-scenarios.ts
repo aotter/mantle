@@ -37,6 +37,10 @@ export async function verifyBareApplication(
   sqlite: boolean,
   includeBench = false,
 ) {
+  // Native result arrays may carry enumerable driver metadata; compare their rows, preserving native scalar values.
+  const invoke = call, query = native;
+  call = async (...args) => { const result = await invoke(...args); return args[0] === "view" ? [...result as Record<string, unknown>[]] : result; };
+  native = async (...args) => [...await query(...args)];
   let checks = 0;
   const owner = owners[0];
   const sql = 'SELECT id, requestnumber, title, amount, approved, sortbucket, requestedunits, submittedat, neededon, payload FROM purchase_requests WHERE ownerid = ? ORDER BY id';

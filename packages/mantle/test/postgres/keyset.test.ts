@@ -18,11 +18,12 @@ const schemas = {
 };
 
 /** The WHERE of the outer select of the paged statement a View runs for `cursor`. */
-async function cursorSql(sql: string, cursor: unknown[]) {
+async function cursorSql(sql: string, cursor: unknown[], nkeys?: number) {
   useCompileSide(pgCompile);
   const seen: any[] = [];
   const s = { schemas, dialect: postgresDialect(), executor: { maxBindings: 1000, apply: async () => [], select: async (st) => (seen.push(st), []) } };
   await runView(s, await program("view", sql, {}, schemas), caller(), { pageSize: 3, cursor });
+  if (nkeys !== undefined) expect(seen.at(-1).ir.SelectStmt.targetList.filter((t) => /^_k\d+$/.test(t.ResTarget.name)).length).toBe(nkeys);
   return print(typed(seen.at(-1).ir, schemas)).replace(/^.*\) AS _p WHERE /, "");
 }
 const ROW = /^\(_p\._k0(, _p\._k\d)*\) [<>] \(\$\d+(, \$\d+)*\) ORDER BY/;
@@ -33,7 +34,8 @@ it("the cursor is a row comparison exactly when every key is NOT NULL and they s
     // native columns are NOT NULL, and the appended id tiebreak follows the last key
     expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at DESC", ["2026-01-01T00:00:00Z", "a"])).toBe("(_p._k0, _p._k1) < ($1, $2) ORDER BY _p._k0 DESC NULLS FIRST, _p._k1 DESC NULLS FIRST LIMIT $3");
     expect(await cursorSql("SELECT id FROM reqs ORDER BY updated_at, created_at", ["2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z", "a"])).toMatch(/^\(_p\._k0, _p\._k1, _p\._k2\) > \(\$1, \$2, \$3\) ORDER BY/);
-    expect(await cursorSql("SELECT id FROM reqs ORDER BY id", ["a", "a"])).toMatch(ROW);
+    expect(await cursorSql("SELECT id FROM reqs ORDER BY id", ["a"], 1)).toMatch(ROW);
+    expect(await cursorSql("SELECT id FROM reqs ORDER BY id", ["a", "a"], 1)).not.toMatch(ROW);
     // a scope column and a publishing status are NOT NULL; so is a native column read through a subquery
     expect(await cursorSql("SELECT n.id FROM notes n ORDER BY n.status DESC", ["published", "a"])).toMatch(ROW);
     expect(await cursorSql("SELECT s.id FROM (SELECT id, created_at AS at FROM reqs) s ORDER BY s.at", ["2026-01-01T00:00:00Z", "a"])).toMatch(ROW);
@@ -52,7 +54,7 @@ it("the cursor is a row comparison exactly when every key is NOT NULL and they s
     // a CTE is not a table, even when it is named like one
     expect(await cursorSql("WITH reqs AS (SELECT id, amount AS created_at FROM reqs) SELECT id FROM reqs ORDER BY created_at", [5, "a"])).toMatch(EXPANDED);
     // mixed directions
-    expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at DESC, id", ["2026-01-01T00:00:00Z", "a", "a"])).toMatch(EXPANDED);
+    expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at DESC, id", ["2026-01-01T00:00:00Z", "a"])).toMatch(EXPANDED);
     // a NULLS clause other than PostgreSQL's default; PostgreSQL's own default spelled out is still the row form
     expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at DESC NULLS LAST", ["2026-01-01T00:00:00Z", "a"])).toMatch(EXPANDED);
     expect(await cursorSql("SELECT id FROM reqs ORDER BY created_at NULLS FIRST", ["2026-01-01T00:00:00Z", "a"])).toMatch(EXPANDED);
@@ -94,8 +96,9 @@ it.skipIf(!PG_URL)("paged one to seven rows at a time, both cursor forms return 
         if (!(cursor = page.next)) return got;
       }
     };
-    const form = (st) => (/\(_p\._k0, _p\._k1/.test(print(typed(st.ir, itemSchemas))) ? "row" : "expanded");
+    const form = (st) => (ROW.test(print(typed(st.ir, itemSchemas)).replace(/^.*\) AS _p WHERE /, "")) ? "row" : "expanded");
     for (const [sql, want] of [
+      ["SELECT id, created_at FROM items ORDER BY id", "row"],
       ["SELECT id, created_at FROM items ORDER BY created_at DESC", "row"],
       ["SELECT id, created_at FROM items ORDER BY created_at", "row"],
       ["SELECT id, amount FROM items ORDER BY amount", "expanded"],

@@ -27,6 +27,27 @@ export class ContractError extends Error {
   }
 }
 
+/** Only transport failures this package raises; unknown codes remain server errors. */
+export function statusOf(code: string): number {
+  switch (code) {
+    case "INPUT_VALIDATION_FAILED": return 400;
+    case "UNAUTHENTICATED": return 401;
+    case "AUTH_DENIED": return 403;
+    case "NOT_FOUND": return 404;
+    case "METHOD_NOT_ALLOWED": return 405;
+    case "CONFLICT": return 409;
+    case "OUTCOME_UNKNOWN": return 503;
+    default: return 500;
+  }
+}
+
+/** Redact native errors at the selected boundary; the bare query preserves their identity. */
+export function wire(error: unknown) {
+  return error instanceof ContractError && statusOf(error.code) !== 500
+    ? { status: statusOf(error.code), error: { code: error.code, message: error.message, path: error.path } }
+    : { status: 500, error: { code: "INTERNAL_ERROR", message: "An internal error occurred.", path: "" } };
+}
+
 /** One result row. */
 export type Row = Record<string, unknown>;
 /** What every generated Procedure returns: the rows of each statement, in order. */

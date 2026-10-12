@@ -321,7 +321,13 @@ function selectIn(n: N, c: C): N {
   if (out.sortClause && !aggregate) {
     // on a native-order dialect the tiebreak runs the way the last key does, so one index scan (forward or backward) serves the whole ORDER BY
     const dir = c.nativeOrder && out.sortClause.at(-1)?.SortBy.sortby_dir === 'SORTBY_DESC' ? 'SORTBY_DESC' : 'SORTBY_DEFAULT';
-    const have = new Set(out.sortClause.map((k: N) => JSON.stringify(k.SortBy.node)));
+    const have = new Set(out.sortClause.map((k: N) => {
+      const node = k.SortBy.node, fields = node.ColumnRef?.fields;
+      const alias = fields?.length === 1 && fields[0].String?.sval === 'id' && out.targetList.find((t: N) => t.ResTarget.name === 'id');
+      const value = alias ? alias.ResTarget.val : node;
+      const actual = value.ColumnRef?.fields;
+      return JSON.stringify(!n.groupClause && firstAlias && actual?.at(-1)?.String?.sval === 'id' && (actual.length === 1 || actual.length === 2 && actual[0].String?.sval === firstAlias) ? col(firstAlias, 'id') : node);
+    }));
     if (n.groupClause) out.sortClause = [...out.sortClause, ...tx(n.groupClause, c).filter((g: N) => !have.has(JSON.stringify(g))).map((g: N) => sort(g, dir))];
     else if (firstAlias || first?.RangeFunction) {
       if (first!.RangeSubselect && !outputsOf(first!.RangeSubselect.subquery.SelectStmt).includes('id'))
