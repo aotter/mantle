@@ -227,3 +227,45 @@ SQLite-family initial artifacts use UTC. Their existing time-zone SQL lowering
 needs `_mantle_tz`; generate emits its native table and one UTC offset row covering
 the safe timestamp range. No request-time zone-table construction occurs. Regional
 time zones are not yet supported by this slice.
+
+## TTL maintenance
+
+A TTL Schema generates `<schema>.sweepExpired(db, caller, { limit?, cursor?, delete? })`
+in `procedures/<schema>.sweepExpired.ts`. Only an application-created system caller
+with a non-empty reason may invoke it; HTTP/OAuth callers cannot become system
+callers. The app owns scheduling. Schedule/lifecycle Triggers remain refused.
+
+The sweep returns `{ scanned, removed, nextCursor? }`, defaults to 500 candidates,
+and accepts limits 1..500. `delete: false` scans without deleting. Cursors belong
+to that Schema's sweep. NULL and future TTL values survive; a timestamp exactly
+at the shared dialect cutoff expires. Maintenance deliberately ignores scope and
+publishing visibility, deleting expired rows across tenants. Candidate selection
+and deletion run atomically through the native driver with its existing uncertain
+transaction outcome handling. Native triggers may suppress deletes, so scanned
+and removed counts can differ; the cursor advances over selected candidates.
+
+```ts
+import sweep from './generated/procedures/session_notes.sweepExpired.js';
+
+export default {
+  async scheduled(_event, env) {
+    const caller = { kind: 'system', reason: 'scheduled TTL cleanup' } as const;
+    // Bounded per invocation: the next scheduled run starts again from the oldest
+    // expired rows, so no cursor needs to survive between runs.
+    let cursor: string | undefined;
+    for (let pages = 0; pages < 20; pages++) {
+      const page = await sweep(env.DB, caller, { limit: 500, cursor });
+      cursor = page.nextCursor;
+      if (!cursor) break;
+    }
+  },
+};
+```
+
+Keep the sweep import in the scheduled entry; apps selecting unrelated operations
+exclude maintenance code. Set `triggers.crons` in Wrangler yourself. The SDK's
+`toCloudflareCron` helper (the `cron` subpath) converts five-field POSIX schedules
+(weekday 0=Sunday) to Cloudflare weekdays (1=Sunday); it refuses ambiguous schedules
+that restrict both day-of-month and weekday. This is conversion only, no dispatcher.
+Bound scheduled work to your host's execution budget; keep the returned cursor
+when continuing a larger sweep in a later invocation.

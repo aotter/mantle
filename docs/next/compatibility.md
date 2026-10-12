@@ -12,6 +12,7 @@ explicitly; apply `schema.sql` directly only to a new database.
 | --- | --- |
 | Closed v2 Schema/View/Procedure grammar, PostgreSQL SQL authoring | Generated for Bun SQLite, Bun PostgreSQL, Cloudflare D1 and Cloudflare PostgreSQL; dialect behavior stays native. |
 | Operational Schemas, scope, TTL read visibility, indexes, checks, native SQL facilities | Generated initial DDL and compiled SQL policy; run migrations and TTL maintenance in application code. |
+| System-only TTL maintenance | Generated `<schema>.sweepExpired`, bounded cursor scans and optional dry-run; app owns `scheduled()` wiring and cron configuration. See [TTL maintenance](contract.md#ttl-maintenance). |
 | Typed SQL Views and Procedures, auth predicates, OCC, atomic writes | Generated bare queries accept validated inputs and a verified Caller; date/date-time outputs are ISO strings, native errors stay internal. |
 | Typed Store collections and internal Views/Procedures | Shared Store, AND-only filters, indexed non-null keyset ordering, atomic batches; interactive transactions on SQLite/PostgreSQL. |
 | Better Auth integration and Workers builds | App owns `auth.ts` and `resolveCaller`; `mantle generate` emits native Wrangler build configuration. Keep heavy auth imports lazy. |
