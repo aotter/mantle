@@ -8,3 +8,7 @@ export const exportName = (kind: string, name: string) => kind + "_" + name.repl
 /** A direct entry: `import` then `export`, because Bun 1.3 drops a bare `export { x as default } from` binding under "sideEffects": false. `extra` is any further re-export line. */
 /** @internal */
 export const entry = (kind: string, name: string, types: string, extra = "") => `import { ${exportName(kind, name)} as operation } from "../generated.js";\nexport default operation;\nexport type { ${types} } from "../generated.js";\n${extra}`;
+
+/** A generated host handle import, shared by the optional boundaries. @internal */
+export const driverFor = (target: string): "bun-sqlite" | "d1" | "postgres" => target === "bun-sqlite" ? "bun-sqlite" : target === "cloudflare-d1" ? "d1" : "postgres";
+export const databaseImport = (target: string): string => driverFor(target) === "postgres" ? 'import type { Postgres as Database } from "@aotter/mantle-next/contracts";' : `import type { Handle as Database } from "@aotter/mantle-next/driver/${driverFor(target)}";`;
