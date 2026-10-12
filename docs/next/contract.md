@@ -30,18 +30,19 @@ application-owned. No cloud provisioning.
 The first PR is a four-target generated SQL slice, not a complete 0.2 replacement.
 Its View functions return full authored-SQL row arrays, not the Store paging API.
 There is no optional Auth/Web/MCP/Admin/UI composition in this slice. Ref handlers,
-guards and Triggers are currently refused. The [compatibility ledger](compatibility.md)
-separates implemented scope, refused declarations and open responsibilities; none
+guards and Triggers are currently refused. The [supported/refused list](compatibility.md)
+separates generated scope, refused declarations and planned features; none
 of those status labels substitutes for native test evidence. Issue #1459 stays open.
 
 ## Contracts and ownership
 
-The full compatibility goal is to keep the closed v2 Schema/View/Procedure/Trigger authoring grammar, PostgreSQL
+Next retains the closed v2 Schema/View/Procedure/Trigger authoring grammar, PostgreSQL
 SQL authoring, typed interfaces, scope/visibility/TTL, declared authorization,
 input/output validation, explicit OCC, native atomicity, and stable failures.
-These are the target observable promises, not a claim that every one is implemented
-in the first slice, and not a requirement to preserve internal RuntimePlan
-or executor APIs. Compilation may use the existing parser, linker, SQL policy,
+The supported/refused list identifies availability. Core APIs, imports, envelopes
+and cursors have no compatibility layer; existing data moves explicitly without
+automatic migration. Internal RuntimePlan and executor APIs are not retained.
+Compilation may use the existing parser, linker, SQL policy,
 and dialect printers as build dependencies. They must never enter the request
 bundle. Each dialect retains its own native behavior; cross-DB equivalence is
 not promised.
@@ -124,12 +125,13 @@ application entry. The first slice accepts an application-supplied Caller and
 does not verify credentials. SQL binds the caller subject directly; a system
 caller is application-owned and never wire input.
 
-Application handlers own business rules and before-hook side effects. Declared
-hook ordering and veto behavior must be preserved when implemented; no sandbox,
-implicit hook OCC, lock wait, or behavior analyzer is added. An unsupported guard,
+Application handlers own business rules and side effects. Before/after lifecycle
+hooks are refused; write a custom handler instead. No sandbox, implicit hook OCC,
+lock wait, or behavior analyzer is added. An unsupported guard,
 hook, lifecycle, reader shape, or feature must produce an actionable generate
-error rather than silently execute without its contract. This experimental
-package cannot replace 0.2 until the compatibility ledger is complete.
+error rather than silently execute without its contract. The
+[supported/refused list](compatibility.md) defines the replacement scope, including
+features planned in #1465.
 
 PostgreSQL session prerequisites are deployment configuration (ROLE/DATABASE
 settings; Hyperdrive does not keep session SETs): `DateStyle` ISO, YMD;
@@ -164,8 +166,9 @@ in `packages/mantle-next/AGENTS.md`; no artificial delay or weakened oracle.
 
 Existing ADRs remain historical and continue governing the old package. For Next,
 this decision supersedes only the old interpreter/plan-at-runtime topology and
-ADR-0044's seeded-executor path. Other 0.2 observable specifications are the
-compatibility source until explicitly amended here. No permanent dual engine,
+ADR-0044's seeded-executor path. Existing specifications describe retained
+contracts where this decision and #1465 explicitly reuse them; they do not promise
+API compatibility. No permanent dual engine,
 new grammar or speculative runtime framework is introduced.
 
 ## Initial DDL decision
@@ -181,4 +184,4 @@ not a replacement for safe production migration or readiness checks.
 SQLite-family initial artifacts use UTC. Their existing time-zone SQL lowering
 needs `_mantle_tz`; generate emits its native table and one UTC offset row covering
 the safe timestamp range. No request-time zone-table construction occurs. Regional
-time zones are an open compatibility item, not implicitly supported by this slice.
+time zones are not yet supported by this slice.

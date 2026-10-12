@@ -32,7 +32,7 @@ function castInputs(statement: LoweredStatement, path: string, refusals: Generat
     const type = b.k === "input" ? String(b.type) : "", target = CORE_CAST[type];
     if (!target) continue;
     const param = `$${i + 1}`, core = `CAST(${param} AS ${target})`;
-    if (sql.split(core).join("").match(new RegExp(`\\$${i + 1}(?!\\d)`))) refusals.push({ code: "GENERATE_UNSUPPORTED", path, message: `Input ${param} must appear only as ${core}.` });
+    if (sql.split(core).join("").match(new RegExp(`\\$${i + 1}(?!\\d)`))) refusals.push({ code: "GENERATE_UNSUPPORTED", path, message: `Input ${param} must appear only as ${core}. Wrap each occurrence in ${core}.` });
     sql = sql.replaceAll(core, cast(param, type));
   }
   Object.assign(statement, { sql });
@@ -91,8 +91,8 @@ export async function generateFromSources(request: { readonly target: Target; re
         } }
     }
   }
-  if (refusals.length) return { ok: false, diagnostics: refusals };
   const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas) });
+  if (refusals.length) return { ok: false, diagnostics: [...refusals, ...(!result.ok ? result.diagnostics : [])] };
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   return { ok: true, files: { ...result.files, "schema.sql": ddl.join(";\n\n") + ";\n" } };

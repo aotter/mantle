@@ -83,7 +83,7 @@ describe("native generation", () => {
   });
   test("unsupported programs fail generation with paths rather than omitting behavior", async () => {
     const input = await canonical("bun-sqlite");
-    const unsupported = { ...input, plan: { ...input.plan, procedures: { ...input.plan.procedures, handler: { ...input.plan.procedures["create-note"]!, handler: { ref: "app-handler" } } }, triggers: { after: { source: { schema: "notes", event: "after_create" }, procedure: "handler" } } } };
+    const unsupported = { ...input, plan: { ...input.plan, procedures: { ...input.plan.procedures, handler: { ...input.plan.procedures["create-note"]!, handler: { ref: "app-handler" } } }, triggers: { after: { source: { kind: "lifecycle", schema: "notes", on: ["after_create"] }, procedure: "handler" } } } };
     const result = generate(unsupported as never);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.diagnostics.map(d => d.path)).toEqual(expect.arrayContaining(["triggers/after", "procedures/handler"]));
@@ -92,13 +92,13 @@ describe("native generation", () => {
   });
 });
 
-test("a hooked or publishing statement in trusted mode alone refuses generation", async () => {
+test("a lifecycle declaration refuses generation even when only trusted SQL is marked hooked", async () => {
   const input = await canonical("bun-sqlite");
   const modes = input.lowered.procedures["create-note"]!;
-  const hooked = { ...input, lowered: { ...input.lowered, procedures: { ...input.lowered.procedures, "create-note": { ...modes, trusted: modes.trusted.map((s: LoweredStatement) => ({ ...s, hooked: true as const })) } } } };
+  const hooked = { ...input, plan: { ...input.plan, triggers: { after: { source: { kind: "lifecycle" as const, schema: "notes", on: ["after_create" as const] }, procedure: "create-note" } } }, lowered: { ...input.lowered, procedures: { ...input.lowered.procedures, "create-note": { ...modes, trusted: modes.trusted.map((s: LoweredStatement) => ({ ...s, hooked: true as const })) } } } };
   const result = generate(hooked);
   expect(result.ok).toBe(false);
-  if (!result.ok) expect(result.diagnostics.map(d => d.path)).toContain("procedures/create-note");
+  if (!result.ok) expect(result.diagnostics).toEqual([{ code: "GENERATE_UNSUPPORTED", path: "triggers/after", message: "Before/after lifecycle hooks are unsupported. Write a custom handler." }]);
 });
 
 test("bare PG writes on the Bun.SQL shape read a unique clash as CONFLICT and signal uncertain outcomes", async () => {
