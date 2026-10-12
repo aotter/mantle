@@ -186,7 +186,9 @@ Resources are bound separately to public and staff MCP surfaces; public requests
 never receive staff resources. Custom resources accept a `ui://` URI, `html`
 (string or async loader), `renders` tool names, optional `appOnly` View names,
 CSP, permissions and `prefersBorder`. Binding errors fail when constructing the
-handler; a write cannot be an app-only tool. Visibility hides tools from clients
+handler; a write cannot be an app-only tool. HTML loader failures return a generic
+internal error; their exception, caller credentials and request metadata never
+enter the response or resource failure log. Visibility hides tools from clients
 without Apps support, and never bypasses the original caller or SQL policies.
 
 Capability detection follows 0.2: read `initialize.params.capabilities` or

@@ -56,7 +56,10 @@ export async function serve<Env, Database, Handlers>(tools: readonly Tool<Databa
       const server = new McpServer({ name: "aotter.mantle", version: "0.2.0" }, { capabilities: { tools: { listChanged: false } } });
       if (withApps) for (const resource of linked.resources) {
         const meta = appMeta(resource);
-        server.registerResource(resource.name, resource.uri, { mimeType: RESOURCE_MIME_TYPE, ...(resource.title ? { title: resource.title } : {}), ...(resource.description ? { description: resource.description } : {}), ...(meta ? { _meta: meta } : {}) }, async () => ({ contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: await appHtml(resource), ...(meta ? { _meta: meta } : {}) }] }));
+        server.registerResource(resource.name, resource.uri, { mimeType: RESOURCE_MIME_TYPE, ...(resource.title ? { title: resource.title } : {}), ...(resource.description ? { description: resource.description } : {}), ...(meta ? { _meta: meta } : {}) }, async () => {
+          try { return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: await appHtml(resource), ...(meta ? { _meta: meta } : {}) }] }; }
+          catch { console.error("[mantle mcp] resource rendering failed"); throw new Error("Internal error."); }
+        });
       }
       for (const tool of visible) {
         const uri = withApps ? linked.appOnly.get(tool.name) ?? linked.rendersIn.get(tool.name) : undefined;

@@ -90,3 +90,28 @@ test("App setup refuses ambiguous bindings and hides errors behind the same tool
     expect(text).not.toContain("internal secret");
   } finally { logged.mockRestore(); }
 });
+
+
+test("Resource loader failures never expose callback errors, credentials or metadata", async () => {
+  let dbCalls = 0, htmlCalls = 0;
+  const privateValue = "FAKE_PRIVATE_HTML_ERROR FAKE_TOKEN";
+  const handle = mcp([], ["staff"], { db: () => { dbCalls++; return null; }, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [{ uri: "ui://a", name: "app", html: async () => { htmlCalls++; throw new Error(privateValue); } }] }, staff: { resources: [{ uri: "ui://staff", name: "staff", html: async () => { htmlCalls++; return privateValue; } }] } } });
+  const { spyOn } = await import("bun:test");
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const request = (path: string, uri: string) => new Request("https://app.test" + path, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: "Bearer FAKE_TOKEN" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/read", params: { uri, _meta: { ...meta, privateValue } } }) });
+    const response = await handle(request("/mcp", "ui://a"), {});
+    const text = await response!.text();
+    expect(text).toContain('"code":-32603');
+    expect(text).toContain('"message":"Internal error."');
+    expect(text).not.toContain(privateValue);
+    expect(text).not.toContain("FAKE_TOKEN");
+    expect(JSON.stringify(logged.mock.calls)).not.toContain(privateValue);
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("FAKE_TOKEN");
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(htmlCalls).toBe(1);
+    expect((await handle(request("/mcp/staff", "ui://staff"), {}))!.status).toBe(401);
+    expect(htmlCalls).toBe(1);
+    expect(dbCalls).toBe(0);
+  } finally { logged.mockRestore(); }
+});
