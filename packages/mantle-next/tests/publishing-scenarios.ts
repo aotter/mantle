@@ -40,7 +40,11 @@ export async function verifyPublishing(app: any, db: any): Promise<{ checks: num
   await transition("archive", 4, system);
   await assert.rejects(transition("publish", 5), { code: "CONFLICT" });
   assert.equal((await table.findById(draft.id)).status, "archived");
-  await assert.rejects(transition("unpublish", 5), { code: "CONFLICT" });
+  await assert.rejects(transition("unpublish", 5, anonymous), { code: "UNAUTHENTICATED" });
+  await assert.rejects(transition("unpublish", 5, user("reader")), { code: "AUTH_DENIED" });
+  await transition("unpublish", 5);
+  assert.equal((await table.findById(draft.id)).status, "draft");
+  assert.equal((await app.views["posts-public"](db, anonymous, {})).length, 0);
   await assert.rejects(transition("archive", 5), { code: "CONFLICT" });
   const deletable = await table.insert({ title: "Delete after publish" });
   await app.procedures["posts.publish"](db, staff, { id: deletable.id, expectedVersion: 1 });
@@ -58,6 +62,11 @@ export async function verifyPublishing(app: any, db: any): Promise<{ checks: num
   await assert.rejects(app.procedures["scoped_posts.publish"](db, foreignStaff, { id: scoped.id, expectedVersion: 1 }), { code: "CONFLICT" });
   await app.procedures["scoped_posts.publish"](db, staff, { id: scoped.id, expectedVersion: 1 });
   assert.equal(await app.store(db, anonymous).collection("scoped_posts").count(), 0);
+  await app.procedures["scoped_posts.archive"](db, staff, { id: scoped.id, expectedVersion: 2 });
+  await assert.rejects(app.procedures["scoped_posts.unpublish"](db, foreignStaff, { id: scoped.id, expectedVersion: 3 }), { code: "CONFLICT" });
+  await app.procedures["scoped_posts.unpublish"](db, staff, { id: scoped.id, expectedVersion: 3 });
+  await assert.rejects(app.procedures["scoped_posts.publish"](db, staff, { id: scoped.id, expectedVersion: 3 }), { code: "CONFLICT" });
+  assert.equal(Number((await app.store(db, staff).collection("scoped_posts").findById(scoped.id)).version), 4);
   const expiring = app.store(db, system).collection("expiring_posts");
   const expired = await expiring.insert({ title: "Expired", expiresat: "2000-01-01T00:00:00Z" });
   await assert.rejects(app.procedures["expiring_posts.publish"](db, system, { id: expired.id, expectedVersion: 1 }), { code: "CONFLICT" });
