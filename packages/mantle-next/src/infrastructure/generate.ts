@@ -7,7 +7,7 @@ import { d1Dialect } from "../../../mantle/dist/d1/dialect.js";
 import { postgresDialect } from "../../../mantle/dist/postgres/dialect.js";
 import { lowerPlan } from "../../../mantle/dist/core/sql/lowered.js";
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
-import { declaredType, outputType } from "../domain/columns.js";
+import { outputType } from "../domain/columns.js";
 import { provePaging, type PagingProof } from "../domain/paging.js";
 import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
 import { dialect as sqliteDialect } from "../kernel/dialect/sqlite.js";
@@ -54,7 +54,7 @@ export async function generateFromSources(request: { readonly target: Target; re
     const output = viewOutputs(view, compiled.plan.schemas);
     return [name, output.positions?.length === output.keys?.length ? output.keys : undefined];
   }));
-  const refusals: GenerateDiagnostic[] = [], orderTypes: Record<string, (string | undefined)[]> = {}, paging: Record<string, PagingProof | undefined> = {};
+  const refusals: GenerateDiagnostic[] = [], paging: Record<string, PagingProof | undefined> = {};
   const { lowered, warnings } = lowerPlan(compiled.plan, dialect, {
     mode: nextMode,
     staffRoles: STAFF_ROLES,
@@ -62,20 +62,13 @@ export async function generateFromSources(request: { readonly target: Target; re
       // Core visits public/caller before trusted. Prove the real caller equality prefixes;
       // a trusted all-scope read does not acquire a fictional scope predicate.
       if (!Object.hasOwn(paging, name)) paging[name] = provePaging(compiled.plan, ast);
-      const view = compiled.plan.views[name]!;
-      const lineage = [...new Set(Object.values(view.columns ?? {}).map(c => c.schema))];
-      const schema = lineage.length === 1 ? compiled.plan.schemas[lineage[0]!] : Object.values(compiled.plan.schemas).length === 1 ? Object.values(compiled.plan.schemas)[0] : undefined;
-      orderTypes[name] = paging[name]?.types ?? (ast.SelectStmt.sortClause ?? []).map((s: any) => {
-        const fields = s.SortBy.node.ColumnRef?.fields, field = fields?.at(-1)?.String?.sval;
-        return schema && field ? declaredType(schema.fields, fields.length === 1 ? view.columns?.[field]?.field ?? field : field) : undefined;
-      });
       return { SelectStmt: { ...ast.SelectStmt, limitCount: undefined, limitOption: "LIMIT_OPTION_DEFAULT" } };
     },
     project(ast, kind, name, page) {
       if (kind === "procedure") return wireReturning(ast, compiled.plan.schemas, wire);
       const keys = page && !page.flat ? [...page.names, ...Array.from({length:page.nkeys}, (_,i)=>`_k${i}`)] : viewKeys[name];
       if (!keys) return ast;
-      const types = page && !page.flat ? [...page.names.map(key=>outputType(compiled.plan,name,key)), ...(orderTypes[name] ?? [])] : keys.map(key=>outputType(compiled.plan,name,key));
+      const types = page && !page.flat ? [...page.names.map(key=>outputType(compiled.plan,name,key)), ...(paging[name]?.types ?? [])] : keys.map(key=>outputType(compiled.plan,name,key));
       const projected = wireScalars(ast,keys,types,wire);
       if (typeof projected !== "string") return projected;
       refusals.push({code:"GENERATE_UNSUPPORTED",path:`views/${name}`,message:projected});
@@ -91,7 +84,7 @@ export async function generateFromSources(request: { readonly target: Target; re
           castInputs(inputPage, `${kind}/${name}`, refusals);
           let sql = inputPage.sql;
           for (const [i, source] of page.sources.entries()) {
-            const type = "cursor" in source ? orderTypes[name]?.[source.cursor] : undefined;
+            const type = "cursor" in source ? paging[name]?.types[source.cursor] : undefined;
             if (type === "timestamptz" || type === "date") {
               const n = statement.binds.length + i + 1;
               sql = sql.replace(new RegExp(`\\$${n}(?!\\d)`,"g"),cast(`$${n}`,type));

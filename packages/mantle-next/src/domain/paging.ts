@@ -114,7 +114,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           if (order.some(f => f.source !== base!.fields.get("id")?.source)) return;
           const indexed = [...(schema.indexes ?? []), ...(schema.unique ?? [])].some(index => {
             let i = 0;
-            while (i < index.length && base!.fixed.has(index[i]!)) i++;
+            while (i < index.length && base!.fixed.has(index[i]!) && index[i] !== order[0]!.name) i++;
             return order.every((f, n) => index[i + n] === f.name);
           });
           if (!indexed) return;
