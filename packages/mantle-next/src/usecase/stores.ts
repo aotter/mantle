@@ -38,6 +38,7 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
     const fact: Fact = {
       ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const } : {}),
       ...(ts.length ? { ts } : {}), ...(dates.length ? { d: dates } : {}),
+      ...(s.search?.length ? { search: s.search } : {}),
     };
     // the shared rules, with this Schema's scope and TTL put in, are Core's rules for it: or the runtime would enforce something else
     const expected = q([core(s), writePolicy(s, "delete", { lock: true }).lock]), got = q([expand(rules, fact), rules.lock]);

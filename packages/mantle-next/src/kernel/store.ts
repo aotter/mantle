@@ -43,6 +43,8 @@ export interface Fact {
   /** Declared date-time and date columns (`created_at` and `updated_at` are always date-times). */
   readonly ts?: readonly string[];
   readonly d?: readonly string[];
+  /** Declared searchable text fields; omitted collections search id only. */
+  readonly search?: readonly string[];
 }
 export const SCOPE = "$scope", TTL = "$ttl";
 /** The columns Mantle owns: no write names them (nor the scope column), and `_rid` is never returned. */
@@ -77,7 +79,7 @@ export type Operators<T> = { readonly eq?: T | null; readonly ne?: T | null; rea
 /** Conditions are ANDed; a bare value is `eq` (null is IS NULL). */
 export type Where<F> = { readonly [K in keyof F]?: F[K] | null | Operators<F[K]> };
 export interface Page<R> { readonly rows: R[]; /** Pass back as `cursor` for the next page; null on the last. */ readonly cursor: string | null }
-export interface Query<F, O extends string> { readonly where?: Where<F>; readonly orderBy?: O; readonly order?: "asc" | "desc"; readonly limit?: number; readonly cursor?: string }
+export interface Query<F, O extends string> { readonly where?: Where<F>; readonly search?: string; readonly orderBy?: O; readonly order?: "asc" | "desc"; readonly limit?: number; readonly cursor?: string }
 export interface Collection<T extends Table> {
   findById(id: string): Promise<RowOf<T> | null>;
   find(query?: Query<T["fields"], T["order"]>): Promise<Page<RowOf<T>>>;
@@ -193,6 +195,12 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       const dir = q.order ?? "asc", name = q.orderBy ?? "id", limit = q.limit ?? 50;
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw no("limit is 1 to 500");
       const values = base(), conds = conditions(q.where, values);
+      if (q.search !== undefined) {
+        if (typeof q.search !== "string" || !q.search.trim() || q.search.includes("\0")) throw no("search takes a non-empty string without NUL");
+        values.push(q.search.trim());
+        const query = d.param(values.length), exact = `r.${ID} = ${query}`;
+        conds.push(f.search?.length ? `(${exact} OR ${d.search(p.name, f.search, "r", query)})` : exact);
+      }
       const id = `r.${ID}`, kc = `r.${d.ident(name)}`, up = dir === "asc", way = up ? "ASC" : "DESC";
       if (q.cursor !== undefined) {
         const [v, last] = decodeCursor(q.cursor, p.name + "/cursor");
