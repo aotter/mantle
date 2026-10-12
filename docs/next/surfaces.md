@@ -244,3 +244,40 @@ The staff allowlist is `owner`, `editor`, `contributor`. MCP bodies are limited
 to 1 MiB (1,048,576 bytes). Resource metadata challenges use the origin of
 `request.url`; behind a proxy, the app must pass a Request with its public
 origin so the audience and metadata URL point to the client-visible service.
+
+### Admin entries
+
+The generated `admin.ts` includes the 0.2 entry list, editor, create, patch,
+publish/unpublish, delete and CSV routes under `/admin/api/entries`. It uses the
+caller's native Store, so scope and TTL apply to every read, search and relation.
+The existing Admin cookie-session/staff/origin gate runs before these routes.
+
+Apply the generated **`admin-schema.sql`** before mounting Admin. It adds each
+collection's `(updated_at, id)` index, prefixed by its scope column where present.
+This explicit Admin deployment artifact is separate from `schema.sql`; applications
+that do not select Admin need neither its code nor these indexes. Admin does not
+probe, create or repair indexes during requests. Omitting this deployment step
+leaves the default sort without its required index.
+
+Inputs are checked by generated full/partial Schema validators. Drafts may be
+incomplete; publishing validates the complete stored entry before the atomic,
+version-guarded transition. Updates require `expectedVersion`; read-only Schemas
+refuse authoring, published entries refuse editing/deletion, and transitions bump
+the version so a racing edit/delete cannot bypass that protection. Unpublish
+restores either a published or an archived entry to a draft, matching the existing
+Admin Archived-tab action. Translations still need a visible published parent.
+
+The selected boundary maps declared field names and JSON/boolean/integer wire
+values; the bare Store remains native. Lists page forward, accept typed paired
+scope/filter values and indexed sortable fields, and include translation locales
+and operational previews. Nullable publishing sorts preserve the native 0.2 NULL
+placement: SQLite ascending first/descending last; PostgreSQL the reverse. SQLite's
+id tie is ascending; PostgreSQL's follows the chosen direction. Native Store callers
+that omit these explicit boundary options retain their existing ordering.
+
+CSV streams all forward pages of 500 rows with a BOM and formula-safe cells. A bad
+first page is a normal JSON error; a later failure errors the stream. Bulk buttons
+retain 0.2's independent sequential entry requests and per-entry failures; an earlier
+successful operation is not rolled back by a later failure.
+
+Admin entry validators are generated for the supported field formats. A collection with an unsupported format (including deferred `geo`) refuses create/full validation with `ADMIN_VALIDATION_UNAVAILABLE` (HTTP 501, path `admin/entries/<collection>/data`) before any write. Geo fields cannot be patched through Admin; patches of other supported fields preserve the existing coordinates. This does not refuse generation or native Store reads for that collection.

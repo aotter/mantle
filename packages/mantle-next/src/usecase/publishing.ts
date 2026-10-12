@@ -8,7 +8,7 @@ import { STAFF_ROLES } from "../domain/visibility.js";
 import { entry, exportName, q } from "../domain/entry.js";
 
 
-export const publishingTransitions = [["publish", ["draft"], "published"], ["unpublish", ["published"], "draft"], ["archive", ["draft", "published"], "archived"]] as const;
+export const publishingTransitions = [["publish", ["draft"], "published"], ["unpublish", ["published", "archived"], "draft"], ["archive", ["draft", "published"], "archived"]] as const;
 export const publishingInput: JsonSchema = {type:"object",properties:{id:{type:"string",minLength:1},expectedVersion:{type:"integer",minimum:1}},required:["id","expectedVersion"],additionalProperties:false};
 export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declarations: string[], procedures: string[], entries: Record<string, string>, values: Set<string>, refuse: (path: string, message: string) => void): void {
   const d = isSqlite ? sqlite : postgres;

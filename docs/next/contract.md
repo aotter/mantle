@@ -186,7 +186,7 @@ and NOT NULL.
 
 Generated `<table>.publish`, `.unpublish`, and `.archive` take
 `{ id, expectedVersion }`, gate staff/system Callers, and execute one atomic native
-UPDATE. Legal states are draft→published, published→draft, and draft/published→archived.
+UPDATE. Legal states are draft→published, published/archived→draft, and draft/published→archived.
 Publish checks required fields. Guards retain scope, TTL and OCC. CONFLICT messages
 name the operation and possible guard failures; no second read guesses which guard
 failed after concurrent activity. Store refuses direct status/published_at writes,

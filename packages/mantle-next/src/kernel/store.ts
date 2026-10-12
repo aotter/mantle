@@ -80,7 +80,7 @@ export type Operators<T> = { readonly eq?: T | null; readonly ne?: T | null; rea
 /** Conditions are ANDed; a bare value is `eq` (null is IS NULL). */
 export type Where<F> = { readonly [K in keyof F]?: F[K] | null | Operators<F[K]> };
 export interface Page<R> { readonly rows: R[]; /** Pass back as `cursor` for the next page; null on the last. */ readonly cursor: string | null }
-export interface Query<F, O extends string> { readonly where?: Where<F>; readonly search?: string; readonly orderBy?: O; readonly order?: "asc" | "desc"; readonly limit?: number; readonly cursor?: string }
+export interface Query<F, O extends string> { readonly where?: Where<F>; readonly search?: string; readonly orderBy?: O; readonly order?: "asc" | "desc"; readonly limit?: number; readonly cursor?: string; /** Explicit nullable order for selected boundaries; bare default is unchanged. */ readonly nulls?: "first" | "last"; readonly idOrder?: "asc" | "desc" }
 export interface Collection<T extends Table> {
   findById(id: string): Promise<RowOf<T> | null>;
   find(query?: Query<T["fields"], T["order"]>): Promise<Page<RowOf<T>>>;
@@ -207,6 +207,8 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     async function find(q: Query<object, string> = {}): Promise<Page<unknown>> {
       const dir = q.order ?? "asc", name = q.orderBy ?? "id", limit = q.limit ?? 50;
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw no("limit is 1 to 500");
+      if (q.nulls !== undefined && q.nulls !== "first" && q.nulls !== "last") throw no("nulls is first or last");
+      if (q.idOrder !== undefined && q.idOrder !== "asc" && q.idOrder !== "desc") throw no("idOrder is asc or desc");
       const values = base(), conds = conditions(q.where, values);
       if (q.search !== undefined) {
         if (typeof q.search !== "string" || !q.search.trim() || q.search.includes("\0")) throw no("search takes a non-empty string without NUL");
@@ -218,13 +220,13 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       if (q.cursor !== undefined) {
         const [v, last] = decodeCursor(q.cursor, p.name + "/cursor");
         values.push(last);
-        const after = `${id} ${up ? ">" : "<"} ${d.param(values.length)}`;
+        const after = `${id} ${(q.idOrder ?? dir) === "asc" ? ">" : "<"} ${d.param(values.length)}`;
         if (name === "id") conds.push(after);
-        else if (v === null) conds.push(`(${kc} IS NULL AND ${after})`);
-        else { const m = put(values, name, v); conds.push(`(${kc} ${up ? ">" : "<"} ${m} OR (${kc} = ${m} AND ${after}) OR ${kc} IS NULL)`); }
+        else if (v === null) conds.push(q.nulls === "first" ? `((${kc} IS NULL AND ${after}) OR ${kc} IS NOT NULL)` : `(${kc} IS NULL AND ${after})`);
+        else { const m = put(values, name, v); conds.push(`(${kc} ${up ? ">" : "<"} ${m} OR (${kc} = ${m} AND ${after})${q.nulls === "first" ? "" : ` OR ${kc} IS NULL`})`); }
       }
-      // an ORDER BY column is NOT NULL (the generated type offers no other), so no NULL placement
-      const list = await rows(`${select()}${where(conds)} ORDER BY ${name === "id" ? "" : `${kc} ${way} NULLS LAST, `}${id} ${way} LIMIT ${limit + 1}`, values);
+      // Bare typed orders are NOT NULL; the selected Admin boundary explicitly chooses nullable placement.
+      const list = await rows(`${select()}${where(conds)} ORDER BY ${name === "id" ? "" : `${kc} ${way} NULLS ${q.nulls === "first" ? "FIRST" : "LAST"}, `}${id} ${(q.idOrder ?? dir) === "asc" ? "ASC" : "DESC"} LIMIT ${limit + 1}`, values);
       if (list.length <= limit) return { rows: clean(list), cursor: null };
       const page = list.slice(0, limit), end = page[limit - 1]!;
       return { rows: clean(page), cursor: encodeCursor(end[name], end.id) };

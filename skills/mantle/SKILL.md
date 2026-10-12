@@ -164,3 +164,5 @@ To add Mantle to an application that has its own code, users and data, read
 
 Report the project path, the exact Mantle version, what you changed, the checks
 you ran with their results, and anything left for the user.
+
+Admin deployment applies the generated `admin-schema.sql` alongside the initial schema before mounting `admin.ts`. Admin entries use native Store reads and generated validation; an Archived entry may be restored to a draft with Unpublish, as in 0.2.
