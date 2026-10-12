@@ -4,6 +4,7 @@ import type { GenerateDiagnostic, GenerateInput, GenerateResult, Target } from "
 import { nativeType, outputType } from "../domain/columns.js";
 import { entry, exportName } from "../domain/entry.js";
 import { recipesOf } from "../domain/recipes.js";
+import { emitPublishing } from "./publishing.js";
 import { emitStores } from "./stores.js";
 import { emitPaging } from "./paging.js";
 import { emitValidation } from "./validation.js";
@@ -101,7 +102,7 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
     if (!("sql" in procedure.handler)) { refuse(path, "Ref Procedures are planned (#1475). Use an SQL handler until then."); continue; }
     const modes = lowered.procedures[name];
     if (!modes?.caller || !modes.trusted) { refuse(path, "Both caller and trusted SQL must be lowered."); continue; }
-    if ([...modes.caller, ...modes.trusted].some(s => s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing writes are planned. Use an operational Schema until publishing generation is available.");
+    if ([...modes.caller, ...modes.trusted].some(s => s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing writes are generated: use the Store and the `<schema>.publish` / `.unpublish` / `.archive` transitions.");
     const fieldNames = inputFields(procedure.input, path + "/input");
     const steps = (statements: readonly LoweredStatement[]) => `[${statements.map(s => step(s, path, fieldNames, s.kind === "row")).join(", ")}] as const`;
     const same = steps(modes.caller) === steps(modes.trusted);
@@ -113,6 +114,7 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input`, `export type { Output } from "${base}contracts";\n`);
   }
+  emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse);
   const surfaces = { ...emitPaging(plan, lowered, target, refuse), ...emitValidation(plan, refuse) };
   if (diagnostics.length) return { ok: false, diagnostics };

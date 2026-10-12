@@ -109,7 +109,7 @@ export function viewCacheProblem(stmts: readonly SqlNode[], schemas: Readonly<Re
 export function storageColumns(s: { readonly fields?: Readonly<Record<string, string>>; readonly scope?: string; readonly publishing?: boolean }): Map<string, string> {
   const cols = new Map<string, string>([["_rid", "integer"], ["id", "text"], ["version", "integer"], ["created_at", "native"], ["updated_at", "native"], ["author_id", "text"]]);
   if (s.scope) cols.set(s.scope, "text");
-  if (s.publishing) cols.set("status", "text");
+  if (s.publishing) { cols.set("status", "text"); cols.set("published_at", "timestamptz"); }
   for (const [f, t] of Object.entries(s.fields ?? {})) {
     if (f === s.scope) continue;
     if (t === "geo") { cols.set(`${f}_lat`, "real"); cols.set(`${f}_lng`, "real"); } else cols.set(f, t);

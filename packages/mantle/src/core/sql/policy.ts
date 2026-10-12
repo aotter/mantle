@@ -104,7 +104,7 @@ const sort = (node: N, dir = 'SORTBY_DEFAULT'): N => ({ SortBy: { node, sortby_d
 // the scope column is never read back, not even by `SELECT *`: it is the caller's own subject key
 const declaredCols = (s: SchemaDef) => Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
 /** what the wrapper exposes: the declared fields plus the columns policy and hooks read */
-const readable = (s: SchemaDef) => ['id', 'version', 'created_at', 'updated_at', 'author_id', ...(s.publishing ? ['status'] : []), ...declaredCols(s)];
+const readable = (s: SchemaDef) => ['id', 'version', 'created_at', 'updated_at', 'author_id', ...(s.publishing ? ['status', 'published_at'] : []), ...declaredCols(s)];
 /** what `SELECT *` and `RETURNING *` expand to: declared fields only, never scope or system columns */
 const starCols = (s: SchemaDef) => declaredCols(s);
 
@@ -134,8 +134,9 @@ function param$(c: C, spec: BindSpec): N {
 }
 
 /** A term of `rowPolicy` as a predicate on alias `a`. A constant inside a term is part of the rule, so it prints inline. */
-function term(c: C, a: string, [column, kind, v]: RowTerm): N {
+function term(c: C, a: string, [column, kind, v, published, roles]: RowTerm): N {
   const value: N = v.k === 'const' ? { A_Const: { sval: { sval: v.value } } } : param$(c, v);
+  if (kind === 'staff') return or(op('=', col(a, column), { A_Const: { sval: { sval: published! } } }), ...roles!.map(role => op('=', value, { A_Const: { sval: { sval: role } } })));
   return kind === 'ttl' ? or({ NullTest: { arg: col(a, column), nulltesttype: 'IS_NULL' } }, op('>', col(a, column), value)) : op('=', col(a, column), value);
 }
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */

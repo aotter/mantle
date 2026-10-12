@@ -7,10 +7,12 @@ import { postgresDialect } from "../../../mantle/dist/postgres/dialect.js";
 import { lowerPlan } from "../../../mantle/dist/core/sql/lowered.js";
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { declaredType, outputType } from "../domain/columns.js";
+import { nextMode } from "../domain/visibility.js";
 import { dialect as sqliteDialect } from "../kernel/dialect/sqlite.js";
 import { cast, dialect as postgresDialect_ } from "../kernel/dialect/postgres.js";
 import { initialStorageSql as sqliteSchema } from "../../../mantle/dist/d1/storage.js";
 import { initialStorageSql as postgresSchema } from "../../../mantle/dist/postgres/storage.js";
+import { publishingSql } from "../usecase/publishing.js";
 import { generate } from "../usecase/generate.js";
 import type { LoweredStatement } from "@aotter/mantle/spec";
 import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/model.js";
@@ -41,7 +43,7 @@ function castInputs(statement: LoweredStatement, path: string, refusals: Generat
 export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; /** The application's Better Auth options: their tables join schema.sql. */ readonly auth?: BetterAuthOptions }): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");
   const compiler = postgres ? postgresCompiler : sqliteCompiler;
-  const compiled = await compilePlan(request.sources, compiler);
+  const compiled = await compilePlan(request.sources, compiler, "operational");
   if (!compiled.ok) return { ok: false, diagnostics: compiled.diagnostics.map(({ code, path, message }) => ({ code, path, message })) };
   const dialect = postgres ? postgresDialect() : d1Dialect;
   const wire = postgres ? postgresDialect_ : sqliteDialect;
@@ -51,6 +53,7 @@ export async function generateFromSources(request: { readonly target: Target; re
   }));
   const refusals: GenerateDiagnostic[] = [], orderTypes: Record<string, (string | undefined)[]> = {};
   const { lowered } = lowerPlan(compiled.plan, dialect, {
+    mode: nextMode,
     pageQuery(ast, name) {
       const view = compiled.plan.views[name]!;
       const lineage = [...new Set(Object.values(view.columns ?? {}).map(c => c.schema))];
@@ -94,6 +97,6 @@ export async function generateFromSources(request: { readonly target: Target; re
   const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas) });
   if (refusals.length) return { ok: false, diagnostics: [...refusals, ...(!result.ok ? result.diagnostics : [])] };
   if (!result.ok) return result;
-  const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
+  const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   return { ok: true, files: { ...result.files, "schema.sql": ddl.join(";\n\n") + ";\n" } };
 }

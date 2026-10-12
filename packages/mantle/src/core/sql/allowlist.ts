@@ -224,6 +224,7 @@ export function schemaColumns(schemas: SqlContext['schemas']): SchemaColumns {
   const scopes = new Set<string>();
   const types = new Map<string, string | null>();
   for (const s of Object.values(schemas)) {
+    if (s.publishing) { known.add('published_at'); types.set('published_at', 'timestamptz'); }
     if (typeof s.scope === 'string') scopes.add(s.scope.toLowerCase());
     for (const [f, t] of Object.entries(s.fields)) {
       (t === 'geo' ? [f, `${f}_lat`, `${f}_lng`] : [f]).forEach((c) => known.add(c));
@@ -571,7 +572,7 @@ const check: Record<string, Checker> = {
 
 /** Columns stored as integers that PostgreSQL compares with a string literal by casting it: the system timestamps and these types. */
 const STORED_AS_NUMBER = new Set(['timestamptz', 'date', 'bool']);
-const SYSTEM_TIMES = new Set(['created_at', 'updated_at']);
+const SYSTEM_TIMES = new Set(['created_at', 'updated_at', 'published_at']);
 
 /** The type a column name has in every Schema that declares it, or undefined when none does or they disagree. */
 function columnType(ctx: Ctx, name: string): string | undefined {
@@ -624,7 +625,7 @@ function writeList(list: N[], ctx: Ctx, rel: N, insert: boolean, values?: N[]) {
     const at = firstLoc(r) ?? firstLoc(rel);
     const name = String(r.name).toLowerCase();
     const scopedId = insert && name === 'id' && s?.scope;
-    if (name === s?.scope?.toLowerCase() || SYSTEM.has(name) || (!insert && name === 'id') || scopedId)
+    if (name === s?.scope?.toLowerCase() || (SYSTEM.has(name) || name === 'published_at') || (!insert && name === 'id') || scopedId)
       no('SQL_WRITE', `${r.name} is filled by Mantle and cannot be written${scopedId ? ' (a scoped Schema generates its ids)' : ''}`, at);
     const cols = Object.entries(s?.fields ?? {}).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
     if (name !== 'id' && !cols.includes(name)) no('SQL_WRITE', `${rel.relname} has no field ${r.name}`, at);

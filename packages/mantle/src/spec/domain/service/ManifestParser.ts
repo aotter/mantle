@@ -69,8 +69,9 @@ interface InternalParseResult {
  */
 export function parseManifestSources(
   sourceSet: ManifestSourceSet,
+  defaultLifecycle: LifecycleMode = "publishing",
 ): ParseResult<ParsedManifestSet> {
-  const parsed = parseManifestSourcesInternal(sourceSet);
+  const parsed = parseManifestSourcesInternal(sourceSet, defaultLifecycle);
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return { ok: false, diagnostics: parsed.diagnostics };
   }
@@ -83,7 +84,7 @@ export function parseManifestSources(
   };
 }
 
-function parseManifestSourcesInternal(sourceSet: ManifestSourceSet): InternalParseResult {
+function parseManifestSourcesInternal(sourceSet: ManifestSourceSet, defaultLifecycle: LifecycleMode): InternalParseResult {
   const entries: ParsedManifestEntry[] = [];
   const diagnostics: Diagnostic[] = [];
   const sources = sourceSet?.sources;
@@ -122,7 +123,7 @@ function parseManifestSourcesInternal(sourceSet: ManifestSourceSet): InternalPar
       ));
       continue;
     }
-    parseOneStream(source, entries, diagnostics);
+    parseOneStream(source, entries, diagnostics, defaultLifecycle);
   }
   return { entries, diagnostics };
 }
@@ -143,6 +144,7 @@ function parseOneStream(
   source: ManifestSource,
   entries: ParsedManifestEntry[],
   diagnostics: Diagnostic[],
+  defaultLifecycle: LifecycleMode,
 ): void {
   const lineCounter = new LineCounter();
   const docs = parseAllDocuments(source.text, { merge: false, lineCounter });
@@ -192,7 +194,7 @@ function parseOneStream(
     if (value == null) continue;
     try {
       entries.push({
-        manifest: normalizeManifest(validateEnvelope(value, docIndex)),
+        manifest: normalizeManifest(validateEnvelope(value, docIndex), defaultLifecycle),
         source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
         sourceSpans: collectSourceSpans(doc.contents, lineCounter),
       });
@@ -227,7 +229,7 @@ function parseOneStream(
   }
 }
 
-function normalizeManifest(manifest: Manifest): ParsedManifest {
+function normalizeManifest(manifest: Manifest, defaultLifecycle: LifecycleMode): ParsedManifest {
   if (manifest.kind === "Schema") {
     return {
       ...manifest,
@@ -237,7 +239,7 @@ function normalizeManifest(manifest: Manifest): ParsedManifest {
         indexes: manifest.spec.indexes ?? [],
         searchableFields: manifest.spec.searchableFields ?? [],
         localized: manifest.spec.localized ?? false,
-        lifecycle: manifest.spec.lifecycle ?? "publishing",
+        lifecycle: manifest.spec.lifecycle ?? defaultLifecycle,
       },
     };
   }

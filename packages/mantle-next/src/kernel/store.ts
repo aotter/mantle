@@ -1,7 +1,7 @@
 /**
  * Generic Store over Core's rowPolicy/writePolicy rules and per-Schema Facts (scope, TTL, publishing, dates).
  * Generated types own storage column names, values, filters and writable columns; the dialect quotes names and binds values.
- * Runtime refuses unsafe limits, system/scope writes, undefined values and publishing writes. It applies row rules, not requires.
+ * Runtime refuses unsafe limits, system/scope writes, undefined values. It applies row rules, not requires.
  */
 import { binds as evaluate, encode, type Bound, type Recipe } from "./binds.js";
 import { ContractError, type Caller, type Row } from "./contracts.js";
@@ -19,7 +19,7 @@ export function decodeCursor(cursor: string, path = "", operation?: string): [un
 }
 
 /** `eq`: `column = value`; `ttl`: `column IS NULL OR column > value` (Core's `RowTerm`). */
-export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe];
+export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe] | readonly [column: string, op: "staff", value: Recipe, published: string, roles: readonly string[]];
 /** Core's row rules for a Schema with the placeholder columns `SCOPE` and `TTL`; `expand` puts a Schema's own in. */
 export interface Rules {
   readonly caller: readonly Term[];
@@ -38,7 +38,7 @@ export interface Fact {
   readonly s?: string;
   /** The TTL column and its seconds. */
   readonly ttl?: readonly [column: string, seconds: number];
-  /** Publishing: read-only here. */
+  /** Opt-in publishing lifecycle. */
   readonly pub?: 1;
   /** Declared date-time and date columns (`created_at` and `updated_at` are always date-times). */
   readonly ts?: readonly string[];
@@ -46,12 +46,21 @@ export interface Fact {
 }
 export const SCOPE = "$scope", TTL = "$ttl";
 /** The columns Mantle owns: no write names them (nor the scope column), and `_rid` is never returned. */
-const SYSTEM = ["id", "version", "created_at", "updated_at", "author_id", "status", "_rid"];
+const SYSTEM = ["id", "version", "created_at", "updated_at", "author_id", "status", "published_at", "_rid"];
 
 /** A Schema's rules: the shared ones with its scope and TTL put in, and a term dropped where it has none. The generator proves this equals Core's for every Schema. */
 export function expand(r: Rules, f: Fact) {
-  const all = <T extends readonly [string, ...any[]]>(l: readonly T[]): T[] => l.flatMap(([c, ...t]) => (c = c === SCOPE ? f.s! : c === TTL ? f.ttl?.[0]! : c) ? [[c, ...t.map(v => v.k === "cutoff" ? { ...v, seconds: f.ttl![1] } : v)] as unknown as T] : []);
+  const all = <T extends readonly [string, ...any[]]>(l: readonly T[]): T[] => l.flatMap(([c, ...t]) => (c = c === SCOPE ? f.s! : c === TTL ? f.ttl?.[0]! : c === "status" && !f.pub ? "" : c) ? [[c, ...t.map(v => v.k === "cutoff" ? { ...v, seconds: f.ttl![1] } : v)] as unknown as T] : []);
   return { caller: all(r.caller), trusted: all(r.trusted), fills: all(r.fills), sets: all(r.sets), lock: r.lock };
+}
+
+export function renderTerm(d: Pick<Dialect, "ident">, [column, op, , published, roles]: Term, prefix: string, placeholder: string): string {
+  const c = prefix + d.ident(column);
+  if (op === "staff") {
+    const literal = (v: string) => `'${v.replaceAll("'", "''")}'`;
+    return `(${c} = ${literal(published!)} OR ${placeholder} IN (${roles!.map(literal).join(", ")}))`;
+  }
+  return op === "ttl" ? `(${c} IS NULL OR ${c} > ${placeholder})` : `${c} = ${placeholder}`;
 }
 
 export interface Driver<H> {
@@ -108,13 +117,9 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
   };
   /** The columns whose wire form the database formats, replacing the same names `*` brings (of two same-named columns a driver keeps the last). */
   const wires = (p: Prepared, prefix: string) => [p.ts, p.d].flatMap((columns, i) => columns.map(c => `${(i ? d.wireDate : d.wireTimestamp)(prefix + d.ident(c)).join("")} AS ${d.ident(c)}`)).join(", ");
-  const term = ([column, op]: Term, prefix: string, placeholder: string) => {
-    const c = prefix + d.ident(column);
-    return op === "ttl" ? `(${c} IS NULL OR ${c} > ${placeholder})` : `${c} = ${placeholder}`;
-  };
   const ID = d.ident("id");
   /** The row rules of one mode, numbered from 1; the SQL is rendered once per mode. */
-  const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => p.policy[+trusted] ??= { sql: terms.map((t, i) => term(t, "r.", d.param(i + 1))).join(" AND "), recipes: terms.map(t => t[2]) };
+  const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => p.policy[+trusted] ??= { sql: terms.map((t, i) => renderTerm(d, t, "r.", d.param(i + 1))).join(" AND "), recipes: terms.map(t => t[2]) };
 
   return ((db: H, caller: Caller) => make(db, caller)) as never;
 
@@ -193,10 +198,11 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         values.push(last);
         const after = `${id} ${up ? ">" : "<"} ${d.param(values.length)}`;
         if (name === "id") conds.push(after);
-        else { const m = put(values, name, v); conds.push(`(${kc} ${up ? ">" : "<"} ${m} OR (${kc} = ${m} AND ${after}))`); }
+        else if (v === null) conds.push(`(${kc} IS NULL AND ${after})`);
+        else { const m = put(values, name, v); conds.push(`(${kc} ${up ? ">" : "<"} ${m} OR (${kc} = ${m} AND ${after}) OR ${kc} IS NULL)`); }
       }
       // an ORDER BY column is NOT NULL (the generated type offers no other), so no NULL placement
-      const list = await rows(`${select()}${where(conds)} ORDER BY ${name === "id" ? "" : `${kc} ${way}, `}${id} ${way} LIMIT ${limit + 1}`, values);
+      const list = await rows(`${select()}${where(conds)} ORDER BY ${name === "id" ? "" : `${kc} ${way} NULLS LAST, `}${id} ${way} LIMIT ${limit + 1}`, values);
       if (list.length <= limit) return { rows: clean(list), cursor: null };
       const page = list.slice(0, limit), end = page[limit - 1]!;
       return { rows: clean(page), cursor: encodeCursor(end[name], end.id) };
@@ -204,7 +210,6 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
 
     /** A write: placeholders are numbered as values are pushed; a Core bind recipe is evaluated against this caller and clock. */
     const writer = (lock?: number | string) => {
-      if (f.pub) throw no("is read-only");
       const values: unknown[] = [], ms = Date.now(), into = d.ident(p.name);
       const push = (v: unknown) => (values.push(v), d.param(values.length));
       const recipe = (r: Recipe) => push(evaluate(d, [r], caller, { version: lock }, ms)[0]);
@@ -217,7 +222,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         return [d.ident(name), put(values, name, v)] as const;
       });
       /** `WHERE id = ? AND <the caller's row rules> AND version = ?` */
-      const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...terms, x.lock].map(t => term(t, "", recipe(t[2])))].join(" AND ")}`;
+      const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...terms, x.lock].map(t => renderTerm(d, t, "", recipe(t[2])))].join(" AND ")}`;
       const step = (sql: string): Bound => ({ sql, binds: values, row: true });
       return { given, recipe, guard, step, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };

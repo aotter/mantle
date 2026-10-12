@@ -2,13 +2,15 @@
  * What a Schema's rows are, as data: who sees a row, and what a write adds to it. Core's policy rewriter renders these terms to
  * its AST, and a runtime that never compiles (a generated Store) renders them to its own SQL, so the rules are spelled once, here.
  */
+import { STAFF_ROLES } from "../model/ManifestGrammar.js";
 import type { SqlSchemaDef } from "../model/SqlIr.js";
 
-export type RowMode = "caller" | "public" | "trusted";
+/** `caller` preserves Core visibility; `staff` additionally hides publishing drafts from non-staff callers. */
+export type RowMode = "caller" | "public" | "trusted" | "staff";
 /** A value an engine binds. Inside a term a `const` is part of the rule (printed inline); in a write it is an input. */
-export type RowValue = { readonly k: "uid" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string };
-/** `eq`: `column = value`. `ttl`: `column IS NULL OR column > value`. */
-export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue];
+export type RowValue = { readonly k: "uid" | "role" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string };
+/** `eq`: `column = value`. `ttl`: `column IS NULL OR column > value`. `staff`: published, or the bound role is staff. */
+export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue] | readonly [column: string, op: "staff", value: RowValue, published: string, roles: readonly string[]];
 export type RowSchema = Pick<SqlSchemaDef, "scope" | "ttl" | "ttlSeconds" | "publishing">;
 export interface RowWrite {
   /** An insert's columns the policy fills, in order. `newId` is a new entry id. */
@@ -19,13 +21,14 @@ export interface RowWrite {
   readonly lock?: RowTerm;
 }
 
+const PUBLISHED = "published";
 const NOW: RowValue = { k: "now" };
 /** The rows a caller can see: its own (unless trusted), live (TTL) and, for a public caller of a publishing Schema, published. */
 export function rowPolicy(s: RowSchema, mode: RowMode): RowTerm[] {
   return [
     ...(mode !== "trusted" && s.scope ? [[s.scope, "eq", { k: "uid" }] as const] : []),
     ...(s.ttl ? [[s.ttl, "ttl", { k: "cutoff", seconds: s.ttlSeconds! }] as const] : []),
-    ...(mode === "public" && s.publishing ? [["status", "eq", { k: "const", value: "published" }] as const] : []),
+    ...(s.publishing && (mode === "public" || mode === "staff") ? [mode === "public" ? ["status", "eq", { k: "const", value: PUBLISHED }] as const : ["status", "staff", { k: "role" }, PUBLISHED, STAFF_ROLES] as const] : []),
   ];
 }
 
