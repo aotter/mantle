@@ -16,6 +16,7 @@ export interface Tool<Database, Handlers = never> {
   readonly description: string;
   /** The declared input; a View tool's schema gains the `limit` and `cursor` paging properties. */
   readonly inputSchema: unknown;
+  readonly annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean };
   /** Declares an auth requirement: anonymous callers are challenged. */
   readonly closed?: boolean;
   /** OAuth scopes the requirement names. */
@@ -74,7 +75,7 @@ export function mcp<Env, Database, Handlers = never>(tools: readonly Tool<Databa
     }
     const handler = createMcpHandler(() => {
       const server = new McpServer({ name: "aotter.mantle", version: "0.2.0" }, { capabilities: { tools: { listChanged: false } } });
-      for (const tool of selected) server.registerTool(tool.name, { description: tool.description, inputSchema: fromJsonSchema((tool.page ? paging(tool.inputSchema as object) : tool.inputSchema) as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } }) }, async (raw: unknown) => {
+      for (const tool of selected) server.registerTool(tool.name, { description: tool.description, annotations: tool.annotations, inputSchema: fromJsonSchema((tool.page ? paging(tool.inputSchema as object) : tool.inputSchema) as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } }) }, async (raw: unknown) => {
         try {
           if (tool.run) checkOrigin(request, caller);
           const data = await call(tool, raw as Record<string, unknown>, options.db(env), caller, options.handlers as Handlers);
