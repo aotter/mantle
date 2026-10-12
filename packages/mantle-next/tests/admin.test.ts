@@ -14,7 +14,7 @@ spec:
  ttl: {field: expiresAt, expireAfterSeconds: 0}
  indexes: [[owner, id]]
  scope: {owner: auth.uid()}
- schema: {type: object, required: [owner, displayTitle, score], properties: {owner: {type: string}, displayTitle: {type: string}, score: {type: integer}, expiresAt: {type: string, format: date-time, nullable: true}}}
+ schema: {type: object, required: [owner, displayTitle, score], properties: {owner: {type: string}, displayTitle: {type: string}, score: {type: integer}, expiresAt: {type: string, format: date-time, nullable: true}, active: {type: boolean, nullable: true}, document: {type: object, nullable: true, additionalProperties: true}}}
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -41,7 +41,7 @@ spec:
  surface: staff
  requires: {auth: {all: [{ctx.staff: [staff]}]}}
  uiSchema: {list: {columns: [id, displayTitle, score], searchFields: [displayTitle], filterFields: [score, expiresAt]}}
- sql: SELECT id,displayTitle,score,updated_at,expiresAt FROM notes ORDER BY id
+ sql: SELECT id,displayTitle,score,updated_at,expiresAt,active,document FROM notes ORDER BY id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -74,6 +74,23 @@ spec:
  source: {kind: mcp, surface: staff}
  target: {procedure: edit}
 `;
+const singleton=`---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: singleton_count}
+spec:
+ surface: staff
+ uiSchema: {list: {filterFields: [total]}}
+ sql: SELECT count(*) AS total FROM notes
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: singleton_min}
+spec:
+ surface: staff
+ uiSchema: {list: {searchFields: [title]}}
+ sql: SELECT min(displayTitle) AS title FROM notes
+`;
 const staff:any={kind:"user",subject:"a",role:"staff",scopes:[],credential:"session",credentialId:null,clientId:null};
 for(const target of ["bun-sqlite","bun-postgres"] as const)(target==="bun-postgres"&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`${target} Admin staff boundary, native paging/filtering, wire and operation`,async()=>{
  const files=await generateOrThrow(target,[{sourceId:"admin.yaml",text:source}]),dir=await mkdtemp(join(tmpdir(),"mantle-admin-")),sqlite=target==="bun-sqlite",schema="admin_"+crypto.randomUUID().replaceAll("-","");
@@ -91,6 +108,7 @@ for(const target of ["bun-sqlite","bun-postgres"] as const)(target==="bun-postgr
    if(sqlite)db.query("INSERT INTO posts(id,version,created_at,updated_at,owner,title,status) VALUES (?,1,0,0,?,'post',?)").run(id,owner,status);
    else await db.unsafe("INSERT INTO posts(id,version,created_at,updated_at,owner,title,status) VALUES ($1,1,now(),now(),$2,'post',$3)",[id,owner,status]);
   }
+  if(sqlite)db.exec(`UPDATE notes SET active=1,document='{"x":[true,null]}' WHERE id='b'`);else await db.unsafe(`UPDATE notes SET active=true,document='{"x":[true,null]}'::jsonb WHERE id='b'`);
   let caller:any=staff,calls=0,queries=0;
   const handle=sqlite?{query(sql:string){queries++;return db.query(sql);}}:{unsafe(sql:string,values:any[]){queries++;return db.unsafe(sql,values);},begin:db.begin.bind(db)};
   const fetch=admin({db:()=>handle,caller:async()=>{calls++;return caller;},getUser:async()=>({name:"Ada",email:"a@test",image:"avatar"}),assets:async(path:string)=>path==="index.html"||path==="preview.html"?new Response("<html/>",{headers:{"content-type":"text/html"}}):path==="assets/app.hash.js"?new Response("js",{headers:{"content-type":"text/javascript"}}):null});
@@ -103,7 +121,7 @@ for(const target of ["bun-sqlite","bun-postgres"] as const)(target==="bun-postgr
   const before=queries,bootstrap=await(await req("/admin/api/bootstrap")).json();expect(queries).toBe(before);expect(bootstrap.me).toEqual({userId:"a",role:"staff",login:"Ada",image:"avatar"});expect(bootstrap.views.map((v:any)=>v.name)).toEqual(["posts_report","report"]);expect(bootstrap.operations.map((p:any)=>p.name)).toEqual(["edit"]);expect(bootstrap.site.capabilities).toEqual({siteSettings:false,media:false,invitationEmail:false,statistics:false});
   expect((await(await req("/admin/api/views/posts_report")).json()).rows.map((r:any)=>[r.id,r.status])).toEqual([["draft","draft"],["published","published"]]);
   const viewBefore=queries;
-  const first=await(await req("/admin/api/views/report?limit=1&filter.score=2")).json();expect(first.rows).toEqual([{id:"b",displayTitle:"beta",score:2,updated_at:expect.any(String),expiresAt:null}]);expect(queries-viewBefore).toBe(1);
+  const first=await(await req("/admin/api/views/report?limit=1&filter.score=2")).json();expect(first.rows).toEqual([{id:"b",displayTitle:"beta",score:2,updated_at:expect.any(String),expiresAt:null,active:true,document:{x:[true,null]}}]);expect(queries-viewBefore).toBe(1);
   const next=await(await req("/admin/api/views/report?limit=1&filter.score=2&cursor="+encodeURIComponent(first.nextCursor))).json();expect(next.rows[0].id).toBe("c");
   expect((await(await req("/admin/api/views/report?search=BETA")).json()).rows.map((r:any)=>r.id)).toEqual(["b"]);expect((await(await req("/admin/api/views/report?search=%25")).json()).rows.map((r:any)=>r.id)).toEqual(["c"]);
   if(sqlite)db.exec("UPDATE notes SET expiresat=4070908800000000 WHERE id='b'");else await db.unsafe("UPDATE notes SET expiresat='2099-01-01T00:00:00Z' WHERE id='b'");
@@ -164,15 +182,17 @@ test("Worker startup excludes unselected Admin and keeps compiler data out of th
  const {unstable_splitSqlQuery}=await import("wrangler"),{spawn}=await import("node:child_process"),{once}=await import("node:events"),{open}=await import("node:fs/promises"),base=resolve(import.meta.dir,".."),dir=await mkdtemp(join(base,"tests/apps/.admin-d1-")),privateDir=await mkdtemp(join(tmpdir(),"mantle-admin-d1-")),port=process.env.MANTLE_NEXT_ADMIN_PORT??"8998";
  let worker:ReturnType<typeof spawn>|undefined,log:Awaited<ReturnType<typeof open>>|undefined;
  try{
-  const files=await generateOrThrow("cloudflare-d1",[{sourceId:"admin.yaml",text:source}]);await writeGenerated(dir,files,false);
-  const seed="INSERT INTO notes(id,version,created_at,updated_at,owner,displaytitle,score) VALUES ('a',1,0,0,'a','Alpha',1),('b',1,0,0,'a','beta',2),('other',1,0,0,'b','beta',2); INSERT INTO notes(id,version,created_at,updated_at,owner,displaytitle,score,expiresat) VALUES ('expired',1,0,0,'a','beta',2,0)";
+  const files=await generateOrThrow("cloudflare-d1",[{sourceId:"admin.yaml",text:source+singleton}]);await writeGenerated(dir,files,false);
+  const seed="INSERT INTO notes(id,version,created_at,updated_at,owner,displaytitle,score) VALUES ('a',1,0,0,'a','Alpha',1),('b',1,0,0,'a','beta',2),('other',1,0,0,'b','beta',2); INSERT INTO notes(id,version,created_at,updated_at,owner,displaytitle,score,expiresat) VALUES ('expired',1,0,0,'a','beta',2,0); UPDATE notes SET active=1,document='{\"x\":[true,null]}' WHERE id='b'";
   await writeFile(join(dir,"worker.ts"),`import {admin} from './admin.js';
 const caller=${JSON.stringify(staff)};const app=admin({db:(env:{DB:any})=>env.DB,caller:async()=>caller});
 const check=(ok:unknown,message:string)=>{if(!ok)throw Error(message);};
 export default{async fetch(request:Request,env:{DB:any}){if(new URL(request.url).pathname==='/health')return new Response('ready');try{
  for(const sql of ${JSON.stringify(unstable_splitSqlQuery(files["schema.sql"]!+seed))})await env.DB.prepare(sql).run();
  const read=(path:string)=>app(new Request('https://app.test/admin/api'+path),env);
- const response=await read('/views/report?search=BETA&filter.score=2&limit=1');check(response!.status===200,'read status');const page:any=await response!.json();check(page.rows.length===1&&page.rows[0].id==='b'&&page.rows[0].displayTitle==='beta','scope/search/filter wire');
+ const response=await read('/views/report?search=BETA&filter.score=2&limit=1');check(response!.status===200,'read status');const page:any=await response!.json();check(page.rows.length===1&&page.rows[0].id==='b'&&page.rows[0].displayTitle==='beta','scope/search/filter wire');check(page.rows[0].active===true&&page.rows[0].document.x[0]===true,'declared bool/JSON wire');
+ check(((await (await read('/views/singleton_count?filter.total=42'))!.json()) as any).rows.length===0,'singleton count negative filter');check(((await (await read('/views/singleton_count?filter.total=2'))!.json()) as any).rows.length===1,'singleton count scope');
+ check(((await (await read('/views/singleton_min?search=notfound'))!.json()) as any).rows.length===0,'singleton search');
  check((await read('/views/public_report'))!.status===404,'public View hidden');check((await read('/views/private_report'))!.status===404,'requires View hidden');
  const input=JSON.stringify({id:'a',title:'edited',version:1}),write=(origin:string)=>app(new Request('https://app.test/admin/api/operations/edit',{method:'POST',body:input,headers:{origin}}),env);
  check((await write('https://evil.test'))!.status===403,'origin gate');check((await write('https://app.test'))!.status===200,'native write');check((await write('https://app.test'))!.status===409,'OCC');
@@ -212,4 +232,15 @@ spec:
  expect((await read("prototype_mixed?filter.constructor=Alpha")).rows).toEqual([{id:"a",displayTitle:"Alpha",constructor:"Alpha",expiresAt:null}]);
  expect((await read("prototype_mixed?filter.constructor=missing")).rows).toEqual([]);
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+for(const target of ["bun-sqlite","bun-postgres"] as const)(target==="bun-postgres"&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`${target} Admin singleton search/filter runs bound SQL after scoped aggregate`,async()=>{
+ const text=source+singleton;
+ const files=await generateOrThrow(target,[{sourceId:"singleton.yaml",text}]),dir=await mkdtemp(join(tmpdir(),"mantle-admin-singleton-")),sqlite=target==="bun-sqlite",schema="admin_single_"+crypto.randomUUID().replaceAll("-","");
+ const db:any=sqlite?new Database(":memory:"):new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1});
+ try{await writeGenerated(dir,files);if(sqlite)db.exec(files["schema.sql"]!);else{await db.unsafe(`CREATE SCHEMA ${schema}`);await db.unsafe(`SET search_path TO ${schema}`);await db.unsafe(files["schema.sql"]!);}
+ const seed=`INSERT INTO notes(id,version,created_at,updated_at,owner,displaytitle,score) VALUES ('a',1,${sqlite?'0,0':'now(),now()'},'a','Alpha',1),('b',1,${sqlite?'0,0':'now(),now()'},'b','other',2)`;if(sqlite)db.exec(seed);else await db.unsafe(seed);
+ const {admin}=await import(join(dir,"admin.ts")),app=admin({db:()=>db,caller:async()=>staff}),read=async(path:string)=>(await app(new Request("https://app.test/admin/api/views/"+path),{})).json();
+ expect((await read("singleton_count?filter.total=42")).rows).toEqual([]);expect((await read("singleton_count?filter.total=1")).rows).toHaveLength(1);
+ expect((await read("singleton_min?search=notfound")).rows).toEqual([]);expect((await read("singleton_min?search=ALPHA")).rows).toEqual([{title:"Alpha"}]);
+ }finally{if(sqlite)db.close();else{await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await db.close();}await rm(dir,{recursive:true,force:true});}
 });

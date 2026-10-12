@@ -5,10 +5,15 @@ const col = (name: string): N => ({ColumnRef:{fields:[{String:{sval:"_p"}},{Stri
 const cast = (arg: N, type: string): N => ({TypeCast:{arg,typeName:{names:[{String:{sval:type}}],typemod:-1}}});
 const bool = (boolop: string, args: N[]): N => ({BoolExpr:{boolop,args}});
 const op = (name: string, lexpr: N, rexpr: N): N => ({A_Expr:{kind:"AEXPR_OP",name:[{String:{sval:name}}],lexpr,rexpr}});
-export function adminPage(ast: N, view: RuntimePlan["views"][string], schemas: RuntimePlan["schemas"], sqlite: boolean): {ast:N;matches:string[]} {
+export function adminPage(ast: N, view: RuntimePlan["views"][string], schemas: RuntimePlan["schemas"], sqlite: boolean, keys: readonly string[] = []): {ast:N;matches:string[]} {
   const list = view.uiSchema?.list as {searchFields?:string[];filterFields?:string[]} | undefined;
-  const matches:string[]=[], conditions:N[]=[], result=structuredClone(ast), sel=result.SelectStmt;
-  if (!sel.fromClause?.[0]?.RangeSubselect || !sel.targetList.some((t:N)=>t.ResTarget.name==="_k0")) return {ast:result,matches};
+  const matches:string[]=[], conditions:N[]=[], result=structuredClone(ast);
+  let sel=result.SelectStmt;
+  if(!list?.searchFields?.length&&!list?.filterFields?.length)return{ast:result,matches};
+  if (!sel.fromClause?.[0]?.RangeSubselect || !sel.targetList.some((t:N)=>t.ResTarget.name==="_k0")) {
+    const inner={...sel,limitCount:undefined,limitOption:"LIMIT_OPTION_DEFAULT",targetList:sel.targetList.map((t:N,i:number)=>({ResTarget:{...t.ResTarget,name:keys[i]}}))};
+    result.SelectStmt=sel={targetList:keys.map(name=>({ResTarget:{name,val:col(name)}})),fromClause:[{RangeSubselect:{subquery:{SelectStmt:inner},alias:{aliasname:"_p"}}}],limitCount:sel.limitCount,limitOption:sel.limitOption,op:"SETOP_NONE"};
+  }
   let index=0;
   const scan=(node:unknown):void=>{if(!node||typeof node!=="object")return;const n=node as N;if(n.ParamRef)index=Math.max(index,n.ParamRef.number);for(const v of Object.values(n))scan(v);};scan(result);
   const output=(name:string)=>sel.targetList.find((t:N)=>t.ResTarget.name===name)?.ResTarget.name ?? name.toLowerCase();
@@ -24,7 +29,7 @@ export function adminPage(ast: N, view: RuntimePlan["views"][string], schemas: R
     const type=[property?.type].flat().find(t=>t&&t!=="null"), native=schema&&declaredType(schema.fields,provenance!.field);
     let value=param("filter."+name,type==="boolean"?(sqlite?"integer":"boolean"):type==="integer"?"bigint":type==="number"?"double precision":native==="date"||native==="timestamptz"?(sqlite?"bigint":"text"):"text");
     if(!sqlite&&(native==="date"||native==="timestamptz"))value=cast(value,native);
-    conditions.push(optional(value,op("=",col(output(name)),value)));
+    conditions.push(optional(value,op("=",!schema?cast(col(output(name)),"text"):col(output(name)),value)));
   }
   if(conditions.length)sel.whereClause=bool("AND_EXPR",[...(sel.whereClause?[sel.whereClause]:[]),...conditions]);
   return {ast:result,matches};

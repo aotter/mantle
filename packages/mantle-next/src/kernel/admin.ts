@@ -5,7 +5,7 @@ import { siteInfo, type SiteConfig, type MediaStorage } from "./site.js";
 import { escapeLike } from "./dialect/common.js";
 type Staff = Extract<Caller,{kind:"user"}>;
 type Descriptor = {readonly name:string;readonly [key:string]:unknown};
-type Page = {rows:Record<string,unknown>[];nextCursor?:string};
+type Page = {rows:readonly Record<string,unknown>[];nextCursor?:string};
 export interface Context<Env,Database> {request:Request;url:URL;env:Env;db:Database;caller:Staff;params:Record<string,string>}
 /** Optional Admin modules add routes inside the same session/origin gate. Paths are relative to /admin/api. */
 export interface Route<Env,Database> {readonly method:string;readonly path:string;run(context:Context<Env,Database>):Promise<unknown>}

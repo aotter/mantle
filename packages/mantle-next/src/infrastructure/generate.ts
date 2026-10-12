@@ -78,9 +78,11 @@ export async function generateFromSources(request: { readonly target: Target; re
       const types = page && !page.flat ? [...page.names.map(key=>outputType(compiled.plan,name,key)), ...(orderTypes[name] ?? [])] : keys.map(key=>outputType(compiled.plan,name,key));
       const projected = wireScalars(ast,keys,types,wire);
       if (typeof projected !== "string") {
-        if(page && compiled.plan.views[name]?.surface === "staff") {
-          const matched=adminPage(projected,compiled.plan.views[name]!,compiled.plan.schemas,!postgres);
-          (adminPages[name]??=[]).push({sql:dialect.print!(matched.ast,compiled.plan.schemas),matches:matched.matches});
+        if(page && compiled.plan.views[name]?.surface === "staff" && (adminPages[name]?.length??0)<(page.nkeys?2:1)) {
+          const matched=adminPage(ast,compiled.plan.views[name]!,compiled.plan.schemas,!postgres,keys);
+          const formatted=wireScalars(matched.ast,keys,types,wire);
+          if(typeof formatted === "string")refusals.push({code:"GENERATE_UNSUPPORTED",path:`views/${name}`,message:formatted});
+          else (adminPages[name]??=[]).push({sql:dialect.print!(formatted,compiled.plan.schemas),matches:matched.matches});
         }
         return projected;
       }

@@ -91,13 +91,25 @@ export function checkOrigin(request: Request, caller: Caller): void {
 export async function surfaceCaller<Env>(request: Request, env: Env, resolve: (request: Request, env: Env) => Caller | Promise<Caller>): Promise<Caller> {
   try { return await resolve(request, env); } catch (cause) { if (cause instanceof ContractError) throw cause; throw new Error("Caller resolution failed.", {cause}); }
 }
-/** Keep native causes in server logs; transport users receive only the shared redacted error. */
+/** Log only the fixed wire classification; arbitrary error messages and causes may contain credentials. */
 export function surfaceError(error: unknown): ReturnType<typeof wire> {
   const result = wire(error);
-  if (result.status === 500) console.error("[mantle surface] unhandled failure", error);
+  if (result.status === 500) console.error("[mantle surface] unhandled failure", result.error.code);
   return result;
 }
 export function surfaceFailure(error: unknown, challenge?: string): Response {
   const result = surfaceError(error);
   return Response.json({error: result.error}, {status: result.status, headers: {"cache-control": "private, no-store", ...(challenge && [401,403].includes(result.status) && result.error.path !== "request:origin" ? {"www-authenticate": challenge} : {})}});
+}
+
+/** Selected transport outputs only: no schema interpreter, no mutation of native query rows. */
+export type WireColumns = ReadonlyArray<readonly [field: string, type: "json" | "bool" | "int"]>;
+export function wireRows(rows: readonly Record<string, unknown>[], fields: WireColumns = []): readonly Record<string, unknown>[] {
+  if (!fields.length) return rows;
+  return rows.map(row => {
+    const result = { ...row };
+    for (const [key, type] of fields) if (Object.hasOwn(row, key) && row[key] != null)
+      result[key] = type === "json" ? JSON.parse(row[key] as string) : type === "bool" ? row[key] === true || row[key] === 1 : Number.isSafeInteger(Number(row[key])) ? Number(row[key]) : row[key];
+    return result;
+  });
 }
