@@ -158,6 +158,12 @@ may converge storage or inspect every schema. Optional Better Auth, REST, MCP,
 Admin and UI stay outside the query core. Preserve their public behavior as they
 are added; do not make a read import their entire composition.
 
+The separate generated `transfer.ts` deployment entry provides
+[portable dump/import](portable-store.md) over an exact static descriptor. It
+preserves physical Schema/product/auth rows and excludes sessions; it does not
+reuse scoped/TTL/publishing-filtered Store reads. Its deploy-time integer text
+projection and codecs do not change bare query responsibilities or startup graphs.
+
 ## Ref Procedures
 
 Ref Procedures generate a typed `Handlers` interface, keyed by Procedure name,

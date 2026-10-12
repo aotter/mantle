@@ -14,8 +14,10 @@ try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     check: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string" }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" },
   } });
-  const command = positionals[0] === "bundle" || positionals[0] === "generate" ? positionals.shift()! : "generate";
-  if (command === "bundle") {
+  const command = ["bundle", "generate", "export", "import"].includes(positionals[0]!) ? positionals.shift()! : "generate";
+  if (command === "export" || command === "import") {
+    await (await import("./transfer.js")).transfer(command, positionals);
+  } else if (command === "bundle") {
     const [entry, outdir] = positionals;
     if (!entry || !outdir || positionals.length !== 2 || values.site || values.auth || values["admin-extensions"] || values.wrangler || values.check) throw new Error(usage);
     await (await import("./bundle.js")).bundle(entry, outdir);

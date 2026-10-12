@@ -56,6 +56,14 @@ Self-hosting is always an option; never present a hosted target as required.
 For workspace consumers with concrete `generated.ts` queries, follow the linked
 package README instead of the Core boot, scaffolding and `--check` steps below.
 
+Native database moves use the generated `transfer.ts` deployment module and the
+version-matched [portable transfer guide](../../next/portable-store.md). Freeze
+all writers, keep the source, pre-provision an empty matching target, and verify
+the completed count/checksum before switching bindings. Sessions are omitted;
+members and session-bound MCP clients authenticate again. A failed D1 import is
+incomplete and must be discarded. Keep transfer modules and dump files private;
+they include identity data and bypass public scope/TTL/publishing filters.
+
 ## Local gate
 
 ```bash

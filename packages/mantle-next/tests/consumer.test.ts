@@ -22,7 +22,7 @@ beforeAll(async () => {
     // unlinked: the consumer resolves @aotter/mantle-next/* through the package (dist), as an application does
     const generated = await generateOrThrow(target, sources);
     await writeGenerated(destination, generated, false);
-    boundaryFiles.push(...Object.keys(generated).filter(name => name.startsWith("paged/") || name.startsWith("validation/") || name === "mcp.ts").map(name => join(destination, name)));
+    boundaryFiles.push(...Object.keys(generated).filter(name => name.startsWith("paged/") || name.startsWith("validation/") || name === "mcp.ts" || name === "transfer.ts").map(name => join(destination, name)));
     files.push(join(destination, "generated.ts"));
     selectedFiles.push(join(destination, "views/purchase-totals.ts"), join(destination, "procedures/create-purchase.ts"));
   }
@@ -32,12 +32,15 @@ beforeAll(async () => {
   await writeFile(drivers, [
     'import { SQL } from "bun";',
         'import postgres from "postgres";',
+    'import { exportStore as dump, importStore as restore } from "./bun-postgres/transfer.js";',
     'import { Database } from "bun:sqlite";',
     'import { views as bun, procedures as bunWrites, store as bunStore } from "./bun-postgres/generated.js";',
     'import { store as sqliteStore } from "./bun-sqlite/generated.js";',
     'import { views as d1Views, procedures as d1Procedures, store as d1Store } from "./cloudflare-d1/generated.js";',
     'import { views as worker, store as workerStore } from "./cloudflare-postgres/generated.js";',
     'const sql = new SQL("postgres://localhost/x");',
+    'const backup: ReadableStream<Uint8Array> = dump(sql);',
+    'await restore(sql, backup);',
     `await bun["purchase-totals"](sql, ${caller}, {});`,
     `await sql.begin(async (tx) => bun["purchase-totals"](tx, ${caller}, {}));`,
     `await bunWrites["create-purchase-pair"](sql, ${caller}, { requestNumber: "r", title: "t", amount: 1, approved: true, sortBucket: null, requestedUnits: 1, submittedAt: new Date(), neededOn: "2026-10-11", payload: "{}" });`,
