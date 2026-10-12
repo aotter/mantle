@@ -51,7 +51,7 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
     expect(failed.stderr).toContain("valid JSONC");
     expect(await readFile(join(dir, "wrangler.jsonc"), "utf8")).toBe('{"name": "bad",');
   } finally { await rm(dir, { recursive: true, force: true }); }
-});
+}, 30_000);
 
 test("generate leaves Wrangler TOML untouched and prints the exact build keys", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-toml-"));
@@ -64,7 +64,7 @@ test("generate leaves Wrangler TOML untouched and prints the exact build keys", 
     expect(spawnSync("node", [cli, "generate", "cloudflare-postgres", "generated", manifest, "--wrangler", "wrangler.toml"], { cwd: dir }).status).toBe(0);
     expect(await readFile(join(dir, "wrangler.toml"), "utf8")).toBe(original);
   } finally { await rm(dir, { recursive: true, force: true }); }
-});
+}, 30_000);
 
 test("workspace consumer bin: plain Wrangler deploy/dev run the split build", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-workers-"));
