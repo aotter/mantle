@@ -44,14 +44,30 @@ Transport-facing `paged/views/<name>.ts` exports
 Bare `views/<name>.ts` retains native row arrays and accepts app-validated input;
 selecting neither boundary adds no validation or paging work to that query.
 Authored SQL `LIMIT` caps each page, up to 500, rather than the whole cursor walk.
-A pageable exposed View orders one indexed NOT NULL Schema column, then `id`
-in the same direction (or simply `id`). Unsupported exposed ordering is refused
-at generation. Internal bare Views can retain aggregates and other native SQL.
-Single-row aggregate/scalar Views expose one page and reject a cursor.
+A pageable Schema View has a complete NOT NULL scalar tuple ending in the
+compiler's `id` tiebreak. Its ordered columns must match an index after fixed
+equality prefixes (including caller scope); multiple columns and mixed directions
+retain the authored order. CTE projections preserve the proof; joins must have a
+proved singleton side so the base id cannot fan out.
+
+Grouped Views use every GROUP BY key as the tiebreak, with known non-null scalar
+keys; `min`/`max` of a non-null column retain its native cursor type. Paging a
+grouped result does not avoid the native grouping/source scan. Authors own source
+predicate indexes and should inspect EXPLAIN for their workload. Nullable,
+unknown and JSON order expressions and unproved fanout remain refused.
+
+Proved singletons (scalar/aggregate queries, unique-id lookups and singleton
+sources) run bounded first-page SQL, reject cursors and refuse overflow.
+Internal Views receive directly imported paged modules only when the same proofs
+hold; they gain no public route or tool. Their bare modules remain available for
+other native SQL and return full authored-query arrays.
 
 Cursors reuse the Store's percent-encoded JSON keyset codec. Selected View
 cursors include operation provenance; malformed, foreign and
-null-key cursors fail with `INPUT_VALIDATION_FAILED`. They are opaque navigation
+null-key cursors fail with `INPUT_VALIDATION_FAILED`. Each generated key has a
+scalar check; temporal keys keep database microseconds. Existing one/two-key
+formats and Store cursors are preserved; larger View tuples contain their full
+key list followed by operation provenance. They are opaque navigation
 values, not credentials; authorization and row predicates run on every page.
 
 ## Mounting REST

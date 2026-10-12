@@ -7,11 +7,11 @@ import { emitPaging } from "./paging.js";
 import { declaredType } from "../domain/columns.js";
 const q=JSON.stringify;
 const allows=(requires:RuntimePlan["views"][string]["requires"])=>"(caller: Caller) => "+((requires?.auth?.all??[]).map(authPredicate).join(" && ")||"true");
-export function emitAdmin({plan,lowered,target,site,adminPages}:GenerateInput,refuse:(path:string,message:string)=>void):Record<string,string> {
+export function emitAdmin({plan,lowered,target,site,adminPages,paging}:GenerateInput,refuse:(path:string,message:string)=>void):Record<string,string> {
   const refs=Object.values(plan.procedures).some(p=>"ref" in p.handler), imports=[`import { admin as serve, type Options } from "@aotter/mantle-next/admin";`,`import type { Caller } from "@aotter/mantle-next/contracts";`,databaseImport(target),`import { bootstrap } from "./admin-descriptors.js";`,...(refs?[`import { store, type Handlers } from "./generated.js";`]:[]),...(site?[`import { site } from "./site.js";`]:[])];
   const views:string[]=[],operations:string[]=[],files:Record<string,string>={};
   const staffPlan={...plan,views:Object.fromEntries(Object.entries(plan.views).filter(([,view])=>view.surface==="staff"))};
-  for(const [path,source] of Object.entries(emitPaging(staffPlan,lowered,target,refuse,adminPages)))files[path.replace("paged/","admin-paged/")]=source;
+  for(const [path,source] of Object.entries(emitPaging(staffPlan,lowered,target,refuse,paging,adminPages)))files[path.replace("paged/","admin-paged/")]=source;
   const conversion=(input:JsonSchema|undefined,binds:Parameters<typeof conversions>[1])=>{const code=conversions(input?.properties,binds,target);return code?`, convert: ${code}`:"";};
   for(const [name,view] of Object.entries(plan.views).filter(([,v])=>v.surface==="staff")){
     const id=views.length,list=view.uiSchema?.list as {columns?:string[];searchFields?:string[];filterFields?:string[]}|undefined;
