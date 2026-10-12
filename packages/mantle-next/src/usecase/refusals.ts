@@ -6,6 +6,7 @@ export function refuseDeclarations({ plan }: GenerateInput, diagnostics: Generat
   const refuse = (path: string, message: string) => diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message });
   for (const [name, trigger] of Object.entries(plan.triggers)) {
     const kind = trigger.source.kind;
+    if (kind === "http") continue;
     refuse(`triggers/${name}`, kind === "schedule" ? "Schedule Triggers are unsupported. Wire scheduled() yourself."
       : kind === "lifecycle" ? "Before/after lifecycle hooks are unsupported. Write a custom handler."
       : `${kind.toUpperCase()} Trigger exposure is planned; no handler is generated yet. Mount an application-owned handler until the surface is available.`);
