@@ -4,7 +4,7 @@
 import { SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/index.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from '../dialect.js';
-import { classify, rowPolicy, writePolicy, type RowMode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
+import { classify, rowPolicy, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
 import type { PrintedStatement } from '../store.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
 
@@ -21,7 +21,7 @@ export type BindSpec =
 
 /** The prefix of the columns that carry an after hook's row; the runner strips them from the result. */
 export const HOOK_PREFIX = '_mantle_h_';
-export type Mode = RowMode;
+export type { Mode };
 export type PolicyOpts = {
   /** `MantleDialect.nativeOrder`: the id tiebreak follows the last sort key's direction */
   nativeOrder?: boolean;

@@ -117,6 +117,9 @@ export function storageColumns(s: { readonly fields?: Readonly<Record<string, st
   return cols;
 }
 
+/** The native columns storage declares NOT NULL (`status` only on a publishing Schema, the only one that has it); `author_id` is nullable. */
+export const NATIVE_NOT_NULL: ReadonlySet<string> = new Set(["id", "version", "created_at", "updated_at", "status"]);
+
 /**
  * The columns an `operational` Schema's database refuses NULL in beyond the native ones: each field its JSON Schema requires and
  * does not allow null (a geo field as its two columns). A `publishing` Schema has none: its drafts may be incomplete. This is the one
