@@ -16,9 +16,9 @@ export function siteRoutes<Env,Database>(options:Options<Env,Database>):Route<En
     return site(context).media(options.media);
   };
   const identity = async <K extends keyof IdentityMethods>(context:Context<Env,Database>,key:K):Promise<IdentityMethods[K]> => {
-    const method=(await options.identity?.directory?.(context))?.[key];
+    const directory=await options.identity?.directory?.(context),method=directory?.[key];
     if(!method)throw new ContractError("IDENTITY_NOT_CONFIGURED","This identity operation is not configured.","admin",{status:501});
-    return method;
+    return method.bind(directory) as IdentityMethods[K];
   };
   const other = (context:Context<Env,Database>) => {
     if(context.params.id===context.caller.subject)throw new ContractError("AUTH_DENIED","You cannot change your own staff identity.","admin");
@@ -28,7 +28,7 @@ export function siteRoutes<Env,Database>(options:Options<Env,Database>):Route<En
     {method:"GET",path:"/site-settings",run:async c=>settings(await site(c).read())},
     {method:"PATCH",path:"/site-settings",run:async c=>{const s=site(c);return settings(await s.updateSettings(await body(c.request)));}},
     {method:"POST",path:"/media/uploads",run:async c=>{const m=media(c);return m.createUpload(await body(c.request));}},
-    {method:"POST",path:"/media/uploads/{groupId}/commit",run:async c=>{const m=media(c);return mediaItem(await m.commitUpload(c.params.groupId!,await body(c.request)));}},
+    {method:"POST",path:"/media/uploads/{groupId}/commit",run:async c=>{const m=media(c);return m.commitUpload(c.params.groupId!,await body(c.request));}},
     {method:"GET",path:"/media",run:async c=>{
       const m=media(c),q=c.url.searchParams,raw=q.get("limit"),search=q.get("search")?.trim();
       if(search?.includes("\0"))invalid("Search must not contain NUL.","admin");

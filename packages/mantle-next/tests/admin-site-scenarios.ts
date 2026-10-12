@@ -4,7 +4,7 @@ export const adminSiteDefaults={brand:"Seed",locales:["en","zh-TW"],media:{purpo
 export const adminSiteStaff={kind:"user" as const,subject:"staff",role:"staff" as const,scopes:[],credential:"session" as const,credentialId:null,clientId:null};
 export const adminSiteStorage:MediaStorage={
   async createUpload(a){return {capabilities:a.variants.map(v=>({...v,method:"PUT" as const,uploadUrl:"https://upload.test/"+a.uploadGroupId,storageKey:"uploads/"+a.uploadGroupId}))};},
-  async commitUpload(a){return {id:a.uploadGroupId,createdAt:a.now,alt:a.alt,caption:a.caption,variants:a.variants.map(v=>({mimeType:v.mimeType,role:v.role,storageKey:"committed/"+a.uploadGroupId,publicUrl:"https://media.test/"+a.uploadGroupId,byteSize:90}))};},
+  async commitUpload(a){return {id:a.uploadGroupId,createdAt:a.now,alt:a.alt,caption:a.caption,metadata:{filename:a.filename},variants:a.variants.map(v=>({mimeType:v.mimeType,role:v.role,storageKey:"committed/"+a.uploadGroupId,publicUrl:"https://media.test/"+a.uploadGroupId,byteSize:90}))};},
   async deleteObject(){},
 };
 export async function verifyAdminSite(fetch:(request:Request)=>Promise<Response>,cookie:string) {
@@ -16,9 +16,9 @@ export async function verifyAdminSite(fetch:(request:Request)=>Promise<Response>
   assert.equal((await req("/site-settings","PATCH",{title:"x".repeat(201)})).status,400);checks++;
   const info=await json("/site");assert.equal(info.publicUrl,"https://app.test");assert.deepEqual(info.locales,["en","zh-TW"]);assert.deepEqual(info.capabilities,{siteSettings:true,media:true,invitationEmail:true,statistics:false});
   const upload=await json("/media/uploads","POST",{filename:"a.png",purpose:"cover",variants:[{mimeType:"image/png",role:"primary",byteSize:90}]});
-  const asset=await json("/media/uploads/"+upload.uploadGroupId+"/commit","POST",{caption:"Cat"});assert.equal(asset.primaryUrl,"https://media.test/"+asset.id);assert.equal(asset.mime,"image/png");assert.equal(asset.byteSize,90);
+  const asset=await json("/media/uploads/"+upload.uploadGroupId+"/commit","POST",{caption:"Cat"});assert.equal(asset.variants[0].publicUrl,"https://media.test/"+asset.id);assert.equal(asset.alt,undefined);assert.equal(asset.metadata.filename,"a.png");
   assert.equal((await json("/media?search=cat")).items.length,1);
-  assert.equal((await json("/media/"+asset.id)).id,asset.id);
+  const item=await json("/media/"+asset.id);assert.equal(item.id,asset.id);assert.equal(item.primaryUrl,"https://media.test/"+asset.id);assert.equal(item.mime,"image/png");assert.equal(item.byteSize,90);
   assert.equal((await json("/media/"+asset.id,"PATCH",{alt:""})).alt,"");
   assert.deepEqual(await json("/media/"+asset.id,"DELETE"),{deleted:true,variantsRemoved:1});
   assert.equal((await req("/media/"+asset.id)).status,404);checks++;
