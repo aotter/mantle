@@ -946,7 +946,7 @@ export function entryTitle(
   collection?: Pick<EntryEditorCollection, "lifecycle" | "list" | "schema">,
   entryId?: string,
 ): string {
-  if (collection?.lifecycle === "operational") {
+  if (collection && collection.lifecycle !== "publishing") {
     const primaryField = collection.list?.primaryField;
     const value = primaryField ? data[primaryField] : undefined;
     if (typeof value === "string" && value.trim()) return value;

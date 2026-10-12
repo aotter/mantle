@@ -53,11 +53,11 @@ export function HomeView(): React.ReactElement {
   const collectionGroups = [
     {
       title: t(language, "nav.content"),
-      items: primaryCollections.filter((collection) => collection.lifecycle !== "operational"),
+      items: primaryCollections.filter((collection) => collection.lifecycle === "publishing"),
     },
     {
       title: t(language, "nav.operations"),
-      items: primaryCollections.filter((collection) => collection.lifecycle === "operational"),
+      items: primaryCollections.filter((collection) => collection.lifecycle !== "publishing"),
     },
   ].filter((group) => group.items.length > 0);
   const siteInfo = site.data;

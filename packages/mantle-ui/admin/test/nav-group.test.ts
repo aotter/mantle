@@ -1,4 +1,4 @@
-import type { AdminExtensionInfo } from "../src/lib/types";
+import type { AdminExtensionInfo, Collection } from "../src/lib/types";
 import { describe, expect, it } from "vitest";
 import { isGroupActive, isLinkActive, isSubLinkActive } from "../src/layout/nav-group";
 import { buildDeveloperNavGroups, buildNavGroups } from "../src/layout/authenticated-layout";
@@ -32,6 +32,15 @@ describe("sidebar collection filters", () => {
 });
 
 describe("member navigation", () => {
+  it("uses records navigation unless publishing is explicitly declared", () => {
+    const base = { name: "notes", title: "Notes", description: null, parent: null, localized: false, hasTranslations: false };
+    const missing = buildNavGroups([base as Collection], [], "en", null, "staff");
+    expect(missing.find(group => group.title === "Records")?.items).toEqual([expect.objectContaining({url: "/admin/c/notes"})]);
+    expect(JSON.stringify(missing)).not.toMatch(/\?status=/);
+    const publishing = buildNavGroups([{...base, lifecycle: "publishing"}], [], "en", null, "staff");
+    expect(JSON.stringify(publishing)).toContain("?status=draft");
+  });
+
   const urlsFor = (role: "staff" | null) =>
     buildNavGroups([], [], "en", null, role)
       .flatMap(({ items }) => items)

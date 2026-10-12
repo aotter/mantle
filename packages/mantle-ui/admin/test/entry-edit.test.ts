@@ -30,6 +30,11 @@ describe("canEditEntry", () => {
 });
 
 describe("entryTitle", () => {
+  it("uses the declared operational primary field when lifecycle is omitted", () => {
+    const collection = {list: {primaryField: "orderNumber", columns: []}, schema: {properties: {}}};
+    expect(entryTitle({title: "Publishing title", orderNumber: "Record 42"}, "Untitled", collection as unknown as Parameters<typeof entryTitle>[2], "id-42")).toBe("Record 42");
+  });
+
   it("uses the explicit operational list primary field", () => {
     const collection = {
       lifecycle: "operational" as const,

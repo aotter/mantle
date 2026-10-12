@@ -4,11 +4,12 @@ import { resolve } from "node:path";
 import { once } from "node:events";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
+import { createOperationController } from "../src/features/content/row-operations";
 
 // Explicit source selection avoids silently testing the legacy Core instead of Next.
 const native = process.env.MANTLE_NEXT_ROOT ? it : it.skip;
 native("real Next SQLite + Better Auth OTP renders staff data, forward paging and member denial", async () => {
-  const child = spawn(process.env.MANTLE_TEST_BUN ?? "bun", [resolve(import.meta.dirname, "next-admin-fixture.ts")], { env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.env.MANTLE_TEST_BUN ?? "bun", [resolve(import.meta.dirname, "next-admin-fixture.mjs")], { env: process.env, stdio: ["ignore", "pipe", "pipe"] });
   const mail = new Map<string, string>();
   let origin = "", stderr = "";
   child.stderr.on("data", data => { stderr += data; });
@@ -32,8 +33,9 @@ native("real Next SQLite + Better Auth OTP renders staff data, forward paging an
       await page.getByRole("textbox", { name: "Email address" }).fill(email);
       await page.getByRole("button", { name: "Send code" }).click();
       await expect.poll(() => mail.get(email)).toBeTruthy();
+      const verification = page.waitForResponse(response => new URL(response.url()).pathname === "/api/auth/sign-in/email-otp" && response.request().method() === "POST");
       await page.getByRole("textbox", { name: "One-time code" }).fill(mail.get(email)!);
-      await page.getByRole("button", { name: "Verify and sign in" }).click();
+      expect((await verification).status()).toBe(200);
       await expect.poll(() => new URL(page.url()).pathname).toBe(returnTo);
     };
     await login("staff@example.test", "/admin/c/tasks");
@@ -65,6 +67,32 @@ native("real Next SQLite + Better Auth OTP renders staff data, forward paging an
       headers: { origin: "https://another-origin.test" }, data: { expectedVersion: 2, data: { title: "Must not be saved" } },
     });
     expect(refused.status()).toBe(403);
+    const operationList = await (await context.request.get(origin + "/admin/api/operations")).json();
+    const operation = operationList.operations.find((item: {name: string}) => item.name === "add-task");
+    expect(operation).toBeTruthy();
+    const originalFetch = globalThis.fetch;
+    const cookies = (await context.cookies()).map(cookie => cookie.name + "=" + cookie.value).join("; ");
+    let writes = 0;
+    // Resolve the browser-relative client in Node while retaining real HTTP, cookies and native SQL.
+    globalThis.fetch = (async (input, init) => {
+      if (init?.method === "POST") writes++;
+      const headers = new Headers(init?.headers); headers.set("cookie", cookies); headers.set("origin", origin);
+      return originalFetch(new URL(String(input), origin), { ...init, headers });
+    }) as typeof fetch;
+    try {
+      const invalid = createOperationController(operation, undefined, undefined, undefined);
+      await invalid.open(); invalid.edit("title", 123); await invalid.submit();
+      expect(invalid.getSnapshot()).toMatchObject({ phase: "failed", diagnostics: [{code: "INPUT_VALIDATION_FAILED"}] });
+      expect(writes).toBe(1);
+      const locked = createOperationController(operation, {collection: "tasks", bind: [{input: "id", field: "id"}], version: "expectedVersion", mutates: true}, "tasks", {id: taskId, version: 2});
+      await locked.open(); locked.edit("title", "Edited native Task"); await locked.submit();
+      expect(locked.getSnapshot()).toMatchObject({ phase: "conflict", draft: {title: "Edited native Task"}, diagnostics: [{code: "CONFLICT"}] });
+      expect(writes).toBe(2);
+      const uncertain = createOperationController(operationList.operations.find((item: {name: string}) => item.name === "uncertain-task"), undefined, undefined, undefined);
+      await uncertain.open(); uncertain.edit("title", "Uncertain native write"); await uncertain.submit();
+      expect(uncertain.getSnapshot()).toMatchObject({ phase: "uncertain", draft: {title: "Uncertain native write"}, diagnostics: [{code: "OUTCOME_UNKNOWN"}] });
+      expect(writes).toBe(3); // no implicit retry after the committed write returned 503
+    } finally { globalThis.fetch = originalFetch; }
 
     expect((await context.request.get(origin + "/admin/api/media")).status()).toBe(501);
     expect((await context.request.get(origin + "/admin/api/site-settings")).status()).toBe(501);
