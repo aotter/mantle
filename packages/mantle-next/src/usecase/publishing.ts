@@ -35,7 +35,7 @@ export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declaration
         }
         if (verb === "publish" && s.translates) conditions.push(publishedParent(plan,s,d,recipes,trusted));
         const clock = d.param(1);
-        return { sql: `UPDATE ${d.ident(s.name)} SET status = '${to}', published_at = ${verb === "publish" ? clock : "NULL"}, version = version + 1, updated_at = ${clock} WHERE ${conditions.join(" AND ")} RETURNING id, version, status, ${d.wireTimestamp(d.ident("published_at")).join("")} AS published_at`, binds: recipes, row: true };
+        return { sql: `UPDATE ${d.ident(s.name)} SET status = '${to}', published_at = ${verb === "publish" ? clock : "NULL"}, version = version + 1, updated_at = ${clock} WHERE ${conditions.join(" AND ")} RETURNING id, ${d.wireInteger(d.ident("version")).join("")} AS version, status, ${d.wireTimestamp(d.ident("published_at")).join("")} AS published_at`, binds: recipes, row: true };
       };
       values.add("now");
       const caller = q([statement(false)]), trusted = q([statement(true)]);

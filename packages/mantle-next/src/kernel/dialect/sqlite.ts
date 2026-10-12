@@ -20,6 +20,7 @@ export function definitive(error: unknown): boolean {
 // floor, not SQLite's truncating `/` and `%`: a time before 1970 is a negative number of microseconds
 export const wireTimestamp = <T>(v: T): (string | T)[] => ["strftime('%Y-%m-%dT%H:%M:%S', ((", v, ") - ((", v, ") % 1000000 + 1000000) % 1000000) / 1000000, 'unixepoch') || '.' || substr('00000' || (((", v, ") % 1000000 + 1000000) % 1000000), -6) || 'Z'"];
 export const wireDate = <T>(v: T): (string | T)[] => ["date((", v, ") * 86400, 'unixepoch')"];
+export const wireInteger = <T>(v: T): (string | T)[] => ["CASE WHEN ", v, " BETWEEN -9007199254740991 AND 9007199254740991 THEN ", v, " ELSE CAST(", v, " AS TEXT) END"];
 export const now = (ms: number): number => ms * 1000;
 export const cutoff = (ms: number, seconds: number): number => ms * 1000 - seconds * 1_000_000;
 export const timestamp = encodeTimestamptz;
@@ -30,4 +31,4 @@ export function search(table: string, fields: readonly string[], alias: string, 
   const phrase = `'"' || replace(${query}, '"', '""') || '"'`;
   return `CASE WHEN length(${query}) >= 3 THEN ${alias}._rid IN (SELECT rowid FROM ${fts} WHERE ${fts} = ${phrase}) ELSE (${searchLike(fields.map(field => `${alias}.${ident(field)}`), query, "LIKE")}) END`;
 }
-export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, search, wireTimestamp, wireDate, now, cutoff, timestamp, date, cast };
+export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, search, wireTimestamp, wireDate, wireInteger, now, cutoff, timestamp, date, cast };
