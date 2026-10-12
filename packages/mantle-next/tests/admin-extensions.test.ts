@@ -17,7 +17,7 @@ test("raw extension bodies belong to the app while builtin JSON limits reject be
  const db=new Database(":memory:");db.exec("CREATE TABLE raw_bytes(size INTEGER)");let who:any=staff,providers=0,calls=0,original:Request|undefined;
  const options={db:()=>{providers++;return db;},caller:()=>who},bytes=new Uint8Array(1_200_007),path="/admin/api/x/raw/api/a%20b/deep?keep=yes";
  const ext={apiVersion:1 as const,id:"raw",title:"Raw",module:"/raw.js",contributes:{pages:[{id:"page",title:"Page",role:"staff" as const}]},handlers:{api:async(request:Request,ctx:any)=>{
-  await Promise.resolve();expect(request).toBe(original);const size=(await request.arrayBuffer()).byteLength;calls++;ctx.db.query("INSERT INTO raw_bytes VALUES (?)").run(size);
+  await Promise.resolve();expect(request).toBe(original!);const size=(await request.arrayBuffer()).byteLength;calls++;ctx.db.query("INSERT INTO raw_bytes VALUES (?)").run(size);
   return Response.json({size,path:ctx.path,url:request.url,method:request.method},{status:201,statusText:"Raw accepted",headers:{"cache-control":"private, max-age=3"}});
  }}};
  const {handlers,...declaration}=ext,hooks=extensionOptions([{id:"raw",declaration:JSON.stringify(declaration),public:declaration,source:false,settings:[],actions:[]}],{},[ext],options);
