@@ -102,6 +102,14 @@ message's origin, iframe source and active draft/revision before serving it.
 Read `docs/next/surfaces.md#design-preview`; never substitute a staff identity
 to make the preview render.
 
+For selected Admin extensions, use full app-owned declarations with OSS role
+`staff` and `--admin-extensions <module>`, then merge the generated helper's
+route/assets/public-metadata facets into `admin`. Generate → typecheck → implement
+the declared settings/action/API handlers using native context; preserve scope,
+OCC and transaction handling in their writes. Keep UI modules same-origin and
+source loaders lazy. Read `docs/next/admin-extensions.md` and test denied callers,
+invalid settings and browser SRI before deploying.
+
 ## New project
 
 1. Create a directory outside the SDK checkout with Node 22+ and

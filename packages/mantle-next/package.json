@@ -36,6 +36,9 @@
     "./admin/design": "./dist/kernel/admin/design.js",
 
     "./admin-entries": "./dist/kernel/admin-entries.js",
+
+    "./admin/extensions": "./dist/kernel/admin/extensions.js",
+    "./admin/extensions/tooling": "./dist/kernel/admin/extension-tooling.js",
     "./mcp": "./dist/kernel/mcp.js",
     "./mcp-apps": "./dist/kernel/mcp-apps.js",
     "./web": "./dist/kernel/web.js",

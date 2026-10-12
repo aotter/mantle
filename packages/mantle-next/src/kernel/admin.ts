@@ -3,12 +3,12 @@ import { ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller 
 import { convert, invalid, type Conversions } from "./surface.js";
 import { siteInfo, type MantleSite, type MediaStorage } from "./site.js";
 import { escapeLike } from "./dialect/common.js";
-type Staff = Extract<Caller,{kind:"user"}>;
+type Staff = Extract<Caller,{kind:"user"}> & {readonly role:"staff";readonly credential:"session"};
 type Descriptor = {readonly name:string;readonly [key:string]:unknown};
 type Page = {rows:readonly Record<string,unknown>[];nextCursor?:string};
 export interface Context<Env,Database> {request:Request;url:URL;env:Env;db:Database;caller:Staff;params:Record<string,string>}
 /** Optional Admin modules add routes inside the same session/origin gate. Paths are relative to /admin/api. */
-export interface Route<Env,Database> {readonly method:string;readonly path:string;run(context:Context<Env,Database>):Promise<unknown>}
+export interface Route<Env,Database> {readonly method:string;readonly path:string;readonly preserveCacheControl?:boolean;run(context:Context<Env,Database>):Promise<unknown>}
 /** Request-scoped native identity facets; providers may implement only the selected methods. */
 export interface IdentityUser {id:string;email:string;name:string;role:string|null;githubLogin:string|null;emailVerified:boolean;createdAt:Date}
 export interface IdentityMethods {
@@ -45,6 +45,13 @@ export interface Operation<Database,Handlers> {
   run:(db:Database,caller:Caller,input:never,handlers:Handlers)=>Promise<unknown>;
 }
 const headers={"cache-control":"no-store"};
+/** The same fresh session gate applies to API routes and selected extension source assets. */
+export async function adminCaller<Env>(request:Request,env:Env,resolve:Options<Env,unknown>["caller"]):Promise<Staff|Response> {
+  const caller=await surfaceCaller(request,env,resolve);
+  if(caller.kind==="anonymous")throw new ContractError("UNAUTHENTICATED","Sign in to use Admin.","admin");
+  if(caller.kind!=="user"||caller.role!=="staff"||caller.credential!=="session")return Response.json({error:{code:"AUTH_DENIED",message:"Admin needs a signed-in staff session.",path:"admin"},minimumRole:"staff"},{status:403,headers});
+  checkOrigin(request,caller);return caller as Staff;
+}
 const fail=(message:string):never=>invalid(message,"admin");
 function checkBodyLength(request:Request):void {
   if(Number(request.headers.get("content-length"))>1_000_000)fail("Request body exceeds 1000000 bytes.");
@@ -81,8 +88,8 @@ export async function csv(name:string,read:(cursor?:string)=>Promise<Page>,decla
   return new Response(new ReadableStream<Uint8Array>({async pull(controller){try{const next=await iterator.next();if(next.done)controller.close();else controller.enqueue(encoder.encode(next.value));}catch(error){console.error("[mantle admin] export failed");controller.error(new Error("CSV export failed."));}},async cancel(){await iterator.return(undefined);}}),{headers:{...headers,"content-type":"text/csv; charset=utf-8","content-disposition":`attachment; filename="${encodeURIComponent(name)}.csv"`}});
 }
 function params(pattern:string,path:string):Record<string,string>|undefined {
-  const keys=pattern.split("/"),parts=path.split("/");if(keys.length!==parts.length)return;
-  const result:Record<string,string>={};for(let i=0;i<keys.length;i++){const key=keys[i]!,part=parts[i]!;if(key.startsWith("{")&&key.endsWith("}")){if(!part)return;result[key.slice(1,-1)]=part;}else if(key!==part)return;}return result;
+  const keys=pattern.split("/"),parts=path.split("/"),tail=keys.at(-1)?.endsWith("*}");if(tail?parts.length<keys.length-1:keys.length!==parts.length)return;
+  const result:Record<string,string>={};for(let i=0;i<keys.length;i++){const key=keys[i]!,part=parts[i]!;if(tail&&i===keys.length-1){result[key.slice(1,-2)]=parts.slice(i).join("/");return result;}if(key.startsWith("{")&&key.endsWith("}")){if(!part)return;result[key.slice(1,-1)]=part;}else if(key!==part)return;}return result;
 }
 export function admin<Env,Database,Handlers=never>(metadata:{collections:readonly Descriptor[];collectionNames?:readonly string[];views:readonly Descriptor[];operations:readonly Descriptor[];webmcp:unknown},views:readonly View<Database>[],operations:readonly Operation<Database,Handlers>[],options:Options<Env,Database>&{handlers?:Handlers}):(request:Request,env:Env)=>Promise<Response|undefined> {
   const sees=(items:readonly Descriptor[],routes:readonly{ name:string;allows:(caller:Caller)=>boolean }[],caller:Caller)=>items.filter(item=>routes.some(route=>route.name===item.name&&route.allows(caller)));
@@ -101,10 +108,7 @@ export function admin<Env,Database,Handlers=never>(metadata:{collections:readonl
         if(!(file&&(decoded==="preview.html"||!/^text\/html\b/i.test(res.headers.get("content-type")??"")))){h.append("content-security-policy","frame-ancestors 'none'");h.set("x-frame-options","DENY");h.set("cache-control","no-store");}
         return new Response(res.body,{status:res.status,headers:h});
       }
-      const caller=await surfaceCaller(request,env,options.caller);
-      if(caller.kind==="anonymous")throw new ContractError("UNAUTHENTICATED","Sign in to use Admin.","admin");
-      if(caller.kind!=="user"||caller.role!=="staff"||caller.credential!=="session")return Response.json({error:{code:"AUTH_DENIED",message:"Admin needs a signed-in staff session.",path:"admin"},minimumRole:"staff"},{status:403,headers});
-      checkOrigin(request,caller);
+      const caller=await adminCaller(request,env,options.caller);if(caller instanceof Response)return caller;
       if(!["GET","HEAD","OPTIONS"].includes(request.method))checkBodyLength(request);
       let path="";try{path=decodeURIComponent(rel.slice(3)).replace(/\/$/,"")||"/";}catch{fail("Malformed Admin path.");}
       if(/%2f|%5c/i.test(rel)||path.includes("\0")||path.includes("\\")||path.split("/").some(x=>x==="."||x===".."))fail("Malformed Admin path.");
@@ -131,7 +135,7 @@ export function admin<Env,Database,Handlers=never>(metadata:{collections:readonl
         ...(options.routes??[]),
       ];
       const allowed:string[]=[];
-      for(const route of routes){const found=params(route.path,path);if(!found)continue;allowed.push(route.method);if(route.method!==request.method)continue;const output=await route.run({...context,params:found});if(output instanceof Response){const h=new Headers(output.headers);h.set("cache-control","no-store");return new Response(output.body,{status:output.status,headers:h});}return Response.json(output,{headers});}
+      for(const route of routes){const found=params(route.path,path);if(!found)continue;allowed.push(route.method);if(route.method!=="*"&&route.method!==request.method)continue;const output=await route.run({...context,params:found});if(output instanceof Response){const h=new Headers(output.headers);if(!route.preserveCacheControl||!h.has("cache-control"))h.set("cache-control","no-store");return new Response(output.body,{status:output.status,statusText:output.statusText,headers:h});}return Response.json(output,{headers});}
       if(allowed.length){const response=surfaceFailure(new ContractError("METHOD_NOT_ALLOWED","Method is not allowed for this route.","admin"));response.headers.set("allow",[...new Set(allowed)].join(", "));return response;}
       throw new ContractError("NOT_FOUND","No such route.","admin");
     }catch(error){return surfaceFailure(error);}

@@ -313,6 +313,14 @@ sandbox. Runtime preview remains the separately authorized host's responsibility
 Importing REST/MCP/web/bare operations never includes the design module or its
 static snapshot.
 
+## Admin extensions
+
+Select full definitions with `--admin-extensions <module>`, then merge the generated
+`adminExtensions(definitions, { caller, assets })` facets into `admin` options.
+It adds compiled settings checks, native-context action/API routes, safe public
+site metadata, and lazy source/SRI shell assets. The existing session/origin gate
+also guards extension modules. [Extension contract and examples](admin-extensions.md).
+
 ## Mounting MCP
 
 Mount the generated `mcp({ db: env => env.DB, caller })` handler in the app's

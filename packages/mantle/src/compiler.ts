@@ -13,7 +13,7 @@ export { initialStorageSql as postgresSchema } from "./postgres/storage.js";
 export { collectionOf } from "./admin/collections.js";
 export { developerConsole } from "./admin/developerConsole.js";
 export { requiredEnumStates } from "./admin/procedureFlow.js";
-export { checkPlanUiExtensions, planUiExtensionRefs } from "./admin/extensions.js";
+export { validateAdminExtensions, adminExtensionsFor, checkPlanUiExtensions, planUiExtensionRefs } from "./admin/extensions.js";
 export type { AdminExtension } from "./admin/extensions.js";
 export { appCatalog, entrySchema } from "./mcp/catalog.js";
 export type { AppRowAction } from "./mcp/catalog.js";
