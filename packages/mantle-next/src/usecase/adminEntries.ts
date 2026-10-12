@@ -8,6 +8,7 @@ import { emitValidation } from "./validation.js";
 import { dialect as sqlite } from "../kernel/dialect/sqlite.js";
 import { dialect as postgres } from "../kernel/dialect/postgres.js";
 export function emitAdminEntries({ plan, target }: GenerateInput): Record<string, string> {
+    if (!Object.keys(plan.schemas).length) return {};
     const all = Object.values(plan.schemas), sqliteTarget = isSqlite(target), d = sqliteTarget ? sqlite : postgres, files: Record<string, string> = {}, imports: string[] = [], descriptors: string[] = [], indexes: string[] = [];
     const refs = Object.values(plan.procedures).some(p => "ref" in p.handler), parents = all.filter(s => all.some(c => c.translates?.parent.toLowerCase() === s.name));
     let hasWire = false;

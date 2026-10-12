@@ -135,6 +135,7 @@ export function admin<Env,Database,Handlers=never>(metadata:{collections:readonl
       ];
       const allowed:string[]=[];
       for(const route of routes){const found=params(route.path,path);if(!found)continue;allowed.push(route.method);if(route.method!=="*"&&route.method!==request.method)continue;if(!route.rawBody&&!["GET","HEAD","OPTIONS"].includes(request.method))checkBodyLength(request);db=options.db(env);const output=await route.run({request,url,env,db,caller,params:found});if(output instanceof Response){const h=new Headers(output.headers);if(!route.preserveCacheControl||!h.has("cache-control"))h.set("cache-control","no-store");return new Response(output.body,{status:output.status,statusText:output.statusText,headers:h});}return Response.json(output,{headers});}
+      if(!["GET","HEAD","OPTIONS"].includes(request.method))checkBodyLength(request);
       if(allowed.length){const response=surfaceFailure(new ContractError("METHOD_NOT_ALLOWED","Method is not allowed for this route.","admin"));response.headers.set("allow",[...new Set(allowed)].join(", "));return response;}
       throw new ContractError("NOT_FOUND","No such route.","admin");
     }catch(error){return surfaceFailure(error);}

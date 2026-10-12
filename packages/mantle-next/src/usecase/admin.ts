@@ -12,7 +12,8 @@ export function emitAdmin({plan,lowered,target,site,adminPages,paging}:GenerateI
   const webmcp=Object.values(plan.views).some(view=>view.surface==="staff")||Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp"&&trigger.source.surface==="staff");
   if(webmcp)imports.push('import { webmcpRoutes } from "@aotter/mantle-next/admin-webmcp";','import { staffTools } from "./mcp-tools.js";');
   imports.push('import { siteRoutes } from "@aotter/mantle-next/admin-site";');
-  imports.push('import {adminEntries} from "./admin-entries.js";');
+  const hasEntries=!!Object.keys(plan.schemas).length;
+  if(hasEntries)imports.push('import {adminEntries} from "./admin-entries.js";');
   const views:string[]=[],operations:string[]=[],files:Record<string,string>={};let hasWire=false;
   const staffPlan={...plan,views:Object.fromEntries(Object.entries(plan.views).filter(([,view])=>view.surface==="staff"))};
   for(const [path,source] of Object.entries(emitPaging(staffPlan,lowered,target,refuse,paging,adminPages)))files[path.replace("paged/","admin-paged/")]=source;
@@ -38,6 +39,6 @@ export function emitAdmin({plan,lowered,target,site,adminPages,paging}:GenerateI
     operations.push(`{ name:${q(name)}, allows:${allows(p.requires)}, validate:validate${id}${conversion(p.input,lowered.procedures[name]?.caller?.flatMap(s=>s.binds)??[])}, run:${ref?`(db,caller,input,handlers) => store(db,caller,{handlers}).procedures[${q(name)}](input)`:`operation${id}`} }`);
   }
   if(hasWire)imports.push('import {wireRows} from "@aotter/mantle-next/contracts";');
-  files["admin.ts"]=`${imports.join("\n")}\nexport function admin<Env>(options: Options<Env,Database>${refs?" & {handlers:Handlers}":""}) {\n  return serve<Env,Database${refs?",Handlers":""}>({...bootstrap,collectionNames:${q(Object.values(plan.schemas).map(s=>s.name))}},[${views.join(",\n")}],[${operations.join(",\n")}],{...${site?"{site,...options}":"options"},routes:[...adminEntries<Env>(${refs?"options":""}),...siteRoutes(${site?"{site,...options}":"options"}),${webmcp?`...webmcpRoutes<Env,Database${refs?",Handlers":",never"}>(bootstrap.webmcp,staffTools(),${refs?"options.handlers":"undefined as never"}),`:""}...(options.routes??[])]});\n}\n`;
+  files["admin.ts"]=`${imports.join("\n")}\nexport function admin<Env>(options: Options<Env,Database>${refs?" & {handlers:Handlers}":""}) {\n  return serve<Env,Database${refs?",Handlers":""}>({...bootstrap,collectionNames:${q(Object.values(plan.schemas).map(s=>s.name))}},[${views.join(",\n")}],[${operations.join(",\n")}],{...${site?"{site,...options}":"options"},routes:[${hasEntries?`...adminEntries<Env>(${refs?"options":""}),`:""}...siteRoutes(${site?"{site,...options}":"options"}),${webmcp?`...webmcpRoutes<Env,Database${refs?",Handlers":",never"}>(bootstrap.webmcp,staffTools(),${refs?"options.handlers":"undefined as never"}),`:""}...(options.routes??[])]});\n}\n`;
   return files;
 }
