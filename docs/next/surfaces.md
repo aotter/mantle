@@ -189,7 +189,7 @@ are refused. HTML is `no-store`, with `nosniff`, `frame-ancestors 'none'` and
 Assets are app-owned and are not bundled into the query core.
 
 `GET /me` returns `{ userId, role, login, image }`. Optional `getUser` supplies
-display information; absent identity facets expose no routes. `GET /bootstrap`
+display information; unwired identity operations return 501. `GET /bootstrap`
 aggregates `me`, `site`, `collections`, caller-visible `views` and `operations`,
 and `webmcp`. An installed entries route adds the first page for `?collection=`.
 Without site or identity wiring the bootstrap performs no database reads.
@@ -197,6 +197,48 @@ Generated site configuration supplies `site(db, caller)` automatically when
 `--site` is selected; an application may override that option. `/site` capability
 flags reflect the wired site, media and invitation email facets. Statistics remain
 unavailable (501), and their capability is false.
+
+Site and identity routes are generated with Admin and share its cookie-session,
+staff and same-origin checks. `GET/PATCH /site-settings` returns only
+`{ brand, title, description }`; partial updates limit these to 80/200/1,000
+characters. No site option returns 501 `SITE_NOT_CONFIGURED`.
+
+Pass the app-owned `media` object storage with a generated site capability.
+`POST /media/uploads`, `POST /media/uploads/<groupId>/commit`, and
+`GET/PATCH/DELETE /media/<id>` reuse that site’s native media library. Bytes go
+directly to the returned upload URLs. `GET /media` accepts `limit` (1..500),
+`cursor` and literal `search`, returning `{ items, next_cursor }`. Items include
+`primaryUrl`, `mime` and `byteSize`. Without both site and object storage the
+routes return 501 `MEDIA_NOT_CONFIGURED`, and `/site.capabilities.media` is false.
+Media error statuses and retry-safe partial deletion outcomes are preserved.
+
+Supply request-scoped native identity methods in `identity.directory`; no
+provider is registered globally and Admin never loads Better Auth itself:
+
+```ts
+identity: {
+  directory: async ({ db, caller, request, env }) => {
+    const { d1Identity } = await import('@aotter/mantle/auth/identity');
+    return d1Identity(db, await loadAuth(env), caller, request.headers);
+  },
+  roles: { sendStaffInvitation: (email, role) => sendInvitation(email, role) }
+}
+```
+
+`loadAuth` and the optional email sender belong to the app. Use
+`postgresIdentity` for PostgreSQL. `GET /staff` returns `{ users }` and
+`GET /members` accepts `search` (<=200 characters), `limit` (1..100, default 50),
+`cursor` and `cursor_direction` (`forward` or `backward`), returning
+`{ items, previous_cursor, next_cursor }`. Native member cursors retain timestamp
+precision; member search is a full scan. Both lists project declared identity
+fields only; members never expose staff roles, password hashes or ban metadata.
+`PATCH /staff/<id>/role` accepts `staff` or `null`; self changes are forbidden.
+`POST /staff/invitations` takes `{ email, role: 'staff' }` and returns
+`{ ok, userId, emailSent }`. Existing accounts must verify their email before
+receiving staff access. `DELETE /staff/invitations/<id>` returns 409 for an
+account that has signed in or verified. Missing identity methods return 501
+`IDENTITY_NOT_CONFIGURED`. OSS uses only `staff`; the Admin SPA role controls
+are adapted in the console work package.
 
 Staff Views use `/views-manifest`, `/views/<name>` and `/views/<name>/export`.
 Inputs, `limit` and `cursor` retain generated validation and keyset paging.

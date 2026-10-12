@@ -1,7 +1,7 @@
 /** Selected Admin boundary. SQL and validators are generated; the application owns identity and assets. */
 import { ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller } from "./contracts.js";
 import { convert, invalid, type Conversions } from "./surface.js";
-import { siteInfo, type SiteConfig, type MediaStorage } from "./site.js";
+import { siteInfo, type MantleSite, type MediaStorage } from "./site.js";
 import { escapeLike } from "./dialect/common.js";
 type Staff = Extract<Caller,{kind:"user"}>;
 type Descriptor = {readonly name:string;readonly [key:string]:unknown};
@@ -9,14 +9,23 @@ type Page = {rows:readonly Record<string,unknown>[];nextCursor?:string};
 export interface Context<Env,Database> {request:Request;url:URL;env:Env;db:Database;caller:Staff;params:Record<string,string>}
 /** Optional Admin modules add routes inside the same session/origin gate. Paths are relative to /admin/api. */
 export interface Route<Env,Database> {readonly method:string;readonly path:string;run(context:Context<Env,Database>):Promise<unknown>}
+/** Request-scoped native identity facets; providers may implement only the selected methods. */
+export interface IdentityUser {id:string;email:string;name:string;role:string|null;githubLogin:string|null;emailVerified:boolean;createdAt:Date}
+export interface IdentityMethods {
+  listUsers():Promise<readonly IdentityUser[]>;
+  listMembers(args:{search?:string;limit?:number;cursor?:string;cursorDirection?:"forward"|"backward"}):Promise<{items:readonly Pick<IdentityUser,"id"|"email"|"name"|"emailVerified"|"createdAt">[];previousCursor:string|null;nextCursor:string|null}>;
+  setUserRole(id:string,role:"staff"|null):Promise<boolean>;
+  inviteUser(email:string):Promise<{kind:"created"|"exists";id:string}>;
+  revokeInvite(id:string):Promise<boolean>;
+}
 export interface Options<Env,Database> {
   db:(env:Env)=>Database;
   caller:(request:Request,env:Env)=>Caller|Promise<Caller>;
   assets?:(path:string,request:Request,env:Env)=>Response|null|Promise<Response|null>;
   getUser?:(subject:string,request:Request,env:Env)=>Promise<{githubLogin?:string|null;name?:string|null;email?:string|null;image?:string|null}|null>;
-  site?:(db:Database,caller:Caller)=>{read():Promise<SiteConfig>};
+  site?:(db:Database,caller:Caller)=>MantleSite;
   media?:MediaStorage;
-  identity?:{roles?:{sendStaffInvitation?:unknown}};
+  identity?:{directory?:(context:Context<Env,Database>)=>Partial<IdentityMethods>|Promise<Partial<IdentityMethods>>;roles?:{sendStaffInvitation?:(email:string,role:"staff")=>Promise<void>}};
   mcpEndpoints?:{public?:string|null;staff?:string|null};
   extensions?:readonly unknown[];
   routes?:readonly Route<Env,Database>[];
@@ -98,10 +107,10 @@ export function admin<Env,Database,Handlers=never>(metadata:{collections:readonl
       checkOrigin(request,caller);
       if(!["GET","HEAD","OPTIONS"].includes(request.method))checkBodyLength(request);
       let path="";try{path=decodeURIComponent(rel.slice(3)).replace(/\/$/,"")||"/";}catch{fail("Malformed Admin path.");}
-      if(/%2f|%5c/i.test(rel)||path.includes("\\")||path.split("/").some(x=>x==="."||x===".."))fail("Malformed Admin path.");
+      if(/%2f|%5c/i.test(rel)||path.includes("\0")||path.includes("\\")||path.split("/").some(x=>x==="."||x===".."))fail("Malformed Admin path.");
       const db=options.db(env),context:Context<Env,Database>={request,url,env,db,caller,params:{}};
       const me=async()=>{const user=await options.getUser?.(caller.subject,request,env);return {userId:caller.subject,role:caller.role,login:user?.githubLogin||user?.name||user?.email||null,image:user?.image??null};};
-      const site=async()=>siteInfo(options.site?await options.site(db,caller).read():{brand:"AotterMantle",title:"CMS",description:"",origin:"",locales:[],canonicalLocale:null,icons:[{src:"/admin/favicon.png",mimeType:"image/png",sizes:["64x64"]},{src:"/admin/favicon.svg",mimeType:"image/svg+xml",sizes:["any"]}],media:{purposes:[]}}, {origin:url.origin,siteSettings:!!options.site,media:!!options.media,invitationEmail:!!options.identity?.roles?.sendStaffInvitation,mcpEndpoints:options.mcpEndpoints,extensions:options.extensions});
+      const site=async()=>siteInfo(options.site?await options.site(db,caller).read():{brand:"AotterMantle",title:"CMS",description:"",origin:"",locales:[],canonicalLocale:null,icons:[{src:"/admin/favicon.png",mimeType:"image/png",sizes:["64x64"]},{src:"/admin/favicon.svg",mimeType:"image/svg+xml",sizes:["any"]}],media:{purposes:[]}}, {origin:url.origin,siteSettings:!!options.site,media:!!options.site&&!!options.media,invitationEmail:!!options.identity?.roles?.sendStaffInvitation,mcpEndpoints:options.mcpEndpoints,extensions:options.extensions});
       const listViews=()=>sees(metadata.views,views,caller),listOperations=()=>sees(metadata.operations,operations,caller);
       const readView=async(view:View<Database>,cursor?:string,limit?:number)=>{
         const {input:raw,...paging}=view.query(url.searchParams),input={...raw};convert(input,view.convert);

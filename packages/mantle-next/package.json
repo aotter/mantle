@@ -30,6 +30,8 @@
     "./rest": "./dist/kernel/rest.js",
     "./admin": "./dist/kernel/admin.js",
     "./admin-webmcp": "./dist/kernel/admin-webmcp.js",
+
+    "./admin-site": "./dist/kernel/admin-site.js",
     "./mcp": "./dist/kernel/mcp.js",
     "./mcp-apps": "./dist/kernel/mcp-apps.js",
     "./web": "./dist/kernel/web.js",

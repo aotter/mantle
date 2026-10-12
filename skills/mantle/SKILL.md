@@ -87,6 +87,12 @@ For a generated public website, follow [web mounting and acceptance](references/
 The app renders HTML and inserts `site.head()`; generated `web.ts` serves the
 indexes and Markdown alternates.
 
+For site/media/staff management, pass object storage as `media` and lazy native
+identity methods in `identity.directory(context)`; forward the request headers
+and verified caller to `d1Identity`/`postgresIdentity`. Verify media upload/commit,
+member cursor paging and invitations locally. Missing capabilities return 501;
+use only `staff` or `null` in role updates.
+
 ## New project
 
 1. Create a directory outside the SDK checkout with Node 22+ and
