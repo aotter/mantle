@@ -17,7 +17,9 @@ test("Apps capability, registration, metadata and hidden View validation retain 
   const resource = { uri: "ui://mantle/public", name: "public", html: async () => "<html>App</html>", renders: ["rows"], appOnly: ["lookup"], csp: { connectDomains: ["https://app.test"] }, permissions: { clipboardWrite: {} }, prefersBorder: false };
   expect(() => linkApps({ resources: [resource, resource] }, new Set(["rows", "lookup"]), new Set(["rows", "lookup"]))).toThrow("twice");
   expect(() => linkApps({ resources: [{ ...resource, appOnly: ["write"] }] }, new Set(["rows", "lookup", "write"]), new Set(["rows", "lookup"]))).toThrow("must be a View");
-  const handle = mcp(tools, ["staff"], { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [resource] } } });
+  let calls = 0;
+  const counted = tools.map(tool => ({ ...tool, page: async (...args: Parameters<NonNullable<typeof tool.page>>) => { calls++; return tool.page!(...args); } }));
+  const handle = mcp(counted, ["staff"], { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [resource] }, staff: { resources: [{ uri: "ui://mantle/staff", name: "staff", html: "private" }] } } });
   const call = async (method: string, params: Record<string, unknown> = {}) => {
     const response = await handle(new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), {});
     const text = await response!.text();
@@ -37,7 +39,10 @@ test("Apps capability, registration, metadata and hidden View validation retain 
   expect(read.text).toBe("<html>App</html>");
   expect(read.mimeType).toBe(RESOURCE_MIME_TYPE);
   expect(read._meta.ui).toEqual({ csp: resource.csp, permissions: resource.permissions, prefersBorder: false });
+  expect((await call("resources/read", { uri: "ui://mantle/staff", _meta: meta })).error).toBeDefined();
+  expect(calls).toBe(0);
   expect((await call("tools/call", { name: "rows", arguments: {}, _meta: meta })).result._meta).toEqual({ "net.aotter.mantle/tool": "rows" });
+  expect(calls).toBe(1);
 });
 
 test("Generated App embeds the existing catalogue without a runtime plan or UI startup dependency", async () => {
@@ -53,10 +58,35 @@ test("Generated App embeds the existing catalogue without a runtime plan or UI s
     expect(JSON.parse(resource.html.split('id="mantle-catalog">')[1].split("</script>")[0])).toEqual(mcpAppCatalogues.staff);
     const escaped = planApp({ views: { "</script>$&": {} }, actions: {} }, { surface: "public", html: "</head>" });
     expect(escaped.html).toContain("\\u003c/script>$&");
+    let htmlReads = 0;
+    const lazy = generatedApp({ surface: "staff", html: async () => { htmlReads++; return "</head>"; } });
+    expect(htmlReads).toBe(0);
+    expect(await lazy.html()).toContain('id="mantle-catalog"');
+    expect(htmlReads).toBe(1);
     const { build } = await import("esbuild");
     const entry = resolve(dir, "worker.ts");
-    await writeFile(entry, 'export default {fetch(){return new Response("ok")}}');
+    const viewEntry = Object.keys(files).find(name => name.startsWith("views/") && name.endsWith(".ts"))!;
+    await writeFile(entry, `export { default } from ${JSON.stringify("./" + viewEntry)};`);
     const bundle = await build({ entryPoints: [entry], bundle: true, write: false, metafile: true, format: "esm", platform: "neutral" });
     expect(Object.keys(bundle.metafile!.inputs).some(name => /kernel\/mcp-apps|mantle-ui|modelcontextprotocol/.test(name))).toBe(false);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test("App setup refuses ambiguous bindings and hides errors behind the same tool result metadata", async () => {
+  const r = { uri: "ui://a", name: "a", html: "a", renders: ["rows"] };
+  const names = new Set(["rows", "lookup"]);
+  expect(() => linkApps({ resources: [{ ...r, uri: "https://a" }] }, names, names)).toThrow("ui://");
+  expect(() => linkApps({ resources: [{ ...r, renders: ["missing"] }] }, names, names)).toThrow("does not serve");
+  expect(() => linkApps({ resources: [r, { ...r, uri: "ui://b", renders: [], appOnly: ["rows"] }] }, names, names)).toThrow("both");
+  const handle = mcp([{ ...tools[0]!, page: async () => { throw new Error("internal secret"); } }], ["staff"], { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [r] } } });
+  const { spyOn } = await import("bun:test");
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const response = await handle(new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "rows", arguments: {}, _meta: meta } }) }), {});
+    const text = await response!.text();
+    expect(text).toContain('"net.aotter.mantle/tool":"rows"');
+    expect(text).toContain('"isError":true');
+    expect(text).not.toContain("internal secret");
+  } finally { logged.mockRestore(); }
 });

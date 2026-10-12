@@ -170,14 +170,15 @@ When a manifest exposes a View, generation also writes `mcp-app.ts`. Its
 `planApp({ surface, html, uri?, title? })` embeds the generated catalogue in
 reusable HTML; pass `mantleAppHtml` from `@aotter/mantle-ui/mcp-app` to retain
 Admin's labels, row actions, conflict handling and en/zh-TW/zh-CN interaction UI.
-It does not embed caller data or load the UI in the Worker startup bundle:
+It does not embed caller data. Use an async HTML loader to keep the UI asset
+out of the Worker startup bundle:
 
 ```ts
-import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";
 import { planApp } from "./generated/mcp-app.js";
 import { mcp } from "./generated/mcp.js";
 const handler = mcp({ db, caller, apps: {
-  staff: { resources: [planApp({ surface: "staff", html: mantleAppHtml })] },
+  staff: { resources: [planApp({ surface: "staff",
+    html: async () => (await import("@aotter/mantle-ui/mcp-app")).mantleAppHtml })] },
 } });
 ```
 

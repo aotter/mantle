@@ -1,3 +1,4 @@
+export { linkApps, type AppLinks } from "./mcp-app-links.js";
 /** MCP Apps (ADR-0029 D7): UI resources served beside the tools that render in them. */
 export const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities";
@@ -22,12 +23,6 @@ export interface McpApps {
   readonly resources: readonly McpAppResource[];
 }
 
-export interface AppLinks {
-  readonly resources: readonly McpAppResource[];
-  readonly rendersIn: ReadonlyMap<string, string>;
-  readonly appOnly: ReadonlyMap<string, string>;
-}
-
 /** Whether the request's client renders MCP Apps; a stateless 2025-era request after `initialize` carries no capabilities: `unknown`. */
 export type ClientUiSupport = "supported" | "unsupported" | "unknown";
 
@@ -45,25 +40,6 @@ export function clientUiSupport(message: unknown): ClientUiSupport {
   return "unknown";
 }
 
-/** Checked once when the surface is built: a bad configuration fails at construction, not on the first request. */
-export function linkApps(apps: McpApps | undefined, tools: ReadonlySet<string>, views: ReadonlySet<string>): AppLinks {
-  const rendersIn = new Map<string, string>();
-  const appOnly = new Map<string, string>();
-  const uris = new Set<string>();
-  for (const r of apps?.resources ?? []) {
-    if (!r.uri.startsWith("ui://")) throw new TypeError(`MCP App resource '${r.name}' must use a ui:// URI.`);
-    if (uris.has(r.uri)) throw new TypeError(`MCP App resource URI '${r.uri}' is registered twice.`);
-    uris.add(r.uri);
-    for (const [names, map] of [[r.renders ?? [], rendersIn], [r.appOnly ?? [], appOnly]] as const) for (const t of names) {
-      if (map === appOnly ? !views.has(t) : !tools.has(t)) throw new TypeError(map === appOnly ? `App-only tool '${t}' must be a View this surface serves.` : `MCP App resource '${r.name}' renders '${t}', which this surface does not serve.`);
-      const other = rendersIn.get(t) ?? appOnly.get(t);
-      if (other && other !== r.uri) throw new TypeError(`Tool '${t}' links to both '${other}' and '${r.uri}'.`);
-      map.set(t, r.uri);
-    }
-  }
-  return { resources: apps?.resources ?? [], rendersIn, appOnly };
-}
-
 export const appHtml = async (r: McpAppResource) => (typeof r.html === "string" ? r.html : await r.html());
 
 export function appMeta(r: McpAppResource): { ui: Record<string, unknown> } | undefined {
@@ -72,7 +48,8 @@ export function appMeta(r: McpAppResource): { ui: Record<string, unknown> } | un
 }
 
 /** Embed static generated catalogue data; never a RuntimePlan or caller data. */
-export function planApp(catalog: { readonly views: Readonly<Record<string, unknown>>; readonly actions: Readonly<Record<string, unknown>> }, options: { readonly surface: "public" | "staff"; readonly html: string; readonly uri?: string; readonly title?: string }): McpAppResource {
+export function planApp(catalog: { readonly views: Readonly<Record<string, unknown>>; readonly actions: Readonly<Record<string, unknown>> }, options: { readonly surface: "public" | "staff"; readonly html: McpAppResource["html"]; readonly uri?: string; readonly title?: string }): McpAppResource {
   const script = `<script type="application/json" id="mantle-catalog">${JSON.stringify(catalog).replace(/</g, "\\u003c")}</script>`;
-  return { uri: options.uri ?? `ui://mantle/${options.surface}`, name: `mantle-${options.surface}`, title: options.title ?? "Mantle", description: "A Mantle View's rows, and the operations that act on one row.", html: options.html.includes("</head>") ? options.html.replace("</head>", () => `${script}</head>`) : script + options.html, renders: Object.keys(catalog.views) };
+  const html = options.html, embed = (html: string) => html.includes("</head>") ? html.replace("</head>", () => `${script}</head>`) : script + html;
+  return { uri: options.uri ?? `ui://mantle/${options.surface}`, name: `mantle-${options.surface}`, title: options.title ?? "Mantle", description: "A Mantle View's rows, and the operations that act on one row.", html: typeof html === "string" ? embed(html) : async () => embed(await html()), renders: Object.keys(catalog.views) };
 }
