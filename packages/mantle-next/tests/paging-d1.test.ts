@@ -11,7 +11,7 @@ import {verifyPaging,pagingSeed} from "./paging-scenarios.js";
  let worker:ReturnType<typeof spawn>|undefined,log:Awaited<ReturnType<typeof open>>|undefined;
  try{
   const files=await generateOrThrow("cloudflare-d1",await loadFixtureSources("paging.yaml"));await writeGenerated(dir,files,false);
-  const names=["ordered","mixed","grouped","grouped-time","joined","lookup","singleton"];
+  const names=["ordered","mixed","grouped","grouped-time","window-groups","joined","lookup","singleton"];
   await writeFile(join(dir,"worker.ts"),`${names.map((name,i)=>`import p${i} from './paged/views/${name}.js';`).join('\n')}
 const pages={${names.map((name,i)=>`${JSON.stringify(name)}:p${i}`).join(',')}};
 export default{async fetch(request:Request,env:{DB:any}){const path=new URL(request.url).pathname;if(path==='/health')return new Response('ready');try{if(path==='/seed'){for(const sql of ${JSON.stringify(unstable_splitSqlQuery(files['schema.sql']!+';'+pagingSeed(false)))})await env.DB.prepare(sql).run();return Response.json({ok:true});}const args:any=await request.json();if(path==='/native')return Response.json((await env.DB.prepare(args.sql).all()).results);let calls=0;const db={prepare(sql:string){calls++;return env.DB.prepare(sql)}};const rows=await pages[args.name](db,args.caller,args.input,args.options);return Response.json({rows,calls});}catch(error){return Response.json({error:{code:(error as any).code,message:String(error)}},{status:400});}}};`);

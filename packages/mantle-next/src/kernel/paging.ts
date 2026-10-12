@@ -84,9 +84,3 @@ export async function page<Database, Row>(spec: Paged<Database>, db: Database, c
   for (const row of rows) for (let i = 0; i < spec.keys; i++) delete row[`_k${i}`];
   return { rows: rows as Row[], ...(nextCursor === undefined ? {} : { nextCursor }) };
 }
-
-/** A View without ORDER BY (one row or an aggregate) is a single page. */
-export async function single<Row>(rows: () => Promise<Row[]>, path: string, options: Options = {}): Promise<{ rows: Row[] }> {
-  if (options.cursor !== undefined || options.limit !== undefined && (!Number.isInteger(options.limit) || options.limit < 1)) invalid("This single-page View needs a positive limit and no cursor.", path);
-  return { rows: await rows() };
-}

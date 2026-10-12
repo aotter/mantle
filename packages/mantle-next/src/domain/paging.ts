@@ -2,7 +2,7 @@
 import { NATIVE_NOT_NULL, notNullColumns, type RuntimePlan, type PlanSchema, type SqlNode } from "@aotter/mantle/spec";
 import { declaredType } from "./columns.js";
 
-type Field = { schema: PlanSchema; name: string; type: string; notNull: boolean };
+type Field = { schema: PlanSchema; name: string; type: string; notNull: boolean; source: object };
 type Relation = { fields: Map<string, Field>; single: boolean; unique: boolean; fixed: Set<string> };
 export type PagingProof = { types: string[]; single: boolean };
 const fieldName = (n: SqlNode) => n.ColumnRef?.fields?.at(-1)?.String?.sval;
@@ -11,39 +11,55 @@ const aggregate = (n: SqlNode): boolean => !!n && !n.SubLink && !n.SelectStmt &&
 
 /** Only complete grouped tuples, base ids and non-fanning singleton joins are proved. */
 export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | undefined {
-  const ctes = new Map<string, Relation | undefined>();
-  const select = (s: SqlNode): { relation: Relation; keys: Field[] } | undefined => {
+  const select = (s: SqlNode, inherited: ReadonlyMap<string, Relation | undefined> = new Map()): { relation: Relation; keys: Field[] } | undefined => {
     if (!s || s.distinctClause || s.op && s.op !== "SETOP_NONE") return;
+    const ctes = new Map(inherited);
     for (const c of s.withClause?.ctes ?? []) {
       const n = c.CommonTableExpr;
       ctes.set(n.ctename, undefined);
-      ctes.set(n.ctename, select(n.ctequery.SelectStmt)?.relation);
+      ctes.set(n.ctename, select(n.ctequery.SelectStmt, ctes)?.relation);
     }
     const aliases = new Map<string, Relation>();
     const reduced = !!s.groupClause?.length || (s.targetList ?? []).some((t: SqlNode) => aggregate(t.ResTarget.val));
     const relation = (n: SqlNode): Relation | undefined => {
       if (n.JoinExpr) {
-        const left = relation(n.JoinExpr.larg), right = relation(n.JoinExpr.rarg);
-        if (!left || !right || !left.single && !right.single && !reduced) return;
+        const left = relation(n.JoinExpr.larg), before = new Set(aliases.keys()), right = relation(n.JoinExpr.rarg);
+        if (!left || !right) return;
+        const column = (v: SqlNode): Field | undefined => v?.ColumnRef?.fields?.length === 2 ? aliases.get(v.ColumnRef.fields[0].String?.sval)?.fields.get(fieldName(v)!) : undefined;
+        const lookup = (side: Relation, other: Relation, term: SqlNode): boolean => {
+          if (term?.BoolExpr?.boolop === "AND_EXPR") return term.BoolExpr.args.some((x: SqlNode) => lookup(side, other, x));
+          const e = term?.A_Expr, id = side.fields.get("id"), otherId = other.fields.get("id");
+          if (!side.unique || !id || !otherId || e?.name?.[0]?.String?.sval !== "=") return false;
+          const a = column(e.lexpr), b = column(e.rexpr);
+          return !!(a?.notNull && b?.notNull && (a.name === id.name && a.source === id.source && b.source === otherId.source || b.name === id.name && b.source === id.source && a.source === otherId.source));
+        };
+        const rightSingle = right.single || lookup(right, left, n.JoinExpr.quals);
+        const leftSingle = left.single || lookup(left, right, n.JoinExpr.quals);
+        if (!leftSingle && !rightSingle && !reduced) return;
         if (n.JoinExpr.jointype === "JOIN_FULL" || n.JoinExpr.jointype === "JOIN_RIGHT") return;
         // The right side of LEFT JOIN may be absent: its fields cannot become NOT NULL cursor keys.
-        if (n.JoinExpr.jointype === "JOIN_LEFT") for (const r of aliases.values()) if (r === right) r.fields = new Map([...r.fields].map(([k, f]) => [k, { ...f, notNull: false }]));
-        return !left.single && !right.single ? { ...left, unique: false } : left.single ? right : left;
+        if (n.JoinExpr.jointype === "JOIN_LEFT") for (const [alias, r] of aliases) if (!before.has(alias)) r.fields = new Map([...r.fields].map(([k, f]) => [k, { ...f, notNull: false }]));
+        return rightSingle ? left : leftSingle ? right : { ...left, unique: false };
       }
       const r = n.RangeVar, sub = n.RangeSubselect;
       let fact: Relation | undefined;
       if (r && plan.schemas[r.relname]) {
-        const schema = plan.schemas[r.relname]!, notNull = notNullColumns(schema);
+        const schema = plan.schemas[r.relname]!, notNull = notNullColumns(schema), source = {};
         const fields = new Map<string, Field>();
         for (const name of [...Object.keys(schema.fields), "id", "version", "created_at", "updated_at", "author_id", "status"]) {
           const type = declaredType(schema.fields, name) ?? (name === "version" ? "integer" : "text");
-          fields.set(name, { schema, name, type, notNull: NATIVE_NOT_NULL.has(name) || notNull.has(name) });
+          fields.set(name, { schema, name, type, notNull: NATIVE_NOT_NULL.has(name) || notNull.has(name), source });
         }
-        fact = { fields, single: false, unique: true, fixed: new Set(schema.scope ? [schema.scope] : []) };
+        fact = { fields, single: false, unique: true, fixed: new Set() };
       } else if (r) fact = ctes.get(r.relname);
-      else if (sub) fact = select(sub.subquery.SelectStmt)?.relation;
+      else if (sub) fact = select(sub.subquery.SelectStmt, ctes)?.relation;
       if (fact) {
-        fact = { ...fact, fields: new Map(fact.fields), fixed: new Set(fact.fixed) };
+        // Two aliases of one Schema/CTE are distinct row sources, including a singleton joined to many rows.
+        const sources = new Map<object, object>();
+        fact = { ...fact, fields: new Map([...fact.fields].map(([name, f]) => {
+          if (!sources.has(f.source)) sources.set(f.source, {});
+          return [name, { ...f, source: sources.get(f.source)! }];
+        })), fixed: new Set(fact.fixed) };
         aliases.set(r?.alias?.aliasname ?? r?.relname ?? sub.alias.aliasname, fact);
       }
       return fact;
@@ -67,7 +83,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
         return matches.length === 1 ? matches[0] : undefined;
       }
       const f = n?.FuncCall;
-      if (f && ["min", "max"].includes(f.funcname?.at(-1)?.String?.sval) && f.args?.length === 1 && s.groupClause?.length) return resolve(f.args[0], false);
+      if (f && !f.over && !f.agg_filter && ["min", "max"].includes(f.funcname?.at(-1)?.String?.sval) && f.args?.length === 1 && s.groupClause?.length) return resolve(f.args[0], false);
       const pos = n?.A_Const?.ival?.ival;
       if (output && pos > 0) return resolve(s.targetList[pos - 1]?.ResTarget.val, false);
       return;
@@ -77,7 +93,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       const e = n?.A_Expr;
       if (e?.name?.[0]?.String?.sval !== "=") return;
       const col = scalar(e.rexpr) ? resolve(e.lexpr, false) : scalar(e.lexpr) ? resolve(e.rexpr, false) : undefined;
-      if (col && [...base!.fields.values()].some(f => f.name === col.name && f.schema.name === col.schema.name)) base!.fixed.add(col.name);
+      if (col && col.source === base!.fields.get("id")?.source) base!.fixed.add(col.name);
     };
     fixed(s.whereClause);
     const fields = new Map<string, Field>();
@@ -85,7 +101,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
     const group: SqlNode[] = s.groupClause ?? [], sorts: SqlNode[] = s.sortClause ?? [];
     const keys = sorts.map(k => resolve(k.SortBy.node));
     if (keys.some(k => !k?.notNull || !["text", "bool", "integer", "int4", "int8", "real", "float8", "date", "timestamptz"].includes(k.type) && !/^numeric\(/.test(k.type))) return;
-    const same = (a: Field | undefined, b: Field | undefined) => a && b && a.name === b.name && a.schema.name === b.schema.name;
+    const same = (a: Field | undefined, b: Field | undefined) => a && b && a.name === b.name && a.source === b.source;
     if (sorts.length) {
       if (group.length) {
         // Full GROUP BY keys, not an id from an arbitrary row in the group, make the result unique.
@@ -95,7 +111,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
         const order = keys.filter(k => k!.name !== "id") as Field[];
         if (order.length) {
           const schema = order[0]!.schema;
-          if (order.some(f => f.schema.name !== schema.name)) return;
+          if (order.some(f => f.source !== base!.fields.get("id")?.source)) return;
           const indexed = [...(schema.indexes ?? []), ...(schema.unique ?? [])].some(index => {
             let i = 0;
             while (i < index.length && base!.fixed.has(index[i]!)) i++;
