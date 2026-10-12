@@ -29,6 +29,8 @@ test("unsafe fanout and NULL/unknown keys remain refused; native-only internal q
  const sources=await loadFixtureSources("paging.yaml");
  const view=(sql:string,surface="public")=>`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: unsafe}\nspec:\n  surface: ${surface}\n  sql: ${sql}\n`;
  for(const sql of [
+  "WITH x AS (SELECT id,session,row_number() OVER (ORDER BY at) AS block FROM positions) SELECT session AS block,count(*) AS total FROM x GROUP BY block ORDER BY block",
+  "SELECT session AS block,count(*) AS total FROM positions GROUP BY block ORDER BY block",
   "WITH x AS (SELECT id,at FROM visible), y AS (WITH x AS (SELECT id,at FROM visible ORDER BY at DESC LIMIT 1) SELECT id,at FROM x) SELECT s.id,v.at FROM y s JOIN x v ON true ORDER BY s.id",
   "SELECT m.id AS group_id,count(*) AS total FROM visible v LEFT JOIN (latest l JOIN latest m ON true) ON v.block=0 GROUP BY m.id ORDER BY m.id",
   "SELECT l.id, v.block FROM latest l JOIN visible v ON true ORDER BY l.id",
@@ -61,4 +63,9 @@ test("an equality on the leading order column does not erase its matching index"
  const sources=await loadFixtureSources("paging.yaml");
  const files=await generateOrThrow("bun-sqlite",[{...sources[0]!,text:sources[0]!.text+`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: fixed-order}\nspec:\n  surface: public\n  input: {type: object, required: [session, block], properties: {session: {type: string}, block: {type: integer}}}\n  sql: SELECT id,block,position FROM positions WHERE session=input.session AND block=input.block ORDER BY block,position\n`}]);
  expect(files["paged/views/fixed-order.ts"]).toBeDefined();
+});
+test("GROUP BY output aliases remain supported when they do not shadow input names",async()=>{
+ const sources=await loadFixtureSources("paging.yaml");
+ const files=await generateOrThrow("bun-sqlite",[{...sources[0]!,text:sources[0]!.text+`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: alias-group}\nspec:\n  surface: public\n  sql: SELECT day AS bucket,count(*) AS total FROM positions GROUP BY bucket ORDER BY bucket\n`}]);
+ expect(files["paged/views/alias-group.ts"]).toBeDefined();
 });
