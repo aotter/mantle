@@ -97,7 +97,7 @@ export async function exerciseEntries(fetch: (request: Request, env: object) => 
     }
     {
         const count = queries(), r = (await response("/entries/a%00b?collection=scalars"))!;
-        check(r.status === (sqlite ? 404 : 400) && queries() - count === (sqlite ? 1 : 0), "decoded entry id native constraint");
+        check(r.status === 400 && queries() === count, "shared Admin malformed-path guard refuses NUL before SQL");
     }
     for (const data of [{ ...scalar, label: "a\0b" }, { ...scalar, day: "0000-01-01" }, { ...scalar, document: { leaf: "a\0b" } }, { ...scalar, document: { unknown: { deeper: "a\0b" } } }, { ...scalar, document: { ["a\0b"]: "safe" } }]) {
         const count = queries(), r = (await response("/entries", "POST", { collection: "scalars", data }))!;

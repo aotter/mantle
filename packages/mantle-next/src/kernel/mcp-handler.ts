@@ -68,6 +68,7 @@ export async function serve<Env, Database, Handlers>(tools: readonly Tool<Databa
       for (const tool of visible) {
         const uri = withApps ? linked.appOnly.get(tool.name) ?? linked.rendersIn.get(tool.name) : undefined;
         const appOnly = linked.appOnly.has(tool.name);
+        const resultMeta = withApps && linked.rendersIn.has(tool.name) ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {};
         const meta = uri ? { ui: { resourceUri: uri, ...(appOnly ? { visibility: ["app"] } : {}) }, "ui/resourceUri": uri, ...(appOnly ? {} : { "openai/outputTemplate": uri }) } : undefined;
         server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown) => {
         const metadata = options.onObservation ? { kind: "invocation" as const, surface, invocationId: crypto.randomUUID(), tool: tool.name, caller: Object.freeze(caller.kind === "user" ? { ...caller, scopes: Object.freeze([...caller.scopes]) } : { ...caller }) } : undefined;
@@ -77,13 +78,13 @@ export async function serve<Env, Database, Handlers>(tools: readonly Tool<Databa
         try {
           if (tool.run) checkOrigin(request, caller);
           const data = await callTool(tool, raw as Record<string, unknown>, options.db(env), caller, options.handlers as Handlers);
-          return { ...(withApps && linked.rendersIn.has(tool.name) ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
+          return { ...resultMeta, content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
           const diagnostic = surfaceError(error).error;
           code = diagnostic.code; outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
           if (diagnostic.path === "request:origin") observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" });
           const payload = { diagnostics: [diagnostic] };
-          return { isError: true, content: [{ type: "text" as const, text: JSON.stringify(payload) }], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
+          return { ...resultMeta, isError: true, content: [{ type: "text" as const, text: JSON.stringify(payload) }], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
         } finally {
           if (metadata) observe(options.onObservation, { ...metadata, phase: "completion", at: Date.now(), outcome, durationMs: Math.max(0, performance.now() - started), ...(code ? { code } : {}) });
         }
