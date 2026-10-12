@@ -25,6 +25,14 @@ comparisons), because postgres.js would otherwise turn text bound to timestamptz
 connection lifetime, database isolation, locks and retries remain native and
 application-owned. No cloud provisioning.
 
+Application-owned adapters run the [Postgres adapter conformance check](postgres-adapters.md)
+before binding a service. An adapter without interactive transactions must have
+`begin` throw `ContractError("TRANSACTION_UNSUPPORTED", ..., "store/transaction", { status: 400 })`
+before calling its callback. Multi-statement Procedures, multi-write Store batches
+and Store transactions then refuse before writing; a single statement remains
+safe in autocommit. This capability belongs to the adapter, rather than a request-time
+driver registry.
+
 ## Current implementation boundary
 
 The first PR is a four-target generated SQL slice, not a complete 0.2 replacement.
