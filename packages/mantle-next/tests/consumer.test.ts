@@ -32,7 +32,7 @@ beforeAll(async () => {
     'import { Database } from "bun:sqlite";',
     'import { views as bun, procedures as bunWrites, store as bunStore } from "./bun-postgres/generated.js";',
     'import { store as sqliteStore } from "./bun-sqlite/generated.js";',
-    'import { store as d1Store } from "./cloudflare-d1/generated.js";',
+    'import { views as d1Views, procedures as d1Procedures, store as d1Store } from "./cloudflare-d1/generated.js";',
     'import { views as worker, store as workerStore } from "./cloudflare-postgres/generated.js";',
     'const sql = new SQL("postgres://localhost/x");',
     `await bun["purchase-totals"](sql, ${caller}, {});`,
@@ -48,6 +48,10 @@ beforeAll(async () => {
     '// @ts-expect-error tuple order preserves the delete result',
     'const wrong: string = tuple[1];',
     `const d1 = d1Store({} as import("@cloudflare/workers-types").D1Database, ${caller});`,
+    'const session = ({} as import("@cloudflare/workers-types").D1Database).withSession("first-unconstrained") satisfies import("@cloudflare/workers-types").D1DatabaseSession;',
+    `await d1Views["purchase-totals"](session, ${caller}, {});`,
+    `await d1Procedures["create-purchase-pair"](session, ${caller}, { requestNumber: "r", title: "t", amount: 1, approved: 1, sortBucket: null, requestedUnits: 1, submittedAt: new Date(), neededOn: "2026-10-11", payload: "{}" });`,
+    `await d1Store(session, ${caller}).collection("purchase_requests").count();`,
     'await d1.batch([d1.collection("purchase_requests").delete("id", { lock: 1 })]);',
     '// @ts-expect-error D1 has no interactive transactions',
     'd1.transaction(async () => {});',
@@ -138,9 +142,9 @@ test("CLI regeneration cannot route removed operation entries to renumbered func
   const author = async (names: string[]) => writeFile(manifest, [...schemas, ...examples.flatMap(atom => names.map(name => ({...atom, metadata:{name:atom.kind === "Procedure" ? "create-" + name : name}})))].map(atom => JSON.stringify(atom)).join("\n---\n"));
   const cli = fileURLToPath(new URL("../src/infrastructure/cli.ts", import.meta.url));
   await author(["a", "b"]);
-  execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {stdio:"pipe"});
+  execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {cwd:directory,stdio:"pipe"});
   await author(["b"]);
-  execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {stdio:"pipe"});
+  execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {cwd:directory,stdio:"pipe"});
   const retained = await Bun.build({entrypoints:[join(destination,"views/b.ts"),join(destination,"procedures/create-b.ts")],target:"browser"});
   expect(retained.success).toBe(true);
   const load = (file: string) => execFileSync(process.execPath, ["-e", `await import(${JSON.stringify(pathToFileURL(file).href)})`], {stdio:"pipe"});

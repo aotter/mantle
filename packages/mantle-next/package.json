@@ -6,6 +6,8 @@
   "sideEffects": false,
   "engines": { "node": ">=22.14.0" },
   "files": ["dist", "README.md"],
+  "bin": { "mantle": "./dist/infrastructure/cli.js" },
+  "dependencies": { "esbuild": "0.28.1", "jsonc-parser": "3.3.1" },
   "exports": {
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
