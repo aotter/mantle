@@ -46,9 +46,12 @@ export interface Operation<Database,Handlers> {
 }
 const headers={"cache-control":"no-store"};
 const fail=(message:string):never=>invalid(message,"admin");
+function checkBodyLength(request:Request):void {
+  if(Number(request.headers.get("content-length"))>1_000_000)fail("Request body exceeds 1000000 bytes.");
+}
 /** Bounded before consuming a declared oversized body. */
 export async function body(request:Request):Promise<Record<string,unknown>> {
-  if(Number(request.headers.get("content-length"))>1_000_000)fail("Request body exceeds 1000000 bytes.");
+  checkBodyLength(request);
   const bytes=await request.arrayBuffer();if(bytes.byteLength>1_000_000)fail("Request body exceeds 1000000 bytes.");
   let value:unknown;try {value=JSON.parse(new TextDecoder().decode(bytes));}catch{fail("Expected a JSON body.");}
   if(!value||typeof value!=="object"||Array.isArray(value))fail("Expected a JSON object.");return value as Record<string,unknown>;
@@ -102,6 +105,7 @@ export function admin<Env,Database,Handlers=never>(metadata:{collections:readonl
       if(caller.kind==="anonymous")throw new ContractError("UNAUTHENTICATED","Sign in to use Admin.","admin");
       if(caller.kind!=="user"||caller.role!=="staff"||caller.credential!=="session")return Response.json({error:{code:"AUTH_DENIED",message:"Admin needs a signed-in staff session.",path:"admin"},minimumRole:"staff"},{status:403,headers});
       checkOrigin(request,caller);
+      if(request.method!=="GET"&&request.method!=="HEAD"&&request.method!=="OPTIONS")checkBodyLength(request);
       let path="";try{path=decodeURIComponent(rel.slice(3)).replace(/\/$/,"")||"/";}catch{fail("Malformed Admin path.");}
       if(/%2f|%5c/i.test(rel)||path.includes("\0")||path.includes("\\")||path.split("/").some(x=>x==="."||x===".."))fail("Malformed Admin path.");
       const db=options.db(env),context:Context<Env,Database>={request,url,env,db,caller,params:{}};

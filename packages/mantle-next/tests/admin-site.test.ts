@@ -37,8 +37,13 @@ test("Admin site routes refuse before body/DB, preserve 501 and never expose ide
   const withIdentity={...options,identity:{directory:()=>({listUsers:async()=>[row],listMembers:async()=>({items:[row],previousCursor:null,nextCursor:null})})}};
   const wired=serve({collections:[],views:[],operations:[],webmcp:{}},[],[],{...withIdentity,routes:siteRoutes(withIdentity)});
   for(const path of ["/staff","/members"]){const response=(await wired(new Request("https://app.test/admin/api"+path),{}))!,json=await response.text();expect(response.status).toBe(200);expect(json).not.toContain("SECRET");expect(json).not.toContain("banReason");if(path==="/members")expect(json).not.toContain('"role"');}
-  let read=false;
-  const configured={...options,site:()=>({read:async()=>({} as any),updateSettings:async()=>{read=true;return{} as any;},media:()=>({} as any)})};
+  const stateful={...options,identity:{directory:()=>({rows:[row],async listUsers(){return this.rows;}})}};
+  const statefulFetch=serve({collections:[],views:[],operations:[],webmcp:{}},[],[],{...stateful,routes:siteRoutes(stateful)});
+  expect((await statefulFetch(new Request("https://app.test/admin/api/staff"),{}))!.status).toBe(200);
+  let read=false,siteCalls=0;calls=0;
+  const configured={...options,site:()=>{siteCalls++;return {read:async()=>({} as any),updateSettings:async()=>{read=true;return{} as any;},media:()=>({} as any)};}};
   const bounded=serve({collections:[],views:[],operations:[],webmcp:{}},[],[],{...configured,routes:siteRoutes(configured)}),oversized=new Request("https://app.test/admin/api/site-settings",{method:"PATCH",body:"{}",headers:{origin:"https://app.test","content-length":"1000001"}});
-  expect((await bounded(oversized,{}))!.status).toBe(400);expect(oversized.bodyUsed).toBe(false);expect(read).toBe(false);
+  expect((await bounded(oversized,{}))!.status).toBe(400);expect(oversized.bodyUsed).toBe(false);expect(read).toBe(false);expect(calls).toBe(0);expect(siteCalls).toBe(0);
+  caller={kind:"anonymous"};expect((await bounded(new Request(oversized),{}))!.status).toBe(401);caller=adminSiteStaff;
+  expect((await bounded(new Request(oversized,{headers:{origin:"https://evil.test","content-length":"1000001"}}),{}))!.status).toBe(403);expect(calls).toBe(0);
 });
