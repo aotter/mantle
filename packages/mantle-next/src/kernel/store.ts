@@ -9,8 +9,8 @@
  * the SQL; a write naming a system or scope column; `undefined`, which a driver binds as NULL; any write to a publishing Schema).
  * The Store does not check a View's or Procedure's `requires`.
  */
-import { binds as evaluate, type Bound, type Recipe } from "./binds.js";
-import { ContractError, type Caller } from "./contracts.js";
+import { binds as evaluate, encode, type Bound, type Recipe } from "./binds.js";
+import { ContractError, type Caller, type Row } from "./contracts.js";
 import type { Dialect } from "./dialect/common.js";
 import { condition } from "./where.js";
 
@@ -52,33 +52,35 @@ export function expand(r: Rules, f: Fact) {
 }
 
 export interface Driver<H> {
-  read(db: H, sql: string, binds: readonly unknown[]): unknown[] | PromiseLike<unknown[]>;
-  procedure(db: H, steps: readonly Bound[], path: string): Promise<unknown[][]>;
+  read(db: H, sql: string, binds: unknown[]): unknown[] | PromiseLike<unknown[]>;
+  procedure(db: H, steps: readonly Bound[], path: string): Promise<Row[][]>;
 }
 
-/** What the generator knows of a collection: its row, its filterable columns, its writable columns, an insert's columns (the required ones are not optional) and the NOT NULL indexed columns `orderBy` may name. */
-export interface Table { readonly row: object; readonly fields: object; readonly set: object; readonly insert: object; readonly order: string }
+/** What the generator knows of a collection: its row, its filterable columns, its writable columns, which of those an insert must give, and the NOT NULL indexed columns `orderBy` may name. */
+export interface Table { readonly row: object; readonly fields: object; readonly set: object; readonly required: string; readonly order: string }
+type RowOf<T extends Table> = Readonly<T["row"]>;
+type Insert<T extends Table> = Readonly<Pick<T["set"], Extract<T["required"], keyof T["set"]>> & Partial<T["set"]>>;
 export type Operators<T> = { readonly eq?: T | null; readonly ne?: T | null; readonly gt?: T; readonly gte?: T; readonly lt?: T; readonly lte?: T; readonly in?: readonly T[]; readonly notIn?: readonly T[]; readonly like?: string; readonly isNull?: boolean };
 /** Conditions are ANDed; a bare value is `eq` (null is IS NULL). */
 export type Where<F> = { readonly [K in keyof F]?: F[K] | null | Operators<F[K]> };
 export interface Page<R> { readonly rows: R[]; /** Pass back as `cursor` for the next page; null on the last. */ readonly cursor: string | null }
 export interface Query<F, O extends string> { readonly where?: Where<F>; readonly orderBy?: O; readonly order?: "asc" | "desc"; readonly limit?: number; readonly cursor?: string }
 export interface Collection<T extends Table> {
-  findById(id: string): Promise<T["row"] | null>;
-  find(query?: Query<T["fields"], T["order"]>): Promise<Page<T["row"]>>;
-  first(query?: Omit<Query<T["fields"], T["order"]>, "limit" | "cursor">): Promise<T["row"] | null>;
+  findById(id: string): Promise<RowOf<T> | null>;
+  find(query?: Query<T["fields"], T["order"]>): Promise<Page<RowOf<T>>>;
+  first(query?: Omit<Query<T["fields"], T["order"]>, "limit" | "cursor">): Promise<RowOf<T> | null>;
   count(where?: Where<T["fields"]>): Promise<number>;
   /** The new row: the writable columns, with scope, author, clock and id filled by the row rules. A caller with no subject inserts nothing (the scope column is NOT NULL). */
-  insert(values: T["insert"]): Promise<T["row"]>;
+  insert(values: Insert<T>): Promise<RowOf<T>>;
   /** Writes only the columns given. `lock` is the version the caller read; a different one (or a row the caller cannot see) is CONFLICT, and so is a unique-index clash. Returns the new row. */
-  update(id: string, set: Partial<T["set"]>, options: { readonly lock: number | string }): Promise<T["row"]>;
+  update(id: string, set: Readonly<Partial<T["set"]>>, options: { readonly lock: number | string }): Promise<RowOf<T>>;
   /** CONFLICT when the version differs or the caller cannot see the row. */
   delete(id: string, options: { readonly lock: number | string }): Promise<void>;
 }
 export interface Store<T extends Record<string, Table>> { collection<K extends keyof T & string>(name: K): Collection<T[K]> }
 
 interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; byId?: string }
-interface Prepared { readonly name: string; readonly f: Fact; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: ReadonlySet<string>; readonly d: ReadonlySet<string>; select?: string; returning?: string; readonly policy: (Policy | undefined)[] }
+interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; select?: string; returning?: string; readonly policy: (Policy | undefined)[] }
 
 export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv: Driver<H>, rules: Rules, facts: { readonly [K in keyof T]: Fact }): (db: H, caller: Caller) => Store<T> {
   const prepared = new Map<string, Prepared>();
@@ -86,27 +88,28 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
     let p = prepared.get(name);
     if (!p) {
       const f = facts[name]!;
-      prepared.set(name, p = { name, f, x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: new Set([...STAMPS, ...f.ts ?? []]), d: new Set(f.d), policy: [] });
+      prepared.set(name, p = { name, f, scope: f.s?.toLowerCase(), x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: [...STAMPS, ...f.ts ?? []], d: f.d ?? [], policy: [] });
     }
     return p;
   };
   /** The columns whose wire form the database formats, replacing the same names `*` brings (of two same-named columns a driver keeps the last). */
-  const wires = (p: Prepared, prefix: string) => [...[...p.ts].map(c => [c, d.wireTimestamp(prefix + d.ident(c))] as const), ...[...p.d].map(c => [c, d.wireDate(prefix + d.ident(c))] as const)].map(([c, parts]) => `${parts.join("")} AS ${d.ident(c)}`).join(", ");
+  const wires = (p: Prepared, prefix: string) => [p.ts, p.d].flatMap((columns, i) => columns.map(c => `${(i ? d.wireDate : d.wireTimestamp)(prefix + d.ident(c)).join("")} AS ${d.ident(c)}`)).join(", ");
   const term = ([column, op]: Term, prefix: string, placeholder: string) => {
     const c = prefix + d.ident(column);
     return op === "ttl" ? `(${c} IS NULL OR ${c} > ${placeholder})` : `${c} = ${placeholder}`;
   };
-  /** The row rules of one mode, numbered from 1 and rendered once. */
-  const policy = (p: Prepared, trusted: boolean): Policy => p.policy[+trusted] ??= ((terms: readonly Term[]) => ({ sql: terms.map((t, i) => term(t, "r.", d.param(i + 1))).join(" AND "), recipes: terms.map(t => t[2]) }))(trusted ? p.x.trusted : p.x.caller);
+  const ID = d.ident("id");
+  /** The row rules of one mode, numbered from 1; the SQL is rendered once per mode. */
+  const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => p.policy[+trusted] ??= { sql: terms.map((t, i) => term(t, "r.", d.param(i + 1))).join(" AND "), recipes: terms.map(t => t[2]) };
 
   return (db, caller) => ({ collection: name => collection(db, caller, prepare(name)) as never });
 
   function collection(db: H, caller: Caller, p: Prepared) {
-    const pol = policy(p, caller.kind === "system"), { f, x } = p, no = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", `${p.name}: ${message}`);
-    /** A value as the engine stores it, as a placeholder. Date-times and dates are known from the fact; a boolean and a JSON object are told by their JS type. */
+    const trusted = caller.kind === "system", { f, x } = p, terms = trusted ? x.trusted : x.caller, pol = policy(p, trusted, terms), no = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", `${p.name}: ${message}`);
+    /** A value as the engine stores it, as a placeholder. Date-times and dates are known from the fact; a JSON object is told by its JS type (a boolean binds as it is on every driver). */
     const put = (values: unknown[], column: string, v: unknown): string => {
-      const type = p.ts.has(column) ? "timestamptz" : p.d.has(column) ? "date" : v !== null && typeof v === "object" && !(v instanceof Date) ? "json" : "";
-      values.push(v === null ? v : type === "timestamptz" ? d.timestamp(v as string | Date) : type === "date" ? d.date(v as string) : type === "json" ? d.json(v) : typeof v === "boolean" ? d.bool(v) : v);
+      const type = p.ts.includes(column) ? "timestamptz" : p.d.includes(column) ? "date" : v !== null && typeof v === "object" && !(v instanceof Date) ? "json" : "";
+      values.push(type === "json" ? JSON.stringify(v) : encode(d, type, v));
       return d.cast(d.param(values.length), type);
     };
     const conditions = (where: object | undefined, values: unknown[]): string[] => {
@@ -131,9 +134,9 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
       const dir = q.order ?? "asc", name = q.orderBy ?? "id", limit = q.limit ?? 50;
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw no("limit is 1 to 500");
       const values = base(), conds = conditions(q.where, values);
-      const id = `r."id"`, kc = `r.${d.ident(name)}`, up = dir === "asc", way = up ? "ASC" : "DESC";
+      const id = `r.${ID}`, kc = `r.${d.ident(name)}`, up = dir === "asc", way = up ? "ASC" : "DESC";
       if (q.cursor !== undefined) {
-        const [v, last] = JSON.parse(decodeURIComponent(q.cursor)) as unknown[];
+        const [v, last] = decode(q.cursor);
         values.push(last);
         const after = `${id} ${up ? ">" : "<"} ${d.param(values.length)}`;
         if (name === "id") conds.push(after);
@@ -146,6 +149,12 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
       return { rows: clean(page), cursor: encodeURIComponent(JSON.stringify([end[name], end.id])) };
     }
 
+    /** A cursor is `encodeURIComponent(JSON.stringify([value, id]))`; anything else is refused. */
+    const decode = (cursor: string): [unknown, unknown] => {
+      try { const c = JSON.parse(decodeURIComponent(cursor)); if (Array.isArray(c) && c.length === 2) return c as [unknown, unknown]; } catch {}
+      throw no("malformed cursor");
+    };
+
     /** A write: placeholders are numbered as values are pushed; a Core bind recipe is evaluated against this caller and clock. */
     const writer = (lock?: number | string) => {
       if (f.pub) throw no("is read-only");
@@ -155,14 +164,14 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
       const given = (set: object) => Object.entries(set).map(([name, v]) => {
         // SQLite matches column names without case, so compare folded
         const key = name.toLowerCase();
-        if (SYSTEM.includes(key) || key === f.s) throw no(`${name} is not writable`);
+        if (SYSTEM.includes(key) || key === p.scope) throw no(`${name} is not writable`);
         // a driver binds undefined as NULL: an update would silently clear the column
         if (v === undefined) throw no(`${name} is undefined`);
         return [d.ident(name), put(values, name, v)] as const;
       });
       /** `WHERE id = ? AND <the caller's row rules> AND version = ?` */
-      const guard = (id: string) => ` WHERE ${[`${d.ident("id")} = ${push(id)}`, ...[...(caller.kind === "system" ? x.trusted : x.caller), x.lock].map(t => term(t, "", recipe(t[2])))].join(" AND ")}`;
-      const run = async (sql: string, verb: string) => clean((await drv.procedure(db, [{ sql, binds: values, row: true }], `${p.name}/${verb}`))[0]! as Record<string, unknown>[]);
+      const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...terms, x.lock].map(t => term(t, "", recipe(t[2])))].join(" AND ")}`;
+      const run = async (sql: string, verb: string) => clean((await drv.procedure(db, [{ sql, binds: values, row: true }], `${p.name}/${verb}`))[0]!);
       return { given, recipe, guard, run, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };
 
@@ -170,7 +179,7 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
       async findById(id: string) {
         const values = base();
         values.push(id);
-        return clean(await rows(pol.byId ??= `${select()}${where([`r."id" = ${d.param(values.length)}`])} LIMIT 1`, values))[0] ?? null;
+        return clean(await rows(pol.byId ??= `${select()}${where([`r.${ID} = ${d.param(values.length)}`])} LIMIT 1`, values))[0] ?? null;
       },
       find,
       async first(q: Omit<Query<object, string>, "limit" | "cursor"> = {}) { return (await find({ ...q, limit: 1 })).rows[0] ?? null; },

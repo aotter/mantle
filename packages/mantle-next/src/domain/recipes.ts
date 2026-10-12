@@ -10,6 +10,7 @@ export function recipesOf(statement: LoweredStatement, fields: readonly string[]
     if (b.k !== "input") return b as Recipe;
     const name = fields.find(field => field.toLowerCase() === String(b.name).toLowerCase());
     if (name === undefined) refuse(`Input bind '${b.name}' has no declared field.`);
-    return { k: "input", name: name ?? String(b.name), type: String(b.type) };
+    // only a date-time or a date is converted at bind time (`encode` in kernel/binds)
+    return { k: "input", name: name ?? String(b.name), ...(b.type === "timestamptz" || b.type === "date" ? { type: b.type } : {}) };
   });
 }

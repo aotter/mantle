@@ -46,8 +46,8 @@ function env(sqlite: boolean, app: any, db: any, native: StoreEnv["native"], rec
 describe("Store", () => {
   test("generated types: a geo field's two columns are in the row, the scope column is nowhere, and orderBy is NOT NULL and indexed", async () => {
     const { types } = await generated("bun-sqlite");
-    const table = (name: string) => new RegExp(`"${name}": \\{ row:.*?order: [^}]*\\}`).exec(types)![0];
-    expect(table("catalog_items")).toContain('readonly "place_lat": number | null; readonly "place_lng": number | null');
+    const table = (name: string) => new RegExp(`${name}: \\{ row:.*?order: [^}]*\\}`).exec(types)![0];
+    expect(table("catalog_items")).toContain('place_lat: number | null; place_lng: number | null');
     expect(table("catalog_items")).toContain('order: "id" | "name"');
     expect(table("session_notes")).not.toContain('"owner"');
   });

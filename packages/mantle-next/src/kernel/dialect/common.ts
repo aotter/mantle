@@ -5,12 +5,10 @@ export const ident = (name: string): string => name.split(".").map(part => `"${p
 /** A literal piece of text for a LIKE pattern: `\`, `%` and `_` match themselves. Pair with `likeEscape`. */
 export const escapeLike = (value: string): string => value.replace(/[\\%_]/g, "\\$&");
 export const likeEscape = " ESCAPE '\\'";
-/** JSON input is text on every target (README: Bun.SQL would encode a string bound to jsonb a second time). */
-export const json = (value: unknown): string => JSON.stringify(value);
 
 /**
- * How one engine spells SQL and stores values. A generated bundle imports exactly one of `dialect/sqlite` and
- * `dialect/postgres`; nothing branches on it at runtime.
+ * How one engine spells SQL and stores values, exactly what the Store needs: each dialect module exports it as `dialect` (and its
+ * members by name, so a bundle that uses a few carries only those). A generated bundle imports one dialect; nothing branches on it.
  */
 export interface Dialect {
   /** The `n`th (1-based) numbered placeholder. */
@@ -28,9 +26,6 @@ export interface Dialect {
   cutoff(ms: number, seconds: number): unknown;
   timestamp(v: string | Date): unknown;
   date(v: string): unknown;
-  bool(v: boolean): unknown;
-  json(v: unknown): string;
   /** A placeholder compared with, or written to, a column of this type, so every driver sends the value verbatim (postgres.js would turn text bound to timestamptz or date into a JavaScript Date and lose microseconds). */
   cast(placeholder: string, type: string): string;
-  readonly nativeTypes: boolean;
 }

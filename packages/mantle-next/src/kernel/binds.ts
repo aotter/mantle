@@ -9,13 +9,16 @@ export type Recipe =
   | { readonly k: "uid" | "role" | "now" | "version" }
   | { readonly k: "cutoff"; readonly seconds: number }
   | { readonly k: "const"; readonly value: unknown }
-  | { readonly k: "input"; readonly name: string; readonly type: string };
+  | { readonly k: "input"; readonly name: string; /** Only a date-time or a date is converted, so only those carry a type. */ readonly type?: "timestamptz" | "date" };
 /** One printed statement and how to bind it. `row`: it must affect exactly one row. */
 export interface Step { readonly sql: string; readonly binds: readonly Recipe[]; readonly row?: boolean }
-export type Bound = { readonly sql: string; readonly binds: readonly unknown[]; readonly row?: boolean };
+export type Bound = { readonly sql: string; readonly binds: unknown[]; readonly row?: boolean };
 
 /** The dialect functions the recipes in use call; generated code passes only those. */
 export type Values = Partial<Pick<Dialect, "now" | "cutoff" | "timestamp" | "date">>;
+/** A declared date-time or date as the engine stores it; any other value (and `null`) is bound as it is. */
+export const encode = (d: Values, type: string | undefined, v: unknown): unknown =>
+  type === "timestamptz" ? (v == null ? null : d.timestamp!(v as string | Date)) : type === "date" ? (v == null ? null : d.date!(v as string)) : v;
 export function binds(d: Values, recipes: readonly Recipe[], caller: Caller, input?: Readonly<Record<string, unknown>>, ms = 0): unknown[] {
   const out: unknown[] = [];
   for (const r of recipes) {
@@ -26,10 +29,7 @@ export function binds(d: Values, recipes: readonly Recipe[], caller: Caller, inp
       case "cutoff": out.push(d.cutoff!(ms ||= Date.now(), r.seconds)); break;
       case "const": out.push(r.value); break;
       case "version": out.push(input!.version); break;
-      case "input": {
-        const v = input![r.name];
-        out.push(r.type === "timestamptz" ? (v == null ? null : d.timestamp!(v as string | Date)) : r.type === "date" ? (v == null ? null : d.date!(v as string)) : v);
-      }
+      case "input": out.push(encode(d, r.type, input![r.name]));
     }
   }
   return out;

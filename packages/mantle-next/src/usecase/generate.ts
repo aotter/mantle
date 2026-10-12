@@ -4,7 +4,6 @@ import type { GenerateDiagnostic, GenerateInput, GenerateResult, Target } from "
 import { nativeType, outputType } from "../domain/columns.js";
 import { entry, exportName } from "../domain/entry.js";
 import { recipesOf } from "../domain/recipes.js";
-import * as postgres from "../kernel/dialect/postgres.js";
 import { emitStores } from "./stores.js";
 
 const q = JSON.stringify;
@@ -33,13 +32,11 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
   if (lowered.dialect.name !== expected || plan.dialect.name !== expected) refuse("target", `Target '${target}' needs canonical '${expected}' compilation and lowering.`);
   for (const name of Object.keys(plan.triggers)) refuse(`triggers/${name}`, "Native Trigger dispatch is not implemented; generation cannot omit it.");
   const driver = target === "bun-sqlite" ? "bun-sqlite" : target === "cloudflare-d1" ? "d1" : "postgres";
-  const used = new Set<string>();
   const auth = (requires: typeof plan.views[string]["requires"], path: string): string[] => {
     if (requires?.guard) refuse(path, "Procedure guards require a generated native dispatch implementation.");
     return (requires?.auth?.all ?? []).map((p, index) => {
-      used.add("ContractError");
       const condition = typeof p === "string" ? 'caller.kind === "user"' : "ctx.auth.scope" in p ? `caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})` : `caller.kind === "user" && ${q(p["ctx.staff"])}.includes(caller.role ?? "")`;
-      return `  let allowed${index}: boolean = ${condition};\n  if (!allowed${index}) throw new ContractError(caller.kind === "user" ? "AUTH_DENIED" : "UNAUTHENTICATED", "Authorization predicate not satisfied.", ${q(`${path}/requires/auth/all/${index}`)});`;
+      return `  deny(caller, ${condition}, ${q(`${path}/requires/auth/all/${index}`)});`;
     });
   };
   const queryInputType = (schema: JsonSchema | undefined, statements: readonly LoweredStatement[]) => {
@@ -49,7 +46,7 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
       const bind = binds.find(b => b.k === "input" && name.toLowerCase() === String(b.name).toLowerCase());
       if (!bind || bind.k !== "input") return `readonly ${q(name)}${schema.required?.includes(name) ? "" : "?"}: ${typeOf(field)};`;
       const type = String(bind.type);
-      const driverType = type === "json" ? "string" : type === "date" ? "string" : type === "timestamptz" ? "string | Date" : isSqlite
+      const driverType = type === "json" || type === "date" ? "string" : type === "timestamptz" ? "string | Date" : isSqlite
         ? type === "bool" || parseNumeric(type) ? "number" : typeOf(field)
         : parseNumeric(type) ? "number | string" : typeOf(field);
       const nullable = field.nullable === true || Array.isArray(field.type) && field.type.includes("null") || !schema.required?.includes(name);
@@ -63,33 +60,17 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
     if (new Set(fields.map(field => field.toLowerCase())).size !== fields.length) refuse(path, "Input properties must have unique case-insensitive names.");
     return fields;
   };
-  // JSON, date-time and date inputs are driver-ready text. Declaring their parameter as text makes every driver send it verbatim:
-  // Bun.SQL would JSON-encode a string bound to jsonb a second time, and postgres.js turns one bound to timestamptz or date into a
-  // JavaScript Date, which loses microseconds.
-  // The cast Core prints for each type; the PostgreSQL dialect spells what replaces it (the same cast the Store writes with).
-  const CORE_CAST: Record<string, string> = { json: "jsonb", timestamptz: "timestamptz", date: "date" };
-  const sqlOf = (s: LoweredStatement, path: string): string => {
-    if (isSqlite) return s.sql;
-    let sql = s.sql;
-    for (const [i, b] of s.binds.entries()) {
-      const type = b.k === "input" ? String(b.type) : "", target = CORE_CAST[type];
-      if (!target) continue;
-      const param = `$${i + 1}`, cast = `CAST(${param} AS ${target})`;
-      if (sql.split(cast).join("").match(new RegExp(`\\$${i + 1}(?!\\d)`))) refuse(path, `Input ${param} must appear only as ${cast}.`);
-      sql = sql.replaceAll(cast, postgres.cast(param, type));
-    }
-    return sql;
-  };
-  /** A statement as a constant: its text and how to bind it. */
   // The dialect functions the bind recipes call, so a bundle carries only those (`binds` takes this object).
   const values = new Set<string>();
+  /** A statement as a constant: its text and how to bind it. */
   const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false) => {
     const recipes = recipesOf(s, fields, message => refuse(path, message));
-    for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && (r.type === "timestamptz" || r.type === "date")) values.add(r.type === "date" ? "date" : "timestamp"); }
-    return `{ sql: ${q(sqlOf(s, path))}, binds: ${q(recipes)}${row ? ", row: true" : ""} }`;
+    for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
+    return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : ""} }`;
   };
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [];
   const entries: Record<string, string> = {};
+  const base = "@aotter/mantle-next/";
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
     const path = `views/${name}`, fn = `view${index}`;
     const modes = lowered.views[name];
@@ -103,14 +84,13 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
       const type = outputType(plan, name, key);
       if (type === "geo") refuse(path, "Native geo projection is not implemented.");
       // Declared timestamps and dates arrive formatted by the SQL itself (domain/wireScalars).
-      output.push(`readonly ${q(key)}: ${nativeType(type, isSqlite)} | null;`);
+      output.push(`readonly ${q(key)}: ${nativeType(type, isSqlite)};`);
     }
     const fieldNames = inputFields(view.input, path + "/input");
-    used.add("read");
     declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`,
       `const ${fn}Caller = ${step(c, path, fieldNames)} as const;`, ...(mode === "caller" ? [`const ${fn}Trusted = ${step(trusted!, path, fieldNames)} as const;`] : []),
       `async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path),
-      ...(mode === "caller" ? [`  const m = caller.kind === "system" ? ${fn}Trusted : ${fn}Caller;`, `  return read(db, m.sql, binds(D, m.binds, caller, raw)) as View${index}Row[] | Promise<View${index}Row[]>;`] : [`  return read(db, ${fn}Caller.sql, binds(D, ${fn}Caller.binds, caller, raw)) as View${index}Row[] | Promise<View${index}Row[]>;`]), "}");
+      `  const m = ${mode === "caller" ? `caller.kind === "system" ? ${fn}Trusted : ` : ""}${fn}Caller;`, `  return DRIVER.read(db, m.sql, binds(D, m.binds, caller, raw));`, "}");
     views.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
     entries[`views/${encodeURIComponent(name)}.ts`] = entry("view", name, `View${index}Input as Input, View${index}Row as Row`);
@@ -120,31 +100,26 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
     if (!("sql" in procedure.handler)) { refuse(path, "Ref handlers require an explicit generated application implementation."); continue; }
     const modes = lowered.procedures[name];
     if (!modes?.caller || !modes.trusted) { refuse(path, "Both caller and trusted SQL must be lowered."); continue; }
-    if (modes.caller.some(s => s.hooked || s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing and lifecycle hooks require explicit native execution.");
+    if ([...modes.caller, ...modes.trusted].some(s => s.hooked || s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing and lifecycle hooks require explicit native execution.");
     const fieldNames = inputFields(procedure.input, path + "/input");
     const steps = (statements: readonly LoweredStatement[]) => `[${statements.map(s => step(s, path, fieldNames, s.kind === "row")).join(", ")}] as const`;
     const same = steps(modes.caller) === steps(modes.trusted);
-    used.add("procedure"); used.add("bound");
-    declarations.push(`export type Procedure${index}Input = ${queryInputType(procedure.input, [...modes.caller, ...modes.trusted])};`, `export type Procedure${index}Output = { readonly results: ReadonlyArray<ReadonlyArray<Record<string, unknown>>> };`,
+    declarations.push(`export type Procedure${index}Input = ${queryInputType(procedure.input, [...modes.caller, ...modes.trusted])};`,
       `const ${fn}Caller = ${steps(modes.caller)};`, ...(same ? [] : [`const ${fn}Trusted = ${steps(modes.trusted)};`]),
-      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Procedure${index}Output> {`, ...auth(procedure.requires, path),
-      `  const results = await procedure(db, bound(D, ${same ? `${fn}Caller` : `caller.kind === "system" ? ${fn}Trusted : ${fn}Caller`}, caller, raw), ${q(path)});`,
-      `  return { results } as Procedure${index}Output;`, "}");
+      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...auth(procedure.requires, path),
+      `  return { results: await DRIVER.procedure(db, bound(D, ${same ? "" : `caller.kind === "system" ? ${fn}Trusted : `}${fn}Caller, caller, raw), ${q(path)}) };`, "}");
     procedures.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
-    entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input, Procedure${index}Output as Output`);
+    entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input`, `export type { Output } from "${base}contracts";\n`);
   }
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse);
   if (diagnostics.length) return { ok: false, diagnostics };
-  const base = "@aotter/mantle-next/";
-  const dbType = target === "bun-sqlite" ? `import type { Handle as Database } from "${base}driver/bun-sqlite";` : target === "cloudflare-d1" ? `import type { Handle as Database } from "${base}driver/d1";` : `import type { Postgres as Database } from "${base}contracts";`;
-  const driverImports = [...["read", "procedure"].filter(n => used.has(n))];
-  return { ok: true, files: { ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import type { Caller } from "${base}contracts";`,
-    ...(used.has("ContractError") ? [`import { ContractError } from "${base}contracts";`] : []),
-    ...(values.size ? [`import { ${[...values].sort().join(", ")} } from "${base}dialect/${isSqlite ? "sqlite" : "postgres"}";`] : []),
-    ...(stores ? [`import * as DIALECT from "${base}dialect/${isSqlite ? "sqlite" : "postgres"}";`] : []),
-    ...(driverImports.length ? [`import { ${driverImports.join(", ")} } from "${base}driver/${driver}";`] : []),
-    ...(stores ? [`import * as DRIVER from "${base}driver/${driver}";`, `import { createStore } from "${base}store";`] : []),
-    `import { ${["binds", ...(used.has("bound") ? ["bound"] : [])].join(", ")} } from "${base}binds";`,
-    `const D = { ${[...values].sort().join(", ")} };`, ...declarations, ...(stores ? [`export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`, `export const store = /* @__PURE__ */ createStore<Database, Tables>(DIALECT, DRIVER, RULES, ${stores.facts});`] : []), `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ""].join("\n") } };
+  const code = [...declarations, ...(stores ? [`export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`, `export const store = /* @__PURE__ */ createStore<Database, Tables>(DIALECT.dialect, DRIVER, RULES, ${stores.facts});`] : []), `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`].join("\n");
+  const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
+  const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(/^  deny\(/m.test(code) ? ["deny"] : []), ...(procedures.length ? ["type Output"] : [])];
+  const dbType = target === "bun-sqlite" ? `import type { Handle as Database } from "${base}driver/bun-sqlite";` : target === "cloudflare-d1" ? `import type { Handle as Database } from "${base}driver/d1";` : "";
+  return { ok: true, files: { ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
+    ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...(stores ? [`import { createStore } from "${base}store";`] : []),
+    `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}binds";`,
+    `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" } };
 }

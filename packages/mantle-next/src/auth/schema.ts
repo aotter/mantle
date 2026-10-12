@@ -14,14 +14,12 @@ export type AuthDialect = "sqlite" | "postgres";
 
 function columnType(field: DBFieldAttribute, dialect: AuthDialect): string {
   const pg = dialect === "postgres";
-  if (Array.isArray(field.type)) return "text";
+  // Anything else, including the arrays the factory stores as JSON text, is text (Bun.SQL would encode that text into jsonb as a JSON string).
   switch (field.type) {
     case "number": return field.bigint ? "bigint" : "integer";
     case "boolean": return pg ? "boolean" : "integer";
     case "date": return pg ? "timestamptz" : "text";
     case "json": return pg ? "jsonb" : "text";
-    // The factory stores arrays as JSON text (supportsArrays: false); Bun.SQL would encode that text into jsonb as a JSON string.
-    case "string[]": case "number[]": return "text";
     default: return "text";
   }
 }
@@ -60,9 +58,6 @@ function orderedTables(options: BetterAuthOptions): Tables {
   return ordered;
 }
 
-/** Table names in creation order; drop them in reverse. */
-export const authTableNames = (options: BetterAuthOptions): string[] => orderedTables(options).map(([name]) => name);
-
 export function authSchemaSql(options: BetterAuthOptions, dialect: AuthDialect): string[] {
   const generateId = options.advanced?.database?.generateId;
   const idType = generateId === "serial" ? "integer" : generateId === "uuid" && dialect === "postgres" ? "uuid" : "text";
@@ -76,7 +71,7 @@ export function authSchemaSql(options: BetterAuthOptions, dialect: AuthDialect):
     const columns = [`${ident("id")} ${idColumn}`];
     for (const [column, field] of Object.entries(table.fields)) {
       if (column === "id") continue;
-      const type = field.references?.field === "id" ? (generateId === "serial" ? "integer" : idType) : columnType(field, dialect);
+      const type = field.references?.field === "id" ? idType : columnType(field, dialect);
       columns.push([
         ident(column), type,
         field.required !== false && "NOT NULL",

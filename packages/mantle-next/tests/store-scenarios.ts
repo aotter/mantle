@@ -93,7 +93,8 @@ export async function verifyStore(env: StoreEnv) {
   assert.equal(filtered.length, rowsA.filter(r => r.approved && r.sortBucket === null).length); assert.ok(filtered.every((r: any) => r.sortbucket === null && (r.approved === 1 || r.approved === true))); ok();
   const last = await a.find({ limit: ROWS }); assert.equal(last.cursor === null || last.rows.length === ROWS, true); ok();
   // a forged or malformed cursor is only ever bound values: it cannot leave the scope, and a bad one is an error or an empty page
-  for (const cursor of ["%%%", btoa("[1,2]"), "null", "[]", encodeURIComponent(JSON.stringify([{ a: 1 }, ["x"]])), encodeURIComponent(JSON.stringify([`' OR 1=1 --`, `' OR 1=1 --`]))]) await elsewhere(a.find({ cursor, limit: 500 }));
+  for (const cursor of ["%%%", btoa("[1,2]"), "null", "[]", "[1,2,3]", encodeURIComponent("{}")]) await refused(a.find({ cursor, limit: 500 })); // not a cursor
+  for (const cursor of [encodeURIComponent(JSON.stringify([{ a: 1 }, ["x"]])), encodeURIComponent(JSON.stringify([`' OR 1=1 --`, `' OR 1=1 --`]))]) await elsewhere(a.find({ cursor, limit: 500 }));
   for (const forged of [[bRow.id, bRow.id], ["", ""], [null, bRow.id]]) {
     for (const orderBy of ["id", "title"] as const) assert.ok((await a.find({ orderBy, cursor: encodeURIComponent(JSON.stringify(forged)), limit: 500 })).rows.every((r: any) => !rowsB.some(x => x.id === r.id)));
   }

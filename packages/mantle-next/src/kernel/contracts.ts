@@ -27,6 +27,18 @@ export class ContractError extends Error {
   }
 }
 
+/** One result row. */
+export type Row = Record<string, unknown>;
+/** What every generated Procedure returns: the rows of each statement, in order. */
+export type Output = { readonly results: ReadonlyArray<ReadonlyArray<Row>> };
+/** Deny unless `allowed`: a user is AUTH_DENIED, anyone else UNAUTHENTICATED. */
+export function deny(caller: Caller, allowed: boolean, path: string): void {
+  if (!allowed) throw new ContractError(caller.kind === "user" ? "AUTH_DENIED" : "UNAUTHENTICATED", "Authorization predicate not satisfied.", path);
+}
+/** CONFLICT for a write the database refused: a unique-index clash, or a row statement that did not change exactly one row. */
+export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
+  new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : "Expected one affected row.", path, { cause });
+
 /** One result of `unsafe`: the rows (typed by the generated function), plus the affected count. */
 export type PostgresResult = any[] & { readonly count: number | null };
 /**
@@ -36,5 +48,7 @@ export type PostgresResult = any[] & { readonly count: number | null };
  */
 export interface Postgres {
   unsafe(text: string, values: any[]): PromiseLike<PostgresResult>;
-  begin(options: string, fn: (tx: Postgres) => Promise<unknown[][]>): PromiseLike<unknown[][]>;
+  begin(options: string, fn: (tx: Postgres) => Promise<Row[][]>): PromiseLike<Row[][]>;
 }
+/** What a read or a single statement needs: a transaction handle suits it too. */
+export type Unsafe = Pick<Postgres, "unsafe">;
