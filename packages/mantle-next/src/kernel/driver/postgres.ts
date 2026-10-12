@@ -1,6 +1,9 @@
 /** Bun.SQL's PostgreSQL shape (`Postgres`); postgres.js satisfies it as it is. */
 import type { Bound } from "../binds.js";
+import type { TransactionOptions } from "../store.js";
 import { conflict, ContractError, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
+
+const transactions = new WeakSet<Postgres>();
 
 export const read = (db: Unsafe, sql: string, binds: unknown[]): PromiseLike<PostgresResult> => db.unsafe(sql, binds);
 export async function run(db: Unsafe, sql: string, binds: unknown[]): Promise<{ rows: any[]; changes: number }> {
@@ -36,11 +39,27 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
     }
     return results;
   };
+  if (transactions.has(db)) return execute(db);
   if (steps.length === 1) {
     try { return await execute(db); } catch (error) { throw error instanceof ContractError ? error : postgresOutcome(error, path); }
   }
+  return transaction(db, execute, undefined, path);
+}
+
+/** Shared BEGIN/COMMIT outcome handling for Procedures and interactive Store transactions. */
+export async function transaction<T>(db: Postgres, fn: (tx: Postgres) => Promise<T>, options: TransactionOptions = {}, path = "store/transaction"): Promise<T> {
+  if (transactions.has(db)) throw new Error("Nested transactions are not supported.");
   let committing = false;
-  try { return await db.begin("isolation level serializable", async tx => { const rows = await execute(tx); committing = true; return rows; }); } catch (error) {
-    throw error instanceof ContractError || !committing ? error : postgresOutcome(error, path);
-  }
+  try {
+    return await db.begin(`isolation level ${options.isolation ?? "serializable"}`, async handle => {
+      let active = true;
+      const tx: Postgres = { unsafe: (sql, values) => {
+        if (!active) throw new Error("Transaction has ended.");
+        return handle.unsafe(sql, values);
+      }, begin: async () => { throw new Error("Nested transactions are not supported."); } };
+      transactions.add(tx);
+      try { const result = await fn(tx); committing = true; return result; }
+      finally { active = false; }
+    });
+  } catch (error) { throw error instanceof ContractError || !committing ? error : postgresOutcome(error, path); }
 }

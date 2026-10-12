@@ -30,7 +30,7 @@ if (includeBench) {
 }
 assert.ok(!selected || targets.includes(selected as Target), "unknown native target");
 const caller = (owner: string | null): Caller => owner === null ? { kind: "anonymous" } : user(owner);
-const sources = await loadFixtureSources("purchase.yaml", "store-extra.yaml", "store-equivalence.yaml");
+const sources = await loadFixtureSources("purchase.yaml", "store-extra.yaml", "store-equivalence.yaml", "store-transactions.yaml");
 for (const target of selected ? [selected as Target] : targets) {
   const files = await generateOrThrow(target, sources);
   const directory = resolve(base, "tests/apps/.generated", target);

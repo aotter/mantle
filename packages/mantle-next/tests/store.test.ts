@@ -15,7 +15,7 @@ type Calls = { sql: string; values: unknown[] }[];
 const directory = resolve(import.meta.dir, "apps/.generated", `store-${crypto.randomUUID()}`);
 afterAll(() => rm(directory, { recursive: true, force: true }));
 async function generated(target: Target) {
-  const files = await generateOrThrow(target, await loadFixtureSources("purchase.yaml", "store-extra.yaml", "store-equivalence.yaml"));
+  const files = await generateOrThrow(target, await loadFixtureSources("purchase.yaml", "store-extra.yaml", "store-equivalence.yaml", "store-transactions.yaml"));
   await writeGenerated(resolve(directory, target), files);
   return { app: await import(resolve(directory, target, "generated.ts")), schema: files["schema.sql"]!, types: files["generated.ts"]! };
 }

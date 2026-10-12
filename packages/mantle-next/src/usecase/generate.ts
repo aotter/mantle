@@ -114,7 +114,7 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
   }
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse);
   if (diagnostics.length) return { ok: false, diagnostics };
-  const code = [...declarations, ...(stores ? [`export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`, `export const store = /* @__PURE__ */ createStore<Database, Tables>(DIALECT.dialect, DRIVER, RULES, ${stores.facts});`] : []), `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`].join("\n");
+  const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [`export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`, `export const store = /* @__PURE__ */ createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof procedures }>(DIALECT.dialect, DRIVER, RULES, ${stores.facts}, { views, procedures });`] : [])].join("\n");
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
   const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(/^  deny\(/m.test(code) ? ["deny"] : []), ...(procedures.length ? ["type Output"] : [])];
   const dbType = target === "bun-sqlite" ? `import type { Handle as Database } from "${base}driver/bun-sqlite";` : target === "cloudflare-d1" ? `import type { Handle as Database } from "${base}driver/d1";` : "";

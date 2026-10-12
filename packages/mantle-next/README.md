@@ -40,6 +40,18 @@ state column names, value types and the writable columns, and the Store enforces
 **not** a View's or Procedure's `requires`: authorize before calling it. Design, limits and what the runtime still refuses are in
 [ADR-0045](../../docs/adr/0045-next-runtime-core.md).
 
+## Store transactions
+
+Writes are lazy thenables: await `collection.insert/update/delete(...)` to execute once,
+or pass unused Writes from the same Store to `store.batch([...])` for atomic results in input order;
+a stale lock, excluded row or unique clash rolls back the whole batch with `CONFLICT`.
+A batch step cannot use a previous step's result. D1 supports only batch.
+On bun:sqlite and PostgreSQL, `store.transaction(async tx => { ... })` binds `collection`, `views`
+and `procedures` to one transaction: resolve commits, throw rolls back; nested transactions and `tx.batch` are refused.
+PostgreSQL defaults to serializable; `{ isolation: "read committed" }` selects another level. There is no automatic retry.
+SQLite uses BEGIN IMMEDIATE and queues all Store/generated driver calls on the same Database until COMMIT/ROLLBACK;
+use `tx` inside the callback and keep direct native Database calls outside it.
+
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain
 row expectations inside native atomic transactions. A single-statement Procedure

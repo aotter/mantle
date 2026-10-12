@@ -1,13 +1,7 @@
 /**
- * The Store: one generic runtime over every collection (a Schema's table), on any dialect and driver, in the shape of a
- * document-database driver. A collection is a `Fact` of a few bytes (its scope column, TTL, publishing flag and which columns
- * are date-times or dates); everything else is one shared `Rules` object that the generator evaluates from Core's `rowPolicy`
- * and `writePolicy`, so the row rules are spelled once, in Core. Column names are the storage names, always quoted by the dialect:
- * an unknown one is a database error, never SQL. Column names, value types, operators, `order`, ids, lock values, writable columns
- * and `orderBy` are enforced by the generated TypeScript types only: every value is a bound parameter, so what the types forbid is
- * a database error or a wrong result inside the caller's rows. Refused here: what a type cannot guarantee (`limit` is printed into
- * the SQL; a write naming a system or scope column; `undefined`, which a driver binds as NULL; any write to a publishing Schema).
- * The Store does not check a View's or Procedure's `requires`.
+ * Generic Store over Core's rowPolicy/writePolicy rules and per-Schema Facts (scope, TTL, publishing, dates).
+ * Generated types own storage column names, values, filters and writable columns; the dialect quotes names and binds values.
+ * Runtime refuses unsafe limits, system/scope writes, undefined values and publishing writes. It applies row rules, not requires.
  */
 import { binds as evaluate, encode, type Bound, type Recipe } from "./binds.js";
 import { ContractError, type Caller, type Row } from "./contracts.js";
@@ -54,6 +48,7 @@ export function expand(r: Rules, f: Fact) {
 export interface Driver<H> {
   read(db: H, sql: string, binds: unknown[]): unknown[] | PromiseLike<unknown[]>;
   procedure(db: H, steps: readonly Bound[], path: string): Promise<Row[][]>;
+  transaction?<R>(db: H, fn: (tx: H) => Promise<R>, options?: TransactionOptions): Promise<R>;
 }
 
 /** What the generator knows of a collection: its row, its filterable columns, its writable columns, which of those an insert must give, and the NOT NULL indexed columns `orderBy` may name. */
@@ -71,18 +66,28 @@ export interface Collection<T extends Table> {
   first(query?: Omit<Query<T["fields"], T["order"]>, "limit" | "cursor">): Promise<RowOf<T> | null>;
   count(where?: Where<T["fields"]>): Promise<number>;
   /** The new row: the writable columns, with scope, author, clock and id filled by the row rules. A caller with no subject inserts nothing (the scope column is NOT NULL). */
-  insert(values: Insert<T>): Promise<RowOf<T>>;
+  insert(values: Insert<T>): Write<RowOf<T>>;
   /** Writes only the columns given. `lock` is the version the caller read; a different one (or a row the caller cannot see) is CONFLICT, and so is a unique-index clash. Returns the new row. */
-  update(id: string, set: Readonly<Partial<T["set"]>>, options: { readonly lock: number | string }): Promise<RowOf<T>>;
+  update(id: string, set: Readonly<Partial<T["set"]>>, options: { readonly lock: number | string }): Write<RowOf<T>>;
   /** CONFLICT when the version differs or the caller cannot see the row. */
-  delete(id: string, options: { readonly lock: number | string }): Promise<void>;
+  delete(id: string, options: { readonly lock: number | string }): Write<void>;
 }
-export interface Store<T extends Record<string, Table>> { collection<K extends keyof T & string>(name: K): Collection<T[K]> }
+/** Lazy, single-execution write: await directly or submit once to its Store's batch. */
+export interface Write<T> extends PromiseLike<T> {}
+export interface TransactionOptions { readonly isolation?: "serializable" | "repeatable read" | "read committed" | "read uncommitted" }
+export interface Store<T extends Record<string, Table>> {
+  collection<K extends keyof T & string>(name: K): Collection<T[K]>;
+  batch<const W extends readonly Write<unknown>[]>(writes: W): Promise<{ -readonly [K in keyof W]: Awaited<W[K]> }>;
+}
+type Operations<H> = Record<string, Record<string, (db: H, caller: Caller, input: any) => Promise<any>>>;
+type BoundOperations<O> = { [K in keyof O]: { [N in keyof O[K]]: O[K][N] extends (db: any, caller: Caller, ...args: infer A) => infer R ? (...args: A) => R : never } };
+type Tx<T extends Record<string, Table>, O> = Pick<Store<T>, "collection"> & BoundOperations<O>;
+type Interactive<T extends Record<string, Table>, O> = { transaction<R>(fn: (tx: Tx<T, O>) => Promise<R>, options?: TransactionOptions): Promise<R> };
 
 interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; byId?: string }
 interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; select?: string; returning?: string; readonly policy: (Policy | undefined)[] }
 
-export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv: Driver<H>, rules: Rules, facts: { readonly [K in keyof T]: Fact }): (db: H, caller: Caller) => Store<T> {
+export function createStore<H, T extends Record<string, Table>, D extends Driver<H> = Driver<H>, O extends Operations<H> = {}>(d: Dialect, drv: D, rules: Rules, facts: { readonly [K in keyof T]: Fact }, operations?: O): (db: H, caller: Caller) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O> : {}) {
   const prepared = new Map<string, Prepared>();
   const prepare = (name: string): Prepared => {
     let p = prepared.get(name);
@@ -102,9 +107,41 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
   /** The row rules of one mode, numbered from 1; the SQL is rendered once per mode. */
   const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => p.policy[+trusted] ??= { sql: terms.map((t, i) => term(t, "r.", d.param(i + 1))).join(" AND "), recipes: terms.map(t => t[2]) };
 
-  return (db, caller) => ({ collection: name => collection(db, caller, prepare(name)) as never });
+  return ((db: H, caller: Caller) => make(db, caller)) as never;
 
-  function collection(db: H, caller: Caller, p: Prepared) {
+  function make(db: H, caller: Caller, inTransaction = false) {
+    type Pending = { build: () => Bound; project: (rows: Row[]) => unknown; promise?: Promise<any>; claimed?: boolean };
+    const pending = new WeakMap<Write<unknown>, Pending>();
+    const write = (build: Pending["build"], project: Pending["project"], path: string): Write<unknown> => {
+      const state: Pending = { build, project };
+      const value: Write<unknown> = { then: (yes, no) => {
+        if (!state.promise) {
+          state.promise = state.claimed ? Promise.reject(new Error("Write has already been batched.")) : Promise.resolve().then(async () => project((await drv.procedure(db, [build()], path))[0]!));
+          state.claimed = true;
+        }
+        return state.promise.then(yes, no);
+      } };
+      pending.set(value, state);
+      return value;
+    };
+    return {
+      collection: (name: string) => collection(db, caller, prepare(name), write),
+      ...Object.fromEntries(Object.entries(operations ?? {}).map(([kind, functions]) => [kind, Object.fromEntries(Object.entries(functions).map(([name, fn]) => [name, (input: any) => fn(db, caller, input)]))])),
+      ...(!inTransaction && { batch: async (writes: readonly Write<unknown>[]) => {
+        const states = writes.map(w => pending.get(w));
+        if (new Set(writes).size !== writes.length || states.some(s => !s || s.claimed)) throw new Error("Batch needs unused Writes from this Store.");
+        for (const s of states) s!.claimed = true;
+        const rows = writes.length ? await drv.procedure(db, states.map(s => s!.build()), "store/batch") : [];
+        return states.map((s, i) => s!.project(rows[i]!));
+      } }),
+      ...(drv.transaction && { transaction: async (fn: (tx: any) => Promise<any>, options?: TransactionOptions) => {
+        if (inTransaction) throw new Error("Nested transactions are not supported.");
+        return drv.transaction!(db, tx => fn(make(tx, caller, true)), options);
+      } }),
+    };
+  }
+
+  function collection(db: H, caller: Caller, p: Prepared, write: (build: () => Bound, project: (rows: Row[]) => unknown, path: string) => Write<unknown>) {
     const trusted = caller.kind === "system", { f, x } = p, terms = trusted ? x.trusted : x.caller, pol = policy(p, trusted, terms), no = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", `${p.name}: ${message}`);
     /** A value as the engine stores it, as a placeholder. Date-times and dates are known from the fact; a JSON object is told by its JS type (a boolean binds as it is on every driver). */
     const put = (values: unknown[], column: string, v: unknown): string => {
@@ -171,8 +208,8 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
       });
       /** `WHERE id = ? AND <the caller's row rules> AND version = ?` */
       const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...terms, x.lock].map(t => term(t, "", recipe(t[2])))].join(" AND ")}`;
-      const run = async (sql: string, verb: string) => clean((await drv.procedure(db, [{ sql, binds: values, row: true }], `${p.name}/${verb}`))[0]!);
-      return { given, recipe, guard, run, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
+      const step = (sql: string): Bound => ({ sql, binds: values, row: true });
+      return { given, recipe, guard, step, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };
 
     return {
@@ -187,21 +224,21 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
         const values = base(), conds = conditions(w, values);
         return Number(((await rows(`SELECT COUNT(*) AS "count"${p.from}${where(conds)}`, values))[0] as { count: unknown }).count);
       },
-      async insert(set: object) {
+      insert(set: object) { return write(() => {
         const w = writer(), names: string[] = [], marks: string[] = [];
         for (const [name, mark] of w.given(set)) { names.push(name); marks.push(mark); }
         for (const [column, v] of x.fills) { names.push(d.ident(column)); marks.push(v === "newId" ? rules.newId : w.recipe(v)); }
-        return (await w.run(`INSERT INTO ${w.into} (${names.join(", ")}) VALUES (${marks.join(", ")})${w.returning()}`, "insert"))[0];
-      },
-      async update(id: string, set: object, { lock }: { lock: number | string }) {
+        return w.step(`INSERT INTO ${w.into} (${names.join(", ")}) VALUES (${marks.join(", ")})${w.returning()}`);
+      }, rows => clean(rows)[0], `${p.name}/insert`); },
+      update(id: string, set: object, { lock }: { lock: number | string }) { return write(() => {
         const w = writer(lock), assigns = w.given(set).map(([name, mark]) => `${name} = ${mark}`);
         for (const [column, v] of x.sets) assigns.push(`${d.ident(column)} = ${v === "bump" ? `${d.ident(column)} + 1` : w.recipe(v)}`);
-        return (await w.run(`UPDATE ${w.into} SET ${assigns.join(", ")}${w.guard(id)}${w.returning()}`, "update"))[0];
-      },
-      async delete(id: string, { lock }: { lock: number | string }) {
+        return w.step(`UPDATE ${w.into} SET ${assigns.join(", ")}${w.guard(id)}${w.returning()}`);
+      }, rows => clean(rows)[0], `${p.name}/update`); },
+      delete(id: string, { lock }: { lock: number | string }) { return write(() => {
         const w = writer(lock);
-        await w.run(`DELETE FROM ${w.into}${w.guard(id)}`, "delete");
-      },
+        return w.step(`DELETE FROM ${w.into}${w.guard(id)}`);
+      }, () => undefined, `${p.name}/delete`); },
     };
   }
 }

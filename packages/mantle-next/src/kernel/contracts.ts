@@ -43,12 +43,12 @@ export const conflict = (path: string, unique: boolean, cause?: unknown): Contra
 export type PostgresResult = any[] & { readonly count: number | null };
 /**
  * The PostgreSQL handle bare generated code calls: Bun.SQL's own shape, so Bun passes its `SQL` directly. A Bun
- * transaction handle suits Views and single-statement Procedures; multi-statement Procedures call `begin` themselves. Other drivers adapt to it (see README). `begin` must run every statement of `fn` on one connection and
+ * transaction handle suits generated queries; the driver marks Store transaction handles to suppress nested `begin`. Other drivers adapt to it (see README). `begin` must run every statement of `fn` on one connection and
  * COMMIT only after `fn` resolves.
  */
 export interface Postgres {
   unsafe(text: string, values: any[]): PromiseLike<PostgresResult>;
-  begin(options: string, fn: (tx: Postgres) => Promise<Row[][]>): PromiseLike<Row[][]>;
+  begin<T>(options: string, fn: (tx: Postgres) => Promise<T>): PromiseLike<T>;
 }
 /** What a read or a single statement needs: a transaction handle suits it too. */
 export type Unsafe = Pick<Postgres, "unsafe">;

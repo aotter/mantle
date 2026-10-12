@@ -16,9 +16,8 @@ Next removes that intermediate executor rather than accelerating it.
 Day-one targets are Bun SQLite, Bun PostgreSQL, Cloudflare D1, and Cloudflare
 PostgreSQL. Workers validation uses local Wrangler only. Bare PostgreSQL entries
 call Bun.SQL's own shape (`Postgres`: `unsafe(text, values)` and
-`begin(options, fn)`), so Bun passes its `SQL` directly. A Bun transaction handle
-also works for Views and single-statement Procedures; a multi-statement Procedure
-opens its own transaction, which Bun refuses inside another (no write happens). postgres.js
+`begin(options, fn)`), so Bun passes its `SQL` directly. Store transaction handles also run multi-statement
+Procedures within the existing transaction (ADR-0045). postgres.js
 satisfies the same shape with no adapter (Workers PostgreSQL over Hyperdrive:
 `postgres(env.HYPERDRIVE.connectionString)`; verified by `verify-native cloudflare-postgres`); other drivers are
 application-owned adapters. Date-time, date and JSON inputs are declared text in the SQL (and in the Store's

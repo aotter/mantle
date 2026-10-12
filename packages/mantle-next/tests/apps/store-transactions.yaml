@@ -1,0 +1,9 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: create-session-note-pair}
+spec:
+  requires: {auth: {all: [ctx.user]}}
+  input: {type: object, required: [body, expiresAt], properties: {body: {type: string}, expiresAt: {type: [string, "null"], format: date-time}}, additionalProperties: false}
+  output: {type: object, required: [results], properties: {results: {type: array}}}
+  handler:
+    sql: 'INSERT INTO session_notes (body, expiresAt) VALUES (input.body, input.expiresAt) RETURNING id; INSERT INTO session_notes (body, expiresAt) VALUES (input.body, input.expiresAt) RETURNING id'

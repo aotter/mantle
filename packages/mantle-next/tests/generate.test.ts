@@ -123,19 +123,28 @@ test("bare PG writes on the Bun.SQL shape read a unique clash as CONFLICT and si
     }
     // Two statements: begin() owns the connection and ROLLBACK; only a failed COMMIT is uncertain.
     for (const [failure, expected] of [["execute", "CONFLICT"], ["commit-40001", "native"], ["commit-57P01", "OUTCOME_UNKNOWN"], ["commit-socket", "OUTCOME_UNKNOWN"]] as const) {
-      const error = failure === "execute" ? server("23505") : failure === "commit-socket" ? socket() : server(failure.slice(7));
-      const calls: string[] = [];
-      const tx = { unsafe: async (text: string) => { calls.push(text); if (failure === "execute") throw error; return Object.assign([], { count: 1 }); } };
-      const db = { unsafe: async () => { throw Error("statements must run inside begin()"); }, begin: async (options: string, fn: (t: unknown) => Promise<unknown>) => {
-        calls.push("BEGIN " + options);
-        try { await fn(tx); } catch (e) { calls.push("ROLLBACK"); throw e; }
-        calls.push("COMMIT"); throw error;
-      } };
-      let caught: any;
-      try { await module.procedures["create-note-pair"](db, caller, { title: "t" }); } catch (e) { caught = e; }
-      expect(calls[0]).toBe("BEGIN isolation level serializable");
-      if (expected === "native") expect(caught).toBe(error); else { expect(caught.code).toBe(expected); expect(caught.cause).toBe(error); }
-      expect(calls.at(-1)).toBe(failure === "execute" ? "ROLLBACK" : "COMMIT");
+      for (const operation of ["procedure", "batch", "transaction"] as const) {
+        const error = failure === "execute" ? server("23505") : failure === "commit-socket" ? socket() : server(failure.slice(7));
+        const calls: string[] = [];
+        const tx = { unsafe: async (text: string) => { calls.push(text); if (failure === "execute") throw error; return Object.assign([], { count: 1 }); } };
+        const db = { unsafe: async () => { throw Error("statements must run inside begin()"); }, begin: async (options: string, fn: (t: unknown) => Promise<unknown>) => {
+          calls.push("BEGIN " + options);
+          try { await fn(tx); } catch (e) { calls.push("ROLLBACK"); throw e; }
+          calls.push("COMMIT"); throw error;
+        } };
+        let caught: any;
+        try {
+          if (operation === "procedure") await module.procedures["create-note-pair"](db, caller, { title: "t" });
+          else {
+            const store = module.store(db, caller);
+            if (operation === "batch") await store.batch([store.collection("notes").insert({ title: "one" }), store.collection("notes").insert({ title: "two" })]);
+            else await store.transaction(async (tx: any) => tx.procedures["create-note-pair"]({ title: "t" }));
+          }
+        } catch (e) { caught = e; }
+        expect(calls[0]).toBe("BEGIN isolation level serializable");
+        if (expected === "native") expect(caught).toBe(error); else { expect(caught.code).toBe(expected); expect(caught.cause).toBe(error); }
+        expect(calls.at(-1)).toBe(failure === "execute" ? "ROLLBACK" : "COMMIT");
+      }
     }
   }
 });

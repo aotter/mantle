@@ -86,13 +86,18 @@ block, for every Schema repeats what the database and the generated types alread
      which used to rethrow it natively.
 6. **The Store does not check `requires`.** As in 0.2, `requires` gates Views and Procedures; a custom handler runs
    after its Procedure's gate. The Store applies row rules only.
+7. **Store transactions reuse Procedure atomicity.** Lazy single-execution Writes await individually or batch as row steps
+   through the existing driver `procedure`, including D1's `_mantle_assert` and PostgreSQL's COMMIT outcome classification.
+   Only SQLite and PostgreSQL expose interactive transactions; transaction handles mark Procedures to run the same statement
+   loop without nested BEGIN. SQLite queues driver work per Database around BEGIN IMMEDIATE/COMMIT/ROLLBACK; PostgreSQL
+   uses native `begin`, serializable by default with an isolation override. Nested transactions are refused; no automatic retry.
 
 ## Consequences
 
 - Each concern has one home; the Better Auth adapter keeps only Better Auth's own semantics (OR grouping, joins).
-- Store runtime (store, binds, where and contracts, bundled with esbuild and minified, one harness): 5,433 bytes (gzip 2,752).
+- Store runtime (`src/kernel/store.ts` bundled with esbuild 0.28.1, minified ESM): 6,414 bytes (gzip 3,214).
   Per Schema fact: 2-54 bytes (gzip 22-71); the shared rules are 396-413 bytes once. `generated.ts` for the purchase and Store
-  fixtures: 23.6 KB on D1, 24.3 KB on Bun PostgreSQL. The deployment bundle budgets and package ceilings are in
+  fixtures: 23,718 bytes on D1, 24,429 on Bun PostgreSQL. The deployment bundle budgets and package ceilings are in
   `size-budgets.json` and `scripts/check-package.ts`.
 - Warm cost on bun:sqlite over the same SQL run by hand (p50, 6,000 interleaved pairs): `findById` +0.17 µs, `find` (50 rows,
   including two `delete`s per row) +3.2 µs, 3-condition `find` +5.0 µs, cursor page +5 µs, `count` +0.6 µs, `insert` +9 µs, `update`
