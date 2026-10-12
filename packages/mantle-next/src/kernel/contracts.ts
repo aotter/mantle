@@ -20,13 +20,19 @@ export type Caller =
 
 
 export class ContractError extends Error {
-  constructor(readonly code: string, message: string, readonly path = "", options?: ErrorOptions) {
+  /** HTTP status for codes outside the core set `statusOf` maps. */
+  declare readonly status?: number;
+  /** Extra wire fields, after `code`, `message` and `path`. */
+  declare readonly fields?: Record<string, unknown>;
+  constructor(readonly code: string, message: string, readonly path = "", options?: ErrorOptions & { status?: number; fields?: Record<string, unknown> }) {
     super(message, options);
     this.name = "ContractError";
+    if (options?.status) this.status = options.status;
+    if (options?.fields) this.fields = options.fields;
   }
 }
 
-/** Only transport failures this package raises; unknown codes remain server errors. */
+/** Only the core transport failures; other codes carry their own status, and unknown codes remain server errors. */
 export function statusOf(code: string): number {
   switch (code) {
     case "INPUT_VALIDATION_FAILED": return 400;
@@ -35,21 +41,16 @@ export function statusOf(code: string): number {
     case "NOT_FOUND": return 404;
     case "METHOD_NOT_ALLOWED": return 405;
     case "CONFLICT": return 409;
-    case "MEDIA_PURPOSE_REJECTED": case "MEDIA_SVG_REJECTED": case "MEDIA_MIME_REJECTED": case "MEDIA_VARIANTS_INCOMPLETE": case "MEDIA_VARIANT_SIZE_EXCEEDED": case "MEDIA_VARIANTS_SUSPICIOUS_SIZE": return 400;
-    case "MEDIA_ASSET_NOT_FOUND": return 404;
-    case "MEDIA_OBJECT_NOT_FOUND": return 409;
-    case "MEDIA_UPLOAD_EXPIRED": return 410;
-    case "SITE_NOT_CONFIGURED": case "MEDIA_NOT_CONFIGURED": return 501;
-    case "PARTIAL_FAILURE": case "OUTCOME_UNKNOWN": return 503;
+    case "OUTCOME_UNKNOWN": return 503;
     default: return 500;
   }
 }
 
 /** Redact native errors at the selected boundary; the bare query preserves their identity. */
-export function wire(error: unknown) {
-  return error instanceof ContractError && statusOf(error.code) !== 500
-    ? { status: statusOf(error.code), error: { code: error.code, message: error.message, path: error.path, ...(error.code === "PARTIAL_FAILURE" ? {failure:{outcome:"partial",retry:"safe",resource:"media"}} : {}) } }
-    : { status: 500, error: { code: "INTERNAL_ERROR", message: "An internal error occurred.", path: "" } };
+export function wire(error: unknown): { status: number; error: { code: string; message: string; path: string; [field: string]: unknown } } {
+  const status = error instanceof ContractError ? error.status ?? statusOf(error.code) : 500;
+  if (status !== 500) { const { code, message, path, fields } = error as ContractError; return { status, error: { code, message, path, ...fields } }; }
+  return { status, error: { code: "INTERNAL_ERROR", message: "An internal error occurred.", path: "" } };
 }
 
 /** One result row. */

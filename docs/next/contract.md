@@ -300,6 +300,14 @@ native SQL write is durable; repeated commit returns the existing immutable id.
 Each R2 commit attempt owns different public keys; concurrent loser cleanup
 cannot affect the durable winner. A fully copied loser removes only its own
 unselected objects after reading the winning SQL row.
+
+Error statuses: the core `statusOf`/`wire` map only the core codes
+(`INPUT_VALIDATION_FAILED`, `UNAUTHENTICATED`, `AUTH_DENIED`, `NOT_FOUND`,
+`METHOD_NOT_ALLOWED`, `CONFLICT`, `OUTCOME_UNKNOWN`); any other `ContractError` carries
+its own `status` (and extra wire `fields`), otherwise it is a redacted 500. Raise media,
+site and `PARTIAL_FAILURE` codes with `mediaError(code, message, path?)` from
+`@aotter/mantle-next/media`, never `new ContractError("MEDIA_…")` directly; a custom
+`MediaStorage` that throws these codes without a status is given it by the library.
 An uncertain SQL outcome is propagated by the native driver. Retry that group
 rather than creating a replacement asset. Rejected objects are discarded.
 

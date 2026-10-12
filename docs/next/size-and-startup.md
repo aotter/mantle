@@ -14,8 +14,18 @@ about 14 µs of startup per operation (420 operations: 9.9 → 3.6 ms in Node, ~
 Workers) at the cost of one uploaded module per operation, so it was not adopted.
 The normal package test command runs this gate.
 
-`check:package` enforces the published file allowlist and the size ceilings in
-`scripts/check-package.ts`.
+The same command builds one Worker per surface from the `surfaces.yaml` fixture —
+REST only, MCP only, web only, and all three — and gates each startup graph against
+`startup:<surface>` in `size-budgets.json`. These are the bytes a deployment loads
+for each mounted surface; the MCP SDK stays a request-time chunk. Generated modules
+run no kernel code at import: a paged View exports a function over a constant spec,
+and REST routes carry their compiled path patterns.
+
+`check:package` enforces the published file allowlist and three ceilings: the
+runtime JavaScript a Worker can load (`dist/kernel` and `dist/auth`, `runtime` in
+`size-budgets.json`), and the whole package as an install-size limit (100 KiB packed,
+384 KiB unpacked in `scripts/check-package.ts`). The generator and CLI ship in the
+same package; tree-shaking and `guardStartup` keep them out of every Worker.
 
 ## Startup
 

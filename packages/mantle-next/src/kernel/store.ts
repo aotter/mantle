@@ -8,15 +8,8 @@ import { ContractError, type Caller, type Row } from "./contracts.js";
 import type { Dialect } from "./dialect/common.js";
 import { condition } from "./where.js";
 
-/** Shared keyset wire format; a selected View binds its cursor to its operation. */
-export const encodeCursor = (value: unknown, id: unknown, operation?: string): string => encodeURIComponent(JSON.stringify(operation === undefined ? [value, id] : [value, id, operation]));
-export function decodeCursor(cursor: string, path = "", operation?: string): [unknown, unknown] {
-  try {
-    const c = JSON.parse(decodeURIComponent(cursor));
-    if (Array.isArray(c) && c.length === (operation === undefined ? 2 : 3) && (operation === undefined || typeof c[1] === "string" && (typeof c[0] === "string" || typeof c[0] === "boolean" || typeof c[0] === "number" && Number.isFinite(c[0])) && c[2] === operation)) return [c[0], c[1]];
-  } catch {}
-  throw new ContractError("INPUT_VALIDATION_FAILED", "Malformed or foreign cursor.", path);
-}
+import { decodeCursor, encodeCursor } from "./paging.js";
+export { decodeCursor, encodeCursor };
 
 /** `eq`: `column = value`; `ttl`: `column IS NULL OR column > value` (Core's `RowTerm`). */
 export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe] | readonly [column: string, op: "staff", value: Recipe, published: string, roles: readonly string[]] | readonly [column: string, op: "parent", value: Recipe, parent: ParentPolicy];

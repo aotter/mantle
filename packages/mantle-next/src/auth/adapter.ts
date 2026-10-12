@@ -67,9 +67,11 @@ function customAdapter(d: Spelling, exec: Exec) {
       return exec(build({ bind, where }), values);
     };
     const idOf = (modelKey: string) => ident(getFieldName({ model: modelKey, field: "id" }));
-    /** `<id> IN (SELECT <id> FROM t WHERE ... LIMIT 1)`: the statement touches at most one row. */
+    /** The WHERE plus `<id> IN (SELECT <id> FROM t WHERE ... LIMIT 1)`: the statement touches at most one row. */
     const oneRow = (s: Statement, table: string, modelKey: string, where: CleanedWhere[]) =>
-      `${idOf(modelKey)} IN (SELECT ${idOf(modelKey)} FROM ${ident(table)}${s.where(modelKey, where)} LIMIT 1)`;
+      s.where(modelKey, where, `${idOf(modelKey)} IN (SELECT ${idOf(modelKey)} FROM ${ident(table)}${s.where(modelKey, where)} LIMIT 1)`);
+    /** The one row a `RETURNING *` statement changed, else null. */
+    const one = async (build: (s: Statement) => string) => ((await run(s => `${build(s)} RETURNING *`)).rows[0] ?? null) as never;
     /** The columns a write gives (an `undefined` is no value). */
     const cols = (values: Row) => Object.entries(values).filter(([, v]) => v !== undefined);
     const assign = (s: Statement, values: Row, increment: Record<string, number> = {}) =>
@@ -158,8 +160,7 @@ function customAdapter(d: Spelling, exec: Exec) {
       },
       async update({ model, modelKey = model, where, update }) {
         if (!where.length) return null;
-        const { rows } = await run(s => `${updateSql(s, model, modelKey, where, update as Row)} RETURNING *`);
-        return (rows[0] ?? null) as never;
+        return one(s => updateSql(s, model, modelKey, where, update as Row));
       },
       async updateMany({ model, modelKey = model, where, update }) {
         return (await run(s => updateSql(s, model, modelKey, where, update))).changes;
@@ -167,12 +168,10 @@ function customAdapter(d: Spelling, exec: Exec) {
       async delete(options) { await deleteMany(options); },
       deleteMany,
       async consumeOne({ model, modelKey = model, where }) {
-        const { rows } = await run(s => `DELETE FROM ${ident(model)}${s.where(modelKey, where, oneRow(s, model, modelKey, where))} RETURNING *`);
-        return (rows[0] ?? null) as never;
+        return one(s => `DELETE FROM ${ident(model)}${oneRow(s, model, modelKey, where)}`);
       },
       async incrementOne({ model, modelKey = model, where, increment, set }) {
-        const { rows } = await run(s => `UPDATE ${ident(model)} SET ${assign(s, set ?? {}, increment)}${s.where(modelKey, where, oneRow(s, model, modelKey, where))} RETURNING *`);
-        return (rows[0] ?? null) as never;
+        return one(s => `UPDATE ${ident(model)} SET ${assign(s, set ?? {}, increment)}${oneRow(s, model, modelKey, where)}`);
       },
       async count({ model, modelKey = model, where }) {
         const { rows } = await run(s => `SELECT COUNT(*) AS "count" FROM ${ident(model)}${s.where(modelKey, where)}`);
@@ -207,9 +206,8 @@ export function d1Adapter(db: D1Like) {
 /** Bun.SQL against PostgreSQL. Transactions use `sql.begin`, which pins every statement to one connection. */
 export function bunSqlAdapter(sql: SQL) {
   const executor = (handle: Pick<SQL, "unsafe">): Exec => (text, values) => bunSql.run(handle as never, text, values);
-  const factory = (options: BetterAuthOptions) =>
-    build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(sql), cb =>
-      sql.begin(tx => cb(build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(tx), false)(options))))(options);
+  const make = (handle: Pick<SQL, "unsafe">, transaction: DBAdapterFactoryConfig["transaction"]) => build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(handle), transaction);
+  const factory = (options: BetterAuthOptions) => make(sql, cb => sql.begin(tx => cb(make(tx, false)(options))))(options);
   nativeReaders.set(factory, { exec: executor(sql), param: postgres.param, now: postgres.now });
   return factory;
 }

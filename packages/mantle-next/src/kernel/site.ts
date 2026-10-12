@@ -1,5 +1,6 @@
 /** Optional site capability. Construction does no database work; deployment facts come from generated constants. */
-import { ContractError, deny, type Caller } from "./contracts.js";
+import { deny, type Caller } from "./contracts.js";
+import { invalid } from "./surface.js";
 import { mediaLibrary, type MediaDatabase } from "./media.js";
 import type { Dialect } from "./dialect/common.js";
 import type { MantleSite, SiteDefaults, SiteConfig, MediaPurposePolicy } from "./site-types.js";
@@ -14,9 +15,9 @@ export function createSite(db: MediaDatabase, d: Pick<Dialect,"param"|"escapeLik
   };
   return { read, async updateSettings(values) {
     staff();
-    if (!values || typeof values !== "object" || Array.isArray(values)) throw new ContractError("INPUT_VALIDATION_FAILED", "Site settings must be an object.", "site/settings");
+    if (!values || typeof values !== "object" || Array.isArray(values)) invalid("Site settings must be an object.", "site/settings");
     const steps = (["brand","title","description"] as const).flatMap(key => values[key] === undefined ? [] : [{sql:`INSERT INTO site_config (key,value) VALUES (${d.param(1)},${d.param(2)}) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,binds:[key,values[key]]}]);
-    for (const key of ["brand","title","description"] as const) if (values[key] !== undefined && (typeof values[key] !== "string" || values[key]!.length > {brand:80,title:200,description:1000}[key])) throw new ContractError("INPUT_VALIDATION_FAILED", `Invalid site setting ${key}`, "site/settings");
+    for (const key of ["brand","title","description"] as const) if (values[key] !== undefined && (typeof values[key] !== "string" || values[key]!.length > {brand:80,title:200,description:1000}[key])) invalid(`Invalid site setting ${key}`, "site/settings");
     if (steps.length) await db.write(steps);
     return read();
   }, media(storage) { staff(); return mediaLibrary(db,d,storage,policies); } };

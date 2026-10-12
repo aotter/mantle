@@ -51,4 +51,23 @@ export default { async fetch(request, env) {
     if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, target), { recursive: true, errorOnExist: true, force: false });
     assert.ok(report.totalBytes <= budgets[target], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
   }
+  // Startup of a Worker mounting each surface (the MCP SDK stays a request-time chunk): the runtime a deployment loads.
+  const app = resolve(directory, "surfaces");
+  await writeGenerated(app, await generateOrThrow("cloudflare-d1", await loadFixtureSources("surfaces.yaml")), false);
+  const caller = 'caller:async()=>({kind:"anonymous"} as const)';
+  const site = 'web({db:env.DB,caller:{kind:"anonymous"},origin:"https://example.test",title:"T",description:"D",pages:{"/items/{title}":{view:"item-by-title",list:"items",markdown:"body"}}}).fetch(request)';
+  const surfaces = {
+    rest: `import {rest} from "./rest.js"; const api=rest({db:(env:any)=>env.DB,${caller}}); export default {fetch:(request:Request,env:any)=>api(request,env)};`,
+    mcp: `import {mcp} from "./mcp.js"; const tools=mcp({db:(env:any)=>env.DB,${caller}}); export default {fetch:(request:Request,env:any)=>tools(request,env)};`,
+    web: `import {web} from "./web.js"; export default {fetch:(request:Request,env:any)=>${site}};`,
+    all: `import {rest} from "./rest.js"; import {mcp} from "./mcp.js"; import {web} from "./web.js"; const api=rest({db:(env:any)=>env.DB,${caller}}),tools=mcp({db:(env:any)=>env.DB,${caller}}); export default {fetch:async(request:Request,env:any)=>(await api(request,env))??(await tools(request,env))??${site}};`,
+  };
+  for (const [surface, code] of Object.entries(surfaces)) {
+    const entry = resolve(app, `${surface}-worker.ts`);
+    await writeFile(entry, code);
+    const meta = await bundle(entry, resolve(app, `${surface}-bundle`));
+    const startupBytes = startupGraph(meta, entry).reduce((total, file) => total + meta.outputs[file]!.bytes, 0), budget = budgets[`startup:${surface}`];
+    console.log(JSON.stringify({ surface, startupBytes, budgetBytes: budget }));
+    assert.ok(startupBytes <= budget, `${surface} Worker startup exceeds ${budget} bytes; slim the runtime before changing the budget`);
+  }
 } finally { await rm(directory, { recursive: true, force: true }); }

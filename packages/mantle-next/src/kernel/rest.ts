@@ -8,23 +8,22 @@ export interface Options<Env, Database> {
   db: (env: Env) => Database;
   caller: (request: Request, env: Env) => Promise<Caller>;
 }
-/** A public View at `GET /api/views/<name>`: its query-string reader and paged boundary. */
-export interface ViewRoute<Database> {
-  readonly view: string;
-  readonly query: (params: URLSearchParams) => { input: Record<string, unknown> } & Paging;
-  readonly page: (db: Database, caller: Caller, input: never, paging: Paging) => Promise<unknown>;
-  readonly convert?: Conversions;
-}
-/** An http Trigger: a JSON body merged with `{name}` path parameters (typed as the input declares them). */
-export interface ProcedureRoute<Database, Handlers> {
+/**
+ * One generated route, matched in order: a public View (`query`, `page`) at `GET /api/views/<name>`, or an http
+ * Trigger whose JSON body merges with its `{name}` path parameters (typed as the input declares them). The
+ * generator prints `pattern` (encoded segments, optional trailing slash) and `keys`, so mounting runs no code.
+ */
+export interface Route<Database, Handlers = never> {
   readonly method: string;
-  readonly path: string;
-  readonly params?: Readonly<Record<string, "number" | "boolean">>;
-  readonly validate: (raw: unknown) => Record<string, unknown>;
+  readonly pattern: RegExp;
+  readonly keys?: readonly string[];
   readonly convert?: Conversions;
-  readonly run: (db: Database, caller: Caller, input: never, handlers: Handlers) => Promise<unknown>;
+  readonly query?: (params: URLSearchParams) => { input: Record<string, unknown> } & Paging;
+  readonly page?: (db: Database, caller: Caller, input: never, paging: Paging) => Promise<unknown>;
+  readonly params?: Readonly<Record<string, "number" | "boolean">>;
+  readonly validate?: (raw: unknown) => Record<string, unknown>;
+  readonly run?: (db: Database, caller: Caller, input: never, handlers: Handlers) => Promise<unknown>;
 }
-interface Route<Database> { method: string; pattern: RegExp; keys: readonly string[]; run(request: Request, db: Database, caller: Caller, params: Record<string, string>): Promise<unknown> }
 
 const headers = { "cache-control": "private, no-store" };
 function fail(message: string): never { return invalid(message, "rest"); }
@@ -40,33 +39,22 @@ async function body(request: Request): Promise<Record<string, unknown>> {
   if (!value || typeof value !== "object" || Array.isArray(value)) fail("Expected a JSON object.");
   return value as Record<string, unknown>;
 }
-/** Each segment is matched in its encoded form; `{name}` segments capture. */
-function pattern(path: string): Pick<Route<unknown>, "pattern" | "keys"> {
-  const keys: string[] = [];
-  const source = path.split("/").map(segment => {
-    if (segment.startsWith("{") && segment.endsWith("}")) { keys.push(segment.slice(1, -1)); return "([^/]+)"; }
-    return encodeURIComponent(segment).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }).join("/");
-  return { pattern: new RegExp("^" + source + "/?$"), keys };
+async function dispatch<Database, Handlers>(route: Route<Database, Handlers>, request: Request, db: Database, caller: Caller, params: Record<string, string>, handlers: Handlers): Promise<unknown> {
+  if (route.page) {
+    const { input: raw, ...paging } = route.query!(new URL(request.url).searchParams);
+    const input = { ...raw };
+    convert(input, route.convert);
+    return route.page(db, caller, input as never, paging);
+  }
+  const raw = await body(request);
+  for (const key in params) raw[key] = route.params?.[key] === "number" ? number(params[key]!) : route.params?.[key] === "boolean" ? boolean(params[key]!) : params[key];
+  const input = route.validate!(raw);
+  convert(input, route.convert);
+  return route.run!(db, caller, input as never, handlers);
 }
 
 /** The handler for one app's routes: a response for `/api` paths, otherwise undefined. */
-export function rest<Env, Database, Handlers = never>(views: readonly ViewRoute<Database>[], procedures: readonly ProcedureRoute<Database, Handlers>[], options: Options<Env, Database> & { handlers?: Handlers }): (request: Request, env: Env) => Promise<Response | undefined> {
-  const routes: Route<Database>[] = [
-    ...views.map(view => ({ method: "GET", ...pattern(`/api/views/${view.view}`), async run(request: Request, db: Database, caller: Caller) {
-      const { input: raw, ...paging } = view.query(new URL(request.url).searchParams);
-      const input = { ...raw };
-      convert(input, view.convert);
-      return view.page(db, caller, input as never, paging);
-    } })),
-    ...procedures.map(route => ({ method: route.method, ...pattern(route.path), async run(request: Request, db: Database, caller: Caller, params: Record<string, string>) {
-      const raw = await body(request);
-      for (const key in params) raw[key] = route.params?.[key] === "number" ? number(params[key]!) : route.params?.[key] === "boolean" ? boolean(params[key]!) : params[key];
-      const input = route.validate(raw);
-      convert(input, route.convert);
-      return route.run(db, caller, input as never, options.handlers as Handlers);
-    } })),
-  ];
+export function rest<Env, Database, Handlers = never>(routes: readonly Route<Database, Handlers>[], options: Options<Env, Database> & { handlers?: Handlers }): (request: Request, env: Env) => Promise<Response | undefined> {
   return async (request, env) => {
     try {
       const original = new URL(request.url).pathname;
@@ -76,10 +64,10 @@ export function rest<Env, Database, Handlers = never>(views: readonly ViewRoute<
       for (const route of routes) {
         const match = route.pattern.exec(path); if (!match) continue; allowed.add(route.method);
         if (route.method !== request.method) continue;
-        const params = decode(route.keys, match, "Malformed path parameter.", "rest");
+        const params = decode(route.keys ?? [], match, "Malformed path parameter.", "rest");
         const caller = await surfaceCaller(request, env, options.caller);
         checkOrigin(request, caller);
-        return Response.json(await route.run(request, options.db(env), caller, params), { headers });
+        return Response.json(await dispatch(route, request, options.db(env), caller, params, options.handlers as Handlers), { headers });
       }
       if (allowed.size) { const response = surfaceFailure(new ContractError("METHOD_NOT_ALLOWED", "Method is not allowed for this route.", "rest")); response.headers.set("allow", [...allowed].join(", ")); return response; }
       if (path! === "/api" || path!.startsWith("/api/")) throw new ContractError("NOT_FOUND", "No such route.", "rest");

@@ -1,0 +1,39 @@
+# Every generated surface on one Schema: public Views (paged, with input), an http and an mcp Trigger. Size gates only.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: items}
+spec:
+  title: Items
+  lifecycle: operational
+  schema: {type: object, properties: {title: {type: string}, body: {type: string}}, required: [title]}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: items}
+spec: {surface: public, sql: 'SELECT id, title, body FROM items ORDER BY id'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: item-by-title}
+spec:
+  surface: public
+  input: {type: object, properties: {title: {type: string}}, required: [title], additionalProperties: false}
+  sql: 'SELECT id, title, body FROM items WHERE title = input.title ORDER BY id'
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: add-item}
+spec:
+  input: {type: object, properties: {title: {type: string, minLength: 1}, body: {type: string}}, required: [title], additionalProperties: false}
+  output: {type: object}
+  handler: {sql: 'INSERT INTO items(title, body) VALUES(input.title, input.body) RETURNING id'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: add-item-http}
+spec: {source: {kind: http, method: POST, path: /api/items}, target: {procedure: add-item}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: add-item-mcp}
+spec: {source: {kind: mcp, surface: public}, target: {procedure: add-item}}

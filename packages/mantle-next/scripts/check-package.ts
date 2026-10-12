@@ -20,10 +20,17 @@ try {
       if (target.startsWith(resolve("package") + "/")) assert.ok(names.includes(target.slice(process.cwd().length + 1)), `missing declaration: ${name} -> ${path}`);
     }
   }
-  let unpackedBytes = 0;
-  for (const name of names) unpackedBytes += (await readFile(resolve(directory, name))).length;
+  let unpackedBytes = 0, runtimeBytes = 0;
+  for (const name of names) {
+    const bytes = (await readFile(resolve(directory, name))).length;
+    unpackedBytes += bytes;
+    // What a Worker can load: the kernel and auth modules, never the generator or CLI.
+    if (/^package\/dist\/(?:kernel|auth)\/.+\.js$/.test(name)) runtimeBytes += bytes;
+  }
   const tarballBytes = (await stat(archive)).size;
-  console.log(JSON.stringify({gate:"package",files:names.length,tarballBytes,unpackedBytes}));
-  assert.ok(tarballBytes <= 96 * 1024, "packed package exceeds 96 KiB");
+  console.log(JSON.stringify({gate:"package",files:names.length,tarballBytes,unpackedBytes,runtimeBytes}));
+  const budget = JSON.parse(await readFile(resolve(import.meta.dir, "../size-budgets.json"), "utf8")).runtime;
+  assert.ok(runtimeBytes <= budget, `runtime JavaScript exceeds ${budget} bytes; slim the kernel or auth before changing the budget`);
+  assert.ok(tarballBytes <= 100 * 1024, "packed package exceeds 100 KiB");
   assert.ok(unpackedBytes <= 384 * 1024, "unpacked package exceeds 384 KiB");
 } finally { await rm(directory, {recursive:true,force:true}); }

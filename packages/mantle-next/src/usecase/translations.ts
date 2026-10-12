@@ -7,7 +7,7 @@ import {dialect as SQLITE} from "../kernel/dialect/sqlite.js";
 import {dialect as POSTGRES} from "../kernel/dialect/postgres.js";
 import {declaredType} from "../domain/columns.js";
 import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
-const q=JSON.stringify;
+import { driverFor, isSqlite, q } from "../domain/entry.js";
 /** The parent is checked by the same atomic UPDATE that publishes the child. */
 export function publishedParent(plan: RuntimePlan, child: PlanSchema, d: Dialect, recipes: object[], trusted: boolean): string {
   const tr=child.translates!,parent=plan.schemas[tr.parent.toLowerCase()]!,on=tr.on.toLowerCase();
@@ -18,12 +18,12 @@ export function publishedParent(plan: RuntimePlan, child: PlanSchema, d: Dialect
   return `EXISTS (SELECT 1 FROM ${d.ident(parent.name)} p WHERE ${conditions.join(" AND ")})`;
 }
 export function emitTranslations(plan:RuntimePlan,target:Target):Record<string,string> {
-  const d=target.endsWith("postgres")?POSTGRES:SQLITE;
+  const d=isSqlite(target)?SQLITE:POSTGRES;
   const children=Object.values(plan.schemas).filter(s=>s.translates);
   if(!Object.values(plan.schemas).some(s=>s.localized))return {};
   if(!children.length)return {"translations.ts":'export {toCanonicalLocale} from "@aotter/mantle-next/translations";\n'};
   const parents=[...new Set(children.map(s=>s.translates!.parent.toLowerCase()))], declarations:string[]=[],descriptors:string[]=[];
-  const driver=target==="bun-sqlite"?"bun-sqlite":target==="cloudflare-d1"?"d1":"postgres";
+  const driver=driverFor(target);
   for(const parent of parents) {
     const schema=plan.schemas[parent]!,types=children.filter(s=>s.translates!.parent.toLowerCase()===parent);
     const entries=types.map(child=>{

@@ -1,7 +1,7 @@
 /** Validate boundary JSON before converting declared binds to driver inputs. */
 import type { JsonSchema, LoweredStatement, RuntimePlan } from "@aotter/mantle/spec";
 import type { Target } from "./model.js";
-const q = JSON.stringify;
+import { q } from "./entry.js";
 /** The kernel's `Conversions` for the fields an input bind reads (see kernel/surface), as a literal; empty when none. */
 export function conversions(properties: JsonSchema["properties"], binds: LoweredStatement["binds"], target: Target): string {
   const fields = Object.keys(properties ?? {}).flatMap(field => {
