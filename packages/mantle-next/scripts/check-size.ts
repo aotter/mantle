@@ -15,26 +15,13 @@ try {
     const app = resolve(directory, target);
     await writeGenerated(app, await generateOrThrow(target, sources), false); // the package (dist), as a deployment resolves it
     if (target === "cloudflare-d1") {
-      for (const [name, source] of [
-        ["collection", 'export { store } from "./generated.js";'],
-        ["direct-op", 'export { default } from "./views/purchase-list.js";'],
-      ]) {
-        const entry = resolve(app, name + ".ts"), outdir = resolve(app, name + "-bundle");
-        await writeFile(entry, source!);
-        const meta = await bundle(entry, outdir), graph = startupGraph(meta, entry);
-        assert.ok(graph.length > 0, "startup graph must include the entry");
-        const code = (await Promise.all(graph.map(file => readFile(resolve(base, file), "utf8")))).join("\n");
-        const bytes = graph.reduce((total, file) => total + meta.outputs[file]!.bytes, 0);
-        if (name === "collection") {
-          assert.ok(!/INSERT INTO purchase_requests|requestCount|submittedDay/.test(code), "operation SQL entered collection startup");
-          assert.ok(!graph.some(file => Object.keys(meta.outputs[file]!.inputs).some(input => /\/(?:views|procedures)\//.test(input))), "operation module entered collection startup");
-          assert.ok(Object.values(meta.outputs).some(output => Object.keys(output.inputs).some(input => input.endsWith("procedures/create-purchase.ts"))), "lazy operations must still be uploaded");
-        } else {
-          assert.ok(code.includes("FROM purchase_requests"), "direct operation SQL must be present");
-          assert.ok(bytes < 4 * 1024, `direct-op startup exceeds 4 KiB: ${bytes}`);
-        }
-        console.log(JSON.stringify({ target, entry: name, startupBytes: bytes }));
-      }
+      // A direct operation import carries only that operation.
+      const entry = resolve(app, "direct-op.ts");
+      await writeFile(entry, 'export { default } from "./views/purchase-list.js";');
+      const meta = await bundle(entry, resolve(app, "direct-op-bundle"));
+      const bytes = startupGraph(meta, entry).reduce((total, file) => total + meta.outputs[file]!.bytes, 0);
+      assert.ok(bytes < 4 * 1024, `direct-op startup exceeds 4 KiB: ${bytes}`);
+      console.log(JSON.stringify({ target, entry: "direct-op", startupBytes: bytes }));
     }
     const postgres = target === "cloudflare-postgres";
     // No test oracle/seed/benchmark code in the deployment bundle. Caller is a
@@ -59,9 +46,9 @@ export default { async fetch(request, env) {
     assert.ok(!inputs.some(input => /\/zod\//.test(input)), "a validator entered the bare query bundle");
     const sum = (files: string[]) => files.reduce((total, file) => total + meta.outputs[file]!.bytes, 0);
     const js = Object.keys(meta.outputs).filter(file => file.endsWith(".js"));
-    const report = { target, startupBytes: sum(startupGraph(meta, entry)), totalBytes: sum(js), gzipBytes: (await Promise.all(js.map(file => readFile(resolve(base, file))))).reduce((n, b) => n + gzipSync(b).length, 0), budget: budgets[target] };
+    const report = { target, startupBytes: sum(startupGraph(meta, entry)), totalBytes: sum(js), gzipBytes: (await Promise.all(js.map(file => readFile(resolve(base, file))))).reduce((n, b) => n + gzipSync(b).length, 0), budgetBytes: budgets[target] };
     console.log(JSON.stringify(report));
     if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, target), { recursive: true, errorOnExist: true, force: false });
-    assert.ok(report.startupBytes <= budgets[target].startup && report.totalBytes <= budgets[target].total, `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
+    assert.ok(report.totalBytes <= budgets[target], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
   }
 } finally { await rm(directory, { recursive: true, force: true }); }

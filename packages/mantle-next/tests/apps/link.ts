@@ -21,12 +21,10 @@ export async function writeGenerated(dir: string, files: Readonly<Record<string,
     await writeFile(resolve(dir, name), linked && name.endsWith(".ts") ? link(text) : text);
   }
 }
-/** Keep lazy operation modules available until the test file has finished. */
-const loadedDirectories: string[] = [];
-export const cleanupGenerated = () => Promise.all(loadedDirectories.map(dir => rm(dir, { recursive: true, force: true })));
-export async function loadGenerated(files: Readonly<Record<string, string>>): Promise<any> {
-  const dir = resolve(import.meta.dir, ".generated", crypto.randomUUID());
-  loadedDirectories.push(dir);
-  await writeGenerated(dir, files);
-  return import(resolve(dir, "generated.ts"));
+/** Imports generated code from a throwaway file in the ignored `.generated/`. */
+export async function loadGenerated(code: string): Promise<any> {
+  const file = resolve(import.meta.dir, ".generated", `${crypto.randomUUID()}.ts`);
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, link(code));
+  try { return await import(file); } finally { await rm(file); }
 }

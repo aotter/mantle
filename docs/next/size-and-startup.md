@@ -7,10 +7,11 @@ fixture and builds two Worker fetch entries retaining every View/Procedure with
 `mantle bundle`, the split build `mantle generate` configures for Wrangler. The
 PostgreSQL entry includes postgres.js; the D1 entry uses the native binding. It
 excludes the seed, oracle and timing harness, rejects old compiler/runtime and Zod
-sources, and checks two budgets per target in `size-budgets.json`: `startup` (the
-entry and its static imports, what a cold isolate evaluates) and `total` (every
-uploaded chunk, operations included). It also builds a collection-only entry, whose
-startup contains no operation SQL, and a direct View entry, which stays below 4 KiB.
+sources, and checks every uploaded chunk against `size-budgets.json`, reporting the
+startup graph (the entry and its static imports) beside it. A direct View entry must
+stay below 4 KiB. Operations stay in `generated.ts`: lazily importing each one saved
+about 14 µs of startup per operation (420 operations: 9.9 → 3.6 ms in Node, ~1 ms on
+Workers) at the cost of one uploaded module per operation, so it was not adopted.
 The normal package test command runs this gate.
 
 `check:package` enforces the published file allowlist and the size ceilings in

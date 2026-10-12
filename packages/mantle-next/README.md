@@ -10,8 +10,7 @@ pnpm --dir packages/mantle run build
 pnpm --dir packages/mantle-next run build
 ```
 
-Outputs include `generated.ts`, `schema.sql` and one module per operation.
-The `views` and `procedures` maps in `generated.ts` load those modules on demand.
+Outputs include `generated.ts`, `schema.sql` and direct operation entries.
 Import a selected function from `views/<encoded-name>.ts` or
 `procedures/<encoded-name>.ts` (default export, with its types) to exclude other
 operations from the request bundle. Apply initial DDL explicitly to an
@@ -34,7 +33,7 @@ state column names, value types and the writable columns, and the Store enforces
 **not** a View's or Procedure's `requires`: authorize before calling it. Design, limits and what the runtime still refuses are in
 [ADR-0045](../../docs/adr/0045-next-runtime-core.md).
 
-With `mantle bundle`, collection-only startup contains no operation SQL; operation modules are uploaded as separate chunks and loaded on first use. The bound operation API stays intact.
+A Store-only purchase Worker retains 1,450 gzip bytes of generated operations (Bun 1.3.14, minified); the existing bound operation API stays intact.
 
 ## Workers build
 

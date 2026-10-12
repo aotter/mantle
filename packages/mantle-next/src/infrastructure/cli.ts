@@ -40,8 +40,8 @@ try {
       if (!existsSync(folder)) continue;
       for (const name of await readdir(folder)) {
         if (!name.endsWith(".ts") || Object.hasOwn(result.files, `${kind}/${name}`)) continue;
-        const file = resolve(folder, name), text = await readFile(file, "utf8");
-        if (text.startsWith("// Generated native operation.") || /^import \{ (?:view|procedure)_[A-Za-z0-9$]+ as operation \} from "\.\.\/generated\.js";\nexport default operation;/.test(text)) await rm(file);
+        const file = resolve(folder, name);
+        if (/^import \{ (?:view|procedure)_[A-Za-z0-9$]+ as operation \} from "\.\.\/generated\.js";\nexport default operation;/.test(await readFile(file, "utf8"))) await rm(file);
       }
     }
     if (target.startsWith("cloudflare-")) {

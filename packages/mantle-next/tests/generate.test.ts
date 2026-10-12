@@ -1,5 +1,5 @@
 import type { LoweredStatement } from "@aotter/mantle/spec";
-import { afterAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { compilePlan, NATIVE_NOT_NULL, notNullColumns, viewOutputs } from "@aotter/mantle/spec";
 import * as postgresCompile from "@aotter/mantle/postgres/compile";
@@ -9,9 +9,7 @@ import { coreNewId, generateFromSources } from "../src/infrastructure/generate.j
 import { generate } from "../src/usecase/generate.js";
 import type { Target } from "../src/domain/model.js";
 import { user } from "./apps/fixtures.js";
-import { cleanupGenerated, loadGenerated } from "./apps/link.js";
-
-afterAll(cleanupGenerated);
+import { loadGenerated } from "./apps/link.js";
 
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -78,7 +76,7 @@ describe("native generation", () => {
     const text = generated.files["generated.ts"]!;
     expect(text).toContain('["notes-list"]: view0');
     expect(text).toContain('["create-note"]: procedure0');
-    for (const mode of ["caller", "trusted"] as const) expect(generated.files["views/notes-list.ts"]).toContain(JSON.stringify(input.lowered.views["notes-list"]![mode]!.sql));
+    for (const mode of ["caller", "trusted"] as const) expect(text).toContain(JSON.stringify(input.lowered.views["notes-list"]![mode]!.sql));
     const driver = target === "bun-sqlite" ? "driver/bun-sqlite" : target === "cloudflare-d1" ? "driver/d1" : "driver/postgres";
     expect(text).toContain(`import * as DRIVER from "@aotter/mantle-next/${driver}"`);
     expect(generate(input)).toEqual(generated);
@@ -111,7 +109,7 @@ test("bare PG writes on the Bun.SQL shape read a unique clash as CONFLICT and si
   const server = (state: string, bun = false) => Object.assign(new Error("native-" + state), bun ? { errno: state, code: "ERR_POSTGRES_SERVER_ERROR", severity: "ERROR" } : { code: state, severity: "ERROR" });
   const socket = () => Object.assign(new Error("native-socket"), { code: "ERR_POSTGRES_CONNECTION_CLOSED" });
   {
-    const module = await loadGenerated(generated.files);
+    const module = await loadGenerated(generated.files["generated.ts"]!);
     // One statement, autocommit: no begin(), one round trip.
     for (const [failure, expected] of [["none", undefined], ["zero", "CONFLICT"], ["23505", "CONFLICT"], ["23505-bun", "CONFLICT"], ["57014", "OUTCOME_UNKNOWN"], ["socket", "OUTCOME_UNKNOWN"]] as const) {
       const error = failure === "socket" ? socket() : failure.startsWith("2") || failure.startsWith("5") ? server(failure.slice(0, 5), failure.endsWith("bun")) : undefined;
@@ -160,12 +158,6 @@ test("repeated or unverified View outputs explicitly refuse generation", async (
   }
 });
 
-test("operation names a module loader could URL-decode refuse generation", async () => {
-  const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"n.yaml",text:source.replaceAll("notes-list", "notes list")}]}});
-  expect(generated.ok).toBe(false);
-  if (!generated.ok) expect(generated.diagnostics.some(d => d.path === "views/notes list" && d.message.includes("letters, digits"))).toBe(true);
-});
-
 test("PG declared integer output types include native unsafe-int8 strings", async () => {
   const integerSource = source.replace('title: {type: string}}', 'title: {type: string}, total: {type: integer}}').replace('SELECT id, title FROM notes', 'SELECT id, title, total FROM notes');
   for (const target of ["bun-postgres", "bun-sqlite"] as const) {
@@ -183,7 +175,7 @@ test("native binds directly use authored input names", async () => {
   const caller = user("test-owner");
   try {
     db.exec(generated.files["schema.sql"]!);
-    const app = await loadGenerated(generated.files);
+    const app = await loadGenerated(generated.files["generated.ts"]!);
     await app.procedures["create-note"](db,caller,{NoteTitle:"Authored case"});
     await app.procedures["create-note"](db,caller,{NoteTitle:null});
     expect(db.query("SELECT title FROM notes ORDER BY title").all()).toEqual([{title:"Authored case"},{title:"Nullable fallback"}]);
@@ -206,7 +198,7 @@ for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare
     : target === "cloudflare-d1" ? {prepare:()=>({bind:()=>({all:async()=>({results:execute()})})})}
     : {unsafe:async()=>execute()};
   {
-    const app = await loadGenerated(generated.files);
+    const app = await loadGenerated(generated.files["generated.ts"]!);
     // A cyclic extra value proves no recursive scan or schema parse runs here.
     const input:any = {}; input.extra = input;
     expect(await app.views["notes-list"](db,caller,input)).toBe(rows);
@@ -265,7 +257,7 @@ test("declared timestamps and dates come back in wire form from the SQL itself",
     // Storage as Mantle writes it: microseconds and days. Before 1970 is negative.
     db.query("INSERT INTO events (id, version, created_at, updated_at, owner, at, day) VALUES ('a', 1, 0, 0, 'u', ?, ?)").run(1791676800123456, 20738);
     db.query("INSERT INTO events (id, version, created_at, updated_at, owner, at, day) VALUES ('b', 1, 0, 0, 'u', ?, ?)").run(-1, -1);
-    const app = await loadGenerated(generated.files);
+    const app = await loadGenerated(generated.files["generated.ts"]!);
     const caller = user("u");
     // Only min/max keep the column's type; count is an integer and stays one.
     expect(await app.views["events-span"](db,caller,{})).toEqual([{n:2,latest:"2026-10-11T00:00:00.123456Z",first:"1969-12-31"}]);
@@ -277,7 +269,7 @@ test("declared timestamps and dates come back in wire form from the SQL itself",
   for (const target of ["bun-postgres", "cloudflare-postgres"] as const) {
     const pg = await generateFromSources({target,sources:{sources:[{sourceId:"events.yaml",text:scalars}]}});
     if (!pg.ok) throw Error(JSON.stringify(pg.diagnostics));
-    expect(pg.files["views/events-list.ts"]).toContain(`to_char((e.at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\\"T\\"HH24:MI:SS.US\\"Z\\"')`);
+    expect(pg.files["generated.ts"]).toContain(`to_char((e.at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\\"T\\"HH24:MI:SS.US\\"Z\\"')`);
   }
 });
 
@@ -327,41 +319,12 @@ spec:
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   expect(generated.files["schema.sql"]).toContain("CREATE TABLE IF NOT EXISTS _mantle_tz");
   expect(generated.files["schema.sql"]).toContain("(-9007199254740991, 0)");
-  expect(generated.files["views/utc-day.ts"]).toContain("_mantle_tz");
+  expect(generated.files["generated.ts"]).toContain("_mantle_tz");
   const db = new Database(":memory:");
   try {
     db.exec(generated.files["schema.sql"]!);
     db.exec(generated.files["schema.sql"]!); // re-applying the initial artifact is harmless
-    const app = await loadGenerated(generated.files);
+    const app = await loadGenerated(generated.files["generated.ts"]!);
     expect(await app.views["utc-day"](db,{kind:"anonymous"},{})).toEqual([{day:Date.parse("2026-10-11T00:00:00Z")*1000}]);
   } finally { db.close(); }
-});
-
-for (const target of ["bun-sqlite", "bun-postgres"] as const) test(`${target} first lazy operations retain transaction handle and ALS guard`, async () => {
-  const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "notes.yaml", text: source }] } });
-  if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
-  const app = await loadGenerated(generated.files), caller = user("lazy-owner");
-  const sqlite = target === "bun-sqlite" ? new Database(":memory:") : undefined;
-  sqlite?.exec(generated.files["schema.sql"]!);
-  let begins = 0, reads = 0;
-  const db = sqlite ?? {
-    unsafe: async () => { throw Error("outer handle executed SQL"); },
-    begin: async (_options: string, fn: (tx: unknown) => Promise<unknown>) => {
-      begins++;
-      return fn({ unsafe: async () => { reads++; return Object.assign([{ id: "n", title: "t" }], { count: 1 }); } });
-    },
-  };
-  try {
-    const store = app.store(db, caller);
-    await store.transaction(async (tx: any) => {
-      // Neither operation module has been loaded before this transaction.
-      const result = await tx.procedures["create-note-pair"]({ title: "t" });
-      expect(result.results).toHaveLength(2);
-      expect(await tx.views["notes-list"]({})).toHaveLength(sqlite ? 2 : 1);
-      // A different module's first load must also retain the outer-handle guard.
-      await expect(app.procedures["create-note"](db, caller, { title: "outer" })).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
-    });
-    if (sqlite) expect(sqlite.query("SELECT title FROM notes").all()).toHaveLength(2);
-    else { expect(begins).toBe(1); expect(reads).toBe(3); }
-  } finally { sqlite?.close(); }
 });

@@ -36,9 +36,8 @@ for (const target of selected ? [selected as Target] : targets) {
   await writeGenerated(directory, files, false); // unlinked: these import the built package, as an application does
   const bare = await import(pathToFileURL(resolve(directory, "generated.ts")).href);
   for (const kind of ["views", "procedures"]) for (const name of Object.keys(bare[kind])) {
-    const entry = await import(pathToFileURL(resolve(directory, kind, name + ".ts")).href);
-    assert.equal(typeof entry.default, "function", "direct entry must export an operation");
-    assert.notEqual(entry.default, bare[kind][name], "the map must lazily invoke the direct operation");
+    const entry = await import(pathToFileURL(resolve(directory, kind, encodeURIComponent(name) + ".ts")).href);
+    assert.equal(entry.default, bare[kind][name], "direct entry must reference the same generated function");
   }
   // Record the actual generated driver call for an exact-SQL native control.
   let canonicalSql = ""; let canonicalCalls = 0;
