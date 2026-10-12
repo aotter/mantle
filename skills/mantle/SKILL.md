@@ -44,6 +44,9 @@ Use the workflow **generate → typecheck → implement listed handlers**: run
 `mantle generate`, then `tsc --noEmit`. Implement every printed `Handlers` key
 and pass the implementations at `store(db, caller, { handlers })` (and selected
 surface options). Run `tsc --noEmit` again before local acceptance.
+Generated Store metadata initializes on its first use, once per module. Bind
+`store(db, caller, options?)` for the current request; never reuse one caller's
+bound Store for another caller.
 
 Use `paged/views/<encoded-name>.ts` for bounded cursor walks, including internal
 Views that satisfy the installed package's generation-time paging proofs.
