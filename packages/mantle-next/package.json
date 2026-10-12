@@ -12,6 +12,8 @@
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
     "./contracts": "./dist/kernel/contracts.js",
+    "./translations": "./dist/kernel/translations.js",
+    "./driver/transaction-context": "./dist/kernel/driver/transaction-context.js",
     "./scalars": "./dist/kernel/scalars.js",
     "./binds": "./dist/kernel/binds.js",
     "./sweep": "./dist/kernel/sweep.js",

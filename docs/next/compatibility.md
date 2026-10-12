@@ -23,6 +23,7 @@ explicitly; apply `schema.sql` directly only to a new database.
 | Generated MCP and `mcp` Trigger exposure | Public/staff tools, shared generated checks, publishing transitions on staff only; SDK loads on matching requests. Install the official MCP peer for manifests selecting this surface. |
 | Dynamic `web.ts` (`llms.txt`, sitemap, `.md` alternates, head tags) | Generated; mount `web({ ... })`; see [surface deltas](surfaces.md#optional-web-output). |
 | Admin UI, web skill/example | Planned [#1477](https://github.com/aotter/mantle/issues/1477), [#1478](https://github.com/aotter/mantle/issues/1478). |
+| Localized Schemas and translations | Plain-string locale values, atomic published-parent guard, SQL parent visibility and generated page locale helper; see [Translations](#translations). |
 | Opt-in `lifecycle: publishing` | Generated status, `published_at`, staff-only transitions and published-only public reads; see [Publishing](#publishing). |
 | `ref` Procedures and typed `Handlers` | Generated `Handlers` type; pass implementations at `store(db, caller, { handlers })`; `mantle generate` lists them. See [ref Procedures](contract.md#ref-procedures). |
 | Optional site settings and media | Select `site` defaults at generation to emit the generated `site` module and deployment tables; native media upload lifecycle, app-owned R2/signing. See [media](media.md). |
@@ -44,8 +45,6 @@ codes and paths. Multiple declarations produce multiple diagnostics.
 | `schedule` Triggers, including disabled ones | Wire `scheduled()` yourself. |
 | `lifecycle` Triggers: before/after hooks, including targets using `ref` | Write a custom handler. |
 | `requires.guard` on a View or Procedure | Write a custom handler that checks authorization before executing queries. |
-| Schema `localized: true` | Manage locales in application-owned fields and handlers; localization returns in 0.2.x. |
-| Schema `translates` | Manage relationships in application-owned fields and handlers; translations return in 0.2.x. |
 | A View projecting a native `geo` value | Select the latitude and longitude columns explicitly. |
 | Dynamic or repeated View output names | Give each SELECT output a unique explicit alias. |
 | Declared date/date-time outputs without one SELECT item per output | Expand the SELECT list explicitly. |
@@ -74,6 +73,40 @@ guard is CONFLICT; the message lists possible guard failures without a racy
 second read. Status/timestamp cannot be written through Store. Staff editing
 limits belong to Admin, not Store. Public reads always require published rows;
 other reads expose drafts only to staff/system, including joins and nested SQL.
-Authored inline publishing writes, lifecycle hooks and translations remain refused.
+Authored inline publishing writes and lifecycle hooks remain refused.
 
 Identity: optional staff directory/role/invitation helpers and the app-owned hardened auth.ts template are supported. OSS staff management uses one role (`staff`); all staff can manage users. Caller roles remain open strings. See [Auth](auth.md).
+### Translations
+
+`localized` and `translates` use the existing v2 compiler checks. A translation
+publishes only when a caller-visible parent with the same join key is published;
+the check is an `EXISTS` inside the atomic UPDATE. An operational parent is live
+without a status column. Translations retain their own status, including drafts.
+Public reads require both a published translation and a published, caller-visible
+parent with the same `on` value. Unpublishing or archiving the parent hides its
+translations; publishing it again restores visibility without changing their status.
+Store, Views and the locale helper use the same generated SQL row policy;
+staff/system preview reads retain access to drafts. Store translation reads merge
+parent fields with translation fields taking precedence. Authored Views still
+return only their explicit SELECT columns.
+
+Generated SQLite/PostgreSQL interactive Store transactions refuse to combine a
+translation publication with its parent's status change, in either order. A failed
+guarded publish releases only its own reservation. D1 has no interactive Store transactions, so
+this rule does not apply there. The app owns consistency for raw native transactions.
+
+Generated `translations.ts` exports `translationLocales(db, caller, parent, rows)`.
+Pass the current parent page using storage column names, up to 500 rows. It returns
+an id-to-locales record, merges all translation Schemas and respects current caller
+scope/publication rules. Reads use batches of 50 join keys and forward child pages
+of 500, avoiding per-parent queries.
+
+`toCanonicalLocale` preserves the existing language/region canonicalisation. It is
+explicit: stored `locale` stays a plain string, with no site-locale allowlist,
+automatic rewrite or fallback. Site configuration owns its locale order/canonical
+locale; localized manifest text remains compiler-owned. The generated web module
+already exists; its translation follow-up will call `translationLocales` for each
+parent page, produce per-locale `llms.txt`, and render canonical-locale hreflang
+links with lower-case URL locale segments (for example `zh-TW` → `zh-tw`). See
+[web translation follow-up](surfaces.md#web-translation-follow-up).
+

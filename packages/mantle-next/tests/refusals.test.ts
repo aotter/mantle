@@ -40,12 +40,9 @@ test("guards are refused on every View and Procedure", async () => {
   for (const d of guards) expect(d.message).toContain("Write a custom handler that checks authorization before executing queries.");
 });
 
-test("localized and translates declarations each carry their own path and hint", async () => {
-  const result = await diagnostics([doc("Schema", "translations", { ...localized, translates: { parent: "notes", on: "slug" } })]);
-  expect(result).toHaveLength(2);
-  expect(result.map(d => d.path)).toEqual(["schemas/translations/localized", "schemas/translations/translates"]);
-  expect(result[0]!.message).toContain("Manage locales in application-owned fields and handlers.");
-  expect(result[1]!.message).toContain("Manage relationships in application-owned fields and handlers.");
+test("localized and translates declarations generate native helpers", async () => {
+ const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"localized.yaml",text:[...base,doc("Schema","translations",{...localized,translates:{parent:"notes",on:"slug"}})].join("\n---\n")}]}});
+ expect(result.ok).toBe(true);if(result.ok)expect(result.files["translations.ts"]).toContain("translationLocales");
 });
 
 test("each native geo View output is refused with an explicit scalar alternative", async () => {
@@ -74,15 +71,15 @@ test("unmatched date-time SELECT outputs give an actionable expansion hint", () 
 test("mixed refused declarations are reported together", async () => {
   const result = await diagnostics([
     doc("Trigger", "cron", { source: { kind: "schedule", cron: "0 * * * *" }, target: { procedure: "read" } }),
-    doc("Schema", "local", localized),
+    doc("Trigger", "timer", { source: { kind: "schedule", cron: "0 * * * *" }, target: { procedure: "read" } }),
   ]);
-  expect(result.map(d => d.path)).toEqual(["triggers/cron", "schemas/local/localized"]);
+  expect(result.map(d => d.path)).toEqual(["triggers/cron", "triggers/timer"]);
   for (const d of result) expect(d.code).toBe("GENERATE_UNSUPPORTED");
 });
 
 
 test("a noncanonical input cast and another refused declaration are reported together", () => {
-  const text = [doc("Schema", "local", localized), doc("View", "bad-cast", { surface: "internal", input: { type: "object", properties: { payload: { type: "object" } } }, sql: "SELECT input.payload AS value" })].join("\n---\n");
+  const text = [doc("Schema", "local", localized), doc("View", "bad-cast", { surface: "internal", requires:{guard:{procedure:"guard"}}, input: { type: "object", properties: { payload: { type: "object" } } }, sql: "SELECT input.payload AS value" }), doc("Procedure","guard",{input:{type:"object"},output:{type:"object"},handler:{ref:"guard"}})].join("\n---\n");
   // The compiler normally supplies canonical casts. Corrupt one lowering in an isolated process.
   const lowered = new URL("../../mantle/dist/core/sql/lowered.js", import.meta.url).href;
   const script = `import { mock } from "bun:test";
@@ -98,7 +95,7 @@ console.log(JSON.stringify(await generateFromSources({ target: "bun-postgres", s
   const result = JSON.parse(execFileSync(process.execPath, ["-e", script], { encoding: "utf8" }));
   expect(result.ok).toBe(false);
   expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/bad-cast", message: "Input $1 must appear only as CAST($1 AS jsonb). Wrap each occurrence in CAST($1 AS jsonb)." });
-  expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "schemas/local/localized", message: "Localized entries are unsupported until 0.2.x. Manage locales in application-owned fields and handlers." });
+  expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/bad-cast/requires/guard", message: "Dynamic authorization guards are unsupported. Write a custom handler that checks authorization before executing queries." });
 });
 
 test("HTTP Trigger exposure emits its REST handler", async () => {

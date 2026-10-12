@@ -135,14 +135,21 @@ function param$(c: C, spec: BindSpec): N {
 }
 
 /** A term of `rowPolicy` as a predicate on alias `a`. A constant inside a term is part of the rule, so it prints inline. */
-function term(c: C, a: string, [column, kind, v, published, roles]: RowTerm): N {
+function term(c: C, a: string, t: RowTerm): N {
+  if (t[1] === "parent") {
+    const [column, , value, parent] = t, alias = a === "_mantle_parent" ? "_mantle_parent_" : "_mantle_parent";
+    const exists = { SubLink: { subLinkType: "EXISTS_SUBLINK", subselect: { SelectStmt: { targetList: [res(num(1))], fromClause: [{ RangeVar: { relname: parent.table, alias: { aliasname: alias }, inh: true, relpersistence: "p", mantle: "system" } }], whereClause: and(op("=", col(alias, column), col(a, column)), ...(parent.scope ? [op("=", col(alias, parent.scope[0]), col(a, parent.scope[1]))] : []), ...parent.terms.map(t => term(c, alias, t))), limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } } } };
+    return parent.roles ? or(...parent.roles.map(role => op("=", param$(c, value), { A_Const: { sval: { sval: role } } })), exists) : exists;
+  }
+  const [column, kind, v, published, roles] = t;
   const value: N = v.k === 'const' ? { A_Const: { sval: { sval: v.value } } } : param$(c, v);
   if (kind === 'staff') return or(op('=', col(a, column), { A_Const: { sval: { sval: published! } } }), ...roles!.map(role => op('=', value, { A_Const: { sval: { sval: role } } })));
   return kind === 'ttl' ? or({ NullTest: { arg: col(a, column), nulltesttype: 'IS_NULL' } }, op('>', col(a, column), value)) : op('=', col(a, column), value);
 }
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
 function visible(s: SchemaDef, a: string, c: C): N | undefined {
-  return c.unsafeNoVisibility ? undefined : and(...rowPolicy(s, c.mode ?? 'caller', c.staffRoles).map((t) => term(c, a, t)));
+  return c.unsafeNoVisibility ? undefined : and(...rowPolicy(s, c.mode ?? 'caller', c.staffRoles, c.schemas).map((t) => term(c, a, t)));
+
 }
 /** A write's `SET` items beyond the author's own. */
 const sets = (w: RowWrite, c: C): N[] =>

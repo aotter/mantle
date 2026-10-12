@@ -1,0 +1,34 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: posts}
+spec:
+ title: Posts
+ lifecycle: publishing
+ scope: {owner: auth.uid()}
+ indexes: [[owner, slug]]
+ schema:
+  type: object
+  required: [owner,slug,title]
+  properties: {owner: {type: string}, slug: {type: string}, title: {type: string}, cover: {type: string}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: translations}
+spec:
+ title: Translations
+ lifecycle: publishing
+ localized: true
+ translates: {parent: posts, on: slug}
+ scope: {owner: auth.uid()}
+ uniqueIndexes: [[owner,slug,locale]]
+ schema:
+  type: object
+  required: [owner,slug,locale,title]
+  properties: {owner: {type: string}, slug: {type: string}, locale: {type: string}, title: {type: string}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: translated}
+spec:
+ surface: public
+ sql: SELECT id, slug, title FROM translations ORDER BY id
