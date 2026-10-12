@@ -7,6 +7,7 @@ import { recipesOf } from "../domain/recipes.js";
 import { emitPublishing } from "./publishing.js";
 import { emitStores } from "./stores.js";
 import { emitPaging } from "./paging.js";
+import { emitWeb } from "./web.js";
 import { emitValidation } from "./validation.js";
 import { refuseDeclarations } from "./refusals.js";
 import { emitHandlers } from "./handlers.js";
@@ -120,7 +121,7 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
   }
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
-  const surfaces = { ...emitPaging(plan, lowered, target, refuse), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target) };
+  const surfaces = { ...emitPaging(plan, lowered, target, refuse), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
   const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
