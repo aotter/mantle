@@ -13,11 +13,37 @@ export interface DumpStorage {
 }
 const PAGE = 20, MAX_LINE = 1_048_576;
 const fail = (message: string) => new ContractError("DUMP_INVALID", message, "store/import", { status: 400 });
+const nativeJSON = JSON as typeof JSON & { rawJSON(text: string): unknown; isRawJSON(value: unknown): boolean };
 const canonical = (value: any, depth = 0): any => {
   if (depth > 64) throw fail("JSON nesting exceeds 64 levels.");
+  if (nativeJSON.isRawJSON?.(value)) return value;
   if (typeof value === "number" && !Number.isFinite(value)) throw fail("Non-finite number.");
   return Array.isArray(value) ? value.map(v => canonical(v, depth + 1)) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k], depth + 1)])) : value;
 };
+/** Exact JSON numbers survive native parsing; binary64 must never mediate portable JSON. */
+function jsonText(text: unknown): string {
+  if (typeof text !== "string" || Buffer.byteLength(text) > MAX_LINE || !nativeJSON.rawJSON) throw fail("Bounded exact JSON text/native JSON source support required.");
+  const parsed = JSON.parse(text, ((_key: string, v: any, context: { source?: string }) => {
+    if (typeof v !== "number") return v;
+    const match = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(context?.source ?? "");
+    if (!match) throw fail("Exact JSON numeric source unavailable.");
+    let digits = (match[2]! + (match[3] ?? "")).replace(/^0+/, ""), exponent = BigInt(match[4] ?? "0") - BigInt(match[3]?.length ?? 0);
+    if (!digits) return nativeJSON.rawJSON("0");
+    const zeros = /0+$/.exec(digits)?.[0].length ?? 0; digits = digits.slice(0, digits.length - zeros); exponent += BigInt(zeros);
+    return nativeJSON.rawJSON(match[1]! + digits + (exponent ? "e" + exponent : ""));
+  }) as any);
+  // JSON.parse discards duplicate keys. Refuse them before the portable projection can hide source data.
+  const objects: (Set<string> | null)[] = [];
+  for (const token of text.matchAll(/"(?:\\.|[^"\\])*"|[{}\[\]]/g)) {
+    if (token[0] === "{") objects.push(new Set()); else if (token[0] === "[") objects.push(null);
+    else if (token[0] === "}" || token[0] === "]") objects.pop();
+    else if (/^\s*:/.test(text.slice(token.index! + token[0].length))) {
+      const keys = objects.at(-1)!, key = JSON.parse(token[0]);
+      if (keys?.has(key)) throw fail("Duplicate JSON object key."); keys?.add(key);
+    }
+  }
+  return JSON.stringify(canonical(parsed));
+}
 const line = (value: unknown) => { const text = JSON.stringify(canonical(value)) + "\n"; if (Buffer.byteLength(text) > MAX_LINE) throw fail("Dump line exceeds 1 MiB."); return text; };
 const fingerprint = (plan: DumpPlan) => createHash("sha256").update(line([plan.tables.map(t => [t.name, t.key, t.columns]), plan.omitted])).digest("hex");
 const integer = (v: unknown): v is string => typeof v === "string" && v.length <= 20 && v !== "-0" && /^-?(0|[1-9]\d*)$/.test(v) && BigInt(v) >= -9223372036854775808n && BigInt(v) <= 9223372036854775807n;
@@ -28,9 +54,9 @@ function value(column: DumpColumn, v: any, source: boolean): any {
   if (source) {
     if (kind === "int") v = String(v);
     if (kind === "bool") { if (![true, false, 0, 1, 0n, 1n].includes(v)) throw fail(`Invalid ${column[0]}.`); v = v === true || v === 1 || v === 1n; }
-    if (kind === "json" && typeof v === "string") v = JSON.parse(v);
     if (kind === "authdate") v = isoTimestamptz(v);
   }
+  if (kind === "json") v = jsonText(v);
   if (kind === "session" || kind === "uuid" && (typeof v !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v)) || kind === "text" && typeof v !== "string" || kind === "int" && !integer(v) || kind === "real" && (typeof v !== "number" || !Number.isFinite(v)) || kind === "bool" && typeof v !== "boolean") throw fail(`Invalid ${column[0]}.`);
   if (kind === "timestamp" || kind === "authdate") { if (typeof v !== "string" || isoTimestamptz(v) !== v) throw fail(`Invalid timestamp ${column[0]}.`); }
   if (kind === "date") { if (typeof v !== "string") throw fail(`Invalid date ${column[0]}.`); encodeDate(v); }
@@ -107,7 +133,7 @@ export async function importStore(storage: DumpStorage, plan: DumpPlan, stream: 
           const row = table.columns.map((c, i) => value(c, record[i], false)), current = keyOf(table, row);
           if (!increasing(table, key, current)) throw fail("Duplicate or unordered row key."); key = current;
           hash.update(line(row));
-          const binds = table.columns.map((c, i) => row[i] === null ? null : c[1] === "json" ? JSON.stringify(row[i]) : plan.dialect === "sqlite" ? c[1] === "bool" ? Number(row[i]) : c[1] === "timestamp" ? encodeTimestamptz(row[i]) : c[1] === "date" ? encodeDate(row[i]) : row[i] : row[i]);
+          const binds = table.columns.map((c, i) => row[i] === null ? null : plan.dialect === "sqlite" ? c[1] === "bool" ? Number(row[i]) : c[1] === "timestamp" ? encodeTimestamptz(row[i]) : c[1] === "date" ? encodeDate(row[i]) : row[i] : row[i]);
           batch.push(binds); count++; if (batch.length === size) await flush(); record = await next();
         }
         const digest = hash.digest("hex");

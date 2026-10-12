@@ -13,6 +13,7 @@ import { d1Shim } from "./apps/d1-shim.js";
 const atom = (kind: string, name: string, spec: object) => JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind,metadata:{name},spec});
 const text = [atom("Schema","items",{title:"Portable items",lifecycle:"publishing",schema:{type:"object",properties:{owner:{type:"string"},title:{type:"string"},units:{type:"integer"},enabled:{type:"boolean"},payload:{type:"object"},at:{type:"string",format:"date-time"},day:{type:"string",format:"date"},expires:{type:["string","null"],format:"date-time"}},required:["owner","title","units","enabled","payload","at","day"]},scope:{owner:"auth.uid()"},indexes:[["owner"]],searchableFields:["title"],ttl:{field:"expires",expireAfterSeconds:0}}),atom("View","items",{surface:"public",requires:{auth:{all:["ctx.user"]}},sql:"SELECT id,title,at,day FROM items ORDER BY id"})].join("\n---\n");
 const auth = () => ({plugins:[jwt(),oauthProvider({loginPage:"/login",consentPage:"/consent"})]});
+const exactJSON = '{"int":9007199254740993,"negative":-9007199254740993,"decimal":1.234567890123456789,"scale":1.2300e2,"huge":1e400,"array":[null,true,"9007199254740993"],"nested":{"small":0.000000000000000000123}}';
 const directory = resolve(import.meta.dir,"apps/.generated",`transfer-${crypto.randomUUID()}`);
 afterAll(()=>rm(directory,{recursive:true,force:true}));
 const stream = (text: string) => new ReadableStream<Uint8Array>({start(c){c.enqueue(new TextEncoder().encode(text));c.close();}});
@@ -26,7 +27,7 @@ async function fixture(target: "bun-sqlite"|"bun-postgres"|"cloudflare-d1", auth
 async function sqlite(target:"bun-sqlite"|"cloudflare-d1"="bun-sqlite",authOptions?:object){const f=await fixture(target,authOptions),db=new Database(":memory:");db.exec("PRAGMA foreign_keys=ON");db.exec(f.ddl);return {...f,db,handle:target==="cloudflare-d1"?d1Shim(db):db};}
 async function postgres(authOptions?:object){const f=await fixture("bun-postgres",authOptions),db=new SQL({url:process.env.MANTLE_NEXT_BUN_PG_URL!,max:1}),schema=`transfer_${crypto.randomUUID().replaceAll("-","")}`;await db.unsafe(`CREATE SCHEMA "${schema}"`);await db.unsafe(`SET search_path TO "${schema}"`);await db.unsafe(f.ddl);return {...f,db,handle:db,close:async()=>{try{await db.unsafe(`DROP SCHEMA "${schema}" CASCADE`);}finally{await db.close();}}};}
 async function seed(f:Awaited<ReturnType<typeof sqlite>>){
-  for(let i=0;i<65;i++)f.db.query("INSERT INTO items(id,version,created_at,updated_at,author_id,status,published_at,owner,title,units,enabled,payload,at,day,expires) VALUES(?,CAST(? AS INTEGER),?,?,?,?,?,?,?,?,?,?,?,?,?)").run(`row-${String(i).padStart(3,"0")}`,i===0?"9007199254740993":"7",encodeTimestamptz("1969-12-31T23:59:59.123456Z"),encodeTimestamptz("2026-10-12T00:00:00.654321Z"),i%2?"owner-a":null,["draft","published","archived"][i%3]!,null,i%2?"owner-a":"owner-b",`record ${i}`,i===0?"-9007199254740993":String(i),i%2,JSON.stringify({z:[null,false,"emoji 🧪"],a:{nested:"value"}}),encodeTimestamptz("2026-10-12T08:00:00.123456+08:00"),encodeDate("2024-02-29"),i%4?null:encodeTimestamptz("2000-01-01T00:00:00Z"));
+  for(let i=0;i<65;i++)f.db.query("INSERT INTO items(id,version,created_at,updated_at,author_id,status,published_at,owner,title,units,enabled,payload,at,day,expires) VALUES(?,CAST(? AS INTEGER),?,?,?,?,?,?,?,?,?,?,?,?,?)").run(`row-${String(i).padStart(3,"0")}`,i===0?"9007199254740993":"7",encodeTimestamptz("1969-12-31T23:59:59.123456Z"),encodeTimestamptz("2026-10-12T00:00:00.654321Z"),i%2?"owner-a":null,["draft","published","archived"][i%3]!,null,i%2?"owner-a":"owner-b",`record ${i}`,i===0?"-9007199254740993":String(i),i%2,i===0?exactJSON:i===1?"null":JSON.stringify({z:[null,false,"emoji 🧪"],a:{nested:"value"}}),encodeTimestamptz("2026-10-12T08:00:00.123456+08:00"),encodeDate("2024-02-29"),i%4?null:encodeTimestamptz("2000-01-01T00:00:00Z"));
   const at="2026-10-12T00:00:00.123456Z";
   f.db.query('INSERT INTO user(id,name,email,emailVerified,"createdAt","updatedAt") VALUES(?,?,?,?,?,?)').run("member","Member","member@example.test",1,at,at);
   f.db.query('INSERT INTO session(id,token,"userId","expiresAt","createdAt","updatedAt") VALUES(?,?,?,?,?,?)').run("session","fixture-token","member","2030-01-01T00:00:00.000001Z",at,at);
@@ -50,7 +51,10 @@ test("portable SQLite dump includes all scopes, TTL and publishing states, prese
     expect(header.sessions).toBe("omitted");expect(header.ignoredSessionLinks).toContainEqual(["oauthAccessToken","sessionId"]);
     expect(dump).toContain('"9007199254740993"');expect(dump).toContain('"-9007199254740993"');expect(dump).not.toContain('"table":"session"');
     expect(await target.app.importStore(target.handle,stream(dump))).toEqual({rows:76});
-    expect(await exported(target)).toBe(dump);expect(target.db.query("SELECT COUNT(*) AS n FROM session").get()).toEqual({n:0});
+    expect(await exported(target)).toBe(dump);
+    expect(target.db.query("SELECT payload -> '$.int' AS integer, payload -> '$.decimal' AS decimal, payload -> '$.huge' AS huge FROM items WHERE id='row-000'").get()).toEqual({integer:"9007199254740993",decimal:"1234567890123456789e-18",huge:"1e400"});
+    expect(target.db.query("SELECT payload, payload IS NULL AS sqlNull FROM items WHERE id='row-001'").get()).toEqual({payload:"null",sqlNull:0});
+    expect(target.db.query("SELECT COUNT(*) AS n FROM session").get()).toEqual({n:0});
     expect(target.db.query('SELECT "sessionId" FROM "oauthRefreshToken"').get()).toEqual({sessionId:null});
     expect(target.db.query('SELECT COUNT(*) AS n FROM "_mantle_fts_items" WHERE "_mantle_fts_items" MATCH \'record\'').get()).toEqual({n:65});
     expect(target.db.query("PRAGMA foreign_key_check").all()).toEqual([]);
@@ -60,7 +64,10 @@ test("portable SQLite dump includes all scopes, TTL and publishing states, prese
 (process.env.MANTLE_NEXT_BUN_PG_URL?test:test.skip)("SQLite → real PostgreSQL → SQLite preserves canonical portable rows and generated View date output",async()=>{
   const source=await sqlite(),target=await postgres(),back=await sqlite();try{
     await seed(source);const original=await exported(source);await target.app.importStore(target.handle,stream(original));const pg=await exported(target);
-    expect(body(pg)).toBe(body(original));await back.app.importStore(back.handle,stream(pg));expect(await exported(back)).toBe(original);
+    expect(body(pg)).toBe(body(original));
+    expect((await target.db.unsafe("SELECT payload->>'int' AS integer,payload->>'decimal' AS decimal,payload->>'negative' AS negative FROM items WHERE id='row-000'"))[0]).toEqual({integer:"9007199254740993",decimal:"1.234567890123456789",negative:"-9007199254740993"});
+    expect((await target.db.unsafe("SELECT CAST(payload AS TEXT) AS payload,payload IS NULL AS null FROM items WHERE id='row-001'"))[0]).toEqual({payload:"null",null:false});
+    await back.app.importStore(back.handle,stream(pg));expect(await exported(back)).toBe(original);
     const caller={kind:"user",subject:"owner-a",role:null,scopes:[],credential:"session",credentialId:null,clientId:null};
     expect(await target.query.views.items(target.db,caller,{})).toEqual(await source.query.views.items(source.db,caller,{}));
   }finally{source.db.close();back.db.close();await target.close();}
@@ -84,6 +91,20 @@ test("NDJSON parser refuses invalid UTF-8, oversize lines, duplicate keys, missi
     const invalid=["null\n",JSON.stringify(JSON.parse(lines[0]!))+"\n"+'x'.repeat(1_048_577)+"\n",[...lines.slice(0,3),lines[2],...lines.slice(3)].join("\n")+"\n",lines.slice(0,-1).join("\n")+"\n",[...lines.slice(0,2),JSON.stringify(row),...lines.slice(3)].join("\n")+"\n"];
     for(const text of invalid){const target=await sqlite();try{await expect(target.app.importStore(target.handle,stream(text))).rejects.toBeInstanceOf(Error);expect(target.db.query("SELECT COUNT(*) AS n FROM items").get()).toEqual({n:0});}finally{target.db.close();}}
     const target=await sqlite();try{const bytes=new ReadableStream<Uint8Array>({start(c){c.enqueue(new Uint8Array([0xff]));c.close();}});await expect(target.app.importStore(target.handle,bytes)).rejects.toBeInstanceOf(Error);}finally{target.db.close();}
+  }finally{source.db.close();}
+});
+
+test("portable JSON keeps scalar types and refuses duplicate keys or excessive nesting",async()=>{
+  const source=await sqlite();try{
+    await seed(source);
+    for(const raw of ['[9007199254740993,1.234567890123456789,"text",null]', '{"a":{"same":1},"b":{"same":2},"__proto__":{"value":9007199254740993}}', '"scalar"', 'true', 'null']){
+      source.db.query("UPDATE items SET payload=? WHERE id='row-000'").run(raw);const target=await sqlite();try{
+        const dump=await exported(source);await target.app.importStore(target.handle,stream(dump));expect(await exported(target)).toBe(dump);
+      }finally{target.db.close();}
+    }
+    for(const raw of ['{"a":1,"a":2}', '{"a":1,"\\u0061":2}', '['.repeat(66)+'0'+']'.repeat(66)]){
+      source.db.query("UPDATE items SET payload=? WHERE id='row-000'").run(raw);await expect(exported(source)).rejects.toMatchObject({code:"DUMP_INVALID"});
+    }
   }finally{source.db.close();}
 });
 
@@ -162,12 +183,13 @@ try {for(const db of [env.DB,env.BROKEN])for(const sql of ddl)await db.prepare(s
 const restored=await importStore(env.DB,stream(dump)),roundtrip=await new Response(exportStore(env.DB)).text();
 let nonempty=false,incomplete=false;try{await importStore(env.DB,stream(dump));}catch(e){nonempty=e.code==='DUMP_INVALID';}
 try{await importStore(env.BROKEN,stream(dump.replace(/"sha256":"[a-f0-9]+"/,'"sha256":"wrong"')));}catch(e){incomplete=e.code==='IMPORT_INCOMPLETE'&&e.fields?.incomplete===true;}
-return Response.json({restored,roundtrip,nonempty,incomplete});}catch(e){return Response.json({error:e.code??'FAILED',message:e.message},{status:500});}}};`);
+const nativeJSON=await env.DB.prepare("SELECT payload -> '$.int' AS integer,payload -> '$.decimal' AS decimal FROM items WHERE id='row-000'").first();
+return Response.json({restored,roundtrip,nonempty,incomplete,nativeJSON});}catch(e){return Response.json({error:e.code??'FAILED',message:e.message},{status:500});}}};`);
     const config=resolve(privateDir,"wrangler.json"),base=resolve(import.meta.dir,"..");
     await writeFile(config,JSON.stringify({name:"mantle-transfer-local",main:entry,compatibility_date:"2026-09-28",compatibility_flags:["nodejs_compat"],d1_databases:[{binding:"DB",database_name:"transfer-ok",database_id:"00000000-0000-0000-0000-000000001298"},{binding:"BROKEN",database_name:"transfer-bad",database_id:"00000000-0000-0000-0000-000000001299"}]}),{mode:0o600});
     log=await open(resolve(privateDir,"wrangler.log"),"w",0o600);
     worker=spawn("node",[resolve(base,"node_modules/wrangler/bin/wrangler.js"),"dev","--local","--config",config,"--ip","127.0.0.1","--port",port,"--inspector-port","0","--persist-to",resolve(privateDir,"state")],{cwd:base,detached:true,env:{...process.env,WRANGLER_SEND_METRICS:"false",NO_PROXY:"127.0.0.1,localhost",no_proxy:"127.0.0.1,localhost"},stdio:["ignore",log.fd,log.fd]});exited=once(worker,"exit");
     let ready=false;for(let i=0;i<60;i++){if(worker.exitCode!==null)throw Error(await readFile(resolve(privateDir,"wrangler.log"),"utf8"));try{ready=(await fetch(`http://127.0.0.1:${port}/health`,{signal:AbortSignal.timeout(1000)})).ok;}catch{}if(ready)break;await new Promise(r=>setTimeout(r,1000));}
-    expect(ready).toBe(true);const response=await fetch(`http://127.0.0.1:${port}/verify`,{signal:AbortSignal.timeout(60_000)}),result=await response.json() as any;expect(response.status).toBe(200);expect(result).toEqual({restored:{rows:76},roundtrip:dump,nonempty:true,incomplete:true});
+    expect(ready).toBe(true);const response=await fetch(`http://127.0.0.1:${port}/verify`,{signal:AbortSignal.timeout(60_000)}),result=await response.json() as any;expect(response.status).toBe(200);expect(result).toEqual({restored:{rows:76},roundtrip:dump,nonempty:true,incomplete:true,nativeJSON:{integer:"9007199254740993",decimal:"1234567890123456789e-18"}});
   }finally{source.db.close();if(worker?.pid){try{process.kill(-worker.pid,"SIGTERM");}catch{}await exited;}await log?.close();await rm(privateDir,{recursive:true,force:true});}
 },90_000);

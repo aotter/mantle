@@ -36,7 +36,14 @@ integer columns, without converting it through a JS number. This leaves normal
 bare query output contracts unchanged. Content timestamps use ISO UTC with six
 digits (SQLite microseconds ↔ PostgreSQL timestamptz), dates use `YYYY-MM-DD`;
 Better Auth's SQLite ISO timestamps preserve their fraction; media epochs remain
-millisecond integers. Booleans and JSON are portable values, not native encodings.
+millisecond integers. Booleans are portable values. JSON columns are canonical
+JSON **text strings** inside the dump: native numeric tokens keep their exact
+decimal digits and use normalized decimal exponents, independently of JavaScript
+binary64. Object keys are sorted; arrays and scalar types are retained. JSON
+literal `null` remains distinct from SQL NULL. Duplicate object keys are refused
+(including keys equal after escape decoding), because PostgreSQL JSONB would
+discard them. A native runtime without JSON numeric source/raw-JSON support is
+refused; JSON values the target cannot represent never report a completed import.
 
 The exporter retains one 20-row native page. Parsing is incremental, each NDJSON
 line is capped at 1 MiB, JSON nesting at 64 levels; imports batch at most 20 rows
