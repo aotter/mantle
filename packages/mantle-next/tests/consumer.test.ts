@@ -143,8 +143,12 @@ test("CLI regeneration cannot route removed operation entries to renumbered func
   const cli = fileURLToPath(new URL("../src/infrastructure/cli.ts", import.meta.url));
   await author(["a", "b"]);
   execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {cwd:directory,stdio:"pipe"});
+  await writeFile(join(destination, "views/custom.ts"), 'export default "application-owned";');
   await author(["b"]);
   execFileSync(process.execPath, [cli, "cloudflare-d1", destination, manifest], {cwd:directory,stdio:"pipe"});
+  expect(existsSync(join(destination, "views/a.ts"))).toBe(false);
+  expect(existsSync(join(destination, "procedures/create-a.ts"))).toBe(false);
+  expect(await readFile(join(destination, "views/custom.ts"), "utf8")).toBe('export default "application-owned";');
   const retained = await Bun.build({entrypoints:[join(destination,"views/b.ts"),join(destination,"procedures/create-b.ts")],target:"browser"});
   expect(retained.success).toBe(true);
   const load = (file: string) => execFileSync(process.execPath, ["-e", `await import(${JSON.stringify(pathToFileURL(file).href)})`], {stdio:"pipe"});
