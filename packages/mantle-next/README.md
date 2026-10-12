@@ -50,7 +50,7 @@ On bun:sqlite and PostgreSQL, `store.transaction(async tx => { ... })` binds `co
 and `procedures` to one transaction: resolve commits, throw rolls back; nested transactions and `tx.batch` are refused.
 PostgreSQL defaults to serializable; `{ isolation: "read committed" }` selects another level. There is no automatic retry.
 SQLite uses BEGIN IMMEDIATE and queues all Store/generated driver calls on the same Database until COMMIT/ROLLBACK;
-use `tx` inside the callback and keep direct native Database calls outside it.
+Inside a transaction callback the outer Store or handle passed to a Mantle driver throws `INPUT_VALIDATION_FAILED`; use `tx`.
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain

@@ -2,6 +2,7 @@
 import type { Bound } from "../binds.js";
 import { conflict, type Row } from "../contracts.js";
 import { unique } from "../dialect/sqlite.js";
+import { context, guard } from "./transaction-context.js";
 
 export interface Handle {
   query(sql: string): {
@@ -23,7 +24,7 @@ function enqueue<T>(db: Handle, fn: () => T | PromiseLike<T>): Promise<T> {
   void tail.then(() => { if (queues.get(db) === tail) queues.delete(db); });
   return result;
 }
-const available = <T>(db: Handle, fn: () => T): T | Promise<T> => queues.has(db) ? enqueue(db, fn) : fn();
+const available = <T>(db: Handle, fn: () => T): T | Promise<T> => { guard(db); return queues.has(db) ? enqueue(db, fn) : fn(); };
 export const read = (db: Handle, sql: string, binds: unknown[]): any[] | Promise<any[]> => available(db, () => db.query(sql).all(...binds));
 /** One statement is atomic on its own; several run in a transaction, and a row statement that does not change exactly one row rolls it back. A unique-index clash is CONFLICT. */
 export async function procedure(db: Handle, steps: readonly Bound[], path: string): Promise<Row[][]> {
@@ -42,6 +43,7 @@ export async function procedure(db: Handle, steps: readonly Bound[], path: strin
 }
 
 export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>): Promise<T> {
+  guard(db);
   if (transactions.has(db)) throw new Error("Nested transactions are not supported.");
   return enqueue(db, async () => {
     db.exec("BEGIN IMMEDIATE");
@@ -51,8 +53,9 @@ export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>)
       return db.query(sql);
     }, exec: db.exec.bind(db), transaction: db.transaction.bind(db) };
     transactions.add(tx);
-    try { const result = await fn(tx); db.exec("COMMIT"); return result; }
+    const state: { outer?: Handle } = { outer: db };
+    try { const result = await context.run(state, () => fn(tx)); db.exec("COMMIT"); return result; }
     catch (error) { db.exec("ROLLBACK"); throw error; }
-    finally { active = false; }
+    finally { active = false; state.outer = undefined; }
   });
 }

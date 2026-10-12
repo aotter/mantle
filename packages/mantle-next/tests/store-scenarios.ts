@@ -33,11 +33,11 @@ export const storeEnv = (app: { store: any; views: any; procedures: any }, handl
   const db: any = handle;
   const tracked = sqlite ? handle : { unsafe: db.unsafe.bind(db), begin: (options: string, fn: any) => { beginOptions.push(options); return db.begin(options, fn); } };
   const store = (caller: Caller) => app.store(tracked, caller);
-  const stores = (caller: Caller, db = handle) => { const store = app.store(db, caller); return { purchase_requests: store.collection("purchase_requests"), session_notes: store.collection("session_notes"), catalog_items: store.collection("catalog_items") }; };
+  const stores = (caller: Caller, db = tracked) => { const store = app.store(db, caller); return { purchase_requests: store.collection("purchase_requests"), session_notes: store.collection("session_notes"), catalog_items: store.collection("catalog_items") }; };
   return {
     sqlite, native, stores, store, beginOptions,
-    view: (name, caller, input) => app.views[name](handle, caller, input),
-    call: (name, caller, input) => app.procedures[name](handle, caller, input),
+    view: (name, caller, input) => app.views[name](tracked, caller, input),
+    call: (name, caller, input) => app.procedures[name](tracked, caller, input),
     ...(spy && { record: async (caller, run) => { const calls: { sql: string; values: unknown[] }[] = []; await run(stores(caller, spy(calls))); return calls.at(-1)!; } }),
   };
 };
@@ -326,6 +326,33 @@ async function verifyTransactions(env: StoreEnv, ok: () => void) {
   assert.deepEqual(await store.batch([]), []); ok();
 
   if (!store.transaction) { assert.equal("transaction" in store, false); return; }
+  const promptly = async (run: () => unknown) => {
+    let timer: ReturnType<typeof setTimeout>;
+    try {
+      return await Promise.race([Promise.resolve().then(run), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Outer handle did not fail promptly")), 500);
+      })]);
+    } finally { clearTimeout(timer!); }
+  };
+  const misuseBefore = await snapshot();
+  for (const run of [
+    () => catalog.update(keep.id, { name: "outer-write" }, { lock: now.version }),
+    () => catalog.findById(keep.id),
+    () => env.view("purchase-totals", user(A), {}),
+    () => env.call("create-session-note-pair", user(A), { body: "outer-procedure", expiresAt: null }),
+    () => store.transaction(async () => {}),
+  ]) {
+    await assert.rejects(store.transaction(async (tx: any) => {
+      await tx.collection("session_notes").insert({ body: "misuse-rollback", expiresat: null });
+      await promptly(run);
+    }), (e: any) => e?.name === "ContractError" && e.code === "INPUT_VALIDATION_FAILED" && /use tx, not the outer store/.test(e.message));
+    assert.deepEqual(await snapshot(), misuseBefore); ok();
+  }
+  // Descendants retain ALS context after the callback: the outer handle is usable once the transaction ends.
+  let after!: Promise<unknown>, releaseAfter!: () => void;
+  const afterGate = new Promise<void>(resolve => { releaseAfter = resolve; });
+  await store.transaction(async () => { after = afterGate.then(() => catalog.findById(keep.id)); });
+  releaseAfter(); assert.equal((await after as any).name, "after"); ok();
   let escaped: any;
   const committed = await store.transaction(async (tx: any) => {
     escaped = tx;

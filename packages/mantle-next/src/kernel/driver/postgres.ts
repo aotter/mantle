@@ -2,13 +2,14 @@
 import type { Bound } from "../binds.js";
 import type { TransactionOptions } from "../store.js";
 import { conflict, ContractError, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
+import { context, guard } from "./transaction-context.js";
 
 const transactions = new WeakSet<Postgres>();
 const ISOLATION: readonly string[] = ["serializable", "repeatable read", "read committed", "read uncommitted"];
 
-export const read = (db: Unsafe, sql: string, binds: unknown[]): PromiseLike<PostgresResult> => db.unsafe(sql, binds);
+export const read = (db: Unsafe, sql: string, binds: unknown[]): PromiseLike<PostgresResult> => { guard(db); return db.unsafe(sql, binds); };
 export async function run(db: Unsafe, sql: string, binds: unknown[]): Promise<{ rows: any[]; changes: number }> {
-  const rows = await db.unsafe(sql, binds);
+  const rows = await read(db, sql, binds);
   return { rows, changes: Number(rows.count ?? 0) };
 }
 
@@ -49,8 +50,10 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
 
 /** Shared BEGIN/COMMIT outcome handling for Procedures and interactive Store transactions. */
 export async function transaction<T>(db: Postgres, fn: (tx: Postgres) => Promise<T>, options: TransactionOptions = {}, path = "store/transaction"): Promise<T> {
+  guard(db);
   if (transactions.has(db)) throw new Error("Nested transactions are not supported.");
   let committing = false;
+  const state: { outer?: Unsafe } = { outer: db };
   try {
     // printed into BEGIN, so only PostgreSQL's own four levels: a handler may pass request input here
     const level = options.isolation ?? "serializable";
@@ -62,8 +65,9 @@ export async function transaction<T>(db: Postgres, fn: (tx: Postgres) => Promise
         return handle.unsafe(sql, values);
       }, begin: async () => { throw new Error("Nested transactions are not supported."); } };
       transactions.add(tx);
-      try { const result = await fn(tx); committing = true; return result; }
+      try { const result = await context.run(state, () => fn(tx)); committing = true; return result; }
       finally { active = false; }
     });
   } catch (error) { throw error instanceof ContractError || !committing ? error : postgresOutcome(error, path); }
+  finally { state.outer = undefined; }
 }
