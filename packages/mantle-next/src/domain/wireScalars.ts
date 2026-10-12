@@ -1,4 +1,4 @@
-import type { RuntimePlan, SqlNode } from "@aotter/mantle/spec";
+import type { RuntimePlan, SqlNode } from "@aotter/mantle/compiler";
 import type { Dialect } from "../kernel/dialect/common.js";
 import { declaredType } from "./columns.js";
 

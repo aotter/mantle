@@ -1,5 +1,5 @@
 /** Build-time predicates on the Core page's outputs, before its keyset LIMIT. */
-import type { RuntimePlan, SqlNode as N } from "@aotter/mantle/spec";
+import type { RuntimePlan, SqlNode as N } from "@aotter/mantle/compiler";
 import { declaredType } from "./columns.js";
 const col = (name: string): N => ({ColumnRef:{fields:[{String:{sval:"_p"}},{String:{sval:name}}]}});
 const cast = (arg: N, type: string): N => ({TypeCast:{arg,typeName:{names:[{String:{sval:type}}],typemod:-1}}});

@@ -1,7 +1,7 @@
 /** Unsupported declarations fail at generation, never silently lose their behavior. */
 import type { GenerateInput, GenerateDiagnostic } from "../domain/model.js";
 import { STAFF_ROLES } from "../domain/visibility.js";
-import { viewOutputs } from "@aotter/mantle/spec";
+import { viewOutputs } from "@aotter/mantle/compiler";
 
 export function refuseDeclarations({ plan }: GenerateInput, diagnostics: GenerateDiagnostic[]): void {
   const refuse = (path: string, message: string) => diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message });

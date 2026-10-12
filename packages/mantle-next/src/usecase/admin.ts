@@ -1,5 +1,5 @@
 /** Static route wiring over the generated descriptor, validation and native query modules. */
-import type { JsonSchema, RuntimePlan } from "@aotter/mantle/spec";
+import type { JsonSchema, RuntimePlan } from "@aotter/mantle/compiler";
 import type { GenerateInput } from "../domain/model.js";
 import { databaseImport } from "../domain/entry.js";
 import { authPredicate, conversions } from "../domain/input.js";

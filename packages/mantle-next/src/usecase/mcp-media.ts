@@ -1,5 +1,5 @@
 /** Compile the seven media inputs once; the generated module binds the existing site. */
-import type { JsonSchema } from "@aotter/mantle/spec";
+import type { JsonSchema } from "@aotter/mantle/compiler";
 import { emitValidation } from "./validation.js";
 export function mediaDefinitions() {
 const define = (name: string, description: string, inputSchema: unknown, action: "policy"|"create"|"commit"|"list"|"get"|"update"|"delete", readOnlyHint = false) => ({name,description,inputSchema,action,annotations:{readOnlyHint,destructiveHint:action === "delete",openWorldHint:true}});

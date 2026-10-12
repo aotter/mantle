@@ -1,5 +1,5 @@
 /** Generated App assembly consumes the static catalogue, never a runtime plan. */
-import type { RuntimePlan } from "@aotter/mantle/spec";
+import type { RuntimePlan } from "@aotter/mantle/compiler";
 export function emitMcpApps(plan: RuntimePlan): Record<string, string> {
   if (!Object.values(plan.views).some(view => view.surface !== "internal")) return {};
   return { "mcp-app.ts": `import { planApp as assemble } from "@aotter/mantle-next/mcp-apps";

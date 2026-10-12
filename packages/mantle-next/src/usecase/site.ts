@@ -1,5 +1,5 @@
 /** Generate the optional site/media module and deployment DDL, never runtime preparation. */
-import { assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired, type SiteDefaults } from "@aotter/mantle/spec";
+import { assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired, type SiteDefaults } from "@aotter/mantle/compiler";
 import type { Target } from "../domain/model.js";
 import { driverFor, isSqlite, q } from "../domain/entry.js";
 export function emitSite(target: Target, defaults: SiteDefaults | undefined, refuse: (path:string,message:string)=>void, schemaNames: readonly string[]): Record<string,string> {

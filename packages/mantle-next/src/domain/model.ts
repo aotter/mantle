@@ -1,13 +1,12 @@
 /** Generation consumes compiler-owned data; emitted application code executes native SQL only. */
-import type { AdminExtension } from "@aotter/mantle/admin";
-import type { PlanLowered, RuntimePlan } from "@aotter/mantle/spec";
+import type { AdminExtension, PlanLowered, RuntimePlan } from "@aotter/mantle/compiler";
 
 export type Target = "bun-sqlite" | "bun-postgres" | "cloudflare-d1" | "cloudflare-postgres";
 export interface GenerateInput {
   readonly target: Target;
   /** Build-time declarations used to check manifest UI bindings. */
   readonly adminExtensions?: readonly Pick<AdminExtension, "id" | "contributes">[];
-  readonly site?: import("@aotter/mantle/spec").SiteDefaults;
+  readonly site?: import("@aotter/mantle/compiler").SiteDefaults;
   readonly plan: RuntimePlan;
   readonly lowered: PlanLowered;
   /** Generated staff View match pages, in caller/trusted first/next order. */

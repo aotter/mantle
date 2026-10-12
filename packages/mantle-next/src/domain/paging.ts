@@ -1,5 +1,5 @@
 /** Build-time proofs for the compiler's keyset keys. No AST reaches a generated operation. */
-import { NATIVE_NOT_NULL, notNullColumns, type RuntimePlan, type PlanSchema, type SqlNode } from "@aotter/mantle/spec";
+import { NATIVE_NOT_NULL, notNullColumns, type RuntimePlan, type PlanSchema, type SqlNode } from "@aotter/mantle/compiler";
 import { declaredType } from "./columns.js";
 
 type Field = { schema: PlanSchema; name: string; type: string; notNull: boolean; source: object };

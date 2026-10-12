@@ -1,5 +1,5 @@
 /** Compile boundary checks into each operation; no schema enters the request bundle. */
-import type { JsonSchema } from "@aotter/mantle/spec";
+import type { JsonSchema } from "@aotter/mantle/compiler";
 import { q } from "../domain/entry.js";
 import { publishingInput } from "./publishing.js";
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");

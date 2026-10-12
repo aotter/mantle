@@ -1,5 +1,5 @@
 /** What a column's Mantle type means to generated code, in one place: Views, Stores and wire forms all read it here. */
-import type { RuntimePlan } from "@aotter/mantle/spec";
+import type { RuntimePlan } from "@aotter/mantle/compiler";
 import type { Target } from "./model.js";
 import type { WireColumns } from "../kernel/contracts.js";
 

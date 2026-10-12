@@ -1,6 +1,6 @@
 /** Generate selected Admin adapters and concrete validators; bare Store rows remain native. */
-import { collectionOf } from "@aotter/mantle/admin";
-import { notNullColumns, resolveMantleRef, type JsonSchema } from "@aotter/mantle/spec";
+import { collectionOf } from "@aotter/mantle/compiler";
+import { notNullColumns, resolveMantleRef, type JsonSchema } from "@aotter/mantle/compiler";
 import type { GenerateInput } from "../domain/model.js";
 import { databaseImport, q, isSqlite } from "../domain/entry.js";
 import { declaredType } from "../domain/columns.js";

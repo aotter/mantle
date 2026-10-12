@@ -1,5 +1,5 @@
 /** Selected View boundary: Core prints keyset SQL once; bare operations retain native rows. */
-import { parseNumeric, type RuntimePlan, type PlanLowered, type SqlNode } from "@aotter/mantle/spec";
+import { parseNumeric, type RuntimePlan, type PlanLowered, type SqlNode } from "@aotter/mantle/compiler";
 import {authLines} from "../domain/input.js";
 import { driverFor, databaseImport, isSqlite, q } from "../domain/entry.js";
 import type { PagingProof } from "../domain/paging.js";
