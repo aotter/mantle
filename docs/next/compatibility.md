@@ -15,6 +15,7 @@ explicitly; apply `schema.sql` directly only to a new database.
 | Typed SQL Views and Procedures, auth predicates, OCC, atomic writes | Generated bare queries accept validated inputs and a verified Caller; date/date-time outputs are ISO strings, native errors stay internal. |
 | Typed Store collections and internal Views/Procedures | Shared Store, AND-only filters, indexed non-null keyset ordering, atomic batches; interactive transactions on SQLite/PostgreSQL. |
 | Better Auth integration and Workers builds | App owns `auth.ts` and `resolveCaller`; `mantle generate` emits native Wrangler build configuration. Keep heavy auth imports lazy. |
+| Transactional email port, English templates and dev console sender | Optional `@aotter/mantle/email`; app supplies the sender and passes locale through. See [email wiring](email.md). |
 | View keyset pages, generated boundary validation and HTTP error mapping | Generated `paged/views/*` and `validation/*` modules plus `wire`; see [surface deltas](surfaces.md). |
 | REST and `http` Trigger exposure | Supported generated `rest.ts`; app mounts with `{ db, caller }` and required `handlers` for ref contracts. Public Views page at `/api/views/<name>`; HTTP Triggers keep method/path. |
 | Generated MCP and `mcp` Trigger exposure | Public/staff tools, shared generated checks, publishing transitions on staff only; SDK loads on matching requests. Install the official MCP peer for manifests selecting this surface. |
@@ -48,7 +49,7 @@ codes and paths. Multiple declarations produce multiple diagnostics.
 | Input properties differing only in case | Rename input properties to be unique without regard to case. |
 | PostgreSQL JSON/date/date-time parameters used without the declared cast | Wrap each occurrence in the concrete `CAST(... AS <type>)` shown by the diagnostic. |
 
-Old service APIs (site/config/media/email), automatic migrations and boot-time
+Old service APIs (site/config/media), automatic migrations and boot-time
 schema convergence are outside generation; the app owns them. They are not v2
 manifest declarations. Store `or`/`not`/joins/subqueries belong in internal SQL
 Views; unsupported ordering fails the generated TypeScript contract. See

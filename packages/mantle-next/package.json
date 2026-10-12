@@ -20,6 +20,7 @@
     "./driver/bun-sqlite": "./dist/kernel/driver/bun-sqlite.js",
     "./driver/d1": "./dist/kernel/driver/d1.js",
     "./driver/postgres": "./dist/kernel/driver/postgres.js",
+    "./email": "./dist/kernel/email.js",
     "./auth": "./dist/auth/caller.js",
     "./auth/adapter": "./dist/auth/adapter.js"
   },
