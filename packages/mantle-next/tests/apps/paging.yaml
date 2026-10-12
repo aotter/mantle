@@ -94,3 +94,29 @@ spec:
   surface: internal
   input: {type: object, required: [session], properties: {session: {type: string}}, additionalProperties: false}
   sql: SELECT id, block, position FROM visible WHERE session = input.session ORDER BY block DESC, position
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: sessions}
+spec:
+  title: Sessions
+  indexes: [[owner]]
+  scope: {owner: auth.uid()}
+  schema:
+    type: object
+    required: [owner, label]
+    properties: {owner: {type: string}, label: {type: string}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: windowed}
+spec:
+  surface: internal
+  sql: SELECT p.id, p.day, p.at, p.session, row_number() OVER (PARTITION BY p.session ORDER BY p.at DESC) AS rn FROM positions p JOIN sessions s ON s.id = p.session
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: window-groups}
+spec:
+  surface: internal
+  sql: SELECT day, max(at) AS latest, count(*) AS total FROM windowed WHERE rn <= 500 GROUP BY day ORDER BY max(at) DESC

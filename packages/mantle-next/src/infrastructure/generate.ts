@@ -59,7 +59,9 @@ export async function generateFromSources(request: { readonly target: Target; re
     mode: nextMode,
     staffRoles: STAFF_ROLES,
     pageQuery(ast, name) {
-      paging[name] = provePaging(compiled.plan, ast);
+      // Core visits public/caller before trusted. Prove the real caller equality prefixes;
+      // a trusted all-scope read does not acquire a fictional scope predicate.
+      if (!Object.hasOwn(paging, name)) paging[name] = provePaging(compiled.plan, ast);
       const view = compiled.plan.views[name]!;
       const lineage = [...new Set(Object.values(view.columns ?? {}).map(c => c.schema))];
       const schema = lineage.length === 1 ? compiled.plan.schemas[lineage[0]!] : Object.values(compiled.plan.schemas).length === 1 ? Object.values(compiled.plan.schemas)[0] : undefined;

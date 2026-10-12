@@ -48,13 +48,18 @@ A pageable Schema View has a complete NOT NULL scalar tuple ending in the
 compiler's `id` tiebreak. Its ordered columns must match an index after fixed
 equality prefixes (including caller scope); multiple columns and mixed directions
 retain the authored order. CTE projections preserve the proof; joins must have a
-proved singleton side so the base id cannot fan out.
+proved singleton side, or an exact PK `id` equality to a non-null column of the
+other relation, so the base id cannot fan out. Relation aliases and nested CTE
+bindings keep their own identity; same-Schema aliases are not interchangeable.
 
 Grouped Views use every GROUP BY key as the tiebreak, with known non-null scalar
-keys; `min`/`max` of a non-null column retain its native cursor type. Paging a
+keys; unfiltered, non-windowed `min`/`max` of a non-null column retain its native cursor type. Paging a
 grouped result does not avoid the native grouping/source scan. Authors own source
 predicate indexes and should inspect EXPLAIN for their workload. Nullable,
 unknown and JSON order expressions and unproved fanout remain refused.
+Trusted system reads retain their all-scope SQL: without an actual scope
+predicate, a scope-first index is not a proved range scan and native sorting or
+scanning may be needed. Caller equality-prefix proofs do not claim otherwise.
 
 Proved singletons (scalar/aggregate queries, unique-id lookups and singleton
 sources) run bounded first-page SQL, reject cursors and refuse overflow.
