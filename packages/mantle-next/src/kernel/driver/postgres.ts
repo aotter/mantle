@@ -20,9 +20,14 @@ const sqlstate = (error: unknown): unknown => { const e = error as { errno?: unk
  * A server ErrorResponse (SQLSTATE + severity) outside connection/resource classes rolled back; anything else, such as a
  * lost socket, is OUTCOME_UNKNOWN.
  */
-export function postgresOutcome(error: unknown, path: string): unknown {
+/** A structured server ErrorResponse proves rollback; missing evidence is uncertain. */
+export function definitive(error: unknown): boolean {
+  if (error instanceof ContractError) return error.code === "CONFLICT";
   const state = sqlstate(error);
-  if (typeof state === "string" && /^[0-9A-Z]{5}$/.test(state) && typeof (error as { severity?: unknown })?.severity === "string" && !/^(08|28|53|57|58|XX)/.test(state)) return error;
+  return typeof state === "string" && /^[0-9A-Z]{5}$/.test(state) && typeof (error as { severity?: unknown })?.severity === "string" && !/^(08|28|53|57|58|XX)/.test(state);
+}
+export function postgresOutcome(error: unknown, path: string): unknown {
+  if (definitive(error)) return error;
   return new ContractError("OUTCOME_UNKNOWN", "The write outcome is unknown; reconcile before retrying.", path, { cause: error });
 }
 

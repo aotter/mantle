@@ -35,7 +35,12 @@ export function statusOf(code: string): number {
     case "NOT_FOUND": return 404;
     case "METHOD_NOT_ALLOWED": return 405;
     case "CONFLICT": return 409;
-    case "OUTCOME_UNKNOWN": return 503;
+    case "MEDIA_PURPOSE_REJECTED": case "MEDIA_SVG_REJECTED": case "MEDIA_MIME_REJECTED": case "MEDIA_VARIANTS_INCOMPLETE": case "MEDIA_VARIANT_SIZE_EXCEEDED": case "MEDIA_VARIANTS_SUSPICIOUS_SIZE": return 400;
+    case "MEDIA_ASSET_NOT_FOUND": return 404;
+    case "MEDIA_OBJECT_NOT_FOUND": return 409;
+    case "MEDIA_UPLOAD_EXPIRED": return 410;
+    case "SITE_NOT_CONFIGURED": case "MEDIA_NOT_CONFIGURED": return 501;
+    case "PARTIAL_FAILURE": case "OUTCOME_UNKNOWN": return 503;
     default: return 500;
   }
 }
@@ -43,7 +48,7 @@ export function statusOf(code: string): number {
 /** Redact native errors at the selected boundary; the bare query preserves their identity. */
 export function wire(error: unknown) {
   return error instanceof ContractError && statusOf(error.code) !== 500
-    ? { status: statusOf(error.code), error: { code: error.code, message: error.message, path: error.path } }
+    ? { status: statusOf(error.code), error: { code: error.code, message: error.message, path: error.path, ...(error.code === "PARTIAL_FAILURE" ? {failure:{outcome:"partial",retry:"safe",resource:"media"}} : {}) } }
     : { status: 500, error: { code: "INTERNAL_ERROR", message: "An internal error occurred.", path: "" } };
 }
 

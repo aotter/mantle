@@ -7,6 +7,7 @@ export interface GenerateInput {
   readonly target: Target;
   /** Build-time declarations used to check manifest UI bindings. */
   readonly adminExtensions?: readonly Pick<AdminExtension, "id" | "contributes">[];
+  readonly site?: import("@aotter/mantle/spec").SiteDefaults;
   readonly plan: RuntimePlan;
   readonly lowered: PlanLowered;
   /** Compiler-resolved output names, supplied by infrastructure; dynamic outputs remain undefined. */

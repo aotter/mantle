@@ -2,6 +2,7 @@
 import type { Bound } from "../binds.js";
 import { conflict, type Row } from "../contracts.js";
 import { unique } from "../dialect/sqlite.js";
+export { definitive } from "../dialect/sqlite.js";
 
 interface Statement { bind(...values: any[]): Statement; all(): Promise<{ results: any[]; meta: { changes: number } }> }
 export interface Reader { prepare(sql: string): Statement }

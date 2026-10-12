@@ -270,6 +270,39 @@ that restrict both day-of-month and weekday. This is conversion only, no dispatc
 Bound scheduled work to your host's execution budget; keep the returned cursor
 when continuing a larger sweep in a later invocation.
 
+### Optional site and media
+
+`generateFromSources({ site: siteDefaults, ... })` (CLI: `--site <module>` exporting
+`siteDefaults`) adds the generated `site` module and the `site_config`, `media_assets`, and
+`pending_media_uploads` tables to deployment `schema.sql`. Without that option,
+none is emitted. `site(db, caller)` constructs a capability without queries or
+DDL. `read()` overlays stored brand/title/description over code defaults;
+`updateSettings()` persists only operator fields. Generated `site-seed.sql` seeds
+nonblank operator defaults once with `ON CONFLICT DO NOTHING`; initial `schema.sql`
+also contains that seed. Apply the seed during subsequent deployments. Origin, icons, locales and
+media purposes are generated code constants, so a deployment updates them
+without boot-time sync or seeds. A later code change never overwrites stored
+operator settings. Defaults use the 0.2 build-time validator and mime expansion.
+
+Site settings and media require the OSS `staff` role, on the application's
+verified Caller. `siteInfo(config, options)` from the optional `/site` subpath
+projects the 0.2 Admin site wire, including absolute MCP endpoints and selected
+capabilities. The app supplies media/email wiring and extension declarations.
+Media asset times and `createdAt` remain epoch milliseconds for the existing
+Admin SPA; content row timestamps remain ISO as specified above. Media references
+still use `x-mantle-ref: media_assets`; the application resolves ids to URLs.
+
+The media library keeps 0.2 purposes, variants, 15-minute upload groups, offset
+paging (1–500), literal id/alt/caption search and edits. It never receives bytes.
+SVG is refused. Delete removes objects before the row; `PARTIAL_FAILURE` retains
+the same id and advertises a safe retry. Commit keeps upload sources until the
+native SQL write is durable; repeated commit returns the existing immutable id.
+Each R2 commit attempt owns different public keys; concurrent loser cleanup
+cannot affect the durable winner. A fully copied loser removes only its own
+unselected objects after reading the winning SQL row.
+An uncertain SQL outcome is propagated by the native driver. Retry that group
+rather than creating a replacement asset. Rejected objects are discarded.
+
 ## OSS staff role
 
 OSS auth templates grant `staff`; any staff can manage users. Caller.role is an open string for application identity vocabulary. Next publishing visibility and transitions use only the generated staff allowlist (`staff`), consistently in Views and Store. Core keeps its legacy role preset for existing consumers. Auth helpers are optional app-selected modules and never perform boot DDL.
