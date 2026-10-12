@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { d1Shim } from "./apps/d1-shim.js";
-import { source, staff, exerciseEntries, exerciseNullableOrder, exerciseEntryRace } from "./admin-entries-scenarios.js";
+import { source, staff, exerciseEntries, exerciseNullableOrder, exerciseIntegerEntries, exerciseEntryRace } from "./admin-entries-scenarios.js";
 for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const) {
     const sqlite = !target.endsWith("postgres"), pg = process.env.MANTLE_NEXT_BUN_PG_URL;
     (sqlite || pg ? test : test.skip)(`${target} native Admin CRUD, wire, nullable order, OCC, locales and export`, async () => {
@@ -41,6 +41,7 @@ for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare
             const native = await import(join(dir, "generated.ts"));
             const app = admin({ db: () => handle, caller: async () => staff });
             expect(await exerciseEntries(app, sql, () => queries, sqlite)).toEqual({ ok: true });
+            await exerciseIntegerEntries(app, sql, () => queries, sqlite);
             const table = native.store(handle, staff).collection("articles");
             await exerciseNullableOrder(table, sql, () => queries, sqlite);
             await exerciseEntryRace(app, sql, arm, sqlite);
@@ -69,11 +70,11 @@ for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare
     try {
         const files = await generateOrThrow("cloudflare-d1", [{ sourceId: "entries.yaml", text: source }]);
         await writeGenerated(dir, files, false);
-        await writeFile(join(dir, "worker.ts"), `import {admin} from './admin.js';import {store} from './generated.js';import {exerciseEntries,exerciseNullableOrder,exerciseEntryRace,staff} from ${JSON.stringify(resolve(import.meta.dir, "admin-entries-scenarios.ts"))};
+        await writeFile(join(dir, "worker.ts"), `import {admin} from './admin.js';import {store} from './generated.js';import {exerciseEntries,exerciseNullableOrder,exerciseIntegerEntries,exerciseEntryRace,staff} from ${JSON.stringify(resolve(import.meta.dir, "admin-entries-scenarios.ts"))};
 export default{async fetch(request:Request,env:{DB:any}){if(new URL(request.url).pathname==='/health')return new Response('ready');try{
  for(const sql of ${JSON.stringify(unstable_splitSqlQuery(files["schema.sql"]! + files["admin-schema.sql"]!))})await env.DB.prepare(sql).run();
  let queries=0,hook:undefined|(()=>Promise<unknown>);const arm=(next:()=>Promise<unknown>)=>{hook=next;};const db={prepare(text:string){const original=env.DB.prepare(text);return{original,bind(...values:unknown[]){return{original:original.bind(...values),async all(){queries++;const result=await this.original.all();if(hook&&text.startsWith("SELECT")&&text.includes("LIMIT 1")){const next=hook;hook=undefined;await next();}return result;}};} };},async batch(statements:any[]){queries++;return env.DB.batch(statements.map(s=>s.original));}};
- const app=admin({db:()=>db,caller:async()=>(${JSON.stringify(staff)})});const sql=async(text:string,values:unknown[]=[])=>{const out=await env.DB.prepare(text).bind(...values).all();return out.results;};await exerciseEntries(app,sql,()=>queries,true);await exerciseNullableOrder(store(db,staff).collection("articles"),sql,()=>queries,true);await exerciseEntryRace(app,sql,arm,true);return Response.json({ok:true});
+ const app=admin({db:()=>db,caller:async()=>(${JSON.stringify(staff)})});const sql=async(text:string,values:unknown[]=[])=>{const out=await env.DB.prepare(text).bind(...values).all();return out.results;};await exerciseEntries(app,sql,()=>queries,true);await exerciseIntegerEntries(app,sql,()=>queries,true);await exerciseNullableOrder(store(db,staff).collection("articles"),sql,()=>queries,true);await exerciseEntryRace(app,sql,arm,true);return Response.json({ok:true});
 }catch(error){return Response.json({error:String(error)},{status:500});}}};`);
         const config = join(privateDir, "wrangler.json");
         await writeFile(config, JSON.stringify({ name: "mantle-entries-local", main: join(dir, "worker.ts"), compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat"], d1_databases: [{ binding: "DB", database_name: "mantle-entries-local", database_id: "00000000-0000-0000-0000-000000000001" }] }));

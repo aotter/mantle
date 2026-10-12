@@ -239,6 +239,51 @@ export async function exerciseNullableOrder(table: any, sql: (text: string, valu
                 check(JSON.stringify(ids) === JSON.stringify(expected.map(row => row.id)), "nullable keyset equals native SQL oracle");
             }
 }
+/** Declared int64 pagination keeps native numeric order and exact wire values on every host. */
+export async function exerciseIntegerEntries(fetch: (request: Request, env: object) => Promise<Response | undefined>, sql: (text: string, values?: unknown[]) => Promise<Record<string, any>[]>, queries: () => number, sqlite: boolean) {
+    const values = ["-9223372036854775808", "-9007199254740993", "-9007199254740991", "9007199254740991", "9007199254740993", "9007199254740993", "9223372036854775807"];
+    const times = sqlite ? "0,0" : "now(),now()", bind = sqlite ? "?" : "$1";
+    const response = async (path: string) => (await fetch(new Request("https://app.test/admin/api" + path), {}))!;
+    try {
+        for (const [i, score] of values.entries())
+            await sql(`INSERT INTO records(id,version,created_at,updated_at,owner,displaytitle,score) VALUES ('int64-${i}',1,${times},'staff-a','Integer ${i}',${score})`);
+        await sql(`INSERT INTO records(id,version,created_at,updated_at,owner,displaytitle,score) VALUES ('int64-foreign',1,${times},'staff-b','Foreign integer',9007199254740993)`);
+        await sql(`INSERT INTO records(id,version,created_at,updated_at,owner,displaytitle,score,expiresat) VALUES ('int64-expired',1,${times},'staff-a','Expired integer',-9007199254740993,${sqlite ? "0" : "'2000-01-01'"})`);
+        for (const direction of ["asc", "desc"]) {
+            const expected = await sql(`SELECT id,CAST(score AS TEXT) AS exact_score FROM records WHERE owner=${bind} AND (expiresat IS NULL OR expiresat>${sqlite ? "unixepoch()" : "now()"}) ORDER BY score ${direction},id ${sqlite ? "asc" : direction}`, [staff.subject]);
+            const seen: string[] = [];let cursor: string | null = null;
+            do {
+                const before = queries(), r = await response("/entries?collection=records&sort=score&direction=" + direction + "&limit=1" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "")), page = await r.json() as any;
+                check(r.status === 200, `integer ${direction} page ${r.status}: ${JSON.stringify(page)}`);
+                check(queries() - before === 1, "integer page uses one native read");
+                check(page.items.length <= 1, "integer page limit");
+                for (const item of page.items) {
+                    const oracle = expected[seen.length]!;
+                    check(item.id === oracle.id, "integer native numeric order and scope/TTL isolation");
+                    const exact = oracle.exact_score, n = BigInt(exact), safe = n >= -9007199254740991n && n <= 9007199254740991n;
+                    check(item.data_preview.score === (safe ? Number(exact) : exact) && typeof item.version === "number" && Number.isSafeInteger(item.version), `integer exact wire primitive: ${JSON.stringify(item)} vs ${exact}`);
+                    seen.push(item.id);
+                }
+                cursor = page.next_cursor;
+                check(!cursor || seen.length <= expected.length, "integer cursor makes progress");
+            } while (cursor);
+            check(JSON.stringify(seen) === JSON.stringify(expected.map(row => row.id)), "integer keyset complete without duplicates");
+        }
+        for (const [i, exact] of values.entries()) {
+            const before = queries(), r = await response("/entries/int64-" + i + "?collection=records"), body = await r.json() as any;
+            const n = BigInt(exact), safe = n >= -9007199254740991n && n <= 9007199254740991n;
+            check(r.status === 200 && queries() - before === 1 && body.entry.data.score === (safe ? Number(exact) : exact), "integer editor exact value and one native read");
+        }
+        const exported = await response("/entries/export?collection=records"), csv = await exported.text();
+        check(exported.status === 200 && values.every(value => csv.includes(value)), "integer export preserves decimal values");
+        for (const key of ["9223372036854775808", "-9223372036854775809", "00", "-0", Number.MAX_SAFE_INTEGER + 1]) {
+            const before = queries(), r = await response("/entries?collection=records&sort=score&cursor=" + encodeURIComponent(JSON.stringify([key, "int64-0"])));
+            check(r.status === 400 && queries() === before, "integer invalid cursor rejected before SQL");
+        }
+    } finally {
+        await sql("DELETE FROM records WHERE id LIKE 'int64-%'");
+    }
+}
 export async function exerciseEntryRace(fetch: (request: Request, env: object) => Promise<Response | undefined>, sql: (text: string, values?: unknown[]) => Promise<Record<string, any>[]>, arm: (hook: () => Promise<unknown>) => void, sqlite: boolean) {
     const response = async (path: string, method: string, data: unknown) => (await fetch(new Request("https://app.test/admin/api" + path, { method, headers: { origin: "https://app.test", "content-type": "application/json" }, body: JSON.stringify(data) }), {}))!;
     const created = await response("/entries", "POST", { collection: "articles", data: { title: "Before race", slug: "race" } }), id = ((await created.json()) as any).entry.id;

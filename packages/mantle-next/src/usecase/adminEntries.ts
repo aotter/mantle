@@ -67,7 +67,7 @@ import {allCollections} from "./admin-descriptors.js";
 ${databaseImport(target)}
 ${parents.length ? 'import {translationLocales} from "./translations.js";' : ""}
 ${imports.join("\n")}
-const validInteger=(value:unknown,min:bigint,max:bigint)=>{if(typeof value==="number"){if(!Number.isSafeInteger(value))return false;}else{${sqliteTarget ? 'return false;' : 'if(typeof value!=="string"||value.length>20||!/^(?:0|-?[1-9]\\d*)$/.test(value))return false;'}}const number=BigInt(value as string|number);return number>=min&&number<=max;};
+const validInteger=(value:unknown,min:bigint,max:bigint)=>{if(typeof value==="number"){if(!Number.isSafeInteger(value))return false;}else{if(typeof value!=="string"||value.length>20||!/^(?:0|-?[1-9]\\d*)$/.test(value))return false;}const number=BigInt(value as string|number);return number>=min&&number<=max;};
 const validTime=(value:string)=>{try{encodeTimestamptz(value);return true;}catch{return false;}};
 const validDate=(value:string)=>{${sqliteTarget ? "" : 'if(value.startsWith("0000-"))return false;'}try{encodeDate(value);return true;}catch{return false;}};
 ${sqliteTarget ? "" : `const nativeText=(value:unknown)=>{const pending=[value];while(pending.length){const next=pending.pop();if(typeof next==="string"){if(next.includes("\\0"))throw new ContractError("INPUT_VALIDATION_FAILED","PostgreSQL text and JSON cannot contain NUL.","admin/entries");}else if(next&&typeof next==="object"){for(const [key,child] of Object.entries(next))pending.push(key,child);}}};`}
