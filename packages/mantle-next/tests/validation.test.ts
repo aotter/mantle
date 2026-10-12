@@ -72,3 +72,10 @@ test("malformed percent escapes in local refs become generation diagnostics", ()
   expect(()=>emitValidation(plan({$ref:"#/%invalid"}), (path,message)=>diagnostics.push(path+": "+message))).not.toThrow();
   expect(diagnostics).toEqual(["views/search/input: Input ref must be a valid local JSON pointer.","procedures/save/input: Input ref must be a valid local JSON pointer."]);
 });
+
+test("recursive local references stop at 100 nesting levels", async () => {
+  const {validate}=await checked({type:"object",$defs:{node:{type:"object",properties:{next:{$ref:"#/$defs/node"}}}},properties:{next:{$ref:"#/$defs/node"}}});
+  const nest=(levels:number)=>{let value:object={};for(let i=0;i<levels;i++)value={next:value};return value;};
+  expect(validate(nest(50))).toBeTruthy();
+  expect(()=>validate(nest(51))).toThrow(expect.objectContaining({code:"INPUT_VALIDATION_FAILED",path:"procedures/save/input"+"/next".repeat(51),message:"Input nesting exceeds 100 levels."}));
+});

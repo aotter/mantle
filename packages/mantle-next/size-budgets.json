@@ -1,4 +1,9 @@
 {
   "cloudflare-d1": 20480,
-  "cloudflare-postgres": 65536
+  "cloudflare-postgres": 65536,
+  "startup:rest": 11264,
+  "startup:mcp": 12288,
+  "startup:web": 11520,
+  "startup:all": 19968,
+  "runtime": 140032
 }

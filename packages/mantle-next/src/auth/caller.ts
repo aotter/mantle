@@ -53,10 +53,11 @@ const roleOf = (user: User): string | null => user.role ?? null;
  *   `responseHeaders` and those Set-Cookie lines are appended, so the browser cookie slides with the session.
  */
 export async function resolveCaller(request: Request, auth: AuthLoader, options: { readonly audience?: string | readonly string[]; readonly responseHeaders?: Headers; readonly scopes?: readonly string[]; readonly resolveCredential?: (request: Request) => Caller | null | Promise<Caller | null> } = {}): Promise<Caller> {
+  const lacks = (have: readonly string[]) => options.scopes?.some(scope => !have.includes(scope));
   const supplied = await options.resolveCredential?.(request);
   if (supplied) {
     if (supplied.kind !== "user" || supplied.credential === "session") throw new ContractError("UNAUTHENTICATED", "Invalid service credential.");
-    if (options.scopes?.some(scope => !supplied.scopes.includes(scope))) throw new ContractError("AUTH_DENIED", "The service credential lacks a required scope.");
+    if (lacks(supplied.scopes)) throw new ContractError("AUTH_DENIED", "The service credential lacks a required scope.");
     return supplied;
   }
   const authorization = request.headers.get("authorization");
@@ -76,7 +77,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     const { assertActiveUserGrant } = await import("./oauth.js");
     const user = await assertActiveUserGrant(instance, claims, options.audience);
     const scopes = typeof claims.scope === "string" ? claims.scope.split(/\s+/).filter(Boolean) : [];
-    if (options.scopes?.some(scope => !scopes.includes(scope))) throw new ContractError("AUTH_DENIED", "The access token lacks a required scope.");
+    if (lacks(scopes)) throw new ContractError("AUTH_DENIED", "The access token lacks a required scope.");
     if (!user || isBanned(user)) throw new ContractError("UNAUTHENTICATED", "The access token's user is not active.");
     const text = (v: unknown) => (typeof v === "string" ? v : null);
     return { kind: "user", subject: user.id, issuer: claims.iss, role: roleOf(user), scopes, credential: "oauth", credentialId: text(claims.jti), clientId: text(claims.azp) ?? text(claims.client_id) };

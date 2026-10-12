@@ -14,86 +14,89 @@ export interface AuthRoutesOptions {
 type AuthRoutesAuth = ReturnType<typeof oauthConsents>;
 
 const PRIVATE = { "cache-control": "private, no-store" };
-const CONSENT = new Set(["GET /oauth/consent", "GET /oauth/consent/data", "POST /oauth/consent"]);
-const CONSENTS = new Set(["GET /oauth/consents", "GET /oauth/consents/data", "POST /oauth/consents/revoke"]);
+const CONSENT = new Set(["GET /oauth/consent", "GET /oauth/consent/data", "POST /oauth/consent", "GET /oauth/consents", "GET /oauth/consents/data", "POST /oauth/consents/revoke"]);
+const MAX_BODY = 1_048_576;
+const text = (body: string, status: number) => new Response(body, { status, headers: PRIVATE });
+const json = (body: unknown, status = 200) => Response.json(body, { status, headers: PRIVATE });
+const redirect = (location: string, status = 302) => new Response(null, { status, headers: { location, ...PRIVATE } });
+const tooLarge = () => new ContractError("INPUT_VALIDATION_FAILED", "Request body exceeds 1 MiB.");
+const basePathOf = (options: { basePath?: string }) => (options.basePath ?? "/api/auth").replace(/\/+$/, "");
 const WELL_KNOWN = /^\/\.well-known\/(oauth-authorization-server|oauth-protected-resource)(\/|$)/;
 
 /** The service's auth entry: a Response for a path it owns, `null` for any other. */
 export function authRoutes(loader: AuthLoader<AuthInstance & { handler(request: Request): Promise<Response> }>, options: AuthRoutesOptions): (request: Request) => Promise<Response | null> {
-  const base = (options.basePath ?? "/api/auth").replace(/\/+$/, "");
+  const base = basePathOf(options);
   if (options.connectedAppsPage && (!options.connectedAppsPage.startsWith("/") || options.connectedAppsPage.startsWith("//") || /[\\\r\n]/.test(options.connectedAppsPage))) throw new Error("connectedAppsPage must be a same-origin absolute path.");
   const resolve = options.resolver ?? ((request: Request) => resolveCaller(request, loader));
   return async request => {
     const { pathname } = new URL(request.url);
     const route = `${request.method} ${pathname}`;
-    if (pathname === `${base}/methods` && request.method === "GET") return Response.json({ methods: options.methods }, { headers: PRIVATE });
+    if (pathname === `${base}/methods` && request.method === "GET") return json({ methods: options.methods });
     if (pathname.startsWith(`${base}/`) || WELL_KNOWN.test(pathname)) {
       const auth = await loader.get();
-      if ((auth.options.basePath ?? "/api/auth").replace(/\/+$/, "") !== base) throw new Error("authRoutes basePath differs from betterAuth options.");
+      if (basePathOf(auth.options) !== base) throw new Error("authRoutes basePath differs from betterAuth options.");
       try {
         await guardAuthAdminRequest(request, () => resolve(request), base);
         const registration = request.method === "POST" && pathname === `${base}/oauth2/register` ? await loopbackClientsAreNative(request) : request;
         return await normalizeAuthResponseCookies(await auth.handler(registration));
       } catch (error) { return surfaceFailure(error); }
     }
-    if (!CONSENT.has(route) && !CONSENTS.has(route)) return null;
+    if (!CONSENT.has(route)) return null;
     try {
       const caller = await resolve(request);
       checkOrigin(request, caller);
-      if (request.method === "POST" && Number(request.headers.get("content-length")) > 1_048_576) return new Response("request body too large", { status: 413, headers: PRIVATE });
-      return await consentSurface(oauthConsents(await loader.get()), options)(request, caller);
+      if (request.method === "POST" && Number(request.headers.get("content-length")) > MAX_BODY) return text("request body too large", 413);
+      return await consentSurface(oauthConsents(await loader.get()), options)(request, caller, route);
     } catch (error) { return surfaceFailure(error); }
   };
 }
 
-function consentSurface(auth: AuthRoutesAuth, options: AuthRoutesOptions): (request: Request, caller: Caller) => Promise<Response> {
+function consentSurface(auth: AuthRoutesAuth, options: AuthRoutesOptions): (request: Request, caller: Caller, route: string) => Promise<Response> {
   const { listOAuthConsents: list, revokeOAuthConsent: revoke } = auth;
-  return async (request, caller) => {
-    const { pathname } = new URL(request.url);
-    const route = `${request.method} ${pathname}`;
+  return async (request, caller, route) => {
     const person = caller.kind === "user" && caller.credential === "session" ? caller.subject : null;
     const locale = /zh[-_]tw/i.test(request.headers.get("accept-language") ?? "") ? "zh-TW" : "en";
 
     if (route === "GET /oauth/consent/data") {
-      if (!person) return Response.json({ consent: null }, { status: 401, headers: PRIVATE });
+      if (!person) return json({ consent: null }, 401);
       const model = await auth.getOAuthConsentRequest(request).catch(() => null); // an invalid signed query stays secret-free
-      return Response.json({ consent: model }, { status: model ? 200 : 400, headers: PRIVATE });
+      return json({ consent: model }, model ? 200 : 400);
     }
     if (route === "GET /oauth/consent") {
       const model = await auth.getOAuthConsentRequest(request).catch(() => null);
       return html(consentHtml(locale, model), model ? 200 : 400);
     }
     if (route === "POST /oauth/consent") {
-      if (!person) return new Response("sign in to answer this request", { status: 401, headers: PRIVATE });
+      if (!person) return text("sign in to answer this request", 401);
       const body = await readBody(request);
       const decision = new URLSearchParams(body).get("decision");
-      if (decision !== "approve" && decision !== "deny") return new Response("invalid consent decision", { status: 400, headers: PRIVATE });
+      if (decision !== "approve" && decision !== "deny") return text("invalid consent decision", 400);
       // the redirect is the one Better Auth validated against the client's registration; nothing in the request names it
       const location = await auth.completeOAuthConsent(new Request(request, { body }), decision === "approve").catch(() => null);
       const target = location && URL.canParse(location) ? new URL(location) : null;
-      if (!target || /^(javascript|data|vbscript|blob):$/i.test(target.protocol)) return new Response("invalid authorization request", { status: 400, headers: PRIVATE });
+      if (!target || /^(javascript|data|vbscript|blob):$/i.test(target.protocol)) return text("invalid authorization request", 400);
       // the parsed form, so a browser cannot read `https:\\evil.test` differently from the check
-      return new Response(null, { status: 302, headers: { location: target.href, ...PRIVATE } });
+      return redirect(target.href);
     }
-    if (!list || !revoke) return new Response("not found", { status: 404, headers: PRIVATE });
+    if (!list || !revoke) return text("not found", 404);
     if (route === "GET /oauth/consents") {
-      if (options.connectedAppsPage) return new Response(null, { status: 302, headers: { location: options.connectedAppsPage, ...PRIVATE } });
-      if (!person) return new Response("sign in to see your connected apps", { status: 401, headers: PRIVATE });
+      if (options.connectedAppsPage) return redirect(options.connectedAppsPage);
+      if (!person) return text("sign in to see your connected apps", 401);
       return html(connectedAppsHtml(locale, await list(person)), 200);
     }
     if (route === "GET /oauth/consents/data") {
-      if (!person) return Response.json({ consents: [] }, { status: 401, headers: PRIVATE });
-      return Response.json({ consents: await list(person) }, { headers: PRIVATE });
+      if (!person) return json({ consents: [] }, 401);
+      return json({ consents: await list(person) });
     }
     if (route === "POST /oauth/consents/revoke") {
-      if (!person) return new Response("sign in to revoke a connection", { status: 401, headers: PRIVATE });
+      if (!person) return text("sign in to revoke a connection", 401);
       const body = await readBody(request);
       const id = new URLSearchParams(body).get("consent_id");
-      if (!id) return new Response("invalid consent id", { status: 400, headers: PRIVATE });
-      if (!await revoke(person, id)) return new Response("consent not found", { status: 404, headers: PRIVATE });
-      return new Response(null, { status: 303, headers: { location: "/oauth/consents", ...PRIVATE } });
+      if (!id) return text("invalid consent id", 400);
+      if (!await revoke(person, id)) return text("consent not found", 404);
+      return redirect("/oauth/consents", 303);
     }
-    return new Response("not found", { status: 404, headers: PRIVATE });
+    return text("not found", 404);
   };
 }
 
@@ -178,7 +181,7 @@ export async function loopbackClientsAreNative(request: Request): Promise<Reques
 
 /** Bounded streaming read even without Content-Length; the native parser still owns JSON/form semantics. */
 async function readBody(request: Request): Promise<string> {
-  if (Number(request.headers.get("content-length")) > 1_048_576) throw new ContractError("INPUT_VALIDATION_FAILED", "Request body exceeds 1 MiB.");
+  if (Number(request.headers.get("content-length")) > MAX_BODY) throw tooLarge();
   const reader = request.body?.getReader();
   if (!reader) return "";
   const decoder = new TextDecoder(); let size = 0, text = "";
@@ -187,7 +190,7 @@ async function readBody(request: Request): Promise<string> {
       const { value, done } = await reader.read();
       if (done) return text + decoder.decode();
       size += value.byteLength;
-      if (size > 1_048_576) { void reader.cancel(); throw new ContractError("INPUT_VALIDATION_FAILED", "Request body exceeds 1 MiB."); }
+      if (size > MAX_BODY) { void reader.cancel(); throw tooLarge(); }
       text += decoder.decode(value, { stream: true });
     }
   } finally { reader.releaseLock(); }

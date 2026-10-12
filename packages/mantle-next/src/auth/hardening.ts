@@ -68,7 +68,10 @@ export function sessionSecondaryStorage(cache: SessionCache, prefix: string, aut
     if (!prefix.trim())
         throw new Error("A unique session-cache namespace is required.");
     const name = (key: string) => `${prefix}:${key}`, verification = (key: string) => key.startsWith("verification:");
-    const optional = async (work: () => Promise<unknown>) => {
+    /** A cache write outside verification keys; its failure is logged, not thrown. */
+    const optional = async (key: string, work: () => Promise<unknown>) => {
+        if (verification(key))
+            return;
         try {
             await work();
         }
@@ -100,12 +103,10 @@ export function sessionSecondaryStorage(cache: SessionCache, prefix: string, aut
             return JSON.stringify({ session, user });
         },
         set: async (key, value, ttl) => {
-            if (!verification(key))
-                await optional(() => cache.set(name(key), value, ttl ? Math.max(60, Math.ceil(ttl)) : undefined));
+            await optional(key, () => cache.set(name(key), value, ttl ? Math.max(60, Math.ceil(ttl)) : undefined));
         },
         delete: async (key) => {
-            if (!verification(key))
-                await optional(() => cache.delete(name(key)));
+            await optional(key, () => cache.delete(name(key)));
         },
         getAndDelete: async () => { throw new Error("Session cache cannot consume verification records."); },
         increment: async () => { throw new Error("Session cache cannot count atomic attempts."); },

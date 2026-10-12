@@ -5,7 +5,21 @@ import type { Dialect } from "./dialect/common.js";
 import type { MediaAsset, MediaLibrary, MediaStorage, MediaVariantRole, MediaPurposePolicy } from "./site-types.js";
 export interface MediaDatabase { read(sql: string, binds: unknown[]): Row[] | PromiseLike<Row[]>; write(steps: readonly Bound[]): Promise<Row[][]>; /** Positive native evidence that the write rolled back; absence is uncertain. */ definitive?(error: unknown): boolean }
 const P = "media";
-const fail = (code: string, message: string) => new ContractError(code, message, P);
+/** HTTP status of each media code: a custom MediaStorage may throw them without one. */
+const STATUS = new Map(Object.entries({
+  MEDIA_PURPOSE_REJECTED: 400, MEDIA_SVG_REJECTED: 400, MEDIA_MIME_REJECTED: 400, MEDIA_VARIANTS_INCOMPLETE: 400, MEDIA_VARIANT_SIZE_EXCEEDED: 400, MEDIA_VARIANTS_SUSPICIOUS_SIZE: 400,
+  MEDIA_ASSET_NOT_FOUND: 404, MEDIA_OBJECT_NOT_FOUND: 409, MEDIA_UPLOAD_EXPIRED: 410, SITE_NOT_CONFIGURED: 501, MEDIA_NOT_CONFIGURED: 501, PARTIAL_FAILURE: 503,
+}));
+const extra = (code: string) => ({ status: STATUS.get(code), ...(code === "PARTIAL_FAILURE" ? { fields: { failure: { outcome: "partial", retry: "safe", resource: "media" } } } : {}) });
+/**
+ * A media, site or partial-failure error with the HTTP status (and `failure` payload) its code has on the wire. Code
+ * outside this module raising these codes uses it: core `statusOf` maps only the core codes.
+ */
+export const mediaError = (code: string, message: string, path = P, options?: ErrorOptions): ContractError => new ContractError(code, message, path, { ...options, ...extra(code) });
+const fail = (code: string, message: string, options?: ErrorOptions) => mediaError(code, message, P, options);
+/** A storage error keeps the wire status its code has always had. */
+const own = (error: unknown) => { if (error instanceof ContractError && !error.status && STATUS.has(error.code)) Object.assign(error, extra(error.code)); return error; };
+const rejected = (results: PromiseSettledResult<unknown>[]) => results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
 const bad = (expected: string) => fail("INPUT_VALIDATION_FAILED", `expected ${expected}`);
 
 /** SVG is refused: object storage does not sanitize it, and an SVG can carry script. */
@@ -71,8 +85,11 @@ const save = (a: MediaAsset, p: Dialect["param"]) => ({
 export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "escapeLike" | "likeEscape" | "like">, storage: MediaStorage, policies: readonly MediaPurposePolicy[], now = Date.now): MediaLibrary {
   const p = d.param;
   const one = async (sql: string, binds: unknown[]) => (await driver.read(sql, binds))[0];
+  const byId = (id: string) => one(`SELECT ${COLUMNS} FROM media_assets WHERE id = ${p(1)}`, [id]);
+  const unpend = (id: string) => ({ sql: `DELETE FROM pending_media_uploads WHERE id = ${p(1)}`, binds: [id] });
+  const removeAll = (variants: readonly { storageKey: string }[]) => Promise.allSettled(variants.map((v) => storage.deleteObject({ storageKey: v.storageKey })));
   const get = async (id: string) => {
-    const r = await one(`SELECT ${COLUMNS} FROM media_assets WHERE id = ${p(1)}`, [id]);
+    const r = await byId(id);
     if (!r) throw fail("MEDIA_ASSET_NOT_FOUND", `no media asset '${id}'`);
     return assetOf(r);
   };
@@ -96,7 +113,8 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       // bearer-equivalent until commit: storage keys under it must not be guessable
       const uploadGroupId = crypto.randomUUID();
       const specs = asked.map(({ mimeType, byteSize, role }) => ({ mimeType, byteSize, role, maxBytes: policy.maxBytes[mimeType]! }));
-      const { capabilities } = await storage.createUpload({ uploadGroupId, purpose, filename, variants: specs, now: at, expiresAt });
+      let capabilities;
+      try { ({ capabilities } = await storage.createUpload({ uploadGroupId, purpose, filename, variants: specs, now: at, expiresAt })); } catch (error) { throw own(error); }
       const record: Pending = {
         purpose, filename, ...described, expiresAt, createdAt: at,
         variants: capabilities.map((c, i) => ({ mimeType: c.mimeType, role: c.role, storageKey: c.storageKey, expectedSize: specs[i]!.byteSize, maxBytes: specs[i]!.maxBytes })),
@@ -110,14 +128,14 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
 
     async commitUpload(uploadGroupId, request) {
       const patch = texts(request);
-      const committed = await one(`SELECT ${COLUMNS} FROM media_assets WHERE id = ${p(1)}`, [uploadGroupId]);
+      const committed = await byId(uploadGroupId);
       if (committed) return assetOf(committed);
       const row = await one(`SELECT record FROM pending_media_uploads WHERE id = ${p(1)}`, [uploadGroupId]);
       const record = row ? JSON.parse(String(row.record)) as Pending : null;
       // a rejected group's objects are deleted: an upload URL takes any type and size, so what was PUT is not trusted
-      const discard = () => Promise.allSettled((record?.variants ?? []).map((v) => storage.deleteObject({ storageKey: v.storageKey })));
+      const discard = () => removeAll(record?.variants ?? []);
       if (!record || record.expiresAt <= now()) {
-        if (record) { await discard(); await driver.write([{ sql: `DELETE FROM pending_media_uploads WHERE id = ${p(1)}`, binds: [uploadGroupId] }]); }
+        if (record) { await discard(); await driver.write([unpend(uploadGroupId)]); }
         throw fail("MEDIA_UPLOAD_EXPIRED", `upload group '${uploadGroupId}' is unknown or expired; create a new upload`);
       }
       let asset: MediaAsset;
@@ -129,19 +147,18 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
         ...((patch.caption ?? record.caption) !== undefined ? { caption: patch.caption ?? record.caption } : {}),
       }); } catch (error) {
         if (error instanceof ContractError && error.code === "MEDIA_OBJECT_NOT_FOUND") {
-          const winner = await one(`SELECT ${COLUMNS} FROM media_assets WHERE id = ${p(1)}`, [uploadGroupId]);
+          const winner = await byId(uploadGroupId);
           if (winner) return assetOf(winner);
         }
         if (error instanceof ContractError && error.code.startsWith("MEDIA_")) await discard();
-        throw error;
+        throw own(error);
       }
       if (asset.id !== uploadGroupId) throw new ContractError("OUTCOME_UNKNOWN", "Storage returned a different asset id; reconcile this upload group.", P);
-      await driver.write([save(asset, p), { sql: `DELETE FROM pending_media_uploads WHERE id = ${p(1)}`, binds: [uploadGroupId] }]).catch(async error => {
+      await driver.write([save(asset, p), unpend(uploadGroupId)]).catch(async error => {
         // Cleanup requires positive native rollback evidence; an unclassified failure may have committed.
         if (driver.definitive?.(error) === true) {
-          const cleanup = await Promise.allSettled(asset.variants.map(v => storage.deleteObject({storageKey:v.storageKey})));
-          const failed = cleanup.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-          if (failed.length) throw new ContractError("PARTIAL_FAILURE", "The write rolled back, but some attempt copies could not be removed. Reconcile storage before retrying.", P, {cause:new AggregateError([error,...failed.map(r=>r.reason)])});
+          const failed = rejected(await removeAll(asset.variants));
+          if (failed.length) throw fail("PARTIAL_FAILURE", "The write rolled back, but some attempt copies could not be removed. Reconcile storage before retrying.", {cause:new AggregateError([error,...failed.map(r=>r.reason)])});
           throw error;
         }
         throw error instanceof ContractError && error.code === "OUTCOME_UNKNOWN" ? error : new ContractError("OUTCOME_UNKNOWN", "The write outcome is unknown; reconcile this upload group before retrying.", P, {cause:error});
@@ -149,8 +166,7 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       const durable = await get(uploadGroupId);
       // ON CONFLICT may select another concurrent attempt. Only discard this attempt's unselected copies.
       const selected = new Set(durable.variants.map(v => v.storageKey));
-      const cleanup = await Promise.allSettled(asset.variants.filter(v => !selected.has(v.storageKey)).map(v => storage.deleteObject({storageKey:v.storageKey})));
-      if (cleanup.some(r => r.status === "rejected")) throw new ContractError("OUTCOME_UNKNOWN", "The asset is committed, but unselected upload copies need storage reconciliation.", P);
+      if (rejected(await removeAll(asset.variants.filter(v => !selected.has(v.storageKey)))).length) throw new ContractError("OUTCOME_UNKNOWN", "The asset is committed, but unselected upload copies need storage reconciliation.", P);
       await discard();
       return durable;
     },
@@ -180,10 +196,8 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
 
     async delete(id) {
       const asset = await get(id);
-      const results = await Promise.allSettled(asset.variants.map((v) => storage.deleteObject({ storageKey: v.storageKey })));
-      const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-      if (failed.length)
-        throw new ContractError("PARTIAL_FAILURE", "Some objects could not be removed. Retry deleting the same asset.", P, { cause: new AggregateError(failed.map(r => r.reason)) });
+      const failed = rejected(await removeAll(asset.variants));
+      if (failed.length) throw fail("PARTIAL_FAILURE", "Some objects could not be removed. Retry deleting the same asset.", { cause: new AggregateError(failed.map(r => r.reason)) });
       await driver.write([{ sql: `DELETE FROM media_assets WHERE id = ${p(1)}`, binds: [id] }]);
       return { deleted: true, variantsRemoved: asset.variants.length };
     },

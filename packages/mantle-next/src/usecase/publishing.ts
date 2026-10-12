@@ -5,16 +5,16 @@ import { dialect as postgres } from "../kernel/dialect/postgres.js";
 import { renderTerm } from "../kernel/store.js";
 import { publishedParent } from "./translations.js";
 import { STAFF_ROLES } from "../domain/visibility.js";
-import { entry, exportName } from "../domain/entry.js";
+import { entry, exportName, q } from "../domain/entry.js";
 
 
 export const publishingTransitions = [["publish", ["draft"], "published"], ["unpublish", ["published"], "draft"], ["archive", ["draft", "published"], "archived"]] as const;
 export const publishingInput: JsonSchema = {type:"object",properties:{id:{type:"string",minLength:1},expectedVersion:{type:"integer",minimum:1}},required:["id","expectedVersion"],additionalProperties:false};
-const q = JSON.stringify;
 export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declarations: string[], procedures: string[], entries: Record<string, string>, values: Set<string>, refuse: (path: string, message: string) => void): void {
   const d = isSqlite ? sqlite : postgres;
   const translations = Object.values(plan.schemas).some(s=>s.translates);
   if(translations)declarations.push('import {translationWrite} from "@aotter/mantle-next/driver/transaction-context";');
+  if(Object.values(plan.schemas).some(s=>s.publishing))declarations.push('import { transition } from "@aotter/mantle-next/publishing";');
   for (const s of Object.values(plan.schemas).filter(s => s.publishing).sort((a, b) => a.name.localeCompare(b.name))) {
     if (Object.hasOwn(s.fields, "published_at")) { refuse(`schemas/${s.name}`, "published_at is a publishing system column; remove the declared field."); continue; }
     if (s.ttl) values.add("cutoff");
@@ -38,11 +38,9 @@ export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declaration
         return { sql: `UPDATE ${d.ident(s.name)} SET status = '${to}', published_at = ${verb === "publish" ? clock : "NULL"}, version = version + 1, updated_at = ${clock} WHERE ${conditions.join(" AND ")} RETURNING id, version, status, ${d.wireTimestamp(d.ident("published_at")).join("")} AS published_at`, binds: recipes, row: true };
       };
       values.add("now");
-      declarations.push(`export type ${fn}Input = { readonly id: string; readonly expectedVersion: number };`, `const ${fn}Caller = ${q([statement(false)])} as const;`, `const ${fn}Trusted = ${q([statement(true)])} as const;`,
-        `async function ${fn}(db: Database, caller: Caller, raw: ${fn}Input): Promise<Output> {`,
-        `  deny(caller, caller.kind === "system" || caller.kind === "user" && ${q(STAFF_ROLES)}.includes(caller.role ?? ""), ${q(path)});`,
-        ...(translations ? [`  const release = translationWrite(db, ${q(s.name)}, ${verb === "publish" && s.translates ? q(s.translates.parent) : "undefined"});`] : []),
-        `  return { results: await DRIVER.procedure(db, bound(D, caller.kind === "system" ? ${fn}Trusted : ${fn}Caller, caller, raw), ${q(path)}).catch(error => { ${translations ? 'if (error?.code === "CONFLICT") release(); ' : ""}if (error?.code === "CONFLICT" && error.message === "Expected one affected row.") error.message = ${q(failure)}; throw error; }) };`, "}", `export { ${fn} };`);
+      const caller = q([statement(false)]), trusted = q([statement(true)]);
+      declarations.push(`export type ${fn}Input = { readonly id: string; readonly expectedVersion: number };`, `const ${fn}Caller = ${caller} as const;`, ...(trusted === caller ? [] : [`const ${fn}Trusted = ${trusted} as const;`]),
+        `async function ${fn}(db: Database, caller: Caller, raw: ${fn}Input): Promise<Output> { return transition(db, caller, raw, ${q(path)}, ${q(STAFF_ROLES)}, ${trusted === caller ? "" : `caller.kind === "system" ? ${fn}Trusted : `}${fn}Caller, ${q(failure)}, D, DRIVER.procedure${translations ? `, () => translationWrite(db, ${q(s.name)}, ${verb === "publish" && s.translates ? q(s.translates.parent) : "undefined"})` : ""}); }`, `export { ${fn} };`);
       procedures.push(`[${q(name)}]: ${fn}`);
       entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `${fn}Input as Input`, 'export type { Output } from "@aotter/mantle-next/contracts";\n');
     }

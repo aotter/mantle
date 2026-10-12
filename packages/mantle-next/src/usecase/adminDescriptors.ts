@@ -4,6 +4,7 @@ import { STAFF_ROLES } from "../domain/visibility.js";
 import { collectionOf, developerConsole, requiredEnumStates, checkPlanUiExtensions, planUiExtensionRefs } from "@aotter/mantle/admin";
 import { appCatalog, entrySchema, type AppRowAction } from "@aotter/mantle/mcp";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
+import { q } from "../domain/entry.js";
 import { publishingInput, publishingTransitions } from "./publishing.js";
 
 export function emitAdminDescriptors({plan,adminExtensions=[]}:Pick<GenerateInput,"plan"|"adminExtensions">,diagnostics:GenerateDiagnostic[]):Record<string,string> {
@@ -51,5 +52,30 @@ export function emitAdminDescriptors({plan,adminExtensions=[]}:Pick<GenerateInpu
     snapshot.interfaces.callable.push({kind:"procedure",name:tool,target:name,surface:"staff",audience:"staff",title:null,description,input:publishingInput,output:null,trigger:null});
   }
   const data={allCollections,views,operations,fieldNames:Object.fromEntries(schemas.map(s=>[s.name,s.names])),viewNames,authorizations,developerConsole:snapshot,mcpAppCatalogues:catalogues,webmcp,extensionBindings:planUiExtensionRefs(plan)};
-  return {"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+Object.entries(data).map(([name,value])=>"export const "+name+" = "+JSON.stringify(value)+" as const;").join("\n")+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+JSON.stringify(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, operations, views, webmcp} as const;\n"};
+  return {"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+literals(data)+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+q(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, operations, views, webmcp} as const;\n"};
+}
+
+/**
+ * Each export as a JSON literal; a subtree of 40 or more bytes that would be printed more than once is printed once, as a
+ * module-private constant the exports reference (a bundler keeps only those an imported export reaches).
+ */
+function literals(exports: Record<string, unknown>): string {
+  const data = JSON.parse(q(exports)) as Record<string, unknown>, count = new Map<string, number>(), hoisted = new Map<string, string>(), constants: string[] = [];
+  const each = (value: unknown, visit: (json: string, value: object) => void) => { if (value && typeof value === "object") for (const child of Object.values(value)) if (child && typeof child === "object") visit(q(child), child); };
+  const tally = (json: string, value: object, by = 1): void => { if (json.length >= 40) count.set(json, (count.get(json) ?? 0) + by); each(value, (json, child) => tally(json, child, by)); };
+  for (const value of Object.values(data)) each(value, tally);
+  // Longest first: once a subtree is printed once, what it contains occurs (copies - 1) times fewer per occurrence in it.
+  for (const json of [...count.keys()].sort((a, b) => b.length - a.length)) {
+    const copies = count.get(json)!;
+    if (copies > 1) { hoisted.set(json, ""); each(JSON.parse(json), (inner, child) => tally(inner, child, 1 - copies)); }
+  }
+  let named = 0;
+  const print = (value: unknown): string => !value || typeof value !== "object" ? q(value) : Array.isArray(value) ? "[" + value.map(reference).join(",") + "]" : "{" + Object.entries(value).map(([key, child]) => q(key) + ":" + reference(child)).join(",") + "}";
+  const reference = (value: unknown): string => {
+    const json = q(value);
+    if (hoisted.get(json) === "") { const name = "$" + named++; hoisted.set(json, name); constants.push("const " + name + " = " + print(value) + " as const;"); }
+    return hoisted.get(json) ?? print(value);
+  };
+  const lines = Object.entries(data).map(([name, value]) => "export const " + name + " = " + print(value) + " as const;");
+  return [...constants, ...lines].join("\n");
 }

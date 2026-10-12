@@ -1,5 +1,6 @@
 /** Native R2 binding plus an app-owned SigV4 signer. No SDK dependency. */
 import { ContractError } from "./contracts.js";
+import { mediaError } from "./media.js";
 import type { MediaStorage, MediaVariant } from "./site-types.js";
 interface R2Head {
   readonly size: number;
@@ -27,7 +28,9 @@ export interface R2MediaStorageOptions {
 
 const EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/avif": "avif", "image/gif": "gif" };
 const UPLOADS = "uploads/";
-const fail = (code: string, message: string) => new ContractError(code, message, "media/r2");
+const fail = (code: string, message: string, options?: ErrorOptions) => mediaError(code, message, "media/r2", options);
+const ext = (mimeType: string) => EXT[mimeType] ?? "bin";
+const cancel = (o?: { body: ReadableStream } | null) => o?.body.cancel().catch(() => undefined);
 
 export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2MediaStorageOptions): MediaStorage {
   if (!publicBase) throw fail("MEDIA_NOT_CONFIGURED", "R2 media storage needs publicBase, the bucket's public URL");
@@ -39,7 +42,7 @@ export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2Media
       return {
         capabilities: await Promise.all(variants.map(async (v) => {
           // server-made keys, one directory per asset so its variants list together
-          const storageKey = `${UPLOADS}${purpose}/${uploadGroupId}/${v.role}.${EXT[v.mimeType] ?? "bin"}`;
+          const storageKey = `${UPLOADS}${purpose}/${uploadGroupId}/${v.role}.${ext(v.mimeType)}`;
           const target = new URL(`${s3}/${storageKey}`);
           target.searchParams.set("X-Amz-Expires", String(ttl));
           const { url } = await signer.sign(target.href, { method: "PUT", aws: { signQuery: true, service: "s3" } });
@@ -63,11 +66,11 @@ export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2Media
       const out: MediaVariant[] = [];
       try {
         for (const [i, spec] of variants.entries()) {
-          const key = `committed/${uploadGroupId}/${attempt}/${spec.role}.${EXT[spec.mimeType] ?? "bin"}`;
+          const key = `committed/${uploadGroupId}/${attempt}/${spec.role}.${ext(spec.mimeType)}`;
           const o = await bucket.get(spec.storageKey);
           // an upload URL may PUT again between the check and the copy: the copy must be what was checked
           if (!o || o.size !== heads[i]!.size || o.httpMetadata?.contentType !== spec.mimeType) {
-            await o?.body.cancel().catch(() => undefined);
+            await cancel(o);
             throw fail("MEDIA_OBJECT_NOT_FOUND", `variant ${spec.role} of '${uploadGroupId}' changed during commit`);
           }
           // Remember a possibly published key before awaiting put: a failed response may still have stored it.
@@ -77,12 +80,12 @@ export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2Media
               httpMetadata: { contentType: spec.mimeType },
               customMetadata: { ...o.customMetadata, committedAt: String(now), role: spec.role, uploadGroupId, filename, ...(alt ? { alt } : {}), ...(caption ? { caption } : {}) },
             });
-          } catch (error) { await o.body.cancel().catch(() => undefined); throw error; }
+          } catch (error) { await cancel(o); throw error; }
         }
         // The use case removes upload keys only after its SQL transaction is durable.
       } catch (error) {
         const cleanup = await Promise.allSettled(out.map(v => bucket.delete(v.storageKey)));
-        if (cleanup.some(r => r.status === "rejected")) throw new ContractError("PARTIAL_FAILURE", "Some copied variants could not be removed. Retry the same upload group.", "media/r2", {cause:error});
+        if (cleanup.some(r => r.status === "rejected")) throw fail("PARTIAL_FAILURE", "Some copied variants could not be removed. Retry the same upload group.", {cause:error});
         throw error instanceof ContractError ? error : new ContractError("OUTCOME_UNKNOWN", "Object copy failed; retry the same upload group after reconciliation.", "media/r2", {cause:error});
       }
       return { id: uploadGroupId, variants: out, createdAt: now, metadata: { filename }, ...(alt !== undefined ? { alt } : {}), ...(caption !== undefined ? { caption } : {}) };

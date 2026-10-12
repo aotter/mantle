@@ -8,9 +8,9 @@
 import { NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, type RuntimePlan } from "@aotter/mantle/spec";
 import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
 import { declaredType, inputType, nativeType } from "../domain/columns.js";
+import { q } from "../domain/entry.js";
 import { expand, SCOPE, TTL, type Fact, type Rules } from "../kernel/store.js";
 
-const q = JSON.stringify;
 // Types the typed Store compares and writes as plain bind values. Fixed numerics are scaled integers on SQLite; geo is two columns.
 const SCALAR = new Set(["text", "real", "float8", "integer", "int4", "int8", "bool", "timestamptz", "date"]);
 

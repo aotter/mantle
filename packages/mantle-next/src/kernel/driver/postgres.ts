@@ -15,17 +15,17 @@ export async function run(db: Unsafe, sql: string, binds: unknown[]): Promise<{ 
 
 /** SQLSTATE of a server error: `errno` on Bun.SQL, `code` on postgres.js. */
 const sqlstate = (error: unknown): unknown => { const e = error as { errno?: unknown; code?: unknown } | null; return typeof e?.errno === "string" ? e.errno : e?.code; };
-/**
- * The error to throw when a PostgreSQL write fails where it may already have committed (autocommit, or COMMIT).
- * A server ErrorResponse (SQLSTATE + severity) outside connection/resource classes rolled back; anything else, such as a
- * lost socket, is OUTCOME_UNKNOWN.
- */
 /** A structured server ErrorResponse proves rollback; missing evidence is uncertain. */
 export function definitive(error: unknown): boolean {
   if (error instanceof ContractError) return error.code === "CONFLICT";
   const state = sqlstate(error);
   return typeof state === "string" && /^[0-9A-Z]{5}$/.test(state) && typeof (error as { severity?: unknown })?.severity === "string" && !/^(08|28|53|57|58|XX)/.test(state);
 }
+/**
+ * The error to throw when a PostgreSQL write fails where it may already have committed (autocommit, or COMMIT).
+ * A server ErrorResponse (SQLSTATE + severity) outside connection/resource classes rolled back; anything else, such as a
+ * lost socket, is OUTCOME_UNKNOWN.
+ */
 export function postgresOutcome(error: unknown, path: string): unknown {
   if (definitive(error)) return error;
   return new ContractError("OUTCOME_UNKNOWN", "The write outcome is unknown; reconcile before retrying.", path, { cause: error });

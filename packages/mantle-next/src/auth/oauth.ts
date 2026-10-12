@@ -35,12 +35,18 @@ export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0
   claims: { accessToken: ({ referenceId }) => ({ mantle_consent_id: referenceId ?? null }) },
 };
 
+/** A verification value that is an authorization code, with its user and client; else undefined. */
+function authCode(text: string): { userId: string; query: { client_id: string } } | undefined {
+  let value;
+  try { value = JSON.parse(text); } catch { return; }
+  return value?.type === "authorization_code" && typeof value.userId === "string" && typeof value.query?.client_id === "string" ? value : undefined;
+}
+
 /** Merge this verification.create.before hook into app-owned betterAuth options, alongside its user hooks. */
 export function oauthGrantHooks(getAuth: () => AuthInstance): NonNullable<BetterAuthOptions["databaseHooks"]> {
   return { verification: { create: { before: async verification => {
-    let value;
-    try { value = JSON.parse(verification.value); } catch { return; }
-    if (value?.type !== "authorization_code" || typeof value.userId !== "string" || typeof value.query?.client_id !== "string") return;
+    const value = authCode(verification.value);
+    if (!value) return;
     const { adapter } = await getAuth().$context as AuthContext;
     const consent = await adapter.findOne<{ id: string }>({ model: "oauthConsent", where: [pair("userId", value.userId), pair("clientId", value.query.client_id)] });
     return { data: { value: JSON.stringify({ ...value, referenceId: consent?.id ?? "" }) } };
@@ -87,7 +93,7 @@ export function oauthConsents(auth: AuthInstance & { handler(request: Request): 
       // Delete first: even if cleanup fails, every issued JWT fails the live-grant check immediately.
       await db.deleteMany({ model: "oauthConsent", where });
       for (const model of ["oauthRefreshToken", "oauthAccessToken"]) await db.updateMany({ model, where: [...where, { field: "revoked", value: null }], update: { revoked: new Date() } });
-      const code = (v: string) => { try { const x = JSON.parse(v); return x?.type === "authorization_code" && x.userId === userId && x.query?.client_id === consent.clientId; } catch { return false; } };
+      const code = (v: string) => { const x = authCode(v); return x?.userId === userId && x.query.client_id === consent.clientId; };
       const codes = [{ field: "value", operator: "contains" as const, value: JSON.stringify(userId) }, { field: "value", operator: "contains" as const, value: JSON.stringify(consent.clientId) }];
       for (let offset = 0; ;) {
         const page = await db.findMany<{ id: string; value: string }>({ model: "verification", where: codes, limit: 100, offset, sortBy: { field: "id", direction: "asc" } });

@@ -1,14 +1,13 @@
 /** Selected View boundary: Core prints keyset SQL once; bare operations retain native rows. */
 import { parseNumeric, NATIVE_NOT_NULL, notNullColumns, type RuntimePlan, type PlanLowered, type SqlNode } from "@aotter/mantle/spec";
 import {authLines} from "../domain/input.js";
-import {driverFor,databaseImport} from "../domain/entry.js";
+import { driverFor, databaseImport, isSqlite, q } from "../domain/entry.js";
 import { declaredType } from "../domain/columns.js";
 import { recipesOf } from "../domain/recipes.js";
 
-const q = JSON.stringify;
 export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: string, refuse: (path: string, message: string) => void): Record<string, string> {
   const files: Record<string, string> = {}, base = "@aotter/mantle-next/";
-  const sqlite = target === "bun-sqlite" || target === "cloudflare-d1";
+  const sqlite = isSqlite(target);
   const driver = driverFor(target);
   for (const [name, view] of Object.entries(plan.views)) {
     if (view.surface === "internal") continue;
@@ -30,7 +29,7 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
     const nonNull = schema && notNullColumns(schema);
     const valid = schema && !sel.groupClause && !sel.distinctClause && fields.length >= 1 && fields.length <= 2 && fields.every(f => f && (NATIVE_NOT_NULL.has(f) || nonNull!.has(f)) && (f === "id" || indexed.has(f))) && (fields.length === 1 || fields[1] === "id") && (fields.length === 1 || (sorts[0]!.SortBy.sortby_dir === "SORTBY_DESC") === (sorts[1]!.SortBy.sortby_dir === "SORTBY_DESC"));
     if (!sorts.length && (!sel?.fromClause?.length || !sel.groupClause && sel.targetList?.some((t: SqlNode) => ["count", "sum", "min", "max", "avg"].includes(t.ResTarget.val.FuncCall?.funcname?.at(-1)?.String?.sval)))) {
-      files[`paged/views/${encodeURIComponent(name)}.ts`] = `import query from "../../views/${encodeURIComponent(name)}.js";\nimport { single } from "${base}paging";\nexport default single(query, ${q(path)});\n`;
+      files[`paged/views/${encodeURIComponent(name)}.ts`] = `import query from "../../views/${encodeURIComponent(name)}.js";\nimport { single } from "${base}paging";\nexport default (...[db, caller, input, options]: [...Parameters<typeof query>, { limit?: number; cursor?: string }?]) => single(() => query(db, caller, input), ${q(path)}, options);\n`;
       continue;
     }
     if (!valid) {
@@ -56,13 +55,15 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
     });
     const auth = authLines(view.requires,path);
     const spec = [`path: ${q(path)}`, `cap: ${cap}`, `sqlite: ${sqlite}`, `cursor: ${q(kind)}`, `keys: ${c.nkeys}`, `values: {${values.size ? ` ${[...values].sort().join(", ")} ` : ""}}`, "read", `caller: ${variants[0]}`, ...(trusted ? [`trusted: ${variants[1]}`] : []), ...(auth.length ? [`auth: (caller: Caller) => {\n${auth.join("\n")}\n  }`] : [])];
-    files[`paged/views/${encodeURIComponent(name)}.ts`] = `import { paged } from "${base}paging";
-${auth.length ? `import { deny, type Caller } from "${base}contracts";\n` : ""}${databaseImport(target)}
+    files[`paged/views/${encodeURIComponent(name)}.ts`] = `import { page, type Paged } from "${base}paging";
+import { ${auth.length ? "deny, " : ""}type Caller } from "${base}contracts";
+${databaseImport(target)}
 import { read } from "${base}driver/${driver}";
 ${values.size ? `import { ${[...values].sort().join(", ")} } from "${base}dialect/${sqlite ? "sqlite" : "postgres"}";\n` : ""}import type { Input, Row } from "../../views/${encodeURIComponent(name)}.js";
-export default paged<Database, Input, Row>({
+const spec: Paged<Database> = {
   ${spec.join(",\n  ")},
-});
+};
+export default (db: Database, caller: Caller, input: Input, options?: { limit?: number; cursor?: string }) => page<Database, Row>(spec, db, caller, input, options);
 `;
   }
   return files;

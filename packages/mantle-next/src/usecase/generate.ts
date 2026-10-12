@@ -1,8 +1,9 @@
 /** Canonical lowered programs become ordinary target-specific TypeScript, never a runtime plan. */
 import { parseNumeric, type JsonSchema, type LoweredStatement } from "@aotter/mantle/spec";
-import type { GenerateDiagnostic, GenerateInput, GenerateResult, Target } from "../domain/model.js";
+import type { GenerateDiagnostic, GenerateInput, GenerateResult } from "../domain/model.js";
 import { nativeType, outputType } from "../domain/columns.js";
-import { entry, exportName } from "../domain/entry.js";
+import { databaseImport, driverFor, entry, exportName, isSqlite as sqlite, q } from "../domain/entry.js";
+import { authLines as auth } from "../domain/input.js";
 import { recipesOf } from "../domain/recipes.js";
 import { emitTtl } from "./ttl.js";
 import { emitPublishing } from "./publishing.js";
@@ -18,8 +19,6 @@ import { emitSite } from "./site.js";
 import { emitTranslations } from "./translations.js";
 import { emitRest } from "./rest.js";
 
-const q = JSON.stringify;
-const sqlite = (target: Target) => target === "bun-sqlite" || target === "cloudflare-d1";
 const typeOf = (s: JsonSchema | undefined): string => {
   if (!s) return "unknown";
   if (s.nullable === true) return `${typeOf({ ...s, nullable: false })} | null`;
@@ -43,13 +42,7 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
   const isSqlite = sqlite(target);
   const expected = isSqlite ? "@aotter/mantle/d1" : "@aotter/mantle/postgres";
   if (lowered.dialect.name !== expected || plan.dialect.name !== expected) refuse("target", `Target '${target}' needs canonical '${expected}' compilation and lowering.`);
-  const driver = target === "bun-sqlite" ? "bun-sqlite" : target === "cloudflare-d1" ? "d1" : "postgres";
-  const auth = (requires: typeof plan.views[string]["requires"], path: string): string[] => {
-    return (requires?.auth?.all ?? []).map((p, index) => {
-      const condition = typeof p === "string" ? 'caller.kind === "user"' : "ctx.auth.scope" in p ? `caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})` : `caller.kind === "user" && ${q(p["ctx.staff"])}.includes(caller.role ?? "")`;
-      return `  deny(caller, ${condition}, ${q(`${path}/requires/auth/all/${index}`)});`;
-    });
-  };
+  const driver = driverFor(target);
   const queryInputType = (schema: JsonSchema | undefined, statements: readonly LoweredStatement[]) => {
     if (!schema?.properties) return typeOf(schema);
     const binds = statements.flatMap(s => s.binds).filter(b => b.k === "input");
@@ -82,7 +75,7 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [], refProcedures: string[] = [];
   const entries: Record<string, string> = {};
   const base = "@aotter/mantle-next/";
-  const refNames = emitHandlers(plan, typeOf, auth, declarations, refProcedures);
+  const refNames = emitHandlers(plan, typeOf, declarations, refProcedures);
   const hasHandlers = refNames.length > 0;
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
     const path = `views/${name}`, fn = `view${index}`;
@@ -99,10 +92,11 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
       output.push(`readonly ${q(key)}: ${nativeType(type, isSqlite)};`);
     }
     const fieldNames = inputFields(view.input, path + "/input");
+    const callerStep = step(c, path, fieldNames), trustedStep = mode === "caller" ? step(trusted!, path, fieldNames) : callerStep;
     declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`,
-      `const ${fn}Caller = ${step(c, path, fieldNames)} as const;`, ...(mode === "caller" ? [`const ${fn}Trusted = ${step(trusted!, path, fieldNames)} as const;`] : []),
+      `const ${fn}Caller = ${callerStep} as const;`, ...(trustedStep !== callerStep ? [`const ${fn}Trusted = ${trustedStep} as const;`] : []),
       `async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path),
-      `  const m = ${mode === "caller" ? `caller.kind === "system" ? ${fn}Trusted : ` : ""}${fn}Caller;`, `  return DRIVER.read(db, m.sql, binds(D, m.binds, caller, raw));`, "}");
+      `  const m = ${trustedStep !== callerStep ? `caller.kind === "system" ? ${fn}Trusted : ` : ""}${fn}Caller;`, `  return DRIVER.read(db, m.sql, binds(D, m.binds, caller, raw));`, "}");
     views.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
     entries[`views/${encodeURIComponent(name)}.ts`] = entry("view", name, `View${index}Input as Input, View${index}Row as Row`);
@@ -138,7 +132,7 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
   ] : [])].join("\n");
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
   const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny"] : []), ...(procedures.length ? ["type Output"] : [])];
-  const dbType = target === "bun-sqlite" ? `import type { Handle as Database } from "${base}driver/bun-sqlite";` : target === "cloudflare-d1" ? `import type { Handle as Database } from "${base}driver/d1";` : "";
+  const dbType = isSqlite ? databaseImport(target) : "";
   return { ok: true, refProcedures: refNames, files: { ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
     ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...(stores ? [`import { createStore } from "${base}store";`] : []),
     `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}binds";`,

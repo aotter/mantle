@@ -47,7 +47,17 @@ export interface IdentityAuth extends AuthInstance {
 }
 type Read = (sql: string, values: unknown[]) => PromiseLike<any[]>;
 const invalid = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", message, "identity");
-const project = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: User) => ({ id, email, name, role: role ?? null, githubLogin: githubLogin ?? null, emailVerified: Boolean(emailVerified), createdAt: new Date(createdAt) });
+/** A staff identity or member as the directory returns it. */
+type Member = {
+    id: string;
+    email: string;
+    name: string;
+    role: string | null;
+    githubLogin: string | null;
+    emailVerified: boolean;
+    createdAt: Date;
+};
+const project = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: User): Member => ({ id, email, name, role: role ?? null, githubLogin: githubLogin ?? null, emailVerified: Boolean(emailVerified), createdAt: new Date(createdAt) });
 /** Uses the default Better Auth model/field names in the template; no boot DDL or seeds. */
 function directory(auth: IdentityAuth, caller: Caller, headers: Headers, d: Dialect, read: Read, createdAt: string) {
     const guard = (id?: string) => {
@@ -134,14 +144,14 @@ function directory(auth: IdentityAuth, caller: Caller, headers: Headers, d: Dial
                 };
                 if (e.status !== "BAD_REQUEST" || e.body?.code !== "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL")
                     throw error;
-                const { users } = await auth.api.listUsers({ headers, query: { filterField: "email", filterValue: normalized, limit: 1 } });
-                if (!users[0])
+                const { users: [found] } = await auth.api.listUsers({ headers, query: { filterField: "email", filterValue: normalized, limit: 1 } });
+                if (!found)
                     throw error;
-                guard(users[0].id);
-                if (!users[0].emailVerified)
+                guard(found.id);
+                if (!found.emailVerified)
                     throw new ContractError("AUTH_DENIED", "The existing account must verify its email before receiving staff access.", "identity:invitation");
-                await auth.api.setRole({ headers, body: { userId: users[0].id, role: "staff" } });
-                return { kind: "exists" as const, id: users[0].id };
+                await auth.api.setRole({ headers, body: { userId: found.id, role: "staff" } });
+                return { kind: "exists" as const, id: found.id };
             }
         },
         async revokeInvite(id: string) {
@@ -176,43 +186,32 @@ export type BootstrapRule = {
     match: "email" | "github-login";
     value: string;
 };
-const matches = (rule: BootstrapRule, user: {
+/** The signed-in user a bootstrap hook inspects. */
+type BootstrapUser = {
+    id: string;
     email?: string | null;
     githubLogin?: string | null;
     emailVerified?: boolean;
-}) => (rule.match === "email" ? user.emailVerified === true ? user.email : null : user.githubLogin)?.trim().toLowerCase() === rule.value.trim().toLowerCase();
-export function d1BootstrapStaff(db: Reader, rule: BootstrapRule) {
+};
+const matches = (rule: BootstrapRule, user: BootstrapUser) => (rule.match === "email" ? user.emailVerified === true ? user.email : null : user.githubLogin)?.trim().toLowerCase() === rule.value.trim().toLowerCase();
+const promote = (param: string) => `UPDATE "user" SET role='staff' WHERE id=${param} AND NOT EXISTS (SELECT 1 FROM "user" WHERE role='staff') RETURNING id`;
+/** Promote the first matching user to staff, only while no staff exists. */
+function bootstrap(rule: BootstrapRule, update: (id: string) => PromiseLike<unknown[]>) {
     if (!rule.value.trim())
         throw invalid("Bootstrap target cannot be empty.");
-    return async (user: {
-        id: string;
-        email?: string | null;
-        githubLogin?: string | null;
-        emailVerified?: boolean;
-    }) => {
+    return async (user: BootstrapUser): Promise<void> => {
         if (!matches(rule, user))
             return;
-        const rows = await d1Read(db, `UPDATE "user" SET role='staff' WHERE id=? AND NOT EXISTS (SELECT 1 FROM "user" WHERE role='staff') RETURNING id`, [user.id]);
-        if (!rows.length)
+        if (!(await update(user.id)).length)
             console.warn("[mantle bootstrap] promotion blocked: staff already exists.");
     };
 }
+export function d1BootstrapStaff(db: Reader, rule: BootstrapRule) {
+    return bootstrap(rule, id => d1Read(db, promote("?"), [id]));
+}
 export function postgresBootstrapStaff(db: Postgres, rule: BootstrapRule) {
-    if (!rule.value.trim())
-        throw invalid("Bootstrap target cannot be empty.");
-    return async (user: {
-        id: string;
-        email?: string | null;
-        githubLogin?: string | null;
-        emailVerified?: boolean;
-    }) => {
-        if (!matches(rule, user))
-            return;
-        const rows = await transaction(db, async (tx) => {
-            await tx.unsafe("SELECT pg_advisory_xact_lock(1296125516,1)", []);
-            return tx.unsafe(`UPDATE "user" SET role='staff' WHERE id=$1 AND NOT EXISTS (SELECT 1 FROM "user" WHERE role='staff') RETURNING id`, [user.id]);
-        }, { isolation: "read committed" }, "auth/bootstrap");
-        if (!rows.length)
-            console.warn("[mantle bootstrap] promotion blocked: staff already exists.");
-    };
+    return bootstrap(rule, id => transaction(db, async (tx) => {
+        await tx.unsafe("SELECT pg_advisory_xact_lock(1296125516,1)", []);
+        return tx.unsafe(promote("$1"), [id]);
+    }, { isolation: "read committed" }, "auth/bootstrap"));
 }

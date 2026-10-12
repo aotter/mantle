@@ -69,7 +69,8 @@ export function authSchemaSql(options: BetterAuthOptions, dialect: AuthDialect):
   const statements: string[] = [];
   const indexes: string[] = [];
   for (const [name, table] of orderedTables(options)) {
-    if (name === tables.user?.modelName) indexes.push(`CREATE INDEX IF NOT EXISTS ${ident(fieldIndexName(`_mantle_auth_${name}`, "member_page"))} ON ${ident(name)} (${ident(tables.user.fields.createdAt?.fieldName ?? "createdAt")}, ${ident("id")})`);
+    const index = (unique: boolean | undefined, index: string, columns: readonly string[]) => indexes.push(`CREATE ${unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${ident(index)} ON ${ident(name)} (${columns.map(ident).join(", ")})`);
+    if (name === tables.user?.modelName) index(false, fieldIndexName(`_mantle_auth_${name}`, "member_page"), [tables.user.fields.createdAt?.fieldName ?? "createdAt", "id"]);
     const columns = [`${ident("id")} ${idColumn}`];
     for (const [column, field] of Object.entries(table.fields)) {
       if (column === "id") continue;
@@ -80,10 +81,10 @@ export function authSchemaSql(options: BetterAuthOptions, dialect: AuthDialect):
         field.unique && "UNIQUE",
         field.references && `REFERENCES ${ident(field.references.model)}(${ident(referenced(field.references))}) ON DELETE ${(field.references.onDelete ?? "cascade").toUpperCase()}`,
       ].filter(Boolean).join(" "));
-      if (field.index && !field.unique) indexes.push(`CREATE INDEX IF NOT EXISTS ${ident(fieldIndexName(name, column))} ON ${ident(name)} (${ident(column)})`);
+      if (field.index && !field.unique) index(false, fieldIndexName(name, column), [column]);
     }
     statements.push(`CREATE TABLE IF NOT EXISTS ${ident(name)} (${columns.join(", ")})`);
-    for (const index of table.indexes ?? []) indexes.push(`CREATE ${index.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${ident(index.name)} ON ${ident(name)} (${index.columns.map(ident).join(", ")})`);
+    for (const declared of table.indexes ?? []) index(declared.unique, declared.name, declared.columns);
   }
   return [...statements, ...indexes];
 }
