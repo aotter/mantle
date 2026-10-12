@@ -174,6 +174,12 @@ spelled), a driver per handle (how it is called and what atomicity it really has
 generic Store. Nothing branches on the engine at run time. The design, the Store's rules and limits, and the measured costs are in
 [ADR-0045](../adr/0045-next-runtime-core.md); size numbers are `size-budgets.json` and `scripts/check-package.ts`.
 
+Generated modules call no Store kernel function during import. The first
+`store(db, caller, options?)` call initializes the metadata factory once per
+generated module. Each call binds fresh database, Caller and handler references;
+only metadata is shared. Initialization performs no SQL. A Worker that imports
+only direct operations retains no Store initializer or kernel.
+
 ## Opt-in publishing
 
 The default Schema lifecycle is `operational`. Opt-in `publishing` emits status

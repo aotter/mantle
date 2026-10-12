@@ -44,7 +44,9 @@ state column names, value types and the writable columns, and the Store enforces
 **not** a View's or Procedure's `requires`: authorize before calling it. Design, limits and what the runtime still refuses are in
 [ADR-0045](../../docs/adr/0045-next-runtime-core.md).
 
-A Store-only purchase Worker retains 1,450 gzip bytes of generated operations (Bun 1.3.14, minified); the existing bound operation API stays intact.
+Importing generated modules does not initialize the Store. The first `store()`
+call prepares its metadata factory once; every call binds its own database,
+Caller and handlers. Unused Stores still tree-shake out of direct operations.
 
 `find({ search: "text" })` and `first({ search: "text" })` match an exact id or
 the Schema's `searchableFields`. Search is trimmed, must be non-empty and cannot contain NUL; it
