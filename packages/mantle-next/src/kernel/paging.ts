@@ -40,7 +40,7 @@ function valid(kind: CursorKind, sqlite: boolean, key: unknown): boolean {
 
 /** A View's paged boundary: `options.limit` defaults to min(50, cap) and is capped at cap and 500. */
 export function paged<Database, Input, Row>(spec: Paged<Database>): (db: Database, caller: Caller, input: Input, options?: Options) => Promise<{ rows: Row[]; nextCursor?: string }> {
-  const { path, cap } = spec;
+  const { path, cap } = spec, two = spec.keys === 2;
   return async (db, caller, input, options = {}) => {
     spec.auth?.(caller);
     const requested = options.limit ?? Math.min(50, cap);
@@ -56,9 +56,9 @@ export function paged<Database, Input, Row>(spec: Paged<Database>): (db: Databas
     const sql = cursor ? m.next : m.first;
     const rows: Record<string, unknown>[] = await spec.read(db, sql.sql, [...values, ...sql.extra.map(i => i < 0 ? limit + 1 : keys![i])]);
     const last = rows[limit - 1];
-    const nextCursor = rows.length > limit && last ? encodeCursor(last._k0, last[`_k${spec.keys - 1}`], path) : undefined;
+    const nextCursor = rows.length > limit && last ? encodeCursor(last._k0, two ? last._k1 : last._k0, path) : undefined;
     if (rows.length > limit) rows.length = limit;
-    for (const row of rows) for (let i = 0; i < spec.keys; i++) delete row[`_k${i}`];
+    for (const row of rows) { delete row._k0; if (two) delete row._k1; }
     return { rows: rows as Row[], ...(nextCursor === undefined ? {} : { nextCursor }) };
   };
 }
