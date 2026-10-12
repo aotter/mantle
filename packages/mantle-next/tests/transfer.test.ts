@@ -19,6 +19,7 @@ afterAll(()=>rm(directory,{recursive:true,force:true}));
 const stream = (text: string) => new ReadableStream<Uint8Array>({start(c){c.enqueue(new TextEncoder().encode(text));c.close();}});
 async function fixture(target: "bun-sqlite"|"bun-postgres"|"cloudflare-d1", authOptions: object = {}, searchable = true) {
   const atoms=text.split("\n---\n").map(part=>JSON.parse(part));if(!searchable)delete atoms[0].spec.searchableFields;
+  atoms[0].spec.schema.properties.optional_day={type:["string","null"],format:"date"};
   const result=await generateFromSources({target,sources:{sources:[{sourceId:"transfer.yaml",text:atoms.map(atom=>JSON.stringify(atom)).join("\n---\n")}]},site:{locales:["en"]},auth:{...auth(),...authOptions}});
   if(!result.ok) throw Error(JSON.stringify(result.diagnostics));
   const dir=resolve(directory,`${target}-${crypto.randomUUID()}`);await writeGenerated(dir,result.files);
@@ -108,6 +109,33 @@ test("portable JSON keeps scalar types and refuses duplicate keys or excessive n
   }finally{source.db.close();}
 });
 
+test("SQLite non-null temporal values outside native formatting range cannot export as NULL",async()=>{
+  const source=await sqlite();try{
+    await seed(source);
+    for(const [column,literal] of [["optional_day","3000000"],["expires","CAST('9223372036854775807' AS INTEGER)"],["published_at","CAST('-9223372036854775808' AS INTEGER)"]] as const){
+      source.db.exec(`UPDATE items SET "${column}"=${literal} WHERE id='row-000'`);
+      expect(source.db.query(`SELECT "${column}" IS NULL AS nil FROM items WHERE id='row-000'`).get()).toEqual({nil:0});
+      await expect(exported(source)).rejects.toMatchObject({code:"SQL_TYPE"});
+      source.db.exec(`UPDATE items SET "${column}"=NULL WHERE id='row-000'`);
+    }
+    await expect(exported(source)).resolves.toContain('"complete":true');
+  }finally{source.db.close();}
+});
+
+(process.env.MANTLE_NEXT_BUN_PG_URL?test:test.skip)("PostgreSQL nullable dates, timestamps and auth dates refuse infinity/BCE without altering real NULL",async()=>{
+  const options={user:{additionalFields:{holiday:{type:"date" as const,required:false}}}},source=await sqlite("bun-sqlite",options),target=await postgres(options);try{
+    await seed(source);const original=await exported(source);await target.app.importStore(target.handle,stream(original));
+    for(const [table,column,literal] of [["items","optional_day","DATE '0001-01-01 BC'"],["items","optional_day","DATE 'infinity'"],["items","optional_day","DATE '-infinity'"],["items","expires","TIMESTAMPTZ '2000-01-01 00:00:00+00 BC'"],["items","expires","TIMESTAMPTZ 'infinity'"],["items","expires","TIMESTAMPTZ '-infinity'"],["user","holiday","TIMESTAMPTZ '2000-01-01 00:00:00+00 BC'"],["user","holiday","TIMESTAMPTZ 'infinity'"],["user","holiday","TIMESTAMPTZ '-infinity'"]] as const){
+      const id=table==="items"?"row-001":"member";
+      await target.db.unsafe(`UPDATE "${table}" SET "${column}"=${literal} WHERE id=$1`,[id]);
+      expect((await target.db.unsafe(`SELECT "${column}" IS NULL AS nil FROM "${table}" WHERE id=$1`,[id]))[0].nil).toBe(false);
+      await expect(exported(target)).rejects.toMatchObject({code:"SQL_TYPE"});
+      await target.db.unsafe(`UPDATE "${table}" SET "${column}"=NULL WHERE id=$1`,[id]);
+    }
+    expect(body(await exported(target))).toBe(body(original));
+  }finally{source.db.close();await target.close();}
+},60_000);
+
 test("transfer modules stay out of an ordinary request bundle",async()=>{
   const f=await fixture("cloudflare-d1");
   // Build an actual generated View, whose graph has no dump entry or node:crypto dependency.
@@ -184,12 +212,13 @@ const restored=await importStore(env.DB,stream(dump)),roundtrip=await new Respon
 let nonempty=false,incomplete=false;try{await importStore(env.DB,stream(dump));}catch(e){nonempty=e.code==='DUMP_INVALID';}
 try{await importStore(env.BROKEN,stream(dump.replace(/"sha256":"[a-f0-9]+"/,'"sha256":"wrong"')));}catch(e){incomplete=e.code==='IMPORT_INCOMPLETE'&&e.fields?.incomplete===true;}
 const nativeJSON=await env.DB.prepare("SELECT payload -> '$.int' AS integer,payload -> '$.decimal' AS decimal FROM items WHERE id='row-000'").first();
-return Response.json({restored,roundtrip,nonempty,incomplete,nativeJSON});}catch(e){return Response.json({error:e.code??'FAILED',message:e.message},{status:500});}}};`);
+let temporalRefusals=0;for(const sql of ["UPDATE items SET optional_day=3000000 WHERE id='row-000'","UPDATE items SET optional_day=NULL,expires=CAST('9223372036854775807' AS INTEGER) WHERE id='row-000'"]){await env.DB.prepare(sql).run();try{await new Response(exportStore(env.DB)).text();}catch(e){if(e.code==='SQL_TYPE')temporalRefusals++;}}
+return Response.json({restored,roundtrip,nonempty,incomplete,nativeJSON,temporalRefusals});}catch(e){return Response.json({error:e.code??'FAILED',message:e.message},{status:500});}}};`);
     const config=resolve(privateDir,"wrangler.json"),base=resolve(import.meta.dir,"..");
     await writeFile(config,JSON.stringify({name:"mantle-transfer-local",main:entry,compatibility_date:"2026-09-28",compatibility_flags:["nodejs_compat"],d1_databases:[{binding:"DB",database_name:"transfer-ok",database_id:"00000000-0000-0000-0000-000000001298"},{binding:"BROKEN",database_name:"transfer-bad",database_id:"00000000-0000-0000-0000-000000001299"}]}),{mode:0o600});
     log=await open(resolve(privateDir,"wrangler.log"),"w",0o600);
     worker=spawn("node",[resolve(base,"node_modules/wrangler/bin/wrangler.js"),"dev","--local","--config",config,"--ip","127.0.0.1","--port",port,"--inspector-port","0","--persist-to",resolve(privateDir,"state")],{cwd:base,detached:true,env:{...process.env,WRANGLER_SEND_METRICS:"false",NO_PROXY:"127.0.0.1,localhost",no_proxy:"127.0.0.1,localhost"},stdio:["ignore",log.fd,log.fd]});exited=once(worker,"exit");
     let ready=false;for(let i=0;i<60;i++){if(worker.exitCode!==null)throw Error(await readFile(resolve(privateDir,"wrangler.log"),"utf8"));try{ready=(await fetch(`http://127.0.0.1:${port}/health`,{signal:AbortSignal.timeout(1000)})).ok;}catch{}if(ready)break;await new Promise(r=>setTimeout(r,1000));}
-    expect(ready).toBe(true);const response=await fetch(`http://127.0.0.1:${port}/verify`,{signal:AbortSignal.timeout(60_000)}),result=await response.json() as any;expect(response.status).toBe(200);expect(result).toEqual({restored:{rows:76},roundtrip:dump,nonempty:true,incomplete:true,nativeJSON:{integer:"9007199254740993",decimal:"1234567890123456789e-18"}});
+    expect(ready).toBe(true);const response=await fetch(`http://127.0.0.1:${port}/verify`,{signal:AbortSignal.timeout(60_000)}),result=await response.json() as any;expect(response.status).toBe(200);expect(result).toEqual({restored:{rows:76},roundtrip:dump,nonempty:true,incomplete:true,nativeJSON:{integer:"9007199254740993",decimal:"1234567890123456789e-18"},temporalRefusals:2});
   }finally{source.db.close();if(worker?.pid){try{process.kill(-worker.pid,"SIGTERM");}catch{}await exited;}await log?.close();await rm(privateDir,{recursive:true,force:true});}
 },90_000);

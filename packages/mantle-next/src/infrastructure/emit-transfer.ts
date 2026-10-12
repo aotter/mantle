@@ -20,7 +20,10 @@ export function emitTransfer(plan: RuntimePlan, target: Target, version: string,
     const cast = (p: string, c: DumpColumn) => !sq && ["int","uuid"].includes(c[1]) ? `CAST(CAST(${p} AS text) AS ${c[1] === "int" ? "bigint" : "uuid"})` : dialect.cast(p, c[1] === "authdate" || c[1] === "timestamp" ? "timestamptz" : c[1]);
     const select = columns.map(c => {
       const column = ident(c[0]);
-      const value = c[1] === "session" ? "NULL" : c[1] === "int" || c[1] === "json" ? `CAST(${column} AS TEXT)` : c[1] === "timestamp" || c[1] === "authdate" && !sq ? dialect.wireTimestamp(column).join("") : c[1] === "date" ? dialect.wireDate(column).join("") : column;
+      let value = c[1] === "session" ? "NULL" : c[1] === "int" || c[1] === "json" ? `CAST(${column} AS TEXT)` : c[1] === "timestamp" || c[1] === "authdate" && !sq ? dialect.wireTimestamp(column).join("") : c[1] === "date" ? dialect.wireDate(column).join("") : column;
+      // Failed formatting is not SQL NULL; YYYY also omits PostgreSQL's BCE era.
+      if (c[1] === "date" || c[1] === "timestamp" || c[1] === "authdate" && !sq)
+        value = `CASE WHEN ${column} IS NULL THEN NULL${sq ? "" : ` WHEN NOT isfinite(${column}) OR EXTRACT(YEAR FROM ${c[1] === "date" ? column : `${column} AT TIME ZONE 'UTC'`}) <= 0 THEN ''`} ELSE COALESCE(${value},'') END`;
       return `${value} AS ${column}`;
     }).join(",");
     const base = `SELECT ${select} FROM ${ident(name)}`, keyColumn = columns.find(c => c[0] === key)!, keySql = ident(key) + (sq ? " COLLATE BINARY" : keyColumn[1] === "text" ? ' COLLATE "C"' : "");

@@ -45,6 +45,10 @@ literal `null` remains distinct from SQL NULL. Duplicate object keys are refused
 discard them. A native runtime without JSON numeric source/raw-JSON support is
 refused; JSON values the target cannot represent never report a completed import.
 
+Native temporal values outside the portable ISO contract (including PostgreSQL
+BCE/infinity and SQLite values outside native date formatting range) are refused,
+even in nullable columns; they are never converted to SQL NULL or another era.
+
 The exporter retains one 20-row native page. Parsing is incremental, each NDJSON
 line is capped at 1 MiB, JSON nesting at 64 levels; imports batch at most 20 rows
 and 100 native bind parameters. Descriptor mismatch and any existing target row
