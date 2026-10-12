@@ -45,21 +45,20 @@ pnpm exec wrangler deploy
 # or: pnpm exec wrangler dev --local
 ```
 
-For `cloudflare-d1` and `cloudflare-postgres`, generation writes Wrangler's custom split ESM build,
-so plain `wrangler deploy` / `wrangler dev` run it automatically. Node 22 suffices; Bun is not required.
-`--wrangler` defaults to `wrangler.jsonc`, `--entry` to `src/worker.ts`, and `--outdir` to `dist`.
-JSONC edits preserve comments and unrelated settings, and rerunning generation leaves the same config.
-A missing config gets placeholders for `name` and `compatibility_date`; fill those and your bindings.
-TOML is left untouched with the exact keys to add printed to the terminal.
-Run generation and Wrangler from the project root. Regenerate after changing manifests or auth options.
+For `cloudflare-d1` and `cloudflare-postgres`, generation configures Wrangler to run
+`mantle bundle <entry> <outdir>` automatically. Node 22 suffices. Run from the project root;
+regenerate after manifest or auth option changes.
 
-The custom command is `mantle bundle <entry> <outdir>`: esbuild 0.28.1 creates minified ESM
-with chunks under `chunks/`, cleaning the output directory first. Wrangler uploads these modules with
-`no_bundle`, `find_additional_modules`, `base_dir` and an ESModule rule; `nodejs_compat` is ensured
-for AsyncLocalStorage and postgres.js. The build rejects Better Auth in the entry's static import graph
-using esbuild's input/output metafile, independent of bundle size. Load auth with
-`authLoader(() => import(...))`; see [Auth](../../docs/next/auth.md#worker-entry).
-Do not put source or generated code in the bundle output directory.
+`--entry` defaults to `src/worker.ts`, `--outdir` to `dist`. `--wrangler` defaults to the
+existing `wrangler.jsonc`, `wrangler.json` or `wrangler.toml`, otherwise `wrangler.jsonc`.
+JSONC edits preserve comments and unrelated settings and are idempotent. A new config
+needs its `name`, `compatibility_date` and bindings filled in. TOML only prints instructions.
+
+esbuild emits minified split ESM; Wrangler uploads it with `no_bundle`,
+`find_additional_modules`, `base_dir` and an ESModule rule. `nodejs_compat` is ensured.
+The metafile guard rejects `better-auth` / `@better-auth/*` in the static startup graph:
+use `authLoader(() => import(...))` ([Auth](../../docs/next/auth.md#worker-entry)).
+The output directory is cleaned first; keep source and generated code elsewhere.
 
 ## D1 Sessions
 
@@ -77,9 +76,6 @@ Return `session.getBookmark()` in a header or cookie and have the client pass it
 Keep `resolveCaller` and Better Auth on `env.DB`: revocation and roles must read the primary.
 Enable [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/)
 on the database (dashboard or REST); writes always go to the primary.
-Maintainer-reported measurements for [#1465](https://github.com/aotter/mantle/issues/1465):
-a Worker at SJC reading an APAC primary took ~120 ms/read; with replication and a session, a WNAM
-replica served reads in ~40 ms. `session.batch` reads also used the replica. These are deployment-specific observations.
 
 ## Store transactions
 

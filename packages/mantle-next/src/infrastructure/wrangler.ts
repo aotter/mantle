@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, relative, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 
 export function configureWrangler(configPath: string, entry: string, outdir: string, generated: string): void {
@@ -20,7 +21,8 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
     return;
   }
   const exists = existsSync(configPath);
-  let text = exists ? readFileSync(configPath, "utf8") : JSON.stringify({ name: "your-worker-name", compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat"] }, null, 2) + "\n";
+  const original = exists ? readFileSync(configPath, "utf8") : JSON.stringify({ name: "your-worker-name", compatibility_date: "2026-09-28" }, null, 2) + "\n";
+  let text = original;
   const errors: ParseError[] = [];
   const config = parse(text, errors, { allowTrailingComma: true });
   if (errors.length || !config || typeof config !== "object" || Array.isArray(config)) throw new Error(`${configPath} must be a valid JSONC object.`);
@@ -32,16 +34,13 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
   const formattingOptions = { insertSpaces: !indent.includes("\t"), tabSize: indent.length, eol: text.includes("\r\n") ? "\r\n" : "\n" };
   // Merge, never replace: the user's own module rules and build options survive.
   const { rules: [rule], build: buildKeys, ...top } = keys;
-  const edits: [(string | number)[], unknown][] = [...Object.entries(top).map(([k, v]) => [[k], v] as [string[], unknown]), ...Object.entries(buildKeys).map(([k, v]) => [["build", k], v] as [string[], unknown])];
-  if (!(config.rules ?? []).some((r: unknown) => JSON.stringify(r) === JSON.stringify(rule))) edits.push([config.rules === undefined ? ["rules"] : ["rules", -1], config.rules === undefined ? [rule] : rule]);
-  const at = (path: (string | number)[]) => path.reduce((v: any, k) => v?.[k], config);
-  for (const [path, value] of edits) {
-    if (path.at(-1) === -1 || JSON.stringify(at(path)) !== JSON.stringify(value)) text = applyEdits(text, modify(text, path, value, { formattingOptions }));
-  }
-  if (!flags.includes("nodejs_compat")) {
-    const path = config.compatibility_flags === undefined ? ["compatibility_flags"] : ["compatibility_flags", -1];
-    text = applyEdits(text, modify(text, path, config.compatibility_flags === undefined ? ["nodejs_compat"] : "nodejs_compat", { formattingOptions }));
-  }
-  if (!exists || text !== readFileSync(configPath, "utf8")) writeFileSync(configPath, text);
+  const edit = (path: (string | number)[], value: unknown) => {
+    if (!isDeepStrictEqual(path.reduce((v: any, k) => v?.[k], config), value)) text = applyEdits(text, modify(text, path, value, { formattingOptions }));
+  };
+  for (const [key, value] of Object.entries(top)) edit([key], value);
+  for (const [key, value] of Object.entries(buildKeys)) edit(["build", key], value);
+  if (!(config.rules ?? []).some((r: unknown) => isDeepStrictEqual(r, rule))) edit(config.rules === undefined ? ["rules"] : ["rules", -1], config.rules === undefined ? [rule] : rule);
+  if (!flags.includes("nodejs_compat")) edit(config.compatibility_flags === undefined ? ["compatibility_flags"] : ["compatibility_flags", -1], config.compatibility_flags === undefined ? ["nodejs_compat"] : "nodejs_compat");
+  if (!exists || text !== original) writeFileSync(configPath, text);
   if (!exists) console.log(`Created ${configPath}. Set name and compatibility_date for your Worker, and add your D1/Hyperdrive bindings and other application settings.`);
 }

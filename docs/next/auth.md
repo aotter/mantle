@@ -1,9 +1,9 @@
-# Auth in Next
+# Auth in Mantle
 
-Next does not wrap Better Auth. Your application writes its own `auth.ts` with the official `betterAuth()` and
-official plugins. Next supplies only what Better Auth cannot know:
+Your application configures `betterAuth()` and its official plugins in `auth.ts`.
+Mantle supplies the database adapter, schema generation and caller resolution:
 
-| Next | What it does |
+| Mantle | What it does |
 | --- | --- |
 | `@aotter/mantle/auth/adapter` | `d1Adapter(env.DB)` / `bunSqlAdapter(sql)`: Better Auth's `database` on the same native handle as your data, no Kysely. Passes Better Auth's official adapter suite (`@better-auth/test-utils/adapter`). |
 | `mantle generate … --auth ./auth.ts` | Adds the tables Better Auth declares for your options (`getSchema`) to `schema.sql`. |
@@ -75,11 +75,9 @@ If you set `advanced.cookiePrefix`, pass the same value: `authLoader(load, "app"
 Workers compiles an uploaded module only when it is imported. Better Auth in its own module therefore costs a cold
 isolate nothing until a request needs it. Measured on production Workers (#1462), startup was 1 ms instead of 77 ms
 eager or 32 ms for `import()` inside one bundle.
-Run `mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts` once, then
-`wrangler deploy` / `wrangler dev` as usual. Generation configures Wrangler to run the split build and upload
-its modules. The build fails if Better Auth enters the entry's static import graph: use
-`authLoader(() => import(...))`. The [Workers build instructions](../../packages/mantle-next/README.md#workers-build)
-own the options and config details; `tests/auth-split.test.ts` checks splitting and the startup guard.
+Follow the [Workers build instructions](../../packages/mantle-next/README.md#workers-build).
+The metafile startup guard rejects static Better Auth imports; keep auth behind
+`authLoader(() => import(...))`.
 
 ## Schema
 

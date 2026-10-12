@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, delimiter } from "node:path";
 import { parse } from "jsonc-parser";
@@ -22,11 +22,11 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
       rules: [{ type: "ESModule", globs: ["**/*.js"], fallthrough: true }],
       build: { command: "mantle bundle src/worker.ts dist", watch_dir: ["src", "generated"] },
     });
-    const original = '{\r\n\t// keep this comment\r\n\t"name": "existing", // same line\r\n\t"vars": { "VALUE": "untouched" },\r\n\t"d1_databases": [{ "binding": "DB", "database_id": "id" }],\r\n\t"compatibility_flags": ["other_flag" /* keep flag comment */],\r\n\t"main": "old.ts",\r\n\t"rules": [{ "type": "Text", "globs": ["**/*.md"] }],\r\n\t"build": { "cwd": "app" },\r\n}\r\n';
+    const original = '{\r\n\t// keep this comment\r\n\t"name": "existing", // same line\r\n\t"vars": { "VALUE": "untouched" },\r\n\t"d1_databases": [{ "binding": "DB", "database_id": "id" }],\r\n\t"compatibility_flags": ["other_flag" /* keep flag comment */],\r\n\t"main": "old.ts",\r\n\t"rules": [{ "type": "Text", "globs": ["**/*.md"] }, { "globs": ["**/*.js"], /* keep rule comment */ "fallthrough": true, "type": "ESModule" }],\r\n\t"build": { "cwd": "app" },\r\n}\r\n';
     await writeFile(join(dir, "wrangler.jsonc"), original);
     generate(dir, "--entry", "worker/index.ts", "--outdir", "build");
     const edited = await readFile(join(dir, "wrangler.jsonc"), "utf8");
-    for (const line of original.split("\r\n").filter(line => /keep this|name|vars|d1_databases/.test(line))) expect(edited).toContain(line);
+    for (const line of original.split("\r\n").filter(line => /keep this|name|vars|d1_databases|rules/.test(line))) expect(edited).toContain(line);
     expect(edited).not.toMatch(/(?<!\r)\n/);
     expect(edited).toContain("/* keep flag comment */");
     const updated = parse(edited);
@@ -36,6 +36,10 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
     expect(updated.rules).toEqual([{ type: "Text", globs: ["**/*.md"] }, { type: "ESModule", globs: ["**/*.js"], fallthrough: true }]);
     generate(dir, "--entry", "worker/index.ts", "--outdir", "build");
     expect(await readFile(join(dir, "wrangler.jsonc"), "utf8")).toBe(edited);
+    await rename(join(dir, "wrangler.jsonc"), join(dir, "wrangler.json"));
+    generate(dir, "--entry", "worker/index.ts", "--outdir", "build");
+    expect(await readFile(join(dir, "wrangler.json"), "utf8")).toBe(edited);
+    expect(await readFile(join(dir, "wrangler.jsonc"), "utf8").catch(() => undefined)).toBeUndefined();
     await mkdir(join(dir, "config"));
     generate(dir, "--wrangler", "config/worker.jsonc");
     const nested = parse(await readFile(join(dir, "config/worker.jsonc"), "utf8"));

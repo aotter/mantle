@@ -33,16 +33,10 @@ before the Core version rules below. If it has `@aotter/mantle`, read its `packa
 
 ## Experimental workspace consumers
 
-If the linked Mantle package generates concrete `generated.ts` queries (rather than Core's
-RuntimePlan), follow its README instead of the Core 0.2 scaffolding below. For Workers, run
-`pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts`
-(or target `cloudflare-postgres`) once, then plain `pnpm exec wrangler deploy` /
-`pnpm exec wrangler dev --local`. Generation writes Wrangler's custom split build; Node 22
-suffices. The startup guard rejects `better-auth` / `@better-auth/*` in the entry's static
-import graph: keep auth behind `authLoader(() => import(...))` and fix static imports when
-it fails. The package README owns build options, config placeholders, TOML instructions
-and D1 Sessions. Regenerate after manifest or auth option changes. Standalone publishing
-is pending; do not install the experiment from npm or migrate a Core project unless asked.
+Follow the linked package README for generation, Workers builds and D1 Sessions;
+the Core scaffolding below does not apply. Keep auth behind
+`authLoader(() => import(...))` to pass the startup guard. Standalone publishing
+is pending; do not install the experiment from npm or migrate Core unless asked.
 
 ## New project
 
