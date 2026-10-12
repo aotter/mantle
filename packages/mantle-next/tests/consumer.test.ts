@@ -10,6 +10,7 @@ import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link
 const targets = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const;
 const files: string[] = [];
 const selectedFiles: string[] = [];
+const boundaryFiles: string[] = [];
 let directory: string | undefined;
 beforeAll(async () => {
   const base = fileURLToPath(new URL("apps/.generated/", import.meta.url));
@@ -19,7 +20,9 @@ beforeAll(async () => {
   for (const target of targets) {
     const destination = join(directory, target);
     // unlinked: the consumer resolves @aotter/mantle-next/* through the package (dist), as an application does
-    await writeGenerated(destination, await generateOrThrow(target, sources), false);
+    const generated = await generateOrThrow(target, sources);
+    await writeGenerated(destination, generated, false);
+    boundaryFiles.push(...Object.keys(generated).filter(name => name.startsWith("paged/") || name.startsWith("validation/")).map(name => join(destination, name)));
     files.push(join(destination, "generated.ts"));
     selectedFiles.push(join(destination, "views/purchase-totals.ts"), join(destination, "procedures/create-purchase.ts"));
   }
@@ -101,7 +104,7 @@ afterAll(async () => { if (directory) await rm(directory, {recursive:true,force:
 
 test("four generated consumers typecheck against official native driver types", () => {
   for (const file of files) expect(existsSync(file)).toBe(true);
-  const program = ts.createProgram([...files, ...selectedFiles], {
+  const program = ts.createProgram([...files, ...selectedFiles, ...boundaryFiles], {
     strict: true, noEmit: true, target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
     typeRoots: [fileURLToPath(new URL("../node_modules/@types", import.meta.url)), fileURLToPath(new URL("../node_modules", import.meta.url))],

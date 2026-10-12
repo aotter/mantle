@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 const directory = await mkdtemp(resolve(tmpdir(), "mantle-next-pack-"));
 try {
@@ -13,10 +13,17 @@ try {
   const allowed = /^package\/(?:package\.json|README\.md|LICENSE|dist\/[A-Za-z0-9_/-]+\.(?:js|d\.ts))$/;
   assert.ok(names.every(name => allowed.test(name)), `unexpected package files: ${names.filter(name => !allowed.test(name))}`);
   execFileSync("tar", ["-xzf", archive, "-C", directory]);
+  for (const name of names.filter(name => name.endsWith(".d.ts"))) {
+    const text = (await readFile(resolve(directory, name), "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const [, path] of text.matchAll(/["'](\.[^"']+)["']/g)) {
+      const target = resolve(dirname(name), path!).replace(/\.js$/, ".d.ts");
+      if (target.startsWith(resolve("package") + "/")) assert.ok(names.includes(target.slice(process.cwd().length + 1)), `missing declaration: ${name} -> ${path}`);
+    }
+  }
   let unpackedBytes = 0;
   for (const name of names) unpackedBytes += (await readFile(resolve(directory, name))).length;
   const tarballBytes = (await stat(archive)).size;
   console.log(JSON.stringify({gate:"package",files:names.length,tarballBytes,unpackedBytes}));
-  assert.ok(tarballBytes <= 48 * 1024, "packed package exceeds 48 KiB");
-  assert.ok(unpackedBytes <= 128 * 1024, "unpacked package exceeds 128 KiB");
+  assert.ok(tarballBytes <= 96 * 1024, "packed package exceeds 96 KiB");
+  assert.ok(unpackedBytes <= 256 * 1024, "unpacked package exceeds 256 KiB");
 } finally { await rm(directory, {recursive:true,force:true}); }

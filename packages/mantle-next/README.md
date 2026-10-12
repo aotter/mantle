@@ -25,6 +25,10 @@ Validate untrusted input before calling queries and redact native errors at appl
 transports. The [query contract](../../docs/next/contract.md#revised-query-responsibility-decision-2026-10-11)
 defines driver-ready inputs, native results, date-time/date wire forms and failure handling.
 
+For transports, `paged/views/<name>.ts` returns `{ rows, nextCursor? }` with keyset paging and
+`validation/<kind>/<name>.ts` checks input against the declared JSON Schema subset; the
+[surface deltas](../../docs/next/surfaces.md) define the REST/MCP wire contract.
+
 Every Schema is also a typed **Store** collection, in the shape of a document-database driver:
 `store(db, caller).collection("purchase_requests")` with `findById`, `find` (AND-only `where`, keyset `cursor`), `first`,
 `count`, `insert(values)`, OCC `update(id, set, { lock })` and `delete(id, { lock })`. Rows, `where`, `set` and `orderBy` use the
