@@ -281,3 +281,5 @@ retain 0.2's independent sequential entry requests and per-entry failures; an ea
 successful operation is not rolled back by a later failure.
 
 Admin entry validators are generated for the supported field formats. A collection with an unsupported format (including deferred `geo`) refuses create/full validation with `ADMIN_VALIDATION_UNAVAILABLE` (HTTP 501, path `admin/entries/<collection>/data`) before any write. Geo fields cannot be patched through Admin; patches of other supported fields preserve the existing coordinates. This does not refuse generation or native Store reads for that collection.
+
+The PostgreSQL Admin boundary rejects NUL characters in text and JSON values or keys, and year `0000` in native DATE fields, cursors and filters before issuing SQL. Literal text `\u0000` (a backslash followed by `u0000`) remains valid. SQLite retains its existing native representations; bare Store and unrelated surfaces retain their contracts.
