@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const directory = await mkdtemp(resolve(tmpdir(), "mantle-next-pack-"));
@@ -29,6 +30,11 @@ try {
   await writeFile(consumer, Object.values(manifest.exports).map((entry, i) => `export type Entry${i} = typeof import(${JSON.stringify("./package/" + String(entry).replace(/^\.\//, ""))});`).join("\n"));
   const program = ts.createProgram([consumer], { noEmit: true, strict: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, types: ["node", "bun-types"], typeRoots: [resolve(directory, "node_modules/@types"), resolve(directory, "node_modules")] });
   assert.deepEqual(ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText, " ")), [], "packed public entries must typecheck");
+  const { ContractError } = await import(pathToFileURL(resolve(packed, "dist/kernel/contracts.js")).href);
+  const { createStore } = await import(pathToFileURL(resolve(packed, "dist/kernel/store.js")).href);
+  assert.equal(ContractError.name, "ContractError");
+  assert.equal(createStore.name, "createStore");
+  assert.match(new ContractError("TEST", "readable").stack, /ContractError: readable/);
   let unpackedBytes = 0;
   for (const name of names) unpackedBytes += (await readFile(resolve(directory, name))).length;
   const tarballBytes = (await stat(archive)).size;
