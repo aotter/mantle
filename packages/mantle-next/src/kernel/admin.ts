@@ -8,7 +8,7 @@ type Descriptor = {readonly name:string;readonly [key:string]:unknown};
 type Page = {rows:readonly Record<string,unknown>[];nextCursor?:string};
 export interface Context<Env,Database> {request:Request;url:URL;env:Env;db:Database;caller:Staff;params:Record<string,string>}
 /** Optional Admin modules add routes inside the same session/origin gate. Paths are relative to /admin/api. */
-export interface Route<Env,Database> {readonly method:string;readonly path:string;readonly preserveCacheControl?:boolean;run(context:Context<Env,Database>):Promise<unknown>}
+export interface Route<Env,Database> {readonly method:string;readonly path:string;readonly preserveCacheControl?:boolean;readonly rawBody?:boolean;run(context:Context<Env,Database>):Promise<unknown>}
 /** Request-scoped native identity facets; providers may implement only the selected methods. */
 export interface IdentityUser {id:string;email:string;name:string;role:string|null;githubLogin:string|null;emailVerified:boolean;createdAt:Date}
 export interface IdentityMethods {
@@ -109,10 +109,9 @@ export function admin<Env,Database,Handlers=never>(metadata:{collections:readonl
         return new Response(res.body,{status:res.status,headers:h});
       }
       const caller=await adminCaller(request,env,options.caller);if(caller instanceof Response)return caller;
-      if(!["GET","HEAD","OPTIONS"].includes(request.method))checkBodyLength(request);
       let path="";try{path=decodeURIComponent(rel.slice(3)).replace(/\/$/,"")||"/";}catch{fail("Malformed Admin path.");}
       if(/%2f|%5c/i.test(rel)||path.includes("\0")||path.includes("\\")||path.split("/").some(x=>x==="."||x===".."))fail("Malformed Admin path.");
-      const db=options.db(env),context:Context<Env,Database>={request,url,env,db,caller,params:{}};
+      let db:Database;
       const me=async()=>{const user=await options.getUser?.(caller.subject,request,env);return {userId:caller.subject,role:caller.role,login:user?.githubLogin||user?.name||user?.email||null,image:user?.image??null};};
       const site=async()=>siteInfo(options.site?await options.site(db,caller).read():{brand:"AotterMantle",title:"CMS",description:"",origin:"",locales:[],canonicalLocale:null,icons:[{src:"/admin/favicon.png",mimeType:"image/png",sizes:["64x64"]},{src:"/admin/favicon.svg",mimeType:"image/svg+xml",sizes:["any"]}],media:{purposes:[]}}, {origin:url.origin,siteSettings:!!options.site,media:!!options.site&&!!options.media,invitationEmail:!!options.identity?.roles?.sendStaffInvitation,mcpEndpoints:options.mcpEndpoints,extensions:options.extensions});
       const listViews=()=>sees(metadata.views,views,caller),listOperations=()=>sees(metadata.operations,operations,caller);
@@ -127,7 +126,7 @@ export function admin<Env,Database,Handlers=never>(metadata:{collections:readonl
         {method:"GET",path:"/views-manifest",run:async()=>({views:listViews()})},
         {method:"GET",path:"/operations",run:async()=>({operations:listOperations()})},
         {method:"GET",path:"/webmcp",run:async()=>metadata.webmcp},
-        {method:"GET",path:"/bootstrap",run:async()=>{const [user,settings,entries]=await Promise.all([me(),site(),url.searchParams.get("collection")?options.routes?.find(r=>r.path==="/entries"&&r.method==="GET")?.run(context):undefined]);return{me:user,site:settings,collections:metadata.collections,views:listViews(),operations:listOperations(),webmcp:metadata.webmcp,...(entries?{entries}:{})};}},
+        {method:"GET",path:"/bootstrap",run:async(context)=>{const [user,settings,entries]=await Promise.all([me(),site(),url.searchParams.get("collection")?options.routes?.find(r=>r.path==="/entries"&&r.method==="GET")?.run(context):undefined]);return{me:user,site:settings,collections:metadata.collections,views:listViews(),operations:listOperations(),webmcp:metadata.webmcp,...(entries?{entries}:{})};}},
         {method:"GET",path:"/collections/{name}/statistics",run:async({params})=>{if(!(metadata.collectionNames??metadata.collections.map(c=>c.name)).some(name=>name.toLowerCase()===params.name?.toLowerCase()))throw new ContractError("NOT_FOUND","No such collection.","admin");return Response.json({error:{code:"STATISTICS_UNAVAILABLE",message:"Statistics are unavailable for this storage adapter."}},{status:501,headers});}},
         {method:"GET",path:"/views/{name}",run:async({params})=>{const view=views.find(v=>v.name===params.name&&v.allows(caller));if(!view)throw new ContractError("NOT_FOUND","No such staff View.","admin");return readView(view);}},
         {method:"GET",path:"/views/{name}/export",run:async({params})=>{const view=views.find(v=>v.name===params.name&&v.allows(caller));if(!view)throw new ContractError("NOT_FOUND","No such staff View.","admin");return csv(view.name,cursor=>readView(view,cursor,500),view.columns);}},
@@ -135,7 +134,7 @@ export function admin<Env,Database,Handlers=never>(metadata:{collections:readonl
         ...(options.routes??[]),
       ];
       const allowed:string[]=[];
-      for(const route of routes){const found=params(route.path,path);if(!found)continue;allowed.push(route.method);if(route.method!=="*"&&route.method!==request.method)continue;const output=await route.run({...context,params:found});if(output instanceof Response){const h=new Headers(output.headers);if(!route.preserveCacheControl||!h.has("cache-control"))h.set("cache-control","no-store");return new Response(output.body,{status:output.status,statusText:output.statusText,headers:h});}return Response.json(output,{headers});}
+      for(const route of routes){const found=params(route.path,path);if(!found)continue;allowed.push(route.method);if(route.method!=="*"&&route.method!==request.method)continue;if(!route.rawBody&&!["GET","HEAD","OPTIONS"].includes(request.method))checkBodyLength(request);db=options.db(env);const output=await route.run({request,url,env,db,caller,params:found});if(output instanceof Response){const h=new Headers(output.headers);if(!route.preserveCacheControl||!h.has("cache-control"))h.set("cache-control","no-store");return new Response(output.body,{status:output.status,statusText:output.statusText,headers:h});}return Response.json(output,{headers});}
       if(allowed.length){const response=surfaceFailure(new ContractError("METHOD_NOT_ALLOWED","Method is not allowed for this route.","admin"));response.headers.set("allow",[...new Set(allowed)].join(", "));return response;}
       throw new ContractError("NOT_FOUND","No such route.","admin");
     }catch(error){return surfaceFailure(error);}

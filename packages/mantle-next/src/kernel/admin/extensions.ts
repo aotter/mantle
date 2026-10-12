@@ -51,7 +51,7 @@ export function extensionOptions<Env,Database>(metadata:readonly ExtensionMetada
       else{if(typeof raw.schema!=="string")throw new ContractError("INPUT_VALIDATION_FAILED","schema names the list","admin");input={schema:raw.schema};}
       const schema=input.record?.schema??input.selection?.schema??input.schema!;if(action.schema&&!action.schema.includes(schema))notFound();return{ok:true,result:(await ext.handlers!.actions![action.id]!.run(ctx.caller,input,ctx))??null};
     }});
-    if(ext.handlers?.api)routes.push({method:"*",path:"/x/"+meta.id+"/api/{path*}",preserveCacheControl:true,run:async ctx=>(await ext.handlers!.api!(ctx.request,{...ctx,extension:meta.id,path:ctx.url.pathname.split("/").slice(6).join("/")}))??notFound()});
+    if(ext.handlers?.api)routes.push({method:"*",path:"/x/"+meta.id+"/api/{path*}",preserveCacheControl:true,rawBody:true,run:async ctx=>(await ext.handlers!.api!(ctx.request,{...ctx,extension:meta.id,path:ctx.url.pathname.split("/").slice(6).join("/")}))??notFound()});
   }
   return {extensions:metadata.map(meta=>meta.public),routes,assets:async(path:string,request:Request,env:Env):Promise<Response|null>=>{
     if(/^extensions\/([a-z][a-z0-9-]{0,62})\.js$/.test(path)){const caller=await adminCaller(request,env,options.caller);if(caller instanceof Response)return caller;const found=bound.find(e=>sourcePath(e.meta.id).slice(7)===path&&e.meta.source);if(!found)notFound();return new Response((await source(found.meta.id,found.ext)).code,{headers:{"content-type":"text/javascript; charset=utf-8","cache-control":"private, no-cache","x-content-type-options":"nosniff"}});}
