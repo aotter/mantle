@@ -4,3 +4,6 @@ export * from "./identity.js";
 export * from "./extensions.js";
 export { developerConsole, type DeveloperConsoleSnapshot } from "./developerConsole.js";
 export * from "./design.js";
+
+// Pure projections also used by generators; no Runtime is needed.
+export { requiredEnumStates } from "./procedureFlow.js";

@@ -1,4 +1,5 @@
 /** Build-time assembly only. None of these imports enter generated applications. */
+import type { AdminExtension } from "@aotter/mantle/admin";
 import { compilePlan, viewOutputs, type ManifestSourceSet } from "@aotter/mantle/spec";
 import * as sqliteCompiler from "@aotter/mantle/d1/compile";
 import * as postgresCompiler from "@aotter/mantle/postgres/compile";
@@ -41,7 +42,7 @@ function castInputs(statement: LoweredStatement, path: string, refusals: Generat
   Object.assign(statement, { sql });
 }
 
-export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; /** The application's Better Auth options: their tables join schema.sql. */ readonly auth?: BetterAuthOptions }): Promise<GenerateResult> {
+export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; /** The application's Better Auth options: their tables join schema.sql. */ readonly auth?: BetterAuthOptions; readonly adminExtensions?: readonly Pick<AdminExtension,"id"|"contributes">[] }): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");
   const compiler = postgres ? postgresCompiler : sqliteCompiler;
   const compiled = await compilePlan(request.sources, compiler, "operational");
@@ -98,7 +99,7 @@ export async function generateFromSources(request: { readonly target: Target; re
   }
   const searchProblems = searchDiagnostics(warnings);
   refusals.push(...searchProblems);
-  const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas) });
+  const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions });
   if (refusals.length) {
     const diagnostics = result.ok ? [] : result.diagnostics.filter(d =>
       !searchProblems.some(p => p.path === d.path) ||

@@ -1,5 +1,5 @@
 /** Opt-in lifecycle: one atomic, version-guarded statement per transition, with Core's row rules. */
-import { rowPolicy, type RuntimePlan } from "@aotter/mantle/spec";
+import { rowPolicy, type JsonSchema, type RuntimePlan } from "@aotter/mantle/spec";
 import { dialect as sqlite } from "../kernel/dialect/sqlite.js";
 import { dialect as postgres } from "../kernel/dialect/postgres.js";
 import { renderTerm } from "../kernel/store.js";
@@ -7,13 +7,15 @@ import { entry, exportName } from "../domain/entry.js";
 
 import { STAFF_ROLES } from "../domain/visibility.js";
 
+export const publishingTransitions = [["publish", ["draft"], "published"], ["unpublish", ["published"], "draft"], ["archive", ["draft", "published"], "archived"]] as const;
+export const publishingInput: JsonSchema = {type:"object",properties:{id:{type:"string",minLength:1},expectedVersion:{type:"integer",minimum:1}},required:["id","expectedVersion"],additionalProperties:false};
 const q = JSON.stringify;
 export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declarations: string[], procedures: string[], entries: Record<string, string>, values: Set<string>, refuse: (path: string, message: string) => void): void {
   const d = isSqlite ? sqlite : postgres;
   for (const s of Object.values(plan.schemas).filter(s => s.publishing).sort((a, b) => a.name.localeCompare(b.name))) {
     if (Object.hasOwn(s.fields, "published_at")) { refuse(`schemas/${s.name}`, "published_at is a publishing system column; remove the declared field."); continue; }
     if (s.ttl) values.add("cutoff");
-    for (const [verb, from, to] of [["publish", ["draft"], "published"], ["unpublish", ["published"], "draft"], ["archive", ["draft", "published"], "archived"]] as const) {
+    for (const [verb, from, to] of publishingTransitions) {
       const name = `${s.name}.${verb}`, fn = exportName("procedure", name), path = `procedures/${name}`;
       const failure = `${verb}: row is missing or excluded, expectedVersion differs, status is not ${from.join(" or ")}${verb === "publish" ? ", or required data is missing" : ""}.`;
       if (plan.procedures[name]) { refuse(path, "This name is reserved for the generated publishing transition."); continue; }

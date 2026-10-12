@@ -327,7 +327,7 @@ export function planUiExtensionRefs(plan: Pick<RuntimePlan, "schemas" | "views" 
 }
 
 /** Checks that each contribution the plan names exists, has the target its key needs, and accepts its `options`. */
-export function checkPlanUiExtensions(plan: Pick<RuntimePlan, "schemas" | "views" | "procedures">, extensions: readonly AdminExtension[]): void {
+export function checkPlanUiExtensions(plan: Pick<RuntimePlan, "schemas" | "views" | "procedures">, extensions: readonly Pick<AdminExtension, "id" | "contributes">[]): void {
   for (const { path, ref, target, options } of planUiExtensionRefs(plan)) {
     const [, extId, cId] = UI_EXTENSION_REF.exec(ref)!;
     const ext = extensions.find((e) => e.id === extId);

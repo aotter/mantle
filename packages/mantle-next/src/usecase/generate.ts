@@ -13,6 +13,7 @@ import { emitMcp } from "./mcp.js";
 import { emitValidation } from "./validation.js";
 import { refuseDeclarations } from "./refusals.js";
 import { emitHandlers } from "./handlers.js";
+import { emitAdminDescriptors } from "./adminDescriptors.js";
 import { emitRest } from "./rest.js";
 
 const q = JSON.stringify;
@@ -33,7 +34,7 @@ const typeOf = (s: JsonSchema | undefined): string => {
     default: return "unknown";
   }
 };
-export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInput): GenerateResult {
+export function generate({ target, plan, lowered, viewKeys, newId, adminExtensions }: GenerateInput): GenerateResult {
   const diagnostics: GenerateDiagnostic[] = [];
   refuseDeclarations({ target, plan, lowered, viewKeys, newId }, diagnostics);
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
@@ -124,7 +125,7 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
-  const surfaces = { ...emitPaging(plan, lowered, target, refuse), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse) };
+  const surfaces = { ...emitPaging(plan, lowered, target, refuse), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse), ...emitAdminDescriptors({plan,adminExtensions},diagnostics) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
   const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
