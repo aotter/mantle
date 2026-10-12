@@ -11,6 +11,40 @@ metadata:
 
 # Provision a Mantle project
 
+## Generated native applications (alpha.7 and later)
+
+If the installed/target README describes generated native queries, use this
+flow and stop before the historical Core instructions below.
+
+Read the installed `docs/next/contract.md`, `compatibility.md`, `service.md`
+and the exact target package README. Run the app's full explicit
+`mantle generate <target> <out> <manifest...>` command with its selected
+`--auth`, `--site` and `--admin-extensions` modules; run `tsc --noEmit`,
+implement every listed `Handlers` key, and typecheck again. Pass handlers
+through Store/surface options. Ref context is `{db, caller, store}`; there
+is no RuntimePlan, `createMantle`, registry, hook dispatcher or `withCaller`.
+Bare queries take application-validated inputs and a verified Caller; selected
+REST/MCP boundaries perform external validation. Store keys are storage column
+names, and SQL carries scope, TTL and publication/translation-parent visibility.
+OSS administrative role is `staff`; schedule/lifecycle/guard handlers are refused.
+Commit generated TypeScript/SQL and Wrangler edits, never hand-edit them, and
+run the same generation command with `--check` in CI. Resolve generated conflicts
+by merging authored manifests/options and regenerating. Keep bundle `dist/` untracked.
+
+Deploy/create resources only within the user's authorization; reuse configured
+host resources. Apply reviewed and rehearsed migrations before routing traffic;
+imports/first requests perform no DDL or convergence. Keep auth dynamic, production
+secrets in the host store, trusted HTTPS origin and verified bootstrap rule,
+production email and selected media wiring. Configure Admin ASSETS worker-first
+as in service.md. Hyperdrive caching stays off; PG settings are deployment-owned.
+Bun uses native Database/SQL, an app server and scheduler. Verify staff sign-in
+(role staff), denied access, public reads, a persisted write, MCP and selected UI.
+Report artifact/resources/checks and keep rollback artifacts.
+
+## Historical Core applications (through alpha.6)
+
+The following applies only when the target package still uses RuntimePlan.
+
 Provision only after the user asks to create remote resources or ship. Read the
 installed `docs/handbook/cloudflare/deploy-and-operate.md` and
 `docs/handbook/cloudflare/authentication.md` first.

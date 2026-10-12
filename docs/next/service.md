@@ -30,7 +30,7 @@ interface Env {
   BETTER_AUTH_SECRET: string;
   ADMIN_EMAIL: string;
 }
-let auth: ReturnType<typeof authLoader> | undefined;
+let auth: import('@aotter/mantle/auth').AuthLoader<ReturnType<typeof import('./auth.js').createAuth>> | undefined;
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     auth ??= authLoader(() => import('./auth.js').then(m => m.createAuth(env)));

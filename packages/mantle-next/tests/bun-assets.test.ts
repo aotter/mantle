@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bunAdminAssets } from "../src/kernel/bun-assets.js";
+import { bunAdminAssets } from "../src/bun/assets.js";
 
 test("Bun Admin reader serves files and refuses malformed paths and escaping symlinks", async () => {
   const root = await mkdtemp(join(tmpdir(), "mantle-assets-"));

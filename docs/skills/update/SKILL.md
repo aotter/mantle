@@ -10,6 +10,37 @@ metadata:
 
 # Mantle Update
 
+## Generated native applications (alpha.7 and later)
+
+If the installed/target README describes generated native queries, use this
+flow and stop before the historical Core instructions below.
+
+Read the installed `docs/next/contract.md`, `compatibility.md`, `service.md`
+and the exact target package README. Run the app's full explicit
+`mantle generate <target> <out> <manifest...>` command with its selected
+`--auth`, `--site` and `--admin-extensions` modules; run `tsc --noEmit`,
+implement every listed `Handlers` key, and typecheck again. Pass handlers
+through Store/surface options. Ref context is `{db, caller, store}`; there
+is no RuntimePlan, `createMantle`, registry, hook dispatcher or `withCaller`.
+Bare queries take application-validated inputs and a verified Caller; selected
+REST/MCP boundaries perform external validation. Store keys are storage column
+names, and SQL carries scope, TTL and publication/translation-parent visibility.
+OSS administrative role is `staff`; schedule/lifecycle/guard handlers are refused.
+Commit generated TypeScript/SQL and Wrangler edits, never hand-edit them, and
+run the same generation command with `--check` in CI. Resolve generated conflicts
+by merging authored manifests/options and regenerating. Keep bundle `dist/` untracked.
+
+Pin exact target SDK/peer versions and read its release notes and Admin asset
+installation instructions. Core-to-native replaces app imports/wiring; it is not
+a package-only update. Preserve users, sessions, content and application code.
+Review emitted SQL/policy diffs and rehearse explicit data-preserving schema/auth/role
+migrations on a copy. Initial schema.sql never authorizes rebuilding production
+tables. Verify auth/Admin/MCP/REST, locks and persistence before authorized cutover.
+
+## Historical Core applications (through alpha.6)
+
+The following applies only when the target package still uses RuntimePlan.
+
 Upgrade deliberately; never overwrite application-owned code.
 
 1. Inspect `git status`, `package.json`, the lockfile and the installed

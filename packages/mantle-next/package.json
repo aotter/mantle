@@ -44,7 +44,7 @@
     "./auth/identity": "./dist/auth/identity.js",
     "./auth/hardening": "./dist/auth/hardening.js",
     "./auth/admin": "./dist/auth/admin.js",
-    "./bun/assets": "./dist/kernel/bun-assets.js"
+    "./bun/assets": "./dist/bun/assets.js"
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.lib.json --removeComments --declaration false && tsc -p tsconfig.lib.json --emitDeclarationOnly && node scripts/prune-declarations.mjs",
