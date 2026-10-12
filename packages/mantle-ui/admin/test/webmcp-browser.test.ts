@@ -35,7 +35,7 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
         calls.push(route.request().postDataJSON());
         return fail ? route.fulfill({ status: 409, json: { error: { code: "CONFLICT", message: "Stale version" } } }) : route.fulfill({ json: { output: { rows: [] } } });
       }
-      return route.fulfill({ json: path === "/me" ? { role: "owner", login: "owner" }
+      return route.fulfill({ json: path === "/me" ? { role: "staff", login: "owner" }
         : path === "/site" ? { brand: "WebMCP test", icons: [], canonicalLocale: "en" }
         : path === "/collections" ? { collections: [] }
         : path === "/operations" ? { operations: [] }

@@ -62,6 +62,14 @@ handler yourself. Use a cookie session with OSS role `staff`, and provide an
 options; verify `/admin/api/bootstrap` and a scoped staff View against the local
 native database before deploying. Read `docs/next/surfaces.md#mounting-admin` for
 optional identity/site facets, CSV, origin checks and the other Admin modules.
+For that console, test OTP sign-in through the app-owned Better Auth handler,
+actual entries/member/media requests and an ordinary member's 403. Serve the
+installed UI asset directory through the app's Wrangler binding or Bun reader;
+do not import the SPA into the query bundle. Next uses the single `staff` role,
+explicit publishing metadata and forward entry paging with URL cursor history.
+Verify conflict handling reads the latest entry once without retrying a write or
+losing the user's edits. Keep legacy 0.2 role setup separate from this experiment.
+
 
 ## New project
 

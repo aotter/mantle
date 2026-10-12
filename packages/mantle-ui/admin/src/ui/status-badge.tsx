@@ -20,12 +20,13 @@ export function StatusBadge({
   status,
   className,
 }: {
-  status: string;
+  status: string | null;
   className?: string;
-}): React.ReactElement {
+}): React.ReactElement | null {
   const { language } = usePreferences();
+  if (status === null) return null;
   const known = isContentStatus(status);
-  const labelKey = STATUS_LABEL_KEY[status];
+  const labelKey = known ? STATUS_LABEL_KEY[status] : undefined;
   return (
     <Badge
       variant="secondary"
@@ -40,5 +41,5 @@ export function StatusBadge({
 }
 
 function isContentStatus(status: string): status is ContentStatus {
-  return status in STATUS_CLASS;
+  return Object.prototype.hasOwnProperty.call(STATUS_CLASS, status);
 }

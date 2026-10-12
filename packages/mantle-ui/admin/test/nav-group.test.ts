@@ -32,33 +32,32 @@ describe("sidebar collection filters", () => {
 });
 
 describe("member navigation", () => {
-  const urlsFor = (role: "owner" | "editor" | "contributor") =>
+  const urlsFor = (role: "staff" | null) =>
     buildNavGroups([], [], "en", null, role)
       .flatMap(({ items }) => items)
       .flatMap((item) => "url" in item ? [item.url] : []);
 
-  it("shows members to editors and owners, while team management stays owner-only", () => {
-    expect(urlsFor("editor")).toContain("/admin/members");
-    expect(urlsFor("editor")).not.toContain("/admin/staff");
-    expect(urlsFor("owner")).toEqual(expect.arrayContaining(["/admin/members", "/admin/staff"]));
-    expect(urlsFor("contributor")).not.toContain("/admin/members");
+  it("shows management to staff and never grants it to a member", () => {
+    expect(urlsFor("staff")).toEqual(expect.arrayContaining(["/admin/members", "/admin/staff"]));
+    expect(urlsFor(null)).not.toContain("/admin/members");
+    expect(urlsFor(null)).not.toContain("/admin/staff");
   });
 
   it("hides settings a deployment did not turn on, and keeps Media, whose page is the setup guide", () => {
     const urls = (capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean }) =>
-      buildNavGroups([], [], "en", null, "owner", false, capabilities).flatMap(({ items }) => items).flatMap((item) => "url" in item ? [item.url] : []);
+      buildNavGroups([], [], "en", null, "staff", false, capabilities).flatMap(({ items }) => items).flatMap((item) => "url" in item ? [item.url] : []);
     expect(urls({ siteSettings: false, media: false, invitationEmail: false, statistics: false })).not.toContain("/admin/settings");
     expect(urls({ siteSettings: false, media: false, invitationEmail: false, statistics: false })).toContain("/admin/media");
     expect(urls()).toEqual(expect.arrayContaining(["/admin/media", "/admin/settings"]));
   });
 
   it("does not create a standalone operations destination", () => {
-    const groups = buildNavGroups([], [], "en", null, "owner");
+    const groups = buildNavGroups([], [], "en", null, "staff");
     expect(JSON.stringify(groups)).not.toContain("/admin/ops");
   });
 
   it("keeps developer navigation out of Content Admin", () => {
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner"))).not.toContain("/admin/dev");
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, "staff"))).not.toContain("/admin/dev");
     const items = buildDeveloperNavGroups("en")[0]?.items ?? [];
     expect(items).toEqual([
       expect.objectContaining({ items: [expect.objectContaining({ url: "/admin/dev/overview/flow" }), expect.objectContaining({ url: "/admin/dev/overview/relationships" })] }),
@@ -74,7 +73,7 @@ describe("member navigation", () => {
 
   it("lists every View of the manifest under Reports: the server lists staff Views only", () => {
     const view = (name: string): ViewManifestInfo => ({ name, title: null, description: null, input: null, list: { columns: [], searchFields: [], filterFields: [] }, columns: {} });
-    const groups = buildNavGroups([], [view("staff-queue"), view("sales")], "en", null, "owner");
+    const groups = buildNavGroups([], [view("staff-queue"), view("sales")], "en", null, "staff");
     expect(groups.find(({ title }) => title === "Reports")?.items).toEqual([
       expect.objectContaining({ url: "/admin/views/staff-queue" }),
       expect.objectContaining({ url: "/admin/views/sales" }),
@@ -82,8 +81,8 @@ describe("member navigation", () => {
   });
 
   it("shows Operations only when a global operation exists", () => {
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner"))).not.toContain("/admin/operations");
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner", true))).toContain("/admin/operations");
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, "staff"))).not.toContain("/admin/operations");
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, "staff", true))).toContain("/admin/operations");
   });
 
   it("includes standalone folded children in main Nav without dropping parent collections", () => {
@@ -110,7 +109,7 @@ describe("member navigation", () => {
         parentCollection: "organizations",
       }),
       collection("members", "operational", { collection: "organizations", parentField: "id", childField: "organizationId" }),
-    ], [], "en", null, "owner");
+    ], [], "en", null, "staff");
     const urls = (groups.find(({ title }) => title === "Records")?.items ?? [])
       .flatMap((item) => "url" in item ? [item.url] : item.items.map((link) => link.url));
     expect(urls).toEqual(expect.arrayContaining(["/admin/c/organizations", "/admin/c/projects"]));
@@ -125,16 +124,16 @@ describe("extension pages and settings in the sidebar", () => {
   });
 
   it("lists settings first, then pages that ask for a place in order, localized, under More", () => {
-    const groups = buildNavGroups([], [], "zh-TW", null, "contributor", false, undefined, [extension({
+    const groups = buildNavGroups([], [], "zh-TW", null, "staff", false, undefined, [extension({
       pages: [
-        { id: "audit", title: "Audit", role: "contributor", nav: { group: "more", order: 2 } },
-        { id: "grants", title: { en: "Grants", "zh-TW": "授權" }, role: "contributor", nav: { group: "more", order: 1 } },
-        { id: "hidden", title: "Hidden", role: "contributor" },
+        { id: "audit", title: "Audit", role: "staff", nav: { group: "more", order: 2 } },
+        { id: "grants", title: { en: "Grants", "zh-TW": "授權" }, role: "staff", nav: { group: "more", order: 1 } },
+        { id: "hidden", title: "Hidden", role: "staff" },
       ],
-      settings: [{ id: "policy", title: { en: "Policy", "zh-TW": "政策" }, role: "contributor", schema: { type: "object", properties: {} } }],
+      settings: [{ id: "policy", title: { en: "Policy", "zh-TW": "政策" }, role: "staff", schema: { type: "object", properties: {} } }],
     })]);
     const more = groups[groups.length - 1]!;
-    expect(more.items.map((item) => "url" in item ? [item.title, item.url] : [])).toEqual([
+    expect(more.items.flatMap((item) => "url" in item && item.url?.startsWith("/admin/x/") ? [[item.title, item.url]] : [])).toEqual([
       ["政策", "/admin/x/staff-access/policy"],
       ["授權", "/admin/x/staff-access/grants"],
       ["Audit", "/admin/x/staff-access/audit"],
@@ -142,8 +141,8 @@ describe("extension pages and settings in the sidebar", () => {
   });
 
   it("adds nothing when the server lists no extensions (or is older and sends none)", () => {
-    const before = buildNavGroups([], [], "en", null, "owner");
-    expect(buildNavGroups([], [], "en", null, "owner", false, undefined, [])).toEqual(before);
-    expect(buildNavGroups([], [], "en", null, "owner", false, undefined, [extension({ panels: [{ id: "p", title: "P", role: "owner", target: "home/v1" }] })])).toEqual(before);
+    const before = buildNavGroups([], [], "en", null, "staff");
+    expect(buildNavGroups([], [], "en", null, "staff", false, undefined, [])).toEqual(before);
+    expect(buildNavGroups([], [], "en", null, "staff", false, undefined, [extension({ panels: [{ id: "p", title: "P", role: "staff", target: "home/v1" }] })])).toEqual(before);
   });
 });

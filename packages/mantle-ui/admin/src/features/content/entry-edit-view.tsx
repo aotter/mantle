@@ -140,16 +140,15 @@ export function EntryEditView({
   // Operational records (lifecycle: operational) have no content workflow:
   // no publish/unpublish controls, and they save in place regardless
   // of the stored status.
-  const isOperational = payload.collection.lifecycle === "operational";
+  const isOperational = payload.collection.lifecycle !== "publishing";
   const isReadOnly = payload.collection.schema.readOnly === true;
   const isDraft = payload.entry.status === "draft";
   const missingRequired = hasMissingRequired(data, payload.collection.schema);
-  const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
+  const canManageContent = me.data?.role === "staff";
   const canEdit = canEditEntry({
     role: me.data?.role,
     isReadOnly,
     isOperational,
-    isDraft,
     operationalEditUnlocked,
   });
   const canSave = canEdit && dirty && (isDraft || isOperational);
@@ -235,7 +234,7 @@ export function EntryEditView({
           sharedHref={parentLink?.href}
           language={language}
           siteLocales={site.data?.locales}
-          canCreate={Boolean(me.data?.role)}
+          canCreate={me.data?.role === "staff"}
           pending={createTranslation.isPending &&
             createTranslation.variables?.section.collection.name === section.collection.name}
           onCreate={(locale) => createTranslation.mutate({ section, locale })}
@@ -549,18 +548,14 @@ export function canEditEntry({
   role,
   isReadOnly,
   isOperational,
-  isDraft,
   operationalEditUnlocked,
 }: {
   role: AdminUser["role"] | undefined;
   isReadOnly: boolean;
   isOperational: boolean;
-  isDraft: boolean;
   operationalEditUnlocked: boolean;
 }): boolean {
-  if (isReadOnly) return false;
-  if (role === "owner" || role === "editor") return !isOperational || operationalEditUnlocked;
-  return role === "contributor" && !isOperational && isDraft;
+  return role === "staff" && !isReadOnly && (!isOperational || operationalEditUnlocked);
 }
 
 function MediaAssetField({

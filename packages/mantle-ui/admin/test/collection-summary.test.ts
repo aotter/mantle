@@ -46,8 +46,8 @@ describe("collectionSummaryKey", () => {
     );
   });
 
-  it("treats an undefined collection as having a lifecycle (loading state, not an operational record)", () => {
-    expect(collectionSummaryKey(undefined)).toBe("collection.schemaSummary.lifecycleOnly");
+  it("does not advertise publishing until the collection declares it", () => {
+    expect(collectionSummaryKey(undefined)).toBe("collection.schemaSummary.plain");
   });
 });
 

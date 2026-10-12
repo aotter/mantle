@@ -6,7 +6,7 @@ const extension: AdminExtensionInfo = {
   id: "brand", title: "Brand", module: "/ext/brand.js",
   contributes: {
     pages: [], settings: [], actions: [],
-    panels: [{ id: "usage", title: "Usage", role: "contributor", target: "record.sidebar/v1" }],
+    panels: [{ id: "usage", title: "Usage", role: "staff", target: "record.sidebar/v1" }],
     fields: [
       { id: "money", target: "field.cell/v1", when: { format: ["money-minor"] } },
       { id: "color", target: "field.input/v1", when: { schema: ["products"], field: ["color"] } },

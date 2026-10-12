@@ -32,20 +32,16 @@ import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import { IdValue } from "../../ui/id-value";
 
 const EMAIL_SETUP_GUIDE_URL = "https://developers.cloudflare.com/email-service/";
-const EMAIL_SETUP_PROMPT = `Enable email sign-in for this Mantle site. Implement the Mantle EmailSender port with a transactional email provider. For Cloudflare, prefer an Email Service binding. Register either { kind: "email-otp", sender } or { kind: "magic-link", sender } in createAuth(), keep credentials in Worker secrets, deploy, then verify that /api/auth/methods lists the method and a real email arrives.`;
+const EMAIL_SETUP_PROMPT = `Enable email sign-in for this Mantle site. Implement the Mantle EmailSender port with a transactional email provider. For Cloudflare, prefer an Email Service binding. Wire the app-owned Better Auth emailOTP or magicLink plugin to that sender, select its native auth schema when generating, keep credentials in Worker secrets, deploy, then verify that /api/auth/methods lists the method and a real email arrives.`;
 
-/** Owner-only staff management: list staff, assign roles, invite by
- *  email. The server enforces owner-only (403 for editor and
- *  contributor) and the self-role-change guard; this view renders
+/** Staff management: list staff, assign roles, invite by
+ *  email. The server enforces signed-in staff and the self-role-change guard; this view renders
  *  those denials, it does not re-derive them. */
 
 const ASSIGNABLE: ReadonlyArray<StaffRole | "none"> = [
-  "owner",
-  "editor",
-  "contributor",
+  "staff",
   "none",
 ];
-const INVITABLE: ReadonlyArray<StaffRole> = ["owner", "editor", "contributor"];
 
 export function StaffView(): React.ReactElement {
   const { language } = usePreferences();
@@ -202,10 +198,9 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
   const { language } = usePreferences();
   const site = useQuery(siteQueryOptions());
   const [email, setEmail] = React.useState("");
-  const [role, setRole] = React.useState<StaffRole>("contributor");
 
   const invite = useMutation({
-    mutationFn: () => api.post("/staff/invitations", { email, role }),
+    mutationFn: () => api.post("/staff/invitations", { email, role: "staff" }),
     onSuccess: () => {
       setEmail("");
       onInvited();
@@ -235,41 +230,10 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
             {t(language, site.data?.capabilities?.invitationEmail === true ? "staff.invite.hint" : "staff.invite.hintNoEmail")}
           </span>
         </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          <span>{t(language, "staff.invite.roleLabel")}</span>
-          <Select
-            value={role}
-            onValueChange={(next) => {
-              if (isStaffRole(next)) setRole(next);
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue>{t(language, `staff.role.${role}`)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent className="min-w-72">
-              {INVITABLE.map((option) => (
-                <SelectItem
-                  key={option}
-                  value={option}
-                  textValue={t(language, `staff.role.${option}`)}
-                  className="items-start py-2"
-                >
-                  <span className="grid gap-0.5">
-                    <span className="font-medium">
-                      {t(language, `staff.role.${option}`)}
-                    </span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {t(language, `staff.role.${option}.help`)}
-                    </span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="max-w-56 text-xs font-normal leading-5 text-muted-foreground">
-            {t(language, `staff.role.${role}.help`)}
-          </span>
-        </label>
+        <div className="grid content-start gap-1.5 text-sm">
+          <span className="font-medium">{t(language, "staff.role.staff")}</span>
+          <span className="text-xs leading-5 text-muted-foreground">{t(language, "staff.role.staff.help")}</span>
+        </div>
         <div className="flex justify-end md:col-span-2">
           <Button
             type="submit"
@@ -328,5 +292,5 @@ function EmailSignInSetup(): React.ReactElement {
 }
 
 function isStaffRole(value: string | null): value is StaffRole {
-  return value === "owner" || value === "editor" || value === "contributor";
+  return value === "staff";
 }

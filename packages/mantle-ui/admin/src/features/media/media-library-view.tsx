@@ -23,7 +23,7 @@ import { formatTimestampMs } from "../content/field-render";
 
 const MEDIA_SETUP_GUIDE_URL =
   "https://developers.cloudflare.com/r2/get-started/workers-api/";
-const MEDIA_SETUP_PROMPT = `Enable Mantle media storage for this site using the runtime's supported storage adapter. If this is a Cloudflare deployment, use r2MediaStorage from @aotter/mantle/cloudflare: create and bind an R2 bucket, configure its S3 credentials and public URL, wire mediaStorage, validate, deploy, and verify /admin/media.`;
+const MEDIA_SETUP_PROMPT = `Enable Mantle's generated site/media capability for this app. Declare siteDefaults with media purposes, run mantle generate --site <module>, and apply the deployment schema. For Cloudflare, use r2MediaStorage from @aotter/mantle/media/r2 with an app-owned R2 binding, signer, endpoint and publicBase; keep S3 credentials in Worker secrets. Pass that storage as the generated admin handler's media option. Deploy and verify /admin/api/site capabilities and the upload, direct PUT, commit and delete flows.`;
 
 /** Full-page media library for committed assets. */
 export function MediaLibraryView(): React.ReactElement {

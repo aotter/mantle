@@ -12,13 +12,6 @@ import { Badge } from "@aotter/mantle-ui/kit";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@aotter/mantle-ui/kit";
-import {
   Pagination,
   PaginationContent,
   PaginationItem,
@@ -38,7 +31,6 @@ import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { IdValue } from "../../ui/id-value";
 
 const MEMBER_PAGE_SIZE = 50;
-const STAFF_ROLES: readonly StaffRole[] = ["owner", "editor", "contributor"];
 
 export function MembersView(): React.ReactElement {
   const { language } = usePreferences();
@@ -71,7 +63,7 @@ export function MembersView(): React.ReactElement {
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
     },
   });
-  const canPromote = me.data?.role === "owner";
+  const canPromote = me.data?.role === "staff";
 
   return (
     <div>
@@ -120,27 +112,14 @@ export function MembersView(): React.ReactElement {
                     </TableCell>
                     {canPromote ? (
                       <TableCell>
-                        <Select
+                        <Button
+                          variant="outline"
                           disabled={promote.isPending}
-                          onValueChange={(value) => {
-                            const role = STAFF_ROLES.find((candidate) => candidate === value);
-                            if (role) promote.mutate({ userId: member.id, role });
-                          }}
+                          onClick={() => promote.mutate({ userId: member.id, role: "staff" })}
+                          aria-label={`${t(language, "members.promote")}: ${member.name}`}
                         >
-                          <SelectTrigger
-                            className="w-44"
-                            aria-label={`${t(language, "members.promote")}: ${member.name}`}
-                          >
-                            <SelectValue placeholder={t(language, "members.promote")} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STAFF_ROLES.map((role) => (
-                              <SelectItem key={role} value={role}>
-                                {t(language, `staff.role.${role}`)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          {t(language, "members.promote")}
+                        </Button>
                       </TableCell>
                     ) : null}
                   </TableRow>

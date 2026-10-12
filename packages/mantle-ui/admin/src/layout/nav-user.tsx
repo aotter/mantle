@@ -24,7 +24,7 @@ import { isAdminPreview } from "@/app/frame-policy";
 export interface NavUserProps {
   login: string | null;
   image: string | null;
-  role: "owner" | "editor" | "contributor" | null;
+  role: "staff" | null;
 }
 
 export function NavUser({ login, image, role }: NavUserProps): React.ReactElement {

@@ -21,6 +21,7 @@ import { api, downloadAdminFile } from "../../lib/api";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import {
+  cursorPageHref,
   entriesQueryOptions,
   entryApiPath,
   entryEditorQueryOptions,
@@ -119,8 +120,9 @@ function CollectionList({
   const parentQuery = params.get("parent") ?? undefined;
   const sortField = params.get("sort") || "updatedAt";
   const sortDirection: SortDirection = params.get("direction") === "asc" ? "asc" : "desc";
-  const cursor = params.get("cursor") || undefined;
-  const cursorDirection = params.get("cursor_direction") === "backward" ? "backward" : "forward";
+  const cursors = params.getAll("cursor");
+  const cursor = cursors.slice(-1)[0] || undefined;
+  const cursorDirection = "forward";
 
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
@@ -178,10 +180,10 @@ function CollectionList({
   const heading = collection
     ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name
     : collectionName;
-  const isOperationalCollection = collection?.lifecycle === "operational";
+  const isOperationalCollection = collection?.lifecycle !== "publishing";
   const isReadOnlyCollection = collection?.schema?.readOnly === true;
-  const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
-  const canCreateDraft = Boolean(me.data?.role) && !isOperationalCollection && !isReadOnlyCollection;
+  const canManageContent = me.data?.role === "staff";
+  const canCreateDraft = me.data?.role === "staff" && !isOperationalCollection && !isReadOnlyCollection;
   const showSelection = canManageContent && !isReadOnlyCollection;
   // the list always ends with its own sortable updated-at column, so a declared `updatedAt` is not shown twice
   const dataColumns = isOperationalCollection ? (collection?.list?.columns ?? []).filter((c) => c !== "updatedAt") : [];
@@ -199,6 +201,8 @@ function CollectionList({
   };
   const listHref = (state: Parameters<typeof collectionHref>[1] = {}) =>
     collectionHref(listPath, { ...listState, ...state });
+  const pageQuery = new URLSearchParams(listHref().split("?")[1]);
+  for (const cursor of cursors) pageQuery.append("cursor", cursor);
   const listQueryFilter = collectionFilter ? {
     name: collectionFilter.field,
     label: propertyLabel(
@@ -359,7 +363,7 @@ function CollectionList({
               selectedId={parentFilter}
               language={language}
               canonical={canonical}
-              onSelect={(id) => navigate(listHref({ parent: id, cursor: undefined, cursorDirection: undefined }))}
+              onSelect={(id) => navigate(listHref({ parent: id, cursor: undefined }))}
             />
           ) : undefined}
           actions={headerActions}
@@ -530,10 +534,7 @@ function CollectionList({
                     (deleteMutation.isPending && deleteMutation.variables === row.id)
                   }
                   canEdit={
-                    !isReadOnlyCollection && (canManageContent ||
-                      (me.data?.role === "contributor" &&
-                        !isOperationalCollection &&
-                        row.status === "draft"))
+                    !isReadOnlyCollection && canManageContent
                   }
                   canDelete={canManageContent && !isReadOnlyCollection}
                 />
@@ -541,15 +542,9 @@ function CollectionList({
             </TableBody>
           </Table>
           <CollectionPagination
-            previousHref={displayedEntries.previous_cursor ? listHref({
-              cursor: displayedEntries.previous_cursor,
-              cursorDirection: "backward",
-            }) : undefined}
-            nextHref={displayedEntries.next_cursor ? listHref({
-              cursor: displayedEntries.next_cursor,
-              cursorDirection: "forward",
-            }) : undefined}
             language={language}
+            previousHref={cursorPageHref(listPath, pageQuery)}
+            nextHref={displayedEntries.next_cursor ? cursorPageHref(listPath, pageQuery, displayedEntries.next_cursor) : undefined}
           />
         </>
       )}
@@ -572,7 +567,7 @@ function BulkActionBar({
 }): React.ReactElement {
   const [pending, setPending] = React.useState(false);
   const [failures, setFailures] = React.useState<unknown[]>([]);
-  const canPublish = collection && collection.lifecycle !== "operational";
+  const canPublish = collection?.lifecycle === "publishing";
   const confirm = useConfirm();
 
   async function runBulk(call: (id: string) => Promise<unknown>): Promise<void> {
@@ -680,7 +675,7 @@ function renderCollectionDescription(
 
 /** Pick the collection summary from its lifecycle and translation support. */
 export function collectionSummaryKey(collection: Collection | undefined): I18nKey {
-  const hasLifecycle = collection ? collection.lifecycle !== "operational" : true;
+  const hasLifecycle = collection?.lifecycle === "publishing";
   const hasTranslations = collection ? collection.localized || collection.hasTranslations : false;
   if (hasLifecycle && hasTranslations) return "collection.schemaSummary.lifecycleAndI18n";
   if (hasLifecycle) return "collection.schemaSummary.lifecycleOnly";
@@ -698,7 +693,6 @@ function collectionHref(
     sortField?: string;
     sortDirection?: SortDirection;
     cursor?: string;
-    cursorDirection?: "forward" | "backward";
     parent?: string;
     extraParams?: Record<string, string>;
   } = {},
@@ -719,7 +713,6 @@ function collectionHref(
     params.set("direction", state.sortDirection);
   }
   if (state.cursor) params.set("cursor", state.cursor);
-  if (state.cursorDirection === "backward") params.set("cursor_direction", "backward");
   const suffix = params.toString();
   return `${path}${suffix ? `?${suffix}` : ""}`;
 }
@@ -734,7 +727,6 @@ function sortHref(
   return collectionHref(path, {
     ...state,
     cursor: undefined,
-    cursorDirection: undefined,
     sortField: field,
     sortDirection: activeField === field
       ? (direction === "asc" ? "desc" : "asc")

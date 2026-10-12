@@ -1,3 +1,4 @@
+import type { EntryEditorPayload } from "./types";
 import { isAdminPreview } from "../app/frame-policy";
 
 const BASE = "/admin/api";
@@ -21,7 +22,7 @@ export function refusalOf(body: unknown): { code?: string; message?: string } | 
 
 const statusLine = (res: Response, body: unknown) => refusalOf(body)?.message || `${res.status} ${res.statusText}`;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, input?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "same-origin",
     ...init,
@@ -38,7 +39,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     // the server's refusal says what is wrong; the status line is the fallback
-    throw new ApiError(statusLine(res, body), res.status, body);
+    const error = new ApiError(statusLine(res, body), res.status, body);
+    const code = refusalOf(body)?.code;
+    const entry = path.match(/^(\/entries\/[^/?]+)(?:\/(?:publish|unpublish|archive))?(\?[^#]*)?$/);
+    if (init?.method && entry && (code === "CONFLICT" || code === "OUTCOME_UNKNOWN")) {
+      try {
+        const latest = await request<EntryEditorPayload>(entry[1]! + (entry[2] ?? ""), {signal:AbortSignal.timeout(10_000)});
+        const expected = (input as {expectedVersion?: unknown} | undefined)?.expectedVersion;
+        error.message += code === "OUTCOME_UNKNOWN"
+          ? " The latest entry was read; the write outcome is still unconfirmed. Review it before trying again."
+          : expected !== undefined && latest.entry.version !== expected
+          ? ` The current version is v${latest.entry.version}. Reload and review your changes before trying again.`
+          : " The latest entry was read; the write conditions no longer match. Review its current state before trying again.";
+      } catch {
+        error.message += " The latest entry could not be read. Refresh before trying again.";
+      }
+    }
+    throw error;
   }
   return body as T;
 }
@@ -47,9 +64,9 @@ export const api = {
   get: <T>(path: string, options: { signal?: AbortSignal } = {}): Promise<T> =>
     request<T>(path, options.signal ? { signal: options.signal } : undefined),
   post: <T>(path: string, body?: unknown, options: { signal?: AbortSignal } = {}): Promise<T> =>
-    request<T>(path, { ...jsonInit("POST", body), ...(options.signal ? { signal: options.signal } : {}) }),
+    request<T>(path, { ...jsonInit("POST", body), ...(options.signal ? { signal: options.signal } : {}) }, body),
   patch: <T>(path: string, body?: unknown): Promise<T> =>
-    request<T>(path, jsonInit("PATCH", body)),
+    request<T>(path, jsonInit("PATCH", body), body),
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: "DELETE" }),
 };
 

@@ -27,17 +27,23 @@ built. Core's public `developerConsole(plan)` and `createAdminDesignSurface`
 (`@aotter/mantle/admin`) project a compiled plan without creating a runtime,
 database, authenticated caller, or role grant. A compiler host must bind the
 snapshot to the exact source hash and revision. This does not relax the running
-Admin API's owner-only developer-console route. Runtime preview hosts instead
+Admin API's staff-only developer-console route. Runtime preview hosts instead
 dispatch through the real authorized Admin surface.
 
-`dist/admin/` is the built Admin console (a static SPA with base `/admin/`).
-Nothing imports it: `mantle generate`'s Cloudflare preset binds
-`node_modules/@aotter/mantle-ui/dist/admin` as the Worker's static assets (the
-Bun preset resolves `@aotter/mantle-ui/admin/index.html` and serves its
-directory with `bunAdminAssets`), and
-`createAdminSurface` (`@aotter/mantle/admin`) serves it at `/admin`. It is
-built for that path, so `createAdminSurface` refuses `assets` under any other
-`basePath`. Its source is `admin/`.
+`dist/admin/` is the static SPA built for `/admin/`. Resolve
+`@aotter/mantle-ui/admin/index.html` and serve its directory through the app's
+Wrangler `ASSETS` binding or Bun reader; UI assets stay outside the query bundle.
+With Next, mount generated `admin({ db, caller, assets, ... })`; `assets` returns
+`null` for missing files. See [the mounting recipe](../../docs/next/surfaces.md#mounting-admin)
+for the single `staff` role, publishing metadata, forward entry cursor history
+and conflict re-reads that preserve edits without retrying writes. The previous
+0.2 host uses `createAdminSurface` and its asset preset at the same `/admin/` path.
+
+To run the native Next OTP/browser fixture after building both packages, select
+the SDK source explicitly: `MANTLE_NEXT_ROOT=/path/to/packages/mantle-next
+MANTLE_TEST_CHROMIUM=/path/to/chromium pnpm exec vitest run
+admin/test/next-admin-browser.test.ts`. It uses real Bun SQLite, Better Auth and
+generated Admin routes with generic test users; no API response is mocked.
 
 ## MCP App
 

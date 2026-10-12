@@ -53,7 +53,7 @@ it("uses only the composition relationship and resets bulk selection when collec
         res.setHeader("content-type", "application/json");
         let body: unknown = {};
         if (req.method === "DELETE") { deleted.push(path); body = { removed: true }; }
-        else if (path === "/admin/api/me") body = { role: "owner", login: "review", image: null };
+        else if (path === "/admin/api/me") body = { role: "staff", login: "review", image: null };
         else if (path === "/admin/api/site") body = { brand: "Review", title: "Review", icons: [], locales: ["en"], canonicalLocale: "en" };
         else if (path === "/admin/api/collections") body = { collections: [org, projects, members] };
         else if (path === "/admin/api/operations") body = { operations: [] };

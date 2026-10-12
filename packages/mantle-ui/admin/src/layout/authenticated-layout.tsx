@@ -162,7 +162,7 @@ export function AuthenticatedLayout({
             pageTitle={pageTitle}
             workspaceLink={workspace === "developer"
               ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: LayoutDashboard }
-              : me.data?.role === "owner"
+              : me.data?.role === "staff"
               ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }
               : undefined}
           />
@@ -190,7 +190,7 @@ export function AuthenticatedLayout({
                 rel="noreferrer"
                 className="rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               >
-                @aotter/mantle-{__MANTLE_VERSION__}
+                @aotter/mantle@{__MANTLE_VERSION__}
               </a>
             </div>
           </footer>
@@ -263,14 +263,14 @@ export function buildNavGroups(
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
     items: [
-      ...(role === "owner" || role === "editor"
+      ...(role === "staff"
         ? [
             // Media stays when it is off: its page is the setup guide
             { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
             { title: t(language, "nav.members"), url: "/admin/members", icon: ContactRound },
           ]
         : []),
-      ...(role === "owner"
+      ...(role === "staff"
         ? [
             ...(capabilities?.siteSettings === false ? [] : [{ title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon }]),
             { title: t(language, "nav.staff"), url: "/admin/staff", icon: Users },

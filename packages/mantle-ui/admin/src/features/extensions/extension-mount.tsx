@@ -30,7 +30,7 @@ export function ExtensionMount({ extension, kind, id, place, onClose, fallback, 
   const { language, resolvedTheme } = usePreferences();
   const { navigate } = useAdminRouter();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<AdminUser>("/me") });
-  const role = me.data?.role ?? "contributor";
+  const role = me.data?.role ?? null;
   const element = React.useRef<HTMLDivElement>(null);
   const [failed, setFailed] = React.useState(false);
   const handle = React.useRef<Exclude<AdminExtensionMounted, void> | null>(null);
