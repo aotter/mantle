@@ -240,7 +240,59 @@ surface its generated `publish_<schema>`, `unpublish_<schema>` and
 `archive_<schema>` tools use the same snake-case naming rule, are staff-only
 and take `{ id, expectedVersion }` through the shared generated validation.
 
-The staff allowlist is `owner`, `editor`, `contributor`. MCP bodies are limited
+The OSS staff allowlist is `["staff"]`. MCP bodies are limited
 to 1 MiB (1,048,576 bytes). Resource metadata challenges use the origin of
 `request.url`; behind a proxy, the app must pass a Request with its public
 origin so the audience and metadata URL point to the client-visible service.
+
+### MCP catalogue and callbacks
+
+`mcp({ db, caller, handlers?, locale?, instructions?, serverInfo?, requiredScopes?,
+resourceMetadata?, onObservation?, onRefusal? })` keeps the SDK behind its first
+request. Locale defaults to `en`; localized titles/descriptions fall back to
+English, then their first entry. Views advertise `readOnlyHint`; Procedures use
+their declared MCP annotations. `instructions` is returned by initialize.
+The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
+`requiredScopes: []` disables that floor. An anonymous closed surface challenges
+from initialize, and every call in a batch is checked before any call runs.
+`resourceMetadata` overrides the challenge URL for reverse proxies.
+
+`onObservation` receives request refusals and invocation attempt/completion
+metadata, including duration and outcome. Its Caller and scopes are frozen copies.
+`onRefusal` receives credential/origin refusals. Neither callback receives request
+headers, bodies or tokens; delivery failures never change the business response
+and promises are not awaited. The application owns callback delivery.
+
+**Procedure output delta:** SQL Procedures retain the Next native `{ results }`
+contract rather than 0.2's authored output projection/validation; MCP advertises
+that object envelope, not the incompatible authored schema. Ref Procedures expose
+the application's typed return value and advertise their authored object output
+schema. The application owns ref output validation. MCP does not decode or
+revalidate native database rows. Business failures carry diagnostics in text;
+with an output schema they omit `structuredContent` to avoid validating an error
+against a success schema. Without one they also expose diagnostic structured
+content. MCP adds no prompts or non-UI resources.
+
+### Declared View scalars on the wire
+
+REST and MCP View pages expose declared JSON columns as JSON values and declared
+boolean columns as booleans, including explicitly authored SQL aliases. SQLite
+and D1 conversions are compiled into only the selected boundary pages;
+PostgreSQL already-native JSON/boolean values pass through. SQL NULL stays null and absent
+fields stay absent. Expressions without declared column lineage stay native.
+Malformed persisted JSON becomes a redacted internal failure. The conversion
+adds no database operations and does not mutate native query rows.
+
+Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
+ref outputs retain their native contracts. Use the generated `rest()` / `mcp()`
+module for this client wire contract; do not duplicate JSON/boolean decoding in
+application route handlers or decode PostgreSQL JSON strings a second time.
+
+PostgreSQL declared integer columns (including a selected system `version`)
+retain 0.2's wire form: safe integers become JSON numbers; unsafe values remain
+exact text. Computed outputs and native SQL Procedure/ref results retain their
+native values. This does not promise precise unsafe int64 values on D1.
+Unexpected surface failures log only a stable wire classification.
+
+MCP locale fallback reads only own locale entries, then English, then the first
+own entry; inherited property names never become titles or descriptions.

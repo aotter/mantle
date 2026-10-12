@@ -1,19 +1,20 @@
 /** Emit the selected MCP boundary; the official transport loads on its first request. */
 import { STAFF_ROLES } from "../domain/visibility.js";
-import { mcpToolNameSegment, resolveLocalizedText, type RuntimePlan, type PlanLowered } from "@aotter/mantle/spec";
+import { mcpToolNameSegment, type RuntimePlan, type PlanLowered } from "@aotter/mantle/spec";
 import type { Target } from "../domain/model.js";
 import { emitValidation } from "./validation.js";
 import { databaseImport, q } from "../domain/entry.js";
 import { conversions } from "../domain/input.js";
 import { publishingInput } from "./publishing.js";
+import { boundaryPage, outputConversions } from "../domain/columns.js";
 export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, refuse: (path: string, message: string) => void): Record<string, string> {
   if (!Object.values(plan.views).some(view=>view.surface!=="internal") && !Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp")) return {};
   const imports: string[] = [], tools: { fields: string[]; schema: string }[] = [];
   const files:Record<string,string> = {};
-  let hasRef=false;
+  let hasRef=false,hasWire=false;
   const names = new Set<string>();
   const refs = Object.values(plan.procedures).some(p => "ref" in p.handler);
-  const add = (name: string, kind: "views" | "procedures", surface: string, operation:Pick<RuntimePlan["views"][string],"input"|"description"|"requires">=kind === "views" ? plan.views[name]! : plan.procedures[name]!, tool=mcpToolNameSegment(name)) => {
+  const add = (name: string, kind: "views" | "procedures", surface: string, operation:Pick<RuntimePlan["views"][string],"input"|"title"|"description"|"requires">=kind === "views" ? plan.views[name]! : plan.procedures[name]!, tool=mcpToolNameSegment(name)) => {
     const ref=kind === "procedures" && !!plan.procedures[name] && "ref" in plan.procedures[name]!.handler;
     hasRef ||= ref;
     const statements=kind === "views" ? [lowered.views[name]?.public ?? lowered.views[name]?.caller] : lowered.procedures[name]?.caller ?? [];
@@ -27,8 +28,13 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     if(names.has(surface+":"+tool)) refuse(`${kind}/${name}`,`MCP tool name ${tool} collides on ${surface}.`);
     names.add(surface+":"+tool);
     const convert=conversions(operation.input?.properties,binds,target), scopes=(operation.requires?.auth?.all??[]).flatMap(p=>typeof p === "object" && "ctx.auth.scope" in p ? [p["ctx.auth.scope"]] : []);
-    const fields=[`name: ${q(tool)}`,`surface: ${q(surface)}`,`description: ${q(resolveLocalizedText(operation.description,"en","en") ?? name)}`,"inputSchema",...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: validate${index}`,...(convert?[`convert: ${convert}`]:[]),
-      ...(kind === "views" ? [`path: ${q(`views/${name}`)}`,`page: run${index}`] : [`run: ${ref ? `(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)` : `run${index}`}`])];
+    const procedure=kind === "procedures" ? plan.procedures[name] : undefined;
+    const output=kind === "procedures" ? ref ? (procedure?.output.type === "object" ? procedure.output : undefined) : {type:"object",properties:{results:{type:"array",items:{type:"array",items:{type:"object"}}}},required:["results"]} : undefined;
+    const annotations=kind === "views" ? {readOnlyHint:true} : procedure?.mcp;
+    const wire = kind === "views" ? outputConversions(plan, name, target) : [];
+    hasWire ||= wire.length > 0;
+    const fields=[`name: ${q(tool)}`,`surface: ${q(surface)}`,...(operation.title?[`title: ${q(operation.title)}`]:[]),`description: ${q(operation.description ?? operation.title ?? name)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: validate${index}`,...(convert?[`convert: ${convert}`]:[]),
+      ...(kind === "views" ? [`path: ${q(`views/${name}`)}`,`page: ${boundaryPage(`run${index}`, wire)}`] : [`run: ${ref ? `(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)` : `run${index}`}`])];
     tools.push({ fields, schema });
   };
   for (const [name, view] of Object.entries(plan.views)) if (view.surface !== "internal") add(name,"views",view.surface);
@@ -42,6 +48,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     Object.assign(files,emitValidation({views:{},procedures:{[name]:{input}}},refuse));
     add(name,"procedures","staff",{input,requires:{auth:{all:[{"ctx.staff":[...STAFF_ROLES]}]}}},mcpToolNameSegment(`${verb}_${schema.name}`));
   }
+  if (hasWire) imports.push('import { wireRows } from "@aotter/mantle-next/contracts";');
   // An input schema several tools share is one constant.
   const uses = new Map<string, number>(), shared = new Map<string, string>();
   for (const { schema } of tools) uses.set(schema, (uses.get(schema) ?? 0) + 1);

@@ -357,3 +357,17 @@ page and its boundary validation. `locale` values are ordinary strings, and
 `toCanonicalLocale` is an explicit helper rather than a Store coercion.
 
 
+
+### Selected View transport scalars
+
+Selected REST/MCP View pages preserve the 0.2 JSON/boolean wire contract through
+static generated output-column conversions. SQLite/D1 JSON text is parsed and
+0/1 booleans become booleans; PostgreSQL values already have those wire types.
+Aliases, nulls and missing fields are preserved. Undeclared computed outputs,
+bare queries, Store rows and Procedure outputs remain native. This boundary
+conversion does not read schemas at request time or issue additional queries.
+
+For selected PostgreSQL View boundaries, declared integer outputs and system
+`version` become numbers only within JavaScript's safe integer range; larger
+values retain their exact driver text. No global driver parser is installed,
+and D1's unsafe int64 precision is not a cross-target promise.

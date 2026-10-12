@@ -72,6 +72,7 @@ test("MCP SDK stays outside startup, unused surface is tree shaken and static SD
   expect(()=>guardStartup(result.metafile!,entry)).not.toThrow();
   const startup=startupGraph(result.metafile!,entry).flatMap(name=>Object.keys(result.metafile!.outputs[name]!.inputs));
   expect(startup.some(name=>name.includes("@modelcontextprotocol"))).toBe(false);
+  expect(startup.some(name=>name.includes("mcp-handler"))).toBe(false);
   expect(Object.keys(result.metafile!.inputs).some(name=>name.includes("@modelcontextprotocol"))).toBe(true);
   await writeFile(entry,'export {McpServer} from "@modelcontextprotocol/server";');
   const eager=await build({entryPoints:[entry],outdir:resolve(dir,"eager"),bundle:true,splitting:true,format:"esm",platform:"neutral",conditions:["workerd","worker","browser"],external:["node:*"],write:false,metafile:true});
@@ -166,4 +167,39 @@ spec: {source: {kind: mcp, surface: staff}, target: {procedure: publish-items}}
  const {generateFromSources}=await import('../src/infrastructure/generate.js');
  const result=await generateFromSources({target:'bun-sqlite',sources:{sources:[{sourceId:'collision.yaml',text}]}});
  expect(result).toMatchObject({ok:false,diagnostics:[{code:'GENERATE_UNSUPPORTED',path:'procedures/items.publish',message:'MCP tool name publish_items collides on staff.'}]});
+});
+
+test("MCP parity advertises localized metadata and native SQL output; callbacks cannot change execution",async()=>{
+ const text=source.replace("spec: {surface: public, sql:","spec: {title: {en: Items, zh: 項目}, surface: public, sql:").replace("  output: {type: object}","  title: {en: Add item, zh: 新增項目}\n  description: {en: Add a row, zh: 新增資料}\n  mcp: {readOnlyHint: false, destructiveHint: true, openWorldHint: false}\n  output: {type: object}");
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'parity.yaml',text}]);const dir=await mkdtemp(resolve(import.meta.dir,'.mcp-parity-')),db=new Database(':memory:');
+ let caller:any={...user,scopes:['custom']};const observations:any[]=[],refusals:any[]=[];
+ try {
+  await writeGenerated(dir,files);db.exec(files['schema.sql']!);const {mcp}=await import(resolve(dir,'mcp.ts'));
+  const handle=mcp({db:()=>db,caller:()=>caller,locale:'zh',instructions:'Use these tools.',serverInfo:{name:'example',title:'Example',version:'7'},requiredScopes:['custom'],resourceMetadata:'https://proxy.test/resource',onObservation:(event:any)=>{observations.push(event);if(event.kind==='invocation'){expect(Object.isFrozen(event.caller)).toBe(true);expect(Object.isFrozen(event.caller.scopes)).toBe(true);}return Promise.reject(new Error('ignored listener'));},onRefusal:(event:any)=>{refusals.push(event);throw Error('ignored listener');}});
+  const call=async(method:string,params:any={},path='/mcp',headers:any={})=>{const response=await handle(new Request('https://app.test'+path,{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream',...headers},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return {response,data:JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body)};};
+  const init=await call('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}});expect(init.data.result.instructions).toBe('Use these tools.');expect(init.data.result.serverInfo.name).toBe('example');
+  const listed=(await call('tools/list')).data.result.tools;
+  expect(listed[0]).toMatchObject({title:'項目',description:'項目',annotations:{readOnlyHint:true}});
+  expect(listed[1]).toMatchObject({title:'新增項目',description:'新增資料',annotations:{destructiveHint:true},outputSchema:{required:['results']}});
+  const ok=await call('tools/call',{name:'add_item',arguments:{title:'Works'}});expect(ok.data.result.structuredContent.results[0][0].id).toBeString();
+  const bad=await call('tools/call',{name:'add_item',arguments:{title:''}});expect(bad.data.result.isError).toBe(true);expect(bad.data.result.structuredContent).toBeUndefined();
+  expect(observations.filter(event=>event.phase==='completion').map(event=>event.outcome)).toEqual(['succeeded','failed']);
+  caller={...user,scopes:[]};const denied=await call('tools/list');expect(denied.response.status).toBe(403);expect(denied.response.headers.get('www-authenticate')).toContain('scope="custom"');expect(denied.response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
+  caller={kind:'anonymous'};expect((await call('initialize',{},'/mcp/staff')).response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
+  caller={...user,credential:'session'};await call('tools/call',{name:'add_item',arguments:{title:'CSRF'}},'/mcp',{origin:'https://evil.test'});
+  expect(refusals.map(event=>event.reason)).toEqual(['credential','credential','origin']);expect(db.query('SELECT COUNT(*) n FROM items').get()).toEqual({n:1});
+  for(const locale of [undefined,'constructor','toString','fr']) {
+   const response=await mcp({db:()=>db,caller:()=>caller,locale})(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})}),{});
+   const body=await response.text(),data=JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);expect(data.result.tools[0].title).toBe('Items');expect(data.result.tools[1].description).toBe('Add a row');
+  }
+ } finally {db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test("MCP preflights all batch calls before any work and reports expired caller challenges",async()=>{
+ const {mcp}=await import('../src/kernel/mcp.js');const {ContractError}=await import('../src/kernel/contracts.js');let runs=0;
+ const tools=[{name:'open',surface:'public',description:'Open',inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>{runs++;return{};}},{name:'closed',surface:'public',description:'Closed',closed:true,scopes:['write'],inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>{runs++;return{};}}];
+ const request=(body:any)=>new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify(body)});
+ const handle=mcp(tools,['staff'],{db:()=>({}),caller:()=>({kind:'anonymous'})});
+ const response=await handle(request(['open','closed'].map((name,id)=>({jsonrpc:'2.0',id,method:'tools/call',params:{name,arguments:{}}}))),{});expect(response!.status).toBe(401);expect(runs).toBe(0);expect(response!.headers.get('www-authenticate')).toContain('scope="mcp write"');
+ const expired=await mcp(tools,['staff'],{db:()=>({}),caller:()=>{throw new ContractError('UNAUTHENTICATED','Expired.','request:authorization');},resourceMetadata:'https://proxy.test/metadata'})(request({jsonrpc:'2.0',id:1,method:'tools/list'}),{});expect(expired!.status).toBe(401);expect(expired!.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/metadata"');
 });
