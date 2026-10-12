@@ -11,6 +11,10 @@ pnpm --dir packages/mantle-next run build
 ```
 
 Outputs include `generated.ts`, `schema.sql` and direct operation entries.
+Commit generated output and Wrangler edits; keep `dist/` untracked. Run the same
+generate command with `--check` in CI. Never hand-edit generated files; merge
+manifest/options changes and regenerate. See [service composition](../../docs/next/service.md)
+for app-owned routing, assets, scheduling, Bun and the generated-output workflow.
 Import a selected function from `views/<encoded-name>.ts` or
 `procedures/<encoded-name>.ts` (default export, with its types) to exclude other
 operations from the request bundle. Apply initial DDL explicitly to an

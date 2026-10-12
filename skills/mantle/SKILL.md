@@ -58,6 +58,13 @@ Call its default export with `(db, caller, input, { limit?, cursor? })`; it retu
 Views for authored-query row arrays, and inspect native EXPLAIN/source indexes
 when grouping: cursor paging does not eliminate aggregation work.
 
+Commit everything `mantle generate` writes, including generated TypeScript, SQL and
+Wrangler edits; keep bundle `dist/` untracked. Never hand-edit generated files.
+Resolve conflicts by merging manifests/options and regenerating. Add the printed
+`.gitattributes` line and run the same generate command with `--check` in CI.
+Compose the app-owned `fetch` using `docs/next/service.md`: auth/consent, Admin,
+MCP, REST behind one request-local origin-checked resolver; keep heavy auth dynamic.
+
 For experimental generated applications, optional site settings/media are selected
 with `--site <module>` exporting `siteDefaults`. Apply the emitted deployment DDL;
 wire application-owned object storage as documented in `docs/next/media.md`.

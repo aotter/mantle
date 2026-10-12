@@ -20,6 +20,7 @@ import { emitAdmin } from "./admin.js";
 import { emitSite } from "./site.js";
 import { emitTranslations } from "./translations.js";
 import { emitRest } from "./rest.js";
+import { generatedFiles } from "../domain/artifacts.js";
 
 const typeOf = (s: JsonSchema | undefined): string => {
   if (!s) return "unknown";
@@ -137,8 +138,8 @@ export function generate(input: GenerateInput): GenerateResult {
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
   const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny"] : []), ...(procedures.length ? ["type Output"] : [])];
   const dbType = isSqlite ? databaseImport(target) : "";
-  return { ok: true, refProcedures: refNames, files: { ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
+  return { ok: true, refProcedures: refNames, files: generatedFiles({ ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
     ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...(stores ? [`import { createStore } from "${base}store";`] : []),
     `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}binds";`,
-    `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" } };
+    `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" }) };
 }
