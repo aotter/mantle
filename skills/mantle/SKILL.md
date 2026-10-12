@@ -62,6 +62,9 @@ handler yourself. Use a cookie session with OSS role `staff`, and provide an
 options; verify `/admin/api/bootstrap` and a scoped staff View against the local
 native database before deploying. Read `docs/next/surfaces.md#mounting-admin` for
 optional identity/site facets, CSV, origin checks and the other Admin modules.
+Verify `/admin/api/webmcp` and one same-origin `POST /admin/api/webmcp/<tool>`:
+only declared staff tools are exposed, with the same native validation/paging and
+caller-owned ref handlers as MCP. This browser boundary does not need the MCP SDK.
 
 ## New project
 

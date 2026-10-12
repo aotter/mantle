@@ -9,7 +9,7 @@ import { publishingInput } from "./publishing.js";
 import { boundaryPage, outputConversions } from "../domain/columns.js";
 export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, refuse: (path: string, message: string) => void): Record<string, string> {
   if (!Object.values(plan.views).some(view=>view.surface!=="internal") && !Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp")) return {};
-  const imports: string[] = [], tools: { fields: string[]; schema: string }[] = [];
+  const imports: string[] = [], tools: { fields: string[]; schema: string; surface:string }[] = [];
   const files:Record<string,string> = {};
   let hasRef=false,hasWire=false;
   const names = new Set<string>();
@@ -35,7 +35,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     hasWire ||= wire.length > 0;
     const fields=[`name: ${q(tool)}`,`surface: ${q(surface)}`,...(operation.title?[`title: ${q(operation.title)}`]:[]),`description: ${q(operation.description ?? operation.title ?? name)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: validate${index}`,...(convert?[`convert: ${convert}`]:[]),
       ...(kind === "views" ? [`path: ${q(`views/${name}`)}`,`page: ${boundaryPage(`run${index}`, wire)}`] : [`run: ${ref ? `(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)` : `run${index}`}`])];
-    tools.push({ fields, schema });
+    tools.push({ fields, schema, surface });
   };
   for (const [name, view] of Object.entries(plan.views)) if (view.surface !== "internal") add(name,"views",view.surface);
   const exposed = new Set<string>();
@@ -53,14 +53,20 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
   const uses = new Map<string, number>(), shared = new Map<string, string>();
   for (const { schema } of tools) uses.set(schema, (uses.get(schema) ?? 0) + 1);
   for (const [schema, count] of uses) if (count > 1 && schema) shared.set(schema, `schema${shared.size}`);
-  return {...files,"mcp.ts": `${[`import { mcp as serve, type Options as McpOptions } from "@aotter/mantle-next/mcp";`, databaseImport(target),
-    ...(refs ? ['import type { Handlers } from "./generated.js";'] : []), ...(hasRef ? ['import { store } from "./generated.js";'] : []), ...imports,
-    ...[...shared].map(([schema, name]) => `const ${name} = ${schema};`)].join("\n")}
+  const sharedTools=Object.values(plan.views).some(view=>view.surface==="staff")||Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp"&&trigger.source.surface==="staff");
+  const toolImports=[databaseImport(target),...(refs ? ['import type { Handlers } from "./generated.js";'] : []),...(hasRef ? ['import { store } from "./generated.js";'] : []),...imports,...[...shared].map(([schema,name])=>`const ${name} = ${schema};`)];
+  const print=(selected:typeof tools)=>selected.map(({fields,schema})=>`    { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n");
+  if(sharedTools)files["mcp-tools.ts"]='import type { Tool } from "@aotter/mantle-next/mcp";\n'+toolImports.join("\n")+"\n"+["public","staff"].map(surface=>`export function ${surface}Tools(): readonly Tool<Database${refs ? ", Handlers" : ""}>[] {
+  return [
+${print(tools.filter(tool=>tool.surface===surface))}
+  ];
+}`).join("\n")+"\n";
+  files["mcp.ts"]=`import { mcp as serve, type Options as McpOptions } from "@aotter/mantle-next/mcp";
+${sharedTools?[databaseImport(target),...(refs?['import type { Handlers } from "./generated.js";']:[]),'import { publicTools, staffTools } from "./mcp-tools.js";'].join("\n"):toolImports.join("\n")}
 export type Options<Env = unknown> = McpOptions<Env, Database>${refs ? " & { handlers: Handlers }" : ""};
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env) => Promise<Response | undefined> {
-  return serve<Env, Database${refs ? ", Handlers" : ""}>([
-${tools.map(({ fields, schema }) => `    { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n")}
-  ], ${q(STAFF_ROLES)}, options);
+  return serve<Env, Database${refs ? ", Handlers" : ""}>(${sharedTools?"[...publicTools(),...staffTools()]":"[\n"+print(tools)+"\n  ]"}, ${q(STAFF_ROLES)}, options);
 }
-`};
+`;
+  return files;
 }

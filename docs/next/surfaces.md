@@ -218,6 +218,22 @@ refs. OCC `CONFLICT` remains unchanged; the console's write controller re-reads
 the entry before explaining it. Selected Admin modules add relative API routes
 through `routes`; they share the same caller, session and origin gate.
 
+`GET /admin/api/webmcp` returns the same `{ tools, routes }` catalogue used by
+bootstrap. Tool names follow MCP's lower-case, hyphen-to-underscore rule; a staff
+View maps to `/admin/views/<name>`, and a Procedure with a target maps to
+`/admin/c/<schema>` with `entry: true`. Public/internal tools are absent. Publishing
+transitions stay on the content buttons and are excluded from this catalogue.
+An application without staff tools receives an empty catalogue.
+
+`POST /admin/api/webmcp/<tool>` accepts a JSON input object and returns `{ output }`.
+It reuses MCP's generated validators, conversions, native keyset paging and ref
+handler dispatch, within Admin's cookie-session and same-origin gate. The caller's
+own Store and the operation's `requires` remain authoritative. Invalid input runs
+no SQL; writes retain OCC and are never retried. SQL outputs use `{ results }`,
+Views use `{ rows, nextCursor? }`, and ref outputs remain handler-owned. WebMCP
+does not load the MCP SDK or require that peer; Admin-only bundles omit public
+tool definitions. Browser tool registration/navigation belongs to the existing SPA.
+
 ## Mounting MCP
 
 Mount the generated `mcp({ db: env => env.DB, caller })` handler in the app's
