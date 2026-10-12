@@ -50,8 +50,8 @@ const propsOf = (s: JsonSchema) => (s.properties ?? {}) as Props;
 const denied = (role: StaffRole, message: string) =>
   json({ error: redactForWire(makeDiagnostic({ code: "AUTH_DENIED", phase: "runtime", severity: "error", path: P, expected: `${role} role or higher`, message })), minimumRole: role }, 403, NO_STORE);
 
-/** What the SPA lists and edits for one Schema; a translation's parent is the entry sharing its `on`. */
-function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
+/** @internal What the SPA lists and edits for one Schema; a translation's parent is the entry sharing its `on`. */
+export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
   const names = new Set(schemas.filter((x) => !x.translates).map((x) => x.name));
   const props = propsOf(s.schema);
   const required = new Set(s.schema.required ?? []);

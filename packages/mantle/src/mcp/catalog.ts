@@ -45,10 +45,10 @@ const nativeSchema = (field: string): JsonSchema | undefined =>
 type Target = { ResTarget: { name?: string; val?: { ColumnRef?: { fields?: { String?: { sval?: string } }[] } } } };
 
 /**
- * The Schema whose entry a row's `id` is: the View reads one table and outputs that table's `id` unchanged. Anything else
+ * @internal The Schema whose entry a row's `id` is: the View reads one table and outputs that table's `id` unchanged. Anything else
  * (a join, a subquery in FROM, an `id` alias of another column) names no entry, so no operation is offered on its rows.
  */
-function entrySchema(plan: RuntimePlan, v: PlanView): string | undefined {
+export function entrySchema(plan: RuntimePlan, v: PlanView): string | undefined {
   const sel = v.stmts[0]?.SelectStmt;
   const table = sel?.fromClause?.length === 1 ? sel.fromClause[0].RangeVar : undefined;
   const key = typeof table?.relname === "string" ? table.relname.toLowerCase() : undefined;

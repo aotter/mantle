@@ -119,7 +119,7 @@ export function sqlLogic(node: SqlNode): SqlLogicNode {
   return branch(rendered.startsWith('[SQL') ? 'opaque' : 'value', rendered.startsWith('[SQL') ? `${Object.keys(node)[0]} · see authored SQL` : rendered);
 }
 
-/** Necessary enum predicates for a declared row target; a display hint, never authorization. */
+/** @internal Necessary enum predicates for a declared row target; a display hint, never authorization. */
 export function requiredEnumStates(stmts: readonly SqlNode[], target: string, schema: JsonSchema): Array<{ field: string; value: string }> {
   const writes = procedureFlow(stmts).filter((s) => s.table?.toLowerCase() === target.toLowerCase() && s.operation === 'UPDATE');
   if (writes.length !== 1 || writes[0]!.mode !== 'row') return [];
