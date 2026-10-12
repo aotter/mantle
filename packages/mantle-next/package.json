@@ -4,13 +4,8 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "engines": {
-    "node": ">=22.14.0"
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ],
+  "engines": { "node": ">=22.14.0" },
+  "files": ["dist", "README.md"],
   "exports": {
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
@@ -41,15 +36,9 @@
     "better-auth": "catalog:peer"
   },
   "peerDependenciesMeta": {
-    "@better-auth/core": {
-      "optional": true
-    },
-    "@better-auth/oauth-provider": {
-      "optional": true
-    },
-    "better-auth": {
-      "optional": true
-    }
+    "@better-auth/core": { "optional": true },
+    "@better-auth/oauth-provider": { "optional": true },
+    "better-auth": { "optional": true }
   },
   "devDependencies": {
     "@aotter/mantle": "workspace:*",

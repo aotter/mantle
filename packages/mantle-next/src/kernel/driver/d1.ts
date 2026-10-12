@@ -10,14 +10,14 @@ export interface Handle extends Reader { batch(statements: any[]): Promise<{ res
 export const read = async (db: Reader, sql: string, binds: unknown[]): Promise<any[]> => (await db.prepare(sql).bind(...binds).all()).results;
 /** The assert table's trigger aborts the whole batch with `CONFLICT op=<k>` when statement k did not change exactly one row. */
 export async function procedure(db: Handle, steps: readonly Bound[], path: string): Promise<Row[][]> {
-  const batch: unknown[] = [], at: number[] = [];
+  const batch: Statement[] = [], at: number[] = [];
   steps.forEach((s, i) => {
     at.push(batch.length);
     batch.push(db.prepare(s.sql).bind(...s.binds));
     if (s.row) batch.push(db.prepare(`INSERT INTO _mantle_assert (op,ok) SELECT ${i}, changes() = 1`));
   });
   let out;
-  try { out = await db.batch(batch as never[]); } catch (error) {
+  try { out = await db.batch(batch); } catch (error) {
     throw unique(error) ? conflict(path, true, error) : /CONFLICT op=\d/.test(String((error as Error)?.message)) ? conflict(path, false, error) : error;
   }
   return at.map(i => out[i]!.results);

@@ -37,7 +37,6 @@ export interface Fact {
 export const SCOPE = "$scope", TTL = "$ttl";
 /** The columns Mantle owns: no write names them (nor the scope column), and `_rid` is never returned. */
 const SYSTEM = ["id", "version", "created_at", "updated_at", "author_id", "status", "_rid"];
-const STAMPS = ["created_at", "updated_at"];
 
 /** A Schema's rules: the shared ones with its scope and TTL put in, and a term dropped where it has none. The generator proves this equals Core's for every Schema. */
 export function expand(r: Rules, f: Fact) {
@@ -93,7 +92,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     let p = prepared.get(name);
     if (!p) {
       const f = facts[name]!;
-      prepared.set(name, p = { name, f, scope: f.s?.toLowerCase(), x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: [...STAMPS, ...f.ts ?? []], d: f.d ?? [], policy: [] });
+      prepared.set(name, p = { name, f, scope: f.s?.toLowerCase(), x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: ["created_at", "updated_at", ...f.ts ?? []], d: f.d ?? [], policy: [] });
     }
     return p;
   };

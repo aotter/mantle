@@ -12,7 +12,7 @@ const budgets = JSON.parse(await readFile(resolve(base, "size-budgets.json"), "u
 const sources = await loadFixtureSources();
 try {
   for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const) {
-    const key = target, app = resolve(directory, key);
+    const app = resolve(directory, target);
     await writeGenerated(app, await generateOrThrow(target, sources), false); // the package (dist), as a deployment resolves it
     const postgres = target === "cloudflare-postgres";
     // No test oracle/seed/benchmark code in the deployment bundle. Caller is a
@@ -43,9 +43,9 @@ export default { async fetch(request, env) {
     const map = JSON.parse(await readFile(resolve(app, "bundle", modules[0]! + ".map"), "utf8"));
     assert.ok(!map.sources.some((source: string) => /(?:^|\/)mantle\/(?:src|dist)\//.test(source) || /@aotter\/mantle(?:\/|$)/.test(source)), "old compiler/runtime in Worker bundle");
     assert.ok(!map.sources.some((source:string) => /\/zod\//.test(source)), "a validator entered the bare query bundle");
-    const report = { target, uncompressedBytes: bytes.length, gzipBytes: gzipSync(bytes).length, budgetBytes: budgets[key] };
+    const report = { target, uncompressedBytes: bytes.length, gzipBytes: gzipSync(bytes).length, budgetBytes: budgets[target] };
     console.log(JSON.stringify(report));
-    if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, key), { recursive: true, errorOnExist: true, force: false });
-    assert.ok(bytes.length <= budgets[key], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
+    if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, target), { recursive: true, errorOnExist: true, force: false });
+    assert.ok(bytes.length <= budgets[target], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
   }
 } finally { await rm(directory, { recursive: true, force: true }); }
