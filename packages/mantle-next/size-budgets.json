@@ -1,4 +1,4 @@
 {
-  "cloudflare-d1": 20480,
-  "cloudflare-postgres": 65536
+  "cloudflare-d1": { "startup": 6144, "total": 20480 },
+  "cloudflare-postgres": { "startup": 49152, "total": 65536 }
 }

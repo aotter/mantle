@@ -1,7 +1,6 @@
-/** Offline deployment bundles: the whole purchase API, including postgres.js. */
+/** Offline deployment bundles (`mantle bundle`): the whole purchase API, including postgres.js; startup graph and total upload. */
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import { bundle, startupGraph } from "../src/infrastructure/bundle.js";
@@ -53,22 +52,16 @@ export default { async fetch(request, env) {
   } finally { ${postgres ? "await db.end();" : ""} }
 } };
 `);
-    await writeFile(resolve(app, "wrangler.json"), JSON.stringify({ name: "mantle-next-size-local", main: "worker.ts", compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat"] }));
-    execFileSync("node", [resolve(base, "node_modules/wrangler/bin/wrangler.js"), "deploy", "--dry-run", "--minify", "--metafile", resolve(app, "meta.json"), "--config", resolve(app, "wrangler.json"), "--outdir", resolve(app, "bundle")], {
-      cwd: base, env: { ...process.env, WRANGLER_SEND_METRICS: "false" }, stdio: "pipe",
-    });
-    const names = await readdir(resolve(app, "bundle"));
-    // This fixture must remain one JS module: don't silently omit future assets.
-    const modules = names.filter(name => name !== "README.md" && !name.endsWith(".map"));
-    assert.equal(modules.length, 1, `unexpected deployment modules: ${modules}`);
-    assert.match(modules[0]!, /\.js$/);
-    const bytes = await readFile(resolve(app, "bundle", modules[0]!));
-    const map = JSON.parse(await readFile(resolve(app, "bundle", modules[0]! + ".map"), "utf8"));
-    assert.ok(!map.sources.some((source: string) => /(?:^|\/)mantle\/(?:src|dist)\//.test(source) || /@aotter\/mantle(?:\/|$)/.test(source)), "old compiler/runtime in Worker bundle");
-    assert.ok(!map.sources.some((source:string) => /\/zod\//.test(source)), "a validator entered the bare query bundle");
-    const report = { target, uncompressedBytes: bytes.length, gzipBytes: gzipSync(bytes).length, budgetBytes: budgets[target] };
+    // The deployment build `mantle generate` configures: split ESM, operations as lazily imported chunks.
+    const entry = resolve(app, "worker.ts"), meta = await bundle(entry, resolve(app, "bundle"));
+    const inputs = Object.values(meta.outputs).flatMap(output => Object.keys(output.inputs));
+    assert.ok(!inputs.some(input => /(?:^|\/)mantle\/(?:src|dist)\//.test(input) || /@aotter\/mantle(?:\/|$)/.test(input)), "old compiler/runtime in Worker bundle");
+    assert.ok(!inputs.some(input => /\/zod\//.test(input)), "a validator entered the bare query bundle");
+    const sum = (files: string[]) => files.reduce((total, file) => total + meta.outputs[file]!.bytes, 0);
+    const js = Object.keys(meta.outputs).filter(file => file.endsWith(".js"));
+    const report = { target, startupBytes: sum(startupGraph(meta, entry)), totalBytes: sum(js), gzipBytes: (await Promise.all(js.map(file => readFile(resolve(base, file))))).reduce((n, b) => n + gzipSync(b).length, 0), budget: budgets[target] };
     console.log(JSON.stringify(report));
     if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, target), { recursive: true, errorOnExist: true, force: false });
-    assert.ok(bytes.length <= budgets[target], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
+    assert.ok(report.startupBytes <= budgets[target].startup && report.totalBytes <= budgets[target].total, `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
   }
 } finally { await rm(directory, { recursive: true, force: true }); }
