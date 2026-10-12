@@ -20,7 +20,9 @@ checkout, or any online copy.
 ## Find the project and its version
 
 Locate the user's application (never use the SDK repository as the
-application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
+application). For workspace links, inspect the linked package's README first; concrete
+`generated.ts` queries select the [experimental flow](#experimental-workspace-consumers)
+before the Core version rules below. If it has `@aotter/mantle`, read its `package.json`, lockfile and
 `node_modules/@aotter/mantle/package.json`, and follow that version's docs.
 
 - `0.2.x`: continue below; for ongoing work read
@@ -28,6 +30,19 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
 - `0.1.x` (v1 manifests, a `version: 1` `mantle.config.json`, `mantle skills`):
   upgrade only when asked, with `docs/skills/update/SKILL.md` and
   `docs/upgrade-0.1-to-0.2.md` of the 0.2 package.
+
+## Experimental workspace consumers
+
+If the linked Mantle package generates concrete `generated.ts` queries (rather than Core's
+RuntimePlan), follow its README instead of the Core 0.2 scaffolding below. For Workers, run
+`pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts`
+(or target `cloudflare-postgres`) once, then plain `pnpm exec wrangler deploy` /
+`pnpm exec wrangler dev --local`. Generation writes Wrangler's custom split build; Node 22
+suffices. The startup guard rejects `better-auth` / `@better-auth/*` in the entry's static
+import graph: keep auth behind `authLoader(() => import(...))` and fix static imports when
+it fails. The package README owns build options, config placeholders, TOML instructions
+and D1 Sessions. Regenerate after manifest or auth option changes. Standalone publishing
+is pending; do not install the experiment from npm or migrate a Core project unless asked.
 
 ## New project
 
@@ -89,7 +104,8 @@ app includes saving, previewing and publishing it; continue through the terminal
 release result. A local-only or save-only request stops there. Creating a local
 project alone does not imply a deploy request. Self-hosting remains available.
 
-- **Cloudflare Workers or ChatGPT Sites:** follow
+- **Experimental Workers consumers:** use the generation/build flow above.
+- **Core Cloudflare Workers or ChatGPT Sites:** follow
   `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` and that host's
   native deployment workflow.
 - **Mantle Cloud:** follow [Cloud workflow](references/cloud.md). The bundled

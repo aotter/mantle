@@ -28,6 +28,11 @@ Ask which target, unless the project already shows one.
 
 Self-hosting is always an option; never present a hosted target as required.
 
+For experimental workspace consumers that generate concrete `generated.ts` queries,
+use the plugin's `mantle` skill (Experimental workspace consumers)
+and the linked package README before deploying. That flow configures the split build and
+startup guard; the Core boot, scaffolding and `--check` steps below do not apply.
+
 ## Local gate
 
 ```bash
