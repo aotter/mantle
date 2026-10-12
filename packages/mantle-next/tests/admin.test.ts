@@ -189,3 +189,27 @@ test("CSV closes a failed later page without logging its native secret",async()=
  try{let page=0;const response=await csv("report",async()=>{if(page++)throw Error("fake-secret-token from a native cause");return{rows:[{title:"ok"}],nextCursor:"next"};},["title"]);await expect(response.text()).rejects.toThrow("CSV export failed.");expect(JSON.stringify(logs)).not.toContain("fake-secret-token");}
  finally{console.error=error;}
 });
+test("Admin literal and mixed row aliases keep Object.prototype names unchanged",async()=>{
+ const text=source+`---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: prototype_alias}
+spec:
+ surface: staff
+ sql: SELECT 1 AS constructor, 2 AS "toString", 3 AS "__proto__"
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: prototype_mixed}
+spec:
+ surface: staff
+ uiSchema: {list: {filterFields: [constructor, expiresAt]}}
+ sql: SELECT id,displayTitle,displayTitle AS constructor,expiresAt FROM notes ORDER BY id
+`;
+ const files=await generateOrThrow("bun-sqlite",[{sourceId:"prototype.yaml",text}]),dir=await mkdtemp(join(tmpdir(),"mantle-admin-prototype-")),db=new Database(":memory:");
+ try{await writeGenerated(dir,files);db.exec(files["schema.sql"]!);db.exec("INSERT INTO notes(id,version,created_at,updated_at,owner,displaytitle,score) VALUES ('a',1,0,0,'a','Alpha',1)");const {admin}=await import(join(dir,"admin.ts")),app=admin({db:()=>db,caller:async()=>staff});const read=async(path:string)=>(await app(new Request("https://app.test/admin/api/views/"+path),{})).json();
+ expect((await read("prototype_alias")).rows).toEqual([{constructor:1,toString:2,["__proto__"]:3}]);
+ expect((await read("prototype_mixed?filter.constructor=Alpha")).rows).toEqual([{id:"a",displayTitle:"Alpha",constructor:"Alpha",expiresAt:null}]);
+ expect((await read("prototype_mixed?filter.constructor=missing")).rows).toEqual([]);
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});

@@ -50,7 +50,7 @@ function matched(view:View<unknown>,params:URLSearchParams):Record<string,unknow
   for(const [name,type] of view.filters??[]){
     const raw=params.get("filter."+name);if(raw===null||raw==="")continue;
     let value:unknown=raw;
-    if(view.filterValues?.[name])try{value=view.filterValues[name]!(raw);}catch{fail("Expected a valid value for filter."+name);}
+    if(view.filterValues&&Object.hasOwn(view.filterValues,name))try{value=view.filterValues[name]!(raw);}catch{fail("Expected a valid value for filter."+name);}
     else if(type==="boolean"){if(raw!=="true"&&raw!=="false")fail("Expected true or false for filter."+name);value=view.sqlite?Number(raw==="true"):raw==="true";}
     else if(type==="integer"||type==="number"){value=Number(raw);if(!raw.trim()||!Number.isFinite(value)||type==="integer"&&!Number.isSafeInteger(value))fail("Expected a valid number for filter."+name);}
     result["filter."+name]=value;
@@ -102,7 +102,7 @@ export function admin<Env,Database,Handlers=never>(metadata:{collections:readonl
       const readView=async(view:View<Database>,cursor?:string,limit?:number)=>{
         const {input:raw,...paging}=view.query(url.searchParams),input={...raw};convert(input,view.convert);
         const page=await view.page(db,caller,input as never,{...paging,...(cursor?{cursor}:{}),...(limit?{limit,cursor}:{}),match:matched(view as View<unknown>,url.searchParams)});
-        page.rows=page.rows.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[view.names?.[key]??key,value])));return page;
+        if(view.names)page.rows=page.rows.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[Object.hasOwn(view.names!,key)?view.names![key]!:key,value])));return page;
       };
       const routes:Route<Env,Database>[]=[
         {method:"GET",path:"/me",run:me},{method:"GET",path:"/site",run:site},
