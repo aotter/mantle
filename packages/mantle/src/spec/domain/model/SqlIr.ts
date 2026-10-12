@@ -17,6 +17,8 @@ export const PG_GRAMMAR = 180004;
 export type SqlDiagnosticCode = Extract<DiagnosticCode, `SQL_${string}`>;
 
 export interface SqlSchemaDef {
+  /** Translation reads share their parent's current visibility on this field. */
+  readonly translates?: { readonly parent: string; readonly on: string };
   /** column that holds the owner; every read and write is filtered on it */
   readonly scope?: string;
   /** a declared timestamptz field the author writes; a row is invisible once it is `ttlSeconds` old (a NULL never expires) */

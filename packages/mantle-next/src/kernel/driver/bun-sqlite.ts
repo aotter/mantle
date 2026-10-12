@@ -59,7 +59,7 @@ export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>)
       return db.query(sql);
     }, exec: db.exec.bind(db), transaction: db.transaction.bind(db) };
     transactions.add(tx);
-    const state: { outer?: Handle } = { outer: db };
+    const state = { outer: db as object | undefined, handle: tx as object | undefined };
     try { const result = await context.run(state, () => fn(tx)); db.exec("COMMIT"); return result; }
     catch (error) {
       try { db.exec("ROLLBACK"); } catch (rollback) {
@@ -67,6 +67,6 @@ export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>)
       }
       throw error;
     }
-    finally { active = false; state.outer = undefined; }
+    finally { active = false; state.outer = undefined; state.handle = undefined; }
   });
 }

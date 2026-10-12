@@ -11,8 +11,8 @@ export function refuseDeclarations({ plan }: GenerateInput, diagnostics: Generat
     refuse(`triggers/${name}`, kind === "schedule" ? "Schedule Triggers are unsupported. Wire scheduled() yourself." : "Before/after lifecycle hooks are unsupported. Write a custom handler.");
   }
   for (const [name, schema] of Object.entries(plan.schemas)) {
-    if (schema.localized) refuse(`schemas/${name}/localized`, "Localized entries are unsupported until 0.2.x. Manage locales in application-owned fields and handlers.");
-    if (schema.translates) refuse(`schemas/${name}/translates`, "Translation relationships are unsupported until 0.2.x. Manage relationships in application-owned fields and handlers.");
+    const parent = schema.translates && plan.schemas[schema.translates.parent.toLowerCase()];
+    if (parent?.scope && schema.scope !== parent.scope) refuse(`schemas/${name}/translates`, `Scoped translation parent '${schema.translates!.parent}' requires the same child scope column '${parent.scope}'. Different or missing child scope columns cannot be correlated safely.`);
   }
   for (const [kind, declarations] of [["views", plan.views], ["procedures", plan.procedures]] as const) {
     for (const [name, declaration] of Object.entries(declarations)) {

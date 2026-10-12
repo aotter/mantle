@@ -19,7 +19,8 @@ export function decodeCursor(cursor: string, path = "", operation?: string): [un
 }
 
 /** `eq`: `column = value`; `ttl`: `column IS NULL OR column > value` (Core's `RowTerm`). */
-export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe] | readonly [column: string, op: "staff", value: Recipe, published: string, roles: readonly string[]];
+export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe] | readonly [column: string, op: "staff", value: Recipe, published: string, roles: readonly string[]] | readonly [column: string, op: "parent", value: Recipe, parent: ParentPolicy];
+export interface ParentPolicy { readonly table: string; readonly terms: readonly Term[]; readonly scope?: readonly [parent: string, child: string]; readonly roles?: readonly string[]; }
 /** Core's row rules for a Schema with the placeholder columns `SCOPE` and `TTL`; `expand` puts a Schema's own in. */
 export interface Rules {
   readonly caller: readonly Term[];
@@ -45,6 +46,8 @@ export interface Fact {
   readonly d?: readonly string[];
   /** Declared searchable text fields; omitted collections search id only. */
   readonly search?: readonly string[];
+  /** Generated parent policy and inherited read-only columns; no authored schema is interpreted. */
+  readonly parent?: { readonly on: string; readonly scope?: readonly [parent: string, child: string]; readonly visible: Term; readonly table: string; readonly caller: readonly Term[]; readonly trusted: readonly Term[]; readonly fields: readonly string[]; readonly ts: readonly string[]; readonly d: readonly string[] };
 }
 export const SCOPE = "$scope", TTL = "$ttl";
 /** The columns Mantle owns: no write names them (nor the scope column), and `_rid` is never returned. */
@@ -53,16 +56,21 @@ const SYSTEM = ["id", "version", "created_at", "updated_at", "author_id", "statu
 /** A Schema's rules: the shared ones with its scope and TTL put in, and a term dropped where it has none. The generator proves this equals Core's for every Schema. */
 export function expand(r: Rules, f: Fact) {
   const all = <T extends readonly [string, ...any[]]>(l: readonly T[]): T[] => l.flatMap(([c, ...t]) => (c = c === SCOPE ? f.s! : c === TTL ? f.ttl?.[0]! : c === "status" && !f.pub ? "" : c) ? [[c, ...t.map(v => v.k === "cutoff" ? { ...v, seconds: f.ttl![1] } : v)] as unknown as T] : []);
-  return { caller: all(r.caller), trusted: all(r.trusted), fills: all(r.fills), sets: all(r.sets), lock: r.lock };
+  return { caller: [...all(r.caller), ...(f.parent ? [f.parent.visible] : [])], trusted: all(r.trusted), fills: all(r.fills), sets: all(r.sets), lock: r.lock };
 }
 
-export function renderTerm(d: Pick<Dialect, "ident">, [column, op, , published, roles]: Term, prefix: string, placeholder: string): string {
-  const c = prefix + d.ident(column);
-  if (op === "staff") {
-    const literal = (v: string) => `'${v.replaceAll("'", "''")}'`;
-    return `(${c} = ${literal(published!)} OR ${placeholder} IN (${roles!.map(literal).join(", ")}))`;
+export function renderTerm(d: Pick<Dialect, "ident">, t: Term, prefix: string, placeholder: string | ((recipe: Recipe) => string)): string {
+  const literal = (v: string) => `'${v.replaceAll("'", "''")}'`;
+  const param = (r: Recipe) => typeof placeholder === "string" ? placeholder : placeholder(r);
+  if (t[1] === "parent") {
+    const [column, , value, parent] = t, alias = prefix === "_mantle_parent." || prefix === d.ident("_mantle_parent") + "." ? "_mantle_parent_" : "_mantle_parent";
+    const conditions = [`${alias}.${d.ident(column)} = ${prefix}${d.ident(column)}`, ...(parent.scope ? [`${alias}.${d.ident(parent.scope[0])} = ${prefix}${d.ident(parent.scope[1])}`] : []), ...parent.terms.map(t => renderTerm(d, t, alias + ".", param))];
+    const exists = `EXISTS (SELECT 1 FROM ${d.ident(parent.table)} ${alias} WHERE ${conditions.join(" AND ")})`;
+    return parent.roles ? `(${param(value)} IN (${parent.roles.map(literal).join(", ")}) OR ${exists})` : exists;
   }
-  return op === "ttl" ? `(${c} IS NULL OR ${c} > ${placeholder})` : `${c} = ${placeholder}`;
+  const [column, op, value, published, roles] = t, c = prefix + d.ident(column), bound = param(value);
+  if (op === "staff") return `(${c} = ${literal(published!)} OR ${bound} IN (${roles!.map(literal).join(", ")}))`;
+  return op === "ttl" ? `(${c} IS NULL OR ${c} > ${bound})` : `${c} = ${bound}`;
 }
 
 export interface Driver<H> {
@@ -104,8 +112,8 @@ type BoundOperations<O> = { [K in keyof O]: { [N in keyof O[K]]: O[K][N] extends
 type Tx<T extends Record<string, Table>, O> = Pick<Store<T>, "collection"> & BoundOperations<O>;
 type Interactive<T extends Record<string, Table>, O> = { transaction<R>(fn: (tx: Tx<T, O>) => Promise<R>, options?: TransactionOptions): Promise<R> };
 
-interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; byId?: string }
-interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; select?: string; returning?: string; readonly policy: (Policy | undefined)[] }
+interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; readonly from: string; readonly projection: string; byId?: string; select?: string }
+interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; returning?: string; readonly policy: (Policy | undefined)[] }
 
 export function createStore<H, T extends Record<string, Table>, D extends Driver<H> = Driver<H>, O extends Operations<H> = {}, C extends object = never>(d: Dialect, drv: D, rules: Rules, facts: { readonly [K in keyof T]: Fact }, operations?: O): (db: H, caller: Caller, ...options: [C] extends [never] ? [] : [options: C]) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O> : {}) {
   const prepared = new Map<string, Prepared>();
@@ -121,7 +129,19 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
   const wires = (p: Prepared, prefix: string) => [p.ts, p.d].flatMap((columns, i) => columns.map(c => `${(i ? d.wireDate : d.wireTimestamp)(prefix + d.ident(c)).join("")} AS ${d.ident(c)}`)).join(", ");
   const ID = d.ident("id");
   /** The row rules of one mode, numbered from 1; the SQL is rendered once per mode. */
-  const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => p.policy[+trusted] ??= { sql: terms.map((t, i) => renderTerm(d, t, "r.", d.param(i + 1))).join(" AND "), recipes: terms.map(t => t[2]) };
+  const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => {
+    if (p.policy[+trusted]) return p.policy[+trusted]!;
+    const recipes: Recipe[] = [], param = (r: Recipe) => (recipes.push(r), d.param(recipes.length));
+    const sql = terms.map(t => renderTerm(d, t, "r.", param)).join(" AND ");
+    let from = p.from, projection = "";
+    const parent = p.f.parent;
+    if (parent) {
+      const alias = "_mantle_merge", conditions = [`${alias}.${d.ident(parent.on)} = r.${d.ident(parent.on)}`, ...(parent.scope ? [`${alias}.${d.ident(parent.scope[0])} = r.${d.ident(parent.scope[1])}`] : []), ...(trusted ? parent.trusted : parent.caller).map(t => renderTerm(d, t, alias + ".", param))];
+      from += ` LEFT JOIN ${d.ident(parent.table)} ${alias} ON ${alias}.${ID} = (SELECT ${alias}.${ID} FROM ${d.ident(parent.table)} ${alias} WHERE ${conditions.join(" AND ")} ORDER BY ${alias}.${d.ident("created_at")} DESC, ${alias}.${ID} DESC LIMIT 1)`;
+      projection = parent.fields.map(c => `${(parent.ts.includes(c) ? d.wireTimestamp(alias + "." + d.ident(c)).join("") : parent.d.includes(c) ? d.wireDate(alias + "." + d.ident(c)).join("") : alias + "." + d.ident(c))} AS ${d.ident(c)}`).join(", ");
+    }
+    return p.policy[+trusted] = { sql, recipes, from, projection };
+  };
 
   return ((db: H, caller: Caller, options?: object) => make(db, caller, false, options)) as never;
 
@@ -187,7 +207,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     const rows = (sql: string, values: unknown[]) => drv.read(db, sql, values) as Promise<Record<string, unknown>[]>;
     /** Core never reads back the scope column, and `_rid` is storage's. */
     const clean = <R extends Record<string, unknown>>(list: R[]): R[] => { for (const r of list) { delete r._rid; if (f.s) delete r[f.s]; } return list; };
-    const select = () => p.select ??= `SELECT r.*, ${wires(p, "r.")}${p.from}`;
+    const select = () => pol.select ??= `SELECT r.*, ${wires(p, "r.")}${pol.projection ? ", " + pol.projection : ""}${pol.from}`;
     const where = (conds: string[]) => { const all = pol.sql ? [pol.sql, ...conds] : conds; return all.length ? ` WHERE ${all.join(" AND ")}` : ""; };
     const base = () => evaluate(d, pol.recipes, caller);
 
@@ -231,7 +251,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         return [d.ident(name), put(values, name, v)] as const;
       });
       /** `WHERE id = ? AND <the caller's row rules> AND version = ?` */
-      const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...terms, x.lock].map(t => renderTerm(d, t, "", recipe(t[2])))].join(" AND ")}`;
+      const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...terms, x.lock].map(t => renderTerm(d, t, t[1] === "parent" ? d.ident(p.name) + "." : "", recipe))].join(" AND ")}`;
       const step = (sql: string): Bound => ({ sql, binds: values, row: true });
       return { given, recipe, guard, step, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };
@@ -246,7 +266,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       async first(q: Omit<Query<object, string>, "limit" | "cursor"> = {}) { return (await find({ ...q, limit: 1 })).rows[0] ?? null; },
       async count(w?: object) {
         const values = base(), conds = conditions(w, values);
-        return Number(((await rows(`SELECT COUNT(*) AS "count"${p.from}${where(conds)}`, values))[0] as { count: unknown }).count);
+        return Number(((await rows(`SELECT COUNT(*) AS "count"${pol.from}${where(conds)}`, values))[0] as { count: unknown }).count);
       },
       insert(set: object) { return write(() => {
         if (f.s && caller.kind === "anonymous") throw new ContractError("UNAUTHENTICATED", "A scoped insert requires an authenticated caller.", `${p.name}/insert`);

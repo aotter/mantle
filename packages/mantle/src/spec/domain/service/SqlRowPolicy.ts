@@ -10,8 +10,10 @@ export type RowMode = "caller" | "public" | "trusted" | "staff";
 /** A value an engine binds. Inside a term a `const` is part of the rule (printed inline); in a write it is an input. */
 export type RowValue = { readonly k: "uid" | "role" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string };
 /** `eq`: `column = value`. `ttl`: `column IS NULL OR column > value`. `staff`: published, or the bound role is staff. */
-export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue] | readonly [column: string, op: "staff", value: RowValue, published: string, roles: readonly string[]];
-export type RowSchema = Pick<SqlSchemaDef, "scope" | "ttl" | "ttlSeconds" | "publishing">;
+export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue] | readonly [column: string, op: "staff", value: RowValue, published: string, roles: readonly string[]] | readonly [column: string, op: "parent", value: RowValue, parent: RowParent];
+/** One correlated parent row must satisfy every visibility term; staff previews may omit this requirement. */
+export interface RowParent { readonly table: string; readonly terms: readonly RowTerm[]; readonly scope?: readonly [parent: string, child: string]; readonly roles?: readonly string[]; }
+export type RowSchema = Pick<SqlSchemaDef, "scope" | "ttl" | "ttlSeconds" | "publishing" | "translates">;
 export interface RowWrite {
   /** An insert's columns the policy fills, in order. `newId` is a new entry id. */
   readonly fills: readonly (readonly [column: string, value: RowValue | "newId"])[];
@@ -24,11 +26,20 @@ export interface RowWrite {
 const PUBLISHED = "published";
 const NOW: RowValue = { k: "now" };
 /** The rows a caller can see: its own (unless trusted), live (TTL) and, for a public caller of a publishing Schema, published. */
-export function rowPolicy(s: RowSchema, mode: RowMode, staffRoles: readonly string[] = STAFF_ROLES): RowTerm[] {
+export function rowPolicy(s: RowSchema, mode: RowMode, staffRoles: readonly string[] = STAFF_ROLES, schemas?: Readonly<Record<string, RowSchema>>): RowTerm[] {
+  let parent: RowTerm[] = [];
+  if (s.translates && (mode === "public" || mode === "staff")) {
+    const table = s.translates.parent.toLowerCase(), schema = schemas?.[table];
+    if (!schema) throw new Error(`Translation parent ${table} is unavailable to rowPolicy.`);
+    parent = [[s.translates.on.toLowerCase(), "parent", { k: "role" }, { table, terms: rowPolicy(schema, "public", staffRoles, schemas), ...(schema.scope && s.scope ? { scope: [schema.scope, s.scope] as const } : {}), ...(mode === "staff" ? { roles: staffRoles } : {}) }]];
+  }
+
   return [
     ...(mode !== "trusted" && s.scope ? [[s.scope, "eq", { k: "uid" }] as const] : []),
     ...(s.ttl ? [[s.ttl, "ttl", { k: "cutoff", seconds: s.ttlSeconds! }] as const] : []),
     ...(s.publishing && (mode === "public" || mode === "staff") ? [mode === "public" ? ["status", "eq", { k: "const", value: PUBLISHED }] as const : ["status", "staff", { k: "role" }, PUBLISHED, staffRoles] as const] : []),
+    ...parent,
+
   ];
 }
 

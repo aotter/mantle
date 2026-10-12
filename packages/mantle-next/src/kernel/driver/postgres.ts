@@ -58,7 +58,7 @@ export async function transaction<T>(db: Postgres, fn: (tx: Postgres) => Promise
   guard(db);
   if (transactions.has(db)) throw new Error("Nested transactions are not supported.");
   let committing = false;
-  const state: { outer?: Unsafe } = { outer: db };
+  const state: { outer?: object; handle?: object } = { outer: db };
   try {
     // printed into BEGIN, so only PostgreSQL's own four levels: a handler may pass request input here
     const level = options.isolation ?? "serializable";
@@ -69,10 +69,10 @@ export async function transaction<T>(db: Postgres, fn: (tx: Postgres) => Promise
         if (!active) throw new Error("Transaction has ended.");
         return handle.unsafe(sql, values);
       }, begin: async () => { throw new Error("Nested transactions are not supported."); } };
-      transactions.add(tx);
+      transactions.add(tx);state.handle=tx;
       try { const result = await context.run(state, () => fn(tx)); committing = true; return result; }
       finally { active = false; }
     });
   } catch (error) { throw error instanceof ContractError || !committing ? error : postgresOutcome(error, path); }
-  finally { state.outer = undefined; }
+  finally { state.outer = undefined; state.handle = undefined; }
 }

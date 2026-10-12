@@ -306,3 +306,40 @@ rather than creating a replacement asset. Rejected objects are discarded.
 ## OSS staff role
 
 OSS auth templates grant `staff`; any staff can manage users. Caller.role is an open string for application identity vocabulary. Next publishing visibility and transitions use only the generated staff allowlist (`staff`), consistently in Views and Store. Core keeps its legacy role preset for existing consumers. Auth helpers are optional app-selected modules and never perform boot DDL.
+## Translation publication
+
+Translations retain the v2 `localized` / `translates { parent, on }` declarations.
+Publishing uses one guarded UPDATE: any parent row sharing `on` may satisfy it,
+but that row must be published and visible under the same caller's SQL scope.
+There is no prior parent read or cached publication decision. Translations keep
+their own status; drafts remain valid. Public translation reads also require a
+published, caller-visible parent with the same `on` value. This condition belongs
+to the shared generated SQL row policy used by Store, Views and locale queries,
+not a second application filter. Unpublish/archive hides the translations;
+re-publishing the parent restores them without updating their status. Staff/system
+preview reads retain access to drafts.
+
+Store translation reads merge parent fields into the returned row; translation
+fields, including system fields, win name collisions. Non-unique join keys choose
+one caller-visible parent by newest `created_at`, then id; public reads choose from
+published parents. Parent-only fields are read-only and optional in the row type:
+child insert/update inputs and write results retain their own columns.
+Non-staff translation updates and deletes are also gated by the visible published
+parent policy. Scoped parents and children must declare the same scope column;
+the generator refuses different or missing child scope columns. Parent publication,
+visibility and inherited field selection always correlate the stored parent/child
+scope values, including for system callers. Authored Views continue to
+return their explicit SELECT columns; parent fields must be selected explicitly.
+Generated SQLite/PostgreSQL interactive Store transactions refuse to combine a
+translation publication with its parent's status change, in either order. A failed
+guarded publication releases only its own reservation, preserving prior successful
+writes in the same transaction.
+D1 has no interactive Store transactions and is exempt from this one-write rule.
+Raw application-owned native transactions remain the application's responsibility.
+
+Generated `translations.ts` lists locales for one parent page with native keyset
+queries (50 keys per batch, 500 child rows per read). The caller owns the parent
+page and its boundary validation. `locale` values are ordinary strings, and
+`toCanonicalLocale` is an explicit helper rather than a Store coercion.
+
+

@@ -106,7 +106,9 @@ GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses us
 `cacheControl` or `public, max-age=60`; authenticated responses use
 `private, no-store`. `If-None-Match` returns 304 only after current content is read.
 Canonical URLs use the configured origin, independently of the request host.
-Only `locales[0]` adds hreflang until translations support. Importing another generated entry does not import web output.
+The current implementation adds hreflang only for `locales[0]`; translation-aware
+indexes and head tags are a follow-up below. Importing another generated entry
+does not import web output.
 
 Web indexes scan at most 50,000 rows for one sitemap and 5,000 for `llms.txt`,
 across all configured lists. Skipped `.`/`..` path segments consume the scan
@@ -122,6 +124,18 @@ string. A NULL Markdown field answers 404. Errors and missing Markdown responses
 use `cache-control: no-store`. A matching HTML page takes precedence over a `.md`
 alternate, including slugs ending in `.md`; a Markdown alternate may read the
 exact HTML candidate first and therefore performs at most two View queries.
+
+### Web translation follow-up
+
+The generated `web.ts` exists; integrating translated pages is a separate follow-up.
+It will call `translationLocales(db, caller, parent, rows)` once per parent page,
+using its batched SQL reads rather than querying each parent separately. Locale
+availability must follow the same public SQL parent/translation visibility rules.
+The follow-up will produce per-locale `llms.txt` and hreflang alternates from those
+available locales. Canonical locale tags use `toCanonicalLocale` (for example
+`zh-TW`); URL locale segments retain the 0.1 lower-case form (`zh-tw`). Site locale
+order chooses the canonical locale. Canonical and alternate URLs use the configured
+origin and the same row-derived page parameters as the sitemap.
 
 ## Mounting MCP
 
