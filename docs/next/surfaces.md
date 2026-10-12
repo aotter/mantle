@@ -191,3 +191,24 @@ revalidate native database rows. Business failures carry diagnostics in text;
 with an output schema they omit `structuredContent` to avoid validating an error
 against a success schema. Without one they also expose diagnostic structured
 content. MCP adds no prompts or non-UI resources.
+
+### Declared View scalars on the wire
+
+REST and MCP View pages expose declared JSON columns as JSON values and declared
+boolean columns as booleans, including explicitly authored SQL aliases. SQLite
+and D1 conversions are compiled into only the selected boundary pages;
+PostgreSQL already-native JSON/boolean values pass through. SQL NULL stays null and absent
+fields stay absent. Expressions without declared column lineage stay native.
+Malformed persisted JSON becomes a redacted internal failure. The conversion
+adds no database operations and does not mutate native query rows.
+
+Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
+ref outputs retain their native contracts. Use the generated `rest()` / `mcp()`
+module for this client wire contract; do not duplicate JSON/boolean decoding in
+application route handlers or decode PostgreSQL JSON strings a second time.
+
+PostgreSQL declared integer columns (including a selected system `version`)
+retain 0.2's wire form: safe integers become JSON numbers; unsafe values remain
+exact text. Computed outputs and native SQL Procedure/ref results retain their
+native values. This does not promise precise unsafe int64 values on D1.
+Unexpected surface failures log only a stable wire classification.

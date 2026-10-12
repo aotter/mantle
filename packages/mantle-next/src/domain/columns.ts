@@ -1,5 +1,7 @@
 /** What a column's Mantle type means to generated code, in one place: Views, Stores and wire forms all read it here. */
 import type { RuntimePlan } from "@aotter/mantle/spec";
+import type { Target } from "./model.js";
+import type { WireColumns } from "../kernel/contracts.js";
 
 /** A column's declared type; the two system timestamps are not declared fields. @internal */
 export const declaredType = (fields: Readonly<Record<string, string>>, column: string): string | undefined =>
@@ -11,6 +13,16 @@ export function outputType(plan: RuntimePlan, view: string, key: string): string
   const field = columns && Object.hasOwn(columns, key) ? columns[key] : undefined;
   const schema = field && plan.schemas[field.schema];
   return schema && declaredType(schema.fields, field!.field);
+}
+
+/** Static declared transport conversions; computed outputs retain their native values. */
+export function outputConversions(plan: RuntimePlan, view: string, target: Target): WireColumns {
+  const postgres = target.endsWith("postgres");
+  return Object.keys(plan.views[view]?.columns ?? {}).flatMap<WireColumns[number]>(key => {
+    const type = outputType(plan, view, key) ?? (plan.views[view]?.columns?.[key]?.field === "version" ? "integer" : undefined);
+    return postgres ? type && ["integer", "int8", "int4"].includes(type) ? [[key, "int"] as const] : []
+      : type === "json" || type === "bool" ? [[key, type] as const] : [];
+  });
 }
 
 const scalarType = (type: string) => type === "bool" ? "boolean" : ["integer", "int4", "int8", "real", "float8"].includes(type) ? "number" : type === "json" ? "unknown" : type === "geo" ? "{lat:number;lng:number}" : "string";
@@ -28,3 +40,7 @@ export function nativeType(type: string | undefined, sqlite: boolean, notNull = 
 
 /** The value a caller of the typed Store passes for a column of this type. JSON is an object or array (the Store tells it by its JS type, so a bare string would be bound as text). @internal */
 export const inputType = (type: string): string => type === "timestamptz" ? "string | Date" : type === "json" ? "object" : scalarType(type);
+
+/** A selected boundary page converts only its static declared output columns. */
+export const boundaryPage = (page: string, fields: ReturnType<typeof outputConversions>): string => fields.length
+  ? `(db, caller, input, paging) => ${page}(db, caller, input, paging).then(page => ({ ...page, rows: wireRows(page.rows, ${JSON.stringify(fields)}) }))` : page;

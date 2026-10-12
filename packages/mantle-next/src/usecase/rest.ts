@@ -3,10 +3,12 @@ import type { RuntimePlan, PlanLowered } from "@aotter/mantle/spec";
 import type { Target } from "../domain/model.js";
 import { databaseImport, q, viewImports } from "../domain/entry.js";
 import { conversions } from "../domain/input.js";
+import { boundaryPage, outputConversions } from "../domain/columns.js";
 export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target): Record<string,string> {
   const refs = Object.values(plan.procedures).some(p=>"ref" in p.handler);
   const imports = ['import { rest as serve, type Options } from "@aotter/mantle-next/rest";', databaseImport(target), ...(refs ? ['import { store, type Handlers } from "./generated.js";'] : [])];
   const views:string[]=[], procedures:string[]=[];
+  let hasWire = false;
   const convert = (code:string) => code ? `, convert: ${code}` : "";
   // Each segment matches in its encoded form; `{name}` segments capture.
   const route = (method:string, path:string) => {
@@ -18,7 +20,9 @@ export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target
     if(view.surface!=="public") continue;
     const id=views.length,encoded=encodeURIComponent(name);
     imports.push(...viewImports(name,id));
-    views.push(`{ ${route("GET",`/api/views/${name}`)}, query: query${id}, page: page${id}${convert(conversions(view.input?.properties,(lowered.views[name]?.public ?? lowered.views[name]?.caller)?.binds ?? [],target))} }`);
+    const wire = outputConversions(plan, name, target);
+    hasWire ||= wire.length > 0;
+    views.push(`{ ${route("GET",`/api/views/${name}`)}, query: query${id}, page: ${boundaryPage(`page${id}`, wire)}${convert(conversions(view.input?.properties,(lowered.views[name]?.public ?? lowered.views[name]?.caller)?.binds ?? [],target))} }`);
   }
   const triggers=Object.values(plan.triggers).filter(t=>t.source.kind==="http").sort((a,b)=>a.source.kind==="http"&&b.source.kind==="http"?(a.source.path.match(/\{/g)?.length??0)-(b.source.path.match(/\{/g)?.length??0):0);
   for(const trigger of triggers) {
@@ -32,6 +36,7 @@ export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target
     }));
     procedures.push(`{ ${route(method,path)}${Object.keys(params).length?`, params: ${q(params)}`:""}, validate: validate${id}${convert(conversions(procedure.input?.properties,lowered.procedures[name]?.caller?.flatMap(s=>s.binds) ?? [],target))}, run: ${ref?`(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)`:`procedure${id}`} }`);
   }
+  if (hasWire) imports.push('import { wireRows } from "@aotter/mantle-next/contracts";');
   const list = (items:string[]) => items.length ? `[\n${items.map(item=>"    "+item+",\n").join("")}  ]` : "[]";
   return {"rest.ts":`${imports.join("\n")}
 export function rest<Env>(options: Options<Env, Database>${refs?" & { handlers: Handlers }":""}): (request: Request, env: Env) => Promise<Response | undefined> {

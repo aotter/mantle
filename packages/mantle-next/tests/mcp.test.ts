@@ -139,16 +139,16 @@ test("ref MCP Procedures require typed caller-owned handlers and enforce require
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
 
-test("unknown tool and caller failures log hidden causes, redact responses and never challenge a resolver exception",async()=>{
+test("unknown tool and caller failures log safe classifications, redact responses and never challenge a resolver exception",async()=>{
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"errors.yaml",text:source}]);const dir=await mkdtemp(resolve(import.meta.dir,".mcp-errors-"));
- const logging=spyOn(console,'error').mockImplementation(()=>{}),token='unlogged-bearer-secret',cause=new Error('hidden database failure');
+ const logging=spyOn(console,'error').mockImplementation(()=>{}),token='unlogged-bearer-secret',cause=new Error('hidden database failure '+token, {cause: new Error(token)});
  try {
   await writeGenerated(dir,files);const {mcp}=await import(resolve(dir,"mcp.ts"));const request=()=>new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream',authorization:'Bearer '+token},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'items',arguments:{}}})});
   const response=await mcp({db:()=>({query(){throw cause;}}),caller:()=>({kind:'anonymous'})})(request(),{});
-  const body=await response.text();expect(body).toContain('INTERNAL_ERROR');expect(body).not.toContain(cause.message);expect(logging.mock.calls[0]![1]).toBe(cause);
-  const thrown=new Error('application caller failed');const failure=await mcp({db:()=>({}),caller:()=>{throw thrown;}})(request(),{});
+  const body=await response.text();expect(body).toContain('INTERNAL_ERROR');expect(body).not.toContain(cause.message);expect(logging.mock.calls[0]![1]).toBe("INTERNAL_ERROR");
+  const thrown=new Error('application caller failed '+token, {cause: new Error(token)});const failure=await mcp({db:()=>({}),caller:()=>{throw thrown;}})(request(),{});
   expect(failure.status).toBe(500);expect(failure.headers.has('www-authenticate')).toBe(false);expect(await failure.text()).not.toContain(thrown.message);
-  expect(logging.mock.calls).toHaveLength(2);expect((logging.mock.calls[1]![1] as Error).cause).toBe(thrown);expect(logging.mock.calls.flat().map(String).join(' ')).not.toContain(token);
+  expect(logging.mock.calls).toHaveLength(2);expect(logging.mock.calls[1]![1]).toBe("INTERNAL_ERROR");expect(logging.mock.calls.flat().map(String).join(' ')).not.toContain(token);
  } finally {logging.mockRestore();await rm(dir,{recursive:true,force:true});}
 });
 
