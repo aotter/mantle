@@ -1,39 +1,31 @@
-/** Offline deployment bundles: the whole purchase API, including official pg. */
+/** Offline deployment bundles: the whole purchase API, including postgres.js. */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
-import { generateFromSources } from "../src/infrastructure/generate.js";
+import { generateOrThrow, loadFixtureSources, writeGenerated } from "../tests/apps/link.js";
 
 const base = resolve(import.meta.dir, "..");
 const directory = await mkdtemp(resolve(base, "tests/apps/.size-"));
 const budgets = JSON.parse(await readFile(resolve(base, "size-budgets.json"), "utf8"));
-const text = await readFile(resolve(base, "tests/apps/purchase.yaml"), "utf8");
+const sources = await loadFixtureSources();
 try {
   for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const) {
-    const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "purchase.yaml", text }] } });
-    assert.ok(generated.ok, JSON.stringify(!generated.ok && generated.diagnostics));
-    const key = target;
-    const app = resolve(directory, key);
-    await mkdir(app);
-    for (const [name, text] of Object.entries(generated.files)) {
-      await mkdir(dirname(resolve(app, name)), { recursive: true });
-      await writeFile(resolve(app, name), text);
-    }
+    const app = resolve(directory, target);
+    await writeGenerated(app, await generateOrThrow(target, sources), false); // the package (dist), as a deployment resolves it
     const postgres = target === "cloudflare-postgres";
     // No test oracle/seed/benchmark code in the deployment bundle. Caller is a
     // fixed fixture identity, not an example of production credential handling.
     await writeFile(resolve(app, "worker.ts"), `
 import { views, procedures } from './generated.ts';
-${postgres ? "import { Client } from 'pg';" : ""}
+${postgres ? "import postgres from 'postgres';" : ""}
 export default { async fetch(request, env) {
   const [kind, name] = new URL(request.url).pathname.slice(1).split('/');
   const operation = (kind === 'views' ? views : procedures)[name];
   if (!operation) return new Response('Unknown operation', {status:404});
-  const db = ${postgres ? "new Client({connectionString:env.HYPERDRIVE.connectionString})" : "env.DB"};
+  const db = ${postgres ? "postgres(env.HYPERDRIVE.connectionString)" : "env.DB"};
   try {
-    ${postgres ? "await db.connect();" : ""}
     return Response.json(await operation(db, {kind:'user',subject:'fixture',role:null,scopes:[],credential:'session',credentialId:null,clientId:null}, await request.json()));
   } finally { ${postgres ? "await db.end();" : ""} }
 } };
@@ -51,9 +43,9 @@ export default { async fetch(request, env) {
     const map = JSON.parse(await readFile(resolve(app, "bundle", modules[0]! + ".map"), "utf8"));
     assert.ok(!map.sources.some((source: string) => /(?:^|\/)mantle\/(?:src|dist)\//.test(source) || /@aotter\/mantle(?:\/|$)/.test(source)), "old compiler/runtime in Worker bundle");
     assert.ok(!map.sources.some((source:string) => /\/zod\//.test(source)), "a validator entered the bare query bundle");
-    const report = { target, uncompressedBytes: bytes.length, gzipBytes: gzipSync(bytes).length, budgetBytes: budgets[key] };
+    const report = { target, uncompressedBytes: bytes.length, gzipBytes: gzipSync(bytes).length, budgetBytes: budgets[target] };
     console.log(JSON.stringify(report));
-    if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, key), { recursive: true, errorOnExist: true, force: false });
-    assert.ok(bytes.length <= budgets[key], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
+    if (process.env.MANTLE_NEXT_SIZE_OUTPUT) await cp(app, resolve(process.env.MANTLE_NEXT_SIZE_OUTPUT, target), { recursive: true, errorOnExist: true, force: false });
+    assert.ok(bytes.length <= budgets[target], `${target} exceeds deployment bundle budget; inspect dependencies before changing the budget`);
   }
 } finally { await rm(directory, { recursive: true, force: true }); }

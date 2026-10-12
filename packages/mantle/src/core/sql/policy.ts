@@ -4,7 +4,7 @@
 import { SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/index.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from '../dialect.js';
-import { classify } from '../../spec/domain/index.js';
+import { classify, rowPolicy, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
 import type { PrintedStatement } from '../store.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
 
@@ -21,7 +21,7 @@ export type BindSpec =
 
 /** The prefix of the columns that carry an after hook's row; the runner strips them from the result. */
 export const HOOK_PREFIX = '_mantle_h_';
-export type Mode = 'caller' | 'public' | 'trusted';
+export type { Mode };
 export type PolicyOpts = {
   /** `MantleDialect.nativeOrder`: the id tiebreak follows the last sort key's direction */
   nativeOrder?: boolean;
@@ -98,8 +98,6 @@ const and = (...args: (N | undefined | false)[]): N | undefined => {
   return a.length === 0 ? undefined : a.length === 1 ? a[0] : { BoolExpr: { boolop: 'AND_EXPR', args: a } };
 };
 const or = (...a: N[]): N => ({ BoolExpr: { boolop: 'OR_EXPR', args: a } });
-const bump = (): N => res(op('+', col('version'), num(1)), 'version');
-const touch = (c: C): N => res(param$(c, { k: 'now' }), 'updated_at');
 const sort = (node: N, dir = 'SORTBY_DEFAULT'): N => ({ SortBy: { node, sortby_dir: dir, sortby_nulls: 'SORTBY_NULLS_DEFAULT' } });
 
 // ---- Schema helpers -------------------------------------------------------------------------------
@@ -135,16 +133,18 @@ function param$(c: C, spec: BindSpec): N {
   return param(n);
 }
 
-/** The ONE place a Schema's visibility rule is spelled. `a` is the alias (or table) the predicate reads through. */
-function visible(s: SchemaDef, a: string, c: C): N | undefined {
-  const mode = c.mode ?? 'caller';
-  if (c.unsafeNoVisibility) return undefined;
-  return and(
-    mode !== 'trusted' && !!s.scope && op('=', col(a, s.scope), param$(c, { k: 'uid' })),
-    !!s.ttl && or({ NullTest: { arg: col(a, s.ttl), nulltesttype: 'IS_NULL' } }, op('>', col(a, s.ttl), param$(c, { k: 'cutoff', seconds: s.ttlSeconds! }))),
-    mode === 'public' && s.publishing && op('=', col(a, 'status'), { A_Const: { sval: { sval: 'published' } } }),
-  );
+/** A term of `rowPolicy` as a predicate on alias `a`. A constant inside a term is part of the rule, so it prints inline. */
+function term(c: C, a: string, [column, kind, v]: RowTerm): N {
+  const value: N = v.k === 'const' ? { A_Const: { sval: { sval: v.value } } } : param$(c, v);
+  return kind === 'ttl' ? or({ NullTest: { arg: col(a, column), nulltesttype: 'IS_NULL' } }, op('>', col(a, column), value)) : op('=', col(a, column), value);
 }
+/** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
+function visible(s: SchemaDef, a: string, c: C): N | undefined {
+  return c.unsafeNoVisibility ? undefined : and(...rowPolicy(s, c.mode ?? 'caller').map((t) => term(c, a, t)));
+}
+/** A write's `SET` items beyond the author's own. */
+const sets = (w: RowWrite, c: C): N[] =>
+  w.sets.map(([column, v]) => res(v === 'bump' ? op('+', col(column), num(1)) : param$(c, v), column));
 
 function positionOf(c: C): RelationPosition {
   switch (c.edge) {
@@ -397,8 +397,9 @@ function update(n: N, c: C): N {
   dmlScope(n.relation, c);
   const out = deep(n, c, 'UpdateStmt');
   c.sel.pop();
-  out.targetList.push(bump(), touch(c), ...(c.status ? [res(param$(c, { k: 'const', value: c.status }), 'status')] : []));
-  out.whereClause = and(out.whereClause, visible(s, a, c), c.lockVersion && op('=', col(a, 'version'), param$(c, { k: 'version' })));
+  const w = writePolicy(s, 'update', { status: c.status, lock: c.lockVersion });
+  out.targetList.push(...sets(w, c));
+  out.whereClause = and(out.whereClause, visible(s, a, c), w.lock && term(c, a, w.lock));
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { UpdateStmt: out };
 }
@@ -408,7 +409,8 @@ function del(n: N, c: C): N {
   dmlScope(n.relation, c);
   const out = deep(n, c, 'DeleteStmt');
   c.sel.pop();
-  out.whereClause = and(out.whereClause, visible(s, a, c), c.lockVersion && op('=', col(a, 'version'), param$(c, { k: 'version' })));
+  const w = writePolicy(s, 'delete', { lock: c.lockVersion });
+  out.whereClause = and(out.whereClause, visible(s, a, c), w.lock && term(c, a, w.lock));
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { DeleteStmt: out };
 }
@@ -417,14 +419,8 @@ function insert(n: N, c: C): N {
   c.seen?.add('insert-target');
   const out = deep(n, c, 'InsertStmt');
   const named = (x: string) => n.cols.some((r: N) => r.ResTarget.name === x);
-  const fill: [string, N][] = [
-    ...(s.scope ? [[s.scope, param$(c, { k: 'uid' })] as [string, N]] : []),
-    ['created_at', param$(c, { k: 'now' })],
-    ['updated_at', param$(c, { k: 'now' })],
-    ['author_id', param$(c, { k: 'uid' })],
-    // a scoped Schema always gets a generated id: a caller-chosen id would collide with (and reveal) another owner's row
-    ...(named('id') && !s.scope ? [] : [['id', c.lower.newId()] as [string, N]]),
-  ];
+  const w = writePolicy(s, 'insert', { idGiven: named('id') });
+  const fill = w.fills.map(([name, v]): [string, N] => [name, v === 'newId' ? c.lower.newId() : param$(c, v)]);
   out.cols = [...out.cols, ...fill.map(([name]) => ({ ResTarget: { name } }))];
   // The user's VALUES/SELECT becomes a derived table so the fills never interact with its DISTINCT or
   // GROUP BY; `WHERE true` is SQLite's disambiguator for INSERT ... SELECT ... ON CONFLICT.
@@ -441,7 +437,7 @@ function insert(n: N, c: C): N {
     if (s.scope && oc.infer && !named) oc.infer.indexElems.unshift({ IndexElem: { name: s.scope, ordering: 'SORTBY_DEFAULT', nulls_ordering: 'SORTBY_NULLS_DEFAULT' } });
     if (oc.action === 'ONCONFLICT_UPDATE') {
       c.seen?.add('conflict-update');
-      oc.targetList.push(bump(), touch(c));
+      oc.targetList.push(...sets(w, c));
       oc.whereClause = and(oc.whereClause, visible(s, n.relation.relname, c)); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one
     }
   }

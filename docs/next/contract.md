@@ -16,12 +16,12 @@ Next removes that intermediate executor rather than accelerating it.
 Day-one targets are Bun SQLite, Bun PostgreSQL, Cloudflare D1, and Cloudflare
 PostgreSQL. Workers validation uses local Wrangler only. Bare PostgreSQL entries
 call Bun.SQL's own shape (`Postgres`: `unsafe(text, values)` and
-`begin(options, fn)`), so Bun passes its `SQL` directly. A Bun transaction handle
-also works for Views and single-statement Procedures; a multi-statement Procedure
-opens its own transaction, which Bun refuses inside another (no write happens). Other
-drivers are application-owned adapters to that shape; Workers PostgreSQL (for
-example Mantle Cloud over Hyperdrive) adapts node-postgres, and the tested recipe
-is `tests/apps/pg-port.ts`. SQLite uses bun:sqlite; D1 uses its platform binding. Pool,
+`begin(options, fn)`), so Bun passes its `SQL` directly. Store transaction handles also run multi-statement
+Procedures within the existing transaction (ADR-0045). postgres.js
+satisfies the same shape with no adapter (Workers PostgreSQL over Hyperdrive:
+`postgres(env.HYPERDRIVE.connectionString)`; verified by `verify-native cloudflare-postgres`); other drivers are
+application-owned adapters. Date-time, date and JSON inputs are declared text in the SQL (and in the Store's
+comparisons), because postgres.js would otherwise turn text bound to timestamptz into a Date and lose microseconds. SQLite uses bun:sqlite; D1 uses its platform binding. Pool,
 connection lifetime, database isolation, locks and retries remain native and
 application-owned. No cloud provisioning.
 
@@ -75,15 +75,9 @@ an extra per-row projection merely to repair names already known at generation.
 Declared authorization, ownership/TTL SQL policy, explicit OCC and atomic writes
 remain required. Generate them as the native application would implement them.
 Transaction rollback and uncertain COMMIT handling must still preserve data-loss
-protection and client disposal responsibility; native errors are rethrown, and
+protection and client disposal responsibility; native errors are rethrown (one exception, below), and
 redaction before they reach HTTP users belongs to the application boundary (no helper). Removing generic error
 normalization does not authorize dropping transaction outcome evidence.
-
-**Implementation:** default `generated.ts` now binds driver-native parameters,
-returns native rows without a projection/decoder and preserves native database
-errors. It imports no Zod and performs no input/output validation or JSON scan.
-Auth/OCC failures and uncertain transaction outcomes remain explicit generated
-checks. SQL policy and atomic transactions are preserved.
 
 **Single-statement writes:** a Procedure with one statement is atomic on its own
 and runs in autocommit, with no BEGIN/COMMIT on PG or native transaction on Bun
@@ -92,15 +86,14 @@ unique `id =`), so a failed count check after autocommit has changed nothing.
 On PG it runs at the server's default isolation, not SERIALIZABLE: a concurrent
 OCC loser re-evaluates its `version =` predicate, matches zero rows and returns
 `CONFLICT` instead of SQLSTATE 40001. A server ErrorResponse (SQLSTATE and
-severity) is a known rollback and is rethrown natively, except connection,
+severity) is a known rollback and is rethrown natively, except a unique violation (23505, SQLite's `UNIQUE constraint failed`), which, in a generated Procedure or a Store write, is `ContractError("CONFLICT")` with the native error as `cause` on every target, and except connection,
 resource and shutdown classes (08, 28, 53, 57, 58, XX), which, like any failure
 without a server response (lost socket), are `OUTCOME_UNKNOWN`. SQLSTATE is
-`errno` on Bun.SQL and `code` on node-postgres. Multi-statement Procedures run in
+`errno` on Bun.SQL and `code` on postgres.js. Multi-statement Procedures run in
 `begin("isolation level serializable", ...)`: a failure before the callback
 returns was rolled back by `begin`; only a failed COMMIT is classified as above.
 
-The optional `checked` boundary was removed on 2026-10-11: validation, defaults and
-error redaction belong to the application.
+The optional `checked` boundary was removed on 2026-10-11; validation, defaults and error redaction belong to the application.
 
 **Date-time wire form:** a View output that is a declared `date-time` column
 (including `created_at`/`updated_at`) returns the handbook's wire form, an ISO
@@ -116,9 +109,7 @@ microseconds and days while PostgreSQL receives the canonical text. Computed val
 PostgreSQL through Bun.SQL that is a `Date`, which drops microseconds. Other
 declared scalars are driver-native.
 
-Driver-ready JSON parameters are text on both targets: node-postgres treats a
-JavaScript array as a PostgreSQL array, so native JSON binds must be serialized by
-the application. Bare PG SQL declares each JSON parameter as text
+Driver-ready JSON parameters are text on every target (a JavaScript array would otherwise be bound as a PostgreSQL array), so the application serializes them. Bare PG SQL declares each JSON parameter as text
 (`CAST(CAST($n AS text) AS jsonb)`), so Bun.SQL sends the text verbatim instead of
 JSON-encoding it again; generation refuses a JSON parameter used any other way. SQLite bool/date/timestamp/numeric parameters use their declared
 storage representations. Bound optional fields become explicit required values,
@@ -150,6 +141,13 @@ Storage migrations are explicit deployment artifacts. No request or module impor
 may converge storage or inspect every schema. Optional Better Auth, REST, MCP,
 Admin and UI stay outside the query core. Preserve their public behavior as they
 are added; do not make a read import their entire composition.
+
+## Shared runtime core
+
+Generated Views, Procedures, the Store and the Better Auth adapter share one kernel (`src/kernel`): a dialect per engine (how SQL is
+spelled), a driver per handle (how it is called and what atomicity it really has), one bind evaluator, one condition builder and one
+generic Store. Nothing branches on the engine at run time. The design, the Store's rules and limits, and the measured costs are in
+[ADR-0045](../adr/0045-next-runtime-core.md); size numbers are `size-budgets.json` and `scripts/check-package.ts`.
 
 ## Architecture and acceptance
 

@@ -58,9 +58,10 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (!options.audience) throw new ContractError("UNAUTHENTICATED", "This route does not accept access tokens.");
     const instance = await auth.get();
     const { oauthProviderResourceClient } = await import("@better-auth/oauth-provider/resource-client");
-    let claims: { sub?: string; scope?: unknown; azp?: unknown; client_id?: unknown; jti?: unknown; iss?: string };
+    const verifier = oauthProviderResourceClient(instance).getActions();
+    let claims: Awaited<ReturnType<typeof verifier.verifyAccessTokenRequest>>;
     try {
-      claims = await oauthProviderResourceClient(instance).getActions().verifyAccessTokenRequest(request, { verifyOptions: { audience: options.audience as string | string[] } });
+      claims = await verifier.verifyAccessTokenRequest(request, { verifyOptions: { audience: options.audience as string | string[] } });
     } catch (cause) {
       throw new ContractError("UNAUTHENTICATED", "The access token is not valid for this resource.", "", { cause });
     }

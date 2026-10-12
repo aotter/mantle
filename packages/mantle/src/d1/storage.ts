@@ -4,7 +4,7 @@
  * are reported and never dropped. STRICT tables, checks as triggers, and the FTS5 / R*Tree tables that back
  * `search` and `format: geo` are Mantle's own and are rebuilt when their declaration changes.
  */
-import { ftsTableName, geoTreeName, checkShapeProblem, storageColumns, parseNumeric, sideTableClashes, type SqlNode } from "../spec/domain/index.js";
+import { ftsTableName, geoTreeName, checkShapeProblem, notNullColumns, storageColumns, parseNumeric, sideTableClashes, type SqlNode } from "../spec/domain/index.js";
 import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { print } from "./print.js";
@@ -119,7 +119,8 @@ function desired(name: string, s: StorageSchema): Desired {
   return { table: name, columns, indexes, triggers, virtuals };
 }
 
-function createTable(d: Desired): string {
+/** `notNull`: the columns the initial artifact (not convergence, which never alters an existing column) also declares NOT NULL. */
+function createTable(d: Desired, notNull: ReadonlySet<string> = new Set()): string {
   const cols = d.columns.map((c) => {
     if (c.name === "_rid") return "_rid INTEGER PRIMARY KEY";
     if (c.name === "id") return "id TEXT NOT NULL UNIQUE";
@@ -128,7 +129,7 @@ function createTable(d: Desired): string {
     if (c.name === "updated_at") return "updated_at INTEGER NOT NULL DEFAULT 0";
     if (c.name === "author_id") return "author_id TEXT";
     if (c.name === "status") return "status TEXT NOT NULL DEFAULT 'draft'";
-    return `${q(c.name)} ${c.type}${c.native && c.type === "TEXT" ? " NOT NULL" : ""}`;
+    return `${q(c.name)} ${c.type}${c.native && c.type === "TEXT" || notNull.has(c.name) ? " NOT NULL" : ""}`;
   });
   // `_rid` aliases rowid: FTS5's content_rowid and the R*Tree key on it, and an unaliased rowid may change on VACUUM
   return `CREATE TABLE IF NOT EXISTS ${q(d.table)} (${cols.join(", ")}) STRICT`;
@@ -148,7 +149,7 @@ export function initialStorageSql(plan: Readonly<Record<string, StorageSchema>>)
   // This initial artifact compiles with UTC, not an application-selected regional time zone.
   return [SYSTEM_DDL[0]!, SYSTEM_DDL[1]!, SYSTEM_DDL[2]!, "INSERT OR IGNORE INTO _mantle_tz (from_us, offset_us) VALUES (-9007199254740991, 0)", ...Object.entries(plan).flatMap(([name, schema]) => {
     const d = desired(name, schema);
-    return [createTable(d), ...d.indexes.map((i) => i.sql), ...d.virtuals.map((i) => i.sql), ...d.triggers.map((i) => i.sql)];
+    return [createTable(d, notNullColumns(schema)), ...d.indexes.map((i) => i.sql), ...d.virtuals.map((i) => i.sql), ...d.triggers.map((i) => i.sql)];
   })];
 }
 

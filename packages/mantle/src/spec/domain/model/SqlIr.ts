@@ -26,6 +26,10 @@ export interface SqlSchemaDef {
   readonly publishing?: boolean;
   /** declared fields and their Mantle types: text integer real bool json timestamptz date numeric(p,s) geo */
   readonly fields: Readonly<Record<string, string>>;
+  /** lower-cased column -> the name the JSON Schema declares (the plan has it; `notNullColumns` reads it with `schema`) */
+  readonly names?: Readonly<Record<string, string>>;
+  /** the Schema's JSON Schema, of which storage reads only what is required and nullable */
+  readonly schema?: { readonly required?: readonly string[]; readonly properties?: Readonly<Record<string, { readonly type?: unknown; readonly nullable?: boolean }>> };
 }
 
 /**
@@ -111,6 +115,26 @@ export function storageColumns(s: { readonly fields?: Readonly<Record<string, st
     if (t === "geo") { cols.set(`${f}_lat`, "real"); cols.set(`${f}_lng`, "real"); } else cols.set(f, t);
   }
   return cols;
+}
+
+/** The native columns storage declares NOT NULL (`status` only on a publishing Schema, the only one that has it); `author_id` is nullable. */
+export const NATIVE_NOT_NULL: ReadonlySet<string> = new Set(["id", "version", "created_at", "updated_at", "status"]);
+
+/**
+ * The columns an `operational` Schema's database refuses NULL in beyond the native ones: each field its JSON Schema requires and
+ * does not allow null (a geo field as its two columns). A `publishing` Schema has none: its drafts may be incomplete. This is the one
+ * rule; the initial storage SQL of both dialects and the generated Store's `orderBy` type read it.
+ */
+export function notNullColumns(s: SqlSchemaDef): Set<string> {
+  const out = new Set<string>();
+  if (s.publishing || !s.schema?.required) return out;
+  const required = new Set(s.schema.required);
+  for (const [f, t] of Object.entries(s.fields)) {
+    const authored = s.names?.[f] ?? f, p = s.schema.properties?.[authored];
+    if (f === s.scope || !required.has(authored) || !p || p.nullable === true || (Array.isArray(p.type) && p.type.includes("null"))) continue;
+    if (t === "geo") out.add(`${f}_lat`).add(`${f}_lng`); else out.add(f);
+  }
+  return out;
 }
 
 /** A field whose name is a column storage creates for something else (`_rid`, or another geo field's `_lat`/`_lng`), or undefined. */

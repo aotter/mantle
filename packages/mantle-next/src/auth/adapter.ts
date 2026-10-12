@@ -8,73 +8,60 @@
 import { createAdapterFactory, type CleanedWhere, type CustomAdapter, type DBAdapterFactoryConfig, type JoinConfig } from "@better-auth/core/db/adapter";
 import type { BetterAuthOptions } from "@better-auth/core";
 import type { SQL } from "bun";
+import type { Dialect } from "../kernel/dialect/common.js";
+import * as postgres from "../kernel/dialect/postgres.js";
+import * as sqlite from "../kernel/dialect/sqlite.js";
+import * as bunSql from "../kernel/driver/postgres.js";
+import type { Reader } from "../kernel/driver/d1.js";
+import { condition as spell } from "../kernel/where.js";
 
 type Row = Record<string, unknown>;
-type Dialect = "sqlite" | "postgres";
 /** Runs one statement; `changes` is the affected-row count. */
-type Exec = (text: string, values: unknown[]) => Promise<{ rows: Row[]; changes: number }>;
+type Exec = (text: string, values: unknown[]) => ReturnType<typeof bunSql.run>;
 /** The slice of D1 the adapter calls (a real `D1Database` satisfies it). */
-export interface D1Like {
-  prepare(text: string): { bind(...values: unknown[]): { all(): Promise<{ results: Row[]; meta: { changes?: number } }> } };
-}
+export type D1Like = Reader;
+/** What one statement's builder is given: `bind` registers a parameter and returns its placeholder; `where` spells conditions with it. */
+interface Statement { bind(value: unknown): string; where(modelKey: string, conditions: CleanedWhere[] | undefined, extra?: string): string }
+type Spelling = Pick<Dialect, "param" | "ident" | "escapeLike" | "like" | "likeEscape">;
 
-const ident = (name: string) => name.split(".").map(part => `"${part.replaceAll('"', '""')}"`).join(".");
-const escapeLike = (value: string) => value.replace(/[\\%_]/g, "\\$&");
-
-function customAdapter(dialect: Dialect, exec: Exec) {
+function customAdapter(d: Spelling, exec: Exec) {
+  const { ident } = d;
   return ({ getFieldName, schema, getDefaultModelName }: Parameters<Parameters<typeof createAdapterFactory>[0]["adapter"]>[0]): CustomAdapter => {
-    const pg = dialect === "postgres";
-    /** One statement under construction: text plus its parameters. */
-    const stmt = () => {
+    const condition = (bind: Statement["bind"], modelKey: string, w: CleanedWhere): string => {
+      const col = ident(getFieldName({ model: modelKey, field: w.field }));
+      const { value, operator } = w;
+      const fold = w.mode === "insensitive" && (typeof value === "string" || (Array.isArray(value) && value.every(v => typeof v === "string")));
+      if (operator === "contains" || operator === "starts_with" || operator === "ends_with") {
+        const text = d.escapeLike(String(value));
+        return spell(d, col, "like", operator === "contains" ? `%${text}%` : operator === "starts_with" ? `${text}%` : `%${text}`, bind, fold);
+      }
+      return spell(d, col, operator === "not_in" ? "notIn" : operator, value, bind, fold);
+    };
+    /** Builds one statement (its own parameters) and runs it. `where` is `WHERE (and...) AND (or...)`, the Kysely adapter's grouping; empty without conditions. */
+    const run = (build: (s: Statement) => string) => {
       const values: unknown[] = [];
-      const bind = (value: unknown) => {
-        values.push(value === undefined ? null : value);
-        return pg ? `$${values.length}` : "?";
-      };
-      const condition = (modelKey: string, w: CleanedWhere): string => {
-        const col = ident(getFieldName({ model: modelKey, field: w.field }));
-        const { value, operator } = w;
-        const fold = w.mode === "insensitive" && (typeof value === "string" || (Array.isArray(value) && value.every(v => typeof v === "string")));
-        const lhs = fold ? `LOWER(${col})` : col;
-        const rhs = (v: unknown) => (fold ? `LOWER(${bind(v)})` : bind(v));
-        if (operator === "in" || operator === "not_in") {
-          const list = Array.isArray(value) ? value : [value];
-          if (!list.length) return operator === "in" ? "1 = 0" : "1 = 1";
-          return `${lhs} ${operator === "in" ? "IN" : "NOT IN"} (${list.map(rhs).join(", ")})`;
-        }
-        if (operator === "contains" || operator === "starts_with" || operator === "ends_with") {
-          const text = escapeLike(String(value));
-          const pattern = operator === "contains" ? `%${text}%` : operator === "starts_with" ? `${text}%` : `%${text}`;
-          return `${col} ${fold && pg ? "ILIKE" : "LIKE"} ${bind(pattern)} ESCAPE '\\'`;
-        }
-        if (operator === "eq" || operator === "ne") {
-          if (value === null) return `${col} IS ${operator === "eq" ? "" : "NOT "}NULL`;
-          return `${lhs} ${operator === "eq" ? "=" : "<>"} ${rhs(value)}`;
-        }
-        return `${col} ${{ gt: ">", gte: ">=", lt: "<", lte: "<=" }[operator]} ${bind(value)}`;
-      };
-      /** `WHERE (and...) AND (or...)`, the Kysely adapter's grouping; empty without conditions. */
-      const where = (modelKey: string, conditions: CleanedWhere[] | undefined, extra?: string) => {
+      const bind = (value: unknown) => (values.push(value === undefined ? null : value), d.param(values.length));
+      const where: Statement["where"] = (modelKey, conditions, extra) => {
         const group = (connector: "AND" | "OR") => {
-          const parts = (conditions ?? []).filter(w => (w.connector === "OR" ? "OR" : "AND") === connector).map(w => condition(modelKey, w));
+          const parts = (conditions ?? []).filter(w => (w.connector === "OR" ? "OR" : "AND") === connector).map(w => condition(bind, modelKey, w));
           return parts.length ? `(${parts.join(` ${connector} `)})` : null;
         };
         const parts = [group("AND"), group("OR"), extra ?? null].filter(Boolean);
         return parts.length ? ` WHERE ${parts.join(" AND ")}` : "";
       };
-      return { values, bind, where };
-    };
-    const run = async (build: (s: ReturnType<typeof stmt>) => string) => {
-      const s = stmt();
-      const text = build(s);
-      return exec(text, s.values);
+      return exec(build({ bind, where }), values);
     };
     const idOf = (modelKey: string) => ident(getFieldName({ model: modelKey, field: "id" }));
     /** `<id> IN (SELECT <id> FROM t WHERE ... LIMIT 1)`: the statement touches at most one row. */
-    const oneRow = (s: ReturnType<typeof stmt>, table: string, modelKey: string, where: CleanedWhere[]) =>
+    const oneRow = (s: Statement, table: string, modelKey: string, where: CleanedWhere[]) =>
       `${idOf(modelKey)} IN (SELECT ${idOf(modelKey)} FROM ${ident(table)}${s.where(modelKey, where)} LIMIT 1)`;
-    const assign = (s: ReturnType<typeof stmt>, values: Row, increment: Record<string, number> = {}) =>
-      [...Object.entries(values).filter(([, v]) => v !== undefined).map(([c, v]) => `${ident(c)} = ${s.bind(v)}`), ...Object.entries(increment).map(([c, n]) => `${ident(c)} = ${ident(c)} + ${s.bind(n)}`)].join(", ");
+    /** The columns a write gives (an `undefined` is no value). */
+    const cols = (values: Row) => Object.entries(values).filter(([, v]) => v !== undefined);
+    const assign = (s: Statement, values: Row, increment: Record<string, number> = {}) =>
+      [...cols(values).map(([c, v]) => `${ident(c)} = ${s.bind(v)}`), ...Object.entries(increment).map(([c, n]) => `${ident(c)} = ${ident(c)} + ${s.bind(n)}`)].join(", ");
+    const updateSql = (s: Statement, model: string, modelKey: string, where: CleanedWhere[], values: Row) => `UPDATE ${ident(model)} SET ${assign(s, values)}${s.where(modelKey, where)}`;
+    const deleteMany = async ({ model, modelKey = model, where }: { model: string; modelKey?: string; where: CleanedWhere[] }) =>
+      (await run(s => `DELETE FROM ${ident(model)}${s.where(modelKey, where)}`)).changes;
 
     /** Joined rows come back as flat `__j<i>__<column>` aliases; fold them into `row[joinModel]` (object or array). */
     const joinColumns = (join: JoinConfig) =>
@@ -144,8 +131,8 @@ function customAdapter(dialect: Dialect, exec: Exec) {
 
     return {
       async create({ data, model }) {
-        const keys = Object.keys(data).filter(k => data[k] !== undefined);
-        const { rows } = await run(s => `INSERT INTO ${ident(model)}${keys.length ? ` (${keys.map(ident).join(", ")}) VALUES (${keys.map(k => s.bind(data[k])).join(", ")})` : " DEFAULT VALUES"} RETURNING *`);
+        const given = cols(data);
+        const { rows } = await run(s => `INSERT INTO ${ident(model)}${given.length ? ` (${given.map(([c]) => ident(c)).join(", ")}) VALUES (${given.map(([, v]) => s.bind(v)).join(", ")})` : " DEFAULT VALUES"} RETURNING *`);
         return rows[0] as never;
       },
       async findOne({ model, modelKey = model, where, select: fields, join }) {
@@ -156,18 +143,14 @@ function customAdapter(dialect: Dialect, exec: Exec) {
       },
       async update({ model, modelKey = model, where, update }) {
         if (!where.length) return null;
-        const { rows } = await run(s => `UPDATE ${ident(model)} SET ${assign(s, update as Row)}${s.where(modelKey, where)} RETURNING *`);
+        const { rows } = await run(s => `${updateSql(s, model, modelKey, where, update as Row)} RETURNING *`);
         return (rows[0] ?? null) as never;
       },
       async updateMany({ model, modelKey = model, where, update }) {
-        return (await run(s => `UPDATE ${ident(model)} SET ${assign(s, update)}${s.where(modelKey, where)}`)).changes;
+        return (await run(s => updateSql(s, model, modelKey, where, update))).changes;
       },
-      async delete({ model, modelKey = model, where }) {
-        await run(s => `DELETE FROM ${ident(model)}${s.where(modelKey, where)}`);
-      },
-      async deleteMany({ model, modelKey = model, where }) {
-        return (await run(s => `DELETE FROM ${ident(model)}${s.where(modelKey, where)}`)).changes;
-      },
+      async delete(options) { await deleteMany(options); },
+      deleteMany,
       async consumeOne({ model, modelKey = model, where }) {
         const { rows } = await run(s => `DELETE FROM ${ident(model)}${s.where(modelKey, where, oneRow(s, model, modelKey, where))} RETURNING *`);
         return (rows[0] ?? null) as never;
@@ -184,35 +167,30 @@ function customAdapter(dialect: Dialect, exec: Exec) {
   };
 }
 
-function build(dialect: Dialect, adapterId: string, adapterName: string, exec: Exec, transaction: DBAdapterFactoryConfig["transaction"]) {
-  const pg = dialect === "postgres";
+function build(d: Spelling, native: boolean, adapterId: string, adapterName: string, exec: Exec, transaction: DBAdapterFactoryConfig["transaction"]) {
   return createAdapterFactory({
     config: {
-      adapterId, adapterName, supportsBooleans: pg, supportsDates: pg, supportsJSON: pg, supportsArrays: false, supportsUUIDs: pg, transaction,
+      adapterId, adapterName, supportsBooleans: native, supportsDates: native, supportsJSON: native, supportsUUIDs: native, transaction,
       // Bun.SQL returns int8/numeric as strings; a `number` field must reach Better Auth as a number (the rate limiter adds to `lastRequest`). Ids stay strings.
       customTransformOutput: ({ data, fieldAttributes, field }) => (fieldAttributes.type === "number" && typeof data === "string" && field !== "id" && !fieldAttributes.references ? Number(data) : data),
     },
-    adapter: customAdapter(dialect, exec),
+    adapter: customAdapter(d, exec),
   });
 }
 
 /** Cloudflare D1 (SQLite). D1 has no interactive transactions, so `transaction` is off and the atomic operations are single statements. */
 export function d1Adapter(db: D1Like) {
-  const exec: Exec = async (text, values) => {
+  return build(sqlite, false, "d1", "Mantle D1 Adapter", async (text, values) => {
     const { results, meta } = await db.prepare(text).bind(...values).all();
-    return { rows: results ?? [], changes: meta?.changes ?? 0 };
-  };
-  return build("sqlite", "d1", "Mantle D1 Adapter", exec, false);
+    return { rows: results, changes: meta.changes };
+  }, false);
 }
 
 /** Bun.SQL against PostgreSQL. Transactions use `sql.begin`, which pins every statement to one connection. */
 export function bunSqlAdapter(sql: SQL) {
-  const executor = (handle: Pick<SQL, "unsafe">): Exec => async (text, values) => {
-    const rows = (await handle.unsafe(text, values as never[])) as Row[] & { count?: number | null };
-    return { rows: [...rows], changes: Number(rows.count ?? 0) };
-  };
+  const executor = (handle: Pick<SQL, "unsafe">): Exec => (text, values) => bunSql.run(handle as never, text, values);
   // Each `betterAuth` instance gets its own factory; its transactions rebuild the adapter on the pinned connection with the same options.
   return (options: BetterAuthOptions) =>
-    build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(sql), cb =>
-      sql.begin(tx => cb(build("postgres", "bun-sql", "Mantle Bun.SQL Adapter", executor(tx), false)(options))))(options);
+    build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(sql), cb =>
+      sql.begin(tx => cb(build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(tx), false)(options))))(options);
 }

@@ -4,8 +4,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { generateFromSources } from "../src/infrastructure/generate.js";
+import { join } from "node:path";
+import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link.js";
 
 const targets = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const;
 const files: string[] = [];
@@ -15,33 +15,81 @@ beforeAll(async () => {
   const base = fileURLToPath(new URL("apps/.generated/", import.meta.url));
   await mkdir(base, {recursive:true});
   directory = await mkdtemp(join(base, "consumer-"));
-  const text = await readFile(new URL("apps/purchase.yaml", import.meta.url), "utf8");
+  const sources = await loadFixtureSources();
   for (const target of targets) {
-    const generated = await generateFromSources({target, sources:{sources:[{sourceId:"purchase.yaml",text}]}});
-    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
     const destination = join(directory, target);
-    await mkdir(destination);
-    const file = join(destination, "generated.ts");
-    for (const [name, text] of Object.entries(generated.files)) {
-      await mkdir(dirname(join(destination, name)), { recursive: true });
-      await writeFile(join(destination, name), text);
-    }
-    files.push(file);
+    // unlinked: the consumer resolves @aotter/mantle-next/* through the package (dist), as an application does
+    await writeGenerated(destination, await generateOrThrow(target, sources), false);
+    files.push(join(destination, "generated.ts"));
     selectedFiles.push(join(destination, "views/purchase-totals.ts"), join(destination, "procedures/create-purchase.ts"));
   }
-  // Bun.SQL is the official PostgreSQL handle; node-postgres reaches it through the documented adapter.
+  // Bun.SQL is the official PostgreSQL handle; postgres.js satisfies the same shape as it is.
   const caller = "{ kind: 'user', subject: 's', role: null, scopes: [], credential: 'session', credentialId: null, clientId: null } as const";
   const drivers = join(directory, "drivers.ts");
   await writeFile(drivers, [
-    'import { SQL } from "bun";', 'import { Client } from "pg";',
-    `import { pgPort } from ${JSON.stringify(fileURLToPath(new URL("apps/pg-port.js", import.meta.url)))};`,
-    'import { views as bun, procedures as bunWrites } from "./bun-postgres/generated.js";',
-    'import { views as worker } from "./cloudflare-postgres/generated.js";',
+    'import { SQL } from "bun";',
+        'import postgres from "postgres";',
+    'import { Database } from "bun:sqlite";',
+    'import { views as bun, procedures as bunWrites, store as bunStore } from "./bun-postgres/generated.js";',
+    'import { store as sqliteStore } from "./bun-sqlite/generated.js";',
+    'import { store as d1Store } from "./cloudflare-d1/generated.js";',
+    'import { views as worker, store as workerStore } from "./cloudflare-postgres/generated.js";',
     'const sql = new SQL("postgres://localhost/x");',
     `await bun["purchase-totals"](sql, ${caller}, {});`,
     `await sql.begin(async (tx) => bun["purchase-totals"](tx, ${caller}, {}));`,
     `await bunWrites["create-purchase-pair"](sql, ${caller}, { requestNumber: "r", title: "t", amount: 1, approved: true, sortBucket: null, requestedUnits: 1, submittedAt: new Date(), neededOn: "2026-10-11", payload: "{}" });`,
-    `await worker["purchase-totals"](pgPort(new Client()), ${caller}, {});`,
+    `await worker["purchase-totals"](postgres("postgres://localhost/x"), ${caller}, {});`,
+    // the typed Store: where/orderBy/set are checked against the Schema
+    `const generated = bunStore(sql, ${caller});`,
+    'const store = generated.collection("purchase_requests");',
+    'const tuple = await generated.batch([store.update("id", { title: "t" }, { lock: 1 }), store.delete("id", { lock: 1 })]);',
+    'const title: string | null = tuple[0].title;',
+    'const deleted: void = tuple[1];',
+    '// @ts-expect-error tuple order preserves the delete result',
+    'const wrong: string = tuple[1];',
+    `const d1 = d1Store({} as import("@cloudflare/workers-types").D1Database, ${caller});`,
+    'await d1.batch([d1.collection("purchase_requests").delete("id", { lock: 1 })]);',
+    '// @ts-expect-error D1 has no interactive transactions',
+    'd1.transaction(async () => {});',
+    'await generated.transaction(async tx => {',
+    '  await tx.collection("purchase_requests").count();',
+    '  await tx.views["purchase-totals"]({});',
+    '  await tx.procedures["create-purchase-pair"]({ requestNumber: "r", title: "t", amount: 1, approved: true, sortBucket: null, requestedUnits: 1, submittedAt: new Date(), neededOn: "2026-10-11", payload: "{}" });',
+    '  // @ts-expect-error tx has no batch',
+    '  tx.batch([]);',
+    '  // @ts-expect-error nested transaction is refused',
+    '  tx.transaction(async () => {});',
+    '}, { isolation: "read committed" });',
+    `await sqliteStore(new Database(":memory:"), ${caller}).transaction(async tx => tx.collection("purchase_requests").count());`,
+    `await workerStore(postgres("postgres://localhost/x"), ${caller}).transaction(async tx => tx.views["purchase-totals"]({}));`,
+    'const page = await store.find({ where: { approved: true, amount: { gte: 1 }, sortbucket: { in: ["a"] }, submittedat: { lt: new Date() } }, orderBy: "title", order: "desc", limit: 5, cursor: "c" });',
+    'const row: string | undefined = page.rows[0]?.title ?? undefined;',
+    'await store.update("id", { title: "t", payload: { a: 1 }, sortbucket: null }, { lock: 1 });',
+    '// @ts-expect-error json columns cannot be ordered by',
+    'await store.find({ orderBy: "payload" });',
+    '// @ts-expect-error version is no indexed column: ordering by it is a type error',
+    'await store.find({ orderBy: "version" });',
+    '// @ts-expect-error sortbucket is indexed but nullable: the keyset cursor has no NULL handling, so the type does not offer it',
+    'await store.find({ orderBy: "sortbucket" });',
+    '// @ts-expect-error the scope column is not a column of the Store: no orderBy, no row key',
+    'await store.find({ orderBy: "ownerid" });',
+    '// @ts-expect-error the scope and system columns are not writable',
+    'await store.update("id", { ownerid: "x", version: 3 }, { lock: 1 });',
+    '// @ts-expect-error a required, non-null column cannot be set to null',
+    'await store.update("id", { title: null }, { lock: 1 });',
+    '// @ts-expect-error a JSON column takes an object or array',
+    'await store.update("id", { payload: "text" }, { lock: 1 });',
+    'await store.insert({ requestnumber: "r", title: "t", amount: 1, approved: true, sortbucket: null, requestedunits: 1, submittedat: "2026-10-11T00:00:00Z", neededon: "2026-10-11", payload: {} });',
+    '// @ts-expect-error a required column is missing',
+    'await store.insert({ title: "t" });',
+    'await store.delete("id", { lock: 1 });',
+    '// @ts-expect-error unknown collection',
+    `bunStore(sql, ${caller}).collection("nope");`,
+    '// @ts-expect-error amount is a number',
+    'await store.update("id", { amount: "x" }, { lock: 1 });',
+    '// @ts-expect-error unknown column',
+    'await store.count({ nope: 1 });',
+    `await sqliteStore(new Database(":memory:"), ${caller}).collection("purchase_requests").findById("x");`,
   ].join("\n"));
   selectedFiles.push(drivers);
 });

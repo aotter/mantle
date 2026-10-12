@@ -1,9 +1,8 @@
 # Next development acceptance
 
 Read the accepted responsibility decision in `../../docs/next/contract.md`.
-The only artifact is a bare native query; the checked boundary was removed on
-2026-10-11 (see the contract). Do not reintroduce validators, codecs or row
-decoders into generated queries.
+The only artifact is a bare native query (see the contract). Do not reintroduce
+validators, codecs or row decoders into generated queries.
 
 Use native primitives and generation before adding request-time work. Bare typed
 queries accept application-validated inputs and a verified Caller. External

@@ -10,16 +10,23 @@
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
     "./contracts": "./dist/kernel/contracts.js",
+    "./binds": "./dist/kernel/binds.js",
+    "./store": "./dist/kernel/store.js",
+    "./dialect/sqlite": "./dist/kernel/dialect/sqlite.js",
+    "./dialect/postgres": "./dist/kernel/dialect/postgres.js",
+    "./driver/bun-sqlite": "./dist/kernel/driver/bun-sqlite.js",
+    "./driver/d1": "./dist/kernel/driver/d1.js",
+    "./driver/postgres": "./dist/kernel/driver/postgres.js",
     "./auth": "./dist/auth/caller.js",
     "./auth/adapter": "./dist/auth/adapter.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.lib.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.lib.json --removeComments --declaration false && tsc -p tsconfig.lib.json --emitDeclarationOnly",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test tests/*.test.ts && bun run check:size && bun scripts/check-package.ts",
     "generate": "bun src/infrastructure/cli.ts",
     "test:native": "bun scripts/verify-native.ts",
-    "bench": "bun scripts/bench.ts",
+    "bench": "bun scripts/verify-native.ts --bench",
     "check:size": "bun run build && bun scripts/check-size.ts",
     "check:package": "bun run build && bun scripts/check-package.ts"
   },
@@ -34,16 +41,15 @@
     "better-auth": { "optional": true }
   },
   "devDependencies": {
+    "@aotter/mantle": "workspace:*",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/test-utils": "1.7.7",
-    "better-auth": "catalog:",
-    "@aotter/mantle": "workspace:*",
-    "@types/node": "catalog:",
-    "@types/pg": "8.23.1",
     "@cloudflare/workers-types": "^5.20261008.1",
+    "@types/node": "catalog:",
+    "better-auth": "catalog:",
     "bun-types": "1.3.14",
-    "pg": "8.23.1",
+    "postgres": "3.4.7",
     "typescript": "catalog:",
     "wrangler": "4.137.0"
   }

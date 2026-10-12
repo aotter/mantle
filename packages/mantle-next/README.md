@@ -13,8 +13,8 @@ pnpm --filter @aotter/mantle-next generate cloudflare-d1 /tmp/purchase-generated
 
 Outputs include `generated.ts`, `schema.sql` and direct operation entries.
 Import a selected function from `views/<encoded-name>.ts` or
-`procedures/<encoded-name>.ts` (default export, with Input/Row or Input/Output
-types) to exclude other operations from the request bundle. Apply initial DDL explicitly to an
+`procedures/<encoded-name>.ts` (default export, with its types) to exclude other
+operations from the request bundle. Apply initial DDL explicitly to an
 empty development database; this artifact is not a destructive migration or a
 production convergence tool. Generation does no database I/O. Application code
 passes driver-ready parameters, a database handle (Bun.SQL `SQL` for PostgreSQL, `bun:sqlite`
@@ -22,45 +22,39 @@ Database, D1 binding) and a verified
 Caller to `views[name](db, caller, input)` or
 `procedures[name](db, caller, input)`.
 
-Default queries contain no validator, scalar decoder, row projection or generic
-database-error wrapper. Validate untrusted input before calling them; redact
-native errors at application transports (they are rethrown as they are). JSON binds are JSON text; SQLite bool
-and fixed numeric binds use native storage values. Bound fields
-must be supplied explicitly (null for absence). Rows use SQL names and official
-driver representations (PG int8 strings, SQLite 0/1 booleans), except declared
-date-time and date columns: the SQL returns them (Views and `RETURNING`) as ISO
-strings in UTC with six fractional digits and `YYYY-MM-DD` on every target, and
-inputs bound to them take the same ISO text (a valid `Date` also works for date-time); an offset-less
-timestamp or a nonexistent day is refused with `SQL_TYPE` before the write.
+Validate untrusted input before calling queries and redact native errors at application
+transports. The [query contract](../../docs/next/contract.md#revised-query-responsibility-decision-2026-10-11)
+defines driver-ready inputs, native results, date-time/date wire forms and failure handling.
 
-The first slice provides **full-result SQL functions**, not the old paginated
-View API. SQL Procedures return their existing `{ results }` shape and retain
-row expectations inside native atomic transactions. A single-statement Procedure
-is one atomic statement and runs without BEGIN/COMMIT (one PG round trip); a
-multi-statement Procedure uses SERIALIZABLE on PG through `begin()`, with no
-automatic retries. Never assume a lost commit answer means rollback after
-OUTCOME_UNKNOWN; reconcile first.
+Every Schema is also a typed **Store** collection, in the shape of a document-database driver:
+`store(db, caller).collection("purchase_requests")` with `findById`, `find` (AND-only `where`, keyset `cursor`), `first`,
+`count`, `insert(values)`, OCC `update(id, set, { lock })` and `delete(id, { lock })`. Rows, `where`, `set` and `orderBy` use the
+table's storage column names, lower-case (`requestnumber`, `created_at`), the keys a generated View returns; the generated types
+state column names, value types and the writable columns, and the Store enforces the Schema's row rules (scope, TTL, version) but
+**not** a View's or Procedure's `requires`: authorize before calling it. Design, limits and what the runtime still refuses are in
+[ADR-0045](../../docs/adr/0045-next-runtime-core.md).
 
-Pass Bun's pooled `SQL` to multi-statement Procedures: they open their own
-transaction, and Bun refuses `begin` inside another.
+A Store-only purchase Worker retains 1,450 gzip bytes of generated operations (Bun 1.3.14, minified); the existing bound operation API stays intact.
 
-PostgreSQL drivers other than Bun.SQL implement the two-method `Postgres` shape
-from `@aotter/mantle-next/contracts`. For node-postgres on Workers/Hyperdrive,
-see `tests/apps/pg-port.ts`: hand it one connected Client per request; `begin`
-must keep every statement on that client and COMMIT only after the callback. Procedures return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
+## Store transactions
+
+Writes are lazy thenables: await `collection.insert/update/delete(...)` to execute once,
+or pass unused Writes from the same Store to `store.batch([...])` for atomic results in input order;
+a stale lock, excluded row or unique clash rolls back the whole batch with `CONFLICT`.
+A batch step cannot use a previous step's result. D1 supports only batch.
+On bun:sqlite and PostgreSQL, `store.transaction(async tx => { ... })` binds `collection`, `views`
+and `procedures` to one transaction: resolve commits, throw rolls back; nested transactions and `tx.batch` are refused.
+PostgreSQL defaults to serializable; `{ isolation: "read committed" }` selects another level. There is no automatic retry.
+SQLite uses BEGIN IMMEDIATE and queues all Store/generated driver calls on the same Database until COMMIT/ROLLBACK;
+Inside a transaction callback the outer Store or handle passed to a Mantle driver throws `INPUT_VALIDATION_FAILED`; use `tx`.
+
+Views return full SQL results; Procedures return `{ results }`. Their atomicity and
+uncertain-write outcomes follow the [query contract](../../docs/next/contract.md#revised-query-responsibility-decision-2026-10-11).
+
+PostgreSQL handles (Bun.SQL, postgres.js) satisfy the two-method `Postgres` shape as they are; see the [contract](../../docs/next/contract.md).
+Procedures return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
 declarations requiring them fail generation. See the complete
 [compatibility ledger](../../docs/next/compatibility.md).
-
-There is no old-runtime fallback, request-time plan verification, dynamic query
-compiler, custom pool, lock polling or hook sandbox. Boundary validation belongs to the
-application. Known output
-names and bindings are emitted as straight-line code. Per-query PG wire metadata
-is needed for computed SQL values whose native type is only known from the result.
-
-PostgreSQL session settings (DateStyle ISO/YMD, IntervalStyle postgres, TimeZone UTC,
-standard_conforming_strings on, extra_float_digits 1, a positive statement_timeout) are
-deployment configuration on the ROLE or DATABASE; Hyperdrive does not keep client SETs.
-Generated functions neither set nor verify them. See the [contract](../../docs/next/contract.md).
 
 Checks:
 

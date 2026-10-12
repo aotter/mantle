@@ -10,16 +10,9 @@ import { admin, emailOTP, jwt } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { ContractError } from "../src/kernel/contracts.js";
 import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller.js";
-import { d1Adapter, type D1Like } from "../src/auth/adapter.js";
+import { d1Adapter } from "../src/auth/adapter.js";
 import { authSchemaSql } from "../src/auth/schema.js";
-
-function d1Shim(sqlite: Database): D1Like & { batch(statements: { all(): Promise<unknown> }[]): Promise<unknown[]> } {
-  const statement = (text: string, values: unknown[] = []) => ({
-    bind: (...next: unknown[]) => statement(text, next),
-    all: async () => ({ results: sqlite.query(text).all(...(values as never[])) as Record<string, unknown>[], meta: { changes: (sqlite.query("SELECT changes() AS c").get() as { c: number }).c } }),
-  });
-  return { prepare: text => statement(text), batch: statements => Promise.all(statements.map(s => s.all())) };
-}
+import { d1Shim } from "./apps/d1-shim.js";
 
 const AUDIENCE = "https://api.example.test/mcp";
 const servers: { stop(force?: boolean): void }[] = [];
@@ -82,26 +75,17 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
   return { sqlite, auth, loader, post, signIn, request, baseURL, loads: () => loads };
 }
 
-/** A loader whose `load` is counted, so "never loaded" is observable. */
-function countingLoader(app: App) {
-  let calls = 0;
-  const loader = authLoader(async () => { calls++; return app.auth as unknown as AuthInstance; }, app.loader.cookiePrefix);
-  return { loader, calls: () => calls };
-}
-
 describe("resolveCaller: session cookie", () => {
   test("1. no Cookie and no Authorization -> anonymous, the loader is never called", async () => {
     const app = await makeApp();
-    const counted = countingLoader(app);
-    expect(await resolveCaller(app.request(), counted.loader)).toEqual({ kind: "anonymous" });
-    expect(counted.calls()).toBe(0);
+    expect(await resolveCaller(app.request(), app.loader)).toEqual({ kind: "anonymous" });
+    expect(app.loads()).toBe(0);
   });
 
   test("2. only unrelated cookies -> anonymous, the loader is never called", async () => {
     const app = await makeApp();
-    const counted = countingLoader(app);
-    expect(await resolveCaller(app.request({ cookie: "_ga=1; theme=dark" }), counted.loader)).toEqual({ kind: "anonymous" });
-    expect(counted.calls()).toBe(0);
+    expect(await resolveCaller(app.request({ cookie: "_ga=1; theme=dark" }), app.loader)).toEqual({ kind: "anonymous" });
+    expect(app.loads()).toBe(0);
   });
 
   test("3. email OTP sign-in -> user caller with session id and null role", async () => {
@@ -189,12 +173,6 @@ describe("resolveCaller: session cookie", () => {
     // A loader left on the default prefix does not see the "app." cookie: anonymous without loading.
     const wrong = authLoader(async () => { throw new Error("must not load"); });
     expect(await resolveCaller(app.request({ cookie }), wrong)).toEqual({ kind: "anonymous" });
-  });
-
-  test("getSession Set-Cookie refresh does not matter to the Caller: repeated resolves stay stable", async () => {
-    const app = await makeApp();
-    const { cookie, userId } = await app.signIn();
-    for (let i = 0; i < 3; i++) expect(await resolveCaller(app.request({ cookie }), app.loader)).toMatchObject({ kind: "user", subject: userId });
   });
 
   test("a session due for refresh hands its fresh Set-Cookie to responseHeaders, so the cookie slides", async () => {

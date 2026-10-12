@@ -36,20 +36,20 @@ Every follow-up must name its target matrix, acceptance tests and owner before c
 | Explicit OCC and expected affected counts | Slice, under review | Caller-observed token, row-zero conflict, foreign-row nondisclosure, native in-transaction assertions; no retries. Generator/contracts |
 | Scoped inserts/upsert and native uniqueness | Slice via compiler/DDL | Ownership injection, generated identities, scoped conflict targets, create race and expired-row policy. Generator/infrastructure |
 | PostgreSQL session preconditions and bounded statements | Slice: explicit native deployment requirements | ISO/postgres text formats, UTC casts, standard strings, float precision and native default timeout; Hyperdrive role/database configuration; no per-request settings manager. Infrastructure/host |
-| Native transaction/error outcomes | Slice, under review | D1 atomic batch, SQLite native transaction, PG SERIALIZABLE via Bun.SQL-shaped begin() (single-statement Procedures autocommit at default isolation; node-postgres through an application adapter); uncertain COMMIT and rollback failure, safe classification, disposal ownership. Generator/contracts/host |
+| Native transaction/error outcomes | Slice, under review | D1 atomic batch, SQLite native transaction, PG SERIALIZABLE via Bun.SQL-shaped begin() (single-statement Procedures autocommit at default isolation; other drivers through an application adapter); uncertain COMMIT and rollback failure, safe classification, disposal ownership. Generator/contracts/host |
 | Ref Procedures and typed handler context | Refused | Caller/cause propagation, input/output checks, application side effects, nested invocation depth. Generator |
 | Dynamic authorization guards | Refused | Validated input, read-only Store/no-invoke, same caller and guard ordering. Generator |
 | Before and after lifecycle hooks | Refused via Trigger rejection | Ordered visible snapshots, veto versus independent commits; after events only for committed affected rows; stable event identity. Generator |
 | Publishing writes and complete-entry state transitions | Refused | Draft/edit/protected-delete transitions; full-entry checks and independently required version pinning. Generator |
 | Translation constraints and translated entry operations | Open | Parent/group constraints and publication semantics; refuse reachable unsupported writes in interim. Generator |
 | Typed Schema readers (`get`, `first`, `find`) | Open; no reader API | Predicate grammar, ordering, bounds, metadata decode and page behavior; finite benchmark shapes are insufficient. Generator |
-| Store JSON row/set mutation API | Open; inline SQL is not this API | Projection, write result shapes, caller policy, validation and atomic arrays. Generator |
+| Store JSON row/set mutation API | Spike: typed `store(db, caller).collection(schema)` (find/first/count/insert/update/delete with OCC, atomic batch, interactive transactions on SQLite/PG; no `requires` check); otherwise open | Projection, write result shapes, caller policy, validation and atomic arrays. Generator |
 | TTL maintenance | Open; read visibility alone is insufficient | System-only sweep, candidate count/cursor distinct from deleted RETURNING rows, bounded continuation and hooks. Generator |
 | Full-text, geo and other target-specific SQL facilities | Partial compiler availability; geo output refused | Explicit supported matrix, required auxiliary schema/index artifacts and native behavior; refuse omissions. Generator/infrastructure |
 | HTTP and schedule Triggers | Refused via Trigger rejection | Validated invocation, authenticated source, schedule readiness and cause/depth rules. Infrastructure/generator |
 | Initial schema DDL | Slice: explicit SQL artifact | Native CHECK/unique constraints, system assertion table, auxiliary structures and correct target application. Infrastructure |
 | Existing-storage migration/convergence | Open | Ownership ledger/fingerprint checks, collision/data-loss protection, partial migration recovery; initial CREATE is not convergence. Infrastructure |
-| Stable diagnostics and observation/cause | Partial: native errors rethrown, uncertain outcomes classified | Safe codes/paths/failure facts across transports; preserve uncertain outcomes and internal-only causes/SQL; no accidental native error exposure. Contracts/surfaces |
+| Stable diagnostics and observation/cause | Partial: native errors rethrown (a unique clash is CONFLICT), uncertain outcomes classified | Safe codes/paths/failure facts across transports; preserve uncertain outcomes and internal-only causes/SQL; no accidental native error exposure. Contracts/surfaces |
 | REST/Web public Views and HTTP Procedures | Open; no composition | Existing envelopes, authorization, bounds, paging, caching/response contracts and complete body parity. Surfaces |
 | MCP tools/resources/apps | Open; no composition | Actual official SDK validation, catalogs, role filtering, full results/error envelopes and resource metadata. Surfaces |
 | Admin operations, bootstrap, CSV and interaction bindings | Open; no composition | Scoped complete responses, paging/CSV, caller-observed OCC binding and recovery, role filtering. Surfaces |
@@ -61,3 +61,8 @@ Every follow-up must name its target matrix, acceptance tests and owner before c
 First-slice acceptance requires actual generated applications on all four targets, matched native work and complete result/state assertions. Native comparison alone is not a 0.2 contract oracle: verify typed outputs and failures against the baseline on the same engine without coercions that hide discrepancies. Record unresolved findings and refusals explicitly.
 
 Before claiming a row compatible, add meaningful adversarial evidence, including foreign ownership, invalid inputs, later-statement rollback, stale OCC, and native failure paths where relevant. Before replacing 0.2, resolve the entire ledger or publish explicitly approved breaking API decisions. Unsupported-feature refusal and benchmark speed are neither proof of compatibility nor permission to close the full issue.
+
+Open gates:
+
+- Paging and cursor API compatibility (the Store View paging rows above).
+- Workers startup CPU and first-use regression gates (see [size and startup](size-and-startup.md)), and native performance acceptance with retained raw samples (`packages/mantle-next/AGENTS.md`).

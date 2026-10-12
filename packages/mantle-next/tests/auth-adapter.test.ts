@@ -7,17 +7,9 @@ import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
 import type { BetterAuthOptions } from "@better-auth/core";
-import { bunSqlAdapter, d1Adapter, type D1Like } from "../src/auth/adapter.js";
+import { bunSqlAdapter, d1Adapter } from "../src/auth/adapter.js";
+import { d1Shim } from "./apps/d1-shim.js";
 import { authSchemaSql } from "../src/auth/schema.js";
-
-/** The slice of D1 the adapter uses, over bun:sqlite (D1 runs SQLite with foreign keys enforced). */
-function d1Shim(sqlite: Database): D1Like & { batch(statements: { all(): Promise<unknown> }[]): Promise<unknown[]> } {
-  const statement = (text: string, values: unknown[] = []) => ({
-    bind: (...next: unknown[]) => statement(text, next),
-    all: async () => ({ results: sqlite.query(text).all(...(values as never[])) as Record<string, unknown>[], meta: { changes: (sqlite.query("SELECT changes() AS c").get() as { c: number }).c } }),
-  });
-  return { prepare: text => statement(text), batch: statements => Promise.all(statements.map(s => s.all())) };
-}
 
 // The official suite is written for vitest: `test.skipIf(c)(name, { timeout }, ({ onTestFailed, skip }) => ...)`. Bun maps the
 // "vitest" import to bun:test, which passes no such context, so wrap that one call shape to supply it (`skip` only returns
@@ -84,102 +76,67 @@ if (pgUrl) {
   (await testAdapter({ adapter: () => bunSqlAdapter(pg.sql), runMigrations: pg.reset, tests: suites, onFinish: pg.drop })).execute();
 }
 
-/** consumeOne guards OTP consumption and incrementOne attempt counting: one statement, at most one winner. */
-function atomicity(label: string, setup: () => Promise<{ adapter: ReturnType<ReturnType<typeof d1Adapter>>; done?: () => Promise<void> }>, enabled = true) {
-  describe.skipIf(!enabled)(`${label}: single-statement guards`, () => {
-    test("the same code consumed twice concurrently succeeds once", async () => {
-      const { adapter, done } = await setup();
-      await adapter.create({ model: "verification", data: { identifier: "otp:a@b.c", value: "123456", expiresAt: new Date(Date.now() + 60_000) } });
-      const where = [{ field: "identifier", value: "otp:a@b.c" }];
-      const results = await Promise.all([adapter.consumeOne({ model: "verification", where }), adapter.consumeOne({ model: "verification", where })]);
-      expect(results.filter(Boolean)).toHaveLength(1);
-      expect(await adapter.count({ model: "verification" })).toBe(0);
-      await done?.();
-    });
-    test("consumeOne deletes at most one of several matching rows", async () => {
-      const { adapter, done } = await setup();
-      for (const value of ["1", "2", "3"]) await adapter.create({ model: "verification", data: { identifier: "same", value, expiresAt: new Date(Date.now() + 60_000) } });
-      expect(await adapter.consumeOne({ model: "verification", where: [{ field: "identifier", value: "same" }] })).not.toBeNull();
-      expect(await adapter.count({ model: "verification" })).toBe(2);
-      await done?.();
-    });
-    test("incrementOne with a guard counts each attempt once", async () => {
-      const { adapter, done } = await setup();
-      await adapter.create({ model: "rateLimit", data: { key: "k", count: 0, lastRequest: 1 } });
-      const attempt = () => adapter.incrementOne({ model: "rateLimit", where: [{ field: "key", value: "k" }, { field: "count", operator: "lt", value: 1 }], increment: { count: 1 } });
-      const results = await Promise.all([attempt(), attempt(), attempt()]);
-      expect(results.filter(Boolean)).toHaveLength(1);
-      expect(await adapter.findOne<{ count: number }>({ model: "rateLimit", where: [{ field: "key", value: "k" }] })).toMatchObject({ count: 1 });
-      await done?.();
-    });
-  });
-}
-
-/** Behaviour of the native SQL itself: number fields, join projection, per-parent join limits. */
-function sql(label: string, setup: (options: BetterAuthOptions) => Promise<{ adapter: ReturnType<ReturnType<typeof d1Adapter>>; done?: () => Promise<void> }>, enabled = true) {
-  const joinOptions: BetterAuthOptions = { rateLimit: { storage: "database" }, advanced: { database: { joins: true } } };
-  describe.skipIf(!enabled)(`${label}: native SQL behaviour`, () => {
-    test("a bigint number field round-trips as a JS number", async () => {
-      const { adapter, done } = await setup(joinOptions);
-      const lastRequest = Date.now();
-      await adapter.create({ model: "rateLimit", data: { key: "k", count: 1, lastRequest } });
-      const row = await adapter.findOne<{ lastRequest: number; count: number }>({ model: "rateLimit", where: [{ field: "key", value: "k" }] });
-      expect(typeof row!.lastRequest).toBe("number");
-      expect(row!.lastRequest + 1000 - lastRequest).toBe(1000);
-      expect(typeof row!.count).toBe("number");
-      await done?.();
-    });
-    test("select with join keeps the id, join key and sort column in the primary query", async () => {
-      const { adapter, done } = await setup(joinOptions);
-      const expiresAt = new Date(Date.now() + 60_000);
-      for (const email of ["b@x.io", "a@x.io"]) {
-        const user = await adapter.create<{ id: string }>({ model: "user", data: { name: email, email, emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
-        for (let i = 0; i < 2; i++) await adapter.create({ model: "session", data: { token: `${email}${i}`, userId: user.id, expiresAt, createdAt: new Date(), updatedAt: new Date() } });
-      }
-      const rows = await adapter.findMany<{ name: string; email?: string; session: unknown[] }>({ model: "user", select: ["name"], sortBy: { field: "email", direction: "asc" }, limit: 10, join: { session: true } });
-      expect(rows.map(r => r.name)).toEqual(["a@x.io", "b@x.io"]);
-      expect(rows.map(r => r.session.length)).toEqual([2, 2]);
-      expect(rows[0]!.email).toBeUndefined();
-      await done?.();
-    });
-    test("a one-to-many join returns at most `limit` rows per parent, chosen in SQL", async () => {
-      const { adapter, done } = await setup(joinOptions);
-      const expiresAt = new Date(Date.now() + 60_000);
-      const make = async (email: string, sessions: number) => {
-        const user = await adapter.create<{ id: string }>({ model: "user", data: { name: email, email, emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
-        for (let i = 0; i < sessions; i++) await adapter.create({ model: "session", data: { token: `${email}${i}`, userId: user.id, expiresAt, createdAt: new Date(), updatedAt: new Date() } });
-      };
-      await make("many@x.io", 7);
-      await make("few@x.io", 2);
-      await make("none@x.io", 0);
-      const rows = await adapter.findMany<{ email: string; session: unknown[] }>({ model: "user", sortBy: { field: "email", direction: "asc" }, limit: 10, join: { session: { limit: 3 } } });
-      expect(rows.map(r => [r.email, r.session.length])).toEqual([["few@x.io", 2], ["many@x.io", 3], ["none@x.io", 0]]);
-      await done?.();
-    });
-  });
-}
-sql("D1", async options => {
-  resetSqlite(options);
-  return { adapter: d1Adapter(d1)(options) };
-});
-sql("Bun.SQL", async options => {
-  const pg = await pgSchema();
-  await pg.reset(options);
-  return { adapter: bunSqlAdapter(pg.sql)(options) as never, done: pg.drop };
-}, !!pgUrl);
-
-test("delete of a missing row resolves", async () => {
-  resetSqlite({});
-  await d1Adapter(d1)({}).delete({ model: "user", where: [{ field: "id", value: "missing" }] });
+type Adapter = ReturnType<ReturnType<typeof d1Adapter>>;
+/** One database per test (a bun:sqlite D1 shim, or a fresh PostgreSQL schema) with the adapter built for `options`. */
+const backends: [label: string, setup: (options: BetterAuthOptions) => Promise<{ adapter: Adapter; done?: () => Promise<void> }>, enabled: boolean][] = [
+  ["D1", async options => { resetSqlite(options); return { adapter: d1Adapter(d1)(options) }; }, true],
+  ["Bun.SQL", async options => { const pg = await pgSchema(); await pg.reset(options); return { adapter: bunSqlAdapter(pg.sql)(options) as never, done: pg.drop }; }, !!pgUrl],
+];
+const expiresAt = () => new Date(Date.now() + 60_000);
+const makeUser = (adapter: Adapter, email: string, sessions = 0) => adapter.create<{ id: string }>({ model: "user", data: { name: email, email, emailVerified: true, createdAt: new Date(), updatedAt: new Date() } }).then(async user => {
+  for (let i = 0; i < sessions; i++) await adapter.create({ model: "session", data: { token: `${email}${i}`, userId: user.id, expiresAt: expiresAt(), createdAt: new Date(), updatedAt: new Date() } });
+  return user;
 });
 
-const options: BetterAuthOptions = { rateLimit: { storage: "database" } };
-atomicity("D1", async () => {
-  resetSqlite(options);
-  return { adapter: d1Adapter(d1)(options) };
+for (const [label, setup, enabled] of backends) describe.skipIf(!enabled)(`${label}: native SQL`, () => {
+  const rateLimit: BetterAuthOptions = { rateLimit: { storage: "database" } };
+  const joins: BetterAuthOptions = { ...rateLimit, advanced: { database: { joins: true } } };
+  /** Runs `body` on a fresh database and always drops it. */
+  const run = (options: BetterAuthOptions, body: (adapter: Adapter) => Promise<void>) => async () => { const { adapter, done } = await setup(options); try { await body(adapter); } finally { await done?.(); } };
+
+  // consumeOne guards OTP consumption and incrementOne attempt counting: one statement, at most one winner.
+  test("the same code consumed twice concurrently succeeds once", run(rateLimit, async adapter => {
+    await adapter.create({ model: "verification", data: { identifier: "otp:a@b.c", value: "123456", expiresAt: expiresAt() } });
+    const where = [{ field: "identifier", value: "otp:a@b.c" }];
+    const results = await Promise.all([adapter.consumeOne({ model: "verification", where }), adapter.consumeOne({ model: "verification", where })]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await adapter.count({ model: "verification" })).toBe(0);
+  }));
+  test("consumeOne deletes at most one of several matching rows", run(rateLimit, async adapter => {
+    for (const value of ["1", "2", "3"]) await adapter.create({ model: "verification", data: { identifier: "same", value, expiresAt: expiresAt() } });
+    expect(await adapter.consumeOne({ model: "verification", where: [{ field: "identifier", value: "same" }] })).not.toBeNull();
+    expect(await adapter.count({ model: "verification" })).toBe(2);
+  }));
+  test("incrementOne with a guard counts each attempt once", run(rateLimit, async adapter => {
+    await adapter.create({ model: "rateLimit", data: { key: "k", count: 0, lastRequest: 1 } });
+    const attempt = () => adapter.incrementOne({ model: "rateLimit", where: [{ field: "key", value: "k" }, { field: "count", operator: "lt", value: 1 }], increment: { count: 1 } });
+    expect((await Promise.all([attempt(), attempt(), attempt()])).filter(Boolean)).toHaveLength(1);
+    expect(await adapter.findOne<{ count: number }>({ model: "rateLimit", where: [{ field: "key", value: "k" }] })).toMatchObject({ count: 1 });
+  }));
+
+  // number fields, join projection, per-parent join limits
+  test("a bigint number field round-trips as a JS number", run(joins, async adapter => {
+    const lastRequest = Date.now();
+    await adapter.create({ model: "rateLimit", data: { key: "k", count: 1, lastRequest } });
+    const row = await adapter.findOne<{ lastRequest: number; count: number }>({ model: "rateLimit", where: [{ field: "key", value: "k" }] });
+    expect(typeof row!.lastRequest).toBe("number");
+    expect(row!.lastRequest + 1000 - lastRequest).toBe(1000);
+    expect(typeof row!.count).toBe("number");
+  }));
+  test("select with join keeps the id, join key and sort column in the primary query", run(joins, async adapter => {
+    for (const email of ["b@x.io", "a@x.io"]) await makeUser(adapter, email, 2);
+    const rows = await adapter.findMany<{ name: string; email?: string; session: unknown[] }>({ model: "user", select: ["name"], sortBy: { field: "email", direction: "asc" }, limit: 10, join: { session: true } });
+    expect(rows.map(r => r.name)).toEqual(["a@x.io", "b@x.io"]);
+    expect(rows.map(r => r.session.length)).toEqual([2, 2]);
+    expect(rows[0]!.email).toBeUndefined();
+  }));
+  test("a one-to-many join returns at most `limit` rows per parent, chosen in SQL", run(joins, async adapter => {
+    await makeUser(adapter, "many@x.io", 7);
+    await makeUser(adapter, "few@x.io", 2);
+    await makeUser(adapter, "none@x.io");
+    const rows = await adapter.findMany<{ email: string; session: unknown[] }>({ model: "user", sortBy: { field: "email", direction: "asc" }, limit: 10, join: { session: { limit: 3 } } });
+    expect(rows.map(r => [r.email, r.session.length])).toEqual([["few@x.io", 2], ["many@x.io", 3], ["none@x.io", 0]]);
+  }));
+  // the official suite's "should not throw on record not found" is disabled above: bun reads a promise resolving to undefined as a failure
+  test("delete of a missing row resolves", run({}, async adapter => { await adapter.delete({ model: "user", where: [{ field: "id", value: "missing" }] }); }));
 });
-atomicity("Bun.SQL", async () => {
-  const pg = await pgSchema();
-  await pg.reset(options);
-  return { adapter: bunSqlAdapter(pg.sql)(options) as never, done: pg.drop };
-}, !!pgUrl);
