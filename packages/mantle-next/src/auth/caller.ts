@@ -88,20 +88,22 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
   const { getSessionCookie, splitSetCookieHeader } = await import("better-auth/cookies");
   if (!getSessionCookie(request, { cookiePrefix: auth.cookiePrefix })) return { kind: "anonymous" };
   const instance = await auth.get();
-  const { response: found } = await instance.api.getSession({ headers: request.headers, query: { disableCookieCache: true, disableRefresh: true }, returnHeaders: true });
+  const mirror = !!instance.options.secondaryStorage;
+  const initial = await instance.api.getSession({ headers: request.headers, query: { disableCookieCache: true, disableRefresh: mirror || !options.responseHeaders }, returnHeaders: true });
+  const found = initial.response;
   if (!found) return { kind: "anonymous" };
   // disableCookieCache bypasses the browser cookie cache, not Better Auth's secondaryStorage. KV can retain an old
   // role/session after failed or delayed cache invalidation; authorization uses the primary database every time.
   if (!instance.options.session?.storeSessionInDatabase && instance.options.secondaryStorage)
     throw new ContractError("AUTH_CONFIGURATION_ERROR", "Caller resolution with secondaryStorage requires session.storeSessionInDatabase: true.", "auth:session");
-  const context = await instance.$context as { adapter: { findOne<T>(input: { model: string; where: { field: string; value: string }[] }): Promise<T | null> } };
-  const live = await context.adapter.findOne<{ userId: string; expiresAt: Date | string | number }>({ model: "session", where: [{ field: "id", value: found.session.id }] });
+  const context = await instance.$context as import("@better-auth/core").AuthContext;
+  const live = await context.adapter.findOne<{ userId: string; expiresAt: Date | string | number; user: User | null }>({ model: "session", where: [{ field: "id", value: found.session.id }], join: { user: true } });
   if (!live || live.userId !== found.user.id || !(new Date(live.expiresAt).getTime() > Date.now())) return { kind: "anonymous" };
-  const user = await context.adapter.findOne<User>({ model: "user", where: [{ field: "id", value: live.userId }] });
+  const user = live.user;
   if (!user || isBanned(user)) return { kind: "anonymous" };
   // Never let a stale secondary snapshot extend an already-expired primary session before the check above.
   if (options.responseHeaders) {
-    const refreshed = await instance.api.getSession({ headers: request.headers, query: { disableCookieCache: true }, returnHeaders: true });
+    const refreshed = mirror ? await instance.api.getSession({ headers: request.headers, query: { disableCookieCache: true }, returnHeaders: true }) : initial;
     if (!refreshed.response || refreshed.response.session.id !== found.session.id || refreshed.response.user.id !== user.id) return { kind: "anonymous" };
     for (const cookie of refreshed.headers?.getSetCookie().flatMap(splitSetCookieHeader) ?? []) options.responseHeaders.append("set-cookie", cookie);
   }

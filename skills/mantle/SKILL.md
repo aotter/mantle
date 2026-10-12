@@ -39,6 +39,9 @@ the linked SDK checkout for the supported/refused list before choosing declarati
 planned features require their implementation first. Keep auth behind
 `authLoader(() => import(...))` to pass the startup guard. Standalone publishing
 is pending; do not install the experiment from npm or migrate Core unless asked.
+Pass outgoing `responseHeaders` to `resolveCaller` so Better Auth's session cookie
+can slide. Native auth adapters use joins by default; keep the joined primary
+session/user check, including before any refresh from secondary storage.
 
 Use the workflow **generate → typecheck → implement listed handlers**: run
 `mantle generate`, then `tsc --noEmit`. Implement every printed `Handlers` key

@@ -81,7 +81,7 @@ export default {
 };
 ```
 
-`resolveCaller` uses Better Auth's own API only. With no credentials it never loads Better Auth. A session cookie is
+`resolveCaller` uses Better Auth's session and adapter APIs. With no credentials it never loads Better Auth. A session cookie is
 validated by `auth.api.getSession` without the cookie cache, so revocation and role changes apply on the next request.
 A `Bearer` access token is verified by the official resource client for `audience`, and the user (role, ban) is read
 from the database on every request. An invalid token is `UNAUTHENTICATED`, never anonymous. Public routes must not call it.
@@ -104,11 +104,25 @@ The metafile startup guard rejects static Better Auth imports; keep auth behind
 (the tables depend on plugins and options, not env values; nothing is constructed) and appends Better Auth's tables to `schema.sql`. Nothing runs DDL at runtime; migrations
 are yours (#1463).
 
-Cookie-session authorization performs two primary-database reads (live session and user), in addition to Better Auth's session validation. The first SDK validation disables refresh; a second SDK call may refresh the cookie only after live checks, when responseHeaders is supplied. `disableCookieCache` alone does not bypass secondaryStorage; these reads prevent delayed/failed KV invalidation from preserving a revoked session, old staff role or ban state.
+The native auth adapters enable database joins by default; an explicit
+`advanced.database.joins: false` retains Better Auth's separate-read fallback.
+Cookie authorization uses one session API call plus one joined primary session/user
+check: two reads with the default native adapters. Passing `responseHeaders` lets
+that session call slide the cookie; a due refresh adds one UPDATE. Cookie headers
+are forwarded only after the primary expiry, user, role and ban checks pass.
+
+With `secondaryStorage`, the first session call disables refresh. The joined
+primary check must pass before a second SDK call may refresh and forward cookies.
+A cache hit needs one primary read for the caller guard; cache authority checks,
+cache misses or an adapter that emulates joins may require more. `disableCookieCache` does not bypass
+secondaryStorage. These checks prevent stale KV snapshots from reviving expired
+or deleted sessions or preserving old staff/ban state.
 
 `@aotter/mantle/auth/admin` exports `guardAuthAdminRequest(request, resolveFreshCaller, basePath?)` for selected auth transports. It resolves authority only for raw/encoded admin paths, requires a staff cookie session and checks mutation origin. Both the app-owned template and OAuth routes use this same guard.
 
-With the authority-bound seam, a cookie Caller without responseHeaders uses three primary reads: the SDK session/user join, then the explicit session and user checks. A requested sliding refresh can add one SDK join after verification. SDK session listing performs one active-index read plus one joined read per live session (N+1; two sessions use three reads). It has the SDK's full-list semantics, so apps with many sessions should account for that read cost. KV is an optional mirror, not a latency improvement.
+SDK session listing performs one active-index read plus one joined read per live
+session (N+1; two sessions use three reads). It has the SDK's full-list semantics,
+so apps with many sessions should account for that read cost.
 
 Next's currently generated role vocabulary is `staff`. Generation rejects owner/editor/contributor in `ctx.staff`; migrate those 0.2 user roles and requires declarations to `staff`, or retain them in Cloud's explicit role sets. Caller.role remains an open string for application-owned ordinary roles; this does not add generated staff permissions for those names.
 

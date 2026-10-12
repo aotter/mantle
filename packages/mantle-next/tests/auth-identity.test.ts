@@ -277,7 +277,7 @@ test("authority-bound KV cannot resurrect expired sessions and session listing r
     expect(!after || Date.parse(after.expiresAt) < Date.now()).toBe(true);
     expect(await resolveCaller(new Request("http://localhost/private", { headers: a.headers }), authLoader(async () => a.auth), { responseHeaders: new Headers() })).toEqual({ kind: "anonymous" });
 });
-test("authority-bound cookie reads and two-session listing have explicit database counts", async () => {
+test("authority cache plus joined caller guard and two-session listing have explicit database counts", async () => {
     const values = new Map<string, string>();
     const a = await app(undefined, { prefix: "counts", cache: { get: async (k) => values.get(k) ?? null, set: async (k, v) => { values.set(k, v); }, delete: async (k) => { values.delete(k); } } });
     await a.ctx.internalAdapter.createSession("s", false);
@@ -286,7 +286,7 @@ test("authority-bound cookie reads and two-session listing have explicit databas
     a.ctx.adapter.findOne = async (...args) => { reads++; return one(...args); };
     a.ctx.adapter.findMany = async (...args) => { reads++; return many(...args); };
     expect(await resolveCaller(new Request("http://localhost/private", { headers: a.headers }), authLoader(async () => a.auth))).toMatchObject({ role: "staff" });
-    expect(reads).toBe(3);
+    expect(reads).toBe(2);
     reads = 0;
     expect(await a.ctx.internalAdapter.listSessions("s")).toHaveLength(2);
     expect(reads).toBe(3);
