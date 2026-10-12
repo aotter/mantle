@@ -5,7 +5,7 @@
   "type": "module",
   "sideEffects": false,
   "engines": { "node": ">=22.14.0" },
-  "files": ["dist", "README.md"],
+  "files": ["dist/**/*.js", "dist/{auth/{adapter,caller},domain/model,infrastructure/generate,kernel/{binds,contracts,scalars,store,dialect/{common,postgres,sqlite},driver/{bun-sqlite,d1,postgres}},usecase/generate}.d.ts", "README.md"],
   "bin": { "mantle": "./dist/infrastructure/cli.js" },
   "dependencies": { "esbuild": "0.28.1", "jsonc-parser": "3.3.1" },
   "exports": {
@@ -23,7 +23,7 @@
     "./auth/adapter": "./dist/auth/adapter.js"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.lib.json --removeComments --declaration false && tsc -p tsconfig.lib.json --emitDeclarationOnly",
+    "build": "tsc --noEmit -p tsconfig.lib.json && node scripts/build.mjs && tsc -p tsconfig.lib.json --emitDeclarationOnly --removeComments",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun run build && bun test tests/*.test.ts && bun scripts/check-size.ts && bun scripts/check-package.ts",
     "generate": "bun src/infrastructure/cli.ts",

@@ -1,5 +1,5 @@
 /** Build-time assembly only. None of these imports enter generated applications. */
-import { compilePlan, viewOutputs, type ManifestSourceSet } from "@aotter/mantle/spec";
+import { compilePlan, viewOutputs, type ManifestSourceSet, type SqlNode, type SqlSchemaDef } from "@aotter/mantle/spec";
 import * as sqliteCompiler from "@aotter/mantle/d1/compile";
 import * as postgresCompiler from "@aotter/mantle/postgres/compile";
 import { d1Dialect } from "../../../mantle/dist/d1/dialect.js";
@@ -20,7 +20,7 @@ import type { BetterAuthOptions } from "better-auth/types";
 import { authSchemaSql } from "../auth/schema.js";
 
 /** Core's own new-entry-id lowering for a dialect, printed once as an SQL expression: the Store's inserts carry the same one its compiled INSERTs do. */
-export const coreNewId = (dialect: Pick<typeof d1Dialect, "print" | "lowering">, schemas: Parameters<NonNullable<typeof d1Dialect.print>>[1]): string =>
+export const coreNewId = (dialect: { print?(ast: SqlNode, schemas: Readonly<Record<string, SqlSchemaDef>>): string; lowering: { newId(): SqlNode } }, schemas: Readonly<Record<string, SqlSchemaDef>>): string =>
   dialect.print!({ SelectStmt: { targetList: [{ ResTarget: { val: dialect.lowering.newId() } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }, schemas).replace(/^SELECT /, "");
 
 // JSON, date-time and date inputs are driver-ready text. Declaring their parameter as text makes every driver send it verbatim:
