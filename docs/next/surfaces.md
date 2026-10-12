@@ -159,7 +159,35 @@ surface its generated `publish_<schema>`, `unpublish_<schema>` and
 `archive_<schema>` tools use the same snake-case naming rule, are staff-only
 and take `{ id, expectedVersion }` through the shared generated validation.
 
-The staff allowlist is `owner`, `editor`, `contributor`. MCP bodies are limited
+The OSS staff allowlist is `["staff"]`. MCP bodies are limited
 to 1 MiB (1,048,576 bytes). Resource metadata challenges use the origin of
 `request.url`; behind a proxy, the app must pass a Request with its public
 origin so the audience and metadata URL point to the client-visible service.
+
+### MCP catalogue and callbacks
+
+`mcp({ db, caller, handlers?, locale?, instructions?, serverInfo?, requiredScopes?,
+resourceMetadata?, onObservation?, onRefusal? })` keeps the SDK behind its first
+request. Locale defaults to `en`; localized titles/descriptions fall back to
+English, then their first entry. Views advertise `readOnlyHint`; Procedures use
+their declared MCP annotations. `instructions` is returned by initialize.
+The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
+`requiredScopes: []` disables that floor. An anonymous closed surface challenges
+from initialize, and every call in a batch is checked before any call runs.
+`resourceMetadata` overrides the challenge URL for reverse proxies.
+
+`onObservation` receives request refusals and invocation attempt/completion
+metadata, including duration and outcome. Its Caller and scopes are frozen copies.
+`onRefusal` receives credential/origin refusals. Neither callback receives request
+headers, bodies or tokens; delivery failures never change the business response
+and promises are not awaited. The application owns callback delivery.
+
+**Procedure output delta:** SQL Procedures retain the Next native `{ results }`
+contract rather than 0.2's authored output projection/validation; MCP advertises
+that object envelope, not the incompatible authored schema. Ref Procedures expose
+the application's typed return value and advertise their authored object output
+schema. The application owns ref output validation. MCP does not decode or
+revalidate native database rows. Business failures carry diagnostics in text;
+with an output schema they omit `structuredContent` to avoid validating an error
+against a success schema. Without one they also expose diagnostic structured
+content. MCP adds no prompts or non-UI resources.
