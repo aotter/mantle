@@ -26,7 +26,7 @@ const shared = {
   keywords: ["mantle", "cms", "agent-skills", "marketplace", "sdk"],
 };
 const version = shared.version;
-const policy = { installation: "AVAILABLE", authentication: "ON_INSTALL" };
+const policy = { installation: "AVAILABLE" };
 
 const manifests = {
   ".claude-plugin/plugin.json": shared,
@@ -40,7 +40,6 @@ const manifests = {
     ...shared,
     author: { ...shared.author, url: shared.homepage },
     skills: "./skills/",
-    mcpServers: "./.mcp.json",
     interface: {
       ...presentation.interface,
       websiteURL: shared.homepage,

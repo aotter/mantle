@@ -55,7 +55,6 @@ Ask which target, unless the project already shows one.
 |---|---|---|
 | Cloudflare Workers | `wrangler.jsonc` | the rest of this skill |
 | ChatGPT Sites | the Site's hosting config | installed `docs/handbook/cloudflare/chatgpt-sites.md`; publish through Sites, never `wrangler deploy` |
-| Mantle Cloud | Cloud project link | the plugin's `mantle` skill and its Cloud workflow; connect Cloud MCP and use its exact host contract, not `wrangler deploy` |
 | Bun (host `bun`) | `.env` | self-hosted; installed `docs/handbook/start/project-and-cli.md` (Bun), not this skill |
 
 Self-hosting is always an option; never present a hosted target as required.

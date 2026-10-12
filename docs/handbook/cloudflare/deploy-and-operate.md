@@ -32,8 +32,7 @@ replace the console email sender first
 the runtime, which creates every table the plan needs on the empty database.
 
 Deploying anywhere is your choice: Cloudflare and Bun have generated presets,
-`host: none` composes any other, and you may always self-host. Mantle Cloud is one option, never a
-requirement.
+`host: none` composes any other, and you may always self-host. Hosting remains application-owned.
 
 ## Changing Schemas
 
@@ -153,24 +152,6 @@ until you regenerate it, and `runtime.bootReport().lowered` says so. Keep the
 work that needs only the plan (building the service, `createMantle`) at module
 scope, and I/O (the database, `fetch`) inside the request. See
 [Native execution](../guides/native-execution.md#cold-isolates).
-
-## Mantle Cloud
-
-Mantle Cloud accepts its pinned 0.2 service contract through host protocol 4. A verified source receipt is required before save.
-Connect Cloud MCP and follow the plugin's `mantle` skill and its
-`references/cloud.md` workflow. Call `cloud_host_contract` for the selected
-project before installing or packing: Cloud returns the exact Core version
-and revision. Do not substitute a moving npm tag or upload a self-hosted
-Worker's platform wiring. Cloud supplies identity and D1 storage; PostgreSQL
-plans are not accepted.
-
-The skill's `scripts/mantle-cloud.mjs` helper orchestrates save, paired
-preview and publish through the connected MCP tools. Follow its literal
-`nextAction`, keeping grants on stdin and preserving the project and operation
-IDs on retry. A saved or paired version is not a serving deployment; publish
-only under the user's authorization and verify Cloud's returned serving state.
-Its offline `check` reports `cloud: "not_checked"`, which proves local
-readiness only. Use Cloud's workflow, not `wrangler deploy`, for that target.
 
 ## Moving data from 0.1.x
 

@@ -99,7 +99,7 @@ Run the **Full checks** workflow (`.github/workflows/full-checks.yml`) before
 releases and after changes to drivers, auth, generator output or Admin UI: add
 the `full-checks` label to the PR (later pushes rerun it). It runs native
 four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
-Cloud plugin validation, Chrome Admin smoke tests and size reports. For local
+OSS plugin validation, Chrome Admin smoke tests and size reports. For local
 browser smoke set `MANTLE_NEXT_ROOT` to `$PWD/packages/mantle` and run
 `pnpm --filter @aotter/mantle-admin test:browser` with Chrome installed. `pnpm check` remains the
 broad local/release check; the release workflow is unchanged.

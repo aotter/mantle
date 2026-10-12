@@ -72,7 +72,7 @@ jobs:
         run: node scripts/check-packed-consumer.mjs --self-test
       - run: pnpm check:worker-consumer
       - run: pnpm check:doc-examples
-      - run: pnpm check:cloud-plugin
+      - run: pnpm check:oss-plugin
       - name: Install Chrome
         run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
       - name: Admin browser smoke (Chrome)
