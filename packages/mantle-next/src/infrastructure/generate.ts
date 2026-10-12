@@ -93,33 +93,29 @@ export async function generateFromSources(request: { readonly target: Target; re
     },
   });
   if (postgres) {
+    const castPage = (statement: LoweredStatement, page: {sql:string}, sources: import("@aotter/mantle/spec").LoweredPage["sources"], name:string, path:string):void => {
+      const inputPage={...statement,sql:page.sql};castInputs(inputPage,path,refusals);
+      let sql=inputPage.sql;
+      for(const [i,source] of sources.entries()) {
+        const type="cursor" in source?orderTypes[name]?.[source.cursor]:undefined;
+        if(type==="timestamptz"||type==="date") {
+          const n=statement.binds.length+i+1;
+          sql=sql.replace(new RegExp(`\\$${n}(?!\\d)`,"g"),cast(`$${n}`,type));
+        }
+      }
+      Object.assign(page,{sql});
+    };
     const seen = new Set<LoweredStatement>();
     for (const [kind, all] of [["views", lowered.views], ["procedures", lowered.procedures]] as const) for (const [name, modes] of Object.entries(all)) {
       for (const statement of Object.values(modes).flat() as LoweredStatement[]) if (!seen.has(statement)) { seen.add(statement); castInputs(statement, `${kind}/${name}`, refusals);
-        if ("paged" in statement) for (const page of Object.values((statement as import("@aotter/mantle/spec").LoweredView).paged)) {
-          const inputPage = { ...statement, sql:page.sql };
-          castInputs(inputPage, `${kind}/${name}`, refusals);
-          let sql = inputPage.sql;
-          for (const [i, source] of page.sources.entries()) {
-            const type = "cursor" in source ? orderTypes[name]?.[source.cursor] : undefined;
-            if (type === "timestamptz" || type === "date") {
-              const n = statement.binds.length + i + 1;
-              sql = sql.replace(new RegExp(`\\$${n}(?!\\d)`,"g"),cast(`$${n}`,type));
-            }
-          }
-          Object.assign(page,{sql});
-        } }
+        if ("paged" in statement) for (const page of Object.values((statement as import("@aotter/mantle/spec").LoweredView).paged)) castPage(statement,page,page.sources,name,`${kind}/${name}`);
+      }
     }
     for (const [name,pages] of Object.entries(adminPages)) {
-      const variants=[lowered.views[name]?.caller,lowered.views[name]?.trusted].filter(v=>!!v);
+      const statement=lowered.views[name]!.caller!;
       for(const [index,page] of pages.entries()) {
-        const statement=variants[Math.floor(index/2)]!;
-        const inputPage={...statement,sql:page.sql};castInputs(inputPage,`views/${name}`,refusals);page.sql=inputPage.sql;
         const original=Object.values(statement.paged).find(p=>p.sources.some(s=>"cursor" in s)===!!(index%2));
-        for(const [i,source] of (original?.sources??[]).entries()) {
-          const type="cursor" in source?orderTypes[name]?.[source.cursor]:undefined;
-          if(type==="timestamptz"||type==="date")page.sql=page.sql.replace(new RegExp(`\\$${statement.binds.length+i+1}(?!\\d)`,"g"),cast(`$${statement.binds.length+i+1}`,type));
-        }
+        castPage(statement,page,original?.sources??[],name,`views/${name}`);
       }
     }
   }
