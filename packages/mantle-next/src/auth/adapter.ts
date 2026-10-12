@@ -7,6 +7,8 @@
  */
 import { createAdapterFactory, type CleanedWhere, type CustomAdapter, type DBAdapterFactoryConfig, type JoinConfig } from "@better-auth/core/db/adapter";
 import type { BetterAuthOptions } from "@better-auth/core";
+import { getAuthTables } from "@better-auth/core/db";
+import { ContractError } from "../kernel/contracts.js";
 import type { SQL } from "bun";
 import type { Dialect } from "../kernel/dialect/common.js";
 import * as postgres from "../kernel/dialect/postgres.js";
@@ -18,6 +20,19 @@ import { condition as spell } from "../kernel/where.js";
 type Row = Record<string, unknown>;
 /** Runs one statement; `changes` is the affected-row count. */
 type Exec = (text: string, values: unknown[]) => ReturnType<typeof bunSql.run>;
+const nativeReaders = new WeakMap<object, { exec: Exec; param(n: number): string; now(ms: number): Date | string }>();
+/** Selected auth queries share this adapter's handle, dialect and Better Auth's physical model/field mapping. */
+export function nativeAuthRead(options: BetterAuthOptions) {
+  const native = options.database && nativeReaders.get(options.database as object);
+  if (!native) throw new ContractError("AUTH_CONFIGURATION_ERROR", "OAuth requires Mantle's native auth database adapter.", "auth:database");
+  const schema = getAuthTables(options);
+  return {
+    ...native,
+    table: (model: string) => postgres.ident(schema[model]!.modelName),
+    column: (model: string, field: string) => postgres.ident(schema[model]?.fields[field]?.fieldName ?? field),
+    has: (model: string, field: string) => field === "id" || !!schema[model]?.fields[field],
+  };
+}
 /** The slice of D1 the adapter calls (a real `D1Database` satisfies it). */
 export type D1Like = Reader;
 /** What one statement's builder is given: `bind` registers a parameter and returns its placeholder; `where` spells conditions with it. */
@@ -180,17 +195,21 @@ function build(d: Spelling, native: boolean, adapterId: string, adapterName: str
 
 /** Cloudflare D1 (SQLite). D1 has no interactive transactions, so `transaction` is off and the atomic operations are single statements. */
 export function d1Adapter(db: D1Like) {
-  return build(sqlite, false, "d1", "Mantle D1 Adapter", async (text, values) => {
+  const exec: Exec = async (text, values) => {
     const { results, meta } = await db.prepare(text).bind(...values).all();
     return { rows: results, changes: meta.changes };
-  }, false);
+  };
+  const factory = build(sqlite, false, "d1", "Mantle D1 Adapter", exec, false);
+  nativeReaders.set(factory, { exec, param: sqlite.param, now: ms => new Date(ms).toISOString() });
+  return factory;
 }
 
 /** Bun.SQL against PostgreSQL. Transactions use `sql.begin`, which pins every statement to one connection. */
 export function bunSqlAdapter(sql: SQL) {
   const executor = (handle: Pick<SQL, "unsafe">): Exec => (text, values) => bunSql.run(handle as never, text, values);
-  // Each `betterAuth` instance gets its own factory; its transactions rebuild the adapter on the pinned connection with the same options.
-  return (options: BetterAuthOptions) =>
+  const factory = (options: BetterAuthOptions) =>
     build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(sql), cb =>
       sql.begin(tx => cb(build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(tx), false)(options))))(options);
+  nativeReaders.set(factory, { exec: executor(sql), param: postgres.param, now: postgres.now });
+  return factory;
 }
