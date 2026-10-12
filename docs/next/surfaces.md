@@ -326,3 +326,38 @@ Generated boundary code checks each input and advertises the 0.2 schemas and
 read-only/destructive/open-world hints. Image bytes are PUT directly to the
 returned short-lived URLs with their required headers, then committed; bytes
 never enter MCP. Store permanent asset ids, never upload URLs.
+
+### MCP Apps
+
+When a manifest exposes a View, generation also writes `mcp-app.ts`. Its
+`planApp({ surface, html, uri?, title? })` embeds the generated catalogue in
+reusable HTML; pass `mantleAppHtml` from `@aotter/mantle-ui/mcp-app` to retain
+Admin's labels, row actions, conflict handling and en/zh-TW/zh-CN interaction UI.
+It does not embed caller data. Use an async HTML loader to keep the UI asset
+out of the Worker startup bundle:
+
+```ts
+import { planApp } from "./generated/mcp-app.js";
+import { mcp } from "./generated/mcp.js";
+const handler = mcp({ db, caller, apps: {
+  staff: { resources: [planApp({ surface: "staff",
+    html: async () => (await import("@aotter/mantle-ui/mcp-app")).mantleAppHtml })] },
+} });
+```
+
+Resources are bound separately to public and staff MCP surfaces; public requests
+never receive staff resources. Custom resources accept a `ui://` URI, `html`
+(string or async loader), `renders` tool names, optional `appOnly` View names,
+CSP, permissions and `prefersBorder`. Binding errors fail when constructing the
+handler; a write cannot be an app-only tool. HTML loader failures return a generic
+internal error; their exception, caller credentials and request metadata never
+enter the response or resource failure log. Visibility hides tools from clients
+without Apps support, and never bypasses the original caller or SQL policies.
+
+Capability detection follows 0.2: read `initialize.params.capabilities` or
+`params._meta["io.modelcontextprotocol/clientCapabilities"]`; explicit absence
+of the UI extension disables resources and app-only tools. Later stateless calls
+without capabilities remain `unknown` and retain resources. Supported tools
+advertise `_meta.ui.resourceUri` and `ui/resourceUri`; model-visible render tools
+also advertise `openai/outputTemplate`. Results carry
+`_meta["net.aotter.mantle/tool"]` so the App identifies the View it renders.

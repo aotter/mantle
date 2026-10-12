@@ -64,10 +64,9 @@ ${print(tools.filter(tool=>tool.surface===surface))}
 }`).join("\n")+"\n";
   files["mcp.ts"]=`import { mcp as serve, type Options as McpOptions } from "@aotter/mantle-next/mcp";
 ${sharedTools?[databaseImport(target),...(refs?['import type { Handlers } from "./generated.js";']:[]),'import { publicTools, staffTools } from "./mcp-tools.js";'].join("\n"):toolImports.join("\n")}
-${media ? 'import type { MediaStorage } from "@aotter/mantle-next/site";' : ""}
-export type Options<Env = unknown> = McpOptions<Env, Database>${refs ? " & { handlers: Handlers }" : ""}${media ? " & { media?: (env: Env) => MediaStorage }" : ""};
+${media ? 'import type { MediaStorage } from "@aotter/mantle-next/site";\n' : ""}export type Options<Env = unknown> = McpOptions<Env, Database>${refs ? " & { handlers: Handlers }" : ""}${media ? " & { media?: (env: Env) => MediaStorage }" : ""};
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env) => Promise<Response | undefined> {
-  return ${media ? "async (request, env) => " : ""}serve<Env, Database${refs ? ", Handlers" : ""}>([...${sharedTools?"[...publicTools(),...staffTools()]":"[\n"+print(tools)+"\n  ]"}${media ? ", ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, \"\") === \"/mcp/staff\" ? (await import(\"./mcp-media.js\")).mediaTools(() => options.media!(env)) : [])" : ""}], ${q(STAFF_ROLES)}, options)${media ? "(request, env)" : ""};
+  return ${media ? "async (request, env) => " : ""}serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? "[..." : ""}${sharedTools?"[...publicTools(),...staffTools()]":"[\n"+print(tools)+"\n  ]"}${media ? ", ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, \"\") === \"/mcp/staff\" ? (await import(\"./mcp-media.js\")).mediaTools(() => options.media!(env)) : [])]" : ""}, ${q(STAFF_ROLES)}, options)${media ? "(request, env)" : ""};
 }
 `;
   return files;

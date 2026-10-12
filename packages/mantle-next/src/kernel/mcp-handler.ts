@@ -1,6 +1,8 @@
 /** Request-only MCP implementation, excluded from Worker startup. */
 import { ContractError, checkOrigin, surfaceCaller, surfaceError, surfaceFailure, wire, type Caller } from "./contracts.js";
 import { callTool } from "./mcp-call.js";
+import { clientUiSupport, appMeta, appHtml, RESOURCE_MIME_TYPE } from "./mcp-apps.js";
+import type { AppLinks } from "./mcp-app-links.js";
 import type { Tool, Options } from "./mcp.js";
 type LocalizedText = string | Readonly<Record<string, string>>;
 const text = (value: LocalizedText | undefined, locale: string): string | undefined => {
@@ -16,7 +18,7 @@ const paging = (schema: { properties?: object }) => ({ ...schema, properties: { 
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
 
 /** The handler for `/mcp` (public tools) and `/mcp/staff` (tools for `staff` roles); other paths are undefined. */
-export async function serve<Env, Database, Handlers>(tools: readonly Tool<Database, Handlers>[], staff: readonly string[], options: Options<Env, Database> & { handlers?: Handlers }, request: Request, env: Env): Promise<Response | undefined> {
+export async function serve<Env, Database, Handlers>(tools: readonly Tool<Database, Handlers>[], staff: readonly string[], options: Options<Env, Database> & { handlers?: Handlers }, request: Request, env: Env, apps: Readonly<Record<string, AppLinks>>): Promise<Response | undefined> {
   const requiredScopes = options.requiredScopes ?? ["mcp"], locale = options.locale ?? "en";
     const url = new URL(request.url), path = url.pathname.replace(/\/+$/, ""), surface = path === "/mcp" ? "public" as const : path === "/mcp/staff" ? "staff" as const : undefined;
     if (!surface) return;
@@ -51,10 +53,23 @@ export async function serve<Env, Database, Handlers>(tools: readonly Tool<Databa
         if (caller.kind === "user" && caller.credential === "oauth" && scopes.some(scope => !caller.scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs additional scopes.", "mcp"), union(caller.scopes, scopes));
       }
     }
+    const linked = apps[surface]!, withApps = clientUiSupport(parsedBody) !== "unsupported" && linked.resources.length > 0;
+    const visible = selected.filter(tool => !(linked.appOnly.has(tool.name) && !withApps));
     const handler = createMcpHandler(() => {
       const schema = (value: unknown) => fromJsonSchema(value as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } });
       const server = new McpServer({ name: "aotter.mantle", version: "0.2.0", ...options.serverInfo }, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
-      for (const tool of selected) server.registerTool(tool.name, { ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown) => {
+      if (withApps) for (const resource of linked.resources) {
+        const meta = appMeta(resource);
+        server.registerResource(resource.name, resource.uri, { mimeType: RESOURCE_MIME_TYPE, ...(resource.title ? { title: resource.title } : {}), ...(resource.description ? { description: resource.description } : {}), ...(meta ? { _meta: meta } : {}) }, async () => {
+          try { return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: await appHtml(resource), ...(meta ? { _meta: meta } : {}) }] }; }
+          catch { console.error("[mantle mcp] resource rendering failed"); throw new Error("Internal error."); }
+        });
+      }
+      for (const tool of visible) {
+        const uri = withApps ? linked.appOnly.get(tool.name) ?? linked.rendersIn.get(tool.name) : undefined;
+        const appOnly = linked.appOnly.has(tool.name);
+        const meta = uri ? { ui: { resourceUri: uri, ...(appOnly ? { visibility: ["app"] } : {}) }, "ui/resourceUri": uri, ...(appOnly ? {} : { "openai/outputTemplate": uri }) } : undefined;
+        server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown) => {
         const metadata = options.onObservation ? { kind: "invocation" as const, surface, invocationId: crypto.randomUUID(), tool: tool.name, caller: Object.freeze(caller.kind === "user" ? { ...caller, scopes: Object.freeze([...caller.scopes]) } : { ...caller }) } : undefined;
         const started = metadata ? performance.now() : 0;
         if (metadata) observe(options.onObservation, { ...metadata, phase: "attempt", at: Date.now() });
@@ -62,7 +77,7 @@ export async function serve<Env, Database, Handlers>(tools: readonly Tool<Databa
         try {
           if (tool.run) checkOrigin(request, caller);
           const data = await callTool(tool, raw as Record<string, unknown>, options.db(env), caller, options.handlers as Handlers);
-          return { content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
+          return { ...(withApps && linked.rendersIn.has(tool.name) ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
           const diagnostic = surfaceError(error).error;
           code = diagnostic.code; outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
@@ -73,6 +88,7 @@ export async function serve<Env, Database, Handlers>(tools: readonly Tool<Databa
           if (metadata) observe(options.onObservation, { ...metadata, phase: "completion", at: Date.now(), outcome, durationMs: Math.max(0, performance.now() - started), ...(code ? { code } : {}) });
         }
       });
+      }
       return server;
     }, { legacy: "stateless", maxRequestBodySize: 1024 * 1024 });
     return handler.fetch(request, { parsedBody });
