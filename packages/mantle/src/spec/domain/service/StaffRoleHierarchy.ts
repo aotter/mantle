@@ -11,6 +11,7 @@ import type { StaffRole } from "../model/ManifestGrammar.js";
  * are referenced by the parser).
  */
 const ROLE_RANK: Record<StaffRole, number> = {
+  staff: 3,
   owner: 3,
   editor: 2,
   contributor: 1,

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { user } from "./apps/fixtures.js";
 
 export async function verifyPublishing(app: any, db: any): Promise<{ checks: number }> {
-  const anonymous = { kind: "anonymous" }, staff = { ...user("staff"), role: "editor" }, system = { kind: "system", reason: "test" };
+  const anonymous = { kind: "anonymous" }, staff = { ...user("staff"), role: "staff" }, system = { kind: "system", reason: "test" };
   const table = app.store(db, staff).collection("posts"), draft = await table.insert({ title: "Hello" });
   assert.equal(draft.status, "draft"); assert.equal(draft.published_at, null);
   assert.equal((await app.views["posts-public"](db, staff, {})).length, 0);
@@ -53,7 +53,7 @@ export async function verifyPublishing(app: any, db: any): Promise<{ checks: num
   const publishedTime = edited.published_at;
   assert.equal(typeof publishedTime, "string");
   const scoped = await app.store(db, staff).collection("scoped_posts").insert({ title: "Scoped" });
-  const foreignStaff = { ...user("foreign"), role: "editor" };
+  const foreignStaff = { ...user("foreign"), role: "staff" };
   assert.equal(await app.store(db, foreignStaff).collection("scoped_posts").count(), 0);
   await assert.rejects(app.procedures["scoped_posts.publish"](db, foreignStaff, { id: scoped.id, expectedVersion: 1 }), { code: "CONFLICT" });
   await app.procedures["scoped_posts.publish"](db, staff, { id: scoped.id, expectedVersion: 1 });

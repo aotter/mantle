@@ -186,7 +186,7 @@ name the operation and possible guard failures; no second read guesses which gua
 failed after concurrent activity. Store refuses direct status/published_at writes,
 but imposes no separate role-based edit/delete rule; Admin owns those limits.
 
-Core rowPolicy term data defines the published value and staff roles, and both
+Core rowPolicy term data defines the published value and carries the generation-time staff vocabulary, and both
 Core's AST renderer and Store render that data. Public Views always require
 published rows; other Views and Store permit drafts only for staff/system.
 Policy applies at every relation, including joins, LEFT JOINs, subqueries and CTEs.
@@ -269,3 +269,7 @@ exclude maintenance code. Set `triggers.crons` in Wrangler yourself. The SDK's
 that restrict both day-of-month and weekday. This is conversion only, no dispatcher.
 Bound scheduled work to your host's execution budget; keep the returned cursor
 when continuing a larger sweep in a later invocation.
+
+## OSS staff role
+
+OSS auth templates grant `staff`; any staff can manage users. Caller.role is an open string for application identity vocabulary. Next publishing visibility and transitions use only the generated staff allowlist (`staff`), consistently in Views and Store. Core keeps its legacy role preset for existing consumers. Auth helpers are optional app-selected modules and never perform boot DDL.

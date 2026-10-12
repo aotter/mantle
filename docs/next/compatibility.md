@@ -74,3 +74,5 @@ second read. Status/timestamp cannot be written through Store. Staff editing
 limits belong to Admin, not Store. Public reads always require published rows;
 other reads expose drafts only to staff/system, including joins and nested SQL.
 Authored inline publishing writes, lifecycle hooks and translations remain refused.
+
+Identity: optional staff directory/role/invitation helpers and the app-owned hardened auth.ts template are supported. OSS staff management uses one role (`staff`); all staff can manage users. Caller roles remain open strings. See [Auth](auth.md).

@@ -7,7 +7,7 @@ import { postgresDialect } from "../../../mantle/dist/postgres/dialect.js";
 import { lowerPlan } from "../../../mantle/dist/core/sql/lowered.js";
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { declaredType, outputType } from "../domain/columns.js";
-import { nextMode } from "../domain/visibility.js";
+import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
 import { dialect as sqliteDialect } from "../kernel/dialect/sqlite.js";
 import { cast, dialect as postgresDialect_ } from "../kernel/dialect/postgres.js";
 import { initialStorageSql as sqliteSchema } from "../../../mantle/dist/d1/storage.js";
@@ -55,6 +55,7 @@ export async function generateFromSources(request: { readonly target: Target; re
   const refusals: GenerateDiagnostic[] = [], orderTypes: Record<string, (string | undefined)[]> = {};
   const { lowered, warnings } = lowerPlan(compiled.plan, dialect, {
     mode: nextMode,
+    staffRoles: STAFF_ROLES,
     pageQuery(ast, name) {
       const view = compiled.plan.views[name]!;
       const lineage = [...new Set(Object.values(view.columns ?? {}).map(c => c.schema))];

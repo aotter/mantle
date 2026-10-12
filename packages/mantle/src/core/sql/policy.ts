@@ -28,6 +28,7 @@ export type PolicyOpts = {
   schemas: Schemas;
   inputs: Record<string, string>;
   mode?: Mode;
+  staffRoles?: readonly string[];
   /** add `AND version = ?` (the version checked by the publishing lifecycle) to a row op's WHERE */
   lockVersion?: boolean;
   /** the status an update moves the entry to (the lifecycle decided it is legal); SQL cannot write `status` */
@@ -141,7 +142,7 @@ function term(c: C, a: string, [column, kind, v, published, roles]: RowTerm): N 
 }
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
 function visible(s: SchemaDef, a: string, c: C): N | undefined {
-  return c.unsafeNoVisibility ? undefined : and(...rowPolicy(s, c.mode ?? 'caller').map((t) => term(c, a, t)));
+  return c.unsafeNoVisibility ? undefined : and(...rowPolicy(s, c.mode ?? 'caller', c.staffRoles).map((t) => term(c, a, t)));
 }
 /** A write's `SET` items beyond the author's own. */
 const sets = (w: RowWrite, c: C): N[] =>

@@ -5,7 +5,7 @@ export async function verifyRest(fetch: (request: Request) => Promise<Response |
   const first = await request("/api/views/notes?limit=1"); assert.equal(first!.status,200); assert.equal(first!.headers.get("cache-control"),"private, no-store");
   const page = await first!.json() as any; assert.deepEqual(page.rows,[{id:"a",title:"a"}]);
   const second = await request("/api/views/notes?limit=1&cursor="+encodeURIComponent(page.nextCursor)); assert.deepEqual((await second!.json() as any).rows,[{id:"b",title:"b"}]);
-  const edit = {title:"x",version:1}, editor = {"x-role":"editor"};
+  const edit = {title:"x",version:1}, editor = {"x-role":"staff"};
   for (const [path,method,body,headers,status] of [
     ["/api/views/notes?limit=bad","GET",undefined,{},400],
     ["/api/notes/a","PUT",edit,{},401],

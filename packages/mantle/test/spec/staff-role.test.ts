@@ -11,6 +11,7 @@ describe("STAFF_ROLES closed enum", () => {
   });
 
   it("isStaffRole accepts members and rejects others", () => {
+    expect(isStaffRole("staff")).toBe(true);
     expect(isStaffRole("owner")).toBe(true);
     expect(isStaffRole("editor")).toBe(true);
     expect(isStaffRole("contributor")).toBe(true);
@@ -21,6 +22,10 @@ describe("STAFF_ROLES closed enum", () => {
 });
 
 describe("meetsRole hierarchy", () => {
+  it("staff has full OSS access", () => {
+    expect(meetsRole("staff", "owner")).toBe(true);
+  });
+
   it("owner satisfies every role", () => {
     expect(meetsRole("owner", "owner")).toBe(true);
     expect(meetsRole("owner", "editor")).toBe(true);

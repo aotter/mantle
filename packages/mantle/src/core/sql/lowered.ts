@@ -19,10 +19,12 @@ import { compileProgram, type CompileContext } from "./compile.js";
 import type { BindSpec, Compiled, Mode } from "./policy.js";
 import { compiledKey, pageShape, pagedOf, seedCompiled, seedPaged, type Paged, type Program } from "./run.js";
 
-type Env = { readonly dialect: MantleDialect; readonly schemas: Readonly<Record<string, StorageSchema>> };
+type Env = { readonly staffRoles?: readonly string[]; readonly dialect: MantleDialect; readonly schemas: Readonly<Record<string, StorageSchema>> };
 type Warn = (message: string) => void;
 type Project = (ast: N, page?: Paged) => N;
 export interface LoweringOptions {
+  /** Deploy-time staff vocabulary; omitted preserves the Core role preset. */
+  readonly staffRoles?: readonly string[];
   readonly mode?: (mode: Mode) => Mode;
   readonly pageQuery?: (ast: N, name: string) => N;
   readonly project?: (ast: N, kind: "view" | "procedure", name: string, page?: Paged) => N;
@@ -55,7 +57,7 @@ export function lowerView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mod
   const print = printer(env.dialect);
   let c: Compiled;
   try {
-    [c] = compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "view", mode }) as [Compiled];
+    [c] = compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "view", mode, staffRoles: env.staffRoles }) as [Compiled];
   } catch (e) {
     warn?.(`${at} (${mode}): ${message(e)}`);
     return undefined;
@@ -78,7 +80,7 @@ export function lowerView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mod
 export function lowerProcedure(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, returning: ReadonlySet<string> | undefined, columns = schemaColumns(env.schemas), warn?: Warn, at = "", project?: Project): LoweredStatement[] | undefined {
   try {
     const print = printer(env.dialect);
-    return compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "procedure", mode, returning }).map((c) => stmtOf(c, print(project?.(c.ast) ?? c.ast, env.schemas)));
+    return compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "procedure", mode, returning, staffRoles: env.staffRoles }).map((c) => stmtOf(c, print(project?.(c.ast) ?? c.ast, env.schemas)));
   } catch (e) {
     warn?.(`${at} (${mode}): ${message(e)}`);
     return undefined;
@@ -89,7 +91,7 @@ export function lowerProcedure(env: Env, p: Pick<Program, "inputs" | "ir">, mode
 export function lowerPlan(plan: Body, dialect: MantleDialect, options: LoweringOptions = {}): { lowered: PlanLowered; warnings: string[] } {
   const warnings: string[] = [];
   const warn: Warn = (m) => warnings.push(m);
-  const env: Env = { dialect, schemas: plan.schemas };
+  const env: Env = { dialect, schemas: plan.schemas, staffRoles: options.staffRoles };
   const columns = schemaColumns(plan.schemas);
   const { before, after } = lifecycleHookSets(plan);
   const returning = before.size || after.size ? after : undefined; // as boot passes `lifecycle?.after`

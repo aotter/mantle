@@ -105,3 +105,15 @@ test("HTTP Trigger exposure emits its REST handler", async () => {
   const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"http.yaml",text:[...base,doc("Trigger","expose",{source:{kind:"http",method:"POST",path:"/api/notes"},target:{procedure:"read"}})].join("\n---\n")}]}});
   expect(result.ok).toBe(true);if(result.ok)expect(result.files["rest.ts"]).toContain("/api/notes");
 });
+
+test("Next refuses legacy staff roles on every auth predicate with a migration hint",async()=>{
+ const result = await diagnostics([
+  doc("View","old-view",{surface:"staff",sql:"SELECT id FROM notes",requires:{auth:{all:[{"ctx.staff":["owner","editor"]}]}}}),
+  doc("Procedure","old-procedure",{...procedure,requires:{auth:{all:["ctx.user",{"ctx.staff":["contributor"]}]}}}),
+ ]);
+ const roles=result.filter(d=>d.path.endsWith("/ctx.staff"));
+ expect(roles).toHaveLength(3);
+ for(const diagnostic of roles){expect(diagnostic.code).toBe("GENERATE_UNSUPPORTED");expect(diagnostic.message).toContain("generated vocabulary (staff)");expect(diagnostic.message).toContain("Migrate 0.2");}
+ const valid=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"staff.yaml",text:[...base,doc("View","staff-view",{surface:"staff",sql:"SELECT id FROM notes ORDER BY id",requires:{auth:{all:[{"ctx.staff":["staff"]}]}}})].join("\n---\n")}]}});
+ expect(valid.ok).toBe(true);
+});

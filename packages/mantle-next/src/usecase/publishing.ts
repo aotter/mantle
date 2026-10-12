@@ -1,9 +1,11 @@
 /** Opt-in lifecycle: one atomic, version-guarded statement per transition, with Core's row rules. */
-import { STAFF_ROLES, rowPolicy, type RuntimePlan } from "@aotter/mantle/spec";
+import { rowPolicy, type RuntimePlan } from "@aotter/mantle/spec";
 import { dialect as sqlite } from "../kernel/dialect/sqlite.js";
 import { dialect as postgres } from "../kernel/dialect/postgres.js";
 import { renderTerm } from "../kernel/store.js";
 import { entry, exportName } from "../domain/entry.js";
+
+import { STAFF_ROLES } from "../domain/visibility.js";
 
 const q = JSON.stringify;
 export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declarations: string[], procedures: string[], entries: Record<string, string>, values: Set<string>, refuse: (path: string, message: string) => void): void {

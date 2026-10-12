@@ -6,7 +6,7 @@
  * Column names, value types, writable columns and `orderBy` are TypeScript types only: nothing at runtime knows them.
  */
 import { NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, type RuntimePlan } from "@aotter/mantle/spec";
-import { nextMode } from "../domain/visibility.js";
+import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
 import { declaredType, inputType, nativeType } from "../domain/columns.js";
 import { expand, SCOPE, TTL, type Fact, type Rules } from "../kernel/store.js";
 
@@ -17,7 +17,7 @@ const SCALAR = new Set(["text", "real", "float8", "integer", "int4", "int8", "bo
 /** Core's own rules for a Schema, in the shape of `Rules` without the id expression (a delete's lock is compared separately). */
 const core = (s: Parameters<typeof rowPolicy>[0]) => {
   const update = writePolicy(s, "update", { lock: true });
-  return { caller: rowPolicy(s, nextMode("caller")), trusted: rowPolicy(s, "trusted"), fills: writePolicy(s, "insert").fills, sets: update.sets, lock: update.lock! };
+  return { caller: rowPolicy(s, nextMode("caller"), STAFF_ROLES), trusted: rowPolicy(s, "trusted"), fills: writePolicy(s, "insert").fills, sets: update.sets, lock: update.lock! };
 };
 const probe = { scope: SCOPE, ttl: TTL, ttlSeconds: 0, publishing: true };
 

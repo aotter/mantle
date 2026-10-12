@@ -34,7 +34,7 @@ kind: Trigger
 metadata: {name: add-item-mcp}
 spec: {source: {kind: mcp, surface: public}, target: {procedure: add-item}}
 `;
-const user={kind:"user",subject:"u",role:"editor",scopes:["mcp"],credential:"oauth",credentialId:null,clientId:null};
+const user={kind:"user",subject:"u",role:"staff",scopes:["mcp"],credential:"oauth",credentialId:null,clientId:null};
 test("official SDK initializes, lists only surface tools, calls shared validation/paging, refuses auth and cookie writes",async()=>{
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"mcp.yaml",text:source}]);
  const dir=await mkdtemp(resolve(import.meta.dir,".mcp-")),db=new Database(":memory:");
@@ -121,7 +121,7 @@ test("generated publishing transitions are validated staff tools; public Views u
 });
 
 test("ref MCP Procedures require typed caller-owned handlers and enforce requires before dispatch",async()=>{
- const text=source.replace("handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",'requires: {auth: {all: [ctx.user, {ctx.staff: [editor]}, {ctx.auth.scope: items:write}]}}\n  handler: {ref: app.addItem}');
+ const text=source.replace("handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",'requires: {auth: {all: [ctx.user, {ctx.staff: [staff]}, {ctx.auth.scope: items:write}]}}\n  handler: {ref: app.addItem}');
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"ref-mcp.yaml",text}]);const dir=await mkdtemp(resolve(import.meta.dir,".mcp-ref-")),db=new Database(":memory:");
  let caller:any=user,calls=0;
  try {

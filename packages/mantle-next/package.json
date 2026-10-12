@@ -27,6 +27,8 @@
     "./auth/adapter": "./dist/auth/adapter.js",
     "./auth/oauth": "./dist/auth/oauth.js",
     "./auth/routes": "./dist/auth/routes.js",
+    "./auth/identity": "./dist/auth/identity.js",
+    "./auth/hardening": "./dist/auth/hardening.js",
     "./auth/admin": "./dist/auth/admin.js"
   },
   "scripts": {
