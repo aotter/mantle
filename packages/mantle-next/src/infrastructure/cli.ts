@@ -36,7 +36,7 @@ try {
       await writeFile(resolve(destination, name), source);
     }
     if (target.startsWith("cloudflare-")) {
-      const wrangler = values.wrangler ?? (!existsSync("wrangler.jsonc") && existsSync("wrangler.toml") ? "wrangler.toml" : "wrangler.jsonc");
+      const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";
       configureWrangler(wrangler, values.entry!, values.outdir!, destination);
     }
   }
