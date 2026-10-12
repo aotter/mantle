@@ -4,6 +4,7 @@ import type { GenerateDiagnostic, GenerateInput, GenerateResult, Target } from "
 import { nativeType, outputType } from "../domain/columns.js";
 import { entry, exportName } from "../domain/entry.js";
 import { recipesOf } from "../domain/recipes.js";
+import { emitTtl } from "./ttl.js";
 import { emitPublishing } from "./publishing.js";
 import { emitStores } from "./stores.js";
 import { emitPaging } from "./paging.js";
@@ -120,6 +121,7 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input`, `export type { Output } from "${base}contracts";\n`);
   }
+  emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
   const surfaces = { ...emitPaging(plan, lowered, target, refuse), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse) };
