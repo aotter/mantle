@@ -9,7 +9,7 @@ import { SQL } from "bun";
 import type { BetterAuthOptions } from "@better-auth/core";
 import { bunSqlAdapter, d1Adapter } from "../src/auth/adapter.js";
 import { d1Shim } from "./apps/d1-shim.js";
-import { authSchemaSql } from "../src/auth/schema.js";
+import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 
 // The official suite is written for vitest: `test.skipIf(c)(name, { timeout }, ({ onTestFailed, skip }) => ...)`. Bun maps the
 // "vitest" import to bun:test, which passes no such context, so wrap that one call shape to supply it (`skip` only returns

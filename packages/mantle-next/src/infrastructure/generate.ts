@@ -113,7 +113,7 @@ export async function generateFromSources(request: { readonly target: Target; re
     return { ok: false, diagnostics: [...refusals, ...diagnostics] };
   }
   if (!result.ok) return result;
-  const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? (await import("../auth/schema.js")).authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
+  const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? (await import("./authSchema.js")).authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
   return { ...result, files: generatedFiles({ ...files, "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) };
 }

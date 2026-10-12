@@ -41,8 +41,8 @@ Startup CPU acceptance is open (see the [supported/planned scope](compatibility.
 
 Deployment generation uses the pure `@aotter/mantle/compiler` entry for the
 existing manifest validator, SQL policy/lowering and static surface metadata.
-It does not load Core's Admin/MCP surface factories; Better Auth's schema
-introspection loads only when `generateFromSources` receives `auth` options.
+It does not load Core's Admin/MCP surface factories; Better Auth's build-time
+`infrastructure/authSchema.ts` introspection loads only when `generateFromSources` receives `auth` options.
 Generated request modules still import only the selected runtime leaves.
 
 This import boundary is preparation for #1479, not a standalone release: the

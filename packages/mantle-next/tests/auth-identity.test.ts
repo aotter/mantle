@@ -9,7 +9,7 @@ import { defaultStatements } from "better-auth/plugins/admin/access";
 import { d1Identity, d1BootstrapStaff, postgresBootstrapStaff, postgresIdentity } from "../src/auth/identity.js";
 import { type SessionCache, type SessionAuthority, authHardening, hashEmailOtp, guardGithubLogin, sessionSecondaryStorage, withAuthTasks, retainAuthTask, authSetupIncomplete } from "../src/auth/hardening.js";
 import { d1Adapter, bunSqlAdapter } from "../src/auth/adapter.js";
-import { authSchemaSql } from "../src/auth/schema.js";
+import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 import type { Caller, Postgres } from "../src/kernel/contracts.js";
 import { authLoader, resolveCaller } from "../src/auth/caller.js";
 import { authOptions as templateOptions, handleAuth } from "./apps/auth/template.js";
