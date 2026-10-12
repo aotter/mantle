@@ -97,6 +97,16 @@ The metafile guard rejects `better-auth` / `@better-auth/*` in the static startu
 use `authLoader(() => import(...))` ([Auth](../../docs/next/auth.md#worker-entry)).
 The output directory is cleaned first; keep source and generated code elsewhere.
 
+## Admin
+
+Mount the generated `admin({ db: env => env.DB, caller, assets, ... })` in the
+app's Fetch entry. `/admin/api` accepts cookie-session users with OSS role
+`staff`; the shell assets remain app-owned. It includes bootstrap metadata,
+site reads, staff View paging/search/filter/CSV and staff Procedure execution.
+See [the Admin contract](../../docs/next/surfaces.md#mounting-admin) for display
+identity, native wire adapters and selected follow-up modules. Importing another
+generated entry excludes Admin from that bundle.
+
 ## D1 Sessions
 
 D1's session handle already satisfies generated Views/Procedures and the Store's structural `db` type:

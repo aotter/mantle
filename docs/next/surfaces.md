@@ -137,6 +137,66 @@ available locales. Canonical locale tags use `toCanonicalLocale` (for example
 order chooses the canonical locale. Canonical and alternate URLs use the configured
 origin and the same row-derived page parameters as the sitemap.
 
+## Mounting Admin
+
+Import the generated `admin` handler and mount it in the application's Fetch entry.
+It returns `undefined` outside `/admin`; Admin API paths remain `/admin/api/*`.
+Pass the app's `db(env)` and `caller(request, env)` functions. The resolver runs
+once for an API request and never for the public SPA shell. Admin accepts only
+a cookie-session user with role `staff`; anonymous users receive 401, other
+callers receive 403 with `minimumRole: "staff"`. Session mutations use the shared
+same-origin guard. All API responses and errors use `no-store`.
+
+```ts
+import { admin } from './generated/admin.js';
+const console = admin({ db: env => env.DB, caller,
+  assets: async (path, request, env) => {
+    const response = await env.ASSETS.fetch(
+      new Request(new URL('/admin/' + path, request.url), request));
+    return response.status === 404 ? null : response;
+  },
+  getUser: async (subject, request, env) => directory.getUser(subject),
+  mcpEndpoints: { public: '/mcp', staff: '/mcp/staff' }
+});
+const response = await console(request, env);
+```
+
+`assets` returns `null` for a missing file. Unknown client paths fall back to
+`index.html`; missing `assets/*` files stay 404. Traversal and encoded separators
+are refused. HTML is `no-store`, with `nosniff`, `frame-ancestors 'none'` and
+`X-Frame-Options: DENY`; `preview.html` remains frameable. Built assets are immutable.
+Assets are app-owned and are not bundled into the query core.
+
+`GET /me` returns `{ userId, role, login, image }`. Optional `getUser` supplies
+display information; absent identity facets expose no routes. `GET /bootstrap`
+aggregates `me`, `site`, `collections`, caller-visible `views` and `operations`,
+and `webmcp`. An installed entries route adds the first page for `?collection=`.
+Without site or identity wiring the bootstrap performs no database reads.
+Generated site configuration supplies `site(db, caller)` automatically when
+`--site` is selected; an application may override that option. `/site` capability
+flags reflect the wired site, media and invitation email facets. Statistics remain
+unavailable (501), and their capability is false.
+
+Staff Views use `/views-manifest`, `/views/<name>` and `/views/<name>/export`.
+Inputs, `limit` and `cursor` retain generated validation and keyset paging.
+Declared `searchFields` and `filterFields` accept `search` and `filter.<output>`;
+generated SQL applies those predicates before the page's LIMIT, with bound values.
+Search matches literal text case-insensitively (dialect Unicode folding still varies).
+View names denied by `requires`, public Views and internal Views are 404.
+The selected Admin View boundary restores declared field spelling. View timestamp
+outputs retain their ISO wire strings, as in 0.2; entry list millisecond timestamps
+belong to the content routes. Bare queries retain native rows. CSV streams pages of
+500, with UTF-8 BOM, RFC 4180 quoting and spreadsheet formula guards.
+
+`/operations` lists caller-visible staff MCP Procedures; publishing transitions
+remain on the native content buttons rather than this list. `POST /operations/<name>`
+validates a JSON object of at most 1,000,000 UTF-8 bytes, then returns
+`{ ok: true, output }`. SQL outputs retain `{ results }`, and ref outputs remain
+handler-owned. Pass the generated `handlers` option when the manifest declares
+refs. OCC `CONFLICT` remains unchanged; the console's write controller re-reads
+the entry before explaining it. Selected Admin modules add relative API routes
+through `routes`; they share the same caller, session and origin gate.
+
 ## Mounting MCP
 
 Mount the generated `mcp({ db: env => env.DB, caller })` handler in the app's

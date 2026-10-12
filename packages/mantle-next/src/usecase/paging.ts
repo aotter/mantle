@@ -39,7 +39,7 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
       continue;
     }
     const mode = view.surface === "public" ? "public" : "caller";
-    const c = lowered.views[name]?.[mode], trusted = mode === "caller" ? lowered.views[name]?.trusted : undefined;
+    const c = lowered.views[name]?.[mode], trusted = mode === "caller" && !adminPages ? lowered.views[name]?.trusted : undefined;
     if (!c) continue;
     const cap = sel.limitCount?.A_Const?.ival?.ival ?? 500;
     if (sel.limitCount && (!sel.limitCount.A_Const?.ival || !Number.isInteger(cap) || cap < 1)) { refuse(path, "A paged View LIMIT must be a positive integer literal."); continue; }
@@ -52,7 +52,7 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
       const first = pages.find(p => !p.sources.some(s => "cursor" in s)), next = pages.find(p => p.sources.some(s => "cursor" in s));
       if (!first || !next || v.nkeys < 1 || v.nkeys > 2) { refuse(path, "Core could not lower this View's keyset pages."); return ""; }
       const recipes = recipesOf(v, Object.keys(view.input?.properties ?? {}), message => refuse(path, message), values);
-      const page = (p: typeof first) => { const matched = adminPages?.[name]?.[adminPage++]; return `{ sql: ${q(matched?.sql ?? p.sql)}, extra: ${q(p.sources.map(s => "cursor" in s ? s.cursor : -1))}${matched ? `, matches: ${q(matched.matches)}` : ""} }`; };
+      const page = (p: typeof first) => { const matched = adminPages?.[name]?.[adminPage++]; return `{ sql: ${q(matched?.sql ?? p.sql)}, extra: ${q(p.sources.map(s => "cursor" in s ? s.cursor : -1))} }`; };
       return `{ binds: ${q(recipes)}, first: ${page(first)}, next: ${page(next)} }`;
     });
     const auth = authLines(view.requires,path);
@@ -65,7 +65,7 @@ ${values.size ? `import { ${[...values].sort().join(", ")} } from "${base}dialec
 const spec: Paged<Database> = {
   ${spec.join(",\n  ")},
 };
-export default (db: Database, caller: Caller, input: Input, options?: { limit?: number; cursor?: string; match?: Readonly<Record<string,unknown>> }) => page<Database, Row>(spec, db, caller, input, options);
+export default (db: Database, caller: Caller, input: Input, options?: { limit?: number; cursor?: string; match?: Readonly<Record<string,unknown>> }) => page<Database, Row>(${adminPages ? `{...spec, read: (db, sql, values) => read(db, sql, [...values, ...${q(adminPages[name]?.[0]?.matches??[])}.map(key => options?.match?.[key] ?? null)])}` : "spec"}, db, caller, input, options);
 `;
   }
   return files;

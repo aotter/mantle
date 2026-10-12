@@ -4,20 +4,26 @@ import type { GenerateInput } from "../domain/model.js";
 import { databaseImport } from "../domain/entry.js";
 import { conversions } from "../domain/input.js";
 import { emitPaging } from "./paging.js";
+import { declaredType } from "../domain/columns.js";
 const q=JSON.stringify;
 const allows=(requires:RuntimePlan["views"][string]["requires"])=>"(caller: Caller) => "+((requires?.auth?.all??[]).map(p=>typeof p==="string"?'caller.kind === "user"':"ctx.auth.scope" in p?`caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})`:`caller.kind === "user" && ${q(p["ctx.staff"])}.includes(caller.role ?? "")`).join(" && ")||"true");
 export function emitAdmin({plan,lowered,target,site,adminPages}:GenerateInput,refuse:(path:string,message:string)=>void):Record<string,string> {
   const refs=Object.values(plan.procedures).some(p=>"ref" in p.handler), imports=[`import { admin as serve, type Options } from "@aotter/mantle-next/admin";`,`import type { Caller } from "@aotter/mantle-next/contracts";`,databaseImport(target),`import { bootstrap } from "./admin-descriptors.js";`,...(refs?[`import { store, type Handlers } from "./generated.js";`]:[]),...(site?[`import { site } from "./site.js";`]:[])];
   const views:string[]=[],operations:string[]=[],files:Record<string,string>={};
-  for(const [path,source] of Object.entries(emitPaging(plan,lowered,target,refuse,adminPages??{})))files[path.replace("paged/","admin-paged/")]=source;
+  const staffPlan={...plan,views:Object.fromEntries(Object.entries(plan.views).filter(([,view])=>view.surface==="staff"))};
+  for(const [path,source] of Object.entries(emitPaging(staffPlan,lowered,target,refuse,adminPages)))files[path.replace("paged/","admin-paged/")]=source;
   const conversion=(input:JsonSchema|undefined,binds:Parameters<typeof conversions>[1])=>{const code=conversions(input?.properties,binds,target);return code?`, convert: ${code}`:"";};
   for(const [name,view] of Object.entries(plan.views).filter(([,v])=>v.surface==="staff")){
     const id=views.length,list=view.uiSchema?.list as {columns?:string[];searchFields?:string[];filterFields?:string[]}|undefined;
     imports.push(`import page${id} from "./admin-paged/views/${encodeURIComponent(name)}.js";`,`import { query as query${id} } from "./validation/views/${encodeURIComponent(name)}.js";`);
     const names=Object.fromEntries(Object.entries(view.columns??{}).map(([key,c])=>[key,key===c.field?plan.schemas[c.schema]?.names[c.field]??key:key]));
-    const times=Object.entries(view.columns??{}).filter(([,c])=>["created_at","updated_at"].includes(c.field)).map(([key])=>key);
-    const filters=(list?.filterFields??[]).map(field=>{const c=view.columns?.[field]??view.columns?.[field.toLowerCase()],s=c&&plan.schemas[c.schema];return[field,[s?.schema.properties?.[s.names[c!.field]??c!.field]?.type].flat().find(t=>t&&t!=="null")??"string"];});
-    views.push(`{ name:${q(name)}, allows:${allows(view.requires)}, query:query${id}, page:page${id}${conversion(view.input,lowered.views[name]?.caller?.binds??[])}, names:${q(names)}, times:${q(times)}, columns:${q(list?.columns??[])}, search:${!!list?.searchFields?.length}, filters:${q(filters)}, sqlite:${!target.endsWith("postgres")} }`);
+    const filterValues:string[]=[],helpers=new Set<string>();
+    const filters=(list?.filterFields??[]).map(field=>{const c=view.columns?.[field]??view.columns?.[field.toLowerCase()],s=c&&plan.schemas[c.schema],native=s&&declaredType(s.fields,c!.field);
+      if(native==="date"||native==="timestamptz"){const helper=native==="date"?"date":"timestamp";helpers.add(helper);filterValues.push(`${q(field)}:${helper}`);}
+      return[field,[s?.schema.properties?.[s.names[c!.field]??c!.field]?.type].flat().find(t=>t&&t!=="null")??"string"];
+    });
+    if(helpers.size)imports.push(`import {${[...helpers].map(h=>h+" as "+h+id).join(",")}} from "@aotter/mantle-next/dialect/${target.endsWith("postgres")?"postgres":"sqlite"}";`);
+    views.push(`{ name:${q(name)}, allows:${allows(view.requires)}, query:query${id}, page:page${id}${conversion(view.input,lowered.views[name]?.caller?.binds??[])}, names:${q(names)}, columns:${q(list?.columns??[])}, search:${!!list?.searchFields?.length}, filters:${q(filters)}${filterValues.length?`, filterValues:{${filterValues.map(v=>v+id).join(",")}}`:""}, sqlite:${!target.endsWith("postgres")} }`);
   }
   const procedures=[...new Set(Object.values(plan.triggers).filter(t=>t.source.kind==="mcp"&&t.source.surface==="staff").map(t=>t.procedure))];
   for(const name of procedures){
@@ -26,6 +32,6 @@ export function emitAdmin({plan,lowered,target,site,adminPages}:GenerateInput,re
     if(!ref)imports.push(`import operation${id} from "./procedures/${encodeURIComponent(name)}.js";`);
     operations.push(`{ name:${q(name)}, allows:${allows(p.requires)}, validate:validate${id}${conversion(p.input,lowered.procedures[name]?.caller?.flatMap(s=>s.binds)??[])}, run:${ref?`(db,caller,input,handlers) => store(db,caller,{handlers}).procedures[${q(name)}](input)`:`operation${id}`} }`);
   }
-  files["admin.ts"]=`${imports.join("\n")}\nexport function admin<Env>(options: Options<Env,Database>${refs?" & {handlers:Handlers}":""}) {\n  return serve<Env,Database${refs?",Handlers":""}>(bootstrap,[${views.join(",\n")}],[${operations.join(",\n")}],${site?"{site,...options}":"options"});\n}\n`;
+  files["admin.ts"]=`${imports.join("\n")}\nexport function admin<Env>(options: Options<Env,Database>${refs?" & {handlers:Handlers}":""}) {\n  return serve<Env,Database${refs?",Handlers":""}>({...bootstrap,collectionNames:${q(Object.values(plan.schemas).map(s=>s.name))}},[${views.join(",\n")}],[${operations.join(",\n")}],${site?"{site,...options}":"options"});\n}\n`;
   return files;
 }

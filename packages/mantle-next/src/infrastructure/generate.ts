@@ -104,6 +104,18 @@ export async function generateFromSources(request: { readonly target: Target; re
           Object.assign(page,{sql});
         } }
     }
+    for (const [name,pages] of Object.entries(adminPages)) {
+      const variants=[lowered.views[name]?.caller,lowered.views[name]?.trusted].filter(v=>!!v);
+      for(const [index,page] of pages.entries()) {
+        const statement=variants[Math.floor(index/2)]!;
+        const inputPage={...statement,sql:page.sql};castInputs(inputPage,`views/${name}`,refusals);page.sql=inputPage.sql;
+        const original=Object.values(statement.paged).find(p=>p.sources.some(s=>"cursor" in s)===!!(index%2));
+        for(const [i,source] of (original?.sources??[]).entries()) {
+          const type="cursor" in source?orderTypes[name]?.[source.cursor]:undefined;
+          if(type==="timestamptz"||type==="date")page.sql=page.sql.replace(new RegExp(`\\$${statement.binds.length+i+1}(?!\\d)`,"g"),cast(`$${statement.binds.length+i+1}`,type));
+        }
+      }
+    }
   }
   const searchProblems = searchDiagnostics(warnings);
   refusals.push(...searchProblems);

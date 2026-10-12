@@ -1,5 +1,6 @@
 /** Build-time predicates on the Core page's outputs, before its keyset LIMIT. */
 import type { RuntimePlan, SqlNode as N } from "@aotter/mantle/spec";
+import { declaredType } from "./columns.js";
 const col = (name: string): N => ({ColumnRef:{fields:[{String:{sval:"_p"}},{String:{sval:name}}]}});
 const cast = (arg: N, type: string): N => ({TypeCast:{arg,typeName:{names:[{String:{sval:type}}],typemod:-1}}});
 const bool = (boolop: string, args: N[]): N => ({BoolExpr:{boolop,args}});
@@ -20,8 +21,9 @@ export function adminPage(ast: N, view: RuntimePlan["views"][string], schemas: R
   for(const name of list?.filterFields??[]){
     const provenance=view.columns?.[name]??view.columns?.[name.toLowerCase()], schema=provenance&&schemas[provenance.schema];
     const property=schema?.schema.properties?.[schema.names[provenance!.field]??provenance!.field];
-    const type=[property?.type].flat().find(t=>t&&t!=="null");
-    const value=param("filter."+name,type==="boolean"?(sqlite?"integer":"boolean"):type==="integer"?"bigint":type==="number"?"double precision":"text");
+    const type=[property?.type].flat().find(t=>t&&t!=="null"), native=schema&&declaredType(schema.fields,provenance!.field);
+    let value=param("filter."+name,type==="boolean"?(sqlite?"integer":"boolean"):type==="integer"?"bigint":type==="number"?"double precision":native==="date"||native==="timestamptz"?(sqlite?"bigint":"text"):"text");
+    if(!sqlite&&(native==="date"||native==="timestamptz"))value=cast(value,native);
     conditions.push(optional(value,op("=",col(output(name)),value)));
   }
   if(conditions.length)sel.whereClause=bool("AND_EXPR",[...(sel.whereClause?[sel.whereClause]:[]),...conditions]);

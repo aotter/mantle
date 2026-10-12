@@ -49,6 +49,13 @@ For experimental generated applications, optional site settings/media are select
 with `--site <module>` exporting `siteDefaults`. Apply the emitted deployment DDL;
 wire application-owned object storage as documented in `docs/next/media.md`.
 
+For selected experimental Admin, mount the generated `admin({ db, caller, ... })`
+handler yourself. Use a cookie session with OSS role `staff`, and provide an
+`assets` function that returns `null` for missing files. Pass ref handlers in the
+options; verify `/admin/api/bootstrap` and a scoped staff View against the local
+native database before deploying. Read `docs/next/surfaces.md#mounting-admin` for
+optional identity/site facets, CSV, origin checks and the other Admin modules.
+
 ## New project
 
 1. Create a directory outside the SDK checkout with Node 22+ and
