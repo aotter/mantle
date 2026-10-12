@@ -57,3 +57,8 @@ test("PostgreSQL window/filtered min-max cannot masquerade as non-null group key
   expect(result).toMatchObject({ok:false});if(!result.ok)expect(result.diagnostics.some(d=>d.path==="views/nullable-aggregate")).toBe(true);
  }
 });
+test("an equality on the leading order column does not erase its matching index",async()=>{
+ const sources=await loadFixtureSources("paging.yaml");
+ const files=await generateOrThrow("bun-sqlite",[{...sources[0]!,text:sources[0]!.text+`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: fixed-order}\nspec:\n  surface: public\n  input: {type: object, required: [session, block], properties: {session: {type: string}, block: {type: integer}}}\n  sql: SELECT id,block,position FROM positions WHERE session=input.session AND block=input.block ORDER BY block,position\n`}]);
+ expect(files["paged/views/fixed-order.ts"]).toBeDefined();
+});
