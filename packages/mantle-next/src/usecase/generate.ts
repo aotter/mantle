@@ -71,7 +71,9 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
   const dbType = target === "bun-sqlite" ? `import type { Handle as Database } from "${base}driver/bun-sqlite";` : target === "cloudflare-d1" ? `import type { Handle as Database } from "${base}driver/d1";` : `import type { Postgres as Database } from "${base}contracts";`;
   const operation = (kind: "view" | "procedure", name: string, fn: string, input: string, output: string, body: string[]) => {
-    const path = `${kind}s/${encodeURIComponent(name)}`, row = kind === "view" ? output.slice(0, -2) : undefined;
+    // A file name and a module specifier at once: characters a loader could URL-decode would not resolve.
+    if (!/^[A-Za-z0-9._-]+$/.test(name)) refuse(`${kind}s/${name}`, "Operation names must use only letters, digits, '.', '_' and '-'.");
+    const path = `${kind}s/${name}`, row = kind === "view" ? output.slice(0, -2) : undefined;
     declarations.push(`const ${fn} = (...args: [db: Database, caller: Caller, input: ${input}]): Promise<${output}> => import(${q("./" + path + ".js")}).then(m => m.default(...args));`, `export { ${fn} as ${exportName(kind, name)} };`);
     entries[path + ".ts"] = ["// Generated native operation. No runtime plan or interpreter.", dbType,
       `import { ${["type Caller", ...(kind === "procedure" ? ["type Output"] : []), ...(body.some(line => line.startsWith("  deny(")) ? ["deny"] : [])].join(", ")} } from "${base}contracts";`,

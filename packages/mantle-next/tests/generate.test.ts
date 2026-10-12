@@ -160,6 +160,12 @@ test("repeated or unverified View outputs explicitly refuse generation", async (
   }
 });
 
+test("operation names a module loader could URL-decode refuse generation", async () => {
+  const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"n.yaml",text:source.replaceAll("notes-list", "notes list")}]}});
+  expect(generated.ok).toBe(false);
+  if (!generated.ok) expect(generated.diagnostics.some(d => d.path === "views/notes list" && d.message.includes("letters, digits"))).toBe(true);
+});
+
 test("PG declared integer output types include native unsafe-int8 strings", async () => {
   const integerSource = source.replace('title: {type: string}}', 'title: {type: string}, total: {type: integer}}').replace('SELECT id, title FROM notes', 'SELECT id, title, total FROM notes');
   for (const target of ["bun-postgres", "bun-sqlite"] as const) {
