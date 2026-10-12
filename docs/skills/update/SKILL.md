@@ -15,20 +15,11 @@ metadata:
 If the installed/target README describes generated native queries, use this
 flow and stop before the historical Core instructions below.
 
-Read the installed `docs/next/contract.md`, `compatibility.md`, `service.md`
-and the exact target package README. Run the app's full explicit
-`mantle generate <target> <out> <manifest...>` command with its selected
-`--auth`, `--site` and `--admin-extensions` modules; run `tsc --noEmit`,
-implement every listed `Handlers` key, and typecheck again. Pass handlers
-through Store/surface options. Ref context is `{db, caller, store}`; there
-is no RuntimePlan, `createMantle`, registry, hook dispatcher or `withCaller`.
-Bare queries take application-validated inputs and a verified Caller; selected
-REST/MCP boundaries perform external validation. Store keys are storage column
-names, and SQL carries scope, TTL and publication/translation-parent visibility.
-OSS administrative role is `staff`; schedule/lifecycle/guard handlers are refused.
-Commit generated TypeScript/SQL and Wrangler edits, never hand-edit them, and
-run the same generation command with `--check` in CI. Resolve generated conflicts
-by merging authored manifests/options and regenerating. Keep bundle `dist/` untracked.
+Follow the installed [native generation and service workflow](../../next/service.md)
+with the exact package version's `contract.md` and `compatibility.md`. Commit
+all generated output, run the same generation command with `--check`, and keep
+bundle `dist/` untracked. The app owns its verified Caller, handlers and native
+resources; OSS staff role is `staff`.
 
 Pin exact target SDK/peer versions and read its release notes and Admin asset
 installation instructions. Core-to-native replaces app imports/wiring; it is not

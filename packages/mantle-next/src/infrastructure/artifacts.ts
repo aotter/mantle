@@ -1,5 +1,5 @@
-import { readFile, readdir, mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile, readdir, mkdir, rm, writeFile, lstat } from "node:fs/promises";
+import { dirname, join, resolve, relative, sep, isAbsolute } from "node:path";
 import { GENERATED } from "../domain/artifacts.js";
 
 /** Only marked generated files (and pre-header operation entries) can be removed. */
@@ -23,6 +23,19 @@ async function ownedFiles(directory: string, prefix = ""): Promise<string[]> {
 
 /** Check never writes; normal generation removes obsolete SDK-owned files only. */
 export async function writeArtifacts(directory: string, files: Readonly<Record<string, string>>, check = false): Promise<string[]> {
+  const root = resolve(directory);
+  // Preflight all destinations before writing any: a symlink belongs to the app,
+  // never to generated output (including links to somewhere inside the tree).
+  for (const name of Object.keys(files)) {
+    const child = relative(root, resolve(root, name));
+    if (!child || isAbsolute(child) || child === ".." || child.startsWith(`..${sep}`)) throw new Error(`Generated path escapes output directory: ${name}`);
+    let path = root;
+    for (const part of ["", ...child.split(sep)]) {
+      path = join(path, part);
+      const stat = await lstat(path).catch(error => { if (error.code === "ENOENT") return undefined; throw error; });
+      if (stat?.isSymbolicLink()) throw new Error(`Generated output cannot follow an application-owned symlink: ${path}`);
+    }
+  }
   const changed: string[] = [];
   for (const [name, source] of Object.entries(files)) {
     const path = join(directory, name);

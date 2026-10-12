@@ -1,5 +1,5 @@
 /** Bun owns files; no SQLite, runtime or compiler import enters this optional host reader. */
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
 /** Same reader contract as the Admin options' assets(path, request, env). */
@@ -11,7 +11,7 @@ export function bunAdminAssets(root: string): (path: string) => Promise<Response
     const target = resolve(base, `.${path}`);
     if (!target.startsWith(`${base}${sep}`)) return null;
     const physical = await realpath(target).catch(() => "");
-    if (!physical || !physical.startsWith(`${await realpath(base)}${sep}`)) return null;
+    if (!physical || !physical.startsWith(`${await realpath(base)}${sep}`) || !(await stat(physical)).isFile()) return null;
     return new Response(Bun.file(physical));
   };
 }
