@@ -21,6 +21,12 @@ Database, D1 binding) and a verified
 Caller to `views[name](db, caller, input)` or
 `procedures[name](db, caller, input)`.
 
+The separate generated `transfer.ts` deployment entry exports/restores portable
+NDJSON through caller-owned native drivers. Read the
+[portable transfer guide](../../docs/next/portable-store.md) before a database
+move: targets must be empty, sessions are omitted, and failed D1 imports must be
+discarded. Ordinary request bundles do not import this entry.
+
 Validate untrusted input before calling queries and redact native errors at application
 transports. The [query contract](../../docs/next/contract.md#revised-query-responsibility-decision-2026-10-11)
 defines driver-ready inputs, native results, date-time/date wire forms and failure handling.

@@ -42,7 +42,8 @@ export function fieldIndexName(table: string, column: string): string {
 type Tables = [string, ReturnType<typeof getSchema>[string]][];
 
 /** Better Auth's own `order`, then referenced tables before the tables that reference them. */
-function orderedTables(options: BetterAuthOptions): Tables {
+/** Build-time ordering shared with the portable dump descriptor. @internal */
+export function orderedTables(options: BetterAuthOptions): Tables {
   const byOrder = Object.entries(getSchema(options)).filter(([, table]) => !table.disableMigrations).sort((a, b) => a[1].order - b[1].order);
   const ordered: Tables = [];
   const place = (entry: Tables[number], visiting: Set<string>) => {

@@ -20,6 +20,7 @@ import type { LoweredStatement } from "@aotter/mantle/spec";
 import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/model.js";
 import type { BetterAuthOptions } from "better-auth/types";
 import { authSchemaSql } from "../auth/schema.js";
+import { emitTransfer } from "./emit-transfer.js";
 
 /** Core's own new-entry-id lowering for a dialect, printed once as an SQL expression: the Store's inserts carry the same one its compiled INSERTs do. */
 export const coreNewId = (dialect: Pick<typeof d1Dialect, "print" | "lowering">, schemas: Parameters<NonNullable<typeof d1Dialect.print>>[1]): string =>
@@ -109,5 +110,5 @@ export async function generateFromSources(request: { readonly target: Target; re
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
-  return { ...result, files: { ...files, "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql } };
+  return { ...result, files: { ...files, ...emitTransfer(compiled.plan, request.target, lowered.mantle, request.site, request.auth), "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql } };
 }
