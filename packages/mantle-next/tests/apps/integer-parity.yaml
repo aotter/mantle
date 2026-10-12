@@ -1,0 +1,27 @@
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"Schema","metadata":{"name":"parity_integer"},"spec":{"title":"Declared integer precision","schema":{"type":"object","properties":{"owner":{"type":"string"},"n":{"type":"integer"},"other":{"type":"integer"},"optional":{"type":["integer","null"]},"enabled":{"type":"boolean"},"amount":{"type":"number"}},"required":["owner","n","other","enabled","amount"]},"scope":{"owner":"auth.uid()"},"indexes":[["owner","n","id"],["owner","other","id"]]}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"View","metadata":{"name":"integer-order"},"spec":{"surface":"internal","sql":"SELECT id,n,other,optional,enabled,amount,version FROM parity_integer ORDER BY n"}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"View","metadata":{"name":"integer-ordinal"},"spec":{"surface":"internal","sql":"SELECT id,n FROM parity_integer ORDER BY 2"}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"View","metadata":{"name":"integer-shadow"},"spec":{"surface":"internal","sql":"SELECT id,n AS other,other AS n FROM parity_integer ORDER BY n"}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"View","metadata":{"name":"integer-null-order"},"spec":{"surface":"internal","sql":"SELECT id,optional FROM parity_integer ORDER BY optional DESC NULLS LAST,id ASC"}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"View","metadata":{"name":"integer-grouped"},"spec":{"surface":"internal","sql":"SELECT other,min(n) AS lo,max(n) AS hi FROM parity_integer GROUP BY other ORDER BY lo,other"}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"View","metadata":{"name":"integer-cte"},"spec":{"surface":"internal","sql":"WITH x AS (SELECT id,n FROM parity_integer) SELECT id,n FROM x ORDER BY n"}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"View","metadata":{"name":"integer-minmax"},"spec":{"surface":"internal","sql":"SELECT min(n) AS lo,max(n) AS hi FROM parity_integer"}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"View","metadata":{"name":"integer-sum"},"spec":{"surface":"internal","sql":"SELECT sum(n) AS total FROM parity_integer WHERE id IN ('a','b')"}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"View","metadata":{"name":"integer-computed"},"spec":{"surface":"internal","sql":"SELECT count(*) AS count,avg(other) AS average,CAST(42 AS int8) AS computed,'12.34'::numeric(12,2) AS decimal FROM parity_integer"}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"Procedure","metadata":{"name":"integer-touch"},"spec":{"input":{"type":"object","properties":{"id":{"type":"string"},"expectedVersion":{"type":"integer"}},"required":["id","expectedVersion"]},"output":{"type":"object"},"handler":{"sql":"UPDATE parity_integer SET other=other WHERE id=input.id AND version=input.expectedVersion RETURNING id,n,optional,version"}}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"Procedure","metadata":{"name":"integer-ref"},"spec":{"input":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]},"output":{"type":"string"},"handler":{"ref":"integerRef"}}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"Schema","metadata":{"name":"parity_parent"},"spec":{"title":"Integer parent","lifecycle":"publishing","scope":{"owner":"auth.uid()"},"schema":{"type":"object","properties":{"owner":{"type":"string"},"slug":{"type":"string"},"units":{"type":"integer"}},"required":["owner","slug","units"]},"indexes":[["owner","slug"]]}}
+---
+{"apiVersion":"cms.mantle.aotter.net/v2","kind":"Schema","metadata":{"name":"parity_child"},"spec":{"title":"Integer inheritance","lifecycle":"publishing","localized":true,"translates":{"parent":"parity_parent","on":"slug"},"scope":{"owner":"auth.uid()"},"schema":{"type":"object","properties":{"owner":{"type":"string"},"slug":{"type":"string"},"locale":{"type":"string"},"title":{"type":"string"}},"required":["owner","slug","locale","title"]},"uniqueIndexes":[["owner","slug","locale"]]}}

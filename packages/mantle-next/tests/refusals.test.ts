@@ -65,7 +65,7 @@ test("geo provenance survives CTEs and subqueries; physical scalar columns remai
 
 test("unmatched date-time SELECT outputs give an actionable expansion hint", () => {
   const ast = { SelectStmt: { targetList: [{ ResTarget: { val: { ColumnRef: { fields: [{ A_Star: {} }] } } } }] } };
-  expect(wireScalars(ast, ["created_at"], ["timestamptz"], dialect)).toBe("Declared timestamp and date outputs need one SELECT item per output. Expand the SELECT list explicitly.");
+  expect(wireScalars(ast, ["created_at"], ["timestamptz"], dialect)).toBe("Declared scalar outputs need one SELECT item per output. Expand the SELECT list explicitly.");
 });
 
 test("mixed refused declarations are reported together", async () => {

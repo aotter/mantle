@@ -173,7 +173,8 @@ export async function verifyStore(env: StoreEnv) {
   await refused(a.update(wr.id, { title: undefined } as never, { lock: wr.version })); await refused(a.update(wr.id, { sortbucket: undefined } as never, { lock: wr.version })); await refused(a.insert({ sortbucket: undefined } as never));
   // a dotted write column is a database error and moves nothing
   for (const name of ["purchase_requests.ownerid", "r.ownerid", "title\" = 'x', \"ownerid"]) { await assert.rejects(async () => a.update(wr.id, { [name]: B } as never, { lock: wr.version })); await assert.rejects(async () => a.insert({ [name]: B } as never)); }
-  assert.deepEqual((await env.native("SELECT ownerid, title, version FROM purchase_requests WHERE id = ?", [wr.id]))[0], { ownerid: A, title: wr.title, version: wr.version });
+  const nativeWritten = (await env.native("SELECT ownerid, title, version FROM purchase_requests WHERE id = ?", [wr.id]))[0]!;
+  assert.deepEqual({ ...nativeWritten, version: Number(nativeWritten.version) }, { ownerid: A, title: wr.title, version: wr.version });
   assert.equal(await total(), ROWS * 2); ok();
 
   // ---- wire forms: ISO UTC with six digits and plain dates from SQL itself; booleans and JSON are the driver's own

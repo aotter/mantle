@@ -193,3 +193,11 @@ The [size and startup gates](../../docs/next/size-and-startup.md) cover the
 bundle and package budgets. The packed generator still needs its workspace compiler
 dependency made standalone before publication.
 This package is not a released replacement for Mantle 0.2.
+
+Declared integer outputs (including version) are `number | string` on every
+target: safe integers are numbers and larger values are exact decimal strings,
+formatted by SQL before the driver can round them. This applies to Views, SQL
+RETURNING and Store rows, including inherited translation fields. Numeric sort
+and cursor comparisons remain native. Narrow with `typeof` or use `BigInt(value)`
+for exact arithmetic; `Number(largeString)` loses precision. Computed COUNT/AVG/CAST
+and bare boolean representations remain native; no decimal grammar is added.

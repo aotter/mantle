@@ -3,6 +3,7 @@
 Read the accepted responsibility decision in `../../docs/next/contract.md`.
 The only artifact is a bare native query (see the contract). Do not reintroduce
 validators, codecs or row decoders into generated queries.
+Preserve declared integer precision in SQL before driver rounding, and keep ordering/cursor predicates on the original native numeric values.
 
 Use native primitives and generation before adding request-time work. Bare typed
 queries accept application-validated inputs and a verified Caller. External

@@ -221,3 +221,8 @@ Report the project path, the exact Mantle version, what you changed, the checks
 you ran with their results, and anything left for the user.
 
 Admin deployment applies the generated `admin-schema.sql` alongside the initial schema before mounting `admin.ts`. Admin entries use native Store reads and generated validation; an Archived entry may be restored to a draft with Unpublish, as in 0.2.
+Declared integer SQL outputs are `number | string` on every target (safe number,
+otherwise exact decimal string), including Store rows and version. Regenerate,
+then run `tsc --noEmit`; narrow with `typeof` or use `BigInt(value)` for arithmetic,
+and never blindly `Number()` a large integer string. Computed COUNT/AVG/CAST and
+bare boolean outputs keep their native target types; ref outputs remain app-owned.

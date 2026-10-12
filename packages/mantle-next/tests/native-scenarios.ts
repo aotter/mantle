@@ -45,7 +45,7 @@ export async function verifyBareApplication(
   const owner = owners[0];
   const sql = 'SELECT id, requestnumber, title, amount, approved, sortbucket, requestedunits, submittedat, neededon, payload FROM purchase_requests WHERE ownerid = ? ORDER BY id';
   // The authored fixture, not the generated SQL, is the oracle for the wire form of declared timestamps and dates.
-  const wire = (row: Record<string, unknown>) => ({ ...row, submittedat: fixtures[0]!.submittedAt, neededon: fixtures[0]!.neededOn });
+  const wire = (row: Record<string, unknown>) => ({ ...row, requestedunits: Number(row.requestedunits), submittedat: fixtures[0]!.submittedAt, neededon: fixtures[0]!.neededOn });
   const totals = 'SELECT COUNT(*) AS "requestCount", SUM(amount) AS "totalAmount" FROM purchase_requests WHERE ownerid = ?';
   // Seeded through the generated write: timestamps and dates in wire form on every target, other values driver-ready.
   for (const {ownerId, ...input} of fixtures) await call("procedure", "create-purchase", ownerId, {...input, approved: sqlite ? Number(input.approved) : input.approved, payload: JSON.stringify(input.payload)});

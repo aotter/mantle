@@ -38,7 +38,7 @@ export async function verifyPostgresAdapter(factory: PostgresAdapterFactory): Pr
     assert.equal(created.at, "2026-10-12T00:00:00.123456Z", "declared RETURNING date-time retains microseconds");
     assert.equal(created.day, input.day, "declared RETURNING date retains calendar day");
     assert.deepEqual(created.payload, JSON.parse(input.payload), "JSON text is bound verbatim, not JSON-encoded twice");
-    assert.equal(String(created.units), String(input.units), "int8 retains a safe integer exactly");
+    assert.equal(created.units, input.units, "declared safe integer is a number on every target");
     assert.equal(created.enabled, true, "PostgreSQL boolean native output"); assert.equal(created.amount, input.amount, "declared number native output"); checks += 6;
     const rows = await app.views["adapter-items"](db, caller, {});
     const count = rows.count;
@@ -56,6 +56,11 @@ export async function verifyPostgresAdapter(factory: PostgresAdapterFactory): Pr
     assert.equal(String(integer[0].positive), "9007199254740993", "unsafe int8 must not be rounded by an adapter");
     assert.equal(String(integer[0].negative), "-9007199254740993");
     assert.equal(integer[0].decimal, "1234567890123.45", "numeric text retains declared scale and precision"); checks += 3;
+    for (const exact of ["9007199254740993", "-9007199254740993", "9223372036854775807", "-9223372036854775808"]) {
+      await db.unsafe("UPDATE adapter_items SET units = CAST($1 AS bigint) WHERE id = $2", [exact, created.id]);
+      assert.equal((await app.views["adapter-items"](db, caller, {}))[0].units, exact, "declared unsafe integer is an exact decimal string");
+      assert.equal((await app.store(db, caller).collection("adapter_items").findById(created.id)).units, exact); checks += 2;
+    }
     const store = app.store(db, caller), collection = store.collection("adapter_items");
     const changed = { sql: "UPDATE adapter_items SET key = $1 WHERE id = $2 RETURNING id", binds: ["transaction", created.id], row: true };
     if (!interactive) {

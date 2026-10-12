@@ -40,7 +40,7 @@ export const APP_CATALOG_ID = "mantle-catalog";
 
 /** The entry's own timestamps, as a View outputs them: date-times on the wire. */
 const nativeSchema = (field: string): JsonSchema | undefined =>
-  Object.hasOwn(NATIVE_OUTPUT_TYPES, field) ? ({ type: "string", format: "date-time" } as JsonSchema) : undefined;
+  NATIVE_OUTPUT_TYPES[field] === "timestamptz" ? ({ type: "string", format: "date-time" } as JsonSchema) : undefined;
 
 type Target = { ResTarget: { name?: string; val?: { ColumnRef?: { fields?: { String?: { sval?: string } }[] } } } };
 

@@ -82,7 +82,7 @@ bounds, JSON defaults and computed result types are handled explicitly by the
 application boundary rather than assumed from TypeScript.
 
 Driver-native PostgreSQL types and SQLite/D1 types need not match, except for
-declared date-time and date outputs (below), which the SQL formats. That does not
+declared integer, date-time and date outputs (below), which the SQL formats. That does not
 justify overriding every PG type parser or adding a generic decoder to the bare
 query. Authored output names should be emitted into SQL where valid, avoiding
 an extra per-row projection merely to repair names already known at generation.
@@ -121,8 +121,24 @@ valid `Date`), and a declared date takes `YYYY-MM-DD` text, on every target: a
 timestamp needs `Z` or an offset and hours 00-23, a day that does not exist is refused with `SQL_TYPE` before the write, and SQLite receives
 microseconds and days while PostgreSQL receives the canonical text. Computed values
 (`now()`, `date_trunc`, `CAST`) carry no declared type and stay driver-native; on
-PostgreSQL through Bun.SQL that is a `Date`, which drops microseconds. Other
-declared scalars are driver-native.
+PostgreSQL through Bun.SQL that is a `Date`, which drops microseconds. Declared integer outputs (including `version` and retained MIN/MAX/SUM integer
+lineage) are also formatted in SQL: a value in the JavaScript safe integer range
+returns `number`, otherwise an exact decimal `string`, on every target. SQLite/D1
+cast the unsafe branch to text before their driver can round it; PostgreSQL emits
+a native JSONB scalar so the default parser returns the same primitive. Generated
+rows use `number | string` (plus null where nullable). Original native integer
+expressions still own ORDER BY, cursor comparisons and writes. This is an explicit
+exception to native scalar outputs, replacing PostgreSQL safe int8 strings and
+SQLite unsafe rounded reads. Other declared scalars remain driver-native.
+
+Narrow a declared integer with `typeof value === "number"` for ordinary arithmetic,
+or use `BigInt(value)` for exact integer arithmetic. Do not coerce a large decimal
+string with `Number(value)`: that loses precision. SQL integer inputs retain the
+existing application-validated number contract; output parity does not add a
+manifest spelling for decimal fields or change app-owned ref handler outputs.
+COUNT/AVG and explicitly computed CAST outputs stay native; a manifest number
+(real/float8) remains a number, and a bare boolean remains SQLite/D1 0/1 or PG
+boolean. Selected REST/MCP boundaries retain their existing boolean wire form.
 
 Driver-ready JSON parameters are text on every target (a JavaScript array would otherwise be bound as a PostgreSQL array), so the application serializes them. Bare PG SQL declares each JSON parameter as text
 (`CAST(CAST($n AS text) AS jsonb)`), so Bun.SQL sends the text verbatim instead of
@@ -130,7 +146,7 @@ JSON-encoding it again; generation refuses a JSON parameter used any other way. 
 storage representations. Bound optional fields become explicit required values,
 with null representing absence; D1 cannot bind undefined. Native output keys are
 SQL names rather than a post-query camel-case projection. PG uses the driver's
-default type parsers (including Date and int8 strings); custom application parser
+default type parsers (including Date and computed int8 strings); custom application parser
 configuration changes application-owned behavior. Procedures expose raw
 `{ results }`, not a claim of validated authored output.
 
