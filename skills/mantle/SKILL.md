@@ -62,6 +62,11 @@ handler yourself. Use a cookie session with OSS role `staff`, and provide an
 options; verify `/admin/api/bootstrap` and a scoped staff View against the local
 native database before deploying. Read `docs/next/surfaces.md#mounting-admin` for
 optional identity/site facets, CSV, origin checks and the other Admin modules.
+For site/media/staff management, pass object storage as `media` and lazy native
+identity methods in `identity.directory(context)`; forward the request headers
+and verified caller to `d1Identity`/`postgresIdentity`. Verify media upload/commit,
+member cursor paging and invitations locally. Missing capabilities return 501;
+use only `staff` or `null` in role updates.
 
 ## New project
 
