@@ -43,12 +43,13 @@ type Columns = Record<string, { schema: string; field: string }>;
 /**
  * A View's outputs, read off its compiled SELECT: `keys` are the row's keys in order (undefined when an output has no name or
  * a `*` reads a subquery or `json_each`), `columns` the outputs that are a Schema field read unchanged.
+ * `includeGeo` exposes logical geo columns to generators that must refuse them before executing native SQL.
  */
-export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>, ctes: ReadonlyMap<string, Columns> = new Map()): { keys?: string[]; columns: Columns; positions?: string[] } {
+export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>, ctes: ReadonlyMap<string, Columns> = new Map(), includeGeo = false): { keys?: string[]; columns: Columns; positions?: string[] } {
   const columns: Columns = {};
   const sel = view.stmts[0]?.SelectStmt;
   if (!sel?.targetList) return { columns };
-  const outputs = (stmt: SqlNode, scope: ReadonlyMap<string, Columns>) => viewOutputs({ grammar: view.grammar, stmts: [stmt] }, schemas, scope);
+  const outputs = (stmt: SqlNode, scope: ReadonlyMap<string, Columns>) => viewOutputs({ grammar: view.grammar, stmts: [stmt] }, schemas, scope, includeGeo);
   // a CTE's outputs, like a FROM subquery's, keep the Schema field they read unchanged; a body sees its earlier siblings,
   // and under RECURSIVE every sibling (one not yet read is untyped)
   const scope = new Map(ctes);
@@ -72,7 +73,7 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
   };
   for (const f of sel.fromClause ?? []) walk(f);
   const typeOf = (schema: string, col: string) => schemas[schema]!.fields[col] ?? (Object.hasOwn(NATIVE_OUTPUT_TYPES, col) ? NATIVE_OUTPUT_TYPES[col] : undefined);
-  const field = (schema: string | undefined, col: string) => (schema && typeOf(schema, col) && typeOf(schema, col) !== "geo" ? { schema, field: col } : undefined);
+  const field = (schema: string | undefined, col: string) => (schema && typeOf(schema, col) && (includeGeo || typeOf(schema, col) !== "geo") ? { schema, field: col } : undefined);
   let keys: string[] | undefined = [];
   for (const { ResTarget: r } of sel.targetList) {
     // sum, min and max of one column keep its type (a sum of money is money); a count or an average does not

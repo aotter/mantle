@@ -34,7 +34,9 @@ before the Core version rules below. If it has `@aotter/mantle`, read its `packa
 ## Experimental workspace consumers
 
 Follow the linked package README for generation, Workers builds and D1 Sessions;
-the Core scaffolding below does not apply. Keep auth behind
+the Core scaffolding below does not apply. Consult `docs/next/compatibility.md` in
+the linked SDK checkout for the supported/refused list before choosing declarations;
+planned features require their implementation first. Keep auth behind
 `authLoader(() => import(...))` to pass the startup guard. Standalone publishing
 is pending; do not install the experiment from npm or migrate Core unless asked.
 

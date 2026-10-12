@@ -25,4 +25,4 @@ and cloud writes remain outside local-only authorization. See the official
 [startup documentation](https://developers.cloudflare.com/workers/platform/limits/#worker-startup-time).
 Workers `performance.now()` freezes between I/O events and cannot time synchronous
 initialization; gate global startup, first use and warm calls separately.
-Startup CPU acceptance is open (see the [compatibility gates](compatibility.md#gates-before-expanding-claims)).
+Startup CPU acceptance is open (see the [supported/planned scope](compatibility.md#supported)).

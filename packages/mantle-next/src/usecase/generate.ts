@@ -7,6 +7,7 @@ import { recipesOf } from "../domain/recipes.js";
 import { emitStores } from "./stores.js";
 import { emitPaging } from "./paging.js";
 import { emitValidation } from "./validation.js";
+import { refuseDeclarations } from "./refusals.js";
 
 const q = JSON.stringify;
 const sqlite = (target: Target) => target === "bun-sqlite" || target === "cloudflare-d1";
@@ -28,14 +29,13 @@ const typeOf = (s: JsonSchema | undefined): string => {
 };
 export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInput): GenerateResult {
   const diagnostics: GenerateDiagnostic[] = [];
+  refuseDeclarations({ target, plan, lowered, viewKeys, newId }, diagnostics);
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
   const isSqlite = sqlite(target);
   const expected = isSqlite ? "@aotter/mantle/d1" : "@aotter/mantle/postgres";
   if (lowered.dialect.name !== expected || plan.dialect.name !== expected) refuse("target", `Target '${target}' needs canonical '${expected}' compilation and lowering.`);
-  for (const name of Object.keys(plan.triggers)) refuse(`triggers/${name}`, "Native Trigger dispatch is not implemented; generation cannot omit it.");
   const driver = target === "bun-sqlite" ? "bun-sqlite" : target === "cloudflare-d1" ? "d1" : "postgres";
   const auth = (requires: typeof plan.views[string]["requires"], path: string): string[] => {
-    if (requires?.guard) refuse(path, "Procedure guards require a generated native dispatch implementation.");
     return (requires?.auth?.all ?? []).map((p, index) => {
       const condition = typeof p === "string" ? 'caller.kind === "user"' : "ctx.auth.scope" in p ? `caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})` : `caller.kind === "user" && ${q(p["ctx.staff"])}.includes(caller.role ?? "")`;
       return `  deny(caller, ${condition}, ${q(`${path}/requires/auth/all/${index}`)});`;
@@ -59,7 +59,7 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
   };
   const inputFields = (schema: JsonSchema | undefined, path: string) => {
     const fields = Object.keys(schema?.properties ?? {});
-    if (new Set(fields.map(field => field.toLowerCase())).size !== fields.length) refuse(path, "Input properties must have unique case-insensitive names.");
+    if (new Set(fields.map(field => field.toLowerCase())).size !== fields.length) refuse(path, "Input properties must have unique case-insensitive names. Rename input properties to be unique without regard to case.");
     return fields;
   };
   // The dialect functions the bind recipes call, so a bundle carries only those (`binds` takes this object).
@@ -80,11 +80,10 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
     const c = modes?.[mode], trusted = modes?.trusted;
     if (!c || (mode === "caller" && !trusted)) { refuse(path, "Every reachable visibility mode must have canonical lowered SQL."); continue; }
     const keys = Object.hasOwn(viewKeys, name) ? viewKeys[name] : undefined;
-    if (!keys || new Set(keys).size !== keys.length) { refuse(path, "Dynamic or repeated View outputs need an explicit generated row contract."); continue; }
+    if (!keys || new Set(keys).size !== keys.length) { refuse(path, "Dynamic or repeated View outputs need an explicit generated row contract. Give each SELECT output a unique explicit alias."); continue; }
     const output: string[] = [];
     for (const key of keys) {
       const type = outputType(plan, name, key);
-      if (type === "geo") refuse(path, "Native geo projection is not implemented.");
       // Declared timestamps and dates arrive formatted by the SQL itself (domain/wireScalars).
       output.push(`readonly ${q(key)}: ${nativeType(type, isSqlite)};`);
     }
@@ -99,10 +98,10 @@ export function generate({ target, plan, lowered, viewKeys, newId }: GenerateInp
   }
   for (const [index, [name, procedure]] of Object.entries(plan.procedures).sort().entries()) {
     const path = `procedures/${name}`, fn = `procedure${index}`;
-    if (!("sql" in procedure.handler)) { refuse(path, "Ref handlers require an explicit generated application implementation."); continue; }
+    if (!("sql" in procedure.handler)) { refuse(path, "Ref Procedures are planned (#1475). Use an SQL handler until then."); continue; }
     const modes = lowered.procedures[name];
     if (!modes?.caller || !modes.trusted) { refuse(path, "Both caller and trusted SQL must be lowered."); continue; }
-    if ([...modes.caller, ...modes.trusted].some(s => s.hooked || s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing and lifecycle hooks require explicit native execution.");
+    if ([...modes.caller, ...modes.trusted].some(s => s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing writes are planned. Use an operational Schema until publishing generation is available.");
     const fieldNames = inputFields(procedure.input, path + "/input");
     const steps = (statements: readonly LoweredStatement[]) => `[${statements.map(s => step(s, path, fieldNames, s.kind === "row")).join(", ")}] as const`;
     const same = steps(modes.caller) === steps(modes.trusted);

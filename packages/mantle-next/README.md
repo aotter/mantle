@@ -97,9 +97,8 @@ Views return full SQL results; Procedures return `{ results }`. Their atomicity 
 uncertain-write outcomes follow the [query contract](../../docs/next/contract.md#revised-query-responsibility-decision-2026-10-11).
 
 PostgreSQL handles (Bun.SQL, postgres.js) satisfy the two-method `Postgres` shape as they are; see the [contract](../../docs/next/contract.md).
-Procedures return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
-declarations requiring them fail generation. See the complete
-[compatibility ledger](../../docs/next/compatibility.md).
+Procedures return native results directly. Unsupported declarations fail generation with actionable diagnostics;
+see the [supported/refused list](../../docs/next/compatibility.md) for current scope and planned features.
 
 Checks:
 

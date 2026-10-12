@@ -20,7 +20,7 @@ export function wireScalars(ast: SqlNode, keys: readonly string[], types: readon
       const larg = select(s.larg), rarg = select(s.rarg);
       return typeof larg === "string" ? larg : typeof rarg === "string" ? rarg : { ...s, larg, rarg };
     }
-    if (s.targetList?.length !== keys.length || s.targetList.some((t: SqlNode) => !t.ResTarget || t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.A_Star)) return "Declared timestamp and date outputs need one SELECT item per output.";
+    if (s.targetList?.length !== keys.length || s.targetList.some((t: SqlNode) => !t.ResTarget || t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.A_Star)) return "Declared timestamp and date outputs need one SELECT item per output. Expand the SELECT list explicitly.";
     return { ...s, targetList: s.targetList.map((t: SqlNode, i: number) => {
       const val = wire(types[i], d, t.ResTarget.val);
       return val ? { ResTarget: { ...t.ResTarget, name: keys[i], val } } : t;
