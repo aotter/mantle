@@ -36,7 +36,7 @@ Every follow-up must name its target matrix, acceptance tests and owner before c
 | Explicit OCC and expected affected counts | Slice, under review | Caller-observed token, row-zero conflict, foreign-row nondisclosure, native in-transaction assertions; no retries. Generator/contracts |
 | Scoped inserts/upsert and native uniqueness | Slice via compiler/DDL | Ownership injection, generated identities, scoped conflict targets, create race and expired-row policy. Generator/infrastructure |
 | PostgreSQL session preconditions and bounded statements | Slice: explicit native deployment requirements | ISO/postgres text formats, UTC casts, standard strings, float precision and native default timeout; Hyperdrive role/database configuration; no per-request settings manager. Infrastructure/host |
-| Native transaction/error outcomes | Slice, under review | D1 atomic batch, SQLite native transaction, PG SERIALIZABLE via Bun.SQL-shaped begin() (single-statement Procedures autocommit at default isolation; node-postgres through an application adapter); uncertain COMMIT and rollback failure, safe classification, disposal ownership. Generator/contracts/host |
+| Native transaction/error outcomes | Slice, under review | D1 atomic batch, SQLite native transaction, PG SERIALIZABLE via Bun.SQL-shaped begin() (single-statement Procedures autocommit at default isolation; other drivers through an application adapter); uncertain COMMIT and rollback failure, safe classification, disposal ownership. Generator/contracts/host |
 | Ref Procedures and typed handler context | Refused | Caller/cause propagation, input/output checks, application side effects, nested invocation depth. Generator |
 | Dynamic authorization guards | Refused | Validated input, read-only Store/no-invoke, same caller and guard ordering. Generator |
 | Before and after lifecycle hooks | Refused via Trigger rejection | Ordered visible snapshots, veto versus independent commits; after events only for committed affected rows; stable event identity. Generator |
@@ -61,3 +61,8 @@ Every follow-up must name its target matrix, acceptance tests and owner before c
 First-slice acceptance requires actual generated applications on all four targets, matched native work and complete result/state assertions. Native comparison alone is not a 0.2 contract oracle: verify typed outputs and failures against the baseline on the same engine without coercions that hide discrepancies. Record unresolved findings and refusals explicitly.
 
 Before claiming a row compatible, add meaningful adversarial evidence, including foreign ownership, invalid inputs, later-statement rollback, stale OCC, and native failure paths where relevant. Before replacing 0.2, resolve the entire ledger or publish explicitly approved breaking API decisions. Unsupported-feature refusal and benchmark speed are neither proof of compatibility nor permission to close the full issue.
+
+Open gates:
+
+- Paging and cursor API compatibility (the Store View paging rows above).
+- Workers startup CPU and first-use regression gates (see [size and startup](size-and-startup.md)), and native performance acceptance with retained raw samples (`packages/mantle-next/AGENTS.md`).

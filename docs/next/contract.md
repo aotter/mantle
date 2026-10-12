@@ -80,12 +80,6 @@ protection and client disposal responsibility; native errors are rethrown (one e
 redaction before they reach HTTP users belongs to the application boundary (no helper). Removing generic error
 normalization does not authorize dropping transaction outcome evidence.
 
-**Implementation:** default `generated.ts` now binds driver-native parameters,
-returns native rows without a projection/decoder and preserves native database
-errors. It imports no Zod and performs no input/output validation or JSON scan.
-Auth/OCC failures and uncertain transaction outcomes remain explicit generated
-checks. SQL policy and atomic transactions are preserved.
-
 **Single-statement writes:** a Procedure with one statement is atomic on its own
 and runs in autocommit, with no BEGIN/COMMIT on PG or native transaction on Bun
 SQLite. A row-classified statement touches at most one row (one-row INSERT or
@@ -96,12 +90,11 @@ OCC loser re-evaluates its `version =` predicate, matches zero rows and returns
 severity) is a known rollback and is rethrown natively, except a unique violation (23505, SQLite's `UNIQUE constraint failed`), which, in a generated Procedure or a Store write, is `ContractError("CONFLICT")` with the native error as `cause` on every target, and except connection,
 resource and shutdown classes (08, 28, 53, 57, 58, XX), which, like any failure
 without a server response (lost socket), are `OUTCOME_UNKNOWN`. SQLSTATE is
-`errno` on Bun.SQL and `code` on node-postgres. Multi-statement Procedures run in
+`errno` on Bun.SQL and `code` on postgres.js. Multi-statement Procedures run in
 `begin("isolation level serializable", ...)`: a failure before the callback
 returns was rolled back by `begin`; only a failed COMMIT is classified as above.
 
-The optional `checked` boundary was removed on 2026-10-11: validation, defaults and
-error redaction belong to the application.
+The optional `checked` boundary was removed on 2026-10-11; validation, defaults and error redaction belong to the application.
 
 **Date-time wire form:** a View output that is a declared `date-time` column
 (including `created_at`/`updated_at`) returns the handbook's wire form, an ISO
@@ -117,9 +110,7 @@ microseconds and days while PostgreSQL receives the canonical text. Computed val
 PostgreSQL through Bun.SQL that is a `Date`, which drops microseconds. Other
 declared scalars are driver-native.
 
-Driver-ready JSON parameters are text on both targets: node-postgres treats a
-JavaScript array as a PostgreSQL array, so native JSON binds must be serialized by
-the application. Bare PG SQL declares each JSON parameter as text
+Driver-ready JSON parameters are text on every target (a JavaScript array would otherwise be bound as a PostgreSQL array), so the application serializes them. Bare PG SQL declares each JSON parameter as text
 (`CAST(CAST($n AS text) AS jsonb)`), so Bun.SQL sends the text verbatim instead of
 JSON-encoding it again; generation refuses a JSON parameter used any other way. SQLite bool/date/timestamp/numeric parameters use their declared
 storage representations. Bound optional fields become explicit required values,
@@ -152,64 +143,12 @@ may converge storage or inspect every schema. Optional Better Auth, REST, MCP,
 Admin and UI stay outside the query core. Preserve their public behavior as they
 are added; do not make a read import their entire composition.
 
-## Shared runtime core (spike, tracking aotter/mantle#1465)
+## Shared runtime core
 
-Generated Views, generated Procedures, the Store and the Better Auth adapter share
-one kernel, split on two independent axes. Nothing branches on the engine at run
-time; a bundle contains one dialect module and one driver module.
-
-- **Dialect** (`kernel/dialect/sqlite.ts`, `postgres.ts`): how SQL is spelled and
-  values are stored: `param(n)` (`?n`/`$n`), `ident`, `escapeLike` and the ESCAPE
-  clause, `like(ci)`, the wire-form templates `wireTimestamp`/`wireDate` (generic over the operand;
-  the 1970 floor arithmetic exists once), and bind values (`now`, `cutoff`, the ISO
-  input encoders in `kernel/scalars.ts`, bool, JSON text) and `unique(error)`, how the engine words a unique-index clash.
-- **Driver** (`kernel/driver/bun-sqlite.ts`, `d1.ts`, `postgres.ts`): how a handle is
-  called: `read`, `run` (`{ rows, changes }`) and `procedure`, each with only the
-  atomicity the engine really has (D1 batch with the `_mantle_assert` row check, mapped to
-  `CONFLICT`; bun:sqlite `db.transaction`; Bun.SQL autocommit for one statement,
-  `begin(serializable)` and `postgresOutcome` for several). No common transaction interface.
-- **Binds** (`kernel/binds.ts`): Core's bind recipes (`uid`, `role`, `now`, `cutoff`,
-  `const`, `version` (the Store's lock), `input` with ISO encoding) evaluated by one function for generated Views,
-  generated Procedures and the Store. Generated code carries the recipes as data, so
-  binds are no longer emitted as straight-line code (about 0.1 microsecond per call on
-  bun:sqlite; see the spike report).
-- **Condition** (`kernel/where.ts`): one column/operator/value fragment builder, used by
-  the Store and by the Better Auth adapter, which keeps only OR grouping, contains/starts/ends
-  patterns and joins.
-- **Store** (`kernel/store.ts`; generated as `store(db, caller).collection(table)`, the document-database-driver shape: one
-  generic runtime, one shared rules object and a small fact per Schema). **The row rules are spelled once, in Core**
-  (`@aotter/mantle/spec`: `rowPolicy(schema, mode)` and `writePolicy(schema, kind)`, data: terms of column, `eq`/`ttl`, and a
-  bind recipe). Core's policy rewriter renders the terms to its AST. The generator evaluates the same functions once for a
-  placeholder scope (`$scope`) and TTL (`$ttl`) into `RULES` (caller and trusted terms, the insert fills, the update sets, the
-  version lock, and Core's own new-id lowering printed for the dialect), and for every Schema proves that `expand(RULES, fact)`
-  equals Core's `rowPolicy` (caller, trusted) and `writePolicy` (insert, update with lock, delete lock): generation is refused otherwise.
-  A fact is `{ s?, ttl?: [column, seconds], pub?, ts?, d? }`, keyed by table name, about 2-60 bytes; the runtime renders the
-  terms to SQL with the dialect. No SQL text is generated per Schema. Methods: `findById`, `find` (AND-only typed `where`: eq
-  ne gt gte lt lte like in notIn isNull, null is IS NULL; keyset `cursor`, percent-encoded JSON `[value, id]` bound as parameters), `first`, `count`, `insert`, `update(id, set, { lock })`, `delete(id, { lock })`.
-  - **Storage names.** Rows, `where`, `set`, `orderBy` and cursors use table column names, always lower-case (`requestnumber`,
-    `created_at`), the same keys generated Views return. `SELECT *` also returns a geo field's `<field>_lat`/`<field>_lng`, which the
-    row type lists. A read is `SELECT r.*, <wire forms of the date-time and date columns> FROM <table> r WHERE
-    <rowPolicy> AND <where> ORDER BY ... LIMIT`, placeholders numbered after the policy's; the replacements are listed after
-    `*` under the same name and every target's driver keeps the last of two same-named columns. The scope column and `_rid` are
-    deleted from each row (Core never reads back the scope column). A write returns `RETURNING *` with the same replacements.
-  - **Identifiers are quoted, not checked.** Every column name is quoted by the dialect; an unknown column is a database
-    error. No runtime allowlist exists. The generated types restrict column names, value types, operators, the writable
-    columns (no `null` for a required non-null column; a JSON column takes an object or array), `order`, ids and lock values,
-    and restrict `orderBy` to `id` and the indexed NOT NULL columns. NOT NULL is a database guarantee: Core's initial storage
-    SQL (`initialStorageSql`, both dialects, one rule `notNullColumns`) declares NOT NULL for every field an `operational` Schema
-    requires and does not allow null; a `publishing` Schema's drafts may be incomplete, so none of its fields qualify. (Convergence at
-    boot does not alter existing columns and keeps its own DDL.) The keyset cursor has no NULL handling; ties break on `id`.
-    The runtime does not check what the types state: a value the types forbid is a bound parameter, so the worst outcome is a
-    database error or a wrong result inside the caller's rows. It refuses only what a type cannot guarantee: `limit` outside 1 to
-    500 (it is printed into the SQL), a write naming a system column (`id`, `version`, `created_at`, `updated_at`, `author_id`,
-    `status`, `_rid`) or the scope column, compared case-insensitively, an `undefined` write value (a driver binds it as NULL) and
-    any write to a publishing Schema. A forged cursor only moves the page inside the caller's rows.
-  - **Writes.** A write names only the columns given plus the policy's (`version = version + 1`, `updated_at`, and for an
-    insert scope, `created_at`, `author_id` and an id), guarded by the row rules and the version; zero rows is `CONFLICT`. The id is Core's lowering of `newId` (the expression its compiled INSERTs use). An insert with no
-    subject fails on the NOT NULL scope column. Date-time and date columns come from the fact and take the ISO encoders and casts;
-    a boolean and a JSON object are told by their JS type. Trusted mode has no scope equality, so such an index does not serve a
-    cross-owner sort. Publishing Schemas have a read Store only. **The Store does not check `requires`**: it enforces row rules
-    only, so authorize before calling it (0.2 semantics).
+Generated Views, Procedures, the Store and the Better Auth adapter share one kernel (`src/kernel`): a dialect per engine (how SQL is
+spelled), a driver per handle (how it is called and what atomicity it really has), one bind evaluator, one condition builder and one
+generic Store. Nothing branches on the engine at run time. The design, the Store's rules and limits, and the measured costs are in
+[ADR-0045](../adr/0045-next-runtime-core.md); size numbers are `size-budgets.json` and `scripts/check-package.ts`.
 
 ## Architecture and acceptance
 

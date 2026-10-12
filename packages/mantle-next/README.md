@@ -34,23 +34,11 @@ timestamp or a nonexistent day is refused with `SQL_TYPE` before the write.
 
 Every Schema is also a typed **Store** collection, in the shape of a document-database driver:
 `store(db, caller).collection("purchase_requests")` with `findById`, `find` (AND-only `where`, keyset `cursor`), `first`,
-`count`, `insert(values)`, OCC `update(id, set, { lock })` and `delete(id, { lock })`. One shared runtime serves every
-collection from one shared rules object (Core's `rowPolicy`/`writePolicy`, evaluated at build time and proven equal for every
-Schema) and a fact of a few bytes per Schema (scope column, TTL, date-time and date columns); it prints no per-Schema SQL.
-Rows, `where`, `set` and `orderBy` use the table's **storage column names**, always lower-case (`requestnumber`, `created_at`):
-the same keys a generated View returns. `SELECT *` returns a geo field's `<field>_lat`/`<field>_lng` (typed in the row); the
-scope column and `_rid` are never returned. Column names are quoted by the dialect, so an unknown one is a database error,
-never SQL. Column names, value types, operators, `order`, ids, lock values and the writable columns are enforced by the
-generated types only: a value the types forbid reaches the database as a bound parameter, so the worst outcome is a database
-error or a wrong result inside the caller's own rows. `orderBy` offers `id` and the indexed columns the database keeps NOT NULL
-(Core's initial storage SQL declares NOT NULL for a field an operational Schema requires; a publishing Schema's drafts may be
-incomplete, so none of its fields qualify). What the runtime still refuses (`INPUT_VALIDATION_FAILED`) is what types cannot
-guarantee: `limit` outside 1 to 500 (it is part of the SQL text), a write that names a system column or the scope column, an
-`undefined` write value (a driver would bind it as NULL and clear the column) and any write to a publishing Schema. A cursor is
-`[value, id]` bound as parameters; a forged one only moves the page inside the caller's rows, and one made for another query
-pages wrongly. An insert's id is Core's new-id expression.
-**The Store does not check `requires`**: it enforces row rules (scope, TTL, version), not a View's or Procedure's
-authorization predicates, which are 0.2 semantics. Authorize before calling it. See the contract.
+`count`, `insert(values)`, OCC `update(id, set, { lock })` and `delete(id, { lock })`. Rows, `where`, `set` and `orderBy` use the
+table's storage column names, lower-case (`requestnumber`, `created_at`), the keys a generated View returns; the generated types
+state column names, value types and the writable columns, and the Store enforces the Schema's row rules (scope, TTL, version) but
+**not** a View's or Procedure's `requires`: authorize before calling it. Design, limits and what the runtime still refuses are in
+[ADR-0045](../../docs/adr/0045-next-runtime-core.md).
 
 The first slice provides **full-result SQL functions**, not the old paginated
 View API. SQL Procedures return their existing `{ results }` shape and retain
@@ -60,8 +48,8 @@ multi-statement Procedure uses SERIALIZABLE on PG through `begin()`, with no
 automatic retries. Never assume a lost commit answer means rollback after
 OUTCOME_UNKNOWN; reconcile first.
 
-Bun.SQL (pass its pooled `SQL` to multi-statement Procedures: they `begin` themselves) and postgres.js (`postgres(env.HYPERDRIVE.connectionString)` on Workers) satisfy the two-method
-`Postgres` shape from `@aotter/mantle-next/contracts` as they are; there is no adapter. Procedures return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
+PostgreSQL handles (Bun.SQL, postgres.js) satisfy the two-method `Postgres` shape as they are; see the [contract](../../docs/next/contract.md).
+Procedures return native results directly. Before/after hooks, guarded/ref handlers and Triggers are not implemented;
 declarations requiring them fail generation. See the complete
 [compatibility ledger](../../docs/next/compatibility.md).
 
