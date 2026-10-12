@@ -5,8 +5,8 @@
  */
 import assert from "node:assert/strict";
 import type { Caller } from "../src/kernel/contracts.js";
+import { user } from "./apps/fixtures.js";
 
-const user = (subject: string): Caller => ({ kind: "user", subject, role: null, scopes: [], credential: "session", credentialId: null, clientId: null });
 const system: Caller = { kind: "system", reason: "store-scenario" };
 const anonymous: Caller = { kind: "anonymous" };
 const A = "store-owner-a", B = "store-owner-b";
@@ -24,6 +24,17 @@ export interface StoreEnv {
   /** What the driver was asked to run for one Store call (bun:test only). */
   record?(caller: Caller, run: (stores: ReturnType<StoreEnv["stores"]>) => Promise<unknown>): Promise<{ sql: string; values: unknown[] }>;
 }
+
+/** The scenarios' view of a generated app (`import * as app`) on one handle. `spy(calls)` builds a handle that logs what it runs (it enables the placeholder checks). */
+export const storeEnv = (app: { store: any; views: any; procedures: any }, handle: unknown, sqlite: boolean, native: StoreEnv["native"], spy?: (calls: { sql: string; values: unknown[] }[]) => unknown): StoreEnv => {
+  const stores = (caller: Caller, db = handle) => { const store = app.store(db, caller); return { purchase_requests: store.collection("purchase_requests"), session_notes: store.collection("session_notes"), catalog_items: store.collection("catalog_items") }; };
+  return {
+    sqlite, native, stores,
+    view: (name, caller, input) => app.views[name](handle, caller, input),
+    call: (name, caller, input) => app.procedures[name](handle, caller, input),
+    ...(spy && { record: async (caller, run) => { const calls: { sql: string; values: unknown[] }[] = []; await run(stores(caller, spy(calls))); return calls.at(-1)!; } }),
+  };
+};
 
 type Model = { requestNumber: string; title: string; amount: number; approved: boolean; requestedUnits: number; submittedAt: string; neededOn: string; sortBucket: string | null; id: string };
 const model = (owner: string, i: number): Omit<Model, "id"> => ({

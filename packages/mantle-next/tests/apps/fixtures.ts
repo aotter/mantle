@@ -1,3 +1,4 @@
+import type { Caller } from "../../src/kernel/contracts.js";
 /** Public synthetic data only. The two owners expose accidental scope leaks. */
 export const owners = ["purchase-owner-a", "purchase-owner-b"] as const;
 export const fixtures = owners.flatMap((ownerId, owner) =>
@@ -15,3 +16,6 @@ export const fixtures = owners.flatMap((ownerId, owner) =>
   })),
 );
 
+
+/** A signed-in user with no role or scopes: the Caller of every scenario. */
+export const user = (subject: string): Caller => ({ kind: "user", subject, role: null, scopes: [], credential: "session", credentialId: null, clientId: null });

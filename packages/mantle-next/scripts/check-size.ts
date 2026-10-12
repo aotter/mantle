@@ -1,26 +1,19 @@
 /** Offline deployment bundles: the whole purchase API, including postgres.js. */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
-import { generateFromSources } from "../src/infrastructure/generate.js";
+import { generateOrThrow, loadFixtureSources, writeGenerated } from "../tests/apps/link.js";
 
 const base = resolve(import.meta.dir, "..");
 const directory = await mkdtemp(resolve(base, "tests/apps/.size-"));
 const budgets = JSON.parse(await readFile(resolve(base, "size-budgets.json"), "utf8"));
-const text = await readFile(resolve(base, "tests/apps/purchase.yaml"), "utf8");
+const sources = await loadFixtureSources();
 try {
   for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const) {
-    const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "purchase.yaml", text }] } });
-    assert.ok(generated.ok, JSON.stringify(!generated.ok && generated.diagnostics));
-    const key = target;
-    const app = resolve(directory, key);
-    await mkdir(app);
-    for (const [name, text] of Object.entries(generated.files)) {
-      await mkdir(dirname(resolve(app, name)), { recursive: true });
-      await writeFile(resolve(app, name), text);
-    }
+    const key = target, app = resolve(directory, key);
+    await writeGenerated(app, await generateOrThrow(target, sources), false); // the package (dist), as a deployment resolves it
     const postgres = target === "cloudflare-postgres";
     // No test oracle/seed/benchmark code in the deployment bundle. Caller is a
     // fixed fixture identity, not an example of production credential handling.

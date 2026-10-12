@@ -4,8 +4,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { generateFromSources } from "../src/infrastructure/generate.js";
+import { join } from "node:path";
+import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link.js";
 
 const targets = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const;
 const files: string[] = [];
@@ -15,18 +15,12 @@ beforeAll(async () => {
   const base = fileURLToPath(new URL("apps/.generated/", import.meta.url));
   await mkdir(base, {recursive:true});
   directory = await mkdtemp(join(base, "consumer-"));
-  const text = await readFile(new URL("apps/purchase.yaml", import.meta.url), "utf8");
+  const sources = await loadFixtureSources();
   for (const target of targets) {
-    const generated = await generateFromSources({target, sources:{sources:[{sourceId:"purchase.yaml",text}]}});
-    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
     const destination = join(directory, target);
-    await mkdir(destination);
-    const file = join(destination, "generated.ts");
-    for (const [name, text] of Object.entries(generated.files)) {
-      await mkdir(dirname(join(destination, name)), { recursive: true });
-      await writeFile(join(destination, name), text);
-    }
-    files.push(file);
+    // unlinked: the consumer resolves @aotter/mantle-next/* through the package (dist), as an application does
+    await writeGenerated(destination, await generateOrThrow(target, sources), false);
+    files.push(join(destination, "generated.ts"));
     selectedFiles.push(join(destination, "views/purchase-totals.ts"), join(destination, "procedures/create-purchase.ts"));
   }
   // Bun.SQL is the official PostgreSQL handle; postgres.js satisfies the same shape as it is.

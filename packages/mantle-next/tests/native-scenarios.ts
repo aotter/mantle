@@ -1,8 +1,29 @@
 import assert from "node:assert/strict";
-import { pairedReadBenchmark } from "../scripts/bench.js";
 import { fixtures, owners } from "./apps/fixtures.js";
 
-export { postgresOracleSql } from "./apps/oracle.js";
+export async function pairedReadBenchmark(generated: () => Promise<unknown>, native: () => Promise<unknown>) {
+  assert.deepEqual(await generated(), await native(), "benchmark requires semantic equality");
+  for (let i = 0; i < 20; i++) { await generated(); await native(); }
+  const samples: { round: number; variant: "generated" | "native"; sample: number; microseconds: number }[] = [];
+  for (let round = 1; round <= 3; round++) {
+    for (let sample = 0; sample < 200; sample++) {
+      const order = (sample + round) % 2 ? ["generated", "native"] as const : ["native", "generated"] as const;
+      for (const variant of order) {
+        const start = performance.now(); await (variant === "generated" ? generated : native)();
+        samples.push({ round, variant, sample, microseconds: (performance.now() - start) * 1000 });
+      }
+    }
+  }
+  const summary = ["generated", "native"].map(variant => {
+    const values = samples.filter(row => row.variant === variant).map(row => row.microseconds).sort((a, b) => a - b);
+    return { variant, samples: values.length, p50Microseconds: values[Math.ceil(values.length * .5) - 1], p95Microseconds: values[Math.ceil(values.length * .95) - 1] };
+  });
+  return {
+    scope: "same-driver local read; native includes equivalent row projection; exploratory paired samples",
+    clockCaveat: "Bun performance.now measures elapsed function time. Worker performance.now advances with I/O events and can omit or misattribute post-I/O CPU; Worker samples are I/O-event intervals, not complete function latency. Use an external host clock for Worker performance acceptance.",
+    summary, samples,
+  };
+}
 
 /** What a native application writes to return the wire form: ISO timestamps with microseconds and plain dates, formatted by the database. */
 export const handwrittenListSql = (sqlite: boolean) => sqlite

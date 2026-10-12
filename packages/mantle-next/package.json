@@ -31,7 +31,7 @@
     "test": "bun test tests/*.test.ts && bun run check:size && bun scripts/check-package.ts",
     "generate": "bun src/infrastructure/cli.ts",
     "test:native": "bun scripts/verify-native.ts",
-    "bench": "bun scripts/bench.ts",
+    "bench": "bun scripts/verify-native.ts --bench",
     "check:size": "bun run build && bun scripts/check-size.ts",
     "check:package": "bun run build && bun scripts/check-package.ts"
   },

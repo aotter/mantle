@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile, mkdtemp, open } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Database } from "bun:sqlite";
@@ -11,12 +11,14 @@ import { SQL } from "bun";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { unstable_splitSqlQuery } from "wrangler";
-import { generateFromSources } from "../src/infrastructure/generate.js";
 import type { Target } from "../src/domain/model.js";
 import { externalReadBenchmark } from "./bench.js";
 import type { Caller } from "../src/kernel/contracts.js";
-import { verifyBareApplication, postgresOracleSql, handwrittenListSql } from "../tests/native-scenarios.js";
-import { verifyStore } from "../tests/store-scenarios.js";
+import { user } from "../tests/apps/fixtures.js";
+import { generateOrThrow, loadFixtureSources, writeGenerated } from "../tests/apps/link.js";
+import { postgresOracleSql } from "../tests/apps/oracle.js";
+import { verifyBareApplication, handwrittenListSql } from "../tests/native-scenarios.js";
+import { storeEnv, verifyStore } from "../tests/store-scenarios.js";
 const base = resolve(import.meta.dir, "..");
 const targets: Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
 const args = process.argv.slice(2);
@@ -27,25 +29,12 @@ if (includeBench) {
   assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: base, encoding: "utf8" }).trim(), "", "formal benchmark source must be committed and clean");
 }
 assert.ok(!selected || targets.includes(selected as Target), "unknown native target");
-const caller = (owner: string | null): Caller => owner === null ? { kind: "anonymous" } : { kind: "user", subject: owner, role: null, scopes: [], credential: "session", credentialId: null, clientId: null };
-const source = await readFile(resolve(base, "tests/apps/purchase.yaml"), "utf8");
-const storeSources = await Promise.all(["store-extra.yaml", "store-equivalence.yaml"].map(async name => ({ sourceId: name, text: await readFile(resolve(base, "tests/apps", name), "utf8") })));
-/** The Store scenarios' view of a generated app on one handle. */
-const storeEnv = (bare: any, handle: unknown, sqlite: boolean, native: (sql: string, values?: readonly unknown[]) => Promise<Record<string, unknown>[]>) => ({
-  sqlite, native,
-  stores: (caller: Caller) => ({ purchase_requests: bare.store(handle, caller).collection("purchase_requests"), session_notes: bare.store(handle, caller).collection("session_notes"), catalog_items: bare.store(handle, caller).collection("catalog_items") }),
-  view: (name: string, caller: Caller, input: Record<string, unknown>) => bare.views[name](handle, caller, input),
-  call: (name: string, caller: Caller, input: Record<string, unknown>) => bare.procedures[name](handle, caller, input),
-});
+const caller = (owner: string | null): Caller => owner === null ? { kind: "anonymous" } : user(owner);
+const sources = await loadFixtureSources("purchase.yaml", "store-extra.yaml", "store-equivalence.yaml");
 for (const target of selected ? [selected as Target] : targets) {
-  const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "purchase.yaml", text: source }, ...storeSources] } });
-  assert.ok(generated.ok, JSON.stringify(!generated.ok && generated.diagnostics));
+  const files = await generateOrThrow(target, sources);
   const directory = resolve(base, "tests/apps/.generated", target);
-  await mkdir(directory, { recursive: true });
-  for (const [name, text] of Object.entries(generated.files)) {
-    await mkdir(dirname(resolve(directory, name)), { recursive: true });
-    await writeFile(resolve(directory, name), text);
-  }
+  await writeGenerated(directory, files, false); // unlinked: these import the built package, as an application does
   const bare = await import(pathToFileURL(resolve(directory, "generated.ts")).href);
   for (const kind of ["views", "procedures"]) for (const name of Object.keys(bare[kind])) {
     const entry = await import(pathToFileURL(resolve(directory, kind, encodeURIComponent(name) + ".ts")).href);
@@ -59,7 +48,7 @@ for (const target of selected ? [selected as Target] : targets) {
     : {unsafe:async(text:string,values:unknown[])=>record(text,values)};
   await bare.views["purchase-list"](capture,caller("purchase-owner-a"),{});
   assert.equal(canonicalCalls,1,"bare View uses exactly one native read");
-  const ddl = generated.files["schema.sql"]!;
+  const ddl = files["schema.sql"]!;
   let result: unknown;
   if (target === "bun-sqlite") {
     const db = new Database(":memory:");
@@ -85,7 +74,7 @@ for (const target of selected ? [selected as Target] : targets) {
     const workerFile = resolve(directory, "worker.ts");
     const schema = `mantle_next_${Date.now()}_${process.pid}`;
     const sql = unstable_splitSqlQuery(ddl);
-    await writeFile(workerFile, `import { views as bareViews, procedures as bareProcedures, store as bareStore } from './generated.ts';\nimport { verifyBareApplication, postgresOracleSql, handwrittenListSql } from '${resolve(base, "tests/native-scenarios.ts")}';\nimport { verifyStore } from '${resolve(base, "tests/store-scenarios.ts")}';\n${postgres ? `import postgres from 'postgres';` : ""}\nexport default { async fetch(_request, env) {\n if (new URL(_request.url).pathname === '/health') return new Response('ready');\n const db = ${postgres ? "postgres(env.HYPERDRIVE.connectionString,{max:1})" : "env.DB"};\n try {\n${postgres ? ` if (!new URL(_request.url).pathname.startsWith('/read-')) { await db.unsafe('CREATE SCHEMA ${schema}'); await db.unsafe('SET search_path TO ${schema}'); await db.unsafe(${JSON.stringify(ddl)}); }` : ` if (!new URL(_request.url).pathname.startsWith('/read-')) for (const sql of ${JSON.stringify(sql)}) await db.prepare(sql).run();`}\n if (new URL(_request.url).pathname.startsWith('/read-')) {\n   ${postgres ? `await db.unsafe('SET search_path TO ${schema}');` : ''}\n   const subject='purchase-owner-a'; const owner={kind:'user',subject,role:null,scopes:[],credential:'session',credentialId:null,clientId:null};\n   let rows; for(let batch=0;batch<20;batch++){\n     if(new URL(_request.url).pathname === '/read-generated') rows=await bareViews['purchase-list'](${postgres ? "db" : "db"},owner,{});\n     else { if(owner.kind !== 'user') throw new Error('UNAUTHENTICATED'); const text=new URL(_request.url).pathname === '/read-native-canonical' ? ${JSON.stringify(canonicalSql)} : ${postgres ? "postgresOracleSql(handwrittenListSql(false))" : "handwrittenListSql(true)"}; rows=${postgres ? "await db.unsafe(text,[subject])" : "(await db.prepare(text).bind(subject).all()).results"}; }\n   }\n   return Response.json(rows);\n }\n const result = await verifyBareApplication(async (kind,name,owner,input) => structuredClone(await (kind==='view'?bareViews:bareProcedures)[name](${postgres ? "db" : "db"},owner===null?{kind:'anonymous'}:{kind:'user',subject:owner,role:null,scopes:[],credential:'session',credentialId:null,clientId:null},input)), async (sql,values=[]) => ${postgres ? "structuredClone(await db.unsafe(postgresOracleSql(sql),values))" : "(await db.prepare(sql).bind(...values).all()).results"}, ${!postgres}, ${includeBench});\n const handle = ${postgres ? "db" : "db"}; const nativeSql = async (sql,values=[]) => ${postgres ? "[...await handle.unsafe(postgresOracleSql(sql),values)]" : "(await db.prepare(sql).bind(...values).all()).results"};\n result.store = await verifyStore({sqlite:${!postgres}, native:nativeSql, stores:(c)=>({purchase_requests:bareStore(handle,c).collection('purchase_requests'),session_notes:bareStore(handle,c).collection('session_notes'),catalog_items:bareStore(handle,c).collection('catalog_items')}), view:(name,c,input)=>bareViews[name](handle,c,input), call:(name,c,input)=>bareProcedures[name](handle,c,input)});\n return Response.json(result);\n } catch(error) { return Response.json({error:String(error),stack:error.stack,actual:Array.isArray(error.actual)?error.actual[0]:error.actual,expected:Array.isArray(error.expected)?error.expected[0]:error.expected},{status:500}); } finally { ${postgres ? "await db.end();" : ""} }\n} };\n`);
+    await writeFile(workerFile, `import * as bare from './generated.ts';\nimport { verifyBareApplication, handwrittenListSql } from '${resolve(base, "tests/native-scenarios.ts")}';\nimport { postgresOracleSql } from '${resolve(base, "tests/apps/oracle.ts")}';\nimport { user } from '${resolve(base, "tests/apps/fixtures.ts")}';\nimport { storeEnv, verifyStore } from '${resolve(base, "tests/store-scenarios.ts")}';\nconst bareViews = bare.views, bareProcedures = bare.procedures;\n${postgres ? `import postgres from 'postgres';` : ""}\nexport default { async fetch(_request, env) {\n if (new URL(_request.url).pathname === '/health') return new Response('ready');\n const db = ${postgres ? "postgres(env.HYPERDRIVE.connectionString,{max:1})" : "env.DB"};\n try {\n${postgres ? ` if (!new URL(_request.url).pathname.startsWith('/read-')) { await db.unsafe('CREATE SCHEMA ${schema}'); await db.unsafe('SET search_path TO ${schema}'); await db.unsafe(${JSON.stringify(ddl)}); }` : ` if (!new URL(_request.url).pathname.startsWith('/read-')) for (const sql of ${JSON.stringify(sql)}) await db.prepare(sql).run();`}\n if (new URL(_request.url).pathname.startsWith('/read-')) {\n   ${postgres ? `await db.unsafe('SET search_path TO ${schema}');` : ''}\n   const subject='purchase-owner-a'; const owner=user(subject);\n   let rows; for(let batch=0;batch<20;batch++){\n     if(new URL(_request.url).pathname === '/read-generated') rows=await bareViews['purchase-list'](${postgres ? "db" : "db"},owner,{});\n     else { if(owner.kind !== 'user') throw new Error('UNAUTHENTICATED'); const text=new URL(_request.url).pathname === '/read-native-canonical' ? ${JSON.stringify(canonicalSql)} : ${postgres ? "postgresOracleSql(handwrittenListSql(false))" : "handwrittenListSql(true)"}; rows=${postgres ? "await db.unsafe(text,[subject])" : "(await db.prepare(text).bind(subject).all()).results"}; }\n   }\n   return Response.json(rows);\n }\n const result = await verifyBareApplication(async (kind,name,owner,input) => structuredClone(await (kind==='view'?bareViews:bareProcedures)[name](${postgres ? "db" : "db"},owner===null?{kind:'anonymous'}:user(owner),input)), async (sql,values=[]) => ${postgres ? "structuredClone(await db.unsafe(postgresOracleSql(sql),values))" : "(await db.prepare(sql).bind(...values).all()).results"}, ${!postgres}, ${includeBench});\n const handle = ${postgres ? "db" : "db"}; const nativeSql = async (sql,values=[]) => ${postgres ? "[...await handle.unsafe(postgresOracleSql(sql),values)]" : "(await db.prepare(sql).bind(...values).all()).results"};\n result.store = await verifyStore(storeEnv(bare, handle, ${!postgres}, nativeSql));\n return Response.json(result);\n } catch(error) { return Response.json({error:String(error),stack:error.stack,actual:Array.isArray(error.actual)?error.actual[0]:error.actual,expected:Array.isArray(error.expected)?error.expected[0]:error.expected},{status:500}); } finally { ${postgres ? "await db.end();" : ""} }\n} };\n`);
     const config = { name: "mantle-next-native-local", main: workerFile, compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat"], ...(postgres ? { hyperdrive: [{ binding: "HYPERDRIVE", id: "00000000000000000000000000000001", localConnectionString: connectionString }] } : { d1_databases: [{ binding: "DB", database_name: "mantle-next-local", database_id: "00000000-0000-0000-0000-000000000001" }] }) };
     const privateDir = await mkdtemp(resolve(process.env.MANTLE_NEXT_LAB_DIR ?? tmpdir(), "mantle-next-native-"));
     const configPath = resolve(privateDir, "wrangler.private.json");
@@ -113,7 +102,7 @@ for (const target of selected ? [selected as Target] : targets) {
     const hash = (text: string) => createHash("sha256").update(text).digest("hex");
     const harnessFiles = ["scripts/verify-native.ts", "scripts/bench.ts", "tests/native-scenarios.ts", "tests/apps/fixtures.ts"];
     const harnessHashes = Object.fromEntries(await Promise.all(harnessFiles.map(async file => [file, hash(await readFile(resolve(base, file), "utf8"))])));
-    const provenance = { canonicalSQLSHA256:hash(canonicalSql), canonicalSql, harnessHashes, gitSHA: execFileSync("git", ["rev-parse", "HEAD"], { cwd: base, encoding: "utf8" }).trim(), generatedSHA256: hash(generated.files["generated.ts"]!), schemaSHA256: hash(ddl), fixtureSHA256: hash(source), contractsSHA256: hash(await readFile(resolve(base, "dist/kernel/contracts.js"), "utf8")), runtime: process.version, bun: Bun.version, timestampUTC: new Date().toISOString() };
+    const provenance = { canonicalSQLSHA256:hash(canonicalSql), canonicalSql, harnessHashes, gitSHA: execFileSync("git", ["rev-parse", "HEAD"], { cwd: base, encoding: "utf8" }).trim(), generatedSHA256: hash(files["generated.ts"]!), schemaSHA256: hash(ddl), fixtureSHA256: hash(sources[0]!.text), contractsSHA256: hash(await readFile(resolve(base, "dist/kernel/contracts.js"), "utf8")), runtime: process.version, bun: Bun.version, timestampUTC: new Date().toISOString() };
     const output = process.env.MANTLE_NEXT_BENCH_OUTPUT;
     assert.ok(output, "MANTLE_NEXT_BENCH_OUTPUT must be a private fresh output directory");
     await mkdir(output, { recursive: true });
