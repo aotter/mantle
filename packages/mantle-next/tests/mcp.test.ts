@@ -72,6 +72,7 @@ test("MCP SDK stays outside startup, unused surface is tree shaken and static SD
   expect(()=>guardStartup(result.metafile!,entry)).not.toThrow();
   const startup=startupGraph(result.metafile!,entry).flatMap(name=>Object.keys(result.metafile!.outputs[name]!.inputs));
   expect(startup.some(name=>name.includes("@modelcontextprotocol"))).toBe(false);
+  expect(startup.some(name=>name.includes("mcp-handler"))).toBe(false);
   expect(Object.keys(result.metafile!.inputs).some(name=>name.includes("@modelcontextprotocol"))).toBe(true);
   await writeFile(entry,'export {McpServer} from "@modelcontextprotocol/server";');
   const eager=await build({entryPoints:[entry],outdir:resolve(dir,"eager"),bundle:true,splitting:true,format:"esm",platform:"neutral",conditions:["workerd","worker","browser"],external:["node:*"],write:false,metafile:true});
