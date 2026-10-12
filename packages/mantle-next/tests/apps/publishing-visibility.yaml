@@ -1,0 +1,51 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: anchors}
+spec:
+  title: Anchors
+  schema:
+    type: object
+    required: [postid]
+    properties: {postid: {type: string}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts-join}
+spec:
+  surface: public
+  sql: SELECT COUNT(*) AS count, COUNT(CASE WHEN p.status = 'draft' THEN 1 END) AS drafts FROM anchors a JOIN posts p ON p.id = a.postid
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts-left}
+spec:
+  surface: public
+  sql: SELECT COUNT(a.id) AS anchors, COUNT(p.id) AS visible, COUNT(CASE WHEN p.status = 'draft' THEN 1 END) AS drafts FROM anchors a LEFT JOIN posts p ON p.id = a.postid
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts-subquery}
+spec:
+  surface: public
+  sql: SELECT p.id FROM posts p WHERE p.id IN (SELECT q.id FROM posts q) ORDER BY p.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts-cte}
+spec:
+  surface: public
+  sql: WITH visible AS (SELECT id, status FROM posts) SELECT COUNT(*) AS count, COUNT(CASE WHEN status = 'draft' THEN 1 END) AS drafts FROM visible
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts-count}
+spec:
+  surface: public
+  sql: SELECT COUNT(*) AS count FROM posts
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts-time}
+spec:
+  surface: public
+  sql: SELECT id, published_at FROM posts ORDER BY id

@@ -65,7 +65,7 @@ interface Column { readonly name: string; readonly type: string; readonly native
 function columns(s: StorageSchema): Column[] {
   return [
     ...(s.scope ? [{ name: s.scope, type: "text", native: true }] : []),
-    ...(s.publishing ? [{ name: "status", type: "text", native: true }] : []),
+    ...(s.publishing ? [{ name: "status", type: "text", native: true }, { name: "published_at", type: "timestamptz", native: false }] : []),
     ...Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, ty]): Column[] =>
       ty === "geo" ? [{ name: `${f}_lat`, type: "float8", native: false }, { name: `${f}_lng`, type: "float8", native: false }] : [{ name: f, type: pgType(ty), native: false }]),
   ];

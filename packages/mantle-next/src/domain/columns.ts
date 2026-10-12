@@ -3,7 +3,7 @@ import type { RuntimePlan } from "@aotter/mantle/spec";
 
 /** A column's declared type; the two system timestamps are not declared fields. @internal */
 export const declaredType = (fields: Readonly<Record<string, string>>, column: string): string | undefined =>
-  fields[column] ?? (column === "created_at" || column === "updated_at" ? "timestamptz" : undefined);
+  fields[column] ?? (column === "created_at" || column === "updated_at" || column === "published_at" ? "timestamptz" : undefined);
 
 /** A View output's declared Mantle type, when the output is a Schema column as it is. Computed outputs have none. @internal */
 export function outputType(plan: RuntimePlan, view: string, key: string): string | undefined {

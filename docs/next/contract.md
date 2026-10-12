@@ -151,6 +151,31 @@ spelled), a driver per handle (how it is called and what atomicity it really has
 generic Store. Nothing branches on the engine at run time. The design, the Store's rules and limits, and the measured costs are in
 [ADR-0045](../adr/0045-next-runtime-core.md); size numbers are `size-budgets.json` and `scripts/check-package.ts`.
 
+## Opt-in publishing
+
+The default Schema lifecycle is `operational`. Opt-in `publishing` emits status
+(`draft | published | archived`, NOT NULL default `draft`), nullable
+`published_at`, and an index on `(published_at, id)` prefixed by scope when present.
+The timestamp is a selectable native column and uses the normal ISO wire form.
+Indexed Store ordering on this nullable system column uses `NULLS LAST` for both
+directions; its keyset cursor handles nulls. Other sortable columns remain indexed
+and NOT NULL.
+
+Generated `<table>.publish`, `.unpublish`, and `.archive` take
+`{ id, expectedVersion }`, gate staff/system Callers, and execute one atomic native
+UPDATE. Legal states are draft→published, published→draft, and draft/published→archived.
+Publish checks required fields. Guards retain scope, TTL and OCC. CONFLICT messages
+name the operation and possible guard failures; no second read guesses which guard
+failed after concurrent activity. Store refuses direct status/published_at writes,
+but imposes no separate role-based edit/delete rule; Admin owns those limits.
+
+Core rowPolicy term data defines the published value and staff roles, and both
+Core's AST renderer and Store render that data. Public Views always require
+published rows; other Views and Store permit drafts only for staff/system.
+Policy applies at every relation, including joins, LEFT JOINs, subqueries and CTEs.
+Transitions already gate staff and therefore need only scope/TTL in their row rule.
+
+
 ## Architecture and acceptance
 
 `kernel <- domain <- usecase <- infrastructure`. Kernel contains portable

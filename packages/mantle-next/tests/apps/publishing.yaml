@@ -1,0 +1,51 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: posts}
+spec:
+  title: Posts
+  lifecycle: publishing
+  schema:
+    type: object
+    required: [title]
+    properties: {title: {type: string}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts-public}
+spec:
+  surface: public
+  sql: SELECT id, title, status FROM posts ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts-staff}
+spec:
+  surface: internal
+  sql: SELECT id, title, status FROM posts ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: scoped_posts}
+spec:
+  title: Scoped posts
+  lifecycle: publishing
+  scope: {owner: auth.uid()}
+  indexes: [[owner]]
+  schema:
+    type: object
+    required: [owner, title]
+    properties: {owner: {type: string}, title: {type: string}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: expiring_posts}
+spec:
+  title: Expiring posts
+  lifecycle: publishing
+  ttl: {field: expiresAt, expireAfterSeconds: 0}
+  schema:
+    type: object
+    required: [title]
+    properties:
+      title: {type: string}
+      expiresAt: {type: string, format: date-time, nullable: true}

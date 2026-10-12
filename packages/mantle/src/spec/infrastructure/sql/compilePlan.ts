@@ -72,7 +72,7 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
     if (n.RangeSubselect?.subquery?.SelectStmt) subs.set(n.RangeSubselect.alias?.aliasname ?? "", outputs(n.RangeSubselect.subquery, scope).columns);
   };
   for (const f of sel.fromClause ?? []) walk(f);
-  const typeOf = (schema: string, col: string) => schemas[schema]!.fields[col] ?? (Object.hasOwn(NATIVE_OUTPUT_TYPES, col) ? NATIVE_OUTPUT_TYPES[col] : undefined);
+  const typeOf = (schema: string, col: string) => schemas[schema]!.fields[col] ?? (col === "published_at" && schemas[schema]!.publishing ? "timestamptz" : Object.hasOwn(NATIVE_OUTPUT_TYPES, col) ? NATIVE_OUTPUT_TYPES[col] : undefined);
   const field = (schema: string | undefined, col: string) => (schema && typeOf(schema, col) && (includeGeo || typeOf(schema, col) !== "geo") ? { schema, field: col } : undefined);
   let keys: string[] | undefined = [];
   for (const { ResTarget: r } of sel.targetList) {
@@ -248,8 +248,8 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
 }
 
 /** The plugin's contract: parse, link and compile manifest sources in one call. */
-export async function compilePlan(sources: ManifestSourceSet, dialect: SqlDialect = d1): Promise<CompilePlanResult> {
-  const parsed = parseManifestSources(sources);
+export async function compilePlan(sources: ManifestSourceSet, dialect: SqlDialect = d1, defaultLifecycle: "operational" | "publishing" = "publishing"): Promise<CompilePlanResult> {
+  const parsed = parseManifestSources(sources, defaultLifecycle);
   if (!parsed.ok) return parsed;
   const linked = linkManifestSet(parsed.value);
   return linked.ok ? compileLinkedPlan(linked.value, dialect) : linked;
