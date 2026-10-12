@@ -14,8 +14,8 @@ handbook. Only the implementation and responsibility changes follow.
   `{ error: { code, message, path } }` with the 0.2 status. Cookie sessions cannot
   mutate across origins.
 - MCP retains public `POST /mcp`, staff `POST /mcp/staff`,
-  `query_view_<name>` on the View's declared surface, and one tool per MCP
-  Trigger. Its SDK loads only through a request-time dynamic import.
+  snake-cased View names on each declared surface, and snake-cased Procedure
+  names per MCP Trigger. Its SDK loads only through a request-time dynamic import.
 - HTTP/MCP Triggers declare exposure only. `mantle generate` refuses schedule
   and lifecycle Triggers; Cloud scheduling is a separate capability.
 - Retained Admin features keep their 0.2 paths; #1477 decides the retained set.
@@ -57,7 +57,7 @@ Known paths with another method return 405 with an `Allow` header. All responses
 `cache-control: private, no-store`. JSON bodies and decoded path parameters
 are validated together, with path parameters taking precedence. Bodies larger
 than 1,000,000 bytes are refused; `content-length` is checked before reading.
-A resolver exception returns a redacted 500. Cookie-origin refusals retain
+A resolver's `ContractError` keeps its status (an expired token is 401 with its challenge); any other resolver exception returns a redacted 500. Cookie-origin refusals retain
 `path: "request:origin"`; REST and MCP share the kernel check.
 
 When the manifest declares ref Procedures, pass the generated `Handlers` as
@@ -115,3 +115,30 @@ string. A NULL Markdown field answers 404. Errors and missing Markdown responses
 use `cache-control: no-store`. A matching HTML page takes precedence over a `.md`
 alternate, including slugs ending in `.md`; a Markdown alternate may read the
 exact HTML candidate first and therefore performs at most two View queries.
+
+## Mounting MCP
+
+Mount the generated `mcp({ db: env => env.DB, caller })` handler in the app's
+Fetch entry. It returns `undefined` outside `/mcp` and `/mcp/staff`. Install the
+optional official `@modelcontextprotocol/server` peer when selecting MCP; its
+transport loads on the first matching request. Pass `handlers` when ref
+Procedures are declared, as for REST. Staff tools are listed only on the staff
+endpoint, and publishing visibility belongs to the generated SQL.
+
+The app resolves bearer tokens with `resolveCaller(request, auth, { audience:
+new URL('/mcp', request.url).href })` (both surfaces use `<origin>/mcp`). The app
+must also mount Better Auth's `/.well-known/oauth-protected-resource/mcp`
+metadata route. Auth challenges point to that route. Presented bearer credentials
+need the `mcp` scope; cookie sessions use the same-origin mutation checks.
+
+Generation emits `mcp.ts` only for a non-internal View or MCP Trigger. These
+manifests require the `@modelcontextprotocol/server` 2.1.0 peer when typechecking
+the generated surface. Publishing alone does not select MCP; on a selected
+surface its generated `publish_<schema>`, `unpublish_<schema>` and
+`archive_<schema>` tools use the same snake-case naming rule, are staff-only
+and take `{ id, expectedVersion }` through the shared generated validation.
+
+The staff allowlist is `owner`, `editor`, `contributor`. MCP bodies are limited
+to 1 MiB (1,048,576 bytes). Resource metadata challenges use the origin of
+`request.url`; behind a proxy, the app must pass a Request with its public
+origin so the audience and metadata URL point to the client-visible service.

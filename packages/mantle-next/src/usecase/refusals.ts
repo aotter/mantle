@@ -6,10 +6,8 @@ export function refuseDeclarations({ plan }: GenerateInput, diagnostics: Generat
   const refuse = (path: string, message: string) => diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message });
   for (const [name, trigger] of Object.entries(plan.triggers)) {
     const kind = trigger.source.kind;
-    if (kind === "http") continue;
-    refuse(`triggers/${name}`, kind === "schedule" ? "Schedule Triggers are unsupported. Wire scheduled() yourself."
-      : kind === "lifecycle" ? "Before/after lifecycle hooks are unsupported. Write a custom handler."
-      : `${kind.toUpperCase()} Trigger exposure is planned; no handler is generated yet. Mount an application-owned handler until the surface is available.`);
+    if (kind === "http" || kind === "mcp") continue;
+    refuse(`triggers/${name}`, kind === "schedule" ? "Schedule Triggers are unsupported. Wire scheduled() yourself." : "Before/after lifecycle hooks are unsupported. Write a custom handler.");
   }
   for (const [name, schema] of Object.entries(plan.schemas)) {
     if (schema.localized) refuse(`schemas/${name}/localized`, "Localized entries are unsupported until 0.2.x. Manage locales in application-owned fields and handlers.");

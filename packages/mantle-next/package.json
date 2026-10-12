@@ -34,17 +34,20 @@
     "check:package": "bun run build && bun scripts/check-package.ts"
   },
   "peerDependencies": {
+    "@modelcontextprotocol/server": "2.1.0",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "better-auth": "catalog:peer"
   },
   "peerDependenciesMeta": {
+    "@modelcontextprotocol/server": { "optional": true },
     "@better-auth/core": { "optional": true },
     "@better-auth/oauth-provider": { "optional": true },
     "better-auth": { "optional": true }
   },
   "devDependencies": {
     "@aotter/mantle": "workspace:*",
+    "@modelcontextprotocol/server": "2.1.0",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/test-utils": "1.7.7",

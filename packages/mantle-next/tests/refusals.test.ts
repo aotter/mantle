@@ -80,12 +80,6 @@ test("mixed refused declarations are reported together", async () => {
   for (const d of result) expect(d.code).toBe("GENERATE_UNSUPPORTED");
 });
 
-for (const source of [{ kind: "mcp", surface: "staff" }] as const) {
-  test(`${source.kind} exposure is planned and provides an interim handler hint`, async () => {
-    const result = await diagnostics([doc("Trigger", "expose", { source, target: { procedure: "read" } })]);
-    expect(result).toEqual([{ code: "GENERATE_UNSUPPORTED", path: "triggers/expose", message: `${source.kind.toUpperCase()} Trigger exposure is planned; no handler is generated yet. Mount an application-owned handler until the surface is available.` }]);
-  });
-}
 
 test("a noncanonical input cast and another refused declaration are reported together", () => {
   const text = [doc("Schema", "local", localized), doc("View", "bad-cast", { surface: "internal", input: { type: "object", properties: { payload: { type: "object" } } }, sql: "SELECT input.payload AS value" })].join("\n---\n");
