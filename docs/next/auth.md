@@ -1,13 +1,13 @@
-# Auth in Next
+# Auth in Mantle
 
-Next does not wrap Better Auth. Your application writes its own `auth.ts` with the official `betterAuth()` and
-official plugins. Next supplies only what Better Auth cannot know:
+Your application configures `betterAuth()` and its official plugins in `auth.ts`.
+Mantle supplies the database adapter, schema generation and caller resolution:
 
-| Next | What it does |
+| Mantle | What it does |
 | --- | --- |
-| `@aotter/mantle-next/auth/adapter` | `d1Adapter(env.DB)` / `bunSqlAdapter(sql)`: Better Auth's `database` on the same native handle as your data, no Kysely. Passes Better Auth's official adapter suite (`@better-auth/test-utils/adapter`). |
-| `mantle-next generate … --auth ./auth.ts` | Adds the tables Better Auth declares for your options (`getSchema`) to `schema.sql`. |
-| `@aotter/mantle-next/auth` | `authLoader` and `resolveCaller(request, loader, { audience })`: the `Caller` that generated queries take. |
+| `@aotter/mantle/auth/adapter` | `d1Adapter(env.DB)` / `bunSqlAdapter(sql)`: Better Auth's `database` on the same native handle as your data, no Kysely. Passes Better Auth's official adapter suite (`@better-auth/test-utils/adapter`). |
+| `mantle generate … --auth ./auth.ts` | Adds the tables Better Auth declares for your options (`getSchema`) to `schema.sql`. |
+| `@aotter/mantle/auth` | `authLoader` and `resolveCaller(request, loader, { audience })`: the `Caller` that generated queries take. |
 
 ## `auth.ts`
 
@@ -16,10 +16,10 @@ import { betterAuth } from "better-auth/minimal"; // the entry without Kysely
 import { emailOTP, jwt } from "better-auth/plugins";
 import { admin } from "better-auth/plugins/admin";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { d1Adapter } from "@aotter/mantle-next/auth/adapter";
+import { d1Adapter } from "@aotter/mantle/auth/adapter";
 import type { BetterAuthOptions } from "better-auth";
 
-// Plain options: `mantle-next generate --auth` reads them without constructing Better Auth.
+// Plain options: `mantle generate --auth` reads them without constructing Better Auth.
 export const authOptions = (env: Env) => ({
   database: d1Adapter(env.DB),
   secret: env.AUTH_SECRET,
@@ -44,7 +44,7 @@ ordinary Better Auth configuration (`databaseHooks`, `advanced.cookiePrefix`, pl
 ## Worker entry
 
 ```ts
-import { authLoader, resolveCaller } from "@aotter/mantle-next/auth";
+import { authLoader, resolveCaller } from "@aotter/mantle/auth";
 import { views } from "./generated/generated.js";
 
 let auth: ReturnType<typeof authLoader> | undefined;
@@ -75,23 +75,12 @@ If you set `advanced.cookiePrefix`, pass the same value: `authLoader(load, "app"
 Workers compiles an uploaded module only when it is imported. Better Auth in its own module therefore costs a cold
 isolate nothing until a request needs it. Measured on production Workers (#1462), startup was 1 ms instead of 77 ms
 eager or 32 ms for `import()` inside one bundle.
-Wrangler's own bundler inlines every `import()` into one script, so bundle with splitting and upload the modules as
-they are:
-
-```sh
-bun build src/worker.ts --splitting --format esm --target browser --minify --outdir dist
-```
-
-```jsonc
-// wrangler.jsonc
-{ "main": "dist/worker.js", "no_bundle": true, "find_additional_modules": true, "base_dir": "dist",
-  "rules": [{ "type": "ESModule", "globs": ["**/*.js"] }] }
-```
-
-`tests/auth-split.test.ts` checks this shape: the entry plus every chunk it imports statically stays under 4 KiB.
+Follow the [Workers build instructions](../../packages/mantle-next/README.md#workers-build).
+The metafile startup guard rejects static Better Auth imports; keep auth behind
+`authLoader(() => import(...))`.
 
 ## Schema
 
-`mantle-next generate <target> <out> <manifest>… --auth ./auth.ts` calls the module's `authOptions` with an empty env
+`mantle generate <target> <out> <manifest>… --auth ./auth.ts` calls the module's `authOptions` with an empty env
 (the tables depend on plugins and options, not env values; nothing is constructed) and appends Better Auth's tables to `schema.sql`. Nothing runs DDL at runtime; migrations
 are yours (#1463).

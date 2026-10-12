@@ -28,6 +28,9 @@ Ask which target, unless the project already shows one.
 
 Self-hosting is always an option; never present a hosted target as required.
 
+For workspace consumers with concrete `generated.ts` queries, follow the linked
+package README instead of the Core boot, scaffolding and `--check` steps below.
+
 ## Local gate
 
 ```bash

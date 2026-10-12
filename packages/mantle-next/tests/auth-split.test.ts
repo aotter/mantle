@@ -1,29 +1,37 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { generateFromSources } from "../src/infrastructure/generate.js";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { bundle } from "../src/infrastructure/bundle.js";
 import { authOptions } from "./apps/auth/auth.js";
 
-test("the entry module never contains Better Auth: it is split out behind import()", async () => {
-  const build = await Bun.build({ entrypoints: [new URL("apps/auth/worker.ts", import.meta.url).pathname], target: "browser", format: "esm", splitting: true, minify: true });
-  expect(build.success).toBe(true);
-  // What a cold isolate evaluates: the entry and every chunk it imports statically (not through import()).
-  const byName = new Map(await Promise.all(build.outputs.map(async o => [o.path.split("/").pop()!, await o.text()] as const)));
-  const startup = new Set<string>();
-  const visit = (name: string) => {
-    if (startup.has(name)) return;
-    startup.add(name);
-    for (const m of byName.get(name)!.matchAll(/(?:^|;)import(?:[^"(]*from)?"\.\/([^"]+)"/g)) visit(m[1]!);
-  };
-  visit(build.outputs.find(o => o.kind === "entry-point")!.path.split("/").pop()!);
-  const bytes = [...startup].reduce((n, name) => n + byName.get(name)!.length, 0);
-  // Better Auth, its cookie helper and the OAuth resource client are hundreds of KB, all behind import().
-  expect(bytes).toBeLessThan(4096);
-  expect(build.outputs.filter(o => o.kind === "chunk").length).toBeGreaterThan(0);
-});
+test("bundle splits Better Auth behind import() and refuses a static auth import", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "next-auth-bundle-"));
+  const entry = new URL("apps/auth/worker.ts", import.meta.url).pathname;
+  const cli = new URL("../dist/infrastructure/cli.js", import.meta.url).pathname;
+  try {
+    const metafile = await bundle(entry, join(dir, "dist"));
+    expect(Object.keys(metafile.outputs).some(name => name.endsWith("/worker.js"))).toBe(true);
+    expect(Object.keys(metafile.outputs).filter(name => name.includes("/chunks/")).length).toBeGreaterThan(0);
+    expect(Object.keys(metafile.inputs).some(name => name.includes("better-auth"))).toBe(true);
+    await writeFile(join(dir, "dist/stale.js"), "stale");
+    execFileSync("node", [cli, "bundle", entry, join(dir, "dist")], { stdio: "pipe" });
+    expect(existsSync(join(dir, "dist/stale.js"))).toBe(false);
+    await expect(bundle(entry, ".")).rejects.toThrow("working directory");
+    await expect(bundle(entry, new URL("apps/", import.meta.url).pathname)).rejects.toThrow("contain the source entry");
+    expect(existsSync(entry)).toBe(true);
+    const eager = join(dir, "eager.ts");
+    await writeFile(eager, `export { default } from ${JSON.stringify(entry)}; export { createAuth } from ${JSON.stringify(new URL("apps/auth/auth.ts", import.meta.url).pathname)};`);
+    const failed = spawnSync("node", [cli, "bundle", eager, join(dir, "eager-dist")], { encoding: "utf8" });
+    expect(failed.status).toBe(1);
+    expect(failed.stderr).toMatch(/Startup module .*chunks\/.* contains .*better-auth/);
+    expect(failed.stderr).toContain("authLoader(() => import(...))");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
 
 test("--auth adds the application's Better Auth tables to schema.sql, applicable twice", async () => {
   const source = `apiVersion: cms.mantle.aotter.net/v2
@@ -58,7 +66,7 @@ test("CLI --auth reads authOptions(env) without constructing Better Auth", async
     const manifest = join(dir, "m.yaml");
     await writeFile(manifest, "apiVersion: cms.mantle.aotter.net/v2\nkind: Schema\nmetadata: {name: notes}\nspec:\n  title: Notes\n  lifecycle: operational\n  indexes: [[title]]\n  schema: {type: object, required: [title], properties: {title: {type: string}}}\n");
     const cli = new URL("../src/infrastructure/cli.ts", import.meta.url).pathname;
-    execFileSync(process.execPath, [cli, "cloudflare-d1", join(dir, "out"), manifest, "--auth", new URL("apps/auth/auth.ts", import.meta.url).pathname], { stdio: "pipe" });
+    execFileSync(process.execPath, [cli, "cloudflare-d1", join(dir, "out"), manifest, "--auth", new URL("apps/auth/auth.ts", import.meta.url).pathname], { cwd: dir, stdio: "pipe" });
     expect(await readFile(join(dir, "out/schema.sql"), "utf8")).toContain('CREATE TABLE IF NOT EXISTS "oauthClient"');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

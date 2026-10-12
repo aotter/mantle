@@ -20,7 +20,9 @@ checkout, or any online copy.
 ## Find the project and its version
 
 Locate the user's application (never use the SDK repository as the
-application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
+application). For workspace links, inspect the linked package's README first; concrete
+`generated.ts` queries select the [experimental flow](#experimental-workspace-consumers)
+before the Core version rules below. If it has `@aotter/mantle`, read its `package.json`, lockfile and
 `node_modules/@aotter/mantle/package.json`, and follow that version's docs.
 
 - `0.2.x`: continue below; for ongoing work read
@@ -28,6 +30,13 @@ application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
 - `0.1.x` (v1 manifests, a `version: 1` `mantle.config.json`, `mantle skills`):
   upgrade only when asked, with `docs/skills/update/SKILL.md` and
   `docs/upgrade-0.1-to-0.2.md` of the 0.2 package.
+
+## Experimental workspace consumers
+
+Follow the linked package README for generation, Workers builds and D1 Sessions;
+the Core scaffolding below does not apply. Keep auth behind
+`authLoader(() => import(...))` to pass the startup guard. Standalone publishing
+is pending; do not install the experiment from npm or migrate Core unless asked.
 
 ## New project
 
@@ -89,7 +98,8 @@ app includes saving, previewing and publishing it; continue through the terminal
 release result. A local-only or save-only request stops there. Creating a local
 project alone does not imply a deploy request. Self-hosting remains available.
 
-- **Cloudflare Workers or ChatGPT Sites:** follow
+- **Experimental Workers consumers:** use the generation/build flow above.
+- **Core Cloudflare Workers or ChatGPT Sites:** follow
   `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` and that host's
   native deployment workflow.
 - **Mantle Cloud:** follow [Cloud workflow](references/cloud.md). The bundled

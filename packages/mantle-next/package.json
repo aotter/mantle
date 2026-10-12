@@ -6,6 +6,8 @@
   "sideEffects": false,
   "engines": { "node": ">=22.14.0" },
   "files": ["dist", "README.md"],
+  "bin": { "mantle": "./dist/infrastructure/cli.js" },
+  "dependencies": { "esbuild": "0.28.1", "jsonc-parser": "3.3.1" },
   "exports": {
     ".": "./dist/usecase/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
@@ -23,7 +25,7 @@
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.lib.json --removeComments --declaration false && tsc -p tsconfig.lib.json --emitDeclarationOnly",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test tests/*.test.ts && bun run check:size && bun scripts/check-package.ts",
+    "test": "bun run build && bun test tests/*.test.ts && bun scripts/check-size.ts && bun scripts/check-package.ts",
     "generate": "bun src/infrastructure/cli.ts",
     "test:native": "bun scripts/verify-native.ts",
     "bench": "bun scripts/verify-native.ts --bench",

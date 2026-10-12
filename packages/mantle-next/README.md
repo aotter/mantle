@@ -1,4 +1,4 @@
-# Mantle Next (unpublished experiment)
+# Mantle (experimental replacement for Core)
 
 Generate typed, concrete SQL functions for Bun SQLite, Bun PostgreSQL,
 Cloudflare D1 and Cloudflare PostgreSQL. The compiler uses 0.2's closed v2
@@ -6,9 +6,8 @@ manifest grammar and canonical SQL policy/printers at build time. The generated
 application imports portable contract primitives and official drivers only.
 
 ```sh
-pnpm --filter @aotter/mantle build
-pnpm --filter @aotter/mantle-next build
-pnpm --filter @aotter/mantle-next generate cloudflare-d1 /tmp/purchase-generated tests/apps/purchase.yaml
+pnpm --dir packages/mantle run build
+pnpm --dir packages/mantle-next run build
 ```
 
 Outputs include `generated.ts`, `schema.sql` and direct operation entries.
@@ -36,6 +35,48 @@ state column names, value types and the writable columns, and the Store enforces
 
 A Store-only purchase Worker retains 1,450 gzip bytes of generated operations (Bun 1.3.14, minified); the existing bound operation API stays intact.
 
+## Workers build
+
+In a workspace consumer with the experimental package linked, run generation once:
+
+```sh
+pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts
+pnpm exec wrangler deploy
+# or: pnpm exec wrangler dev --local
+```
+
+For `cloudflare-d1` and `cloudflare-postgres`, generation configures Wrangler to run
+`mantle bundle <entry> <outdir>` automatically. Node 22 suffices. Run from the project root;
+regenerate after manifest or auth option changes.
+
+`--entry` defaults to `src/worker.ts`, `--outdir` to `dist`. `--wrangler` defaults to the
+existing `wrangler.jsonc`, `wrangler.json` or `wrangler.toml`, otherwise `wrangler.jsonc`.
+JSONC edits preserve comments and unrelated settings and are idempotent. A new config
+needs its `name`, `compatibility_date` and bindings filled in. TOML only prints instructions.
+
+esbuild emits minified split ESM; Wrangler uploads it with `no_bundle`,
+`find_additional_modules`, `base_dir` and an ESModule rule. `nodejs_compat` is ensured.
+The metafile guard rejects `better-auth` / `@better-auth/*` in the static startup graph:
+use `authLoader(() => import(...))` ([Auth](../../docs/next/auth.md#worker-entry)).
+The output directory is cleaned first; keep source and generated code elsewhere.
+
+## D1 Sessions
+
+D1's session handle already satisfies generated Views/Procedures and the Store's structural `db` type:
+
+```ts
+const bookmark = request.headers.get("x-d1-bookmark");
+const session = env.DB.withSession(bookmark ?? "first-unconstrained");
+const rows = await views.catalog(session, caller, {});
+const data = store(session, caller); // use the same handle for Store operations
+return Response.json(rows, { headers: { "x-d1-bookmark": session.getBookmark() ?? "" } });
+```
+
+Return `session.getBookmark()` in a header or cookie and have the client pass it back on the next request.
+Keep `resolveCaller` and Better Auth on `env.DB`: revocation and roles must read the primary.
+Enable [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/)
+on the database (dashboard or REST); writes always go to the primary.
+
 ## Store transactions
 
 Writes are lazy thenables: await `collection.insert/update/delete(...)` to execute once,
@@ -59,10 +100,10 @@ declarations requiring them fail generation. See the complete
 Checks:
 
 ```sh
-pnpm --filter @aotter/mantle-next typecheck
-pnpm --filter @aotter/mantle-next test
+pnpm --dir packages/mantle-next run typecheck
+pnpm --dir packages/mantle-next run test
 # Set MANTLE_NEXT_BUN_PG_URL and MANTLE_NEXT_WORKER_PG_URL to disposable local DBs.
-pnpm --filter @aotter/mantle-next test:native
+pnpm --dir packages/mantle-next run test:native
 ```
 
 The native runner executes all four real engines/hosts locally, with independent
