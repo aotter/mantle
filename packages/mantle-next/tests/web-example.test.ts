@@ -10,7 +10,9 @@ const example = resolve(import.meta.dir, '../../../docs/examples/generated-web')
 const sources = async () => [{ sourceId: 'posts.yaml', text: await readFile(join(example, 'posts.yaml'), 'utf8') }];
 async function writeWorker(dir: string) {
   await mkdir(join(dir, 'src')); const entry = join(dir, 'src/worker.ts');
-  await writeFile(entry, await readFile(join(example, 'src/worker.ts'), 'utf8')); return entry;
+  // Before package assembly, resolve the public alpha.7 import to its existing kernel.
+  const code = (await readFile(join(example, 'src/worker.ts'), 'utf8')).replace('"@aotter/mantle/contracts"', JSON.stringify(resolve(import.meta.dir, '../src/kernel/contracts.js')));
+  await writeFile(entry, code); return entry;
 }
 
 test('documented web Worker serves SQL-visible HTML, REST, indexes and alternates', async () => {
@@ -19,14 +21,15 @@ test('documented web Worker serves SQL-visible HTML, REST, indexes and alternate
     const files = await generateOrThrow('bun-sqlite', await sources()); await writeGenerated(join(dir, 'generated'), files);
     const worker = (await import(await writeWorker(dir))).default;
     db.exec(files['schema.sql']!); db.exec(await readFile(join(example, 'seed.sql'), 'utf8'));
-    const env = { DB: db, PUBLIC_ORIGIN: 'https://public.test' };
+    let queries = 0;
+    const env = { DB: { query: (sql: string) => { queries++; return db.query(sql); }, exec: db.exec.bind(db), transaction: db.transaction.bind(db) }, PUBLIC_ORIGIN: 'https://public.test' };
     const get = (path: string, method = 'GET') => worker.fetch(new Request('https://other.test' + path, { method }), env);
-    const index = await (await get('/')).text();
+    const index = await (await get('/')).text(); expect(queries).toBe(2);
     expect(index).toContain('href="/posts/hello"'); expect(index).not.toContain('Hidden draft');
     expect(index).toContain('rel="canonical" href="https://public.test/"');
     expect(index).toContain('type="text/markdown" href="https://public.test/.md"');
     expect(await (await get('/.md')).text()).toContain('# Posts');
-    const html = await (await get('/posts/hello')).text();
+    queries = 0; const html = await (await get('/posts/hello')).text(); expect(queries).toBe(2);
     expect(html).toContain('Hello &lt;world&gt;'); expect(html).not.toContain('Hello <world>');
     expect(html).toContain('rel="canonical" href="https://public.test/posts/hello"');
     expect(html).toContain('type="text/markdown" href="https://public.test/posts/hello.md"');
@@ -47,6 +50,14 @@ test('documented web Worker serves SQL-visible HTML, REST, indexes and alternate
       const response = await get(path); expect(response.status).toBe(404); expect(response.headers.get('cache-control')).toBe('no-store');
     }
     expect(await (await get('/posts/hello', 'HEAD')).text()).toBe('');
+    for (const cursor of ['broken', encodeURIComponent(JSON.stringify(['hello', 'hello', 'views/post']))]) {
+      const response = await get('/?cursor=' + encodeURIComponent(cursor));
+      expect(response.status).toBe(400); expect(response.headers.get('cache-control')).toContain('no-store');
+      expect((await response.json()).error.code).toBe('INPUT_VALIDATION_FAILED');
+    }
+    for (const [path, status] of [['/posts/%xx', 400], ['/posts/%E0%A4%A', 400], ['/posts/2026-02-30', 404], ['/posts/2026-02-30.md', 404]] as const) {
+      const response = await get(path); expect(response.status).toBe(status); expect(response.headers.get('cache-control')).toContain('no-store');
+    }
     expect((await get('/posts/%xx')).status).toBe(400); expect((await get('/', 'POST')).headers.get('allow')).toBe('GET, HEAD');
   } finally { db.close(); await rm(dir, { recursive: true, force: true }); }
 });

@@ -43,7 +43,14 @@ Acceptance:
   alternate whose GET returns its current source. The index canonical is `/`.
 - `/posts/draft` and `/posts/draft.md` return 404; the draft is absent from REST,
   HTML links, `llms.txt` and sitemap. HTML source escapes the fixture's `<world>`.
+- Malformed/foreign list cursors return structured 400 errors with `no-store`.
 - HTML HEAD has no body. Unknown pages return 404 with `no-store`.
+
+HTML detail performs two native reads: one Store read for the body, then one
+public View read in `site.head()`. The index likewise performs two reads (list
+and home head). The current head API accepts no preloaded row; there is no
+request cache or extra authentication lookup in this public example. Markdown
+may perform two View reads when checking an exact `.md` page before its alternate.
 
 Web indexes have deliberate ceilings: 5,000 scanned rows, 10 queries and 1 MiB
 for `llms.txt`; 50,000 rows, 100 queries and 50 MiB for a sitemap. Small SQL LIMITs
