@@ -34,7 +34,12 @@ export async function procedure(db: Handle, steps: readonly Bound[], path: strin
     let rows: Row[] = [], changes: number;
     try {
       rows = statement.columnNames.length ? statement.all(...s.binds) : [];
-      changes = statement.columnNames.length ? rows.length : Number(statement.run(...s.binds).changes);
+      if (statement.columnNames.length) changes = rows.length;
+      else {
+        statement.run(...s.binds);
+        // Bun's run().changes includes FTS maintenance writes; SQLite changes() counts the authored statement only.
+        changes = s.row ? Number(handle.query("SELECT changes() AS n").all()[0]!.n) : 0;
+      }
     } catch (error) { throw unique(error) ? conflict(path, true, error) : error; }
     if (s.row && changes !== 1) throw conflict(path, false);
     return rows;

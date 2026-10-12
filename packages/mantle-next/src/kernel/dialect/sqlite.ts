@@ -1,5 +1,6 @@
 /** SQLite and Cloudflare D1: `?n` placeholders, time as microseconds and dates as days since the epoch. */
 import { encodeDate, encodeTimestamptz } from "../scalars.js";
+import { searchLike } from "../search.js";
 import { escapeLike, ident, likeEscape, type Dialect } from "./common.js";
 export { ident, escapeLike, likeEscape };
 
@@ -15,4 +16,9 @@ export const cutoff = (ms: number, seconds: number): number => ms * 1000 - secon
 export const timestamp = encodeTimestamptz;
 export const date = encodeDate;
 export const cast = (placeholder: string): string => placeholder;
-export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, wireTimestamp, wireDate, now, cutoff, timestamp, date, cast };
+export function search(table: string, fields: readonly string[], alias: string, query: string): string {
+  const fts = ident(`_mantle_fts_${table}`);
+  const phrase = `'"' || replace(${query}, '"', '""') || '"'`;
+  return `CASE WHEN length(${query}) >= 3 THEN ${alias}._rid IN (SELECT rowid FROM ${fts} WHERE ${fts} = ${phrase}) ELSE (${searchLike(fields.map(field => `${alias}.${ident(field)}`), query, "LIKE")}) END`;
+}
+export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, search, wireTimestamp, wireDate, now, cutoff, timestamp, date, cast };

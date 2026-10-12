@@ -39,6 +39,22 @@ state column names, value types and the writable columns, and the Store enforces
 
 A Store-only purchase Worker retains 1,450 gzip bytes of generated operations (Bun 1.3.14, minified); the existing bound operation API stays intact.
 
+`find({ search: "text" })` and `first({ search: "text" })` match an exact id or
+the Schema's `searchableFields`. Search is trimmed, must be non-empty and cannot contain NUL; it
+combines with `where`, scope, TTL and publication rules. SQLite/D1 use the
+generated FTS5 trigram index with maintenance triggers (queries shorter than
+three characters use LIKE); PostgreSQL uses ILIKE without requiring an extension.
+`%`, `_`, quotes and FTS operators are literal text. Schemas without search fields
+match id only. Non-ASCII case folding follows the dialect: SQLite/D1 FTS5
+trigram folds searchable text for queries of three or more characters, while
+shorter SQLite/D1 LIKE queries fold ASCII only; PostgreSQL ILIKE follows the
+database locale/collation. These are the same native differences as 0.2.
+Generated Views reuse Core's `mantle.search(alias, input.q)` and
+`mantle.search_rank(alias)`; ranking requires search on the same alias/query.
+Rank-ordered exposed Views still need supported keyset ordering; use an internal
+View for arbitrary rank ordering. Applying changed search DDL remains the app's
+migration responsibility; no request runs DDL or rebuilds indexes.
+
 ## Publishing
 
 Schemas default to `lifecycle: operational`. Opt-in `lifecycle: publishing` adds status

@@ -13,6 +13,7 @@ import { cast, dialect as postgresDialect_ } from "../kernel/dialect/postgres.js
 import { initialStorageSql as sqliteSchema } from "../../../mantle/dist/d1/storage.js";
 import { initialStorageSql as postgresSchema } from "../../../mantle/dist/postgres/storage.js";
 import { publishingSql } from "../usecase/publishing.js";
+import { searchDiagnostics } from "../usecase/search.js";
 import { generate } from "../usecase/generate.js";
 import type { LoweredStatement } from "@aotter/mantle/spec";
 import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/model.js";
@@ -52,7 +53,7 @@ export async function generateFromSources(request: { readonly target: Target; re
     return [name, output.positions?.length === output.keys?.length ? output.keys : undefined];
   }));
   const refusals: GenerateDiagnostic[] = [], orderTypes: Record<string, (string | undefined)[]> = {};
-  const { lowered } = lowerPlan(compiled.plan, dialect, {
+  const { lowered, warnings } = lowerPlan(compiled.plan, dialect, {
     mode: nextMode,
     pageQuery(ast, name) {
       const view = compiled.plan.views[name]!;
@@ -94,8 +95,15 @@ export async function generateFromSources(request: { readonly target: Target; re
         } }
     }
   }
+  const searchProblems = searchDiagnostics(warnings);
+  refusals.push(...searchProblems);
   const result = generate({ target: request.target, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas) });
-  if (refusals.length) return { ok: false, diagnostics: [...refusals, ...(!result.ok ? result.diagnostics : [])] };
+  if (refusals.length) {
+    const diagnostics = result.ok ? [] : result.diagnostics.filter(d =>
+      !searchProblems.some(p => p.path === d.path) ||
+      !["Every reachable visibility mode must have canonical lowered SQL.", "Both caller and trusted SQL must be lowered."].includes(d.message));
+    return { ok: false, diagnostics: [...refusals, ...diagnostics] };
+  }
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   return { ...result, files: { ...result.files, "schema.sql": ddl.join(";\n\n") + ";\n" } };
