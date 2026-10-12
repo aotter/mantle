@@ -12,11 +12,11 @@ const { admin: adminPlugin, emailOTP } = await import(require.resolve("better-au
 const { createAccessControl } = await import(require.resolve("better-auth/plugins/access"));
 const { defaultStatements } = await import(require.resolve("better-auth/plugins/admin/access"));
 const { d1Adapter } = await import(join(sdk, "src/auth/adapter.ts"));
-const { authSchemaSql } = await import(join(sdk, "src/auth/schema.ts"));
 const { authLoader, resolveCaller } = await import(join(sdk, "src/auth/caller.ts"));
 const { authRoutes } = await import(join(sdk, "src/auth/routes.ts"));
 const { d1Identity } = await import(join(sdk, "src/auth/identity.ts"));
-const { generateOrThrow, writeGenerated } = await import(join(sdk, "tests/apps/link.ts"));
+const { generateFromSources } = await import(join(sdk, "src/infrastructure/generate.ts"));
+const { writeGenerated } = await import(join(sdk, "tests/apps/link.ts"));
 const { d1Shim } = await import(join(sdk, "tests/apps/d1-shim.ts"));
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -51,13 +51,14 @@ try {
       emailOTP({ sendVerificationOTP: async ({ email, otp }: { email: string; otp: string }) => { console.log(JSON.stringify({ email, otp })); } }),
     ],
   };
-  for (const sql of authSchemaSql(options, "sqlite")) db.exec(sql);
+  const generated = await generateFromSources({ target: "bun-sqlite", sources: { sources: [{ sourceId: "console.yaml", text: source }] }, auth: options });
+  if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+  const files = generated.files;
+  await writeGenerated(dir, files);
+  db.exec(files["schema.sql"] + files["admin-schema.sql"]);
   const auth = betterAuth(options), context = await auth.$context;
   for (const role of ["staff", "user"])
     await context.internalAdapter.createUser({ id: role, email: role + "@example.test", name: role, role, emailVerified: true }, { method: "admin" });
-  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "console.yaml", text: source }]);
-  await writeGenerated(dir, files);
-  db.exec(files["schema.sql"] + files["admin-schema.sql"]);
   const { store } = await import(join(dir, "generated.ts"));
   const system = { kind: "system", reason: "generic fixture seed" };
   const tasks = store(db, system).collection("tasks");
