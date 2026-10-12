@@ -5,7 +5,7 @@ import {createAccessControl} from "better-auth/plugins/access";
 import {defaultStatements} from "better-auth/plugins/admin/access";
 import {d1Adapter,bunSqlAdapter} from "../src/auth/adapter.js";
 import {d1Identity,postgresIdentity} from "../src/auth/identity.js";
-import {authSchemaSql} from "../src/auth/schema.js";
+import {authSchemaSql} from "../src/infrastructure/authSchema.js";
 export async function identityFixture(db:any,postgres:boolean,execute:(sql:string)=>Promise<unknown>) {
   const ac=createAccessControl(defaultStatements);let otp="";
   const options={baseURL:"https://app.test/api/auth",secret:"admin-site-test-secret-01234567890123456789",database:postgres?bunSqlAdapter(db):d1Adapter(db),user:{additionalFields:{githubLogin:{type:"string" as const,required:false}}},plugins:[admin({adminRoles:["staff"],ac,roles:{staff:ac.newRole(defaultStatements),user:ac.newRole({user:[],session:[]})}}),emailOTP({sendVerificationOTP:async({otp:code})=>{otp=code;}})]};
