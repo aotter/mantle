@@ -10,6 +10,8 @@ export interface GenerateInput {
   readonly site?: import("@aotter/mantle/spec").SiteDefaults;
   readonly plan: RuntimePlan;
   readonly lowered: PlanLowered;
+  /** Generated staff View match pages, in caller/trusted first/next order. */
+  readonly adminPages?: Readonly<Record<string, readonly { sql: string; matches: readonly string[] }[]>>;
   /** Compiler-resolved output names, supplied by infrastructure; dynamic outputs remain undefined. */
   readonly viewKeys: Readonly<Record<string, readonly string[] | undefined>>;
   /** Core's new entry id for this dialect, as an SQL expression (its `lowering.newId()`, printed). */

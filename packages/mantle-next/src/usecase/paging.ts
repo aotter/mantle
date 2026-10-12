@@ -5,11 +5,13 @@ import { driverFor, databaseImport, isSqlite, q } from "../domain/entry.js";
 import { declaredType } from "../domain/columns.js";
 import { recipesOf } from "../domain/recipes.js";
 
-export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: string, refuse: (path: string, message: string) => void): Record<string, string> {
+export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: string, refuse: (path: string, message: string) => void, adminPages?: import("../domain/model.js").GenerateInput["adminPages"]): Record<string, string> {
   const files: Record<string, string> = {}, base = "@aotter/mantle-next/";
   const sqlite = isSqlite(target);
   const driver = driverFor(target);
   for (const [name, view] of Object.entries(plan.views)) {
+    if (adminPages && !adminPages[name]) continue;
+    let adminPage = 0;
     if (view.surface === "internal") continue;
     const path = `views/${name}`, sel = view.stmts[0]?.SelectStmt;
     const relation = sel?.fromClause?.length === 1 && sel.fromClause[0];
@@ -50,7 +52,7 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
       const first = pages.find(p => !p.sources.some(s => "cursor" in s)), next = pages.find(p => p.sources.some(s => "cursor" in s));
       if (!first || !next || v.nkeys < 1 || v.nkeys > 2) { refuse(path, "Core could not lower this View's keyset pages."); return ""; }
       const recipes = recipesOf(v, Object.keys(view.input?.properties ?? {}), message => refuse(path, message), values);
-      const page = (p: typeof first) => `{ sql: ${q(p.sql)}, extra: ${q(p.sources.map(s => "cursor" in s ? s.cursor : -1))} }`;
+      const page = (p: typeof first) => { const matched = adminPages?.[name]?.[adminPage++]; return `{ sql: ${q(matched?.sql ?? p.sql)}, extra: ${q(p.sources.map(s => "cursor" in s ? s.cursor : -1))}${matched ? `, matches: ${q(matched.matches)}` : ""} }`; };
       return `{ binds: ${q(recipes)}, first: ${page(first)}, next: ${page(next)} }`;
     });
     const auth = authLines(view.requires,path);
@@ -63,7 +65,7 @@ ${values.size ? `import { ${[...values].sort().join(", ")} } from "${base}dialec
 const spec: Paged<Database> = {
   ${spec.join(",\n  ")},
 };
-export default (db: Database, caller: Caller, input: Input, options?: { limit?: number; cursor?: string }) => page<Database, Row>(spec, db, caller, input, options);
+export default (db: Database, caller: Caller, input: Input, options?: { limit?: number; cursor?: string; match?: Readonly<Record<string,unknown>> }) => page<Database, Row>(spec, db, caller, input, options);
 `;
   }
   return files;

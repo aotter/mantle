@@ -28,6 +28,7 @@
     "./paging": "./dist/kernel/paging.js",
     "./publishing": "./dist/kernel/publishing.js",
     "./rest": "./dist/kernel/rest.js",
+    "./admin": "./dist/kernel/admin.js",
     "./mcp": "./dist/kernel/mcp.js",
     "./web": "./dist/kernel/web.js",
     "./validation": "./dist/kernel/validation.js",

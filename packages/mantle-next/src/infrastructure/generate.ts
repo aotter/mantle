@@ -20,6 +20,7 @@ import type { LoweredStatement } from "@aotter/mantle/spec";
 import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/model.js";
 import type { BetterAuthOptions } from "better-auth/types";
 import { authSchemaSql } from "../auth/schema.js";
+import { adminPage } from "../domain/adminPaging.js";
 
 /** Core's own new-entry-id lowering for a dialect, printed once as an SQL expression: the Store's inserts carry the same one its compiled INSERTs do. */
 export const coreNewId = (dialect: Pick<typeof d1Dialect, "print" | "lowering">, schemas: Parameters<NonNullable<typeof d1Dialect.print>>[1]): string =>
@@ -54,6 +55,7 @@ export async function generateFromSources(request: { readonly target: Target; re
     return [name, output.positions?.length === output.keys?.length ? output.keys : undefined];
   }));
   const refusals: GenerateDiagnostic[] = [], orderTypes: Record<string, (string | undefined)[]> = {};
+  const adminPages: Record<string, {sql:string;matches:string[]}[]> = {};
   const { lowered, warnings } = lowerPlan(compiled.plan, dialect, {
     mode: nextMode,
     staffRoles: STAFF_ROLES,
@@ -73,7 +75,13 @@ export async function generateFromSources(request: { readonly target: Target; re
       if (!keys) return ast;
       const types = page ? [...page.names.map(key=>outputType(compiled.plan,name,key)), ...(orderTypes[name] ?? [])] : keys.map(key=>outputType(compiled.plan,name,key));
       const projected = wireScalars(ast,keys,types,wire);
-      if (typeof projected !== "string") return projected;
+      if (typeof projected !== "string") {
+        if(page && compiled.plan.views[name]?.surface === "staff") {
+          const matched=adminPage(projected,compiled.plan.views[name]!,compiled.plan.schemas,!postgres);
+          (adminPages[name]??=[]).push({sql:dialect.print!(matched.ast,compiled.plan.schemas),matches:matched.matches});
+        }
+        return projected;
+      }
       refusals.push({code:"GENERATE_UNSUPPORTED",path:`views/${name}`,message:projected});
       return ast;
     },
@@ -99,7 +107,7 @@ export async function generateFromSources(request: { readonly target: Target; re
   }
   const searchProblems = searchDiagnostics(warnings);
   refusals.push(...searchProblems);
-  const result = generate({ target: request.target, site: request.site, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions });
+  const result = generate({ target: request.target, site: request.site, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions, adminPages });
   if (refusals.length) {
     const diagnostics = result.ok ? [] : result.diagnostics.filter(d =>
       !searchProblems.some(p => p.path === d.path) ||

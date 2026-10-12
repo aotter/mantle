@@ -14,7 +14,7 @@ export function decodeCursor(cursor: string, path = "", operation?: string): [un
 }
 
 /** First and next page SQL; `extra` lists, per trailing placeholder, the cursor key it binds (-1: the limit + 1). */
-export interface Pages { readonly binds: readonly Recipe[]; readonly first: { readonly sql: string; readonly extra: readonly number[] }; readonly next: { readonly sql: string; readonly extra: readonly number[] } }
+export interface Pages { readonly binds: readonly Recipe[]; readonly first: { readonly sql: string; readonly extra: readonly number[]; readonly matches?: readonly string[] }; readonly next: { readonly sql: string; readonly extra: readonly number[]; readonly matches?: readonly string[] } }
 /** The order column's cursor check: `int` is int8/integer, `numeric` a NUMERIC with scale, `date`/`timestamp` strings converted by the dialect. */
 export type CursorKind = "bool" | "int4" | "int" | "numeric" | "float" | "text" | "date" | "timestamp";
 export interface Paged<Database> {
@@ -33,7 +33,7 @@ export interface Paged<Database> {
   readonly trusted?: Pages;
   readonly auth?: (caller: Caller) => void;
 }
-type Options = { limit?: number; cursor?: string };
+type Options = { limit?: number; cursor?: string; match?: Readonly<Record<string, unknown>> };
 
 function valid(kind: CursorKind, sqlite: boolean, key: unknown): boolean {
   switch (kind) {
@@ -66,7 +66,7 @@ export async function page<Database, Row>(spec: Paged<Database>, db: Database, c
   if (cursor && (spec.cursor === "date" || spec.cursor === "timestamp")) try { cursorValue = spec.values[spec.cursor]!(cursor[0] as string); } catch { invalid("Malformed temporal cursor.", path + "/cursor"); }
   const keys = cursor && (spec.keys === 1 ? [cursor[1]] : [cursorValue, cursor[1]]);
   const sql = cursor ? m.next : m.first;
-  const rows: Record<string, unknown>[] = await spec.read(db, sql.sql, [...values, ...sql.extra.map(i => i < 0 ? limit + 1 : keys![i])]);
+  const rows: Record<string, unknown>[] = await spec.read(db, sql.sql, [...values, ...sql.extra.map(i => i < 0 ? limit + 1 : keys![i]), ...(sql.matches ?? []).map(key => options.match?.[key] ?? null)]);
   const last = rows[limit - 1];
   const nextCursor = rows.length > limit && last ? encodeCursor(last._k0, two ? last._k1 : last._k0, path) : undefined;
   if (rows.length > limit) rows.length = limit;
