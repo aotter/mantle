@@ -24,7 +24,7 @@ Caller to `views[name](db, caller, input)` or
 
 Default queries contain no validator, scalar decoder, row projection or generic
 database-error wrapper. Validate untrusted input before calling them; redact
-native errors at application transports (they are rethrown as they are, except a unique-index clash, which is `CONFLICT` with the native error as its cause). JSON binds are JSON text; SQLite bool
+native errors at application transports. They are rethrown as they are, except that a unique-index clash, in a generated Procedure or a Store write alike, is `ContractError("CONFLICT")` with the native error as its `cause`. JSON binds are JSON text; SQLite bool
 and fixed numeric binds use native storage values. Bound fields are explicit (null for absence). Rows use SQL names and official
 driver representations (PG int8 strings, SQLite 0/1 booleans), except declared
 date-time and date columns: the SQL returns them (Views and `RETURNING`) as ISO
@@ -37,13 +37,18 @@ Every Schema is also a typed **Store** collection, in the shape of a document-da
 `count`, `insert(values)`, OCC `update(id, set, { lock })` and `delete(id, { lock })`. One shared runtime serves every
 collection from one shared rules object (Core's `rowPolicy`/`writePolicy`, evaluated at build time and proven equal for every
 Schema) and a fact of a few bytes per Schema (scope column, TTL, date-time and date columns); it prints no per-Schema SQL.
-Rows, `where`, `set` and `orderBy` use the table's **storage column names** (`requestnumber`, `created_at`), as `SELECT *`
-returns them, except that the scope column and `_rid` are never returned. Column names are always quoted by the dialect, so an
-unknown one is a database error, never SQL; column names, value types, operators, writable columns and `orderBy` (`id` and
-indexed NOT NULL columns) are enforced by the generated types only. At run time the Store refuses unknown operators, wrongly
-shaped values, a bad `limit` or cursor, and a write that names a system column or the scope column
-(`INPUT_VALIDATION_FAILED`). An insert's id is Core's new-id expression, and a unique-index clash on insert or update (and in
-a Procedure) is `CONFLICT`.
+Rows, `where`, `set` and `orderBy` use the table's **storage column names**, always lower-case (`requestnumber`, `created_at`):
+the same keys a generated View returns. `SELECT *` returns a geo field's `<field>_lat`/`<field>_lng` (typed in the row); the
+scope column and `_rid` are never returned. Column names are quoted by the dialect, so an unknown one is a database error,
+never SQL. Column names, value types, operators, `order`, ids, lock values and the writable columns are enforced by the
+generated types only: a value the types forbid reaches the database as a bound parameter, so the worst outcome is a database
+error or a wrong result inside the caller's own rows. `orderBy` offers `id` and the indexed columns the database keeps NOT NULL
+(Core's initial storage SQL declares NOT NULL for a field an operational Schema requires; a publishing Schema's drafts may be
+incomplete, so none of its fields qualify). What the runtime still refuses (`INPUT_VALIDATION_FAILED`) is what types cannot
+guarantee: `limit` outside 1 to 500 (it is part of the SQL text), a write that names a system column or the scope column, an
+`undefined` write value (a driver would bind it as NULL and clear the column) and any write to a publishing Schema. A cursor is
+`[value, id]` bound as parameters; a forged one only moves the page inside the caller's rows, and one made for another query
+pages wrongly. An insert's id is Core's new-id expression.
 **The Store does not check `requires`**: it enforces row rules (scope, TTL, version), not a View's or Procedure's
 authorization predicates, which are 0.2 semantics. Authorize before calling it. See the contract.
 

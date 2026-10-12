@@ -76,7 +76,7 @@ an extra per-row projection merely to repair names already known at generation.
 Declared authorization, ownership/TTL SQL policy, explicit OCC and atomic writes
 remain required. Generate them as the native application would implement them.
 Transaction rollback and uncertain COMMIT handling must still preserve data-loss
-protection and client disposal responsibility; native errors are rethrown (a unique-index clash is `CONFLICT`, below), and
+protection and client disposal responsibility; native errors are rethrown (one exception, below), and
 redaction before they reach HTTP users belongs to the application boundary (no helper). Removing generic error
 normalization does not authorize dropping transaction outcome evidence.
 
@@ -93,7 +93,7 @@ unique `id =`), so a failed count check after autocommit has changed nothing.
 On PG it runs at the server's default isolation, not SERIALIZABLE: a concurrent
 OCC loser re-evaluates its `version =` predicate, matches zero rows and returns
 `CONFLICT` instead of SQLSTATE 40001. A server ErrorResponse (SQLSTATE and
-severity) is a known rollback and is rethrown natively, except a unique violation (23505, SQLite's `UNIQUE constraint failed`), which is `CONFLICT` with the native error as `cause` on every target, and except connection,
+severity) is a known rollback and is rethrown natively, except a unique violation (23505, SQLite's `UNIQUE constraint failed`), which, in a generated Procedure or a Store write, is `ContractError("CONFLICT")` with the native error as `cause` on every target, and except connection,
 resource and shutdown classes (08, 28, 53, 57, 58, XX), which, like any failure
 without a server response (lost socket), are `OUTCOME_UNKNOWN`. SQLSTATE is
 `errno` on Bun.SQL and `code` on node-postgres. Multi-statement Procedures run in
@@ -185,22 +185,27 @@ time; a bundle contains one dialect module and one driver module.
   equals Core's `rowPolicy` (caller, trusted) and `writePolicy` (insert, update with lock, delete lock): generation is refused otherwise.
   A fact is `{ s?, ttl?: [column, seconds], pub?, ts?, d? }`, keyed by table name, about 2-60 bytes; the runtime renders the
   terms to SQL with the dialect. No SQL text is generated per Schema. Methods: `findById`, `find` (AND-only typed `where`: eq
-  ne gt gte lt lte like in notIn isNull, null is IS NULL; keyset `cursor`, percent-encoded JSON bound to table, `orderBy` and
-  direction), `first`, `count`, `insert`, `update(id, set, { lock })`, `delete(id, { lock })`.
-  - **Storage names.** Rows, `where`, `set`, `orderBy` and cursors use table column names (`requestnumber`, `created_at`),
-    as `SELECT *` returns them. A read is `SELECT r.*, <wire forms of the date-time and date columns> FROM <table> r WHERE
+  ne gt gte lt lte like in notIn isNull, null is IS NULL; keyset `cursor`, percent-encoded JSON `[value, id]` bound as parameters), `first`, `count`, `insert`, `update(id, set, { lock })`, `delete(id, { lock })`.
+  - **Storage names.** Rows, `where`, `set`, `orderBy` and cursors use table column names, always lower-case (`requestnumber`,
+    `created_at`), the same keys generated Views return. `SELECT *` also returns a geo field's `<field>_lat`/`<field>_lng`, which the
+    row type lists. A read is `SELECT r.*, <wire forms of the date-time and date columns> FROM <table> r WHERE
     <rowPolicy> AND <where> ORDER BY ... LIMIT`, placeholders numbered after the policy's; the replacements are listed after
     `*` under the same name and every target's driver keeps the last of two same-named columns. The scope column and `_rid` are
     deleted from each row (Core never reads back the scope column). A write returns `RETURNING *` with the same replacements.
   - **Identifiers are quoted, not checked.** Every column name is quoted by the dialect; an unknown column is a database
     error. No runtime allowlist exists. The generated types restrict column names, value types, operators, the writable
-    columns (no `null` for a required non-null column; a JSON column takes an object or array) and `orderBy` to `id` and the
-    indexed NOT NULL columns (a system column, or required and not nullable in the Schema; Mantle's DDL does not enforce it).
-    The keyset cursor has no NULL handling; ties break on `id`. The runtime refuses a write naming a system column (`id`,
-    `version`, `created_at`, `updated_at`, `author_id`, `status`, `_rid`) or the scope column, compared case-insensitively.
+    columns (no `null` for a required non-null column; a JSON column takes an object or array), `order`, ids and lock values,
+    and restrict `orderBy` to `id` and the indexed NOT NULL columns. NOT NULL is a database guarantee: Core's initial storage
+    SQL (`initialStorageSql`, both dialects, one rule `notNullColumns`) declares NOT NULL for every field an `operational` Schema
+    requires and does not allow null; a `publishing` Schema's drafts may be incomplete, so none of its fields qualify. (Convergence at
+    boot does not alter existing columns and keeps its own DDL.) The keyset cursor has no NULL handling; ties break on `id`.
+    The runtime does not check what the types state: a value the types forbid is a bound parameter, so the worst outcome is a
+    database error or a wrong result inside the caller's rows. It refuses only what a type cannot guarantee: `limit` outside 1 to
+    500 (it is printed into the SQL), a write naming a system column (`id`, `version`, `created_at`, `updated_at`, `author_id`,
+    `status`, `_rid`) or the scope column, compared case-insensitively, an `undefined` write value (a driver binds it as NULL) and
+    any write to a publishing Schema. A forged cursor only moves the page inside the caller's rows.
   - **Writes.** A write names only the columns given plus the policy's (`version = version + 1`, `updated_at`, and for an
-    insert scope, `created_at`, `author_id` and an id), guarded by the row rules and the version; zero rows is `CONFLICT`, and so
-    is a unique-index clash. The id is Core's lowering of `newId` (the expression its compiled INSERTs use). An insert with no
+    insert scope, `created_at`, `author_id` and an id), guarded by the row rules and the version; zero rows is `CONFLICT`. The id is Core's lowering of `newId` (the expression its compiled INSERTs use). An insert with no
     subject fails on the NOT NULL scope column. Date-time and date columns come from the fact and take the ISO encoders and casts;
     a boolean and a JSON object are told by their JS type. Trusted mode has no scope equality, so such an index does not serve a
     cross-owner sort. Publishing Schemas have a read Store only. **The Store does not check `requires`**: it enforces row rules

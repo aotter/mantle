@@ -48,14 +48,16 @@ what the database and the generated types already say.
    `Rules` and, per Schema, a fact of 2-60 bytes keyed by the table name: `{ s?: scope column, ttl?: [column, seconds],
    pub?: 1, ts?: [date-time columns], d?: [date columns] }`. API: `store(db, caller).collection(name)` with `findById`,
    `find`, `first`, `count`, `insert`, `update`, `delete`; `where` is a typed AND-only object; `find` pages with keyset
-   cursors (percent-encoded JSON bound to table, `orderBy` and direction).
+   cursors (percent-encoded JSON `[value, id]`, bound as parameters).
    - **Names are storage names.** Rows, `where`, `set`, `orderBy` and cursors use the table's column names (`requestnumber`,
      `created_at`), the keys `SELECT *` returns on every target and the same SQL names as the other generated outputs.
      Authored camelCase exists only in a View's aliases.
    - **No runtime allowlist.** Every column name is quoted by the dialect (`ident`); an unknown one is a database error, never
-     SQL. Column names, value types, operators, writable columns and `orderBy` are enforced by the generated TypeScript
-     types only. The runtime refuses what only it can: operators, shapes, `limit`, `order`, cursors, and a write that
-     names a system column (`id`, `version`, `created_at`, `updated_at`, `author_id`, `status`, `_rid`, compared without
+     SQL. Column names, value types, operators, `order`, ids, lock values, writable columns and `orderBy` are enforced
+     by the generated TypeScript types only; every value is a bound parameter, so the worst outcome of breaking a type is a
+     database error or a wrong result inside the caller's rows. The runtime refuses what a type cannot guarantee: `limit`
+     outside 1 to 500 (printed into the SQL), an `undefined` write value (a driver binds NULL), any write to a publishing Schema,
+     and a write that names a system column (`id`, `version`, `created_at`, `updated_at`, `author_id`, `status`, `_rid`, compared without
      case because SQLite folds it) or the scope column.
    - **Reads are `SELECT r.*`.** Only the date-time and date columns are replaced by the dialect's wire-form templates
      (`wireTimestamp`/`wireDate`, the definition the generator also uses), listed after `*` under the same name: a result row
@@ -67,9 +69,10 @@ what the database and the generated types already say.
      narrows a JSON column's input to `object`).
    - **`orderBy` is indexed and NOT NULL, in the types.** The generated `order` type lists `id` and the indexed
      columns (the first, or the one after the scope column) that are NOT NULL; the keyset cursor has no NULL handling and
-     ties break on `id`. NOT NULL means: a system column, or required and not nullable in the Schema. It is **not** a
-     database constraint (Mantle's DDL declares only native columns NOT NULL), so a writer outside the typed Store can
-     still leave NULL and page wrongly; the generated `set`/`insert` types do not offer `null` for such a column.
+     ties break on `id`. NOT NULL means: a system column, or required and not nullable in the Schema. It is a
+     database guarantee: Core's `initialStorageSql` (both dialects, one rule `notNullColumns`) declares NOT NULL for every field an
+     `operational` Schema requires and does not allow null. A `publishing` Schema's drafts may be incomplete, so none of its fields
+     qualify for `orderBy`. Convergence at boot (replaced by 0.2) keeps its own DDL and does not alter existing columns.
    - **Insert ids are Core's.** `writePolicy` fills `id` with `newId`; Core's lowering renders that as SQL
      (`lower(hex(randomblob(16)))`, `replace(gen_random_uuid()::text, '-', '')`). The generator prints that same lowering once
      (`coreNewId`) into the `Rules`, and the Store inserts it as the id expression: same format, same source as a
@@ -84,13 +87,13 @@ what the database and the generated types already say.
 
 - Each concern has one home; the Better Auth adapter keeps only Better Auth's own semantics (OR grouping, joins).
 - Store runtime (store, binds, where and contracts, bundled with esbuild and minified, one harness): 7,610 bytes before,
-  6,309 now (gzip 3,353 to 3,086). Per Schema fact: 519-827 bytes (gzip 244-354) before, 2-54 now (22-71); the shared rules
+  6,309 (gzip 3,086) after the second prototype, then 831 bytes (gzip 356) fewer once the checks the generated types already state were removed (same esbuild command: 6,289 to 5,458, gzip 3,080 to 2,724). Per Schema fact: 519-827 bytes (gzip 244-354) before, 2-54 now (22-71); the shared rules
   are 396-413 bytes once. `generated.ts` for the purchase and Store fixtures: 31.3 KB to 29.7 KB.
 - Warm cost on bun:sqlite over the same SQL run by hand (p50, 6,000 interleaved pairs): `findById` +0.17 µs, `find` (50 rows,
   including two `delete`s per row) +3.2 µs, 3-condition `find` +5.0 µs, cursor page +5 µs, `count` +0.6 µs, `insert` +9 µs, `update`
   +5 µs. Exploratory, not a formal run (AGENTS.md).
 - The package ceiling is 128 KiB unpacked and 48 KiB packed so `.d.ts` files keep their documentation for coding agents.
 - Core tests need Node >= 22.22 (`node:sqlite` `columns()`); `.nvmrc` pins 22.22.3, and Next's tests pass on it and on 22.14.
-- Rows of a table with a `geo` field carry its two physical columns (`*`); only the types hide them.
+- Rows of a table with a `geo` field carry its two physical columns (`*`); the row type lists `<field>_lat`/`<field>_lng`.
 - `SELECT *` order and the rule that the last of two same-named columns wins are driver behavior; the Store scenarios
   pin them on every target.

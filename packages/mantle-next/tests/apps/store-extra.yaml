@@ -38,6 +38,7 @@ spec:
       sku: {type: string}
       name: {type: string}
       price: {type: number}
+      place: {type: object, format: geo}
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure

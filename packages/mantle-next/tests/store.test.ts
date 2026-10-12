@@ -24,7 +24,7 @@ async function generated(target: Target) {
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, name.endsWith(".ts") ? link(text, "../../../../../src/kernel/") : text);
   }
-  return { app: await import(resolve(directory, target, "generated.ts")), schema: result.files["schema.sql"]! };
+  return { app: await import(resolve(directory, target, "generated.ts")), schema: result.files["schema.sql"]!, types: result.files["generated.ts"]! };
 }
 
 const collections = (app: any, db: unknown, caller: Caller) => { const store = app.store(db, caller); return { purchase_requests: store.collection("purchase_requests"), session_notes: store.collection("session_notes"), catalog_items: store.collection("catalog_items") }; };
@@ -44,6 +44,13 @@ function env(sqlite: boolean, app: any, db: any, native: StoreEnv["native"], rec
 }
 
 describe("Store", () => {
+  test("generated types: a geo field's two columns are in the row, the scope column is nowhere, and orderBy is NOT NULL and indexed", async () => {
+    const { types } = await generated("bun-sqlite");
+    const table = (name: string) => new RegExp(`"${name}": \\{ row:.*?order: [^}]*\\}`).exec(types)![0];
+    expect(table("catalog_items")).toContain('readonly "place_lat": number | null; readonly "place_lng": number | null');
+    expect(table("catalog_items")).toContain('order: "id" | "name"');
+    expect(table("session_notes")).not.toContain('"owner"');
+  });
   test("bun:sqlite", async () => {
     const { app, schema } = await generated("bun-sqlite");
     const db = new Database(":memory:"); db.exec(schema);

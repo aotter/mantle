@@ -55,6 +55,8 @@ beforeAll(async () => {
     'await store.find({ orderBy: "version" });',
     '// @ts-expect-error sortbucket is indexed but nullable: the keyset cursor has no NULL handling, so the type does not offer it',
     'await store.find({ orderBy: "sortbucket" });',
+    '// @ts-expect-error the scope column is not a column of the Store: no orderBy, no row key',
+    'await store.find({ orderBy: "ownerid" });',
     '// @ts-expect-error the scope and system columns are not writable',
     'await store.update("id", { ownerid: "x", version: 3 }, { lock: 1 });',
     '// @ts-expect-error a required, non-null column cannot be set to null',

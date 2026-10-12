@@ -3,8 +3,11 @@
  * document-database driver. A collection is a `Fact` of a few bytes (its scope column, TTL, publishing flag and which columns
  * are date-times or dates); everything else is one shared `Rules` object that the generator evaluates from Core's `rowPolicy`
  * and `writePolicy`, so the row rules are spelled once, in Core. Column names are the storage names, always quoted by the dialect:
- * an unknown one is a database error, never SQL. Column names, value types, operators, writable columns and `orderBy` are
- * enforced by the generated TypeScript types only. The Store does not check a View's or Procedure's `requires`.
+ * an unknown one is a database error, never SQL. Column names, value types, operators, `order`, ids, lock values, writable columns
+ * and `orderBy` are enforced by the generated TypeScript types only: every value is a bound parameter, so what the types forbid is
+ * a database error or a wrong result inside the caller's rows. Refused here: what a type cannot guarantee (`limit` is printed into
+ * the SQL; a write naming a system or scope column; `undefined`, which a driver binds as NULL; any write to a publishing Schema).
+ * The Store does not check a View's or Procedure's `requires`.
  */
 import { binds as evaluate, type Bound, type Recipe } from "./binds.js";
 import { ContractError, type Caller } from "./contracts.js";
@@ -74,18 +77,14 @@ export interface Collection<T extends Table> {
 }
 export interface Store<T extends Record<string, Table>> { collection<K extends keyof T & string>(name: K): Collection<T[K]> }
 
-const OPERATORS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "in", "notIn", "like", "isNull"]);
-
 interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; byId?: string }
 interface Prepared { readonly name: string; readonly f: Fact; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: ReadonlySet<string>; readonly d: ReadonlySet<string>; select?: string; returning?: string; readonly policy: (Policy | undefined)[] }
 
 export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv: Driver<H>, rules: Rules, facts: { readonly [K in keyof T]: Fact }): (db: H, caller: Caller) => Store<T> {
   const prepared = new Map<string, Prepared>();
-  const bad = (table: string, message: string) => new ContractError("INPUT_VALIDATION_FAILED", `${table}: ${message}`);
   const prepare = (name: string): Prepared => {
     let p = prepared.get(name);
     if (!p) {
-      if (!Object.hasOwn(facts, name)) throw bad(name, "is not a collection");
       const f = facts[name]!;
       prepared.set(name, p = { name, f, x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: new Set([...STAMPS, ...f.ts ?? []]), d: new Set(f.d), policy: [] });
     }
@@ -103,7 +102,7 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
   return (db, caller) => ({ collection: name => collection(db, caller, prepare(name)) as never });
 
   function collection(db: H, caller: Caller, p: Prepared) {
-    const pol = policy(p, caller.kind === "system"), { f, x } = p, no = (message: string) => bad(p.name, message);
+    const pol = policy(p, caller.kind === "system"), { f, x } = p, no = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", `${p.name}: ${message}`);
     /** A value as the engine stores it, as a placeholder. Date-times and dates are known from the fact; a boolean and a JSON object are told by their JS type. */
     const put = (values: unknown[], column: string, v: unknown): string => {
       const type = p.ts.has(column) ? "timestamptz" : p.d.has(column) ? "date" : v !== null && typeof v === "object" && !(v instanceof Date) ? "json" : "";
@@ -113,11 +112,8 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
     const conditions = (where: object | undefined, values: unknown[]): string[] => {
       const out: string[] = [];
       for (const [name, spec] of Object.entries(where ?? {})) {
-        if (spec === undefined) throw no(`${name} is undefined`);
         const operators = spec !== null && typeof spec === "object" && !(spec instanceof Date) && !Array.isArray(spec) ? Object.entries(spec) : [["eq", spec] as const];
-        if (!operators.length) throw no(`${name} has no operator`);
         for (const [op, v] of operators) {
-          if (!OPERATORS.has(op) || v === undefined) throw no(`${name}.${op} is not an operator`);
           const left = `r.${d.ident(name)}`, bind = (x: unknown) => put(values, name, x);
           out.push(op === "isNull" ? condition(d, left, v ? "eq" : "ne", null, bind) : condition(d, left, op as "eq", v, bind));
         }
@@ -133,15 +129,11 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
 
     async function find(q: Query<object, string> = {}): Promise<Page<unknown>> {
       const dir = q.order ?? "asc", name = q.orderBy ?? "id", limit = q.limit ?? 50;
-      if (dir !== "asc" && dir !== "desc") throw no("order is asc or desc");
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw no("limit is 1 to 500");
       const values = base(), conds = conditions(q.where, values);
       const id = `r."id"`, kc = `r.${d.ident(name)}`, up = dir === "asc", way = up ? "ASC" : "DESC";
       if (q.cursor !== undefined) {
-        let at: unknown;
-        try { at = JSON.parse(decodeURIComponent(q.cursor)); } catch { throw no("cursor is invalid"); }
-        const [s, o, dr, v, last] = Array.isArray(at) ? at : [];
-        if (s !== p.name || o !== name || dr !== dir || typeof last !== "string" || v == null) throw no("cursor is for another query");
+        const [v, last] = JSON.parse(decodeURIComponent(q.cursor)) as unknown[];
         values.push(last);
         const after = `${id} ${up ? ">" : "<"} ${d.param(values.length)}`;
         if (name === "id") conds.push(after);
@@ -151,13 +143,12 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
       const list = await rows(`${select()}${where(conds)} ORDER BY ${name === "id" ? "" : `${kc} ${way}, `}${id} ${way} LIMIT ${limit + 1}`, values);
       if (list.length <= limit) return { rows: clean(list), cursor: null };
       const page = list.slice(0, limit), end = page[limit - 1]!;
-      return { rows: clean(page), cursor: encodeURIComponent(JSON.stringify([p.name, name, dir, end[name], end.id])) };
+      return { rows: clean(page), cursor: encodeURIComponent(JSON.stringify([end[name], end.id])) };
     }
 
     /** A write: placeholders are numbered as values are pushed; a Core bind recipe is evaluated against this caller and clock. */
     const writer = (lock?: number | string) => {
       if (f.pub) throw no("is read-only");
-      if (lock !== undefined && !(typeof lock === "number" ? Number.isSafeInteger(lock) : typeof lock === "string" && /^\d+$/.test(lock))) throw no("lock is the version read");
       const values: unknown[] = [], ms = Date.now(), into = d.ident(p.name);
       const push = (v: unknown) => (values.push(v), d.param(values.length));
       const recipe = (r: Recipe) => push(evaluate(d, [r], caller, { version: lock }, ms)[0]);
@@ -165,21 +156,18 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
         // SQLite matches column names without case, so compare folded
         const key = name.toLowerCase();
         if (SYSTEM.includes(key) || key === f.s) throw no(`${name} is not writable`);
+        // a driver binds undefined as NULL: an update would silently clear the column
         if (v === undefined) throw no(`${name} is undefined`);
         return [d.ident(name), put(values, name, v)] as const;
       });
       /** `WHERE id = ? AND <the caller's row rules> AND version = ?` */
-      const guard = (id: string) => {
-        if (typeof id !== "string") throw no("id is a string");
-        return ` WHERE ${[`${d.ident("id")} = ${push(id)}`, ...[...(caller.kind === "system" ? x.trusted : x.caller), x.lock].map(t => term(t, "", recipe(t[2])))].join(" AND ")}`;
-      };
+      const guard = (id: string) => ` WHERE ${[`${d.ident("id")} = ${push(id)}`, ...[...(caller.kind === "system" ? x.trusted : x.caller), x.lock].map(t => term(t, "", recipe(t[2])))].join(" AND ")}`;
       const run = async (sql: string, verb: string) => clean((await drv.procedure(db, [{ sql, binds: values, row: true }], `${p.name}/${verb}`))[0]! as Record<string, unknown>[]);
       return { given, recipe, guard, run, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };
 
     return {
       async findById(id: string) {
-        if (typeof id !== "string") throw no("id is a string");
         const values = base();
         values.push(id);
         return clean(await rows(pol.byId ??= `${select()}${where([`r."id" = ${d.param(values.length)}`])} LIMIT 1`, values))[0] ?? null;
@@ -198,7 +186,6 @@ export function createStore<H, T extends Record<string, Table>>(d: Dialect, drv:
       },
       async update(id: string, set: object, { lock }: { lock: number | string }) {
         const w = writer(lock), assigns = w.given(set).map(([name, mark]) => `${name} = ${mark}`);
-        if (!assigns.length) throw no("nothing to update");
         for (const [column, v] of x.sets) assigns.push(`${d.ident(column)} = ${v === "bump" ? `${d.ident(column)} + 1` : w.recipe(v)}`);
         return (await w.run(`UPDATE ${w.into} SET ${assigns.join(", ")}${w.guard(id)}${w.returning()}`, "update"))[0];
       },

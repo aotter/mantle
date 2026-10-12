@@ -5,12 +5,11 @@
  * (caller and trusted rows, insert fills, update sets and lock, delete lock).
  * Column names, value types, writable columns and `orderBy` are TypeScript types only: nothing at runtime knows them.
  */
-import { rowPolicy, writePolicy, type RuntimePlan } from "@aotter/mantle/spec";
+import { notNullColumns, rowPolicy, writePolicy, type RuntimePlan } from "@aotter/mantle/spec";
 import { declaredType, inputType, nativeType } from "../domain/columns.js";
 import { expand, SCOPE, TTL, type Fact, type Rules } from "../kernel/store.js";
 
 const q = JSON.stringify;
-type Schema = RuntimePlan["schemas"][string];
 // Types the typed Store compares and writes as plain bind values. Fixed numerics are scaled integers on SQLite; geo is two columns.
 const SCALAR = new Set(["text", "real", "float8", "integer", "int4", "int8", "bool", "timestamptz", "date"]);
 const SYSTEM_NOT_NULL = new Set(["id", "version", "created_at", "updated_at", "status"]);
@@ -31,13 +30,10 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
   for (const s of all) {
     const type = (column: string) => declaredType(s.fields, column) ?? (column === "version" ? "integer" : "text");
     const declared = Object.keys(s.fields).filter(f => f !== s.scope && s.fields[f] !== "geo");
+    const geo = Object.keys(s.fields).filter(f => s.fields[f] === "geo").flatMap(f => [`${f}_lat`, `${f}_lng`]); // `*` returns a geo field's two columns
     const names = [...["id", "version", "created_at", "updated_at", "author_id", ...(s.publishing ? ["status"] : [])], ...declared];
-    const required = new Set(s.schema.required ?? []);
-    const nonNull = (column: string) => {
-      if (SYSTEM_NOT_NULL.has(column)) return true;
-      const authored = s.names?.[column] ?? column, p = s.schema.properties?.[authored];
-      return required.has(authored) && !!p && p.nullable !== true && !(Array.isArray(p.type) && p.type.includes("null"));
-    };
+    const required = new Set(s.schema.required ?? []), notNull = notNullColumns(s);
+    const nonNull = (column: string) => SYSTEM_NOT_NULL.has(column) || notNull.has(column);
     const fact: Fact = {
       ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const } : {}),
       ...(declared.some(c => s.fields[c] === "timestamptz") ? { ts: declared.filter(c => s.fields[c] === "timestamptz") } : {}),
@@ -52,7 +48,7 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
     const scalar = (c: string) => SCALAR.has(type(c));
     const writable = s.publishing ? [] : declared.filter(c => scalar(c) || type(c) === "json");
     const input = (c: string) => `${inputType(type(c))}${nonNull(c) ? "" : " | null"}`;
-    tables.push(`${q(s.name)}: { row: ${of(names, c => c === "id" ? "string" : `${nativeType(type(c), isSqlite)} | null`)}; fields: ${of(names.filter(scalar), c => inputType(type(c)))}; set: ${of(writable, input)}; insert: ${of(writable, input, c => !required.has(s.names?.[c] ?? c))}; order: ${["id", ...names.filter(c => c !== "id" && scalar(c) && indexed.has(c) && nonNull(c))].map(c => q(c)).join(" | ")} }`);
+    tables.push(`${q(s.name)}: { row: ${of([...names, ...geo], c => c === "id" ? "string" : `${nativeType(geo.includes(c) ? "real" : type(c), isSqlite)} | null`)}; fields: ${of(names.filter(scalar), c => inputType(type(c)))}; set: ${of(writable, input)}; insert: ${of(writable, input, c => !required.has(s.names?.[c] ?? c))}; order: ${["id", ...names.filter(c => c !== "id" && scalar(c) && indexed.has(c) && nonNull(c))].map(c => q(c)).join(" | ")} }`);
     facts.push(`${q(s.name)}: ${q(fact)}`);
   }
   return { tables: `{ ${tables.join("; ")} }`, rules: q(rules), facts: `{ ${facts.join(", ")} }` };

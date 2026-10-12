@@ -1,5 +1,5 @@
 /** Generation consumes compiler-owned data; emitted application code executes native SQL only. */
-import type { LoweredStatement, PlanLowered, RuntimePlan } from "@aotter/mantle/spec";
+import type { PlanLowered, RuntimePlan } from "@aotter/mantle/spec";
 
 export type Target = "bun-sqlite" | "bun-postgres" | "cloudflare-d1" | "cloudflare-postgres";
 export interface GenerateInput {

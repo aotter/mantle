@@ -34,7 +34,9 @@ const ROWS = 60;
 const num = (v: unknown) => Number(v);
 const refused = (p: Promise<unknown>, code = "INPUT_VALIDATION_FAILED") => assert.rejects(p, (e: any) => e?.code === code, `expected ${code}`);
 /** Only the generated types stop these; at run time they must be inert: a database error or no rows, never a changed row. */
-const inert = async (p: Promise<any>) => { const r = await p.then(v => v, () => undefined); assert.ok(r === undefined || r === 0 || r.rows?.length === 0, `not inert: ${JSON.stringify(r)}`); };
+const inert = async (p: Promise<any>) => { const r = await p.then(v => v, () => undefined); assert.ok(r == null || r === 0 || r.rows?.length === 0, `not inert: ${JSON.stringify(r)}`); };
+/** A read the types forbid: a database error, or rows that are still only the caller's own (wrong at worst, never another scope's). */
+const scoped = (theirs: Set<string>) => async (p: Promise<any>) => { const r = await p.then(v => v, () => undefined); assert.ok(r === undefined || r === null || r.rows?.every((x: any) => !theirs.has(x.id)), "left the scope"); };
 const COLUMNS = ["amount", "approved", "author_id", "created_at", "id", "neededon", "payload", "requestedunits", "requestnumber", "sortbucket", "submittedat", "title", "updated_at", "version"];
 
 export async function verifyStore(env: StoreEnv) {
@@ -56,7 +58,7 @@ export async function verifyStore(env: StoreEnv) {
   // ---- scope: another owner's rows do not exist for a caller
   assert.equal(await a.count({ requestnumber: { like: "S-%" } }), ROWS); ok();
   assert.equal((await a.find({ limit: 500 })).rows.every((r: any) => String(r.requestnumber).startsWith(`S-${A}-`) || String(r.requestnumber).startsWith("REQ-")), true); ok();
-  const bRow = rowsB[3]!;
+  const bRow = rowsB[3]!, elsewhere = scoped(new Set(rowsB.map(r => r.id)));
   assert.equal(await a.findById(bRow.id), null); ok();
   assert.equal(await a.first({ where: { id: bRow.id } }), null); ok();
   assert.equal((await a.find({ where: { id: { in: [bRow.id, rowsA[0]!.id] } } })).rows.length, 1); ok();
@@ -90,12 +92,12 @@ export async function verifyStore(env: StoreEnv) {
   const filtered = await drain(a, { where: { approved: true, sortbucket: null }, orderBy: "title" }, 3);
   assert.equal(filtered.length, rowsA.filter(r => r.approved && r.sortBucket === null).length); assert.ok(filtered.every((r: any) => r.sortbucket === null && (r.approved === 1 || r.approved === true))); ok();
   const last = await a.find({ limit: ROWS }); assert.equal(last.cursor === null || last.rows.length === ROWS, true); ok();
-  // a cursor belongs to its query, and a forged one cannot leave the scope
-  const first = await a.find({ orderBy: "title", limit: 5 });
-  await refused(a.find({ orderBy: "amount", cursor: first.cursor! })); await refused(a.find({ orderBy: "title", order: "desc", cursor: first.cursor! }));
-  await refused(a.find({ cursor: "%%%" })); await refused(a.find({ cursor: btoa("[1,2]") }));
-  const forged = encodeURIComponent(JSON.stringify(["purchase_requests", "id", "asc", bRow.id, bRow.id]));
-  assert.ok((await a.find({ cursor: forged, limit: 500 })).rows.every((r: any) => !rowsB.some(x => x.id === r.id))); ok();
+  // a forged or malformed cursor is only ever bound values: it cannot leave the scope, and a bad one is an error or an empty page
+  for (const cursor of ["%%%", btoa("[1,2]"), "null", "[]", encodeURIComponent(JSON.stringify([{ a: 1 }, ["x"]])), encodeURIComponent(JSON.stringify([`' OR 1=1 --`, `' OR 1=1 --`]))]) await elsewhere(a.find({ cursor, limit: 500 }));
+  for (const forged of [[bRow.id, bRow.id], ["", ""], [null, bRow.id]]) {
+    for (const orderBy of ["id", "title"] as const) assert.ok((await a.find({ orderBy, cursor: encodeURIComponent(JSON.stringify(forged)), limit: 500 })).rows.every((r: any) => !rowsB.some(x => x.id === r.id)));
+  }
+  ok();
 
   // ---- operators
   const n = (where: Record<string, unknown>) => a.count({ requestnumber: { like: "S-%" }, ...where });
@@ -126,11 +128,13 @@ export async function verifyStore(env: StoreEnv) {
   // ---- refusals and inert input: operators, shapes, limits and system columns are refused; a column name is only ever a quoted identifier
   const hostile = "'; DROP TABLE purchase_requests; --";
   const total = async () => num((await env.native("SELECT COUNT(*) AS c FROM purchase_requests WHERE requestnumber LIKE ?", ["S-%"]))[0]!.c);
-  await refused(a.find({ where: { title: { "= 1 OR 1=1 --": 1 } } as never })); await refused(a.find({ where: { title: undefined } as never }));
-  await refused(a.find({ where: { title: { a: 1 } } as never })); await refused(a.find({ where: { title: {} } as never }));
-  await refused(a.find({ order: "sideways" as never })); await refused(a.find({ limit: 0 })); await refused(a.find({ limit: 501 })); await refused(a.find({ limit: 1.5 }));
-  await refused(a.find({ order: "asc; DROP TABLE x" as never }));
-  await refused(a.findById({} as never));
+  // what only the generated types stop: no row outside the caller's scope, no SQL from a value, no changed row
+  await elsewhere(a.find({ where: { title: { "= 1 OR 1=1 --": 1 } } as never })); await elsewhere(a.find({ where: { title: undefined } as never }));
+  await elsewhere(a.find({ where: { title: { a: 1 } } as never })); await elsewhere(a.find({ where: { title: { __proto__: 1, constructor: 2 } } as never }));
+  assert.equal((await a.find({ order: "sideways" as never, limit: 500 })).rows.every((r: any) => !rowsB.some(x => x.id === r.id)), true);
+  await refused(a.find({ limit: 0 })); await refused(a.find({ limit: 501 })); await refused(a.find({ limit: 1.5 }));
+  await elsewhere(a.find({ order: "asc; DROP TABLE x" as never, limit: 500 }));
+  await inert(a.findById({} as never)); await inert(a.findById(undefined as never));
   // an unknown column (hostile text, a dotted name, another table's column) is a database error: it never becomes SQL
   for (const name of [hostile, "title\" = 1 OR \"1", "r.title", "purchase_requests.title", "nosuchcolumn"]) {
     await assert.rejects(a.find({ where: { [name]: 1 } as never })); await assert.rejects(a.find({ orderBy: name as never })); await assert.rejects(a.count({ [name]: { like: "x" } } as never));
@@ -142,7 +146,11 @@ export async function verifyStore(env: StoreEnv) {
   for (const name of ["ownerid", "OwnerId", "OWNERID", "id", "Id", "version", "VERSION", "created_at", "Created_At", "updated_at", "author_id", "_rid", "status"]) {
     await refused(a.update(wr.id, { [name]: B } as never, { lock: wr.version })); await refused(a.insert({ [name]: B } as never));
   }
-  await refused(a.update("x", {}, { lock: 1 })); await refused(a.update("x", { title: "t" }, { lock: "1; DROP" as never })); await refused(a.update("x", { title: undefined } as never, { lock: 1 }));
+  assert.equal(await total(), ROWS * 2);
+  for (const lock of ["1; DROP", "abc", 1.5, NaN, null, undefined]) await assert.rejects(a.update(wr.id, { title: "t" }, { lock: lock as never }));
+  await refused(a.update("x", {}, { lock: 1 }), "CONFLICT"); await refused(a.update(wr.id, { title: "t" }, { lock: wr.version + 1 }), "CONFLICT");
+  // undefined would be bound as NULL and clear a nullable column: refused. As a filter it matches nothing.
+  await refused(a.update(wr.id, { title: undefined } as never, { lock: wr.version })); await refused(a.update(wr.id, { sortbucket: undefined } as never, { lock: wr.version })); await refused(a.insert({ sortbucket: undefined } as never));
   // a dotted write column is a database error and moves nothing
   for (const name of ["purchase_requests.ownerid", "r.ownerid", "title\" = 'x', \"ownerid"]) { await assert.rejects(a.update(wr.id, { [name]: B } as never, { lock: wr.version })); await assert.rejects(a.insert({ [name]: B } as never)); }
   assert.deepEqual((await env.native("SELECT ownerid, title, version FROM purchase_requests WHERE id = ?", [wr.id]))[0], { ownerid: A, title: wr.title, version: wr.version });
@@ -191,12 +199,20 @@ export async function verifyStore(env: StoreEnv) {
   assert.match(made.created_at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/); assert.equal(made.created_at, made.updated_at);
   assert.deepEqual(Object.keys(made).sort(), COLUMNS); assert.deepEqual(Object.keys((await a.findById(made.id))).sort(), COLUMNS); assert.deepEqual(Object.keys((await sys.findById(made.id))).sort(), COLUMNS);
   assert.equal(await b.findById(made.id), null); assert.equal((await sys.findById(made.id)).title, "inserted"); assert.equal((await env.native("SELECT ownerid FROM purchase_requests WHERE id = ?", [made.id]))[0]!.ownerid, A); ok();
-  await refused(a.insert({ title: undefined } as never));
   // a unique-index clash is CONFLICT on insert and on update, as in a generated Procedure
   await refused(a.insert(row("I-1", { title: "again" })), "CONFLICT");
   const other = await a.insert(row("I-2")); await refused(a.update(other.id, { requestnumber: "I-1" }, { lock: other.version }), "CONFLICT");
   assert.equal((await a.findById(other.id)).requestnumber, "I-2"); await a.delete(other.id, { lock: other.version });
   assert.equal((await b.insert(row("I-1", { title: "b's" }))).title, "b's"); // unique per owner
+  // a required, non-null field is NOT NULL in the database, so the orderBy promise holds for any writer: natively, through the Store and through a Procedure
+  const nulls = async (n: string) => num((await env.native("SELECT COUNT(*) AS c FROM catalog_items WHERE sku = ? OR name = ? OR price IS NULL", [n, n]))[0]!.c);
+  for (const column of ["sku", "name", "price"]) {
+    const given: Record<string, unknown> = { sku: "n-1", name: "n-1", price: 1, [column]: null };
+    await assert.rejects(env.native(`INSERT INTO catalog_items (id, created_at, sku, name, price) VALUES (?, ?, ?, ?, ?)`, ["null-test", env.sqlite ? 0 : "2026-01-01T00:00:00Z", given.sku, given.name, given.price]), /null/i, `native ${column}`);
+    await assert.rejects(catalog(user(A)).insert(given as never), /null/i, `Store ${column}`);
+    await assert.rejects(env.call("create-catalog-item", user(A), given), /null/i, `Procedure ${column}`);
+  }
+  assert.equal(await nulls("n-1"), 0); ok();
   // a keyset cursor carries any text (it is percent-encoded JSON)
   const uni = [await a.insert(row("U-1", { title: "測試 é" })), await a.insert(row("U-2", { title: "測試 ü" }))];
   const upage = await a.find({ where: { requestnumber: { like: "U-%" } }, orderBy: "title", limit: 1 });
@@ -207,7 +223,7 @@ export async function verifyStore(env: StoreEnv) {
   assert.equal((await notes.findById(note.id)).id, note.id); assert.equal((await env.stores(user(B)).session_notes.findById(note.id)), null);
   const item = await catalog(user(B)).insert({ sku: "c-9", name: "tape", price: 3 }); assert.equal(item.author_id, B); assert.equal((await catalog(user(A)).findById(item.id)).sku, "c-9"); ok();
   await refused(b.delete(made.id, { lock: 1 }), "CONFLICT"); await refused(a.delete(made.id, { lock: 2 }), "CONFLICT"); await refused(a.delete("no-such-id", { lock: 1 }), "CONFLICT");
-  await refused(a.delete(made.id, { lock: "x" as never })); await refused(a.delete({} as never, { lock: 1 }));
+  await assert.rejects(a.delete(made.id, { lock: "x" as never })); await assert.rejects(a.delete({} as never, { lock: 1 }));
   assert.equal(await a.delete(made.id, { lock: made.version }), undefined); assert.equal(await a.findById(made.id), null); assert.equal(await sys.findById(made.id), null); ok();
   await catalog(system).delete(item.id, { lock: item.version }); assert.equal(await catalog(system).findById(item.id), null); ok();
 
@@ -215,6 +231,8 @@ export async function verifyStore(env: StoreEnv) {
   const stores = env.stores;
   const same = async (name: string, caller: Caller, store: any, where: object, rows: boolean) => {
     const got = (await store.find({ where, limit: 500 })).rows;
+    // `*` also returns a geo field's two columns, which no View can name
+    for (const r of got) { assert.ok(name.startsWith("eq-catalog") ? r.place_lat === null && r.place_lng === null : !("place_lat" in r)); delete r.place_lat; delete r.place_lng; }
     assert.deepEqual(got, await env.view(name, caller, {}), `${name} as ${caller.kind}`);
     assert.equal(got.length > 0, rows, `${name} as ${caller.kind}: ${rows ? "vacuous" : "leaks rows"}`);
   };
