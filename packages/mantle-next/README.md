@@ -122,6 +122,12 @@ See [the Admin contract](../../docs/next/surfaces.md#mounting-admin) for display
 identity, native wire adapters and selected follow-up modules. Importing another
 generated entry excludes Admin from that bundle.
 
+For Cloud draft projections, import generated `adminDesign({ name, origin })`
+from `admin-design.ts`. It serves only the static design GET paths with null
+identity and refuses execution with 403 `DESIGN_ONLY`. Use the existing UI package's
+`adminPreviewDocument`/`readAdminPreviewRequest` for its same-origin host bridge.
+[Design preview contract](../../docs/next/surfaces.md#design-preview).
+
 ## D1 Sessions
 
 D1's session handle already satisfies generated Views/Procedures and the Store's structural `db` type:

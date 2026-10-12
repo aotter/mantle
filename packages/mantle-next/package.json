@@ -32,6 +32,8 @@
     "./admin-webmcp": "./dist/kernel/admin-webmcp.js",
 
     "./admin-site": "./dist/kernel/admin-site.js",
+
+    "./admin/design": "./dist/kernel/admin/design.js",
     "./mcp": "./dist/kernel/mcp.js",
     "./mcp-apps": "./dist/kernel/mcp-apps.js",
     "./web": "./dist/kernel/web.js",

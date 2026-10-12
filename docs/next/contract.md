@@ -377,3 +377,12 @@ For selected PostgreSQL View boundaries, declared integer outputs and system
 `version` become numbers only within JavaScript's safe integer range; larger
 values retain their exact driver text. No global driver parser is installed,
 and D1's unsafe int64 precision is not a cross-target promise.
+
+### Design-only projection
+
+The generated `admin-design.ts` reuses build-time console descriptors and serves
+only the four GET projections documented in [surfaces.md](surfaces.md#design-preview).
+It has no database, verified Caller or operation execution path; its identity
+role is always null. Other paths/methods/origins return 403 `DESIGN_ONLY` explicitly.
+The existing UI package owns the preview document and same-origin message protocol.
+Hosts authorize the draft/revision before exposing its static snapshot.

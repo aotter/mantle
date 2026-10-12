@@ -93,6 +93,15 @@ and verified caller to `d1Identity`/`postgresIdentity`. Verify media upload/comm
 member cursor paging and invitations locally. Missing capabilities return 501;
 use only `staff` or `null` in role updates.
 
+For a Cloud design-only draft, use generated `adminDesign({ name, origin })`
+with no DB/Caller wiring. Its `/admin/api/me` role stays null and only four
+static GET projections exist; 403 `DESIGN_ONLY` means a host must supply a
+separate authorized runtime to test business operations. Keep the existing
+`@aotter/mantle-ui/admin-preview` document/protocol helpers, and verify the
+message's origin, iframe source and active draft/revision before serving it.
+Read `docs/next/surfaces.md#design-preview`; never substitute a staff identity
+to make the preview render.
+
 ## New project
 
 1. Create a directory outside the SDK checkout with Node 22+ and

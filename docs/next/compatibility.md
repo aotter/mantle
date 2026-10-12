@@ -24,6 +24,8 @@ explicitly; apply `schema.sql` directly only to a new database.
 | Dynamic `web.ts` (`llms.txt`, sitemap, `.md` alternates, head tags) | Generated; mount `web({ ... })`; see [surface deltas](surfaces.md#optional-web-output). |
 | Admin core API | Generated handler: session gate, SPA shell, bootstrap/metadata/site reads, staff Views/search/filter/CSV and staff operations. [Mounting](surfaces.md#mounting-admin). Content authoring and optional Admin modules remain separate work packages. |
 | Admin site/media/identity API | Generated site settings, media uploads/library and staff/member routes reuse app-owned native capabilities. Cookie-session `staff` only; unwired capabilities return 501. [Wiring](surfaces.md#mounting-admin). |
+
+| Design preview | Static generated GET-only draft projection with null staff identity and 403 `DESIGN_ONLY` for execution; canonical UI preview document/protocol helpers retained. [Contract](surfaces.md#design-preview). |
 | Admin UI, web skill/example | Planned Admin follow-ups and [#1478](https://github.com/aotter/mantle/issues/1478). |
 | Localized Schemas and translations | Plain-string locale values, atomic published-parent guard, SQL parent visibility and generated page locale helper; see [Translations](#translations). |
 | Opt-in `lifecycle: publishing` | Generated status, `published_at`, staff-only transitions and published-only public reads; see [Publishing](#publishing). |
