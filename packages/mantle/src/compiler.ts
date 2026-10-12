@@ -2,7 +2,7 @@
 export { compilePlan, viewOutputs } from "./spec/infrastructure/sql/compilePlan.js";
 export { DiagnosticError } from "./spec/kernel/diagnostic.js";
 export { parseNumeric, resolveMantleRef, NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, mcpTools, mcpToolNameSegment, resolveLocalizedText, assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired } from "./spec/domain/index.js";
-export type { AuthPredicate, ManifestSourceSet, JsonSchema, RuntimePlan, PlanSchema, PlanLowered, LoweredStatement, LoweredView, SqlNode, RowMode, SiteDefaults } from "./spec/index.js";
+export type { AuthPredicate, ManifestSourceSet, JsonSchema, RuntimePlan, PlanSchema, PlanLowered, LoweredStatement, LoweredView, LoweredPage, SqlNode, RowMode, SiteDefaults } from "./spec/index.js";
 export { lowerPlan } from "./core/sql/lowered.js";
 export { d1Dialect } from "./d1/dialect.js";
 export { postgresDialect } from "./postgres/dialect.js";
