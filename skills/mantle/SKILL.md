@@ -83,6 +83,10 @@ Verify `/admin/api/webmcp` and one same-origin `POST /admin/api/webmcp/<tool>`:
 only declared staff tools are exposed, with the same native validation/paging and
 caller-owned ref handlers as MCP. This browser boundary does not need the MCP SDK.
 
+For a generated public website, follow [web mounting and acceptance](references/web.md).
+The app renders HTML and inserts `site.head()`; generated `web.ts` serves the
+indexes and Markdown alternates.
+
 ## New project
 
 1. Create a directory outside the SDK checkout with Node 22+ and

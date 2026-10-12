@@ -6,6 +6,7 @@ your project's `manifests/`; none is a template to copy wholesale.
 
 | Example | What it shows | Handler code |
 |---|---|---|
+| [Generated public website](./generated-web/README.md) | Native generated Worker with HTML list/detail, Store, REST, canonical tags and Markdown alternates (alpha.7 onwards). | yes |
 | [`reference-service/`](./reference-service/README.md) | A runnable service with its smoke test: scoped orders, SQL Views and Procedures, hooks, a cron, REST, both MCP surfaces, Admin's API and console email-OTP sign-in. The release gate runs it. | yes |
 | [Intake form](./intake.md) | An anonymous form: one SQL `INSERT` and a staff View. | none |
 | [Intake with bot check and notification](./intake-hooks.md) | A Turnstile check as the Procedure's guard, an email from an after hook. | 2 handlers |
