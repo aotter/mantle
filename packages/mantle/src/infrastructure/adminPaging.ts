@@ -2,10 +2,10 @@
 import type {RuntimePlan,SqlNode} from "../build/compiler.js";
 import {adminEntries} from "./adminEntries.js";
 import {wireScalars} from "../domain/wireScalars.js";
-import {outputType} from "../domain/columns.js";
+import {boundaryType} from "../domain/columns.js";
 import type {Dialect} from "../kernel/dialect/common.js";
 import type {GenerateDiagnostic} from "../domain/model.js";
-import { compileProgram } from "../build/compiler.js";
+import { viewOutputs, compileProgram } from "../build/compiler.js";
 import { pagedOf } from "../build/compiler.js";
 import type { MantleDialect } from "../build/compiler.js";
 import {castCursor,type PagingProof} from "../domain/paging.js";
@@ -27,7 +27,7 @@ export function adminPaging(plan:RuntimePlan,dialect:MantleDialect,proofs:Readon
       const reserved=JSON.stringify([c.ast,v.source,list,Object.values(plan.schemas).map(s=>s.fields)]);
       let marker=32767;while(reserved.includes(String(marker)))marker++;
       const print=(ast:SqlNode)=>dialect.print!(ast,plan.schemas);
-      const read=(p:typeof first)=>{const typed=castCursor(p.ast,p.sources,proof.types,!!dialect.nativeOrder);return {prefix:print(project({SelectStmt:{...typed.SelectStmt,whereClause:undefined,sortClause:undefined,limitCount:undefined,limitOption:"LIMIT_OPTION_DEFAULT"}},p.names,keys,name))+(typed.SelectStmt.whereClause?` WHERE (${expression(typed.SelectStmt.whereClause)})`:""),extra:p.sources.filter(x=>"cursor"in x).map(x=>(x as {cursor:number}).cursor)};};
+      const read=(p:typeof first)=>{const typed=castCursor(p.ast,p.sources,proof.types,!!dialect.nativeOrder);return {prefix:print(project({SelectStmt:{...typed.SelectStmt,whereClause:undefined,sortClause:undefined,limitCount:undefined,limitOption:"LIMIT_OPTION_DEFAULT"}},p.flat?viewOutputs(v,plan.schemas).keys??[]:p.names,keys,name))+(typed.SelectStmt.whereClause?` WHERE (${expression(typed.SelectStmt.whereClause)})`:""),extra:p.sources.filter(x=>"cursor"in x).map(x=>(x as {cursor:number}).cursor)};};
       const suffixAst={SelectStmt:{targetList:[{ResTarget:{val:{A_Const:{ival:{ival:1}}}}}],sortClause:keys?first.ast.SelectStmt.sortClause:undefined,limitCount:{ParamRef:{number:marker}},limitOption:"LIMIT_OPTION_COUNT",op:"SETOP_NONE"}};
       const tail=print(suffixAst).replace(/^SELECT 1/,"");
       const expression=(ast:SqlNode)=>print({SelectStmt:{targetList:[{ResTarget:{val:ast}}],limitOption:"LIMIT_OPTION_DEFAULT",op:"SETOP_NONE"}}).replace(/^SELECT /,"");
@@ -49,7 +49,7 @@ export async function adminBindingsOf(plan:RuntimePlan,dialect:MantleDialect,pag
   let adminPages:ReturnType<typeof adminPaging>|undefined;
   try{adminPages=adminPaging(plan,dialect,paging,(ast,names,nkeys,name)=>{
     const keys=[...names,...Array.from({length:nkeys},(_,i)=>`_k${i}`)];
-    const projected=wireScalars(ast,keys,[...names.map(key=>outputType(plan,name,key)),...(paging[name]?.types??[])],wire);
+    const projected=wireScalars(ast,keys,[...names.map(key=>boundaryType(plan,name,key)),...(paging[name]?.types??[])],wire,true);
     if(typeof projected==="string")throw Error(projected);return projected;
   });}catch(error){refusals.push({code:"GENERATE_UNSUPPORTED",path:"admin/views",message:error instanceof Error?error.message:String(error)});}
   return {ok:true as const,adminPages,adminEntries:await adminEntries(plan,dialect,wire as Dialect,refusals)};

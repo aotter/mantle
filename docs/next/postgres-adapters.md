@@ -27,7 +27,8 @@ await verifyPostgresAdapter(async () => ({
 
 The check executes generated View and Procedure entries. It covers bound date-time,
 date and JSON text; declared SELECT and RETURNING timestamp microseconds; row
-array/count; safe and unsafe int8 precision; numeric text and booleans; unique
+array/count; safe and unsafe int8 precision (including int64 extrema), aliased selected-page
+integer/version number-or-string outputs; native numeric text and booleans; unique
 violations and zero-row writes; commit, rollback and nested handles; and uncertain
 COMMIT classification. It does not compare latency or perform cloud provisioning.
 

@@ -19,8 +19,8 @@ export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target
   for (const [name,view] of Object.entries(plan.views)) {
     if(view.surface!=="public") continue;
     const id=views.length,encoded=encodeURIComponent(name);
-    imports.push(...viewImports(name,id));
     const wire = outputConversions(plan, name, target);
+    imports.push(...viewImports(name,id).map(line=>wire.some(([,type])=>type==="int") ? line.replace("./paged/views/", "./paged/wire/views/") : line));
     hasWire ||= wire.length > 0;
     views.push(`{ ${route("GET",`/api/views/${name}`)}, query: query${id}, page: ${boundaryPage(`page${id}`, wire)}${convert(conversions(view.input?.properties,(lowered.views[name]?.public ?? lowered.views[name]?.caller)?.binds ?? [],target))} }`);
   }

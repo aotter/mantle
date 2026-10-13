@@ -34,7 +34,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
     const select=`SELECT ${columns.map(c=>`${wire.ident(s.name)}.${wire.ident(c)}`).join(",")} FROM ${wire.ident(s.name)}`;
     const base=await parse(select);
     const project=(ast:SqlNode,names:readonly string[],keys:readonly string[])=>{
-      const projected=wireScalars(ast,[...names,...keys.map((_,i)=>`_k${i}`)],[...names.map(n=>types[columns.indexOf(n)]??(parent?declaredType(parent.fields,n):undefined)),...keys],wire);
+      const projected=wireScalars(ast,[...names,...keys.map((_,i)=>`_k${i}`)],[...names.map(n=>types[columns.indexOf(n)]??(parent?declaredType(parent.fields,n):undefined)),...keys],wire,true);
       if(typeof projected==="string")throw Error(projected);return projected;
     };
     let marker=32767;const authored=JSON.stringify([plan.schemas,s]);while(authored.includes(String(marker)))marker++;
@@ -46,7 +46,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
       const type=declaredType(s.fields,column)??(column==="version"?"integer":"text");
       if(!["text","integer","int4","int8","real","float8","bool","date","timestamptz"].includes(type))continue;
       const expression=wire.ident(s.name)+"."+wire.ident(column),[kind,nullable]=(Object.hasOwn(ordered,column)?ordered[column]:undefined)??[];
-      fieldFacts[column]={expression,value:wire.cast(markerText,type),wire:kind&&type==="date"?wire.wireDate(expression).join(""):kind&&type==="timestamptz"?wire.wireTimestamp(expression).join(""):expression,nullable:nullable??true,...(kind?{kind}:{})};
+      fieldFacts[column]={expression,value:wire.cast(markerText,type),wire:kind&&["integer","int8","int4"].includes(type)?`CAST(${expression} AS text)`:kind&&type==="date"?wire.wireDate(expression).join(""):kind&&type==="timestamptz"?wire.wireTimestamp(expression).join(""):expression,nullable:nullable??true,...(kind?{kind}:{})};
     }
     const filter=(s.uiSchema?.list as {filterField?:string}|undefined)?.filterField,enums=enumOptions(filter?s.schema.properties?.[filter]:undefined)?.map(choice=>choice.value);
     const literal=(v:string)=>"'"+v.replaceAll("'","''")+"'";let subtype="NULL",option=0;
@@ -86,7 +86,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
       if(!writable.length)updateAst.UpdateStmt.targetList=[];
       const deleteAst=(await parse(`DELETE FROM ${wire.ident(s.name)} WHERE id=input.id RETURNING id`))[0]!;
       const write=(ast:SqlNode)=>{const [c]=compileProgram([ast],{...ctx("procedure",trusted,inputs),lockVersion:true});if(!c||c.kind!=="row")throw Error("Admin writes must affect exactly one row.");
-        const fixed=c.binds.filter(b=>!(b.k==="input"&&writable.includes(String(b.name)))),rewritten=wireReturning(c.ast,plan.schemas,wire);
+        const fixed=c.binds.filter(b=>!(b.k==="input"&&writable.includes(String(b.name)))),rewritten=wireReturning(c.ast,plan.schemas,wire,true);
         const rewrite=(n:SqlNode)=>{if(n.ParamRef){const b=c.binds[n.ParamRef.number-1]!;if(b.k==="input"&&writable.includes(String(b.name))){delete n.ParamRef;n.Raw={parts:[wire.cast(markerText,String(b.type))]};return;}n.ParamRef.number=fixed.indexOf(b)+1;}for(const v of Object.values(n))if(v&&typeof v==="object")Array.isArray(v)?v.forEach(rewrite):rewrite(v);};rewrite(rewritten);return {ast:rewritten,binds:recipesOf({binds:fixed},["id"],message=>{throw Error(message);})};};
       const create=write(insertAst),patch=write(updateAst),remove=write(deleteAst),entryFields:Record<string,unknown>=Object.create(null);
       const insert=create.ast.InsertStmt,update=patch.ast.UpdateStmt;

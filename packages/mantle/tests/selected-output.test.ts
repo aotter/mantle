@@ -76,7 +76,7 @@ test("selected scalar conversion is static, copies rows and preserves native com
  const compiled=await compilePlan({sources:[{sourceId:"values",text:fixture}]},postgresCompiler,"operational");
  if(!compiled.ok)throw Error(JSON.stringify(compiled.diagnostics));
  expect(outputConversions(compiled.plan,"values","bun-postgres")).toEqual([["integerAlias","int"],["maybe","int"],["rev","int"]]);
- expect(outputConversions(compiled.plan,"values","cloudflare-d1")).toEqual([["booleanAlias","bool"],["jsonAlias","json"]]);
+ expect(outputConversions(compiled.plan,"values","cloudflare-d1")).toEqual([["integerAlias","int"],["booleanAlias","bool"],["jsonAlias","json"],["maybe","int"],["rev","int"]]);
  expect(outputConversions(compiled.plan,"computed","bun-postgres")).toEqual([]);
  expect(outputConversions(compiled.plan,"aggregate","bun-postgres")).toEqual([]);
  expect(Object.getPrototypeOf(compiled.plan.views["proto-int"]!.columns)).toBeNull();
@@ -90,7 +90,7 @@ spec: {surface: internal, sql: 'WITH p AS (SELECT amount,flag,payload FROM value
 `}]},postgresCompiler,"operational");
  if(!direct.ok)throw Error(JSON.stringify(direct.diagnostics));
  expect(outputConversions(direct.plan,"direct-cte","bun-postgres")).toEqual([["amount","int"]]);
- expect(outputConversions(direct.plan,"direct-cte","cloudflare-d1")).toEqual([["flag","bool"],["payload","json"]]);
+ expect(outputConversions(direct.plan,"direct-cte","cloudflare-d1")).toEqual([["amount","int"],["flag","bool"],["payload","json"]]);
  expect(()=>checkOrigin(new Request("https://app.test/api/edit",{method:"POST",headers:{origin:"https://evil.test"}}),{...caller,credential:"session"})).toThrow("Cross-origin");
 });
 

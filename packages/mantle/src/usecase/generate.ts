@@ -1,7 +1,7 @@
 /** Canonical lowered programs become ordinary target-specific TypeScript, never a runtime plan. */
 import { parseNumeric, type JsonSchema, type LoweredStatement } from "../build/compiler.js";
 import type { GenerateDiagnostic, GenerateInput, GenerateResult } from "../domain/model.js";
-import { nativeType, outputType } from "../domain/columns.js";
+import { boundaryType, nativeType, outputType, wireType } from "../domain/columns.js";
 import { databaseImport, driverFor, entry, exportName, generatedFiles, isSqlite as sqlite, q } from "../domain/entry.js";
 import { authLines as auth } from "../domain/input.js";
 import { recipesOf } from "../domain/recipes.js";
@@ -95,13 +95,13 @@ export function generate(input: GenerateInput): GenerateResult {
     }
     const fieldNames = inputFields(view.input, path + "/input");
     const callerStep = step(c, path, fieldNames), trustedStep = mode === "caller" ? step(trusted!, path, fieldNames) : callerStep;
-    declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`,
+    declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`, `export type View${index}WireRow = { ${keys.map(key => `readonly ${q(key)}: ${boundaryType(plan, name, key) ? wireType(boundaryType(plan, name, key)) : `View${index}Row[${q(key)}]`};`).join(" ")} };`,
       `const ${fn}Caller = ${callerStep} as const;`, ...(trustedStep !== callerStep ? [`const ${fn}Trusted = ${trustedStep} as const;`] : []),
       `async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path),
       `  const m = ${trustedStep !== callerStep ? `caller.kind === "system" ? ${fn}Trusted : ` : ""}${fn}Caller;`, `  return DRIVER.read(db, m.sql, binds(D, m.binds, caller, raw));`, "}");
     views.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
-    entries[`views/${encodeURIComponent(name)}.ts`] = entry("view", name, `View${index}Input as Input, View${index}Row as Row`);
+    entries[`views/${encodeURIComponent(name)}.ts`] = entry("view", name, `View${index}Input as Input, View${index}Row as Row, View${index}WireRow as WireRow`);
   }
   for (const [index, [name, procedure]] of Object.entries(plan.procedures).sort().entries()) {
     const path = `procedures/${name}`, fn = `procedure${index}`;
@@ -123,7 +123,7 @@ export function generate(input: GenerateInput): GenerateResult {
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
-  const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse, !!site), ...emitAdminDescriptors({plan,adminExtensions,admin},diagnostics), ...emitAdminBindings(input,refuse), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
+  const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse, !!site), ...emitAdminDescriptors({plan,adminExtensions,admin},diagnostics), ...emitAdminBindings(input,refuse), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
   const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [

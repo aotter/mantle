@@ -94,10 +94,11 @@ for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:
  await run(`INSERT INTO ordered(id,version,created_at,updated_at,ownerid,kind,rank,label,at) VALUES ('other',1,${pg?"now(),now()":"0,0"},'B','a',0,'exact %_',${pg?"'2026-10-13 00:00:00.000001+00'":"1791849600000001"})`);
  await run(`INSERT INTO dated(id,version,created_at,updated_at,ownerid,day) VALUES ('d1',1,${pg?"now(),now()":"0,0"},'A',${pg?"'2026-10-13'":"20739"}),('d2',1,${pg?"now(),now()":"0,0"},'A',${pg?"'2026-10-14'":"20740"})`);
  const {adminBindings}=await import(join(dir,"admin-bindings.ts")),bindings=adminBindings(),views=bindings.views,adapter=bindings.adapter,native=await import(join(dir,"native-admin.ts"));
- const single=views.find((v:any)=>v.name==="one"),sq=single.query(new URLSearchParams({minimum:"0","filter.rank":"0",search:"ignored"}));expect((await single.page(db,caller("A"),sq.input,sq)).rows).toEqual([{rank:pg?"0":0}]);
+ const single=views.find((v:any)=>v.name==="one"),sq=single.query(new URLSearchParams({minimum:"0","filter.rank":"0",search:"ignored"}));expect((await single.page(db,caller("A"),sq.input,sq)).rows).toEqual([{rank:"0"}]);
+ expect(single.row({rank:"0"})).toEqual({rank:0});
  const trio=views.find((v:any)=>v.name==="trio");const ids:string[]=[];let cursor:string|undefined;
  const instrument=pg?{unsafe:(sql:string,values:unknown[])=>{reads++;return(db as SQL).unsafe(sql,values as any[]);}}:{query:(sql:string)=>({all:(...values:unknown[])=>{reads++;return(db as Database).query(sql).all(...values as any[]);}})};let reads=0;
- do{const {input,...paging}=trio.query(new URLSearchParams({minimum:"0",limit:"1",search:"%_","filter.kind":"a","filter.rank":"0",...(cursor?{cursor}:{})}));const page=await trio.page(instrument,caller("A"),input,paging);ids.push(...page.rows.map((row:any)=>row.id));expect(page.rows[0]["$32767"]).toBe(pg?"0":0);cursor=page.nextCursor;}while(cursor);
+ do{const {input,...paging}=trio.query(new URLSearchParams({minimum:"0",limit:"1",search:"%_","filter.kind":"a","filter.rank":"0",...(cursor?{cursor}:{})}));const page=await trio.page(instrument,caller("A"),input,paging);ids.push(...page.rows.map((row:any)=>row.id));expect(page.rows[0]["$32767"]).toBe("0");cursor=page.nextCursor;}while(cursor);
  expect(ids).toEqual(["r0","r2"]);expect(reads).toBe(2);
  const first=await trio.page(instrument,caller("A"),{minimum:0},{limit:1,match:{filters:{},search:"%_"}}),before=reads;
  await expect(trio.page(instrument,caller("B"),{minimum:0},{limit:1,cursor:first.nextCursor,match:{filters:{},search:"%_"}})).rejects.toThrow();await expect(trio.page(instrument,caller("A"),{minimum:1},{limit:1,cursor:first.nextCursor,match:{filters:{},search:"%_"}})).rejects.toThrow();expect(reads).toBe(before);
@@ -180,7 +181,7 @@ INSERT INTO ordered(id,version,created_at,updated_at,ownerid,kind,rank,label,at)
  const ordinaryUpdate=await post({kind:"write",name:"ordinaryowners",caller:caller("A"),verb:"patch",id:ordinary.result.id,version:ordinary.result.version,input:{ownerId:"updated value"}});expect(ordinaryUpdate.result.ownerid).toBe("updated value");expect(ordinaryUpdate.calls).toBe(2);
  const ordinaryPage=await post({kind:"entries",name:"ordinaryowners",caller:caller("A"),params:{filter_field:"ownerId",filter_values:'["updated value"]'}});expect(ordinaryPage.result.rows.map((r:any)=>r.id)).toEqual([ordinary.result.id]);expect(ordinaryPage.calls).toBe(1);
  const create=await post({kind:"write",name:"records",caller:caller("A"),verb:"create",input:{label:"write",kind:"a",flag:true,data:{test:1}}});expect(create.result.status).toBe("draft");expect(create.calls).toBe(2);
- const patch=await post({kind:"write",name:"records",caller:caller("A"),verb:"patch",id:create.result.id,version:create.result.version,input:{label:"changed"}});expect(patch.result.version).toBe(create.result.version+1);expect(patch.calls).toBe(2);expect(JSON.parse(patch.result.data)).toEqual({test:1});
+ const patch=await post({kind:"write",name:"records",caller:caller("A"),verb:"patch",id:create.result.id,version:create.result.version,input:{label:"changed"}});expect(Number(patch.result.version)).toBe(Number(create.result.version)+1);expect(patch.calls).toBe(2);expect(JSON.parse(patch.result.data)).toEqual({test:1});
  expect(await post({kind:"write",name:"records",caller:caller("B"),verb:"patch",id:create.result.id,version:patch.result.version,input:{label:"foreign"}})).toMatchObject({error:{code:"CONFLICT"},calls:2});
  expect(await post({kind:"write",name:"records",caller:caller("A"),verb:"patch",id:create.result.id,version:create.result.version,input:{label:"stale"}})).toMatchObject({error:{code:"CONFLICT"},calls:2});
  expect(await post({kind:"write",name:"records",caller:caller("A"),verb:"remove",id:create.result.id,version:patch.result.version})).toMatchObject({calls:2});
@@ -328,3 +329,30 @@ for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:
  expect(await native.nativeEntryGet(s.binding,b.adapter,db,caller('B'),'child')).toBeNull();
  }finally{if(pg){await run(`DROP SCHEMA IF EXISTS ${namespace} CASCADE`);await(db as SQL).close();}else(db as Database).close();await rm(dir,{recursive:true,force:true});}
 },30000);
+
+for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`Admin ${pg?'PostgreSQL':'SQLite'} collection boundary preserves exact int64 quantity/version before driver rounding`,async()=>{
+ const {source:text,seed,integerCases}=await import('./wire-scenarios.js');
+ const dir=await mkdtemp(join(import.meta.dir,'apps/.admin-int64-')),db=pg?new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}):new Database(':memory:'),namespace='admin_int64_'+crypto.randomUUID().replaceAll('-','');
+ const run=(sql:string)=>pg?(db as SQL).unsafe(sql):Promise.resolve((db as Database).query(sql).all());
+ try{
+  const result=await generateFromSources({target:pg?'bun-postgres':'bun-sqlite',admin:true,sources:{sources:[{sourceId:'wire.yaml',text}]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);
+  if(pg){await run(`CREATE SCHEMA ${namespace}`);await run(`SET search_path TO ${namespace}`);await run(result.files['schema.sql']!);}else(db as Database).exec(result.files['schema.sql']!);
+  if(pg)await run(seed(true));else(db as Database).exec(seed(false));const {adminBindings}=await import(join(dir,'admin-bindings.ts')),bindings=adminBindings(),schema=bindings.schemas.find((s:any)=>s.name==='wire_records'),native=await import(join(dir,'native-admin.ts'));
+  const query=schema.query(new URLSearchParams({sort:'id',direction:'asc',limit:'500'}));let reads=0;
+  const tapped=pg?{unsafe:(sql:string,values:unknown[])=>{reads++;return(db as SQL).unsafe(sql,values as any[]);}}:{query:(sql:string)=>({all:(...values:unknown[])=>{reads++;return(db as Database).query(sql).all(...values as any[]);}})};
+  const page=await native.nativeEntryPage(schema.binding,bindings.adapter,()=>tapped,caller('staff'),query);expect(reads).toBe(1);
+  for(const [id,,expected] of integerCases){const row=schema.row(page.rows.find((r:any)=>r.id===id));expect(row.quantity).toBe(expected);expect(row.version).toBe(expected);}
+ }finally{if(pg){await run(`DROP SCHEMA IF EXISTS ${namespace} CASCADE`);await(db as SQL).close();}else(db as Database).close();await rm(dir,{recursive:true,force:true});}
+},30000);
+
+test('flat staff View pages cast int64 before D1 driver rounding',async()=>{
+ const {source:text,seed,integerCases}=await import('./wire-scenarios.js');
+ const flat=text.split('---')[0]+`---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: flat}\nspec: {surface: staff, input: {type: object, properties: {id: {type: string}}, required: [id]}, sql: 'SELECT id,quantity,version FROM wire_records WHERE id=input.id'}\n`;
+ const dir=await mkdtemp(join(import.meta.dir,'apps/.admin-flat-')),db=new Database(':memory:');
+ try{
+  const result=await generateFromSources({target:'cloudflare-d1',admin:true,sources:{sources:[{sourceId:'flat.yaml',text:flat}]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);db.exec(result.files['schema.sql']!);db.exec(seed(false));
+  const {adminBindings}=await import(join(dir,'admin-bindings.ts')),bindings=adminBindings(),view=bindings.views.find((v:any)=>v.name==='flat');let reads=0;
+  const d1={prepare:(sql:string)=>({bind:(...values:any[])=>({all:async()=>{reads++;return {results:db.query(sql).all(...values)};}})})};
+  for(const [id,,expected]of integerCases){const {input,...paging}=view.query(new URLSearchParams({id,limit:'500'})),before=reads,page=await view.page(d1,caller('staff'),input,paging);expect(reads-before).toBe(1);const row=view.row(page.rows[0]);expect(row.quantity).toBe(expected);expect(row.version).toBe(expected);}
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});

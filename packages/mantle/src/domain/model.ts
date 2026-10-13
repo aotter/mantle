@@ -14,6 +14,7 @@ export interface GenerateInput {
   readonly site?: import("../build/compiler.js").SiteDefaults;
   readonly plan: RuntimePlan;
   readonly lowered: PlanLowered;
+  readonly wireLowered?: PlanLowered;
   /** Compiler-resolved output names, supplied by infrastructure; dynamic outputs remain undefined. */
   readonly viewKeys: Readonly<Record<string, readonly string[] | undefined>>;
   /** Core's new entry id for this dialect, as an SQL expression (its `lowering.newId()`, printed). */

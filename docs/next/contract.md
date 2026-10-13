@@ -89,15 +89,20 @@ justify overriding every PG type parser or adding a generic decoder to the bare
 query. Authored output names should be emitted into SQL where valid, avoiding
 an extra per-row projection merely to repair names already known at generation.
 
-Selected REST/MCP View boundaries use generated column lineage: PostgreSQL
-declared integers become numbers when safe, otherwise exact native strings
-(including a driver's bigint converted to a string); SQLite/D1 declared JSON
-and booleans become JSON values and booleans. Computed outputs, SQL Procedures
-and app-owned ref results retain their native values. Integer paging cursor
-keys serialize bigint without changing the returned rows. SQLite/D1 unsafe
-integer numbers remain driver-native and may already have lost precision;
-full cross-target int64 parity in #1526 is unfinished. No integer SQL projection
-or generic row decoder is added to bare queries or the Store.
+Selected REST/MCP/Admin boundaries use static generated column lineage. Declared
+integers (including aliased system versions) are `number | string | null` on every
+target: safe integers become numbers; unsafe integers remain exact decimal text.
+Selected SQL projections cast integers and hidden integer cursor keys to text
+before the driver reads them, preserving stored int64 values on SQLite/D1 and
+PostgreSQL. This cannot repair values already rounded during a write.
+`views/<name>.ts` exports both driver-native `Row` and `WireRow` (declared wire fields agree across targets);
+`paged/views/<name>.ts` keeps native `Row` rows; REST/MCP use separate
+`paged/wire/views/<name>.ts` SQL and convert at their boundary. SQLite/D1 declared JSON
+and boolean columns become JSON values and booleans, preserving aliases and nulls.
+Declared real/float outputs remain numbers. Computed outputs without proved lineage,
+SQL Procedures and app-owned ref results retain native values and types. Bare queries
+and the Store receive no integer SQL projection, transport conversion or runtime
+schema interpreter.
 
 Declared authorization, ownership/TTL SQL policy, explicit OCC and atomic writes
 remain required. Generate them as the native application would implement them.
