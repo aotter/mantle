@@ -64,12 +64,12 @@ self-hosted, a host when hosted.
   spirit as Better Auth's `adminRoles`. A host caller is staff by definition. Holding a
   staff role admits the caller to Admin and `/mcp/staff`; other roles, such as a member
   tier, are only read with `auth.hasRole()`.
-- `mantle generate` collects every use into `catalog.json` (section 9), so agents and
-  hosts read one vocabulary. An application that uses none of these generates
+- `mantle describe` reports every use (section 9), so authors, agents and hosts read one
+  vocabulary. An application that uses none of these generates
   byte-identical code to today.
 
 A misspelled role never matches, so the rule fails closed. A host that compares the
-catalog with what it can supply catches the typo (section 9).
+report with what it can supply catches the typo (section 9).
 
 ### 2. The caller carries roles and fields
 
@@ -152,7 +152,7 @@ spec:
   roles). A caller holding one of those roles reads and writes every value. The kernel
   picks one of two pre-lowered statements per request, so the filtered statement keeps
   its index. This is an explicit, author-written widening, visible in the manifest and
-  in the catalog.
+  in the `mantle describe` report.
 - **Enforcement.** For every non-system caller, the generator wraps every read and write
   position with the scope term. The positions are:
   - the policy wrapper, including joins, subqueries, CTEs, set operations, windows and
@@ -207,6 +207,12 @@ spec:
 
 ### 5. Where roles and fields come from
 
+**Members and staff alike.** The references are not staff-only. `auth.hasRole('vip')` and
+`auth.user('plan')` work for members the same way they work for staff, because both are
+Better Auth users. Whatever sets `user.role` or a field (the admin plugin, an
+`additionalFields` entry, `customSession`, or the application's own Better Auth plugin
+for groups or teams) feeds the same references.
+
 **Self-hosted: Better Auth.** Mantle reads the session Better Auth already produces:
 - `roles` is `user.role` split on commas (the admin plugin's storage).
 - `fields` is `session.user.<field>` for each field the application reads. A field may
@@ -233,6 +239,11 @@ on a self-hosted application are pointed to them.
 hosted application still sign in through the application's own Better Auth, so member
 roles and fields come from the same configuration everywhere.
 
+A self-hosted application can reach the same model as a managed host: a Better Auth
+plugin with groups and attribute mapping that sets `user.role` and fields produces the
+same callers. A host adds operation and governance around it, not a different
+mechanism.
+
 **Tests and local development (section 10).** Test tools build users of the same shape.
 
 ### 6. Host contract v1
@@ -240,7 +251,7 @@ roles and fields come from the same configuration everywhere.
 A host supplies a versioned contract when it composes the application:
 
 ```ts
-{ v: 1, caller, db, staff: "local" | "host", media?, mail? }
+{ v: 1, caller, db, media?, mail? }
 ```
 
 - `db` is the native handle: D1, Bun.SQL, postgres.js, or any driver that passes the
@@ -259,12 +270,14 @@ A host supplies a versioned contract when it composes the application:
   It never reads headers or the body. On a non-staff entry, `props.mantle` is an error
   (a tripwire). The caller's subject is `'host:' + user.id`, and its roles and fields are
   validated like any other caller's.
-- **`staff: "host"` means staff exist only as host callers.**
-  - Local users' roles bind empty.
-  - `ctx.staff`, `/mcp/staff` and Admin accept only host callers.
-  - Local staff management (setting roles, staff invitations) is disabled.
-
-  With `staff: "local"` (the default), the application's own staff roles work as today.
+- **No staff mode.** A host that keeps staff outside the application needs no special
+  switch. It uses the generic pieces:
+  - `staffRoles: []`, so no local user is staff, and Admin and `/mcp/staff` admit only
+    host callers;
+  - its own `caller` resolver, which may limit the roles members can hold, so that a
+    member role never matches a role an author uses to widen a scope;
+  - its own gate in front of the application, which decides which targets (including
+    Admin's staff-management routes) a host caller may reach.
 - **Missing field.** A missing field that a host target needs fails with
   `HOST_CONTRACT` (412) before any SQL runs. Denials of a host caller are 403, never 401.
 
@@ -279,7 +292,7 @@ A host supplies a versioned contract when it composes the application:
 - **Origin checks.** Session-credential host writes keep origin checks: the host checks
   `Sec-Fetch-Site`/`Origin` before issuing props, and `checkOrigin` applies according to
   `props.credential`.
-- **`/mcp/staff`** becomes an allowlist: staff users (`staff: "local"`) or host callers.
+- **`/mcp/staff`** becomes an allowlist: holders of a `staffRoles` role, or host callers.
   It is no longer a denylist that admits new caller kinds by default.
 - **Subjects.** User subjects may not start with `system:` or `host:`. Host writes record
   `author_id = 'host:' + user.id`.
@@ -287,24 +300,32 @@ A host supplies a versioned contract when it composes the application:
 ### 8. Admin, content and handlers accept host callers
 
 - **Admin targets.** Every Admin API route maps to exactly one target id
-  (`admin:<method> <path template>`), and the id must equal `props.target`. The catalog
-  lists Admin targets.
+  (`admin:<method> <path template>`), and the id must equal `props.target`.
+  `mantle describe` lists Admin targets.
 - **Gates.** The Admin gate, the extension contract (`caller: { kind: "staff" | "host" }`),
   publishing transitions, site settings and media accept host callers, and scope
   applies throughout. `requires: ctx.staff` checks the host caller's roles.
 - **Drafts.** Host callers see drafts, as staff do.
 - **Owner-scoped Schemas.** A host caller's subject is `'host:' + user.id`, so it sees
-  only rows it owns, never a member's. The catalog flags such targets `ownerScoped`.
+  only rows it owns, never a member's. `mantle describe` flags such targets `ownerScoped`.
 - **Ref handlers.** Host callers may call them.
   - `ctx.store` is bound to the host caller and enforces scope.
   - `ctx.db` is undefined for host callers; `HandlerContext` is a union by caller kind.
-  - Such Procedures are flagged `opaque` in the catalog. Custom code is the author's
-    responsibility, and the catalog lets a host's administrators see that.
+  - Such Procedures are flagged `opaque` by `mantle describe`. Custom code is the author's
+    responsibility, and the report makes that visible.
 
-### 9. Capability catalog
+### 9. `mantle describe`: what the application exposes and who sees what
 
-`mantle generate` writes `catalog.json` as a managed generated file. It has a published
-JSON Schema and `schemaVersion`, and lists `hostContract: [1]`.
+`mantle describe` reports, for the application as it is generated, every entry point and
+how it is protected. It is useful to anyone reviewing permissions before release, to
+coding agents checking what they wrote, and to anything that fronts the application (a
+gateway, generated documentation, a host). It writes no file into the project.
+
+- `mantle describe` prints a human-readable report: targets, which are enforced by
+  scope, which only filter in SQL, and which run custom handler code.
+- `mantle describe --json`, and the same data from the exported function
+  `describeApp(plan)`, give a machine-readable report with a published JSON Schema and
+  `schemaVersion`.
 
 **Top level:** `access`, every role and user field the application uses, with each
 field's type, enum, operator form and the Schemas whose scope binds it. It is derived
@@ -319,12 +340,8 @@ from use, never declared.
 - `hostCallable`;
 - the flags `opaque`, `rawDb`, `ownerScoped` and `unscopedReads`.
 
-The catalog holds no SQL and no data. Its file name must not collide with the MCP Apps
-catalog.
-
-A host may publish, for its own agents, which roles and fields it can supply for an
-application, and compare it with the catalog's `access` to catch roles or fields nothing
-supplies. That list is the host's documentation; the catalog remains the contract.
+The report holds no SQL and no data. Anything that fronts the application builds its
+own registry from it; Mantle does not define such registries.
 
 ### 10. Local testing and development
 
@@ -338,7 +355,7 @@ supplies. That list is the host's documentation; the catalog remains the contrac
   including `customSession`, and returns the fields Mantle would bind.
 - **`fakeHost(app, { user } | { persona })`** drives `app.fetch` with `props.mantle` the
   way a host does:
-  - it resolves targets from the catalog;
+  - it resolves targets from the `mantle describe` data;
   - it sends only the fields a target reads;
   - it reproduces `HOST_CONTRACT`.
 
@@ -373,7 +390,7 @@ These paths ignore scope by design. The handbook lists them:
 - the system caller and `runtime.store`;
 - the TTL sweep;
 - `ctx.db` for non-host callers;
-- unscoped Schemas, flagged `unscopedReads` in the catalog;
+- unscoped Schemas, flagged `unscopedReads` by `mantle describe`;
 - the author-written role escape (section 4).
 
 ## Consequences
@@ -385,7 +402,9 @@ These paths ignore scope by design. The handbook lists them:
     conformance suite.
   - Deciding who holds which roles and field values (groups, attribute mapping, grants,
     audit) belongs to whoever operates the application. Self-hosted, that is the
-    application's own Better Auth configuration and plugins.
+    application's own Better Auth configuration and plugins; a self-hosted application
+    that builds those plugins reaches the same model a managed host offers.
+  - The same references serve members and staff.
 - **Authors and agents.** An author declares nothing new and writes rules with names
   agents already know: Better Auth's `user.role` and `user.<field>`, and the
   `hasRole` predicate. What a self-hosted application can supply depends on its Better
@@ -398,7 +417,7 @@ These paths ignore scope by design. The handbook lists them:
   - the `Caller` shape and the `HandlerContext` union;
   - the `/mcp/staff` allowlist;
   - the Admin gate and the extension contract;
-  - the new generated `catalog.json`.
+  - the new `mantle describe` report.
 - **Cost.** An application that uses no role or user field generates byte-identical code.
   The shared kernel code, including the bind case, must fit the existing `startup:*`
   budgets.
@@ -413,6 +432,12 @@ These paths ignore scope by design. The handbook lists them:
   puts a role model into the application, which must stay agnostic: who holds which role
   and what a field means belong to the identity system. Types and the vocabulary are
   derived from use instead.
+- **A host staff mode (`staff: "host"`).** `staffRoles`, the host's caller resolver and
+  the host's own gate already express it, so a mode would only add a host concept to the
+  core.
+- **A generated catalog file committed with the application.** Only something fronting
+  the application needs it, so a self-hosted project would carry an unused file and a
+  public file format. `mantle describe` produces the same data on demand.
 - **A set-valued `auth.role()`.** Agents read `auth.role()` as Supabase's deprecated
   database-role function, and a singular name returning a set invites misreading `IN`.
 - **Permissions in SQL** (`hasPermission`). Permissions decide which target a caller may
@@ -449,7 +474,10 @@ Then:
 - Unique and upsert behaviour that never crosses partitions.
 - The element encodings: NULL text, quotes, backslash, comma, braces and lone
   surrogates.
-- `staff: "host"` refusing a local staff user on Admin and `/mcp/staff`.
+- `staffRoles: []` refusing every local user on Admin and `/mcp/staff` while host
+  callers pass.
+- Member roles and fields with `auth.hasRole()` and `auth.user()`, from the admin plugin,
+  `additionalFields`, `customSession` and a test plugin.
 - A forged header or props on a public entry.
 - Version skew failing to link.
 - Batch refusal and pinning.
