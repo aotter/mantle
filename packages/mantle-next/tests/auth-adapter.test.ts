@@ -18,8 +18,8 @@ type Context = { onTestFailed(hook: () => unknown): void; skip(reason?: string):
 const skipIf = bunTest.test.skipIf;
 (bunTest.test as { skipIf: unknown }).skipIf = (condition: unknown) => {
   const register = skipIf.call(bunTest.test, !!condition) as (...args: unknown[]) => void;
-  return (name: string, options: unknown, fn?: (context: Context) => Promise<void>) => {
-    if (!fn) return register(name, options);
+  return (name: string, options: unknown, fn?: ((context: Context) => Promise<void>) | number) => {
+    if (typeof fn !== "function") return register(name, options, fn);
     return register(name, async () => {
       const hooks: (() => unknown)[] = [];
       try { await fn({ onTestFailed: hook => void hooks.push(hook), skip: () => {} }); } catch (error) { for (const hook of hooks) await hook(); throw error; }
