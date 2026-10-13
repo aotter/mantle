@@ -182,7 +182,7 @@ function customAdapter(d: Spelling, exec: Exec) {
 }
 
 function build(d: Spelling, native: boolean, adapterId: string, adapterName: string, exec: Exec, transaction: DBAdapterFactoryConfig["transaction"]) {
-  return createAdapterFactory({
+  const factory = createAdapterFactory({
     config: {
       adapterId, adapterName, supportsBooleans: native, supportsDates: native, supportsJSON: native, supportsUUIDs: native, transaction,
       // Bun.SQL returns int8/numeric as strings; a `number` field must reach Better Auth as a number (the rate limiter adds to `lastRequest`). Ids stay strings.
@@ -190,6 +190,8 @@ function build(d: Spelling, native: boolean, adapterId: string, adapterName: str
     },
     adapter: customAdapter(d, exec),
   });
+  // Both native adapters implement joins; Better Auth otherwise emulates each joined read with another statement.
+  return (options: BetterAuthOptions) => factory({ ...options, advanced: { ...options.advanced, database: { ...options.advanced?.database, joins: options.advanced?.database?.joins ?? true } } });
 }
 
 /** Cloudflare D1 (SQLite). D1 has no interactive transactions, so `transaction` is off and the atomic operations are single statements. */
