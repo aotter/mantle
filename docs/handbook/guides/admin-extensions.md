@@ -3,6 +3,11 @@ description: Add your own pages, settings, actions, record panels and field widg
 ---
 # Extend Admin
 
+**Historical Core API through alpha.6.** The retained routes and examples below
+match the RuntimePlan-based releases. For the unpublished native Admin preview,
+use [Native Admin](native-admin.md) and the exact installed package docs.
+Do not apply the old Store/preset/role wiring to generated native applications.
+
 Manifests decide most of what Admin shows ([Customize Admin from
 manifests](admin-ui.md)). When a project needs UI of its own, it adds an
 **Admin extension**: a declaration that is plain data, server handlers, and

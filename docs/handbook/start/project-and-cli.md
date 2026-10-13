@@ -3,6 +3,11 @@ description: The files of a Mantle 0.2.0 project, who owns each, mantle.config.j
 ---
 # Project layout and CLI
 
+**Historical Core through alpha.6.** For canonical generated native SDK apps,
+follow the exact installed README and [native service workflow](../../next/service.md);
+the preset/RuntimePlan commands and role wiring below are version-specific.
+
+
 ## Files
 
 | Path | Written by | Owner |

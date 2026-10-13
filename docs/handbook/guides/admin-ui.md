@@ -3,6 +3,11 @@ description: What Admin serves in 0.2.0, how manifests and uiSchema become Admin
 ---
 # Customize Admin from manifests
 
+**Historical Core API through alpha.6.** The retained routes and examples below
+match the RuntimePlan-based releases. For the unpublished native Admin preview,
+use [Native Admin](native-admin.md) and the exact installed package docs.
+Do not apply the old Store/preset/role wiring to generated native applications.
+
 `createAdminSurface` serves Admin's API at `/admin/api/*` behind a staff gate.
 Every route reads and writes through `runtime.store.as(caller)` and
 `invokeProcedure`, so Admin sees exactly what the signed-in staff member may

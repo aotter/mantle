@@ -1,83 +1,71 @@
-// Written once by `mantle generate`; this file is yours now. It composes the service (ADR-0032 decision 6).
-import { createMantle, withCaller, type MantleRuntime, type MantleService, type Surface } from "@aotter/mantle";
-import { createAdminSurface } from "@aotter/mantle/admin";
-import { ConsoleEmailSender, createAuthRoutes, createCallerResolver, createMantleAuth, createSetupIncompleteAuth, type MantleAuth } from "@aotter/mantle/auth";
-import { d1Driver, d1Storage } from "@aotter/mantle/cloudflare";
-import { createMcpSurface, planApp } from "@aotter/mantle/mcp";
-import { mantleAppHtml } from "@aotter/mantle-ui/mcp-app";
-import { createRestSurface } from "@aotter/mantle/web";
-import { plan } from "../.mantle/generated/mantle.js";
-import { handlers } from "./handlers.js";
+import { authLoader, resolveCaller } from "@aotter/mantle/auth";
+import { authRoutes } from "@aotter/mantle/auth/routes";
+import { withAuthTasks } from "@aotter/mantle/auth/hardening";
+import { checkOrigin, ContractError, surfaceFailure, type Caller } from "@aotter/mantle/contracts";
+import { admin, adminShell } from "@aotter/mantle-admin/server";
+import { entries } from "@aotter/mantle-admin/server/entries";
+import { siteRoutes } from "@aotter/mantle-admin/server/site";
+import { webmcpRoutes } from "@aotter/mantle-admin/server/webmcp";
+import { adminMcpApps } from "@aotter/mantle-admin/mcp";
+import { mcp as serveMcp, type Tool } from "@aotter/mantle/mcp";
+import type { Handle } from "@aotter/mantle/driver/d1";
+import { adminBindings } from "../generated/admin-bindings.js";
+import { rest } from "../generated/rest.js";
+import { tools } from "../generated/mcp.js";
+import { mcpAppCatalogues } from "../generated/admin-descriptors.js";
+import { handlers, recordOrders } from "./handlers.js";
+import { salesPage, searchPage, pageOptions } from "./pages.js";
+import type { Handlers } from "../generated/generated.js";
 
-export interface Env {
-  readonly DB: D1Database;
-  /** The Admin SPA's files (`@aotter/mantle-ui/admin`), bound in wrangler.jsonc. */
-  readonly ASSETS: Fetcher;
-  readonly BETTER_AUTH_SECRET?: string;
-  readonly PUBLIC_ORIGIN?: string;
-  readonly ADMIN_EMAIL?: string;
-}
-
-/** One composition per storage owner; cached auth and transports serve each request's runtime. */
-export function createService() {
-  /** One-time codes printed to the log are for local development: a deployed service picks its own sign-in method and sender. */
-  function createAuth(env: Env, origin: string): MantleAuth {
-    // an unset PUBLIC_ORIGIN is not local: the fallback origin below is only for URLs, never for deciding to print codes
-    const local = env.PUBLIC_ORIGIN !== undefined && /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin);
-    if (!local || !env.BETTER_AUTH_SECRET || !env.ADMIN_EMAIL)
-      return createSetupIncompleteAuth({ message: "Sign-in is not configured: copy .dev.vars.example to .dev.vars locally, or choose a sign-in method in src/service.ts." });
-    return createMantleAuth({
-      database: env.DB, driver: d1Driver(env.DB), baseURL: origin, secret: env.BETTER_AUTH_SECRET,
-      methods: [{ kind: "email-otp", sender: new ConsoleEmailSender() }],
-      bootstrapOwner: { match: "email", value: env.ADMIN_EMAIL },
-      ipAddressHeaders: ["cf-connecting-ip"],
-      oauthProvider: { loginPage: "/admin/sign-in", consentPage: "/admin/oauth/consent", scopes: ["mcp"], mcpResource: `${origin}/mcp` },
-    });
-  }
-
-  /** A file of the Admin SPA, or null when it has none by that path. */
-  async function adminAsset(assets: Fetcher, path: string): Promise<Response | null> {
-    const response = await assets.fetch(new URL(path, "http://assets/"));
-    return response.ok ? response : null;
-  }
-
-  function mount(runtime: MantleRuntime, env: Env) {
-    const origin = env.PUBLIC_ORIGIN?.replace(/\/+$/, "") ?? "http://127.0.0.1:8787";
-    const auth = createAuth(env, origin);
-    const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } });
-    const authRoutes = createAuthRoutes(auth, { resolver });
-    const guard = (surface: Surface, options?: { resourceMetadata?: string }) => withCaller(resolver, surface, options);
-    const resourceMetadata = `${origin}/.well-known/oauth-protected-resource/mcp`;
-    const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { directory: auth, roles: auth, deleteUser: auth.deleteUser }, site: { mcpEndpoints: { public: "/mcp", staff: "/mcp/staff" } } }));
-    const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
-    // MCP Apps hosts render each staff View's rows, and the operations on one row, in the chat
-    const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }, resourceMetadata }), { resourceMetadata });
-    // REST answers everything else: public Views under /api/views and the plan's HTTP Triggers
-    const rest = guard(createRestSurface(runtime, { basePath: "/api" }));
-    return async (request: Request, runtime: MantleRuntime, waitUntil: (promise: Promise<unknown>) => void): Promise<Response> => {
-      const { pathname } = new URL(request.url);
-      const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
-      // Auth startup is shared by this service instance; a failed start is mounted again by its next request
-      await auth.ready?.catch((error) => {
-        routes = undefined;
-        throw error;
-      });
-      const owned = await authRoutes(request, { waitUntil });
-      if (owned) return owned;
-      if (under("/admin")) return admin(request, runtime);
-      if (under("/mcp/staff")) return staffMcp(request, runtime);
-      if (under("/mcp")) return mcp(request, runtime);
-      return rest(request, runtime);
-    };
-  }
-
-  let routes: ReturnType<typeof mount> | undefined;
-  const service: MantleService<Env> = {
-    handlers,
-    fetch: (request, env, { runtime, waitUntil }) => (routes ??= mount(runtime, env))(request, runtime, waitUntil),
+export interface Env { DB: D1Database; ASSETS: Fetcher; BETTER_AUTH_SECRET?: string; PUBLIC_ORIGIN?: string; ADMIN_EMAIL?: string; }
+let auth: ReturnType<typeof authLoader<ReturnType<typeof import("./auth.js").createAuth>>> | undefined;
+const salesDescriptor = { name: "sales-by-item", title: null, description: null, input: null, list: { columns: [], searchFields: [], filterFields: [], cells: {} }, columns: { name: { schema: "items", field: "name" } } };
+const salesBrowserTool = { name: "sales_by_item", description: "Sales grouped by item.", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true } };
+const addSalesTool = (catalogue: { readonly tools: readonly { readonly name: string }[]; readonly routes: Readonly<Record<string, unknown>> }) => ({ tools: [...catalogue.tools, salesBrowserTool], routes: { ...catalogue.routes, sales_by_item: { path: "/admin/views/sales-by-item" } } });
+const extraTools: readonly Tool<Handle, Handlers>[] = [
+  { name: "search_items", surface: "public", description: "Search items in native relevance order.", inputSchema: { type: "object", properties: { q: { type: "string", minLength: 1 } }, required: ["q"], additionalProperties: false }, annotations: { readOnlyHint: true }, path: "views/search-items", validate: raw => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some(k => k !== "q") || typeof (raw as { q?: unknown }).q !== "string") throw new ContractError("INPUT_VALIDATION_FAILED", "Expected q.");
+    return raw as Record<string, unknown>;
+  }, page: searchPage },
+  { name: "sales_by_item", surface: "staff", description: "Sales grouped by item.", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true }, closed: true, path: "views/sales-by-item", validate: raw => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length) throw new ContractError("INPUT_VALIDATION_FAILED", "Expected empty input.");
+    return {};
+  }, page: salesPage },
+];
+export async function fetchService(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
+  auth ??= authLoader(() => import("./auth.js").then(m => m.createAuth(env)));
+  const headers = new Headers();
+  let authority: Promise<Caller> | undefined;
+  const caller = () => authority ??= resolveCaller(request, auth!, { audience: `${env.PUBLIC_ORIGIN}/mcp`, responseHeaders: headers }).then(value => { checkOrigin(request, value); return value; });
+  const options = { db: (env: Env) => env.DB, caller, handlers };
+  const respond = (response: Response) => {
+    for (const cookie of headers.getSetCookie()) response.headers.append("set-cookie", cookie);
+    return response;
   };
-
-  return createMantle(service, { plan, storage: (env) => d1Storage(env.DB), schedules: true });
+  try {
+    const ownAuth = await withAuthTasks(context.waitUntil.bind(context), () => authRoutes(auth!, { methods: [{ kind: "email-otp" }], resolver: caller })(request));
+    if (ownAuth) return respond(ownAuth);
+    const url = new URL(request.url), paging = { ...(url.searchParams.has("limit") ? { limit: Number(url.searchParams.get("limit")) } : {}), ...(url.searchParams.has("cursor") ? { cursor: url.searchParams.get("cursor")! } : {}) };
+    if (url.pathname === "/api/views/search-items" && request.method === "GET") return respond(Response.json(await searchPage(env.DB, await caller(), { q: url.searchParams.get("q")! }, paging), { headers: { "cache-control": "private, no-store" } }));
+    const bindings = adminBindings({handlers});
+    const metadata = {...bindings.metadata, views:[...bindings.metadata.views,salesDescriptor],webmcp:addSalesTool(bindings.metadata.webmcp)};
+    const salesView = {name:"sales-by-item",allows:(caller:Caller)=>caller.kind==="user"&&caller.role==="staff",query:(params:URLSearchParams)=>({input:{},...pageOptions({limit:params.has("limit")?Number(params.get("limit")):undefined,cursor:params.get("cursor")??undefined}),cursor:params.get("cursor")??undefined}),page:salesPage};
+    const adminOptions = {...options,identity:{directory:async ({caller,request}: {caller:Caller;request:Request})=>{const {d1Identity}=await import("@aotter/mantle/auth/identity");return d1Identity(env.DB,await auth!.get(),caller,request.headers);}},mcpEndpoints:{public:"/mcp",staff:"/mcp/staff"}};
+    const serveAdmin = admin(metadata,[...bindings.views,salesView],bindings.operations,{...adminOptions,routes:[...entries(bindings.schemas,bindings.adapter),...siteRoutes(adminOptions),...webmcpRoutes(metadata.webmcp,[...tools,...extraTools],handlers)]});
+    const serveMcpHandler = serveMcp([...tools, ...extraTools], ["staff"], { ...options, apps: { staff: adminMcpApps({catalogue:{ ...mcpAppCatalogues.staff, views: { ...mcpAppCatalogues.staff.views, sales_by_item: { columns: { name: { type: "string" } }, list: { columns: [] }, actions: [] } } },html:async()=> (await import("@aotter/mantle-admin/mcp-app")).mantleAppHtml}) } });
+    for (const route of [serveAdmin, serveMcpHandler, rest(options)]) {
+      const response = await route(request, env);
+      if (response) {
+        // Preserve the same post-commit effect for native Admin entry writers.
+        if (response.ok && ["POST", "PATCH"].includes(request.method) && /^\/admin\/api\/entries(?:\/[^/]+)?$/.test(decodeURIComponent(url.pathname).replace(/\/$/, "")) && url.searchParams.get("collection")?.toLowerCase() === "orders") {
+          const output = await response.clone().json() as { entry: { id: string; data: Record<string, unknown> } };
+          await recordOrders(env.DB, await caller(), [{ id: output.entry.id, ...output.entry.data }], request.method === "POST" ? "after_create" : "after_update");
+        }
+        return respond(response);
+      }
+    }
+    const shell = await adminShell(request, path => env.ASSETS.fetch(new Request(new URL("/" + path, url), request)));
+    if (shell) return shell;
+    return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
+  } catch (error) { return surfaceFailure(error); }
 }
-
-export const mantle = createService();

@@ -18,7 +18,9 @@ handbook. Only the implementation and responsibility changes follow.
   names per MCP Trigger. Its SDK loads only through a request-time dynamic import.
 - HTTP/MCP Triggers declare exposure only. `mantle generate` refuses schedule
   and lifecycle Triggers; Cloud scheduling is a separate capability.
-- Retained Admin features keep their 0.2 paths; #1477 decides the retained set.
+- Native Admin retains selected 0.2 paths and the console contracts; see
+  [Native Admin preview](../handbook/guides/native-admin.md) for app-mounted
+  `adminBindings()` and `entries(bindings.schemas, bindings.adapter)`.
 
 Generated `rest.ts`, `mcp.ts`, `web.ts`, `paged/views/*` and `validation/*` hold
 only the app's tables: routes, tools, pages, operation bindings, compiled input
@@ -195,3 +197,78 @@ Selected integer cursor keys may be exact canonical decimal strings on either di
 Cursor casts target only proved AST bind nodes, preserving authored SQL literals. Paging proofs respect the compiler's lexical table/CTE identity. Explicit CTE or relation column renaming is currently refused for paging because uniqueness has not been proved through those aliases; internal bare queries remain available.
 
 A paged View's output names must not collide with its actual hidden cursor keys (`_k0` through `_kN-1`); SQLite compares aliases without case sensitivity. Such internal Views keep their bare entry but receive no paged entry. Other output names remain available.
+
+## Selected Admin bindings
+
+See [Native Admin preview](../handbook/guides/native-admin.md) for the single
+current contract: three packages, explicit generation and app mounting, shared
+whitelisted get/page/statistics templates, native Procedure fragments, generated
+input checks, exact OCC and optional capabilities. These features are implemented
+as a preview; this document does not claim alpha.7 is published.
+
+
+### MCP catalogue and callbacks
+
+`mcp({ db, caller, handlers?, locale?, instructions?, serverInfo?, requiredScopes?,
+resourceMetadata?, onObservation?, onRefusal? })` keeps the SDK behind its first
+request. Locale defaults to `en`; localized titles/descriptions fall back to
+English, then their first entry. Views advertise `readOnlyHint`; Procedures use
+their declared MCP annotations. `instructions` is returned by initialize.
+The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
+`requiredScopes: []` disables that floor. An anonymous closed surface challenges
+from initialize, and every call in a batch is checked before any call runs.
+`resourceMetadata` overrides the challenge URL for reverse proxies.
+
+`onObservation` receives request refusals and invocation attempt/completion
+metadata, including duration and outcome. Its Caller and scopes are frozen copies.
+`onRefusal` receives credential/origin refusals. Neither callback receives request
+headers, bodies or tokens; delivery failures never change the business response
+and promises are not awaited. The application owns callback delivery.
+
+**Procedure output delta:** SQL Procedures retain the Next native `{ results }`
+contract rather than 0.2's authored output projection/validation; MCP advertises
+that object envelope, not the incompatible authored schema. Ref Procedures expose
+the application's typed return value and advertise their authored object output
+schema. The application owns ref output validation. MCP does not decode or
+revalidate native database rows. Business failures carry diagnostics in text;
+with an output schema they omit `structuredContent` to avoid validating an error
+against a success schema. Without one they also expose diagnostic structured
+content. MCP adds no prompts or non-UI resources.
+
+### Declared View scalars on the wire
+
+REST and MCP View pages expose declared JSON columns as JSON values and declared
+boolean columns as booleans, including explicitly authored SQL aliases. SQLite
+and D1 conversions are compiled into only the selected boundary pages;
+PostgreSQL already-native JSON/boolean values pass through. SQL NULL stays null and absent
+fields stay absent. Expressions without declared column lineage stay native.
+Malformed persisted JSON becomes a redacted internal failure. The conversion
+adds no database operations and does not mutate native query rows.
+
+Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
+ref outputs retain their native contracts. Use the generated `rest()` / `mcp()`
+module for this client wire contract; do not duplicate JSON/boolean decoding in
+application route handlers or decode PostgreSQL JSON strings a second time.
+
+PostgreSQL declared integer columns (including a selected system `version`)
+retain 0.2's wire form: safe integers become JSON numbers; unsafe values remain
+exact text. Computed outputs and native SQL Procedure/ref results retain their
+native values. This does not promise precise unsafe int64 values on D1.
+Unexpected surface failures log only a stable wire classification.
+
+MCP locale fallback reads only own locale entries, then English, then the first
+own entry; inherited property names never become titles or descriptions.
+
+### Staff media MCP tools
+
+With generated site configuration, `mcp({ db, caller, media: env => storage })`
+loads the media module only on a configured staff MCP request and
+adds `get_media_upload_policy`, `create_media_upload`, `commit_media_upload`,
+`list_media_assets`, `get_media_asset`, `update_media_asset` and
+`delete_media_asset` to `/mcp/staff` only. `storage` is the same `MediaStorage`
+used by the Admin media library. Omitting `media` omits all seven tools.
+The OSS `staff` role can invoke them; cookie writes retain the origin check.
+Generated boundary code checks each input and advertises the 0.2 schemas and
+read-only/destructive/open-world hints. Image bytes are PUT directly to the
+returned short-lived URLs with their required headers, then committed; bytes
+never enter MCP. Store permanent asset ids, never upload URLs.

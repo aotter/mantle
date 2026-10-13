@@ -65,6 +65,16 @@ An agent reads these files from `node_modules` when the task calls for them.
 
 ## 3. Verify the application
 
+If the matching README documents generated native queries, use
+[service composition](../../next/service.md) and [Native Admin](native-admin.md),
+not the historical plan/preset checks below. Generate, typecheck, implement all
+printed handlers, and typecheck again. With selected Admin, mount
+`entries(bindings.schemas, bindings.adapter)` and separately serve the console.
+Run real member and staff OTP/UI flows and check stored state, visibility and OCC.
+A workspace preview is not proof that alpha.7 has been released.
+
+### Historical Core verification
+
 Installing instructions proves only that they were copied. Prove the service:
 
 1. `mantle generate` and `mantle generate --check` exit 0.

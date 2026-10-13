@@ -23,8 +23,11 @@ Each endpoint accepts one contributor or an array. The separate
 `@aotter/mantle-admin` package contributes its staff App through this same
 `apps.staff` hook; it owns `ui://mantle-admin/…`. App resources use their own
 `ui://<app>/…` namespace. Duplicate resource URI/name, conflicting `renders`,
-or `renders`/`appOnly` naming an unavailable endpoint tool fail on the first
-matching request. Clients without UI support see no UI resources.
+or `renders`/`appOnly` naming an unavailable endpoint tool (or a Procedure for
+`appOnly`) fail when `mcp(...)` is built; with a request-bound tool table, the
+tool names are checked on the first matching request. Only clients that
+declare no MCP Apps support see no UI resources; a request that advertises no
+capabilities at all is treated as supported.
 
 Use `renders` for a declared tool; `appOnly` optionally hides it from non-UI
 clients. Import HTML lazily; it carries no secrets or caller data. Tool results

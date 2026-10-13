@@ -10,10 +10,11 @@ metadata:
 
 # Mantle Update
 
-## Generated native applications (alpha.7 and later)
+## Generated native applications (alpha.7 target / workspace preview)
 
 If the installed/target README describes generated native queries, use this
-flow and stop before the historical Core instructions below.
+flow and stop before the historical Core instructions below. A develop preview
+is not evidence that alpha.7 has been published.
 
 Follow the installed [native generation and service workflow](../../next/service.md)
 with the exact package version's `contract.md` and `compatibility.md`. Commit
@@ -27,6 +28,13 @@ a package-only update. Preserve users, sessions, content and application code.
 Review emitted SQL/policy diffs and rehearse explicit data-preserving schema/auth/role
 migrations on a copy. Initial schema.sql never authorizes rebuilding production
 tables. Verify auth/Admin/MCP/REST, locks and persistence before authorized cutover.
+
+Follow [Native Admin](../../handbook/guides/native-admin.md) for the three-package
+SDK/Admin/shared-kit split and asset/extension/MCP App subpath moves; old UI
+subpaths have no compatibility aliases. Pin only actually published versions,
+or explicitly use a matching workspace preview. Recheck member and Admin OTP,
+all affected native routes, private field visibility, OCC and unknown outcomes.
+Do not publish a package as part of an application dependency update.
 
 ## Historical Core applications (through alpha.6)
 

@@ -3,6 +3,14 @@ description: What Mantle 0.2.0 is, how a service is put together, and where to r
 ---
 # Mantle handbook
 
+For generated native applications, begin with [service composition](../../next/service.md)
+and [Native Admin](../guides/native-admin.md). This is an unpublished preview
+intended for alpha.7, with one Core SDK plus separate Admin and shared UI packages.
+Use the version-matched installed docs. The RuntimePlan diagram, preset commands
+and limitations below describe historical Core releases through alpha.6.
+
+## Historical Core overview
+
 Mantle is a manifest-driven service core. A service declares four atoms in
 YAML: a **Schema** stores rows, a **View** reads them, a **Procedure** writes
 them, and a **Trigger** binds a Procedure to HTTP, MCP, a lifecycle event or a

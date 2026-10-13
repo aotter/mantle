@@ -1,0 +1,28 @@
+/** Deployment compiler leaves. Optional request surfaces are never constructed. */
+export { compilePlan, viewOutputs } from "./spec/infrastructure/sql/compilePlan.js";
+export { DiagnosticError } from "./spec/kernel/diagnostic.js";
+export { enumOptions, parseNumeric, NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, mcpTools, mcpToolNameSegment, resolveLocalizedText, assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired } from "./spec/domain/index.js";
+export type { ManifestSourceSet } from "./spec/domain/service/ManifestParser.js";
+export type { JsonSchema } from "./spec/domain/model/ManifestGrammar.js";
+export type { RuntimePlan, PlanSchema, PlanLowered, LoweredStatement, LoweredView, LoweredPage } from "./spec/domain/model/RuntimePlan.js";
+export type { SqlNode } from "./spec/domain/model/SqlIr.js";
+export type { RowMode } from "./spec/domain/service/SqlRowPolicy.js";
+export type { SiteDefaults } from "./spec/domain/model/SiteConfig.js";
+export { lowerPlan } from "./core/sql/lowered.js";
+export { d1Dialect } from "./d1/dialect.js";
+export { postgresDialect } from "./postgres/dialect.js";
+export * as sqliteCompiler from "./d1/compile/index.js";
+export * as postgresCompiler from "./postgres/compile/index.js";
+export { initialStorageSql as sqliteSchema } from "./d1/storage.js";
+export { initialStorageSql as postgresSchema } from "./postgres/storage.js";
+export { collectionOf, adminIndexColumns } from "./admin/collections.js";
+export { developerConsole } from "./admin/developerConsole.js";
+export { requiredEnumStates } from "./admin/procedureFlow.js";
+export { checkPlanUiExtensions, planUiExtensionRefs } from "./admin/extensions.js";
+export type { AdminExtension } from "./admin/extensions.js";
+export { appCatalog, entrySchema } from "./mcp/catalog.js";
+export type { AppRowAction } from "./mcp/catalog.js";
+export { compileProgram } from "./core/sql/compile.js";
+export { pagedOf } from "./core/sql/run.js";
+export { parsePgSql } from "./spec/infrastructure/sql/PgQueryParser.js";
+export type { MantleDialect } from "./core/dialect.js";

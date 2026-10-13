@@ -3,6 +3,11 @@ description: Create a Mantle 0.2.0 service on Cloudflare Workers from an empty d
 ---
 # Quickstart: a service on Cloudflare Workers
 
+**Historical Core through alpha.6.** For canonical generated native SDK apps,
+follow the exact installed README and [native service workflow](../../next/service.md);
+the preset/RuntimePlan commands and role wiring below are version-specific.
+
+
 From an empty directory to a running service with a public View and a write.
 You need Node 22 or later and a package manager (pnpm is used below).
 

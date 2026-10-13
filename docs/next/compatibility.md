@@ -22,7 +22,8 @@ explicitly; apply `schema.sql` directly only to a new database.
 | REST and `http` Trigger exposure | Supported generated `rest.ts`; app mounts with `{ db, caller }` and required `handlers` for ref contracts. Public Views page at `/api/views/<name>`; HTTP Triggers keep method/path. |
 | Generated MCP and `mcp` Trigger exposure | Public/staff tools, shared generated checks, publishing transitions on staff only; SDK loads on matching requests. Install the official MCP peer for manifests selecting this surface. |
 | Dynamic `web.ts` (`llms.txt`, sitemap, `.md` alternates, head tags) | Generated; mount `web({ ... })`; see [surface deltas](surfaces.md#optional-web-output). |
-| Admin UI, web skill/example | Planned [#1477](https://github.com/aotter/mantle/issues/1477), [#1478](https://github.com/aotter/mantle/issues/1478). |
+| Native Admin bindings, server and console | Implemented experimental preview; select `--admin` / `admin: true` and mount `entries(bindings.schemas, bindings.adapter)`. Shared authorized read templates, native Procedure writes, full console/22 languages; see [Native Admin](../handbook/guides/native-admin.md). Release/consumer acceptance is still pending. |
+| Web skill/example | Follow the version-matched [web skill reference](../../skills/mantle/references/web.md); release assembly and acceptance remain pending. |
 | Localized Schemas and translations | Plain-string locale values, atomic published-parent guard, SQL parent visibility and generated page locale helper; see [Translations](#translations). |
 | Opt-in `lifecycle: publishing` | Generated status, `published_at`, staff-only transitions and published-only public reads; see [Publishing](#publishing). |
 | `ref` Procedures and typed `Handlers` | Generated `Handlers` type; pass implementations at `store(db, caller, { handlers })`; `mantle generate` lists them. See [ref Procedures](contract.md#ref-procedures). |

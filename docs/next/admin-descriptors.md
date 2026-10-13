@@ -1,5 +1,10 @@
 # Generated Admin descriptors
 
+Experimental native preview; use the matching installed SDK/Admin versions.
+[Native Admin](../handbook/guides/native-admin.md) explains execution and mounting
+with `entries(bindings.schemas, bindings.adapter)`. Descriptors remain static
+data, not runtime authorization or a storage interpreter.
+
 `mantle generate` emits `admin-descriptors.ts`. Its exports are static data;
 importing a query does not import them. Selecting only `collections` also drops
 the developer snapshot and MCP catalogues from a bundle. No request-time parser,
@@ -9,7 +14,9 @@ RuntimePlan, SQL AST, storage access or execution observer is included.
   into their parents; composition, parent picker, media fields, indexed sorts,
   enum filters and list presentation retain their declared field names.
 - `allCollections` includes translation and child editor descriptors by name.
-  `fieldNames` maps storage column names to authored names; `viewNames` does the
+  `scopeField` identifies the private scope field; `exportFields` lists only
+  declared, exportable data fields (excluding scope/geo). CSV uses these facts
+  instead of guessing from row keys. `fieldNames` maps storage column names to authored names; `viewNames` does the
   same for staff View outputs whose fields are read unchanged.
 - `views` and `operations` preserve the 0.2 staff descriptor shapes. Generated
   publishing transitions stay out of Admin operations and WebMCP, preserving
@@ -33,8 +40,8 @@ RuntimePlan, SQL AST, storage access or execution observer is included.
 Generation reuses the 0.2 projection and SQL-logic helpers. View columns come
 from the compiled plan (Core's `viewOutputs` provenance, including aliases,
 stars, CTEs and subqueries). Translation
-metadata is supported by the emitter; execution support comes from the separate
-translation kernel work.
+metadata and selected execution share the generated translation policy. Child
+fields win; private scope fields cannot be overlaid by inherited parent fields.
 
 Pass declarations with `mantle generate --admin-extensions ./admin-extensions.mjs`.
 The module exports a named `adminExtensions` array or a default array; it should
@@ -65,3 +72,10 @@ Schema/Procedure field widgets, Schema/staff View cells and sidebar panels.
 Unknown contributions, wrong targets and invalid options fail generation with
 `UI_EXTENSION_UNKNOWN`, `UI_EXTENSION_TARGET` or `UI_EXTENSION_OPTIONS`, retaining
 0.2 paths. Serving extension modules and handling extension actions is separate.
+
+`adminBindings()` provides the selected adapter and checked entry/View/operation
+bindings. The server shares native read templates across collections; descriptors
+carry compiler-verified policy/field fragments and generated validators, not a
+copy of full SQL for every order/direction. Metadata endpoints perform no storage
+read of their own; caller resolution and optional site/user enrichment may query.
+Statistics capability is advertised only when its native route is mounted.

@@ -1,6 +1,7 @@
-# Mantle Next: generated native execution
+# Mantle: generated native execution
 
-Status: experimental implementation decision authorized on 2026-10-11.
+Status: experimental native implementation, intended for alpha.7 but not yet released.
+The installed package README remains authoritative for an application version.
 Baseline: 6fda2dfddc72d414720c9540d572b199a7bb7a35. Existing Mantle remains intact.
 
 ## Goal
@@ -35,18 +36,19 @@ driver registry.
 
 ## Current implementation boundary
 
-The first PR is a four-target generated SQL slice, not a complete 0.2 replacement.
-Its View functions return full authored-SQL row arrays, not the Store paging API.
+Native execution supports four targets. Bare View functions return full
+authored-SQL row arrays, not the Store paging API.
 For bounded keyset reads, import `paged/views/<encoded-name>.ts` directly and call
 `page(db, caller, input, { limit?, cursor? })`, returning `{ rows, nextCursor? }`.
 This includes safely pageable internal Views without exposing them through
 REST/MCP. The [surface contract](surfaces.md) lists generation-time order,
 cardinality and cursor guarantees; grouped pages still pay the native source
 grouping cost. Bare View signatures and Store cursors are unchanged.
-There is no optional Auth/Web/MCP/Admin/UI composition in this slice. Ref Procedure
-handlers are generated application contracts; guards and Triggers are currently refused. The [supported/refused list](compatibility.md)
-separates generated scope, refused declarations and planned features; none
-of those status labels substitutes for native test evidence. Issue #1459 stays open.
+Auth, Web, MCP, REST and the [native Admin preview](../handbook/guides/native-admin.md)
+are optional app-mounted capabilities. HTTP/MCP Triggers expose generated
+operations; schedule/lifecycle Triggers and dynamic guards remain refused.
+The [supported/refused list](compatibility.md) separates implemented preview
+features from release plans; no status label substitutes for native acceptance.
 
 ## Contracts and ownership
 
@@ -144,9 +146,9 @@ default type parsers (including Date and int8 strings); custom application parse
 configuration changes application-owned behavior. Procedures expose raw
 `{ results }`, not a claim of validated authored output.
 
-When Auth composition is implemented, it resolves a trusted Caller once at the
-application entry. The first slice accepts an application-supplied Caller and
-does not verify credentials. SQL binds the caller subject directly; a system
+The application resolves a verified Caller once at its entry, using its selected
+auth module or identity. Bare queries accept that application-supplied Caller and
+do not verify credentials. SQL binds the caller subject directly; a system
 caller is application-owned and never wire input.
 
 Application handlers own business rules and side effects. Before/after lifecycle
@@ -181,9 +183,19 @@ the context Store types expose collections and operation maps shared by both.
 Missing, extra and incompatible implementations fail TypeScript at Store wiring;
 an object missing a key at runtime is `HANDLER_NOT_REGISTERED`. Input/output schemas remain
 typed application contracts; external input validation belongs to selected
-REST/MCP boundary modules. Those surfaces take handlers in their options when
+REST/MCP/Admin boundary modules. Those surfaces take handlers in their options when
 ref Procedures are exposed. Handler failures propagate unchanged. Custom handlers
 own their side effects and explicit transaction boundaries.
+
+## Selected Admin
+
+The [Native Admin guide](../handbook/guides/native-admin.md) defines the public
+`adminBindings()` / `entries(schemas, adapter)` composition, generated validators,
+shared whitelisted get/page/statistics reads, native Procedure writes, exact OCC,
+private field projection and request-time ref dispatch. The SDK has no Admin
+runtime dependency; the app selects `@aotter/mantle-admin` and its assets, while
+`@aotter/mantle-ui` retains the shared kit. All three are separate packages;
+alpha.7 publication and final acceptance remain pending.
 
 ## Shared runtime core
 
@@ -234,7 +246,7 @@ emitted strings are output, not generator dependencies.
 Every supported feature needs a side-by-side semantic test against independently
 written native SQL on the same engine and fixture. Compare SQL/bind work, full
 results, errors, and committed state. Performance comparisons follow the protocol
-in `packages/mantle-next/AGENTS.md`; no artificial delay or weakened oracle.
+in `packages/mantle/AGENTS.md`; no artificial delay or weakened oracle.
 
 Existing ADRs remain historical and continue governing the old package. For Next,
 this decision supersedes only the old interpreter/plan-at-runtime topology and
@@ -336,7 +348,7 @@ Error statuses: the core `statusOf`/`wire` map only the core codes
 `METHOD_NOT_ALLOWED`, `CONFLICT`, `OUTCOME_UNKNOWN`); any other `ContractError` carries
 its own `status` (and extra wire `fields`), otherwise it is a redacted 500. Raise media,
 site and `PARTIAL_FAILURE` codes with `mediaError(code, message, path?)` from
-`@aotter/mantle-next/media`, never `new ContractError("MEDIA_…")` directly; a custom
+`@aotter/mantle/media`, never `new ContractError("MEDIA_…")` directly; a custom
 `MediaStorage` that throws these codes without a status is given it by the library.
 An uncertain SQL outcome is propagated by the native driver. Retry that group
 rather than creating a replacement asset. Rejected objects are discarded.
@@ -381,3 +393,17 @@ page and its boundary validation. `locale` values are ordinary strings, and
 `toCanonicalLocale` is an explicit helper rather than a Store coercion.
 
 
+
+### Selected View transport scalars
+
+Selected REST/MCP View pages preserve the 0.2 JSON/boolean wire contract through
+static generated output-column conversions. SQLite/D1 JSON text is parsed and
+0/1 booleans become booleans; PostgreSQL values already have those wire types.
+Aliases, nulls and missing fields are preserved. Undeclared computed outputs,
+bare queries, Store rows and Procedure outputs remain native. This boundary
+conversion does not read schemas at request time or issue additional queries.
+
+For selected PostgreSQL View boundaries, declared integer outputs and system
+`version` become numbers only within JavaScript's safe integer range; larger
+values retain their exact driver text. No global driver parser is installed,
+and D1's unsafe int64 precision is not a cross-target promise.

@@ -10,10 +10,11 @@ metadata:
 
 # Integrate Mantle into an existing application
 
-## Generated native applications (alpha.7 and later)
+## Generated native applications (alpha.7 target / workspace preview)
 
 If the installed/target README describes generated native queries, use this
-flow and stop before the historical Core instructions below.
+flow and stop before the historical Core instructions below. A develop preview
+is not evidence that alpha.7 has been published.
 
 Follow the installed [native generation and service workflow](../../next/service.md)
 with the exact package version's `contract.md` and `compatibility.md`. Commit
@@ -27,6 +28,13 @@ one Caller per request with the shared cookie-session origin check. Rehearse
 data-preserving schema/auth/role migrations on a copy and retain rollback artifacts.
 Initial schema.sql is for an empty database, not an in-place upgrade; requests
 never discover, seed or converge storage. Verify cutover with actual app tests.
+
+Preserve the app router, verified identity and native resources. For selected
+Admin use the [native guide](../../handbook/guides/native-admin.md): three matching
+packages, generated checks and `entries(bindings.schemas, bindings.adapter)`.
+Do not import old `/spec`, `/core` or runtime surface APIs. Review data/role
+migrations explicitly; full cross-target int64 parity and automated transfer
+are not this release's upgrade contract.
 
 ## Historical Core applications (through alpha.6)
 

@@ -1,5 +1,10 @@
 # Native execution and hook migration
 
+**Historical Core through alpha.6.** For canonical generated native SDK apps,
+follow the exact installed README and [native service workflow](../../next/service.md);
+the preset/RuntimePlan commands and role wiring below are version-specific.
+
+
 The cleanup in [ADR-0041](../../adr/0041-native-driver-and-application-hook-ownership.md)
 removes database coordination and before-hook policing. Existing generated
 source is application-owned and is never silently rewritten. Generate a

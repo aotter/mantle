@@ -3,6 +3,11 @@ description: Read and write through the typed Store from handlers and service co
 ---
 # Query from TypeScript
 
+**Historical Core through alpha.6.** For canonical generated native SDK apps,
+follow the exact installed README and [native service workflow](../../next/service.md);
+the preset/RuntimePlan commands and role wiring below are version-specific.
+
+
 Handler and service code reach Mantle-owned rows only through Store. The
 generated `.mantle/generated/mantle.ts` types it over your Schemas and Views:
 `ctx.store` in a `MantleHandlers` handler is its `CallerStore`, while

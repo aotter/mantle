@@ -1,13 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
-    "noEmit": false,
-    "tsBuildInfoFile": "./.tsbuildinfo",
-    "declaration": true,
-    "types": ["node"]
-  },
-  "include": ["src/**/*"],
-  "exclude": ["dist/**/*", "src/cloudflare/testing/**/*"]
+  "compilerOptions": { "rootDir": "src", "outDir": "dist", "types": ["node", "bun-types"], "declaration": true, "sourceMap": false, "declarationMap": false },
+  "include": ["src/**/*.ts"]
 }

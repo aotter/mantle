@@ -2,7 +2,7 @@
 
 ## Executable bundle regression gate
 
-`pnpm --filter @aotter/mantle-next check:size` generates the tracked purchase
+`pnpm --filter @aotter/mantle check:size` generates the tracked purchase
 fixture and builds two Worker fetch entries retaining every View/Procedure with
 `mantle bundle`, the split build `mantle generate` configures for Wrangler. The
 PostgreSQL entry includes postgres.js; the D1 entry uses the native binding. It
@@ -12,7 +12,10 @@ startup graph (the entry and its static imports) beside it. A direct View entry 
 stay below 4 KiB. Operations stay in `generated.ts`: lazily importing each one saved
 about 14 µs of startup per operation (420 operations: 9.9 → 3.6 ms in Node, ~1 ms on
 Workers) at the cost of one uploaded module per operation, so it was not adopted.
-The normal package test command runs this gate.
+The normal package test command runs this gate. Selected Admin publishing/custom
+operations are separately lazy-loaded only when invoked; the shared initial read
+path need not load the generic Store used by ref handlers. This does not change
+ordinary operation emission.
 
 The same command builds one Worker per surface from the `surfaces.yaml` fixture —
 REST only, MCP only, web only, and all three — and gates each startup graph against
@@ -36,17 +39,3 @@ and cloud writes remain outside local-only authorization. See the official
 Workers `performance.now()` freezes between I/O events and cannot time synchronous
 initialization; gate global startup, first use and warm calls separately.
 Startup CPU acceptance is open (see the [supported/planned scope](compatibility.md#supported)).
-
-## Compiler assembly
-
-Deployment generation uses the pure `@aotter/mantle/compiler` entry for the
-existing manifest validator, SQL policy/lowering and static surface metadata.
-It does not load Core's Admin/MCP surface factories; Better Auth's build-time
-`infrastructure/authSchema.ts` introspection loads only when `generateFromSources` receives `auth` options.
-Generated request modules still import only the selected runtime leaves.
-
-This import boundary is preparation for #1479, not a standalone release: the
-temporary Next package still depends on the compiler in the workspace during
-development. The final SDK must include that compiler and its declarations in
-the same tarball, pass clean-install generation, and meet both whole-package
-ceilings. Runtime/startup measurements alone do not prove that package gate.

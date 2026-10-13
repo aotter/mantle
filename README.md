@@ -82,7 +82,7 @@ the owning definitions.
 compiled declarations; it does not certify runtime or deployment health.*
 
 The generated service serves the console at `/admin` from
-`@aotter/mantle-ui/admin`; this view draws from the owner-only
+`@aotter/mantle-admin/admin/index.html`; this view draws from the staff-only
 `GET /admin/api/developer-console`.
 
 | Interface | Integration guide |
@@ -169,7 +169,8 @@ service also reads [the release notes](docs/handbook/releases/index.md).
 | Package | Purpose |
 |---|---|
 | `@aotter/mantle` | Core, the manifest compiler, the D1 and PostgreSQL dialects, the Cloudflare and Bun hosts, Auth, Admin, MCP and REST surfaces, the compliance suite, and the `mantle` CLI, as subpaths. |
-| `@aotter/mantle-ui` | The Admin console (`/admin`, served by the preset) and shared UI for Admin and MCP Apps: interaction controller, components, the UI kit and the MCP App. |
+| `@aotter/mantle-ui` | Pure UI: generic interaction controller, React components, visual kit and design tokens. No SDK dependency. |
+| `@aotter/mantle-admin` | Admin SPA and thin server, extensions, preview and Admin MCP App. Uses UI and public SDK contracts; the SDK remains a peer. |
 
 </details>
 

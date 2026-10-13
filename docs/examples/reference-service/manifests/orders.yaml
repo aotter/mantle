@@ -14,6 +14,21 @@ spec:
       itemId: { type: string }
       qty: { type: integer, minimum: 1 }
   output: { type: object }
+  handler: { ref: placeOrder }
+---
+# Internal native program; its ref wrapper owns the post-commit activity effect.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: place-order-write }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [itemId, qty]
+    properties:
+      itemId: { type: string }
+      qty: { type: integer, minimum: 1 }
+  output: { type: object }
   handler:
     sql: |
       INSERT INTO orders (itemId, qty, orderStatus, placedAt)
@@ -44,7 +59,7 @@ metadata: { name: restock }
 spec:
   title: Restock an item
   description: Add stock to an item by SKU, creating the item if it is new.
-  requires: { auth: { all: [{ ctx.staff: [owner, editor] }] } }
+  requires: { auth: { all: [{ ctx.staff: [staff] }] } }
   input:
     type: object
     required: [sku, name, qty]
@@ -58,22 +73,6 @@ spec:
       INSERT INTO items (sku, name, stock) VALUES (input.sku, input.name, input.qty)
       ON CONFLICT (sku) DO UPDATE SET stock = items.stock + EXCLUDED.stock
       RETURNING id, sku, stock
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: record-orders }
-spec:
-  input: { type: object }
-  output: { type: object }
-  handler: { ref: recordOrders }
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: weekly-digest }
-spec:
-  input: { type: object }
-  output: { type: object }
-  handler: { ref: weeklyDigest }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
@@ -102,19 +101,3 @@ metadata: { name: restock-mcp }
 spec:
   source: { kind: mcp, surface: staff }
   target: { procedure: restock }
----
-# After hooks get every row one statement touched.
-apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: orders-recorded }
-spec:
-  source: { kind: lifecycle, schema: orders, on: [after_create, after_update] }
-  target: { procedure: record-orders }
----
-# POSIX cron, UTC: Sundays at 03:00.
-apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: weekly-digest }
-spec:
-  source: { kind: schedule, cron: "0 3 * * 0" }
-  target: { procedure: weekly-digest }

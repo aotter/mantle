@@ -17,6 +17,6 @@
   },
   "include": [
     "src/**/*.ts",
-    ".mantle/generated/**/*.ts"
+    "generated/**/*.ts"
   ]
 }

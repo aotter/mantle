@@ -11,10 +11,11 @@ metadata:
 
 # Provision a Mantle project
 
-## Generated native applications (alpha.7 and later)
+## Generated native applications (alpha.7 target / workspace preview)
 
 If the installed/target README describes generated native queries, use this
-flow and stop before the historical Core instructions below.
+flow and stop before the historical Core instructions below. A develop preview
+is not evidence that alpha.7 has been published.
 
 Follow the installed [native generation and service workflow](../../next/service.md)
 with the exact package version's `contract.md` and `compatibility.md`. Commit
@@ -31,6 +32,12 @@ as in service.md. Hyperdrive caching stays off; PG settings are deployment-owned
 Bun uses native Database/SQL, an app server and scheduler. Verify staff sign-in
 (role staff), denied access, public reads, a persisted write, MCP and selected UI.
 Report artifact/resources/checks and keep rollback artifacts.
+
+Use the installed [Native Admin](../../handbook/guides/native-admin.md) asset
+contract and `entries(bindings.schemas, bindings.adapter)`. Admin SPA assets
+belong to `@aotter/mantle-admin`, while UI supplies the shared kit. Verify both
+member and staff OTP/UI flows. Deployment of an authorized application does
+not authorize SDK publication; a workspace preview remains a preview.
 
 ## Historical Core applications (through alpha.6)
 

@@ -1,7 +1,7 @@
 // Runs the service under `wrangler dev` on a fresh local D1 and drives it the way people and agents would: console email-OTP
 // sign-in, REST, both MCP surfaces, Admin's API and a cron. Each step asserts what the manifests promise.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,11 @@ const port = 18000 + Math.floor(Math.random() * 1000);
 const origin = `http://127.0.0.1:${port}`;
 const owner = "owner@example.test";
 const state = mkdtempSync(join(tmpdir(), "mantle-reference-"));
+// Deployment preparation is explicit; no import or request converges storage.
+for (const file of ["generated/schema.sql"]) {
+  const applied = spawnSync("pnpm", ["exec", "wrangler", "d1", "execute", "mantle-reference", "--local", "--persist-to", state, "--file", file], { encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } });
+  assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+}
 const wrangler = spawn("pnpm", ["exec", "wrangler", "dev", "--local", "--ip", "127.0.0.1", "--port", String(port), "--inspector-port", "0",
   "--persist-to", state, "--test-scheduled",
   "--var", `PUBLIC_ORIGIN:${origin}`, "--var", `ADMIN_EMAIL:${owner}`, "--var", "BETTER_AUTH_SECRET:reference-smoke-secret-0123456789abcdef"],
@@ -59,11 +64,14 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   assert.deepEqual((await call("GET", "/api/views/catalog")).body.rows, []);
-  step("boot converges a fresh D1 to the plan; the public catalog is empty");
+  step("explicit deployment DDL prepared a fresh D1; the public catalog is empty");
 
   const staff = await signIn(owner);
-  assert.equal((await call("GET", "/admin/api/me", { cookie: staff })).body.role, "owner");
-  step("console email OTP signs in; ADMIN_EMAIL becomes the owner");
+  assert.equal((await call("GET", "/admin/api/me", { cookie: staff })).body.role, "staff");
+  step("console email OTP signs in; verified ADMIN_EMAIL becomes staff");
+  const resourceMetadata = await call("GET", "/.well-known/oauth-protected-resource/mcp");
+  assert.equal(resourceMetadata.status, 200, JSON.stringify(resourceMetadata.body));
+  assert.equal(resourceMetadata.body.resource, `${origin}/mcp`);
 
   for (const qty of [5, 3]) {
     const restocked = await mcp("/mcp/staff", staff, "restock", { sku: "TEA-1", name: "Oolong tea", qty });
@@ -110,12 +118,16 @@ try {
   assert.equal((await call("GET", "/admin/api/views/sales-by-item", { cookie: buyer })).status, 403);
   step("sales-by-item (GROUP BY over a LEFT JOIN) is staff-only through Admin's API");
 
-  // the console: @aotter/mantle-ui/admin served by Admin at /admin, its assets by name, any other path its client-side route
+  // the console: @aotter/mantle-admin assets served by the application at /admin, its assets by name, any other path its client-side route
   const shell = await fetch(`${origin}/admin/c/items`);
   const html = await shell.text();
   const script = /src="((?:\/admin\/|\.\/)assets\/[^"]+\.js)"/.exec(html)?.[1];
   const base = /<base href="([^"]+)"/.exec(html)?.[1] ?? "/admin/";
   assert.equal(shell.headers.get("x-frame-options"), "DENY");
+  assert.match(shell.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
+  assert.equal(shell.headers.get("cache-control"), "no-store");
+  assert.equal(shell.headers.get("x-content-type-options"), "nosniff");
+  assert.equal((await fetch(`${origin}/admin/..%2f..%2fsecret.txt`)).status, 404);
   assert.ok(script, html.slice(0, 300));
   const scriptUrl = new URL(script, new URL(base, origin));
   assert.equal(scriptUrl.origin, origin);
@@ -124,7 +136,7 @@ try {
   assert.equal((await fetch(`${origin}/admin/assets/missing.js`)).status, 404);
   // the editor's round trip: it reads the whole entry and writes it back, an unset optional field included as null
   const [tea] = (await call("GET", "/admin/api/entries?collection=items", { cookie: staff })).body.items;
-  assert.deepEqual(tea.data_preview, { name: "Oolong tea", sku: "TEA-1", stock: 8 });
+  assert.deepEqual({name:tea.data.name,sku:tea.data.sku,stock:tea.data.stock}, { name: "Oolong tea", sku: "TEA-1", stock: 8 });
   const { entry } = (await call("GET", `/admin/api/entries/${tea.id}?collection=items`, { cookie: staff })).body;
   const saved = await call("PATCH", `/admin/api/entries/${tea.id}?collection=items`, { cookie: staff, body: { expectedVersion: entry.version, data: { ...entry.data, name: "Oolong tea (Taiwan)", priceCents: null } } });
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
@@ -135,12 +147,73 @@ try {
   assert.ok(tools.includes("place_order") && !tools.includes("restock"), tools.join());
   step("public MCP lists place_order and not the staff restock");
 
-  assert.equal((await fetch(`${origin}/__scheduled?cron=${encodeURIComponent("0 3 * * 1")}`)).status, 200);
+  assert.equal((await fetch(`${origin}/cdn-cgi/local/scheduled?cron=${encodeURIComponent("0 3 * * 1")}`)).status, 200);
   const activity = (await call("GET", "/admin/api/views/recent-activity", { cookie: staff })).body.rows;
   assert.deepEqual(activity.map((r) => r.kind).sort(), ["after_create", "after_update", "weekly-digest"]);
   // the one order was cancelled, and the digest counts placed orders only
   assert.equal(activity.find((r) => r.kind === "weekly-digest").detail, "0 orders, 0 units");
-  step("the after hooks recorded the order rows, and Cloudflare's Monday-numbered cron ran the POSIX Sunday digest");
+  step("the app-owned after effects recorded the order rows, and Cloudflare's Monday-numbered cron ran the POSIX Sunday digest");
+
+  const bootstrap = (await call("GET", "/admin/api/bootstrap", { cookie: staff })).body;
+  assert.ok(bootstrap.views.some(view => view.name === "sales-by-item"));
+  assert.ok(bootstrap.webmcp.tools.some(tool => tool.name === "sales_by_item"));
+  assert.equal((await call("GET", "/api/views/sales-by-item")).status, 404);
+  assert.equal((await call("GET", "/admin/api/views/sales-by-item")).status, 401);
+  for (const [sku, name] of [["TEA-2", "A tea"], ["TEA-3", "A tea"], ["TEA-4", "Z tea"]]) {
+    const stocked = await mcp("/mcp/staff", staff, "restock", { sku, name, qty: 5 });
+    assert.equal(stocked.body.result.isError, undefined, JSON.stringify(stocked.body));
+  }
+  const walk = async (path, cookie) => {
+    const rows = []; let cursor;
+    for (let pages = 0; pages < 10; pages++) {
+      const page = await call("GET", `${path}${path.includes("?") ? "&" : "?"}limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { cookie });
+      assert.equal(page.status, 200, JSON.stringify(page.body));
+      assert.ok(page.body.rows.length <= 1);
+      rows.push(...page.body.rows); cursor = page.body.nextCursor;
+      if (!cursor) return rows;
+    }
+    assert.fail("cursor walk did not terminate");
+  };
+  const fullSearch = (await call("GET", "/api/views/search-items?q=tea&limit=500")).body.rows;
+  assert.equal(fullSearch.length, 4);
+  assert.deepEqual(await walk("/api/views/search-items?q=tea"), fullSearch);
+  assert.equal(new Set(fullSearch.map(row => row.id)).size, 4);
+  const firstSearch = (await call("GET", "/api/views/search-items?q=tea&limit=1")).body;
+  assert.equal((await call("GET", `/api/views/search-items?q=oolong&cursor=${encodeURIComponent(firstSearch.nextCursor)}`)).status, 400);
+  assert.equal((await call("GET", "/api/views/search-items?q=tea&cursor=malformed")).status, 400);
+  const fullSales = (await call("GET", "/admin/api/views/sales-by-item?limit=500", { cookie: staff })).body.rows;
+  assert.equal(fullSales.length, 3); // identical item names form one complete group
+  assert.deepEqual(await walk("/admin/api/views/sales-by-item", staff), fullSales);
+  assert.equal((await call("GET", `/admin/api/views/sales-by-item?cursor=${encodeURIComponent(firstSearch.nextCursor)}`, { cookie: staff })).status, 400);
+  assert.deepEqual((await call("POST", "/admin/api/webmcp/sales_by_item", { cookie: staff, body: {} })).body.output.rows, fullSales);
+  const searchedTool = await mcp("/mcp", undefined, "search_items", { q: "tea", limit: 1 });
+  assert.equal(searchedTool.body.result.isError, undefined, JSON.stringify(searchedTool.body));
+  assert.equal(searchedTool.body.result.structuredContent.rows.length, 1);
+  assert.ok(!(await mcp("/mcp", undefined)).body.result.tools.some(tool => tool.name === "sales_by_item"));
+  step("computed relevance and grouped SQL keysets preserve ties, pages, scope, metadata and WebMCP; malformed/foreign cursors refuse");
+
+  const createdForStaff = await call("POST", "/api/orders", { cookie: staff, body: { itemId, qty: 1 } });
+  assert.equal(createdForStaff.status, 200, JSON.stringify(createdForStaff.body));
+  const [staffOrder] = (await call("GET", "/api/views/my-orders", { cookie: staff })).body.rows;
+  const editedOrder = await call("PATCH", `/admin/api/%65ntries/${staffOrder.id}/?collection=ORDERS`, { cookie: staff, body: { expectedVersion: staffOrder.version, data: { qty: 3 } } });
+  assert.equal(editedOrder.status, 200, JSON.stringify(editedOrder.body));
+  const affected = (await call("GET", "/admin/api/views/recent-activity", { cookie: staff })).body.rows.filter(row => row.subject === staffOrder.id);
+  assert.deepEqual(affected.map(row => row.detail).sort(), ["placed x1", "placed x3"]);
+  const execute = command => {
+    const result = spawnSync("pnpm", ["exec", "wrangler", "d1", "execute", "mantle-reference", "--local", "--persist-to", state, "--command", command, "--json"], { encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return JSON.parse(result.stdout)[0].results;
+  };
+  const actors = execute(`SELECT DISTINCT u.email FROM activity a JOIN user u ON u.id = a.author_id WHERE a.subject = '${staffOrder.id}'`);
+  assert.deepEqual(actors, [{ email: owner }]);
+  execute("CREATE TRIGGER reference_fail_activity BEFORE INSERT ON activity BEGIN SELECT RAISE(ABORT, 'synthetic after failure'); END");
+  const beforeFailure = (await call("GET", "/api/views/catalog")).body.rows.find(row => row.id === itemId).stock;
+  const committed = await call("POST", "/api/orders", { cookie: staff, body: { itemId, qty: 1 } });
+  assert.equal(committed.status, 200, JSON.stringify(committed.body));
+  assert.equal((await call("GET", "/api/views/catalog")).body.rows.find(row => row.id === itemId).stock, beforeFailure - 1);
+  assert.equal((await call("GET", "/api/views/my-orders", { cookie: staff })).body.rows.length, 2);
+  execute("DROP TRIGGER reference_fail_activity");
+  step("Admin affected rows record the actual caller; failed after effects preserve committed stock/order and never retry the business write");
 
   const version = JSON.parse(readFileSync("node_modules/@aotter/mantle/package.json", "utf8")).version;
   console.log(`Mantle ${version}: reference service passed`);

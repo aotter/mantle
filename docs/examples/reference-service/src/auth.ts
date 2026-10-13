@@ -1,0 +1,47 @@
+/** Application-owned Better Auth; this module loads only on an auth request. */
+import { betterAuth } from "better-auth/minimal";
+import { admin, emailOTP, jwt } from "better-auth/plugins";
+import { createAccessControl } from "better-auth/plugins/access";
+import { defaultStatements } from "better-auth/plugins/admin/access";
+import { mcp } from "@better-auth/mcp";
+import { cimd } from "@better-auth/cimd";
+import { oauthGrantExtension, oauthGrantHooks } from "@aotter/mantle/auth/oauth";
+import type { AuthInstance } from "@aotter/mantle/auth";
+import { d1Adapter } from "@aotter/mantle/auth/adapter";
+import { d1BootstrapStaff } from "@aotter/mantle/auth/identity";
+import { authHardening, hashEmailOtp } from "@aotter/mantle/auth/hardening";
+import type { BetterAuthOptions } from "better-auth/types";
+import type { Env } from "./service.js";
+
+const ac = createAccessControl(defaultStatements);
+/** Schema generation reads these options without constructing Better Auth. */
+export function authOptions(env: Env, getAuth?: () => AuthInstance) {
+  const origin = env.PUBLIC_ORIGIN || "https://example.invalid";
+  const secret = env.BETTER_AUTH_SECRET || "schema-generation-placeholder-secret";
+  const bootstrap = env.ADMIN_EMAIL ? d1BootstrapStaff(env.DB, { match: "email", value: env.ADMIN_EMAIL }) : async () => {};
+  const plugins = [
+    admin({ defaultRole: "user", adminRoles: ["staff"], ac, roles: { staff: ac.newRole(defaultStatements), user: ac.newRole({ user: [], session: [] }) } }),
+    emailOTP({ storeOTP: { hash: otp => hashEmailOtp(secret, otp) }, sendVerificationOTP: async ({ email, otp }) => {
+      if (!/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) throw new Error("Configure a production email sender.");
+      console.log(`${email}: one-time code is ${otp}`);
+    } }),
+    jwt({ disableSettingJwtHeader: true }),
+    mcp({ loginPage: "/admin/sign-in", consentPage: "/admin/oauth/consent", resource: `${origin}/mcp`, scopes: ["mcp"], extensions: [oauthGrantExtension], allowPublicClientPrelogin: true, clientRegistrationClientSecretExpiration: "90d" }),
+    cimd({ fetchClientMetadataResource: (input, init) => fetch(input, { ...init, redirect: "manual" }), metadataProfile: "mcp-2026-07-28" }),
+  ];
+  return { database: d1Adapter(env.DB), secret, baseURL: origin, basePath: "/api/auth", plugins,
+    ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], plugins, baseURL: origin, errorURL: "/admin/sign-in" }),
+    databaseHooks: { ...oauthGrantHooks(getAuth ?? (() => { throw new Error("Auth instance is not bound."); })), user: { create: { after: bootstrap }, update: { after: bootstrap } } },
+    session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true },
+  } satisfies BetterAuthOptions;
+}
+export function createAuth(env: Env) {
+  if (!env.BETTER_AUTH_SECRET || !env.PUBLIC_ORIGIN || !env.ADMIN_EMAIL) throw new Error("Authentication setup is incomplete.");
+  let current: AuthInstance | undefined;
+  const auth = betterAuth(authOptions(env, () => {
+    if (!current) throw new Error("Auth instance is not ready.");
+    return current;
+  }));
+  current = auth;
+  return auth;
+}

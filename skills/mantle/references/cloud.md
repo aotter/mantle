@@ -1,9 +1,16 @@
-# Mantle Cloud workflow
+# Historical Core Mantle Cloud workflow (through alpha.6)
+
+This protocol-6 RuntimePlan delivery workflow is version-pinned historical
+Core guidance. It does not deploy the canonical generated native SDK. Native
+applications use their selected host's matching source/build workflow; if that
+capability is unavailable, report it pending rather than inventing a backend
+plan, upload endpoint or release receipt. Installing a new SDK does not upgrade
+a Cloud host. Read the installed SDK's `docs/next/service.md` for app source composition.
 
 Cloud MCP owns project identity, source admission, candidate readiness, pairing and publication. Discover tool schemas and use their underscore names. The local helper is a packer and safe Git transport; it stores no lifecycle state and does not log in, poll or deploy. A shell with Node 22+ and Git is required. `<helper>` is this skill's absolute `scripts/mantle-cloud.mjs` path; run it from the application repository root.
 
 Old pinned kits may contain removed helper save/deploy commands; follow this
-current native MCP workflow instead.
+matching historical MCP workflow instead.
 
 The normal path is local preparation → verified Git source → ready backend and
 paired frontend → one accepted publication → read-only status → the final URL.

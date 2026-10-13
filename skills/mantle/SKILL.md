@@ -77,6 +77,19 @@ Resolve conflicts by merging manifests/options and regenerating. Add the printed
 Compose the app-owned `fetch` using `docs/next/service.md`: auth/consent, Admin,
 MCP, REST behind one request-local origin-checked resolver; keep heavy auth dynamic.
 
+For selected native Admin, follow the version-matched
+`docs/handbook/guides/native-admin.md`: select `--admin` (or `admin: true`),
+mount `entries(bindings.schemas, bindings.adapter)` and serve the Admin assets
+separately. The three-package preview is one Core SDK, the Admin product and the
+shared UI kit; do not replace it with old `createAdminSurface`/`withCaller` wiring.
+Admin reads share generated whitelisted native View templates, writes use native
+Procedure fragments and generated checks. Ref operations retain typed `ctx.store`
+at request time. Verify member/frontend and staff/Admin OTP, tenant/privacy/TTL,
+publishing, paging, statistics, exact OCC, ref effects and the actual console;
+never retry unknown 503 writes automatically. Read the installed Admin README
+for extensions, raw-body limits, CSP/assets, 22 languages and the developer workspace.
+A develop preview does not establish that alpha.7 is published.
+
 For generated native applications, optional site settings/media are selected
 with `--site <module>` exporting `siteDefaults`. Apply the emitted deployment DDL;
 wire application-owned object storage as documented in `docs/next/media.md`.
@@ -85,7 +98,7 @@ For a generated public website, follow [web mounting and acceptance](references/
 The app renders HTML and inserts `site.head()`; generated `web.ts` serves the
 indexes and Markdown alternates.
 
-## New project
+## Historical Core new project (through alpha.6)
 
 1. Create a directory outside the SDK checkout with Node 22+ and
    `"type": "module"` in `package.json`.
@@ -145,11 +158,15 @@ app includes saving, previewing and publishing it; continue through the terminal
 release result. A local-only or save-only request stops there. Creating a local
 project alone does not imply a deploy request. Self-hosting remains available.
 
-- **Experimental Workers consumers:** use the generation/build flow above.
+- **Generated native consumers:** use the generation/build flow above and the
+  installed host contract. A workspace preview is not an npm release. Native
+  Cloud source deployment needs the selected host's matching native workflow;
+  never package generated native queries as a historical protocol-6 RuntimePlan.
 - **Core Cloudflare Workers or ChatGPT Sites:** follow
   `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` and that host's
   native deployment workflow.
-- **Mantle Cloud:** follow [Cloud workflow](references/cloud.md). The bundled
+- **Historical Core Mantle Cloud (through alpha.6):** follow
+  [version-pinned Cloud workflow](references/cloud.md). The bundled
   `scripts/mantle-cloud.mjs` supports `check`, `prepare`, `source`, `open`, `pack backend`, `pack frontend` and `version`.
   Cloud MCP owns source admission, review, durable deployment and rollback. After one accepted publication, read native status until terminal; do not advance each deployment step. Run the helper by absolute path from the application root;
   follow the discovered Cloud MCP schemas and the workflow reference;
