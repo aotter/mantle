@@ -47,10 +47,10 @@ export function InterfaceDocsView(): React.ReactElement {
           </DocSection>
       ) : null}
       {page === "mcp" ? (
-          <DocSection intro={t(language, "docs.mcpIntro")} search={search} onSearch={setSearch} endpoints={<>{site.data?.mcpEndpoints?.public ? <Endpoint label={t(language, "docs.publicEndpoint")} value={site.data.mcpEndpoints.public} /> : null}{site.data?.mcpEndpoints?.staff ? <Endpoint label={t(language, "docs.staffEndpoint")} value={site.data.mcpEndpoints.staff} /> : null}</>}>
+          <DocSection intro={t(language, "docs.mcpIntro")} search={search} onSearch={setSearch} endpoints={<>{site.data?.mcpEndpoints?.public ? <Endpoint label={t(language, "docs.publicEndpoint")} value={site.data.mcpEndpoints.public} /> : null}{site.data?.mcpEndpoints?.admin ? <Endpoint label={t(language, "docs.adminEndpoint")} value={site.data.mcpEndpoints.admin} /> : null}</>}>
             {site.isLoading ? <Skeleton className="h-24 w-full" /> : null}
             {site.isError ? <ErrorBox error={site.error} /> : null}
-            {(["public", "staff"] as const).map((surface) => {
+            {(["public", "admin"] as const).map((surface) => {
               const entries = filteredCallable.filter((capability) => capability.surface === surface);
               return entries.length ? <section key={surface} className="space-y-3"><h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{surface}</h2><OperationList>{entries.map((capability) => <CapabilityOperation key={`${surface}:${capability.name}`} capability={capability} />)}</OperationList></section> : null;
             })}
@@ -73,7 +73,7 @@ export function InterfaceDocsView(): React.ReactElement {
 
 function AdminToolOperation({ tool }: { tool: AdminTool }): React.ReactElement {
   const { language } = usePreferences();
-  return <Operation summary={<><Badge variant="secondary">{t(language, "docs.staffEndpoint")}</Badge><code className="font-semibold">{tool.name}</code>{tool.annotations?.readOnlyHint ? <Badge variant="outline">{t(language, "docs.readOnly")}</Badge> : null}</>} description={tool.description}><SchemaDetails label={t(language, "docs.inputSchema")} schema={tool.inputSchema} /></Operation>;
+  return <Operation summary={<><Badge variant="secondary">{t(language, "docs.adminEndpoint")}</Badge><code className="font-semibold">{tool.name}</code>{tool.annotations?.readOnlyHint ? <Badge variant="outline">{t(language, "docs.readOnly")}</Badge> : null}</>} description={tool.description}><SchemaDetails label={t(language, "docs.inputSchema")} schema={tool.inputSchema} /></Operation>;
 }
 
 function DocSection({ intro, endpoints, search, onSearch, children }: { intro: string; endpoints?: React.ReactNode; search: string; onSearch: (value: string) => void; children: React.ReactNode }): React.ReactElement {

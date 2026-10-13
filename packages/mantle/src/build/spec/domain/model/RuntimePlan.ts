@@ -44,7 +44,7 @@ export interface PlanView extends SqlPlan {
   readonly input?: JsonSchema;
   /** The SQL as authored, which Admin shows; the IR (`stmts`) is what runs. */
   readonly source: string;
-  readonly surface: "public" | "staff" | "internal";
+  readonly surface: "public" | "admin" | "internal";
   readonly requires?: AuthorizationRequirements;
   /** `spec.cache.sharedMaxAge`: REST lets a shared cache keep an anonymous read this many seconds. Only an unguarded public View has it. */
   readonly sharedMaxAge?: number;

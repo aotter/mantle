@@ -10,6 +10,8 @@ export type Caller =
       /** Informational. */
       readonly issuer?: string;
       readonly role: string | null;
+      /** Privileged layer, classified from Better Auth admin plugin configuration. */
+      readonly admin?: boolean;
       readonly scopes: readonly string[];
       readonly credential: CredentialKind;
       /** Opaque record id or token JTI, never the raw credential. */
@@ -18,6 +20,10 @@ export type Caller =
     }
   | { readonly kind: "system"; readonly reason: string };
 
+
+/** Privilege never follows a member role name. Application-owned callers set the layer explicitly. */
+export const isAdmin = (caller: Caller): caller is Extract<Caller, { kind: "user" }> & { readonly admin: true } => caller.kind === "user" && caller.admin === true;
+export const hasAdminRole = (caller: Caller, name: string): boolean => isAdmin(caller) && (caller.role ?? "").split(",").includes(name);
 
 export class ContractError extends Error {
   /** HTTP status for codes outside the core set `statusOf` maps. */

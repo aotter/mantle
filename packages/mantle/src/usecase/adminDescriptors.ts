@@ -1,6 +1,5 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
 import { DiagnosticError, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
-import { STAFF_ROLES } from "../domain/visibility.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { emitValidation } from "./validation.js";
@@ -17,7 +16,7 @@ export function emitAdminDescriptors({plan,adminExtensions=[],admin=false}:Pick<
   const schemas=Object.values(plan.schemas);
   const allCollections=Object.fromEntries(schemas.map(s=>[s.name,{...collectionOf(s,schemas),...(admin ? {scopeField:s.scope ? s.names[s.scope] ?? s.scope : null,exportFields:Object.keys(s.fields).filter(f=>f!==s.scope&&s.fields[f]!=="geo").map(f=>s.names[f]??f)} : {})}]));
   const viewNames:Record<string,Record<string,string>>=Object.create(null);
-  const views=Object.entries(plan.views).filter(([,v])=>v.surface==="staff").map(([name,v])=>{
+  const views=Object.entries(plan.views).filter(([,v])=>v.surface==="admin").map(([name,v])=>{
     const columns=Object.fromEntries(Object.entries(v.columns??{}).map(([key,column])=>{
       const schema=plan.schemas[column.schema]!,field=schema.names[column.field]??column.field;
       const output=key===column.field?field:key;(viewNames[name]??=Object.create(null))[key]=output;
@@ -26,34 +25,34 @@ export function emitAdminDescriptors({plan,adminExtensions=[],admin=false}:Pick<
     const list=(v.uiSchema?.list??{}) as {columns?:string[];searchFields?:string[];filterFields?:string[];cells?:Record<string,string>};
     return {name,title:v.title??null,description:v.description??null,input:v.input??null,list:{columns:list.columns??[],searchFields:list.searchFields??[],filterFields:list.filterFields??[],cells:list.cells??{}},columns};
   });
-  const staffTools=mcpTools(plan,"staff"),toolNames=new Set(staffTools.map(t=>t.name));
-  const operations=staffTools.filter(t=>t.kind==="procedure").map(t=>{
+  const adminTools=mcpTools(plan,"admin"),toolNames=new Set(adminTools.map(t=>t.name));
+  const operations=adminTools.filter(t=>t.kind==="procedure").map(t=>{
     const p=plan.procedures[t.source]!;
     const preconditions=p.target&&"sql" in p.handler?rowPreconditions(p.handler.sql.stmts,p.target.schema,p.target.id,plan.schemas[p.target.schema.toLowerCase()]?.schema??{}):[];
     return {...(preconditions.length?{preconditions}:{}),name:t.source,title:p.title??null,description:p.description??null,input:p.input,uiSchema:p.uiSchema??null,interactions:p.target?[{collection:p.target.schema,bind:[{input:p.target.id,field:"id"}],...(p.target.version?{version:p.target.version}:{}),mutates:true}]:[]};
   });
   const authorizations={views:Object.fromEntries(views.map(v=>[v.name,plan.views[v.name]!.requires??null])),procedures:Object.fromEntries(Object.entries(plan.procedures).map(([name,p])=>[name,p.requires??null]))};
-  const staffCatalogue=appCatalog(plan,"staff");
-  const catalogues={public:appCatalog(plan,"public"),staff:{views:Object.fromEntries(Object.entries(staffCatalogue.views).map(([name,v])=>[name,{...v,actions:[...v.actions]}])),actions:{...staffCatalogue.actions}}};
+  const adminCatalogue=appCatalog(plan,"admin");
+  const catalogues={public:appCatalog(plan,"public"),admin:{views:Object.fromEntries(Object.entries(adminCatalogue.views).map(([name,v])=>[name,{...v,actions:[...v.actions]}])),actions:{...adminCatalogue.actions}}};
   const snapshot=developerConsole(plan);
-  const webmcp={tools:staffTools.map(({name,source,kind,title,description,inputSchema,outputSchema,annotations})=>({name,...(title?{title:(kind==="view"?plan.views[source]:plan.procedures[source])!.title??title}:{}),description:(kind==="view"?plan.views[source]:plan.procedures[source])!.description??description,inputSchema,...(outputSchema?{outputSchema}:{}),...(annotations?{annotations}:{})})),routes:Object.fromEntries(staffTools.flatMap(t=>{
+  const webmcp={tools:adminTools.map(({name,source,kind,title,description,inputSchema,outputSchema,annotations})=>({name,...(title?{title:(kind==="view"?plan.views[source]:plan.procedures[source])!.title??title}:{}),description:(kind==="view"?plan.views[source]:plan.procedures[source])!.description??description,inputSchema,...(outputSchema?{outputSchema}:{}),...(annotations?{annotations}:{})})),routes:Object.fromEntries(adminTools.flatMap(t=>{
     if(t.kind==="view")return [[t.name,{path:"/admin/views/"+encodeURIComponent(t.source)}]];
     const target=plan.procedures[t.source]!.target;return target?[[t.name,{path:"/admin/c/"+encodeURIComponent(plan.schemas[target.schema.toLowerCase()]?.name??target.schema),entry:true}]]:[];
   })) as Record<string,{path:string;entry?:boolean}>};
   // These are the actual generated transitions, not authored ref handlers or SQL IR.
   for(const schema of schemas.filter(s=>s.publishing))for(const [verb] of publishingTransitions){
     const name=schema.name+"."+verb,tool=mcpToolNameSegment(verb+"_"+schema.name);
-    if(toolNames.has(tool)){diagnostics.push({code:"GENERATE_UNSUPPORTED",path:"schemas/"+schema.name,message:"Generated publishing tool '"+tool+"' conflicts with a staff tool."});continue;}
+    if(toolNames.has(tool)){diagnostics.push({code:"GENERATE_UNSUPPORTED",path:"schemas/"+schema.name,message:"Generated publishing tool '"+tool+"' conflicts with an admin tool."});continue;}
     toolNames.add(tool);
     const action:AppRowAction={capability:tool,inputSchema:publishingInput,bind:[{input:"id",field:"id"}],version:"expectedVersion",mutates:true};
-    catalogues.staff.actions[tool]=action;
-    for(const t of staffTools.filter(t=>t.kind==="view"))if(entrySchema(plan,plan.views[t.source]!)===schema.name.toLowerCase())catalogues.staff.views[t.name]!.actions.push(tool);
+    catalogues.admin.actions[tool]=action;
+    for(const t of adminTools.filter(t=>t.kind==="view"))if(entrySchema(plan,plan.views[t.source]!)===schema.name.toLowerCase())catalogues.admin.views[t.name]!.actions.push(tool);
 
-    authorizations.procedures[name]={auth:{all:[{"ctx.staff":[...STAFF_ROLES]}]}};
+    authorizations.procedures[name]={auth:{all:["ctx.admin"]}};
     const description=verb+" an entry in "+schema.name+".";
     webmcp.tools.push({name:tool,description,inputSchema:publishingInput,annotations:{readOnlyHint:false,destructiveHint:verb==="archive"}});
     webmcp.routes[tool]={path:"/admin/c/"+encodeURIComponent(schema.name),entry:true};
-    snapshot.interfaces.callable.push({kind:"procedure",name:tool,target:name,surface:"staff",audience:"staff",title:null,description,input:publishingInput,output:null,trigger:null});
+    snapshot.interfaces.callable.push({kind:"procedure",name:tool,target:name,surface:"admin",audience:"admin",title:null,description,input:publishingInput,output:null,trigger:null});
   }
   const extensionIds = new Set<string>();
   const extensionMetadata = adminExtensions.map(extension => {

@@ -1,5 +1,5 @@
 import {test, expect} from "bun:test";
-import {admin, type Route, type Metadata} from "../../src/server/index.js";
+import { admin as adminFunction, type Route, type Metadata} from "../../src/server/index.js";
 import {entries, type EntrySchema} from "../../src/server/entries.js";
 import {extensionOptions} from "../../src/server/extensions.js";
 import type {Caller} from "@aotter/mantle/contracts";
@@ -7,20 +7,20 @@ import type {NativeCollection,NativeProcedureAdapter} from "../../src/server/nat
 const mode={projection:"id, version, title",from:"FROM fixture",policy:"",binds:[],fields:{title:{column:"title",insert:"@value",update:"title=@value"}},create:{prefix:"create(",between:")(",suffix:")",columns:[],values:[],binds:[],returning:""},patch:{prefix:"patch ",sets:[],where:"",returning:"",binds:[{k:"input" as const,name:"id"},{k:"version" as const}]},remove:{sql:"remove",binds:[{k:"input" as const,name:"id"},{k:"version" as const}],row:true}};
 const compiled:NativeCollection={path:"admin/entries",marker:"@value",id:"id",cursorAliases:[{name:"_cursor0",sql:"_cursor0"},{name:"_cursor1",sql:"_cursor1"}],fields:{id:{expression:"id",value:"@value",wire:"id",kind:"text",nullable:false}},orderFields:["id"],caller:mode,trusted:mode,statistics:{time:"created_at",subtype:"NULL",rowsAlias:{name:"_statistics",sql:"_statistics"}}};
 const unused:NativeProcedureAdapter<{}>={sqlite:true,values:{},param:n=>"?"+n,escapeLike:value=>value,read:()=>{throw Error("unexpected read");},procedure:async()=>{throw Error("unexpected write");}};
-const staff: Caller={kind:"user",subject:"a",role:"staff",scopes:[],credential:"session",credentialId:null,clientId:null};
+const admin: Caller={kind:"user",subject:"a",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null};
 const metadata: Metadata={collections:[],views:[],operations:[],webmcp:{tools:[],routes:{}}};
 function fixture(routes: readonly Route<{}, {}>[]=[]){
-  let caller: Caller=staff, resolves=0, providers=0;
-  const fetch=admin(metadata,[],[],{db:()=>{providers++;return {};},caller:()=>{resolves++;return caller;},routes});
+  let caller: Caller=admin, resolves=0, providers=0;
+  const fetch=adminFunction(metadata,[],[],{db:()=>{providers++;return {};},caller:()=>{resolves++;return caller;},routes});
   const ask=(path:string,method="GET",raw?:string,headers:Record<string,string>={})=>fetch(new Request("https://app.test/admin/api"+path,{method,body:raw,headers:{origin:"https://app.test",...headers}}),{});
   return {fetch,ask,caller:(c:Caller)=>caller=c,resolves:()=>resolves,providers:()=>providers};
 }
-test("staff session gate and builtin JSON byte limits precede database providers",async()=>{
+test("admin session gate and builtin JSON byte limits precede database providers",async()=>{
   let writes=0;
   const f=fixture([{method:"PATCH",path:"/save",run:c=>{writes++;const db=c.db;expect(c.db).toBe(db);return c.input;}}]);
   f.caller({kind:"anonymous"});expect((await f.ask("/save","PATCH","{"))?.status).toBe(401);
-  f.caller({...staff,kind:"user",credential:"api-key"});expect((await f.ask("/save","PATCH","{}"))?.status).toBe(403);
-  f.caller(staff);expect((await f.ask("/save","PATCH","{}",{origin:"https://foreign.test"}))?.status).toBe(403);
+  f.caller({...admin,kind:"user",credential:"api-key"});expect((await f.ask("/save","PATCH","{}"))?.status).toBe(403);
+  f.caller(admin);expect((await f.ask("/save","PATCH","{}",{origin:"https://foreign.test"}))?.status).toBe(403);
   expect((await f.ask("/save","PATCH","{}",{"content-length":"1000001"}))?.status).toBe(400);
   expect((await f.ask("/save","PATCH",JSON.stringify({data:"x".repeat(1000001)})))?.status).toBe(400);
   expect(f.providers()).toBe(0);expect(writes).toBe(0);
@@ -94,12 +94,12 @@ test("extension record action versions remain safe optional numbers before provi
 
 test("developer View preview preserves caller and permission gates without acquiring DB for unavailable Views",async()=>{
   let providers=0,reads=0;
-  const view={name:"public-owned",allows:(c:Caller)=>c.kind==="user"&&c.subject==="a",query:()=>({input:{},limit:20}),page:async(_db:{},c:Caller)=>{expect(c).toBe(staff);reads++;return {rows:[{id:"own"}]};}};
-  const fetch=admin({...metadata,developerConsole:{}},[],[],{developerViews:[view],db:()=>{providers++;return {};},caller:()=>staff});
+  const view={name:"public-owned",allows:(c:Caller)=>c.kind==="user"&&c.subject==="a",query:()=>({input:{},limit:20}),page:async(_db:{},c:Caller)=>{expect(c).toBe(admin);reads++;return {rows:[{id:"own"}]};}};
+  const fetch=adminFunction({...metadata,developerConsole:{}},[],[],{developerViews:[view],db:()=>{providers++;return {};},caller:()=>admin});
   const ask=(path:string,method="GET")=>fetch(new Request("https://app.test/admin/api"+path,{method,headers:{origin:"https://app.test"}}),{});
   expect(await(await ask("/developer/views/public-owned"))!.json()).toEqual({rows:[{id:"own"}]});expect([providers,reads]).toEqual([1,1]);
   expect(await(await ask("/developer/views/internal"))!.json()).toEqual({unavailable:true});expect(providers).toBe(1);
-  const denied=admin({...metadata,developerConsole:{}},[],[],{developerViews:[{...view,allows:()=>false}],db:()=>{throw Error("unauthorized DB acquisition");},caller:()=>staff});
+  const denied=adminFunction({...metadata,developerConsole:{}},[],[],{developerViews:[{...view,allows:()=>false}],db:()=>{throw Error("unauthorized DB acquisition");},caller:()=>admin});
   expect(await(await denied(new Request("https://app.test/admin/api/developer/views/public-owned"),{}))!.json()).toEqual({unavailable:true});
   for(const path of ["/views/public-owned","/views/public-owned/export"])expect((await ask(path))!.status).toBe(404);
   expect(providers).toBe(1);

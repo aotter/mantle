@@ -48,7 +48,7 @@ export default {
     let authority: Promise<Caller> | undefined, readAuthority: Promise<Caller> | undefined;
     const resolve = (readOnly: boolean) => resolveCaller(request, auth!, {
       readOnly,
-      audience: [`${env.ORIGIN}/mcp`, `${env.ORIGIN}/mcp/staff`],
+      audience: [`${env.ORIGIN}/mcp`, `${env.ORIGIN}/mcp/admin`],
       responseHeaders: headers,
     }).then(value => { checkOrigin(request, value); return value; });
     const caller = (_request?: Request, _env?: Env, classification = { readOnly: false }) =>

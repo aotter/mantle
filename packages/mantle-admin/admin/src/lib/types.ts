@@ -139,12 +139,13 @@ export interface EntryEditorPayload {
   related: RelatedEntrySection[];
 }
 
-export type StaffRole = "staff";
+export type AdminRole = string;
 
 export interface AdminUser {
   login: string | null;
   image: string | null;
-  role: StaffRole | null;
+  role: AdminRole | null;
+  admin: boolean;
   userId?: string;
 }
 
@@ -155,10 +156,10 @@ export type AuthMethodInfo =
   | { kind: "social"; provider: string }
   | { kind: "oauth"; providerId: string; displayName?: string };
 
-/** Row from `GET /admin/api/staff` (staff-only). `createdAt` arrives
+/** Row from `GET /admin/api/admin` (admin-only). `createdAt` arrives
  *  as an ISO string over the wire. `emailVerified: false` with no
  *  `githubLogin` marks a pending invitation nobody has signed in to. */
-export interface StaffUser {
+export interface AdminIdentity {
   id: string;
   email: string;
   name: string;
@@ -210,19 +211,19 @@ export interface SiteInfo {
   /** Canonical deployment URL projected by the server. Never derive it from the Admin request origin. */
   publicUrl: string;
   /** Remote MCP endpoints actually mounted by this host. */
-  mcpEndpoints?: { public: string | null; staff: string | null };
-  /** Deprecated staff endpoint alias. */
+  mcpEndpoints?: { public: string | null; admin: string | null };
+  /** Deprecated admin endpoint alias. */
   mcpUrl: string | null;
   /** What the deployment turned on; absent from an older server, which means all of it. */
   capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean };
-  /** Admin extensions this staff member's role reaches; absent from an older server. */
+  /** Admin extensions this admin member's role reaches; absent from an older server. */
   extensions?: AdminExtensionInfo[];
   media?: {
     purposes?: MediaPurposePolicy[];
   };
 }
 
-/** Admin extensions (ADR-lite 1376): the declarations this staff member's role reaches, as the server sent them. */
+/** Admin extensions (ADR-lite 1376): the declarations this admin member's role reaches, as the server sent them. */
 export interface AdminExtensionWhen {
   schema?: string[];
   field?: string[];
@@ -233,11 +234,11 @@ export interface AdminExtensionInfo {
   title: LocalizedText;
   module?: string;
   contributes: {
-    pages: { id: string; title: LocalizedText; role: StaffRole; nav?: { group: "more" | "settings"; order?: number } }[];
-    settings: { id: string; title: LocalizedText; role: StaffRole; schema: JsonSchema }[];
-    actions: { id: string; title: LocalizedText; role: StaffRole; target: "record/v1" | "list.selection/v1" | "list.toolbar/v1"; presentation: "run" | "confirm" | "dialog"; destructive?: boolean; when?: AdminExtensionWhen }[];
-    panels: { id: string; title: LocalizedText; role: StaffRole; target: "record.sidebar/v1" | "home/v1"; when?: AdminExtensionWhen }[];
-    fields: { id: string; target: "field.input/v1" | "field.cell/v1"; role?: StaffRole; when?: AdminExtensionWhen }[];
+    pages: { id: string; title: LocalizedText; role: AdminRole; nav?: { group: "more" | "settings"; order?: number } }[];
+    settings: { id: string; title: LocalizedText; role: AdminRole; schema: JsonSchema }[];
+    actions: { id: string; title: LocalizedText; role: AdminRole; target: "record/v1" | "list.selection/v1" | "list.toolbar/v1"; presentation: "run" | "confirm" | "dialog"; destructive?: boolean; when?: AdminExtensionWhen }[];
+    panels: { id: string; title: LocalizedText; role: AdminRole; target: "record.sidebar/v1" | "home/v1"; when?: AdminExtensionWhen }[];
+    fields: { id: string; target: "field.input/v1" | "field.cell/v1"; role?: AdminRole; when?: AdminExtensionWhen }[];
   };
 }
 
@@ -286,16 +287,16 @@ export interface MediaLibraryListResult {
   next_cursor: string | null;
 }
 
-/** Staff-operable Procedure derived from the manifest. */
-/** One row binding of a staff operation, from the sealed plan. */
-export interface StaffOperationInteraction {
+/** Admin-operable Procedure derived from the manifest. */
+/** One row binding of an admin operation, from the sealed plan. */
+export interface AdminOperationInteraction {
   collection: string;
   bind: Array<{ input: string; field: string }>;
   version?: string;
   mutates: boolean;
 }
 
-export interface StaffOperation {
+export interface AdminOperation {
   /** Necessary string and boolean literal predicates; does not authorize execution. */
   preconditions?: Array<{ field: string; values: Array<string | boolean> }>;
   name: string;
@@ -311,10 +312,10 @@ export interface StaffOperation {
    * inputs it binds and, on the operation target, the input carrying the
    * version the person reviewed. The first one per collection applies.
    */
-  interactions: StaffOperationInteraction[];
+  interactions: AdminOperationInteraction[];
 }
 
-/** A staff View as `/admin/api/views-manifest` lists it: its declared input, and the outputs that read a Schema field unchanged. */
+/** A admin View as `/admin/api/views-manifest` lists it: its declared input, and the outputs that read a Schema field unchanged. */
 export interface ViewManifestInfo {
   name: string;
   title: LocalizedText | null;
@@ -349,7 +350,7 @@ export interface DeveloperViewQuery {
 export interface DeveloperViewModel {
   name: string;
   title: LocalizedText | null;
-  surface: "public" | "staff" | "internal";
+  surface: "public" | "admin" | "internal";
   query: DeveloperViewQuery;
   authorization: unknown[];
   guard: string | null;
@@ -357,7 +358,7 @@ export interface DeveloperViewModel {
 }
 
 export type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
-export type DeveloperAudience = "public" | "members" | "staff" | "system" | "api-clients";
+export type DeveloperAudience = "public" | "members" | "admin" | "system" | "api-clients";
 export type DeveloperTransport = "http" | "mcp" | "lifecycle" | "schedule";
 
 /** An inline program's SQL as authored, or a registered code handler. */
@@ -382,7 +383,7 @@ export interface DeveloperProcedureModel {
 
 export type DeveloperTriggerSource =
   | { kind: "http"; method: string; path: string }
-  | { kind: "mcp"; surface: "public" | "staff" }
+  | { kind: "mcp"; surface: "public" | "admin" }
   | { kind: "lifecycle"; schema: string; on: string[] }
   | { kind: "schedule"; cron: string; enabled?: boolean };
 
@@ -474,7 +475,7 @@ export interface DeveloperCallableCapability {
   kind: "view" | "procedure";
   name: string;
   target: string;
-  surface: "public" | "staff";
+  surface: "public" | "admin";
   audience: DeveloperAudience;
   title: string | null;
   description: string;

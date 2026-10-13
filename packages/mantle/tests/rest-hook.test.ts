@@ -1,7 +1,7 @@
 import {test, expect} from "bun:test";
 import {nativeRest, body, type Route} from "../src/kernel/rest.js";
 import type {Caller} from "../src/kernel/contracts.js";
-const caller: Caller = {kind:"user",subject:"a",role:"staff",scopes:[],credential:"session",credentialId:null,clientId:null};
+const caller: Caller = {kind:"user",subject:"a",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null};
 test("native REST hook preserves Request/env/custom Response and gates before providers", async () => {
   let resolutions=0, providers=0, dispatches=0;
   const env={marker:17};

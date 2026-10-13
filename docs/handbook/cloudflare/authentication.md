@@ -18,9 +18,8 @@ Better Auth; apply `schema.sql` during deployment, never at boot. OAuth resource
 rows are created on first OAuth use from runtime configuration; they require no
 resource deployment step.
 
-OSS uses `admin({adminRoles: ["staff"], ac, roles: {staff: ac.newRole(defaultStatements), user: ac.newRole({user: [], session: []})}})`.
-**Any staff can manage users in OSS.** `Caller.role` preserves every application role string; the OSS publishing
-allowlist contains only `staff`. Cloud permissions/organizations remain separate.
+OSS uses `admin({adminRoles: ["admin"], ac, roles: {admin: ac.newRole(defaultStatements), user: ac.newRole({user: [], session: []})}})`.
+Mantle reads the official admin plugin’s `adminRoles` when auth loads (default `["admin"]`); it has no role setting of its own. `Caller.role` preserves comma-separated roles and `Caller.admin` carries the layer. A caller holding any configured admin role is an admin; a member’s role names never grant privilege. Publishing, Admin and `/mcp/admin` read this layer. Better Auth still checks permissions for its identity API calls.
 
 `@aotter/mantle/auth/hardening` supplies optional helpers:
 
@@ -47,17 +46,17 @@ user hooks. `genericOAuth` is a login plugin, distinct from the OAuth provider.
 
 `@aotter/mantle/auth/identity` exports `d1Identity(db, auth, caller, request.headers)` and
 `postgresIdentity(sql, auth, caller, request.headers)` (Bun.SQL/postgres.js). Helpers use the template's default
-Better Auth table/field names. Every operation requires a current staff cookie session.
+Better Auth table/field names. Every operation requires a current admin cookie session.
 
-Methods: `listUsers()` lists all staff; `listMembers({search,limit,cursor,cursorDirection})` searches id/name/email
+Methods: `listUsers()` lists all admin; `listMembers({search,limit,cursor,cursorDirection})` searches id/name/email
 (literal LIKE), pages 1–100 and supports forward/backward opaque cursors bound to normalized search;
-`setUserRole(id, "staff" | null)`, `inviteUser(email)`, `revokeInvite(id)`, `deleteUser(id)`.
+`setUserRole(id, "admin" | null)`, `inviteUser(email)`, `revokeInvite(id)`, `deleteUser(id)`.
 Only identity fields reach outputs, never tokens/internal columns. Self-demotion/deletion is refused. Inviting an existing
-member grants staff only after email verification; an unverified existing account is refused. Revocation deletes only an unverified staff invitation with no linked account. Deletion clears OTP
+member grants admin only after email verification; an unverified existing account is refused. Revocation deletes only an unverified admin invitation with no linked account. Deletion clears OTP
 records first and delegates user/session/cache cleanup to Better Auth. Invitation email is an optional email-module step
 after success; invitations still work when email is absent.
 
-`d1BootstrapStaff(db, {match: "email" | "github-login", value})` / `postgresBootstrapStaff(sql, rule)` return
+`d1BootstrapAdmin(db, {match: "email" | "github-login", value}, () => auth)` / `postgresBootstrapAdmin(sql, rule, () => auth)` return
 `databaseHooks.user.create.after` (and user.update.after for a later email verification). Only the first matching signup wins (case-insensitive); email matching requires emailVerified=true (required for bootstrap).
 D1 uses one conditional UPDATE; PostgreSQL uses a transaction advisory lock before UPDATE, avoiding concurrent winners.
 A blocked promotion logs a warning. A GitHub rule requires a configured trusted GitHub provider/profile mapper.
@@ -124,8 +123,8 @@ tools and generated native Admin media reads before resolving Caller. Generated
 metadata identifies Views versus Procedures; names and `readOnlyHint` annotations
 never make a Procedure eligible. A batch uses cached authority only if every
 message is a known read. Unknown/malformed methods or tools, mutations,
-publishing transitions and Admin writes use fresh authority. Dynamic staff tool
-implementations still load only after the staff gate; their read catalogue is
+publishing transitions and Admin writes use fresh authority. Dynamic admin tool
+implementations still load only after the admin gate; their read catalogue is
 generated separately. App-composed tool tables default to fresh authority, including tools with a
 `page` callback or read annotations, unless the
 app supplies equivalent trusted read metadata to `mcp`'s fourth argument.
@@ -150,8 +149,8 @@ With secondaryStorage, disableCookieCache does not bypass KV. Caller keeps a pri
 only for a matching consent request, after Caller/origin/body guards. Optional
 Better Auth adapter code stays outside the Worker startup graph.
 
-`@aotter/mantle/auth/admin` exports `guardAuthAdminRequest(request, resolveFreshCaller, basePath?)` for selected auth transports. It resolves authority only for raw/encoded admin paths, requires a staff cookie session and checks mutation origin. Both the app-owned template and OAuth routes use this same guard.
+`@aotter/mantle/auth/admin` exports `guardAuthAdminRequest(request, resolveFreshCaller, basePath?)` for selected auth transports. It resolves authority only for raw/encoded admin paths, requires an admin cookie session and checks mutation origin. Both the app-owned template and OAuth routes use this same guard.
 
-The generated role vocabulary is `staff`. Generation rejects owner/editor/contributor in `ctx.staff`; migrate those 0.2 user roles and requires declarations to `staff`, or retain them in Cloud's explicit role sets. Caller.role remains an open string for application-owned ordinary roles; this does not add generated staff permissions for those names.
+`ctx.admin` role names are open and must match `^[a-z][a-zA-Z0-9_]{0,62}$`. Bare `ctx.admin` admits any admin; a list admits admins holding one of its roles. Better Auth’s `adminRoles` decides who is an admin. Member role names alone grant no privilege.
 
 The generated auth DDL adds a native `(createdAt, id)` member-paging index (respecting schema field/table names). Unfiltered forward/backward paging orders native timestamps through that index; PostgreSQL cursors retain all six fractional digits and bind as text before timestamp casting. Member search (`%term%` over id/name/email, casting UUID ids to text only in the search expression) is a full scan; the index does not accelerate it.

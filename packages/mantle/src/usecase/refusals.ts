@@ -1,6 +1,5 @@
 /** Unsupported declarations fail at generation, never silently lose their behavior. */
 import type { GenerateInput, GenerateDiagnostic } from "../domain/model.js";
-import { STAFF_ROLES } from "../domain/visibility.js";
 import { viewOutputs } from "../build/compiler.js";
 
 export function refuseDeclarations({ plan }: GenerateInput, diagnostics: GenerateDiagnostic[]): void {
@@ -16,16 +15,6 @@ export function refuseDeclarations({ plan }: GenerateInput, diagnostics: Generat
   }
   for (const [kind, declarations] of [["views", plan.views], ["procedures", plan.procedures]] as const) {
     for (const [name, declaration] of Object.entries(declarations)) {
-      const roles = (node: unknown, path: string): void => {
-        if (Array.isArray(node)) { node.forEach((child, index) => roles(child, `${path}/${index}`)); return; }
-        if (!node || typeof node !== "object") return;
-        for (const [key, value] of Object.entries(node)) {
-          if (key === "ctx.staff" && Array.isArray(value)) for (const role of value) {
-            if (!(STAFF_ROLES as readonly string[]).includes(role)) refuse(`${path}/ctx.staff`, `Role '${role}' is outside the generated vocabulary (${STAFF_ROLES.join(", ")}). Migrate 0.2 owner/editor/contributor users and requires declarations to 'staff'; other Caller role strings remain application-owned.`);
-          } else roles(value, `${path}/${key}`);
-        }
-      };
-      roles(declaration.requires?.auth, `${kind}/${name}/requires/auth`);
       if (declaration.requires?.guard) refuse(`${kind}/${name}/requires/guard`, "Dynamic authorization guards are unsupported. Write a custom handler that checks authorization before executing queries.");
     }
   }

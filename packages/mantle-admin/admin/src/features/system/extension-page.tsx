@@ -17,7 +17,7 @@ import { NotFoundView } from "./not-found-view";
 
 /**
  * `/admin/x/{extension}/{contribution}`: an extension's page, which its module renders, or its settings, which Admin
- * renders from the declared schema (ADR-lite 1376). Only contributions the server listed for this staff member exist.
+ * renders from the declared schema (ADR-lite 1376). Only contributions the server listed for this admin member exist.
  */
 export function ExtensionPage({ extension: extensionId, contribution }: { extension: string; contribution: string }): React.ReactElement {
   const { language } = usePreferences();

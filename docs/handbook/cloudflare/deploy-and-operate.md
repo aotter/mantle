@@ -35,4 +35,4 @@ Auth configuration and production email delivery are app-owned; follow [authenti
 
 Scheduling is app-owned. Wire generated system-only TTL sweeps into `scheduled()` and configure Wrangler crons explicitly. Bound each invocation and retain a cursor if work remains; see [TTL maintenance](../guides/native-execution.md#ttl-maintenance). Expired rows remain stored and hold unique keys until removed.
 
-After deployment, verify public and protected reads, member/staff sign-in, a persisted write, stale OCC and selected MCP/Admin/web routes. An `OUTCOME_UNKNOWN` write may have committed; reconcile before deciding what to do next and never retry automatically.
+After deployment, verify public and protected reads, member/admin sign-in, a persisted write, stale OCC and selected MCP/Admin/web routes. An `OUTCOME_UNKNOWN` write may have committed; reconcile before deciding what to do next and never retry automatically.

@@ -18,7 +18,7 @@ Follow the installed [native generation and service workflow](../../handbook/clo
 with its [native contract](../../handbook/guides/native-execution.md) and [supported declarations](../../handbook/reference/features.md). Commit
 all generated output, run the same generation command with `--check`, and keep
 bundle `dist/` untracked. The app owns its verified Caller, handlers and native
-resources; OSS staff role is `staff`.
+resources; Better Auth’s admin plugin `adminRoles` defines the admin layer (default `["admin"]`); `ctx.admin` accepts open role names.
 
 Pin exact target SDK/peer versions and read its release notes and Admin asset
 installation instructions. Core-to-native replaces app imports/wiring; it is not

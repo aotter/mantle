@@ -12,8 +12,8 @@ import { decodeCursor, encodeCursor } from "./paging.js";
 export { decodeCursor, encodeCursor };
 
 /** `eq`: `column = value`; `ttl`: `column IS NULL OR column > value` (Core's `RowTerm`). */
-export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe] | readonly [column: string, op: "staff", value: Recipe, published: string, roles: readonly string[]] | readonly [column: string, op: "parent", value: Recipe, parent: ParentPolicy];
-export interface ParentPolicy { readonly table: string; readonly terms: readonly Term[]; readonly scope?: readonly [parent: string, child: string]; readonly roles?: readonly string[]; }
+export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe] | readonly [column: string, op: "admin", value: Recipe, published: string] | readonly [column: string, op: "parent", value: Recipe, parent: ParentPolicy];
+export interface ParentPolicy { readonly table: string; readonly terms: readonly Term[]; readonly scope?: readonly [parent: string, child: string]; readonly admin?: true; }
 /** Core's row rules for a Schema with the placeholder columns `SCOPE` and `TTL`; `expand` puts a Schema's own in. */
 export interface Rules {
   readonly caller: readonly Term[];
@@ -59,10 +59,10 @@ export function renderTerm(d: Pick<Dialect, "ident">, t: Term, prefix: string, p
     const [column, , value, parent] = t, alias = prefix === "_mantle_parent." || prefix === d.ident("_mantle_parent") + "." ? "_mantle_parent_" : "_mantle_parent";
     const conditions = [`${alias}.${d.ident(column)} = ${prefix}${d.ident(column)}`, ...(parent.scope ? [`${alias}.${d.ident(parent.scope[0])} = ${prefix}${d.ident(parent.scope[1])}`] : []), ...parent.terms.map(t => renderTerm(d, t, alias + ".", param))];
     const exists = `EXISTS (SELECT 1 FROM ${d.ident(parent.table)} ${alias} WHERE ${conditions.join(" AND ")})`;
-    return parent.roles ? `(${param(value)} IN (${parent.roles.map(literal).join(", ")}) OR ${exists})` : exists;
+    return parent.admin ? `(${param(value)} = 1 OR ${exists})` : exists;
   }
-  const [column, op, value, published, roles] = t, c = prefix + d.ident(column), bound = param(value);
-  if (op === "staff") return `(${c} = ${literal(published!)} OR ${bound} IN (${roles!.map(literal).join(", ")}))`;
+  const [column, op, value, published] = t, c = prefix + d.ident(column), bound = param(value);
+  if (op === "admin") return `(${c} = ${literal(published!)} OR ${bound} = 1)`;
   return op === "ttl" ? `(${c} IS NULL OR ${c} > ${bound})` : `${c} = ${bound}`;
 }
 

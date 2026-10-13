@@ -8,7 +8,7 @@ import {loadFixtureSources,writeGenerated} from "./apps/link.js";
 import {r2MediaStorage,type R2Bucket} from "../src/kernel/r2-media.js";
 import {ContractError,wire} from "../src/kernel/contracts.js";
 const defaults = {origin:"https://site.test",locales:["en","zh-TW"],brand:"Seed",media:{purposes:[{name:"cover",required:["jpg,png","webp"],maxBytes:{"image/jpeg":100,"image/png":100,"image/webp":100}}]}};
-const staff:any={kind:"user",subject:"staff-id",role:"staff",scopes:[],credential:"session",credentialId:null,clientId:null};
+const admin:any={kind:"user",subject:"admin-id",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null};
 function memoryStorage() {
  const objects=new Map<string,{type:string;size:number}>(); let failedDelete:string|undefined;
  const bucket:R2Bucket={async head(key){const o=objects.get(key);return o?{size:o.size,httpMetadata:{contentType:o.type}}:null;},async get(key){const o=objects.get(key);return o?{size:o.size,httpMetadata:{contentType:o.type},body:new Blob([new Uint8Array(o.size)]).stream()}:null;},async put(key,body,options){objects.set(key,{size:(await new Response(body).arrayBuffer()).byteLength,type:options.httpMetadata.contentType});},async delete(keys){for(const key of typeof keys==="string"?[keys]:keys){if(key===failedDelete)throw new Error("temporary private blob deletion failure");objects.delete(key);}}};
@@ -47,14 +47,14 @@ async function fixture(target:"bun-sqlite"|"bun-postgres") {
 }
 test("optional site/media emits no runtime DDL or boot queries; native SQLite preserves 0.2 wire and retry",async()=>{
  const {dir,files,site}=await fixture("bun-sqlite"),db=new Database(":memory:");
- try{expect(()=>site({query(){throw Error("boot query");}},staff)).not.toThrow();db.exec(files["schema.sql"]!);const capability=site(db,staff);await scenario(capability,async sql=>db.query(sql).all());
+ try{expect(()=>site({query(){throw Error("boot query");}},admin)).not.toThrow();db.exec(files["schema.sql"]!);const capability=site(db,admin);await scenario(capability,async sql=>db.query(sql).all());
  db.exec(files["site-seed.sql"]!);expect((await site(db,{kind:"anonymous"}).read()).brand).toBe("Operator");expect(()=>site(db,{kind:"anonymous"}).media(memoryStorage().storage)).toThrow(ContractError);
  expect(files["site.ts"]).not.toMatch(/CREATE TABLE|INSERT INTO/);
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
 (process.env.MANTLE_NEXT_BUN_PG_URL?test:test.skip)("native PostgreSQL site/media uses the same durable state and wire oracle",async()=>{
  const {dir,files,site}=await fixture("bun-postgres"),sql=new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}),schema="site_"+crypto.randomUUID().replaceAll("-","");
- try{await sql.unsafe(`CREATE SCHEMA ${schema}`);await sql.unsafe(`SET search_path TO ${schema}`);await sql.unsafe(files["schema.sql"]!);await scenario(site(sql,staff),async q=>[...await sql.unsafe(q)]);}finally{await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await sql.close();await rm(dir,{recursive:true,force:true});}
+ try{await sql.unsafe(`CREATE SCHEMA ${schema}`);await sql.unsafe(`SET search_path TO ${schema}`);await sql.unsafe(files["schema.sql"]!);await scenario(site(sql,admin),async q=>[...await sql.unsafe(q)]);}finally{await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await sql.close();await rm(dir,{recursive:true,force:true});}
 },30000);
 test("site is absent unless selected and invalid deployment defaults fail generation",async()=>{
  const sources={sources:await loadFixtureSources()};const absent=await generateFromSources({target:"bun-sqlite",sources});expect(absent.ok&&absent.files["site.ts"]).toBeUndefined();expect(absent.ok&&absent.files["schema.sql"]).not.toContain("media_assets");
@@ -84,7 +84,7 @@ test("R2 refuses changed GET snapshots and rolls back copied public objects on f
 });
 (process.env.MANTLE_NEXT_BUN_PG_URL?test:test.skip)("postgres.js uses the same site/media persistence contract",async()=>{
  const postgres=(await import("postgres")).default,{dir,files,site}=await fixture("bun-postgres"),sql=postgres(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}),schema="site_js_"+crypto.randomUUID().replaceAll("-","");
- try{await sql.unsafe(`CREATE SCHEMA ${schema}`);await sql.unsafe(`SET search_path TO ${schema}`);await sql.unsafe(files["schema.sql"]!);await scenario(site(sql,staff),async q=>[...await sql.unsafe(q)]);}finally{await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await sql.end();await rm(dir,{recursive:true,force:true});}
+ try{await sql.unsafe(`CREATE SCHEMA ${schema}`);await sql.unsafe(`SET search_path TO ${schema}`);await sql.unsafe(files["schema.sql"]!);await scenario(site(sql,admin),async q=>[...await sql.unsafe(q)]);}finally{await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await sql.end();await rm(dir,{recursive:true,force:true});}
 },30000);
 test("optional site and media stay out of an app's bundle unless imported",async()=>{
  const {build}=await import("esbuild"),{dir,files}=await fixture("bun-sqlite");
@@ -99,8 +99,8 @@ test("optional site and media stay out of an app's bundle unless imported",async
 
 test("site and media projections preserve the Admin SPA envelope and null convenience fields",async()=>{
  const {siteInfo}=await import("../src/kernel/site.js"),{mediaItem}=await import("../src/kernel/media.js");
- const projected=siteInfo({brand:"Brand",title:"Title",description:"",origin:"",locales:[],canonicalLocale:null,icons:[],media:{purposes:[]}},{origin:"https://app.test",mcpEndpoints:{public:"/mcp",staff:"/mcp/staff"},media:true,invitationEmail:false});
- expect(projected).toMatchObject({publicUrl:"https://app.test",mcpEndpoints:{public:"https://app.test/mcp",staff:"https://app.test/mcp/staff"},capabilities:{siteSettings:true,media:true,invitationEmail:false,statistics:false},extensions:[]});
+ const projected=siteInfo({brand:"Brand",title:"Title",description:"",origin:"",locales:[],canonicalLocale:null,icons:[],media:{purposes:[]}},{origin:"https://app.test",mcpEndpoints:{public:"/mcp",admin:"/mcp/admin"},media:true,invitationEmail:false});
+ expect(projected).toMatchObject({publicUrl:"https://app.test",mcpEndpoints:{public:"https://app.test/mcp",admin:"https://app.test/mcp/admin"},capabilities:{siteSettings:true,media:true,invitationEmail:false,statistics:false},extensions:[]});
  expect(mediaItem({id:"id",createdAt:1234,variants:[]})).toEqual({id:"id",createdAt:1234,variants:[],primaryUrl:null,mime:null,byteSize:null,alt:null,caption:null});
 });
 for (const target of ["bun-sqlite","bun-postgres"] as const) {
@@ -149,7 +149,7 @@ for (const target of ["bun-sqlite","bun-postgres"] as const) {
 }
 test("blank stored and default brands fall back as in 0.2",async()=>{
  const {createSite}=await import("../src/kernel/site.js"),d=await import("../src/kernel/dialect/sqlite.js"),driver={read:()=>[{key:"brand",value:""}],async write(){return [];}};
- expect((await createSite(driver,d,staff,{brand:"Default"},[]).read()).brand).toBe("Default");expect((await createSite(driver,d,staff,{brand:""},[]).read()).brand).toBe("AotterMantle");
+ expect((await createSite(driver,d,admin,{brand:"Default"},[]).read()).brand).toBe("Default");expect((await createSite(driver,d,admin,{brand:""},[]).read()).brand).toBe("AotterMantle");
 });
 test("real D1 driver lost batch response preserves the committed asset's copies",async()=>{
  const {dir,files}=await fixture("bun-sqlite"),db=new Database(":memory:"),{d1Shim}=await import("./apps/d1-shim.js"),driver=await import("../src/kernel/driver/d1.js"),d=await import("../src/kernel/dialect/sqlite.js"),{mediaLibrary}=await import("../src/kernel/media.js");

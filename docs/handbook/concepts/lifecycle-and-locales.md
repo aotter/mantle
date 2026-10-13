@@ -2,9 +2,9 @@
 
 Schemas default to `operational`: rows are live immediately and edit in place. Opt-in `publishing` adds `status` (draft/published/archived), nullable `published_at` and a scope-aware `(published_at, id)` index.
 
-Generated `<table>.publish`, `.unpublish` and `.archive` Procedures take `{ id, expectedVersion }`, require staff/system and perform one atomic UPDATE. Publish checks required fields, visibility, TTL, source state and OCC. A failed guard is `CONFLICT`. Store cannot write status/published_at directly. Admin permits generic publishing edits only on drafts; Store does not add that separate Admin editing rule.
+Generated `<table>.publish`, `.unpublish` and `.archive` Procedures take `{ id, expectedVersion }`, require admin/system and perform one atomic UPDATE. Publish checks required fields, visibility, TTL, source state and OCC. A failed guard is `CONFLICT`. Store cannot write status/published_at directly. Admin permits generic publishing edits only on drafts; Store does not add that separate Admin editing rule.
 
-Public Views see published rows only. Other reads expose drafts only to staff/system. This policy applies to joins and nested queries too.
+Public Views see published rows only. Other reads expose drafts only to admin/system. This policy applies to joins and nested queries too.
 
 ## Translations
 

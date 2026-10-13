@@ -1,12 +1,12 @@
 /**
- * resolveCaller / authLoader against a REAL Better Auth instance: emailOTP sign-in, admin (role/banned), jwt and
+ * resolveCaller / authLoader against a REAL Better Auth instance: emailOTP sign-in, admin plugin (role/banned), jwt and
  * oauthProvider, on the native d1Adapter over a bun:sqlite D1 shim. The auth handler is also served over a local HTTP
  * port, because Better Auth's resource client verifies access tokens against the instance's JWKS URL (baseURL + /jwks).
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { betterAuth } from "better-auth/minimal";
-import { admin, emailOTP, jwt } from "better-auth/plugins";
+import { admin as adminFunction, emailOTP, jwt } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -24,7 +24,7 @@ afterAll(() => { for (const server of servers) server.stop(true); });
 
 type App = Awaited<ReturnType<typeof makeApp>>;
 
-async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; staffAdmin?: boolean } = {}) {
+async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean } = {}) {
   const sqlite = new Database(":memory:");
   sqlite.run("PRAGMA foreign_keys = ON");
   const otps: { email: string; otp: string }[] = [];
@@ -53,7 +53,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
     },
     plugins: [
       emailOTP({ sendVerificationOTP: async ({ email, otp }) => { otps.push({ email, otp }); } }),
-      options.staffAdmin ? admin({ adminRoles: ["staff"], ac, roles: { staff: ac.newRole(defaultStatements) } }) : admin(),
+      options.customAdmin ? adminFunction({ adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements) } }) : adminFunction(),
       jwt({ disableSettingJwtHeader: true }),
       oauthProvider({
         loginPage: "/sign-in",
@@ -106,7 +106,7 @@ describe("resolveCaller: session cookie", () => {
     const { cookie, userId } = await app.signIn();
     const sessionId = (app.sqlite.query("SELECT id FROM session WHERE userId = ?").get(userId) as { id: string }).id;
     const caller = await resolveCaller(app.request({ cookie }), app.loader);
-    expect(caller).toEqual({ kind: "user", subject: userId, role: "user", scopes: [], credential: "session", credentialId: sessionId, clientId: null });
+    expect(caller).toEqual({ kind: "user", subject: userId, role: "user", admin: false, scopes: [], credential: "session", credentialId: sessionId, clientId: null });
     expect(app.loads()).toBe(1);
   });
 
@@ -156,9 +156,9 @@ describe("resolveCaller: session cookie", () => {
   test("6b. admin plugin banUser revokes the user's sessions -> anonymous", async () => {
     const app = await makeApp();
     const { cookie, userId } = await app.signIn();
-    const staff = await app.signIn("root@example.test");
+    const admin = await app.signIn("root@example.test");
     app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [(app.sqlite.query("SELECT id FROM user WHERE email = 'root@example.test'").get() as { id: string }).id]);
-    await app.auth.api.banUser({ headers: new Headers({ cookie: staff.cookie }), body: { userId } });
+    await app.auth.api.banUser({ headers: new Headers({ cookie: admin.cookie }), body: { userId } });
     expect(await resolveCaller(app.request({ cookie }), app.loader)).toEqual({ kind: "anonymous" });
   });
 
@@ -277,7 +277,7 @@ describe("resolveCaller: OAuth bearer", () => {
     expect(accessToken.split(".")).toHaveLength(3);
 
     const caller = await resolveCaller(bearer(app, accessToken), app.loader, { audience: AUDIENCE });
-    expect(caller).toMatchObject({ kind: "user", subject: userId, role: "user", scopes: ["mcp"], credential: "oauth", clientId, issuer: expect.any(String) });
+    expect(caller).toMatchObject({ kind: "user", subject: userId, role: "user", admin: false, scopes: ["mcp"], credential: "oauth", clientId, issuer: expect.any(String) });
     expect((caller as { credentialId: string | null }).credentialId).toBeTruthy();
 
     app.sqlite.run("UPDATE user SET role = 'editor' WHERE id = ?", [userId]);
@@ -388,21 +388,21 @@ describe("OAuth grant revocation and consent routes", () => {
     expect(response!.status).toBe(400); expect(response!.headers.get("cache-control")).toContain("no-store");
     expect(() => authRoutes(app.loader as never, { methods: [], connectedAppsPage: "/\\evil.test" })).toThrow("same-origin");
   });
-  test("raw and encoded SDK admin routes ignore stale staff KV after demotion, ban or session deletion", async () => {
-    const app = await makeApp({ sessionCache: true, staffAdmin: true });
+  test("raw and encoded SDK admin routes ignore stale admin KV after demotion, ban or session deletion", async () => {
+    const app = await makeApp({ sessionCache: true, customAdmin: true });
     const signed = await app.signIn();
-    app.sqlite.run("UPDATE user SET role = 'staff' WHERE id = ?", [signed.userId]);
+    app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [signed.userId]);
     const { cookie } = await app.signIn();
     const routes = authRoutes(app.loader as never, { methods: [] });
     const call = (path = "/admin/list-users") => routes(new Request(`${app.baseURL}${path}?limit=1`, { headers: { cookie } }));
     expect((await call())!.status).toBe(200);
     app.breakCache();
     app.sqlite.run("UPDATE user SET role = 'user' WHERE id = ?", [signed.userId]);
-    // The exact SDK API still trusts its cached staff snapshot; our public HTTP boundary must not.
-    expect(((await app.auth.api.getSession({ headers: new Headers({ cookie }), query: { disableCookieCache: true } }))!.user as { role?: string }).role).toBe("staff");
+    // The exact SDK API still trusts its cached admin snapshot; our public HTTP boundary must not.
+    expect(((await app.auth.api.getSession({ headers: new Headers({ cookie }), query: { disableCookieCache: true } }))!.user as { role?: string }).role).toBe("admin");
     expect((await call())!.status).toBe(403);
     expect((await call("/%61dmin/list-users"))!.status).toBe(403);
-    app.sqlite.run("UPDATE user SET role = 'staff', banned = 1 WHERE id = ?", [signed.userId]);
+    app.sqlite.run("UPDATE user SET role = 'admin', banned = 1 WHERE id = ?", [signed.userId]);
     expect((await call())!.status).toBe(401);
     app.sqlite.run("UPDATE user SET banned = 0 WHERE id = ?", [signed.userId]);
     const hostile = await routes(new Request(`${app.baseURL}/%61dmin/set-role`, { method: "POST", headers: { cookie, origin: "https://evil.test", "content-type": "application/json" }, body: "{}" }));
@@ -412,8 +412,8 @@ describe("OAuth grant revocation and consent routes", () => {
     expect((await call("/%61dmin/list-users"))!.status).toBe(401);
   });
   test("an expired primary session cannot refresh from a still-valid KV snapshot", async () => {
-    const app = await makeApp({ sessionCache: true, staffAdmin: true });
-    const signed = await app.signIn(); app.sqlite.run("UPDATE user SET role = 'staff' WHERE id = ?", [signed.userId]);
+    const app = await makeApp({ sessionCache: true, customAdmin: true });
+    const signed = await app.signIn(); app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [signed.userId]);
     const { cookie } = await app.signIn();
     for (const [key, text] of app.cache) {
       const value = JSON.parse(text);
@@ -477,7 +477,7 @@ describe("OAuth grant revocation and consent routes", () => {
   test("app-owned credential hook precedes OAuth/cookies and never falls back after denial", async () => {
     const app = await makeApp(); const { cookie } = await app.signIn();
     const credential = { kind: "user", subject: "api-user", role: null, scopes: ["mcp"], credential: "api-key", credentialId: "key-id", clientId: null } as const;
-    expect(await resolveCaller(app.request({ cookie, authorization: "Bearer invalid" }), app.loader, { scopes: ["mcp"], resolveCredential: () => credential })).toEqual(credential);
+    expect(await resolveCaller(app.request({ cookie, authorization: "Bearer invalid" }), app.loader, { scopes: ["mcp"], resolveCredential: () => credential })).toEqual({ ...credential, admin: false });
     await expect(resolveCaller(app.request({ cookie }), app.loader, { scopes: ["other"], resolveCredential: () => credential })).rejects.toMatchObject({ code: "AUTH_DENIED" });
     await expect(resolveCaller(app.request({ cookie }), app.loader, { resolveCredential: () => { throw new ContractError("UNAUTHENTICATED", "Invalid key."); } })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
   });

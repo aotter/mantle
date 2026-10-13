@@ -2,11 +2,11 @@
  * Core's bind recipes (`BindSpec` in the policy rewriter), evaluated for one call. Generated Views, generated
  * Procedures and the Store all bind through this one function. Input recipes carry the authored field name; `version` reads the Store's lock from `input`.
  */
-import type { Caller } from "./contracts.js";
+import { isAdmin, type Caller } from "./contracts.js";
 import type { Dialect } from "./dialect/common.js";
 
 export type Recipe =
-  | { readonly k: "uid" | "role" | "now" | "version" }
+  | { readonly k: "uid" | "role" | "admin" | "now" | "version" }
   | { readonly k: "cutoff"; readonly seconds: number }
   | { readonly k: "const"; readonly value: unknown }
   | { readonly k: "input"; readonly name: string; /** Only a date-time or a date is converted, so only those carry a type. */ readonly type?: "timestamptz" | "date" };
@@ -24,6 +24,7 @@ export function binds(d: Values, recipes: readonly Recipe[], caller: Caller, inp
   for (const r of recipes) {
     switch (r.k) {
       case "uid": out.push(caller.kind === "user" ? caller.subject : caller.kind === "system" ? `system:${caller.reason}` : null); break;
+      case "admin": out.push(isAdmin(caller) ? 1 : 0); break;
       case "role": out.push(caller.kind === "user" ? caller.role : null); break;
       case "now": out.push(d.now!(ms ||= Date.now())); break;
       case "cutoff": out.push(d.cutoff!(ms ||= Date.now(), r.seconds)); break;

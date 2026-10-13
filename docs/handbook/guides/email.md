@@ -2,7 +2,7 @@
 
 Import the optional email port from `@aotter/mantle/email`. OSS supplies
 `EmailSender`, `EmailSendArgs`, English `signInCodeEmail`, `signInLinkEmail`
-and `staffInvitationEmail` templates, and `ConsoleEmailSender` for local
+and `adminInvitationEmail` templates, and `ConsoleEmailSender` for local
 development. Mantle Cloud wires email sending and email OTP by default; OSS
 applications select and configure their sender and Better Auth plugins.
 
@@ -10,14 +10,14 @@ applications select and configure their sender and Better Auth plugins.
 The templates return `{ subject, text }`, with the same English text as 0.2;
 they do not translate or consume `locale`. Pass the recipient's locale through
 to the sender, which can select localized templates. Existing categories are
-`auth.email-otp.<type>`, `auth.magic-link.sign-in` and `auth.staff-invitation`.
+`auth.email-otp.<type>`, `auth.magic-link.sign-in` and `auth.admin-invitation`.
 
 ## Application wiring
 
 ```ts
 import { emailOTP } from "better-auth/plugins";
 import { hashEmailOtp } from "@aotter/mantle/auth/hardening";
-import { signInCodeEmail, staffInvitationEmail, type EmailSender } from "@aotter/mantle/email";
+import { signInCodeEmail, adminInvitationEmail, type EmailSender } from "@aotter/mantle/email";
 
 const locale = (request?: Request) =>
   request?.headers.get("accept-language")?.split(",")[0]?.split(";")[0]?.trim() || "en";
@@ -32,11 +32,11 @@ export const emailPlugin = (sender: EmailSender, secret: string) => emailOTP({
 });
 
 // Use the configured, trusted application origin, never an incoming Host or
-// Origin header. The application grants the OSS "staff" role before sending.
+// Origin header. The application grants the OSS "admin" role before sending.
 export const inviteEmail = (sender: EmailSender, origin: string, to: string, language: string) =>
   sender.send({
-    to, ...staffInvitationEmail("staff", new URL("/admin/sign-in", origin).href),
-    locale: language, category: "auth.staff-invitation",
+    to, ...adminInvitationEmail("admin", new URL("/admin/sign-in", origin).href),
+    locale: language, category: "auth.admin-invitation",
   });
 ```
 

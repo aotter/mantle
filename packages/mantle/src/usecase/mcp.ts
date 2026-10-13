@@ -1,5 +1,4 @@
 /** Emit the selected MCP boundary; the official transport loads on its first request. */
-import { STAFF_ROLES } from "../domain/visibility.js";
 import { mcpToolNameSegment, type RuntimePlan, type PlanLowered } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import { emitMcpMedia, mediaDefinitions } from "./mcp-media.js";
@@ -14,7 +13,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
   const imports: string[] = [], tools: { fields: string[]; schema: string }[] = [];
   const files:Record<string,string> = media ? emitMcpMedia(refuse) : {};
   let hasRef=false,hasWire=false;
-  const names = new Set<string>(media ? mediaDefinitions().map(tool=>"staff:"+tool.name) : []);
+  const names = new Set<string>(media ? mediaDefinitions().map(tool=>"admin:"+tool.name) : []);
 
   const refs = Object.values(plan.procedures).some(p => "ref" in p.handler);
   const add = (name: string, kind: "views" | "procedures", surface: string, operation:Pick<RuntimePlan["views"][string],"input"|"title"|"description"|"requires">=kind === "views" ? plan.views[name]! : plan.procedures[name]!, tool=mcpToolNameSegment(name)) => {
@@ -50,7 +49,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
   for(const schema of Object.values(plan.schemas)) if(schema.publishing) for(const verb of ["publish","unpublish","archive"]) {
     const name=`${schema.name}.${verb}`,input=publishingInput;
     Object.assign(files,emitValidation({views:{},procedures:{[name]:{input}}},refuse));
-    add(name,"procedures","staff",{input,requires:{auth:{all:[{"ctx.staff":[...STAFF_ROLES]}]}}},mcpToolNameSegment(`${verb}_${schema.name}`));
+    add(name,"procedures","admin",{input,requires:{auth:{all:["ctx.admin"]}}},mcpToolNameSegment(`${verb}_${schema.name}`));
   }
   if (hasWire) imports.push('import { wireRows } from "@aotter/mantle/contracts";');
   // An input schema several tools share is one constant.
@@ -67,7 +66,7 @@ export const tools: readonly Tool<Database${refs ? ", Handlers" : ""}>[] = [
 ${tools.map(({ fields, schema }) => `  { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n")}
 ];
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env) => Promise<Response | undefined> {
-  return serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/staff" ? (await import("./mcp-media.js")).mediaTools${refs ? "<Handlers>" : ""}(() => options.media!(env)) : [])]` : "tools"}, ${q(STAFF_ROLES)}, options, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"staff"})))} : [])]` : q(reads)});
+  return serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools${refs ? "<Handlers>" : ""}(() => options.media!(env)) : [])]` : "tools"}, options, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
 }
 `};
 }

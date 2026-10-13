@@ -14,7 +14,7 @@ export function contributionsOf<K extends keyof AdminExtensionInfo["contributes"
   return extensionsOf(site).flatMap((extension) => (extension.contributes[kind] ?? []).map((c) => ({ ...c, extension }) as ExtensionContribution<K>));
 }
 
-/** The contribution a `uiSchema` name points at, if this staff member's role reaches it. */
+/** The contribution a `uiSchema` name points at, if this admin member's role reaches it. */
 export function contributionByRef<K extends "fields" | "panels">(site: SiteInfo | undefined, kind: K, ref: unknown): ExtensionContribution<K> | undefined {
   const m = typeof ref === "string" ? UI_EXTENSION_REF.exec(ref) : null;
   return m ? contributionsOf(site, kind).find((c) => c.extension.id === m[1] && c.id === m[2]) : undefined;

@@ -1,5 +1,5 @@
 /** Selected generated native adapters: constants and compiled predicates, never a manifest interpreter. */
-import { ContractError, deny, type Caller, type Row } from "@aotter/mantle/contracts";
+import { ContractError, isAdmin, deny, type Caller, type Row } from "@aotter/mantle/contracts";
 import { binds, bound, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/binds";
 import { query as readQuery } from "@aotter/mantle/validation";
 import { invalid } from "@aotter/mantle/surface";
@@ -13,7 +13,7 @@ export interface NativeAdapter<Database> {
     readonly sqlite: boolean;
 }
 export async function nativeStatistics<Database>(specs: Readonly<Record<string, NativeCollection>>, adapter: NativeAdapter<Database>, db: Database, caller: Caller, collection: string, args: {from: number; to: number; bucketMs: number}) {
-    deny(caller, caller.kind === "user" && caller.role === "staff", "admin/statistics");
+    deny(caller, isAdmin(caller), "admin/statistics");
     if (!Object.hasOwn(specs, collection)) invalid("Unknown collection.", "admin/statistics");
     const spec = specs[collection]!, {from, to, bucketMs} = args;
     if (!spec.statistics || ![from, to, bucketMs].every(Number.isSafeInteger) || from < 0 || to <= from || bucketMs <= 0 || to - from > 20 * 86400000 || Math.ceil((to - from) / bucketMs) > 480 || Math.max(to, bucketMs) > Number.MAX_SAFE_INTEGER / 1000) invalid("Statistics require <=20 days and <=480 buckets.", "admin/statistics");

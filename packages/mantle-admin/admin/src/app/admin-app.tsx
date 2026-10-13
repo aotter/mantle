@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AuthenticatedLayout } from "../layout/authenticated-layout";
 import { api, ApiError } from "../lib/api";
-import type { AdminUser, Collection, SiteInfo, StaffOperation, ViewManifestInfo } from "../lib/types";
+import type { AdminUser, Collection, SiteInfo, AdminOperation, ViewManifestInfo } from "../lib/types";
 import type { AdminToolCatalog } from "../lib/admin-tools";
 
 import { useAdminLocation } from "./router";
@@ -33,7 +33,7 @@ const ViewPage = React.lazy(() => import("../features/ops/view-page").then(modul
 const ExtensionPage = React.lazy(() => import("../features/system/extension-page").then(module => ({ default: module.ExtensionPage })));
 const PreferencesView = React.lazy(() => import("../features/system/preferences-view").then(module => ({ default: module.PreferencesView })));
 const SettingsView = React.lazy(() => import("../features/system/settings-view").then(module => ({ default: module.SettingsView })));
-const StaffView = React.lazy(() => import("../features/system/staff-view").then(module => ({ default: module.StaffView })));
+const AdminView = React.lazy(() => import("../features/system/admin-view").then(module => ({ default: module.AdminView })));
 const MembersView = React.lazy(() => import("../features/system/members-view").then(module => ({ default: module.MembersView })));
 
 const DeveloperWorkspace = React.lazy(() => import("../features/logic/developer-workspace"));
@@ -77,7 +77,7 @@ interface BootstrapPayload {
   collections: Collection[];
   allCollections: Record<string, Collection>;
   site: SiteInfo;
-  operations: StaffOperation[];
+  operations: AdminOperation[];
   views: ViewManifestInfo[];
   webmcp: AdminToolCatalog;
   entries?: import("../lib/types").ListEntriesResult;
@@ -199,10 +199,10 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     );
   }
 
-  if (path === "/admin/staff") {
+  if (path === "/admin/admin") {
     return (
       <AuthenticatedLayout>
-        <StaffView />
+        <AdminView />
       </AuthenticatedLayout>
     );
   }

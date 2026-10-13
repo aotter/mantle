@@ -6,7 +6,7 @@ import { renderTerm } from "../kernel/store.js";
 import {dialect as SQLITE} from "../kernel/dialect/sqlite.js";
 import {dialect as POSTGRES} from "../kernel/dialect/postgres.js";
 import {declaredType} from "../domain/columns.js";
-import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
+import { nextMode } from "../domain/visibility.js";
 import { driverFor, isSqlite, q } from "../domain/entry.js";
 /** The parent is checked by the same atomic UPDATE that publishes the child. */
 export function publishedParent(plan: RuntimePlan, child: PlanSchema, d: Dialect, recipes: object[], trusted: boolean): string {
@@ -14,7 +14,7 @@ export function publishedParent(plan: RuntimePlan, child: PlanSchema, d: Dialect
   const conditions=[`p.${d.ident(on)} = ${d.ident(child.name)}.${d.ident(on)}`];
   if(parent.scope) conditions.push(`p.${d.ident(parent.scope)} = ${d.ident(child.name)}.${d.ident(child.scope ?? parent.scope)}`);
   if(parent.publishing) conditions.push("p.status = 'published'");
-  for(const term of rowPolicy(parent,trusted?"trusted":"caller",STAFF_ROLES,plan.schemas)) conditions.push(renderTerm(d,term,"p.",recipe=>(recipes.push(recipe),d.param(recipes.length))));
+  for(const term of rowPolicy(parent,trusted?"trusted":"caller",plan.schemas)) conditions.push(renderTerm(d,term,"p.",recipe=>(recipes.push(recipe),d.param(recipes.length))));
   return `EXISTS (SELECT 1 FROM ${d.ident(parent.name)} p WHERE ${conditions.join(" AND ")})`;
 }
 export function emitTranslations(plan:RuntimePlan,target:Target):Record<string,string> {
@@ -30,7 +30,7 @@ export function emitTranslations(plan:RuntimePlan,target:Target):Record<string,s
       const on=child.translates!.on.toLowerCase(),type=declaredType(child.fields,on);
       const key="t."+d.ident(on),projection=type==="timestamptz"?d.wireTimestamp(key).join(""):type==="date"?d.wireDate(key).join(""):key;
       const variants=[nextMode("caller"),"trusted" as const].map(mode=>{
-        const terms=rowPolicy(child,mode,STAFF_ROLES,plan.schemas),recipes:object[]=[];
+        const terms=rowPolicy(child,mode,plan.schemas),recipes:object[]=[];
         const where=terms.map(term=>renderTerm(d,term,"t.",recipe=>(recipes.push(recipe),d.param(recipes.length)))).join(" AND ");
         return `{where:${q(where)},binds:${q(recipes)}}`;
       });

@@ -10,12 +10,12 @@ their installed `docs/handbook/guides/native-admin.md` and the
 - Link to host-provided Mantle Admin UI and configured tenant OTP; do not emit frontend assets under host-owned /admin routes. Add visitor sign-in only where
   needed. Do not build a second identity store or configure another mail provider
   when the host already supplies one. Backend permissions enforce roles and data
-  access; Host membership is not application staff access.
+  access; Host membership is not application admin access.
 - Integrate image selection/upload into content editing through the existing
   Admin media library and host storage. Follow the pinned Core upload/PUT/commit
-  contract and `x-mantle-ref: media_assets` plus `x-mcp-hint: media-image`; store committed asset IDs, resolve permanent variants in the frontend, never use an ID as an image URL. Tenant `/mcp/staff` supplies `get_media_upload_policy` → `create_media_upload` → direct HTTP PUT → `commit_media_upload` when its shared media adapter is wired. Follow the pinned media docs for tenant staff authentication (historical Core
-uses staff); host project credentials are not application credentials. Upload capability URLs are temporary,
-  not committed public images; anonymous visitors must not gain staff media access.
+  contract and `x-mantle-ref: media_assets` plus `x-mcp-hint: media-image`; store committed asset IDs, resolve permanent variants in the frontend, never use an ID as an image URL. Tenant `/mcp/admin` supplies `get_media_upload_policy` → `create_media_upload` → direct HTTP PUT → `commit_media_upload` when its shared media adapter is wired. Follow the pinned media docs for tenant admin authentication (historical Core
+uses admin); host project credentials are not application credentials. Upload capability URLs are temporary,
+  not committed public images; anonymous visitors must not gain admin media access.
 - Generate an accessible, responsive public frontend by reading the installed
   `@aotter/mantle/web` REST contract; browser code on static hosts uses
   same-origin fetch, not a server surface imported into the browser. Do not install the historical standalone
@@ -39,11 +39,11 @@ metadata/sitemap and anonymous draft/permission refusal, and exercise OTP,
 content editing and media upload/commit with authorized synthetic accounts.
 Read the host's preview capability limits: disabled mail/media checks stay
 pending, not passed. Use candidate preview first, then an existing explicitly authorized live test
-tenant with authorized staff accounts for disabled services. Do not create or
+tenant with authorized admin accounts for disabled services. Do not create or
 publish a test tenant without authorization. Live tests require
 explicit authorization for synthetic writes and cleanup. Without a published
 test tenant or that authorization, report them pending.
-Do not weaken preview isolation, fake success or grant staff privileges outside the authorized test scope to make
+Do not weaken preview isolation, fake success or grant admin privileges outside the authorized test scope to make
 checks pass. Provenance/pairing review does not certify website quality; report
 passed, failed and blocked checks separately. Pending required checks also
 block completion.

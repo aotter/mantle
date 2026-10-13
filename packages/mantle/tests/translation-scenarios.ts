@@ -1,9 +1,8 @@
 /** The same native state/visibility checks run on SQLite, PostgreSQL and local D1. */
 import assert from "node:assert/strict";
-import {STAFF_ROLES} from "../src/domain/visibility.js";
 export async function verifyTranslations(app:any,locales:any,db:any):Promise<void> {
  const state=async(table:string,id:string)=>{const text=`SELECT status,version FROM ${table} WHERE id = ?`;return db.batch?(await db.prepare(text).bind(id).all()).results[0]:db.unsafe?(await db.unsafe(text.replace("?","$1"),[id]))[0]:db.query(text).all(id)[0];};
- const staff={kind:"user",subject:"a",role:STAFF_ROLES[0],scopes:[],credential:"session",credentialId:null,clientId:null},store=app.store(db,staff),other=app.store(db,{...staff,subject:"b"});
+ const admin={kind:"user",subject:"a",role:"admin",admin:true,scopes:[],credential:"session",credentialId:null,clientId:null},store=app.store(db,admin),other=app.store(db,{...admin,subject:"b"});
  const parent=await store.collection("posts").insert({slug:"shared",title:"parent",cover:"parent-cover"}),child=await store.collection("translations").insert({slug:"shared",locale:"zh_TW",title:"child"});assert.equal(child.locale,"zh_TW");
  const foreign=await other.collection("posts").insert({slug:"shared",title:"foreign",cover:"foreign-cover"});await other.procedures["posts.publish"]({id:foreign.id,expectedVersion:1});const foreignChild=await other.collection("translations").insert({slug:"shared",locale:"fr",title:"private foreign"});await other.procedures["translations.publish"]({id:foreignChild.id,expectedVersion:1});
  const system={kind:"system",reason:"translation tenant regression"},systemStore=app.store(db,system);
@@ -19,8 +18,8 @@ export async function verifyTranslations(app:any,locales:any,db:any):Promise<voi
  }),{code:"INPUT_VALIDATION_FAILED"});
  assert.equal(Number((await state("posts",parent.id)).version),2);assert.equal((await state("translations",child.id)).status,"draft");
  const sibling=await store.collection("posts").insert({slug:"shared",title:"sibling",cover:"sibling-cover"});await store.procedures["posts.unpublish"]({id:parent.id,expectedVersion:2});await assert.rejects(store.procedures["translations.publish"]({id:child.id,expectedVersion:3}),{code:"CONFLICT"});await store.procedures["posts.publish"]({id:sibling.id,expectedVersion:1});await store.procedures["translations.publish"]({id:child.id,expectedVersion:3});
- const page=[{id:parent.id,slug:"shared"},{id:"missing",slug:"unknown"}];assert.deepEqual(await locales(db,staff,"posts",page),{[parent.id]:["zh_TW"],missing:[]});assert.deepEqual(await locales(db,{kind:"anonymous"},"posts",page),{[parent.id]:[],missing:[]});
- const reader={...staff,role:null},read=app.store(db,reader),preview=app.store(db,{kind:"system",reason:"translation preview"});
+ const page=[{id:parent.id,slug:"shared"},{id:"missing",slug:"unknown"}];assert.deepEqual(await locales(db,admin,"posts",page),{[parent.id]:["zh_TW"],missing:[]});assert.deepEqual(await locales(db,{kind:"anonymous"},"posts",page),{[parent.id]:[],missing:[]});
+ const reader={...admin,role:null,admin:false},read=app.store(db,reader),preview=app.store(db,{kind:"system",reason:"translation preview"});
  const visible=async(expected:boolean)=>{
   assert.equal(!!await read.collection("translations").findById(child.id),expected);
   assert.equal((await read.collection("translations").find()).rows.length,expected?1:0);
@@ -39,7 +38,7 @@ export async function verifyTranslations(app:any,locales:any,db:any):Promise<voi
  assert.equal((await state("translations",child.id)).status,"published");assert.ok(await store.collection("translations").findById(child.id));assert.ok(await preview.collection("translations").findById(child.id));
  await store.procedures["posts.publish"]({id:sibling.id,expectedVersion:3});await visible(true);
  await store.procedures["posts.archive"]({id:sibling.id,expectedVersion:4});await visible(false);assert.ok(await store.collection("translations").findById(child.id));
- await store.procedures["translations.unpublish"]({id:child.id,expectedVersion:4});assert.deepEqual(await locales(db,{...staff,role:null},"posts",page),{[parent.id]:[],missing:[]});
+ await store.procedures["translations.unpublish"]({id:child.id,expectedVersion:4});assert.deepEqual(await locales(db,{...admin,role:null,admin:false},"posts",page),{[parent.id]:[],missing:[]});
  if(store.transaction){
   const p=await store.collection("posts").insert({slug:"reset",title:"tracker"}),c=await store.collection("translations").insert({slug:"reset",locale:"fr",title:"tracker"});await store.procedures["posts.publish"]({id:p.id,expectedVersion:1});
   await store.transaction(async(tx:any)=>{await assert.rejects(tx.procedures["translations.publish"]({id:c.id,expectedVersion:99}),{code:"CONFLICT"});await tx.procedures["posts.unpublish"]({id:p.id,expectedVersion:2});});
@@ -47,5 +46,5 @@ export async function verifyTranslations(app:any,locales:any,db:any):Promise<voi
   await assert.rejects(store.transaction(async(tx:any)=>{await tx.procedures["translations.publish"]({id:c.id,expectedVersion:1});await assert.rejects(tx.procedures["translations.publish"]({id:c.id,expectedVersion:1}),{code:"CONFLICT"});await tx.procedures["posts.unpublish"]({id:p.id,expectedVersion:4});}),{code:"INPUT_VALIDATION_FAILED"});
   assert.equal((await state("translations",c.id)).status,"draft");assert.equal((await state("posts",p.id)).status,"published");
  }
- await assert.rejects(locales(db,staff,"posts",Array.from({length:501},(_,i)=>({id:String(i),slug:String(i)}))),{code:"INPUT_VALIDATION_FAILED"});
+ await assert.rejects(locales(db,admin,"posts",Array.from({length:501},(_,i)=>({id:String(i),slug:String(i)}))),{code:"INPUT_VALIDATION_FAILED"});
 }

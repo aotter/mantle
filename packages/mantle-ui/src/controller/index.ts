@@ -1,7 +1,7 @@
 /**
  * Framework-free interaction logic (ADR-0029 D7): one operation opened from
  * one row, reviewed by a person, submitted once. The host injects `read` and
- * `invoke` — the Admin's staff MCP client, an MCP App's `callServerTool`, or
+ * `invoke` — the Admin's admin MCP client, an MCP App's `callServerTool`, or
  * an application's own HTTP client — and renders the snapshot however it
  * likes. Nothing here touches a router, cookies, globals or a UI framework,
  * and nothing is imported: the Mantle shapes below are structural, so a

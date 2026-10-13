@@ -18,11 +18,11 @@ Follow the installed [native generation and service workflow](../../handbook/clo
 with its [native contract](../../handbook/guides/native-execution.md) and [supported declarations](../../handbook/reference/features.md). Commit
 all generated output, run the same generation command with `--check`, and keep
 bundle `dist/` untracked. The app owns its verified Caller, handlers and native
-resources; OSS staff role is `staff`.
+resources; Better Auth’s admin plugin `adminRoles` defines the admin layer (default `["admin"]`); `ctx.admin` accepts open role names.
 
 Use the native Store/query/surface entries and app-owned fetch from the service composition guide.
 Keep optional modules out of unused entry imports and auth dynamically loaded.
-Run actual public/member/staff HTTP, MCP and UI scenarios; verify stored state,
+Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.
 
 For native Admin, read the [current guide](../../handbook/guides/native-admin.md).
@@ -35,10 +35,10 @@ Check actual member/Admin OTP, private scope/TTL/translation visibility, paging,
 statistics, safe/exact OCC and no automatic retry after unknown 503 outcomes.
 
 
-Place staff MCP Procedures in Admin deliberately: `spec.uiSchema.collectionAction:
+Place admin MCP Procedures in Admin deliberately: `spec.uiSchema.collectionAction:
 <schema-name>` adds a collection-header action; `spec.target: { schema, id,
 version? }` selects row actions and binds the row id / reviewed OCC version to
-the named inputs. Other staff operations appear under Operations in the sidebar.
+the named inputs. Other admin operations appear under Operations in the sidebar.
 Keep state conditions in the SQL WHERE: simple AND equality/IN literals become
 row-menu hints, while the Procedure remains the authority. Required-ref child
 collections fold under their parent's sidebar group; use Schema

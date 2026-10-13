@@ -44,7 +44,7 @@ Generated types constrain Store fields and writes; Store does not interpret a JS
 
 ## Row rules
 
-Schemas default to operational. Publishing opts into draft/published/archived and generated staff/system transitions. Store cannot assign system columns or scope; generated policy fills them. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
+Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
 
 Scope is one required string bound to `auth.uid()`, leading an index and every unique index. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
 

@@ -35,7 +35,7 @@ type LogicItem =
 
 type LogicTab = "overview" | "contract" | "manifest";
 
-const triggerAudiences = ["public", "members", "staff", "api-clients", "system"] as const satisfies readonly DeveloperAudience[];
+const triggerAudiences = ["public", "members", "admin", "api-clients", "system"] as const satisfies readonly DeveloperAudience[];
 
 export function LogicView(): React.ReactElement {
   const { language } = usePreferences();

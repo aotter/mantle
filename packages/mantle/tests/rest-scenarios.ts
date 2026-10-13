@@ -5,7 +5,7 @@ export async function verifyRest(fetch: (request: Request) => Promise<Response |
   const first = await request("/api/views/notes?limit=1"); assert.equal(first!.status,200); assert.equal(first!.headers.get("cache-control"),"private, no-store");
   const page = await first!.json() as any; assert.deepEqual(page.rows,[{id:"a",title:"a"}]);
   const second = await request("/api/views/notes?limit=1&cursor="+encodeURIComponent(page.nextCursor)); assert.deepEqual((await second!.json() as any).rows,[{id:"b",title:"b"}]);
-  const edit = {title:"x",version:1}, editor = {"x-role":"staff"};
+  const edit = {title:"x",version:1}, editor = {"x-role":"admin"};
   for (const [path,method,body,headers,status] of [
     ["/api/views/notes?limit=bad","GET",undefined,{},400],
     ["/api/notes/a","PUT",edit,{},401],
@@ -13,7 +13,7 @@ export async function verifyRest(fetch: (request: Request) => Promise<Response |
     ["/api/notes/a","PUT",edit,editor,200],
     ["/api/notes/a","PUT",edit,editor,409],
     ["/api/missing","GET",undefined,{},404],
-    ["/api/views/staff-notes","GET",undefined,editor,404],
+    ["/api/views/admin-notes","GET",undefined,editor,404],
     ["/api/views/notes","POST",undefined,{},405],
     ["/api/notes/a","PUT",{title:"x",version:2},{...editor,"x-credential":"session",origin:"https://evil.test"},403],
   ] as const) assert.equal((await request(path,method,body,headers))!.status,status,path);

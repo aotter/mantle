@@ -26,7 +26,7 @@ export interface McpTool {
  * The tools an MCP surface lists (ADR-0032 decision 9): each Procedure bound by an `mcp` Trigger of the surface and each View of it,
  * never a Schema. Generated MCP and Admin catalogues use these declarations; publishing transitions are added by the generator.
  */
-export function mcpTools(plan: RuntimePlan, surface: "public" | "staff", locale = "en"): McpTool[] {
+export function mcpTools(plan: RuntimePlan, surface: "public" | "admin", locale = "en"): McpTool[] {
   const text = (t: LocalizedText | undefined) => resolveLocalizedText(t, locale, "en") ?? undefined;
   const tools = new Map<string, McpTool>();
   const add = (tool: McpTool) => {

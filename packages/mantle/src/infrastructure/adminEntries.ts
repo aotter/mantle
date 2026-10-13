@@ -7,7 +7,7 @@ import { adminOrder } from "../domain/adminOrder.js";
 import { declaredType } from "../domain/columns.js";
 import { wireScalars, wireReturning } from "../domain/wireScalars.js";
 import { recipesOf } from "../domain/recipes.js";
-import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
+import { nextMode } from "../domain/visibility.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import type { GenerateDiagnostic } from "../domain/model.js";
 
@@ -30,7 +30,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
     // Compiler scope names belong only to relations this generated query can reference.
     const schemas:Record<string,Schema>=Object.create(null);let relation:Schema|undefined=s;
     while(relation&&!Object.hasOwn(schemas,relation.name)){schemas[relation.name]=relation;relation=relation.translates?plan.schemas[relation.translates.parent.toLowerCase()]:undefined;}
-    const ctx=(kind:"view"|"procedure",trusted:boolean,inputs:Record<string,string>)=>({dialect,schemas,inputs,kind,mode:trusted?"trusted" as const:nextMode("caller"),staffRoles:STAFF_ROLES});
+    const ctx=(kind:"view"|"procedure",trusted:boolean,inputs:Record<string,string>)=>({dialect,schemas,inputs,kind,mode:trusted?"trusted" as const:nextMode("caller")});
     const select=`SELECT ${columns.map(c=>`${wire.ident(s.name)}.${wire.ident(c)}`).join(",")} FROM ${wire.ident(s.name)}`;
     const base=await parse(select);
     const project=(ast:SqlNode,names:readonly string[],keys:readonly string[])=>{

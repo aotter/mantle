@@ -118,7 +118,7 @@ function currentPage(pathname: string, language: ReturnType<typeof usePreference
   if (pathname === "/admin/media") return t(language, "nav.media");
   if (pathname === "/admin/connected-apps") return t(language, "oauth.connectedApps");
   if (pathname === "/admin/settings") return t(language, "nav.settings");
-  if (pathname === "/admin/staff") return t(language, "nav.staff");
+  if (pathname === "/admin/admin") return t(language, "nav.admin");
   if (pathname === "/admin/members") return t(language, "nav.members");
   if (pathname === "/admin/dev" || pathname.startsWith("/admin/dev/overview/")) return t(language, "nav.overview");
   if (pathname === "/admin/dev/model" || pathname.startsWith("/admin/dev/model/")) return t(language, "model.title");

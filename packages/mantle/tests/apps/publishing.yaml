@@ -18,7 +18,7 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
-metadata: {name: posts-staff}
+metadata: {name: posts-admin}
 spec:
   surface: internal
   sql: SELECT id, title, status FROM posts ORDER BY id

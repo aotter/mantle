@@ -1,7 +1,7 @@
 // @ts-nocheck shared fixture of the generate-time lowering tests (ADR-0044)
 import { compilePlan, planFingerprint, type RuntimePlan } from "../compiler.js";
 
-/** A scoped Schema with a unique index, a public View with ORDER BY, a staff View with input and ORDER BY, inline insert and update Procedures, and an after_create hook on a ref handler. */
+/** A scoped Schema with a unique index, a public View with ORDER BY, an admin View with input and ORDER BY, inline insert and update Procedures, and an after_create hook on a ref handler. */
 export const MANIFESTS = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: items }
@@ -28,7 +28,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: low-stock }
 spec:
-  surface: staff
+  surface: admin
   input: { type: object, properties: { max: { type: integer, default: 100 } } }
   sql: "SELECT id, name, stock FROM items WHERE stock <= input.max ORDER BY stock, id"
 ---
@@ -36,7 +36,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: everything }
 spec:
-  surface: staff
+  surface: admin
   sql: "SELECT id, name FROM items"
 ---
 apiVersion: cms.mantle.aotter.net/v2

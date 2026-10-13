@@ -1,6 +1,6 @@
 /** View.spec and Procedure.spec: input, cache, handler binding, and the `requires` authorization predicate. */
 import type { DiagnosticCode } from "../../kernel/diagnostic.js";
-import { PROCEDURE_MCP_ANNOTATION_KEYS, PROCEDURE_TARGET_KEYS, STAFF_ROLES, VIEW_INPUT_RESERVED, isStaffRole, type AuthPredicate, type JsonSchema, type ProcedureManifest, type ViewManifest } from "../model/ManifestGrammar.js";
+import { PROCEDURE_MCP_ANNOTATION_KEYS, PROCEDURE_TARGET_KEYS, VIEW_INPUT_RESERVED, isAdminRole, type AuthPredicate, type JsonSchema, type ProcedureManifest, type ViewManifest } from "../model/ManifestGrammar.js";
 import { ManifestParseError, V01_VIEW_SURFACES, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
 import { checkFormUiSchema, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
 import { validateJsonSchema } from "./SchemaSpecChecks.js";
@@ -266,7 +266,9 @@ function validateAuthPredicate(
   path: string,
   pointer: string,
 ): asserts p is AuthPredicate {
-  if (p === "ctx.user" || p === "ctx.auth") return;
+  if (p === "ctx.staff" || typeof p === "object" && p !== null && "ctx.staff" in p)
+    throw new ManifestParseError(`${path}: 'ctx.staff' was renamed to 'ctx.admin'; replace it with 'ctx.admin'.`, idx);
+  if (p === "ctx.user" || p === "ctx.auth" || p === "ctx.admin") return;
   if (typeof p === "object" && p !== null && !Array.isArray(p)) {
     const o = p as Record<string, unknown>;
     if ("ctx.auth.scope" in o) {
@@ -280,19 +282,19 @@ function validateAuthPredicate(
       }
       return;
     }
-    if ("ctx.staff" in o) {
-      rejectUnknownKeys(o, ["ctx.staff"], idx, pointer);
-      const roles = o["ctx.staff"];
+    if ("ctx.admin" in o) {
+      rejectUnknownKeys(o, ["ctx.admin"], idx, pointer);
+      const roles = o["ctx.admin"];
       if (!Array.isArray(roles) || roles.length === 0 || roles.some((r) => typeof r !== "string")) {
         throw new ManifestParseError(
-          `${path}: 'ctx.staff' value must be a non-empty array of role-name strings`,
+          `${path}: 'ctx.admin' value must be a non-empty array of role-name strings`,
           idx,
         );
       }
-      const badRole = (roles as readonly string[]).find((r) => !isStaffRole(r));
+      const badRole = (roles as readonly string[]).find((r) => !isAdminRole(r));
       if (badRole !== undefined) {
         throw new ManifestParseError(
-          `${path}: 'ctx.staff' role '${badRole}' is not in STAFF_ROLES (${[...STAFF_ROLES].join(", ")})`,
+          `${path}: 'ctx.admin' role '${badRole}' must match ^[a-z][a-zA-Z0-9_]{0,62}$`,
           idx,
           undefined,
           "AUTH_PREDICATE_NOT_IN_ENUM",
@@ -302,7 +304,7 @@ function validateAuthPredicate(
     }
   }
   throw new ManifestParseError(
-    `${path} must be 'ctx.user', 'ctx.auth', { 'ctx.auth.scope': <scope> }, or { 'ctx.staff': [<role>, ...] }; got ${JSON.stringify(p)}`,
+    `${path} must be 'ctx.user', 'ctx.auth', 'ctx.admin', { 'ctx.auth.scope': <scope> }, or { 'ctx.admin': [<role>, ...] }; got ${JSON.stringify(p)}`,
     idx,
   );
 }

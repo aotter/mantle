@@ -85,7 +85,7 @@ function trigger(name: string, procedureName: string): TriggerManifest {
 
 describe("validateManifests()", () => {
   it("refuses x-mantle-bind, which 0.2.0 no longer stamps, with the replacement in the message", () => {
-    for (const bind of ["ctx.user", "ctx.staff", "now"]) {
+    for (const bind of ["ctx.user", "ctx.admin", "now"]) {
       const s = schema("notes", { schema: { type: "object", properties: { by: { type: "string", "x-mantle-bind": bind } } } });
       const r = validateManifests({ manifests: [s] });
       expect(r.diagnostics.map((d) => d.message).join()).toMatch(/x-mantle-bind is removed\. Use spec\.scope/);
@@ -101,7 +101,7 @@ describe("validateManifests()", () => {
     for (const spec of [
       { ...scoped.spec, indexes: [] },
       { ...scoped.spec, scope: { ownerId: "$ctx.user.id" } }, // the 0.1.x spelling
-      { ...scoped.spec, schema: { ...scoped.spec.schema, properties: { ownerId: { type: "string", "x-mantle-bind": "ctx.staff" } } } },
+      { ...scoped.spec, schema: { ...scoped.spec.schema, properties: { ownerId: { type: "string", "x-mantle-bind": "ctx.admin" } } } },
       { ...scoped.spec, uniqueIndexes: [["slug"]] },
     ]) {
       expect(validateManifests({ manifests: [{ ...scoped, spec } as SchemaManifest] }).errorCount).toBeGreaterThan(0);
@@ -129,7 +129,7 @@ describe("validateManifests()", () => {
       kind: "Trigger",
       metadata: { name: "restockProductHttp" },
       spec: {
-        source: { kind: "http", method: "POST", path: "/staff/api/restock" },
+        source: { kind: "http", method: "POST", path: "/admin/api/restock" },
         target: { procedure: "restockProduct" },
       },
     };
@@ -559,7 +559,7 @@ spec:
       input: { type: "object", required: ["token"], properties: { token: { type: "string" } } },
     } }, trigger] }).diagnostics.map((d) => d.code)).toContain("SCHEDULE_INPUT_INVALID");
     expect(validateManifests({ manifests: [{ ...procedure, spec: { ...procedure.spec,
-      requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
+      requires: { auth: { all: [{ "ctx.admin": ["owner"] }] } },
     } }, trigger] }).diagnostics.map((d) => d.code)).toContain("SCHEDULE_AUTH_INVALID");
     expect(parseManifests(JSON.stringify({ ...trigger, spec: { ...trigger.spec,
       source: { kind: "schedule", cron: "0 2 * * 0" }, // POSIX: 0 is Sunday
@@ -586,14 +586,14 @@ spec:
   });
 
   // ponytail: one table for the mcp source shape
-  it("accepts an mcp source on staff or public, and refuses a missing or unknown surface and foreign keys", () => {
+  it("accepts an mcp source on admin or public, and refuses a missing or unknown surface and foreign keys", () => {
     for (const [surface, extra, refusal] of [
-    ["surface: staff", "", undefined],
+    ["surface: admin", "", undefined],
     ["surface: public", "", undefined],
     ["", "", /surface must be one of/],
-    ["surface: admin", "", /surface must be one of/],
-    ["surface: staff", "schema: posts\n    on: [before_create]", "/spec/source/schema"],
-    ["surface: staff", "method: POST\n    path: /api/foo", "/spec/source/method"],
+    ["surface: unknown", "", /surface must be one of/],
+    ["surface: admin", "schema: posts\n    on: [before_create]", "/spec/source/schema"],
+    ["surface: admin", "method: POST\n    path: /api/foo", "/spec/source/method"],
   ] as const) {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
@@ -653,7 +653,7 @@ spec:
     expect(result.diagnostics[0]?.message).toContain("non-empty string");
   });
 
-  it("rejects View.requires.auth.all with a role outside STAFF_ROLES", () => {
+  it("rejects View.requires.auth.all with an invalid role name", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: secretView }
@@ -662,7 +662,7 @@ spec:
   sql: 'SELECT id FROM "posts"'
   requires:
     auth:
-      all: [{ "ctx.staff": ["superadmin"] }]
+      all: [{ "ctx.admin": ["bad-role"] }]
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics.map((d) => d.code)).toContain("AUTH_PREDICATE_NOT_IN_ENUM");
@@ -692,7 +692,7 @@ spec:
   sql: 'SELECT id FROM "posts"'
   requires:
     auth:
-      all: [{ "ctx.staff": [editor], owns: posts }]
+      all: [{ "ctx.admin": [editor], owns: posts }]
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics[0]).toMatchObject({
@@ -717,7 +717,7 @@ spec:
   });
 
   it.each([
-    ["staff", "surface: staff\n  sql: SELECT 1"],
+    ["admin", "surface: admin\n  sql: SELECT 1"],
     ["guarded", "surface: public\n  sql: SELECT 1\n  requires: can-read"],
   ])("rejects shared cache on a %s View", (_case, body) => {
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
@@ -814,7 +814,7 @@ kind: View
 metadata: { name: badView }
 spec:
   sql: 'SELECT id FROM "posts"'
-  surface: admin
+  surface: unknown
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics.map((d) => d.message)).toContainEqual(
@@ -826,7 +826,7 @@ spec:
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: bad }
-spec: { surface: staff }
+spec: { surface: admin }
 `);
     expect(result.diagnostics[0]?.message).toMatch(/sql is required/);
   });
@@ -886,8 +886,8 @@ spec:
   });
 });
 
-describe("parseManifests() — ctx.staff role-enum enforcement", () => {
-  it("rejects ctx.staff with a role that is not in STAFF_ROLES", () => {
+describe("parseManifests() — ctx.admin role-name enforcement", () => {
+  it("rejects ctx.admin with an invalid role name", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: secret }
@@ -896,14 +896,14 @@ spec:
   output: { type: object }
   requires:
     auth:
-      all: [{ "ctx.staff": ["superadmin"] }]
+      all: [{ "ctx.admin": ["bad-role"] }]
   handler: { ref: secretFn }
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics.map((d) => d.code)).toContain("AUTH_PREDICATE_NOT_IN_ENUM");
   });
 
-  it("accepts ctx.staff with all roles in STAFF_ROLES", () => {
+  it("accepts ctx.admin with application-owned roles", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: editor }
@@ -912,7 +912,7 @@ spec:
   output: { type: object }
   requires:
     auth:
-      all: [{ "ctx.staff": ["owner", "editor"] }]
+      all: [{ "ctx.admin": ["owner", "editor"] }]
   handler: { ref: editorFn }
 `;
     const result = parseManifests(yaml);

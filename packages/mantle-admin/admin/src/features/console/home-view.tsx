@@ -63,8 +63,8 @@ export function HomeView(): React.ReactElement {
   const siteInfo = site.data;
   const canonical = siteInfo?.canonicalLocale ?? null;
   const publicMcpUrl = siteInfo?.mcpEndpoints?.public ?? null;
-  const staffMcpUrl = siteInfo?.mcpEndpoints?.staff ?? null;
-  const mcpEndpoint = staffMcpUrl ?? publicMcpUrl;
+  const adminMcpUrl = siteInfo?.mcpEndpoints?.admin ?? null;
+  const mcpEndpoint = adminMcpUrl ?? publicMcpUrl;
   const isLocalMcp = mcpEndpoint
     ? ["localhost", "127.0.0.1", "::1"].includes(new URL(mcpEndpoint).hostname)
     : false;
@@ -95,7 +95,7 @@ export function HomeView(): React.ReactElement {
         <Skeleton className="h-72 w-full" />
       ) : site.isError ? (
         <ErrorBox error={site.error} />
-      ) : siteInfo && (publicMcpUrl || staffMcpUrl) ? (
+      ) : siteInfo && (publicMcpUrl || adminMcpUrl) ? (
         <SectionCard className="overflow-hidden p-0">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/70 p-5">
             <div className="flex items-start gap-3">
@@ -126,21 +126,21 @@ export function HomeView(): React.ReactElement {
               <CopyField label={t(language, "console.connector.endpointLabel")} value={publicMcpUrl} />
             </div> : null}
 
-            {staffMcpUrl ? <div className="rounded-xl border bg-muted/20 p-4">
+            {adminMcpUrl ? <div className="rounded-xl border bg-muted/20 p-4">
               <div className="mb-3 flex items-start gap-3">
                 <ShieldCheck className="mt-0.5 size-5 text-muted-foreground" aria-hidden />
                 <div>
-                  <h3 className="font-medium">{t(language, "console.connector.staff.title")}</h3>
+                  <h3 className="font-medium">{t(language, "console.connector.admin.title")}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {t(language, "console.connector.staff.body")}
+                    {t(language, "console.connector.admin.body")}
                   </p>
                 </div>
               </div>
-              <CopyField label={t(language, "console.connector.endpointLabel")} value={staffMcpUrl} />
+              <CopyField label={t(language, "console.connector.endpointLabel")} value={adminMcpUrl} />
             </div> : null}
           </div>
 
-          {staffMcpUrl ? <div className="flex justify-end border-t border-border/70 px-5 py-3">
+          {adminMcpUrl ? <div className="flex justify-end border-t border-border/70 px-5 py-3">
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="ghost">{t(language, "console.connector.details")}</Button>
@@ -167,7 +167,7 @@ export function HomeView(): React.ReactElement {
                     <TabsTrigger value="other">{t(language, "console.connector.other")}</TabsTrigger>
                   </TabsList>
                   <TabsContent value="claude" className="space-y-4 pt-3">
-                    <CopyField label={t(language, "console.connector.step1.label")} value={staffMcpUrl} />
+                    <CopyField label={t(language, "console.connector.step1.label")} value={adminMcpUrl} />
                     <SetupSteps
                       steps={[
                         t(language, "console.connector.step1.body"),

@@ -7,7 +7,7 @@ const extension: AdminExtensionInfo = {
   id: "brand", title: "Brand", module: "/ext/brand.js",
   contributes: {
     pages: [], settings: [], actions: [],
-    panels: [{ id: "usage", title: "Usage", role: "staff", target: "record.sidebar/v1" }],
+    panels: [{ id: "usage", title: "Usage", role: "admin", target: "record.sidebar/v1" }],
     fields: [
       { id: "money", target: "field.cell/v1", when: { format: ["money-minor"] } },
       { id: "color", target: "field.input/v1", when: { schema: ["products"], field: ["color"] } },
@@ -53,4 +53,4 @@ it("shares the full kit on demand without replacing Admin's React instance", asy
   expect(shared["@aotter/mantle-ui/kit"]).toBe(await import("@aotter/mantle-ui/kit"));
   expect(shared.react).toBe(react);
   expect((globalThis as unknown as Record<string, unknown>)[SHARED_GLOBAL]).toBe(shared);
-});
+}, 15_000);

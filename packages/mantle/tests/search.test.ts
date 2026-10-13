@@ -12,7 +12,7 @@ test("SQLite search validates before SQL and keeps native call counts bounded",a
   await writeGenerated(dir,files);db.exec(files["schema.sql"]!);
   const app=await import(join(dir,"generated.ts"));
   let calls=0;const counted={query(sql:string){calls++;return db.query(sql);}};
-  const owner={kind:"user",subject:"search-owner",role:"staff",scopes:[],credential:"session",credentialId:null,clientId:null};
+  const owner={kind:"user",subject:"search-owner",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null};
   const collection=app.store(counted,owner).collection("search_records");
   await collection.find({search:"Beta"});expect(calls).toBe(1);
   for(const search of [" ", "\0", "Alpha\0"]){await expect(collection.find({search})).rejects.toHaveProperty("code","INPUT_VALIDATION_FAILED");expect(calls).toBe(1);}

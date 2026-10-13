@@ -7,7 +7,7 @@ export type { McpApps, McpAppResource } from "./mcp-apps.js";
 
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> {
-  apps?: Readonly<Partial<Record<"public" | "staff", import("./mcp-apps.js").McpApps | readonly import("./mcp-apps.js").McpApps[]>>>;
+  apps?: Readonly<Partial<Record<"public" | "admin", import("./mcp-apps.js").McpApps | readonly import("./mcp-apps.js").McpApps[]>>>;
   db: (env: Env) => Database;
   caller: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
   locale?: string;
@@ -20,14 +20,14 @@ export interface Options<Env, Database> {
 }
 export interface CallerRefusal { readonly at: number; readonly status: 401 | 403; readonly reason: "origin" | "credential"; }
 export type McpObservation =
-  | { readonly kind: "request-refused"; readonly at: number; readonly surface: "public" | "staff"; readonly status: 401 | 403 }
-  | { readonly kind: "invocation"; readonly at: number; readonly surface: "public" | "staff"; readonly invocationId: string; readonly tool: string; readonly caller: Caller } & (
+  | { readonly kind: "request-refused"; readonly at: number; readonly surface: "public" | "admin"; readonly status: 401 | 403 }
+  | { readonly kind: "invocation"; readonly at: number; readonly surface: "public" | "admin"; readonly invocationId: string; readonly tool: string; readonly caller: Caller } & (
     | { readonly phase: "attempt" }
     | { readonly phase: "completion"; readonly outcome: "succeeded" | "failed" | "denied"; readonly durationMs: number; readonly code?: string }
   );
 type LocalizedText = string | Readonly<Record<string, string>>;
 type Paging = { limit?: number; cursor?: string };
-/** One tool: a paged View (`page`) or a Procedure (`run`, a write), on the public or staff surface. */
+/** One tool: a paged View (`page`) or a Procedure (`run`, a write), on the public or admin surface. */
 export interface Tool<Database, Handlers = never> {
   readonly name: string;
   readonly surface: string;
@@ -52,20 +52,20 @@ export interface Tool<Database, Handlers = never> {
 export type Tools<Env, Database, Handlers = never> = readonly Tool<Database, Handlers>[] | ((request: Request, env: Env) => readonly Tool<Database, Handlers>[] | Promise<readonly Tool<Database, Handlers>[]>);
 
 /** The selected MCP routes; all request work loads only when an MCP request arrives. */
-export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database, Handlers>, staff: readonly string[], options: Options<Env, Database> & { handlers?: Handlers }, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env) => Promise<Response | undefined> {
+export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env) => Promise<Response | undefined> {
   let serve: ReturnType<typeof import("./mcp-handler.js").handler<Env, Database, Handlers>> | undefined;
   // a bad App configuration fails here, not on the first request
   const linked: Partial<Record<string, ReturnType<typeof linkSurface>>> = {};
   const apps: NonNullable<Options<Env, Database>["apps"]> = { ...options.apps && Object.fromEntries(Object.entries(options.apps).map(([surface, app]) => [surface, resourcesOf(app)])) };
   options = { ...options, apps };
-  for (const surface of ["public", "staff"] as const) {
+  for (const surface of ["public", "admin"] as const) {
     const app = apps[surface];
     if (app) typeof tools === "function" ? linkApps(app) : linked[surface] = linkSurface(app, tools.filter(tool => tool.surface === surface));
   }
   return async (request, env) => {
-    if (!/^\/mcp(?:\/staff)?\/*$/.test(new URL(request.url).pathname)) return;
+    if (!/^\/mcp(?:\/admin)?\/*$/.test(new URL(request.url).pathname)) return;
     const { handler } = await import("./mcp-handler.js");
-    serve ??= handler(tools, staff, options, linked, reads);
+    serve ??= handler(tools, options, linked, reads);
     return serve(request, env);
   };
 }

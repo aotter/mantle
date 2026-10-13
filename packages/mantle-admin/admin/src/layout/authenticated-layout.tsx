@@ -31,7 +31,7 @@ import {
   type SiteInfo,
   type SiteIcon,
   type SidebarStatus,
-  type StaffOperation,
+  type AdminOperation,
   type ViewManifestInfo,
 } from "../lib/types";
 import { useAdminLocation } from "../app/router";
@@ -83,7 +83,7 @@ export function AuthenticatedLayout({
     ...viewsManifestQueryOptions(),
     enabled: workspace === "content",
   });
-  const operationsQuery = useQuery<StaffOperation[]>({
+  const operationsQuery = useQuery<AdminOperation[]>({
     ...operationsQueryOptions(),
     enabled: workspace === "content",
   });
@@ -122,13 +122,13 @@ export function AuthenticatedLayout({
           viewsQuery.data ?? [],
           language,
           canonical,
-          me.data?.role ?? null,
+          me.data?.admin === true,
           (operationsQuery.data ?? []).some((operation) =>
             (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]),
           site.data?.capabilities,
           site.data?.extensions,
         ),
-    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.role, workspace, site.data?.capabilities, site.data?.extensions],
+    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities, site.data?.extensions],
   );
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
@@ -163,7 +163,7 @@ export function AuthenticatedLayout({
             pageTitle={pageTitle}
             workspaceLink={workspace === "developer"
               ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: LayoutDashboard }
-              : me.data?.role === "staff"
+              : me.data?.admin === true
               ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }
               : undefined}
           />
@@ -213,7 +213,7 @@ export function buildNavGroups(
   views: ReadonlyArray<ViewManifestInfo>,
   language: AdminLanguage,
   canonical: string | null,
-  role: AdminUser["role"],
+  admin: boolean,
   hasGlobalOperations = false,
   capabilities?: SiteInfo["capabilities"],
   extensions?: SiteInfo["extensions"],
@@ -258,13 +258,13 @@ export function buildNavGroups(
         }
       : null;
 
-  // the manifest lists staff Views only: public and member Views belong to the application surface
-  const staffViews = views;
+  // the manifest lists admin Views only: public and member Views belong to the application surface
+  const adminViews = views;
   const reportsGroup: NavGroupData | null =
-    staffViews.length > 0
+    adminViews.length > 0
       ? {
           title: t(language, "nav.reports"),
-          items: staffViews.map((v) => ({
+          items: adminViews.map((v) => ({
             title: resolveLocalizedText(v.title, language, canonical) ?? fieldLabel(v.name),
             icon: BarChart3,
             url: `/admin/views/${encodeURIComponent(v.name)}`,
@@ -275,20 +275,20 @@ export function buildNavGroups(
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
     items: [
-      ...(role === "staff"
+      ...(admin
         ? [
             // Media stays when it is off: its page is the setup guide
             { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
             { title: t(language, "nav.members"), url: "/admin/members", icon: ContactRound },
           ]
         : []),
-      ...(role === "staff"
+      ...(admin
         ? [
             ...(capabilities?.siteSettings === false ? [] : [{ title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon }]),
-            { title: t(language, "nav.staff"), url: "/admin/staff", icon: Users },
+            { title: t(language, "nav.admin"), url: "/admin/admin", icon: Users },
           ]
         : []),
-      // extension pages and settings (ADR-lite 1376), already filtered to this staff member's role by the server;
+      // extension pages and settings (ADR-lite 1376), already filtered to this admin member's role by the server;
       // a page appears only when it asks for a place, a settings page always does
       ...(extensions ?? []).flatMap((extension) => [
         ...(extension.contributes?.pages ?? []).filter((p) => p.nav).map((p) => ({ ...p, order: p.nav!.order ?? 0, group: p.nav!.group })),

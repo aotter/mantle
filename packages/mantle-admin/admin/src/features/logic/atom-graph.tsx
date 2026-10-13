@@ -59,7 +59,7 @@ const atomKindNodeTone = {
   Trigger: "!border-rose-400/70 [&.selected]:!border-rose-500 [&.selected]:!ring-2 [&.selected]:!ring-rose-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(244,63,94,0.65)] dark:[&.selected]:!border-rose-300 dark:[&.selected]:!ring-rose-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(251,113,133,0.8)]",
 } as const;
 
-const audiences = ["public", "members", "staff", "system", "api-clients"] as const satisfies readonly DeveloperAudience[];
+const audiences = ["public", "members", "admin", "system", "api-clients"] as const satisfies readonly DeveloperAudience[];
 
 export type ManifestGraphEdge = Edge<{ kind: DeveloperRelationKind; label: string; opacity: number }, "manifest">;
 type FocusSlice = { startId: string; nodeIds: Set<string>; relationIds: Set<string> };
@@ -93,7 +93,7 @@ export function relationLabel(language: AdminLanguage, kind: DeveloperRelationKi
 export function audienceLabel(language: AdminLanguage, audience: DeveloperAudience): string {
   if (audience === "public") return t(language, "developer.graph.audience.public");
   if (audience === "members") return t(language, "developer.graph.audience.members");
-  if (audience === "staff") return t(language, "developer.graph.audience.staff");
+  if (audience === "admin") return t(language, "developer.graph.audience.admin");
   if (audience === "system") return t(language, "developer.graph.audience.system");
   return t(language, "developer.graph.audience.apiClients");
 }
@@ -108,7 +108,7 @@ export function atomKindLabel(language: AdminLanguage, kind: DeveloperAtom["kind
 function audienceDescription(language: AdminLanguage, audience: DeveloperAudience): string {
   if (audience === "public") return t(language, "developer.graph.audienceDescription.public");
   if (audience === "members") return t(language, "developer.graph.audienceDescription.members");
-  if (audience === "staff") return t(language, "developer.graph.audienceDescription.staff");
+  if (audience === "admin") return t(language, "developer.graph.audienceDescription.admin");
   if (audience === "system") return t(language, "developer.graph.audienceDescription.system");
   return t(language, "developer.graph.audienceDescription.apiClients");
 }

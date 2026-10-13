@@ -8,7 +8,7 @@ import { cimd } from "@better-auth/cimd";
 import { oauthGrantExtension, oauthGrantHooks } from "@aotter/mantle/auth/oauth";
 import type { AuthInstance } from "@aotter/mantle/auth";
 import { d1Adapter } from "@aotter/mantle/auth/adapter";
-import { d1BootstrapStaff } from "@aotter/mantle/auth/identity";
+import { d1BootstrapAdmin } from "@aotter/mantle/auth/identity";
 import { authHardening, hashEmailOtp } from "@aotter/mantle/auth/hardening";
 import type { BetterAuthOptions } from "better-auth/types";
 
@@ -17,9 +17,9 @@ const ac = createAccessControl(defaultStatements);
 export function authOptions(env: Env, getAuth?: () => AuthInstance) {
   const origin = env.PUBLIC_ORIGIN || "https://example.invalid";
   const secret = env.BETTER_AUTH_SECRET || "schema-generation-placeholder-secret";
-  const bootstrap = env.ADMIN_EMAIL ? d1BootstrapStaff(env.DB, { match: "email", value: env.ADMIN_EMAIL }) : async () => {};
+  const bootstrap = env.ADMIN_EMAIL ? d1BootstrapAdmin(env.DB, { match: "email", value: env.ADMIN_EMAIL }, () => ({ options: { plugins } })) : async () => {};
   const plugins = [
-    admin({ defaultRole: "user", adminRoles: ["staff"], ac, roles: { staff: ac.newRole(defaultStatements), user: ac.newRole({ user: [], session: [] }) } }),
+    admin({ defaultRole: "user", adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements), user: ac.newRole({ user: [], session: [] }) } }),
     emailOTP({ storeOTP: { hash: otp => hashEmailOtp(secret, otp) }, sendVerificationOTP: async ({ email, otp }) => {
       if (!/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) throw new Error("Configure a production email sender.");
       console.log(`${email}: one-time code is ${otp}`);

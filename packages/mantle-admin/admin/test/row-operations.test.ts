@@ -8,7 +8,7 @@ import {
 } from "../src/features/content/row-operations";
 import { idempotencyFields } from "../src/features/ops/interaction-dialog";
 import { globalOperations } from "../src/features/ops/operations-view";
-import type { JsonSchema, StaffOperation, StaffOperationInteraction } from "../src/lib/types";
+import type { JsonSchema, AdminOperation, AdminOperationInteraction } from "../src/lib/types";
 
 const input: JsonSchema = {
   type: "object",
@@ -21,7 +21,7 @@ const input: JsonSchema = {
   },
 };
 
-const operation = (name: string, extra: Partial<StaffOperation> = {}): StaffOperation => ({
+const operation = (name: string, extra: Partial<AdminOperation> = {}): AdminOperation => ({
   name,
   title: null,
   description: null,
@@ -33,7 +33,7 @@ const operation = (name: string, extra: Partial<StaffOperation> = {}): StaffOper
   ...extra,
 });
 
-const target: StaffOperationInteraction = { collection: "inventory", bind: [{ input: "id", field: "id" }], version: "expectedVersion", mutates: true };
+const target: AdminOperationInteraction = { collection: "inventory", bind: [{ input: "id", field: "id" }], version: "expectedVersion", mutates: true };
 
 describe("row operation form", () => {
   it("hides only what the interaction binds and the idempotency key", () => {

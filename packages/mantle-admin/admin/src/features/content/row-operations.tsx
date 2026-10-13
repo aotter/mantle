@@ -11,7 +11,7 @@ import { fieldLabel } from "../../lib/field-label";
 import { api, ApiError, refusalOf } from "../../lib/api";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { entryApiPath } from "../../lib/queries";
-import type { Collection, EntryEditorPayload, StaffOperation, StaffOperationInteraction } from "../../lib/types";
+import type { Collection, EntryEditorPayload, AdminOperation, AdminOperationInteraction } from "../../lib/types";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { ErrorBox, redirectToSignIn } from "../../ui/page";
@@ -46,17 +46,17 @@ export type OperableRow = {
 
 /** Operations bound to rows from this collection. */
 export function boundOperationsFor(
-  operations: readonly StaffOperation[] | undefined,
+  operations: readonly AdminOperation[] | undefined,
   collectionName: string,
-): StaffOperation[] {
+): AdminOperation[] {
   return (operations ?? []).filter((op) => (op.interactions ?? []).some((item) => item.collection === collectionName));
 }
 
 /** Operations explicitly exposed from a collection header. */
 export function collectionOperationsFor(
-  operations: readonly StaffOperation[] | undefined,
+  operations: readonly AdminOperation[] | undefined,
   collectionName: string,
-): StaffOperation[] {
+): AdminOperation[] {
   return (operations ?? []).filter((op) => op.uiSchema?.["collectionAction"] === collectionName);
 }
 
@@ -71,7 +71,7 @@ export function rowValues(row: OperableRow): Record<string, unknown> {
 }
 
 /** Missing preview fields cannot establish a mismatch; the server still checks every write. */
-export function operationMatchesRow(operation: StaffOperation, row: OperableRow): boolean {
+export function operationMatchesRow(operation: AdminOperation, row: OperableRow): boolean {
   const values = rowValues(row);
   return (operation.preconditions ?? []).every(({ field, values: allowed }) =>
     !Object.prototype.hasOwnProperty.call(values, field) || allowed.some(value => value === values[field]));
@@ -98,7 +98,7 @@ export function RowOperationsMenu({
   row: OperableRow;
   collection?: Collection;
   /** Pre-filtered via `boundOperationsFor(allOps, row.collection)`. */
-  operations: readonly StaffOperation[];
+  operations: readonly AdminOperation[];
   editHref?: string;
   language: AdminLanguage;
   canonical: string | null;
@@ -107,7 +107,7 @@ export function RowOperationsMenu({
    *  Defaults to the compact "⋯" icon button used in table rows. */
   trigger?: React.ReactNode;
 }): React.ReactElement | null {
-  const [activeOperation, setActiveOperation] = React.useState<StaffOperation | null>(null);
+  const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
   if (operations.length === 0 && !editHref) return null;
   const available = operations.filter(op => operationMatchesRow(op, row));
   if (!available.length && !editHref) return null;
@@ -164,12 +164,12 @@ export function CollectionOperations({
   canonical,
   onSuccess,
 }: {
-  operations: readonly StaffOperation[];
+  operations: readonly AdminOperation[];
   language: AdminLanguage;
   canonical: string | null;
   onSuccess: () => void;
 }): React.ReactElement | null {
-  const [activeOperation, setActiveOperation] = React.useState<StaffOperation | null>(null);
+  const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
   if (operations.length === 0) return null;
 
   return (
@@ -195,7 +195,7 @@ export function CollectionOperations({
 }
 
 /**
- * One staff operation through the shared interaction controller
+ * One admin operation through the shared interaction controller
  * (ADR-0029), from a row, a collection header or the Operations page.
  * Bindings and the version lock come only from the operation's declared
  * interaction for the row's collection; nothing is inferred from names.
@@ -211,8 +211,8 @@ export function OperationDialog({
   onClose,
   onSuccess,
 }: {
-  operation: StaffOperation;
-  interaction?: StaffOperationInteraction;
+  operation: AdminOperation;
+  interaction?: AdminOperationInteraction;
   row?: OperableRow;
   collection?: Collection;
   language: AdminLanguage;
@@ -271,11 +271,11 @@ export function OperationDialog({
 /**
  * The controller for one Admin operation: it reads the entry through the
  * Admin entry API and runs the operation through the Admin operations API,
- * so HTTP-only staff operations work the same as MCP ones.
+ * so HTTP-only admin operations work the same as MCP ones.
  */
 export function createOperationController(
-  operation: StaffOperation,
-  interaction: StaffOperationInteraction | undefined,
+  operation: AdminOperation,
+  interaction: AdminOperationInteraction | undefined,
   collection: string | undefined,
   row: Record<string, unknown> | undefined,
 ): InteractionController {

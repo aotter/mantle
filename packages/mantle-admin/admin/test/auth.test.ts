@@ -87,7 +87,7 @@ describe("sign-in", () => {
     expect(html).not.toContain("GitHub:");
   });
 
-  it("lets members disconnect their own apps without granting staff access", async () => {
+  it("lets members disconnect their own apps without granting admin access", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
     await client.fetchQuery({
       queryKey: ["me"],

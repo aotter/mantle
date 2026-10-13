@@ -6,7 +6,7 @@ Apply the emitted `schema.sql` to a new database; apply idempotent `site-seed.sq
 on subsequent deployments to seed only absent operator fields. Import `site` from the generated
 `site` module; call `site(db, verifiedCaller).read()`, `.updateSettings({brand,title,
 description})`, or `.media(storage)` to access the library. Construction runs no
-queries, migrations, seeds, or storage work. The library accepts verified staff
+queries, migrations, seeds, or storage work. The library accepts verified admin
 Callers of any credential kind; the Admin handler must additionally keep its
 cookie-session-only gate and the shared session-mutation origin check. The optional module is absent from
 a Worker that does not import it.

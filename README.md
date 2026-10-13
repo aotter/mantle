@@ -32,7 +32,7 @@
 
 Mantle is an embeddable application engine for TypeScript. Define your data,
 queries, actions, and triggers in a Manifest, then use them through typed APIs,
-HTTP endpoints, agent tools, and a staff console when your app needs one.
+HTTP endpoints, agent tools, and a admin console when your app needs one.
 
 Build a publishing site, an internal operations app, or an API for agents.
 Your application owns its host, storage, and business logic; choose the Mantle
@@ -50,7 +50,7 @@ modules you need.
   reports, and invoke business actions. Configure columns, filters, and actions
   with Manifest `uiSchema`. [Admin customization](docs/handbook/guides/admin-ui.md).
 - **Tools for browser and remote agents.** Admin supports WebMCP using the
-  signed-in staff session. Remote MCP clients connect through authenticated
+  signed-in admin session. Remote MCP clients connect through authenticated
   endpoints, with authorization checked on each call.
   [MCP and WebMCP](docs/handbook/concepts/mcp-and-agents.md).
 - **Publishing.** Draft/publish workflows, localized content and full-text
@@ -62,12 +62,12 @@ modules you need.
 
 ## Admin for people and agents
 
-Give staff a workspace for content, operational records, reports, and actions.
-In browsers supporting WebMCP, agents can discover and invoke staff tools from
+Give admin a workspace for content, operational records, reports, and actions.
+In browsers supporting WebMCP, agents can discover and invoke admin tools from
 Admin, inspect the current page, and navigate alongside the user. Calls use the
-current staff session and retain server-side authorization and concurrency checks.
+current admin session and retain server-side authorization and concurrency checks.
 
-![Mantle Admin brings publishing content, live records, reports, and staff operations into one console.](docs/assets/mantle-admin-operations.png)
+![Mantle Admin brings publishing content, live records, reports, and admin operations into one console.](docs/assets/mantle-admin-operations.png)
 
 ### Developer UI and application API docs
 
@@ -82,7 +82,7 @@ the owning definitions.
 compiled declarations; it does not certify runtime or deployment health.*
 
 The generated service serves the console at `/admin` from
-`@aotter/mantle-admin/admin/index.html`; this view draws from the staff-only
+`@aotter/mantle-admin/admin/index.html`; this view draws from the admin-only
 `GET /admin/api/developer-console`.
 
 | Interface | Integration guide |
@@ -93,8 +93,8 @@ The generated service serves the console at `/admin` from
 
 ## A Manifest in practice
 
-An intake application needs request records, a submission action, and a staff
-inbox. Its staff View can be as small as:
+An intake application needs request records, a submission action, and a admin
+inbox. Its admin View can be as small as:
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -102,13 +102,13 @@ kind: View
 metadata: { name: recent-requests }
 spec:
   title: Recent requests
-  surface: staff
+  surface: admin
   sql: |
     SELECT id, name, email, message, created_at FROM requests
     ORDER BY created_at DESC LIMIT 50
 ```
 
-Together with the `requests` Schema, this defines the read used by the staff
+Together with the `requests` Schema, this defines the read used by the admin
 report and its MCP tool. A Procedure handles submissions, with Triggers choosing
 HTTP and MCP exposure.
 
@@ -152,7 +152,7 @@ Using ChatGPT Sites? Follow [Mantle on ChatGPT Sites](docs/handbook/cloudflare/c
 | [`@aotter/mantle`](packages/mantle/README.md) | Manifests, Store authored as SQL, the runtime and the `mantle` CLI. |
 | `@aotter/mantle/cloudflare` and the generated preset | A Worker on D1, or on PostgreSQL through Hyperdrive, with REST, MCP and Admin. |
 | `@aotter/mantle/bun` and the generated preset | A Bun server on PostgreSQL or SQLite with the same surfaces. |
-| `@aotter/mantle/auth` | Sign-in, staff roles, and OAuth for MCP. |
+| `@aotter/mantle/auth` | Sign-in, admin roles, and OAuth for MCP. |
 | [The reference service](docs/examples/reference-service/README.md) | A whole service to read and run. |
 
 SQLite (D1) and PostgreSQL are the built-in dialects, PostgreSQL the

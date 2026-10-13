@@ -2,12 +2,12 @@ import {expect,test} from "bun:test";
 import {Database} from "bun:sqlite";
 import {readFile,mkdtemp,rm} from "node:fs/promises";
 import {join} from "node:path";
-import {admin} from "../../src/server/index.js";
+import {admin as createAdmin} from "../../src/server/index.js";
 import {entries} from "../../src/server/entries.js";
 import {csv} from "../../src/server/csv.js";
 import {nativeStatistics,type NativeCollection} from "../../src/server/native.js";
 import {generateAdmin,writeAdminFixture} from "./generated-fixture.js";
-import {staff} from "./server-native-scenarios.js";
+import {admin} from "./server-native-scenarios.js";
 
 test("CSV streams pages, quotes formulas, propagates failures and stops after cancel",async()=>{
  let reads=0;
@@ -28,16 +28,16 @@ test("PostgreSQL statistics split aggregates without another round trip and use 
  const queries:{sql:string;values:unknown[]}[]=[];
  const mode={from:'FROM "posts"',projection:'*',binds:[{k:"uid" as const}],policy:'"owner" = $1'};
  const spec={caller:mode,statistics:{time:'extract(epoch FROM "posts"."created_at") * 1000000',column:'"posts"."created_at"',subtype:'NULL',rowsAlias:{name:"unused",sql:"unused"}}} as unknown as NativeCollection;
- const result=await nativeStatistics({posts:spec},{sqlite:false,param:n=>"$"+n,values:{},escapeLike:s=>s,read:(_db,sql,values)=>{queries.push({sql,values});return [{bucket:-1,subtype:null,count:12},{bucket:0,subtype:null,count:3}];}},null,staff,"posts",{from:1000,to:2000,bucketMs:1000});
+ const result=await nativeStatistics({posts:spec},{sqlite:false,param:n=>"$"+n,values:{},escapeLike:s=>s,read:(_db,sql,values)=>{queries.push({sql,values});return [{bucket:-1,subtype:null,count:12},{bucket:0,subtype:null,count:3}];}},null,admin,"posts",{from:1000,to:2000,bucketMs:1000});
  expect(result).toEqual({total:12,buckets:[{bucket:0,subtype:null,count:3}]});
  expect(queries).toHaveLength(1);
  expect(queries[0]!.sql).toContain('SELECT -1 AS bucket, NULL AS subtype, count(*) AS count FROM "posts" WHERE ("owner" = $1) UNION ALL SELECT');
  expect(queries[0]!.sql).toContain('"posts"."created_at" >= $2 AND "posts"."created_at" < $3');
  expect(queries[0]!.sql).not.toContain("WITH");
- expect(queries[0]!.values).toEqual([staff.subject,"1970-01-01T00:00:01.000Z","1970-01-01T00:00:02.000Z",1000000]);
+ expect(queries[0]!.values).toEqual([admin.subject,"1970-01-01T00:00:01.000Z","1970-01-01T00:00:02.000Z",1000000]);
 });
 
-test("native list/editor/bootstrap and exports share a single staff resolution and generated policies",async()=>{
+test("native list/editor/bootstrap and exports share a single admin resolution and generated policies",async()=>{
  const manifest=await readFile(join(import.meta.dir,"../../../mantle/tests/apps/translations.yaml"),"utf8");
  const files=await generateAdmin("bun-sqlite",manifest),dir=await mkdtemp(join(import.meta.dir,"../../../mantle/tests/apps/.admin-followups-")),db=new Database(":memory:");
  try{
@@ -46,7 +46,7 @@ test("native list/editor/bootstrap and exports share a single staff resolution a
   const {adminBindings}=await import(join(dir,"admin-bindings.ts")),bindings=adminBindings();
   let resolves=0, queries=0;
   const adapter={...bindings.adapter,read:(...args: any[])=>{queries++;return bindings.adapter.read(...args);}};
-  const fetch=admin(bindings.metadata,bindings.views,bindings.operations,{db:()=>db,caller:()=>{resolves++;return staff;},routes:entries(bindings.schemas,adapter)});
+  const fetch=createAdmin(bindings.metadata,bindings.views,bindings.operations,{db:()=>db,caller:()=>{resolves++;return admin;},routes:entries(bindings.schemas,adapter)});
   const ask=async(path:string,method="GET",input?:unknown)=>{const response=(await fetch(new Request("https://app.test/admin/api"+path,{method,headers:{origin:"https://app.test"},body:input===undefined?undefined:JSON.stringify(input)}),{}))!;expect(response.status).toBe(200);return response;};
   const parent=(await(await ask("/entries","POST",{collection:"posts",data:{slug:"same",title:"Parent",cover:"Cover"}})).json()).entry;
   const child=(await(await ask("/entries","POST",{collection:"translations",data:{slug:"same",locale:"fr",title:"French"}})).json()).entry;
@@ -68,17 +68,17 @@ test("native list/editor/bootstrap and exports share a single staff resolution a
 test("resolved session supplies menu display fields with one authority read and no profile query",async()=>{
  const {authLoader,resolveCaller}=await import("@aotter/mantle/auth");
  let reads=0,profiles=0,providers=0;
- const auth=authLoader(async()=>({options:{},$context:Promise.resolve({}),api:{getSession:async()=>{reads++;return {headers:null,response:{session:{id:"session"},user:{id:"staff",role:"staff",name:"Ada",image:"/avatar.png",githubLogin:"ada"}}};}}}));
+ const auth=authLoader(async()=>({options:{plugins:[{id:"admin"}]},$context:Promise.resolve({}),api:{getSession:async()=>{reads++;return {headers:null,response:{session:{id:"session"},user:{id:"admin",role:"admin",name:"Ada",image:"/avatar.png",githubLogin:"ada"}}};}}}));
  const request=new Request("https://app.test/admin/api/me",{headers:{cookie:"better-auth.session_token=value"}});
  const caller=await resolveCaller(request,auth);
- const fetch=admin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>{providers++;return null;},caller:()=>caller});
+ const fetch=createAdmin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>{providers++;return null;},caller:()=>caller});
  expect(await(await fetch(request,{}))!.json()).toMatchObject({login:"ada",image:"/avatar.png"});
  expect(reads).toBe(1);expect(profiles).toBe(0);expect(providers).toBe(0);
 });
 
 test("generated extension metadata binds declarations and compiled settings checks",async()=>{
  const {generateFromSources}=await import("../../../mantle/src/infrastructure/generate.js");
- const declaration={apiVersion:1 as const,id:"preferences",title:"Preferences",contributes:{settings:[{id:"theme",title:"Theme",role:"staff" as const,schema:{type:"object" as const,properties:{accent:{type:"string" as const,enum:["blue","green"]},"choice/path":{type:"integer" as const,oneOf:[{const:1},{const:2}]}},required:["accent"]}}]}};
+ const declaration={apiVersion:1 as const,id:"preferences",title:"Preferences",contributes:{settings:[{id:"theme",title:"Theme",role:"admin" as const,schema:{type:"object" as const,properties:{accent:{type:"string" as const,enum:["blue","green"]},"choice/path":{type:"integer" as const,oneOf:[{const:1},{const:2}]}},required:["accent"]}}]}};
  const result=await generateFromSources({target:"bun-sqlite",admin:true,sources:{sources:[]},adminExtensions:[declaration]});
  expect(result.ok).toBe(true);if(!result.ok)throw Error(JSON.stringify(result.diagnostics));
  const dir=await mkdtemp(join(import.meta.dir,"../../../mantle/tests/apps/.admin-extension-followups-"));
@@ -89,7 +89,7 @@ test("generated extension metadata binds declarations and compiled settings chec
   const definition={...declaration,handlers:{settings:{theme:{load:async()=>({accent:"blue"}),save:async(_caller:unknown,value:unknown)=>{saves++;return value;}}}}};
   const facets=extensionBindings([definition]);
   expect(()=>extensionBindings([{...definition,title:"Drift"}])).toThrow("differs from generation");
-  const fetch=admin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>null,caller:()=>staff,...facets});
+  const fetch=createAdmin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>null,caller:()=>admin,...facets});
   const ask=(accent:string,choice=1)=>fetch(new Request("https://app.test/admin/api/x/preferences/settings/theme",{method:"PATCH",headers:{origin:"https://app.test"},body:JSON.stringify({value:{accent,"choice/path":choice}})}),{});
   expect((await ask("red"))!.status).toBe(400);expect(saves).toBe(0);
   const invalid=(await ask("green",3))!;expect(invalid.status).toBe(400);expect((await invalid.json()).error.fields["choice/path"]).toContain("enum");
@@ -101,8 +101,8 @@ test("generated extension metadata binds declarations and compiled settings chec
 
 test("WebMCP localizes declarations and View export validates before streaming",async()=>{
  let reads=0;
- const metadata={collections:[],operations:[],views:[{name:"people",list:{columns:["name"]}}],webmcp:{tools:[{name:"people",description:{en:"People","zh-TW":"人員"},title:{en:"Staff","zh-TW":"團隊"}}]}};
- const fetch=admin(metadata,[{name:"people",allows:()=>true,query:()=>({input:{}}),page:async(_db,_caller,_input,paging)=>{reads++;expect(paging.limit).toBe(500);return paging.cursor?{rows:[{name:"Grace",secret:"hidden"}]}:{rows:[{name:"Ada",secret:"hidden"}],nextCursor:"second"};}}],[],{db:()=>null,caller:()=>staff,locale:"zh-TW"});
+ const metadata={collections:[],operations:[],views:[{name:"people",list:{columns:["name"]}}],webmcp:{tools:[{name:"people",description:{en:"People","zh-TW":"人員"},title:{en:"Admin","zh-TW":"團隊"}}]}};
+ const fetch=createAdmin(metadata,[{name:"people",allows:()=>true,query:()=>({input:{}}),page:async(_db,_caller,_input,paging)=>{reads++;expect(paging.limit).toBe(500);return paging.cursor?{rows:[{name:"Grace",secret:"hidden"}]}:{rows:[{name:"Ada",secret:"hidden"}],nextCursor:"second"};}}],[],{db:()=>null,caller:()=>admin,locale:"zh-TW"});
  const ask=(path:string)=>fetch(new Request("https://app.test/admin/api"+path),{});
  expect((await(await ask("/webmcp"))!.json()).tools[0]).toMatchObject({description:"人員",title:"團隊"});
  const response=(await ask("/views/people/export"))!;
@@ -111,9 +111,9 @@ test("WebMCP localizes declarations and View export validates before streaming",
 
 test("handler-less WebMCP dispatch accepts omitted and undefined handlers", async () => {
  const {webmcpRoutes}=await import("../../src/server/webmcp.js");
- const tools: import("@aotter/mantle/mcp").Tool<null>[]=[{name:"plain",surface:"staff",description:"Plain SQL",inputSchema:{},validate:raw=>raw as Record<string,unknown>,run:async()=>({results:[[{reqStatus:"submitted"}]]})}];
+ const tools: import("@aotter/mantle/mcp").Tool<null>[]=[{name:"plain",surface:"admin",description:"Plain SQL",inputSchema:{},validate:raw=>raw as Record<string,unknown>,run:async()=>({results:[[{reqStatus:"submitted"}]]})}];
  for(const routes of [webmcpRoutes({tools:[{name:"plain"}]},tools),webmcpRoutes({tools:[{name:"plain"}]},tools,undefined)]) {
-  const ask=admin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>null,caller:()=>staff,routes});
+  const ask=createAdmin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>null,caller:()=>admin,routes});
   const response=await ask(new Request("https://example.test/admin/api/webmcp/plain",{method:"POST",headers:{origin:"https://example.test","content-type":"application/json"},body:"{}"}),{});
   expect(response?.status).toBe(200);
   expect(await response!.json()).toEqual({output:{results:[[{reqStatus:"submitted"}]]}});

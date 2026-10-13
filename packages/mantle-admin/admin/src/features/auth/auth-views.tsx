@@ -73,7 +73,7 @@ export function AccessDeniedView({
       </CardHeader>
       <CardContent className="text-center">
         <p className="mb-1 text-sm text-muted-foreground">
-          {t(language, "auth.accessDenied.noStaff")}
+          {t(language, "auth.accessDenied.noAdmin")}
         </p>
         <p className="mb-6 text-sm text-muted-foreground">
           {t(language, "auth.accessDenied.askOwner")}
@@ -269,7 +269,7 @@ export function OAuthConsentView(): React.ReactElement {
   );
 }
 
-/** Members can manage their own grants without access to staff Admin APIs. */
+/** Members can manage their own grants without access to admin Admin APIs. */
 export function ConnectedAppsPage(): React.ReactElement {
   return (
     <AuthCard action={<ThemeToggle />} wide>
