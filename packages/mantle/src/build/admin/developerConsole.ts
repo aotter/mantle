@@ -6,12 +6,12 @@
 import { mcpTools, resolveMantleRef, type AuthPredicate, type AuthorizationRequirements, type JsonSchema, type RuntimePlan, type SqlNode } from "../spec/domain/index.js";
 import { procedureFlow, sqlLogic } from "./procedureFlow.js";
 
-type Audience = "public" | "members" | "staff" | "system" | "api-clients";
+type Audience = "public" | "members" | "admin" | "system" | "api-clients";
 
 /** Who a `requires` admits, as the console groups it; null is anyone. */
 function audienceOf(requires: AuthorizationRequirements | undefined): Audience | null {
   const all: readonly AuthPredicate[] = requires?.auth?.all ?? [];
-  if (all.some((p) => typeof p === "object" && "ctx.staff" in p)) return "staff";
+  if (all.some((p) => p === "ctx.admin" || typeof p === "object" && "ctx.admin" in p)) return "admin";
   if (all.includes("ctx.user")) return "members";
   if (all.some((p) => p === "ctx.auth" || (typeof p === "object" && "ctx.auth.scope" in p))) return "api-clients";
   return null;
@@ -61,9 +61,9 @@ export function developerConsole(plan: RuntimePlan) {
   }));
   const triggers = Object.entries(plan.triggers).sort(([a], [b]) => a.localeCompare(b)).map(([name, t]) => ({
     name, target: t.procedure, source: t.source, manifest: t,
-    audience: (t.source.kind === "lifecycle" || t.source.kind === "schedule" ? "system" : t.source.kind === "mcp" && t.source.surface === "staff" ? "staff" : procedureAudience(t.procedure)) as Audience,
+    audience: (t.source.kind === "lifecycle" || t.source.kind === "schedule" ? "system" : t.source.kind === "mcp" && t.source.surface === "admin" ? "admin" : procedureAudience(t.procedure)) as Audience,
   }));
-  const viewAudience = (v: RuntimePlan["views"][string]): Audience => (v.surface === "internal" ? "system" : v.surface === "staff" ? "staff" : audienceOf(v.requires) ?? "public");
+  const viewAudience = (v: RuntimePlan["views"][string]): Audience => (v.surface === "internal" ? "system" : v.surface === "admin" ? "admin" : audienceOf(v.requires) ?? "public");
 
   const relation = (id: string, kind: string, sourceId: string, targetId: string, at: string, value: string) => ({ id, kind, sourceId, targetId, pointer: at, value });
   const relations = [
@@ -89,8 +89,8 @@ export function developerConsole(plan: RuntimePlan) {
     ]),
   ].sort((a, b) => a.id.localeCompare(b.id));
 
-  const callable = (["public", "staff"] as const).flatMap((surface) => mcpTools(plan, surface).map((tool) => ({
-    kind: tool.kind, name: tool.name, target: tool.source, surface, audience: surface === "staff" ? "staff" : audienceOf(tool.requires) ?? "public",
+  const callable = (["public", "admin"] as const).flatMap((surface) => mcpTools(plan, surface).map((tool) => ({
+    kind: tool.kind, name: tool.name, target: tool.source, surface, audience: surface === "admin" ? "admin" : audienceOf(tool.requires) ?? "public",
     title: tool.title ?? null, description: tool.description, input: tool.inputSchema, output: tool.outputSchema ?? null,
     trigger: tool.kind === "procedure" ? Object.entries(plan.triggers).find(([, t]) => t.procedure === tool.source && t.source.kind === "mcp" && t.source.surface === surface)?.[0] ?? null : null,
   })));

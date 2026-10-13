@@ -1,4 +1,4 @@
-/** The transactional-email port (Better Auth email OTP and magic link, staff invitations). The sender decides how to branch on `locale`; `category` names the template lane. */
+/** The transactional-email port (Better Auth email OTP and magic link, admin invitations). The sender decides how to branch on `locale`; `category` names the template lane. */
 export interface EmailSender {
   send(args: EmailSendArgs): Promise<void>;
 }
@@ -40,7 +40,7 @@ export function signInLinkEmail(url: string): EmailContent {
   ]);
 }
 
-export function staffInvitationEmail(role: string, signInUrl: string): EmailContent {
+export function adminInvitationEmail(role: string, signInUrl: string): EmailContent {
   return englishEmail("You have been invited to Mantle", [
     `You now have ${role} access to Mantle.`,
     "Sign in with this email address to accept the invitation:",

@@ -13,7 +13,7 @@ const app: McpApps = { resources: [{
   html: () => loadAppHtml(), renders: ['records'],
 }] };
 const handler = mcp({ db, caller, apps: {
-  public: app, staff: [adminMcpApps(adminOptions), staffApp],
+  public: app, admin: [adminMcpApps(adminOptions), adminApp],
 } });
 ```
 

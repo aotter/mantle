@@ -7,7 +7,7 @@ import { t } from "../app/i18n";
 import { queryClient } from "../app/query-client";
 import { adminWebMcpQueryOptions } from "../lib/queries";
 import { isAdminPreview } from "../app/frame-policy";
-import { adminPath, callStaffTool, resultPath, type AdminModelContext, type AdminToolCatalog } from "../lib/admin-tools";
+import { adminPath, callAdminTool, resultPath, type AdminModelContext, type AdminToolCatalog } from "../lib/admin-tools";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@aotter/mantle-ui/kit";
 
@@ -27,14 +27,14 @@ export function WebMcpControl(): React.ReactElement | null {
       const execute = async (name: string, input: Record<string, unknown>, signal = controller.signal, navigation = true) => {
         signal.throwIfAborted();
         if (!input || typeof input !== "object" || Array.isArray(input)) throw new TypeError("Tool input must be an object.");
-        if (!tools.some(tool => tool.name === name)) throw new TypeError("Unknown staff tool.");
+        if (!tools.some(tool => tool.name === name)) throw new TypeError("Unknown admin tool.");
         if (name === "admin_get_context") return { path: location.pathname + location.search, tools };
         if (name === "admin_navigate") {
           const path = adminPath(input.path);
           navigate(path);
           return { path };
         }
-        const { result, output } = await callStaffTool(name, input, signal);
+        const { result, output } = await callAdminTool(name, input, signal);
         await queryClient.invalidateQueries();
         const path = resultPath(catalog, name, output);
         if (navigation && path) navigate(path);

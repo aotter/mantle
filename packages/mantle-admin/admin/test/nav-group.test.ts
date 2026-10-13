@@ -35,39 +35,39 @@ describe("member navigation", () => {
   it("uses records navigation unless publishing is explicitly declared", () => {
     const base = { lifecycle: "operational" as const, exportFields: [], name: "notes", title: "Notes", description: null, parent: null, localized: false, hasTranslations: false };
     Reflect.deleteProperty(base, "lifecycle");
-    const missing = buildNavGroups([base], [], "en", null, "staff");
+    const missing = buildNavGroups([base], [], "en", null, true);
     expect(missing.find(group => group.title === "Records")?.items).toEqual([expect.objectContaining({url: "/admin/c/notes"})]);
     expect(JSON.stringify(missing)).not.toMatch(/\?status=/);
-    const publishing = buildNavGroups([{...base, lifecycle: "publishing"}], [], "en", null, "staff");
+    const publishing = buildNavGroups([{...base, lifecycle: "publishing"}], [], "en", null, true);
     expect(JSON.stringify(publishing)).toContain("?status=draft");
   });
 
-  const urlsFor = (role: "staff" | null) =>
-    buildNavGroups([], [], "en", null, role)
+  const urlsFor = (admin: boolean) =>
+    buildNavGroups([], [], "en", null, admin)
       .flatMap(({ items }) => items)
       .flatMap((item) => "url" in item ? [item.url] : []);
 
-  it("shows management to staff and never grants it to a member", () => {
-    expect(urlsFor("staff")).toEqual(expect.arrayContaining(["/admin/members", "/admin/staff"]));
-    expect(urlsFor(null)).not.toContain("/admin/members");
-    expect(urlsFor(null)).not.toContain("/admin/staff");
+  it("shows management to admin and never grants it to a member", () => {
+    expect(urlsFor(true)).toEqual(expect.arrayContaining(["/admin/members", "/admin/admin"]));
+    expect(urlsFor(false)).not.toContain("/admin/members");
+    expect(urlsFor(false)).not.toContain("/admin/admin");
   });
 
   it("hides settings a deployment did not turn on, and keeps Media, whose page is the setup guide", () => {
     const urls = (capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean }) =>
-      buildNavGroups([], [], "en", null, "staff", false, capabilities).flatMap(({ items }) => items).flatMap((item) => "url" in item ? [item.url] : []);
+      buildNavGroups([], [], "en", null, true, false, capabilities).flatMap(({ items }) => items).flatMap((item) => "url" in item ? [item.url] : []);
     expect(urls({ siteSettings: false, media: false, invitationEmail: false, statistics: false })).not.toContain("/admin/settings");
     expect(urls({ siteSettings: false, media: false, invitationEmail: false, statistics: false })).toContain("/admin/media");
     expect(urls()).toEqual(expect.arrayContaining(["/admin/media", "/admin/settings"]));
   });
 
   it("does not create a standalone operations destination", () => {
-    const groups = buildNavGroups([], [], "en", null, "staff");
+    const groups = buildNavGroups([], [], "en", null, true);
     expect(JSON.stringify(groups)).not.toContain("/admin/ops");
   });
 
   it("keeps developer navigation out of Content Admin", () => {
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, "staff"))).not.toContain("/admin/dev");
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, true))).not.toContain("/admin/dev");
     const items = buildDeveloperNavGroups("en")[0]?.items ?? [];
     expect(items).toEqual([
       expect.objectContaining({ items: [expect.objectContaining({ url: "/admin/dev/overview/flow" }), expect.objectContaining({ url: "/admin/dev/overview/relationships" })] }),
@@ -81,18 +81,18 @@ describe("member navigation", () => {
     ]);
   });
 
-  it("lists every View of the manifest under Reports: the server lists staff Views only", () => {
+  it("lists every View of the manifest under Reports: the server lists admin Views only", () => {
     const view = (name: string): ViewManifestInfo => ({ name, title: null, description: null, input: null, list: { columns: [], searchFields: [], filterFields: [] }, columns: {} });
-    const groups = buildNavGroups([], [view("staff-queue"), view("sales")], "en", null, "staff");
+    const groups = buildNavGroups([], [view("admin-queue"), view("sales")], "en", null, true);
     expect(groups.find(({ title }) => title === "Reports")?.items).toEqual([
-      expect.objectContaining({ url: "/admin/views/staff-queue" }),
+      expect.objectContaining({ url: "/admin/views/admin-queue" }),
       expect.objectContaining({ url: "/admin/views/sales" }),
     ]);
   });
 
   it("shows Operations only when a global operation exists", () => {
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, "staff"))).not.toContain("/admin/operations");
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, "staff", true))).toContain("/admin/operations");
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, true))).not.toContain("/admin/operations");
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, true, true))).toContain("/admin/operations");
   });
 
   it("includes standalone folded children in main Nav without dropping parent collections", () => {
@@ -119,7 +119,7 @@ describe("member navigation", () => {
         parentCollection: "organizations",
       }),
       collection("members", "operational", { collection: "organizations", parentField: "id", childField: "organizationId" }),
-    ], [], "en", null, "staff");
+    ], [], "en", null, true);
     const urls = (groups.find(({ title }) => title === "Records")?.items ?? [])
       .flatMap((item) => "url" in item ? [item.url] : item.items.map((link) => link.url));
     expect(urls).toEqual(expect.arrayContaining(["/admin/c/organizations", "/admin/c/projects"]));
@@ -130,30 +130,30 @@ describe("member navigation", () => {
 
 describe("extension pages and settings in the sidebar", () => {
   const extension = (contributes: Partial<AdminExtensionInfo["contributes"]>): AdminExtensionInfo => ({
-    id: "staff-access", title: { en: "Staff access", "zh-TW": "Staff 權限" }, module: "/x/access.js",
+    id: "admin-access", title: { en: "Admin access", "zh-TW": "Admin 權限" }, module: "/x/access.js",
     contributes: { pages: [], settings: [], actions: [], panels: [], fields: [], ...contributes },
   });
 
   it("lists settings first, then pages that ask for a place in order, localized, under More", () => {
-    const groups = buildNavGroups([], [], "zh-TW", null, "staff", false, undefined, [extension({
+    const groups = buildNavGroups([], [], "zh-TW", null, true, false, undefined, [extension({
       pages: [
-        { id: "audit", title: "Audit", role: "staff", nav: { group: "more", order: 2 } },
-        { id: "grants", title: { en: "Grants", "zh-TW": "授權" }, role: "staff", nav: { group: "more", order: 1 } },
-        { id: "hidden", title: "Hidden", role: "staff" },
+        { id: "audit", title: "Audit", role: "admin", nav: { group: "more", order: 2 } },
+        { id: "grants", title: { en: "Grants", "zh-TW": "授權" }, role: "admin", nav: { group: "more", order: 1 } },
+        { id: "hidden", title: "Hidden", role: "admin" },
       ],
-      settings: [{ id: "policy", title: { en: "Policy", "zh-TW": "政策" }, role: "staff", schema: { type: "object", properties: {} } }],
+      settings: [{ id: "policy", title: { en: "Policy", "zh-TW": "政策" }, role: "admin", schema: { type: "object", properties: {} } }],
     })]);
     const more = groups[groups.length - 1]!;
     expect(more.items.flatMap((item) => "url" in item && item.url?.startsWith("/admin/x/") ? [[item.title, item.url]] : [])).toEqual([
-      ["政策", "/admin/x/staff-access/policy"],
-      ["授權", "/admin/x/staff-access/grants"],
-      ["Audit", "/admin/x/staff-access/audit"],
+      ["政策", "/admin/x/admin-access/policy"],
+      ["授權", "/admin/x/admin-access/grants"],
+      ["Audit", "/admin/x/admin-access/audit"],
     ]);
   });
 
   it("adds nothing when the server lists no extensions (or is older and sends none)", () => {
-    const before = buildNavGroups([], [], "en", null, "staff");
-    expect(buildNavGroups([], [], "en", null, "staff", false, undefined, [])).toEqual(before);
-    expect(buildNavGroups([], [], "en", null, "staff", false, undefined, [extension({ panels: [{ id: "p", title: "P", role: "staff", target: "home/v1" }] })])).toEqual(before);
+    const before = buildNavGroups([], [], "en", null, true);
+    expect(buildNavGroups([], [], "en", null, true, false, undefined, [])).toEqual(before);
+    expect(buildNavGroups([], [], "en", null, true, false, undefined, [extension({ panels: [{ id: "p", title: "P", role: "admin", target: "home/v1" }] })])).toEqual(before);
   });
 });

@@ -16,19 +16,19 @@ const EMPTY_VIEW_LIST: ViewListPresentation = {
   filterFields: [],
 };
 
-/** Validate the deliberately small Admin list contract for staff Views. */
+/** Validate the deliberately small Admin list contract for admin Views. */
 export function checkViewAdminUi(view: ViewManifest): {
   readonly list: ViewListPresentation;
   readonly problems: readonly SchemaAdminUiProblem[];
 } {
   const uiSchema = view.spec.uiSchema;
   if (uiSchema === undefined) return { list: EMPTY_VIEW_LIST, problems: [] };
-  if (view.spec.surface !== "staff") {
+  if (view.spec.surface !== "admin") {
     return { list: EMPTY_VIEW_LIST, problems: [problem(
       "/spec/uiSchema",
       uiSchema,
-      "Admin UI configuration on a surface: staff View",
-      "View.spec.uiSchema is only supported for surface: staff Views.",
+      "Admin UI configuration on a surface: admin View",
+      "View.spec.uiSchema is only supported for surface: admin Views.",
     )] };
   }
   if (!uiSchema || typeof uiSchema !== "object" || Array.isArray(uiSchema)) {

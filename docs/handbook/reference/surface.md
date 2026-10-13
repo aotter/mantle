@@ -9,7 +9,7 @@
   input and responses contain its result. Errors remain
   `{ error: { code, message, path } }` with the 0.2 status. Cookie sessions cannot
   mutate across origins.
-- MCP retains public `POST /mcp`, staff `POST /mcp/staff`,
+- MCP retains public `POST /mcp`, admin `POST /mcp/admin`,
   snake-cased View names on each declared surface, and snake-cased Procedure
   names per MCP Trigger. Its SDK loads only through a request-time dynamic import.
 - HTTP/MCP Triggers declare exposure only. `mantle generate` refuses schedule
@@ -163,10 +163,10 @@ exact HTML candidate first and therefore performs at most two View queries.
 ## Mounting MCP
 
 Mount the generated `mcp({ db: env => env.DB, caller })` handler in the app's
-Fetch entry. It returns `undefined` outside `/mcp` and `/mcp/staff`. Install the
+Fetch entry. It returns `undefined` outside `/mcp` and `/mcp/admin`. Install the
 optional official `@modelcontextprotocol/server` peer when selecting MCP; its
 transport loads on the first matching request. Pass `handlers` when ref
-Procedures are declared, as for REST. Staff tools are listed only on the staff
+Procedures are declared, as for REST. Admin tools are listed only on the admin
 endpoint, and publishing visibility belongs to the generated SQL.
 
 The app resolves bearer tokens with `resolveCaller(request, auth, { audience:
@@ -181,10 +181,10 @@ The peer loads by dynamic import on the first matching `/mcp` request; if
 missing, that request fails at runtime. Publishing alone does not select MCP;
 on a selected
 surface its generated `publish_<schema>`, `unpublish_<schema>` and
-`archive_<schema>` tools use the same snake-case naming rule, are staff-only
+`archive_<schema>` tools use the same snake-case naming rule, are admin-only
 and take `{ id, expectedVersion }` through the shared generated validation.
 
-The generated staff allowlist is `staff`; the application supplies its own verified Caller. MCP bodies are limited
+`/mcp/admin` admits only admins: `isAdmin(caller)` must hold. Better Auth’s admin plugin `adminRoles` defines this layer (default `["admin"]`); the application supplies its verified Caller. MCP bodies are limited
 to 1 MiB (1,048,576 bytes). Resource metadata challenges use the origin of
 `request.url`; behind a proxy, the app must pass a Request with its public
 origin so the audience and metadata URL point to the client-visible service.
@@ -258,15 +258,15 @@ Unexpected surface failures log only a stable wire classification.
 MCP locale fallback reads only own locale entries, then English, then the first
 own entry; inherited property names never become titles or descriptions.
 
-### Staff media MCP tools
+### Admin media MCP tools
 
 With generated site configuration, `mcp({ db, caller, media: env => storage })`
-loads the media module only on a configured staff MCP request and
+loads the media module only on a configured admin MCP request and
 adds `get_media_upload_policy`, `create_media_upload`, `commit_media_upload`,
 `list_media_assets`, `get_media_asset`, `update_media_asset` and
-`delete_media_asset` to `/mcp/staff` only. `storage` is the same `MediaStorage`
+`delete_media_asset` to `/mcp/admin` only. `storage` is the same `MediaStorage`
 used by the Admin media library. Omitting `media` omits all seven tools.
-The OSS `staff` role can invoke them; cookie writes retain the origin check.
+Admins can invoke them; cookie writes retain the origin check.
 Generated boundary code checks each input and advertises the 0.2 schemas and
 read-only/destructive/open-world hints. Image bytes are PUT directly to the
 returned short-lived URLs with their required headers, then committed; bytes

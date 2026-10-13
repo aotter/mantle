@@ -6,7 +6,7 @@
  */
 
 export type LocalizedText = string | Readonly<Record<string, string>>;
-export type StaffRole = "staff";
+export type AdminRole = string;
 
 export interface AdminExtensionRecord { readonly schema: string; readonly id: string; readonly version?: number | string }
 export interface AdminExtensionSelection { readonly schema: string; readonly ids: readonly string[] }
@@ -35,7 +35,7 @@ export interface AdminExtensionContext {
   readonly apiBase: string;
   readonly language: string;
   readonly theme: "light" | "dark";
-  readonly caller: { readonly role: StaffRole | null };
+  readonly caller: { readonly role: AdminRole | null };
   readonly host: AdminExtensionHost;
   /** Record targets and record panels. */
   readonly record?: AdminExtensionRecord;

@@ -84,7 +84,7 @@ separately. The three-package preview is one Core SDK, the Admin product and the
 shared UI kit.
 Admin reads share generated whitelisted native View templates, writes use native
 Procedure fragments and generated checks. Ref operations retain typed `ctx.store`
-at request time. Verify member/frontend and staff/Admin OTP, tenant/privacy/TTL,
+at request time. Verify member/frontend and admin/Admin OTP, tenant/privacy/TTL,
 publishing, paging, statistics, exact OCC, ref effects and the actual console;
 never retry unknown 503 writes automatically. Read the installed Admin README
 for extensions, raw-body limits, CSP/assets, 22 languages and the developer workspace.

@@ -27,7 +27,7 @@ const REQUIRED_TRANSLATED_KEYS = new Set([
   "nav.operations",
   "nav.overview",
   "nav.reports",
-  "nav.staff",
+  "nav.admin",
 ]);
 
 const translatedKeys = Object.keys(STRINGS.en).filter((key) =>
@@ -40,11 +40,11 @@ const translatedKeys = Object.keys(STRINGS.en).filter((key) =>
 );
 
 describe("Required Admin translations", () => {
-  it("describes the one OSS staff role in every retained audience translation", () => {
-    for (const {value} of ADMIN_LANGUAGES) expect(t(value, "developer.graph.audienceDescription.staff")).toContain("staff");
-    expect(t("zh-CN", "staff.role.staff")).toBe("团队人员");
-    expect(t("zh-CN", "staff.role.staff.help")).toContain("团队权限");
-    expect(t("en", "staff.page.body")).not.toContain("Only site owners");
+  it("describes the admin layer in every retained audience translation", () => {
+    for (const {value} of ADMIN_LANGUAGES) expect(t(value, "developer.graph.audienceDescription.admin")).toMatch(/admin|amministr|管理|관리|مسؤول|مدیر|מנהל|beheerder|ผู้ดูแล|yönetici|адміністратор|администратор|quản trị/i);
+    expect(t("zh-CN", "admin.role.admin")).toBe("管理员");
+    expect(t("zh-CN", "admin.role.admin.help")).toContain("团队权限");
+    expect(t("en", "admin.page.body")).not.toContain("Only site owners");
   });
 
   for (const { value } of ADMIN_LANGUAGES) {

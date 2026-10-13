@@ -22,7 +22,7 @@ interface AppSidebarProps {
   user: {
     login: string | null;
     image: string | null;
-    role: "staff" | null;
+    role: string | null;
   };
 }
 

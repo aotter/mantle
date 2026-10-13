@@ -1,7 +1,7 @@
 import {test,expect} from "bun:test";
 import {nativePage,nativeText,nativeStatistics,entriesQuery,type NativeAdapter,type NativePageMode,type NativeCollection} from "../../src/server/native.js";
 import type {Caller} from "@aotter/mantle/contracts";
-const caller:Caller={kind:"user",subject:"tenant-a",role:"staff",scopes:[],credential:"session",credentialId:null,clientId:null};
+const caller:Caller={kind:"user",subject:"tenant-a",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null};
 test("native page uses Core tuple cursor, preserves binding positions and caps effective page",async()=>{
  const reads:{sql:string,values:unknown[]}[]=[];
  const adapter:NativeAdapter<null>={sqlite:false,values:{},param:n=>"$"+n,escapeLike:s=>s.replace(/[%_]/g,"\\$&"),read:(_db,sql,values)=>{reads.push({sql,values});return Array.from({length:3},(_,i)=>({_k0:i,_k1:"id"+i,_k2:i%2===0,title:"row"+i}));}};

@@ -5,9 +5,9 @@ Mount generated `mcp()` with the app's native handle and verified Caller resolve
 | Endpoint | Tools |
 | --- | --- |
 | `/mcp` | Public Views and Procedures exposed by public MCP Triggers |
-| `/mcp/staff` | Staff Views, staff Trigger Procedures, generated publishing transitions and selected product tools |
+| `/mcp/admin` | Admin Views, admin Trigger Procedures, generated publishing transitions and selected product tools |
 
-Names are snake-case; a View named `my-orders` becomes `my_orders`. Each call retains declared authorization, scoped/TTL/publication SQL and input checks. Staff tools require staff authority. Tool visibility and UI hints grant no authority. Cookie-session mutations retain origin checks.
+Names are snake-case; a View named `my-orders` becomes `my_orders`. Each call retains declared authorization, scoped/TTL/publication SQL and input checks. Admin tools require admin authority. Tool visibility and UI hints grant no authority. Cookie-session mutations retain origin checks.
 
 Views return structured `{ rows, nextCursor? }`. SQL Procedures retain native `{ results }`; application ref results remain app-owned. Selected boundaries redact native errors. Never retry an uncertain write automatically.
 

@@ -1,4 +1,3 @@
-import { STAFF_ROLES } from "../src/domain/visibility.js";
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { resolve } from "node:path";
@@ -17,12 +16,12 @@ test("SQLite public visibility composes through joins, LEFT JOINs, subqueries an
   const files = await generateOrThrow("bun-sqlite", await loadFixtureSources("publishing.yaml", "publishing-visibility.yaml"));
   const path = resolve(directory, "visibility"); await writeGenerated(path, files);
   const app = await import(resolve(path, "generated.ts")), db = new Database(":memory:"); db.exec(files["schema.sql"]!);
-  const staff = { kind: "system", reason: "test" }, anonymous = { kind: "anonymous" }, data = app.store(db, staff);
+  const admin = { kind: "system", reason: "test" }, anonymous = { kind: "anonymous" }, data = app.store(db, admin);
   try {
     const draft = await data.collection("posts").insert({ title: "Draft" }), published = await data.collection("posts").insert({ title: "Published" });
-    await app.procedures["posts.publish"](db, staff, { id: published.id, expectedVersion: 1 });
+    await app.procedures["posts.publish"](db, admin, { id: published.id, expectedVersion: 1 });
     for (const p of [draft, published]) await data.collection("anchors").insert({ postid: p.id });
-    for (const caller of [anonymous, staff]) {
+    for (const caller of [anonymous, admin]) {
       for (const name of ["posts-join", "posts-cte"]) {
         const [row] = await app.views[name](db, caller, {});
         expect(Number(row.count)).toBe(1);
@@ -36,11 +35,11 @@ test("SQLite public visibility composes through joins, LEFT JOINs, subqueries an
     expect((await app.views["posts-subquery"](db, anonymous, {})).map((r: any) => r.id)).toEqual([published.id]);
     expect(Number((await app.views["posts-count"](db, anonymous, {}))[0].count)).toBe(1);
     expect((await app.views["posts-time"](db, anonymous, {}))[0].published_at).toMatch(/Z$/);
-    for (const role of [null, "staff", "owner", "custom-role"]) {
-      const caller = { kind: "user", subject: "reader", role, scopes: [], credential: "session", credentialId: null, clientId: null };
-      const view = await app.views["posts-staff"](db, caller, {}), store = await app.store(db, caller).collection("posts").find();
+    for (const role of [null, "admin", "owner", "custom-role"]) {
+      const caller = { kind: "user", subject: "reader", role, admin: role === "admin", scopes: [], credential: "session", credentialId: null, clientId: null };
+      const view = await app.views["posts-admin"](db, caller, {}), store = await app.store(db, caller).collection("posts").find();
       expect(view.map((r: any) => r.id)).toEqual(store.rows.map((r: any) => r.id));
-      expect(view.length).toBe(role === "staff" ? 2 : 1);
+      expect(view.length).toBe(role === "admin" ? 2 : 1);
     }
   } finally { db.close(); }
 });
@@ -71,19 +70,17 @@ spec:
   await expect(generateOrThrow("bun-sqlite", [{ sourceId: "operational.yaml", text }])).rejects.toThrow(/SQL_COLUMN/);
 });
 
-test("Core and Store render the staff values from policy data", async () => {
-  const roles = STAFF_ROLES as unknown as string[], original = [...roles];
+test("Core and Store read only the admin layer for custom role names", async () => {
   const db = new Database(":memory:");
   try {
-    roles.splice(0, roles.length, "reviewer");
     const files = await generateOrThrow("bun-sqlite", await loadFixtureSources("publishing.yaml"));
     const path = resolve(directory, "policy-data"); await writeGenerated(path, files);
     const app = await import(resolve(path, "generated.ts")); db.exec(files["schema.sql"]!);
     await app.store(db, { kind: "system", reason: "test" }).collection("posts").insert({ title: "Draft" });
-    for (const [role, expected] of [["reviewer", 1], ["staff", 0]] as const) {
-      const caller = { kind: "user", subject: "reader", role, scopes: [], credential: "session", credentialId: null, clientId: null };
-      expect((await app.views["posts-staff"](db, caller, {})).length).toBe(expected);
+    for (const [role, expected] of [["reviewer", 1], ["admin", 0]] as const) {
+      const caller = { kind: "user", subject: "reader", role, admin: role === "reviewer", scopes: [], credential: "session", credentialId: null, clientId: null };
+      expect((await app.views["posts-admin"](db, caller, {})).length).toBe(expected);
       expect(await app.store(db, caller).collection("posts").count()).toBe(expected);
     }
-  } finally { roles.splice(0, roles.length, ...original); db.close(); }
+  } finally { db.close(); }
 });

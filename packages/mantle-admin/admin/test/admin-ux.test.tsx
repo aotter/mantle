@@ -11,14 +11,14 @@ import { globalOperations } from "../src/features/ops/operations-view";
 import { buildNavGroups } from "../src/layout/authenticated-layout";
 import { loadLanguage, STRINGS } from "../src/app/i18n";
 import { ADMIN_LANGUAGES, PreferencesProvider } from "../src/app/preferences";
-import type { Collection, StaffOperation, DeveloperViewModel } from "../src/lib/types";
+import type { Collection, AdminOperation, DeveloperViewModel } from "../src/lib/types";
 
-const operation: StaffOperation = {name: "approve", title: null, description: null, input: {type: "object"}, uiSchema: null, triggers: ["mcp"], rowBindings: [], interactions: [], preconditions: [{field: "reqStatus", values: ["submitted", "reopened"]}]};
+const operation: AdminOperation = {name: "approve", title: null, description: null, input: {type: "object"}, uiSchema: null, triggers: ["mcp"], rowBindings: [], interactions: [], preconditions: [{field: "reqStatus", values: ["submitted", "reopened"]}]};
 describe("acceptance Admin UX", () => {
-  it("shows the Operations sidebar destination exactly when an unplaced staff action remains", () => {
-    const actions: StaffOperation[] = [{...operation, interactions: [{collection: "requisitions", bind: [], mutates: true}]}, {...operation, name: "create", uiSchema: {collectionAction: "requisitions"}}, {...operation, name: "notify"}];
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, "staff", globalOperations(actions).length > 0))).toContain("/admin/operations");
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, "staff", globalOperations(actions.slice(0, 2)).length > 0))).not.toContain("/admin/operations");
+  it("shows the Operations sidebar destination exactly when an unplaced admin action remains", () => {
+    const actions: AdminOperation[] = [{...operation, interactions: [{collection: "requisitions", bind: [], mutates: true}]}, {...operation, name: "create", uiSchema: {collectionAction: "requisitions"}}, {...operation, name: "notify"}];
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, true, globalOperations(actions).length > 0))).toContain("/admin/operations");
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, true, globalOperations(actions.slice(0, 2)).length > 0))).not.toContain("/admin/operations");
   });
   it.each(["internal", "public"] as const)("explains unavailable %s Views instead of displaying route errors", surface => {
     const model = {name: "unavailable", surface, query: {kind: "sql", statement: "SELECT id FROM records"}} as DeveloperViewModel;

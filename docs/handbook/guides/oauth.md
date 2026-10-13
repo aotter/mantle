@@ -86,7 +86,7 @@ non-CIMD/non-reference clients older than 90 days; it runs no boot-time work.
 
 When configuring session secondary storage, set `verification.storeInDatabase: true` and `session.storeSessionInDatabase: true`: live grants and durable DPoP single-use reservations must use the database, never a non-atomic session KV cache.
 
-Auth routing also guards Better Auth’s raw `/api/auth/admin/*` endpoints (including percent-encoded admin paths): only a fresh primary-database `staff` cookie session may enter, and mutations require same origin. A stale staff snapshot in session KV cannot bypass demotion, ban or session deletion. App-owned auth mounts can reuse `guardAuthAdminRequest` from `@aotter/mantle/auth/admin` with a resolver that reads current authority.
+Auth routing also guards Better Auth’s raw `/api/auth/admin/*` endpoints (including percent-encoded admin paths): only a fresh primary-database `admin` cookie session may enter, and mutations require same origin. A stale admin snapshot in session KV cannot bypass demotion, ban or session deletion. App-owned auth mounts can reuse `guardAuthAdminRequest` from `@aotter/mantle/auth/admin` with a resolver that reads current authority.
 
 Use primary database sessions without session secondaryStorage as the simple
 safe configuration. If optional session caching is enabled, use the

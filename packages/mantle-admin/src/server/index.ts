@@ -1,15 +1,15 @@
-/** Optional Admin API: generated data and native calls, with one fresh staff session per request. */
-import { ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller } from "@aotter/mantle/contracts";
+/** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
+import { isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller } from "@aotter/mantle/contracts";
 import { nativeRest, body, type Route as RestRoute } from "@aotter/mantle/rest";
 import { sessionUserOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
 import { convert, type Conversions } from "@aotter/mantle/surface";
 import { siteInfo, type MantleSite, type MediaStorage } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
-export type Staff = Extract<Caller, {
+export type Admin = Extract<Caller, {
     kind: "user";
 }> & {
-    readonly role: "staff";
+    readonly admin: true;
     readonly credential: "session";
 };
 export interface Context<Env, Database> {
@@ -17,7 +17,7 @@ export interface Context<Env, Database> {
     url: URL;
     env: Env;
     db: Database;
-    caller: Staff;
+    caller: Admin;
     params: Record<string, string>;
     input?: Record<string, unknown>;
 }
@@ -51,8 +51,8 @@ export interface IdentityMethods {
         previousCursor: string | null;
         nextCursor: string | null;
     }>;
-    setUserRole(id: string, role: "staff" | null): Promise<boolean>;
-    inviteUser(email: string): Promise<{
+    setUserRole(id: string, role: string | null): Promise<boolean>;
+    inviteUser(email: string, role?: string): Promise<{
         kind: "created" | "exists";
         id: string;
     }>;
@@ -75,12 +75,12 @@ export interface Options<Env, Database> {
     identity?: {
         directory?: (context: Context<Env, Database>) => Partial<IdentityMethods> | Promise<Partial<IdentityMethods>>;
         roles?: {
-            sendStaffInvitation?: (email: string, role: "staff") => Promise<void>;
+            sendAdminInvitation?: (email: string, role: string) => Promise<void>;
         };
     };
     mcpEndpoints?: {
         public?: string | null;
-        staff?: string | null;
+        admin?: string | null;
     };
     extensions?: readonly unknown[];
     routes?: readonly Route<Env, Database>[];
@@ -139,8 +139,8 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     const localized = (value: unknown) => typeof value === "string" ? value : value && typeof value === "object" ? (value as Record<string, string>)[options.locale ?? "en"] ?? (value as Record<string, string>).en ?? Object.values(value)[0] : undefined;
     const webmcp = metadata.webmcp as { tools?: readonly Record<string, unknown>[] };
     const catalogue = { ...webmcp, tools: webmcp.tools?.map(tool => ({ ...tool, ...(tool.title ? { title: localized(tool.title) } : {}), description: localized(tool.description) ?? localized(tool.title) ?? tool.name })) };
-    const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? sessionUserOf(caller); return { userId: caller.subject, role: caller.role, login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
-    const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendStaffInvitation, mcpEndpoints: options.mcpEndpoints, extensions: options.extensions }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
+    const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? sessionUserOf(caller); return { userId: caller.subject, role: caller.role, admin: true, login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
+    const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendAdminInvitation, mcpEndpoints: options.mcpEndpoints, extensions: options.extensions }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
     const viewPage = async (c: Context<Env, Database>, preview = false) => {
         const view = (preview ? options.developerViews ?? views : views).find(v => v.name === c.params.name && v.allows(c.caller));
         if (!view) { if (preview) return { unavailable: true }; throw missing(); }
@@ -180,7 +180,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 const operation = operations.find(p => p.name === c.params.name && p.allows(c.caller));
                 if (!operation)
                     throw missing();
-                return { ok: true, output: await callTool({ ...operation, surface: "staff", description: "", inputSchema: {} }, await json(c), () => c.db, c.caller, options.handlers as Handlers) };
+                return { ok: true, output: await callTool({ ...operation, surface: "admin", description: "", inputSchema: {} }, await json(c), () => c.db, c.caller, options.handlers as Handlers) };
             } },
         ...(metadata.developerConsole === undefined ? [] : [{ method: "GET", path: "/developer-console", run: () => metadata.developerConsole }]),
         ...(options.routes ?? []),
@@ -196,7 +196,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             return encodeURIComponent(segment).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         }).join("/");
         return { method: route.method, pattern: new RegExp("^/admin/api" + path + "/?$"), keys, bodyLimit: route.bodyLimit, rawBody: route.rawBody, handle: async (request, env, getDb, caller, params, _handlers, input) => {
-                const result = await route.run({ request, url: new URL(request.url), env, get db() { return getDb(); }, caller: caller as Staff, params, input });
+                const result = await route.run({ request, url: new URL(request.url), env, get db() { return getDb(); }, caller: caller as Admin, params, input });
                 if (!(result instanceof Response))
                     return result;
                 const headers = new Headers(result.headers);
@@ -213,8 +213,8 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             const caller = await surfaceCaller(request, env, options.caller);
             if (caller.kind === "anonymous")
                 throw new ContractError("UNAUTHENTICATED", "Sign in to use Admin.", "admin");
-            if (caller.kind !== "user" || caller.role !== "staff" || caller.credential !== "session")
-                return Response.json({ error: { code: "AUTH_DENIED", message: "Admin needs a signed-in staff session.", path: "admin" }, minimumRole: "staff" }, { status: 403, headers: { "cache-control": "private, no-store" } });
+            if (!isAdmin(caller) || caller.credential !== "session")
+                return Response.json({ error: { code: "AUTH_DENIED", message: "Admin needs a signed-in admin session.", path: "admin" }, minimumRole: "admin" }, { status: 403, headers: { "cache-control": "private, no-store" } });
             checkOrigin(request, caller);
             try {
                 decodeURIComponent(path);

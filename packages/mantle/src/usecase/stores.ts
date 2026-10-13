@@ -6,7 +6,7 @@
  * Column names, value types, writable columns and `orderBy` are TypeScript types only: nothing at runtime knows them.
  */
 import { NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, type RuntimePlan } from "../build/compiler.js";
-import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
+import { nextMode } from "../domain/visibility.js";
 import { declaredType, inputType, nativeType } from "../domain/columns.js";
 import { q } from "../domain/entry.js";
 import { expand, SCOPE, TTL, type Fact, type Rules } from "../kernel/store.js";
@@ -17,7 +17,7 @@ const SCALAR = new Set(["text", "real", "float8", "integer", "int4", "int8", "bo
 /** Core's own rules for a Schema, in the shape of `Rules` without the id expression (a delete's lock is compared separately). */
 const core = (s: Parameters<typeof rowPolicy>[0], schemas?: RuntimePlan["schemas"]) => {
   const update = writePolicy(s, "update", { lock: true });
-  return { caller: rowPolicy(s, nextMode("caller"), STAFF_ROLES, schemas), trusted: rowPolicy(s, "trusted", STAFF_ROLES, schemas), fills: writePolicy(s, "insert").fills, sets: update.sets, lock: update.lock! };
+  return { caller: rowPolicy(s, nextMode("caller"), schemas), trusted: rowPolicy(s, "trusted", schemas), fills: writePolicy(s, "insert").fills, sets: update.sets, lock: update.lock! };
 
 };
 const probe = { scope: SCOPE, ttl: TTL, ttlSeconds: 0, publishing: true };
@@ -43,7 +43,7 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
       ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const } : {}),
       ...(ts.length ? { ts } : {}), ...(dates.length ? { d: dates } : {}),
       ...(s.search?.length ? { search: s.search } : {}),
-      ...(parent ? { parent: { on: s.translates!.on.toLowerCase(), ...(parent.scope ? {scope:[parent.scope,s.scope!] as const} : {}), table: s.translates!.parent.toLowerCase(), visible: rowPolicy(s,nextMode("caller"),STAFF_ROLES,schemas).find(t=>t[1]==="parent")!, caller: rowPolicy(parent,nextMode("caller"),STAFF_ROLES,schemas), trusted: rowPolicy(parent,"trusted",STAFF_ROLES,schemas), fields: inherited, ts: inherited.filter(c=>parent.fields[c]==="timestamptz"), d: inherited.filter(c=>parent.fields[c]==="date") } } : {}),
+      ...(parent ? { parent: { on: s.translates!.on.toLowerCase(), ...(parent.scope ? {scope:[parent.scope,s.scope!] as const} : {}), table: s.translates!.parent.toLowerCase(), visible: rowPolicy(s,nextMode("caller"),schemas).find(t=>t[1]==="parent")!, caller: rowPolicy(parent,nextMode("caller"),schemas), trusted: rowPolicy(parent,"trusted",schemas), fields: inherited, ts: inherited.filter(c=>parent.fields[c]==="timestamptz"), d: inherited.filter(c=>parent.fields[c]==="date") } } : {}),
     };
     // the shared rules, with this Schema's scope and TTL put in, are Core's rules for it: or the runtime would enforce something else
     const expected = q([core(s, schemas), writePolicy(s, "delete", { lock: true }).lock]), got = q([expand(rules, fact), rules.lock]);

@@ -174,7 +174,7 @@ export function checkTriggerRefs(
           severity: "error",
           path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
           value: procName,
-          expected: "a Procedure without user or staff authorization requirements",
+          expected: "a Procedure without user or admin authorization requirements",
           message: `Scheduled Trigger '${t.metadata.name}' cannot satisfy '${procName}' authorization with a system caller.`,
         }));
       }

@@ -23,7 +23,7 @@ const view = (sql: string) => `---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: v }
-spec: { surface: staff, sql: "${sql}", input: { type: object, properties: { q: { type: string } } } }
+spec: { surface: admin, sql: "${sql}", input: { type: object, properties: { q: { type: string } } } }
 `;
 const procedure = (sql: string) => `---
 apiVersion: cms.mantle.aotter.net/v2
@@ -135,7 +135,7 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
 
   it("carries what Admin and MCP show, unchanged, and a plan without it is unchanged", async () => {
     const plain = await compilePlan({ sources: [{ sourceId: "m", text: SCHEMA + view("SELECT id FROM notes") }] });
-    const rich = await compilePlan({ sources: [{ sourceId: "m", text: SCHEMA.replace("title: Notes", "title: { en: Notes, zh-TW: 筆記 }\n  description: My notes\n  localized: false\n  uiSchema: { list: { columns: [body] } }") + view("SELECT id FROM notes").replace("surface: staff,", "surface: staff, title: Mine, description: Mine only, uiSchema: { list: { columns: [id] } },") }] });
+    const rich = await compilePlan({ sources: [{ sourceId: "m", text: SCHEMA.replace("title: Notes", "title: { en: Notes, zh-TW: 筆記 }\n  description: My notes\n  localized: false\n  uiSchema: { list: { columns: [body] } }") + view("SELECT id FROM notes").replace("surface: admin,", "surface: admin, title: Mine, description: Mine only, uiSchema: { list: { columns: [id] } },") }] });
     if (!plain.ok || !rich.ok) throw new Error("compile");
     expect(plain.plan.schemas.notes).toMatchObject({ name: "notes", title: "Notes" });
     expect(plain.plan.schemas.notes).not.toHaveProperty("uiSchema");
@@ -151,7 +151,7 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
   });
 
   it("refuses a uiSchema.list.searchFields or filterFields name the View's SELECT does not output (ADR-0032 decision 5)", async () => {
-    const withList = (list: string) => SCHEMA + view("SELECT id, body AS text FROM notes ORDER BY id").replace("surface: staff,", `surface: staff, uiSchema: { list: { ${list} } },`);
+    const withList = (list: string) => SCHEMA + view("SELECT id, body AS text FROM notes ORDER BY id").replace("surface: admin,", `surface: admin, uiSchema: { list: { ${list} } },`);
     expect((await compile(withList("searchFields: [text], filterFields: [ID]"))).ok).toBe(true);
     const bad = await compile(withList("searchFields: [body], filterFields: [ownerId]"));
     expect(bad.ok).toBe(false);
@@ -159,7 +159,7 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
   });
 
   it("refuses a uiSchema.list.cells key the View's SELECT does not output (ADR-lite 1376)", async () => {
-    const withCells = (cells: string) => SCHEMA + view("SELECT id, body AS text FROM notes ORDER BY id").replace("surface: staff,", `surface: staff, uiSchema: { list: { cells: { ${cells} } } },`);
+    const withCells = (cells: string) => SCHEMA + view("SELECT id, body AS text FROM notes ORDER BY id").replace("surface: admin,", `surface: admin, uiSchema: { list: { cells: { ${cells} } } },`);
     expect((await compile(withCells("text: kit/preview"))).ok).toBe(true);
     const bad = await compile(withCells("body: kit/preview"));
     expect(!bad.ok && bad.diagnostics.map((d) => [d.code, d.value])).toEqual([["VIEW_UI_INVALID", "body"]]);
@@ -184,7 +184,7 @@ describe("a field with more than one JSON Schema type", () => {
   const doc = (kind: string, name: string, spec: string) => `apiVersion: cms.mantle.aotter.net/v2\nkind: ${kind}\nmetadata: { name: ${name} }\nspec:\n${spec}\n`;
   const things = (checks = "") => doc("Schema", "things", `  title: Things\n  lifecycle: operational\n  schema:\n    type: object\n    properties: { qty: { type: [integer, number] }, mixed: { type: [integer, string] }, tags: { type: array } }\n${checks}`);
   const labels = doc("Schema", "labels", "  title: Labels\n  lifecycle: operational\n  schema:\n    type: object\n    properties: { mixed: { type: string }, value: { type: object } }");
-  const view = (sql: string) => `---\n${doc("View", "v", `  surface: staff\n  sql: "${sql}"`)}`;
+  const view = (sql: string) => `---\n${doc("View", "v", `  surface: admin\n  sql: "${sql}"`)}`;
   const compile = async (text: string, dialect?: typeof pgCompile) => {
     const r = await compilePlan({ sources: [{ sourceId: "memory:union", text }] }, ...(dialect ? [dialect] : []));
     return r.ok ? "ok" : r.diagnostics.map((d) => d.message).join(" ");

@@ -4,7 +4,7 @@ import { admin, emailOTP, magicLink, jwt, genericOAuth } from "better-auth/plugi
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { d1Adapter, type D1Like } from "../../../src/auth/adapter.js";
-import { d1BootstrapStaff } from "../../../src/auth/identity.js";
+import { d1BootstrapAdmin } from "../../../src/auth/identity.js";
 import { authHardening, guardGithubLogin, hashEmailOtp, sessionSecondaryStorage, type SessionCache, type SessionAuthority } from "../../../src/auth/hardening.js";
 import type { BetterAuthOptions } from "better-auth/types";
 import { authLoader, resolveCaller } from "../../../src/auth/caller.js";
@@ -38,8 +38,8 @@ const locale = (request?: Request) => request?.headers.get("accept-language")?.s
 export function authOptions(env: Env, authority?: SessionAuthority) {
     // CLI schema generation passes an empty env; placeholder values construct no runtime instance.
     const origin = env.ORIGIN || "https://example.invalid", secret = env.AUTH_SECRET || "schema-generation-placeholder-secret";
-    const bootstrap = env.ADMIN_EMAIL ? d1BootstrapStaff(env.DB, { match: "email", value: env.ADMIN_EMAIL }) : async () => { };
-    const plugins = [admin({ defaultRole: "user", adminRoles: ["staff"], ac, roles: { staff: ac.newRole(defaultStatements), user: ac.newRole({ user: [], session: [] }) } }),
+    const bootstrap = env.ADMIN_EMAIL ? d1BootstrapAdmin(env.DB, { match: "email", value: env.ADMIN_EMAIL }, () => ({ options: { plugins } })) : async () => { };
+    const plugins = [admin({ defaultRole: "user", adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements), user: ac.newRole({ user: [], session: [] }) } }),
         emailOTP({ storeOTP: { hash: otp => hashEmailOtp(secret, otp) }, sendVerificationOTP: ({ email, otp, type }, ctx) => env.MAIL.otp({ email, otp, type, locale: locale(ctx?.request) }) }),
         magicLink({ storeToken: "hashed", expiresIn: 900, sendMagicLink: ({ email, url }, ctx) => env.MAIL.link({ email, url, locale: locale(ctx?.request) }) }),
         jwt({ disableSettingJwtHeader: true }),

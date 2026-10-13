@@ -8,7 +8,7 @@ const settings = ({ brand, title, description }: {
     title: string;
     description: string;
 }) => ({ brand, title, description });
-const staffInfo = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: Awaited<ReturnType<IdentityMethods["listUsers"]>>[number]) => ({ id, email, name, role, githubLogin, emailVerified, createdAt });
+const adminInfo = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: Awaited<ReturnType<IdentityMethods["listUsers"]>>[number]) => ({ id, email, name, role, githubLogin, emailVerified, createdAt });
 const memberInfo = ({ id, email, name, emailVerified, createdAt }: Awaited<ReturnType<IdentityMethods["listMembers"]>>["items"][number]) => ({ id, email, name, emailVerified, createdAt });
 export function siteRoutes<Env, Database>(options: Options<Env, Database>): Route<Env, Database>[] {
     const site = ({ db, caller }: Context<Env, Database>) => {
@@ -29,7 +29,7 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
     };
     const other = (context: Context<Env, Database>) => {
         if (context.params.id === context.caller.subject)
-            throw new ContractError("AUTH_DENIED", "You cannot change your own staff identity.", "admin");
+            throw new ContractError("AUTH_DENIED", "You cannot change your own admin identity.", "admin");
         return context.params.id!;
     };
     return [
@@ -47,7 +47,7 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
         { method: "GET", path: "/media/{id}", run: async (c) => mediaItem(await media(c).get(c.params.id!)) },
         { method: "PATCH", path: "/media/{id}", run: async (c) => { const m = media(c); return mediaItem(await m.update(c.params.id!, await json(c))); } },
         { method: "DELETE", path: "/media/{id}", run: c => media(c).delete(c.params.id!) },
-        { method: "GET", path: "/staff", run: async (c) => ({ users: (await (await identity(c, "listUsers"))()).map(staffInfo) }) },
+        { method: "GET", path: "/admin", run: async (c) => ({ users: (await (await identity(c, "listUsers"))()).map(adminInfo) }) },
         { method: "GET", path: "/members", run: async (c) => {
                 const list = await identity(c, "listMembers"), q = c.url.searchParams, limit = Number(q.get("limit") ?? 50), search = q.get("search")?.trim() ?? "", cursor = q.get("cursor") || undefined, direction = q.get("cursor_direction") ?? "forward";
                 if (!Number.isInteger(limit) || limit < 1 || limit > 100 || search.length > 200 || search.includes("\0") || !["forward", "backward"].includes(direction))
@@ -55,26 +55,26 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
                 const result = await list({ limit, search, cursor, cursorDirection: direction as "forward" | "backward" });
                 return { items: result.items.map(memberInfo), previous_cursor: result.previousCursor, next_cursor: result.nextCursor };
             } },
-        { method: "PATCH", path: "/staff/{id}/role", run: async (c) => {
+        { method: "PATCH", path: "/admin/{id}/role", run: async (c) => {
                 const id = other(c), set = await identity(c, "setUserRole"), { role } = await json(c);
-                if (role !== null && role !== "staff")
-                    invalid("Role must be staff or null.", "admin");
-                if (!await set(id, role as "staff" | null))
+                if (role !== null && (typeof role !== "string" || !/^[a-z][a-zA-Z0-9_]{0,62}$/.test(role)))
+                    invalid("Role must be a role name or null.", "admin");
+                if (!await set(id, role as string | null))
                     throw new ContractError("NOT_FOUND", "No such user.", "admin");
                 return { ok: true };
             } },
-        { method: "POST", path: "/staff/invitations", run: async (c) => {
+        { method: "POST", path: "/admin/invitations", run: async (c) => {
                 const invite = await identity(c, "inviteUser"), input = await json(c), email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || input.role !== "staff")
-                    invalid("An invitation needs an email and the staff role.", "admin");
-                const result = await invite(email);
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || typeof input.role !== "string" || !/^[a-z][a-zA-Z0-9_]{0,62}$/.test(input.role))
+                    invalid("An invitation needs an email and the admin role.", "admin");
+                const result = await invite(email, input.role as string);
                 if (result.id === c.caller.subject)
-                    throw new ContractError("AUTH_DENIED", "You cannot change your own staff identity.", "admin");
-                const send = options.identity?.roles?.sendStaffInvitation;
-                await send?.(email, "staff");
+                    throw new ContractError("AUTH_DENIED", "You cannot change your own admin identity.", "admin");
+                const send = options.identity?.roles?.sendAdminInvitation;
+                await send?.(email, input.role as string);
                 return { ok: true, userId: result.id, emailSent: !!send };
             } },
-        { method: "DELETE", path: "/staff/invitations/{id}", run: async (c) => {
+        { method: "DELETE", path: "/admin/invitations/{id}", run: async (c) => {
                 const id = other(c), revoke = await identity(c, "revokeInvite");
                 if (!await revoke(id))
                     throw new ContractError("CONFLICT", "Only an invitation nobody has signed in to can be revoked.", "admin");

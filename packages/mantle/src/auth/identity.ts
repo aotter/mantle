@@ -1,6 +1,6 @@
 /** Optional identity operations. Better Auth owns permission checks, writes and session-cache invalidation. */
-import type { AuthInstance } from "./caller.js";
-import { ContractError, deny, type Caller, type Postgres } from "../kernel/contracts.js";
+import { adminRolesOf, type AuthInstance } from "./caller.js";
+import { ContractError, isAdmin, deny, type Caller, type Postgres } from "../kernel/contracts.js";
 import * as sqlite from "../kernel/dialect/sqlite.js";
 import * as postgres from "../kernel/dialect/postgres.js";
 import type { Dialect } from "../kernel/dialect/common.js";
@@ -15,6 +15,7 @@ type User = {
     emailVerified: boolean | number;
     createdAt: string | Date;
 };
+/** Plugin configuration validates dynamic roles before calling Better Auth’s inferred role API. */
 type Api = {
     listUsers(input: {
         headers: Headers;
@@ -27,7 +28,7 @@ type Api = {
         headers: Headers;
         body: {
             userId: string;
-            role: "staff" | "user";
+            role: never;
         };
     }): Promise<unknown>;
     createUser(input: {
@@ -35,19 +36,19 @@ type Api = {
         body: {
             email: string;
             name: string;
-            role: "staff";
+            role: never;
         };
     }): Promise<{
         user: User;
     }>;
 };
-/** Requires the official admin plugin with adminRoles: ["staff"]. */
+/** Requires the official Better Auth admin plugin; its adminRoles decide the layer. */
 export interface IdentityAuth extends AuthInstance {
     readonly api: AuthInstance["api"] & Api;
 }
 type Read = (sql: string, values: unknown[]) => PromiseLike<any[]>;
 const invalid = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", message, "identity");
-/** A staff identity or member as the directory returns it. */
+/** An admin identity or member as the directory returns it. */
 type Member = {
     id: string;
     email: string;
@@ -59,30 +60,36 @@ type Member = {
 };
 const project = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: User): Member => ({ id, email, name, role: role ?? null, githubLogin: githubLogin ?? null, emailVerified: Boolean(emailVerified), createdAt: new Date(createdAt) });
 /** Uses the default Better Auth model/field names in the template; no boot DDL or seeds. */
+const literal = (value: string) => "'" + value.replaceAll("'", "''") + "'";
+/** Exact comma-delimited membership, including case; values come only from plugin configuration. */
+const adminSql = (d: Dialect, roles: readonly string[], column = 'role') => roles.length ? '(' + roles.map(role => `${d === sqlite.dialect ? "instr" : "strpos"}(',' || COALESCE(${column}, '') || ',', ${literal(',' + role + ',')}) > 0`).join(' OR ') + ')' : 'FALSE';
+const holdsAdmin = (roles: readonly string[], role?: string | null) => (role ?? '').split(',').some(name => roles.includes(name));
 function directory(auth: IdentityAuth, caller: Caller, headers: Headers, d: Dialect, read: Read, createdAt: string, write: Read = read) {
+    const roles = [...adminRolesOf(auth)], privileged = adminSql(d, roles);
+    const grantRole = (role = roles[0]) => { if (!role || !roles.includes(role)) throw invalid("Role must be configured in Better Auth adminRoles."); return role; };
     const guard = (id?: string) => {
-        deny(caller, caller.kind === "user" && caller.credential === "session" && caller.role === "staff", "identity");
+        deny(caller, isAdmin(caller) && caller.credential === "session", "identity");
         if (caller.kind === "user" && id === caller.subject)
-            throw new ContractError("AUTH_DENIED", "You cannot change or delete your own staff identity.", "identity");
+            throw new ContractError("AUTH_DENIED", "You cannot change or delete your own admin identity.", "identity");
     };
-    /** One guarded UPDATE leaves staff only while another staff member remains; `write` serializes it where one statement is not atomic. */
+    /** One guarded UPDATE leaves admin only while another admin remains; `write` serializes it where one statement is not atomic. */
     const demote = async (id: string): Promise<boolean> => {
         const p = d.param(1);
-        if ((await write(`UPDATE "user" SET role='user' WHERE id=${p} AND role='staff' AND EXISTS (SELECT 1 FROM "user" other WHERE other.role='staff' AND other.id<>${p}) RETURNING id`, [id])).length)
+        if ((await write(`UPDATE "user" SET role='user' WHERE id=${p} AND ${privileged} AND EXISTS (SELECT 1 FROM "user" other WHERE ${adminSql(d, roles, "other.role")} AND COALESCE(other.banned, ${d === sqlite.dialect ? '0' : 'FALSE'}) = ${d === sqlite.dialect ? '0' : 'FALSE'} AND other.id<>${p}) RETURNING id`, [id])).length)
             return true;
         const [user] = await read(`SELECT role FROM "user" WHERE id=${p}`, [id]);
-        if (user?.role === "staff")
-            throw new ContractError("CONFLICT", "This is the last staff member; promote another staff member before removing this one.", "identity");
+        if (holdsAdmin(roles, user?.role))
+            throw new ContractError("CONFLICT", "This is the last admin; promote another admin before removing this one.", "identity");
         return !!user;
     };
     return {
         async listUsers() {
             guard();
-            const query = { filterField: "role", filterValue: "staff", sortBy: "createdAt", sortDirection: "asc" };
+            const query = { sortBy: "createdAt", sortDirection: "asc" };
             let { users, total } = await auth.api.listUsers({ headers, query });
             if (users.length < total)
                 ({ users } = await auth.api.listUsers({ headers, query: { ...query, limit: total } }));
-            return users.map(project);
+            return users.filter(user => holdsAdmin(roles, user.role)).map(project);
         },
         async listMembers({ search = "", limit = 50, cursor, cursorDirection = "forward" }: {
             search?: string;
@@ -110,7 +117,7 @@ function directory(auth: IdentityAuth, caller: Caller, headers: Headers, d: Dial
                 }
             }
             const values: unknown[] = [], bind = (v: unknown) => (values.push(v), d.param(values.length));
-            const conditions = [`(role IS NULL OR role <> 'staff')`];
+            const conditions = [`NOT ${privileged}`];
             if (term) {
                 const like = bind(`%${d.escapeLike(term)}%`);
                 conditions.push(`(${["CAST(id AS text)", "name", "email"].map(c => `${c} ${d.like(true)} ${like}${d.likeEscape}`).join(" OR ")})`);
@@ -127,24 +134,24 @@ function directory(auth: IdentityAuth, caller: Caller, headers: Headers, d: Dial
             const encode = (row: User) => `m:${encodeURIComponent(JSON.stringify([scope, typeof row.createdAt === "string" ? row.createdAt : row.createdAt.toISOString(), row.id]))}`;
             return { items: page.map(project), previousCursor: (backward ? rows.length > limit : !!key) && page[0] ? encode(page[0]) : null, nextCursor: (backward ? !!key : rows.length > limit) && page.at(-1) ? encode(page.at(-1)!) : null };
         },
-        async setUserRole(id: string, role: "staff" | null) {
+        async setUserRole(id: string, role: string | null) {
             guard(id);
-            if (role !== null && role !== "staff")
-                throw invalid("Role must be staff or null.");
+            if (role !== null) grantRole(role);
             if (role === null)
                 return demote(id);
             if (!(await read(`SELECT id FROM "user" WHERE id=${d.param(1)}`, [id])).length)
                 return false;
-            await auth.api.setRole({ headers, body: { userId: id, role } });
+            await auth.api.setRole({ headers, body: { userId: id, role: role as never } });
             return true;
         },
-        async inviteUser(email: string) {
+        async inviteUser(email: string, role?: string) {
             guard();
+            const adminRole = grantRole(role);
             const normalized = email.trim().toLowerCase();
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized))
                 throw invalid("Invalid invitation email.");
             try {
-                const { user } = await auth.api.createUser({ headers, body: { email: normalized, name: normalized.split("@")[0]!, role: "staff" } });
+                const { user } = await auth.api.createUser({ headers, body: { email: normalized, name: normalized.split("@")[0]!, role: adminRole as never } });
                 return { kind: "created" as const, id: user.id };
             }
             catch (error) {
@@ -161,15 +168,15 @@ function directory(auth: IdentityAuth, caller: Caller, headers: Headers, d: Dial
                     throw error;
                 guard(found.id);
                 if (!found.emailVerified)
-                    throw new ContractError("AUTH_DENIED", "The existing account must verify its email before receiving staff access.", "identity:invitation");
-                await auth.api.setRole({ headers, body: { userId: found.id, role: "staff" } });
+                    throw new ContractError("AUTH_DENIED", "The existing account must verify its email before receiving admin access.", "identity:invitation");
+                await auth.api.setRole({ headers, body: { userId: found.id, role: adminRole as never } });
                 return { kind: "exists" as const, id: found.id };
             }
         },
         async revokeInvite(id: string) {
             guard(id);
             // One guarded DELETE; verification/account linking cannot race the eligibility check.
-            return (await read(`DELETE FROM "user" WHERE id=${d.param(1)} AND role='staff' AND NOT "emailVerified" AND NOT EXISTS (SELECT 1 FROM account WHERE account."userId"="user".id) RETURNING id`, [id])).length > 0;
+            return (await read(`DELETE FROM "user" WHERE id=${d.param(1)} AND ${privileged} AND NOT "emailVerified" AND NOT EXISTS (SELECT 1 FROM account WHERE account."userId"="user".id) RETURNING id`, [id])).length > 0;
         },
         async deleteUser(id: string) {
             guard(id);
@@ -195,12 +202,12 @@ function directory(auth: IdentityAuth, caller: Caller, headers: Headers, d: Dial
 }
 export type IdentityDirectory = ReturnType<typeof directory>;
 export const d1Identity = (db: Reader, auth: IdentityAuth, caller: Caller, headers: Headers): IdentityDirectory => directory(auth, caller, headers, sqlite.dialect, (sql, v) => d1Read(db, sql, v), '"createdAt"');
-/** One advisory lock orders every statement that changes who is staff (bootstrap included); read committed would let two demotions each see the other staff member. */
-const staffWrite = (db: Postgres, sql: string, values: unknown[]) => transaction(db, async (tx) => {
+/** One advisory lock orders every statement that changes who is admin (bootstrap included); read committed would let two demotions each see the other admin member. */
+const adminWrite = (db: Postgres, sql: string, values: unknown[]) => transaction(db, async (tx) => {
     await tx.unsafe("SELECT pg_advisory_xact_lock(1296125516,1)", []);
     return tx.unsafe(sql, values);
-}, { isolation: "read committed" }, "identity/staff");
-export const postgresIdentity = (db: Postgres, auth: IdentityAuth, caller: Caller, headers: Headers): IdentityDirectory => directory(auth, caller, headers, postgres.dialect, (sql, v) => pgRead(db, sql, v), postgres.wireTimestamp('"createdAt"').join(""), (sql, v) => staffWrite(db, sql, v));
+}, { isolation: "read committed" }, "identity/admin");
+export const postgresIdentity = (db: Postgres, auth: IdentityAuth, caller: Caller, headers: Headers): IdentityDirectory => directory(auth, caller, headers, postgres.dialect, (sql, v) => pgRead(db, sql, v), postgres.wireTimestamp('"createdAt"').join(""), (sql, v) => adminWrite(db, sql, v));
 export type BootstrapRule = {
     match: "email" | "github-login";
     value: string;
@@ -213,8 +220,13 @@ type BootstrapUser = {
     emailVerified?: boolean;
 };
 const matches = (rule: BootstrapRule, user: BootstrapUser) => (rule.match === "email" ? user.emailVerified === true ? user.email : null : user.githubLogin)?.trim().toLowerCase() === rule.value.trim().toLowerCase();
-const promote = (param: string) => `UPDATE "user" SET role='staff' WHERE id=${param} AND NOT EXISTS (SELECT 1 FROM "user" WHERE role='staff') RETURNING id`;
-/** Promote the first matching user to staff, only while no staff exists. */
+type BootstrapAuth = Pick<AuthInstance, "options"> | (() => Pick<AuthInstance, "options">);
+const promote = (d: Dialect, param: string, auth: BootstrapAuth) => {
+    const roles = adminRolesOf(typeof auth === "function" ? auth() : auth);
+    if (!roles[0]) throw new ContractError("AUTH_CONFIGURATION_ERROR", "Bootstrap requires Better Auth adminRoles.", "identity");
+    return `UPDATE "user" SET role=${literal(roles[0])} WHERE id=${param} AND NOT EXISTS (SELECT 1 FROM "user" WHERE ${adminSql(d, roles)}) RETURNING id`;
+};
+/** Promote the first matching user to admin, only while no admin exists. */
 function bootstrap(rule: BootstrapRule, update: (id: string) => PromiseLike<unknown[]>) {
     if (!rule.value.trim())
         throw invalid("Bootstrap target cannot be empty.");
@@ -222,12 +234,12 @@ function bootstrap(rule: BootstrapRule, update: (id: string) => PromiseLike<unkn
         if (!matches(rule, user))
             return;
         if (!(await update(user.id)).length)
-            console.warn("[mantle bootstrap] promotion blocked: staff already exists.");
+            console.warn("[mantle bootstrap] promotion blocked: admin already exists.");
     };
 }
-export function d1BootstrapStaff(db: Reader, rule: BootstrapRule) {
-    return bootstrap(rule, id => d1Read(db, promote("?"), [id]));
+export function d1BootstrapAdmin(db: Reader, rule: BootstrapRule, auth: BootstrapAuth) {
+    return bootstrap(rule, id => d1Read(db, promote(sqlite.dialect, "?", auth), [id]));
 }
-export function postgresBootstrapStaff(db: Postgres, rule: BootstrapRule) {
-    return bootstrap(rule, id => staffWrite(db, promote("$1"), [id]));
+export function postgresBootstrapAdmin(db: Postgres, rule: BootstrapRule, auth: BootstrapAuth) {
+    return bootstrap(rule, id => adminWrite(db, promote(postgres.dialect, "$1", auth), [id]));
 }

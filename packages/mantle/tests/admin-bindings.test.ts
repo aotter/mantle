@@ -19,7 +19,7 @@ const instantKeys=["2026-10-13T08:00:00.000001+08:00","2026-10-13T00:00:00.00000
 const enumSource=(name:string,format:string|undefined,values:string[])=>{const m=oneofManifest();m.metadata.name=name;m.spec.schema.properties.kind={type:"string",...(format?{format}:{}),enum:values};return {sourceId:name+".json",text:JSON.stringify(m)};};
 const temporalSources=[enumSource("instantchoices","date-time",instantKeys),enumSource("daychoices","date",["2026-10-13","2026-10-14"]),enumSource("quotedchoices",undefined,["a'quote"] )];
 
-const caller=(subject:string)=>({kind:"user" as const,subject,role:"staff" as const,scopes:[],credential:"session" as const,credentialId:null,clientId:null});
+const caller=(subject:string)=>({kind:"user" as const,subject,role:"admin" as const,admin:true,scopes:[],credential:"session" as const,credentialId:null,clientId:null});
 const ordinaryOwnerSource={sourceId:'ordinary-owner.json',text:JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Schema',metadata:{name:'ordinaryowners'},spec:{title:'Ordinary owners',lifecycle:'operational',schema:{type:'object',required:['ownerId','label'],properties:{ownerId:{type:'string'},label:{type:'string'}}},indexes:[['ownerId','id']]}})};
 const overlaySources=[{name:'overlayparents',spec:{title:'Parents',lifecycle:'publishing',indexes:[['slug']],schema:{type:'object',required:['ownerId','slug','title'],properties:{ownerId:{type:'string'},slug:{type:'string'},title:{type:'string'},cover:{type:'string'}}}}},{name:'overlaychildren',spec:{title:'Children',lifecycle:'publishing',localized:true,translates:{parent:'overlayparents',on:'slug'},scope:{ownerId:'auth.uid()'},indexes:[['ownerId','slug']],schema:{type:'object',required:['ownerId','slug','locale','title'],properties:{ownerId:{type:'string'},slug:{type:'string'},locale:{type:'string'},title:{type:'string'}}}}}].map(({name,spec})=>({sourceId:name+'.json',text:JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Schema',metadata:{name},spec})}));
 async function writeBindings(dir:string,files:Readonly<Record<string,string>>){
@@ -66,8 +66,8 @@ test("unselected generation has no Admin package import or deployment indexes",a
  }finally{await db.unsafe(`DROP SCHEMA IF EXISTS ${namespace} CASCADE`);await db.close();await rm(dir,{recursive:true,force:true});}
 },30000);
 
-const board={sourceId:"board.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name:"board"},spec:{surface:"staff",requires:{auth:{all:[{"ctx.staff":["staff"]}]}},sql:"SELECT id,label,kind,flag FROM records ORDER BY id",uiSchema:{list:{searchFields:["label"],filterFields:["kind","flag"]}}}})};
-for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`Admin ${pg?"PostgreSQL":"SQLite"} staff View native fragments page search/filter on scoped rows`,async()=>{
+const board={sourceId:"board.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name:"board"},spec:{surface:"admin",requires:{auth:{all:[{"ctx.admin":["admin"]}]}},sql:"SELECT id,label,kind,flag FROM records ORDER BY id",uiSchema:{list:{searchFields:["label"],filterFields:["kind","flag"]}}}})};
+for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`Admin ${pg?"PostgreSQL":"SQLite"} admin View native fragments page search/filter on scoped rows`,async()=>{
  const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-view-")),db=pg?new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}):new Database(":memory:"),namespace="admin_view_"+crypto.randomUUID().replaceAll("-","");
  const run=(sql:string,values:unknown[]=[])=>pg?(db as SQL).unsafe(sql,values as any[]):Promise.resolve((db as Database).query(sql).all(...values as any[]));
  try{
@@ -83,7 +83,7 @@ for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:
 
 const tupleSchema={sourceId:"tuple-schema.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"ordered"},spec:{title:"Ordered",lifecycle:"operational",scope:{ownerId:"auth.uid()"},schema:{type:"object",required:["ownerId","kind","rank","label","at"],properties:{ownerId:{type:"string"},kind:{type:"string"},rank:{type:"integer"},label:{type:"string"},at:{type:"string",format:"date-time"}}},indexes:[["ownerId","kind","rank","id"],["ownerId","at","id"]]}})};
 const datedSchema={sourceId:"dated.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"dated"},spec:{title:"Dated",lifecycle:"operational",scope:{ownerId:"auth.uid()"},schema:{type:"object",required:["ownerId","day"],properties:{ownerId:{type:"string"},day:{type:"string",format:"date"}}},indexes:[["ownerId","day","id"]]}})};
-const tupleView=(name:string,sql:string,list:object={})=>({sourceId:name+".json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name},spec:{surface:"staff",requires:{auth:{all:[{"ctx.staff":["staff"]}]}},input:{type:"object",properties:{minimum:{type:"integer"}},required:["minimum"]},sql,uiSchema:{list}}})});
+const tupleView=(name:string,sql:string,list:object={})=>({sourceId:name+".json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name},spec:{surface:"admin",requires:{auth:{all:[{"ctx.admin":["admin"]}]}},input:{type:"object",properties:{minimum:{type:"integer"}},required:["minimum"]},sql,uiSchema:{list}}})});
 for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`Admin ${pg?"PostgreSQL":"SQLite"} complete three-key/grouped aliases, temporal binds and cursor authority`,async()=>{
  const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-tuples-")),db=pg?new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}):new Database(":memory:"),namespace="tuples_"+crypto.randomUUID().replaceAll("-","");
  const run=(sql:string,values:unknown[]=[])=>pg?(db as SQL).unsafe(sql,values as any[]):Promise.resolve((db as Database).query(sql).all(...values as any[]));
@@ -122,7 +122,7 @@ test("generated selected Admin factories conform to the actual public server int
 kind: Procedure
 metadata: {name: app-test}
 spec:
-  requires: {auth: {all: [{ctx.staff: [staff]}]}}
+  requires: {auth: {all: [{ctx.admin: [admin]}]}}
   input: {type: object, properties: {label: {type: string}}, required: [label], additionalProperties: false}
   output: {type: object, properties: {label: {type: string}}, required: [label]}
   handler: {ref: app.test}
@@ -130,7 +130,7 @@ spec:
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: {name: app-test-mcp}
-spec: {source: {kind: mcp, surface: staff}, target: {procedure: app-test}}
+spec: {source: {kind: mcp, surface: admin}, target: {procedure: app-test}}
 `};
  for(const target of ["bun-sqlite","bun-postgres","cloudflare-d1","cloudflare-postgres"] as const){
  const result=await generateFromSources({target,admin:true,sources:{sources:[source,board,ref]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));const out=join(dir,target);await writeGenerated(out,result.files,false);
@@ -246,7 +246,7 @@ for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:
  const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-oneof-")),db=pg?new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}):new Database(":memory:"),namespace="admin_oneof_"+crypto.randomUUID().replaceAll("-","");
  const run=(sql:string,values:unknown[]=[])=>pg?(db as SQL).unsafe(sql,values as any[]):Promise.resolve((db as Database).query(sql).all(...values as any[]));
  try{
- const view={sourceId:"oneof-view.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name:"choice-list"},spec:{surface:"staff",sql:"SELECT id,label,kind FROM oneofrecords ORDER BY id",uiSchema:{list:{filterFields:["kind"]}}}})};
+ const view={sourceId:"oneof-view.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name:"choice-list"},spec:{surface:"admin",sql:"SELECT id,label,kind FROM oneofrecords ORDER BY id",uiSchema:{list:{filterFields:["kind"]}}}})};
  const generated=await generateFromSources({target:pg?'bun-postgres':'bun-sqlite',admin:true,sources:{sources:[oneofSource,view]}});if(!generated.ok)throw Error(JSON.stringify(generated.diagnostics));await writeBindings(dir,generated.files);if(pg){await run(`CREATE SCHEMA ${namespace}`);await run(`SET search_path TO ${namespace}`);await run(generated.files['schema.sql']!);}else(db as Database).exec(generated.files['schema.sql']!);
  const {adminBindings,statisticsView}=await import(join(dir,'admin-bindings.ts')),bindings=adminBindings(),schema=bindings.schemas[0];expect(bindings.metadata.allCollections.oneofrecords.filter.values).toEqual(['a','b']);expect(schema.validate({label:'A',kind:'a'},true)).toEqual({label:'A',kind:'a'});expect(schema.validate({kind:'b'},false)).toEqual({kind:'b'});expect(()=>schema.validate({label:'A',kind:'c'},true)).toThrow();expect(()=>schema.validate({kind:'c'},false)).toThrow();expect(()=>schema.query(new URLSearchParams({filter_field:'kind',filter_value:'c'}))).toThrow();expect(()=>bindings.views[0].query(new URLSearchParams({'filter.kind':'c'}))).toThrow();
  for(const [id,owner,kind,millis,expired]of [['a','A','a',500,false],['b','A','b',1500,false],['outside','A','a',-1000,false],['foreign','B','a',500,false],['expired','A','b',500,true]] as const){const param=(i:number)=>pg?'$'+i:'?'+i;await run(`INSERT INTO oneofrecords(id,version,created_at,updated_at,ownerid,label,kind,expiry) VALUES (${Array.from({length:8},(_,i)=>param(i+1)).join(',')})`,[id,1,pg?new Date(millis).toISOString():millis*1000,pg?new Date(0).toISOString():0,owner,id,kind,expired?pg?new Date(0).toISOString():0:null]);}
@@ -367,24 +367,24 @@ for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:
   if(pg)await run(seed(true));else(db as Database).exec(seed(false));const {adminBindings}=await import(join(dir,'admin-bindings.ts')),bindings=adminBindings(),schema=bindings.schemas.find((s:any)=>s.name==='wire_records'),native=await import(join(dir,'native-admin.ts'));
   const query=schema.query(new URLSearchParams({sort:'id',direction:'asc',limit:'500'}));let reads=0;
   const tapped=pg?{unsafe:(sql:string,values:unknown[])=>{reads++;return(db as SQL).unsafe(sql,values as any[]);}}:{query:(sql:string)=>({all:(...values:unknown[])=>{reads++;return(db as Database).query(sql).all(...values as any[]);}})};
-  const page=await native.nativeEntryPage(schema.binding,bindings.adapter,()=>tapped,caller('staff'),query);expect(reads).toBe(1);
+  const page=await native.nativeEntryPage(schema.binding,bindings.adapter,()=>tapped,caller('admin'),query);expect(reads).toBe(1);
   for(const [id,,expected] of integerCases){const row=schema.row(page.rows.find((r:any)=>r.id===id));expect(row.quantity).toBe(expected);expect(row.version).toBe(expected);}
  }finally{if(pg){await run(`DROP SCHEMA IF EXISTS ${namespace} CASCADE`);await(db as SQL).close();}else(db as Database).close();await rm(dir,{recursive:true,force:true});}
 },30000);
 
-test('flat staff View pages cast int64 before D1 driver rounding',async()=>{
+test('flat admin View pages cast int64 before D1 driver rounding',async()=>{
  const {source:text,seed,integerCases}=await import('./wire-scenarios.js');
- const flat=text.split('---')[0]+`---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: flat}\nspec: {surface: staff, input: {type: object, properties: {id: {type: string}}, required: [id]}, sql: 'SELECT id,quantity,version FROM wire_records WHERE id=input.id'}\n`;
+ const flat=text.split('---')[0]+`---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: flat}\nspec: {surface: admin, input: {type: object, properties: {id: {type: string}}, required: [id]}, sql: 'SELECT id,quantity,version FROM wire_records WHERE id=input.id'}\n`;
  const dir=await mkdtemp(join(import.meta.dir,'apps/.admin-flat-')),db=new Database(':memory:');
  try{
   const result=await generateFromSources({target:'cloudflare-d1',admin:true,sources:{sources:[{sourceId:'flat.yaml',text:flat}]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);db.exec(result.files['schema.sql']!);db.exec(seed(false));
   const {adminBindings}=await import(join(dir,'admin-bindings.ts')),bindings=adminBindings(),view=bindings.views.find((v:any)=>v.name==='flat');let reads=0;
   const d1={prepare:(sql:string)=>({bind:(...values:any[])=>({all:async()=>{reads++;return {results:db.query(sql).all(...values)};}})})};
-  for(const [id,,expected]of integerCases){const {input,...paging}=view.query(new URLSearchParams({id,limit:'500'})),before=reads,page=await view.page(d1,caller('staff'),input,paging);expect(reads-before).toBe(1);const row=view.row(page.rows[0]);expect(row.quantity).toBe(expected);expect(row.version).toBe(expected);}
+  for(const [id,,expected]of integerCases){const {input,...paging}=view.query(new URLSearchParams({id,limit:'500'})),before=reads,page=await view.page(d1,caller('admin'),input,paging);expect(reads-before).toBe(1);const row=view.row(page.rows[0]);expect(row.quantity).toBe(expected);expect(row.version).toBe(expected);}
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
 
-test("public developer View pages use REST public visibility with the signed-in staff caller",async()=>{
+test("public developer View pages use REST public visibility with the signed-in admin caller",async()=>{
  const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-public-preview-")),db=new Database(":memory:");
  try{
   const view={sourceId:"owned.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name:"owned"},spec:{surface:"public",requires:{auth:{all:["ctx.user"]}},sql:"SELECT id,label FROM records ORDER BY id"}})};

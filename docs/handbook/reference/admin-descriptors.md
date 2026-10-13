@@ -17,8 +17,8 @@ execution plan or SQL AST, storage access or execution observer is included.
   `scopeField` identifies the private scope field; `exportFields` lists only
   declared, exportable data fields (excluding scope/geo). CSV uses these facts
   instead of guessing from row keys. `fieldNames` maps storage column names to authored names; `viewNames` does the
-  same for staff View outputs whose fields are read unchanged.
-- `views` and `operations` preserve the 0.2 staff descriptor shapes. Generated
+  same for admin View outputs whose fields are read unchanged.
+- `views` and `operations` preserve the 0.2 admin descriptor shapes. Generated
   publishing transitions stay out of Admin operations and WebMCP, preserving
   the SPA's native Publish/Unpublish buttons. Operation
   bindings use declared targets and version inputs; `preconditions` contains
@@ -27,14 +27,14 @@ execution plan or SQL AST, storage access or execution observer is included.
   do not authorize execution.
 - `authorizations` is a separate View/Procedure lookup for the generated Admin
   handler to filter descriptors by the resolved Caller. These constants do not
-  authorize a request; session/staff gates and execution checks remain required.
+  authorize a request; session/admin gates and execution checks remain required.
 - `developerConsole` is the 0.2 data-model, logic, interface, relationship and
   operations snapshot, derived once during generation. SQL logic is display
   data, not executable IR. Observations remain unavailable and run history empty.
-- `mcpAppCatalogues` contains public/staff App catalogues. Row actions require
+- `mcpAppCatalogues` contains public/admin App catalogues. Row actions require
   the same single-table, unchanged-id provenance as 0.2. Publishing transitions
   use the actual `<schema>.<verb>` Procedures and canonical `<verb>_<schema>`
-  staff tool names. A conflicting declared staff tool is refused.
+  admin tool names. A conflicting declared admin tool is refused.
 - `webmcp` carries static tool declarations and Admin page routes. `bootstrap`
   combines `collections`, `operations`, `views` and `webmcp`; the handler adds
   request-owned `me`, `site` and any selected entries page.
@@ -70,7 +70,7 @@ await generateFromSources({ target, sources,
 ```
 
 Only `id` and `contributes` are needed at generation. `extensionBindings` records
-Schema/Procedure field widgets, Schema/staff View cells and sidebar panels.
+Schema/Procedure field widgets, Schema/admin View cells and sidebar panels.
 Unknown contributions, wrong targets and invalid options fail generation with
 `UI_EXTENSION_UNKNOWN`, `UI_EXTENSION_TARGET` or `UI_EXTENSION_OPTIONS`, retaining
 0.2 paths. Serving extension modules and handling extension actions is separate.

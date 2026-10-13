@@ -12,7 +12,7 @@ type Schemas = Record<string, SchemaDef>;
 /** A bind a dialect's lowering adds; the dialect resolves it (`MantleDialect.bind`). */
 export type DialectBind = { readonly k: 'dialect'; readonly [key: string]: unknown };
 export type BindSpec =
-  | { k: 'uid' } | { k: 'now' } | { k: 'role' } | { k: 'cutoff'; seconds: number } | { k: 'const'; value: unknown }
+  | { k: 'uid' } | { k: 'now' } | { k: 'role' } | { k: 'admin' } | { k: 'cutoff'; seconds: number } | { k: 'const'; value: unknown }
   | { k: 'input'; name: string; type: string }
   | DialectBind
   | { k: 'version' }
@@ -27,7 +27,6 @@ export type PolicyOpts = {
   schemas: Schemas;
   inputs: Record<string, string>;
   mode?: Mode;
-  staffRoles?: readonly string[];
   /** add `AND version = ?` (the version checked by the publishing lifecycle) to a row op's WHERE */
   lockVersion?: boolean;
   /** the status an update moves the entry to (the lifecycle decided it is legal); SQL cannot write `status` */
@@ -135,16 +134,16 @@ function term(c: C, a: string, t: RowTerm): N {
   if (t[1] === "parent") {
     const [column, , value, parent] = t, alias = a === "_mantle_parent" ? "_mantle_parent_" : "_mantle_parent";
     const exists = { SubLink: { subLinkType: "EXISTS_SUBLINK", subselect: { SelectStmt: { targetList: [res(num(1))], fromClause: [{ RangeVar: { relname: parent.table, alias: { aliasname: alias }, inh: true, relpersistence: "p", mantle: "system" } }], whereClause: and(op("=", col(alias, column), col(a, column)), ...(parent.scope ? [op("=", col(alias, parent.scope[0]), col(a, parent.scope[1]))] : []), ...parent.terms.map(t => term(c, alias, t))), limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } } } };
-    return parent.roles ? or(...parent.roles.map(role => op("=", param$(c, value), { A_Const: { sval: { sval: role } } })), exists) : exists;
+    return parent.admin ? or(op("=", param$(c, value), num(1)), exists) : exists;
   }
-  const [column, kind, v, published, roles] = t;
+  const [column, kind, v, published] = t;
   const value: N = v.k === 'const' ? { A_Const: { sval: { sval: v.value } } } : param$(c, v);
-  if (kind === 'staff') return or(op('=', col(a, column), { A_Const: { sval: { sval: published! } } }), ...roles!.map(role => op('=', value, { A_Const: { sval: { sval: role } } })));
+  if (kind === 'admin') return or(op('=', col(a, column), { A_Const: { sval: { sval: published! } } }), op('=', value, num(1)));
   return kind === 'ttl' ? or({ NullTest: { arg: col(a, column), nulltesttype: 'IS_NULL' } }, op('>', col(a, column), value)) : op('=', col(a, column), value);
 }
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
 function visible(s: SchemaDef, a: string, c: C): N | undefined {
-  return c.unsafeNoVisibility ? undefined : and(...rowPolicy(s, c.mode ?? 'caller', c.staffRoles, c.schemas).map((t) => term(c, a, t)));
+  return c.unsafeNoVisibility ? undefined : and(...rowPolicy(s, c.mode ?? 'caller', c.schemas).map((t) => term(c, a, t)));
 
 }
 /** A write's `SET` items beyond the author's own. */

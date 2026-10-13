@@ -1,7 +1,7 @@
 import { authLoader, resolveCaller } from "@aotter/mantle/auth";
 import { authRoutes } from "@aotter/mantle/auth/routes";
 import { withAuthTasks } from "@aotter/mantle/auth/hardening";
-import { checkOrigin, ContractError, surfaceFailure, type Caller } from "@aotter/mantle/contracts";
+import { isAdmin,  checkOrigin, ContractError, surfaceFailure, type Caller } from "@aotter/mantle/contracts";
 import { admin, adminShell } from "@aotter/mantle-admin/server";
 import { entries } from "@aotter/mantle-admin/server/entries";
 import { siteRoutes } from "@aotter/mantle-admin/server/site";
@@ -26,7 +26,7 @@ const extraTools: readonly Tool<Handle, Handlers>[] = [
     if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some(k => k !== "q") || typeof (raw as { q?: unknown }).q !== "string") throw new ContractError("INPUT_VALIDATION_FAILED", "Expected q.");
     return raw as Record<string, unknown>;
   }, page: searchPage },
-  { name: "sales_by_item", surface: "staff", description: "Sales grouped by item.", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true }, closed: true, path: "views/sales-by-item", validate: raw => {
+  { name: "sales_by_item", surface: "admin", description: "Sales grouped by item.", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true }, closed: true, path: "views/sales-by-item", validate: raw => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length) throw new ContractError("INPUT_VALIDATION_FAILED", "Expected empty input.");
     return {};
   }, page: salesPage },
@@ -56,14 +56,14 @@ export async function fetchService(request: Request, env: Env, context: Executio
       if (!serveAdmin) {
         const bindings = adminBindings({handlers});
         const metadata = {...bindings.metadata, views:[...bindings.metadata.views,salesDescriptor],webmcp:addSalesTool(bindings.metadata.webmcp)};
-        const salesView = {name:"sales-by-item",allows:(caller:Caller)=>caller.kind==="user"&&caller.role==="staff",query:(params:URLSearchParams)=>({input:{},...pageOptions({limit:params.has("limit")?Number(params.get("limit")):undefined,cursor:params.get("cursor")??undefined}),cursor:params.get("cursor")??undefined}),page:salesPage};
-        const adminOptions = {...options,identity:{directory:async ({caller,request,db}: {caller:Caller;request:Request;db:Handle})=>{const {d1Identity}=await import("@aotter/mantle/auth/identity");return d1Identity(db,await auth!.get(),caller,request.headers);}},mcpEndpoints:{public:"/mcp",staff:"/mcp/staff"}};
+        const salesView = {name:"sales-by-item",allows:(caller:Caller)=>isAdmin(caller),query:(params:URLSearchParams)=>({input:{},...pageOptions({limit:params.has("limit")?Number(params.get("limit")):undefined,cursor:params.get("cursor")??undefined}),cursor:params.get("cursor")??undefined}),page:salesPage};
+        const adminOptions = {...options,identity:{directory:async ({caller,request,db}: {caller:Caller;request:Request;db:Handle})=>{const {d1Identity}=await import("@aotter/mantle/auth/identity");return d1Identity(db,await auth!.get(),caller,request.headers);}},mcpEndpoints:{public:"/mcp",admin:"/mcp/admin"}};
         serveAdmin = admin(metadata,[...bindings.views,salesView],bindings.operations,{...adminOptions,developerViews:bindings.developerViews,routes:[...entries(bindings.schemas,bindings.adapter),...siteRoutes(adminOptions),...webmcpRoutes(metadata.webmcp,[...tools,...extraTools],handlers)]});
       }
       response = await serveAdmin(request, env);
-    } else if (/^\/mcp(?:\/staff)?\/*$/.test(url.pathname)) {
+    } else if (/^\/mcp(?:\/admin)?\/*$/.test(url.pathname)) {
       if (!serveMcpHandler) {
-        serveMcpHandler = serveMcp([...tools, ...extraTools], ["staff"], { ...options, apps: { staff: adminMcpApps({catalogue:{ ...mcpAppCatalogues.staff, views: { ...mcpAppCatalogues.staff.views, sales_by_item: { columns: { name: { type: "string" } }, list: { columns: [] }, actions: [] } } },html:async()=> (await import("@aotter/mantle-admin/mcp-app")).mantleAppHtml}) } });
+        serveMcpHandler = serveMcp([...tools, ...extraTools], { ...options, apps: { admin: adminMcpApps({catalogue:{ ...mcpAppCatalogues.admin, views: { ...mcpAppCatalogues.admin.views, sales_by_item: { columns: { name: { type: "string" } }, list: { columns: [] }, actions: [] } } },html:async()=> (await import("@aotter/mantle-admin/mcp-app")).mantleAppHtml}) } });
       }
       response = await serveMcpHandler(request, env);
     } else {

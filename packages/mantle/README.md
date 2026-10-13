@@ -72,9 +72,9 @@ Schemas default to `lifecycle: operational`. Opt-in `lifecycle: publishing` adds
 (`draft` default, `published`, `archived`), nullable `published_at` and a scope-aware
 `(published_at, id)` index; `published_at` is selectable in Views and orders Store `find`
 (`NULLS LAST`). Generated `<table>.publish`, `.unpublish` and `.archive` Procedures take
-`{ id, expectedVersion }`, gate staff/system callers and run one atomic UPDATE; a failed guard is
+`{ id, expectedVersion }`, gate admin/system callers and run one atomic UPDATE; a failed guard is
 `CONFLICT`. Store writes cannot set status or `published_at`. Public Views see published rows only;
-other reads expose drafts only to staff or system callers.
+other reads expose drafts only to admin or system callers.
 
 ## Ref Procedures
 

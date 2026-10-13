@@ -8,7 +8,7 @@ produces it.
 
 | `identity` | Who produces the caller |
 |---|---|
-| `mantle` | `@aotter/mantle/auth`: Better Auth on the service's own database, with email OTP, magic link, social and generic OAuth sign-in, staff roles and an OAuth server for MCP. Self-hosted; the owner supplies provider credentials and an email sender |
+| `mantle` | `@aotter/mantle/auth`: Better Auth on the service's own database, with email OTP, magic link, social and generic OAuth sign-in, admin roles and an OAuth server for MCP. Self-hosted; the owner supplies provider credentials and an email sender |
 | `custom` | the service's own `CallerResolver` over its existing sessions or tokens, which may come from any identity provider |
 | `none` | nobody: every caller is anonymous |
 
@@ -26,6 +26,6 @@ What carries over from 0.1.x:
 
 The standalone hosted-auth and Landing provisioning flow from 0.1.x is absent
 in 0.2.0. A Mantle Cloud tenant uses Cloud's managed identity/storage contract;
-Cloud project membership does not grant tenant staff access. See
+Cloud project membership does not grant tenant admin access. See
 [Authentication](handbook/cloudflare/authentication.md) and
 [Authorization](handbook/concepts/authorization.md).

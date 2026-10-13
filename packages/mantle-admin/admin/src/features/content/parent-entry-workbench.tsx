@@ -8,7 +8,7 @@ import { api } from "../../lib/api";
 import { entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import { entryEditPath, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { Collection, EntryEditorPayload, SiteInfo, StaffOperation } from "../../lib/types";
+import type { Collection, EntryEditorPayload, SiteInfo, AdminOperation } from "../../lib/types";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Tabs, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
@@ -34,7 +34,7 @@ export function ParentEntryWorkbench({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
-  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
+  const operationsQuery = useQuery<AdminOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
     () => boundOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],

@@ -60,10 +60,10 @@ const api = admin(bindings.metadata, bindings.views, bindings.operations, {
 ```
 
 Without ref Procedures, omit `handlers` and use `adminBindings()`. The app's
-resolver verifies the caller; Admin accepts a staff cookie session with role
-`staff`, and cookie writes retain the shared same-origin check. Old
-owner/editor/contributor identities need an explicit role migration to `staff`.
-Do not manufacture a staff/system Caller from request input. Views and operations
+resolver verifies the caller; Admin accepts an admin cookie session classified from
+Better Auth’s admin plugin `adminRoles` (default `["admin"]`), and cookie writes
+retain the shared same-origin check. Comma-separated roles are supported.
+Do not manufacture an admin/system Caller from request input. Views and operations
 also retain their own generated `requires` checks. Share one request-local
 resolver with auth, consent, MCP and REST; preserve its response cookie headers.
 
@@ -89,7 +89,7 @@ from generated whitelists. Search/filter/cursor/range values are binds, never
 SQL identifiers. Core compiles scope, TTL, publishing and parent predicates;
 there is no request-time manifest/schema/SQL AST interpreter.
 
-Scoped rows remain private even from other staff. Translation reads merge at
+Scoped rows remain private even from other admin. Translation reads merge at
 most one visible parent with the matching join key; scoped parents correlate
 scope in every mode, including trusted reads. Child declarations win over parent
 fields, and a parent's public same-named field cannot replace a child's private
@@ -104,7 +104,7 @@ Entry queries validate indexed sort fields, directions, filters and limits
 Pages keep native NULL ordering, id ties, microsecond timestamp keys and an
 opaque cursor bound to caller, input, filters and ordering. Malformed/foreign
 cursors and unknown selectors fail before acquiring the route's DB handle;
-the app's authentication may already have used its own database. Staff manifest
+the app's authentication may already have used its own database. Admin manifest
 Views retain their complete proved key tuple, not a two-key approximation.
 
 Generated full/partial input checks validate creates, edits, operations and
@@ -215,7 +215,7 @@ tabs. Set `Schema.spec.uiSchema.nav.standalone: true` to put a required-ref chil
 at the top level instead. With multiple eligible references, set
 `nav.parentField` to the chosen reference field.
 
-Staff operations are Procedures exposed by a staff MCP Trigger. Declare
+Admin operations are Procedures exposed by an admin MCP Trigger. Declare
 `Procedure.spec.uiSchema.collectionAction: <schema-name>` to show the operation
 in that collection's list header. Row operations are chosen by the Procedure's
 explicit `target: { schema, id, version? }`: `id` names the input bound to the
@@ -236,9 +236,9 @@ Developer Model and Logic pages share an object sidebar on wide containers
 and an object-list drawer on narrow containers.
 Schema Live data previews use collection routes even for folded children.
 Pass `bindings.developerViews` as the Admin `developerViews` option for
-public and staff View previews; ordinary Admin View routes and exports use
-only `bindings.views` (staff Views). View previews use the read-only `/admin/api/developer/views/<view>` route,
-with the signed-in staff caller and the same authorization, scope, TTL and
+public and admin View previews; ordinary Admin View routes and exports use
+only `bindings.views` (admin Views). View previews use the read-only `/admin/api/developer/views/<view>` route,
+with the signed-in admin caller and the same authorization, scope, TTL and
 publishing policy as REST. Public Views retain public visibility; internal or
 disallowed Views show an unavailable explanation. Previews never use a system
 caller or bypass a View's `requires`.

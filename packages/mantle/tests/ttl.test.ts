@@ -58,7 +58,7 @@ test("TTL scans advance even when a native trigger suppresses deletion", async (
     expect(page.scanned).toBe(1); expect(page.removed).toBe(0);
     expect(await app.procedures["session_notes.sweepExpired"](db, caller, {cursor: page.nextCursor})).toEqual({scanned: 0, removed: 0});
     expect(db.query("SELECT id FROM session_notes").all()).toEqual([{id: "held"}]);
-    // Rejection precedes any database access, including forged staff callers.
-    await expect(app.procedures["session_notes.sweepExpired"]({}, {kind: "user", role: "staff"}, {})).rejects.toMatchObject({code: "AUTH_DENIED"});
+    // Rejection precedes any database access, including forged admin callers.
+    await expect(app.procedures["session_notes.sweepExpired"]({}, {kind: "user", role: "admin"}, {})).rejects.toMatchObject({code: "AUTH_DENIED"});
   } finally {db.close();}
 });

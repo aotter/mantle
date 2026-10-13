@@ -1,5 +1,5 @@
 /** Request-only MCP implementation, excluded from Worker startup. */
-import { ContractError, checkOrigin, surfaceCaller, surfaceError, surfaceFailure, wire, type Caller } from "./contracts.js";
+import { isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, surfaceFailure, wire, type Caller } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tools, Options } from "./mcp.js";
 import { RESOURCE_MIME_TYPE, linkSurface, type McpAppResource } from "./mcp-apps.js";
@@ -16,14 +16,14 @@ const paging = (schema: { properties?: object }) => ({ ...schema, properties: { 
 /** The scopes a challenge asks for: the credential's, plus what the request needs. */
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
 
-/** The handler for `/mcp` (public tools) and `/mcp/staff` (tools for `staff` roles); other paths are undefined. */
-export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, staff: readonly string[], options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env) => Promise<Response | undefined> {
+/** The handler for `/mcp` (public tools) and `/mcp/admin` (tools for `admin` roles); other paths are undefined. */
+export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env) => Promise<Response | undefined> {
   return async (request, env) => {
     const requiredScopes = options.requiredScopes ?? ["mcp"], locale = options.locale ?? "en";
-    const url = new URL(request.url), path = url.pathname.replace(/\/+$/, ""), surface = path === "/mcp" ? "public" as const : path === "/mcp/staff" ? "staff" as const : undefined;
+    const url = new URL(request.url), path = url.pathname.replace(/\/+$/, ""), surface = path === "/mcp" ? "public" as const : path === "/mcp/admin" ? "admin" as const : undefined;
     if (!surface) return;
     const select = async () => (typeof tools === "function" ? await tools(request, env) : tools).filter(tool => tool.surface === surface);
-    // Dynamic staff tables stay behind the staff gate; cache classification uses generated metadata only.
+    // Dynamic admin tables stay behind the admin gate; cache classification uses generated metadata only.
     let selected = surface === "public" ? await select() : [];
     let parsedBody: unknown, tooLarge = false;
     const cookieOnly = request.headers.has("cookie") && !request.headers.has("authorization");
@@ -52,12 +52,12 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
     let caller: Caller;
     try {
       caller = await surfaceCaller(request, env, options.caller, readOnly);
-      if (caller.kind === "anonymous" && (surface === "staff" || selected.length > 0 && selected.every(tool => tool.closed))) throw new ContractError("UNAUTHENTICATED", "Authentication is required.", "mcp");
+      if (caller.kind === "anonymous" && (surface === "admin" || selected.length > 0 && selected.every(tool => tool.closed))) throw new ContractError("UNAUTHENTICATED", "Authentication is required.", "mcp");
       if (caller.kind === "system") return challenge(new ContractError("AUTH_DENIED", "System callers cannot use MCP.", "mcp"), undefined, true);
-      if (surface === "staff" && caller.kind === "user" && !staff.includes(caller.role ?? "")) return challenge(new ContractError("AUTH_DENIED", "Staff role is required.", "mcp/staff"), undefined, true);
+      if (surface === "admin" && !isAdmin(caller)) return challenge(new ContractError("AUTH_DENIED", "Admin role is required.", "mcp/admin"), undefined, true);
       if (caller.kind === "user" && caller.credential !== "session" && requiredScopes.some(scope => !(caller as Extract<Caller, {kind: "user"}>).scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs the required MCP scopes.", "mcp"), union(caller.scopes, requiredScopes));
     } catch (error) { return challenge(error); }
-    if (surface === "staff") selected = await select();
+    if (surface === "admin") selected = await select();
     const { McpServer, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
     if (request.method === "POST" && !cookieOnly) await parse();
     if (tooLarge) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Request body exceeds 1048576 bytes." } }, { status: 413 });

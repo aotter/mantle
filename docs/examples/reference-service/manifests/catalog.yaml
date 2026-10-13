@@ -1,4 +1,4 @@
-# A small shop: a public catalog, orders that only their owner sees, and staff tools.
+# A small shop: a public catalog, orders that only their owner sees, and admin tools.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: items }
@@ -100,7 +100,7 @@ kind: View
 metadata: { name: sales-by-item }
 spec:
   surface: internal
-  requires: { auth: { all: [{ ctx.staff: [staff] }] } }
+  requires: { auth: { all: [{ ctx.admin: [admin] }] } }
   input:
     type: object
     required: [afterUnits, afterName, cap]
@@ -120,6 +120,6 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: recent-activity }
 spec:
-  surface: staff
-  requires: { auth: { all: [{ ctx.staff: [staff] }] } }
+  surface: admin
+  requires: { auth: { all: [{ ctx.admin: [admin] }] } }
   sql: SELECT kind, subject, detail FROM activity ORDER BY created_at DESC, id DESC LIMIT 50

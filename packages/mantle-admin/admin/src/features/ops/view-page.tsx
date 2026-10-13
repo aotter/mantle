@@ -44,7 +44,7 @@ interface ViewQueryResult {
   nextCursor?: string;
 }
 
-/** Fetch a staff View while preserving its declared query parameters. */
+/** Fetch an admin View while preserving its declared query parameters. */
 export async function fetchView(
   name: string,
   params: Record<string, unknown>,
@@ -135,7 +135,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={<Badge variant="secondary">{t(language, "views.staffReport")}</Badge>}
+        eyebrow={<Badge variant="secondary">{t(language, "views.adminReport")}</Badge>}
         title={viewTitle}
         description={resolveLocalizedText(view.description, language, canonical) ?? t(language, "views.page.body", { schema: view.name })}
         actions={

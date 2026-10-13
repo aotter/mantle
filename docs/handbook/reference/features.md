@@ -16,11 +16,11 @@ The native 0.2.0 SDK compiles the closed v2 grammar for four targets. Generation
 | Transactional email port, English templates and dev console sender | Optional `@aotter/mantle/email`; app supplies the sender and passes locale through. See [email wiring](../guides/email.md). |
 | View keyset pages, generated boundary validation and HTTP error mapping | Generated `paged/views/*` for proved exposed/internal Views: indexed non-null tuples, complete groups and singleton joins/lookups; `validation/*` and `wire`; see [surface contracts](surface.md). |
 | REST and `http` Trigger exposure | Supported generated `rest.ts`; app mounts with `{ db, caller }` and required `handlers` for ref contracts. Public Views page at `/api/views/<name>`; HTTP Triggers keep method/path. |
-| Generated MCP and `mcp` Trigger exposure | Public/staff tools, shared generated checks, publishing transitions on staff only; SDK loads on matching requests. Install the official MCP peer for manifests selecting this surface. |
+| Generated MCP and `mcp` Trigger exposure | Public/admin tools, shared generated checks, publishing transitions on admin only; SDK loads on matching requests. Install the official MCP peer for manifests selecting this surface. |
 | Dynamic `web.ts` (`llms.txt`, sitemap, `.md` alternates, head tags) | Generated; mount `web({ ... })`; see [surface contracts](surface.md#optional-web-output). |
 | Native Admin bindings, server and console | Supported; select `--admin` / `admin: true` and mount `entries(bindings.schemas, bindings.adapter)`. Shared authorized read templates, native Procedure writes and the console; see [Native Admin](../guides/native-admin.md).  |
 | Localized Schemas and translations | Plain-string locale values, atomic published-parent guard, SQL parent visibility and generated page locale helper; see [Translations](../concepts/lifecycle-and-locales.md#translations). |
-| Opt-in `lifecycle: publishing` | Generated status, `published_at`, staff-only transitions and published-only public reads; see [Publishing](../concepts/lifecycle-and-locales.md). |
+| Opt-in `lifecycle: publishing` | Generated status, `published_at`, admin-only transitions and published-only public reads; see [Publishing](../concepts/lifecycle-and-locales.md). |
 | `ref` Procedures and typed `Handlers` | Generated `Handlers` type; pass implementations at `store(db, caller, { handlers })`; `mantle generate` lists them. See [ref Procedures](../guides/native-execution.md#ref-procedures). |
 | Optional site settings and media | Select `site` defaults at generation to emit the generated `site` module and deployment tables; native media upload lifecycle, app-owned R2/signing. See [media](../cloudflare/media-r2.md). |
 

@@ -2,17 +2,16 @@
  * What a Schema's rows are, as data: who sees a row, and what a write adds to it. Core's policy rewriter renders these terms to
  * its AST, and a runtime that never compiles (a generated Store) renders them to its own SQL, so the rules are spelled once, here.
  */
-import { STAFF_ROLES } from "../model/ManifestGrammar.js";
 import type { SqlSchemaDef } from "../model/SqlIr.js";
 
-/** `caller` preserves Core visibility; `staff` additionally hides publishing drafts from non-staff callers. */
-export type RowMode = "caller" | "public" | "trusted" | "staff";
+/** `caller` preserves Core visibility; `admin` additionally hides publishing drafts from non-admin callers. */
+export type RowMode = "caller" | "public" | "trusted" | "admin";
 /** A value an engine binds. Inside a term a `const` is part of the rule (printed inline); in a write it is an input. */
-export type RowValue = { readonly k: "uid" | "role" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string };
-/** `eq`: `column = value`. `ttl`: `column IS NULL OR column > value`. `staff`: published, or the bound role is staff. */
-export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue] | readonly [column: string, op: "staff", value: RowValue, published: string, roles: readonly string[]] | readonly [column: string, op: "parent", value: RowValue, parent: RowParent];
-/** One correlated parent row must satisfy every visibility term; staff previews may omit this requirement. */
-export interface RowParent { readonly table: string; readonly terms: readonly RowTerm[]; readonly scope?: readonly [parent: string, child: string]; readonly roles?: readonly string[]; }
+export type RowValue = { readonly k: "uid" | "role" | "admin" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string };
+/** `eq`: `column = value`. `ttl`: `column IS NULL OR column > value`. `admin`: published, or the bound caller holds the admin layer. */
+export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue] | readonly [column: string, op: "admin", value: RowValue, published: string] | readonly [column: string, op: "parent", value: RowValue, parent: RowParent];
+/** One correlated parent row must satisfy every visibility term; admin previews may omit this requirement. */
+export interface RowParent { readonly table: string; readonly terms: readonly RowTerm[]; readonly scope?: readonly [parent: string, child: string]; readonly admin?: true; }
 export type RowSchema = Pick<SqlSchemaDef, "scope" | "ttl" | "ttlSeconds" | "publishing" | "translates">;
 export interface RowWrite {
   /** An insert's columns the policy fills, in order. `newId` is a new entry id. */
@@ -26,18 +25,18 @@ export interface RowWrite {
 const PUBLISHED = "published";
 const NOW: RowValue = { k: "now" };
 /** The rows a caller can see: its own (unless trusted), live (TTL) and, for a public caller of a publishing Schema, published. */
-export function rowPolicy(s: RowSchema, mode: RowMode, staffRoles: readonly string[] = STAFF_ROLES, schemas?: Readonly<Record<string, RowSchema>>): RowTerm[] {
+export function rowPolicy(s: RowSchema, mode: RowMode, schemas?: Readonly<Record<string, RowSchema>>): RowTerm[] {
   let parent: RowTerm[] = [];
-  if (s.translates && (mode === "public" || mode === "staff")) {
+  if (s.translates && (mode === "public" || mode === "admin")) {
     const table = s.translates.parent.toLowerCase(), schema = schemas?.[table];
     if (!schema) throw new Error(`Translation parent ${table} is unavailable to rowPolicy.`);
-    parent = [[s.translates.on.toLowerCase(), "parent", { k: "role" }, { table, terms: rowPolicy(schema, "public", staffRoles, schemas), ...(schema.scope && s.scope ? { scope: [schema.scope, s.scope] as const } : {}), ...(mode === "staff" ? { roles: staffRoles } : {}) }]];
+    parent = [[s.translates.on.toLowerCase(), "parent", { k: "admin" }, { table, terms: rowPolicy(schema, "public", schemas), ...(schema.scope && s.scope ? { scope: [schema.scope, s.scope] as const } : {}), ...(mode === "admin" ? { admin: true as const } : {}) }]];
   }
 
   return [
     ...(mode !== "trusted" && s.scope ? [[s.scope, "eq", { k: "uid" }] as const] : []),
     ...(s.ttl ? [[s.ttl, "ttl", { k: "cutoff", seconds: s.ttlSeconds! }] as const] : []),
-    ...(s.publishing && (mode === "public" || mode === "staff") ? [mode === "public" ? ["status", "eq", { k: "const", value: PUBLISHED }] as const : ["status", "staff", { k: "role" }, PUBLISHED, staffRoles] as const] : []),
+    ...(s.publishing && (mode === "public" || mode === "admin") ? [mode === "public" ? ["status", "eq", { k: "const", value: PUBLISHED }] as const : ["status", "admin", { k: "admin" }, PUBLISHED] as const] : []),
     ...parent,
 
   ];

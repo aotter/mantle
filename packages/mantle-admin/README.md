@@ -46,7 +46,7 @@ const api = admin(bindings.metadata, bindings.views, bindings.operations, {
 
 Use `adminBindings()` when no ref handlers are declared. Select additional
 site/media/identity routes with `/server/site`; Admin's resolver accepts only a
-fresh staff cookie session. The API router handles `/admin/api` and returns
+fresh admin cookie session. The API router handles `/admin/api` and returns
 `undefined` for other paths, so the application must serve the SPA shell for
 `/admin` and client routes, including `/admin/sign-in`, after mounting auth.
 Keep missing `/admin/assets/*` and `/admin/shared/*` as 404 responses. Supply a

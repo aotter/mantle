@@ -64,7 +64,7 @@ export type JsonSchema = {
   readonly maxItems?: number;
   readonly nullable?: boolean;
   /** Standard JSON Schema annotation. At the root of a Schema manifest,
-   *  Mantle keeps generic Admin and Staff MCP authoring read-only while
+   *  Mantle keeps generic Admin and Admin MCP authoring read-only while
    *  allowing trusted Procedure handlers to maintain the projection. */
   readonly readOnly?: boolean;
   readonly default?: unknown;
@@ -277,7 +277,7 @@ export interface ViewCachePolicy {
   readonly sharedMaxAge: number;
 }
 
-export const VIEW_SURFACES = ["public", "staff", "internal"] as const;
+export const VIEW_SURFACES = ["public", "admin", "internal"] as const;
 export type ViewSurface = (typeof VIEW_SURFACES)[number];
 
 export interface ViewManifestSpec {
@@ -292,7 +292,7 @@ export interface ViewManifestSpec {
    *  (ADR-0029). Projected into the View's MCP tool description; absent
    *  keeps the generated "Query <surface> View '<name>'." text. */
   readonly description?: LocalizedText;
-  /** Admin's list for a `surface: staff` View: `uiSchema.list.columns`, and
+  /** Admin's list for a `surface: admin` View: `uiSchema.list.columns`, and
    *  `searchFields` / `filterFields`, which Store compiles to `LIKE` and `=`
    *  conditions on the View's outputs for Admin's search box and filters
    *  (ADR-0032 decision 5). REST and MCP are unchanged. */
@@ -304,10 +304,10 @@ export interface ViewManifestSpec {
   /** Adapter exposure policy.
    *  `"public"` auto-mounts at the public
    *  `GET /api/views/<name>` (v0.1 default; `requires` may still gate
-   *  the call). When `"staff"` the View is
+   *  the call). When `"admin"` the View is
    *  NOT mounted on the public path — it mounts at
-   *  `GET /admin/api/views/<name>` behind the staff gate and becomes
-   *  the report-sidebar source. Guards data behind a staff session; use
+   *  `GET /admin/api/views/<name>` behind the admin gate and becomes
+   *  the report-sidebar source. Guards data behind an admin session; use
    *  it for any View over sensitive rows. `"internal"` mounts on no
    *  adapter and is callable only through `runtime.store.as(ctx).view()`. */
   readonly surface: ViewSurface;
@@ -318,7 +318,7 @@ export interface ViewManifestSpec {
    *  When absent the View is public — `ExecuteViewUseCase` skips the
    *  predicate check. When present, ALL predicates must hold; the
    *  runtime enforces with `evaluateAuthAll`. Closed predicate
-   *  vocabulary: `ctx.user`, `ctx.staff`, `ctx.auth`, and
+   *  vocabulary: `ctx.user`, `ctx.admin`, `ctx.auth`, and
    *  `ctx.auth.scope`; an optional guard names one consumer Procedure. */
   readonly requires?: AuthorizationRequirements;
   /** Caller-supplied parameters, read in `sql` as `input.<name>`. MUST be
@@ -336,7 +336,7 @@ export const VIEW_INPUT_RESERVED = ["limit", "cursor"] as const;
 export type ProcedureManifest = ManifestEnvelope<"Procedure", ProcedureManifestSpec>;
 
 export interface ProcedureManifestSpec {
-  /** Human-readable label for the admin UI's staff-operations surface
+  /** Human-readable label for the admin UI's admin-operations surface
    *  (#430). Same string-or-locale-map `LocalizedText` shape as
    *  `Schema.spec.title`. Optional — Procedures didn't carry a title
    *  before v0.1.x; when absent the admin UI falls back to a
@@ -349,7 +349,7 @@ export interface ProcedureManifestSpec {
   readonly description?: LocalizedText;
   /** Authorization via `requires.auth.all` plus one optional
    *  `requires.guard.procedure`; static predicates are closed to
-   *  `ctx.user`, `ctx.staff`, `ctx.auth`, and `ctx.auth.scope`. */
+   *  `ctx.user`, `ctx.admin`, `ctx.auth`, and `ctx.auth.scope`. */
   readonly requires?: AuthorizationRequirements;
   /** JSON Schema for the request body. */
   readonly input: JsonSchema;
@@ -404,7 +404,7 @@ export interface HandlerSqlBinding {
 }
 
 /** Closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare
- *  strings; `ctx.staff` and `ctx.auth.scope` carry scalar data under
+ *  strings; `ctx.admin` and `ctx.auth.scope` carry scalar data under
  *  literal object keys.
  */
 export interface AuthorizationRequirements {
@@ -417,14 +417,15 @@ export interface AuthorizationRequirements {
 
 export type AuthPredicate =
   | CtxUserPredicate
-  | CtxStaffPredicate
+  | "ctx.admin"
+  | CtxAdminPredicate
   | CtxAuthPredicate
   | CtxAuthScopePredicate;
 export type CtxUserPredicate = "ctx.user";
 /** Requires any verified credential normalized into HandlerContext.auth. */
 export type CtxAuthPredicate = "ctx.auth";
-export interface CtxStaffPredicate {
-  readonly "ctx.staff": readonly StaffRole[];
+export interface CtxAdminPredicate {
+  readonly "ctx.admin": readonly AdminRole[];
 }
 /** Requires one opaque, consumer-owned scope. Repeat under `all` for
  *  multiple required scopes. */
@@ -432,28 +433,10 @@ export interface CtxAuthScopePredicate {
   readonly "ctx.auth.scope": string;
 }
 
-/**
- * Staff role hierarchy. `users` is the base identity layer (runtime);
- * `staff` is the privilege overlay (one row per privileged user). A
- * user without a staff row is a regular site member with no admin
- * access.
- *
- *   owner       — full control, manages staff, manages settings
- *   editor      — publish, approve/reject, manage all entries
- *   contributor — create and edit drafts
- *
- * `StaffRole` lives in spec because the manifest grammar references
- * it directly: `requires.auth.all: [{ "ctx.staff": [<role>, ...] }]`
- * — the parser checks each role string with `isStaffRole` at compile time.
- * The `Staff` runtime row shape (with grantedBy / grantedAt) lives in
- * `mantle-runtime`; only the closed enum is grammar.
- */
-export const STAFF_ROLES = ["owner", "editor", "contributor"] as const;
-/** Next adds one OSS role; the legacy Core preset remains unchanged. */
-export type StaffRole = (typeof STAFF_ROLES)[number] | "staff";
-
-export function isStaffRole(s: string): s is StaffRole {
-  return s === "staff" || (STAFF_ROLES as readonly string[]).includes(s);
+/** Role names are application-owned; the privileged layer comes from Better Auth. */
+export type AdminRole = string;
+export function isAdminRole(s: string): s is AdminRole {
+  return /^[a-z][a-zA-Z0-9_]{0,62}$/.test(s);
 }
 
 /* ─── Trigger ─── */
@@ -511,11 +494,11 @@ export interface LifecycleTriggerSource {
   readonly on: readonly LifecycleHook[];
 }
 
-/** Surfaces an MCP-source Trigger can be bound to. `staff` ⇒
- *  `/mcp/staff` (bearer + role gate); `public` ⇒ `/mcp` (bearer only).
+/** Surfaces an MCP-source Trigger can be bound to. `admin` ⇒
+ *  `/mcp/admin` (bearer + role gate); `public` ⇒ `/mcp` (bearer only).
  *  The procedure's own `requires.auth` still gates the call —
  *  surface determines visibility in `tools/list`. */
-export const MCP_TRIGGER_SURFACES = ["staff", "public"] as const;
+export const MCP_TRIGGER_SURFACES = ["admin", "public"] as const;
 export type McpTriggerSurface = (typeof MCP_TRIGGER_SURFACES)[number];
 
 export interface McpTriggerSource {

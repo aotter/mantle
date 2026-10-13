@@ -28,7 +28,7 @@ import type { MediaStorage } from "@aotter/mantle/site";
 import type { Tool } from "@aotter/mantle/mcp";
 ${definitions.map((tool,i)=>`import { validate as v${i} } from "./validation/media/${tool.name}.js";`).join("\n")}
 export function mediaTools<Handlers = never>(storage: () => MediaStorage): Tool<Parameters<typeof site>[0], Handlers>[] { return [
-${definitions.map(({action,...tool},i)=>`{...${JSON.stringify(tool)},surface:"staff",closed:true,validate:v${i},run:${invoke[action]}}`).join(",\n")}
+${definitions.map(({action,...tool},i)=>`{...${JSON.stringify(tool)},surface:"admin",closed:true,validate:v${i},run:${invoke[action]}}`).join(",\n")}
 ]; }
 `};
 }

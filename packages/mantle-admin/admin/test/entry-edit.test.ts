@@ -9,23 +9,23 @@ import {
 
 describe("canEditEntry", () => {
   const access = (overrides: Partial<Parameters<typeof canEditEntry>[0]> = {}) => canEditEntry({
-    role: "staff",
+    admin: true,
     isReadOnly: false,
     isOperational: true,
     operationalEditUnlocked: false,
     ...overrides,
   });
 
-  it("requires staff to explicitly unlock operational records", () => {
+  it("requires admin to explicitly unlock operational records", () => {
     expect(access()).toBe(false);
     expect(access({ operationalEditUnlocked: true })).toBe(true);
-    expect(access({ role: null, operationalEditUnlocked: true })).toBe(false);
+    expect(access({ admin: false, operationalEditUnlocked: true })).toBe(false);
     expect(access({ isReadOnly: true, operationalEditUnlocked: true })).toBe(false);
   });
 
-  it("allows staff publishing edits but never grants a member access", () => {
+  it("allows admin publishing edits but never grants a member access", () => {
     expect(access({ isOperational: false })).toBe(true);
-    expect(access({ role: null, isOperational: false })).toBe(false);
+    expect(access({ admin: false, isOperational: false })).toBe(false);
   });
 });
 

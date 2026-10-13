@@ -5,7 +5,7 @@ type JsonSchema = AdminExtensionSchema;
 type LocalizedText = string | Readonly<Record<string, string>>;
 import type { Context } from "./index.js";
 export type AdminExtensionCaller = Context<unknown, unknown>["caller"];
-type Staff = AdminExtensionCaller;
+type Admin = AdminExtensionCaller;
 export const ADMIN_EXTENSION_TARGETS = {
     action: ["record/v1", "list.selection/v1", "list.toolbar/v1"],
     panel: ["record.sidebar/v1", "home/v1"],
@@ -23,7 +23,7 @@ export interface AdminExtensionWhen {
 export interface AdminExtensionPage {
     readonly id: string;
     readonly title: LocalizedText;
-    readonly role: "staff";
+    readonly role: "admin";
     readonly nav?: {
         readonly group: "more" | "settings";
         readonly order?: number;
@@ -33,13 +33,13 @@ export interface AdminExtensionPage {
 export interface AdminExtensionSettings {
     readonly id: string;
     readonly title: LocalizedText;
-    readonly role: "staff";
+    readonly role: "admin";
     readonly schema: JsonSchema;
 }
 export interface AdminExtensionAction {
     readonly id: string;
     readonly title: LocalizedText;
-    readonly role: "staff";
+    readonly role: "admin";
     readonly target: AdminActionTarget;
     /** `run` calls the server at once, `confirm` asks first, `dialog` mounts the module's renderer in an Admin dialog. */
     readonly presentation: "run" | "confirm" | "dialog";
@@ -49,15 +49,15 @@ export interface AdminExtensionAction {
 export interface AdminExtensionPanel {
     readonly id: string;
     readonly title: LocalizedText;
-    readonly role: "staff";
+    readonly role: "admin";
     readonly target: AdminPanelTarget;
     readonly when?: AdminExtensionWhen;
 }
 export interface AdminExtensionField {
     readonly id: string;
     readonly target: AdminFieldTarget;
-    /** Default `staff`, the OSS role. */
-    readonly role?: "staff";
+    /** Default `admin`, the OSS role. */
+    readonly role?: "admin";
     readonly when?: AdminExtensionWhen;
     /** The form subset `uiSchema` `options` must satisfy; without it, `options` is refused. */
     readonly optionsSchema?: JsonSchema;
@@ -100,11 +100,11 @@ export interface AdminExtensionHandlers<Env = unknown, Database = unknown> {
         readonly path: string;
     }) => Response | null | Promise<Response | null>;
     readonly settings?: Readonly<Record<string, {
-        load(caller: Staff, context: Context<Env, Database>): unknown;
-        save(caller: Staff, value: Readonly<Record<string, unknown>>, context: Context<Env, Database>): unknown;
+        load(caller: Admin, context: Context<Env, Database>): unknown;
+        save(caller: Admin, value: Readonly<Record<string, unknown>>, context: Context<Env, Database>): unknown;
     }>>;
     readonly actions?: Readonly<Record<string, {
-        run(caller: Staff, input: {
+        run(caller: Admin, input: {
             readonly record?: AdminExtensionRecordRef;
             readonly selection?: AdminExtensionSelection;
             readonly schema?: string;

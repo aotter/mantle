@@ -27,7 +27,7 @@ controller.edit("reviewerNote", "Within budget.");
 await controller.submit();
 ```
 
-The host injects `read` and `invoke`. Admin uses the staff MCP client, an MCP
+The host injects `read` and `invoke`. Admin uses the admin MCP client, an MCP
 App uses `App.callServerTool`, and an application can use its own HTTP
 client. `subscribe` and `getSnapshot` plug straight into React's
 `useSyncExternalStore`, or into any other store. A listener that throws is

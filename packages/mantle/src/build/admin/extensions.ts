@@ -1,6 +1,6 @@
 /** Build-time contribution metadata and existing manifest binding checks. */
 import { DiagnosticError, makeDiagnostic } from "../spec/kernel/index.js";
-import { UI_EXTENSION_REF, type JsonSchema, type LocalizedText, type RuntimePlan, type StaffRole } from "../spec/domain/index.js";
+import { UI_EXTENSION_REF, type JsonSchema, type LocalizedText, type RuntimePlan, type AdminRole } from "../spec/domain/index.js";
 export const ADMIN_EXTENSION_TARGETS = {
   action: ["record/v1", "list.selection/v1", "list.toolbar/v1"],
   panel: ["record.sidebar/v1", "home/v1"],
@@ -20,20 +20,20 @@ export interface AdminExtensionWhen {
 export interface AdminExtensionPage {
   readonly id: string;
   readonly title: LocalizedText;
-  readonly role: StaffRole;
+  readonly role: AdminRole;
   readonly nav?: { readonly group: "more" | "settings"; readonly order?: number };
 }
 /** A settings page Admin renders from `schema` (the form subset) with no client code. */
 export interface AdminExtensionSettings {
   readonly id: string;
   readonly title: LocalizedText;
-  readonly role: StaffRole;
+  readonly role: AdminRole;
   readonly schema: JsonSchema;
 }
 export interface AdminExtensionAction {
   readonly id: string;
   readonly title: LocalizedText;
-  readonly role: StaffRole;
+  readonly role: AdminRole;
   readonly target: AdminActionTarget;
   /** `run` calls the server at once, `confirm` asks first, `dialog` mounts the module's renderer in an Admin dialog. */
   readonly presentation: "run" | "confirm" | "dialog";
@@ -43,15 +43,15 @@ export interface AdminExtensionAction {
 export interface AdminExtensionPanel {
   readonly id: string;
   readonly title: LocalizedText;
-  readonly role: StaffRole;
+  readonly role: AdminRole;
   readonly target: AdminPanelTarget;
   readonly when?: AdminExtensionWhen;
 }
 export interface AdminExtensionField {
   readonly id: string;
   readonly target: AdminFieldTarget;
-  /** Default `contributor`: a viewer below it gets Admin's own widget. */
-  readonly role?: StaffRole;
+  /** Default `admin`; Admin routes enforce the admin-layer gate. */
+  readonly role?: AdminRole;
   readonly when?: AdminExtensionWhen;
   /** The form subset `uiSchema` `options` must satisfy; without it, `options` is refused. */
   readonly optionsSchema?: JsonSchema;

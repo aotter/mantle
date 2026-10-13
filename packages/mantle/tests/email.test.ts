@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { build } from "esbuild";
 import type { EmailSender as PublicSender, EmailSendArgs as PublicArgs } from "@aotter/mantle/email";
-import { ConsoleEmailSender, signInCodeEmail, signInLinkEmail, staffInvitationEmail, type EmailSender, type EmailSendArgs } from "../src/kernel/email.js";
+import { ConsoleEmailSender, signInCodeEmail, signInLinkEmail, adminInvitationEmail, type EmailSender, type EmailSendArgs } from "../src/kernel/email.js";
 
 test("English templates preserve the 0.2 text-only contract", () => {
   expect(signInCodeEmail("123456")).toEqual({
@@ -13,9 +13,9 @@ test("English templates preserve the 0.2 text-only contract", () => {
     subject: "Your Mantle sign-in link",
     text: `Use this link to sign in:\n\n${url}\n\nThe link expires shortly.\n\nIf you did not expect this email, you can ignore it.`,
   });
-  expect(staffInvitationEmail("staff", url)).toEqual({
+  expect(adminInvitationEmail("admin", url)).toEqual({
     subject: "You have been invited to Mantle",
-    text: `You now have staff access to Mantle.\n\nSign in with this email address to accept the invitation:\n\n${url}\n\nIf you did not expect this email, you can ignore it.`,
+    text: `You now have admin access to Mantle.\n\nSign in with this email address to accept the invitation:\n\n${url}\n\nIf you did not expect this email, you can ignore it.`,
   });
   // These are text bodies, never HTML or raw MIME headers.
   expect(signInLinkEmail("<script>alert(1)</script>")).not.toHaveProperty("html");

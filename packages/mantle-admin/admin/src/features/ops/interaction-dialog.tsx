@@ -13,7 +13,7 @@ import type { AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { JsonSchema, StaffOperation } from "../../lib/types";
+import type { JsonSchema, AdminOperation } from "../../lib/types";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
 
@@ -64,7 +64,7 @@ export { idempotencyFields, operationFormSchema } from "./interaction-schema";
 import { operationFormSchema } from "./interaction-schema";
 
 /**
- * One staff operation in a dialog, through the shared interaction
+ * One admin operation in a dialog, through the shared interaction
  * controller (ADR-0029). Every Admin entry point uses it, so review,
  * conflicts and uncertain writes behave the same everywhere. The caller
  * decides how the controller reads and invokes.
@@ -72,7 +72,7 @@ import { operationFormSchema } from "./interaction-schema";
 export function InteractionDialog({ create, operation, hidden, automatic, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult }: {
   /** Called once when the dialog opens; a binding that cannot be met is shown, not thrown. */
   create: () => InteractionController;
-  operation: StaffOperation;
+  operation: AdminOperation;
   /** Inputs the form does not render: row bindings, the version, idempotency keys. */
   hidden: readonly string[];
   /** Idempotency keys, renewed when a payload is refused or conflicts. */
@@ -146,7 +146,7 @@ export function InteractionDialog({ create, operation, hidden, automatic, langua
 
 function InteractionDialogPanel({ controller, operation, hidden, automatic, title, description, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult, closeRef }: {
   controller: InteractionController;
-  operation: StaffOperation;
+  operation: AdminOperation;
   hidden: readonly string[];
   automatic: readonly string[];
   title: string;

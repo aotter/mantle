@@ -6,7 +6,7 @@ exact packed tarballs (`scripts/check-worker-consumer.mjs`).
 
 - `manifests/`: scoped orders, a stock CHECK, joins, grouping, native full-text
   search, atomic SQL Procedures, typed ref Procedures, REST and MCP exposure.
-- `src/auth.ts`: app-owned Better Auth options and verified-email staff bootstrap;
+- `src/auth.ts`: app-owned Better Auth options and verified-email admin bootstrap;
   Better Auth loads dynamically, and local-only email OTPs print to the log.
 - `src/handlers.ts`: scoped cancellation and stock restoration in one native
   batch. Order activity runs after commit with the actual caller, best effort,
@@ -38,7 +38,7 @@ pnpm dev                        # /admin; local OTP codes appear in this log
 Apply initial DDL only to an empty development database. Production migrations
 are reviewed application-owned artifacts; imports and requests do no schema
 convergence. Configure a real email sender before deployment. `ADMIN_EMAIL`
-receives the OSS `staff` role only after email verification; ordinary members
+receives the OSS `admin` role only after email verification; ordinary members
 receive 403 from Admin.
 
 Commit every generated TypeScript/SQL file and Wrangler edit; regenerate instead

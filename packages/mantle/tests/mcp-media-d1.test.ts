@@ -33,9 +33,9 @@ import {wire} from ${JSON.stringify(resolve(base,"src/kernel/contracts.ts"))};
 import {mediaError} from ${JSON.stringify(resolve(base,"src/kernel/media.ts"))};
 import {r2MediaStorage} from ${JSON.stringify(resolve(base,"src/kernel/r2-media.ts"))};
 let reads=0;
-const caller={kind:'user',subject:'native-staff',role:'staff',scopes:[],credential:'session',credentialId:null,clientId:null};
+const caller={kind:'user',subject:'native-admin',role:'admin', admin: true,scopes:[],credential:'session',credentialId:null,clientId:null};
 const storage=env=>r2MediaStorage({bucket:env.MEDIA,endpoint:${JSON.stringify(origin)},publicBase:${JSON.stringify(origin)},signer:{async sign(url){return{url};}}});
-const handle=mcp({db:env=>({prepare(sql){const statement=env.DB.prepare(sql);return{original:statement,bind(...values){const bound=statement.bind(...values);return{original:bound,all(){reads++;return bound.all();}};}}},batch(statements){return env.DB.batch(statements.map(s=>s.original));}}),caller:request=>request.headers.get('x-test-caller')==='anonymous'?{kind:'anonymous'}:request.headers.get('x-test-caller')==='member'?{...caller,role:'member'}:caller,media:storage});
+const handle=mcp({db:env=>({prepare(sql){const statement=env.DB.prepare(sql);return{original:statement,bind(...values){const bound=statement.bind(...values);return{original:bound,all(){reads++;return bound.all();}};}}},batch(statements){return env.DB.batch(statements.map(s=>s.original));}}),caller:request=>request.headers.get('x-test-caller')==='anonymous'?{kind:'anonymous'}:request.headers.get('x-test-caller')==='member'?{...caller,role:'member',admin:false}:caller,media:storage});
 export default{async fetch(request,env){const url=new URL(request.url),key=url.pathname.slice(1);
  if(url.pathname==='/health')return new Response('ready');
  if(url.pathname==='/setup'){for(const sql of ${JSON.stringify(unstable_splitSqlQuery(generated.files["schema.sql"]!))})await env.DB.prepare(sql).run();return new Response(null,{status:204});}
@@ -53,12 +53,12 @@ export default{async fetch(request,env){const url=new URL(request.url),key=url.p
   if(!ready)throw Error(await readFile(join(state,"worker.log"),"utf8"));
   expect((await fetch(origin+"/setup")).status).toBe(204);
   const counts=async()=>await(await fetch(origin+"/counts")).json() as {reads:number;objects:string[]};
-  const rpc=async(method:string,params:unknown={},path="/mcp/staff",headers:Record<string,string>={})=>{const response=await fetch(origin+path,{method:"POST",headers:{origin,"content-type":"application/json",accept:"application/json, text/event-stream",...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});const body=await response.text();return{response,data:JSON.parse(body.startsWith("event:")?body.split("data: ")[1]!.split("\n")[0]!:body)};};
+  const rpc=async(method:string,params:unknown={},path="/mcp/admin",headers:Record<string,string>={})=>{const response=await fetch(origin+path,{method:"POST",headers:{origin,"content-type":"application/json",accept:"application/json, text/event-stream",...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});const body=await response.text();return{response,data:JSON.parse(body.startsWith("event:")?body.split("data: ")[1]!.split("\n")[0]!:body)};};
   const call=async(name:string,args:unknown={})=>(await rpc("tools/call",{name,arguments:args})).data.result;
   const names=(await rpc("tools/list")).data.result.tools.map((tool:{name:string})=>tool.name);
   expect(names).toEqual(["get_media_upload_policy","create_media_upload","commit_media_upload","list_media_assets","get_media_asset","update_media_asset","delete_media_asset"]);
   expect((await rpc("tools/list",{},"/mcp")).data.result.tools.map((tool:{name:string})=>tool.name)).toEqual(["entries"]);expect((await counts()).reads).toBe(0);
-  expect((await rpc("tools/list",{},"/mcp/staff",{"x-test-caller":"anonymous"})).response.status).toBe(401);expect((await rpc("tools/list",{},"/mcp/staff",{"x-test-caller":"member"})).response.status).toBe(403);
+  expect((await rpc("tools/list",{},"/mcp/admin",{"x-test-caller":"anonymous"})).response.status).toBe(401);expect((await rpc("tools/list",{},"/mcp/admin",{"x-test-caller":"member"})).response.status).toBe(403);
   expect((await call("get_media_asset",{id:2})).isError).toBe(true);expect((await counts()).reads).toBe(0);
   expect((await call("get_media_upload_policy")).structuredContent.purposes[0].name).toBe("cover");expect((await counts()).reads).toBe(1);
   const upload=(await call("create_media_upload",{filename:"native.png",purpose:"cover",variants:[{mimeType:"image/png",byteSize:5,role:"primary"}]})).structuredContent,capability=upload.capabilities[0];
@@ -69,7 +69,7 @@ export default{async fetch(request,env){const url=new URL(request.url),key=url.p
   expect((await call("commit_media_upload",{uploadGroupId:upload.uploadGroupId})).structuredContent.id).toBe(committed.id);
   expect((await call("list_media_assets",{search:committed.id})).structuredContent.rows).toHaveLength(1);
   expect((await call("update_media_asset",{id:committed.id,alt:"native R2"})).structuredContent.alt).toBe("native R2");
-  const before=(await counts()).reads,refused=(await rpc("tools/call",{name:"delete_media_asset",arguments:{id:committed.id}},"/mcp/staff",{origin:"https://evil.test"})).data.result;
+  const before=(await counts()).reads,refused=(await rpc("tools/call",{name:"delete_media_asset",arguments:{id:committed.id}},"/mcp/admin",{origin:"https://evil.test"})).data.result;
   expect(JSON.parse(refused.content[0].text).diagnostics[0]).toMatchObject({code:"AUTH_DENIED",path:"request:origin"});expect((await counts()).reads).toBe(before);
   expect((await call("get_media_asset",{id:committed.id})).structuredContent.alt).toBe("native R2");
   const missing=await fetch(origin+"/native-error-status");expect(missing.status).toBe(404);expect((await missing.json() as {error:{code:string;path:string}}).error).toMatchObject({code:"MEDIA_ASSET_NOT_FOUND",path:"media"});

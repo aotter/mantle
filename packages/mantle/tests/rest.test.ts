@@ -30,7 +30,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: {name: edit}
 spec:
- requires: {auth: {all: [{ctx.staff: [staff]}]}}
+ requires: {auth: {all: [{ctx.admin: [admin]}]}}
  input: {type: object, required: [id,title,version], properties: {id: {type: string}, title: {type: string}, version: {type: integer}}, additionalProperties: false}
  output: {type: object}
  handler: {sql: 'UPDATE notes SET title=input.title WHERE id=input.id AND version=input.version RETURNING id,title'}
@@ -42,7 +42,7 @@ spec:
  source: {kind: http, method: PUT, path: '/api/notes/{id}'}
  target: {procedure: edit}
 `;
-const user=(role:string|null="staff",credential="api-key")=>({kind:"user",subject:"s",role,scopes:[],credential,credentialId:null,clientId:null});
+const user=(role:string|null="admin",credential="api-key")=>({kind:"user",subject:"s",role,admin: role === "admin",scopes:[],credential,credentialId:null,clientId:null});
 test("REST selected routes: paging, validation, auth, OCC, method, composition and session origin",async()=>{
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"rest.yaml",text:source}]);
  expect(files["rest.ts"]).not.toContain("secret.js");
@@ -71,7 +71,7 @@ test("REST selected routes: paging, validation, auth, OCC, method, composition a
   const before=calls;expect(await request("/custom")).toBeUndefined();expect(await request("/custom/%ZZ")).toBeUndefined();expect(calls).toBe(before);
   const oversized=new Request("https://app.test/api/notes/a",{method:"PUT",body:"{}",headers:{"content-length":"1000001"}});expect((await fetch(oversized,{})).status).toBe(400);expect(oversized.bodyUsed).toBe(false);
   expect((await request("/api/notes/a","PUT",JSON.stringify({title:"😀".repeat(300000),version:2}))).status).toBe(400);
-  caller=user("staff","session");
+  caller=user("admin","session");
   for(const headers of [{} as Record<string,string>,{origin:"https://evil.test"},{"sec-fetch-site":"cross-site",origin:"https://app.test"}]) expect((await request("/api/notes/a","PUT",'{"title":"y","version":2}',headers)).status).toBe(403);
   expect((await (await request("/api/notes/a","PUT",'{"title":"y","version":2}',{origin:"https://evil.test"})).json()).error.path).toBe("request:origin");
   expect((await request("/api/notes/a","PUT",'{"title":"y","version":2}',{origin:"https://app.test"})).status).toBe(200);

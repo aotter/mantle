@@ -59,7 +59,7 @@ metadata: { name: restock }
 spec:
   title: Restock an item
   description: Add stock to an item by SKU, creating the item if it is new.
-  requires: { auth: { all: [{ ctx.staff: [staff] }] } }
+  requires: { auth: { all: [{ ctx.admin: [admin] }] } }
   input:
     type: object
     required: [sku, name, qty]
@@ -99,5 +99,5 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: restock-mcp }
 spec:
-  source: { kind: mcp, surface: staff }
+  source: { kind: mcp, surface: admin }
   target: { procedure: restock }

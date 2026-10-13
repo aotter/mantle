@@ -77,7 +77,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
       const tampered = cookie.split("; ").map(value => {
         const index = value.indexOf("="); if (!value.slice(0, index).includes("session_data")) return value;
         const payload = JSON.parse(atob(value.slice(index + 1).replaceAll("-", "+").replaceAll("_", "/")));
-        payload.session.user.role = "tampered-staff";
+        payload.session.user.role = "tampered-admin";
         return value.slice(0, index + 1) + btoa(JSON.stringify(payload)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
       }).join("; ");
       assert.equal((await readSnapshot("read-tampered", tampered, expected)).kind, "user");
@@ -112,20 +112,20 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
       options.session!.cookieCache!.enabled = true;
     }
     // Primary rows, not a cached or browser snapshot, own the role and ban state.
-    await run(`UPDATE "${u}" SET "${field("role")}" = 'staff' WHERE id = ${dialect === "postgres" ? "$1" : "?"}`, [id]);
+    await run(`UPDATE "${u}" SET "${field("role")}" = 'admin' WHERE id = ${dialect === "postgres" ? "$1" : "?"}`, [id]);
     if (!cached) {
       const snapshot = await auth.api.getSession({ headers: new Headers({ cookie }) });
-      assert.notEqual((snapshot?.user as { role?: string } | undefined)?.role, "staff", "browser cookie cache is stale and must be bypassed");
+      assert.notEqual((snapshot?.user as { role?: string } | undefined)?.role, "admin", "browser cookie cache is stale and must be bypassed");
     }
     const role = (await check("role", expected)).caller;
     assert.equal(role.kind, "user");
-    assert.equal(role.kind === "user" && role.role, "staff");
+    assert.equal(role.kind === "user" && role.role, "admin");
     if (!cached) {
       const stale = await readSnapshot("read-stale-role");
       assert.equal(stale.kind === "user" && stale.role, "user");
       statements.length = 0;
       const writer = await resolveCaller(new Request("http://localhost:3000/private", { method: "POST", headers: { cookie } }), loader);
-      assert.equal(writer.kind === "user" && writer.role, "staff"); assert.equal(reads(), expected);
+      assert.equal(writer.kind === "user" && writer.role, "admin"); assert.equal(reads(), expected);
       counts[`${variant}:write-current-role`] = reads();
     }
     assert.equal((await check("headers", variant === "authority" ? 3 : expected, new Headers())).caller.kind, "user");

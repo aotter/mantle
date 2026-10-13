@@ -19,7 +19,7 @@ Follow the installed [native generation and service workflow](../../handbook/clo
 with its [native contract](../../handbook/guides/native-execution.md) and [supported declarations](../../handbook/reference/features.md). Commit
 all generated output, run the same generation command with `--check`, and keep
 bundle `dist/` untracked. The app owns its verified Caller, handlers and native
-resources; OSS staff role is `staff`.
+resources; Better Auth’s admin plugin `adminRoles` defines the admin layer (default `["admin"]`); `ctx.admin` accepts open role names.
 
 Deploy/create resources only within the user's authorization; reuse configured
 host resources. Apply reviewed and rehearsed migrations before routing traffic;
@@ -27,12 +27,12 @@ imports/first requests perform no DDL or schema checks. Keep auth dynamic, produ
 secrets in the host store, trusted HTTPS origin and verified bootstrap rule,
 production email and selected media wiring. Configure Admin ASSETS worker-first
 as in [Workers assets and secrets](../../handbook/cloudflare/service-entry.md#workers-assets-and-secrets). Hyperdrive caching stays off; PG settings are deployment-owned.
-Bun uses native Database/SQL, an app server and scheduler. Verify staff sign-in
-(role staff), denied access, public reads, a persisted write, MCP and selected UI.
+Bun uses native Database/SQL, an app server and scheduler. Verify admin sign-in
+(role admin), denied access, public reads, a persisted write, MCP and selected UI.
 Report artifact/resources/checks and keep rollback artifacts.
 
 Use the installed [Native Admin](../../handbook/guides/native-admin.md) asset
 contract and `entries(bindings.schemas, bindings.adapter)`. Admin SPA assets
 belong to `@aotter/mantle-admin`, while UI supplies the shared kit. Verify both
-member and staff OTP/UI flows. Deployment of an authorized application does
+member and admin OTP/UI flows. Deployment of an authorized application does
 not authorize SDK publication; a workspace preview remains a preview.

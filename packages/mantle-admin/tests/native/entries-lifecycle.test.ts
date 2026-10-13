@@ -2,17 +2,17 @@ import {test,expect} from "bun:test";
 import {Database} from "bun:sqlite";
 import {mkdtemp,readFile,rm} from "node:fs/promises";
 import {join} from "node:path";
-import {admin} from "../../src/server/index.js";
+import {admin as createAdmin} from "../../src/server/index.js";
 import {entries} from "../../src/server/entries.js";
 import {generateAdmin,writeAdminFixture} from "./generated-fixture.js";
-import {staff} from "./server-native-scenarios.js";
+import {admin} from "./server-native-scenarios.js";
 const manifest=await readFile(join(import.meta.dir,"../../../mantle/tests/apps/translations.yaml"),"utf8");
 test("a translation entry is read with its parent's fields and saved back unchanged, and a restored archive returns to draft",async()=>{
  const files=await generateAdmin("bun-sqlite",manifest),dir=await mkdtemp(join(import.meta.dir,"../../../mantle/tests/apps/.admin-lifecycle-")),db=new Database(":memory:");
  try{
   await writeAdminFixture(dir,files);db.exec(files["schema.sql"]!);
   const {adminBindings}=await import(join(dir,"admin-bindings.ts")),bindings=adminBindings();
-  const fetch=admin(bindings.metadata,bindings.views,bindings.operations,{db:()=>db,caller:()=>staff,routes:entries(bindings.schemas,bindings.adapter)});
+  const fetch=createAdmin(bindings.metadata,bindings.views,bindings.operations,{db:()=>db,caller:()=>admin,routes:entries(bindings.schemas,bindings.adapter)});
   const ask=async(path:string,method="GET",body?:unknown)=>{const response=(await fetch(new Request("https://app.test/admin/api"+path,{method,headers:{origin:"https://app.test"},body:body===undefined?undefined:JSON.stringify(body)}),{}))!;return {status:response.status,body:await response.json() as any};};
   const parent=(await ask("/entries","POST",{collection:"posts",data:{slug:"same",title:"parent",cover:"cover A"}})).body.entry;
   expect((await ask(`/entries/${parent.id}/publish?collection=posts`,"POST",{})).status).toBe(200);

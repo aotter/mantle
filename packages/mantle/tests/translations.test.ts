@@ -6,7 +6,6 @@ import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 import {generateOrThrow,writeGenerated,loadFixtureSources} from "./apps/link.js";
 import {verifyTranslations} from "./translation-scenarios.js";
-import {STAFF_ROLES} from "../src/domain/visibility.js";
 import {toCanonicalLocale} from "../src/kernel/translations.js";
 test("locale canonicalisation follows the existing language/region subset without a site list",()=>{
  for(const [raw,canonical] of [["zh_TW","zh-TW"],["zhTW","zh-TW"],["ZH-tw","zh-TW"],["fil","fil"],["en-US-x","en-US"]] as const)expect(toCanonicalLocale(raw!)).toBe(canonical);
@@ -34,7 +33,7 @@ test("locale page reads stay at 50 keys and 500 child rows without per-parent re
  const files=await generateOrThrow("bun-sqlite",await loadFixtureSources("translations.yaml")),dir=await mkdtemp(join(tmpdir(),"mantle-locale-page-")),db=new Database(":memory:");
  try {
   await writeGenerated(dir,files);db.exec(files["schema.sql"]!);const app=await import(join(dir,"generated.ts")),{translationLocales}=await import(join(dir,"translations.ts"));
-  const caller={kind:"user",subject:"a",role:STAFF_ROLES[0],scopes:[],credential:"session",credentialId:null,clientId:null},store=app.store(db,caller),parents=[];
+  const caller={kind:"user",subject:"a",role:"admin",admin:true,scopes:[],credential:"session",credentialId:null,clientId:null},store=app.store(db,caller),parents=[];
   for(let i=0;i<51;i++)parents.push(await store.collection("posts").insert({slug:"p"+i,title:"parent"}));
   for(let i=0;i<605;i++)db.query("INSERT INTO translations(id,version,created_at,updated_at,owner,slug,locale,title) VALUES (?,1,0,0,'a','p0',?,'t')").run("bulk-"+String(i).padStart(4,"0"),"custom-"+i);
   const queries:string[]=[],handle={query(sql:string){queries.push(sql);return db.query(sql);}};

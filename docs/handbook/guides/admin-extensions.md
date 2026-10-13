@@ -9,7 +9,7 @@ Native Admin accepts app-owned extension declarations, executable server handler
 | panels | record sidebar or home |
 | fields | field input or cell |
 
-OSS contribution roles are `staff`; optional field roles default to staff. Server authorization is checked on every route. Handlers own finer business permissions.
+Admin contributions sit behind the admin-layer gate; optional field roles default to `admin`. Server authorization is checked on every route. Handlers own finer business permissions.
 
 Pass full declarations to `mantle generate … --admin --admin-extensions <module>` (named/default `adminExtensions` array). Generation checks contributions, manifest uiSchema references and settings schemas, then emits `extensionMetadata` and compiled `extensionBindings` in `admin-extensions.ts`. Bind the same runtime definitions with `extensionBindings(adminExtensions)` and merge its extensions/routes into `admin()` options. Drift is refused before execution.
 

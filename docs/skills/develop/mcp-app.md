@@ -18,8 +18,8 @@ const tools = mcp({ db, caller, handlers, apps: { public: memberApp } });
 ```
 
 Each endpoint accepts one contributor or an array. The separate
-`@aotter/mantle-admin` package contributes its staff App through this same
-`apps.staff` hook; it owns `ui://mantle-admin/…`. App resources use their own
+`@aotter/mantle-admin` package contributes its admin App through this same
+`apps.admin` hook; it owns `ui://mantle-admin/…`. App resources use their own
 `ui://<app>/…` namespace. Duplicate resource URI/name, conflicting `renders`,
 or `renders`/`appOnly` naming an unavailable endpoint tool (or a Procedure for
 `appOnly`) fail when `mcp(...)` is built; with a request-bound tool table, the
@@ -29,7 +29,7 @@ capabilities at all is treated as supported.
 
 Use `renders` for a declared tool; `appOnly` optionally hides it from non-UI
 clients. Import HTML lazily; it carries no secrets or caller data. Tool results
-use the caller's SQL policy, and an App cannot authorize a hidden staff tool.
+use the caller's SQL policy, and an App cannot authorize a hidden admin tool.
 Generic interaction components and controllers remain in `@aotter/mantle-ui`;
 Admin-specific controllers/catalogues belong to `@aotter/mantle-admin`.
 

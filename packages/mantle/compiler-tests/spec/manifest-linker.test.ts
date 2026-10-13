@@ -162,9 +162,9 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
-metadata: { name: suspend-tenant-staff }
+metadata: { name: suspend-tenant-admin }
 spec:
-  source: { kind: mcp, surface: staff }
+  source: { kind: mcp, surface: admin }
   target: { procedure: suspend-tenant }
 ---
 apiVersion: cms.mantle.aotter.net/v2
@@ -176,9 +176,9 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
-metadata: { name: measure-usage-staff }
+metadata: { name: measure-usage-admin }
 spec:
-  source: { kind: mcp, surface: staff }
+  source: { kind: mcp, surface: admin }
   target: { procedure: measure-usage }
 ---
 apiVersion: cms.mantle.aotter.net/v2
@@ -196,8 +196,8 @@ spec:
       path: "/spec/description",
       message: expect.stringContaining("'suspend-tenant'"),
     })]);
-    expect(warnings[0]?.message).toContain("staff surface");
-    expect(warnings[0]?.message).toContain("'suspend-tenant-staff'");
+    expect(warnings[0]?.message).toContain("admin surface");
+    expect(warnings[0]?.message).toContain("'suspend-tenant-admin'");
   });
 
   it("accepts declared MCP tool annotations and rejects a read-only claim over a writing sql handler", () => {
@@ -309,7 +309,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: get-entry-mcp }
 spec:
-  source: { kind: mcp, surface: staff }
+  source: { kind: mcp, surface: admin }
   target: { procedure: get-entry }
 `));
 

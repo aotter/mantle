@@ -19,6 +19,22 @@ export interface AuthInstance {
   readonly api: { getSession(input: { headers: Headers; query?: { disableCookieCache?: boolean; disableRefresh?: boolean }; returnHeaders: true }): Promise<{ headers: Headers | null; response: { session: { id: string }; user: User } | null }> };
 }
 
+/** Better Auth owns the role model; absence of its admin plugin grants no admin layer. */
+const adminRoles = new WeakMap<object, readonly string[]>();
+export function adminRolesOf(auth: Pick<AuthInstance, "options">): readonly string[] {
+  const cached = adminRoles.get(auth);
+  if (cached) return cached;
+  const plugin = auth.options.plugins?.find(plugin => plugin.id === "admin") as { options?: { adminRoles?: string | readonly string[] } } | undefined;
+  const configured = plugin?.options?.adminRoles ?? ["admin"];
+  const roles = Object.freeze(plugin ? typeof configured === "string" ? configured.split(",") : [...configured] : []);
+  adminRoles.set(auth, roles);
+  return roles;
+}
+const userIsAdmin = (auth: AuthInstance, role: string | null | undefined): boolean => {
+  const roles = adminRolesOf(auth);
+  return (role ?? "").split(",").some(name => roles.includes(name));
+};
+
 export interface AuthLoader<A extends AuthInstance = AuthInstance> {
   /** `advanced.cookiePrefix` of the same options; read before Better Auth loads. */
   readonly cookiePrefix: string;
@@ -39,6 +55,7 @@ export function authLoader<A extends AuthInstance>(load: () => Promise<A>, cooki
       if ((auth.options.advanced?.cookiePrefix ?? "better-auth") !== cookiePrefix) throw new Error(`authLoader cookiePrefix '${cookiePrefix}' differs from the auth options' advanced.cookiePrefix.`);
       if (auth.options.advanced?.cookies?.session_token?.name) throw new Error("advanced.cookies.session_token.name is not supported: Better Auth's getSessionCookie cannot find a renamed session cookie.");
       if (auth.options.secondaryStorage && !auth.options.session?.storeSessionInDatabase) throw new ContractError("AUTH_CONFIGURATION_ERROR", "Session secondaryStorage requires session.storeSessionInDatabase: true.", "auth:session");
+      adminRolesOf(auth);
       return auth;
     }).catch((error) => { instance = undefined; throw error; }),
   };
@@ -61,7 +78,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
   if (supplied) {
     if (supplied.kind !== "user" || supplied.credential === "session") throw new ContractError("UNAUTHENTICATED", "Invalid service credential.");
     if (lacks(supplied.scopes)) throw new ContractError("AUTH_DENIED", "The service credential lacks a required scope.");
-    return supplied;
+    return { ...supplied, admin: userIsAdmin(await auth.get(), supplied.role) };
   }
   const authorization = request.headers.get("authorization");
   if (authorization && /^(bearer|dpop) /i.test(authorization)) {
@@ -83,7 +100,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (lacks(scopes)) throw new ContractError("AUTH_DENIED", "The access token lacks a required scope.");
     if (!user || isBanned(user)) throw new ContractError("UNAUTHENTICATED", "The access token's user is not active.");
     const text = (v: unknown) => (typeof v === "string" ? v : null);
-    return { kind: "user", subject: user.id, issuer: claims.iss, role: user.role ?? null, scopes, credential: "oauth", credentialId: text(claims.jti), clientId: text(claims.azp) ?? text(claims.client_id) };
+    return { kind: "user", subject: user.id, issuer: claims.iss, role: user.role ?? null, admin: userIsAdmin(instance, user.role), scopes, credential: "oauth", credentialId: text(claims.jti), clientId: text(claims.azp) ?? text(claims.client_id) };
   }
   if (authorization !== null) throw new ContractError("UNAUTHENTICATED", "The authorization header is not a supported credential.");
   // With no Cookie header at all getSessionCookie returns null: skip even loading the helper.
@@ -116,7 +133,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (!refreshed.response || refreshed.response.session.id !== found.session.id || refreshed.response.user.id !== user.id) return { kind: "anonymous" };
     for (const cookie of refreshed.headers?.getSetCookie().flatMap(splitSetCookieHeader) ?? []) options.responseHeaders.append("set-cookie", cookie);
   }
-  const caller: Caller = { kind: "user", subject: user.id, role: user.role ?? null, scopes: [], credential: "session", credentialId: found.session.id, clientId: null };
+  const caller: Caller = { kind: "user", subject: user.id, role: user.role ?? null, admin: userIsAdmin(instance, user.role), scopes: [], credential: "session", credentialId: found.session.id, clientId: null };
   sessionUsers.set(caller, user);
   return caller;
 }

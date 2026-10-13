@@ -4,7 +4,6 @@ import { dialect as sqlite } from "../kernel/dialect/sqlite.js";
 import { dialect as postgres } from "../kernel/dialect/postgres.js";
 import { renderTerm } from "../kernel/store.js";
 import { publishedParent } from "./translations.js";
-import { STAFF_ROLES } from "../domain/visibility.js";
 import { entry, exportName, q } from "../domain/entry.js";
 
 
@@ -25,7 +24,7 @@ export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declaration
       const statement = (trusted: boolean) => {
         const recipes: object[] = [{ k: "now" }, { k: "input", name: "id" }, { k: "input", name: "expectedVersion" }];
         const conditions = [`id = ${d.param(2)}`, `version = ${d.param(3)}`, `status IN (${from.map(v => `'${v}'`).join(", ")})`];
-        for (const term of rowPolicy(s, trusted ? "trusted" : "caller", STAFF_ROLES, plan.schemas)) {
+        for (const term of rowPolicy(s, trusted ? "trusted" : "caller", plan.schemas)) {
           recipes.push(term[2]);
           conditions.push(renderTerm(d, term, "", d.param(recipes.length)));
         }
@@ -40,7 +39,7 @@ export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declaration
       values.add("now");
       const caller = q([statement(false)]), trusted = q([statement(true)]);
       declarations.push(`export type ${fn}Input = { readonly id: string; readonly expectedVersion: number };`, `const ${fn}Caller = ${caller} as const;`, ...(trusted === caller ? [] : [`const ${fn}Trusted = ${trusted} as const;`]),
-        `async function ${fn}(db: Database, caller: Caller, raw: ${fn}Input): Promise<Output> { return transition(db, caller, raw, ${q(path)}, ${q(STAFF_ROLES)}, ${trusted === caller ? "" : `caller.kind === "system" ? ${fn}Trusted : `}${fn}Caller, ${q(failure)}, D, DRIVER.procedure${translations ? `, () => translationWrite(db, ${q(s.name)}, ${verb === "publish" && s.translates ? q(s.translates.parent) : "undefined"})` : ""}); }`, `export { ${fn} };`);
+        `async function ${fn}(db: Database, caller: Caller, raw: ${fn}Input): Promise<Output> { return transition(db, caller, raw, ${q(path)}, ${trusted === caller ? "" : `caller.kind === "system" ? ${fn}Trusted : `}${fn}Caller, ${q(failure)}, D, DRIVER.procedure${translations ? `, () => translationWrite(db, ${q(s.name)}, ${verb === "publish" && s.translates ? q(s.translates.parent) : "undefined"})` : ""}); }`, `export { ${fn} };`);
       procedures.push(`[${q(name)}]: ${fn}`);
       entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `${fn}Input as Input`, 'export type { Output } from "@aotter/mantle/contracts";\n');
     }

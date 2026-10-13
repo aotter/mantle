@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { adminPath, callStaffTool, resultPath } from "../src/lib/admin-tools";
+import { adminPath, callAdminTool, resultPath } from "../src/lib/admin-tools";
 
 afterEach(() => vi.unstubAllGlobals());
 describe("Admin tool transport and routing", () => {
@@ -18,14 +18,14 @@ describe("Admin tool transport and routing", () => {
       seen.push([url, init?.method, init?.body as string | undefined]);
       return Response.json({ output: { title: "x" } });
     }));
-    expect(await callStaffTool("re/title", { id: "a", tags: ["x"], assignee: null })).toEqual({ output: { title: "x" }, result: { content: [{ type: "text", text: '{"title":"x"}' }], structuredContent: { title: "x" } } });
+    expect(await callAdminTool("re/title", { id: "a", tags: ["x"], assignee: null })).toEqual({ output: { title: "x" }, result: { content: [{ type: "text", text: '{"title":"x"}' }], structuredContent: { title: "x" } } });
     expect(seen).toEqual([["/admin/api/webmcp/re%2Ftitle", "POST", JSON.stringify({ id: "a", tags: ["x"], assignee: null })]]);
   });
   it("keeps the refusal's Mantle diagnostic as a plain body, and never retries", async () => {
     const diagnostic = { code: "CONFLICT", message: "Stale version" };
     const fetcher = vi.fn(async () => Response.json({ error: diagnostic }, { status: 409 }));
     vi.stubGlobal("fetch", fetcher);
-    await expect(callStaffTool("retitle", { id: "x", expected_version: 1 })).rejects.toMatchObject({ message: "Stale version", status: 409, body: diagnostic });
+    await expect(callAdminTool("retitle", { id: "x", expected_version: 1 })).rejects.toMatchObject({ message: "Stale version", status: 409, body: diagnostic });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

@@ -77,7 +77,7 @@ camelCase names.)
 | `scope: { owner: $ctx.user.id }` | `scope: { owner: auth.uid() }`. The field is a required string, the leftmost column of an index (`indexes: [[owner]]`), and the first column of every `uniqueIndexes` entry. Store fills it; a write never sets it |
 | `x-mantle-bind: ctx.user` on a field only its owner may see | remove the bind; add `scope` as above |
 | any other `x-mantle-bind: ctx.user` | remove the bind; every write that sets the field sets it to `auth.uid()`, never to an input |
-| `x-mantle-bind: ctx.staff` | remove the bind; set it to `auth.uid()` in writes whose Procedure `requires` `ctx.staff` |
+| `x-mantle-bind: ctx.staff` | remove the bind; set it to `auth.uid()` in writes whose Procedure requires `ctx.admin` |
 | `x-mantle-bind: now` | remove the bind; set it to `now()` in every write that sets it |
 | `searchableFields` | unchanged, now trigram full-text search; date and date-time fields are refused |
 
@@ -162,7 +162,7 @@ The generated types list exactly the plan's refs.
 |---|---|
 | `ctx.user` present | `ctx.caller.kind === "user"`. Never test `!== "anonymous"`: a schedule runs as `system` |
 | `ctx.user.id` | `ctx.caller.subject` (after that check) |
-| `ctx.staff` | `ctx.caller.kind === "user" && ctx.caller.role !== null` |
+| `ctx.staff` | `isAdmin(ctx.caller)` from `@aotter/mantle/contracts` |
 | `ctx.event`, `ctx.schedule` | `ctx.cause` (`kind`: `http`, `mcp`, `internal`, `schedule`, `lifecycle`); `ctx.cause.cron` is POSIX, so shift any cron string the code compares |
 | `ctx.event.entry` | **a loop** over `ctx.cause.rows` (one statement can touch many rows; never `rows[0]`). Rows are flat: `entry.data.x` → `row.x` |
 | `ctx.store.view(name, { params, page, show, search, filters })` | `ctx.store.view(name, { input, limit, cursor, search, filters })`; `search` and `filters` match only the View's `uiSchema.list.searchFields` and `filterFields` |
@@ -183,8 +183,9 @@ only in trusted host code.
    old Worker into the new files by hand.
 3. With `identity: mantle`, sign-in uses a console email sender locally;
    replace it with a real `EmailSender` before deploying.
-4. Staff MCP stays at `/mcp/staff`, behind an OAuth token with the `mcp`
-   scope and a staff role; MCP clients keep their URL.
+4. Admin MCP moves from `/mcp/staff` to `/mcp/admin`. Update MCP client URLs.
+   It admits only the admin layer classified by Better Auth’s admin plugin
+   `adminRoles` (default `["admin"]`), and requires the `mcp` scope for tokens.
 5. Import data into the new database through `runtime.store`. A scoped row
    goes through `runtime.store.as(<its owner's caller>)`, so the scope field is
    the owner. `status`, `created_at` and `author_id` cannot be imported:

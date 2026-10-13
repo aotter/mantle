@@ -7,7 +7,7 @@ Use internal Views for joins, aggregates, OR and reusable reads. Simple handler 
 | Surface | Exposure when mounted |
 | --- | --- |
 | public | REST `/api/views/<name>` and public MCP |
-| staff | Admin View API and staff MCP |
+| admin | Admin View API and admin MCP |
 | internal | Generated operation only; no public route/tool |
 
 Every generated invocation retains its `requires`. SQL row policy limits scope, TTL and publishing visibility at every relation. The app supplies a verified Caller.

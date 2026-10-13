@@ -26,7 +26,7 @@ import type {
   MediaPurposePolicy,
   RelatedEntrySection,
   SiteInfo,
-  StaffOperation,
+  AdminOperation,
 } from "../../lib/types";
 import { mantleRefOf } from "../../lib/types";
 import { Button, buttonVariants } from "@aotter/mantle-ui/kit";
@@ -73,7 +73,7 @@ export function EntryEditView({
     queryFn: () => api.get<AdminUser>("/me"),
     retry: false,
   });
-  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
+  const operationsQuery = useQuery<AdminOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
     () => boundOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
@@ -152,9 +152,9 @@ export function EntryEditView({
   const isDraft = payload.entry.status === "draft";
   const isArchived = payload.entry.status === "archived";
   const missingRequired = hasMissingRequired(data, payload.collection.schema);
-  const canManageContent = me.data?.role === "staff";
+  const canManageContent = me.data?.admin === true;
   const canEdit = canEditEntry({
-    role: me.data?.role,
+    admin: me.data?.admin,
     isReadOnly,
     isOperational,
     operationalEditUnlocked,
@@ -244,7 +244,7 @@ export function EntryEditView({
           sharedHref={parentLink?.href}
           language={language}
           siteLocales={site.data?.locales}
-          canCreate={me.data?.role === "staff"}
+          canCreate={me.data?.admin === true}
           pending={createTranslation.isPending &&
             createTranslation.variables?.section.collection.name === section.collection.name}
           onCreate={(locale) => createTranslation.mutate({ section, locale })}
@@ -557,17 +557,17 @@ export function editorHiddenFields(
 }
 
 export function canEditEntry({
-  role,
+  admin,
   isReadOnly,
   isOperational,
   operationalEditUnlocked,
 }: {
-  role: AdminUser["role"] | undefined;
+  admin: boolean | undefined;
   isReadOnly: boolean;
   isOperational: boolean;
   operationalEditUnlocked: boolean;
 }): boolean {
-  return role === "staff" && !isReadOnly && (!isOperational || operationalEditUnlocked);
+  return admin === true && !isReadOnly && (!isOperational || operationalEditUnlocked);
 }
 
 function MediaAssetField({
@@ -730,7 +730,7 @@ function RelatedSections({
   language: AdminLanguage;
   canonical: string | null;
   /** Child rows derive their own bound operations. */
-  operations: readonly StaffOperation[] | undefined;
+  operations: readonly AdminOperation[] | undefined;
   onOperationSuccess: () => void;
 }): React.ReactElement {
   return (

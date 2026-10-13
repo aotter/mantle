@@ -58,7 +58,7 @@ node extras.mjs bun-sqlite
 The same case includes 20,000 requisitions, 500 vendors, 300 related items,
 budgets, custom business roles and seven real users. It checks:
 
-- Browser OTP bootstrap-owner login; real staff grants and outsider denial.
+- Browser OTP bootstrap-owner login; real admin grants and outsider denial.
 - Store-validated data imports, rejection of invalid dynamic rows, searchable
   announcements, indexed filters/sorts and disjoint cursor pages.
 - Related scope + compound-index sorting (actual ordered values, not only
@@ -69,7 +69,7 @@ budgets, custom business roles and seven real users. It checks:
 - Whole SQL-batch rollback on insufficient budget and stale-version conflicts.
 - Actual Admin form/enum editing, save, publish/unpublish, joined report,
   expanded developer flow and data-relation toggle, with no page errors.
-- Staff MCP discovery, actual role creation, MCP App resources and eight
+- Admin MCP discovery, actual role creation, MCP App resources and eight
   concurrent HTTP writers: exactly one commit, seven conflicts.
 - Explicit 501 for unconfigured optional site settings. Media has no blob
   binding in these default presets and is outside this populated fixture.

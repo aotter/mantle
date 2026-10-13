@@ -35,7 +35,7 @@ import type {
   EntryRow,
   ListEntriesResult,
   SiteInfo,
-  StaffOperation,
+  AdminOperation,
 } from "../../lib/types";
 import { PUBLISHING_STATUSES } from "../../lib/types";
 import { cn } from "../../lib/utils";
@@ -149,7 +149,7 @@ function CollectionList({
     retry: false,
   });
   const canonical = site.data?.canonicalLocale ?? null;
-  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
+  const operationsQuery = useQuery<AdminOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
     () => boundOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
@@ -185,8 +185,8 @@ function CollectionList({
     : collectionName;
   const isOperationalCollection = collection?.lifecycle !== "publishing";
   const isReadOnlyCollection = collection?.schema?.readOnly === true;
-  const canManageContent = me.data?.role === "staff";
-  const canCreateDraft = me.data?.role === "staff" && !isOperationalCollection && !isReadOnlyCollection;
+  const canManageContent = me.data?.admin === true;
+  const canCreateDraft = me.data?.admin === true && !isOperationalCollection && !isReadOnlyCollection;
   const showSelection = canManageContent && !isReadOnlyCollection;
   // the list always ends with its own sortable updated-at column, so a declared `updatedAt` is not shown twice
   const dataColumns = isOperationalCollection ? (collection?.list?.columns ?? []).filter((c) => c !== "updatedAt") : [];
@@ -969,7 +969,7 @@ function EntryRowDisplay({
   dataColumns: string[] | null;
   primaryField: string | null;
   /** Operations bound to this collection's rows. */
-  boundOperations: StaffOperation[];
+  boundOperations: AdminOperation[];
   onOperationSuccess: () => void;
   selected: boolean;
   onToggleSelect: (checked: boolean) => void;

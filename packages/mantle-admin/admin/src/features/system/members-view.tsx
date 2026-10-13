@@ -5,7 +5,7 @@ import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
-import type { AdminUser, MemberListResult, StaffRole } from "../../lib/types";
+import type { AdminUser, MemberListResult, AdminRole } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { formatTimestampMs } from "../content/field-render";
 import { Badge } from "@aotter/mantle-ui/kit";
@@ -56,14 +56,14 @@ export function MembersView(): React.ReactElement {
     retry: false,
   });
   const promote = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: StaffRole }) =>
-      api.patch(`/staff/${encodeURIComponent(userId)}/role`, { role }),
+    mutationFn: ({ userId, role }: { userId: string; role: AdminRole }) =>
+      api.patch(`/admin/${encodeURIComponent(userId)}/role`, { role }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["members"] });
-      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin"] });
     },
   });
-  const canPromote = me.data?.role === "staff";
+  const canPromote = me.data?.admin === true;
 
   return (
     <div>
@@ -115,7 +115,7 @@ export function MembersView(): React.ReactElement {
                         <Button
                           variant="outline"
                           disabled={promote.isPending}
-                          onClick={() => promote.mutate({ userId: member.id, role: "staff" })}
+                          onClick={() => promote.mutate({ userId: member.id, role: "admin" })}
                           aria-label={`${t(language, "members.promote")}: ${member.name}`}
                         >
                           {t(language, "members.promote")}

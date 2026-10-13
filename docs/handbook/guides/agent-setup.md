@@ -64,6 +64,6 @@ An agent reads these files from `node_modules` when the task calls for them.
 
 ## 3. Verify the application
 
-Run the app's exact generation command with `--check`, typecheck, implement every printed handler and typecheck again. Test actual routes and persisted state. With selected Admin, mount `entries(bindings.schemas, bindings.adapter)` and serve assets separately. Verify member/staff OTP, row visibility and OCC. Installing a skill proves none of these flows.
+Run the app's exact generation command with `--check`, typecheck, implement every printed handler and typecheck again. Test actual routes and persisted state. With selected Admin, mount `entries(bindings.schemas, bindings.adapter)` and serve assets separately. Verify member/admin OTP, row visibility and OCC. Installing a skill proves none of these flows.
 
 If packaged docs are missing, reinstall the SDK version pinned by the app. If a feature differs from an online page, read the installed docs rather than assuming compatibility.

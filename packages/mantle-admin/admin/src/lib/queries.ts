@@ -2,7 +2,7 @@ import { api } from "./api";
 import { queryClient } from "../app/query-client";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
 import { isFoldedFieldChild } from "./collection-nav";
-import type { CollectionsMetadata, EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, StaffOperation, ViewManifestInfo } from "./types";
+import type { CollectionsMetadata, EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
 
 export const COLLECTION_PAGE_SIZE = 50;
 
@@ -188,12 +188,12 @@ export function viewsManifestQueryOptions(): {
 /** Shared options keep operation consumers on one cache entry. */
 export function operationsQueryOptions(): {
   queryKey: readonly ["operations"];
-  queryFn: () => Promise<StaffOperation[]>;
+  queryFn: () => Promise<AdminOperation[]>;
 } {
   return {
     queryKey: ["operations"] as const,
     queryFn: async () => {
-      const res = await api.get<{ operations: StaffOperation[] }>("/operations");
+      const res = await api.get<{ operations: AdminOperation[] }>("/operations");
       return res.operations;
     },
   };

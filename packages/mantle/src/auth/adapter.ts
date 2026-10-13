@@ -12,6 +12,7 @@ import { getAuthTables } from "@better-auth/core/db";
 import type { OAuthOptions } from "@better-auth/oauth-provider";
 import { resourceSeeds } from "./resource-seeds.js";
 import { ContractError } from "../kernel/contracts.js";
+import { adminRolesOf } from "./caller.js";
 import type { SQL } from "bun";
 import type { Dialect } from "../kernel/dialect/common.js";
 import * as postgres from "../kernel/dialect/postgres.js";
@@ -22,7 +23,7 @@ import { condition as spell } from "../kernel/where.js";
 
 type Row = Record<string, unknown>;
 /** Runs one statement; `changes` is the affected-row count. */
-type Exec = (text: string, values: unknown[]) => ReturnType<typeof bunSql.run>;
+type Exec = (text: string, values: unknown[], protectAdmin?: boolean) => ReturnType<typeof bunSql.run>;
 const nativeReaders = new WeakMap<object, { exec: Exec; param(n: number): string; now(ms: number): Date | string }>();
 /** Selected auth queries share this adapter's handle, dialect and Better Auth's physical model/field mapping. */
 export function nativeAuthRead(options: BetterAuthOptions) {
@@ -42,7 +43,7 @@ export type D1Like = Reader;
 interface Statement { bind(value: unknown): string; where(modelKey: string, conditions: CleanedWhere[] | undefined, extra?: string): string }
 type Spelling = Pick<Dialect, "param" | "ident" | "escapeLike" | "like" | "likeEscape">;
 
-function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Promise<boolean>, insertOnly = false) {
+function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Promise<boolean>, insertOnly = false, options?: BetterAuthOptions) {
   const { ident } = d;
   return ({ getFieldName, schema, getDefaultModelName }: Parameters<Parameters<typeof createAdapterFactory>[0]["adapter"]>[0]): CustomAdapter => {
     const condition = (bind: Statement["bind"], modelKey: string, w: CleanedWhere): string => {
@@ -56,7 +57,7 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
       return spell(d, col, operator === "not_in" ? "notIn" : operator, value, bind, fold);
     };
     /** Builds one statement (its own parameters) and runs it. `where` is `WHERE (and...) AND (or...)`, the Kysely adapter's grouping; empty without conditions. */
-    const run = (build: (s: Statement) => string) => {
+    const run = (build: (s: Statement) => string, protectAdmin = false) => {
       const values: unknown[] = [];
       const bind = (value: unknown) => (values.push(value === undefined ? null : value), d.param(values.length));
       const where: Statement["where"] = (modelKey, conditions, extra) => {
@@ -67,7 +68,7 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
         const parts = [group("AND"), group("OR"), extra ?? null].filter(Boolean);
         return parts.length ? ` WHERE ${parts.join(" AND ")}` : "";
       };
-      return exec(build({ bind, where }), values);
+      return exec(build({ bind, where }), values, protectAdmin);
     };
     const idOf = (modelKey: string) => ident(getFieldName({ model: modelKey, field: "id" }));
     /** The WHERE plus `<id> IN (SELECT <id> FROM t WHERE ... LIMIT 1)`: the statement touches at most one row. */
@@ -79,9 +80,27 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
     const cols = (values: Row) => Object.entries(values).filter(([, v]) => v !== undefined);
     const assign = (s: Statement, values: Row, increment: Record<string, number> = {}) =>
       [...cols(values).map(([c, v]) => `${ident(c)} = ${s.bind(v)}`), ...Object.entries(increment).map(([c, n]) => `${ident(c)} = ${ident(c)} + ${s.bind(n)}`)].join(", ");
-    const updateSql = (s: Statement, model: string, modelKey: string, where: CleanedWhere[], values: Row) => `UPDATE ${ident(model)} SET ${assign(s, values)}${s.where(modelKey, where)}`;
+    const roles = options ? adminRolesOf({ options }) : [];
+    const holdsAdmin = (role: unknown) => typeof role === "string" && role.split(",").some(role => roles.includes(role));
+    const field = (name: string) => getFieldName({ model: "user", field: name });
+    const protects = (modelKey: string, values?: Row) => modelKey === "user" && roles.length > 0 &&
+      (!values || values[field("banned")] === true || values[field("banned")] === 1 || Object.hasOwn(values, field("role")) && !holdsAdmin(values[field("role")]));
+    const membership = (s: Statement, alias: string) => '(' + roles.map(role => `${d === sqlite ? "instr" : "strpos"}(',' || COALESCE(${alias}.${ident(field("role"))}, '') || ',', ${s.bind(',' + role + ',')}) > 0`).join(' OR ') + ')';
+    const lastAdminGuard = (s: Statement, model: string) => {
+      const table = ident(model), other = '"_mantle_other_admin"', no = d === sqlite ? '0' : 'FALSE';
+      return `(NOT ${membership(s, table)} OR EXISTS (SELECT 1 FROM ${table} ${other} WHERE ${membership(s, other)} AND ${other}.${idOf("user")} <> ${table}.${idOf("user")} AND COALESCE(${other}.${ident(field("banned"))}, ${no}) = ${no}))`;
+    };
+    const mutation = async (model: string, modelKey: string, where: CleanedWhere[], values?: Row) => {
+      const protect = protects(modelKey, values);
+      if (protect && (where.length !== 1 || where[0]!.field !== field("id") || where[0]!.operator && where[0]!.operator !== "eq"))
+        throw new APIError("FORBIDDEN", { code: "AUTH_DENIED", message: "Destructive admin identity writes require one user id." });
+      const result = await run(s => `${values ? `UPDATE ${ident(model)} SET ${assign(s, values)}` : `DELETE FROM ${ident(model)}`}${s.where(modelKey, where, protect ? lastAdminGuard(s, model) : undefined)} RETURNING *`, protect);
+      if (protect && !result.changes && (await run(s => `SELECT ${idOf(modelKey)} FROM ${ident(model)}${s.where(modelKey, where, `NOT ${lastAdminGuard(s, model)}`)} LIMIT 1`)).rows.length)
+        throw new APIError("CONFLICT", { code: "CONFLICT", message: "This is the last admin; promote another admin before removing or banning this one." });
+      return result;
+    };
     const deleteMany = async ({ model, modelKey = model, where }: { model: string; modelKey?: string; where: CleanedWhere[] }) =>
-      (await run(s => `DELETE FROM ${ident(model)}${s.where(modelKey, where)}`)).changes;
+      (await mutation(model, modelKey, where)).changes;
 
     /** Joined rows come back as flat `__j<i>__<column>` aliases; fold them into `row[joinModel]` (object or array). */
     const joinColumns = (join: JoinConfig) =>
@@ -167,10 +186,10 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
       },
       async update({ model, modelKey = model, where, update }) {
         if (!where.length) return null;
-        return one(s => updateSql(s, model, modelKey, where, update as Row));
+        return ((await mutation(model, modelKey, where, update as Row)).rows[0] ?? null) as never;
       },
       async updateMany({ model, modelKey = model, where, update }) {
-        return (await run(s => updateSql(s, model, modelKey, where, update))).changes;
+        return (await mutation(model, modelKey, where, update)).changes;
       },
       async delete(options) { await deleteMany(options); },
       deleteMany,
@@ -231,7 +250,7 @@ function build(d: Spelling, native: boolean, adapterId: string, adapterName: str
     // Bun.SQL returns int8/numeric as strings; a `number` field must reach Better Auth as a number (the rate limiter adds to `lastRequest`). Ids stay strings.
     customTransformOutput: ({ data, fieldAttributes, field }) => (fieldAttributes.type === "number" && typeof data === "string" && field !== "id" && !fieldAttributes.references ? Number(data) : data),
   };
-  const factory = createAdapterFactory({ config, adapter: customAdapter(d, exec, seed) });
+  const factory = createAdapterFactory({ config, adapter: customAdapter(d, exec, seed, false, options) });
   // Both native adapters implement joins; Better Auth otherwise emulates each joined read with another statement.
   return (options: BetterAuthOptions) => factory({ ...options, advanced: { ...options.advanced, database: { ...options.advanced?.database, joins: options.advanced?.database?.joins ?? true } } });
 }
@@ -249,7 +268,13 @@ export function d1Adapter(db: D1Like) {
 
 /** Bun.SQL against PostgreSQL. Transactions use `sql.begin`, which pins every statement to one connection. */
 export function bunSqlAdapter(sql: SQL) {
-  const executor = (handle: Pick<SQL, "unsafe">): Exec => (text, values) => bunSql.run(handle as never, text, values);
+  const executor = (handle: Pick<SQL, "unsafe">): Exec => async (text, values, protectAdmin) => {
+    const run = async (tx: Pick<SQL, "unsafe">) => {
+      if (protectAdmin) await tx.unsafe("SELECT pg_advisory_xact_lock(1296125516,1)", []);
+      return bunSql.run(tx as never, text, values);
+    };
+    return protectAdmin && handle === sql ? sql.begin(tx => run(tx)) : run(handle);
+  };
   const make = (handle: Pick<SQL, "unsafe">, transaction: DBAdapterFactoryConfig["transaction"]) => (options: BetterAuthOptions) => build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(handle), transaction, options)(options);
   const factory = (options: BetterAuthOptions) => make(sql, cb => sql.begin(tx => cb(make(tx, false)(options))))(options);
   nativeReaders.set(factory, { exec: executor(sql), param: postgres.param, now: postgres.now });

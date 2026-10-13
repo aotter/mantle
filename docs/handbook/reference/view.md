@@ -1,6 +1,6 @@
 # View
 
-A View requires `surface: public | staff | internal` and one `sql` SELECT. Optional keys include title, description, input, requires, uiSchema (staff only), and cache. The app imports its generated typed function and supplies a native handle, verified Caller and driver-ready input.
+A View requires `surface: public | admin | internal` and one `sql` SELECT. Optional keys include title, description, input, requires, uiSchema (admin only), and cache. The app imports its generated typed function and supplies a native handle, verified Caller and driver-ready input.
 
 ## SQL
 
@@ -27,4 +27,4 @@ Each SELECT output needs a unique static name. Unquoted SQL identifiers fold to 
 
 Bare `views/<encoded-name>.ts` returns row arrays. Proved pageable exposed/internal Views also receive native `paged/views/*`, returning `{ rows, nextCursor? }`. Selected REST/MCP boundaries use separate `paged/wire/views/*` SQL when declared integers require exact transport projections; bare modules also export `WireRow`. Indexed ordering after fixed equality prefixes, non-null typed keys, complete groups and singleton joins/lookups are checked at generation. Unsupported internal paging retains its bare View; exposure requires a supported page contract. Aggregates still scan/group their sources: inspect EXPLAIN.
 
-Internal Views have no public route/tool. Public and staff Views use selected REST/MCP/Admin bindings. `uiSchema.list` selects staff search/filter/display metadata. See [surfaces](surface.md) for validation, paging and wire conversions and [typed queries](../guides/typed-queries.md) for a complete example.
+Internal Views have no public route/tool. Public and admin Views use selected REST/MCP/Admin bindings. `uiSchema.list` selects admin search/filter/display metadata. See [surfaces](surface.md) for validation, paging and wire conversions and [typed queries](../guides/typed-queries.md) for a complete example.

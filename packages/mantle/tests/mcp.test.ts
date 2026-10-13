@@ -18,8 +18,8 @@ spec: {surface: public, sql: 'SELECT id, title FROM items ORDER BY id'}
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
-metadata: {name: staff-items}
-spec: {surface: staff, sql: 'SELECT id, title FROM items ORDER BY id'}
+metadata: {name: admin-items}
+spec: {surface: admin, sql: 'SELECT id, title FROM items ORDER BY id'}
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -34,7 +34,7 @@ kind: Trigger
 metadata: {name: add-item-mcp}
 spec: {source: {kind: mcp, surface: public}, target: {procedure: add-item}}
 `;
-const user={kind:"user",subject:"u",role:"staff",scopes:["mcp"],credential:"oauth",credentialId:null,clientId:null};
+const user={kind:"user",subject:"u",role:"admin", admin: true,scopes:["mcp"],credential:"oauth",credentialId:null,clientId:null};
 test("official SDK initializes, lists only surface tools, calls shared validation/paging, refuses auth and cookie writes",async()=>{
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"mcp.yaml",text:source}]);
  const dir=await mkdtemp(resolve(import.meta.dir,".mcp-")),db=new Database(":memory:");
@@ -49,12 +49,12 @@ test("official SDK initializes, lists only surface tools, calls shared validatio
   };
   const initialized=await call("initialize",{protocolVersion:"2025-03-26",capabilities:{},clientInfo:{name:"test",version:"1"}});expect(initialized.response.status).toBe(200);expect(initialized.readOnly).toBe(true);
   const listed=(await call("tools/list")).data.result.tools; expect(listed.map((t:any)=>t.name)).toEqual(["items","add_item"]);expect(listed[0].inputSchema.additionalProperties).toBe(false);
-  const denied=await call("tools/list",{},"/mcp/staff"); expect(denied.response.status).toBe(401); expect(denied.response.headers.get("www-authenticate")).toContain('scope="mcp"');
+  const denied=await call("tools/list",{},"/mcp/admin"); expect(denied.response.status).toBe(401); expect(denied.response.headers.get("www-authenticate")).toContain('scope="mcp"');
   const bad=await call("tools/call",{name:"add_item",arguments:{title:""}});expect(bad.data.result.isError).toBe(true);expect(JSON.parse(bad.data.result.content[0].text).diagnostics[0].code).toBe("INPUT_VALIDATION_FAILED");
   const ok=await call("tools/call",{name:"add_item",arguments:{title:"Hello"}});expect(ok.data.result.isError).toBeUndefined();expect(ok.readOnly).toBe(false);
   const page=await call("tools/call",{name:"items",arguments:{limit:1}});expect(page.data.result.structuredContent.rows[0].title).toBe("Hello");expect(page.readOnly).toBe(true);
-  caller=user;expect((await call("tools/list",{},"/mcp/staff")).data.result.tools.map((t:any)=>t.name)).toEqual(["staff_items"]);
-  caller={...user,role:null}; const roleDenied=await call("tools/list",{},"/mcp/staff");expect(roleDenied.response.status).toBe(403);expect(roleDenied.response.headers.has("www-authenticate")).toBe(false);
+  caller=user;expect((await call("tools/list",{},"/mcp/admin")).data.result.tools.map((t:any)=>t.name)).toEqual(["admin_items"]);
+  caller={...user,role:null,admin:false}; const roleDenied=await call("tools/list",{},"/mcp/admin");expect(roleDenied.response.status).toBe(403);expect(roleDenied.response.headers.has("www-authenticate")).toBe(false);
   caller={...user,scopes:[]}; const scopeDenied=await call("tools/list");expect(scopeDenied.response.status).toBe(403);expect(scopeDenied.response.headers.get("www-authenticate")).toContain('error="insufficient_scope", scope="mcp"');
   caller={...user,credential:"session"};expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{origin:"https://evil.test"})).data.result.isError).toBe(true);
   expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({n:1});
@@ -98,11 +98,11 @@ test("MCP emission is selected by Views/Triggers, not internal queries or publis
   const files=await generateOrThrow("bun-sqlite",[{sourceId:"bare.yaml",text}]);
   expect(files["mcp.ts"]).toBeUndefined();expect(Object.values(files).join('\n')).not.toContain('@modelcontextprotocol');
  }
- const internal=source.split('---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure')[0]!.replaceAll('surface: public','surface: internal').replaceAll('surface: staff','surface: internal');
+ const internal=source.split('---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure')[0]!.replaceAll('surface: public','surface: internal').replaceAll('surface: admin','surface: internal');
  expect((await generateOrThrow("bun-sqlite",[{sourceId:"internal.yaml",text:internal}]))["mcp.ts"]).toBeUndefined();
 });
 
-test("generated publishing transitions are validated staff tools; public Views use SQL visibility",async()=>{
+test("generated publishing transitions are validated admin tools; public Views use SQL visibility",async()=>{
  const text=source.split('---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure')[0]!.replace('lifecycle: operational','lifecycle: publishing');
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"publishing-mcp.yaml",text}]);
  const dir=await mkdtemp(resolve(import.meta.dir,".mcp-publishing-")),db=new Database(":memory:");let caller:any={kind:"anonymous"};
@@ -112,18 +112,18 @@ test("generated publishing transitions are validated staff tools; public Views u
   const call=async(method:string,params:any={},path="/mcp/")=>{const response=await handle(new Request("https://app.test"+path,{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})}),{});const text=await response.text();return JSON.parse(text.startsWith("event:")?text.split("data: ")[1].split("\n")[0]:text);};
   expect((await call("tools/list")).result.tools.map((tool:any)=>tool.name)).toEqual(["items"]);
   expect((await call("tools/call",{name:"items",arguments:{}})).result.structuredContent.rows).toEqual([]);
-  caller=user;const staff=await call("tools/list",{},"/mcp/staff/");
-  expect(staff.result.tools.map((tool:any)=>tool.name)).toEqual(["staff_items","publish_items","unpublish_items","archive_items"]);
-  expect(staff.result.tools.find((tool:any)=>tool.name==='publish_items').inputSchema).toMatchObject({required:['id','expectedVersion'],additionalProperties:false});
-  const invalid=await call("tools/call",{name:"publish_items",arguments:{id:"a",expectedVersion:"1"}},"/mcp/staff/");expect(JSON.parse(invalid.result.content[0].text).diagnostics[0].code).toBe("INPUT_VALIDATION_FAILED");
-  const publish=await call("tools/call",{name:"publish_items",arguments:{id:"a",expectedVersion:1}},"/mcp/staff/");expect(publish.result.structuredContent.results[0][0].status).toBe('published');
+  caller=user;const admin=await call("tools/list",{},"/mcp/admin/");
+  expect(admin.result.tools.map((tool:any)=>tool.name)).toEqual(["admin_items","publish_items","unpublish_items","archive_items"]);
+  expect(admin.result.tools.find((tool:any)=>tool.name==='publish_items').inputSchema).toMatchObject({required:['id','expectedVersion'],additionalProperties:false});
+  const invalid=await call("tools/call",{name:"publish_items",arguments:{id:"a",expectedVersion:"1"}},"/mcp/admin/");expect(JSON.parse(invalid.result.content[0].text).diagnostics[0].code).toBe("INPUT_VALIDATION_FAILED");
+  const publish=await call("tools/call",{name:"publish_items",arguments:{id:"a",expectedVersion:1}},"/mcp/admin/");expect(publish.result.structuredContent.results[0][0].status).toBe('published');
   caller={kind:"anonymous"};expect((await call("tools/call",{name:"items",arguments:{}})).result.structuredContent.rows.map((row:any)=>row.id)).toEqual(['a']);
-  caller=user;for(const [name,version,status] of [['unpublish_items',2,'draft'],['archive_items',3,'archived']]) expect((await call('tools/call',{name,arguments:{id:'a',expectedVersion:version}},'/mcp/staff/')).result.structuredContent.results[0][0].status).toBe(status);
+  caller=user;for(const [name,version,status] of [['unpublish_items',2,'draft'],['archive_items',3,'archived']]) expect((await call('tools/call',{name,arguments:{id:'a',expectedVersion:version}},'/mcp/admin/')).result.structuredContent.results[0][0].status).toBe(status);
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
 
 test("ref MCP Procedures require typed caller-owned handlers and enforce requires before dispatch",async()=>{
- const text=source.replace("handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",'requires: {auth: {all: [ctx.user, {ctx.staff: [staff]}, {ctx.auth.scope: items:write}]}}\n  handler: {ref: app.addItem}');
+ const text=source.replace("handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",'requires: {auth: {all: [ctx.user, {ctx.admin: [admin]}, {ctx.auth.scope: items:write}]}}\n  handler: {ref: app.addItem}');
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"ref-mcp.yaml",text}]);const dir=await mkdtemp(resolve(import.meta.dir,".mcp-ref-")),db=new Database(":memory:");
  let caller:any=user,calls=0;
  try {
@@ -153,7 +153,7 @@ test("unknown tool and caller failures log the surface and original error, redac
  } finally {logging.mockRestore();await rm(dir,{recursive:true,force:true});}
 });
 
-test("canonical publishing tool names refuse a colliding declared staff Procedure",async()=>{
+test("canonical publishing tool names refuse a colliding declared admin Procedure",async()=>{
  const text=source.split('---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure')[0]!.replace('lifecycle: operational','lifecycle: publishing')+`---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -163,11 +163,11 @@ spec: {input: {type: object}, output: {type: object}, handler: {ref: app.publish
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: {name: publish-items-mcp}
-spec: {source: {kind: mcp, surface: staff}, target: {procedure: publish-items}}
+spec: {source: {kind: mcp, surface: admin}, target: {procedure: publish-items}}
 `;
  const {generateFromSources}=await import('../src/infrastructure/generate.js');
  const result=await generateFromSources({target:'bun-sqlite',sources:{sources:[{sourceId:'collision.yaml',text}]}});
- expect(result).toMatchObject({ok:false,diagnostics:[{code:'GENERATE_UNSUPPORTED',path:'procedures/items.publish',message:'MCP tool name publish_items collides on staff.'}]});
+ expect(result).toMatchObject({ok:false,diagnostics:[{code:'GENERATE_UNSUPPORTED',path:'procedures/items.publish',message:'MCP tool name publish_items collides on admin.'}]});
 });
 
 test("MCP parity advertises localized metadata and native SQL output; callbacks cannot change execution",async()=>{
@@ -186,7 +186,7 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   const bad=await call('tools/call',{name:'add_item',arguments:{title:''}});expect(bad.data.result.isError).toBe(true);expect(bad.data.result.structuredContent).toBeUndefined();
   expect(observations.filter(event=>event.phase==='completion').map(event=>event.outcome)).toEqual(['succeeded','failed']);
   caller={...user,scopes:[]};const denied=await call('tools/list');expect(denied.response.status).toBe(403);expect(denied.response.headers.get('www-authenticate')).toContain('scope="custom"');expect(denied.response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
-  caller={kind:'anonymous'};expect((await call('initialize',{},'/mcp/staff')).response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
+  caller={kind:'anonymous'};expect((await call('initialize',{},'/mcp/admin')).response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
   caller={...user,credential:'session'};await call('tools/call',{name:'add_item',arguments:{title:'CSRF'}},'/mcp',{origin:'https://evil.test'});
   expect(refusals.map(event=>event.reason)).toEqual(['credential','credential','origin']);expect(db.query('SELECT COUNT(*) n FROM items').get()).toEqual({n:1});
   for(const locale of [undefined,'constructor','toString','fr']) {
@@ -200,7 +200,7 @@ test("MCP preflights all batch calls before any work and reports expired caller 
  const {mcp}=await import('../src/kernel/mcp.js');const {ContractError}=await import('../src/kernel/contracts.js');let runs=0;
  const tools=[{name:'open',surface:'public',description:'Open',inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>{runs++;return{};}},{name:'closed',surface:'public',description:'Closed',closed:true,scopes:['write'],inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>{runs++;return{};}}];
  const request=(body:any)=>new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify(body)});
- const handle=mcp(tools,['staff'],{db:()=>({}),caller:()=>({kind:'anonymous'})});
+ const handle=mcp(tools,{db:()=>({}),caller:()=>({kind:'anonymous'})});
  const response=await handle(request(['open','closed'].map((name,id)=>({jsonrpc:'2.0',id,method:'tools/call',params:{name,arguments:{}}}))),{});expect(response!.status).toBe(401);expect(runs).toBe(0);expect(response!.headers.get('www-authenticate')).toContain('scope="mcp write"');
- const expired=await mcp(tools,['staff'],{db:()=>({}),caller:()=>{throw new ContractError('UNAUTHENTICATED','Expired.','request:authorization');},resourceMetadata:'https://proxy.test/metadata'})(request({jsonrpc:'2.0',id:1,method:'tools/list'}),{});expect(expired!.status).toBe(401);expect(expired!.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/metadata"');
+ const expired=await mcp(tools,{db:()=>({}),caller:()=>{throw new ContractError('UNAUTHENTICATED','Expired.','request:authorization');},resourceMetadata:'https://proxy.test/metadata'})(request({jsonrpc:'2.0',id:1,method:'tools/list'}),{});expect(expired!.status).toBe(401);expect(expired!.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/metadata"');
 });

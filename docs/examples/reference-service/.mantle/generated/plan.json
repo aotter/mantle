@@ -1088,12 +1088,12 @@
         },
         "inputs": {},
         "source": "SELECT i.name, count(o.id) AS orders, coalesce(sum(o.qty), 0) AS units\nFROM items i LEFT JOIN orders o ON o.itemId = i.id AND o.orderStatus = 'placed'\nGROUP BY i.name\nORDER BY units DESC, i.name\n",
-        "surface": "staff",
+        "surface": "admin",
         "requires": {
           "auth": {
             "all": [
               {
-                "ctx.staff": [
+                "ctx.admin": [
                   "owner",
                   "editor"
                 ]
@@ -1211,12 +1211,12 @@
         },
         "inputs": {},
         "source": "SELECT kind, subject, detail FROM activity ORDER BY created_at DESC LIMIT 50",
-        "surface": "staff",
+        "surface": "admin",
         "requires": {
           "auth": {
             "all": [
               {
-                "ctx.staff": [
+                "ctx.admin": [
                   "owner",
                   "editor"
                 ]
@@ -1639,7 +1639,7 @@
           "auth": {
             "all": [
               {
-                "ctx.staff": [
+                "ctx.admin": [
                   "owner",
                   "editor"
                 ]
@@ -1912,7 +1912,7 @@
       "restock-mcp": {
         "source": {
           "kind": "mcp",
-          "surface": "staff"
+          "surface": "admin"
         },
         "procedure": "restock"
       },

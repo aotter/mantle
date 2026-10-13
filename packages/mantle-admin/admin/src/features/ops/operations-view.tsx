@@ -8,11 +8,11 @@ import { api } from "../../lib/api";
 import { fieldLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
-import type { SiteInfo, StaffOperation } from "../../lib/types";
+import type { SiteInfo, AdminOperation } from "../../lib/types";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { OperationDialog } from "../content/row-operations";
 
-export function globalOperations(operations: readonly StaffOperation[]): StaffOperation[] {
+export function globalOperations(operations: readonly AdminOperation[]): AdminOperation[] {
   return operations.filter(operation => (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]);
 }
 
@@ -20,7 +20,7 @@ export function OperationsView(): React.ReactElement {
   const { language } = usePreferences();
   const query = useQuery(operationsQueryOptions());
   const site = useQuery({ queryKey: ["site"], queryFn: () => api.get<SiteInfo>("/site") });
-  const [active, setActive] = React.useState<StaffOperation | null>(null);
+  const [active, setActive] = React.useState<AdminOperation | null>(null);
   const canonical = site.data?.canonicalLocale ?? null;
   const operations = globalOperations(query.data ?? []);
   return <div className="space-y-6">

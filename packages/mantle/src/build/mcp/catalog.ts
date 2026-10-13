@@ -56,7 +56,7 @@ export function entrySchema(plan: RuntimePlan, v: PlanView): string | undefined 
   return outputsId ? key : undefined;
 }
 
-export function appCatalog(plan: RuntimePlan, surface: "public" | "staff"): AppCatalog {
+export function appCatalog(plan: RuntimePlan, surface: "public" | "admin"): AppCatalog {
   const tools = mcpTools(plan, surface);
   const actions: Record<string, AppRowAction> = {};
   const targets = new Map<string, string[]>();
