@@ -45,6 +45,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0042](0042-native-query-work-cleanup.md) | Native product reads, query lowering, owned media ordering, fresh Auth proofs and immutable Admin descriptions. | Accepted for #1428; amended by 0043 |
 | [0043](0043-schema-readers.md) | Per-Schema readers (`store.db` / `ctx.db`: `get`, `first`, `find`) replace `Store.select`: one walk per query shape, a bounded per-Store memo of compiled shapes, typed rows, and refused reader-name collisions. | Accepted for #1432; `select` is deprecated in PR A and removed in PR B |
 | [0044](0044-generate-time-lowering.md) | `mantle generate` lowers every View and inline Procedure for the plan's dialect into `plan.lowered`; the runtime seeds its compile cache from it, and the page size is a bind. | Accepted direction for #1433; amends 0035 and 0032 decision 10 |
+| [0046](0046-caller-attributes-and-host-authorization.md) | Applications declare roles and caller attributes; `auth.attr(name)` binds attributes into SQL and Schema scope; one host contract supplies callers and an optional `authorize` seam; generation publishes a capability catalog and surfaces accept host-forwarded invocations (#1492). | Proposed |
 
 ## Reading order
 
