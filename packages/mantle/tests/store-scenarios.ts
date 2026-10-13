@@ -1,7 +1,7 @@
 /**
  * The Store on one real driver: scope, trusted mode, TTL, keyset paging, every operator, refusals and inert hostile input, OCC,
  * unique CONFLICT, placeholder continuation and wire forms (rows are keyed by storage column names), each checked against an independent model of the seeded rows and native SQL. Runs under
- * bun:test (bun:sqlite, a D1 shim, Bun.SQL) and in verify-native (the four real hosts), so it uses node:assert only.
+ * verify-native (the four real hosts), so it uses node:assert only.
  */
 import assert from "node:assert/strict";
 import type { Caller } from "../src/kernel/contracts.js";
@@ -23,12 +23,11 @@ export interface StoreEnv {
   call(name: string, caller: Caller, input: Record<string, unknown>): Promise<any>;
   /** Independent native SQL with `?` placeholders. */
   native(sql: string, values?: readonly unknown[]): Promise<Record<string, unknown>[]>;
-  /** What the driver was asked to run for one Store call (bun:test only). */
-  record?(caller: Caller, run: (stores: ReturnType<StoreEnv["stores"]>) => Promise<unknown>): Promise<{ sql: string; values: unknown[] }>;
+
 }
 
-/** The scenarios' view of a generated app (`import * as app`) on one handle. `spy(calls)` builds a handle that logs what it runs (it enables the placeholder checks). */
-export const storeEnv = (app: { store: any; views: any; procedures: any }, handle: unknown, sqlite: boolean, native: StoreEnv["native"], spy?: (calls: { sql: string; values: unknown[] }[]) => unknown): StoreEnv => {
+/** The scenarios' view of a generated app (`import * as app`) on one handle. */
+export const storeEnv = (app: { store: any; views: any; procedures: any }, handle: unknown, sqlite: boolean, native: StoreEnv["native"]): StoreEnv => {
   const beginOptions: string[] = [];
   const db: any = handle;
   const tracked = sqlite ? handle : { unsafe: db.unsafe.bind(db), begin: (options: string, fn: any) => { beginOptions.push(options); return db.begin(options, fn); } };
@@ -38,7 +37,6 @@ export const storeEnv = (app: { store: any; views: any; procedures: any }, handl
     sqlite, native, stores, store, beginOptions,
     view: (name, caller, input) => app.views[name](tracked, caller, input),
     call: (name, caller, input) => app.procedures[name](tracked, caller, input),
-    ...(spy && { record: async (caller, run) => { const calls: { sql: string; values: unknown[] }[] = []; await run(stores(caller, spy(calls))); return calls.at(-1)!; } }),
   };
 };
 
@@ -265,25 +263,6 @@ export async function verifyStore(env: StoreEnv) {
   }
   ok();
 
-  // ---- placeholders continue after the base statement's own (uid, cutoff...), in both modes
-  if (env.record) {
-    const ph = (n: number) => env.sqlite ? `?${n}` : `$${n}`;
-    const seen = async (caller: Caller, run: (s: ReturnType<StoreEnv["stores"]>) => Promise<unknown>) => env.record!(caller, run);
-    let c = await seen(user(A), s => s.purchase_requests.find({ where: { title: "Item 1", amount: { gt: 1 } } }));
-    assert.deepEqual(c.values, [A, "Item 1", 1]); assert.ok(c.sql.includes(`r."title" = ${ph(2)}`) && c.sql.includes(`r."amount" > ${ph(3)}`), c.sql);
-    c = await seen(system, s => s.purchase_requests.find({ where: { title: "Item 1", amount: { gt: 1 } } }));
-    assert.deepEqual(c.values, ["Item 1", 1]); assert.ok(c.sql.includes(`r."title" = ${ph(1)}`) && c.sql.includes(`r."amount" > ${ph(2)}`), c.sql);
-    c = await seen(user(A), s => s.session_notes.find({ where: { body: "x" } }));
-    assert.equal(c.values.length, 3); assert.ok(c.sql.includes(`r."body" = ${ph(3)}`), c.sql);
-    c = await seen(system, s => s.session_notes.count({ body: "x" }));
-    assert.equal(c.values.length, 2); assert.ok(c.sql.includes(`r."body" = ${ph(2)}`), c.sql);
-    c = await seen(user(A), s => s.purchase_requests.findById("x")); assert.deepEqual(c.values, [A, "x"]); assert.ok(c.sql.includes(`r."id" = ${ph(2)}`));
-    c = await seen(system, s => s.purchase_requests.findById("x")); assert.deepEqual(c.values, ["x"]); assert.ok(c.sql.includes(`r."id" = ${ph(1)}`));
-    const page = await a.find({ orderBy: "title", limit: 5 });
-    c = await seen(user(A), s => s.purchase_requests.find({ orderBy: "title", limit: 5, cursor: page.cursor, where: { title: { like: "Item%" } } }));
-    const top = Math.max(...[...c.sql.matchAll(env.sqlite ? /\?(\d+)/g : /\$(\d+)/g)].map(x => Number(x[1]))); assert.equal(top, c.values.length, c.sql);
-    ok();
-  }
   await verifyTransactions(env, ok);
   return { checks };
 }

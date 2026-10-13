@@ -4,22 +4,8 @@ import { Database } from "bun:sqlite";
 import { resolve } from "node:path";
 import { rm } from "node:fs/promises";
 import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link.js";
-import { verifyPublishing } from "./publishing-scenarios.js";
-import type { Target } from "../src/domain/model.js";
 const directory = resolve(import.meta.dir, "apps/.generated", `publishing-${crypto.randomUUID()}`);
 afterAll(() => rm(directory, { recursive: true, force: true }));
-async function scenario(target: Target, db: any, ddl: (sql: string) => Promise<unknown>) {
-  const files = await generateOrThrow(target, await loadFixtureSources("publishing.yaml"));
-  await ddl(files["schema.sql"]!);
-  await writeGenerated(resolve(directory, target), files);
-  const app = await import(resolve(directory, target, "generated.ts"));
-  expect((await verifyPublishing(app, db)).checks).toBe(43);
-}
-for (const target of ["bun-sqlite"] as const) test(`publishing ${target}`, async () => {
-  const native = new Database(":memory:");
-  try { await scenario(target, native, async sql => native.exec(sql)); } finally { native.close(); }
-});
-
 test("publishing is opt-in", async () => {
   const sources = await loadFixtureSources("publishing.yaml");
   const files = await generateOrThrow("bun-sqlite", sources.map(s => ({ ...s, text: s.text.split("---")[0]!.replace("  lifecycle: publishing\n", "") })));

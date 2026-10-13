@@ -18,7 +18,7 @@ async function scenario(target: Target, db: any, native: (sql: string, values?: 
   const app = await import(resolve(path, "generated.ts"));
   await verifyTtl(app, db, target.endsWith("sqlite") || target.endsWith("d1"), native, 2);
 }
-for (const target of ["bun-sqlite"] as const) test(`TTL ${target} expiry, scope, bounded scan and authority`, async () => {
+for (const target of ["bun-sqlite"] as const) test(`TTL ${target} nonzero expiry, scope, bounded scan and authority`, async () => {
   const db = new Database(":memory:");
   try {await scenario(target, db, async (sql, values) => values ? db.query(sql).all(...values) : /^SELECT/.test(sql) ? db.query(sql).all() : db.exec(sql));} finally {db.close();}
 });

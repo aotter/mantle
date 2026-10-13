@@ -12,15 +12,15 @@ test("locale canonicalisation follows the existing language/region subset withou
  for(const [raw,canonical] of [["zh_TW","zh-TW"],["zhTW","zh-TW"],["ZH-tw","zh-TW"],["fil","fil"],["en-US-x","en-US"]] as const)expect(toCanonicalLocale(raw!)).toBe(canonical);
  for(const raw of ["","zh-Hant","e"," en ","en-123","zh-ß","zh-ıı","ıı-US","KK-US"])expect(()=>toCanonicalLocale(raw)).toThrow();
 });
-for(const target of ["bun-sqlite","bun-postgres"] as const)(target==="bun-postgres"&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`${target} translation publication is atomic, scoped and one-write guarded`,async()=>{
- const files=await generateOrThrow(target,await loadFixtureSources("translations.yaml")),dir=await mkdtemp(join(tmpdir(),"mantle-translations-"));
- const sqlite=target==="bun-sqlite",schema="tr_"+crypto.randomUUID().replaceAll("-","");
- const db:any=sqlite?new Database(":memory:"):new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1});
+(process.env.MANTLE_NEXT_BUN_PG_URL?test:test.skip)("bun-postgres translation publication is atomic, scoped and one-write guarded",async()=>{
+ const files=await generateOrThrow("bun-postgres",await loadFixtureSources("translations.yaml")),dir=await mkdtemp(join(tmpdir(),"mantle-translations-"));
+ const schema="tr_"+crypto.randomUUID().replaceAll("-","");
+ const db=new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1});
  try {
-  await writeGenerated(dir,files);if(sqlite)db.exec(files["schema.sql"]!);else{await db.unsafe(`CREATE SCHEMA ${schema}`);await db.unsafe(`SET search_path TO ${schema}`);await db.unsafe(files["schema.sql"]!);}
+  await writeGenerated(dir,files);await db.unsafe(`CREATE SCHEMA ${schema}`);await db.unsafe(`SET search_path TO ${schema}`);await db.unsafe(files["schema.sql"]!);
   const app=await import(join(dir,"generated.ts")),{translationLocales}=await import(join(dir,"translations.ts"));
   await verifyTranslations(app,translationLocales,db);expect(true).toBe(true);
- } finally {if(sqlite)db.close();else{await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await db.close();}await rm(dir,{recursive:true,force:true});}
+ } finally {await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await db.close();await rm(dir,{recursive:true,force:true});}
 },30000);
 test("translation helper types are generated for all four target handles",async()=>{
  const ts=(await import("typescript")).default,{writeFile}=await import("node:fs/promises");const dir=await mkdtemp(join(import.meta.dir,"apps/.translation-types-"));

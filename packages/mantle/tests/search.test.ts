@@ -5,13 +5,12 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {generateOrThrow,loadFixtureSources,writeGenerated} from "./apps/link.js";
 import {generateFromSources} from "../src/infrastructure/generate.js";
-import {verifySearch} from "./search-scenarios.js";
-test("SQLite search preserves scope, TTL, publishing, OCC and bounded native calls",async()=>{
+test("SQLite search validates before SQL and keeps native call counts bounded",async()=>{
  const dir=await mkdtemp(join(tmpdir(),"mantle-search-")),db=new Database(":memory:");
  try {
   const files=await generateOrThrow("bun-sqlite",await loadFixtureSources("search.yaml"));
   await writeGenerated(dir,files);db.exec(files["schema.sql"]!);
-  const app=await import(join(dir,"generated.ts"));await verifySearch(app,db);
+  const app=await import(join(dir,"generated.ts"));
   let calls=0;const counted={query(sql:string){calls++;return db.query(sql);}};
   const owner={kind:"user",subject:"search-owner",role:"staff",scopes:[],credential:"session",credentialId:null,clientId:null};
   const collection=app.store(counted,owner).collection("search_records");

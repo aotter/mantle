@@ -17,7 +17,7 @@
   "scripts": {
     "build": "pnpm -r --filter '@aotter/mantle*' build",
     "typecheck": "pnpm -r --filter '@aotter/mantle*' typecheck",
-    "test": "pnpm -r --filter '@aotter/mantle*' test",
+    "test": "pnpm -r --parallel --filter '@aotter/mantle*' test",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:skills": "node scripts/check-skills.mjs",
     "check:doc-examples": "node scripts/check-doc-examples.mjs",

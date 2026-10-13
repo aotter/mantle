@@ -24,7 +24,6 @@ jobs:
       MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
       MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
       MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
-      MANTLE_NEXT_ROOT: ${{ github.workspace }}/packages/mantle
       MANTLE_TEST_CHROMIUM: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,7 +74,7 @@ jobs:
       - run: pnpm check:oss-plugin
       - name: Install Chrome
         run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
-      - name: Admin browser smoke (Chrome)
+      - name: Admin sandbox boundaries (Chrome)
         run: pnpm --filter @aotter/mantle-admin test:browser
       - name: SDK bundle size report
         working-directory: packages/mantle

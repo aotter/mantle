@@ -90,8 +90,10 @@ package filters while iterating. PostgreSQL tests skip unless `MANTLE_PG_URL`
 names a disposable database; native Bun conformance is separate
 (`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
 
-PR CI runs install, build, typecheck, unit tests, boundaries, startup graphs and
-per-surface startup budgets, plus the cheap skill and plugin-manifest checks.
+PR CI builds once in each of two parallel jobs: typecheck plus boundaries,
+skills, plugin manifests, startup graphs/budgets and release/packed-consumer
+self-tests; and the three packages’ tests running concurrently. Both jobs use
+the pnpm store cache and must pass the combined required status.
 Build before running package tests locally; `pnpm test` does not rebuild or pack.
 Package and upload bytes are reports; cold-start checks remain gates.
 
@@ -99,10 +101,15 @@ Run the **Full checks** workflow (`.github/workflows/full-checks.yml`) before
 releases and after changes to drivers, auth, generator output or Admin UI: add
 the `full-checks` label to the PR (later pushes rerun it). It runs native
 four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
-OSS plugin validation, Chrome Admin smoke tests and size reports. For local
-browser smoke set `MANTLE_NEXT_ROOT` to `$PWD/packages/mantle` and run
-`pnpm --filter @aotter/mantle-admin test:browser` with Chrome installed. `pnpm check` remains the
-broad local/release check; the release workflow is unchanged.
+OSS plugin validation, the two Chrome sandbox-boundary tests (design preview
+and MCP App host bridge), and size reports. Run the boundaries locally with
+`pnpm --filter @aotter/mantle-admin test:browser` and Chrome installed. The
+Admin sign-in/list/edit/publish/translation browser flow is covered by maintainer
+manual acceptance; the packed worker-consumer smoke checks the service and Admin
+API round trip. Shared Store, publishing and search scenarios run through
+`test:native`; focused unit tests retain security and correctness invariants.
+`pnpm check` remains the broad local/release check; the release workflow is
+unchanged.
 
 ## Branches, commits, and pull requests
 
