@@ -35,6 +35,19 @@ So the tenant, which is the Mantle application, must receive roles and attribute
 from its host and enforce them. The same manifest must also run in OSS, where the
 application resolves its own callers.
 
+Cloud also plans an organization-wide MCP entry point, "Omni MCP", modelled on Uber's
+MCP Gateway (2026). Uber's gateway has two halves:
+- a **registry** (the control plane) of servers and tools. Tools are discovered
+  automatically but start disabled, and their owners review and enable them;
+- a **data plane** that serves one `/<server>/mcp` endpoint per virtual server, plus
+  an Omni server.
+
+Omni is a single endpoint. Agents discover through it incrementally with
+`discover_server`, `discover_tools`, `get_tool_schema` and `invoke_tool`, under the
+gateway's access control. In Cloud, Omni and the per-project staff MCP endpoints
+belong to `org-auth`. The tenant must therefore be callable by that gateway and
+describable without being called.
+
 ## Decision
 
 1. **The application declares its role and attribute vocabulary.** An app-level
@@ -118,6 +131,32 @@ application resolves its own callers.
    reading the body. Admin's `present` hints (hidden or read-only) come from the host
    (Cloud: `org-auth`), not from the tenant.
 
+8. **The plan publishes a capability catalog.** `mantle generate` writes a static,
+   host-readable catalog, `catalog.json`, beside the generated code. It lists every
+   exposed target:
+   - target id, surface and MCP tool name;
+   - title and description;
+   - canonical input JSON Schema and annotations (read-only, destructive);
+   - the roles `requires` names and the attributes the target's SQL reads;
+   - a per-target input-schema hash.
+
+   It holds no SQL and no data. A gateway uses it for discovery and schema answers
+   (`discover_tools`, `get_tool_schema`, a flattened constrained schema) and for binding
+   grants per target. When a target's schema hash changes, only that target's grant
+   lapses. The gateway answers discovery without calling a tenant. This replaces
+   deriving tools from Core's runtime (mantle-home #357, #379).
+
+9. **Surfaces accept a host-forwarded invocation.** A gateway that has already
+   authenticated the caller may invoke a tenant surface in process, for example a
+   `tools/call` that Omni forwards to the tenant's staff MCP surface. The caller and
+   the constraints come from the host contract (decision 6), so:
+   - no bearer token or cookie is required on that path;
+   - the surface still runs its own `requires`, attribute scope, generated validation
+     and `authorize`;
+   - the forwarded caller can say an agent is acting for a human. `Caller` already
+     carries `credential` and `clientId`, and a host may add an `actor` marker that
+     `authorize` can read. The kernel does not interpret it.
+
 ## Consequences
 
 - One manifest runs in both places:
@@ -131,6 +170,18 @@ application resolves its own callers.
   special case is needed.
 - Attribute scope makes row-level ABAC declarative and dialect-native. Policies written
   as `WHERE` clauses by hand remain possible, but scope is the default.
+- **Omni MCP and the organization registry live entirely in Cloud's `org-auth`.**
+  Compared with Uber's design:
+  - The registry is fed by each release's `catalog.json`, not by crawling or by an LLM.
+    The manifest is the IDL, so discovery is deterministic.
+  - "Discovery is not exposure" holds: a target that appears in a new release stays
+    unavailable to restricted staff until an administrator grants it.
+  - `invoke_tool` resolves to a project and target, then forwards per decision 9. The
+    tenant sees an ordinary staff call.
+  - Response trimming ("response projection"), output redaction and third-party
+    credential exchange are gateway features on the response path. They are not
+    kernel seams.
+  - Public and member traffic never pass through the gateway.
 - Cost when unused: nothing at startup or per request. When used: one bind per
   attribute reference, plus whatever `authorize` costs.
 - Breaking changes for 0.2 (unreleased):
@@ -158,9 +209,21 @@ application resolves its own callers.
 - What does a missing multi-valued attribute look like in both dialects? It must match
   nothing, never everything.
 
+- Is `catalog.json` enough for `get_tool_schema` once the grant has flattened the
+  schema, or does the gateway also need each target's generated validator to
+  canonicalize Omni input before forwarding? Proposal: the tenant canonicalizes under
+  decision 9, and the gateway only filters by target.
+
 ## Evidence
 
 - Cloud spikes, 2026-10-13: mantle-home #413.
 - Topology: dispatcher → org-auth → tenant with `props`, about 3 ms extra; failure
   isolation; gradual deployment.
 - Better Auth on Durable Object SQLite; fresh-on-write revocation.
+- Uber Engineering, "Designing MCP Gateway: Uber's MCP Management Platform" (2026):
+  - registry and data plane;
+  - disabled-by-default discovery with owner review;
+  - Omni MCP with incremental discovery;
+  - response projection;
+  - third-party token exchange;
+  - Code Mode through a CLI.
