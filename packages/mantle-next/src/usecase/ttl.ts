@@ -1,5 +1,5 @@
 /** TTL maintenance sees expired rows, so it deliberately bypasses ordinary scope/read visibility. */
-import type { RuntimePlan } from "@aotter/mantle/spec";
+import type { RuntimePlan } from "@aotter/mantle/compiler";
 import { dialect as sqlite } from "../kernel/dialect/sqlite.js";
 import { dialect as postgres } from "../kernel/dialect/postgres.js";
 import { entry, exportName, q } from "../domain/entry.js";

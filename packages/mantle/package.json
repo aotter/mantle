@@ -66,6 +66,10 @@
     "./bun": {
       "types": "./dist/bun/index.d.ts",
       "import": "./dist/bun/index.js"
+    },
+    "./compiler": {
+      "types": "./dist/compiler.d.ts",
+      "import": "./dist/compiler.js"
     }
   },
   "bin": {

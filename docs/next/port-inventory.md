@@ -334,7 +334,7 @@ Nothing in Next on develop serves HTTP or any Admin/MCP/OAuth route; every "gap"
 
 | ID | On develop | Draft PRs | Status | Notes |
 |---|---|---|---|---|
-| AUTH-01 | `src/auth/adapter.ts` (`d1Adapter`, `bunSqlAdapter`), `src/auth/schema.ts` (`authSchemaSql` from `getSchema`), `--auth ./auth.ts` | none | delta (by decision) | Next "does not wrap Better Auth" (docs/next/auth.md); the plugin set, role access-control, `jwt`, `mcp`, `cimd`, `genericOAuth` configuration that `buildAuth.ts` did is now app-owned; no template for it yet |
+| AUTH-01 | `src/auth/adapter.ts` (`d1Adapter`, `bunSqlAdapter`), `src/infrastructure/authSchema.ts` (`authSchemaSql` from `getSchema`, build-time only), `--auth ./auth.ts` | none | delta (by decision) | Next "does not wrap Better Auth" (docs/next/auth.md); the plugin set, role access-control, `jwt`, `mcp`, `cimd`, `genericOAuth` configuration that `buildAuth.ts` did is now app-owned; no template for it yet |
 | AUTH-02 | none | none | gap | derive from `authOptions` at generate time or add helper |
 | AUTH-03 | docs sample uses `emailOTP({storeOTP:"hashed", ...})` | none | partial | no keyed-HMAC storage, no locale pick, no `backgroundTasks`+`waitUntil`, no default rate-limit tightening, no templates |
 | AUTH-04..06 | app config | none | partial (app-owned) | |

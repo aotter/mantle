@@ -1,5 +1,5 @@
 /** Core's lowered bind specs as the kernel's recipes (`kernel/binds.ts`), each input resolved to its authored field name. */
-import type { LoweredStatement } from "@aotter/mantle/spec";
+import type { LoweredStatement } from "@aotter/mantle/compiler";
 import type { Recipe } from "../kernel/binds.js";
 
 const KINDS = new Set(["uid", "role", "now", "cutoff", "const", "input"]);

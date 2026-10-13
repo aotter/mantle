@@ -1,3 +1,5 @@
+import { collectionOf, propsOf } from "./collections.js";
+export { collectionOf } from "./collections.js";
 import { requiredEnumStates } from "./procedureFlow.js";
 /**
  * The Admin surface (ADR-0032 decisions 8 and 9): the staff JSON API under `{basePath}/api` and the SPA shell under `{basePath}`.
@@ -5,7 +7,7 @@ import { requiredEnumStates } from "./procedureFlow.js";
  * caller's scope sees and nothing wider. Routes of an `AdminIdentity` facet that is absent do not exist.
  */
 import { makeDiagnostic, redactForWire } from "../spec/kernel/index.js";
-import { MCP_HINT_KEYWORD, STAFF_ROLES, isMediaMcpHint, isStaffRole, meetsRole, enumOptions, resolveMantleRef, mcpTools, type JsonSchema, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
+import { STAFF_ROLES, isStaffRole, meetsRole, resolveMantleRef, mcpTools, type JsonSchema, type PlanSchema, type PlanView, type StaffRole } from "../spec/domain/index.js";
 import { evaluateAuthAll, readerOf, type Caller, type CallerStore, type MantleRuntime, type MediaAsset, type MediaStorage, type SiteSettings, type FindQuery, type SchemaReader, type StoreRow, type StoreScalar, type StoreSelectResult, type Surface } from "../core/index.js";
 import { siteConfigOf } from "../core/siteConfig.js";
 import { sessionUserOf } from "../core/sessionUser.js";
@@ -44,44 +46,9 @@ interface Route {
 const NO_STORE = { "cache-control": "no-store" };
 const P = "admin";
 const bad = (message: string) => wireError("INPUT_VALIDATION_FAILED", message, P);
-type Props = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
-const propsOf = (s: JsonSchema) => (s.properties ?? {}) as Props;
 /** A role denial names the minimum role, so the SPA can say who may do it. */
 const denied = (role: StaffRole, message: string) =>
   json({ error: redactForWire(makeDiagnostic({ code: "AUTH_DENIED", phase: "runtime", severity: "error", path: P, expected: `${role} role or higher`, message })), minimumRole: role }, 403, NO_STORE);
-
-/** @internal What the SPA lists and edits for one Schema; a translation's parent is the entry sharing its `on`. */
-export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
-  const names = new Set(schemas.filter((x) => !x.translates).map((x) => x.name));
-  const props = propsOf(s.schema);
-  const required = new Set(s.schema.required ?? []);
-  const ui = (s.uiSchema ?? {}) as Record<string, Record<string, unknown> | undefined>;
-  const list = ui["list"] ?? {};
-  const nav = ui["nav"];
-  const filterField = list["filterField"] as string | undefined;
-  // a required reference is composition: the child sits under its parent, an `id` reference first, else one by a unique field
-  const refs = Object.keys(props).filter((f) => required.has(f) && names.has(resolveMantleRef(props[f])?.schema ?? ""));
-  const byId = refs.find((f) => resolveMantleRef(props[f])!.field === "id");
-  const parentField = byId ?? refs[0];
-  // a standalone list's parent picker scopes by the parent's entry id, so only an `id` reference composes there (the checker agrees)
-  const navField = nav?.["standalone"] === true ? (nav["parentField"] as string | undefined) ?? byId : undefined;
-  const navParent = navField ? resolveMantleRef(props[navField]) : null;
-  const children = schemas.filter((c) => c.translates?.parent === s.name);
-  return {
-    name: s.name, title: s.title ?? s.name, description: s.description ?? null,
-    lifecycle: s.publishing ? "publishing" : "operational",
-    parent: s.translates ? { collection: s.translates.parent, parentField: s.translates.on, childField: s.translates.on }
-      : parentField ? { collection: resolveMantleRef(props[parentField])!.schema, parentField: resolveMantleRef(props[parentField])!.field, childField: parentField } : null,
-    hasTranslations: children.length > 0, localized: s.localized === true || !!s.translates, translates: s.translates ?? null,
-    schema: s.schema, uiSchema: s.uiSchema ?? null,
-    mediaFields: [s, ...children].flatMap((x) => Object.entries(propsOf(x.schema)).flatMap(([name, p]) => (isMediaMcpHint(p[MCP_HINT_KEYWORD]) ? [{ name, hint: p[MCP_HINT_KEYWORD] }] : []))),
-    // the plan lower-cases index columns; `names` maps them back to the declared spelling
-    sortableFields: [...new Set([...(s.unique ?? []), ...(s.indexes ?? [])].map((i) => s.names[i[0]!] ?? i[0]!).filter((f) => required.has(f)))],
-    filter: filterField ? { field: filterField, values: enumOptions(props[filterField])?.map((o) => o.value) ?? [] } : null,
-    list: { primaryField: (list["primaryField"] as string | undefined) ?? null, columns: (list["columns"] as string[] | undefined) ?? [] },
-    nav: navField && navParent ? { standalone: true, parentField: navField, parentCollection: navParent.schema } : null,
-  };
-}
 
 /** The settings page's fields and their longest value; the old surface had no limit. */
 const SETTINGS = { brand: 80, title: 200, description: 1000 } as const;

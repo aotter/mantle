@@ -1,5 +1,5 @@
 /** Translation helpers use generated SQL policy, never a request-time manifest. */
-import { rowPolicy, type RuntimePlan, type PlanSchema } from "@aotter/mantle/spec";
+import { rowPolicy, type RuntimePlan, type PlanSchema } from "@aotter/mantle/compiler";
 import type { Target } from "../domain/model.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import { renderTerm } from "../kernel/store.js";

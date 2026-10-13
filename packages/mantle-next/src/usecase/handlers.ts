@@ -1,5 +1,5 @@
 /** Ref contracts become application functions; no interpreter or registration dependency. */
-import type { JsonSchema, RuntimePlan } from "@aotter/mantle/spec";
+import type { JsonSchema, RuntimePlan } from "@aotter/mantle/compiler";
 import { authLines as auth } from "../domain/input.js";
 import { q } from "../domain/entry.js";
 

@@ -1,5 +1,5 @@
 /** What a column's Mantle type means to generated code, in one place: Views, Stores and wire forms all read it here. */
-import type { RuntimePlan } from "@aotter/mantle/spec";
+import type { RuntimePlan } from "@aotter/mantle/compiler";
 
 /** A column's declared type; the two system timestamps are not declared fields. @internal */
 export const declaredType = (fields: Readonly<Record<string, string>>, column: string): string | undefined =>

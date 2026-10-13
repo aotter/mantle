@@ -15,7 +15,7 @@ import { authRoutes, loopbackClientsAreNative, normalizeAuthResponseCookies } fr
 import { ContractError } from "../src/kernel/contracts.js";
 import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller.js";
 import { d1Adapter } from "../src/auth/adapter.js";
-import { authSchemaSql } from "../src/auth/schema.js";
+import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 import { d1Shim } from "./apps/d1-shim.js";
 
 const AUDIENCE = "https://api.example.test/mcp";

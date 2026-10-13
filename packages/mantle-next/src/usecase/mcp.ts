@@ -1,6 +1,6 @@
 /** Emit the selected MCP boundary; the official transport loads on its first request. */
 import { STAFF_ROLES } from "../domain/visibility.js";
-import { mcpToolNameSegment, resolveLocalizedText, type RuntimePlan, type PlanLowered } from "@aotter/mantle/spec";
+import { mcpToolNameSegment, resolveLocalizedText, type RuntimePlan, type PlanLowered } from "@aotter/mantle/compiler";
 import type { Target } from "../domain/model.js";
 import { emitValidation } from "./validation.js";
 import { databaseImport, q } from "../domain/entry.js";

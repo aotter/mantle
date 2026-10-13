@@ -1,26 +1,16 @@
 /** Build-time assembly only. None of these imports enter generated applications. */
-import type { AdminExtension } from "@aotter/mantle/admin";
-import { compilePlan, viewOutputs, type ManifestSourceSet } from "@aotter/mantle/spec";
-import * as sqliteCompiler from "@aotter/mantle/d1/compile";
-import * as postgresCompiler from "@aotter/mantle/postgres/compile";
-import { d1Dialect } from "../../../mantle/dist/d1/dialect.js";
-import { postgresDialect } from "../../../mantle/dist/postgres/dialect.js";
-import { lowerPlan } from "../../../mantle/dist/core/sql/lowered.js";
+import { compilePlan, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, postgresDialect, lowerPlan, sqliteSchema, postgresSchema, type AdminExtension, type ManifestSourceSet, type LoweredStatement } from "@aotter/mantle/compiler";
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { outputType } from "../domain/columns.js";
 import { castCursor, provePaging, type PagingProof } from "../domain/paging.js";
 import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
 import { dialect as sqliteDialect } from "../kernel/dialect/sqlite.js";
 import { cast, dialect as postgresDialect_ } from "../kernel/dialect/postgres.js";
-import { initialStorageSql as sqliteSchema } from "../../../mantle/dist/d1/storage.js";
-import { initialStorageSql as postgresSchema } from "../../../mantle/dist/postgres/storage.js";
 import { publishingSql } from "../usecase/publishing.js";
 import { searchDiagnostics } from "../usecase/search.js";
 import { generate } from "../usecase/generate.js";
-import type { LoweredStatement } from "@aotter/mantle/spec";
 import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/model.js";
 import type { BetterAuthOptions } from "better-auth/types";
-import { authSchemaSql } from "../auth/schema.js";
 import { generatedFiles } from "../domain/entry.js";
 
 /** Core's own new-entry-id lowering for a dialect, printed once as an SQL expression: the Store's inserts carry the same one its compiled INSERTs do. */
@@ -44,7 +34,7 @@ function castInputs(statement: LoweredStatement, path: string, refusals: Generat
   Object.assign(statement, { sql });
 }
 
-export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; /** Select the optional generated site/media capability and deployment tables. */ readonly site?: import("@aotter/mantle/spec").SiteDefaults; /** The application's Better Auth options: their tables join schema.sql. */ readonly auth?: BetterAuthOptions; readonly adminExtensions?: readonly Pick<AdminExtension,"id"|"contributes">[] }): Promise<GenerateResult> {
+export async function generateFromSources(request: { readonly target: Target; readonly sources: ManifestSourceSet; /** Select the optional generated site/media capability and deployment tables. */ readonly site?: import("@aotter/mantle/compiler").SiteDefaults; /** The application's Better Auth options: their tables join schema.sql. */ readonly auth?: BetterAuthOptions; readonly adminExtensions?: readonly Pick<AdminExtension,"id"|"contributes">[] }): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");
   const compiler = postgres ? postgresCompiler : sqliteCompiler;
   const compiled = await compilePlan(request.sources, compiler, "operational");
@@ -81,7 +71,7 @@ export async function generateFromSources(request: { readonly target: Target; re
     const seen = new Set<LoweredStatement>();
     for (const [kind, all] of [["views", lowered.views], ["procedures", lowered.procedures]] as const) for (const [name, modes] of Object.entries(all)) {
       for (const statement of Object.values(modes).flat() as LoweredStatement[]) if (!seen.has(statement)) { seen.add(statement); castInputs(statement, `${kind}/${name}`, refusals);
-        if ("paged" in statement) for (const page of Object.values((statement as import("@aotter/mantle/spec").LoweredView).paged)) {
+        if ("paged" in statement) for (const page of Object.values((statement as import("@aotter/mantle/compiler").LoweredView).paged)) {
           const inputPage = { ...statement, sql:page.sql };
           castInputs(inputPage, `${kind}/${name}`, refusals);
           Object.assign(page,{sql:inputPage.sql});
@@ -98,7 +88,7 @@ export async function generateFromSources(request: { readonly target: Target; re
     return { ok: false, diagnostics: [...refusals, ...diagnostics] };
   }
   if (!result.ok) return result;
-  const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
+  const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? (await import("./authSchema.js")).authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
   return { ...result, files: { ...files, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
 }
