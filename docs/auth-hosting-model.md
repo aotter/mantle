@@ -22,7 +22,7 @@ What carries over from 0.1.x:
   its own session; with `identity: custom` its resolver maps that session to a
   `Caller`.
 - **API and MCP authorization** is the same `requires` and guard everywhere;
-  see [Guarded API access](examples/guarded-api.md).
+  see [surface contracts](handbook/reference/surface.md).
 
 The standalone hosted-auth and Landing provisioning flow from 0.1.x is absent
 in 0.2.0. A Mantle Cloud tenant uses Cloud's managed identity/storage contract;

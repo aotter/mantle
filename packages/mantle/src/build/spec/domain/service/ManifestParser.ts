@@ -246,11 +246,6 @@ function normalizeManifest(manifest: Manifest, defaultLifecycle: LifecycleMode):
   return manifest;
 }
 
-function pointerFor(docIndex: number, jsonPointer: string): string {
-  const ptr = jsonPointer.startsWith("/") ? jsonPointer : `/${jsonPointer}`;
-  return `manifest:doc/${docIndex}#${ptr}`;
-}
-
 function validateEnvelope(raw: unknown, docIndex: number): Manifest {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new ManifestParseError("manifest must be a YAML mapping", docIndex);

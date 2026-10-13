@@ -1,11 +1,9 @@
 // The D1 dialect's lowering (ADR-0034 decision 8, ADR-0035 decision 6): what Core's policy rewriter hands a dialect to spell
 // in SQLite. Casts become the storage encodings, Mantle's functions become FTS5, R*Tree and `_mantle_tz` lookups, and a
-// surviving function prints as a plain call. Runs in the tenant Worker: AST in, AST out, no parser.
+// surviving function prints as a plain call. Runs only at build time: AST in, AST out, no parser.
 import { SqlRefusal as Refused, ftsTableName, geoTreeName, intervalMicros, parseNumeric, type SqlNode as N } from '../spec/domain/index.js';
 import { S, num, ref as col, target as res } from '../core/sql/ast.js';
-import type { BindContext } from '../core/sql/compile.js';
 import type { PolicyLowering, LoweringScope } from '../core/sql/policy.js';
-import { runtimeDiagnostic, DiagnosticError } from '../spec/kernel/index.js';
 import { encodeDate, encodeNumeric, encodeTimestamptz, sqliteType } from './codec.js';
 import type { RawExpr } from './print.js';
 
@@ -127,16 +125,6 @@ function lowerCast(n: N, scope: LoweringScope): N {
   return cast(scope.tx(n.arg), target);
 }
 
-/** The box a near() query binds to the R*Tree: a bounding box of the radius, padded for float32 storage. */
-function box(which: BoxBind['box'], lat: number, lng: number, meters: number): number {
-  const dLat = meters / 111_320;
-  const dLng = meters / (111_320 * Math.max(Math.cos((lat * Math.PI) / 180), 1e-9));
-  const pad = 1e-4;
-  if (Math.abs(lat) + dLat >= 90 || Math.abs(lng) + dLng >= 180)
-    throw new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: "mantle.near(): a box that crosses the antimeridian or a pole is refused" }));
-  return { minLat: lat - dLat - pad, maxLat: lat + dLat + pad, minLng: lng - dLng - pad, maxLng: lng + dLng + pad }[which];
-}
-
 export const d1Lowering: PolicyLowering = {
   // decision 5: every bind is CAST to its declared type
   input: (param, type) => cast(param, sqliteType(type)),
@@ -157,11 +145,3 @@ export const d1Lowering: PolicyLowering = {
   // the FTS5 and R*Tree tables join on SQLite's rowid
   columns: (s) => (s.search?.length || Object.values(s.fields).includes('geo') ? [res(col('rowid'), '_rid')] : []),
 };
-
-/** Resolves the D1 dialect's own bind, a corner of a near() box, for one call. */
-export function bindBox(spec: { readonly k: 'dialect' }, ctx: BindContext): number {
-  const b = spec as BoxBind;
-  const input = ctx.input ?? {};
-  const arg = (a: Arg) => ('const' in a ? a.const : Number(input[a.input]));
-  return box(b.box, arg(b.lat), arg(b.lng), b.meters);
-}

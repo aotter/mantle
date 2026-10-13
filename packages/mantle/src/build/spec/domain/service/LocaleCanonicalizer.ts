@@ -11,10 +11,6 @@ import { InvalidLocaleError } from "../model/Locale.js";
  * script subtag (`zh-Hant`), no variants (`de-1996`). Extend the
  * regexes below — they are the only place the restriction lives.
  *
- * Note: `URL_LOCALE` is stricter than `LANG` (2-letter only) because
- * 3-letter languages don't appear in published URL paths today. If
- * you accept a 3-letter site locale, audit URL_LOCALE consumers
- * before flipping it.
  */
 
 const LANG = /^[a-z]{2,3}$/;
@@ -44,25 +40,6 @@ export function toCanonicalLocale(input: string): string {
   const region = parts[1]!.toLowerCase();
   if (!REGION.test(region)) throw new InvalidLocaleError(input);
   return `${lang}-${region.toUpperCase()}`;
-}
-
-/** Canonical → URL form (always lowercase). */
-export function toUrlLocale(canonical: string): string {
-  return canonical.toLowerCase();
-}
-
-/**
- * Best-effort canonicalization. Unlike `toCanonicalLocale`, never
- * throws — returns the original input unchanged when it's malformed.
- * Used for query-side comparisons where a malformed filter value
- * should simply match nothing rather than error.
- */
-export function safeCanonicalLocale(input: string): string {
-  try {
-    return toCanonicalLocale(input);
-  } catch {
-    return input;
-  }
 }
 
 /**

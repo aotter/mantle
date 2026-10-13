@@ -192,64 +192,6 @@ export interface Diagnostic {
 }
 
 /**
- * HTTP status mapping for codes that surface on the wire (runtime
- * phase). Codes not in this map default to 500 when surfaced over
- * HTTP. Validate / test / boot phases don't map to HTTP — they
- * surface in CLI exit codes / thrown errors / Worker init logs.
- *
- * Narrowed to a status-literal union so adding a code with a status
- * outside the v0.1 set fails compile.
- */
-export type RuntimeHttpStatus = 400 | 401 | 402 | 403 | 404 | 405 | 409 | 410 | 412 | 429 | 500 | 501 | 503 | 507;
-
-export const HTTP_STATUS_BY_CODE: Readonly<Partial<Record<DiagnosticCode, RuntimeHttpStatus>>> = {
-  RESOURCE_EXHAUSTED: 507,
-  RESOURCE_UNAVAILABLE: 503,
-  RATE_LIMITED: 429,
-  OUTCOME_UNKNOWN: 503,
-  PARTIAL_FAILURE: 503,
-  PRECONDITION_FAILED: 412,
-  INPUT_VALIDATION_FAILED: 400,
-  INVALID_LOCALE: 400,
-  UNAUTHENTICATED: 401,
-  AUTH_DENIED: 403,
-  ENTITLEMENT_REQUIRED: 402,
-  NOT_FOUND: 404,
-  METHOD_NOT_ALLOWED: 405,
-  CONFLICT: 409,
-  TRANSLATES_PARENT_UNKNOWN: 409,
-  HANDLER_NOT_REGISTERED: 500,
-  DISPATCHER_NOT_BUILT: 501,
-  INTERNAL_ERROR: 500,
-  OUTPUT_VALIDATION_FAILED: 500,
-  // Lifecycle before_* hook explicitly aborted the mutation. 409 is
-  // the right fit (the hook rejected based on resource state — bot
-  // check failed, rate limit hit, etc.); the structured diagnostic
-  // includes the failing hook's name for surfacing to the caller.
-  LIFECYCLE_HOOK_REJECTED: 409,
-  MEDIA_NOT_CONFIGURED: 501,
-  SITE_NOT_CONFIGURED: 501,
-  MEDIA_UPLOAD_EXPIRED: 410,
-  MEDIA_OBJECT_NOT_FOUND: 409,
-  MEDIA_MIME_REJECTED: 400,
-  MEDIA_SIZE_EXCEEDED: 400,
-  MEDIA_SVG_REJECTED: 400,
-  MEDIA_CHECKSUM_MISMATCH: 409,
-  MEDIA_PURPOSE_REJECTED: 400,
-  MEDIA_VARIANTS_INCOMPLETE: 400,
-  MEDIA_VARIANT_SIZE_EXCEEDED: 400,
-  MEDIA_VARIANTS_SUSPICIOUS_SIZE: 400,
-  MEDIA_ASSET_NOT_FOUND: 404,
-};
-
-/** Resolve a Diagnostic's HTTP status for wire egress; unknown codes
- *  default to 500. Lives in the kernel so every adapter shares one
- *  mapping. */
-export function httpStatusFor(d: Diagnostic): RuntimeHttpStatus {
-  return HTTP_STATUS_BY_CODE[d.code] ?? 500;
-}
-
-/**
  * Build a Diagnostic with a derived default `message`. Call sites may supply
  * contextual prose, but the structured fields remain authoritative.
  */
@@ -339,39 +281,4 @@ export class DiagnosticError extends Error {
     if (!d) throw new Error("DiagnosticError carries no diagnostics");
     return d;
   }
-}
-
-/**
- * Strip security-sensitive fields for wire egress. Per ADR-0008:
- * never expose `candidates` to untrusted callers — that leaks
- * schema information. Internal phases (validate / test / boot)
- * skip this redaction.
- */
-export function redactForWire(d: Diagnostic): Diagnostic {
-  if (d.candidates === undefined) return d;
-  const { candidates: _omit, ...rest } = d;
-  return rest;
-}
-
-/**
- * Walk a JSON Pointer (RFC 6901) on a value. Returns `undefined` for
- * any miss. Best-effort — used to surface the offending value inside
- * a diagnostic, not for strict pointer dereferencing.
- */
-export function readJsonPointer(root: unknown, jsonPointer: string): unknown {
-  if (!jsonPointer || jsonPointer === "/") return root;
-  const parts = jsonPointer.split("/").slice(1).map(unescapePointer);
-  let cur: unknown = root;
-  for (const part of parts) {
-    if (cur && typeof cur === "object") {
-      cur = (cur as Record<string, unknown>)[part];
-    } else {
-      return undefined;
-    }
-  }
-  return cur;
-}
-
-function unescapePointer(s: string): string {
-  return s.replace(/~1/g, "/").replace(/~0/g, "~");
 }

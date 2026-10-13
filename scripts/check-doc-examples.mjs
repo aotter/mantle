@@ -1,20 +1,17 @@
 #!/usr/bin/env node
-// Every example page under docs/examples/ (and the HANDBOOK pages below) is a whole service: its ```yaml blocks are the manifests. Each page is compiled by the
-// built `mantle` CLI in a scratch project (`generate`, then `generate --check`), so a page that stops compiling, or compiles with a warning, fails `pnpm check`.
-import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+// Compile native handbook manifests with the built CLI, then check their TypeScript snippets.
+// Generation warnings, type errors and drift under `generate --check` fail the check.
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const examples = join(root, "docs/examples");
-// These pages explicitly document alpha.6 RuntimePlan. Test their exact historical
-// package; the native reference service is checked separately from current tarballs.
-// Current handbook examples use the built native SDK, without a registry install.
+// Native handbook examples use the built SDK, without a registry install.
 const nativeSdk = join(root, "packages/mantle");
 const HANDBOOK = ["start/quickstart-worker.md", "guides/typed-queries.md", "reference/schema.md", "reference/trigger.md", "guides/postgres-adapters.md", "guides/email.md"];
 const requested = process.argv.slice(2).map(path => resolve(path));
-const nativePages = requested.length ? requested.filter(path => path.startsWith(join(root, "docs/handbook") + "/")) : HANDBOOK.map(page => join(root, "docs/handbook", page));
+const nativePages = requested.length ? requested : HANDBOOK.map(page => join(root, "docs/handbook", page));
 for (const page of nativePages) {
   const source = readFileSync(page, "utf8");
   const blocks = [...source.matchAll(/^```yaml\n([\s\S]*?)^```$/gm)].map(match => match[1]);
@@ -46,49 +43,3 @@ for (const page of nativePages) {
   } finally { rmSync(project,{recursive:true,force:true}); }
 }
 console.log(`check-doc-examples: ${nativePages.length} native handbook pages typecheck; manifest examples also generate and --check`);
-const historicalPages = requested.length ? requested.filter(path => !nativePages.includes(path)) : readdirSync(examples).filter(name=>name.endsWith(".md") && name!=="README.md").map(name=>join(examples,name));
-if (!historicalPages.length) process.exit(0);
-const legacy = mkdtempSync(join(tmpdir(), "mantle-legacy-docs-"));
-const legacyVersion = "0.2.0-alpha.6";
-writeFileSync(join(legacy, "package.json"), JSON.stringify({private:true,type:"module",dependencies:{"@aotter/mantle":legacyVersion}}));
-execFileSync("pnpm",["install","--ignore-scripts","--no-frozen-lockfile"],{cwd:legacy,stdio:"pipe"});
-const legacySdk = join(legacy,"node_modules/@aotter/mantle");
-const cli = join(legacySdk,"dist/cli/main.js");
-const pages = historicalPages;
-
-const failures = [];
-try {
-for (const page of pages) {
-  const blocks = [...readFileSync(page, "utf8").matchAll(/^```yaml\n([\s\S]*?)^```$/gm)].map((match) => match[1]);
-  if (!blocks.some((block) => block.includes("apiVersion: cms.mantle.aotter.net/v2"))) {
-    failures.push(`${page}: no v2 manifest block`);
-    continue;
-  }
-  const project = mkdtempSync(join(tmpdir(), "mantle-doc-example-"));
-  try {
-    mkdirSync(join(project, "manifests"));
-    mkdirSync(join(project, "node_modules/@aotter"), { recursive: true });
-    symlinkSync(legacySdk, join(project, "node_modules/@aotter/mantle"), "dir");
-    writeFileSync(join(project, "package.json"), '{ "type": "module" }\n');
-    blocks.forEach((block, index) => writeFileSync(join(project, "manifests", `${index}.yaml`), block));
-    // identity none and REST only, on SQLite named as `mantle generate --dialect sqlite` writes it: the page's manifests are what is checked, not the peers a fuller selection needs
-    // a warning fails too: an example teaches what a clean manifest looks like.
-    for (const args of [[cli, "generate", "--identity", "none", "--features", "web", "--dialect", "sqlite"], [cli, "generate", "--check"]]) {
-      const run = spawnSync(process.execPath, args, { cwd: project, encoding: "utf8" });
-      if (run.status !== 0 || /^warning:/m.test(run.stdout + run.stderr)) {
-        failures.push(`${page}: ${args.slice(1).join(" ")}\n${run.stdout}${run.stderr}`);
-        break;
-      }
-    }
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-}
-
-} finally { rmSync(legacy,{recursive:true,force:true}); }
-
-if (failures.length) {
-  console.error(`check-doc-examples: ${failures.length} page(s) failed\n${failures.join("\n")}`);
-  process.exit(1);
-}
-console.log(`check-doc-examples: ${pages.length} historical page(s) compile with alpha.6; current native service uses check-worker-consumer`);

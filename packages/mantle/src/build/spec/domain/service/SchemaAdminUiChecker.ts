@@ -35,15 +35,6 @@ const SCHEMA_LIST_KEYS = new Set(["filterField", "primaryField", "columns", "cel
 const SCHEMA_NAV_KEYS = new Set(["standalone", "parentField"]);
 const SCALAR_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
-export function schemaSortableFields(schema: SchemaManifest): readonly string[] {
-  const required = new Set(schema.spec.schema.required ?? []);
-  return [...new Set(
-    checkSchemaIndexes(schema).declarations
-      .map(({ fields }) => fields[0]?.name)
-      .filter((field): field is string => field !== undefined && required.has(field)),
-  )];
-}
-
 export function checkSchemaAdminUi(schema: SchemaManifest): {
   readonly filter: SchemaListFilter | null;
   readonly list: SchemaListPresentation;
@@ -505,10 +496,6 @@ export function requiredMantleRefFields(
     if (ref?.field === "id") fields.push({ field, collection: ref.schema });
   }
   return fields;
-}
-
-export function isRequiredMantleRefField(schema: SchemaManifest, field: string): boolean {
-  return requiredMantleRefFields(schema).some((item) => item.field === field);
 }
 
 /** Graph-time: standalone parent collection must exist and not be a translates child. */

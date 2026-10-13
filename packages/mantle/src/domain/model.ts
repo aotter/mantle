@@ -1,7 +1,8 @@
 /** Generation consumes compiler-owned data; emitted application code executes native SQL only. */
 import type { AdminExtension, PlanLowered, RuntimePlan, LoweredStatement } from "../build/compiler.js";
 
-export type Target = "bun-sqlite" | "bun-postgres" | "cloudflare-d1" | "cloudflare-postgres";
+import type { Target } from "./generation.js";
+export type { Target, GenerateDiagnostic, GenerateResult } from "./generation.js";
 export interface GenerateInput {
   readonly target: Target;
   /** Select generated bindings for the optional Admin server package. */
@@ -22,15 +23,6 @@ export interface GenerateInput {
   /** Generation-time proofs for the canonical policy SELECT's complete cursor tuple. */
   readonly paging?: Readonly<Record<string, import("./paging.js").PagingProof | undefined>>;
 }
-export interface GenerateDiagnostic {
-  readonly code: string;
-  readonly path: string;
-  readonly message: string;
-}
-export type GenerateResult =
-  | { readonly ok: true; readonly files: Readonly<Record<string, string>>; readonly refProcedures: readonly string[] }
-  | { readonly ok: false; readonly diagnostics: readonly GenerateDiagnostic[] };
-
 export interface AdminPage {
   readonly marker:string;
   readonly binds: LoweredStatement["binds"];

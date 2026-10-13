@@ -452,10 +452,6 @@ export const STAFF_ROLES = ["owner", "editor", "contributor"] as const;
 /** Next adds one OSS role; the legacy Core preset remains unchanged. */
 export type StaffRole = (typeof STAFF_ROLES)[number] | "staff";
 
-// `meetsRole` (role-rank comparison) moved to
-// `domain/service/StaffRoleHierarchy.ts` — this file is pure grammar
-// types referenced by the parser.
-
 export function isStaffRole(s: string): s is StaffRole {
   return s === "staff" || (STAFF_ROLES as readonly string[]).includes(s);
 }
@@ -551,7 +547,6 @@ export const RESERVED_ENTRY_COLUMNS = [
   "updatedAt",
   "authorId",
 ] as const;
-export type ReservedEntryColumn = (typeof RESERVED_ENTRY_COLUMNS)[number];
 
 /**
  * Reserved Procedure input wire names. `expectedVersion` is the observed
@@ -562,4 +557,3 @@ export type ReservedEntryColumn = (typeof RESERVED_ENTRY_COLUMNS)[number];
  */
 export const EXPECTED_VERSION_PROPERTY = "expectedVersion" as const;
 export const RESERVED_PROCEDURE_INPUT_NAMES = [EXPECTED_VERSION_PROPERTY] as const;
-export type ReservedProcedureInputName = (typeof RESERVED_PROCEDURE_INPUT_NAMES)[number];

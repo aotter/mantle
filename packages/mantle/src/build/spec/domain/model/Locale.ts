@@ -17,15 +17,6 @@
  * model-layer types can reference them without depending on services.
  */
 
-/**
- * URL-form regex: lowercase Mantle locale (`xx` or `xx-yy`). Matches
- * what a public-content router should accept verbatim — strict
- * canonical URL form, no mixed case. Consumer routers can plug this
- * into framework route patterns directly (e.g.
- * Hono's `/:locale{${URL_LOCALE.source}}/`).
- */
-export const URL_LOCALE = /^[a-z]{2}(?:-[a-z]{2})?$/;
-
 export class InvalidLocaleError extends Error {
   constructor(value: string) {
     super(`invalid locale: ${value}`);

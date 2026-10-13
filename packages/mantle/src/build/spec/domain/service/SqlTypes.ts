@@ -15,16 +15,6 @@ export function parseNumeric(type: string): { p: number; s: number } | undefined
   return { p, s };
 }
 
-/** The Mantle field types storage maps (`numeric(p, s)` aside): the one list a plan's `fields` are checked against. */
-export const MANTLE_FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'integer', 'real', 'bool', 'json', 'timestamptz', 'date', 'geo']);
-
-/** A field type storage can create: one of `MANTLE_FIELD_TYPES`, or a `numeric(p, s)` that `parseNumeric` accepts. */
-export function isFieldType(type: unknown): boolean {
-  if (typeof type !== 'string') return false;
-  if (MANTLE_FIELD_TYPES.has(type)) return true;
-  try { return parseNumeric(type) !== undefined; } catch { return false; }
-}
-
 /**
  * A TTL's `expireAfterSeconds` that reads can use: a whole number of seconds, 0 or more, whose cutoff (now less the TTL, in
  * microseconds) stays a safe integer, which is how an instant is bound.
@@ -57,30 +47,6 @@ export function intervalMicros(text: string, typmod?: number): number {
 /** D1's search table of a Schema (FTS5) and R*Tree of each geo field: the names `near()` and `search` read. */
 export const ftsTableName = (schema: string) => `_mantle_fts_${schema}`;
 export const geoTreeName = (schema: string, field: string) => `_mantle_geo_${schema}_${field}`;
-const FTS5_SHADOWS = ['_data', '_idx', '_content', '_docsize', '_config'];
-const RTREE_SHADOWS = ['_node', '_parent', '_rowid'];
-
-/**
- * Declarations whose search or geo tables would name one object: `a` field `b_c` and `a_b` field `c` share a tree, and a tree
- * may be named as another's shadow table (`_node`, `_parent`, `_rowid`; FTS5's `_data` and the rest). Names fold, as SQLite's do.
- */
-export function sideTableClashes(schemas: Readonly<Record<string, { readonly search?: readonly string[]; readonly fields?: Readonly<Record<string, string>> }>>): { schema: string; message: string }[] {
-  const named = new Map<string, string>(); // folded table name -> the declaration that names it
-  const out: { schema: string; message: string }[] = [];
-  for (const [schema, s] of Object.entries(schemas)) {
-    const tables = [
-      ...(s.search?.length ? [{ owner: `${schema} search`, name: ftsTableName(schema), shadows: FTS5_SHADOWS }] : []),
-      ...Object.entries(s.fields ?? {}).filter(([, t]) => t === 'geo').map(([f]) => ({ owner: `${schema}.${f}`, name: geoTreeName(schema, f), shadows: RTREE_SHADOWS })),
-    ];
-    for (const t of tables)
-      for (const n of [t.name, ...t.shadows.map((x) => t.name + x)]) {
-        const prior = named.get(n.toLowerCase());
-        if (prior !== undefined && prior !== t.owner) out.push({ schema, message: `${t.owner} and ${prior} would both name the table ${n}: rename a Schema or a field` });
-        else named.set(n.toLowerCase(), t.owner);
-      }
-  }
-  return out;
-}
 
 /** JSON Schema property to Mantle type, as the CLI types a column or an input. `numeric(p,s)` has no manifest spelling yet. */
 export function fieldType(p: JsonSchema): string {

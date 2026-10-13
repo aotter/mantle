@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { checkLocaleAndTranslates } from "../../src/build/spec/domain/service/CrossSchemaChecker.js";
+import { checkTranslatesReferences } from "../../src/build/spec/domain/service/CrossSchemaChecker.js";
 import { parseManifests } from "./parse.js";
 import { validateManifests } from "./parse.js";
 import type { SchemaManifest } from "../../src/build/spec/domain/model/ManifestGrammar.js";
 
-// Cross-Schema validation from ADR-0010. Runs in the validate phase
-// (CLI, optional siteLocales) and the boot phase (Worker, always with
-// siteLocales from D1). Every locale/translation diagnostic is exercised here.
+// Translation references use the same check as the manifest linker.
 
 function schema(name: string, spec: Partial<SchemaManifest["spec"]>): SchemaManifest {
   return {
@@ -25,45 +23,13 @@ function schema(name: string, spec: Partial<SchemaManifest["spec"]>): SchemaMani
   };
 }
 
-describe("checkLocaleAndTranslates — SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES", () => {
-  const localized = schema("posts", { localized: true });
-
-  it("rejects localized Schema when site has empty locales", () => {
-    const diags = checkLocaleAndTranslates({
-      schemas: [localized],
-      phase: "boot",
-      siteLocales: [],
-    });
-    const codes = diags.map((d) => d.code);
-    expect(codes).toContain("SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES");
-    expect(diags[0]?.path).toMatch(/posts/);
-  });
-
-  it("passes when site has at least one locale", () => {
-    const diags = checkLocaleAndTranslates({
-      schemas: [localized],
-      phase: "boot",
-      siteLocales: ["en"],
-    });
-    expect(diags.filter((d) => d.code === "SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES")).toHaveLength(0);
-  });
-
-  it("skips the check entirely when siteLocales is undefined (validate-from-CLI path)", () => {
-    const diags = checkLocaleAndTranslates({
-      schemas: [localized],
-      phase: "validate",
-    });
-    expect(diags.filter((d) => d.code === "SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES")).toHaveLength(0);
-  });
-});
-
-describe("checkLocaleAndTranslates — TRANSLATES_PARENT_UNKNOWN", () => {
+describe("checkTranslatesReferences — TRANSLATES_PARENT_UNKNOWN", () => {
   it("flags a translates.parent that doesn't resolve to any declared Schema", () => {
     const child = schema("post-translations", {
       localized: true,
       translates: { parent: "ghost", on: "slug" },
     });
-    const diags = checkLocaleAndTranslates({ schemas: [child], phase: "validate" });
+    const diags = checkTranslatesReferences([child], "validate");
     const codes = diags.map((d) => d.code);
     expect(codes).toContain("TRANSLATES_PARENT_UNKNOWN");
   });
@@ -74,26 +40,26 @@ describe("checkLocaleAndTranslates — TRANSLATES_PARENT_UNKNOWN", () => {
       localized: true,
       translates: { parent: "post", on: "slug" }, // typo: missing 's'
     });
-    const diags = checkLocaleAndTranslates({ schemas: [parent, child], phase: "validate" });
+    const diags = checkTranslatesReferences([parent, child], "validate");
     const d = diags.find((x) => x.code === "TRANSLATES_PARENT_UNKNOWN");
     expect(d?.candidates).toContain("posts");
     expect(d?.suggestion).toBe("posts");
   });
 });
 
-describe("checkLocaleAndTranslates — TRANSLATES_PARENT_IS_LOCALIZED", () => {
+describe("checkTranslatesReferences — TRANSLATES_PARENT_IS_LOCALIZED", () => {
   it("rejects translates.parent that is itself localized", () => {
     const parent = schema("posts", { localized: true });
     const child = schema("post-translations", {
       localized: true,
       translates: { parent: "posts", on: "slug" },
     });
-    const diags = checkLocaleAndTranslates({ schemas: [parent, child], phase: "validate" });
+    const diags = checkTranslatesReferences([parent, child], "validate");
     expect(diags.map((d) => d.code)).toContain("TRANSLATES_PARENT_IS_LOCALIZED");
   });
 });
 
-describe("checkLocaleAndTranslates — TRANSLATES_FIELD_NOT_IN_PARENT", () => {
+describe("checkTranslatesReferences — TRANSLATES_FIELD_NOT_IN_PARENT", () => {
   it("flags join field missing from parent Schema properties", () => {
     const parent: SchemaManifest = {
       apiVersion: "cms.mantle.aotter.net/v2",
@@ -108,24 +74,20 @@ describe("checkLocaleAndTranslates — TRANSLATES_FIELD_NOT_IN_PARENT", () => {
       localized: true,
       translates: { parent: "products", on: "slug" }, // parent has no slug
     });
-    const diags = checkLocaleAndTranslates({ schemas: [parent, child], phase: "validate" });
+    const diags = checkTranslatesReferences([parent, child], "validate");
     expect(diags.map((d) => d.code)).toContain("TRANSLATES_FIELD_NOT_IN_PARENT");
   });
 
 });
 
-describe("checkLocaleAndTranslates — happy path (parent + child correctly wired)", () => {
+describe("checkTranslatesReferences — happy path (parent + child correctly wired)", () => {
   it("emits no diagnostics", () => {
     const parent = schema("products", {});
     const child = schema("product-translations", {
       localized: true,
       translates: { parent: "products", on: "slug" },
     });
-    const diags = checkLocaleAndTranslates({
-      schemas: [parent, child],
-      phase: "boot",
-      siteLocales: ["en", "zh-TW"],
-    });
+    const diags = checkTranslatesReferences([parent, child], "boot");
     expect(diags).toEqual([]);
   });
 
@@ -138,7 +100,6 @@ describe("checkLocaleAndTranslates — happy path (parent + child correctly wire
     expect(parsed.diagnostics).toEqual([]);
     expect(validateManifests({
       manifests: parsed.manifests,
-      siteLocales: ["en", "zh-TW"],
     }).diagnostics).toEqual([]);
   });
 });
@@ -149,8 +110,8 @@ describe("phase tagging", () => {
       localized: true,
       translates: { parent: "ghost", on: "slug" },
     });
-    const validateDiags = checkLocaleAndTranslates({ schemas: [child], phase: "validate" });
-    const bootDiags = checkLocaleAndTranslates({ schemas: [child], phase: "boot" });
+    const validateDiags = checkTranslatesReferences([child], "validate");
+    const bootDiags = checkTranslatesReferences([child], "boot");
     expect(validateDiags[0]?.phase).toBe("validate");
     expect(bootDiags[0]?.phase).toBe("boot");
   });

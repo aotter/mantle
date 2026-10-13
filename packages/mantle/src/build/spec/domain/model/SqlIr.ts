@@ -79,12 +79,6 @@ export interface SqlPlan {
   readonly stmts: readonly SqlNode[];
 }
 
-/** Whether an expression holds a subquery, by structure: a string literal 'SubLink' is not one. */
-export function hasSubLink(v: unknown): boolean {
-  if (!v || typeof v !== "object") return false;
-  return Object.entries(v).some(([k, c]) => k === "SubLink" || hasSubLink(c));
-}
-
 /** Shared-cache eligibility of validated, expanded View IR; source text is display metadata, not execution. */
 export function viewCacheProblem(stmts: readonly SqlNode[], schemas: Readonly<Record<string, SqlSchemaDef>>): string | undefined {
   const pending: unknown[] = [...stmts];

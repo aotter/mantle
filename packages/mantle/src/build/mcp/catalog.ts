@@ -34,9 +34,6 @@ export interface AppCatalog {
   readonly actions: Readonly<Record<string, AppRowAction>>;
 }
 
-/** The catalog element's id in the App's HTML. */
-export const APP_CATALOG_ID = "mantle-catalog";
-
 /** System columns follow their declared scalar metadata. */
 const nativeSchema = (field: string): JsonSchema | undefined =>
   Object.hasOwn(NATIVE_OUTPUT_TYPES, field) ? NATIVE_OUTPUT_TYPES[field] === "integer" ? { type: "integer" } : { type: "string", format: "date-time" } : undefined;
@@ -88,4 +85,3 @@ export function appCatalog(plan: RuntimePlan, surface: "public" | "staff"): AppC
   }
   return { views, actions };
 }
-
