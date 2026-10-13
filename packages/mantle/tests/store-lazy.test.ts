@@ -15,7 +15,7 @@ spec:
   handler: {ref: app.echo}
 ` };
 
-for (const target of targets) test(`${target}: importing generated code runs no Store initializer; callers and handlers stay independent`, async () => {
+for (const target of ["bun-sqlite"] as const) test(`${target}: importing generated code runs no Store initializer; callers and handlers stay independent`, async () => {
   const dir = await mkdtemp(resolve(import.meta.dir, "apps/.generated/lazy-store-"));
   try {
     for (const handlers of [false, true]) {

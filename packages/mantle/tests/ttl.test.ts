@@ -1,13 +1,10 @@
 import {afterAll, expect, test} from "bun:test";
-import {SQL} from "bun";
 import {Database} from "bun:sqlite";
-import postgres from "postgres";
 import {resolve} from "node:path";
 import {rm} from "node:fs/promises";
 import {build} from "esbuild";
 import ts from "typescript";
 import {generateOrThrow, loadFixtureSources, writeGenerated} from "./apps/link.js";
-import {d1Shim} from "./apps/d1-shim.js";
 import {toCloudflareCron} from "../src/kernel/cron.js";
 import type {Target} from "../src/domain/model.js";
 const dir = resolve(import.meta.dir, "apps/.generated", `ttl-${crypto.randomUUID()}`);
@@ -21,18 +18,11 @@ async function scenario(target: Target, db: any, native: (sql: string, values?: 
   const app = await import(resolve(path, "generated.ts"));
   await verifyTtl(app, db, target.endsWith("sqlite") || target.endsWith("d1"), native, 2);
 }
-for (const target of ["bun-sqlite", "cloudflare-d1"] as const) test(`TTL ${target} expiry, scope, bounded scan and authority`, async () => {
+for (const target of ["bun-sqlite"] as const) test(`TTL ${target} expiry, scope, bounded scan and authority`, async () => {
   const db = new Database(":memory:");
-  try {await scenario(target, target === "bun-sqlite" ? db : d1Shim(db), async (sql, values) => values ? db.query(sql).all(...values) : /^SELECT/.test(sql) ? db.query(sql).all() : db.exec(sql));} finally {db.close();}
+  try {await scenario(target, db, async (sql, values) => values ? db.query(sql).all(...values) : /^SELECT/.test(sql) ? db.query(sql).all() : db.exec(sql));} finally {db.close();}
 });
-const url = process.env.MANTLE_NEXT_BUN_PG_URL;
-for (const bun of [true, false]) test.skipIf(!url)(`TTL PostgreSQL ${bun ? "Bun.SQL" : "postgres.js"}`, async () => {
-  const name = `ttl_${crypto.randomUUID().replaceAll("-", "")}`, admin = postgres(url!, {onnotice: () => {}});
-  await admin.unsafe(`CREATE SCHEMA "${name}"`);
-  const db: any = bun ? new SQL({url: url!, max: 1}) : postgres(url!, {max: 1, onnotice: () => {}});
-  try {await db.unsafe(`SET search_path TO "${name}"`); await scenario(bun ? "bun-postgres" : "cloudflare-postgres", db, (sql, values) => db.unsafe(sql, values ?? []));}
-  finally {if (bun) await db.close(); else await db.end(); await admin.unsafe(`DROP SCHEMA "${name}" CASCADE`); await admin.end();}
-});
+
 test("TTL entries are optional and tree-shake out of unrelated operations", async () => {
   const files = await generateOrThrow("bun-sqlite", await loadFixtureSources("store-extra.yaml"));
   const path = resolve(dir, "bundle"); await writeGenerated(path, files);

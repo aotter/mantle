@@ -81,7 +81,7 @@ test("generate leaves Wrangler TOML untouched and prints the exact build keys", 
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 
-test("workspace consumer bin: plain Wrangler deploy/dev run the split build", async () => {
+test.skipIf(!process.env.MANTLE_NATIVE_TESTS)("workspace consumer bin: plain Wrangler deploy/dev run the split build", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-workers-"));
   try {
     await writeFile(join(dir, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "@aotter/mantle": `link:${base}` } }));

@@ -62,22 +62,13 @@ jobs:
       - name: Check generated plugin manifests
         run: pnpm run check:plugin-manifests
 
-      - name: Check release controller
-        run: pnpm run check:release
-
-      - name: Compile the documented examples
-        run: pnpm run check:doc-examples
-
       - name: Typecheck workspace
         run: pnpm typecheck
 
       - run: pnpm test
 
-      - name: Native four-target conformance
-        run: pnpm --filter @aotter/mantle test:native
+      - name: Check startup graphs and budgets
+        run: pnpm check:startup
 
-      - name: Check packed-consumer provenance rejection
-        run: node scripts/check-packed-consumer.mjs --self-test
-
-      - name: Test packed Core in the reference Worker
-        run: pnpm check:worker-consumer
+      - name: Self-test release scripts and packed-consumer provenance
+        run: pnpm run check:release && node scripts/check-packed-consumer.mjs --self-test

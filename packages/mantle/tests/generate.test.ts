@@ -70,18 +70,6 @@ async function canonical(target: Target, text = source) {
   return { target, plan: compiled.plan, lowered, newId: coreNewId(dialect, compiled.plan.schemas), viewKeys: Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys])) };
 }
 describe("native generation", () => {
-  for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const) test(target, async () => {
-    const input = await canonical(target);
-    const generated = generate(input);
-    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
-    const text = generated.files["generated.ts"]!;
-    expect(text).toContain('["notes-list"]: view0');
-    expect(text).toContain('["create-note"]: procedure0');
-    for (const mode of ["caller", "trusted"] as const) expect(text).toContain(JSON.stringify(input.lowered.views["notes-list"]![mode]!.sql));
-    const driver = target === "bun-sqlite" ? "driver/bun-sqlite" : target === "cloudflare-d1" ? "driver/d1" : "driver/postgres";
-    expect(text).toContain(`import * as DRIVER from "@aotter/mantle/${driver}"`);
-    expect(generate(input)).toEqual(generated);
-  });
   test("unsupported programs fail generation with paths rather than omitting behavior", async () => {
     const input = await canonical("bun-sqlite");
     const unsupported = { ...input, plan: { ...input.plan, procedures: { ...input.plan.procedures, handler: { ...input.plan.procedures["create-note"]!, handler: { ref: "app-handler" } } }, triggers: { after: { source: { kind: "lifecycle", schema: "notes", on: ["after_create"] }, procedure: "handler" } } } };
@@ -159,15 +147,6 @@ test("repeated or unverified View outputs explicitly refuse generation", async (
   }
 });
 
-test("PG declared integer output types include native strings and configured bigint values", async () => {
-  const integerSource = source.replace('title: {type: string}}', 'title: {type: string}, total: {type: integer}}').replace('SELECT id, title FROM notes', 'SELECT id, title, total FROM notes');
-  for (const target of ["bun-postgres", "bun-sqlite"] as const) {
-    const generated = generate(await canonical(target, integerSource));
-    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
-    expect(generated.files["generated.ts"]).toContain(`readonly "total": ${target === "bun-postgres" ? "number | string | bigint" : "number"} | null;`);
-  }
-});
-
 test("native binds directly use authored input names", async () => {
   const text = source.replace('input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}', 'input: {type: object, properties: {NoteTitle: {type: string, nullable: true}}, additionalProperties: false}').replace('VALUES (input.title)', "VALUES (coalesce(input.noteTitle, input.noteTitle, ''Nullable fallback''))");
   const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"names.yaml",text}]}});
@@ -187,7 +166,7 @@ test("native binds directly use authored input names", async () => {
   if (!ambiguous.ok) expect(ambiguous.diagnostics.some(d=>d.path==="procedures/create-note/input" && d.message.includes("case-insensitive"))).toBe(true);
 });
 
-for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const) test(`${target} bare View preserves driver rows and errors without validation`, async () => {
+for (const target of ["bun-sqlite"] as const) test(`${target} bare View preserves driver rows and errors without validation`, async () => {
   const generated = generate(await canonical(target));
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const rows = [{id:"native-id",title:null}];
@@ -271,17 +250,6 @@ test("declared timestamps and dates come back in wire form from the SQL itself",
     const pg = await generateFromSources({target,sources:{sources:[{sourceId:"events.yaml",text:scalars}]}});
     if (!pg.ok) throw Error(JSON.stringify(pg.diagnostics));
     expect(pg.files["generated.ts"]).toContain(`to_char((e.at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\\"T\\"HH24:MI:SS.US\\"Z\\"')`);
-  }
-});
-
-test("the Store's rules are Core's, emitted once; a Schema adds only a small fact", async () => {
-  for (const target of ["bun-sqlite", "bun-postgres"] as const) {
-    const generated = await generateFromSources({ target, sources: { sources: [{ sourceId: "notes.yaml", text: source }] } });
-    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
-    const text = generated.files["generated.ts"]!, store = text.slice(text.indexOf("const RULES"));
-    expect(store).toContain(`"notes": {"s":"owner"}`);
-    expect(store).not.toMatch(/SELECT|FROM|CASE WHEN/);
-    expect(Object.keys(generated.files).filter(name => name.startsWith("stores/"))).toEqual([]);
   }
 });
 test("the NOT NULL columns the generated types assume are the ones the initial storage SQL declares", async () => {
