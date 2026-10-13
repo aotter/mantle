@@ -66,9 +66,12 @@ Call its default export with `(db, caller, input, { limit?, cursor? })`; it retu
 Views for authored-query row arrays, and inspect native EXPLAIN/source indexes
 when grouping: cursor paging does not eliminate aggregation work.
 Bare Views, Store and SQL Procedure results keep driver-native scalar values.
-Selected REST/MCP Views convert declared PG integers to safe numbers or exact
-strings, and SQLite/D1 JSON/booleans to JSON values/booleans. Computed/ref
-results remain app-owned; SQLite/D1 unsafe integer precision is not guaranteed.
+Selected REST/MCP/Admin boundaries return target-identical `WireRow` types:
+declared integers become safe numbers or exact decimal strings, SQLite/D1
+JSON/booleans become JSON values/booleans, and compiler-declared decimals become
+strings. Selected SQL reads integer text before driver rounding; it cannot repair
+already-rounded writes. Use exported `WireRow` for clients and `Row` for bare
+queries. Computed/ref results remain app-owned.
 
 Commit everything `mantle generate` writes, including generated TypeScript, SQL and
 Wrangler edits; keep bundle `dist/` untracked. Never hand-edit generated files.

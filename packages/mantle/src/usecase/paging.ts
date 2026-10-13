@@ -1,17 +1,21 @@
 /** Selected View boundary: Core prints keyset SQL once; bare operations retain native rows. */
 import { parseNumeric, type RuntimePlan, type PlanLowered, type SqlNode } from "../build/compiler.js";
+import { outputConversions } from "../domain/columns.js";
+import type { Target } from "../domain/model.js";
 import {authLines} from "../domain/input.js";
 import { driverFor, databaseImport, isSqlite, q } from "../domain/entry.js";
 import type { PagingProof } from "../domain/paging.js";
 import { recipesOf } from "../domain/recipes.js";
 
-export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: string, refuse: (path: string, message: string) => void, proofs?: Readonly<Record<string, PagingProof | undefined>>): Record<string, string> {
+export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: string, refuse: (path: string, message: string) => void, proofs?: Readonly<Record<string, PagingProof | undefined>>, boundary = false): Record<string, string> {
   const files: Record<string, string> = {}, base = "@aotter/mantle/";
   const sqlite = isSqlite(target);
   const driver = driverFor(target);
   for (const [name, view] of Object.entries(plan.views)) {
+    if (boundary && (view.surface === "internal" || !outputConversions(plan,name,target as Target).some(([,type])=>type==="int"))) continue;
     const path = `views/${name}`, sel = view.stmts[0]?.SelectStmt;
     const proof = proofs?.[name];
+    if (boundary && (!proof || !proof.types.length && !proof.single)) continue;
     // Internal bare queries remain available even when they cannot be safely paged.
     if (!proof || !proof.types.length && !proof.single) {
       if (view.surface !== "internal") refuse(path, "Paged Views need a complete typed NOT NULL key tuple, indexed Schema order and a non-fanning relation, or a proved singleton.");
@@ -42,11 +46,11 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
     });
     const auth = authLines(view.requires,path);
     const spec = [`path: ${q(path)}`, `cap: ${cap}`, `sqlite: ${sqlite}`, `cursor: ${q(kinds)}`, `keys: ${c.nkeys}`, `values: {${values.size ? ` ${[...values].sort().join(", ")} ` : ""}}`, "read", `caller: ${variants[0]}`, ...(trusted ? [`trusted: ${variants[1]}`] : []), ...(auth.length ? [`auth: (caller: Caller) => {\n${auth.join("\n")}\n  }`] : [])];
-    files[`paged/views/${encodeURIComponent(name)}.ts`] = `import { page, type Paged } from "${base}paging";
+    files[`paged/${boundary ? "wire/" : ""}views/${encodeURIComponent(name)}.ts`] = `import { page, type Paged } from "${base}paging";
 import { ${auth.length ? "deny, " : ""}type Caller } from "${base}contracts";
 ${databaseImport(target)}
 import { read } from "${base}driver/${driver}";
-${values.size ? `import { ${[...values].sort().join(", ")} } from "${base}dialect/${sqlite ? "sqlite" : "postgres"}";\n` : ""}import type { Input, Row } from "../../views/${encodeURIComponent(name)}.js";
+${values.size ? `import { ${[...values].sort().join(", ")} } from "${base}dialect/${sqlite ? "sqlite" : "postgres"}";\n` : ""}import type { Input, Row } from "${boundary ? "../../../" : "../../"}views/${encodeURIComponent(name)}.js";
 const spec: Paged<Database> = {
   ${spec.join(",\n  ")},
 };

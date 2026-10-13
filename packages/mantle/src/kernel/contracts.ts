@@ -63,8 +63,11 @@ export function wireRows(rows: readonly Row[], fields: WireColumns = []): readon
     const result = { ...row };
     for (const [key, type] of fields) if (Object.hasOwn(row, key) && row[key] != null) {
       const value = row[key];
-      result[key] = type === "json" ? JSON.parse(value as string) : type === "bool" ? value === true || value === 1
-        : Number.isSafeInteger(Number(value)) ? Number(value) : typeof value === "bigint" ? String(value) : value;
+      if (type === "json") {
+        try { result[key] = JSON.parse(value as string); }
+        catch { throw new ContractError("INVALID_STORED_JSON", "Persisted JSON could not be parsed."); }
+      } else result[key] = type === "bool" ? value === true || value === 1
+        : typeof value === "number" || Number.isSafeInteger(Number(value)) ? Number(value) : String(value);
     }
     return result;
   });
@@ -105,7 +108,7 @@ export function checkOrigin(request: Request, caller: Caller): void {
 export async function surfaceCaller<Env>(request: Request, env: Env, resolve: (request: Request, env: Env) => Caller | Promise<Caller>): Promise<Caller> {
   try { return await resolve(request, env); } catch (cause) { if (cause instanceof ContractError) throw cause; throw new Error("Caller resolution failed.", {cause}); }
 }
-/** The client sees the redacted wire form; the log gets the surface (a route or tool, never headers) and the original error. */
+/** The client sees the redacted wire form; the log gets the surface (a route or tool, never headers) and the original message, stack and cause. */
 export function surfaceError(error: unknown, where = "surface"): ReturnType<typeof wire> {
   const result = wire(error);
   if (result.status === 500) console.error(`[mantle ${where}] unhandled failure`, error);

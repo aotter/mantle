@@ -46,7 +46,7 @@ audiences or copy maintainer policy into shipped skills.
   `build`, `domain`, `usecase`, `infrastructure`, Admin, or another SDK.
 - Generated operations call only the selected native driver and dialect. Bare
   query output preserves native driver values; selected HTTP/MCP/Admin boundaries
-  own declared-column transport conversion. Complete int64 parity is deferred.
+  own static declared-column transport conversion, including exact stored int64 text.
 - Auth, REST, MCP, web, site/media and Admin remain selected capabilities.
   Better Auth and the MCP SDK load on a matching request, outside Worker startup.
   The application writes `auth.ts` and resolves Caller; Mantle does not wrap Auth.

@@ -5,14 +5,14 @@ import type { GenerateInput } from "../domain/model.js";
 import { databaseImport, isSqlite, literal as q } from "../domain/entry.js";
 import { conversions, authLines } from "../domain/input.js";
 import { recipesOf } from "../domain/recipes.js";
-import { outputType } from "../domain/columns.js";
+import { boundaryType, conversion } from "../domain/columns.js";
 import { adminOrder } from "../domain/adminOrder.js";
 import { emitValidation } from "./validation.js";
 
 type Schema = GenerateInput["plan"]["schemas"][string];
 const scalar = (type: string | undefined) => ["text","integer","int4","int8","real","float8","bool","date","timestamptz"].includes(type ?? "");
 const wire = (fields: readonly (readonly [string,string|undefined])[], sqlite: boolean): string => {
-  const columns=fields.flatMap(([name,type])=>{const kind=sqlite&&type==="json"?"json":sqlite&&type==="bool"?"bool":!sqlite&&["integer","int8"].includes(type??"")?"int":undefined;return kind?[[name,kind]]:[];});
+  const columns=fields.flatMap(([name,type])=>conversion(name,type,sqlite));
   const geo=fields.filter(([,type])=>type==="geo").map(([field])=>`row[${q(field)}]=row[${q(field+"_lat")}] == null || row[${q(field+"_lng")}] == null ? null : {lat:row[${q(field+"_lat")}],lng:row[${q(field+"_lng")}]};delete row[${q(field+"_lat")}];delete row[${q(field+"_lng")}];`);
   return `(raw:Row):Row=>{const row=${columns.length?`wireRows([raw],${q(columns)})[0]!`:geo.length?"{...raw}":"raw"};${geo.join("")}return row;}`;
 };
@@ -106,7 +106,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     const modes=Object.fromEntries(Object.entries(pageData).map(([mode,p])=>[mode,{...p,binds:recipesOf(p, Object.keys(v.input?.properties??{}),message=>refuse(`views/${name}/admin`,message))}]));
     pageSpecs.push(`const viewPage${n}=${q({path:"views/"+name,cap:v.stmts[0]?.SelectStmt.limitCount?.A_Const?.ival?.ival??500,cursorKinds,...modes})} as const;`);
     imports.push(`const allowsView${n}=${allowed(v.requires,`views/${name}`)};`);
-    views.push(`{name:${q(name)},allows:allowsView${n},query:(params)=>{const result=queryView${n}(params),filters:Record<string,unknown>=Object.create(null);${filterReads.join("")}filters${n}(filters);${filterTransforms.join("")}${sqlite?"":"nativeText(result.input);nativeText(filters);"}${kinds.searchFields?.length?`const search=params.get("search")?.trim();`:""}return {...result,match:{filters${kinds.searchFields?.length?",...(search?{search}:{})":""}}};},page:(db,caller,input,paging)=>{deny(caller,allowsView${n}(caller),${q("views/"+name)});return nativePage(viewPage${n},adapter,db,caller,input,paging);},${converted?`convert:${converted},`:""}row:(raw)=>{const row=(${wire((input.viewKeys[name]??[]).map(key=>[key,outputType(plan,name,key)] as const),sqlite)})(raw);return Object.fromEntries(Object.entries(row).map(([key,value])=>[Object.hasOwn(viewNames${n},key)?viewNames${n}[key as keyof typeof viewNames${n}]:key,value]));}}`);
+    views.push(`{name:${q(name)},allows:allowsView${n},query:(params)=>{const result=queryView${n}(params),filters:Record<string,unknown>=Object.create(null);${filterReads.join("")}filters${n}(filters);${filterTransforms.join("")}${sqlite?"":"nativeText(result.input);nativeText(filters);"}${kinds.searchFields?.length?`const search=params.get("search")?.trim();`:""}return {...result,match:{filters${kinds.searchFields?.length?",...(search?{search}:{})":""}}};},page:(db,caller,input,paging)=>{deny(caller,allowsView${n}(caller),${q("views/"+name)});return nativePage(viewPage${n},adapter,db,caller,input,paging);},${converted?`convert:${converted},`:""}row:(raw)=>{const row=(${wire((input.viewKeys[name]??[]).map(key=>[key,boundaryType(plan,name,key)] as const),sqlite)})(raw);return Object.fromEntries(Object.entries(row).map(([key,value])=>[Object.hasOwn(viewNames${n},key)?viewNames${n}[key as keyof typeof viewNames${n}]:key,value]));}}`);
   }
   for(const [name,p]of Object.entries(plan.procedures).filter(([name])=>Object.values(plan.triggers).some(t=>t.procedure===name&&t.source.kind==="mcp"&&t.source.surface==="staff"))){
     const n=operations.length,ref="ref"in p.handler,encoded=encodeURIComponent(name),converted=conversions(p.input?.properties,lowered.procedures[name]?.caller?.flatMap(s=>s.binds)??[],target);

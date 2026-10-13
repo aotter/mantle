@@ -15,20 +15,35 @@ export function outputType(plan: RuntimePlan, view: string, key: string): string
   return schema && declaredType(schema.fields, field!.field);
 }
 
+/** Transport lineage excludes expressions/aggregates; existing temporal SQL formatting is retained. */
+export function boundaryType(plan: RuntimePlan, view: string, key: string): string | undefined {
+  const field = viewOutputs(plan.views[view]!, plan.schemas, new Map(), false, false).columns[key];
+  const type = outputType(plan, view, key);
+  return field || type === "date" || type === "timestamptz" ? type : undefined;
+}
+
 /** Declared output lineage only; computed columns retain their native values. */
 export function outputConversions(plan: RuntimePlan, view: string, target: Target): WireColumns {
   const postgres = target.endsWith("postgres");
   const columns = viewOutputs(plan.views[view]!, plan.schemas, new Map(), false, false).columns;
   return Object.keys(columns).flatMap<WireColumns[number]>(key => {
     const type = outputType(plan, view, key);
-    return postgres ? type && ["integer", "int8", "int4"].includes(type) ? [[key, "int"]] : []
-      : type === "json" || type === "bool" ? [[key, type]] : [];
+    return conversion(key, type, !postgres);
   });
 }
 
-/** Wrap a selected page; the generated bare operation is unchanged. */
-export const boundaryPage = (page: string, fields: WireColumns): string => fields.length
-  ? `(db, caller, input, paging) => ${page}(db, caller, input, paging).then(page => ({ ...page, rows: wireRows(page.rows, ${JSON.stringify(fields)}) }))` : page;
+/** Shared static conversion recipe for Views and Admin collections. */
+export function conversion(key: string, type: string | undefined, sqlite: boolean): WireColumns {
+  return type && ["integer", "int8", "int4"].includes(type) ? [[key, "int"]]
+    : sqlite && (type === "json" || type === "bool") ? [[key, type]] : [];
+}
+
+/** Client-visible declared output type, identical on every target. */
+export function wireType(type: string | undefined): string {
+  const value = !type ? "unknown" : ["integer", "int8", "int4"].includes(type) ? "number | string"
+    : scalarType(type);
+  return value === "unknown" ? value : `${value} | null`;
+}
 
 const scalarType = (type: string) => type === "bool" ? "boolean" : ["integer", "int4", "int8", "real", "float8"].includes(type) ? "number" : type === "json" ? "unknown" : type === "geo" ? "{lat:number;lng:number}" : "string";
 
@@ -45,3 +60,7 @@ export function nativeType(type: string | undefined, sqlite: boolean, notNull = 
 
 /** The value a caller of the typed Store passes for a column of this type. JSON is an object or array (the Store tells it by its JS type, so a bare string would be bound as text). @internal */
 export const inputType = (type: string): string => type === "timestamptz" ? "string | Date" : type === "json" ? "object" : scalarType(type);
+
+/** Wrap only a selected transport page. */
+export const boundaryPage = (page: string, fields: WireColumns): string => fields.length
+  ? `(db, caller, input, paging) => ${page}(db, caller, input, paging).then(page => ({ ...page, rows: wireRows(page.rows, ${JSON.stringify(fields)}) }))` : page;

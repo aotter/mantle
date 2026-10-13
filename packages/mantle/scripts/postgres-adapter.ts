@@ -15,6 +15,7 @@ const properties = { key: { type: "string" }, at: { type: "string", format: "dat
 const source = [
   atom("Schema", "adapter_items", { title: "Adapter conformance", schema: { type: "object", properties, required: Object.keys(properties) }, uniqueIndexes: [["key"]] }),
   atom("View", "adapter-items", { surface: "internal", sql: "SELECT id, key, at, day, payload, units, enabled, amount, created_at, CAST(at AS timestamptz) AS computed_at FROM adapter_items ORDER BY id" }),
+  atom("View", "adapter-wire", { surface: "public", sql: `SELECT units AS "quantityAlias", enabled, amount, version AS "versionAlias" FROM adapter_items ORDER BY id` }),
   atom("Procedure", "adapter-create", { input: { type: "object", properties, required: Object.keys(properties) }, output: { type: "object" }, handler: { sql: "INSERT INTO adapter_items(key, at, day, payload, units, enabled, amount) VALUES(input.key, input.at, input.day, input.payload, input.units, input.enabled, input.amount) RETURNING id, at, day, payload, units, enabled, amount" } }),
 ].join("\n---\n");
 
@@ -56,6 +57,15 @@ export async function verifyPostgresAdapter(factory: PostgresAdapterFactory): Pr
     assert.equal(String(integer[0].positive), "9007199254740993", "unsafe int8 must not be rounded by an adapter");
     assert.equal(String(integer[0].negative), "-9007199254740993");
     assert.equal(integer[0].decimal, "1234567890123.45", "numeric text retains declared scale and precision"); checks += 3;
+    const { default: page } = await import(pathToFileURL(resolve(directory, "paged/wire/views/adapter-wire.ts")).href);
+    for (const value of ["9007199254740991", "9007199254740993", "-9007199254740993", "9223372036854775807", "-9223372036854775808"]) {
+      await db.unsafe("UPDATE adapter_items SET units=CAST($1 AS bigint), version=CAST($1 AS bigint)", [value]);
+      const wire = (await page(db, caller, {})).rows[0];
+      // The selected-boundary module returns exact integer text; REST/MCP turn safe values into numbers.
+      assert.equal(String(wire.quantityAlias), value); assert.equal(String(wire.versionAlias), value);
+      assert.equal(wire.enabled, true); assert.equal(wire.amount, input.amount); checks += 4;
+    }
+    await db.unsafe("UPDATE adapter_items SET version=1", []);
     const store = app.store(db, caller), collection = store.collection("adapter_items");
     const changed = { sql: "UPDATE adapter_items SET key = $1 WHERE id = $2 RETURNING id", binds: ["transaction", created.id], row: true };
     if (!interactive) {

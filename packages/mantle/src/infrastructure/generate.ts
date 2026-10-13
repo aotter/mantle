@@ -1,7 +1,7 @@
 /** Build-time assembly only. None of these imports enter generated applications. */
 import { compilePlan, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, postgresDialect, lowerPlan, sqliteSchema, postgresSchema, type AdminExtension, type ManifestSourceSet, type LoweredStatement } from "../build/compiler.js";
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
-import { outputType } from "../domain/columns.js";
+import { boundaryType, outputType } from "../domain/columns.js";
 import { castCursor, provePaging, type PagingProof } from "../domain/paging.js";
 import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
 import { dialect as sqliteDialect } from "../kernel/dialect/sqlite.js";
@@ -49,7 +49,7 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
     return [name, output.positions?.length === output.keys?.length ? output.keys : undefined];
   }));
   const refusals: GenerateDiagnostic[] = [], paging: Record<string, PagingProof | undefined> = {};
-  const { lowered, warnings } = lowerPlan(compiled.plan, dialect, {
+  const lower = (boundary: boolean) => lowerPlan(compiled.plan, dialect, {
     mode: nextMode,
     staffRoles: STAFF_ROLES,
     pageQuery(ast, name) {
@@ -63,16 +63,19 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
       if (page && !page.flat) ast = castCursor(ast, page.sources, paging[name]?.types ?? [], postgres);
       const keys = page && !page.flat ? [...page.names, ...Array.from({length:page.nkeys}, (_,i)=>`_k${i}`)] : viewKeys[name];
       if (!keys) return ast;
-      const types = page && !page.flat ? [...page.names.map(key=>outputType(compiled.plan,name,key)), ...(paging[name]?.types ?? [])] : keys.map(key=>outputType(compiled.plan,name,key));
-      const projected = wireScalars(ast,keys,types,wire);
+      const types = page && !page.flat ? [...page.names.map(key=>boundaryType(compiled.plan,name,key)), ...(paging[name]?.types ?? [])] : keys.map(key=>page ? boundaryType(compiled.plan,name,key) : outputType(compiled.plan,name,key));
+      let projected = wireScalars(ast,keys,types,wire,boundary && !!page);
+      if (typeof projected !== "string" && page && !page.flat && !boundary) projected = wireScalars(projected,keys,[...page.names.map(() => undefined), ...(paging[name]?.types ?? []).map(type => ["integer","int8","int4"].includes(type) ? type : undefined)],wire,true);
       if (typeof projected !== "string") return projected;
       refusals.push({code:"GENERATE_UNSUPPORTED",path:`views/${name}`,message:projected});
       return ast;
     },
   });
+  const { lowered, warnings } = lower(false);
+  const wireLowered = lower(true).lowered;
   if (postgres) {
     const seen = new Set<LoweredStatement>();
-    for (const [kind, all] of [["views", lowered.views], ["procedures", lowered.procedures]] as const) for (const [name, modes] of Object.entries(all)) {
+    for (const [kind, all] of [["views", lowered.views], ["views", wireLowered.views], ["procedures", lowered.procedures]] as const) for (const [name, modes] of Object.entries(all)) {
       for (const statement of Object.values(modes).flat() as LoweredStatement[]) if (!seen.has(statement)) { seen.add(statement); castInputs(statement, `${kind}/${name}`, refusals);
         if ("paged" in statement) for (const page of Object.values((statement as import("../build/compiler.js").LoweredView).paged)) {
           const inputPage = { ...statement, sql:page.sql };
@@ -85,7 +88,7 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   refusals.push(...searchProblems);
   const adminReads=request.admin?await adminBindingsOf(compiled.plan,dialect,paging,wire,refusals):undefined;
   const {adminPages,adminEntries}=adminReads??{};
-  const result = generate({ target: request.target, admin:request.admin, adminPages, adminEntries, site: request.site, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions, paging });
+  const result = generate({ target: request.target, admin:request.admin, adminPages, adminEntries, site: request.site, plan: compiled.plan, lowered, wireLowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions, paging });
   if (refusals.length) {
     const diagnostics = result.ok ? [] : result.diagnostics.filter(d =>
       !searchProblems.some(p => p.path === d.path) ||

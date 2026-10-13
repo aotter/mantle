@@ -23,7 +23,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     const binds=statements.flatMap(statement=>statement?.binds??[]);
     const index = tools.length, file = encodeURIComponent(name);
     imports.push(`import { validate as validate${index} } from "./validation/${kind}/${file}.js";`);
-    if (kind === "views" || !ref) imports.push(`import run${index} from "./${kind === "views" ? "paged/views" : kind}/${file}.js";`);
+    if (kind === "views" || !ref) imports.push(`import run${index} from "./${kind === "views" ? outputConversions(plan,name,target).some(([,type])=>type==="int") ? "paged/wire/views" : "paged/views" : kind}/${file}.js";`);
     // The kernel adds a View tool's `limit` and `cursor` paging properties.
     const schema = q(kind === "views" ? operation.input ?? {type:"object",additionalProperties:false} : operation.input);
     if (kind === "views" && ("limit" in (operation.input?.properties ?? {}) || "cursor" in (operation.input?.properties ?? {}))) refuse(`views/${name}`, "MCP View input reserves limit and cursor for paging.");

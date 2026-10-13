@@ -137,7 +137,7 @@ Publishing/custom Admin operations load existing generated Procedure modules
 when invoked. Ref handlers retain the original typed `{ caller, db, store }`
 context and authorization. Ordinary SDK/REST/MCP emission and the synchronous
 public Store API are unchanged. Selected JSON boundaries preserve declared JSON/boolean conversions and safe
-PostgreSQL integer normalization; exact unsafe values are not rounded. Bare
+cross-target integer normalization from SQL text; exact unsafe values are not rounded. Bare
 Views, Store and SQL Procedures keep their driver-native contract. Native
 unique/OCC errors and uncertain transaction outcomes keep their contracts. A 503 outcome may mean a write committed: do not
 retry automatically or turn it into a success by reading afterward. Core
