@@ -95,9 +95,9 @@ per-surface startup budgets, plus the cheap skill and plugin-manifest checks.
 Build before running package tests locally; `pnpm test` does not rebuild or pack.
 Package and upload bytes are reports; cold-start checks remain gates.
 
-Run the **Full checks** workflow (`.github/workflows/full-checks.yml`, manual
-`workflow_dispatch` only) before releases and after changes to drivers, auth,
-generator output or Admin UI. Select the branch being reviewed. It runs native
+Run the **Full checks** workflow (`.github/workflows/full-checks.yml`) before
+releases and after changes to drivers, auth, generator output or Admin UI: add
+the `full-checks` label to the PR (later pushes rerun it). It runs native
 four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
 Cloud plugin validation, Chrome Admin smoke tests and size reports. For local
 browser smoke set `MANTLE_NEXT_ROOT` to `$PWD/packages/mantle` and run

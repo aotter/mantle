@@ -1,13 +1,17 @@
 name: Full checks
 
+# Run by adding the `full-checks` label to a PR (workflow_dispatch only works once this file is on main).
 on:
   workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize]
 
 permissions:
   contents: read
 
 jobs:
   full-checks:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'full-checks')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
