@@ -23,7 +23,7 @@ Store keeps `find`/`first` search and `count`. `count` scans every matching row;
 
 ## Results and paging
 
-Each SELECT output needs a unique static name. Unquoted SQL identifiers fold to lower case; use an explicit quoted alias to preserve case. Declared-column lineage supplies generated types; computed outputs remain native/unknown. SQL formats declared date-time/date outputs, while computed timestamps retain driver values. See [native execution](../guides/native-execution.md).
+Each SELECT output needs a unique static name. Unquoted SQL identifiers fold to lower case; use an explicit quoted alias to preserve case (`r.reqStatus AS "reqStatus"`). Generation warns when an unaliased direct declared field would use its lower-case storage name. Declared-column lineage supplies generated types; computed outputs remain native/unknown. SQL formats declared date-time/date outputs, while computed timestamps retain driver values. See [native execution](../guides/native-execution.md).
 
 Bare `views/<encoded-name>.ts` returns row arrays. Proved pageable exposed/internal Views also receive native `paged/views/*`, returning `{ rows, nextCursor? }`. Selected REST/MCP boundaries use separate `paged/wire/views/*` SQL when declared integers require exact transport projections; bare modules also export `WireRow`. Indexed ordering after fixed equality prefixes, non-null typed keys, complete groups and singleton joins/lookups are checked at generation. Unsupported internal paging retains its bare View; exposure requires a supported page contract. Aggregates still scan/group their sources: inspect EXPLAIN.
 

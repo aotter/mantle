@@ -6,6 +6,6 @@ export interface GenerateDiagnostic {
   readonly message: string;
 }
 export type GenerateResult =
-  | { readonly ok: true; readonly files: Readonly<Record<string, string>>; readonly refProcedures: readonly string[] }
+  | { readonly ok: true; readonly files: Readonly<Record<string, string>>; readonly refProcedures: readonly string[]; readonly warnings?: readonly string[] }
   | { readonly ok: false; readonly diagnostics: readonly GenerateDiagnostic[] };
 

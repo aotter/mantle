@@ -43,3 +43,12 @@ Keep the app's router, pool/handle, identity and frontend. Declare only the Sche
 Existing tables need explicit migration into the declared storage shape, including system columns and constraints. Initial schema.sql must not be applied over an occupied database. Rehearse on a copy and test scope, TTL, publication, OCC and persisted state with the app's own identity.
 
 Writes use Store or declared Procedures; never raw SQL writes to adopted collections. Use internal Views for joins, aggregates, OR and reusable reads. Store findById/find/first remain useful for simple AND lookups in existing handlers.
+
+Direct declared Schema-column outputs in Views and SQL Procedure `RETURNING`
+keep their authored field names; explicit aliases keep SQL casing rules. Store
+rows and nested SQL relations use storage names. Boundary validators support a
+permissive `format: email` check (one `@`, non-empty parts, no whitespace). For
+LEFT JOIN paging, join on the joined Schema's id or single-field unique key and
+keep the base indexed, non-null order/id tuple. Handler-less apps omit handlers
+at `adminBindings()`, generated REST/MCP options and `webmcpRoutes(catalogue, tools)`;
+ref-handler apps must supply the generated implementations.

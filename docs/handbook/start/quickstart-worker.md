@@ -35,7 +35,7 @@ spec:
     properties:
       ticketState: { type: string, enum: [open, closed] }
   sql: |
-    SELECT id, subject, ticketState FROM tickets
+    SELECT id, subject, ticketState AS "ticketState" FROM tickets
     WHERE ticketState = input.ticketState
     ORDER BY id ASC
 ```

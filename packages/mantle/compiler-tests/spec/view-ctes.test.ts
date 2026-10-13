@@ -75,3 +75,19 @@ for(const engine of ["sqlite","postgres"]) it(`${engine} CTE lowering retains vi
  expect(()=>lower(forged)).toThrow(/cte reference is not defined in scope/);
  expect((await compileSql("WITH x AS (SELECT owner FROM items) SELECT owner FROM x",{schemas,inputs:{},kind:"view"},dialect)).ok).toBe(false);
 });
+
+for (const engine of ["sqlite", "postgres"]) it(`${engine} preserves SQL output names in Views and every RETURNING statement`, async () => {
+  const ctx = { schemas: { notes: { fields: { reqstatus: "text" }, names: { reqstatus: "reqStatus" } } }, inputs: {}, kind: "procedure" };
+  for (const sql of [
+    'SELECT reqStatus, reqStatus AS "reqStatus", reqStatus AS explicitName FROM notes',
+    'SELECT n.reqStatus, n.reqStatus AS "reqStatus", n.reqStatus AS explicitName FROM notes n',
+    'INSERT INTO notes(reqStatus) VALUES (\'submitted\') RETURNING reqStatus, reqStatus AS "reqStatus", reqStatus AS explicitName',
+    'UPDATE notes SET reqStatus = \'approved\' WHERE id = \'one\' RETURNING reqStatus, reqStatus AS "reqStatus", reqStatus AS explicitName',
+    'DELETE FROM notes WHERE id = \'one\' RETURNING reqStatus, reqStatus AS "reqStatus", reqStatus AS explicitName',
+  ]) {
+    const result = await compileSql(sql, { ...ctx, kind: sql.startsWith("SELECT") ? "view" : "procedure" }, engine === "postgres" ? pgCompile : undefined);
+    expect(result.ok, JSON.stringify(result.diagnostic)).toBe(true);
+    const stmt = Object.values(result.plan.stmts[0])[0];
+    expect((stmt.returningClause?.exprs ?? stmt.targetList).map(t => t.ResTarget.name)).toEqual([undefined, "reqStatus", "explicitname"]);
+  }
+});

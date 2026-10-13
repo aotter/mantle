@@ -4,13 +4,15 @@ import { declaredType } from "./columns.js";
 
 type Field = { schema: PlanSchema; name: string; type: string; notNull: boolean; source: object };
 type Relation = { fields: Map<string, Field>; names: ReadonlySet<string>; single: boolean; unique: boolean; fixed: Set<string> };
-export type PagingProof = { types: string[]; single: boolean };
+export type PagingProof = { types: string[]; single: boolean; reason?: string };
 const fieldName = (n: SqlNode) => n.ColumnRef?.fields?.at(-1)?.String?.sval;
 const scalar = (n: SqlNode): boolean => !!(n.ParamRef || n.A_Const || n.TypeCast && scalar(n.TypeCast.arg));
 const aggregate = (n: SqlNode): boolean => !!n && !n.SubLink && !n.SelectStmt && (n.FuncCall && !n.FuncCall.over && ["count", "sum", "min", "max", "avg"].includes(n.FuncCall.funcname?.at(-1)?.String?.sval) || Object.values(n).some(v => v && typeof v === "object" && (Array.isArray(v) ? v.some(aggregate) : aggregate(v))));
 
 /** Only complete grouped tuples, base ids and non-fanning singleton joins are proved. */
 export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | undefined {
+  let reason: string | undefined;
+  const fail = (message: string) => { reason = message; return undefined; };
   const select = (s: SqlNode, inherited: ReadonlyMap<string, Relation | undefined> = new Map()): { relation: Relation; keys: Field[] } | undefined => {
     if (!s || s.distinctClause || s.op && s.op !== "SETOP_NONE") return;
     const ctes = new Map(inherited);
@@ -19,6 +21,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       ctes.set(n.ctename, undefined);
       ctes.set(n.ctename, n.aliascolnames?.length ? undefined : select(n.ctequery.SelectStmt, ctes)?.relation);
     }
+    reason = undefined;
     const aliases = new Map<string, Relation>();
     const reduced = !!s.groupClause?.length || (s.targetList ?? []).some((t: SqlNode) => aggregate(t.ResTarget.val));
     const relation = (n: SqlNode): Relation | undefined => {
@@ -29,13 +32,15 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
         const lookup = (side: Relation, other: Relation, term: SqlNode): boolean => {
           if (term?.BoolExpr?.boolop === "AND_EXPR") return term.BoolExpr.args.some((x: SqlNode) => lookup(side, other, x));
           const e = term?.A_Expr, id = side.fields.get("id"), otherId = other.fields.get("id");
-          if (!side.unique || !id || !otherId || e?.name?.[0]?.String?.sval !== "=") return false;
+          if (!side.unique || !id || !otherId || e?.kind !== "AEXPR_OP" || e.name?.[0]?.String?.sval !== "=") return false;
           const a = column(e.lexpr), b = column(e.rexpr);
-          return !!(a?.notNull && b?.notNull && (a.name === id.name && a.source === id.source && b.source === otherId.source || b.name === id.name && b.source === id.source && a.source === otherId.source));
+          const unique = (f: Field | undefined, value: Field | undefined) => f && value && f.source === id.source && value.source === otherId.source &&
+            (f.name === id.name || f.schema.unique?.some(index => index.length === 1 && index[0] === f.name));
+          return !!(unique(a, b) || unique(b, a));
         };
         const rightSingle = right.single || lookup(right, left, n.JoinExpr.quals);
         const leftSingle = left.single || lookup(left, right, n.JoinExpr.quals);
-        if (!leftSingle && !rightSingle && !reduced) return;
+        if (!rightSingle && (!leftSingle || n.JoinExpr.jointype === "JOIN_LEFT") && !reduced) return fail(`Fanning join '${[...aliases.keys()].filter(alias => !before.has(alias)).join(", ")}': join on the joined Schema's id or a single-field unique key, or reduce it to one row.`);
         if (n.JoinExpr.jointype === "JOIN_FULL" || n.JoinExpr.jointype === "JOIN_RIGHT") return;
         // The right side of LEFT JOIN may be absent: its fields cannot become NOT NULL cursor keys.
         if (n.JoinExpr.jointype === "JOIN_LEFT") for (const [alias, r] of aliases) if (!before.has(alias)) r.fields = new Map([...r.fields].map(([k, f]) => [k, { ...f, notNull: false }]));
@@ -91,7 +96,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
     const fixed = (n: SqlNode): void => {
       if (n?.BoolExpr?.boolop === "AND_EXPR") n.BoolExpr.args.forEach(fixed);
       const e = n?.A_Expr;
-      if (e?.name?.[0]?.String?.sval !== "=") return;
+      if (e?.kind !== "AEXPR_OP" || e.name?.[0]?.String?.sval !== "=") return;
       const col = scalar(e.rexpr) ? resolve(e.lexpr, false) : scalar(e.lexpr) ? resolve(e.rexpr, false) : undefined;
       if (col && col.source === base!.fields.get("id")?.source) base!.fixed.add(col.name);
     };
@@ -100,6 +105,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
     for (const [name, expr] of targets) { const field = resolve(expr, false); if (field && name) fields.set(name, field); }
     const group: SqlNode[] = s.groupClause ?? [], sorts: SqlNode[] = s.sortClause ?? [];
     const keys = sorts.map(k => resolve(k.SortBy.node));
+    if (keys.some(k => k && !k.notNull)) return fail(`Nullable ORDER BY key '${keys.find(k => k && !k.notNull)!.name}': make the operational Schema field required and non-null, and order by the preserved side of a LEFT JOIN.`);
     if (keys.some(k => !k?.notNull || !["text", "bool", "integer", "int4", "int8", "real", "float8", "date", "timestamptz"].includes(k.type) && !/^numeric\(/.test(k.type))) return;
     const same = (a: Field | undefined, b: Field | undefined) => a && b && a.name === b.name && a.source === b.source;
     if (sorts.length) {
@@ -112,7 +118,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           return f?.notNull && keys.some(k => same(k, f));
         })) return;
       } else {
-        if (!base.unique || !keys.some(k => same(k, base.fields.get("id")))) return;
+        if (!base.unique || !keys.some(k => same(k, base.fields.get("id")))) return fail("Incomplete ORDER BY key tuple: include the base Schema's id as a tiebreak and preserve its row identity.");
         const order = keys.filter(k => k!.name !== "id") as Field[];
         if (order.length) {
           const schema = order[0]!.schema;
@@ -122,7 +128,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
             while (i < index.length && base!.fixed.has(index[i]!) && index[i] !== order[0]!.name) i++;
             return order.every((f, n) => index[i + n] === f.name);
           });
-          if (!indexed) return;
+          if (!indexed) return fail(`Missing index for ORDER BY (${order.map(f => f.name).join(", ")}): declare a Schema index with these ordered columns after any fixed equality prefix.`);
         }
       }
     }
@@ -130,7 +136,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
     return { relation: { fields, names: new Set(targets.keys()), single, unique: !group.length && base.unique && !!same(fields.get("id"), base.fields.get("id")), fixed: base.fixed }, keys: keys as Field[] };
   };
   const result = select(ast.SelectStmt);
-  return result && { types: result.keys.map(f => f.type), single: result.relation.single };
+  return result ? { types: result.keys.map(f => f.type), single: result.relation.single } : reason ? { types: [], single: false, reason } : undefined;
 }
 
 /** Cast only cursor ParamRefs in the outer predicate, never authored literals or bare projections. */

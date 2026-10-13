@@ -1,5 +1,5 @@
 /** Build-time assembly only. None of these imports enter generated applications. */
-import { compilePlan, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, postgresDialect, lowerPlan, sqliteSchema, postgresSchema, type AdminExtension, type ManifestSourceSet, type LoweredStatement } from "../build/compiler.js";
+import { compilePlan, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, postgresDialect, lowerPlan, sqliteSchema, postgresSchema, type AdminExtension, type ManifestSourceSet, type LoweredStatement, type RuntimePlan, type SqlNode } from "../build/compiler.js";
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { boundaryType, outputType } from "../domain/columns.js";
 import { castCursor, provePaging, type PagingProof } from "../domain/paging.js";
@@ -33,6 +33,40 @@ function castInputs(statement: LoweredStatement, path: string, refusals: Generat
     sql = sql.replaceAll(core, cast(param, type));
   }
   Object.assign(statement, { sql });
+}
+
+/** Warn about SQL's case folding without changing the authored output names. */
+function outputNameWarnings(plan: RuntimePlan): string[] {
+  const warnings: string[] = [];
+  const inspect = (kind: string, name: string, stmts: readonly SqlNode[]) => {
+    for (const stmt of stmts) {
+      const select = stmt.SelectStmt, write = stmt.InsertStmt ?? stmt.UpdateStmt ?? stmt.DeleteStmt;
+      const targets = kind === "View" ? select?.targetList : write?.returningClause?.exprs;
+      const relations = new Map<string, string | undefined>();
+      const from = (node: SqlNode): void => {
+        if (node.JoinExpr) { from(node.JoinExpr.larg); from(node.JoinExpr.rarg); return; }
+        const r = node.RangeVar ?? node;
+        if (r.relname) relations.set(r.alias?.aliasname ?? r.relname, r.mantle === "table" ? r.relname : undefined);
+      };
+      if (write) from(write.relation);
+      for (const node of select?.fromClause ?? write?.fromClause ?? write?.usingClause ?? []) from(node);
+      for (const { ResTarget: target } of targets ?? []) {
+        const refs = target.val?.ColumnRef?.fields;
+        if (target.name || !refs?.every((ref: SqlNode) => ref.String) || refs.length > 2) continue;
+        const column = refs.at(-1).String.sval;
+        const candidates = refs.length === 2 ? [relations.get(refs[0].String.sval)] : [...relations.values()].filter(schema => schema && plan.schemas[schema]?.fields[column]);
+        if (candidates.length !== 1 || !candidates[0]) continue;
+        const declared = plan.schemas[candidates[0]]?.names?.[column];
+        if (declared && declared !== column) {
+          const reference = refs.length === 2 ? `${refs[0].String.sval}.${declared}` : declared;
+          warnings.push(`${kind} '${name}' field '${declared}' outputs storage name '${column}'; use ${reference} AS "${declared}" to preserve the declared name.`);
+        }
+      }
+    }
+  };
+  for (const [name, view] of Object.entries(plan.views)) inspect("View", name, view.stmts);
+  for (const [name, procedure] of Object.entries(plan.procedures)) if ("sql" in procedure.handler) inspect("Procedure", name, procedure.handler.sql.stmts);
+  return [...new Set(warnings)];
 }
 
 export interface GenerateRequest { readonly target: Target; readonly admin?: boolean; readonly sources: ManifestSourceSet; /** Select the optional generated site/media capability and deployment tables. */ readonly site?: import("../build/compiler.js").SiteDefaults; readonly adminExtensions?: readonly AdminExtension[] }
@@ -98,5 +132,5 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.admin ? adminIndexes(compiled.plan.schemas, !postgres) : []), ...(schema?.() ?? [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
-  return { ...result, files: { ...files, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
+  return { ...result, warnings: outputNameWarnings(compiled.plan), files: { ...files, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
 }
