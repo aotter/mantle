@@ -1,6 +1,6 @@
 # ADR-0046: Roles and user fields in SQL scope
 
-**Status:** Proposed (issue #1492).
+**Status:** Accepted for 0.2.0 (2026-10-14, issue #1492).
 
 **Date:** 2026-10-13
 
