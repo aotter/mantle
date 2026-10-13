@@ -22,17 +22,19 @@ import {
 } from "../features/auth/auth-views";
 import { HomeView } from "../features/console/home-view";
 import { CollectionView } from "../features/content/collection-view";
-import { EntryEditView } from "../features/content/entry-edit-view";
-import { ParentEntryWorkbench, shouldOpenParentWorkbench } from "../features/content/parent-entry-workbench";
-import { MediaLibraryView } from "../features/media/media-library-view";
-import { OperationsView } from "../features/ops/operations-view";
-import { ViewPage } from "../features/ops/view-page";
+import { hasFoldedChildCollections } from "../lib/collection-nav";
 import { NotFoundView } from "../features/system/not-found-view";
-import { ExtensionPage } from "../features/system/extension-page";
-import { PreferencesView } from "../features/system/preferences-view";
-import { SettingsView } from "../features/system/settings-view";
-import { StaffView } from "../features/system/staff-view";
-import { MembersView } from "../features/system/members-view";
+
+const EntryEditView = React.lazy(() => import("../features/content/entry-edit-view").then(module => ({ default: module.EntryEditView })));
+const ParentEntryWorkbench = React.lazy(() => import("../features/content/parent-entry-workbench").then(module => ({ default: module.ParentEntryWorkbench })));
+const MediaLibraryView = React.lazy(() => import("../features/media/media-library-view").then(module => ({ default: module.MediaLibraryView })));
+const OperationsView = React.lazy(() => import("../features/ops/operations-view").then(module => ({ default: module.OperationsView })));
+const ViewPage = React.lazy(() => import("../features/ops/view-page").then(module => ({ default: module.ViewPage })));
+const ExtensionPage = React.lazy(() => import("../features/system/extension-page").then(module => ({ default: module.ExtensionPage })));
+const PreferencesView = React.lazy(() => import("../features/system/preferences-view").then(module => ({ default: module.PreferencesView })));
+const SettingsView = React.lazy(() => import("../features/system/settings-view").then(module => ({ default: module.SettingsView })));
+const StaffView = React.lazy(() => import("../features/system/staff-view").then(module => ({ default: module.StaffView })));
+const MembersView = React.lazy(() => import("../features/system/members-view").then(module => ({ default: module.MembersView })));
 
 const DeveloperWorkspace = React.lazy(() => import("../features/logic/developer-workspace"));
 
@@ -257,7 +259,7 @@ function EntryLanding({
     },
   });
   if (collectionsQuery.isLoading) return <GateLoading />;
-  if (shouldOpenParentWorkbench(collectionsQuery.data, collectionName)) {
+  if (hasFoldedChildCollections(collectionsQuery.data ?? [], collectionName)) {
     return <ParentEntryWorkbench collectionName={collectionName} entryId={entryId} />;
   }
   return <EntryEditView collectionName={collectionName} entryId={entryId} />;

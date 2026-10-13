@@ -40,6 +40,7 @@ import { AppSidebar } from "./app-sidebar";
 import { Header } from "./header";
 import { PageHeaderActionsHostContext } from "./page-header-actions";
 import { Main } from "./main";
+import { Skeleton } from "@aotter/mantle-ui/kit";
 import { SkipToMain } from "./skip-to-main";
 import { statusLabel } from "../features/content/status";
 import { t } from "../app/i18n";
@@ -169,7 +170,7 @@ export function AuthenticatedLayout({
           <Main className={fullBleed
             ? "min-h-0 max-w-none overflow-hidden px-0 py-0 pt-14 pb-10 sm:px-0"
             : `min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>
-            {children}
+            <React.Suspense fallback={<div aria-busy="true"><Skeleton className="h-40 w-full" /></div>}>{children}</React.Suspense>
           </Main>
           <footer
             data-slot="status-bar"

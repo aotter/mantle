@@ -12,7 +12,7 @@ export default defineConfig({
     name: "mantle-app-native-date",
     enforce: "pre",
     resolveId(source, importer) {
-      if (source === "./components/ui/calendar.js" && importer?.endsWith("/mantle-ui/dist/kit/index.js")) return resolve(import.meta.dirname, "src/mcp-app/native-date.tsx");
+      if (source === "../kit/components/ui/calendar.js" && importer?.endsWith("/mantle-ui/dist/react/fields.js")) return resolve(import.meta.dirname, "src/mcp-app/native-date.tsx");
     },
   }, react(), tailwindcss(), viteSingleFile()],
   build: {

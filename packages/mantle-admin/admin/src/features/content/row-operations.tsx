@@ -27,9 +27,11 @@ import {
 } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { idempotencyFields, InteractionDialog } from "../ops/interaction-dialog";
+import { idempotencyFields } from "../ops/interaction-schema";
 
-export { operationFormSchema } from "../ops/interaction-dialog";
+const InteractionDialog = React.lazy(() => import("../ops/interaction-dialog").then(module => ({ default: module.InteractionDialog })));
+
+export { operationFormSchema } from "../ops/interaction-schema";
 
 /**
  * The row an operation opens from, as the page listed it. `version` and
@@ -240,27 +242,29 @@ export function OperationDialog({
   }
   const reviewed = entry.data ? { ...listed, ...entry.data.entry.data, id: entry.data.entry.id, version: entry.data.entry.version } : listed;
   return (
-    <InteractionDialog
-      create={() => createOperationController(operation, binding, row?.collection, reviewed)}
-      operation={operation}
-      hidden={hidden}
-      automatic={automatic}
-      language={language}
-      canonical={canonical}
-      sourceSchema={collection?.schema ?? entry.data?.collection.schema}
-      previewFields={row ? [...new Set([collection?.list?.primaryField, ...(collection?.list?.columns ?? []), ...(collection?.list ? [] : Object.keys(collection?.schema?.properties ?? entry.data?.collection.schema.properties ?? {}))])].filter((field): field is string => !!field && field !== "id" && field !== "version" && !!reviewed && field in reviewed) : undefined}
-      onClose={onClose}
-      onDone={onSuccess}
-      onSucceeded={() => toast.success(t(language, "ops.success", { name: title }))}
-      renderResult={(output) => (
-        <section aria-label={t(language, "ops.output")} className="mt-2 min-w-0 space-y-2">
-          <h3 className="text-sm font-semibold">{t(language, "ops.output")}</h3>
-          <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-xs" tabIndex={0}>
-            {JSON.stringify(output ?? null, null, 2)}
-          </pre>
-        </section>
-      )}
-    />
+    <React.Suspense fallback={<InteractionLoading language={language} onClose={onClose}><Skeleton className="h-40 w-full" /></InteractionLoading>}>
+      <InteractionDialog
+        create={() => createOperationController(operation, binding, row?.collection, reviewed)}
+        operation={operation}
+        hidden={hidden}
+        automatic={automatic}
+        language={language}
+        canonical={canonical}
+        sourceSchema={collection?.schema ?? entry.data?.collection.schema}
+        previewFields={row ? [...new Set([collection?.list?.primaryField, ...(collection?.list?.columns ?? []), ...(collection?.list ? [] : Object.keys(collection?.schema?.properties ?? entry.data?.collection.schema.properties ?? {}))])].filter((field): field is string => !!field && field !== "id" && field !== "version" && !!reviewed && field in reviewed) : undefined}
+        onClose={onClose}
+        onDone={onSuccess}
+        onSucceeded={() => toast.success(t(language, "ops.success", { name: title }))}
+        renderResult={(output) => (
+          <section aria-label={t(language, "ops.output")} className="mt-2 min-w-0 space-y-2">
+            <h3 className="text-sm font-semibold">{t(language, "ops.output")}</h3>
+            <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-xs" tabIndex={0}>
+              {JSON.stringify(output ?? null, null, 2)}
+            </pre>
+          </section>
+        )}
+      />
+    </React.Suspense>
   );
 }
 
