@@ -9,7 +9,7 @@ export type { McpApps, McpAppResource } from "./mcp-apps.js";
 export interface Options<Env, Database> {
   apps?: Readonly<Partial<Record<"public" | "staff", import("./mcp-apps.js").McpApps | readonly import("./mcp-apps.js").McpApps[]>>>;
   db: (env: Env) => Database;
-  caller: (request: Request, env: Env) => Caller | Promise<Caller>;
+  caller: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
   locale?: string;
   instructions?: string;
   serverInfo?: { name?: string; title?: string; version?: string; icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[] };
@@ -52,7 +52,7 @@ export interface Tool<Database, Handlers = never> {
 export type Tools<Env, Database, Handlers = never> = readonly Tool<Database, Handlers>[] | ((request: Request, env: Env) => readonly Tool<Database, Handlers>[] | Promise<readonly Tool<Database, Handlers>[]>);
 
 /** The selected MCP routes; all request work loads only when an MCP request arrives. */
-export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database, Handlers>, staff: readonly string[], options: Options<Env, Database> & { handlers?: Handlers }): (request: Request, env: Env) => Promise<Response | undefined> {
+export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database, Handlers>, staff: readonly string[], options: Options<Env, Database> & { handlers?: Handlers }, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env) => Promise<Response | undefined> {
   let serve: ReturnType<typeof import("./mcp-handler.js").handler<Env, Database, Handlers>> | undefined;
   // a bad App configuration fails here, not on the first request
   const linked: Partial<Record<string, ReturnType<typeof linkSurface>>> = {};
@@ -65,7 +65,7 @@ export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database,
   return async (request, env) => {
     if (!/^\/mcp(?:\/staff)?\/*$/.test(new URL(request.url).pathname)) return;
     const { handler } = await import("./mcp-handler.js");
-    serve ??= handler(tools, staff, options, linked);
+    serve ??= handler(tools, staff, options, linked, reads);
     return serve(request, env);
   };
 }

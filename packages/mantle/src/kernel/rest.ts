@@ -1,12 +1,12 @@
 /** REST request handling for a generated route table: matching, body and parameter decoding, dispatch and errors. */
 import { ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller } from "./contracts.js";
-import { convert, decode, invalid, type Conversions } from "./surface.js";
+import { decode, invalid, type Conversions } from "./surface.js";
 
 type Paging = { limit?: number; cursor?: string };
 /** Options of a generated `rest(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> {
   db: (env: Env) => Database;
-  caller: (request: Request, env: Env) => Caller | Promise<Caller>;
+  caller: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
 }
 /**
  * One generated route, matched in order: a public View (`query`, `page`) at `GET /api/views/<name>`, or an http
@@ -34,24 +34,9 @@ export interface Route<Database, Handlers = never, Env = unknown> {
 const headers = { "cache-control": "private, no-store" };
 const isApi = (path: string): boolean => path === "/api" || path.startsWith("/api/");
 const fail: (message: string) => never = message => invalid(message, "rest");
-function number(raw: string): number { const value = Number(raw); if (!raw.trim() || !Number.isFinite(value)) fail("Expected a number."); return value; }
-function boolean(raw: string): boolean { if (raw !== "true" && raw !== "false") fail("Expected true or false."); return raw === "true"; }
 export async function body(request: Request, limit = 1_000_000): Promise<Record<string, unknown>> {
   if (Number(request.headers.get("content-length")) > limit) fail(`Request body exceeds ${limit} bytes.`);
   return (await import("./json-body.js")).body(request, limit, fail);
-}
-async function dispatch<Database, Handlers, Env>(route: Route<Database, Handlers, Env>, request: Request, getDb: () => Database, caller: Caller, params: Record<string, string>, handlers: Handlers): Promise<unknown> {
-  if (route.page) {
-    const { input: raw, ...paging } = route.query!(new URL(request.url).searchParams);
-    const input = { ...raw };
-    convert(input, route.convert);
-    return route.page(getDb(), caller, input as never, paging);
-  }
-  const raw = await body(request);
-  for (const key in params) raw[key] = route.params?.[key] === "number" ? number(params[key]!) : route.params?.[key] === "boolean" ? boolean(params[key]!) : params[key];
-  const input = route.validate!(raw);
-  convert(input, route.convert);
-  return route.run!(getDb(), caller, input as never, handlers);
 }
 
 /** Shared matching/auth/error envelope; selected dispatch is supplied by the surface. */
@@ -64,9 +49,10 @@ function router<Env, Database, Handlers>(routes: readonly Route<Database, Handle
       const allowed = new Set<string>();
       for (const route of routes) {
         const match = route.pattern.exec(path); if (!match) continue; allowed.add(route.method);
-        if (route.method !== request.method) continue;
+        const read = !!route.page && !route.run && !route.handle;
+        if (route.method !== request.method && !(request.method === "HEAD" && route.method === "GET" && read)) continue;
         const params = decode(route.keys ?? [], match, "Malformed path parameter.", "rest");
-        const caller = await surfaceCaller(request, env, options.caller);
+        const caller = await surfaceCaller(request, env, options.caller, read && ["GET", "HEAD"].includes(request.method));
         checkOrigin(request, caller);
         return await send(route, request, env, caller, params);
       }
@@ -79,7 +65,11 @@ function router<Env, Database, Handlers>(routes: readonly Route<Database, Handle
 
 /** Generated REST routes retain the native View/Procedure dispatch. */
 export function rest<Env, Database, Handlers = never>(routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database> & { handlers?: Handlers }): (request: Request, env: Env) => Promise<Response | undefined> {
-  return router(routes, options, async (route, request, env, caller, params) => Response.json(await dispatch(route, request, () => options.db(env), caller, params, options.handlers as Handlers), {headers}));
+  return router(routes, options, async (route, request, env, caller, params) => {
+    const { dispatch } = await import("./rest-dispatch.js");
+    const data = await dispatch(route, request, () => options.db(env), caller, params, options.handlers as Handlers);
+    return request.method === "HEAD" ? new Response(null, {headers}) : Response.json(data, {headers});
+  });
 }
 
 /** A selected surface's raw/JSON handlers; its branches are absent from ordinary REST bundles. */

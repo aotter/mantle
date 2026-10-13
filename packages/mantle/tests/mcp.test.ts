@@ -39,19 +39,20 @@ test("official SDK initializes, lists only surface tools, calls shared validatio
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"mcp.yaml",text:source}]);
  const dir=await mkdtemp(resolve(import.meta.dir,".mcp-")),db=new Database(":memory:");
  let caller:any={kind:"anonymous"};
+ const classifications: boolean[] = [];
  try {
   await writeGenerated(dir,files);db.exec(files["schema.sql"]!);
-  const {mcp}=await import(resolve(dir,"mcp.ts"));const handle=mcp({db:()=>db,caller:()=>caller});
+  const {mcp}=await import(resolve(dir,"mcp.ts"));const handle=mcp({db:()=>db,caller:(_request:Request,_env:unknown,authority:{readOnly:boolean})=>{classifications.push(authority.readOnly);return caller;}});
   const call=async(method:string,params:any={},path="/mcp",headers:Record<string,string>={})=>{
-   const response=await handle(new Request("https://app.test"+path,{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream",...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})}),{});
-   const text=await response.text(); const data=JSON.parse(text.startsWith("event:")?text.split("data: ")[1].split("\n")[0]:text);return {response,data};
+   const response=await handle(new Request("https://app.test"+path,{method:"POST",headers:{cookie:"fixture=1","content-type":"application/json",accept:"application/json, text/event-stream",...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})}),{});
+   const text=await response.text(); const data=JSON.parse(text.startsWith("event:")?text.split("data: ")[1].split("\n")[0]:text);return {response,data,readOnly:classifications.at(-1)};
   };
-  const initialized=await call("initialize",{protocolVersion:"2025-03-26",capabilities:{},clientInfo:{name:"test",version:"1"}});expect(initialized.response.status).toBe(200);
+  const initialized=await call("initialize",{protocolVersion:"2025-03-26",capabilities:{},clientInfo:{name:"test",version:"1"}});expect(initialized.response.status).toBe(200);expect(initialized.readOnly).toBe(true);
   const listed=(await call("tools/list")).data.result.tools; expect(listed.map((t:any)=>t.name)).toEqual(["items","add_item"]);expect(listed[0].inputSchema.additionalProperties).toBe(false);
   const denied=await call("tools/list",{},"/mcp/staff"); expect(denied.response.status).toBe(401); expect(denied.response.headers.get("www-authenticate")).toContain('scope="mcp"');
   const bad=await call("tools/call",{name:"add_item",arguments:{title:""}});expect(bad.data.result.isError).toBe(true);expect(JSON.parse(bad.data.result.content[0].text).diagnostics[0].code).toBe("INPUT_VALIDATION_FAILED");
-  const ok=await call("tools/call",{name:"add_item",arguments:{title:"Hello"}});expect(ok.data.result.isError).toBeUndefined();
-  const page=await call("tools/call",{name:"items",arguments:{limit:1}});expect(page.data.result.structuredContent.rows[0].title).toBe("Hello");
+  const ok=await call("tools/call",{name:"add_item",arguments:{title:"Hello"}});expect(ok.data.result.isError).toBeUndefined();expect(ok.readOnly).toBe(false);
+  const page=await call("tools/call",{name:"items",arguments:{limit:1}});expect(page.data.result.structuredContent.rows[0].title).toBe("Hello");expect(page.readOnly).toBe(true);
   caller=user;expect((await call("tools/list",{},"/mcp/staff")).data.result.tools.map((t:any)=>t.name)).toEqual(["staff_items"]);
   caller={...user,role:null}; const roleDenied=await call("tools/list",{},"/mcp/staff");expect(roleDenied.response.status).toBe(403);expect(roleDenied.response.headers.has("www-authenticate")).toBe(false);
   caller={...user,scopes:[]}; const scopeDenied=await call("tools/list");expect(scopeDenied.response.status).toBe(403);expect(scopeDenied.response.headers.get("www-authenticate")).toContain('error="insufficient_scope", scope="mcp"');

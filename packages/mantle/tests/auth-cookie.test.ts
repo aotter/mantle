@@ -7,6 +7,7 @@ import { verifyCookieCaller } from "./auth-cookie-scenarios.js";
 
 test("real Better Auth cookie reads, refresh, revocation and field mapping on SQLite", async () => {
   const db = new Database(":memory:"), statements: string[] = [], native = d1Shim(db);
+  db.exec("PRAGMA foreign_keys=ON");
   try {
     const counts = await verifyCookieCaller(d1Adapter({ prepare: text => { statements.push(text); return native.prepare(text); } }), "sqlite", async (text, values = []) => db.query(text).all(...values as never[]) as Record<string, unknown>[], statements);
     expect(counts["native:fresh"]).toBe(1); expect(counts["native:read-first"]).toBe(0); expect(counts["native:read-warm"]).toBe(0); expect(counts["secondary:refresh"]).toBe(1);

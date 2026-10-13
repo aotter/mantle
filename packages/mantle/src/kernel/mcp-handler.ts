@@ -17,14 +17,29 @@ const paging = (schema: { properties?: object }) => ({ ...schema, properties: { 
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
 
 /** The handler for `/mcp` (public tools) and `/mcp/staff` (tools for `staff` roles); other paths are undefined. */
-export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, staff: readonly string[], options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}): (request: Request, env: Env) => Promise<Response | undefined> {
+export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, staff: readonly string[], options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env) => Promise<Response | undefined> {
   return async (request, env) => {
     const requiredScopes = options.requiredScopes ?? ["mcp"], locale = options.locale ?? "en";
     const url = new URL(request.url), path = url.pathname.replace(/\/+$/, ""), surface = path === "/mcp" ? "public" as const : path === "/mcp/staff" ? "staff" as const : undefined;
     if (!surface) return;
     const select = async () => (typeof tools === "function" ? await tools(request, env) : tools).filter(tool => tool.surface === surface);
-    // staff tables load only after the caller passed the staff gate; the public gate needs to know which tools are closed
+    // Dynamic staff tables stay behind the staff gate; cache classification uses generated metadata only.
     let selected = surface === "public" ? await select() : [];
+    let parsedBody: unknown, tooLarge = false;
+    const cookieOnly = request.headers.has("cookie") && !request.headers.has("authorization");
+    const parse = async () => {
+      const { readRequestBody } = await import("@modelcontextprotocol/server");
+      try { const body = await readRequestBody(request.clone() as Parameters<typeof readRequestBody>[0], 1024 * 1024); tooLarge = body.tooLarge; if (!body.tooLarge) parsedBody = JSON.parse(body.text); } catch {}
+    };
+    if (request.method === "POST" && cookieOnly) await parse();
+    const messages = Array.isArray(parsedBody) ? parsedBody : [parsedBody];
+    const readOnly = request.method === "POST" && messages.length > 0 && messages.every(message => {
+      if (!isRecord(message) || message.jsonrpc !== "2.0" || typeof message.method !== "string") return false;
+      if (["initialize", "tools/list", "resources/list", "resources/read"].includes(message.method)) return true;
+      if (message.method !== "tools/call") return false;
+      const name = isRecord(message.params) ? message.params.name : undefined;
+      return reads.some(tool => tool.surface === surface && tool.name === name);
+    });
     const challenge = (error: unknown, scope?: string, bare = false) => {
       const result = wire(error);
       if (result.status === 401 || result.status === 403) {
@@ -36,17 +51,17 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
     };
     let caller: Caller;
     try {
-      caller = await surfaceCaller(request, env, options.caller);
+      caller = await surfaceCaller(request, env, options.caller, readOnly);
       if (caller.kind === "anonymous" && (surface === "staff" || selected.length > 0 && selected.every(tool => tool.closed))) throw new ContractError("UNAUTHENTICATED", "Authentication is required.", "mcp");
       if (caller.kind === "system") return challenge(new ContractError("AUTH_DENIED", "System callers cannot use MCP.", "mcp"), undefined, true);
       if (surface === "staff" && caller.kind === "user" && !staff.includes(caller.role ?? "")) return challenge(new ContractError("AUTH_DENIED", "Staff role is required.", "mcp/staff"), undefined, true);
       if (caller.kind === "user" && caller.credential !== "session" && requiredScopes.some(scope => !(caller as Extract<Caller, {kind: "user"}>).scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs the required MCP scopes.", "mcp"), union(caller.scopes, requiredScopes));
     } catch (error) { return challenge(error); }
     if (surface === "staff") selected = await select();
-    const { McpServer, createMcpHandler, fromJsonSchema, readRequestBody } = await import("@modelcontextprotocol/server");
-    let parsedBody: unknown;
+    const { McpServer, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
+    if (request.method === "POST" && !cookieOnly) await parse();
+    if (tooLarge) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Request body exceeds 1048576 bytes." } }, { status: 413 });
     if (request.method === "POST") {
-      try { const body = await readRequestBody(request.clone() as Parameters<typeof readRequestBody>[0], 1024 * 1024); if (body.tooLarge) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Request body exceeds 1048576 bytes." } }, { status: 413 }); parsedBody = JSON.parse(body.text); } catch {}
       for (const message of Array.isArray(parsedBody) ? parsedBody : [parsedBody]) {
         if (!message || message.method !== "tools/call") continue;
         const tool = selected.find(tool => tool.name === message.params?.name);

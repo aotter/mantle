@@ -64,9 +64,16 @@ spec:
   const generated = await generateFromSources({ target: "cloudflare-d1", sources: { sources: [{ sourceId: "n.yaml", text: source }] }, auth: authOptions({ DB: undefined as never, ORIGIN: "https://app.example" }) });
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const sql = generated.files["schema.sql"]!;
+  const noEnv = await generateFromSources({ target: "cloudflare-d1", sources: { sources: [{ sourceId: "n.yaml", text: source }] }, auth: authOptions(new Proxy({} as never, { get: () => undefined })) });
+  if (!noEnv.ok) throw Error(JSON.stringify(noEnv.diagnostics));
+  expect(noEnv.files["schema.sql"]).toBe(sql); // CLI generation has no runtime environment.
+
   for (const table of ["user", "session", "verification", "jwks", "oauthClient"]) expect(sql).toContain(`CREATE TABLE IF NOT EXISTS "${table}"`);
+  expect(sql).not.toContain('INSERT INTO "oauthResource"');
   const db = new Database(":memory:");
+  db.exec("PRAGMA foreign_keys=ON");
   db.exec(sql); db.exec(sql);
+  expect(db.query('SELECT identifier FROM "oauthResource"').all()).toEqual([]);
   expect(db.query(`SELECT name FROM sqlite_master WHERE name = 'user'`).all()).toHaveLength(1);
 });
 

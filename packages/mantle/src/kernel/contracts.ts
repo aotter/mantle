@@ -105,8 +105,8 @@ export function checkOrigin(request: Request, caller: Caller): void {
 }
 
 /** A resolver's ContractError (e.g. UNAUTHENTICATED for an expired token) keeps its status; anything else is an application failure. */
-export async function surfaceCaller<Env>(request: Request, env: Env, resolve: (request: Request, env: Env) => Caller | Promise<Caller>): Promise<Caller> {
-  try { return await resolve(request, env); } catch (cause) { if (cause instanceof ContractError) throw cause; throw new Error("Caller resolution failed.", {cause}); }
+export async function surfaceCaller<Env>(request: Request, env: Env, resolve: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>, readOnly = false): Promise<Caller> {
+  try { return await resolve(request, env, { readOnly }); } catch (cause) { if (cause instanceof ContractError) throw cause; throw new Error("Caller resolution failed.", {cause}); }
 }
 /** The client sees the redacted wire form; the log gets the surface (a route or tool, never headers) and the original message, stack and cause. */
 export function surfaceError(error: unknown, where = "surface"): ReturnType<typeof wire> {

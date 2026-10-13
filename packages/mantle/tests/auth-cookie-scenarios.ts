@@ -2,9 +2,12 @@
 import assert from "node:assert/strict";
 import type { BetterAuthOptions } from "@better-auth/core";
 import { betterAuth } from "better-auth/minimal";
-import { admin, emailOTP } from "better-auth/plugins";
+import { oauthProvider } from "@better-auth/oauth-provider";
+import { admin, emailOTP, jwt } from "better-auth/plugins";
 import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller.js";
 import { sessionSecondaryStorage } from "../src/auth/hardening.js";
+import { verifyAuthRequestClasses } from "./auth-request-classes.js";
+import { verifyOAuthResources } from "./auth-resource-scenarios.js";
 import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 
 type Run = (text: string, values?: unknown[]) => Promise<Record<string, unknown>[]>;
@@ -30,7 +33,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
         : { get: async key => cache.get(key) ?? null, set: async (key, value) => { cache.set(key, value); }, delete: async key => { cache.delete(key); }, getAndDelete: async () => { throw Error("verification stays in the primary database"); }, increment: async () => { throw Error("verification stays in the primary database"); } } } : {}),
       advanced: { database: { ...(variant === "fallback" ? { joins: false } : {}) }, cookiePrefix: prefix },
       // Better Auth's admin plugin mutates its shared schema when fields are renamed; reset every field per fixture.
-      plugins: [admin({ schema: { user: { fields: { role: field("role"), banned: field("banned"), banReason: field("banReason"), banExpires: field("banExpires") } } } }), emailOTP({ sendVerificationOTP: async value => { otp = value.otp; } })],
+      plugins: [admin({ schema: { user: { fields: { role: field("role"), banned: field("banned"), banReason: field("banReason"), banExpires: field("banExpires") } } } }), emailOTP({ sendVerificationOTP: async value => { otp = value.otp; } }), ...(variant === "native" ? [jwt({ disableSettingJwtHeader: true }), oauthProvider({ loginPage: "/login", consentPage: "/consent", resources: ["http://localhost:3000/mcp"] })] : [])],
     };
     for (const text of authSchemaSql(options, dialect)) await run(text);
     auth = betterAuth(options);
@@ -99,6 +102,14 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
       try { Date.now = () => now() + 61_000; assert.equal((await readSnapshot("read-legacy-300-version", oldCookie, expected)).kind, "user"); }
       finally { Date.now = now; }
       assert.equal((await legacy.handler(new Request(`${options.baseURL}/sign-out`, { method: "POST", headers: { cookie: oldCookie, origin: "http://localhost:3000" } }))).status, 200);
+    }
+    if (variant === "native" || variant === "secondary") {
+      // A fresh loader and a retained loader exercise the first request and warm dispatch separately.
+      await verifyAuthRequestClasses(() => authLoader(async () => betterAuth(options) as unknown as AuthInstance, prefix), cookie, statements, cached ? expected : 0, expected);
+      await verifyAuthRequestClasses(loader, cookie, statements, cached ? expected : 0, expected);
+      options.session!.cookieCache!.enabled = false;
+      await verifyAuthRequestClasses(loader, cookie, statements, expected, expected);
+      options.session!.cookieCache!.enabled = true;
     }
     // Primary rows, not a cached or browser snapshot, own the role and ban state.
     await run(`UPDATE "${u}" SET "${field("role")}" = 'staff' WHERE id = ${dialect === "postgres" ? "$1" : "?"}`, [id]);
@@ -181,5 +192,6 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
     assert.equal(reads(), 0);
 
   }
+  await verifyOAuthResources(database, dialect, run, statements);
   return counts;
 }

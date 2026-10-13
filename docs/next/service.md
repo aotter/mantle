@@ -42,11 +42,14 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     auth ??= authLoader(() => import('./auth.js').then(m => m.createAuth(env)));
     const headers = new Headers(); // retain Better Auth's sliding-session cookies
-    let authority: Promise<Caller> | undefined;
-    const caller = () => authority ??= resolveCaller(request, auth!, {
+    let authority: Promise<Caller> | undefined, readAuthority: Promise<Caller> | undefined;
+    const resolve = (readOnly: boolean) => resolveCaller(request, auth!, {
+      readOnly,
       audience: [`${env.ORIGIN}/mcp`, `${env.ORIGIN}/mcp/staff`],
       responseHeaders: headers,
     }).then(value => { checkOrigin(request, value); return value; });
+    const caller = (_request?: Request, _env?: Env, classification = { readOnly: false }) =>
+      classification.readOnly ? readAuthority ??= resolve(true) : authority ??= resolve(false);
     const options = { db: (env: Env) => env.DB, caller, handlers };
     const bindings = adminBindings({ handlers }); // use adminBindings() without ref Procedures
     const routes = [
@@ -153,7 +156,9 @@ const serveAdmin = admin(bindings.metadata, bindings.views, bindings.operations,
 The reader returns a native `Response` or `null`, rejects traversal/control
 characters and escaping symlinks; the app owns shell, CSP and cache headers.
 Use ignored `.env` on Bun. Run cron work with your native scheduler; neither
-imports nor `fetch` execute DDL, migration, seeding or cron work.
+imports nor ordinary requests execute DDL, migrations or cron work. OAuth resource
+rows are inserted on first OAuth use from runtime configuration, with no deploy
+step; auth initialization and cookie/bearer/MCP/REST requests do no resource work.
 
 ## Commit generated output and verify it in CI
 
