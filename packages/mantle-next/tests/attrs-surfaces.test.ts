@@ -45,6 +45,9 @@ test("generated mcp() and rest() take the host's caller (no bearer) and scope by
     // the host's role still gates the staff surface, and generated validation still runs before any SQL
     caller = forwarded({ region: ["TW"] }, { role: "other" });
     expect((await call("tools/list")).response.status).toBe(403);
+    // KNOWN GAP (spike): `roles[]` reaches generated `requires` (attrs.test.ts) but the kernel's MCP staff gate still reads `role` only
+    caller = forwarded({ region: ["TW"] }, { role: null, roles: ["sales"] });
+    expect((await call("tools/list")).response.status).toBe(403);
     caller = forwarded({ region: ["TW"] });
     const bad = await call("tools/call", { name: "rename_order", arguments: { id: "x", title: "" } });
     expect(bad.data.result.isError).toBe(true);

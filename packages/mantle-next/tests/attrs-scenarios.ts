@@ -103,5 +103,11 @@ export async function verifyAttrs(app: any, db: any): Promise<number> {
   is(JSON.stringify(await rename(sales("u1", { region: ["TW"] }), "A1", "A1-renamed")).includes("A1-renamed"), true, "a Procedure UPDATE inside the set");
   is(titles((await store(system).collection("orders").find({})).rows as { title: string }[]), ["A1-renamed", "A2", "B1", "C1"], "only the in-set order was renamed");
   is(await rename(sales("u1", { region: ["TW"] }, { role: "editor" }), "A2", "x"), "AUTH_DENIED", "Procedure requires: undeclared role");
+
+  // ---- values with quoting characters travel inside the one array parameter (PostgreSQL array literal, SQLite JSON) and match exactly
+  const odd = `q"u\\o,te{} 'x'`;
+  await store(system).collection("orders").insert({ region: odd, tier: "gold", title: "W1" });
+  is(titles(await view("regional-orders", sales("u1", { region: [odd, "TW"] }))), ["A1-renamed", "A2", "W1"], "a value with quotes, backslash, comma and braces matches exactly");
+  is(titles(await view("regional-orders", sales("u1", { region: ["TW"] }))), ["A1-renamed", "A2"], "and is not matched by its neighbours");
   return checks;
 }
