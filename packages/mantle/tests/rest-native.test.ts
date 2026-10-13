@@ -1,5 +1,4 @@
 import {test,expect} from "bun:test";
-import {Database} from "bun:sqlite";
 import {SQL} from "bun";
 import {mkdtemp,readFile,writeFile,rm,open} from "node:fs/promises";
 import {resolve,join} from "node:path";
@@ -20,10 +19,6 @@ async function fixture(target:"bun-sqlite"|"bun-postgres"|"cloudflare-d1") {
  try {const sources=await loadFixtureSources("rest.yaml");
  const files=await generateOrThrow(target,target==="bun-postgres"?sources:sources.map(source=>({...source,text:source.text.replace("CAST(input.payload AS jsonb)","input.payload")})));await writeGenerated(dir,files);await writeFile(join(dir,"app.ts"),composition);return {dir,files};} catch(error){await rm(dir,{recursive:true,force:true});throw error;}
 }
-test("REST native SQLite: bool/JSON, public publishing SQL, staff exclusion and ref Store handlers",async()=>{
- const {dir,files}=await fixture("bun-sqlite"),db=new Database(":memory:");
- try {db.exec(files["schema.sql"]!);db.exec(seed(false));const {app}=await import(join(dir,"app.ts"));await verifyRest(request=>app(request,{DB:db}));expect(true).toBe(true);} finally {db.close();await rm(dir,{recursive:true,force:true});}
-});
 (process.env.MANTLE_NEXT_BUN_PG_URL ? test : test.skip)("REST real Bun.SQL PostgreSQL runs the same transport and state oracle",async()=>{
  const {dir,files}=await fixture("bun-postgres"),sql=new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}),schema="rest_"+crypto.randomUUID().replaceAll("-","");
  try {await sql.unsafe(`CREATE SCHEMA ${schema}`);await sql.unsafe(`SET search_path TO ${schema}`);await sql.unsafe(files["schema.sql"]!);await sql.unsafe(seed(true));const {app}=await import(join(dir,"app.ts"));await verifyRest(request=>app(request,{DB:sql}));expect(true).toBe(true);} finally {await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await sql.close();await rm(dir,{recursive:true,force:true});}

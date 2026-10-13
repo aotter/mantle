@@ -17,23 +17,24 @@ permissions:
   contents: read
 
 jobs:
-  # Deterministic checks required before merge.
+  # Keep the existing required status while both parallel jobs must pass.
   lint:
     name: Typecheck + tests
+    needs: [typecheck, tests]
+    if: ${{ always() && !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both jobs
+        env:
+          TYPECHECK: ${{ needs.typecheck.result }}
+          TESTS: ${{ needs.tests.result }}
+        run: test "$TYPECHECK" = success && test "$TESTS" = success
+
+  typecheck:
+    name: Typecheck + gates
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # the PostgreSQL dialect's tests (test/postgres) run against this server; without MANTLE_PG_URL they skip
-    services:
-      postgres:
-        image: postgres:16
-        env: { POSTGRES_USER: mantle, POSTGRES_PASSWORD: mantle, POSTGRES_DB: mantle }
-        ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
-    env:
-      MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
-      MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
-      MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -65,10 +66,46 @@ jobs:
       - name: Typecheck workspace
         run: pnpm typecheck
 
-      - run: pnpm test
-
       - name: Check startup graphs and budgets
         run: pnpm check:startup
 
       - name: Self-test release scripts and packed-consumer provenance
         run: pnpm run check:release && node scripts/check-packed-consumer.mjs --self-test
+
+  tests:
+    name: Package tests
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Keep PostgreSQL driver/compiler tests enabled in PR CI.
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: mantle, POSTGRES_PASSWORD: mantle, POSTGRES_DB: mantle }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+      MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+      MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build dist
+        run: pnpm build
+
+      - name: Test packages concurrently
+        run: pnpm test

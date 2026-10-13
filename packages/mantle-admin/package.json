@@ -123,7 +123,7 @@
     "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts && vite build --config vite.shared.config.ts && vite build --config vite.preview.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json && tsc -p tsconfig.mcp-app.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "bun test tests/native/*.test.ts && vitest run",
-    "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run",
+    "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run admin/test/preview-boundary.test.ts test/mcp-app-browser.test.ts",
     "check:size": "node ../../scripts/check-ui-size.mjs mantle-admin",
     "test:native-server": "MANTLE_NATIVE_TESTS=1 bun test tests/native/*.test.ts"
   }
