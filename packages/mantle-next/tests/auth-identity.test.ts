@@ -121,6 +121,27 @@ test("D1 bootstrap promotes one contender atomically; invitation revocation guar
     expect(await a.directory.revokeInvite("b")).toBe(false);
 });
 const pgUrl = process.env.MANTLE_NEXT_BUN_PG_URL;
+test.skipIf(!pgUrl)("PostgreSQL UUID member search casts only the search expression, preserving native keyset order", async () => {
+    const schema = `uuid_members_${crypto.randomUUID().replaceAll("-", "")}`, admin = new SQL(pgUrl!);
+    await admin.unsafe(`CREATE SCHEMA ${schema}`);
+    const db = new SQL({ url: pgUrl!, max: 1, connection: { search_path: schema } }), statements: string[] = [];
+    try {
+        await db.unsafe(`CREATE TABLE "user" (id uuid PRIMARY KEY, email text, name text, role text, "githubLogin" text, "emailVerified" boolean, "createdAt" timestamptz)`);
+        const ids = ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"];
+        for (const id of ids) await db.unsafe(`INSERT INTO "user" VALUES ($1,$2,'Member',NULL,NULL,true,'2026-02-01T00:00:00.000001Z')`, [id, `${id}@example.test`]);
+        const handle = { unsafe: (text: string, values: unknown[]) => { statements.push(text); return db.unsafe(text, values); } };
+        const directory = postgresIdentity(handle as unknown as Postgres, {} as never, staff, new Headers());
+        expect((await directory.listMembers({ search: "000001" })).items.map(row => row.id)).toEqual([ids[0]!]);
+        expect((await directory.listMembers({ search: "MEMBER" })).items.map(row => row.id)).toEqual(ids);
+        statements.length = 0;
+        const first = await directory.listMembers({ limit: 1 });
+        const second = await directory.listMembers({ limit: 1, cursor: first.nextCursor! });
+        expect([...first.items, ...second.items].map(row => row.id)).toEqual(ids);
+        expect(statements).toHaveLength(2);
+        expect(statements.every(text => !text.includes("CAST(id AS text)"))).toBe(true);
+        expect(statements[1]).toContain("AND id >");
+    } finally { await db.close(); await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`); await admin.close(); }
+});
 test.skipIf(!pgUrl)("PostgreSQL competing bootstrap transactions serialize and native member paging works", async () => {
     const db = new SQL(pgUrl!), schema = `identity_${crypto.randomUUID().replaceAll("-", "")}`;
     try {
