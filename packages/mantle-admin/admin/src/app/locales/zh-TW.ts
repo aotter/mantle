@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "詳細資訊",
+    "ops.conditionConflict": "這筆紀錄已變更，或已不符合此操作的條件。請重新整理後再試一次。",
+  "ops.uniqueConflict": "已有一筆資料使用相同的唯一值。",
+    "model.viewDataUnavailable": "無法預覽即時資料：此 View 僅供內部使用，或你的帳號沒有執行權限。",
     "developer.sqlProcedure": "此程序的 SQL 陳述式一併執行：全部套用，或全部不套用。",
     "webmcp.copied": "已複製",
     "webmcp.title": "與 AI agent 一起操作",

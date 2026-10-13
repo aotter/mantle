@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Ayrıntılar",
+    "ops.conditionConflict": "Kayıt değişti veya artık bu işlemin koşulunu karşılamıyor. Yenileyip tekrar deneyin.",
+  "ops.uniqueConflict": "Aynı benzersiz değere sahip bir kayıt zaten var.",
+    "model.viewDataUnavailable": "Canlı veriler kullanılamıyor: bu View dahilidir veya hesabınızın çalıştırma izni yoktur.",
     "admin.consoleTitle": "Yönetim konsolu",
     "developer.workspaceTitle": "Geliştirme",
     "auth.signIn.title": "Oturum aç",

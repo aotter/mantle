@@ -58,7 +58,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
         const metadata = {...bindings.metadata, views:[...bindings.metadata.views,salesDescriptor],webmcp:addSalesTool(bindings.metadata.webmcp)};
         const salesView = {name:"sales-by-item",allows:(caller:Caller)=>caller.kind==="user"&&caller.role==="staff",query:(params:URLSearchParams)=>({input:{},...pageOptions({limit:params.has("limit")?Number(params.get("limit")):undefined,cursor:params.get("cursor")??undefined}),cursor:params.get("cursor")??undefined}),page:salesPage};
         const adminOptions = {...options,identity:{directory:async ({caller,request,db}: {caller:Caller;request:Request;db:Handle})=>{const {d1Identity}=await import("@aotter/mantle/auth/identity");return d1Identity(db,await auth!.get(),caller,request.headers);}},mcpEndpoints:{public:"/mcp",staff:"/mcp/staff"}};
-        serveAdmin = admin(metadata,[...bindings.views,salesView],bindings.operations,{...adminOptions,routes:[...entries(bindings.schemas,bindings.adapter),...siteRoutes(adminOptions),...webmcpRoutes(metadata.webmcp,[...tools,...extraTools],handlers)]});
+        serveAdmin = admin(metadata,[...bindings.views,salesView],bindings.operations,{...adminOptions,developerViews:bindings.developerViews,routes:[...entries(bindings.schemas,bindings.adapter),...siteRoutes(adminOptions),...webmcpRoutes(metadata.webmcp,[...tools,...extraTools],handlers)]});
       }
       response = await serveAdmin(request, env);
     } else if (/^\/mcp(?:\/staff)?\/*$/.test(url.pathname)) {

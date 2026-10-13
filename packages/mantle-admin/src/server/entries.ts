@@ -180,7 +180,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
             return csv(schema.name, async cursor => {
                 if (cursor) params.set("cursor", cursor); else params.delete("cursor");
                 const page = await pageOf(schema, ctx, params);
-                return {...page, rows: page.rows.map(raw => {const e = entry(schema, raw); return {...e.data, id: e.id, status: e.status, version: e.version, updated_at: e.updated_at};})};
+                return {...page, rows: page.rows.map(schema.row)};
             }, columns);
         } },
         { method: "GET", path: "/entries/{id}", run: async (ctx) => { const schema = schemaOf(ctx.url.searchParams.get("collection")); return editor(schema, await current(schema, ctx, ctx.params.id!), ctx); } },

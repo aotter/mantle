@@ -40,7 +40,7 @@ const pointer = (s: string) => s.replace(/~/g, "~0").replace(/\//g, "~1");
 export function developerConsole(plan: RuntimePlan) {
   const schemaName = (key: string) => plan.schemas[key]?.name;
   const schemas = Object.values(plan.schemas).sort((a, b) => a.name.localeCompare(b.name));
-  const views = Object.entries(plan.views).filter(([, v]) => v.surface !== "internal").sort(([a], [b]) => a.localeCompare(b));
+  const views = Object.entries(plan.views).sort(([a], [b]) => a.localeCompare(b));
   const procedureAudience = (name: string): Audience => audienceOf(plan.procedures[name]?.requires) ?? "public";
   const handlerOf = (h: RuntimePlan["procedures"][string]["handler"]) => {
     if ("ref" in h) return { kind: "ref" as const, ref: h.ref };
@@ -63,7 +63,7 @@ export function developerConsole(plan: RuntimePlan) {
     name, target: t.procedure, source: t.source, manifest: t,
     audience: (t.source.kind === "lifecycle" || t.source.kind === "schedule" ? "system" : t.source.kind === "mcp" && t.source.surface === "staff" ? "staff" : procedureAudience(t.procedure)) as Audience,
   }));
-  const viewAudience = (v: RuntimePlan["views"][string]): Audience => (v.surface === "staff" ? "staff" : audienceOf(v.requires) ?? "public");
+  const viewAudience = (v: RuntimePlan["views"][string]): Audience => (v.surface === "internal" ? "system" : v.surface === "staff" ? "staff" : audienceOf(v.requires) ?? "public");
 
   const relation = (id: string, kind: string, sourceId: string, targetId: string, at: string, value: string) => ({ id, kind, sourceId, targetId, pointer: at, value });
   const relations = [

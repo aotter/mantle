@@ -5,7 +5,7 @@ import {tmpdir} from "node:os";
 import {compilePlan,type RuntimePlan} from "../src/build/compiler.js";
 import {STAFF_ROLES} from "../src/domain/visibility.js";
 import * as compiler from "../src/build/d1/compile/index.js";
-import {collectionOf,developerConsole,requiredEnumStates} from "../src/build/compiler.js";
+import {collectionOf,developerConsole,rowPreconditions} from "../src/build/compiler.js";
 import {appCatalog} from "../src/build/compiler.js";
 import {adminOrder} from "../src/domain/adminOrder.js";
 import {emitAdminDescriptors} from "../src/usecase/adminDescriptors.js";
@@ -37,11 +37,11 @@ test("Admin projections match 0.2 collections, operations, SQL graph and MCP cat
   const plan=await planOf(),{loaded:m,files}=await metadata(plan),schemas=Object.values(plan.schemas);
   expect(m.collections).toEqual(schemas.map(s=>collectionOf(s,schemas)));
   expect(m.collections.find((x:any)=>x.name==="tasks")).toMatchObject({parent:{collection:"projects",parentField:"id",childField:"projectId"},nav:{standalone:true,parentField:"projectId",parentCollection:"projects"},sortableFields:["priority","state"],filter:{field:"state",values:["todo","done"]},list:{primaryField:"title",columns:["projectCode","state"]}});
-  expect(m.operations).toHaveLength(1);expect(m.operations[0]).toMatchObject({name:"mark-done",requiredStates:[{field:"state",value:"todo"}],interactions:[{collection:"tasks",bind:[{input:"entryId",field:"id"}],version:"expectedVersion",mutates:true}]});
-  const p=plan.procedures["mark-done"]!;if("sql" in p.handler)expect(m.operations[0].requiredStates).toEqual(requiredEnumStates(p.handler.sql.stmts,"tasks",plan.schemas.tasks!.schema));
+  expect(m.operations).toHaveLength(1);expect(m.operations[0]).toMatchObject({name:"mark-done",preconditions:[{field:"state",values:["todo"]}],interactions:[{collection:"tasks",bind:[{input:"entryId",field:"id"}],version:"expectedVersion",mutates:true}]});
+  const p=plan.procedures["mark-done"]!;if("sql" in p.handler)expect(m.operations[0].preconditions).toEqual(rowPreconditions(p.handler.sql.stmts,"tasks","entryId",plan.schemas.tasks!.schema));
   expect(m.views.map((v:any)=>v.name)).not.toContain("public-tasks");expect(m.views.map((v:any)=>v.name)).not.toContain("internal-tasks");expect(Object.keys(m.authorizations.views)).toEqual(m.views.map((v:any)=>v.name));
   expect(m.views.find((v:any)=>v.name==="tasks-board").columns.projectCode).toEqual({schema:"tasks",field:"projectCode"});expect(m.viewNames["tasks-board"].projectcode).toBe("projectCode");expect(m.fieldNames.tasks.projectid).toBe("projectId");expect(m.views.find((v:any)=>v.name==="cte-board").columns.projectCode).toEqual({schema:"tasks",field:"projectCode"});expect(m.views.find((v:any)=>v.name==="totals").columns.total).toEqual({schema:"tasks",field:"priority"});
-  expect(m.developerConsole).toEqual(developerConsole(plan));expect(m.developerConsole.logic.procedures[0].handler.flow[0].cases).toHaveLength(1);
+  expect(m.developerConsole.dataModel.views.find((v:any)=>v.name==="internal-tasks").surface).toBe("internal");expect(m.developerConsole.interfaces.callable.some((v:any)=>v.target==="internal-tasks")).toBe(false);expect(m.developerConsole).toEqual(developerConsole(plan));expect(m.developerConsole.logic.procedures[0].handler.flow[0].cases).toHaveLength(1);
   expect(m.developerConsole.graph.relations).toEqual(expect.arrayContaining([expect.objectContaining({kind:"schema-reference",pointer:"/spec/schema/properties/projectId/x-mantle-ref"}),expect.objectContaining({kind:"trigger-target",targetId:"Procedure:mark-done"})]));
   expect(m.developerConsole.operations).toMatchObject({schedules:[],ttlPolicies:[{schema:"tasks",field:"expiresAt",expireAfterSeconds:3600,sweepObservation:"unavailable"}],observationAvailability:"unavailable",runs:[],latestRuns:[]});
   expect(m.mcpAppCatalogues).toEqual({public:appCatalog(plan,"public"),staff:appCatalog(plan,"staff")});expect(m.mcpAppCatalogues.staff.views.tasks_board.actions).toEqual(["mark_done"]);expect(m.mcpAppCatalogues.staff.views.joined_board.actions).toEqual([]);expect(m.mcpAppCatalogues.staff.views.alias_board.actions).toEqual([]);
@@ -103,4 +103,20 @@ test("Admin generation accepts Schema properties named like Object.prototype mem
     const result = await generateFromSources({ target: "bun-sqlite", admin: true, sources: { sources: [{ sourceId: "n.yaml", text }] } });
     expect(result.ok ? [] : result.diagnostics).toEqual([]);
   }
+});
+
+test("row preconditions derive AND equality/IN literals only from the declared target-row write",async()=>{
+  const check=async(sql:string)=>{
+    const plan=await planOf([sources[0]!,sources[1]!,manifest("Procedure","act",{input:{type:"object",properties:{id:{type:"string"}},required:["id"]},output:{type:"object"},target:{schema:"tasks",id:"id"},handler:{sql}})]);
+    const p=plan.procedures.act!; if(!("sql" in p.handler))throw Error("SQL required");
+    return rowPreconditions(p.handler.sql.stmts,"tasks","id",plan.schemas.tasks!.schema);
+  };
+  expect(await check("UPDATE tasks SET state='done' WHERE id=input.id AND state='todo' AND priority=1 RETURNING id")).toEqual([{field:"state",values:["todo"]}]);
+  expect(await check("UPDATE tasks SET state='done' WHERE id=input.id AND priority=1 RETURNING id")).toEqual([]);
+  expect(await check("DELETE FROM tasks AS t WHERE t.id=input.id AND t.state IN ('todo','done') RETURNING id")).toEqual([{field:"state",values:["todo","done"]}]);
+  expect(await check("UPDATE tasks SET state='done' WHERE id=input.id AND 'todo'=state RETURNING id")).toEqual([{field:"state",values:["todo"]}]);
+  expect(await check("UPDATE tasks SET state='done' WHERE id=input.id AND (state='todo' OR priority=1) RETURNING id")).toEqual([]);
+  expect(await check("UPDATE tasks SET state='done' WHERE id=input.id AND priority>1 RETURNING id")).toEqual([]);
+  const plan=await planOf(),{loaded:m}=await metadata(plan);
+  expect(m.operations[0].preconditions).toEqual([{field:"state",values:["todo"]}]);
 });

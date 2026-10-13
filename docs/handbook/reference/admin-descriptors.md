@@ -21,8 +21,10 @@ execution plan or SQL AST, storage access or execution observer is included.
 - `views` and `operations` preserve the 0.2 staff descriptor shapes. Generated
   publishing transitions stay out of Admin operations and WebMCP, preserving
   the SPA's native Publish/Unpublish buttons. Operation
-  bindings use declared targets and version inputs; `requiredStates` contains
-  necessary enum equalities from one row UPDATE, not an authorization rule.
+  bindings use declared targets and version inputs; `preconditions` contains
+  necessary string (including enum) and boolean equality/IN predicates from one
+  target-row write. Numeric, temporal and JSON fields are skipped; these hints
+  do not authorize execution.
 - `authorizations` is a separate View/Procedure lookup for the generated Admin
   handler to filter descriptors by the resolved Caller. These constants do not
   authorize a request; session/staff gates and execution checks remain required.

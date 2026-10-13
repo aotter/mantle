@@ -6,6 +6,7 @@ import {
   useInteraction,
   type InteractionController,
   type InteractionLabels,
+  type InteractionDiagnostic,
 } from "@aotter/mantle-ui";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, applyFieldEdits } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
@@ -48,6 +49,15 @@ const LABEL_KEYS: Record<keyof InteractionLabels, I18nKey> = {
 
 export function interactionLabels(language: AdminLanguage): InteractionLabels {
   return Object.fromEntries(Object.entries(LABEL_KEYS).map(([key, i18n]) => [key, t(language, i18n)])) as unknown as InteractionLabels;
+}
+
+export function OperationDiagnostic({ diagnostic, language, summary = true }: { diagnostic: InteractionDiagnostic; language: AdminLanguage; summary?: boolean }): React.ReactNode {
+  const key = diagnostic.code !== "CONFLICT" ? undefined
+    : diagnostic.message === "Expected one affected row." ? "ops.conditionConflict"
+    : diagnostic.message === "A unique constraint of the Schema was violated." ? "ops.uniqueConflict"
+    : undefined;
+  if (!key) return diagnostic.message;
+  return <>{summary ? <p>{t(language, key)}</p> : null}<details><summary>{t(language, "ops.details")}</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(diagnostic, null, 2)}</pre></details></>;
 }
 
 export { idempotencyFields, operationFormSchema } from "./interaction-schema";
@@ -190,7 +200,8 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
       controller={controller}
       title={title}
       description={description}
-      labels={interactionLabels(language)}
+      labels={{ ...interactionLabels(language), conflict: t(language, "ops.conditionConflict"), conflictReopen: t(language, "ops.conditionConflict") }}
+      renderDiagnostic={diagnostic => <OperationDiagnostic diagnostic={diagnostic} language={language} summary={state.phase !== "conflict" || diagnostic.message !== "Expected one affected row."} />}
       fieldLabel={fieldLabel}
       fieldValue={fieldValue}
       onClose={close}

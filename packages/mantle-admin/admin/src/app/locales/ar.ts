@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "التفاصيل",
+    "ops.conditionConflict": "تغيّر السجل أو لم يعد يستوفي شرط هذا الإجراء. حدّث الصفحة وحاول مجددًا.",
+  "ops.uniqueConflict": "يوجد بالفعل سجل بالقيمة الفريدة نفسها.",
+    "model.viewDataUnavailable": "البيانات المباشرة غير متاحة: هذا العرض داخلي أو حسابك غير مخوّل لتشغيله.",
     "admin.consoleTitle": "لوحة الإدارة",
     "developer.workspaceTitle": "التطوير",
     "auth.signIn.title": "تسجيل الدخول",

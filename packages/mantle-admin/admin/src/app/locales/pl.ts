@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Szczegóły",
+    "ops.conditionConflict": "Rekord zmienił się lub nie spełnia już warunku tej akcji. Odśwież i spróbuj ponownie.",
+  "ops.uniqueConflict": "Rekord z tą samą unikalną wartością już istnieje.",
+    "model.viewDataUnavailable": "Dane na żywo są niedostępne: ta View jest wewnętrzna lub Twoje konto nie może jej uruchomić.",
     "admin.consoleTitle": "Konsola administracyjna",
     "developer.workspaceTitle": "Programowanie",
     "auth.signIn.title": "Zaloguj się",

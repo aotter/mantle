@@ -60,6 +60,8 @@ export interface IdentityMethods {
 }
 export interface Options<Env, Database> {
     locale?: string;
+    /** Read-only developer preview bindings, including public Views. */
+    developerViews?: readonly View<Database>[];
     db: (env: Env) => Database;
     caller: (request: Request, env: Env) => Caller | Promise<Caller>;
     getUser?: (subject: string, request: Request, env: Env) => Promise<{
@@ -139,6 +141,14 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     const catalogue = { ...webmcp, tools: webmcp.tools?.map(tool => ({ ...tool, ...(tool.title ? { title: localized(tool.title) } : {}), description: localized(tool.description) ?? localized(tool.title) ?? tool.name })) };
     const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? sessionUserOf(caller); return { userId: caller.subject, role: caller.role, login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
     const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendStaffInvitation, mcpEndpoints: options.mcpEndpoints, extensions: options.extensions }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
+    const viewPage = async (c: Context<Env, Database>, preview = false) => {
+        const view = (preview ? options.developerViews ?? views : views).find(v => v.name === c.params.name && v.allows(c.caller));
+        if (!view) { if (preview) return { unavailable: true }; throw missing(); }
+        const { input: raw, ...paging } = view.query(c.url.searchParams), input = { ...raw };
+        convert(input, view.convert);
+        const page = await view.page(c.db, c.caller, input as never, paging);
+        return view.row ? { ...page, rows: page.rows.map(view.row) } : page;
+    };
     const routes: readonly Route<Env, Database>[] = [
         { method: "GET", path: "/me", run: me }, { method: "GET", path: "/site", run: site },
         { method: "GET", path: "/collections", run: () => ({ collections: metadata.collections, allCollections: metadata.allCollections ?? Object.fromEntries(metadata.collections.map(c => [c.name, c])) }) },
@@ -164,15 +174,8 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                     return view.row ? {...page, rows: page.rows.map(view.row)} : page;
                 }, columns);
             } },
-        { method: "GET", path: "/views/{name}", run: async (c) => {
-                const view = views.find(v => v.name === c.params.name && v.allows(c.caller));
-                if (!view)
-                    throw missing();
-                const { input: raw, ...paging } = view.query(c.url.searchParams), input = { ...raw };
-                convert(input, view.convert);
-                const page = await view.page(c.db, c.caller, input as never, paging);
-                return view.row ? { ...page, rows: page.rows.map(view.row) } : page;
-            } },
+        { method: "GET", path: "/views/{name}", run: c => viewPage(c) },
+        ...(metadata.developerConsole === undefined ? [] : [{ method: "GET" as const, path: "/developer/views/{name}", run: (c: Context<Env, Database>) => viewPage(c, true) }]),
         { method: "POST", path: "/operations/{name}", run: async (c) => {
                 const operation = operations.find(p => p.name === c.params.name && p.allows(c.caller));
                 if (!operation)

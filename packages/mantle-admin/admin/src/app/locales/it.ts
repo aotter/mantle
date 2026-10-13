@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Dettagli",
+    "ops.conditionConflict": "Il record è cambiato o non soddisfa più la condizione di questa azione. Aggiorna e riprova.",
+  "ops.uniqueConflict": "Esiste già un record con lo stesso valore univoco.",
+    "model.viewDataUnavailable": "Dati live non disponibili: questa View è interna o il tuo account non può eseguirla.",
     "admin.consoleTitle": "Console di amministrazione",
     "developer.workspaceTitle": "Sviluppo",
     "auth.signIn.title": "Accedi",

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
 import { api } from "../../lib/api";
-import { entryLandingPath, isPrimaryNavCollection } from "../../lib/collection-nav";
+import { entryLandingPath } from "../../lib/collection-nav";
 import { renderTitleText } from "../../lib/entry-title";
 import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../../lib/queries";
 import { renderDataValue } from "../../lib/render-data-value";
@@ -15,7 +15,15 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
 import { SchemaFields } from "../content/entry-edit-view";
 import { formatTimestampMs } from "../content/field-render";
-import { fetchView } from "../ops/view-page";
+export async function fetchViewPreview(name: string, params: Record<string, unknown>) {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== null && value !== "") qs.set(key, String(value));
+  return api.get<{ rows?: Array<Record<string, unknown>>; unavailable?: boolean; nextCursor?: string }>(`/developer/views/${encodeURIComponent(name)}?${qs}`);
+}
+
+export function previewCollection(collections: readonly Collection[], name: string): Collection | undefined {
+  return collections.find(item => item.name === name);
+}
 
 const PREVIEW_SIZE = 20;
 
@@ -32,7 +40,7 @@ export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): R
     queryKey: ["collections"],
     queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
   });
-  const collection = collections.data?.find((item) => item.name === model.name && isPrimaryNavCollection(item));
+  const collection = previewCollection(collections.data ?? [], model.name);
   const entries = useQuery({
     ...entriesQueryOptions({
       ...entriesQueryArgsFromSearch(model.name, ""),
@@ -103,11 +111,12 @@ export function ViewDataPreview({ model }: { model: DeveloperViewModel }): React
   const canRun = (schema?.required ?? []).every((name) => params[name] !== undefined && params[name] !== null && params[name] !== "");
   const query = useQuery({
     queryKey: ["developer-view-preview", model.name, submitted, run],
-    queryFn: () => fetchView(model.name, { ...submitted, limit: PREVIEW_SIZE }),
-    enabled: submitted !== null,
+    queryFn: () => fetchViewPreview(model.name, { ...submitted, limit: PREVIEW_SIZE }),
+    enabled: submitted !== null && model.surface !== "internal",
     retry: false,
     staleTime: 0,
   });
+  if (model.surface === "internal" || query.data?.unavailable) return <p className="p-5 text-sm text-muted-foreground">{t(language, "model.viewDataUnavailable")}</p>;
   const rows = query.data?.rows ?? [];
   const fields = [...new Set(rows.flatMap((row) => Object.keys(row)))];
   return (

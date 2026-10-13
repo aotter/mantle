@@ -35,6 +35,15 @@ Check actual member/Admin OTP, private scope/TTL/translation visibility, paging,
 statistics, safe/exact OCC and no automatic retry after unknown 503 outcomes.
 
 
+Place staff MCP Procedures in Admin deliberately: `spec.uiSchema.collectionAction:
+<schema-name>` adds a collection-header action; `spec.target: { schema, id,
+version? }` selects row actions and binds the row id / reviewed OCC version to
+the named inputs. Other staff operations appear under Operations in the sidebar.
+Keep state conditions in the SQL WHERE: simple AND equality/IN literals become
+row-menu hints, while the Procedure remains the authority. Required-ref child
+collections fold under their parent's sidebar group; use Schema
+`uiSchema.nav.standalone: true` for a top-level entry.
+
 ## Database changes
 
 The runtime never creates, alters or checks tables. Boot and requests run no DDL, introspection or schema checks.

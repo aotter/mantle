@@ -21,8 +21,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
@@ -72,6 +70,20 @@ export function rowValues(row: OperableRow): Record<string, unknown> {
   };
 }
 
+/** Missing preview fields cannot establish a mismatch; the server still checks every write. */
+export function operationMatchesRow(operation: StaffOperation, row: OperableRow): boolean {
+  const values = rowValues(row);
+  return (operation.preconditions ?? []).every(({ field, values: allowed }) =>
+    !Object.prototype.hasOwnProperty.call(values, field) || allowed.some(value => value === values[field]));
+}
+
+export function OperationResult({ output, language }: { output: unknown; language: AdminLanguage }): React.ReactElement {
+  return <details className="mt-2 min-w-0">
+    <summary className="cursor-pointer text-sm">{t(language, "ops.details")}</summary>
+    <pre className="mt-2 max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-xs" tabIndex={0}>{JSON.stringify(output ?? null, null, 2)}</pre>
+  </details>;
+}
+
 /** Row operation menu shared by lists and entry pages. */
 export function RowOperationsMenu({
   row,
@@ -97,10 +109,8 @@ export function RowOperationsMenu({
 }): React.ReactElement | null {
   const [activeOperation, setActiveOperation] = React.useState<StaffOperation | null>(null);
   if (operations.length === 0 && !editHref) return null;
-  const values = rowValues(row);
-  const matches = (op: StaffOperation) => !!op.requiredStates?.length && op.requiredStates.every(({ field, value }) => values[field] === value);
-  const relevant = operations.filter(matches);
-  const other = operations.filter((op) => !matches(op));
+  const available = operations.filter(op => operationMatchesRow(op, row));
+  if (!available.length && !editHref) return null;
 
   return (
     <>
@@ -127,10 +137,7 @@ export function RowOperationsMenu({
               </a>
             </DropdownMenuItem>
           ) : null}
-          {[relevant, other].map((group, index) => <React.Fragment key={index}>
-            {group.length && relevant.length ? <><DropdownMenuSeparator /><DropdownMenuLabel>{language.startsWith('zh') ? index === 0 ? '符合目前狀態（仍須驗證權限）' : '其他操作' : index === 0 ? 'Matching state (permission checks still apply)' : 'Other operations'}</DropdownMenuLabel></> : null}
-            {group.map((op) => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name)}</DropdownMenuItem>)}
-          </React.Fragment>)}
+          {available.map(op => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name)}</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
       {activeOperation ? (
@@ -255,14 +262,7 @@ export function OperationDialog({
         onClose={onClose}
         onDone={onSuccess}
         onSucceeded={() => toast.success(t(language, "ops.success", { name: title }))}
-        renderResult={(output) => (
-          <section aria-label={t(language, "ops.output")} className="mt-2 min-w-0 space-y-2">
-            <h3 className="text-sm font-semibold">{t(language, "ops.output")}</h3>
-            <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-xs" tabIndex={0}>
-              {JSON.stringify(output ?? null, null, 2)}
-            </pre>
-          </section>
-        )}
+        renderResult={output => <OperationResult output={output} language={language} />}
       />
     </React.Suspense>
   );
