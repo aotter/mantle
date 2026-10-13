@@ -48,6 +48,13 @@ Generated Store metadata initializes on its first use, once per module. Bind
 `store(db, caller, options?)` for the current request; never reuse one caller's
 bound Store for another caller.
 
+Use `paged/views/<encoded-name>.ts` for bounded cursor walks, including internal
+Views that satisfy the installed package's generation-time paging proofs.
+Call its default export with `(db, caller, input, { limit?, cursor? })`; it returns
+`{ rows, nextCursor? }`. Internal paging creates no public route/tool. Keep bare
+Views for authored-query row arrays, and inspect native EXPLAIN/source indexes
+when grouping: cursor paging does not eliminate aggregation work.
+
 For experimental generated applications, optional site settings/media are selected
 with `--site <module>` exporting `siteDefaults`. Apply the emitted deployment DDL;
 wire application-owned object storage as documented in `docs/next/media.md`.
