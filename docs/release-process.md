@@ -111,9 +111,6 @@ dist-tag DELETE only added failure and re-run state, and Actions
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
-   The plugin's Cloud helper, `skills/mantle/scripts/mantle-cloud.mjs`, is
-   plain source with no build; it ships with the plugin version above.
-
    Leave the consumer cold-start entry **untagged**: `npx skills add
    aotter/mantle`, `/plugin marketplace add aotter/mantle`,
    `codex plugin marketplace add aotter/mantle` and the plugin-manifest

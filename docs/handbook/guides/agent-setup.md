@@ -10,8 +10,8 @@ carries.
 
 ## 1. Install the `mantle` skill
 
-The Mantle plugin carries one skill, `mantle`, its helper script, and the
-Mantle Cloud MCP connection (`https://cloud.mantle.tools/mcp`).
+The Mantle plugin carries one OSS authoring skill, `mantle`, and local
+acceptance references. It does not configure a hosted-service connection.
 
 ```bash
 # Claude Code: two separate prompts
@@ -30,8 +30,7 @@ Without a plugin host, install the skill alone:
 npx skills add aotter/mantle
 ```
 
-A skill-only install has no Cloud MCP connection; add one by hand if you need
-it. Either way, read the path the installer prints (for project-local Codex,
+Read the path the installer prints (for project-local Codex,
 `.agents/skills/mantle/SKILL.md`). The skill installs no SDK, creates no
 project and copies no handbook.
 

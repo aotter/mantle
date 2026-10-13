@@ -1,12 +1,12 @@
 ---
 name: mantle
-description: Create a Mantle 0.2 service, continue an existing one, or save, preview and publish it on Mantle Cloud, using the installed @aotter/mantle package's own docs and this skill's Cloud helper script.
+description: Create or continue a Mantle application, test it locally and deploy to a user-owned host using the installed SDK docs.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/mantle/SKILL.md
   applies_to: mantle 0.2
   projection: plugin
-  projectionReason: The plugin's entry skill; it creates projects and carries the Cloud helper, so it is installed from the repository, not the npm package.
+  projectionReason: The plugin's authoring entry skill is installed from the repository; workflow documentation comes from the installed SDK package.
 ---
 
 # Mantle
@@ -102,10 +102,7 @@ indexes and Markdown alternates.
 
 1. Create a directory outside the SDK checkout with Node 22+ and
    `"type": "module"` in `package.json`.
-2. For a Mantle Cloud project, first connect Cloud MCP and select or create the
-   organization/project as described in [Cloud workflow](references/cloud.md).
-   Use the exact Core version returned by `cloud_host_contract`. Otherwise
-   choose the version: `npm view @aotter/mantle dist-tags`. Use a `0.2.x`
+2. Choose the SDK version: `npm view @aotter/mantle dist-tags`. Use a `0.2.x`
    version (while 0.2.0 is in prerelease it is on `alpha`; `latest` may still
    be 0.1.x). Install it exactly: `npm install --save-exact @aotter/mantle@<version>`
    (or the pnpm/yarn/bun equivalent). Install `@types/node` and `typescript`
@@ -138,7 +135,7 @@ indexes and Markdown alternates.
    `ADMIN_EMAIL` and a random `BETTER_AUTH_SECRET`, run `wrangler dev --local`
    (on Bun: `.env.example` to `.env`, then `bun src/index.ts`),
    sign in at `/admin/sign-in` with the one-time code printed to the log, and
-   check that the console loads and `GET /admin/api/me` is `owner`. Exercise the REST routes and `/mcp` `tools/list`. For custom handlers and websites, run the [local HTTP acceptance](references/cloud.md#local-http-acceptance-before-source-upload) before uploading source; compilation and packing do not execute handlers.
+   check that the console loads and `GET /admin/api/me` is `owner`. Exercise the REST routes and `/mcp` `tools/list`. For custom handlers and websites, run the [local HTTP acceptance](references/local-testing.md) before deployment; compilation and packing do not execute handlers.
 
 For a local cold start, do not push, deploy or configure providers. For a
 requested hosted app, continue with the selected hosting workflow.
@@ -146,50 +143,15 @@ requested hosted app, continue with the selected hosting workflow.
 ## Complete websites
 
 For a requested complete website, apply [website defaults](references/website.md)
-without asking the user to enumerate OTP, media, Admin or SEO. A Cloud frontend
-kit is authoritative about the selected runtime's capabilities. Defaults are
+without asking the user to enumerate OTP, media, Admin or SEO. Defaults are
 acceptance requirements, not evidence that a missing renderer is implemented.
 Do not report a complete website with blocked required checks.
 
-## Hosting and publishing
+## Self-hosted deployment
 
-Follow the user's requested host. A request for a complete hosted Mantle Cloud
-app includes saving, previewing and publishing it; continue through the terminal
-release result. A local-only or save-only request stops there. Creating a local
-project alone does not imply a deploy request. Self-hosting remains available.
-
-- **Generated native consumers:** use the generation/build flow above and the
-  installed host contract. A workspace preview is not an npm release. Native
-  Cloud source deployment needs the selected host's matching native workflow;
-  never package generated native queries as a historical protocol-6 RuntimePlan.
-- **Core Cloudflare Workers or ChatGPT Sites:** follow
-  `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` and that host's
-  native deployment workflow.
-- **Historical Core Mantle Cloud (through alpha.6):** follow
-  [version-pinned Cloud workflow](references/cloud.md). The bundled
-  `scripts/mantle-cloud.mjs` supports `check`, `prepare`, `source`, `open`, `pack backend`, `pack frontend` and `version`.
-  Cloud MCP owns source admission, review, durable deployment and rollback. After one accepted publication, read native status until terminal; do not advance each deployment step. Run the helper by absolute path from the application root;
-  follow the discovered Cloud MCP schemas and the workflow reference;
-  local pack output is not Cloud state. It uses the project's installed compiler and esbuild; it bundles
-  no Core, SQL parser, provider credentials or application runtime.
-
-For an offline readiness check:
-
-```bash
-node <this skill>/scripts/mantle-cloud.mjs check [--project <dir>] [--core <Cloud version>]
-```
-
-It reads only the project, compiles with its installed `@aotter/mantle/spec`,
-and prints `{ ok, coreVersion, fingerprint, sourceHash, planFile, cloud,
-nextAction? }`. `cloud: "not_checked"` is not a deployment result.
-`planFile: "stale"` means regenerate and commit `.mantle/generated/`;
-`core_mismatch` means install Cloud's exact version. Cloud serves D1 plans.
-
-The plugin configures `https://cloud.mantle.tools/mcp`. The same Cloud workflow
-works with a staging MCP connection; do not change production to staging behind
-the user's back. Never put tokens or grants in files, commands or chat. Pipe
-Cloud contracts or Git credentials to the helper over stdin. Existing OAuth/session and project
-edit/deploy rules still apply; Cloud membership never grants tenant staff access.
+Deploy only when the user requests it. Follow the application's selected host
+and the installed `docs/skills/provision/SKILL.md`; use the platform's native
+workflow. Local project creation alone is not deployment authorization.
 
 ## Existing project and handoff
 

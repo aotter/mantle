@@ -394,3 +394,9 @@ list manifest tools; its native media operations remain REST-backed.
 - **Decision 1:** the Store surface is `db` readers, `write`, `view`, `id` and `sweepExpired` (and `as` on `MantleStore`). `select` is removed; between PR A and PR B of #1432 it is `@deprecated` and works as before.
 - **Decision 7:** `HandlerContext` gains `db`, and `ctx.db === ctx.store.db`. `HandlerContext`, `HandlerFn` and `MantleHandlers` take a store type parameter (`HandlerContext<Env, S>`), so the generated `Handler` types `ctx.store` and `ctx.db` per plan while Core's untyped context stays assignable.
 - **Implementation status:** readers, the shape memo, `ctx.db` and the reader-name checks are implemented by #1432 PR A; the removal of `select` by PR B.
+
+- **2026-10-12, OSS plugin distribution boundary (#1466).** The public plugin
+  retains local authoring, installed-version documentation and self-hosted
+  deployment. Hosted-service MCP connections, packers and lifecycle instructions
+  are distributed separately; earlier Cloud-helper distribution text is historical.
+  Generic platform adapters and SDK contracts remain public.
