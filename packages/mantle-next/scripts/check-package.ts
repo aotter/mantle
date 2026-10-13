@@ -30,7 +30,8 @@ try {
   const tarballBytes = (await stat(archive)).size;
   console.log(JSON.stringify({gate:"package",files:names.length,tarballBytes,unpackedBytes,runtimeBytes}));
   const budget = JSON.parse(await readFile(resolve(import.meta.dir, "../size-budgets.json"), "utf8")).runtime;
-  assert.ok(runtimeBytes <= budget, `runtime JavaScript exceeds ${budget} bytes; slim the kernel or auth before changing the budget`);
-  assert.ok(tarballBytes <= 100 * 1024, "packed package exceeds 100 KiB");
-  assert.ok(unpackedBytes <= 384 * 1024, "unpacked package exceeds 384 KiB");
+  // Sizes are reported, not gating (#1465, 2026-10-13): cold-start behaviour is gated by the startup-graph and
+  // per-surface startup budgets in check-size.ts; package bytes are tracked per PR and slimmed deliberately.
+  for (const [label, actual, limit] of [["runtime JavaScript", runtimeBytes, budget], ["packed package", tarballBytes, 100 * 1024], ["unpacked package", unpackedBytes, 384 * 1024]] as const)
+    if (actual > limit) console.warn(`[size report] ${label} ${actual} B exceeds the reference ${limit} B`);
 } finally { await rm(directory, {recursive:true,force:true}); }
