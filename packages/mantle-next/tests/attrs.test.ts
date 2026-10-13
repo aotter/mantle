@@ -24,6 +24,14 @@ describe("caller attributes (ADR-0046)", () => {
     const db = new Database(":memory:"); db.exec(schema);
     expect(await verifyAttrs(app, db)).toBeGreaterThan(40);
   }, 60_000);
+  test("bun:sqlite plans the attribute predicate as an index search, not a scan", async () => {
+    const files = await generateOrThrow("bun-sqlite", await loadFixtureSources("attrs.yaml"));
+    const db = new Database(":memory:"); db.exec(files["schema.sql"]!);
+    const sql = /const view3Caller = \{ sql: ("[^"]+")/.exec(files["generated.ts"]!)![1]!;
+    const plan = db.query(`EXPLAIN QUERY PLAN ${JSON.parse(sql)}`).all('["TW"]').map((r: any) => r.detail).join(" | ");
+    expect(JSON.parse(sql)).toContain("json_each");
+    expect(plan).toMatch(/SEARCH orders USING INDEX \S+ \(region=\?\)/);
+  });
   test("cloudflare-d1 (bun:sqlite shim)", async () => {
     const { app, schema } = await generated("cloudflare-d1");
     const sqlite = new Database(":memory:"); sqlite.exec(schema);

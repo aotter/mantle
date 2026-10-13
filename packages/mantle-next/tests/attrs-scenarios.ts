@@ -1,8 +1,9 @@
 /**
  * ADR-0046 spike: caller attributes (`auth.attr`) and attribute scope on one real driver. Same scenarios on bun:sqlite, a D1 shim,
- * Bun.SQL and postgres.js (tests/attrs.test.ts); rows are told apart by title.
+ * Bun.SQL and postgres.js (tests/attrs.test.ts) and, through scripts/verify-attrs-native.ts, in local workerd on D1 and on postgres.js; rows are told apart by title.
+ * node:assert only, so it runs inside a Worker.
  */
-import { expect } from "bun:test";
+import assert from "node:assert/strict";
 import type { Caller } from "../src/kernel/contracts.js";
 
 const system: Caller = { kind: "system", reason: "attrs-seed" };
@@ -16,7 +17,8 @@ const code = async (run: () => Promise<unknown>) => run().then(() => "ok", (e: a
 
 export async function verifyAttrs(app: any, db: any): Promise<number> {
   let checks = 0;
-  const is = (actual: unknown, expected: unknown, label: string) => { try { expect(actual).toEqual(expected); } catch (e) { throw new Error(`${label}: ${(e as Error).message}`); } checks++; };
+  // plain JSON on purpose: postgres.js results are Array subclasses
+  const is = (actual: unknown, expected: unknown, label: string) => { assert.deepEqual(JSON.parse(JSON.stringify(actual ?? null)), expected, label); checks++; };
   const view = (name: string, caller: Caller) => app.views[name](db, caller, {}) as Promise<{ title: string }[]>;
   const store = (caller: Caller) => app.store(db, caller);
 

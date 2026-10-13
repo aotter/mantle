@@ -20,8 +20,8 @@ const values = (r: Attr, caller: Caller): readonly unknown[] | null => {
  */
 const literal = (list: readonly unknown[]) => `{${list.map(x => `"${String(x).replace(/[\\"]/g, "\\$&")}"`).join(",")}}`;
 const bind = (json: boolean) => (r: Attr, caller: Caller): unknown => {
-  const list = values(r, caller);
-  if (r.multiple) return list && (json ? JSON.stringify(list) : literal(list));
+  // SQLite: a missing set is '[null]', so a membership test is NULL (never FALSE) and `NOT (x IN set)` still matches nothing. PostgreSQL: `= ANY(NULL)` is NULL already
+  if (r.multiple) { const list = values(r, caller); return json ? JSON.stringify(list ?? [null]) : list && literal(list); }
   const v = caller.kind === "user" ? caller.attrs?.[r.name] : undefined;
   return typeof v === r.type ? v : null;
 };
@@ -29,5 +29,5 @@ const bind = (json: boolean) => (r: Attr, caller: Caller): unknown => {
 const scope = (r: Attr, caller: Caller, value: unknown, path: string): void => {
   if (!values(r, caller)?.includes(value)) throw new ContractError("AUTH_DENIED", `${path}: the value is outside the caller's '${r.name}' attribute`, path);
 };
-export const sqlite = { attr: bind(true), anyOf: (column: string, p: string) => `CASE WHEN ${p} IS NULL THEN NULL ELSE ${column} IN (SELECT value FROM json_each(${p})) END`, scope };
+export const sqlite = { attr: bind(true), anyOf: (column: string, p: string) => `${column} IN (SELECT value FROM json_each(${p}))`, scope };
 export const postgres = { attr: bind(false), anyOf: (column: string, p: string, type: "string" | "number") => `${column} = ANY(CAST(CAST(${p} AS text) AS ${type === "number" ? "float8" : "text"}[]))`, scope };

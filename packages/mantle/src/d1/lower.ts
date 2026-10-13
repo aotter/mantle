@@ -150,8 +150,8 @@ export const d1Lowering: PolicyLowering = {
   },
   cast: lowerCast,
   // ADR-0046: one array parameter, bound as JSON text; a NULL set matches nothing and is NULL, not FALSE
-  // SQLite's membership in an empty set is FALSE (not NULL), so `NOT (x IN set)` would match every row: a NULL set stays NULL
-  anyOf: (x, set) => sql('CASE WHEN __set IS NULL THEN NULL ELSE __x IN (SELECT value FROM json_each(__set)) END', { __x: x, __set: set }),
+  // the plain form keeps the column's index (a CASE around it scans). A missing set is bound as '[null]' (`attrs.ts`): membership in {NULL} is NULL, not FALSE, so `NOT (x IN set)` cannot match every row
+  anyOf: (x, set) => sql('__x IN (SELECT value FROM json_each(__set))', { __x: x, __set: set }),
   sublink(out) {
     if (out.subLinkType === 'ANY_SUBLINK') delete out.operName; // `x = ANY (subquery)` is `x IN (subquery)`; SQLite has no ANY
     return { SubLink: out };
