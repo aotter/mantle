@@ -200,9 +200,28 @@ describe("resolveCaller: session cookie", () => {
     expect(Date.parse(expiresAt)).toBeGreaterThan(Date.now() + 86_400_000);
   });
 
-  test("real SDK refresh cookies survive merged headers; a revoke between validation and primary check wins", async () => {
-    const app = await makeApp(), { cookie } = await app.signIn();
+  test("one primary result is the authority snapshot; a later revoke applies to the next request", async () => {
+    const app = await makeApp(), { cookie, userId } = await app.signIn();
+    let revoked = false;
+    const instance: AuthInstance = { options: app.auth.options, $context: app.auth.$context, api: { getSession: async input => {
+      const result = await app.auth.api.getSession(input);
+      if (!revoked) { app.sqlite.run("DELETE FROM session"); revoked = true; }
+      return result;
+    } } };
+    const loader = authLoader(async () => instance);
+    app.statements.length = 0;
+    expect(await resolveCaller(app.request({ cookie }), loader)).toMatchObject({ kind: "user", subject: userId });
+    expect(app.statements.filter(text => /^\s*(SELECT|WITH)\b/i.test(text))).toHaveLength(1);
+    expect(await resolveCaller(app.request({ cookie }), loader)).toEqual({ kind: "anonymous" });
+  });
+
+  test("real SDK refresh cookies survive merged headers; revocation wins over the secondary snapshot", async () => {
+    const app = await makeApp({ sessionCache: true }), { cookie } = await app.signIn();
     app.sqlite.run("UPDATE session SET expiresAt = ?", [new Date(Date.now() + 60_000).toISOString()]);
+    for (const [key, text] of app.cache) {
+      const value = JSON.parse(text);
+      if (value.session) { value.session.expiresAt = new Date(Date.now() + 60_000).toISOString(); app.cache.set(key, JSON.stringify(value)); }
+    }
     let revoked = false;
     const instance: AuthInstance = { options: app.auth.options, $context: app.auth.$context, api: { getSession: async input => {
       const result = await app.auth.api.getSession(input);
