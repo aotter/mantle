@@ -5,7 +5,6 @@ import { SqlRefusal as Refused, type SqlNode as N } from "../spec/domain/index.j
 import { S, num } from "../core/sql/ast.js";
 import type { LoweringScope, PolicyLowering } from "../core/sql/policy.js";
 import { encodeDate, encodeNumeric, encodeTimestamptz, decodeDate, decodeNumeric, decodeTimestamptz } from "../d1/codec.js";
-import { bindBox } from "../d1/lower.js";
 import { parseNumeric } from "../spec/domain/index.js";
 import { pgType } from "./codec.js";
 import type { RawExpr } from "./print.js";

@@ -11,7 +11,7 @@ import { adminIndexes } from "../domain/adminOrder.js";
 import { publishingSql } from "../usecase/publishing.js";
 import { searchDiagnostics } from "../usecase/search.js";
 import { generate } from "../usecase/generate.js";
-import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/model.js";
+import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/generation.js";
 import { generatedFiles } from "../domain/entry.js";
 
 /** Core's own new-entry-id lowering for a dialect, printed once as an SQL expression: the Store's inserts carry the same one its compiled INSERTs do. */

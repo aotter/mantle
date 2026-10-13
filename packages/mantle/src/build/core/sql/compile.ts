@@ -2,31 +2,13 @@
  * IR -> physical statements: validate (the runtime never trusts an IR), inject policy, resolve binds.
  * Everything a Store does per statement before the executor runs it (ADR-0034 decisions 3 and 8).
  */
-import { PG_GRAMMAR, type JsonSchema, type SchemaColumns, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
+import { PG_GRAMMAR, type SchemaColumns, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
 import { runtimeDiagnostic, DiagnosticError } from "../../spec/kernel/index.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
 import { applyPolicy, type BindSpec, type Compiled, type Mode, type PolicyOpts } from "./policy.js";
 import type { RelationPosition } from "./positions.js";
 
 export type { Compiled, Mode } from "./policy.js";
-
-/** Who and when a statement runs for; `input` is the Procedure or View input. */
-export interface BindContext {
-  /** The caller's subject; null for an anonymous caller, who matches no scoped row. */
-  readonly uid: string | null;
-  readonly now: number;
-  readonly role?: string | null;
-  readonly input?: Readonly<Record<string, unknown>>;
-}
-
-/**
- * The input as a statement binds it. SQL folds an unquoted `input.itemId` to `itemid`, so the statement names the folded name. Only
- * declared properties are keyed: a key the caller added that folds the same (`ITEMID`) skipped the schema's checks and is never read.
- */
-export function sqlInput(schema: JsonSchema | undefined, input: unknown): Record<string, unknown> {
-  const given = (input ?? {}) as Record<string, unknown>;
-  return Object.fromEntries(Object.keys(schema?.properties ?? {}).map((name) => [name.toLowerCase(), Object.hasOwn(given, name) ? given[name] : undefined]));
-}
 
 export interface CompileContext {
   readonly dialect: MantleDialect;
@@ -62,24 +44,5 @@ export function compileProgram(stmts: readonly SqlNode[], ctx: CompileContext): 
     if (c.kind === "set" && c.schema && ctx.schemas[c.schema]?.publishing)
       throw new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `SQL_SHAPE: a set op on ${c.schema} is refused: its lifecycle is publishing, so published entries are protected and writes take row ops only` }));
     return c;
-  });
-}
-
-/** Resolve a statement's numbered binds. `version` and `cursor` values come from the caller of this function. */
-export function bindValues(dialect: MantleDialect, binds: readonly BindSpec[], ctx: BindContext, extra: { version?: unknown; cursor?: readonly unknown[] } = {}): unknown[] {
-  const input = ctx.input ?? {};
-  return binds.map((b) => {
-    switch (b.k) {
-      case "uid": return ctx.uid;
-      // an instant is bound as the dialect stores one (microseconds on D1, an ISO string on PostgreSQL)
-      case "now": return dialect.codec.encode("timestamptz", ctx.now);
-      case "cutoff": return dialect.codec.encode("timestamptz", ctx.now - b.seconds * 1_000_000);
-      case "const": return b.value;
-      case "role": return ctx.role ?? null;
-      case "input": return dialect.codec.encode(b.type, input[b.name]);
-      case "version": return extra.version;
-      case "cursor": return extra.cursor![b.i];
-      case "dialect": return dialect.bind(b, ctx);
-    }
   });
 }

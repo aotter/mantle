@@ -551,7 +551,6 @@ export const RESERVED_ENTRY_COLUMNS = [
   "updatedAt",
   "authorId",
 ] as const;
-export type ReservedEntryColumn = (typeof RESERVED_ENTRY_COLUMNS)[number];
 
 /**
  * Reserved Procedure input wire names. `expectedVersion` is the observed
@@ -562,4 +561,3 @@ export type ReservedEntryColumn = (typeof RESERVED_ENTRY_COLUMNS)[number];
  */
 export const EXPECTED_VERSION_PROPERTY = "expectedVersion" as const;
 export const RESERVED_PROCEDURE_INPUT_NAMES = [EXPECTED_VERSION_PROPERTY] as const;
-export type ReservedProcedureInputName = (typeof RESERVED_PROCEDURE_INPUT_NAMES)[number];

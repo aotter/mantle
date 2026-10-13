@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { firstZodIssueAsJsonPointer, jsonSchemaToZod } from "../../src/build/spec/domain/service/JsonSchemaToZod.js";
+import { jsonSchemaToZod } from "../../src/build/spec/domain/service/JsonSchemaToZod.js";
 
 // JSON Schema semantics are Zod's (`z.fromJSONSchema`); only what Mantle adds on top is tested here.
 
@@ -26,9 +26,4 @@ it("refuses a value past the depth limit or with a cycle before Zod walks it", (
   cyclic["self"] = cyclic;
   expect(jsonSchemaToZod({}).safeParse(cyclic).success).toBe(false);
   expect(jsonSchemaToZod({}).safeParse([[[1]]]).success).toBe(true);
-});
-
-it("an issue path is an RFC 6901 pointer", () => {
-  const r = jsonSchemaToZod({ type: "object", properties: { "a/b~c": { type: "array", items: { type: "number" } } } }).safeParse({ "a/b~c": [1, "x"] });
-  expect(firstZodIssueAsJsonPointer(r.error!).instancePath).toBe("/a~1b~0c/1");
 });

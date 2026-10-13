@@ -4,7 +4,6 @@
  * behavior. No external imports beyond the spec's own kernel.
  */
 export * from "./ManifestGrammar.js";
-export * from "./ContentState.js";
 export * from "./SiteConfig.js";
 export * from "./MediaMimeAccept.js";
 export * from "./Locale.js";

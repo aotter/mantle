@@ -1,4 +1,3 @@
-import { checkSiteLocales } from "../../src/build/spec/domain/service/CrossSchemaChecker.js";
 import {
   linkManifestSet,
   parseManifestSources,
@@ -38,7 +37,6 @@ export function parseManifests(input: string | readonly string[]): TestParseResu
 
 export function validateManifests(request: {
   readonly manifests: readonly Manifest[];
-  readonly siteLocales?: readonly string[];
 }): {readonly diagnostics:readonly Diagnostic[];readonly errorCount:number;readonly warningCount:number;readonly linked?:LinkedManifestSet} {
   const parsed = parseManifestSources({
     sources: request.manifests.map((manifest, index) => ({
@@ -57,7 +55,7 @@ export function validateManifests(request: {
     };
   }
   const linked = linkManifestSet(parsed.value);
-  const diagnostics = [...linked.diagnostics, ...(linked.ok && request.siteLocales !== undefined ? checkSiteLocales({schemas:linked.value.schemas.map(entry=>entry.manifest),phase:"validate",siteLocales:request.siteLocales}) : [])];
+  const diagnostics = linked.diagnostics;
   const errorCount = diagnostics.filter(diagnostic=>diagnostic.severity==="error").length;
   return {diagnostics,errorCount,warningCount:diagnostics.length-errorCount,...(linked.ok?{linked:linked.value}:{})};
 }

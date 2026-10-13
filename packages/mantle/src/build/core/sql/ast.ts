@@ -8,8 +8,6 @@ export const op = (o: string, l: N, r: N): N => ({ A_Expr: { kind: "AEXPR_OP", n
 /** Integers past int32 must be `fval` in libpg-query's shape; 0 must keep its `ival` key. */
 export const num = (n: number): N => (Number.isSafeInteger(n) && Math.abs(n) < 2 ** 31 ? { A_Const: { ival: { ival: n } } } : { A_Const: { fval: { fval: String(n) } } });
 export const target = (val: N, name?: string): N => ({ ResTarget: name ? { name, val } : { val } });
-/** A relation as the CLI tags it: a Schema `table`, or `system` for Core's own (never reachable from author IR). */
-export const table = (relname: string, mantle: "table" | "system" = "table"): N => ({ relname, inh: true, relpersistence: "p", mantle });
 
 /** Nodes that print as one unit on both engines; anything else is an expression a printer must parenthesize as an operand. */
 const ATOMIC = new Set(["ColumnRef", "A_Const", "ParamRef", "FuncCall", "TypeCast", "CaseExpr", "CoalesceExpr", "MinMaxExpr", "RowExpr", "Raw"]);

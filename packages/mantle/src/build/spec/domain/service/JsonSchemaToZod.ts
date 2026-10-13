@@ -18,19 +18,6 @@ export function jsonSchemaToZod(schema: JsonSchema): ZodType {
 }
 
 /**
- * `schema.safeParse(value)`, where anything the validator throws other than a Zod issue (a stack overflow on a schema nobody
- * checked) is a failed parse: a value the schema cannot check is not accepted, and the caller reports it as it reports any.
- */
-export function safeParseJson<T extends ZodType>(schema: T, value: unknown): ReturnType<T["safeParse"]> {
-  try {
-    return schema.safeParse(value) as ReturnType<T["safeParse"]>;
-  } catch (error) {
-    const message = `the schema cannot check this value: ${error instanceof Error ? error.message : String(error)}`;
-    return { success: false, error: new z.ZodError([{ code: "custom", path: [], message, input: value }]) } as ReturnType<T["safeParse"]>;
-  }
-}
-
-/**
  * Zod checks a string's `maxLength` before its `pattern` but runs the pattern even when the length failed. The CLI bounds a
  * pattern's backtracking only up to the declared maxLength (branches × maxLength^e), so a longer string must stop at the length check:
  * every string schema's maxLength check aborts the checks after it.
@@ -126,32 +113,4 @@ function jsonValueWithinLimits(): ZodType {
       }
     }
   });
-}
-
-/**
- * Convert a zod issue path (`PropertyKey[]`) to an RFC 6901 JSON
- * Pointer string. Empty path → `""`; `["foo", 0, "bar"]` → `"/foo/0/bar"`;
- * field names containing `/` or `~` are escaped per the spec
- * (`~` → `~0`, `/` → `~1`).
- */
-export function zodPathToJsonPointer(path: ReadonlyArray<PropertyKey>): string {
-  if (path.length === 0) return "";
-  return (
-    "/" +
-    path
-      .map((seg) => String(seg).replace(/~/g, "~0").replace(/\//g, "~1"))
-      .join("/")
-  );
-}
-
-/**
- * Translate a zod `safeParse` failure to the (instancePath, message)
- * shape the dispatcher's diagnostic emitter expects.
- */
-export function firstZodIssueAsJsonPointer(
-  err: z.ZodError,
-): { instancePath: string; message: string } {
-  const issue = err.issues[0];
-  if (!issue) return { instancePath: "", message: "validation failed" };
-  return { instancePath: zodPathToJsonPointer(issue.path), message: issue.message };
 }

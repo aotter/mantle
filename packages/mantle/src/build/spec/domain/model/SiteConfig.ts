@@ -1,63 +1,4 @@
-/**
- * Site-level declarative contract — sibling to the manifest grammar,
- * not part of it.
- *
- * The 4-atom manifest grammar (Schema/View/Procedure/Trigger) describes
- * content types. `SiteConfig` describes deployment metadata: locales the
- * site publishes in, brand label, the operator-visible title and
- * description, the canonical absolute origin used for canonical URLs.
- *
- * Lives in `mantle-spec` (not `-runtime`) because the spec validator
- * checks declared `siteDefaults.locales` are canonical BCP 47 at boot
- * (see `domain/service/SiteDefaultsValidator`). The runtime operations
- * that read/write `site_config` rows from the DB live in
- * `mantle-runtime` — they go through the `DatabaseDriver`.
- *
- * Future v0.1.x: optional standalone `site.yaml` parsed via a
- * `kind: SiteConfig` envelope sibling to the 4-atom manifest grammar.
- * Today the consumer declares `siteDefaults` in `src/mantle/config.ts` as a
- * TS object; either path conforms to this type.
- */
-export interface SiteConfig {
-  /** Site title — `<title>` suffix and og:site_name. */
-  readonly title: string;
-  /** Default `<meta name="description">` when an entry has none. */
-  readonly description: string;
-  /** Canonical absolute origin (no trailing slash), e.g. `https://my-blog.com`. */
-  readonly origin: string;
-  /** All locales the site publishes in. Empty = locale subsystem off
-   *  site-wide (ADR-0010). Drives `<link rel="alternate" hreflang>`
-   *  emission only when non-empty. */
-  readonly locales: readonly string[];
-  /** Canonical locale (`locales[0]`) or `null` when locales is empty.
-   *  Templates emit `<html lang="">` only when this is non-null —
-   *  silent omission is correct for zero-locale sites, not a fake
-   *  default. */
-  readonly canonicalLocale: string | null;
-  /** Operator-facing brand label — admin chrome (sidebar header,
-   *  sign-in card). Distinct from `title` so single-tenant operators
-   *  can ship one and agencies can override the other. */
-  readonly brand: string;
-  /** One site identity shared by browser favicons, Admin chrome, and
-   *  MCP `serverInfo.icons`. Always contains at least the SDK default. */
-  readonly icons: readonly SiteIcon[];
-  /** Starter-declared media taxonomy. Empty array = no first-party
-   *  media uploads permitted; the runtime disables the
-   *  `create_media_upload` / `commit_media_upload` MCP tools and the
-   *  admin upload lifecycle on deployments that don't declare any
-   *  purpose, symmetric with "no `MediaStorage` configured". When
-   *  non-empty, `create_media_upload` rejects any `purpose` not in
-   *  this set with `MEDIA_PURPOSE_REJECTED`. */
-  readonly media: SiteMediaConfig;
-}
 
-/** Runtime read shape for the `media` section of `SiteConfig`. Always
- *  present after seed; `purposes` may be empty when the consumer
- *  didn't declare any. Each purpose carries the required mime set the
- *  Worker enforces and the per-mime byte cap the uploader is held to. */
-export interface SiteMediaConfig {
-  readonly purposes: readonly MediaPurposePolicy[];
-}
 
 /**
  * Per-purpose policy. `name` is the slug consumers reference from
@@ -166,11 +107,6 @@ export interface SiteIcon {
   readonly sizes?: ReadonlyArray<string>;
   readonly theme?: "light" | "dark";
 }
-
-export const DEFAULT_SITE_ICONS: readonly SiteIcon[] = [
-  { src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] },
-  { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
-];
 
 /** Slug regex for `media.purposes[].name`. Matches a lowercase
  *  alphanumeric word, optionally followed by dash-separated
