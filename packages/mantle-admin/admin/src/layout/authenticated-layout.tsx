@@ -146,7 +146,7 @@ export function AuthenticatedLayout({
         <AppSidebar
           brand={resolvedBrand}
           groups={groups}
-          pathname={pathname}
+          pathname={pathname === "/admin/dev" ? "/admin/dev/overview/flow" : pathname /* the workspace entry is the overview flow */}
           search={search}
           user={{
             login: me.data?.login ?? null,

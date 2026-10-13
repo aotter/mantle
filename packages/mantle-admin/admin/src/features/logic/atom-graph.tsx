@@ -42,7 +42,6 @@ import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, Drop
 import { PageHeaderActions } from "../../layout/page-header-actions";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 
-import { businessRules } from "./business-rules";
 import { businessOverview, BusinessStepNode } from "./business-overview";
 import { ProcedureLogicPreview } from "./procedure-logic-preview";
 
@@ -161,7 +160,7 @@ export function AtomGraph({
   onOpen: (atom: DeveloperAtom) => void;
 }): React.ReactElement {
   const { language, theme } = usePreferences();
-  const business = diagramMode === "business" || (diagramMode !== "system" && graph.atoms.some((a) => businessRules(a, schemas, language).some((r) => r.transitions?.length)));
+  const business = diagramMode === "business"; // system wiring is the default view
   const [showDetails, setShowDetails] = React.useState(Boolean(selectedAtomId));
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const hudRef = React.useRef<HTMLDivElement>(null);
