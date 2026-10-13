@@ -35,7 +35,7 @@ function castInputs(statement: LoweredStatement, path: string, refusals: Generat
   Object.assign(statement, { sql });
 }
 
-export interface GenerateRequest { readonly target: Target; readonly admin?: boolean; readonly sources: ManifestSourceSet; /** Select the optional generated site/media capability and deployment tables. */ readonly site?: import("../build/compiler.js").SiteDefaults; readonly adminExtensions?: readonly Pick<AdminExtension,"id"|"contributes">[] }
+export interface GenerateRequest { readonly target: Target; readonly admin?: boolean; readonly sources: ManifestSourceSet; /** Select the optional generated site/media capability and deployment tables. */ readonly site?: import("../build/compiler.js").SiteDefaults; readonly adminExtensions?: readonly AdminExtension[] }
 
 export async function generateFromSources(request: GenerateRequest, schema?: () => readonly string[]): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");

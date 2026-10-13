@@ -1,4 +1,7 @@
 import type { EntryEditorPayload } from "./types";
+import { isAdminPreview } from "../app/frame-policy";
+
+export { csvCell } from "../../../src/csv";
 
 const BASE = "/admin/api";
 
@@ -69,48 +72,20 @@ export const api = {
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: "DELETE" }),
 };
 
-/** RFC 4180 cells; strings that spreadsheets execute are treated as text. */
-export function csvCell(value: unknown, quote = false): string {
-  const text = value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
-  const safe = typeof value === "string" && /^[\s\u0000-\u001f]*[=+@-]|^[\t\r]/u.test(text) ? `'${text}` : text;
-  return quote || /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-}
-
-/** Client exports read ordinary authorized pages; a failed page creates no partial download. */
-export async function downloadAdminFile(path: string, declaredColumns?: readonly string[]): Promise<void> {
+/** Native browser downloads consume the authorized server stream without buffering a Blob; the preview has no live origin, so it fetches through its bridge. */
+export async function downloadAdminFile(path: string): Promise<void> {
   const url = new URL(path, window.location.href);
   const entry = url.pathname === `${BASE}/entries/export`;
   const view = url.pathname.match(/^\/admin\/api\/views\/([^/]+)\/export$/);
   if (url.origin !== window.location.origin || (!entry && !view)) throw new TypeError("Expected an Admin download URL.");
-  if (entry && !declaredColumns) throw new TypeError("Entry export columns must come from collection metadata.");
-  const query = new URLSearchParams(url.search);
-  query.delete("cursor");
-  query.delete("cursor_direction");
-  query.set("limit", "500");
-  const endpoint = entry ? "/entries" : `/views/${view![1]}`;
-  const chunks: string[] = [];
-  const seen = new Set<string>();
-  let columns = declaredColumns;
-  for (;;) {
-    const page = await api.get<{ items?: { data: Record<string, unknown>; id: string; status: string | null; version: number | string; updated_at: number }[]; rows?: Record<string, unknown>[]; next_cursor?: string | null; nextCursor?: string }>(`${endpoint}?${query}`);
-    const rows: Record<string, unknown>[] = entry ? page.items!.map(({ data, id, status, version, updated_at }) => ({ ...data, id, status, version, updated_at })) : page.rows!;
-    if (!columns) columns = [...new Set(rows.flatMap(row => Object.keys(row)))];
-    if (!chunks.length) chunks.push("\uFEFF" + columns.map(column => csvCell(column)).join(",") + "\r\n");
-    chunks.push(rows.map(row => columns!.map(column => csvCell(row[column])).join(",") + "\r\n").join(""));
-    const cursor = entry ? page.next_cursor : page.nextCursor;
-    if (!cursor) break;
-    if (seen.has(cursor)) throw new Error("Export paging did not advance.");
-    seen.add(cursor);
-    query.set("cursor", cursor);
-  }
-  const objectUrl = URL.createObjectURL(new Blob(chunks, { type: "text/csv;charset=utf-8" }));
+  url.searchParams.delete("cursor"); url.searchParams.delete("cursor_direction");
   const link = document.createElement("a");
-  link.href = objectUrl;
-  link.download = `${entry ? query.get("collection") : decodeURIComponent(view![1]!)}.csv`;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+  const response = isAdminPreview() ? await fetch(url) : null;
+  if (response && !response.ok) throw new ApiError(`Export failed (${response.status}).`, response.status, null);
+  link.href = response ? URL.createObjectURL(await response.blob()) : url.href;
+  link.download = `${entry ? url.searchParams.get("collection") : decodeURIComponent(view![1]!)}.csv`;
+  document.body.append(link); link.click(); link.remove();
+  if (response) setTimeout(() => URL.revokeObjectURL(link.href), 1_000);
 }
 
 function jsonInit(method: string, body: unknown): RequestInit {

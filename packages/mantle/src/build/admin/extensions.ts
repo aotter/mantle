@@ -65,7 +65,15 @@ export interface AdminExtensionContributions {
   readonly fields?: readonly AdminExtensionField[];
 }
 
-export interface AdminExtension { readonly id: string; readonly contributes: AdminExtensionContributions }
+export interface AdminExtension {
+  readonly apiVersion?: 1;
+  readonly id: string;
+  readonly title?: LocalizedText;
+  readonly module?: string;
+  readonly integrity?: string;
+  readonly source?: unknown;
+  readonly contributes: AdminExtensionContributions;
+}
 const invalid = (code: "UI_EXTENSION_INVALID" | "UI_EXTENSION_UNKNOWN" | "UI_EXTENSION_TARGET" | "UI_EXTENSION_OPTIONS", path: string, message: string, value?: unknown) =>
   new DiagnosticError(makeDiagnostic({ code, phase: "boot", severity: "error", path, message, ...(value === undefined ? {} : { value }) }));
 

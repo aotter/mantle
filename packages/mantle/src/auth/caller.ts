@@ -6,7 +6,10 @@
 import type { BetterAuthOptions } from "better-auth/types";
 import { ContractError, type Caller } from "../kernel/contracts.js";
 
-type User = { id: string; role?: string | null; banned?: boolean | null; banExpires?: Date | string | number | null };
+type User = { name?: string | null; email?: string | null; image?: string | null; githubLogin?: string | null; id: string; role?: string | null; banned?: boolean | null; banExpires?: Date | string | number | null };
+const sessionUsers = new WeakMap<Caller, User>();
+/** Display identity from the session this Caller already resolved; never an authority source. */
+export const sessionUserOf = (caller: Caller): Readonly<User> | undefined => sessionUsers.get(caller);
 /** The admin plugin's ban, lapsed once `banExpires` has passed (as the plugin reads it at sign-in). */
 const isBanned = (user: User) => !!user.banned && (user.banExpires == null || new Date(user.banExpires).getTime() > Date.now());
 /** The application's `betterAuth()` instance, as far as Caller resolution reads it. */
@@ -113,5 +116,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (!refreshed.response || refreshed.response.session.id !== found.session.id || refreshed.response.user.id !== user.id) return { kind: "anonymous" };
     for (const cookie of refreshed.headers?.getSetCookie().flatMap(splitSetCookieHeader) ?? []) options.responseHeaders.append("set-cookie", cookie);
   }
-  return { kind: "user", subject: user.id, role: user.role ?? null, scopes: [], credential: "session", credentialId: found.session.id, clientId: null };
+  const caller: Caller = { kind: "user", subject: user.id, role: user.role ?? null, scopes: [], credential: "session", credentialId: found.session.id, clientId: null };
+  sessionUsers.set(caller, user);
+  return caller;
 }

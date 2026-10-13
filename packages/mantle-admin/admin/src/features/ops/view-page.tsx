@@ -69,7 +69,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   const { language } = usePreferences();
   const { navigate } = useAdminRouter();
   const location = useAdminLocation();
-  const exportFile = useMutation({ mutationFn: (path: string) => downloadAdminFile(path, view?.list?.columns?.length ? view.list.columns : undefined) });
+  const exportFile = useMutation({ mutationFn: (path: string) => downloadAdminFile(path) });
   const urlParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
   const collectionsQuery = useQuery<Collection[]>({

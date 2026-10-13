@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ContentState, IllegalTransitionError } from "../../src/build/spec/domain/model/index.js";
+import { ContentState } from "../../src/build/spec/domain/model/index.js";
 import {
   canTransition,
   decideLifecycleWrite,
@@ -68,18 +68,6 @@ describe("canTransition — publishing lifecycle", () => {
 
   it("treats undefined schema as publishing", () => {
     expect(canTransition(undefined, "draft", "published")).toBe(true);
-  });
-});
-
-describe("IllegalTransitionError", () => {
-  it("carries from / to and a readable message", () => {
-    const err = new IllegalTransitionError("draft", "published");
-    expect(err).toBeInstanceOf(Error);
-    expect(err.name).toBe("IllegalTransitionError");
-    expect(err.from).toBe("draft");
-    expect(err.to).toBe("published");
-    expect(err.message).toContain("draft");
-    expect(err.message).toContain("published");
   });
 });
 

@@ -3,43 +3,20 @@ import { api, downloadAdminFile, csvCell } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
-test("client CSV retains filters, formula safety and cursor pages without a server export route", async () => {
-  const urls: string[] = [];
-  const click = vi.fn(), remove = vi.fn();
-  const link = { href: "", download: "", click, remove };
-  vi.stubGlobal("window", { location: { href: "https://site.test/admin", origin: "https://site.test" } });
-  vi.stubGlobal("document", { createElement: () => link, body: { append: vi.fn() } });
-  const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:export");
-  vi.stubGlobal("fetch", async (url: string) => {
-    urls.push(url);
-    return Response.json({ items: [{ id: String(urls.length), status: null, version: 1, updated_at: 1, data: { name: urls.length === 1 ? "=formula" : "Ada, \"Lovelace\"" } }], next_cursor: urls.length === 1 ? "opaque:next" : null });
-  });
-  try {
-    await downloadAdminFile("/admin/api/entries/export?collection=items&status=draft&cursor=old", ["id", "name"]);
-    expect(urls).toEqual(["/admin/api/entries?collection=items&status=draft&limit=500", "/admin/api/entries?collection=items&status=draft&limit=500&cursor=opaque%3Anext"]);
-    const blob = create.mock.calls[0]![0] as Blob;
-    expect([...new Uint8Array(await blob.arrayBuffer()).slice(0, 3)]).toEqual([239, 187, 191]);
-    expect(await blob.text()).toBe("id,name\r\n1,'=formula\r\n2,\"Ada, \"\"Lovelace\"\"\"\r\n");
-    expect(click).toHaveBeenCalledOnce();
-    expect(link.download).toBe("items.csv");
-    expect(remove).toHaveBeenCalledOnce();
-  } finally { create.mockRestore(); }
-});
-
-test("failed later pages and foreign exports produce no partial file", async () => {
-  vi.stubGlobal("window", { location: { href: "https://site.test/admin", origin: "https://site.test" } });
-  const create = vi.spyOn(URL, "createObjectURL");
-  const fetch = vi.fn().mockResolvedValueOnce(Response.json({ rows: [{ name: "Ada" }], nextCursor: "second" })).mockResolvedValueOnce(Response.json({error:{code:"FORBIDDEN",message:"Denied"}},{status:403}));
+test("download delegates streaming to the browser and retains filters", async () => {
+  const link = {href:"",download:"",click:vi.fn(),remove:vi.fn()};
+  const fetch=vi.fn();
+  vi.stubGlobal("window",{location:{href:"https://site.test/admin",origin:"https://site.test"}});
+  vi.stubGlobal("document",{createElement:()=>link,body:{append:vi.fn()},querySelector:()=>null});
   vi.stubGlobal("fetch",fetch);
-  try {
-    await expect(downloadAdminFile("/admin/api/views/people/export")).rejects.toMatchObject({status:403});
-    expect(create).not.toHaveBeenCalled();
-    await expect(downloadAdminFile("https://other.test/admin/api/views/people/export")).rejects.toThrow("Admin download URL");
-    await expect(downloadAdminFile("/oauth/consents/revoke")).rejects.toThrow("Admin download URL");
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(csvCell(" \t@formula")).toBe("' \t@formula");
-    expect(csvCell(-3)).toBe("-3");
-  } finally { create.mockRestore(); }
+  await downloadAdminFile("/admin/api/entries/export?collection=items&status=draft&cursor=old");
+  expect(link.href).toBe("https://site.test/admin/api/entries/export?collection=items&status=draft");
+  expect(link.download).toBe("items.csv");
+  expect(link.click).toHaveBeenCalledOnce(); expect(link.remove).toHaveBeenCalledOnce();
+  expect(fetch).not.toHaveBeenCalled();
+  await expect(downloadAdminFile("https://other.test/admin/api/views/people/export")).rejects.toThrow("Admin download URL");
+  await expect(downloadAdminFile("/oauth/consents/revoke")).rejects.toThrow("Admin download URL");
+  expect(csvCell(" \t@formula")).toBe("' \t@formula"); expect(csvCell(-3)).toBe("-3");
 });
 
 test("entry refusals read authority once, preserve the draft and never retry the write", async () => {

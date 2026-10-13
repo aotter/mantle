@@ -1,8 +1,11 @@
 /** Optional Admin API: generated data and native calls, with one fresh staff session per request. */
 import { ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller } from "@aotter/mantle/contracts";
 import { nativeRest, body, type Route as RestRoute } from "@aotter/mantle/rest";
+import { sessionUserOf } from "@aotter/mantle/auth";
+import { callToolLazy as callTool } from "@aotter/mantle/mcp";
 import { convert, type Conversions } from "@aotter/mantle/surface";
 import { siteInfo, type MantleSite, type MediaStorage } from "@aotter/mantle/site";
+import { csv } from "./csv.js";
 export type Staff = Extract<Caller, {
     kind: "user";
 }> & {
@@ -56,6 +59,7 @@ export interface IdentityMethods {
     revokeInvite(id: string): Promise<boolean>;
 }
 export interface Options<Env, Database> {
+    locale?: string;
     db: (env: Env) => Database;
     caller: (request: Request, env: Env) => Caller | Promise<Caller>;
     getUser?: (subject: string, request: Request, env: Env) => Promise<{
@@ -130,15 +134,36 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         allows: (caller: Caller) => boolean;
     }[], caller: Caller) => items.filter(item => routes.some(route => route.name === item.name && route.allows(caller)));
     const missing = () => new ContractError("NOT_FOUND", "No such Admin route.", "admin");
-    const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = await options.getUser?.(caller.subject, request, env); return { userId: caller.subject, role: caller.role, login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
+    const localized = (value: unknown) => typeof value === "string" ? value : value && typeof value === "object" ? (value as Record<string, string>)[options.locale ?? "en"] ?? (value as Record<string, string>).en ?? Object.values(value)[0] : undefined;
+    const webmcp = metadata.webmcp as { tools?: readonly Record<string, unknown>[] };
+    const catalogue = { ...webmcp, tools: webmcp.tools?.map(tool => ({ ...tool, ...(tool.title ? { title: localized(tool.title) } : {}), description: localized(tool.description) ?? localized(tool.title) ?? tool.name })) };
+    const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? sessionUserOf(caller); return { userId: caller.subject, role: caller.role, login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
     const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendStaffInvitation, mcpEndpoints: options.mcpEndpoints, extensions: options.extensions }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
     const routes: readonly Route<Env, Database>[] = [
         { method: "GET", path: "/me", run: me }, { method: "GET", path: "/site", run: site },
         { method: "GET", path: "/collections", run: () => ({ collections: metadata.collections, allCollections: metadata.allCollections ?? Object.fromEntries(metadata.collections.map(c => [c.name, c])) }) },
         { method: "GET", path: "/views-manifest", run: c => ({ views: sees(metadata.views, views, c.caller) }) },
         { method: "GET", path: "/operations", run: c => ({ operations: sees(metadata.operations, operations, c.caller) }) },
-        { method: "GET", path: "/webmcp", run: () => metadata.webmcp },
-        { method: "GET", path: "/bootstrap", run: async (c) => { const [user, settings] = await Promise.all([me(c), site(c)]); return { me: user, site: settings, collections: metadata.collections, allCollections: metadata.allCollections, views: sees(metadata.views, views, c.caller), operations: sees(metadata.operations, operations, c.caller), webmcp: metadata.webmcp }; } },
+        { method: "GET", path: "/webmcp", run: () => catalogue },
+        { method: "GET", path: "/bootstrap", run: async c => {
+                const list = c.url.searchParams.has("collection") ? options.routes?.find(route => route.path === "/entries" && route.method === "GET") : undefined;
+                const [user, settings, entries] = await Promise.all([me(c), site(c), list ? Promise.resolve(list.run(c)).catch(() => undefined) : undefined]);
+                return { me: user, site: settings, collections: metadata.collections, allCollections: metadata.allCollections, views: sees(metadata.views, views, c.caller), operations: sees(metadata.operations, operations, c.caller), webmcp: catalogue, ...(entries ? { entries } : {}) };
+            } },
+        { method: "GET", path: "/views/{name}/export", run: async (c) => {
+                const view = views.find(v => v.name === c.params.name && v.allows(c.caller));
+                if (!view) throw missing();
+                const params = new URLSearchParams(c.url.searchParams);
+                params.delete("cursor"); params.set("limit", "500");
+                const {input: raw, ...paging} = view.query(params), input = {...raw};
+                convert(input, view.convert);
+                const descriptor = metadata.views.find(v => v.name === view.name);
+                const columns = (descriptor?.list as {columns?: readonly string[]} | undefined)?.columns;
+                return csv(view.name, async cursor => {
+                    const page = await view.page(c.db, c.caller, input as never, {...paging, limit: 500, cursor});
+                    return view.row ? {...page, rows: page.rows.map(view.row)} : page;
+                }, columns);
+            } },
         { method: "GET", path: "/views/{name}", run: async (c) => {
                 const view = views.find(v => v.name === c.params.name && v.allows(c.caller));
                 if (!view)
@@ -152,9 +177,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 const operation = operations.find(p => p.name === c.params.name && p.allows(c.caller));
                 if (!operation)
                     throw missing();
-                const input = operation.validate(await json(c));
-                convert(input, operation.convert);
-                return { ok: true, output: await operation.run(c.db, c.caller, input as never, options.handlers as Handlers) };
+                return { ok: true, output: await callTool({ ...operation, surface: "staff", description: "", inputSchema: {} }, await json(c), () => c.db, c.caller, options.handlers as Handlers) };
             } },
         ...(metadata.developerConsole === undefined ? [] : [{ method: "GET", path: "/developer-console", run: () => metadata.developerConsole }]),
         ...(options.routes ?? []),

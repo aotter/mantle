@@ -79,3 +79,8 @@ carry compiler-verified policy/field fragments and generated validators, not a
 copy of full SQL for every order/direction. Metadata endpoints perform no storage
 read of their own; caller resolution and optional site/user enrichment may query.
 Statistics capability is advertised only when its native route is mounted.
+
+Full extension declarations also emit `extensionMetadata` and, with Admin selected,
+`admin-extensions.ts` with a runtime `extensionBindings` function and compiled
+settings checks. Native modules are host-served; install integrity in the host
+shell import map. `source` modules are refused.

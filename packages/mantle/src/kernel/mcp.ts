@@ -2,7 +2,7 @@
 import type { Caller } from "./contracts.js";
 import type { Conversions } from "./surface.js";
 import { linkApps, linkSurface, resourcesOf } from "./mcp-apps.js";
-export { callTool } from "./mcp-call.js";
+export { callTool, callToolLazy } from "./mcp-call.js";
 export type { McpApps, McpAppResource } from "./mcp-apps.js";
 
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */

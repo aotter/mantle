@@ -60,33 +60,17 @@ test("entry landing prefetches the first folded child with the same scoped list 
   ]);
 });
 
-test("translation badges batch one authorized page per schema and editor composition uses raw data", async () => {
-  const { vi } = await import("vitest");
-  const { queryClient } = await import("../app/query-client");
-  const { entriesQueryOptions, composeEntry } = await import("./queries");
-  const parent = { name: "posts", title: "Posts", description: null, lifecycle: "publishing", exportFields: ["slug", "title"], hasTranslations: true, localized: false, schema: {type:"object",properties:{slug:{type:"string"},title:{type:"string"}}} };
-  const child = { ...parent, name: "translations", hasTranslations: false, localized: true, translates: {parent:"posts",on:"slug"}, parent:{collection:"posts",parentField:"slug",childField:"slug"}, schema:{type:"object",properties:{slug:{type:"string"},title:{type:"string"},locale:{type:"string"}}} };
-  const rows = Array.from({length:50},(_,i)=>({id:String(i),collection:"posts",locale:null,status:"published",version:1,updated_at:1,data:{slug:"s"+i,title:"Post "+i}}));
-  queryClient.clear();
-  queryClient.setQueryData(["collection-metadata"], {collections:[parent],allCollections:{posts:parent,translations:child}});
-  const urls: URL[] = [];
-  vi.stubGlobal("fetch", async (path:string) => {
-    const url = new URL(path,"https://fixture.test"); urls.push(url);
-    if (url.searchParams.get("collection")==="posts") return Response.json({items:rows,next_cursor:null});
-    return Response.json({items:[{...rows[0],id:"translated",collection:"translations",locale:"ja",data:{slug:"s0",title:"Japanese",locale:"ja"}}],next_cursor:null});
-  });
+test("list and editor consume server projections without relationship HTTP requests", async () => {
+  const {vi} = await import("vitest");
+  const {entriesQueryOptions, composeEntry} = await import("./queries");
+  const payload = {collection:{name:"posts"},entry:{id:"one"},related:[{entries:[{id:"translated"}]}],parentEntryId:null,parentEntryTitle:null} as unknown as EntryEditorPayload;
+  const fetch = vi.fn(async () => Response.json({items:[{id:"one",title:"Post",translation_locales:["ja"]}],next_cursor:null}));
+  vi.stubGlobal("fetch",fetch);
   try {
     const result = await entriesQueryOptions({collectionName:"posts",searchTerm:"",sortField:"updatedAt",sortDirection:"desc",cursorDirection:"forward"}).queryFn();
-    expect(urls).toHaveLength(2);
-    expect(JSON.parse(urls[1]!.searchParams.get("filter_values")!)).toHaveLength(50);
-    expect(result.items[0]).toMatchObject({title:"Post 0",translation_locales:["ja"]});
-    expect(result.items[0]!.data_preview).toBeUndefined();
-    expect(result.items[1]!.translation_locales).toEqual([]);
-    const document = {collection:{...parent,translates:null,uiSchema:null},entry:rows[0]!} as import("./types").EntryDocument;
-    const editor = await composeEntry(document);
-    expect(editor.entry).toBe(rows[0]);
-    expect(editor.related[0]).toMatchObject({collection:{name:"translations"},relationship:{kind:"translation",parentField:"slug",childField:"slug",parentValue:"s0"},entries:[{id:"translated"}]});
-    expect(urls[2]!.searchParams.get("filter_field")).toBe("slug");
-    expect(urls[2]!.searchParams.get("filter_value")).toBe("s0");
-  } finally { vi.unstubAllGlobals(); queryClient.clear(); }
+    expect(result.items[0]).toMatchObject({title:"Post",translation_locales:["ja"]});
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(await composeEntry(payload)).toBe(payload);
+    expect(fetch).toHaveBeenCalledOnce();
+  } finally {vi.unstubAllGlobals();}
 });

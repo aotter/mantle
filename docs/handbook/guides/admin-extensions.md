@@ -8,6 +8,12 @@ match the RuntimePlan-based releases. For the unpublished native Admin preview,
 use [Native Admin](native-admin.md) and the exact installed package docs.
 Do not apply the old Store/preset/role wiring to generated native applications.
 
+
+Native Admin does not serve `source` modules at `/admin/extensions/{id}.js` or
+inject extension integrity into the shell. Use a host-served same-origin `module`
+path, and install its integrity in the host shell's import map. The `source`
+examples and module route below describe the historical RuntimePlan API only.
+
 Manifests decide most of what Admin shows ([Customize Admin from
 manifests](admin-ui.md)). When a project needs UI of its own, it adds an
 **Admin extension**: a declaration that is plain data, server handlers, and

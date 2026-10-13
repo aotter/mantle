@@ -1,6 +1,6 @@
 /** Request-only MCP implementation, excluded from Worker startup. */
 import { ContractError, checkOrigin, surfaceCaller, surfaceError, surfaceFailure, wire, type Caller } from "./contracts.js";
-import { callTool } from "./mcp-call.js";
+import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tools, Options } from "./mcp.js";
 import { RESOURCE_MIME_TYPE, linkSurface, type McpAppResource } from "./mcp-apps.js";
 type LocalizedText = string | Readonly<Record<string, string>>;
@@ -72,7 +72,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         let outcome: "succeeded" | "failed" | "denied" = "succeeded", code: string | undefined;
         try {
           if (tool.run) checkOrigin(request, caller);
-          const data = await callTool(tool, raw as Record<string, unknown>, options.db(env), caller, options.handlers as Handlers);
+          const data = await callTool(tool, raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers);
           return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
           const diagnostic = surfaceError(error, `mcp ${tool.name}`).error;

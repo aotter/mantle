@@ -1,10 +1,8 @@
 import { api } from "./api";
 import { queryClient } from "../app/query-client";
-import { entryTitle } from "./entry-title";
-import { mantleRefOf } from "./types";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
 import { isFoldedFieldChild } from "./collection-nav";
-import type { Collection, CollectionsMetadata, EntryDocument, EntryEditorCollection, EntryEditorEntry, EntryPage, EntryRow, RelatedEntrySection, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, StaffOperation, ViewManifestInfo } from "./types";
+import type { CollectionsMetadata, EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, StaffOperation, ViewManifestInfo } from "./types";
 
 export const COLLECTION_PAGE_SIZE = 50;
 
@@ -85,11 +83,7 @@ export function entriesQueryOptions(args: EntriesQueryArgs) {
     queryKey,
     queryFn: async (): Promise<ListEntriesResult> => {
       const qs = entriesQuerySearchParams(args);
-      const [page, metadata] = await Promise.all([api.get<EntryPage>(`/entries?${qs}`), collectionMetadata()]);
-      const collection = metadata.allCollections[args.collectionName];
-      if (!collection) throw new Error("Collection metadata is unavailable.");
-      const locales = await translationLocales(collection, page.items, metadata);
-      return { ...page, items: page.items.map(entry => entryRow(collection, entry, locales.get(entry.id) ?? [])) };
+      return api.get<ListEntriesResult>(`/entries?${qs}`);
     },
   };
 }
@@ -109,88 +103,9 @@ export function collectionMetadata(): Promise<CollectionsMetadata> {
   });
 }
 
-function editorCollection(collection: Collection): EntryEditorCollection {
-  if (!collection.schema) throw new Error("Collection schema is unavailable.");
-  return { ...collection, schema: collection.schema, uiSchema: collection.uiSchema ?? null, translates: collection.translates ?? null };
-}
-
-function valueOfEntry(entry: EntryEditorEntry, field: string): unknown {
-  if (field === "id") return entry.id;
-  if (field === "version") return entry.version;
-  if (field === "status") return entry.status;
-  if (field === "createdAt" || field === "created_at") return entry.created_at;
-  if (field === "updatedAt" || field === "updated_at") return entry.updated_at;
-  return entry.data[field];
-}
-
-function entryRow(collection: Collection, entry: EntryEditorEntry, locales: string[]): EntryRow {
-  const properties = collection.schema?.properties ?? {};
-  const primary = collection.list?.primaryField;
-  const title = [primary, "title", "name", "slug", ...(collection.schema?.required ?? []).filter(field => [properties[field]?.type].flat().includes("string"))]
-    .find(field => field && typeof entry.data[field] === "string" && entry.data[field] !== "");
-  const preview = [...(primary ? [primary] : []), ...(collection.list?.columns ?? [])];
-  return { ...entry, title: collection.lifecycle === "publishing" && title ? entry.data[title] : null,
-    translation_locales: locales, ...(collection.lifecycle === "operational" && preview.length ? { data_preview: Object.fromEntries(preview.map(field => [field, valueOfEntry(entry, field) ?? null])) } : {}) };
-}
-
-function scalar(value: unknown): value is string | number | boolean {
-  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
-}
-
-async function translationLocales(collection: Collection, entries: readonly EntryEditorEntry[], metadata: CollectionsMetadata): Promise<Map<string, string[]>> {
-  const result = new Map(entries.map(entry => [entry.id, new Set<string>()]));
-  for (const child of Object.values(metadata.allCollections).filter(child => child.translates?.parent === collection.name && child.localized)) {
-    const on = child.translates!.on;
-    const keys = [...new Set(entries.map(entry => valueOfEntry(entry, on)).filter(scalar))];
-    const byKey = new Map<unknown, Set<string>>();
-    for (let offset = 0; offset < keys.length; offset += COLLECTION_PAGE_SIZE) {
-      const params = new URLSearchParams({ collection: child.name, limit: "500", filter_field: on, filter_values: JSON.stringify(keys.slice(offset, offset + COLLECTION_PAGE_SIZE)) });
-      for (;;) {
-        const page = await api.get<EntryPage>(`/entries?${params}`);
-        for (const entry of page.items) if (entry.locale) {
-          const key = valueOfEntry(entry, on);
-          byKey.set(key, (byKey.get(key) ?? new Set()).add(entry.locale));
-        }
-        if (!page.next_cursor) break;
-        params.set("cursor", page.next_cursor);
-      }
-    }
-    for (const entry of entries) for (const locale of byKey.get(valueOfEntry(entry, on)) ?? []) result.get(entry.id)!.add(locale);
-  }
-  return new Map([...result].map(([id, locales]) => [id, [...locales]]));
-}
-
-/** Compose only declared relationships using the same authorized paged entry API. */
+/** The native server returns the complete editor projection on reads and writes. */
 export async function composeEntry(document: EntryDocument): Promise<EntryEditorPayload> {
-  const { collection, entry } = document;
-  const metadata = await collectionMetadata();
-  const relationships = Object.values(metadata.allCollections).flatMap<{ collection: Collection; kind: "translation" | "field"; parentField: string; childField: string }>(child => {
-    if (child.translates?.parent === collection.name || child.name === collection.name && child.translates) {
-      return [{ collection: child, kind: "translation" as const, parentField: child.translates!.on, childField: child.translates!.on }];
-    }
-    return Object.entries(child.schema?.properties ?? {}).flatMap(([field, schema]) => {
-      const ref = mantleRefOf(schema);
-      return child.name !== collection.name && ref?.schema === collection.name
-        ? [{ collection: child, kind: "field" as const, parentField: ref.field, childField: field }] : [];
-    });
-  });
-  const valueOf = (field: string) => valueOfEntry(entry, field);
-  const find = async (name: string, field: string, value: unknown, limit: number) => {
-    if (!scalar(value) || value === "") return [];
-    const params = new URLSearchParams({ collection: name, filter_field: field, filter_value: String(value), limit: String(limit) });
-    return (await api.get<EntryPage>(`/entries?${params}`)).items;
-  };
-  const [parent, related] = await Promise.all([
-    collection.parent ? find(collection.parent.collection, collection.parent.parentField, valueOf(collection.parent.childField), 1).then(rows => rows[0]) : undefined,
-    Promise.all(relationships.map(async ({ collection: child, kind, parentField, childField }): Promise<RelatedEntrySection> => {
-      const value = valueOf(parentField);
-      const parentValue = scalar(value) && value !== "" ? value : null;
-      return { collection: editorCollection(child), relationship: { kind, parentField, childField, parentValue }, entries: await find(child.name, childField, parentValue, COLLECTION_PAGE_SIZE) };
-    })),
-  ]);
-  const parentCollection = collection.parent && metadata.allCollections[collection.parent.collection];
-  return { collection, entry, parentEntryId: parent?.id ?? null,
-    parentEntryTitle: parent && parentCollection ? entryTitle(parent.data, parent.id, parentCollection, parent.id) : null, related };
+  return document as EntryEditorPayload;
 }
 
 export function entryApiPath(collection: string, id: string, suffix = ""): string {

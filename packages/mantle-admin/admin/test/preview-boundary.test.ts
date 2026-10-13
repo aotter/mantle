@@ -105,7 +105,7 @@ it("keeps the built preview on its bridge, including search and downloads, while
     expect(result.blocked).toEqual([true,true,true,true]);
     expect(result.xhrBlocked).toBe(true);
     // Browsers may report an accepted beacon even when CSP blocks transmission.
-    expect(result.bridged).toContain("/admin/api/views/report?q=Ada&search=Ada&limit=500");
+    expect(result.bridged.some((path: string) => path.startsWith("/admin/api/views/report/export"))).toBe(true);
     await page.goto(`${origin}/host?route=/admin/connected-apps`);
     await page.frames()[1]!.getByRole("heading", {name:"Sandbox preview"}).waitFor();
     expect(network).toEqual([]);

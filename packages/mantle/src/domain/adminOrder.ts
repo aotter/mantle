@@ -17,7 +17,7 @@ export function adminOrder(schema: Schema): Record<string, readonly [CursorKind,
 /** Deployment-only indexes; no request attempts to converge storage. */
 export function adminIndexes(schemas: RuntimePlan["schemas"], isSqlite: boolean): string[] {
   const d = isSqlite ? sqlite : postgres;
-  return Object.values(schemas).flatMap(s => ["updated_at", ...(s.publishing ? ["status"] : [])].flatMap(field =>
+  return Object.values(schemas).flatMap(s => ["created_at", "updated_at", ...(s.publishing ? ["status"] : [])].flatMap(field =>
     [[], ...(s.scope ? [[s.scope]] : [])].flatMap(prefix => {
       const columns = [...prefix, field, "id"];
       if ([...(s.indexes ?? []), ...(s.unique ?? [])].some(i => columns.every((c, n) => i[n] === c))) return [];
