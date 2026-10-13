@@ -28,10 +28,10 @@ Two names that agents already know shaped the SQL surface:
 - `hasRole` is the predicate Spring Security, Quarkus and Better Auth checks use.
 
 Mantle needs one rule shape that works in three places:
-1. An author writes an ordinary, testable rule: "sales staff see the orders of their
+1. An author writes an ordinary, testable rule: "sales admins see the orders of their
    regions; administrators see all orders".
 2. A self-hosted application fills roles and fields with Better Auth.
-3. A managed host or gateway authenticates staff in front of the application and
+3. A managed host or gateway authenticates its own people in front of the application and
    supplies the same user shape. The application never learns how the host computed
    it.
 
@@ -42,7 +42,7 @@ Mantle needs one rule shape that works in three places:
 The application does not declare a role model. Roles and user fields exist in the
 manifest only where an author uses them:
 - `auth.hasRole('<role>')` in a scope or in SQL;
-- `requires: ctx.staff: [<role>, …]`;
+- `requires: ctx.admin: [<role>, …]`;
 - `auth.user('<field>')` in a scope or in SQL.
 
 What a role means and who holds it belongs to the identity system: Better Auth when
@@ -57,19 +57,38 @@ self-hosted, a host when hosted.
   These field names are reserved because they are Better Auth core fields or caller
   metadata: `id email emailVerified name image createdAt updatedAt role banned banReason
   banExpires` and `mantle*`.
-- **`requires: ctx.staff`** accepts any role name, not only the built-in `owner`,
-  `editor`, `contributor` and `staff`.
-- **Which roles count as staff** is runtime configuration, not manifest grammar. The
-  self-hosted option is `staffRoles` (default: the built-in staff roles), in the same
-  spirit as Better Auth's `adminRoles`. A host caller is staff by definition. Holding a
-  staff role admits the caller to Admin and `/mcp/staff`; other roles, such as a member
-  tier, are only read with `auth.hasRole()`.
+- **`requires: ctx.admin`** (renamed from `ctx.staff`) accepts any role name.
 - `mantle describe` reports every use (section 9), so authors, agents and hosts read one
   vocabulary. An application that uses none of these generates
   byte-identical code to today.
 
 A misspelled role never matches, so the rule fails closed. A host that compares the
 report with what it can supply catches the typo (section 9).
+
+### 1a. Two layers: admin and member
+
+Mantle keeps one boundary between privileged callers and everyone else, and names it
+the way Better Auth does.
+
+- **Admin.** A caller holding one of Better Auth's admin plugin `adminRoles` is an admin.
+  Mantle reads `adminRoles` from the admin plugin configuration; it has no setting of its
+  own. A host caller is an admin by definition (section 6). The previous `staff` role,
+  `ctx.staff`, `/mcp/staff` and "staff" in Admin are renamed `admin`, `ctx.admin`,
+  `/mcp/admin` and "admin"; Better Auth's default `adminRoles: ["admin"]` therefore
+  works unchanged.
+- **Member.** Every other signed-in caller.
+- **Privilege reads only the admin layer.** `requires: ctx.admin` and the role escape in a
+  scope (section 4) consult a caller's roles only when the caller is an admin. A member
+  who holds a role with the same name gains nothing.
+- **Roles inside each layer.** Admins may hold several `adminRoles` with different
+  Better Auth access-control statements, for example an `editor` who may publish but not
+  ban users. Members may hold member roles such as `vip`. `auth.hasRole()` in SQL reads
+  either layer, as a filter.
+- **Permissions are Better Auth statements.** Each Admin target names the statement it
+  needs (`content:publish`, `user:ban`, `session:revoke`). A local admin passes when one
+  of its roles grants the statement through Better Auth's access control. A host caller
+  passes the Admin gate, and the host's own gate decides which targets it may reach, in
+  the same statement vocabulary.
 
 ### 2. The caller carries roles and fields
 
@@ -164,8 +183,8 @@ spec:
 
   A missing or empty field matches no row.
 - **No implicit role bypass.** Only the author-written escape widens a scope. No kernel
-  shortcut skips the term: the staff shortcut on translation children
-  (`role IN ('staff') OR EXISTS(parent)`) keeps the parent's scope inside the `EXISTS`.
+  shortcut skips the term: the admin shortcut on translation children
+  (`role IN ('admin') OR EXISTS(parent)`) keeps the parent's scope inside the `EXISTS`.
   Publishing and translation Schemas may be field-scoped.
 - **Correlated fields.** Fields are independent sets. Two scoped Schemas, or one scope
   and an SQL filter, over `region` and `store` grant every combination of the two sets.
@@ -198,7 +217,7 @@ spec:
   Each field is bound once per statement.
 - **Paging.** `col IN field` counts as fan-out fixed for the paging proof, so an index
   such as `[region, createdAt]` serves `ORDER BY createdAt`. The cost is bounded by
-  elements × limit. Staff and public variants are each proven.
+  elements × limit. Admin and public variants are each proven.
 - **Public Views.** Row policy applies in public mode too. A public View over a
   field-scoped Schema returns nothing to anonymous visitors, and generate warns with
   `USER_SCOPE_PUBLIC_ANON_EMPTY`. A member with fields sees their own range. Tests pin
@@ -207,9 +226,9 @@ spec:
 
 ### 5. Where roles and fields come from
 
-**Members and staff alike.** The references are not staff-only. `auth.hasRole('vip')` and
-`auth.user('plan')` work for members the same way they work for staff, because both are
-Better Auth users. Whatever sets `user.role` or a field (the admin plugin, an
+**Members and admins alike.** The references are not admin-only. `auth.hasRole('vip')`
+and `auth.user('plan')` work for members the same way they work for admins, because both
+are Better Auth users. Whatever sets `user.role` or a field (the admin plugin, an
 `additionalFields` entry, `customSession`, or the application's own Better Auth plugin
 for groups or teams) feeds the same references.
 
@@ -235,7 +254,7 @@ The handbook gives Better Auth recipes for common shapes (roles with the admin p
 a region field, team membership as a field, a small plugin for groups). Agents working
 on a self-hosted application are pointed to them.
 
-**A host (section 6).** A host supplies staff as callers of the same shape. Members of a
+**A host (section 6).** A host supplies its own people as admin callers of the same shape. Members of a
 hosted application still sign in through the application's own Better Auth, so member
 roles and fields come from the same configuration everywhere.
 
@@ -267,17 +286,14 @@ A host supplies a versioned contract when it composes the application:
     target, targetHash, requestId, credential: "session" | "oauth", bodyDigest }
   ```
 
-  It never reads headers or the body. On a non-staff entry, `props.mantle` is an error
+  It never reads headers or the body. On a non-admin entry, `props.mantle` is an error
   (a tripwire). The caller's subject is `'host:' + user.id`, and its roles and fields are
   validated like any other caller's.
-- **No staff mode.** A host that keeps staff outside the application needs no special
-  switch. It uses the generic pieces:
-  - `staffRoles: []`, so no local user is staff, and Admin and `/mcp/staff` admit only
-    host callers;
-  - its own `caller` resolver, which may limit the roles members can hold, so that a
-    member role never matches a role an author uses to widen a scope;
-  - its own gate in front of the application, which decides which targets (including
-    Admin's staff-management routes) a host caller may reach.
+- **No host mode.** A host that keeps its people outside the application needs no
+  switch. No local user holds an `adminRoles` role, so Admin and `/mcp/admin` admit only
+  host callers, and the host's own gate decides which targets a host caller may reach.
+  Because privilege reads only the admin layer (section 1a), member roles never widen a
+  scope.
 - **Missing field.** A missing field that a host target needs fails with
   `HOST_CONTRACT` (412) before any SQL runs. Denials of a host caller are 403, never 401.
 
@@ -292,7 +308,8 @@ A host supplies a versioned contract when it composes the application:
 - **Origin checks.** Session-credential host writes keep origin checks: the host checks
   `Sec-Fetch-Site`/`Origin` before issuing props, and `checkOrigin` applies according to
   `props.credential`.
-- **`/mcp/staff`** becomes an allowlist: holders of a `staffRoles` role, or host callers.
+- **`/mcp/admin`** (renamed from `/mcp/staff`) becomes an allowlist: admins, or host
+  callers.
   It is no longer a denylist that admits new caller kinds by default.
 - **Subjects.** User subjects may not start with `system:` or `host:`. Host writes record
   `author_id = 'host:' + user.id`.
@@ -302,10 +319,21 @@ A host supplies a versioned contract when it composes the application:
 - **Admin targets.** Every Admin API route maps to exactly one target id
   (`admin:<method> <path template>`), and the id must equal `props.target`.
   `mantle describe` lists Admin targets.
-- **Gates.** The Admin gate, the extension contract (`caller: { kind: "staff" | "host" }`),
+- **Gates.** The Admin gate, the extension contract (`caller: { kind: "admin" | "host" }`),
   publishing transitions, site settings and media accept host callers, and scope
-  applies throughout. `requires: ctx.staff` checks the host caller's roles.
-- **Drafts.** Host callers see drafts, as staff do.
+  applies throughout. `requires: ctx.admin` checks the host caller's roles.
+- **Drafts.** Host callers see drafts, as admins do.
+- **Member management.** Admin's identity routes (list and view users, ban and unban,
+  revoke sessions, set member roles) are targets like any other, each naming its Better
+  Auth statement.
+  - A local admin's call goes through Better Auth's admin API with the admin's own
+    request, as today.
+  - A host caller has no session in the application's Better Auth. Its call runs through
+    Better Auth's server context with the same effects as the admin API (for a ban: the
+    ban fields and revoking every session), and records `host:` + `user.id` as the
+    actor.
+  - A host caller can never give a user an `adminRoles` role.
+  - Impersonation is never host-callable.
 - **Owner-scoped Schemas.** A host caller's subject is `'host:' + user.id`, so it sees
   only rows it owns, never a member's. `mantle describe` flags such targets `ownerScoped`.
 - **Ref handlers.** Host callers may call them.
@@ -347,7 +375,7 @@ own registry from it; Mantle does not define such registries.
 
 `@aotter/mantle/testing` (a new export, refused by `mantle bundle`) provides:
 
-- **`authenticatedAs(user, options?)`** builds a branded member, staff or host caller
+- **`authenticatedAs(user, options?)`** builds a branded member, admin or host caller
   from a Better Auth–shaped user (`{ id, role: "sales", region: ["TW"] }`) and calls
   generated functions directly. It verifies lowering and binds. A host target is a
   generated literal union type, so a misspelled target fails typecheck.
@@ -364,7 +392,7 @@ own registry from it; Mantle does not define such registries.
   may export them, sanitized, with stable labels and a `planHash`; a stale fixture fails
   with `USER_FIXTURE_STALE`.
 
-`mantle dev --as role=sales,region=TW[,JP]` (or `--as <fixture>`) uses `fakeHost` for staff
+`mantle dev --as role=sales,region=TW[,JP]` (or `--as <fixture>`) uses `fakeHost` for admin
 targets and prints the resulting scope. Members sign in through the application's own
 Better Auth as usual.
 - It binds only to 127.0.0.1.
@@ -404,7 +432,7 @@ These paths ignore scope by design. The handbook lists them:
     audit) belongs to whoever operates the application. Self-hosted, that is the
     application's own Better Auth configuration and plugins; a self-hosted application
     that builds those plugins reaches the same model a managed host offers.
-  - The same references serve members and staff.
+  - The same references serve members and admins.
 - **Authors and agents.** An author declares nothing new and writes rules with names
   agents already know: Better Auth's `user.role` and `user.<field>`, and the
   `hasRole` predicate. What a self-hosted application can supply depends on its Better
@@ -412,10 +440,10 @@ These paths ignore scope by design. The handbook lists them:
   documentation to publish.
 - **Breaking changes for the unreleased 0.2:**
   - `auth.role()` removed in favour of `auth.hasRole()`;
-  - the open `requires: ctx.staff` role names, the `staffRoles` option and the scope
-    grammar;
+  - the rename of `staff` to `admin` (`ctx.admin`, `/mcp/admin`, the default role), the
+    open `requires: ctx.admin` role names and the scope grammar;
   - the `Caller` shape and the `HandlerContext` union;
-  - the `/mcp/staff` allowlist;
+  - the `/mcp/admin` allowlist;
   - the Admin gate and the extension contract;
   - the new `mantle describe` report.
 - **Cost.** An application that uses no role or user field generates byte-identical code.
@@ -432,9 +460,11 @@ These paths ignore scope by design. The handbook lists them:
   puts a role model into the application, which must stay agnostic: who holds which role
   and what a field means belong to the identity system. Types and the vocabulary are
   derived from use instead.
-- **A host staff mode (`staff: "host"`).** `staffRoles`, the host's caller resolver and
-  the host's own gate already express it, so a mode would only add a host concept to the
-  core.
+- **A host staff mode (`staff: "host"`) or a Mantle `staffRoles` setting.** Better Auth's
+  `adminRoles`, the admin/member layering and the host's own gate already express it, so
+  either would only add a concept Better Auth already has.
+- **Keeping the name `staff`.** The self-hosted privileged layer is Better Auth's admin,
+  and a managed host may use "staff" for its own, different concept.
 - **A generated catalog file committed with the application.** Only something fronting
   the application needs it, so a self-hosted project would carry an unused file and a
   public file format. `mantle describe` produces the same data on demand.
@@ -457,7 +487,8 @@ ADR-0034 position matrix: join, `LEFT JOIN`, subquery, CTE, set operation, windo
 are:
 - anonymous;
 - a member with fields and a member without;
-- a local staff user with and without fields, and one holding an escape role;
+- a local admin with and without fields, one holding an escape role, and a member
+  holding a role with an escape role's name;
 - a host caller inside the set, outside it, with an empty set, with a missing field and
   with an escape role;
 - the system caller.
@@ -467,15 +498,18 @@ Then:
 - Single and array values with `=`, `IN` and scope; mixed operators refused; `=` with an
   array value matching no row.
 - A role used only in `requires` or SQL, a misspelled role failing closed, and
-  `staffRoles` deciding staff admission.
+  `adminRoles` deciding admin admission.
 - Fields from `additionalFields` (with `input: true` refused) and from `customSession`.
 - Inserts inside and outside the set, and single-value auto-fill.
 - `SET` on the scoped column refused in every path.
 - Unique and upsert behaviour that never crosses partitions.
 - The element encodings: NULL text, quotes, backslash, comma, braces and lone
   surrogates.
-- `staffRoles: []` refusing every local user on Admin and `/mcp/staff` while host
-  callers pass.
+- No local admin: Admin and `/mcp/admin` refuse every local user while host callers
+  pass.
+- Admin targets checked against Better Auth statements for local admins; host member
+  management (ban with session revocation, member roles only, no `adminRoles`, no
+  impersonation).
 - Member roles and fields with `auth.hasRole()` and `auth.user()`, from the admin plugin,
   `additionalFields`, `customSession` and a test plugin.
 - A forged header or props on a public entry.
