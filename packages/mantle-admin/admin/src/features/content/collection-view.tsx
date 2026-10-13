@@ -113,7 +113,7 @@ function CollectionList({
   const queryClient = useQueryClient();
   const exportFile = useMutation({ mutationFn: (path: string) => {
     if (!collection) throw new Error("Collection metadata is unavailable.");
-    return downloadAdminFile(path, ["id", ...(collection.lifecycle === "publishing" ? ["status"] : []), "version", "updated_at", ...collection.exportFields]);
+    return downloadAdminFile(path);
   } });
   const params = new URLSearchParams(location.search);
   const status = params.get("status") ?? undefined;

@@ -3,7 +3,9 @@ import type { CallTool, ToolResult } from "./bridge.js";
 
 // MCP Apps 2026-01-26: only the messages this App consumes. The official
 // AppBridge remains the interoperability oracle in the browser host test.
-const VERSION = "2026-01-26";
+// ext-apps 2.0.0 supported list; the interoperability test checks every official version.
+const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = ["2026-01-26"];
+const VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -98,7 +100,7 @@ export function connectHost(handlers: {
         // Only a valid initialize reply may establish the host origin.
         if (!ready) {
           const value = message.result;
-          if (!record(value) || value.protocolVersion !== VERSION || !record(value.hostCapabilities)
+          if (!record(value) || (typeof value.protocolVersion !== "string" || !SUPPORTED_PROTOCOL_VERSIONS.includes(value.protocolVersion)) || !record(value.hostCapabilities)
             || !record(value.hostInfo) || typeof value.hostInfo.name !== "string" || typeof value.hostInfo.version !== "string" || !context(value.hostContext)) {
             entry.clean(); entry.reject(new Error("Invalid host handshake")); return;
           }
@@ -113,6 +115,10 @@ export function connectHost(handlers: {
     // into the server, or trick a notification into becoming a write.
     if (message.id !== undefined) {
       if (typeof message.id !== "string" && (typeof message.id !== "number" || !Number.isSafeInteger(message.id))) return;
+      if (message.method === "ui/resource-teardown") {
+        send({ id: message.id, result: {} });
+        disconnect(); handlers.cancelled(); return;
+      }
       send({ id: message.id, ...(message.method === "ping" ? { result: {} } : { error: { code: -32601, message: "Method not found" } }) });
       return;
     }
@@ -154,11 +160,12 @@ export function connectHost(handlers: {
     observer = new ResizeObserver(resize);
     observer.observe(win.document.documentElement); observer.observe(win.document.body); resize();
   }).catch(error => { if (!closed) handlers.error(error instanceof Error ? error : new Error(String(error))); });
-  return () => {
+  function disconnect() {
     closed = true; ready = false;
     win.removeEventListener("message", receive); observer?.disconnect();
     for (const entry of [...pending.values()]) { entry.clean(); entry.reject(new Error("App disconnected")); }
-  };
+  }
+  return disconnect;
 }
 
 export function applyHostContext(value: McpUiHostContext, doc: Document = document): void {

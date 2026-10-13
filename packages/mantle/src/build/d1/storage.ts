@@ -1,30 +1,9 @@
-/**
- * Storage convergence (ADR-0033, amended by ADR-0034): the database is the state, the plan is the target.
- * Safe differences are applied in one batch; blocked ones are reported and never touched; undeclared ones
- * are reported and never dropped. STRICT tables, checks as triggers, and the FTS5 / R*Tree tables that back
- * `search` and `format: geo` are Mantle's own and are rebuilt when their declaration changes.
- */
-import { ftsTableName, geoTreeName, checkShapeProblem, notNullColumns, storageColumns, parseNumeric, sideTableClashes, type SqlNode } from "../spec/domain/index.js";
-import type { DatabaseDriver, SqlStatement } from "../core/driver.js";
+/** Build-time initial SQLite DDL; applications own migrations. */
+import { ftsTableName, geoTreeName, checkShapeProblem, notNullColumns, storageColumns, parseNumeric, type SqlNode } from "../spec/domain/index.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { print } from "./print.js";
-import { transitions, tzStatements } from "./tz.js";
-import { readRows } from "./read.js";
 
 export type { StorageSchema };
-
-export interface StorageChange {
-  readonly schema: string;
-  readonly code: "STORAGE_CHANGE_BLOCKED" | "STORAGE_TABLE_NOT_OWNED" | "STORAGE_UNDECLARED_COLUMN" | "STORAGE_UNDECLARED_INDEX";
-  readonly message: string;
-}
-
-export interface StorageReport {
-  /** Fingerprint matched: nothing but the fingerprint was read. */
-  readonly skipped: boolean;
-  readonly blocked: readonly StorageChange[];
-  readonly undeclared: readonly StorageChange[];
-}
 
 const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
@@ -140,8 +119,6 @@ const SYSTEM_DDL = [
   "CREATE TABLE IF NOT EXISTS _mantle_assert (op INTEGER, ok INTEGER)",
   "CREATE TRIGGER IF NOT EXISTS _mantle_assert_t BEFORE INSERT ON _mantle_assert BEGIN SELECT CASE WHEN new.ok IS NOT 1 THEN RAISE(ABORT, 'CONFLICT op=' || new.op) ELSE RAISE(IGNORE) END; END",
   "CREATE TABLE IF NOT EXISTS _mantle_tz (from_us INTEGER PRIMARY KEY, offset_us INTEGER NOT NULL) STRICT",
-  "CREATE TABLE IF NOT EXISTS _mantle_boot_state (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT",
-  "CREATE TABLE IF NOT EXISTS _mantle_schema_tables (name TEXT PRIMARY KEY) STRICT",
 ];
 
 /** Build-time initial schema artifact. Applying or migrating it is the application's responsibility. */
@@ -151,164 +128,4 @@ export function initialStorageSql(plan: Readonly<Record<string, StorageSchema>>)
     const d = desired(name, schema);
     return [createTable(d, notNullColumns(schema)), ...d.indexes.map((i) => i.sql), ...d.virtuals.map((i) => i.sql), ...d.triggers.map((i) => i.sql)];
   })];
-}
-
-type Row = Record<string, unknown>;
-
-/** Converge storage to the plan. Blocked differences are reported and applied to nothing; a matching fingerprint reads nothing else. */
-export async function convergeStorage(
-  driver: DatabaseDriver,
-  plan: Readonly<Record<string, StorageSchema>>,
-  options: { fingerprint: string; timeZone?: string },
-): Promise<StorageReport> {
-  const timeZone = options.timeZone ?? "UTC";
-  const state = `${options.fingerprint}|${timeZone}`;
-  const system = await readRows(driver, { sql: "SELECT name, type FROM sqlite_schema WHERE name IN ('_mantle_assert', '_mantle_assert_t', '_mantle_tz', '_mantle_boot_state', '_mantle_schema_tables')" });
-  const ready = system.length === 5 && system.every((r) => r.type === (r.name === "_mantle_assert_t" ? "trigger" : "table"));
-  if (!ready) await driver.batch(SYSTEM_DDL.map((sql) => ({ sql })));
-  const stored = await readRows(driver, { sql: "SELECT key, value FROM _mantle_boot_state WHERE key IN ('fingerprint', 'timezone', 'instance')" });
-  const booted = new Map(stored.map((r) => [r.key, r.value]));
-  if (!booted.has("instance")) await driver.batch([{ sql: "INSERT OR IGNORE INTO _mantle_boot_state (key, value) VALUES ('instance', ?1)", binds: [crypto.randomUUID()] }]);
-  if (ready && booted.get("fingerprint") === state) return { skipped: true, blocked: [], undeclared: [] };
-  // the zone's transitions cost hundreds of milliseconds of CPU to compute: only a changed zone rewrites them, not every plan change
-  const tz = booted.get("timezone") === timeZone && system.some((r) => r.name === "_mantle_tz" && r.type === "table") ? [] : [...tzStatements(transitions(timeZone)).map((sql) => ({ sql })), { sql: "INSERT OR REPLACE INTO _mantle_boot_state (key, value) VALUES ('timezone', ?1)", binds: [timeZone] }];
-
-  for (let attempt = 0; ; attempt++) {
-    const { statements, blocked, undeclared, uniques } = await diff(driver, plan);
-    if (blocked.length) return { skipped: false, blocked, undeclared };
-    statements.push(...tz);
-    statements.push({ sql: "INSERT OR REPLACE INTO _mantle_boot_state (key, value) VALUES ('fingerprint', ?1)", binds: [state] });
-    try {
-      await driver.batch(statements);
-      return { skipped: false, blocked: [], undeclared };
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      // a concurrent cold start applied the same ADD COLUMN: introspect again and let the diff decide
-      if (/duplicate column name|already exists/i.test(message) && attempt < 2) continue;
-      if (/UNIQUE constraint failed/i.test(message) && uniques.length)
-        return { skipped: false, blocked: uniques.map((u) => ({ schema: u.schema, code: "STORAGE_CHANGE_BLOCKED", message: `unique index ${u.index} cannot be created: existing rows break it (${message}); dedupe the data, then rerun` })), undeclared };
-      throw e;
-    }
-  }
-}
-
-/** Tables the platform creates itself (Better Auth, media, site config); a Schema may not take these names. */
-const RESERVED_TABLES = new Set([
-  "entries", "_migrations", "d1_migrations", "site_config", "user", "session", "account", "verification", "jwks",
-  "oauthclient", "oauthresource", "oauthclientresource", "oauthrefreshtoken", "oauthaccesstoken", "oauthconsent", "oauthclientassertion",
-  "media_assets", "pending_media_uploads",
-]);
-
-/**
- * What `convergeStorage` would apply to this database now, applying nothing (`mantle generate --check`, ADR-0033 decision 3).
- * `skipped` when the database already booted this fingerprint, as boot would. The SQL replays: system DDL (only where Mantle
- * never booted) is `IF NOT EXISTS`, `ADD COLUMN` comes from the current state, binds are inlined. The boot state and time
- * zone rows are left to boot.
- */
-export async function planStorageChanges(driver: DatabaseDriver, plan: Readonly<Record<string, StorageSchema>>, options: { fingerprint?: string } = {}): Promise<{ skipped: boolean; sql: string[]; blocked: readonly StorageChange[]; undeclared: readonly StorageChange[] }> {
-  const sys = await readRows(driver, { sql: "SELECT name FROM sqlite_schema WHERE name IN ('_mantle_boot_state', '_mantle_schema_tables')" });
-  const have = new Set(sys.map((r) => r.name));
-  if (options.fingerprint !== undefined && have.has("_mantle_boot_state")) {
-    const b = await readRows(driver, { sql: "SELECT value FROM _mantle_boot_state WHERE key = 'fingerprint'" });
-    if (String(b[0]?.value ?? "").startsWith(`${options.fingerprint}|`)) return { skipped: true, sql: [], blocked: [], undeclared: [] };
-  }
-  const { statements, blocked, undeclared } = await diff(driver, plan);
-  const inline = (s: SqlStatement) => (s.binds ? s.sql.replace(/\?(\d+)/g, (_, n: string) => lit(String(s.binds![Number(n) - 1]))) : s.sql);
-  return { skipped: false, sql: [...(have.has("_mantle_schema_tables") ? [] : SYSTEM_DDL), ...statements.map(inline)], blocked, undeclared };
-}
-
-async function diff(driver: DatabaseDriver, plan: Readonly<Record<string, StorageSchema>>) {
-  const statements: SqlStatement[] = [];
-  const blocked: StorageChange[] = [];
-  const undeclared: StorageChange[] = [];
-  const uniques: { schema: string; index: string }[] = [];
-  const block = (schema: string, message: string, code: StorageChange["code"] = "STORAGE_CHANGE_BLOCKED") => blocked.push({ schema, code, message });
-
-  const objects = await readRows(driver, { sql: "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\'" });
-  // SQLite identifiers are case-insensitive, so ownership and lookup are too.
-  const byName = new Map<string, Row>(objects.map((r) => [String(r.name).toLowerCase(), r]));
-  // a dry run creates nothing, so on a database Mantle never booted the registry does not exist yet
-  const owned = !byName.has("_mantle_schema_tables") ? [] : await readRows(driver, { sql: "SELECT name FROM _mantle_schema_tables" });
-  const ownedNames = new Set(owned.map((r) => String(r.name).toLowerCase()));
-
-  // a search or geo table is named for its Schema (and field): two declarations that would name one object are refused
-  for (const c of sideTableClashes(plan)) block(c.schema, c.message);
-
-  for (const [name, schema] of Object.entries(plan)) {
-    const d = desired(name, schema);
-    const t = q(name);
-    if (RESERVED_TABLES.has(name.toLowerCase()) || name.toLowerCase().startsWith("_mantle_")) {
-      block(name, `table name ${name} is reserved for Mantle and Better Auth`, "STORAGE_TABLE_NOT_OWNED");
-      continue;
-    }
-    const existing = byName.get(name.toLowerCase());
-    if (existing && !ownedNames.has(name.toLowerCase())) {
-      block(name, `table ${name} exists and Mantle did not create it, so it is not read or written`, "STORAGE_TABLE_NOT_OWNED");
-      continue;
-    }
-    if (!existing) {
-      statements.push({ sql: createTable(d) }, { sql: "INSERT OR IGNORE INTO _mantle_schema_tables (name) VALUES (?1)", binds: [name] }, ...d.indexes.map((i) => ({ sql: i.sql })));
-      if (d.indexes.some((i) => i.unique)) for (const i of d.indexes) if (i.unique) uniques.push({ schema: name, index: i.name });
-    } else {
-      const [info, idx] = await driver.batch([
-        { sql: "SELECT name, type, pk FROM pragma_table_info(?1)", binds: [name] },
-        { sql: "SELECT il.name AS name, il.\"unique\" AS uniq, il.origin AS origin, il.partial AS partial, ii.name AS col FROM pragma_index_list(?1) il, pragma_index_info(il.name) ii ORDER BY il.name, ii.seqno", binds: [name] },
-      ]);
-      const have = new Map(info!.rows.map((r) => [String(r.name), String(r.type).toUpperCase()]));
-      const pk = new Map(info!.rows.map((r) => [String(r.name), Number(r.pk)]));
-      for (const c of d.columns) {
-        const actual = have.get(c.name);
-        if (actual === undefined) {
-          if (c.name === "_rid") block(name, `${name} has no _rid, which must be the table's INTEGER PRIMARY KEY (the rowid alias FTS5 and the R*Tree key on) and cannot be added to a table; copy the data into a table Mantle creates`);
-          else if (c.native) block(name, `${name} lacks the native column ${c.name}; add it, or copy the data into a table Mantle creates`);
-          else statements.push({ sql: `ALTER TABLE ${t} ADD COLUMN ${q(c.name)} ${c.type}` });
-        } else if (c.name === "_rid" && pk.get("_rid") !== 1) block(name, `${name}._rid is not the table's INTEGER PRIMARY KEY, so it does not alias the rowid; copy the data into a table Mantle creates`);
-        else if (actual !== c.type && !(c.name === "_rid" && actual === "INTEGER")) block(name, `${name}.${c.name} is ${actual}, the plan says ${c.type}; a column's type is never altered`);
-      }
-      const declared = new Set(d.columns.map((c) => c.name));
-      for (const c of have.keys()) if (!declared.has(c)) undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_COLUMN", message: `${name}.${c} is in the database and not in the plan; it is kept` });
-
-      const actualIdx = new Map<string, { unique: boolean; cols: string[]; origin: string; partial: boolean }>();
-      for (const r of idx!.rows) {
-        const e = actualIdx.get(String(r.name)) ?? { unique: r.uniq === 1, cols: [], origin: String(r.origin), partial: r.partial === 1 };
-        e.cols.push(String(r.col));
-        actualIdx.set(String(r.name), e);
-      }
-      for (const i of d.indexes) {
-        const a = actualIdx.get(i.name);
-        if (!a) {
-          statements.push({ sql: i.sql });
-          if (i.unique) uniques.push({ schema: name, index: i.name });
-        } else if (a.unique !== i.unique || a.partial || a.cols.join() !== i.columns.join()) block(name, `index ${i.name} exists with other columns, uniqueness or a WHERE; drop it and rerun`);
-      }
-      const declaredIdx = new Set(d.indexes.map((i) => i.name));
-      for (const [n, a] of actualIdx) {
-        // a column UNIQUE is a constraint too, and it would leak across owners; only the `id` UNIQUE (ours) and primary keys pass
-        if (a.origin === "u" && a.unique && a.cols.join() !== "id") block(name, `${name} has a UNIQUE constraint on ${a.cols.join(", ")} that Mantle did not declare; it still constrains writes`);
-        if (declaredIdx.has(n) || a.origin !== "c") continue;
-        if (a.unique) block(name, `undeclared unique index ${n} still constrains writes; drop it or declare it`);
-        else undeclared.push({ schema: name, code: "STORAGE_UNDECLARED_INDEX", message: schema.scope && n === `_mantle_scope_${name}` ? `index ${n} is redundant: a declared index leads with ${schema.scope}; drop it by hand` : `index ${n} is in the database and not in the plan; it is kept` });
-      }
-    }
-    // Mantle's own triggers and search / geo tables: rebuilt when their declaration changes, dropped when it goes away
-    const wantTriggers = new Set(d.triggers.map((x) => x.name));
-    for (const r of byName.values())
-      if (r.type === "trigger" && r.tbl_name === name && String(r.name).startsWith("_mantle_") && !wantTriggers.has(String(r.name))) {
-        statements.push({ sql: `DROP TRIGGER IF EXISTS ${q(String(r.name))}` });
-        // the insert trigger of a search or geo table names it: a declaration that went away takes its table with it (a name
-        // alone is not evidence, an FTS5 or R*Tree shadow table of another Schema can look the same)
-        const tree = /^(_mantle_(?:fts|geo)_.+)_i$/.exec(String(r.name));
-        if (tree && byName.get(tree[1]!)?.sql?.toString().startsWith("CREATE VIRTUAL TABLE")) statements.push({ sql: `DROP TABLE IF EXISTS ${q(tree[1]!)}` });
-      }
-    for (const v of d.virtuals) {
-      const cur = byName.get(v.name);
-      if (cur?.sql === v.sql) continue;
-      // a virtual table's triggers reference it, so they are dropped and recreated with it
-      statements.push({ sql: `DROP TABLE IF EXISTS ${q(v.name)}` }, { sql: v.sql }, { sql: v.rebuild });
-    }
-    for (const tr of d.triggers) {
-      if (byName.get(tr.name)?.sql !== tr.sql) statements.push({ sql: `DROP TRIGGER IF EXISTS ${q(tr.name)}` }, { sql: tr.sql });
-    }
-  }
-  return { statements, blocked, undeclared, uniques };
 }

@@ -3,7 +3,7 @@ import { ContractError, deny, type Caller, type Row } from "@aotter/mantle/contr
 import { binds, bound, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/binds";
 import { query as readQuery } from "@aotter/mantle/validation";
 import { invalid } from "@aotter/mantle/surface";
-import { page, decodeNullableCursor, encodeCursor, validCursor, type CursorKind, type Pages } from "@aotter/mantle/paging";
+import { checkPageLimit, page, decodeNullableCursor, encodeCursor, validCursor, type CursorKind, type Pages } from "@aotter/mantle/paging";
 import type {EntryPageQuery, EntryScalar} from "./entries.js";
 export interface NativeAdapter<Database> {
     readonly read: (db: Database, sql: string, values: unknown[]) => PromiseLike<Row[]> | Row[];
@@ -18,18 +18,22 @@ export async function nativeStatistics<Database>(specs: Readonly<Record<string, 
     const spec = specs[collection]!, {from, to, bucketMs} = args;
     if (!spec.statistics || ![from, to, bucketMs].every(Number.isSafeInteger) || from < 0 || to <= from || bucketMs <= 0 || to - from > 20 * 86400000 || Math.ceil((to - from) / bucketMs) > 480 || Math.max(to, bucketMs) > Number.MAX_SAFE_INTEGER / 1000) invalid("Statistics require <=20 days and <=480 buckets.", "admin/statistics");
     const m = spec.caller, values = binds(adapter.values, m.binds, caller);
+    const policy = m.policy ? " WHERE (" + m.policy + ")" : "";
+    const totalQuery = `SELECT -1 AS bucket, NULL AS subtype, count(*) AS count ${m.from}${policy}`;
     const parameter = (value: unknown) => {values.push(value); return adapter.param(values.length);};
-    const lower = parameter(from * 1000), upper = parameter(to * 1000), width = parameter(bucketMs * 1000);
-    const source = `SELECT ${spec.statistics.time} AS _time, ${spec.statistics.subtype} AS _subtype ${m.from}${m.policy ? " WHERE (" + m.policy + ")" : ""}`;
-    const division = `((_time - ${lower}) / ${width})`, bucket = adapter.sqlite ? `CAST(${division} AS INTEGER)` : `CAST(floor(${division}) AS bigint)`;
-    const rowsAlias = spec.statistics.rowsAlias.sql;
-    const rows = await adapter.read(db, `WITH ${rowsAlias} AS (${source}) SELECT -1 AS bucket, NULL AS subtype, count(*) AS count FROM ${rowsAlias} UNION ALL SELECT ${bucket} AS bucket, _subtype AS subtype, count(*) AS count FROM ${rowsAlias} WHERE _time >= ${lower} AND _time < ${upper} GROUP BY ${bucket}, _subtype ORDER BY bucket, subtype`, values);
-    let total = 0;
-    const buckets: {bucket: number; subtype: string | null; count: number}[] = [];
-    for (const row of rows) {
-        if (Number(row.bucket) === -1) total = Number(row.count);
-        else buckets.push({bucket: Number(row.bucket), subtype: row.subtype == null ? null : String(row.subtype), count: Number(row.count)});
-    }
+    // Bindings generated without `column` compare the epoch-microsecond `time` expression, so they bind numbers.
+    const micros = adapter.sqlite || !spec.statistics.column;
+    const lower = parameter(micros ? from * 1000 : new Date(from).toISOString());
+    const upper = parameter(micros ? to * 1000 : new Date(to).toISOString());
+    const width = parameter(bucketMs * 1000);
+    const time = spec.statistics.time, column = spec.statistics.column ?? time;
+    const origin = micros ? lower : `extract(epoch FROM CAST(${lower} AS timestamptz)) * 1000000`;
+    const division = `((${time} - ${origin}) / ${width})`;
+    const bucket = adapter.sqlite ? `CAST(${division} AS INTEGER)` : `CAST(floor(${division}) AS bigint)`;
+    // Independent aggregates avoid CTE materialization while retaining one native round trip.
+    const rows = await adapter.read(db, `${totalQuery} UNION ALL SELECT ${bucket} AS bucket, ${spec.statistics.subtype} AS subtype, count(*) AS count ${m.from}${policy}${policy ? " AND" : " WHERE"} ${column} >= ${lower} AND ${column} < ${upper} GROUP BY 1, 2 ORDER BY bucket, subtype`, values);
+    const total = Number(rows.find(row => Number(row.bucket) === -1)?.count ?? 0);
+    const buckets = rows.filter(row => Number(row.bucket) !== -1).map(row => ({bucket: Number(row.bucket), subtype: row.subtype == null ? null : String(row.subtype), count: Number(row.count)}));
     return {total, buckets};
 }
 export function nativeText(value: unknown): void {
@@ -146,7 +150,7 @@ export interface NativeCollection extends NativeEntryProcedures {
     readonly fields: Readonly<Record<string, {readonly expression: string; readonly value: string; readonly wire: string; readonly kind?: CursorKind; readonly nullable: boolean}>>;
     readonly orderFields: readonly string[];
     readonly search?: string;
-    readonly statistics?: {readonly time: string; readonly subtype: string; readonly rowsAlias: {readonly name: string; readonly sql: string}};
+    readonly statistics?: {readonly column?: string; readonly time: string; readonly subtype: string; readonly rowsAlias: {readonly name: string; readonly sql: string}};
 }
 export async function nativeEntryGet<Database>(spec: NativeCollection, adapter: NativeAdapter<Database>, db: Database, caller: Caller, id: string): Promise<Row | null> {
     if (typeof id !== "string" || !id) invalid("An entry id is required.", spec.path);
@@ -191,7 +195,7 @@ export async function nativeEntryPage<Database>(spec: NativeCollection, adapter:
     const field = spec.fields[column]!;
     if (!field.kind) invalid("Unknown cursor type.", spec.path);
     const limit = query.limit ?? 50;
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) invalid("limit is 1 to 500.", spec.path);
+    checkPageLimit(limit, spec.path);
     const m = caller.kind === "system" ? spec.trusted : spec.caller, filters = query.match?.filters ?? {}, search = query.match?.search;
     const operation = JSON.stringify([spec.path, caller, query.input, filters, search ?? null, query.order]);
     const cursor = query.cursor === undefined ? undefined : decodeNullableCursor(query.cursor, spec.path + "/cursor", operation);
@@ -299,8 +303,7 @@ export function entriesQuery(params: URLSearchParams, options: {
     if (!Object.hasOwn(options.orderFields, sort) || !["asc", "desc"].includes(direction))
         fail("Unknown indexed sort or direction.");
     const { limit: givenLimit, cursor } = readQuery(params, raw => raw as Record<string, unknown>, options.path, []), limit = givenLimit ?? 50;
-    if (limit < 1 || limit > 500)
-        fail("limit is 1 to 500.");
+    checkPageLimit(limit, options.path);
     const search = (params.get("q") ?? params.get("search"))?.trim();
     if (search?.includes("\0"))
         fail("Search must not contain NUL.");

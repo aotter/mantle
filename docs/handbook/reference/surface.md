@@ -71,7 +71,7 @@ Every route needs a staff caller; the column names the least role.
 | `GET`, `PATCH /admin/api/x/{extension}/settings/{id}` | the settings' `role` | load and save an extension's settings; `PATCH { value }` is checked against its `schema` (400 with `error.fields`) |
 | `POST /admin/api/x/{extension}/actions/{id}` | the action's `role` | run a `run` or `confirm` action with `{ record }`, `{ selection }` or `{ schema }` for its target; `when.schema` is enforced |
 | `… /admin/api/x/{extension}/api/{path}` | the extension's lowest contribution role | the extension's own API (`handlers.api`); `null` answers 404; answers are `no-store` unless the handler sets `cache-control` |
-| `GET /admin/extensions/{id}.js` | the extension's lowest contribution role | a `source` extension's module; its integrity is in the shell's import map ([Extend Admin](../guides/admin-extensions.md)) |
+| Historical only: `GET /admin/extensions/{id}.js` | the extension's lowest contribution role | a `source` extension's module; its integrity is in the shell's import map ([Extend Admin](../guides/admin-extensions.md)) |
 
 ## Packages
 
@@ -100,3 +100,9 @@ A subpath that is not imported is never loaded: a service with identity
 `mantle generate [--manifests <dir>] [--features <list>] [--identity <kind>] [--host <host>] [--dialect <name>]`
 and `mantle generate --check [--database <file>]`. See
 [Project layout and CLI](../start/project-and-cli.md).
+
+
+Native Admin does not serve `source` modules at `/admin/extensions/{id}.js` or
+inject extension integrity into the shell. Use a host-served same-origin `module`
+path, and install its integrity in the host shell's import map. The `source`
+examples and module route below describe the historical RuntimePlan API only.

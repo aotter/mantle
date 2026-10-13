@@ -10,7 +10,7 @@ export interface GenerateInput {
   /** Compiler-authorized native creation-statistics reads, selected only for Admin. */
   readonly adminPages?: Readonly<Record<string,{caller:AdminPage;trusted:AdminPage}>>;
   /** Build-time declarations used to check manifest UI bindings. */
-  readonly adminExtensions?: readonly Pick<AdminExtension, "id" | "contributes">[];
+  readonly adminExtensions?: readonly AdminExtension[];
   readonly site?: import("../build/compiler.js").SiteDefaults;
   readonly plan: RuntimePlan;
   readonly lowered: PlanLowered;

@@ -66,7 +66,7 @@ test("translation projection folds children, inherits media and retains composit
 
 test("publishing descriptors use generated Procedure and canonical staff MCP names",async()=>{
   const plan=await planOf([manifest("Schema","articles",schema({title:{type:"string"}},["title"],{lifecycle:"publishing"})),manifest("View","articles-list",{surface:"staff",sql:"SELECT id,title FROM articles ORDER BY id"}),manifest("View","articles-second",{surface:"staff",sql:"SELECT id,title FROM articles ORDER BY id"})]),{loaded:m}=await metadata(plan);
-  expect(m.operations).toEqual([]);expect(m.webmcp.tools.map((t:any)=>t.name)).toEqual(["articles_list","articles_second"]);expect(m.webmcp.routes.publish_articles).toBeUndefined();
+  expect(m.operations).toEqual([]);expect(m.webmcp.tools.map((t:any)=>t.name)).toEqual(["articles_list","articles_second","publish_articles","unpublish_articles","archive_articles"]);expect(m.webmcp.routes.publish_articles).toEqual({path:"/admin/c/articles",entry:true});
   expect(m.mcpAppCatalogues.staff.views.articles_list.actions).toEqual(["publish_articles","unpublish_articles","archive_articles"]);expect(m.mcpAppCatalogues.staff.views.articles_second.actions).toEqual(["publish_articles","unpublish_articles","archive_articles"]);expect(m.mcpAppCatalogues.public.actions).toEqual({});expect(m.authorizations.procedures["articles.publish"].auth.all).toEqual([{"ctx.staff":[...STAFF_ROLES]}]);
   expect(m.developerConsole.interfaces.callable.find((t:any)=>t.name==="publish_articles")).toMatchObject({target:"articles.publish",surface:"staff",audience:"staff"});
 });

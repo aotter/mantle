@@ -29,7 +29,7 @@ async function writeBindings(dir:string,files:Readonly<Record<string,string>>){
  await writeGenerated(dir,{...linked,"native-admin.ts":source.replaceAll('"@aotter/mantle/','"@aotter/mantle/')});
 }
 async function fixture(){const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-bindings-"));const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[source]},admin:true});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);const {adminBindings}=await import(join(dir,"admin-bindings.ts"));const db=new Database(":memory:");db.exec(result.files["schema.sql"]!);return {dir,db,files:result.files,bindings:adminBindings()};}
-test("selected Admin emits factories, indexed null ordering, scoped batch filters and one statistics query",async()=>{
+test("selected Admin emits factories, indexed null ordering, scoped batch filters and independent statistics branches in one round trip",async()=>{
  const {dir,db,files,bindings}=await fixture();const adapter=bindings.adapter,native=await import(join(dir,"native-admin.ts"));try{
  expect(files["admin-bindings.ts"]).toContain('import type {EntrySchema}');expect(files["admin-bindings.ts"]!.split("export function adminBindings")[0]).not.toContain("=store(");
  expect(bindings.metadata.allCollections.records.exportFields).toEqual(["label","kind","flag","data","expiry"]);expect(bindings.metadata.allCollections.records.scopeField).toBe("ownerId");

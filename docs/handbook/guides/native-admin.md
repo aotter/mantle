@@ -185,3 +185,26 @@ SDK package bytes and query/write/cold timing are separate checks. Extra selecte
 Admin indexes add write/storage maintenance; an indexed SELECT plan does not
 prove unchanged write latency. Report remaining gates honestly; this preview
 neither establishes release acceptance nor promises measured performance.
+
+## Extension declarations
+
+Pass full declarations to `--admin-extensions`. Generation emits
+`extensionMetadata` in `admin-descriptors.ts` and compiled settings checks plus
+`extensionBindings` in `admin-extensions.ts`. Bind the same runtime definitions
+(including handlers) with `extensionBindings(adminExtensions)`, and merge the
+returned `extensions` and `routes` into `admin()` options. Declaration drift is
+refused before any handler runs. The older descriptor `extensionBindings` export
+contains manifest UI references only; it is not the runtime binding function.
+
+Native Admin does not serve `source` modules or modify shell import maps. Serve
+an extension's `module` at a same-origin absolute path and install its `integrity`
+in the host shell import map. Selecting `source` fails generation with that
+instruction. This differs from historical 0.2's automatic source-module route.
+
+Entry lists and editor reads/writes return translation badges and related
+sections in one authorized HTTP response. `/bootstrap?collection=...` can include
+the first requested list page. CSV exports use `/entries/export` and
+`/views/{name}/export`; native browser downloads stream paged server output.
+A failure after headers aborts the stream, so a download can fail after partial
+bytes have arrived. Existing databases need an app-owned migration for the
+Admin-selected `created_at` statistics indexes emitted in initial `schema.sql`.

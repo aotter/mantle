@@ -74,6 +74,7 @@ export async function verifyAdminBindings(bindings:any,handle:any,reads:()=>numb
    before=reads();const providerBeforeStats=providers;
    assert.equal((await ask("/collections/notes/statistics?range=unknown"))?.status,400);assert.equal(providers,providerBeforeStats);assert.equal(reads(),before);
    const statistics=await ask("/collections/notes/statistics?range=1h");assert.equal(statistics?.status,200);const counts=await statistics!.json();assert.equal(counts.total,1);assert.equal(counts.buckets.reduce((sum:number,bucket:any)=>sum+bucket.count,0),1);assert.equal(reads()-before,1);
+   const download=await ask("/entries/export?collection=notes");assert.equal(download?.status,200);const text=await download!.text();assert.ok(text.includes("ref changed"));assert.ok(!text.includes("other owner"));
 
    const draft=await(await ask("/entries","POST",{collection:"posts",data:{title:"Draft"}}))!.json();assert.equal(draft.entry.status,"draft");
    const published=await ask(`/entries/${draft.entry.id}/publish?collection=posts`,"POST",{});assert.equal(published?.status,200);assert.equal((await published!.json()).entry.status,"published");

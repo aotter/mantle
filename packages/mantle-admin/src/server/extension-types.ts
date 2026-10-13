@@ -87,13 +87,9 @@ export interface AdminExtension<Env = unknown, Database = unknown> {
     readonly title: LocalizedText;
     /** A same-origin ESM path the host serves, whose default export is `defineAdminExtension({...})`. */
     readonly module?: string;
-    /** Subresource Integrity for `module`, enforced through Admin's import map. */
+    /** The host installs module integrity in its shell import map; Admin does not inject it. */
     readonly integrity?: string;
-    /**
-     * The module's code, which build tooling emits at `{basePath}/extensions/{id}.js` to staff whose role reaches the
-     * extension, with its integrity computed. Plain ESM needs no build: Admin's import map resolves `react`,
-     * `react/jsx-runtime`, `react-dom/client`, `@aotter/mantle-ui/kit` and `@aotter/mantle-admin/extension`.
-     */
+    /** Historical source modules are unsupported by native Admin; use a host-served module. */
     readonly source?: string | (() => string | Promise<string>);
     readonly contributes: AdminExtensionContributions;
     readonly handlers?: AdminExtensionHandlers<Env, Database>;

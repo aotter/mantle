@@ -1,3 +1,4 @@
+import { entriesQueryArgsFromSearch, entriesQuerySearchParams, entriesQueryOptions, withNavigationTools } from "../lib/queries";
 import { canRenderAdmin } from "./frame-policy";
 import { usePreferences } from "./preferences";
 import { t } from "./i18n";
@@ -8,7 +9,7 @@ import { AuthenticatedLayout } from "../layout/authenticated-layout";
 import { api, ApiError } from "../lib/api";
 import type { AdminUser, Collection, SiteInfo, StaffOperation, ViewManifestInfo } from "../lib/types";
 import type { AdminToolCatalog } from "../lib/admin-tools";
-import { withNavigationTools } from "../lib/queries";
+
 import { useAdminLocation } from "./router";
 import {
   AccessDeniedView,
@@ -77,6 +78,7 @@ interface BootstrapPayload {
   operations: StaffOperation[];
   views: ViewManifestInfo[];
   webmcp: AdminToolCatalog;
+  entries?: import("../lib/types").ListEntriesResult;
 }
 
 function Gate({ path, search, preview }: { path: string; search: string; preview: boolean }): React.ReactElement {
@@ -88,7 +90,9 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     queryKey: ["me"],
     queryFn: async () => {
       if (!useBootstrap) return api.get<AdminUser>("/me");
-      const data = await api.get<BootstrapPayload>("/bootstrap");
+      const args = entriesQueryArgsFromSearch(decodeURIComponent(collectionMatch![1]!), search);
+      const data = await api.get<BootstrapPayload>(`/bootstrap?${entriesQuerySearchParams(args)}`);
+      if (data.entries) queryClient.setQueryData(entriesQueryOptions(args).queryKey, data.entries);
       queryClient.setQueryData(["collections"], data.collections);
       queryClient.setQueryData(["site"], data.site);
       queryClient.setQueryData(["operations"], data.operations);

@@ -24,7 +24,7 @@ export interface McpTool {
 
 /**
  * The tools an MCP surface lists (ADR-0032 decision 9): each Procedure bound by an `mcp` Trigger of the surface and each View of it,
- * never a Schema. `createMcpSurface` registers exactly these, and Admin's `/webmcp` publishes them, so the two cannot disagree.
+ * never a Schema. Generated MCP and Admin catalogues use these declarations; publishing transitions are added by the generator.
  */
 export function mcpTools(plan: RuntimePlan, surface: "public" | "staff", locale = "en"): McpTool[] {
   const text = (t: LocalizedText | undefined) => resolveLocalizedText(t, locale, "en") ?? undefined;

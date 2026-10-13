@@ -32,12 +32,17 @@ const extraTools: readonly Tool<Handle, Handlers>[] = [
     return {};
   }, page: salesPage },
 ];
+const authorities = new WeakMap<Request, () => Promise<Caller>>();
+const options = { db: (env: Env) => env.DB, caller: (request: Request) => authorities.get(request)!(), handlers };
+let serveAdmin: ReturnType<typeof admin<Env, Handle, Handlers>> | undefined;
+let serveMcpHandler: ReturnType<typeof serveMcp<Env, Handle, Handlers>> | undefined;
+const serveRest = rest(options);
 export async function fetchService(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
   auth ??= authLoader(() => import("./auth.js").then(m => m.createAuth(env)));
   const headers = new Headers();
   let authority: Promise<Caller> | undefined;
   const caller = () => authority ??= resolveCaller(request, auth!, { audience: `${env.PUBLIC_ORIGIN}/mcp`, responseHeaders: headers }).then(value => { checkOrigin(request, value); return value; });
-  const options = { db: (env: Env) => env.DB, caller, handlers };
+  authorities.set(request, caller);
   const respond = (response: Response) => {
     for (const cookie of headers.getSetCookie()) response.headers.append("set-cookie", cookie);
     return response;
@@ -47,22 +52,31 @@ export async function fetchService(request: Request, env: Env, context: Executio
     if (ownAuth) return respond(ownAuth);
     const url = new URL(request.url), paging = { ...(url.searchParams.has("limit") ? { limit: Number(url.searchParams.get("limit")) } : {}), ...(url.searchParams.has("cursor") ? { cursor: url.searchParams.get("cursor")! } : {}) };
     if (url.pathname === "/api/views/search-items" && request.method === "GET") return respond(Response.json(await searchPage(env.DB, await caller(), { q: url.searchParams.get("q")! }, paging), { headers: { "cache-control": "private, no-store" } }));
-    const bindings = adminBindings({handlers});
-    const metadata = {...bindings.metadata, views:[...bindings.metadata.views,salesDescriptor],webmcp:addSalesTool(bindings.metadata.webmcp)};
-    const salesView = {name:"sales-by-item",allows:(caller:Caller)=>caller.kind==="user"&&caller.role==="staff",query:(params:URLSearchParams)=>({input:{},...pageOptions({limit:params.has("limit")?Number(params.get("limit")):undefined,cursor:params.get("cursor")??undefined}),cursor:params.get("cursor")??undefined}),page:salesPage};
-    const adminOptions = {...options,identity:{directory:async ({caller,request}: {caller:Caller;request:Request})=>{const {d1Identity}=await import("@aotter/mantle/auth/identity");return d1Identity(env.DB,await auth!.get(),caller,request.headers);}},mcpEndpoints:{public:"/mcp",staff:"/mcp/staff"}};
-    const serveAdmin = admin(metadata,[...bindings.views,salesView],bindings.operations,{...adminOptions,routes:[...entries(bindings.schemas,bindings.adapter),...siteRoutes(adminOptions),...webmcpRoutes(metadata.webmcp,[...tools,...extraTools],handlers)]});
-    const serveMcpHandler = serveMcp([...tools, ...extraTools], ["staff"], { ...options, apps: { staff: adminMcpApps({catalogue:{ ...mcpAppCatalogues.staff, views: { ...mcpAppCatalogues.staff.views, sales_by_item: { columns: { name: { type: "string" } }, list: { columns: [] }, actions: [] } } },html:async()=> (await import("@aotter/mantle-admin/mcp-app")).mantleAppHtml}) } });
-    for (const route of [serveAdmin, serveMcpHandler, rest(options)]) {
-      const response = await route(request, env);
-      if (response) {
-        // Preserve the same post-commit effect for native Admin entry writers.
-        if (response.ok && ["POST", "PATCH"].includes(request.method) && /^\/admin\/api\/entries(?:\/[^/]+)?$/.test(decodeURIComponent(url.pathname).replace(/\/$/, "")) && url.searchParams.get("collection")?.toLowerCase() === "orders") {
-          const output = await response.clone().json() as { entry: { id: string; data: Record<string, unknown> } };
-          await recordOrders(env.DB, await caller(), [{ id: output.entry.id, ...output.entry.data }], request.method === "POST" ? "after_create" : "after_update");
-        }
-        return respond(response);
+    let response: Response | undefined;
+    if (url.pathname === "/admin/api" || url.pathname.startsWith("/admin/api/")) {
+      if (!serveAdmin) {
+        const bindings = adminBindings({handlers});
+        const metadata = {...bindings.metadata, views:[...bindings.metadata.views,salesDescriptor],webmcp:addSalesTool(bindings.metadata.webmcp)};
+        const salesView = {name:"sales-by-item",allows:(caller:Caller)=>caller.kind==="user"&&caller.role==="staff",query:(params:URLSearchParams)=>({input:{},...pageOptions({limit:params.has("limit")?Number(params.get("limit")):undefined,cursor:params.get("cursor")??undefined}),cursor:params.get("cursor")??undefined}),page:salesPage};
+        const adminOptions = {...options,identity:{directory:async ({caller,request,db}: {caller:Caller;request:Request;db:Handle})=>{const {d1Identity}=await import("@aotter/mantle/auth/identity");return d1Identity(db,await auth!.get(),caller,request.headers);}},mcpEndpoints:{public:"/mcp",staff:"/mcp/staff"}};
+        serveAdmin = admin(metadata,[...bindings.views,salesView],bindings.operations,{...adminOptions,routes:[...entries(bindings.schemas,bindings.adapter),...siteRoutes(adminOptions),...webmcpRoutes(metadata.webmcp,[...tools,...extraTools],handlers)]});
       }
+      response = await serveAdmin(request, env);
+    } else if (/^\/mcp(?:\/staff)?\/*$/.test(url.pathname)) {
+      if (!serveMcpHandler) {
+        serveMcpHandler = serveMcp([...tools, ...extraTools], ["staff"], { ...options, apps: { staff: adminMcpApps({catalogue:{ ...mcpAppCatalogues.staff, views: { ...mcpAppCatalogues.staff.views, sales_by_item: { columns: { name: { type: "string" } }, list: { columns: [] }, actions: [] } } },html:async()=> (await import("@aotter/mantle-admin/mcp-app")).mantleAppHtml}) } });
+      }
+      response = await serveMcpHandler(request, env);
+    } else {
+      response = await serveRest(request, env);
+    }
+    if (response) {
+      // Preserve the same post-commit effect for native Admin entry writers.
+      if (response.ok && ["POST", "PATCH"].includes(request.method) && /^\/admin\/api\/entries(?:\/[^/]+)?$/.test(decodeURIComponent(url.pathname).replace(/\/$/, "")) && url.searchParams.get("collection")?.toLowerCase() === "orders") {
+        const output = await response.clone().json() as { entry: { id: string; data: Record<string, unknown> } };
+        await recordOrders(env.DB, await caller(), [{ id: output.entry.id, ...output.entry.data }], request.method === "POST" ? "after_create" : "after_update");
+      }
+      return respond(response);
     }
     const shell = await adminShell(request, path => env.ASSETS.fetch(new Request(new URL("/" + path, url), request)));
     if (shell) return shell;

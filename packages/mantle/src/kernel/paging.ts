@@ -22,6 +22,11 @@ export function decodeNullableCursor(cursor: string, path: string, operation: st
   invalid("Malformed or foreign cursor.", path);
 }
 
+export const MAX_PAGE_SIZE = 500;
+/** Transport and native entry bounds share one check; Views retain their declared cap. */
+export function checkPageLimit(limit: unknown, path: string): asserts limit is number {
+  if (!Number.isSafeInteger(limit) || Number(limit) < 1 || Number(limit) > MAX_PAGE_SIZE) invalid("limit is 1 to 500.", path);
+}
 /** First and next page SQL; `extra` lists, per trailing placeholder, the cursor key it binds (-1: the limit + 1). */
 export interface Pages { readonly binds: readonly Recipe[]; readonly first: { readonly sql: string; readonly extra: readonly number[] }; readonly next: { readonly sql: string; readonly extra: readonly number[] } }
 /** The order column's cursor check: `int` is int8/integer, `numeric` a NUMERIC with scale, `date`/`timestamp` strings converted by the dialect. */
@@ -66,7 +71,7 @@ export async function page<Database, Row>(spec: Paged<Database>, db: Database, c
   spec.auth?.(caller);
   const requested = options.limit ?? Math.min(50, cap);
   if (!Number.isInteger(requested) || requested < 1) invalid("limit must be a positive integer.", path + "/limit");
-  const limit = Math.min(requested, cap, 500);
+  const limit = Math.min(requested, cap, MAX_PAGE_SIZE);
   const m = caller.kind === "system" && spec.trusted ? spec.trusted : spec.caller;
   const values = binds(spec.values, m.binds, caller, input as Readonly<Record<string, unknown>>);
   let keys: unknown[] | undefined;

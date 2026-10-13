@@ -1,9 +1,12 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
-import { DiagnosticError, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, requiredEnumStates, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
+import { DiagnosticError, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, requiredEnumStates, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
 import { STAFF_ROLES } from "../domain/visibility.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
+import { emitValidation } from "./validation.js";
 import { publishingInput, publishingTransitions } from "./publishing.js";
+
+const adminEnum = (p: JsonSchema): JsonSchema => { if(!p.oneOf) return p; const {oneOf,...rest}=p; return {...rest,enum:oneOf.map(c=>c.const)}; };
 
 export function emitAdminDescriptors({plan,adminExtensions=[],admin=false}:Pick<GenerateInput,"plan"|"adminExtensions"|"admin">,diagnostics:GenerateDiagnostic[]):Record<string,string> {
   try {checkPlanUiExtensions(plan,adminExtensions);} catch(error) {
@@ -32,7 +35,7 @@ export function emitAdminDescriptors({plan,adminExtensions=[],admin=false}:Pick<
   const staffCatalogue=appCatalog(plan,"staff");
   const catalogues={public:appCatalog(plan,"public"),staff:{views:Object.fromEntries(Object.entries(staffCatalogue.views).map(([name,v])=>[name,{...v,actions:[...v.actions]}])),actions:{...staffCatalogue.actions}}};
   const snapshot=developerConsole(plan);
-  const webmcp={tools:staffTools.map(({name,title,description,inputSchema,outputSchema,annotations})=>({name,...(title?{title}:{}),description,inputSchema,...(outputSchema?{outputSchema}:{}),...(annotations?{annotations}:{})})),routes:Object.fromEntries(staffTools.flatMap(t=>{
+  const webmcp={tools:staffTools.map(({name,source,kind,title,description,inputSchema,outputSchema,annotations})=>({name,...(title?{title:(kind==="view"?plan.views[source]:plan.procedures[source])!.title??title}:{}),description:(kind==="view"?plan.views[source]:plan.procedures[source])!.description??description,inputSchema,...(outputSchema?{outputSchema}:{}),...(annotations?{annotations}:{})})),routes:Object.fromEntries(staffTools.flatMap(t=>{
     if(t.kind==="view")return [[t.name,{path:"/admin/views/"+encodeURIComponent(t.source)}]];
     const target=plan.procedures[t.source]!.target;return target?[[t.name,{path:"/admin/c/"+encodeURIComponent(plan.schemas[target.schema.toLowerCase()]?.name??target.schema),entry:true}]]:[];
   })) as Record<string,{path:string;entry?:boolean}>};
@@ -47,10 +50,34 @@ export function emitAdminDescriptors({plan,adminExtensions=[],admin=false}:Pick<
 
     authorizations.procedures[name]={auth:{all:[{"ctx.staff":[...STAFF_ROLES]}]}};
     const description=verb+" an entry in "+schema.name+".";
+    webmcp.tools.push({name:tool,description,inputSchema:publishingInput,annotations:{readOnlyHint:false,destructiveHint:verb==="archive"}});
+    webmcp.routes[tool]={path:"/admin/c/"+encodeURIComponent(schema.name),entry:true};
     snapshot.interfaces.callable.push({kind:"procedure",name:tool,target:name,surface:"staff",audience:"staff",title:null,description,input:publishingInput,output:null,trigger:null});
   }
-  const data={allCollections,views,operations,fieldNames:Object.fromEntries(schemas.map(s=>[s.name,s.names])),viewNames,authorizations,developerConsole:snapshot,mcpAppCatalogues:catalogues,webmcp,extensionBindings:planUiExtensionRefs(plan)};
-  return {"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+literals(data)+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+q(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, allCollections, operations, views, webmcp, developerConsole} as const;\n"};
+  const extensionIds = new Set<string>();
+  const extensionMetadata = adminExtensions.map(extension => {
+    if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(extension.id) || extensionIds.has(extension.id) || extension.apiVersion !== undefined && extension.apiVersion !== 1) diagnostics.push({code:"UI_EXTENSION_INVALID",path:"admin/extensions/"+extension.id,message:"Extensions need unique kebab-case ids and apiVersion 1."});
+    extensionIds.add(extension.id);
+    const {source, handlers: _handlers, bodyLimit: _bodyLimit, ...declaration} = extension as typeof extension & {handlers?: unknown; bodyLimit?: number};
+    if (source !== undefined) diagnostics.push({code:"GENERATE_UNSUPPORTED",path:"admin/extensions/"+extension.id,message:"Native Admin uses host-served module paths; source modules are not served. Set module and install its integrity in the host shell import map."});
+    if (extension.module && (!extension.module.startsWith("/") || extension.module.startsWith("//") || /[\\?#]/.test(extension.module))) diagnostics.push({code:"UI_EXTENSION_INVALID",path:"admin/extensions/"+extension.id,message:"module must be a same-origin absolute path."});
+    return {id:extension.id,declaration:JSON.stringify(declaration),public:declaration,...(extension.module?{module:extension.module}:{}),...(extension.integrity?{integrity:extension.integrity}:{}),source:false,settings:(extension.contributes.settings??[]).map(s=>s.id),actions:(extension.contributes.actions??[]).map(a=>({id:a.id,target:a.target,...(a.when?.schema?{schema:a.when.schema}:{})}))};
+  });
+  const checks: string[] = [], validationFiles: Record<string,string> = {};
+  for (const extension of adminExtensions) for (const settings of extension.contributes.settings ?? []) {
+    const key=extension.id+"/"+settings.id, problem=formSchemaProblem(settings.schema);
+    if(problem){diagnostics.push({code:"UI_EXTENSION_INVALID",path:"admin/extensions/"+key,message:problem});continue;}
+    const input={...settings.schema,additionalProperties:false,properties:Object.fromEntries(Object.entries(settings.schema.properties??{}).map(([name,p])=>[name,adminEnum(p)]))};
+    const file=extension.id+"__"+settings.id; // ponytail: no "/" so Node ESM can import the emitted module
+    const generated=emitValidation({views:{},procedures:{[file]:{input}}},(path,message)=>diagnostics.push({code:"GENERATE_UNSUPPORTED",path,message}));
+    Object.assign(validationFiles,generated);
+    const alias="check"+checks.length;
+    checks.push(`import {validate as ${alias}} from "./validation/procedures/${encodeURIComponent(file)}.js";`);
+  }
+  const settingsKeys=adminExtensions.flatMap(e=>(e.contributes.settings??[]).map(s=>e.id+"/"+s.id));
+  const bindings = "import {extensionOptions} from '@aotter/mantle-admin/server/extensions';\nimport type {AdminExtension} from '@aotter/mantle-admin/server/extensions';\nimport {extensionMetadata} from './admin-descriptors.js';\nimport {ContractError} from '@aotter/mantle/contracts';\n"+checks.join("\n")+"\nconst checks={"+settingsKeys.map((key,n)=>`${q(key)}:(value:unknown)=>{try{check${n}(value);return {};}catch(error){if(!(error instanceof ContractError))throw error;return {[(error.path.split('/input/')[1]??'').replace(/~1/g,'/').replace(/~0/g,'~')]:error.message};}}`).join(",")+"};\nexport const extensionBindings=<Env,DB>(definitions:readonly AdminExtension<Env,DB>[])=>extensionOptions<Env,DB>(extensionMetadata,checks,definitions);\n";
+  const data={allCollections,views,operations,fieldNames:Object.fromEntries(schemas.map(s=>[s.name,s.names])),viewNames,authorizations,developerConsole:snapshot,mcpAppCatalogues:catalogues,webmcp,extensionBindings:planUiExtensionRefs(plan),extensionMetadata};
+  return {...validationFiles,...(adminExtensions.length && admin ? {"admin-extensions.ts":bindings} : {}),"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+literals(data)+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+q(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, allCollections, operations, views, webmcp, developerConsole} as const;\n"};
 }
 
 /**

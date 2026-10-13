@@ -41,8 +41,7 @@ export function extensionOptions<Env, Database>(metadata: readonly ExtensionMeta
             invalid("Extension '" + meta.id + "' differs from generation.");
         if (bodyLimit !== undefined && (!Number.isSafeInteger(bodyLimit) || bodyLimit < 1))
             invalid("bodyLimit must be a positive integer.");
-        if (source !== undefined && typeof source !== "string" && typeof source !== "function")
-            invalid("Extension source must be code or a loader.");
+        if (source !== undefined) invalid("Native Admin does not serve source modules; use a host-served module and shell import-map integrity.");
         if (!object(handlers ?? {}) || Object.keys(handlers ?? {}).some(key => !["api", "settings", "actions"].includes(key)))
             invalid("Handlers have api, settings and actions only.");
         if (handlers?.settings !== undefined && !object(handlers.settings) || handlers?.actions !== undefined && !object(handlers.actions))
