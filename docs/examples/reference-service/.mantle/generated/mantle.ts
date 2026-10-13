@@ -107,7 +107,7 @@ export namespace Mantle {
   export type ViewRow_search_u002d_items = { readonly "id": unknown; readonly "name": NonNullable<Entry_items["name"]> | null; readonly "stock": NonNullable<Entry_items["stock"]> | null; };
 
   /** Row shape returned by View 'my-orders' */
-  export type ViewRow_my_u002d_orders = { readonly "id": unknown; readonly "qty": NonNullable<Entry_orders["qty"]> | null; readonly "orderStatus": NonNullable<Entry_orders["orderStatus"]> | null; readonly "item": NonNullable<Entry_items["name"]> | null; readonly "version": unknown; };
+  export type ViewRow_my_u002d_orders = { readonly "id": unknown; readonly "qty": NonNullable<Entry_orders["qty"]> | null; readonly "orderStatus": NonNullable<Entry_orders["orderStatus"]> | null; readonly "item": NonNullable<Entry_items["name"]> | null; readonly "version": number | null; };
 
   /** Row shape returned by View 'sales-by-item' */
   export type ViewRow_sales_u002d_by_u002d_item = { readonly "name": NonNullable<Entry_items["name"]> | null; readonly "orders": unknown; readonly "units": unknown; };

@@ -25,6 +25,10 @@ defines driver-ready inputs, native results, date-time/date wire forms and failu
 For transports, `paged/views/<name>.ts` returns `{ rows, nextCursor? }` with keyset paging and
 `validation/<kind>/<name>.ts` checks input against the declared JSON Schema subset; the
 [surface deltas](../../docs/next/surfaces.md) define the REST/MCP wire contract.
+Those View responses convert declared PG integers to safe numbers or exact
+strings (including native bigint), and SQLite/D1 JSON/booleans to JSON
+values/booleans. Bare query/Store/SQL Procedure values stay native. Computed
+and ref results are app-owned; SQLite/D1 unsafe integer precision is not guaranteed.
 Proved internal Views also get paging without a public route/tool: one SELECT
 per page, validated scalar cursor keys and hidden-key removal. Schema tuples
 need indexed order after fixed equality prefixes; complete groups and singleton

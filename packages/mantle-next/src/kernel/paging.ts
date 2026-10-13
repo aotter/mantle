@@ -78,7 +78,11 @@ export async function page<Database, Row>(spec: Paged<Database>, db: Database, c
   const rows: Record<string, unknown>[] = await spec.read(db, sql.sql, [...values, ...sql.extra.map(i => i < 0 ? limit + 1 : keys![i])]);
   const last = rows[limit - 1];
   if (!spec.keys && rows.length > limit) invalid("This unordered View exceeds one page; add a supported ORDER BY.", path);
-  const next = last && Array.from({ length: spec.keys }, (_, i) => last[`_k${i}`]);
+  const next = last && Array.from({ length: spec.keys }, (_, i) => {
+    const key = last[`_k${i}`];
+    return typeof key === "bigint" && (spec.cursor[i] === "int" || spec.cursor[i] === "int4")
+      ? Number.isSafeInteger(Number(key)) ? Number(key) : String(key) : key;
+  });
   const nextCursor = rows.length > limit && next ? encodeURIComponent(JSON.stringify([...next, ...(spec.keys === 1 ? next : []), path])) : undefined;
   if (rows.length > limit) rows.length = limit;
   for (const row of rows) for (let i = 0; i < spec.keys; i++) delete row[`_k${i}`];

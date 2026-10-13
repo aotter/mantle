@@ -86,7 +86,7 @@ describe("appCatalog", () => {
     expect(Object.keys(catalog.views)).toEqual(["pending", "totals", "joined", "aliased"]);
     expect(catalog.views["pending"]).toEqual({
       title: "Pending",
-      columns: { item: { type: "string", title: { en: "Item", "zh-TW": "品項" } }, totalMinor: { type: "integer", "x-mcp-hint": "money-minor" }, created_at: { type: "string", format: "date-time" } },
+      columns: { version: { type: "integer" }, item: { type: "string", title: { en: "Item", "zh-TW": "品項" } }, totalMinor: { type: "integer", "x-mcp-hint": "money-minor" }, created_at: { type: "string", format: "date-time" } },
       list: { columns: ["item", "totalMinor"] },
       actions: ["approve"],
     });

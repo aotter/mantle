@@ -87,6 +87,16 @@ justify overriding every PG type parser or adding a generic decoder to the bare
 query. Authored output names should be emitted into SQL where valid, avoiding
 an extra per-row projection merely to repair names already known at generation.
 
+Selected REST/MCP View boundaries use generated column lineage: PostgreSQL
+declared integers become numbers when safe, otherwise exact native strings
+(including a driver's bigint converted to a string); SQLite/D1 declared JSON
+and booleans become JSON values and booleans. Computed outputs, SQL Procedures
+and app-owned ref results retain their native values. Integer paging cursor
+keys serialize bigint without changing the returned rows. SQLite/D1 unsafe
+integer numbers remain driver-native and may already have lost precision;
+full cross-target int64 parity in #1526 is unfinished. No integer SQL projection
+or generic row decoder is added to bare queries or the Store.
+
 Declared authorization, ownership/TTL SQL policy, explicit OCC and atomic writes
 remain required. Generate them as the native application would implement them.
 Transaction rollback and uncertain COMMIT handling must still preserve data-loss

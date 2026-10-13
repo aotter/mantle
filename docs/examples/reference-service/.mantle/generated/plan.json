@@ -776,6 +776,10 @@
           "item": {
             "schema": "items",
             "field": "name"
+          },
+          "version": {
+            "schema": "orders",
+            "field": "version"
           }
         },
         "inputs": {},
@@ -1931,7 +1935,7 @@
         "procedure": "weekly-digest"
       }
     },
-    "fingerprint": "4f86cd4ccb7ac3300c5306b085db02381298ea57a1428b0541782f253f4b2ecd",
+    "fingerprint": "01fba461f426f7fece61905026796c25ab8001c1d816e98c9d9a86b6a3af3dc9",
     "lowered": {
       "mantle": "0.2.0-alpha.6",
       "dialect": {

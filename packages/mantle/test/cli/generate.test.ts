@@ -52,6 +52,18 @@ const read = (dir: string, path: string) => readFile(join(dir, path), "utf8");
 const CUSTOM = ["--features", "web", "--identity", "custom"];
 
 describe("mantle generate", () => {
+  it("types the system version as a number and keeps timestamps as strings", async () => {
+    const dir = await project();
+    await writeFile(join(dir, "manifests/versions.yaml"), `apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: post-versions}
+spec: {surface: internal, sql: 'SELECT id,version AS revision,created_at FROM posts ORDER BY id'}
+`);
+    expect((await gen(CUSTOM, dir)).code).toBe(0);
+    const code = await read(dir, ".mantle/generated/mantle.ts");
+    expect(code).toContain('readonly "revision": number | null;');
+    expect(code).toContain('readonly "created_at": string | null;');
+  });
   it("writes byte-identical plan.json and mantle.ts for identical input, whatever the project's location", async () => {
     const [a, b] = [await project(), await project()];
     expect((await gen(CUSTOM, a)).code).toBe(0);

@@ -61,6 +61,10 @@ Call its default export with `(db, caller, input, { limit?, cursor? })`; it retu
 `{ rows, nextCursor? }`. Internal paging creates no public route/tool. Keep bare
 Views for authored-query row arrays, and inspect native EXPLAIN/source indexes
 when grouping: cursor paging does not eliminate aggregation work.
+Bare Views, Store and SQL Procedure results keep driver-native scalar values.
+Selected REST/MCP Views convert declared PG integers to safe numbers or exact
+strings, and SQLite/D1 JSON/booleans to JSON values/booleans. Computed/ref
+results remain app-owned; SQLite/D1 unsafe integer precision is not guaranteed.
 
 Commit everything `mantle generate` writes, including generated TypeScript, SQL and
 Wrangler edits; keep bundle `dist/` untracked. Never hand-edit generated files.
