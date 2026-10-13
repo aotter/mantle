@@ -17,7 +17,6 @@ import { handlers, recordOrders } from "./handlers.js";
 import { salesPage, searchPage, pageOptions } from "./pages.js";
 import type { Handlers } from "../generated/generated.js";
 
-export interface Env { DB: D1Database; ASSETS: Fetcher; BETTER_AUTH_SECRET?: string; PUBLIC_ORIGIN?: string; ADMIN_EMAIL?: string; }
 let auth: ReturnType<typeof authLoader<ReturnType<typeof import("./auth.js").createAuth>>> | undefined;
 const salesDescriptor = { name: "sales-by-item", title: null, description: null, input: null, list: { columns: [], searchFields: [], filterFields: [], cells: {} }, columns: { name: { schema: "items", field: "name" } } };
 const salesBrowserTool = { name: "sales_by_item", description: "Sales grouped by item.", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true } };

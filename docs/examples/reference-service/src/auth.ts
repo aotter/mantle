@@ -11,7 +11,6 @@ import { d1Adapter } from "@aotter/mantle/auth/adapter";
 import { d1BootstrapStaff } from "@aotter/mantle/auth/identity";
 import { authHardening, hashEmailOtp } from "@aotter/mantle/auth/hardening";
 import type { BetterAuthOptions } from "better-auth/types";
-import type { Env } from "./service.js";
 
 const ac = createAccessControl(defaultStatements);
 /** Schema generation reads these options without constructing Better Auth. */

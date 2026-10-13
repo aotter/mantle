@@ -17,6 +17,14 @@ use the shared origin check. A custom identity
 supplies the same verified `Caller`; absent directory/role facets remain absent.
 Never construct a system Caller from credentials or request input.
 
+Generate `Env` from the Wrangler config; do not hand-write it. Declare secrets
+under `secrets.required`, run `pnpm exec wrangler types --include-runtime=false`,
+add `worker-configuration.d.ts` to `tsconfig.json` and commit it.
+`@cloudflare/workers-types` still supplies runtime types. Rerun after every binding
+change; `wrangler types --include-runtime=false --check` fails on drift.
+Once `secrets.required` is set, `wrangler dev` loads only those keys from
+`.dev.vars`/`.env`, so declare every secret the app reads.
+
 ```ts
 // src/worker.ts — application-owned; choose imports for the features you use.
 import { authLoader, resolveCaller } from '@aotter/mantle/auth';
@@ -30,14 +38,8 @@ import { mcp } from '../generated/mcp.js';
 import { rest } from '../generated/rest.js';
 import { handlers } from './handlers.js'; // omit when there are no ref Procedures
 
-interface Env {
-  DB: D1Database;
-  ASSETS: Fetcher;
-  ORIGIN: string;
-  AUTH_SECRET: string;
-  ADMIN_EMAIL: string;
-  MAIL: import('./auth.js').Env['MAIL']; // app-owned OTP and magic-link sender
-}
+// Env comes from worker-configuration.d.ts: declare DB, ASSETS, the MAIL sender binding
+// and the ORIGIN, AUTH_SECRET and ADMIN_EMAIL secrets in Wrangler.
 let auth: import('@aotter/mantle/auth').AuthLoader<ReturnType<typeof import('./auth.js').createAuth>> | undefined;
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {

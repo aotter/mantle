@@ -6,6 +6,24 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "secrets": {
+    "required": [
+      "BETTER_AUTH_SECRET",
+      "PUBLIC_ORIGIN",
+      "ADMIN_EMAIL"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  },
   "d1_databases": [
     {
       "binding": "DB",

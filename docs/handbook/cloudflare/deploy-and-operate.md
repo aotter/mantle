@@ -21,7 +21,17 @@ For PostgreSQL, use the app's migration tool and deployment credentials. Plan lo
 
 ## Operate
 
-Auth configuration and production email delivery are app-owned; follow [authentication](authentication.md). Keep secrets in the platform's secret store. Serve the selected Admin assets through the [native Admin](../guides/native-admin.md) shell contract.
+Enable Workers Logs and traces in production. The top-level `observability.enabled` alone does not enable traces:
+
+```jsonc
+"observability": {
+  "enabled": true,
+  "logs": { "enabled": true, "head_sampling_rate": 1 },
+  "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+}
+```
+
+Auth configuration and production email delivery are app-owned; follow [authentication](authentication.md). Keep secrets in the platform's secret store. With `secrets.required`, `wrangler deploy` refuses to upload while a required secret is unset: set them with `wrangler secret put` (or pass `--secrets-file` on the first deploy). Serve the selected Admin assets through the [native Admin](../guides/native-admin.md) shell contract.
 
 Scheduling is app-owned. Wire generated system-only TTL sweeps into `scheduled()` and configure Wrangler crons explicitly. Bound each invocation and retain a cursor if work remains; see [TTL maintenance](../guides/native-execution.md#ttl-maintenance). Expired rows remain stored and hold unique keys until removed.
 
