@@ -1,30 +1,19 @@
 ---
-description: Read and write through the typed Store from handlers and service code, call named Views, and choose between ctx.store, runtime.store and runtime.store.as(caller).
+description: Choose Store for writes and simple lookups; declare internal Views for richer reads.
 ---
 # Query from TypeScript
 
-**Historical Core through alpha.6.** For canonical generated native SDK apps,
-follow the exact installed README and [native service workflow](../../next/service.md);
-the preset/RuntimePlan commands and role wiring below are version-specific.
+| Work | Data path |
+| --- | --- |
+| Writes | Store `insert` / `update` / `delete`, atomic `batch`, supported `transaction`, or declared Procedures |
+| Id lookup or simple AND filter | Store `findById` / `find` / `first`, inside handlers or an existing application |
+| Joins, aggregates, OR, reusable reads | Internal View: manifest SQL that is reviewable and typed |
 
-
-Handler and service code reach Mantle-owned rows only through Store. The
-generated `.mantle/generated/mantle.ts` types it over your Schemas and Views:
-`ctx.store` in a `MantleHandlers` handler is its `CallerStore`, while
-`runtime.store` is the untyped `MantleStore` until you cast it to the
-generated `Store`.
-
-| Store | Where | Scope |
-|---|---|---|
-| `ctx.store` | inside a `ref` handler | bound to the invocation's caller. Only an authorization guard gets a read-only one |
-| `runtime.store.as(caller)` | service code that has resolved a caller | that caller |
-| `runtime.store` | trusted host code (imports, maintenance) | none: no caller scope. TTL still applies |
-
-Each one applies TTL visibility, and published-only on public Views. Only
-`runtime.store` skips caller scope, so never hand it a request's input
-unchecked.
+Never write raw SQL to Mantle collections: it bypasses scope, TTL, publishing and system-column rules. The Store applies row rules but does not check a View's or Procedure's `requires`; authorize your handler before using it.
 
 ## Declare an internal View
+
+Save this as `manifests/tickets.yaml`:
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -56,138 +45,48 @@ spec:
   sql: |
     SELECT id, subject, ticketState FROM tickets
     WHERE ticketState = input.ticketState
-    ORDER BY created_at DESC LIMIT 50
+    ORDER BY id ASC
 ```
 
-`internal` keeps the View off REST, MCP and Admin. It is still in the plan and
-the typed Store. It is not a security bypass: a `requires` on it is checked
-for the caller the Store is bound to.
-
-## Call it
+Generate with `mantle generate cloudflare-d1 generated manifests/tickets.yaml`.
+An internal View has no public REST route or MCP tool. Its generated function still applies declared authorization and compiled row policy.
 
 ```ts
-import type { MantleHandlers } from "../.mantle/generated/mantle.js";
+import { store } from './generated/generated.js';
+import ticketsByState from './generated/views/tickets-by-state.js';
+import type { Caller } from '@aotter/mantle/contracts';
 
-export const handlers: MantleHandlers = {
-  closeStale: async (_input, ctx) => {
-    const { rows, nextCursor } = await ctx.store.view("tickets-by-state", { input: { ticketState: "open" }, limit: 20 });
-    // rows: { id: unknown; subject: string | null; ticketState: "open" | "closed" | null }[]
-    return { open: rows.length, more: nextCursor !== undefined };
-  },
-};
+export async function readTickets(db: Parameters<typeof store>[0], caller: Caller) {
+  const tickets = store(db, caller).collection('tickets');
+  const first = await tickets.first({ where: { ticketstate: 'open' } });
+  const rows = await ticketsByState(db, caller, { ticketState: 'open' });
+  return { first, rows };
+}
 ```
 
-The View name, its `input` and its row type are checked by `tsc`. A staff View
-with `uiSchema.list.searchFields` or `filterFields` also takes `search` and
-`filters` (`ctx.store.view(name, { search: "refund", filters: { ticketState: "open" } })`);
-Store refuses a filter the View does not declare. An output that reads a
-Schema field unchanged has that field's type, `created_at` and `updated_at`
-are `string | null`, and an expression, or another native column such as `id`,
-is `unknown`. Page with `limit` (default 50, at most 500) and the opaque
-`cursor` from `nextCursor`.
+The app supplies a verified Caller and its existing native handle. External input needs boundary validation. Store rows, filters and writes use storage names (`ticketstate`, `created_at`); View aliases use the SQL output names.
 
-## Readers (`db`)
+## Store reads and writes
 
-Every Schema has a reader on `ctx.db` (the same object as `ctx.store.db`, also
-`runtime.store.db` and `runtime.store.as(caller).db`), named by the lower-camel
-form of the Schema's name: `tickets` is `ctx.db.tickets`, `ticket-events` is
-`ctx.db.ticketEvents`. A name that has no such form (a non-ASCII name, or one
-starting with a digit) is the Schema's lower-case name, `ctx.db["2fa"]`. Two
-Schemas that become one name, and the reserved names `constructor`, `then`,
-`__proto__`, `prototype`, `toString`, `valueOf` and `hasOwnProperty`, are
-refused with `SCHEMA_READER_NAME_COLLISION`.
+`find` returns `{ rows, cursor }` (null cursor on the last page), with limits 1–500 and opaque keyset cursors. `where` combines fields with AND; `orderBy` selects a generated indexed column with `id` ties. Most order columns must be NOT NULL; publishing `published_at` supports nulls. For a proved pageable internal View, import `paged/views/<encoded-name>.ts` and call `(db, caller, input, { limit?, cursor? })`. Other internal Views retain their bare row-array function.
 
-```ts
-const ticket = await ctx.db.tickets.get(id);                       // one row or null
-const next = await ctx.db.tickets.first({ where: { ticketState: "open" }, orderBy: { createdAt: "asc" } });
-const { rows, nextCursor } = await ctx.db.tickets.find({
-  where: { ticketState: "open", subject: { like: "%refund%" } },
-  columns: ["id", "subject"],                                      // the row is Pick<Row, "id" | "subject">
-  limit: 20,
-});
+Store keeps `find({ search: 'text' })`, `first({ search: 'text' })` and `count(where?)`. Search matches exact id or declared searchable fields under the same row policy.
+
+`count` scans every matching row. For large tables or frequently shown totals, use an internal View with indexed predicates or avoid exact totals; a View's aggregate still scans the matching rows.
+
+Store search, Admin list search and Views using `mantle.search` share the same dialect search. SQLite/D1 use FTS5 trigram for queries of 3 or more characters, and LIKE for shorter queries. PostgreSQL uses ILIKE over the declared fields, which scans by default. A View does not make PostgreSQL search faster. For large PostgreSQL tables, the application's agent adds trigram indexes in a migration; ILIKE then uses them with no code change:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX articles_title_trgm ON articles USING gin (title gin_trgm_ops);
 ```
 
-- `get(id, { columns })`, `first(query)` and `find(query)`. A query is
-  `{ where, columns, orderBy, search }`; `find` also takes `limit` (1 to 500,
-  default 50) and the opaque `cursor` from `nextCursor`.
-- `where` is **AND only**: `{ column: value }` is equality, `{ column: null }`
-  is `IS NULL`, and `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`
-  compares. `in` and `notIn` take a non-empty list without `null`. For `or`,
-  `not`, a subquery, a join or an aggregate, declare a View and call
-  `store.view`.
-- `orderBy` is one column, and `id` breaks ties. The default is
-  `{ updatedAt: "desc" }`. `search` is matched against `searchableFields` (and
-  `id`).
-- A row has the native columns (`id`, `version`, `createdAt`, `updatedAt`,
-  `status` on a `publishing` Schema, `authorId` or `null`) and every field the
-  Schema declares except its scope field, each as its type or `null` (a column
-  is not required in storage, so a read can find it empty).
-- A reader returns every status of a `publishing` Schema, drafts included:
-  published-only is the rule for a public View. Scope, TTL and `requires` apply
-  as they do to every Store read.
-- Each query shape is converted and compiled once per Store, then reused for
-  every caller; only the values change between calls. Values are checked on
-  every call.
+Index each searched field as needed and inspect EXPLAIN for the workload. Case folding follows the engine.
 
-Without generated types, `runtime.store.db` is a `StoreDb` of untyped readers.
-`readerOf(store.db, "tickets")` (from `@aotter/mantle`) returns the reader of a
-Schema by name, in any case.
+Writes are lazy and execute once when awaited. Insert/update return native rows; delete returns void. `update(id, set, { lock })` and `delete(id, { lock })` require the version the caller reviewed. A stale lock, excluded row or unique clash is `CONFLICT`. `batch` atomically executes unused Writes from one Store in input order; a step cannot use a prior result.
 
-## `write`
+Interactive `transaction(async tx => …)` exists on bun:sqlite and PostgreSQL, with collections, Views and Procedures bound to the transaction. D1 supports batches only. PostgreSQL defaults to serializable, with an explicit isolation override; SQLite uses BEGIN IMMEDIATE. Use `tx` inside the callback, not the outer Store or handle. Nested transactions and `tx.batch` are refused; there is no automatic retry.
 
-Reads go through a reader (above) or a View. `write` applies every operation or
-none, in order:
+Ref handlers receive `{ caller, db, store }` bound to the same Caller and transaction. Implement the generated `Handlers` interface and pass it to `store(db, caller, { handlers })`. Direct Procedure modules expose SQL Procedures; ref Procedures are reached through the bound Store or selected surfaces.
 
-```ts
-await ctx.store.write([
-  { update: "tickets", set: { ticketState: "closed" }, where: { id }, lock: expectedVersion },
-  { insert: "ticket-events", values: { ticketId: id, kind: "closed" } },
-]);
-```
-
-- `insert` with `values`, optional client `id` (`ctx.store.id()`) and
-  `onConflict: "ignore" | { columns, update }`. A scoped Schema refuses a
-  client `id`, because a chosen id could collide with another owner's row and
-  reveal it: give such rows a field of your own that is unique with the scope
-  field (`uniqueIndexes: [[owner, clientKey]]`) when other rows of the same
-  write must point at them, or when a retry must find them.
-- A write `where` keeps the full grammar that a reader does not take:
-  `{ column: value }` is equality and sibling keys are AND; also
-  `{ column: { eq, ne, gt, gte, lt, lte, like, in, notIn, isNull } }`, and
-  `and`, `or`, `not`. `in` takes a list or `{ select, from, where }`, whose
-  subquery is scoped like any Store read. Native columns are camelCase here
-  (`createdAt`, `authorId`), while SQL spells them snake_case (`created_at`).
-- `update` with `set` and `where`; `delete` with `where`. A `where` that pins
-  `id` is a row op: it may carry `lock` (the version the caller saw), and
-  writing no row is `CONFLICT`.
-- A result is `{ id, version }` for a row op and `{ affected }` for a set op.
-- `set` and `values` never name the scope field or a native column (except
-  `status` on a `publishing` Schema, below); Store
-  fills them. A `null` leaves empty, or clears, a field the Schema does not
-  require (the generated `values` and `set` types accept it); for a required
-  field it is refused. On a `publishing` Schema, `set: { status }` is how a `ref`
-  handler publishes, unpublishes or archives.
-
-Failures throw `DiagnosticError` with `INPUT_VALIDATION_FAILED` (including a
-failed `check`), `CONFLICT` (`conflict.reason` is `lock`, `expect` or
-`unique`, and `conflict.opIndex` names the operation; for `unique` it is
-present when exactly one operation of the write targets the violated Schema,
-since the engine names the table and not the statement), `RESOURCE_UNAVAILABLE`
-or `OUTCOME_UNKNOWN`. Nothing is written on any failure. After
-`OUTCOME_UNKNOWN`, retry with the same client ids and locks: a replayed insert
-conflicts on its id, a replayed update on its lock.
-
-## From service code
-
-The service's `fetch` receives the runtime. Resolve the caller first, as the
-generated `withCaller` does, and bind Store to it:
-
-```ts
-const caller = await resolveCaller(request);
-if (!("caller" in caller)) return new Response("unauthorized", { status: 401 });
-const { rows } = await runtime.store.as(caller.caller).view("tickets-by-state", { input: { ticketState: "open" } });
-```
-
-To run a Procedure from service code, with its auth, guard and validation, call
-`runtime.invokeProcedure({ procedure, input, caller, cause: { kind: "internal", id } })`.
-Inside a handler, `ctx.invoke(name, input)` does the same and keeps the caller.
+See [native execution](native-execution.md) for values and write outcomes and [migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations) before changing a Schema.

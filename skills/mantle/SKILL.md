@@ -19,26 +19,17 @@ checkout, or any online copy.
 
 ## Find the project and its version
 
-Locate the user's application (never use the SDK repository as the
-application). For workspace links, inspect the linked package's README first; concrete
-`generated.ts` queries select the [native flow](#generated-native-applications)
-before the Core version rules below. The same flow applies when an installed
-alpha.7-or-later package README documents generated native queries; stop before
-the historical Core new-project instructions. If it has `@aotter/mantle`, read its `package.json`, lockfile and
-`node_modules/@aotter/mantle/package.json`, and follow that version's docs.
+Work in the user's application, outside the SDK checkout. Read package.json, the lockfile, installed SDK README and node_modules/@aotter/mantle/docs/. Those files define the exact version's contract. Preserve existing identity, handles, routes and resources.
 
-- `0.2.x`: continue below; for ongoing work read
-  `node_modules/@aotter/mantle/docs/skills/develop/SKILL.md`.
-- `0.1.x` (v1 manifests, a `version: 1` `mantle.config.json`, `mantle skills`):
-  upgrade only when asked, with `docs/skills/update/SKILL.md` and
-  `docs/upgrade-0.1-to-0.2.md` of the 0.2 package.
+For a new project, install an exact published SDK version with matching selected Admin/UI packages. Node must be 22.22 or newer. Add TypeScript and target types; Workers also need Wrangler. Optional auth/MCP peers use the installed SDK's package.json versions. Read the installed handbook's start/project-and-cli.md before choosing a target.
+
+For existing older applications, use their installed docs until the user requests an upgrade. For partial adoption read node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md.
 
 ## Generated native applications
 
 Follow the installed (or workspace-linked) package README for generation, Workers
-builds and D1 Sessions; the Core scaffolding below does not apply. Read that
-version's `docs/next/compatibility.md` before choosing declarations; planned
-features require their implementation first. Keep auth behind
+builds and D1 Sessions; the app owns its entry and routing. Read that
+version's `docs/handbook/reference/features.md` before choosing declarations. Keep auth behind
 `authLoader(() => import(...))` to pass the startup guard. Install only the exact
 released version shown by the installed/target package
 contract. Replacing Core needs explicit app wiring and reviewed deployment
@@ -51,8 +42,14 @@ cookieCache `{enabled:true,maxAge:60,refreshCache:false,version:"read-60-v1"}` a
 no KV. Bump version when enabling/changing the policy; writes, Admin, consent,
 unknown/ref/media calls stay fresh. Read the installed auth docs before MCP caching.
 
-Use the workflow **generate → typecheck → implement listed handlers**: run
-`mantle generate`, then `tsc --noEmit`. Implement every printed `Handlers` key
+Use the workflow **generate → typecheck → implement listed handlers**. For example:
+
+```sh
+pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml
+pnpm exec tsc --noEmit
+pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --check
+```
+ Implement every printed `Handlers` key
 and pass the implementations at `store(db, caller, { handlers })` (and selected
 surface options). Run `tsc --noEmit` again before local acceptance.
 Generated Store metadata initializes on its first use, once per module. Bind
@@ -77,71 +74,29 @@ Commit everything `mantle generate` writes, including generated TypeScript, SQL 
 Wrangler edits; keep bundle `dist/` untracked. Never hand-edit generated files.
 Resolve conflicts by merging manifests/options and regenerating. Add the printed
 `.gitattributes` line and run the same generate command with `--check` in CI.
-Compose the app-owned `fetch` using `docs/next/service.md`: auth/consent, Admin,
+Compose the app-owned `fetch` using `docs/handbook/cloudflare/service-entry.md`: auth/consent, Admin,
 MCP, REST behind one request-local origin-checked resolver; keep heavy auth dynamic.
 
 For selected native Admin, follow the version-matched
 `docs/handbook/guides/native-admin.md`: select `--admin` (or `admin: true`),
 mount `entries(bindings.schemas, bindings.adapter)` and serve the Admin assets
 separately. The three-package preview is one Core SDK, the Admin product and the
-shared UI kit; do not replace it with old `createAdminSurface`/`withCaller` wiring.
+shared UI kit.
 Admin reads share generated whitelisted native View templates, writes use native
 Procedure fragments and generated checks. Ref operations retain typed `ctx.store`
 at request time. Verify member/frontend and staff/Admin OTP, tenant/privacy/TTL,
 publishing, paging, statistics, exact OCC, ref effects and the actual console;
 never retry unknown 503 writes automatically. Read the installed Admin README
 for extensions, raw-body limits, CSP/assets, 22 languages and the developer workspace.
-A develop preview does not establish that alpha.7 is published.
+Use only versions actually published, or the explicitly linked workspace packages.
 
 For generated native applications, optional site settings/media are selected
 with `--site <module>` exporting `siteDefaults`. Apply the emitted deployment DDL;
-wire application-owned object storage as documented in `docs/next/media.md`.
+wire application-owned object storage as documented in `docs/handbook/cloudflare/media-r2.md`.
 
 For a generated public website, follow [web mounting and acceptance](references/web.md).
 The app renders HTML and inserts `site.head()`; generated `web.ts` serves the
 indexes and Markdown alternates.
-
-## Historical Core new project (through alpha.6)
-
-1. Create a directory outside the SDK checkout with Node 22+ and
-   `"type": "module"` in `package.json`.
-2. Choose the SDK version: `npm view @aotter/mantle dist-tags`. Use a `0.2.x`
-   version (while 0.2.0 is in prerelease it is on `alpha`; `latest` may still
-   be 0.1.x). Install it exactly: `npm install --save-exact @aotter/mantle@<version>`
-   (or the pnpm/yarn/bun equivalent). Install `@types/node` and `typescript`
-   as dev dependencies; Cloudflare additionally needs `wrangler` and
-   `@cloudflare/workers-types`, while Bun needs `bun-types`. Pin every
-   `@aotter/mantle*` package to that same version. If the project's registry
-   overrides npmjs, add `@aotter:registry=https://registry.npmjs.org/` to the
-   project's `.npmrc`.
-3. Read `node_modules/@aotter/mantle/docs/handbook/start/quickstart-worker.md`
-   for Cloudflare, or `docs/handbook/start/project-and-cli.md` for Bun,
-   and `docs/handbook/reference/features.md`.
-4. Choose the identity and features with the user's request:
-   `mantle generate` with no flags is Better Auth sign-in plus Admin, MCP and
-   REST; `--identity custom` keeps the user's own auth;
-   `--identity none --features web` is a public REST service. The default
-   host is Cloudflare over D1; `--host bun` (PostgreSQL unless
-   `--dialect sqlite`) or `--dialect postgres` choose another
-   (`docs/handbook/start/project-and-cli.md`). Identity, host and dialect
-   cannot be switched later.
-5. Write only the user's Schemas, Views, Procedures and Triggers in
-   `manifests/`. `docs/examples/` shows whole services; do not copy one
-   wholesale or invent business data.
-6. Run `mantle generate`. When it names missing packages, install exactly
-   those with the project's package manager and run it again. Use Core's
-   installed `package.json` `peerDependencies` versions for auth/MCP peers,
-   not registry latest; resolve incompatible peer warnings before running.
-   Then
-   `mantle generate --check` and `tsc --noEmit`.
-7. With identity `mantle`: `cp .dev.vars.example .dev.vars`, set
-   `ADMIN_EMAIL` and a random `BETTER_AUTH_SECRET`, run `wrangler dev --local`
-   (on Bun: `.env.example` to `.env`, then `bun src/index.ts`),
-   sign in at `/admin/sign-in` with the one-time code printed to the log, and
-   check that the console loads and `GET /admin/api/me` is `owner`. Exercise the REST routes and `/mcp` `tools/list`. For custom handlers and websites, run the [local HTTP acceptance](references/local-testing.md) before deployment; compilation and packing do not execute handlers.
-
-For a local cold start, do not push, deploy or configure providers. For a
-requested hosted app, continue with the selected hosting workflow.
 
 ## Complete websites
 
@@ -149,6 +104,8 @@ For a requested complete website, apply [website defaults](references/website.md
 without asking the user to enumerate OTP, media, Admin or SEO. Defaults are
 acceptance requirements, not evidence that a missing renderer is implemented.
 Do not report a complete website with blocked required checks.
+
+Run the [local HTTP acceptance](references/local-testing.md) for handlers and websites; compilation does not execute their behavior.
 
 ## Self-hosted deployment
 
@@ -159,12 +116,18 @@ workflow. Local project creation alone is not deployment authorization.
 ## Existing project and handoff
 
 Preserve the user's manifests, `src/` files, identity, package versions and
-provider resources. `src/service.ts`, `src/index.ts` and `wrangler.jsonc` are
-the application's after the first generate. Run `mantle generate --check` and
-the project's own tests before and after a change.
+provider resources. The app writes its entry (`src/worker.ts` by default;
+`--entry` selects another). Workers generation creates or updates Wrangler's
+split-build settings. Run the same generation command (target, output directory,
+manifests and options) with `--check`, and the project's own tests,
+before and after a change.
 
 To add Mantle to an application that has its own code, users and data, read
 `node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md` first.
 
 Report the project path, the exact Mantle version, what you changed, the checks
 you ran with their results, and anything left for the user.
+
+## Data paths
+
+Writes use Store `insert` / `update` / `delete`, atomic `batch` / supported `transaction`, or declared Procedures. Raw SQL writes bypass row rules. Use internal Views for joins, aggregates, OR and reusable reads; Store `findById` / `find` / `first` are for id lookups and simple AND filters. Ref handlers receive `ctx.store` with the same Caller and transaction.

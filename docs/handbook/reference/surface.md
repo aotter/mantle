@@ -1,108 +1,267 @@
----
-description: Every HTTP route the generated Mantle 0.2.0 service mounts (REST, auth, MCP, Admin), the package subpaths and their exports, and the CLI.
----
-# HTTP, MCP, CLI and packages
+# Generated surfaces
 
-**Historical Core API through alpha.6.** The retained routes and examples below
-match the RuntimePlan-based releases. For the unpublished native Admin preview,
-use [Native Admin](../guides/native-admin.md) and the exact installed package docs.
-Do not apply the old Store/preset/role wiring to generated native applications.
+- The app mounts generated modules and passes `{ db, caller }`; `caller(request, env, { readOnly })`
+  is the app's own `resolveCaller(...)` call. There is no generated `service.ts`,
+  routing framework or Better Auth wrapper.
+- REST retains public `GET /api/views/<name>` (and bodyless HEAD) with declared query input plus
+  `limit` and `cursor`, answering `{ rows, nextCursor? }`. HTTP Triggers retain
+  their own method/path; JSON bodies and path parameters form the Procedure
+  input and responses contain its result. Errors remain
+  `{ error: { code, message, path } }` with the 0.2 status. Cookie sessions cannot
+  mutate across origins.
+- MCP retains public `POST /mcp`, staff `POST /mcp/staff`,
+  snake-cased View names on each declared surface, and snake-cased Procedure
+  names per MCP Trigger. Its SDK loads only through a request-time dynamic import.
+- HTTP/MCP Triggers declare exposure only. `mantle generate` refuses schedule
+  and lifecycle Triggers; Cloud scheduling is a separate capability.
+- Native Admin retains selected 0.2 paths and the console contracts; see
+  [Native Admin](../guides/native-admin.md) for app-mounted
+  `adminBindings()` and `entries(bindings.schemas, bindings.adapter)`.
 
-## Routes of the generated service
+Generated `rest.ts`, `mcp.ts`, `web.ts`, `paged/views/*` and `validation/*` hold
+only the app's tables: routes, tools, pages, operation bindings, compiled input
+checks and types. Request handling (matching, body and query decoding, dispatch,
+challenges, JSON-RPC, web rendering, keyset paging) lives in the package's
+`rest`, `mcp`, `web`, `paging` and `validation` kernel modules, so a runtime fix
+ships as a package update instead of a regeneration.
 
-`src/service.ts` mounts, in this order. Each surface runs behind
-`withCaller(resolver, …)`; with identity `none`, every caller is anonymous.
+The generated `validation/views/<name>.ts` and
+`validation/procedures/<name>.ts` export `validate(unknown)`. View validators
+also export `query(URLSearchParams)` returning `{ input, limit?, cursor? }`.
+REST and MCP use the same generated checks, with no runtime schema interpreter.
+Supported checks are types/unions and nullable, required/properties/additionalProperties,
+arrays/items and length bounds, enum, local `$defs`/`$ref`, string length/pattern,
+numeric bounds/`multipleOf`, and date/date-time. Integers must be safe; fractional
+`multipleOf` uses a 1e-9 quotient tolerance. `const`, `oneOf`, `uniqueItems` and
+object property-count bounds are refused, alongside other unsupported keywords
+and formats. Defaults remain
+annotations and are not inserted into request input.
 
-| Path | Surface | Mounted when |
-|---|---|---|
-| `/api/auth/*`, `/.well-known/oauth-authorization-server/*`, `/.well-known/oauth-protected-resource[/*]`, `/oauth/consent[/data]`, `/oauth/consents[/data\|/revoke]` | `createAuthRoutes` | identity `mantle` |
-| `/admin/*` | `createAdminSurface`: the console (from `ASSETS`) and `/admin/api/*` | feature `admin` |
-| `/mcp/staff` | `createMcpSurface`, `surface: staff`, with `planApp`'s MCP App | feature `mcp` and an identity |
-| `/mcp` | `createMcpSurface`, `surface: public` | feature `mcp` |
-| everything else | `createRestSurface` at `/api` | always |
+Native `paged/views/<name>.ts` has a default export, callable as
+`page(db, caller, input, { limit?, cursor? })` after importing it as `page`,
+answering `{ rows, nextCursor? }`.
+Bare `views/<name>.ts` retains native row arrays and accepts app-validated input;
+selecting neither boundary adds no validation or paging work to that query.
+Selected REST/MCP/Admin responses convert declared integer columns on every target
+to safe numbers or exact decimal strings. Their SQL reads integers as text before
+driver conversion; integer cursor keys retain that precision without changing native
+sort order. `views/<name>.ts` also exports `WireRow` for selected transport
+boundaries; declared wire fields agree across targets. Declared SQLite/D1
+JSON/boolean columns become JSON values and booleans. Aliases follow generated
+source-column lineage; computed values and Procedure/ref results retain
+their contracts. Native integer bigint cursor keys are serialized separately.
+REST/MCP use separate `paged/wire/views/<name>.ts` SQL when declared integers
+require exact transport projections. Web pages and internal paged Views keep
+driver-native rows. Internal paging creates no public route/tool.
+Authored SQL `LIMIT` caps each page, up to 500, rather than the whole cursor walk.
+A pageable Schema View has a complete NOT NULL scalar tuple ending in the
+compiler's `id` tiebreak. Its ordered columns must match an index after fixed
+equality prefixes (including caller scope); multiple columns and mixed directions
+retain the authored order. CTE projections preserve the proof; joins must have a
+proved singleton side, or an exact PK `id` equality to a non-null column of the
+other relation, so the base id cannot fan out. Relation aliases and nested CTE
+bindings keep their own identity; same-Schema aliases are not interchangeable.
 
-### REST
+Grouped Views use every GROUP BY key as the tiebreak, with known non-null scalar
+keys; unfiltered, non-windowed `min`/`max` of a non-null column retain its native cursor type. Paging a
+grouped result does not avoid the native grouping/source scan. Authors own source
+predicate indexes and should inspect EXPLAIN for their workload. Nullable,
+unknown and JSON order expressions and unproved fanout remain refused.
+Trusted system reads retain their all-scope SQL: without an actual scope
+predicate, a scope-first index is not a proved range scan and native sorting or
+scanning may be needed. Caller equality-prefix proofs do not claim otherwise.
 
-| Route | |
-|---|---|
-| `GET /api/views/<name>` | a `public` View; query parameters are its `input` plus `limit` and `cursor`. Answers `{ rows, nextCursor? }` |
-| `<METHOD> <path>` | each `http` Trigger; the JSON body and path parameters are the input. Answers the Procedure's output |
+Proved singletons (scalar/aggregate queries, unique-id lookups and singleton
+sources) run bounded first-page SQL, reject cursors and refuse overflow.
+Internal Views receive directly imported paged modules only when the same proofs
+hold; they gain no public route or tool. Their bare modules remain available for
+other native SQL and return full authored-query arrays.
 
-A failure is `{ "error": <diagnostic> }` with the code's status
-([Diagnostics](./diagnostics.md)). A cookie session cannot mutate across
-origins.
+Cursors reuse the Store's percent-encoded JSON keyset codec. Selected View
+cursors include operation provenance; malformed, foreign and
+null-key cursors fail with `INPUT_VALIDATION_FAILED`. Each generated key has a
+scalar check; temporal keys keep database microseconds. Existing one/two-key
+formats and Store cursors are preserved; larger View tuples contain their full
+key list followed by operation provenance. They are opaque navigation
+values, not credentials; authorization and row predicates run on every page.
 
-### Auth (identity `mantle`)
+## Mounting REST
 
-| Route | |
-|---|---|
-| `GET /api/auth/methods` | the sign-in methods this service offers |
-| `/api/auth/*` | Better Auth: email OTP (`/email-otp/send-verification-otp`, `/sign-in/email-otp`), magic link, social and generic OAuth sign-in, sessions, sign-out, the OAuth provider |
-| `/.well-known/oauth-authorization-server/*`, `/.well-known/oauth-protected-resource[/mcp]` | OAuth metadata, served by Better Auth |
-| `/oauth/consent`, `/oauth/consents` | consent and connected apps, session only; with Admin, consent renders at `/admin/oauth/consent` and posts here |
+`rest.ts` exports `rest({ db, caller })`, returning an async
+`(request, env) => Response | undefined`. The app supplies its native handle and
+verified Caller; requests outside `/api` fall through to the app. Public Views
+use `/api/views/<name>`; HTTP Triggers keep their declared method and path.
+Known paths with another method return 405 with an `Allow` header. All responses use
+`cache-control: private, no-store`. JSON bodies and decoded path parameters
+are validated together, with path parameters taking precedence. Bodies larger
+than 1,000,000 bytes are refused; `content-length` is checked before reading.
+A resolver's `ContractError` keeps its status (an expired token is 401 with its challenge); any other resolver exception returns a redacted 500. Cookie-origin refusals retain
+`path: "request:origin"`; REST and MCP share the kernel check.
 
-### MCP
+When the manifest declares ref Procedures, pass the generated `Handlers` as
+`rest({ db, caller, handlers })`; the option is type-required. Handler dispatch
+uses the generated Store, preserving the Procedure's authorization contract.
+Publishing visibility belongs to generated SQL; the REST module adds no status
+filter. The app retains ownership of authentication and its other routes.
 
-| Route | |
-|---|---|
-| `POST /mcp` | the public surface (Streamable HTTP, JSON-RPC) |
-| `POST /mcp/staff` | the staff surface: staff only, the same token as `/mcp`; see [MCP and agents](../concepts/mcp-and-agents.md) |
+## Optional web output
 
-### Admin API
+`web.ts` exports `web({ db, caller, origin, title, description, locales?, pages,
+cacheControl? })`. `db` is the application-owned native handle, including callable
+PostgreSQL handles. `caller` is a verified Caller or the app's
+`(request, env, { readOnly }) => Caller | Promise<Caller>` resolver, evaluated once per request.
+Generated REST/MCP/web callbacks classify reads; forward the third argument to
+`resolveCaller` to permit an enabled cookie cache, as documented in
+[authentication](../cloudflare/authentication.md#explicit-read-only-cookie-snapshots).
+The module dispatches public Views only; it never invokes Procedures or needs handlers.
 
-Every route needs a staff caller; the column names the least role.
+```ts
+import { web } from './generated/web.js';
+const site = web({ db, caller, origin: 'https://example.com', title: 'Blog',
+  description: 'Articles', locales: ['en'],
+  pages: { '/posts/{slug}': { view: 'post-by-slug', list: 'posts', markdown: 'body' } }
+});
+const response = await site.fetch(request, env); // Response | undefined
+const tags = await site.head(request, env); // HTML string, empty for unknown/missing pages
+```
 
-| Route | Role | |
-|---|---|---|
-| `GET /admin/api/me`, `GET /admin/api/bootstrap` | contributor | the caller; the console's first load |
-| `GET /admin/api/collections`, `GET …/collections/{name}/statistics` | contributor | Schemas; statistics answer 501 in 0.2.0 |
-| `GET /admin/api/entries?collection=`, `GET …/entries/export`, `GET …/entries/{id}` | contributor | list (with `search`, `limit`, `cursor`), CSV, one row |
-| `POST /admin/api/entries`, `PATCH …/entries/{id}` (with `expectedVersion`) | contributor | create, edit (contributors: drafts only) |
-| `POST …/entries/{id}/publish`, `…/unpublish`, `DELETE …/entries/{id}` | editor | |
-| `GET /admin/api/views-manifest`, `GET …/views/{name}`, `GET …/views/{name}/export` | contributor | staff Views (`{ name, title, description, input, list: { columns, searchFields, filterFields }, columns }`); rows by `limit`/`cursor` with `search` and `filter.<output>`; CSV |
-| `GET /admin/api/operations`, `POST …/operations/{name}` | contributor | Procedures bound to the staff MCP surface |
-| `GET /admin/api/site` | contributor | site metadata, `mcpEndpoints`, `capabilities: { siteSettings, media, invitationEmail, statistics }` (what this deployment turned on; the console hides what is off), and `extensions` (the Admin extension declarations the caller's role reaches, never handlers or integrity) |
-| `GET`, `PATCH /admin/api/site-settings` | owner | 501 `SITE_NOT_CONFIGURED` without `runtime.site` |
-| `POST /admin/api/media/uploads`, `POST …/media/uploads/{groupId}/commit`, `GET …/media`, `GET`, `PATCH`, `DELETE …/media/{id}` | editor | with `media` and `runtime.site` |
-| `GET /admin/api/webmcp`, `POST …/webmcp/{tool}` | contributor | the staff tools for a browser agent (`{ tools, routes }`); a call runs one as `/mcp/staff` does and answers `{ output }` |
-| `GET /admin/api/staff`, `PATCH …/staff/{id}/role`, `POST …/staff/invitations`, `DELETE …/staff/invitations/{id}` | owner | with an `AdminIdentity` that has `directory` / `roles` |
-| `GET /admin/api/members` | editor | with `directory` |
-| `GET /admin/api/developer-console` | owner | the plan's data model, logic and schedules |
-| `GET`, `PATCH /admin/api/x/{extension}/settings/{id}` | the settings' `role` | load and save an extension's settings; `PATCH { value }` is checked against its `schema` (400 with `error.fields`) |
-| `POST /admin/api/x/{extension}/actions/{id}` | the action's `role` | run a `run` or `confirm` action with `{ record }`, `{ selection }` or `{ schema }` for its target; `when.schema` is enforced |
-| `… /admin/api/x/{extension}/api/{path}` | the extension's lowest contribution role | the extension's own API (`handlers.api`); `null` answers 404; answers are `no-store` unless the handler sets `cache-control` |
-| Historical only: `GET /admin/extensions/{id}.js` | the extension's lowest contribution role | a `source` extension's module; its integrity is in the shell's import map ([Extend Admin](../guides/admin-extensions.md)) |
+Page parameter names must exactly match the View's declared input properties.
+Page and list Views must return the page parameters; list Views must accept empty input. Markdown
+must name a textual output column. HTML remains application-owned.
 
-## Packages
+`/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
+read the current page View. SQL alone controls visibility, including publication.
+GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses use
+`cacheControl` or `public, max-age=60`; authenticated responses use
+`private, no-store`. `If-None-Match` returns 304 only after current content is read.
+Canonical URLs use the configured origin, independently of the request host.
+The current implementation adds hreflang only for `locales[0]`; translation-aware
+indexes and head tags are a follow-up below. Importing another generated entry
+does not import web output.
 
-Two npm packages, always published together at one version.
+Web indexes scan at most 50,000 rows for one sitemap and 5,000 for `llms.txt`,
+across all configured lists. Skipped `.`/`..` path segments consume the scan
+budget too. Output stops before exceeding 50 MiB of UTF-8 sitemap XML (including
+its closing tag) or 1 MiB of `llms.txt`; a sitemap index can be added separately.
+Each request also stops after 100 sitemap queries or 10 `llms.txt` queries,
+across all templates. Small authored SQL LIMITs or many templates can truncate
+output sooner. A sitemap index remains separate future work.
 
-| Import | Exports |
-|---|---|
-| `@aotter/mantle` | `createMantle`, `createMantleRuntime`, `verifyPlan` and its `PLAN_LIMITS`, `withCaller`, `systemCaller`, the `Caller`, `CallerResolver`, `MantleService`, `HandlerContext`, `Invocation` and Store types, `EmailSender`, `DiagnosticError`, `makeDiagnostic`, `runtimeDiagnostic`, `STAFF_ROLES`, `isStaffRole` |
-| `@aotter/mantle/spec` | the grammar types, `compilePlan`, `mcpTools` (the CLI side; it bundles the SQL parser, so a Worker or handler imports `DiagnosticError` from the root) |
-| `@aotter/mantle/d1`, `/d1/compile` | the `sqlite` dialect: `sqliteStorage` over any `DatabaseDriver`; its compile side |
-| `@aotter/mantle/postgres`, `/postgres/compile` | the `postgres` dialect: `postgresStorage`, `postgresDialect`, `pgDatabaseDriver`, `pgPool`, the `PgClient` and `PgConnect` types; its compile side |
-| `@aotter/mantle/cloudflare` | `d1Storage`, `d1Driver`, `r2MediaStorage`, `toCloudflareCron`; experimental `durableObjectStorage`, `durableObjectDriver` |
-| `@aotter/mantle/auth` | `createMantleAuth`, `createSetupIncompleteAuth`, `createCallerResolver`, `createAuthRoutes`, `ConsoleEmailSender`, `appleClientSecret` |
-| `@aotter/mantle/admin` | `createAdminSurface`, `AdminIdentity` |
-| `@aotter/mantle/mcp` | `createMcpSurface`, `mcpTools` and its `McpTool` type (the same function `/spec` exports, for a bundle that may not import `/spec`), `planApp` and `appCatalog` (the MCP App's catalog) |
-| `@aotter/mantle/web` | `createRestSurface` |
-| `@aotter/mantle/bun` | `bunSqliteStorage`, `bunSqliteDriver`, `bunAdminAssets` |
-| `@aotter/mantle/testing` | `runStorageConformance`, the dialect compliance suite |
-| `@aotter/mantle-ui` | the root (React operation components and the controller), `/controller`, `/kit`, `/kit.css`, `/tokens.css`, `/mcp-app` (`mantleAppHtml`, the App `planApp` serves), and the prebuilt Admin console in `dist/admin` (exported as `./admin/index.html`), which the preset serves at `/admin` |
+`head` normalizes URLs from the queried row's page parameters, matching sitemap
+URLs; malformed paths, failed validation and unavailable rows return an empty
+string. A NULL Markdown field answers 404. Errors and missing Markdown responses
+use `cache-control: no-store`. A matching HTML page takes precedence over a `.md`
+alternate, including slugs ending in `.md`; a Markdown alternate may read the
+exact HTML candidate first and therefore performs at most two View queries.
 
-A subpath that is not imported is never loaded: a service with identity
-`none` bundles no Better Auth, and no Worker bundles the SQL parser.
+## Mounting MCP
 
-## CLI
+Mount the generated `mcp({ db: env => env.DB, caller })` handler in the app's
+Fetch entry. It returns `undefined` outside `/mcp` and `/mcp/staff`. Install the
+optional official `@modelcontextprotocol/server` peer when selecting MCP; its
+transport loads on the first matching request. Pass `handlers` when ref
+Procedures are declared, as for REST. Staff tools are listed only on the staff
+endpoint, and publishing visibility belongs to the generated SQL.
 
-`mantle generate [--manifests <dir>] [--features <list>] [--identity <kind>] [--host <host>] [--dialect <name>]`
-and `mantle generate --check [--database <file>]`. See
-[Project layout and CLI](../start/project-and-cli.md).
+The app resolves bearer tokens with `resolveCaller(request, auth, { audience:
+new URL('/mcp', request.url).href })` (both surfaces use `<origin>/mcp`). The app
+must also mount Better Auth's `/.well-known/oauth-protected-resource/mcp`
+metadata route. Auth challenges point to that route. Presented bearer credentials
+need the `mcp` scope; cookie sessions use the same-origin mutation checks.
+
+Generation emits `mcp.ts` only for a non-internal View or MCP Trigger. These
+surfaces typecheck without the `@modelcontextprotocol/server` 2.1.0 peer.
+The peer loads by dynamic import on the first matching `/mcp` request; if
+missing, that request fails at runtime. Publishing alone does not select MCP;
+on a selected
+surface its generated `publish_<schema>`, `unpublish_<schema>` and
+`archive_<schema>` tools use the same snake-case naming rule, are staff-only
+and take `{ id, expectedVersion }` through the shared generated validation.
+
+The generated staff allowlist is `staff`; the application supplies its own verified Caller. MCP bodies are limited
+to 1 MiB (1,048,576 bytes). Resource metadata challenges use the origin of
+`request.url`; behind a proxy, the app must pass a Request with its public
+origin so the audience and metadata URL point to the client-visible service.
+
+Selected integer cursor keys may be exact canonical decimal strings on either dialect; SQLite cursor binds are cast to INTEGER so grouped expressions and native columns compare the same value; they are bounded to the declared integer range. This applies to cursor metadata only and does not change bare query or Store integer outputs, or recover integers already rounded by a native driver. `validCursor` is shared with selected boundary adapters.
+
+Cursor casts target only proved AST bind nodes, preserving authored SQL literals. Paging proofs respect the compiler's lexical table/CTE identity. Explicit CTE or relation column renaming is currently refused for paging because uniqueness has not been proved through those aliases; internal bare queries remain available.
+
+A paged View's output names must not collide with its actual hidden cursor keys (`_k0` through `_kN-1`); SQLite compares aliases without case sensitivity. Such internal Views keep their bare entry but receive no paged entry. Other output names remain available.
+
+## Selected Admin bindings
+
+See [Native Admin](../guides/native-admin.md) for the single
+current contract: three packages, explicit generation and app mounting, shared
+whitelisted get/page/statistics templates, native Procedure fragments, generated
+input checks, exact OCC and optional capabilities. These features are implemented
+as an explicit option.
 
 
-Native Admin does not serve `source` modules at `/admin/extensions/{id}.js` or
-inject extension integrity into the shell. Use a host-served same-origin `module`
-path, and install its integrity in the host shell's import map. The `source`
-examples and module route below describe the historical RuntimePlan API only.
+### MCP catalogue and callbacks
+
+`mcp({ db, caller, handlers?, locale?, instructions?, serverInfo?, requiredScopes?,
+resourceMetadata?, onObservation?, onRefusal? })` keeps the SDK behind its first
+request. Locale defaults to `en`; localized titles/descriptions fall back to
+English, then their first entry. Views advertise `readOnlyHint`; Procedures use
+their declared MCP annotations. `instructions` is returned by initialize.
+The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
+`requiredScopes: []` disables that floor. An anonymous closed surface challenges
+from initialize, and every call in a batch is checked before any call runs.
+`resourceMetadata` overrides the challenge URL for reverse proxies.
+
+`onObservation` receives request refusals and invocation attempt/completion
+metadata, including duration and outcome. Its Caller and scopes are frozen copies.
+`onRefusal` receives credential/origin refusals. Neither callback receives request
+headers, bodies or tokens; delivery failures never change the business response
+and promises are not awaited. The application owns callback delivery.
+
+**Procedure output:** SQL Procedures retain the native `{ results }`
+contract rather than 0.2's authored output projection/validation; MCP advertises
+that object envelope, not the incompatible authored schema. Ref Procedures expose
+the application's typed return value and advertise their authored object output
+schema. The application owns ref output validation. MCP does not decode or
+revalidate native database rows. Business failures carry diagnostics in text;
+with an output schema they omit `structuredContent` to avoid validating an error
+against a success schema. Without one they also expose diagnostic structured
+content. MCP adds no prompts or non-UI resources.
+
+### Declared View scalars on the wire
+
+REST and MCP View pages expose declared JSON columns as JSON values and declared
+boolean columns as booleans, including explicitly authored SQL aliases. SQLite
+and D1 conversions are compiled into only the selected boundary pages;
+PostgreSQL already-native JSON/boolean values pass through. SQL NULL stays null and absent
+fields stay absent. Expressions without declared column lineage stay native.
+Malformed persisted JSON becomes a redacted internal failure. The conversion
+adds no database operations and does not mutate native query rows.
+
+Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
+ref outputs retain their native contracts. Use the generated `rest()` / `mcp()`
+module for this client wire contract; do not duplicate JSON/boolean decoding in
+application route handlers or decode PostgreSQL JSON strings a second time.
+
+Declared integer columns (including a selected system `version`) on every target
+use the wire form: safe integers become JSON numbers; unsafe values remain exact
+decimal text. Selected-boundary SQL casts integers to text before driver conversion,
+preserving stored int64 values on D1 too. Values already rounded when written
+(e.g. by a JavaScript number) cannot be recovered. Computed outputs and native
+SQL Procedure/ref results retain their native values.
+Unexpected surface failures log only a stable wire classification.
+
+MCP locale fallback reads only own locale entries, then English, then the first
+own entry; inherited property names never become titles or descriptions.
+
+### Staff media MCP tools
+
+With generated site configuration, `mcp({ db, caller, media: env => storage })`
+loads the media module only on a configured staff MCP request and
+adds `get_media_upload_policy`, `create_media_upload`, `commit_media_upload`,
+`list_media_assets`, `get_media_asset`, `update_media_asset` and
+`delete_media_asset` to `/mcp/staff` only. `storage` is the same `MediaStorage`
+used by the Admin media library. Omitting `media` omits all seven tools.
+The OSS `staff` role can invoke them; cookie writes retain the origin check.
+Generated boundary code checks each input and advertises the 0.2 schemas and
+read-only/destructive/open-world hints. Image bytes are PUT directly to the
+returned short-lived URLs with their required headers, then committed; bytes
+never enter MCP. Store permanent asset ids, never upload URLs.

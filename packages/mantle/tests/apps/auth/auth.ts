@@ -1,4 +1,4 @@
-/** Fixture: an application's Better Auth module as docs/next/auth.md recommends. Imported only through authLoader. */
+/** Fixture: an application's Better Auth module as docs/handbook/cloudflare/authentication.md recommends. Imported only through authLoader. */
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP, jwt } from "better-auth/plugins";
 import { admin } from "better-auth/plugins/admin";

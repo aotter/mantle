@@ -14,7 +14,7 @@ metadata:
 ## Generated native applications (alpha.7 and later)
 
 If the installed README describes generated native queries, read
-`docs/next/media.md` and app-owned site/media wiring instead of Core storage
+`docs/handbook/cloudflare/media-r2.md` and app-owned site/media wiring instead of Core storage
 options. Resolve the exact configured bucket and declared purposes. The
 `uploads/` candidate audit below still applies. Committed copies live under
 `committed/` and must never be candidates. Attempt-isolated committed copies
@@ -26,9 +26,10 @@ objects approved by the user.
 
 ## Preflight
 
-1. Read `wrangler.jsonc` and `src/service.ts`. Resolve the R2 bucket that
-   `r2MediaStorage` uses and the media purpose names in the site defaults
-   passed to `d1Storage(db, { site })`.
+1. Read `wrangler.jsonc`, the app-owned entry (`src/worker.ts` by default,
+   or the generation command's `--entry`) and its media wiring. Resolve the R2
+   bucket that `r2MediaStorage` uses and the media purpose names in
+   `siteDefaults.media.purposes` selected by `--site`.
 2. Confirm the exact Cloudflare account and bucket. If either is ambiguous,
    ask; never choose by name similarity.
 3. Use the Cloudflare OpenAPI search before execution to resolve the current

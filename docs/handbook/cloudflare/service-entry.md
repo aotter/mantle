@@ -1,170 +1,195 @@
----
-description: The generated src/service.ts and src/index.ts of a Mantle 0.2.0 Cloudflare service — how the surfaces are mounted, and how to add your own routes, bindings and scheduled work.
----
-# The service and its entry
+# Application-owned service composition
 
-**Historical Core through alpha.6.** For canonical generated native SDK apps,
-follow the exact installed README and [native service workflow](../../next/service.md);
-the preset/RuntimePlan commands and role wiring below are version-specific.
+Read the exact installed SDK/Admin versions. The [Native Admin guide](../guides/native-admin.md)
+is the authority for generated collection bindings and retained console behavior.
 
+The app owns `fetch`, native database handles, pools, auth options and deployment.
+Select generated modules by importing them; omitted modules stay out of the bundle.
+Keep application routing source outside
+the generated directory. The [auth template](authentication.md), [surface contracts](../reference/surface.md)
+and [media wiring](media-r2.md) describe the selected capabilities.
 
-On host `cloudflare`, `mantle generate` writes two files once, then they are
-yours (host `bun` writes a `Bun.serve` entry instead, ADR-0038):
-
-- `src/service.ts` composes the service: storage, identity, surfaces, and the
-  `mantle` object from `createMantle`;
-- `src/index.ts` is the Cloudflare entry: `fetch` and `scheduled`.
-
-Mantle owns no route of its own. What is mounted, and where, is this code.
-
-## `src/service.ts`
-
-With identity `mantle` and every feature (the
-[reference service](../../examples/reference-service/src/service.ts) is this
-file, unchanged):
+Mount auth (including discovery), consent, Admin, MCP and REST in that order,
+matching 0.2. `authRoutes` owns both auth and consent paths. Supply one lazy,
+request-local resolver to those surfaces, memoizing read-only and fresh authority
+separately so a cached read cannot authorize a write. All cookie-session mutations
+use the shared origin check. A custom identity
+supplies the same verified `Caller`; absent directory/role facets remain absent.
+Never construct a system Caller from credentials or request input.
 
 ```ts
-export function createService() {
-  function mount(runtime: MantleRuntime, env: Env) {
-    const auth = createAuth(env, origin);                       // createMantleAuth, or a setup-incomplete stub
-    const resolver = createCallerResolver(auth, { jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] } });
-    const authRoutes = createAuthRoutes(auth, { resolver });
-    const guard = (surface, options?) => withCaller(resolver, surface, options);
-    const admin = guard(createAdminSurface(runtime, { basePath: "/admin", assets: (path) => adminAsset(env.ASSETS, path), identity: { … }, site: { mcpEndpoints: { public: "/mcp", staff: "/mcp/staff" } } }));
-    const mcp = guard(createMcpSurface(runtime, { basePath: "/mcp", surface: "public", resourceMetadata }), { resourceMetadata });
-    // MCP Apps hosts render each staff View's rows, and the operations on one row, in the chat
-    const staffMcp = guard(createMcpSurface(runtime, { basePath: "/mcp/staff", surface: "staff", apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }, resourceMetadata }), { resourceMetadata });
-    const rest = guard(createRestSurface(runtime, { basePath: "/api" }));
-    return async (request, runtime, waitUntil) => {
-      await auth.ready?.catch((error) => { routes = undefined; throw error; });
-      const owned = await authRoutes(request, { waitUntil });
-      if (owned) return owned;
-      if (under("/admin")) return admin(request, runtime);
-      if (under("/mcp/staff")) return staffMcp(request, runtime);
-      if (under("/mcp")) return mcp(request, runtime);
-      return rest(request, runtime);
-    };
-  }
+// src/worker.ts — application-owned; choose imports for the features you use.
+import { authLoader, resolveCaller } from '@aotter/mantle/auth';
+import { authRoutes } from '@aotter/mantle/auth/routes';
+import { checkOrigin, surfaceFailure, type Caller } from '@aotter/mantle/contracts';
+import { admin } from '@aotter/mantle-admin/server';
+import { entries } from '@aotter/mantle-admin/server/entries';
+import { adminBindings } from '../generated/admin-bindings.js';
+import { adminAssets } from './admin-assets.js'; // app-owned SPA shell, assets and CSP
+import { mcp } from '../generated/mcp.js';
+import { rest } from '../generated/rest.js';
+import { handlers } from './handlers.js'; // omit when there are no ref Procedures
 
-  let routes: ReturnType<typeof mount> | undefined;
-  const service: MantleService<Env> = {
-    handlers,
-    fetch: (request, env, { runtime, waitUntil }) => (routes ??= mount(runtime, env))(request, runtime, waitUntil),
-  };
-
-  return createMantle(service, { plan, storage: (env) => d1Storage(env.DB), schedules: true });
+interface Env {
+  DB: D1Database;
+  ASSETS: Fetcher;
+  ORIGIN: string;
+  AUTH_SECRET: string;
+  ADMIN_EMAIL: string;
+  MAIL: import('./auth.js').Env['MAIL']; // app-owned OTP and magic-link sender
 }
-
-export const mantle = createService();
-```
-
-- `Env` lists the bindings and vars the service reads. Add yours there.
-- Each `createService()` call owns its routes, auth startup and database session.
-  Surfaces and MCP transport are built once per instance; execution receives
-  the current request runtime. The native PostgreSQL pool stays owned by the host.
-- With identity `custom` the resolver is your `src/identity.ts`; with `none`
-  every surface gets `{ kind: "anonymous" }` and no auth routes are mounted.
-
-## Existing generated entries
-
-`generate` leaves existing `src/service.ts` files alone. To adopt the lifetime
-fix, wrap the composition in `createService()` as above, including `routes`,
-`mount`, its auth-start retry reset, and the PostgreSQL `session` / `database`
-closure. Return the existing `createMantle` result (and its PostgreSQL request
-wrappers), then export `mantle = createService()` once. Keep your native pool
-in the host entry; the factory does not construct another pool.
-
-The function returned by `mount` now takes `(request, runtime, waitUntil)`.
-Pass that current runtime to each cached guarded surface:
-`admin(request, runtime)`, `mcp(request, runtime)`, and `rest(request, runtime)`.
-For anonymous composition, forward it with
-`surface(request, { kind: "anonymous" }, runtime)`. The optional third argument
-is for a request facade from the same service instance as the surface's plan
-and storage. Standalone runtime callers can keep the two-argument form.
-Do not substitute a mutable module variable for the execution runtime or
-recreate the MCP handler on every request: it owns live transport state.
-
-## Add your own routes
-
-Put them in the function `mount` returns, where they belong in the order:
-
-```ts
-return async (request, runtime, waitUntil) => {
-  const { pathname } = new URL(request.url);
-  await auth.ready?.catch((error) => { routes = undefined; throw error; }); // first, before any route answers
-  if (pathname === "/healthz") return new Response("ok");            // no caller
-  if (pathname === "/payments/callback") return handleCallback(request, runtime, env);
-  const owned = await authRoutes(request, { waitUntil });
-  if (owned) return owned;
-  …
+let auth: import('@aotter/mantle/auth').AuthLoader<ReturnType<typeof import('./auth.js').createAuth>> | undefined;
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    auth ??= authLoader(() => import('./auth.js').then(m => m.createAuth(env)));
+    const headers = new Headers(); // retain Better Auth's sliding-session cookies
+    let authority: Promise<Caller> | undefined, readAuthority: Promise<Caller> | undefined;
+    const resolve = (readOnly: boolean) => resolveCaller(request, auth!, {
+      readOnly,
+      audience: [`${env.ORIGIN}/mcp`, `${env.ORIGIN}/mcp/staff`],
+      responseHeaders: headers,
+    }).then(value => { checkOrigin(request, value); return value; });
+    const caller = (_request?: Request, _env?: Env, classification = { readOnly: false }) =>
+      classification.readOnly ? readAuthority ??= resolve(true) : authority ??= resolve(false);
+    const options = { db: (env: Env) => env.DB, caller, handlers };
+    const bindings = adminBindings({ handlers }); // use adminBindings() without ref Procedures
+    const routes = [
+      authRoutes(auth, { methods: [{ kind: 'email-otp' }], resolver: caller }),
+      admin(bindings.metadata, bindings.views, bindings.operations, {
+        ...options, routes: entries(bindings.schemas, bindings.adapter),
+      }),
+      mcp(options),
+      rest(options),
+    ];
+    try {
+      for (const route of routes) {
+        const response = await route(request, env);
+        if (!response) continue;
+        if (!headers.getSetCookie().length) return response;
+        const result = new Response(response.body, response);
+        for (const cookie of headers.getSetCookie()) result.headers.append('set-cookie', cookie);
+        return result;
+      }
+      const asset = await adminAssets(request, env);
+      if (asset) return asset;
+      // Your public frontend/web.ts routes can use an anonymous Caller without
+      // loading auth; their generated SQL still controls publication visibility.
+      return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
+    } catch (error) { return surfaceFailure(error); }
+  },
 };
 ```
 
-- With identity `mantle`, keep `await auth.ready` above every route. `mount`
-  starts Better Auth inside an isolate's first request, and Workers cancels I/O
-  that a finished request started: a route that answers that first request
-  before `auth.ready` settles leaves the context pending for ever, and every
-  later request waits on it (under `wrangler dev` too). The wait costs only the
-  isolate's first request.
+Remove imports and array entries for omitted surfaces. `mcp.ts` exists only when
+the manifest has an MCP surface, and requires the documented optional MCP peer.
+Pass the same handlers to each selected surface that exposes ref Procedures.
+Bind site/media/identity and extension capabilities through the selected Admin/MCP
+options; do not expose native auth administrative routes without `authRoutes` or
+`guardAuthAdminRequest`. Auth background callbacks on Workers use the documented
+`withAuthTasks(ctx.waitUntil.bind(ctx), ...)` integration, not another request's context.
+Select `--admin` to emit `admin-bindings.ts`. Admin's API is a separate
+`@aotter/mantle-admin` package; the SDK never imports it. The API handles only
+`/admin/api`. The app-owned asset route serves the built shell for `/admin` and
+client routes, including `/admin/sign-in`, and preserves missing asset 404s.
+Allow its built import map through the exact CSP hash documented by the installed
+Admin package. Collection statistics use the generated shared `statisticsView`:
+its collection parameter selects only a generated table and visibility policy.
 
-- A route that acts for a caller resolves it the same way:
-  `withCaller(resolver, (request, caller) => …)` gives you the caller, the 401
-  for a bad credential, and the cross-origin check.
-- Reach data through `runtime.store.as(caller)` or
-  `runtime.invokeProcedure({ procedure, input, caller, cause: { kind: "internal", id } })`;
-  `runtime.store` alone is unscoped, for trusted code only.
-- Server-rendered pages, a SPA's assets, a signed webhook: all are routes
-  here. Mantle renders no public pages in 0.2.0.
+## Workers assets and secrets
 
-## `src/index.ts`
-
-```ts
-export default {
-  fetch: (request, env) => mantle.fetch(request, env, ctx),
-  async scheduled(controller, env) { … mantle.invokeSchedule(cron, controller.scheduledTime, env, ctx) … },
-} satisfies ExportedHandler<Env>;
-```
-
-- `ctx` is `{ waitUntil }` from `cloudflare:workers`, which is not bound to one
-  request, so a handler's `ctx.waitUntil` never lands on a finished request.
-- Manifest crons are POSIX; Cloudflare names a cron as `wrangler.jsonc` spells
-  it. The entry maps each Cloudflare cron back to every POSIX expression that
-  shares it, runs them all, and reports every failure together. A cron no
-  Trigger maps to throws.
-- There is no `queue` handler: no Mantle path produces queue messages. Add
-  your own `queue` beside `fetch` if your service uses one.
-
-## Bindings
-
-`wrangler.jsonc` starts with `DB` (D1), or with dialect `postgres` a
-`HYPERDRIVE` binding whose `id` is a placeholder until
-`wrangler hyperdrive create <name> --caching-disabled --connection-string=…`
-gives one, `triggers.crons`, and with feature `admin` the console's files:
+`mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --admin`
+updates the split-build Wrangler keys. Configure the rest explicitly; JSONC
+comments and unrelated settings survive regeneration:
 
 ```jsonc
-"assets": { "directory": "node_modules/@aotter/mantle-ui/dist/admin", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none" }
+{
+  "assets": {
+    "directory": "node_modules/@aotter/mantle-admin/dist/admin",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none"
+  },
+  "d1_databases": [{ "binding": "DB", "database_name": "your-database", "database_id": "your-id" }]
+}
 ```
 
-`run_worker_first` sends every request through the Worker, so Admin answers
-every `/admin` path and nothing is served at the files' bare paths; keep it
-when you add assets of your own (serve those through the same binding or a
-route). `mantle generate` warns when `admin` is selected and no `ASSETS` is
-bound. Add the rest:
+`run_worker_first` lets the application supply shell/security/cache headers;
+`none` keeps `index.html` available by name. Admin assets are not a public database
+API. PostgreSQL uses application-owned Hyperdrive/postgres.js wiring,
+with Hyperdrive query caching disabled for authority and mutation visibility.
 
-| Need | `wrangler.jsonc` | Code |
-|---|---|---|
-| Media | `r2_buckets: [{ binding: "MEDIA", bucket_name: … }]` | [Media uploads with R2](./media-r2.md) |
-| A secret | `wrangler secret put NAME` (`.dev.vars` locally) | `env.NAME` |
-| A plain var | `vars: { NAME: "…" }` | `env.NAME` |
-| Email | `send_email: [{ name: "EMAIL" }]` | your `EmailSender` for sign-in, or a handler's `ctx.env.EMAIL` |
-| KV, Queues, Durable Objects | their usual keys | your own code; Mantle reads none of them (a Durable Object can hold its own Mantle store: [Durable Object per tenant](durable-object-tenant.md)) |
+Commit `.dev.vars.example` containing variable names and placeholders only:
 
-Handlers receive the same `env` as `ctx.env`. Mantle-owned rows are reached
-only through Store; never write a Schema's table with `env.DB` directly. Your
-own tables in the same database are yours.
+```dotenv
+ORIGIN=http://localhost:8787
+ADMIN_EMAIL=you@example.test
+AUTH_SECRET=replace-with-a-random-secret
+```
 
-## When the preset changes
+Copy it to ignored `.dev.vars`; use deployment secrets for production. Supply
+`MAIL` with the template's `otp` and `link` callbacks from your app-owned email
+provider; it is an object, not a `.dev.vars` value. The auth
+module wires `ADMIN_EMAIL` to the bootstrap helper, which requires verified email.
+`PUBLIC_ORIGIN` can be your application variable instead of `ORIGIN`; map it
+explicitly when constructing auth and keep the trusted origin consistent.
 
-The preset is never rewritten. After an SDK upgrade, compare your files with
-a fresh preset: generate into an empty directory with the same manifests and
-`mantle.config.json`, and diff `src/service.ts` and `src/index.ts`.
+## Scheduling and Bun
+
+Scheduling remains app-owned; schedule/lifecycle Triggers are refused. Import
+only the desired generated `sweepExpired` entry in `scheduled()`, pass a system
+Caller with a reason, and choose an application-owned page budget for each
+invocation; see the [TTL contract](../guides/native-execution.md#ttl-maintenance). Configure `triggers.crons` yourself;
+`toCloudflareCron` converts POSIX schedules without adding a dispatcher. Keep
+larger sweeps' cursors for a later invocation instead of scanning without a bound.
+
+On Bun, reuse a process-owned `Database` or `SQL` pool and call the same generated
+surfaces from `Bun.serve({fetch})`. The optional host reader is independent of
+the query target:
+
+```ts
+import { bunAdminAssets } from '@aotter/mantle/bun/assets';
+const assets = bunAdminAssets('node_modules/@aotter/mantle-admin/dist/admin');
+const bindings = adminBindings({ handlers });
+const serveAdmin = admin(bindings.metadata, bindings.views, bindings.operations, {
+  db: () => db, caller, handlers, routes: entries(bindings.schemas, bindings.adapter),
+});
+// Call assets(path) from your separate shell/static route.
+```
+
+The reader returns a native `Response` or `null`, rejects traversal/control
+characters and escaping symlinks; the app owns shell, CSP and cache headers.
+Use ignored `.env` on Bun. Run cron work with your native scheduler; neither
+imports nor ordinary requests execute DDL, migrations or cron work. OAuth resource
+rows are inserted on first OAuth use from runtime configuration, with no deploy
+step; auth initialization and cookie/bearer/MCP/REST requests do no resource work.
+
+## Commit generated output and verify it in CI
+
+Commit every file written by `mantle generate`: TypeScript, `schema.sql`, optional
+seed SQL and Wrangler edits. Never hand-edit generated output. Every emitted
+TypeScript/SQL file carries the ownership header. Add the line printed by
+generation to `.gitattributes`, for example:
+
+```gitattributes
+generated/** linguist-generated=true
+```
+
+Resolve generated merge conflicts by merging authored manifests/options first,
+then regenerating with the same options. Review the SQL/policy diff and write
+explicit migrations before deployment. Keep `dist/` (the `mantle bundle` output)
+untracked. Deployment uses committed generated source; it does not regenerate.
+
+```sh
+# CI, with the project's exact installed SDK and peer versions:
+pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --admin --check
+pnpm exec tsc --noEmit
+pnpm exec mantle bundle src/worker.ts dist
+```
+
+`--check` regenerates in memory, lists missing/changed/obsolete SDK-owned files
+and stale Wrangler build settings, exits nonzero, and writes nothing. Unmarked
+application files are preserved. TOML generation prints manual edits, so an
+exact Wrangler `--check` requires JSON/JSONC. Use all the same `--site`, `--auth`,
+`--admin` and `--admin-extensions` options as normal generation. The check needs no database,
+network access, credentials or deployment. Imported configuration modules must
+remain pure: exporting `authOptions(env)` avoids constructing Better Auth at build time.

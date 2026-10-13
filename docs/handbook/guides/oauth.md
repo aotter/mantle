@@ -20,8 +20,10 @@ token issuance, registration defaults or audience checks), the adapter validates
 and inserts the missing row with insert-if-absent semantics. Concurrent requests
 are safe; subsequent lookups preserve persisted policy edits. No resource deploy
 step is required, and `resourceSeedMode` does not overwrite existing rows.
-To retire a configured resource, set `disabled` or remove it from configuration:
-a deleted row that is still configured is recreated on a later lookup. On
+To retire a resource, set its persisted `disabled` policy (or configure it disabled
+before its first lookup). Removing configuration does not disable an existing row.
+Do not delete a configured resource row: a later lookup in a new adapter instance
+can recreate it from configuration. On
 `/oauth2/authorize` an invalid configured identifier surfaces as the provider's
 `invalid_target` redirect rather than HTTP 500.
 
@@ -89,7 +91,7 @@ Auth routing also guards Better Auth’s raw `/api/auth/admin/*` endpoints (incl
 Use primary database sessions without session secondaryStorage as the simple
 safe configuration. If optional session caching is enabled, use the
 **authority-bound** secondary-storage adapter from the identity/auth template
-(`@aotter/mantle/auth/identity`, #1499): every snapshot must be checked against the primary session and current
+(`@aotter/mantle/auth/hardening`, #1499): every snapshot must be checked against the primary session and current
 user before the SDK can read it, including raw SDK endpoints and session lists.
 Arbitrary session KV snapshots are outside this secure configuration: middleware
 may trust stale roles or refresh an expired primary session from a snapshot.

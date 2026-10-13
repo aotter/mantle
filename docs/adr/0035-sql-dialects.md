@@ -2,6 +2,8 @@
 
 **Status:** Accepted for 0.2.0. Amends ADR-0032 decisions 6 and 12, ADR-0033, and ADR-0034 decisions 2, 3, 5, 6, 7, 8 and 9. Amended by its PostgreSQL dialect amendment (#1293), [ADR-0036](0036-host-and-dialect.md) and [ADR-0037](0037-postgresql-is-the-reference-dialect.md).
 
+**0.2.0 status (2026-10-13):** The open SQL dialect interface in decisions 3, 5 and 8 is superseded by the native Core database boundary (#1566). Drivers remain open structural handles; dialects are closed to `postgres` and `sqlite`. A third engine requires a compiler and Store runtime fork. Runtime schema installation described here is historical; the runtime runs no DDL or schema checks.
+
 **Date:** 2026-09-30
 
 **Related:** ADR-0032, ADR-0033, ADR-0034

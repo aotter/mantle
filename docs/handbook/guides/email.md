@@ -16,14 +16,15 @@ to the sender, which can select localized templates. Existing categories are
 
 ```ts
 import { emailOTP } from "better-auth/plugins";
+import { hashEmailOtp } from "@aotter/mantle/auth/hardening";
 import { signInCodeEmail, staffInvitationEmail, type EmailSender } from "@aotter/mantle/email";
 
 const locale = (request?: Request) =>
   request?.headers.get("accept-language")?.split(",")[0]?.split(";")[0]?.trim() || "en";
 
 // Include this plugin in the app's Better Auth options.
-export const emailPlugin = (sender: EmailSender) => emailOTP({
-  storeOTP: "hashed",
+export const emailPlugin = (sender: EmailSender, secret: string) => emailOTP({
+  storeOTP: { hash: otp => hashEmailOtp(secret, otp) },
   sendVerificationOTP: ({ email, otp, type }, ctx) => sender.send({
     to: email, ...signInCodeEmail(otp), locale: locale(ctx?.request),
     category: `auth.email-otp.${type}`,
@@ -56,7 +57,7 @@ reject the promise; the application owns error handling and retry policy.
 the user exists, so a response that waits for the provider reveals whether an
 account exists. Configure Better Auth's `advanced.backgroundTasks.handler` (on
 Workers, `ctx.waitUntil`) so the send runs after the response, as 0.2 did; the
-generated `auth.ts` template wires it (#1499).
+app-owned auth template wires it.
 
 ## Cloudflare Email Service binding
 

@@ -4,11 +4,7 @@ Generate native SQL for Bun SQLite/PostgreSQL and Cloudflare D1/PostgreSQL.
 The build-time compiler uses the closed v2 grammar and canonical SQL policy.
 Applications import contract primitives and official drivers.
 
-Experimental develop preview intended for alpha.7; not a published release.
-The intended package topology is one `@aotter/mantle` Core SDK, optional
-`@aotter/mantle-admin` (server/SPA/extensions/preview/MCP App) and the existing
-`@aotter/mantle-ui` shared kit. Workspace source currently lives here; install
-only versions actually released and read their own docs.
+Three packages: `@aotter/mantle` is the SDK with bin `mantle`; `@aotter/mantle-ui` is pure UI without an SDK dependency; `@aotter/mantle-admin` is the optional product with the SDK as a peer. Use matching installed versions and their own docs.
 
 Select `--admin` / `admin: true` for [Native Admin](./docs/handbook/guides/native-admin.md).
 Its generated adapter mounts with `entries(bindings.schemas, bindings.adapter)`;
@@ -20,7 +16,7 @@ Build and contributor checks: [CONTRIBUTING](https://github.com/aotter/mantle/bl
 Outputs include `generated.ts`, `schema.sql` and direct operation entries.
 Commit generated output and Wrangler edits; keep `dist/` untracked. Run the same
 generate command with `--check` in CI. Never hand-edit generated files; merge
-manifest/options changes and regenerate. See [service composition](./docs/next/service.md)
+manifest/options changes and regenerate. See [service composition](./docs/handbook/cloudflare/service-entry.md)
 for app-owned routing, assets, scheduling, Bun and the generated-output workflow.
 Import `views/<encoded-name>.ts` or `procedures/<encoded-name>.ts` (default export
 and types) to exclude other operations. Apply initial DDL to an empty development
@@ -30,12 +26,12 @@ driver-ready inputs, a native handle (Bun.SQL, bun:sqlite Database or D1 binding
 and a verified Caller.
 
 Validate untrusted input before calling queries and redact native errors at application
-transports. The [query contract](./docs/next/contract.md#revised-query-responsibility-decision-2026-10-11)
+transports. The [query contract](./docs/handbook/guides/native-execution.md#query-inputs-values-and-outcomes)
 defines driver-ready inputs, native results, date-time/date wire forms and failure handling.
 
 For transports, `paged/views/<name>.ts` returns `{ rows, nextCursor? }` with keyset paging and
 `validation/<kind>/<name>.ts` checks input against the declared JSON Schema subset; the
-[surface deltas](./docs/next/surfaces.md) define the REST/MCP wire contract.
+[surface deltas](./docs/handbook/reference/surface.md) define the REST/MCP wire contract.
 Proved internal Views also get paging without a public route/tool: one SELECT
 per page, validated scalar cursor keys and hidden-key removal. Schema tuples
 need indexed order after fixed equality prefixes; complete groups and singleton
@@ -43,12 +39,12 @@ joins are supported. Grouping still scans/aggregates its source: inspect EXPLAIN
 Unsupported internal SQL retains its bare module.
 
 Every Schema is a typed **Store** collection:
-`store(db, caller).collection("purchase_requests")` with `findById`, `find` (AND-only `where`, keyset `cursor`), `first`,
+`store(db, caller).collection("purchase_requests")` with `findById`, `find` (AND-only `where`, `{ rows, cursor }` keyset pages), `first`,
 `count`, `insert(values)`, OCC `update(id, set, { lock })` and `delete(id, { lock })`. Rows, `where`, `set` and `orderBy` use the
 table's storage column names, lower-case (`requestnumber`, `created_at`), the keys a generated View returns; the generated types
 state column names, value types and the writable columns, and the Store enforces the Schema's row rules (scope, TTL, version) but
 **not** a View's or Procedure's `requires`: authorize before calling it. Design, limits and what the runtime still refuses are in
-[ADR-0045](./docs/adr/0045-next-runtime-core.md).
+[Store guide](./docs/handbook/guides/typed-queries.md).
 
 Importing generated modules does not initialize the Store. The first `store()`
 call prepares its metadata factory once; every call binds its own database,
@@ -89,7 +85,7 @@ bound to the same caller and transaction; the exported `procedures` map holds SQ
 
 ## Workers build
 
-In a workspace consumer with the experimental package linked, run generation once:
+In an application, run generation:
 
 ```sh
 pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts
@@ -98,7 +94,7 @@ pnpm exec wrangler deploy
 ```
 
 For `cloudflare-d1` and `cloudflare-postgres`, generation configures Wrangler to run
-`mantle bundle <entry> <outdir>` automatically. Node 22 suffices. Run from the project root;
+`mantle bundle <entry> <outdir>` automatically. Node 22.22 or newer is required. Run from the project root;
 regenerate after manifest or auth option changes.
 
 `--entry` defaults to `src/worker.ts`, `--outdir` to `dist`. `--wrangler` defaults to the
@@ -109,7 +105,7 @@ needs its `name`, `compatibility_date` and bindings filled in. TOML only prints 
 esbuild emits minified split ESM; Wrangler uploads it with `no_bundle`,
 `find_additional_modules`, `base_dir` and an ESModule rule. `nodejs_compat` is ensured.
 The metafile guard rejects `better-auth` / `@better-auth/*` in the static startup graph:
-use `authLoader(() => import(...))` ([Auth](./docs/next/auth.md#worker-entry)).
+use `authLoader(() => import(...))` ([Auth](./docs/handbook/cloudflare/authentication.md#worker-entry)).
 The output directory is cleaned first; keep source and generated code elsewhere.
 
 ## D1 Sessions
@@ -141,17 +137,23 @@ PostgreSQL defaults to serializable; `{ isolation: "read committed" }` selects a
 SQLite uses BEGIN IMMEDIATE and queues all Store/generated driver calls on the same Database until COMMIT/ROLLBACK;
 Inside a transaction callback the outer Store or handle passed to a Mantle driver throws `INPUT_VALIDATION_FAILED`; use `tx`.
 
-Views return rows; Procedures return `{ results }`. See the [query contract](./docs/next/contract.md#revised-query-responsibility-decision-2026-10-11)
+Views return rows; Procedures return `{ results }`. See the [query contract](./docs/handbook/guides/native-execution.md#query-inputs-values-and-outcomes)
 for atomicity and uncertain writes.
 
-PostgreSQL handles (Bun.SQL, postgres.js) satisfy the two-method `Postgres` shape as they are; see the [contract](./docs/next/contract.md).
+PostgreSQL handles (Bun.SQL, postgres.js) satisfy the two-method `Postgres` shape as they are; see the [contract](./docs/handbook/guides/native-execution.md).
 Unsupported declarations fail generation with diagnostics;
-see the [supported/refused list](./docs/next/compatibility.md) for current scope and planned features.
+see the [supported/refused list](./docs/handbook/reference/features.md) for current scope and planned features.
 
 Native contributor checks run all four hosts with independent SQL oracles and
 fresh PostgreSQL schemas; behavior follows each engine. Local Cloudflare checks
 create no cloud resources. Performance claims need a quiet machine and raw samples.
-The [size and startup gates](./docs/next/size-and-startup.md) cover the
-bundle and package budgets. The packed generator still needs its workspace compiler
-dependency made standalone before publication.
-This package is not a released replacement for Mantle 0.2.
+The [size and startup gates](./docs/handbook/guides/size-and-startup.md) cover the
+bundle and package budgets. The private compiler ships in this SDK and stays outside request imports.
+
+## Data paths and migrations
+
+Writes use Store or declared Procedures, never raw SQL writes that bypass scope, TTL, publishing and system columns. Internal Views are for joins, aggregates, OR and reusable reads. Store findById/find/first remain useful for simple handler lookups and partial adoption in existing TypeScript/Node apps using their own native handle and verified Caller.
+
+The runtime never creates, alters or checks tables; boot and requests run no DDL. Apply initial schema.sql plus selected auth/site DDL to an empty database. For each later change, the app's agent diffs regenerated SQL, writes a native migration, rehearses it on a copy and applies it before deploying code. Destructive/type changes need explicit data migration; Mantle drops nothing.
+
+[Drivers are open structural handles; dialects are exactly postgres and sqlite](./docs/handbook/concepts/runtime-and-adapters.md#drivers-and-dialects).

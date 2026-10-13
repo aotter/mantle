@@ -1,6 +1,6 @@
 # Next development acceptance
 
-Read the accepted responsibility decision in `../../docs/next/contract.md`.
+Read the accepted responsibility decision in `../../docs/handbook/guides/native-execution.md`.
 Bare native queries keep their native contract. Selected REST/MCP/Admin boundaries
 use generated validators and explicit legacy wire conversion; do not add those
 to bare queries. Read the [Native Admin contract](../../docs/handbook/guides/native-admin.md)
