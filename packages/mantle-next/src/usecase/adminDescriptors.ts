@@ -1,6 +1,6 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
 import { DiagnosticError, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, requiredEnumStates, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "@aotter/mantle/compiler";
-import { STAFF_ROLES } from "../domain/visibility.js";
+import { staffRolesOf } from "../domain/visibility.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { publishingInput, publishingTransitions } from "./publishing.js";
@@ -45,7 +45,7 @@ export function emitAdminDescriptors({plan,adminExtensions=[]}:Pick<GenerateInpu
     catalogues.staff.actions[tool]=action;
     for(const t of staffTools.filter(t=>t.kind==="view"))if(entrySchema(plan,plan.views[t.source]!)===schema.name.toLowerCase())catalogues.staff.views[t.name]!.actions.push(tool);
 
-    authorizations.procedures[name]={auth:{all:[{"ctx.staff":[...STAFF_ROLES]}]}};
+    authorizations.procedures[name]={auth:{all:[{"ctx.staff":[...staffRolesOf(plan)]}]}};
     const description=verb+" an entry in "+schema.name+".";
     snapshot.interfaces.callable.push({kind:"procedure",name:tool,target:name,surface:"staff",audience:"staff",title:null,description,input:publishingInput,output:null,trigger:null});
   }

@@ -1,6 +1,8 @@
 /** Deployment compiler leaves. Optional request surfaces are never constructed. */
 export { compilePlan, viewOutputs } from "./spec/infrastructure/sql/compilePlan.js";
 export { DiagnosticError } from "./spec/kernel/diagnostic.js";
+export { attrScopeName } from "./spec/domain/model/ManifestGrammar.js";
+export type { AuthDeclaration } from "./spec/domain/model/ManifestGrammar.js";
 export { parseNumeric, NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, mcpTools, mcpToolNameSegment, resolveLocalizedText, assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired } from "./spec/domain/index.js";
 export type { ManifestSourceSet, JsonSchema, RuntimePlan, PlanSchema, PlanLowered, LoweredStatement, LoweredView, LoweredPage, SqlNode, RowMode, SiteDefaults } from "./spec/index.js";
 export { lowerPlan } from "./core/sql/lowered.js";

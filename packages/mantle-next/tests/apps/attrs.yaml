@@ -1,0 +1,94 @@
+# ADR-0046 spike fixture: a declared role and attributes, a View filtered by auth.attr, an attribute-scoped Schema.
+auth:
+  roles: [sales]
+  attributes:
+    region: { type: string, multiple: true }
+    tier: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: orders}
+spec:
+  title: Orders
+  lifecycle: operational
+  indexes: [[region]]
+  schema:
+    type: object
+    required: [region, tier, title]
+    properties: {region: {type: string}, tier: {type: string}, title: {type: string}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: regional-orders}
+spec:
+  title: Orders in my regions
+  description: Orders whose region is one of the caller's regions.
+  surface: staff
+  requires: {auth: {all: [{ctx.staff: [sales]}]}}
+  sql: SELECT id, title, region FROM orders WHERE region IN (auth.attr('region')) ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: tier-orders}
+spec:
+  title: Orders of my tier
+  surface: internal
+  sql: SELECT id, title, tier FROM orders WHERE tier = auth.attr('tier') ORDER BY title, id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: negated-orders}
+spec:
+  title: Orders outside my regions (author-negated, left to show the empty-set behavior)
+  surface: internal
+  sql: SELECT id, title, region FROM orders WHERE NOT (region IN (auth.attr('region'))) ORDER BY title, id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: all-orders}
+spec:
+  title: Every order
+  surface: internal
+  sql: SELECT id, title, region FROM orders ORDER BY title, id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: notes}
+spec:
+  title: Regional notes
+  lifecycle: operational
+  scope: {area: "auth.attr('region')"}
+  indexes: [[area]]
+  schema:
+    type: object
+    required: [area, title]
+    properties: {area: {type: string}, title: {type: string}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: notes-list}
+spec:
+  title: Notes I can see
+  surface: staff
+  requires: {auth: {all: [{ctx.staff: [sales]}]}}
+  sql: SELECT id, title FROM notes ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: rename-order}
+spec:
+  title: Rename an order
+  requires: {auth: {all: [{ctx.staff: [sales]}]}}
+  input: {type: object, required: [id, title], properties: {id: {type: string}, title: {type: string, minLength: 1}}, additionalProperties: false}
+  output: {type: object}
+  handler: {sql: "UPDATE orders SET title = input.title WHERE id = input.id AND region IN (auth.attr('region')) RETURNING id, title"}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: rename-order-http}
+spec: {source: {kind: http, method: POST, path: /api/orders/rename}, target: {procedure: rename-order}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: rename-order-mcp}
+spec: {source: {kind: mcp, surface: staff}, target: {procedure: rename-order}}

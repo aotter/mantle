@@ -16,6 +16,7 @@
     "./driver/transaction-context": "./dist/kernel/driver/transaction-context.js",
     "./scalars": "./dist/kernel/scalars.js",
     "./binds": "./dist/kernel/binds.js",
+    "./attrs": "./dist/kernel/attrs.js",
     "./sweep": "./dist/kernel/sweep.js",
     "./cron": "./dist/kernel/cron.js",
     "./store": "./dist/kernel/store.js",

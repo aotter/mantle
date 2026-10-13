@@ -2,7 +2,7 @@
 import type { LoweredStatement } from "@aotter/mantle/compiler";
 import type { Recipe } from "../kernel/binds.js";
 
-const KINDS = new Set(["uid", "role", "now", "cutoff", "const", "input"]);
+const KINDS = new Set(["uid", "role", "now", "cutoff", "const", "input", "attr"]);
 /** @internal */
 export function recipesOf(statement: LoweredStatement, fields: readonly string[], refuse: (message: string) => void, values?: Set<string>): Recipe[] {
   return statement.binds.map(b => {

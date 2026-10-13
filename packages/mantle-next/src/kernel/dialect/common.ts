@@ -1,3 +1,5 @@
+import type { Recipe } from "../binds.js";
+import type { Caller } from "../contracts.js";
 /** What SQLite and PostgreSQL spell identically, defined once; each dialect module re-exports it. */
 
 /** A (possibly schema-qualified) name, quoted. */
@@ -30,4 +32,9 @@ export interface Dialect {
   date(v: string): unknown;
   /** A placeholder compared with, or written to, a column of this type, so every driver sends the value verbatim (postgres.js would turn text bound to timestamptz or date into a JavaScript Date and lose microseconds). */
   cast(placeholder: string, type: string): string;
+  /** ADR-0046, only on a generated app that uses attributes (`attrs.ts`): a caller attribute as its bind, and `column` is one of the values of a set parameter. */
+  attr?(r: Extract<Recipe, { k: "attr" }>, caller: Caller): unknown;
+  anyOf?(column: string, placeholder: string, type: "string" | "number"): string;
+  /** The scope check of an insert into an attribute-scoped Schema. */
+  scope?(r: Extract<Recipe, { k: "attr" }>, caller: Caller, value: unknown, path: string): void;
 }

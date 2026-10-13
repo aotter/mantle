@@ -3,12 +3,15 @@ import { compilePlan, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, 
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { outputType } from "../domain/columns.js";
 import { castCursor, provePaging, type PagingProof } from "../domain/paging.js";
-import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
+import { nextMode, staffRolesOf } from "../domain/visibility.js";
 import { dialect as sqliteDialect } from "../kernel/dialect/sqlite.js";
 import { cast, dialect as postgresDialect_ } from "../kernel/dialect/postgres.js";
 import { publishingSql } from "../usecase/publishing.js";
 import { searchDiagnostics } from "../usecase/search.js";
+import { attrDiagnostics } from "../usecase/attrs.js";
 import { generate } from "../usecase/generate.js";
+import { buildCatalog } from "../usecase/catalog.js";
+import { createHash } from "node:crypto";
 import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/model.js";
 import type { BetterAuthOptions } from "better-auth/types";
 import { generatedFiles } from "../domain/entry.js";
@@ -48,7 +51,8 @@ export async function generateFromSources(request: { readonly target: Target; re
   const refusals: GenerateDiagnostic[] = [], paging: Record<string, PagingProof | undefined> = {};
   const { lowered, warnings } = lowerPlan(compiled.plan, dialect, {
     mode: nextMode,
-    staffRoles: STAFF_ROLES,
+    staffRoles: staffRolesOf(compiled.plan),
+    attrs: compiled.plan.auth?.attributes,
     pageQuery(ast, name) {
       // Core visits public/caller before trusted. Prove the real caller equality prefixes;
       // a trusted all-scope read does not acquire a fictional scope predicate.
@@ -79,16 +83,19 @@ export async function generateFromSources(request: { readonly target: Target; re
     }
   }
   const searchProblems = searchDiagnostics(warnings);
-  refusals.push(...searchProblems);
+  const attrProblems = attrDiagnostics(warnings);
+  refusals.push(...searchProblems, ...attrProblems);
   const result = generate({ target: request.target, site: request.site, plan: compiled.plan, lowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions, paging });
   if (refusals.length) {
     const diagnostics = result.ok ? [] : result.diagnostics.filter(d =>
-      !searchProblems.some(p => p.path === d.path) ||
+      ![...searchProblems, ...attrProblems].some(p => p.path === d.path) ||
       !["Every reachable visibility mode must have canonical lowered SQL.", "Both caller and trusted SQL must be lowered."].includes(d.message));
     return { ok: false, diagnostics: [...refusals, ...diagnostics] };
   }
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.auth ? (await import("./authSchema.js")).authSchemaSql(request.auth, postgres ? "postgres" : "sqlite") : [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
-  return { ...result, files: { ...files, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
+  // ADR-0046 decision 8: the static capability catalog beside the generated code (JSON has no comment header, so it is not generatedFiles-wrapped)
+  const catalog = JSON.stringify(buildCatalog(compiled.plan, lowered, text => createHash("sha256").update(text).digest("hex")), null, 2) + "\n";
+  return { ...result, files: { ...files, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }), "catalog.json": catalog } };
 }

@@ -5,7 +5,8 @@ import { ManifestParseError, V01_VIEW_SURFACES, rejectUnknownKeys, validateLocal
 import { checkFormUiSchema, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
 import { validateJsonSchema } from "./SchemaSpecChecks.js";
 
-export function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
+/** `declaredRoles`: the roles the application's auth block adds to the staff vocabulary (ADR-0046). */
+export function validateViewSpec(m: ViewManifest, idx: number, declaredRoles: readonly string[] = []): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
@@ -29,7 +30,7 @@ export function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   }
   if ("cache" in s) validateViewCache(s["cache"], m, idx);
   if ("requires" in s && s["requires"] != null) {
-    validateRequires(s["requires"], idx, "View");
+    validateRequires(s["requires"], idx, "View", declaredRoles);
   }
   const adminUiProblem = checkViewAdminUi(m).problems[0];
   if (adminUiProblem) {
@@ -94,7 +95,7 @@ function validateViewInput(raw: unknown, idx: number): void {
   }
 }
 
-export function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureManifest {
+export function validateProcedureSpec(m: ProcedureManifest, idx: number, declaredRoles: readonly string[] = []): ProcedureManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
@@ -152,7 +153,7 @@ export function validateProcedureSpec(m: ProcedureManifest, idx: number): Proced
   }
   validateHandlerBinding(handler, idx);
   if ("requires" in s && s["requires"] != null) {
-    validateRequires(s["requires"], idx, "Procedure");
+    validateRequires(s["requires"], idx, "Procedure", declaredRoles);
   }
   return m;
 }
@@ -204,7 +205,7 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
   }
 }
 
-function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View"): void {
+function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View", declaredRoles: readonly string[]): void {
   if (typeof req !== "object" || req === null) {
     throw new ManifestParseError(`${atom}.spec.requires must be an object`, idx);
   }
@@ -256,6 +257,7 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
       idx,
       `${atom}.spec.requires.auth.all[${i}]`,
       `/spec/requires/auth/all/${i}`,
+      declaredRoles,
     );
   }
 }
@@ -265,6 +267,7 @@ function validateAuthPredicate(
   idx: number,
   path: string,
   pointer: string,
+  declaredRoles: readonly string[],
 ): asserts p is AuthPredicate {
   if (p === "ctx.user" || p === "ctx.auth") return;
   if (typeof p === "object" && p !== null && !Array.isArray(p)) {
@@ -289,10 +292,10 @@ function validateAuthPredicate(
           idx,
         );
       }
-      const badRole = (roles as readonly string[]).find((r) => !isStaffRole(r));
+      const badRole = (roles as readonly string[]).find((r) => !isStaffRole(r) && !declaredRoles.includes(r));
       if (badRole !== undefined) {
         throw new ManifestParseError(
-          `${path}: 'ctx.staff' role '${badRole}' is not in STAFF_ROLES (${[...STAFF_ROLES].join(", ")})`,
+          `${path}: 'ctx.staff' role '${badRole}' is not in STAFF_ROLES (${[...STAFF_ROLES, ...declaredRoles].join(", ")})${declaredRoles.length ? "" : "; declare application roles in the auth block"}`,
           idx,
           undefined,
           "AUTH_PREDICATE_NOT_IN_ENUM",

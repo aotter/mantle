@@ -2,7 +2,7 @@
  * IR -> physical statements: validate (the runtime never trusts an IR), inject policy, resolve binds.
  * Everything a Store does per statement before the executor runs it (ADR-0034 decisions 3 and 8).
  */
-import { PG_GRAMMAR, type JsonSchema, type SchemaColumns, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
+import { PG_GRAMMAR, type JsonSchema, type SchemaColumns, type SqlContext, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
 import { runtimeDiagnostic, DiagnosticError } from "../../spec/kernel/index.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
 import { applyPolicy, type BindSpec, type Compiled, type Mode, type PolicyOpts } from "./policy.js";
@@ -38,6 +38,8 @@ export interface CompileContext {
   readonly kind: "view" | "procedure";
   readonly mode?: Mode;
   readonly staffRoles?: readonly string[];
+  /** ADR-0046: the declared attributes `auth.attr(name)` may read. */
+  readonly attrs?: SqlContext["attrs"];
   /** Schema + semantic verb keys whose after hooks need whole rows in hidden columns. */
   readonly returning?: ReadonlySet<string>;
   /** Add `AND version = ?` (the version checked by the publishing lifecycle) to a row op. */
@@ -52,10 +54,10 @@ export interface CompileContext {
 
 /** Check every statement of a program with the dialect, then inject policy. A refused IR is `INPUT_VALIDATION_FAILED`. */
 export function compileProgram(stmts: readonly SqlNode[], ctx: CompileContext): Compiled[] {
-  const diagnostics = ctx.dialect.check({ grammar: PG_GRAMMAR, stmts } satisfies SqlPlan, { schemas: ctx.schemas, ...(ctx.columns ? { columns: ctx.columns } : {}), inputs: ctx.inputs, kind: ctx.kind, public: ctx.mode === "public" });
+  const diagnostics = ctx.dialect.check({ grammar: PG_GRAMMAR, stmts } satisfies SqlPlan, { schemas: ctx.schemas, ...(ctx.columns ? { columns: ctx.columns } : {}), inputs: ctx.inputs, kind: ctx.kind, public: ctx.mode === "public", ...(ctx.attrs ? { attrs: ctx.attrs } : {}) });
   if (diagnostics.length)
     throw new DiagnosticError(diagnostics.map((d) => runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `${d.code}: ${d.message}` })));
-  const opts: PolicyOpts = { schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, staffRoles: ctx.staffRoles, lockVersion: ctx.lockVersion, returning: ctx.returning, seen: ctx.seen, unsafeNoVisibility: ctx.unsafeNoVisibility, lower: ctx.dialect.lowering, nativeOrder: ctx.dialect.nativeOrder };
+  const opts: PolicyOpts = { schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, staffRoles: ctx.staffRoles, attrs: ctx.attrs, lockVersion: ctx.lockVersion, returning: ctx.returning, seen: ctx.seen, unsafeNoVisibility: ctx.unsafeNoVisibility, lower: ctx.dialect.lowering, nativeOrder: ctx.dialect.nativeOrder };
   return stmts.map((stmt, i) => {
     const c = applyPolicy(stmt, { ...opts, status: ctx.statuses?.[i] });
     // a Schema whose published entries are protected takes row ops only (ADR-0032 decision 2, ADR-0034 decision 4)
@@ -76,6 +78,7 @@ export function bindValues(dialect: MantleDialect, binds: readonly BindSpec[], c
       case "cutoff": return dialect.codec.encode("timestamptz", ctx.now - b.seconds * 1_000_000);
       case "const": return b.value;
       case "role": return ctx.role ?? null;
+      case "attr": throw new Error("attribute binds are served by the generated runtime (ADR-0046), not Core's executor");
       case "input": return dialect.codec.encode(b.type, input[b.name]);
       case "version": return extra.version;
       case "cursor": return extra.cursor![b.i];

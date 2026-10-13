@@ -252,7 +252,7 @@ export interface SchemaManifestSpec {
   readonly ttl?: { readonly field: string; readonly expireAfterSeconds: number };
   /** Caller identity scope for Store operations: one field bound to `auth.uid()`.
    *  The field must be required and indexed first. */
-  readonly scope?: Readonly<Record<string, "auth.uid()">>;
+  readonly scope?: Readonly<Record<string, "auth.uid()" | `auth.attr('${string}')`>>;
 }
 
 export interface TranslatesBinding {
@@ -424,7 +424,7 @@ export type CtxUserPredicate = "ctx.user";
 /** Requires any verified credential normalized into HandlerContext.auth. */
 export type CtxAuthPredicate = "ctx.auth";
 export interface CtxStaffPredicate {
-  readonly "ctx.staff": readonly StaffRole[];
+  readonly "ctx.staff": readonly (StaffRole | (string & {}))[];
 }
 /** Requires one opaque, consumer-owned scope. Repeat under `all` for
  *  multiple required scopes. */
@@ -459,6 +459,17 @@ export type StaffRole = (typeof STAFF_ROLES)[number] | "staff";
 export function isStaffRole(s: string): s is StaffRole {
   return s === "staff" || (STAFF_ROLES as readonly string[]).includes(s);
 }
+
+/**
+ * ADR-0046 decision 1: the application's declared role and attribute vocabulary (the app-level `auth` block).
+ * `staff` stays built in. Absent block: `staff` only, no attributes.
+ */
+export interface AuthDeclaration {
+  readonly roles: readonly string[];
+  readonly attributes: Readonly<Record<string, { readonly type: "string" | "number"; readonly multiple: boolean }>>;
+}
+/** The attribute name in a Schema scope reference `auth.attr('<name>')`, or undefined. */
+export const attrScopeName = (ref: unknown): string | undefined => typeof ref === "string" ? /^auth\.attr\('([A-Za-z][A-Za-z0-9_]*)'\)$/.exec(ref)?.[1] : undefined;
 
 /* ─── Trigger ─── */
 

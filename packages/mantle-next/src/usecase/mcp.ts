@@ -1,5 +1,5 @@
 /** Emit the selected MCP boundary; the official transport loads on its first request. */
-import { STAFF_ROLES } from "../domain/visibility.js";
+import { staffRolesOf } from "../domain/visibility.js";
 import { mcpToolNameSegment, resolveLocalizedText, type RuntimePlan, type PlanLowered } from "@aotter/mantle/compiler";
 import type { Target } from "../domain/model.js";
 import { emitValidation } from "./validation.js";
@@ -43,7 +43,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
   for(const schema of Object.values(plan.schemas)) if(schema.publishing) for(const verb of ["publish","unpublish","archive"]) {
     const name=`${schema.name}.${verb}`,input=publishingInput;
     Object.assign(files,emitValidation({views:{},procedures:{[name]:{input}}},refuse));
-    add(name,"procedures","staff",{input,requires:{auth:{all:[{"ctx.staff":[...STAFF_ROLES]}]}}},mcpToolNameSegment(`${verb}_${schema.name}`));
+    add(name,"procedures","staff",{input,requires:{auth:{all:[{"ctx.staff":[...staffRolesOf(plan)]}]}}},mcpToolNameSegment(`${verb}_${schema.name}`));
   }
   // An input schema several tools share is one constant.
   const uses = new Map<string, number>(), shared = new Map<string, string>();
@@ -56,7 +56,7 @@ export type Options<Env = unknown> = McpOptions<Env, Database>${refs ? " & { han
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env) => Promise<Response | undefined> {
   return serve<Env, Database${refs ? ", Handlers" : ""}>([
 ${tools.map(({ fields, schema }) => `    { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n")}
-  ], ${q(STAFF_ROLES)}, options);
+  ], ${q(staffRolesOf(plan))}, options);
 }
 `};
 }

@@ -1,5 +1,5 @@
 /** Schema.spec: its JSON Schema subset, local refs, indexes, search and Admin UI. */
-import { MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
+import { attrScopeName, MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
 import { ManifestParseError, V01_LIFECYCLE_MODES, escapeJsonPointerSegment, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
 import { checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes, schemaIndexDiagnosticCode } from "./SchemaIndexChecker.js";
@@ -117,10 +117,10 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
     const [field, ref] = Object.entries(scope)[0]!;
     const property = properties && typeof properties === "object" && !Array.isArray(properties)
       ? (properties as Record<string, Record<string, unknown>>)[field] : undefined;
-    if (ref !== "auth.uid()" || !property || property["type"] !== "string" || property["nullable"] === true || property["oneOf"] !== undefined ||
+    if ((ref !== "auth.uid()" && attrScopeName(ref) === undefined) || !property || property["type"] !== "string" || property["nullable"] === true || property["oneOf"] !== undefined ||
       !Array.isArray(schema["required"]) || !schema["required"].includes(field) ||
       ![...(m.spec.uniqueIndexes ?? []), ...(m.spec.indexes ?? [])].some((index) => index[0] === field)) {
-      throw new ManifestParseError("Schema.spec.scope requires a required string field with a leftmost index and the exact auth.uid() reference", idx, "/spec/scope");
+      throw new ManifestParseError("Schema.spec.scope requires a required string field with a leftmost index and the exact auth.uid() or auth.attr('<name>') reference", idx, "/spec/scope");
     }
     if ((m.spec.uniqueIndexes ?? []).some((index) => index[0] !== field)) {
       throw new ManifestParseError("Scoped Schema unique indexes must begin with the scope field", idx, "/spec/uniqueIndexes");

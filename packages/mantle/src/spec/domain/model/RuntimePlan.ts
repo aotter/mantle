@@ -17,6 +17,8 @@ export interface PlanSchema {
   readonly uiSchema?: Readonly<Record<string, unknown>>;
   readonly localized?: boolean;
   readonly scope?: string;
+  /** ADR-0046: the scope column is bound to a caller attribute (`auth.attr('<name>')`) instead of `auth.uid()`. */
+  readonly scopeAttr?: { readonly name: string; readonly multiple: boolean; readonly type: "string" | "number" };
   readonly ttl?: string;
   readonly ttlSeconds?: number;
   readonly publishing?: boolean;
@@ -128,6 +130,8 @@ export interface RuntimePlan {
   readonly views: Readonly<Record<string, PlanView>>;
   readonly procedures: Readonly<Record<string, PlanProcedure>>;
   readonly triggers: Readonly<Record<string, PlanTrigger>>;
+  /** ADR-0046: the declared role and attribute vocabulary. Omitted when the application declares none (so its fingerprint is unchanged). */
+  readonly auth?: import("./ManifestGrammar.js").AuthDeclaration;
   /** Optional, covered by the fingerprint, and ignored by a runtime it does not match (ADR-0044). */
   readonly lowered?: PlanLowered;
 }

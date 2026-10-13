@@ -9,7 +9,7 @@ import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
 const STATEMENTS = new Set(["SelectStmt", "InsertStmt", "UpdateStmt", "DeleteStmt", "MergeStmt"]);
 const WRITES = new Set(["InsertStmt", "UpdateStmt", "DeleteStmt", "MergeStmt"]);
 /** The functions of decision 2: the only members of the `mantle` and `auth` schemas. */
-const MANTLE_FUNCTIONS = new Set(["mantle.search", "mantle.search_rank", "mantle.near", "mantle.distance", "auth.uid", "auth.role"]);
+const MANTLE_FUNCTIONS = new Set(["mantle.search", "mantle.search_rank", "mantle.near", "mantle.distance", "auth.uid", "auth.role", "auth.attr"]);
 /** Functions that change session or server state, reach outside the database, or run SQL text the front end cannot see. */
 const OUTSIDE = /^(pg_(try_)?advisory_|pg_read_(binary_)?file$|pg_ls_|pg_stat_file$|pg_file_|lo_|dblink|pg_(cancel|terminate|signal)_backend$|pg_reload_conf$|pg_rotate_logfile$|pg_notify$|(set|next)val$|(query|table|cursor|schema|database)_to_xml|ts_stat$|ts_rewrite$)/;
 

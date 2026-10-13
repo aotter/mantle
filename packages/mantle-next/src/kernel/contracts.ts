@@ -10,6 +10,10 @@ export type Caller =
       /** Informational. */
       readonly issuer?: string;
       readonly role: string | null;
+      /** ADR-0046: the host's role set; when present `role` is `roles[0]`. Only the resolver or host fills it. */
+      readonly roles?: readonly string[];
+      /** ADR-0046: caller attributes, written by administrators and filled only by the resolver or host; read only by `auth.attr(name)`. */
+      readonly attrs?: Readonly<Record<string, string | number | boolean | readonly (string | number)[]>>;
       readonly scopes: readonly string[];
       readonly credential: CredentialKind;
       /** Opaque record id or token JTI, never the raw credential. */

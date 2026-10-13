@@ -15,6 +15,8 @@ export type DialectBind = { readonly k: 'dialect'; readonly [key: string]: unkno
 export type BindSpec =
   | { k: 'uid' } | { k: 'now' } | { k: 'role' } | { k: 'cutoff'; seconds: number } | { k: 'const'; value: unknown }
   | { k: 'input'; name: string; type: string }
+  /** ADR-0046: a caller attribute; a multi-valued one binds ONE array parameter */
+  | { k: 'attr'; name: string; multiple: boolean; type: 'string' | 'number' }
   | DialectBind
   | { k: 'version' }
   | { k: 'cursor'; i: number };
@@ -29,6 +31,8 @@ export type PolicyOpts = {
   inputs: Record<string, string>;
   mode?: Mode;
   staffRoles?: readonly string[];
+  /** ADR-0046: the declared attributes `auth.attr(name)` may read */
+  attrs?: Readonly<Record<string, { readonly type: 'string' | 'number'; readonly multiple: boolean }>>;
   /** add `AND version = ?` (the version checked by the publishing lifecycle) to a row op's WHERE */
   lockVersion?: boolean;
   /** the status an update moves the entry to (the lifecycle decided it is legal); SQL cannot write `status` */
@@ -68,6 +72,8 @@ export interface PolicyLowering {
   cast(n: N, scope: LoweringScope): N;
   /** A subquery link, with its subquery rewritten. */
   sublink(out: N): N;
+  /** ADR-0046: `x` is one of the values of the array bind `set` (SQLite: IN (SELECT value FROM json_each(?)); PostgreSQL: = ANY(CAST($n AS text[]))). A NULL set matches nothing. */
+  anyOf?(x: N, set: N, type: 'string' | 'number'): N;
   /** A new entry id, for an insert that names none. */
   newId(): N;
   /** Extra columns a Schema's read wrapper exposes (the dialect's own index joins). */
@@ -144,7 +150,11 @@ function term(c: C, a: string, t: RowTerm): N {
   const [column, kind, v, published, roles] = t;
   const value: N = v.k === 'const' ? { A_Const: { sval: { sval: v.value } } } : param$(c, v);
   if (kind === 'staff') return or(op('=', col(a, column), { A_Const: { sval: { sval: published! } } }), ...roles!.map(role => op('=', value, { A_Const: { sval: { sval: role } } })));
-  return kind === 'ttl' ? or({ NullTest: { arg: col(a, column), nulltesttype: 'IS_NULL' } }, op('>', col(a, column), value)) : op('=', col(a, column), value);
+  if (kind === 'in') {
+    if (v.k !== 'attr' || !c.lower.anyOf) throw new Refused('SQL_FUNCTION', 'attribute scope needs a dialect that spells a set membership');
+    return c.lower.anyOf(col(a, column), value, v.type);
+  }
+  return kind === 'ttl' ? or({ NullTest: { arg: col(a, column), nulltesttype: 'IS_NULL' } }, op('>', col(a, column), value)) : op('=', col(a, column), v.k === 'attr' ? c.lower.input(value, v.type === 'number' ? 'real' : 'text') : value);
 }
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
 function visible(s: SchemaDef, a: string, c: C): N | undefined {
@@ -216,11 +226,24 @@ const scopeOf = (c: C): LoweringScope => ({
   inputs: c.inputs, param: (spec) => param$(c, spec), tx: (node) => tx(node, c), alias: (name) => lookupAlias(c, name), seen: (p) => c.seen?.add(p),
 });
 
+/** The declared attribute an `auth.attr('<name>')` call reads, as its bind. */
+function attrOf(fc: N, c: C): Extract<BindSpec, { k: 'attr' }> {
+  const name = fc.args?.[0]?.A_Const?.sval?.sval as string | undefined;
+  const declared = name === undefined ? undefined : c.attrs?.[name];
+  if (!declared) throw new Refused('SQL_FUNCTION', `auth.attr('${name}') names an attribute the application does not declare`);
+  return { k: 'attr', name: name!, multiple: declared.multiple, type: declared.type };
+}
+
 function lowerFunc(n: N, c: C): N {
   const f = n.funcname.map((x: N) => x.String.sval).join('.').replace(/^pg_catalog\./, '');
   switch (f) {
     case 'auth.uid': return param$(c, { k: 'uid' });
     case 'auth.role': return param$(c, { k: 'role' });
+    case 'auth.attr': {
+      const spec = attrOf(n, c);
+      if (spec.multiple) throw new Refused('SQL_FUNCTION', `auth.attr('${spec.name}') is multi-valued: write col IN (auth.attr('${spec.name}'))`);
+      return c.lower.input(param$(c, spec), spec.type === 'number' ? 'real' : 'text');
+    }
     case 'now': { const p = param$(c, { k: 'now' }); return c.lower.system?.(p, 'timestamptz') ?? p; }
   }
   return c.lower.func(f, n, scopeOf(c)) ?? c.lower.call(deep(n, c, 'FuncCall'));
@@ -235,6 +258,15 @@ const H: Record<string, (n: N, c: C) => N> = {
     return c.lower.input(param$(c, { k: 'input', name: f[1], type }), type);
   },
   FuncCall: (n, c) => lowerFunc(n, c),
+  // ADR-0046: `col IN (auth.attr('name'))`, the one place a multi-valued attribute may stand
+  A_Expr: (n, c) => {
+    const item = n.kind === 'AEXPR_IN' && n.rexpr?.List?.items?.length === 1 ? n.rexpr.List.items[0].FuncCall : undefined;
+    if (!item || item.funcname.map((x: N) => x.String.sval).join('.').replace(/^pg_catalog\./, '') !== 'auth.attr') return { A_Expr: deep(n, c, 'A_Expr') };
+    const spec = attrOf(item, c), left = tx(n.lexpr, c), set = param$(c, spec);
+    if (!spec.multiple) return op('=', left, c.lower.input(set, spec.type === 'number' ? 'real' : 'text'));
+    if (!c.lower.anyOf) throw new Refused('SQL_FUNCTION', 'this dialect does not spell a set membership');
+    return c.lower.anyOf(left, set, spec.type);
+  },
   SubLink: (n, c) => c.lower.sublink(deep(n, c, 'SubLink')),
   TypeCast: (n, c) => c.lower.cast(n, scopeOf(c)),
   RangeVar: (n, c) => wrap(n, c),
@@ -432,6 +464,8 @@ function del(n: N, c: C): N {
 function insert(n: N, c: C): N {
   const s = c.schemas[String(n.relation.relname).toLowerCase()]!;
   c.seen?.add('insert-target');
+  // ADR-0046 spike: the scope value of an attribute-scoped Schema is the writer's choice, checked against the caller's set; only the Store takes it
+  if (s.scopeAttr) throw new Refused('SQL_UNSUPPORTED', `${n.relation.relname} is scoped by auth.attr('${s.scopeAttr.name}'): Procedure SQL cannot insert into it; write it through the Store`);
   const out = deep(n, c, 'InsertStmt');
   const named = (x: string) => n.cols.some((r: N) => r.ResTarget.name === x);
   const w = writePolicy(s, 'insert', { idGiven: named('id') });

@@ -4,7 +4,7 @@
  * declarations. Like `compileSql`, only the CLI and the plugin's helper scripts import this.
  */
 import { validateDiagnostic, type Diagnostic, type SourceLocation } from "../../kernel/diagnostic.js";
-import type { JsonSchema, ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
+import { attrScopeName, type JsonSchema, type ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
 import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
@@ -103,8 +103,13 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
 /** Compile a linked manifest set to the sealed plan. Every refusal is reported, one per SQL source. */
 export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlDialect = d1): Promise<CompilePlanResult> {
   const schemas: Record<string, PlanSchema> = {};
-  for (const { manifest: m } of linked.schemas) {
+  const attrDiagnostics: Diagnostic[] = [];
+  for (const { manifest: m, source } of linked.schemas) {
     const scope = Object.keys(m.spec.scope ?? {})[0]?.toLowerCase();
+    // ADR-0046: a scope bound to `auth.attr('<name>')` names a declared attribute
+    const attrName = attrScopeName(Object.values(m.spec.scope ?? {})[0]);
+    const declaredAttr = attrName === undefined ? undefined : linked.auth?.attributes[attrName];
+    if (attrName !== undefined && !declaredAttr) attrDiagnostics.push(validateDiagnostic({ code: "INVALID_MANIFEST_ENVELOPE", severity: "error", path: `${source.sourceId}#/${source.documentIndex}/spec/scope`, source: { ...source, path: "/spec/scope" }, message: `Schema '${m.metadata.name}' scope names attribute '${attrName}', which the application's auth block does not declare. Declared attributes: ${Object.keys(linked.auth?.attributes ?? {}).join(", ") || "none"}.` }));
     const props = m.spec.schema.properties ?? {};
     const lower = (xs: readonly string[]) => xs.map((x) => x.toLowerCase());
     schemas[m.metadata.name.toLowerCase()] = {
@@ -114,6 +119,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       ...(m.spec.uiSchema ? { uiSchema: m.spec.uiSchema } : {}),
       ...(m.spec.localized ? { localized: true } : {}),
       ...(scope ? { scope } : {}),
+      ...(declaredAttr ? { scopeAttr: { name: attrName!, multiple: declaredAttr.multiple, type: declaredAttr.type } } : {}),
       ...(m.spec.ttl ? { ttl: m.spec.ttl.field.toLowerCase(), ttlSeconds: m.spec.ttl.expireAfterSeconds } : {}),
       publishing: m.spec.lifecycle === "publishing",
       schema: m.spec.schema,
@@ -138,7 +144,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     // a readable View is replaced by its SELECT once it compiles (in dependency order, below); until then it is refused
     refs[ref] = { refusal: why ? `${ref} is ${why}: FROM reads only an internal View without input or requires` : `${ref} did not compile` };
   }
-  const ctxOf = (kind: SqlContext["kind"], input: JsonSchema | undefined, isPublic = false): SqlContext => ({ schemas, inputs: typesOf(input), kind, public: isPublic, views: refs });
+  const ctxOf = (kind: SqlContext["kind"], input: JsonSchema | undefined, isPublic = false): SqlContext => ({ schemas, inputs: typesOf(input), kind, public: isPublic, views: refs, ...(linked.auth ? { attrs: linked.auth.attributes } : {}) });
   const compile = async (kind: SqlContext["kind"], sql: string, input: JsonSchema | undefined, source: SourceLocation, pointer: string, isPublic = false) => {
     const res = await compileSql(sql, ctxOf(kind, input, isPublic), dialect);
     if (res.ok) return res;
@@ -242,9 +248,10 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     const target = p.spec.target ?? (plan ? inferTarget(p, plan.stmts) : undefined);
     if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan, source: p.spec.handler.sql } };
   }
+  diagnostics.push(...attrDiagnostics);
   if (diagnostics.length) return { ok: false, diagnostics };
   const triggers: Record<string, PlanTrigger> = Object.fromEntries(linked.triggers.map(({ manifest: t }) => [t.metadata.name, { source: t.spec.source, procedure: t.spec.target.procedure }]));
-  const sealed = { version: RUNTIME_PLAN_VERSION, dialect: { name: dialect.name, version: dialect.version }, schemas, views, procedures, triggers };
+  const sealed = { version: RUNTIME_PLAN_VERSION, dialect: { name: dialect.name, version: dialect.version }, schemas, views, procedures, triggers, ...(linked.auth ? { auth: linked.auth } : {}) };
   return { ok: true, plan: { ...sealed, fingerprint: await planFingerprint(sealed) } };
 }
 

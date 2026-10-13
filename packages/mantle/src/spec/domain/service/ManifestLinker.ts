@@ -44,6 +44,8 @@ export interface LinkedManifestSet {
   readonly views: readonly LinkedView[];
   readonly procedures: readonly LinkedProcedure[];
   readonly triggers: readonly LinkedTrigger[];
+  /** ADR-0046: the declared role and attribute vocabulary. */
+  readonly auth?: import("../model/ManifestGrammar.js").AuthDeclaration;
   readonly [linkedManifestSetBrand]: true;
 }
 
@@ -114,6 +116,7 @@ export function linkManifestSet(
       views: Object.freeze(views),
       procedures: Object.freeze(procedures),
       triggers: Object.freeze(triggers),
+      ...(parsed.auth ? { auth: parsed.auth } : {}),
     }) as LinkedManifestSet,
     diagnostics,
   };

@@ -9,13 +9,15 @@ export type Recipe =
   | { readonly k: "uid" | "role" | "now" | "version" }
   | { readonly k: "cutoff"; readonly seconds: number }
   | { readonly k: "const"; readonly value: unknown }
+  /** ADR-0046: a caller attribute; a multi-valued one is one array parameter (`attrs.ts`). */
+  | { readonly k: "attr"; readonly name: string; readonly multiple: boolean; readonly type: "string" | "number" }
   | { readonly k: "input"; readonly name: string; /** Only a date-time or a date is converted, so only those carry a type. */ readonly type?: "timestamptz" | "date" };
 /** One printed statement and how to bind it. `row`: it must affect exactly one row. */
 export interface Step { readonly sql: string; readonly binds: readonly Recipe[]; readonly row?: boolean }
 export type Bound = { readonly sql: string; readonly binds: unknown[]; readonly row?: boolean };
 
 /** The dialect functions the recipes in use call; generated code passes only those. */
-export type Values = Partial<Pick<Dialect, "now" | "cutoff" | "timestamp" | "date">>;
+export type Values = Partial<Pick<Dialect, "now" | "cutoff" | "timestamp" | "date" | "attr">>;
 /** A declared date-time or date as the engine stores it; any other value (and `null`) is bound as it is. */
 export const encode = (d: Values, type: string | undefined, v: unknown): unknown =>
   type === "timestamptz" ? (v == null ? null : d.timestamp!(v as string | Date)) : type === "date" ? (v == null ? null : d.date!(v as string)) : v;
@@ -28,6 +30,7 @@ export function binds(d: Values, recipes: readonly Recipe[], caller: Caller, inp
       case "now": out.push(d.now!(ms ||= Date.now())); break;
       case "cutoff": out.push(d.cutoff!(ms ||= Date.now(), r.seconds)); break;
       case "const": out.push(r.value); break;
+      case "attr": out.push(d.attr!(r, caller)); break;
       case "version": out.push(input!.version); break;
       case "input": out.push(encode(d, r.type, input![r.name]));
     }

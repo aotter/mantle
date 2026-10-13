@@ -87,7 +87,7 @@ export const FUNCS = new Set([
   'lower', 'upper', 'length', 'abs', 'round', 'substr', 'replace', 'btrim', 'ltrim', 'rtrim', 'instr', 'typeof', 'hex', // btrim is what PostgreSQL parses trim(x) to
  
   'json_extract', 'json_set', 'json_insert', 'json_remove', 'json_array_length',
-  'now', 'auth.uid', 'auth.role', 'date_trunc', 'extract', 'like_escape',
+  'now', 'auth.uid', 'auth.role', 'auth.attr', 'date_trunc', 'extract', 'like_escape',
   'mantle.search', 'mantle.search_rank', 'mantle.near', 'mantle.distance',
 ]);
 const WINDOW = new Set(['row_number', 'rank', 'sum', 'count']);
@@ -430,6 +430,13 @@ const check: Record<string, Checker> = {
       case 'date_trunc': if (args.length !== 2 || !ctx.p.trunc.has(str(args[0]) ?? '')) no('SQL_TYPE', `date_trunc takes ${[...ctx.p.trunc].join(', ')} as a literal first argument`, at); break;
       case 'extract': if (args.length !== 2 || !ctx.p.extract.has(str(args[0]) ?? '')) no('SQL_TYPE', `extract takes ${[...ctx.p.extract].join(', ')}`, at); break;
       case 'now': case 'auth.uid': case 'auth.role': if (args.length) no('SQL_FUNCTION', `${f}() takes no arguments`, at); break;
+      // ADR-0046: one literal attribute name, declared by the application's auth block
+      case 'auth.attr': {
+        const name = args.length === 1 ? str(args[0]) : undefined;
+        if (name === undefined) no('SQL_FUNCTION', "auth.attr() takes one literal attribute name: auth.attr('region')", at);
+        if (!ctx.attrs?.[name!]) no('SQL_FUNCTION', `auth.attr('${name}'): the application's auth block does not declare attribute '${name}' (declared: ${Object.keys(ctx.attrs ?? {}).join(', ') || 'none'})`, at);
+        break;
+      }
       case 'mantle.search': case 'mantle.search_rank':
         if (args.length !== (f === 'mantle.search' ? 2 : 1) || args[0]?.ColumnRef?.fields?.length !== 1) no('SQL_FUNCTION', f === 'mantle.search' ? 'mantle.search(<alias>, <query>)' : 'mantle.search_rank(<alias>)', at);
         break;
@@ -466,6 +473,9 @@ const check: Record<string, Checker> = {
     jsonCompare(n, ctx, at);
     if (n.kind === 'AEXPR_OP' && !ctx.p.ops.has(op)) no('SQL_UNSUPPORTED', `operator ${op} is refused`, at);
     if (n.kind === 'AEXPR_IN' && !['=', '<>'].includes(op)) no('SQL_UNSUPPORTED', 'a bad IN', at);
+    // ADR-0046: a multi-valued attribute is the one item of `col IN (auth.attr('name'))`; NOT IN would turn an empty set into "everything"
+    if (n.kind === 'AEXPR_IN' && items?.some((x) => x.FuncCall && fname(x.FuncCall) === 'auth.attr') && (items.length !== 1 || op !== '='))
+      no('SQL_FUNCTION', "auth.attr() in an IN list stands alone and is not negated: col IN (auth.attr('name'))", at);
     if (n.kind === 'AEXPR_LIKE' && !['~~', '!~~'].includes(op)) no('SQL_UNSUPPORTED', 'ILIKE and regular expressions are refused', at, /\bILIKE\b/i);
     if (n.kind === 'AEXPR_ILIKE' && !['~~*', '!~~*'].includes(op)) no('SQL_UNSUPPORTED', 'a bad ILIKE', at);
     const esc = (x: N | undefined) => !!x?.FuncCall && fname(x.FuncCall) === 'like_escape';

@@ -1,6 +1,6 @@
 import { LineCounter, parseAllDocuments } from "yaml";
 import { validateDiagnostic, type Diagnostic, type SourceLocation, type SourceSpan } from "../../kernel/diagnostic.js";
-import { API_VERSION, type LifecycleMode, type Manifest, type ManifestKind, type ProcedureManifest, type SchemaManifest, type TriggerManifest, type ViewManifest } from "../model/ManifestGrammar.js";
+import { API_VERSION, type AuthDeclaration, type LifecycleMode, type Manifest, type ManifestKind, type ProcedureManifest, type SchemaManifest, type TriggerManifest, type ViewManifest } from "../model/ManifestGrammar.js";
 import { KNOWN_KINDS, ManifestParseError, rejectUnknownKeys } from "./ManifestFieldChecks.js";
 import { collectSourceSpans, sourceLocation, sourceLocationForNode } from "./ManifestSourceSpans.js";
 import { validateProcedureSpec, validateViewSpec } from "./ProcedureViewSpecChecks.js";
@@ -39,6 +39,37 @@ export type ParsedManifest =
   | ProcedureManifest
   | TriggerManifest;
 
+/** ADR-0046 decision 1: the application's role and attribute vocabulary, from the app-level `auth` block. */
+export function parseAuthBlock(raw: unknown, docIndex: number): AuthDeclaration {
+  const m = raw as Record<string, unknown>;
+  rejectUnknownKeys(m, ["apiVersion", "auth"], docIndex, "/");
+  if (m["apiVersion"] !== undefined && m["apiVersion"] !== API_VERSION) throw new ManifestParseError(`apiVersion must be "${API_VERSION}"`, docIndex, "/apiVersion");
+  const block = m["auth"];
+  if (typeof block !== "object" || block === null || Array.isArray(block)) throw new ManifestParseError("auth must be a mapping", docIndex, "/auth");
+  const a = block as Record<string, unknown>;
+  rejectUnknownKeys(a, ["roles", "attributes"], docIndex, "/auth");
+  const name = /^[A-Za-z][A-Za-z0-9_]*$/;
+  const roles = a["roles"] ?? [];
+  if (!Array.isArray(roles) || roles.some((r) => typeof r !== "string" || !name.test(r) || r === "staff")) {
+    throw new ManifestParseError("auth.roles must be a list of role names; 'staff' is built in and not declared", docIndex, "/auth/roles");
+  }
+  if (new Set(roles).size !== roles.length) throw new ManifestParseError("auth.roles repeats a role", docIndex, "/auth/roles");
+  const raws = a["attributes"] ?? {};
+  if (typeof raws !== "object" || raws === null || Array.isArray(raws)) throw new ManifestParseError("auth.attributes must be a mapping", docIndex, "/auth/attributes");
+  const attributes: Record<string, { type: "string" | "number"; multiple: boolean }> = {};
+  for (const [key, spec] of Object.entries(raws)) {
+    const path = `/auth/attributes/${key}`;
+    if (!name.test(key)) throw new ManifestParseError(`attribute name '${key}' must be an identifier`, docIndex, path);
+    if (typeof spec !== "object" || spec === null || Array.isArray(spec)) throw new ManifestParseError(`${path} must be { type, multiple }`, docIndex, path);
+    const s = spec as Record<string, unknown>;
+    rejectUnknownKeys(s, ["type", "multiple"], docIndex, path);
+    if (s["type"] !== "string" && s["type"] !== "number") throw new ManifestParseError(`${path}/type must be 'string' or 'number'`, docIndex, `${path}/type`);
+    if (s["multiple"] !== undefined && typeof s["multiple"] !== "boolean") throw new ManifestParseError(`${path}/multiple must be a boolean`, docIndex, `${path}/multiple`);
+    attributes[key] = { type: s["type"], multiple: s["multiple"] === true };
+  }
+  return { roles: [...roles], attributes };
+}
+
 export interface ParsedManifestEntry {
   readonly manifest: ParsedManifest;
   readonly source: SourceLocation;
@@ -51,6 +82,8 @@ declare const parsedManifestSetBrand: unique symbol;
 /** Parser-owned value. Consumers cannot construct it as an ordinary object literal. */
 export interface ParsedManifestSet {
   readonly entries: readonly ParsedManifestEntry[];
+  /** The declared role and attribute vocabulary (ADR-0046); absent when the application declares none. */
+  readonly auth?: AuthDeclaration;
   readonly [parsedManifestSetBrand]: true;
 }
 
@@ -60,6 +93,7 @@ export type ParseResult<T> =
 
 interface InternalParseResult {
   readonly entries: ParsedManifestEntry[];
+  auth?: AuthDeclaration;
   readonly diagnostics: Diagnostic[];
 }
 
@@ -79,6 +113,7 @@ export function parseManifestSources(
     ok: true,
     value: Object.freeze({
       entries: Object.freeze(parsed.entries),
+      ...(parsed.auth ? { auth: parsed.auth } : {}),
     }) as ParsedManifestSet,
     diagnostics: parsed.diagnostics,
   };
@@ -87,12 +122,15 @@ export function parseManifestSources(
 function parseManifestSourcesInternal(sourceSet: ManifestSourceSet, defaultLifecycle: LifecycleMode): InternalParseResult {
   const entries: ParsedManifestEntry[] = [];
   const diagnostics: Diagnostic[] = [];
+  const result: InternalParseResult = { entries, diagnostics };
   const sources = sourceSet?.sources;
   if (!Array.isArray(sources)) {
     diagnostics.push(invalidSourceDiagnostic("/sources", "ManifestSourceSet.sources must be an array"));
     return { entries, diagnostics };
   }
   const seenIds = new Set<string>();
+  // ADR-0046: the declared roles are known before any `requires` is checked, wherever the auth block sits in the sources
+  const declaredRoles = declaredRolesOf(sources);
   for (let index = 0; index < sources.length; index++) {
     const source = sources[index];
     if (!source || typeof source !== "object") {
@@ -123,9 +161,25 @@ function parseManifestSourcesInternal(sourceSet: ManifestSourceSet, defaultLifec
       ));
       continue;
     }
-    parseOneStream(source, entries, diagnostics, defaultLifecycle);
+    parseOneStream(source, entries, diagnostics, defaultLifecycle, result, declaredRoles);
   }
-  return { entries, diagnostics };
+  return result;
+}
+
+/** The roles an app-level auth block declares, read ahead of the real parse (which reports the block's own errors). */
+function declaredRolesOf(sources: readonly ManifestSource[]): string[] {
+  const roles: string[] = [];
+  for (const source of sources) {
+    if (typeof source?.text !== "string" || !/^auth:/m.test(source.text)) continue;
+    for (const doc of parseAllDocuments(source.text, { merge: false })) {
+      if (doc.errors.length) continue;
+      let value: unknown;
+      try { value = doc.toJS({ maxAliasCount: 100 }); } catch { continue; }
+      const list = typeof value === "object" && value !== null && !("kind" in value) ? (value as { auth?: { roles?: unknown } }).auth?.roles : undefined;
+      if (Array.isArray(list)) roles.push(...list.filter((r): r is string => typeof r === "string"));
+    }
+  }
+  return roles;
 }
 
 function invalidSourceDiagnostic(path: string, message: string, sourceId?: string): Diagnostic {
@@ -145,6 +199,8 @@ function parseOneStream(
   entries: ParsedManifestEntry[],
   diagnostics: Diagnostic[],
   defaultLifecycle: LifecycleMode,
+  result: InternalParseResult,
+  declaredRoles: readonly string[],
 ): void {
   const lineCounter = new LineCounter();
   const docs = parseAllDocuments(source.text, { merge: false, lineCounter });
@@ -193,8 +249,14 @@ function parseOneStream(
     }
     if (value == null) continue;
     try {
+      // the app-level block (ADR-0046): a document that has an `auth` key and no `kind`
+      if (typeof value === "object" && !Array.isArray(value) && "auth" in value && !("kind" in value)) {
+        if (result.auth) throw new ManifestParseError("the application declares its auth block once", docIndex, "/auth");
+        result.auth = parseAuthBlock(value, docIndex);
+        continue;
+      }
       entries.push({
-        manifest: normalizeManifest(validateEnvelope(value, docIndex), defaultLifecycle),
+        manifest: normalizeManifest(validateEnvelope(value, docIndex, declaredRoles), defaultLifecycle),
         source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
         sourceSpans: collectSourceSpans(doc.contents, lineCounter),
       });
@@ -251,7 +313,7 @@ function pointerFor(docIndex: number, jsonPointer: string): string {
   return `manifest:doc/${docIndex}#${ptr}`;
 }
 
-function validateEnvelope(raw: unknown, docIndex: number): Manifest {
+function validateEnvelope(raw: unknown, docIndex: number, declaredRoles: readonly string[]): Manifest {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new ManifestParseError("manifest must be a YAML mapping", docIndex);
   }
@@ -292,9 +354,9 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
     case "Schema":
       return validateSchemaSpec(raw as SchemaManifest, docIndex);
     case "View":
-      return validateViewSpec(raw as ViewManifest, docIndex);
+      return validateViewSpec(raw as ViewManifest, docIndex, declaredRoles);
     case "Procedure":
-      return validateProcedureSpec(raw as ProcedureManifest, docIndex);
+      return validateProcedureSpec(raw as ProcedureManifest, docIndex, declaredRoles);
     case "Trigger":
       return validateTriggerSpec(raw as TriggerManifest, docIndex);
     default:

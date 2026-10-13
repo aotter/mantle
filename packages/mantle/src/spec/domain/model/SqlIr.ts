@@ -21,6 +21,8 @@ export interface SqlSchemaDef {
   readonly translates?: { readonly parent: string; readonly on: string };
   /** column that holds the owner; every read and write is filtered on it */
   readonly scope?: string;
+  /** ADR-0046: the scope column holds a caller attribute's value (a member of the caller's set) rather than the caller's subject key */
+  readonly scopeAttr?: { readonly name: string; readonly multiple: boolean; readonly type: "string" | "number" };
   /** a declared timestamptz field the author writes; a row is invisible once it is `ttlSeconds` old (a NULL never expires) */
   readonly ttl?: string;
   readonly ttlSeconds?: number;
@@ -54,6 +56,8 @@ export interface SqlContext {
   /** declared input properties and their Mantle types */
   readonly inputs: Readonly<Record<string, string>>;
   readonly kind: "view" | "procedure";
+  /** ADR-0046: the attributes `auth.attr(name)` may read (the application's auth block); absent: none */
+  readonly attrs?: Readonly<Record<string, { readonly type: "string" | "number"; readonly multiple: boolean }>>;
   /** a public View: a caller sees published rows only, even across a join */
   readonly public?: boolean;
   /**
@@ -93,7 +97,7 @@ export function viewCacheProblem(stmts: readonly SqlNode[], schemas: Readonly<Re
     if (!node || typeof node !== "object") continue;
     const n = node as SqlNode;
     const fn = n.FuncCall?.funcname?.map((x: SqlNode) => x.String.sval).join(".").replace(/^pg_catalog\./, "");
-    if (fn === "now" || fn === "auth.uid" || fn === "auth.role") return `shared caching cannot read ${fn}()`;
+    if (fn === "now" || fn === "auth.uid" || fn === "auth.role" || fn === "auth.attr") return `shared caching cannot read ${fn}()`;
     const relation = n.RangeVar;
     if (relation?.mantle === "table") {
       const schema = schemas[relation.relname.toLowerCase()];

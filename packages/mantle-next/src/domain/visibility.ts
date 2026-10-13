@@ -4,4 +4,7 @@ export const nextMode = (mode: RowMode): RowMode => mode === "caller" ? "staff" 
 
 /** Single OSS role; additional role policy belongs to the application. */
 export const STAFF_ROLES = ["staff"] as const;
+/** ADR-0046 decision 1: `staff` plus the roles the application's auth block declares; without a block, exactly STAFF_ROLES. */
+export const staffRolesOf = (plan: { readonly auth?: { readonly roles: readonly string[] } }): readonly string[] =>
+  plan.auth?.roles.length ? [...STAFF_ROLES, ...plan.auth.roles] : STAFF_ROLES;
 

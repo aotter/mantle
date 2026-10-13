@@ -12,7 +12,7 @@ import { decodeCursor, encodeCursor } from "./paging.js";
 export { decodeCursor, encodeCursor };
 
 /** `eq`: `column = value`; `ttl`: `column IS NULL OR column > value` (Core's `RowTerm`). */
-export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe] | readonly [column: string, op: "staff", value: Recipe, published: string, roles: readonly string[]] | readonly [column: string, op: "parent", value: Recipe, parent: ParentPolicy];
+export type Term = readonly [column: string, op: "eq" | "ttl" | "in", value: Recipe] | readonly [column: string, op: "staff", value: Recipe, published: string, roles: readonly string[]] | readonly [column: string, op: "parent", value: Recipe, parent: ParentPolicy];
 export interface ParentPolicy { readonly table: string; readonly terms: readonly Term[]; readonly scope?: readonly [parent: string, child: string]; readonly roles?: readonly string[]; }
 /** Core's row rules for a Schema with the placeholder columns `SCOPE` and `TTL`; `expand` puts a Schema's own in. */
 export interface Rules {
@@ -30,6 +30,9 @@ export interface Rules {
 export interface Fact {
   /** The scope column. */
   readonly s?: string;
+  /** ADR-0046: the scope column holds a caller attribute's value; `o` is Core's own caller terms and insert fills for this Schema. */
+  readonly a?: { readonly name: string; readonly multiple: boolean; readonly type: "string" | "number" };
+  readonly o?: { readonly caller: readonly Term[]; readonly fills: readonly (readonly [column: string, value: Recipe | "newId"])[] };
   /** The TTL column and its seconds. */
   readonly ttl?: readonly [column: string, seconds: number];
   /** Opt-in publishing lifecycle. */
@@ -52,7 +55,7 @@ export function expand(r: Rules, f: Fact) {
   return { caller: [...all(r.caller), ...(f.parent ? [f.parent.visible] : [])], trusted: all(r.trusted), fills: all(r.fills), sets: all(r.sets), lock: r.lock };
 }
 
-export function renderTerm(d: Pick<Dialect, "ident">, t: Term, prefix: string, placeholder: string | ((recipe: Recipe) => string)): string {
+export function renderTerm(d: Pick<Dialect, "ident" | "anyOf">, t: Term, prefix: string, placeholder: string | ((recipe: Recipe) => string)): string {
   const literal = (v: string) => `'${v.replaceAll("'", "''")}'`;
   const param = (r: Recipe) => typeof placeholder === "string" ? placeholder : placeholder(r);
   if (t[1] === "parent") {
@@ -62,6 +65,7 @@ export function renderTerm(d: Pick<Dialect, "ident">, t: Term, prefix: string, p
     return parent.roles ? `(${param(value)} IN (${parent.roles.map(literal).join(", ")}) OR ${exists})` : exists;
   }
   const [column, op, value, published, roles] = t, c = prefix + d.ident(column), bound = param(value);
+  if (op === "in") return d.anyOf!(c, bound, (value as { type: "string" | "number" }).type);
   if (op === "staff") return `(${c} = ${literal(published!)} OR ${bound} IN (${roles!.map(literal).join(", ")}))`;
   return op === "ttl" ? `(${c} IS NULL OR ${c} > ${bound})` : `${c} = ${bound}`;
 }
@@ -114,7 +118,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     let p = prepared.get(name);
     if (!p) {
       const f = facts[name]!;
-      prepared.set(name, p = { name, f, scope: f.s?.toLowerCase(), x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: ["created_at", "updated_at", ...f.ts ?? []], d: f.d ?? [], policy: [] });
+      prepared.set(name, p = { name, f, scope: f.s?.toLowerCase(), x: f.o ? { ...expand(rules, f), caller: [...f.o.caller], fills: [...f.o.fills] } : expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: ["created_at", "updated_at", ...f.ts ?? []], d: f.d ?? [], policy: [] });
     }
     return p;
   };
@@ -235,10 +239,10 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       const values: unknown[] = [], ms = Date.now(), into = d.ident(p.name);
       const push = (v: unknown) => (values.push(v), d.param(values.length));
       const recipe = (r: Recipe) => push(evaluate(d, [r], caller, { version: lock }, ms)[0]);
-      const given = (set: object) => Object.entries(set).map(([name, v]) => {
+      const given = (set: object, insert = false) => Object.entries(set).map(([name, v]) => {
         // SQLite matches column names without case, so compare folded
         const key = name.toLowerCase();
-        if (SYSTEM.includes(key) || key === p.scope) throw no(`${name} is not writable`);
+        if (SYSTEM.includes(key) || key === p.scope && !(insert && f.a)) throw no(`${name} is not writable`);
         // a driver binds undefined as NULL: an update would silently clear the column
         if (v === undefined) throw no(`${name} is undefined`);
         return [d.ident(name), put(values, name, v)] as const;
@@ -264,7 +268,12 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       insert(set: object) { return write(() => {
         if (f.s && caller.kind === "anonymous") throw new ContractError("UNAUTHENTICATED", "A scoped insert requires an authenticated caller.", `${p.name}/insert`);
         const w = writer(), names: string[] = [], marks: string[] = [];
-        for (const [name, mark] of w.given(set)) { names.push(name); marks.push(mark); }
+        if (f.a && caller.kind !== "system") {
+          const own = Object.entries(set).find(([name]) => name.toLowerCase() === p.scope);
+          if (!own) throw no(`${f.s} is required (a value inside the caller's ${f.a.name} attribute)`);
+          d.scope!({ k: "attr", ...f.a }, caller, own[1], `${p.name}/insert`);
+        }
+        for (const [name, mark] of w.given(set, true)) { names.push(name); marks.push(mark); }
         for (const [column, v] of x.fills) { names.push(d.ident(column)); marks.push(v === "newId" ? rules.newId : w.recipe(v)); }
         return w.step(`INSERT INTO ${w.into} (${names.join(", ")}) VALUES (${marks.join(", ")})${w.returning()}`);
       }, rows => clean(rows)[0], `${p.name}/insert`); },

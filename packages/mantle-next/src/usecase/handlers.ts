@@ -22,7 +22,7 @@ export function emitHandlers(
       `export type Procedure${index}Input = ${typeOf(procedure.input ?? { type: "object", additionalProperties: false })};`,
       `export type Procedure${index}Output = ${typeOf(procedure.output)};`,
       `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input, context: { handlers: Handlers; store: HandlerContext["store"] }): Promise<Procedure${index}Output> {`,
-      ...auth(procedure.requires, path),
+      ...auth(procedure.requires, path, !!plan.auth?.roles.length),
       "  const handlers = context?.handlers;",
       `  const handler = handlers && Object.hasOwn(handlers, ${q(name)}) ? handlers[${q(name)}] : undefined;`,
       `  if (!handler) throw new ContractError("HANDLER_NOT_REGISTERED", "Procedure handler is not registered.", ${q(path)});`,

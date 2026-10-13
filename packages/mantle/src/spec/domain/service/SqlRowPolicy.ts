@@ -8,12 +8,12 @@ import type { SqlSchemaDef } from "../model/SqlIr.js";
 /** `caller` preserves Core visibility; `staff` additionally hides publishing drafts from non-staff callers. */
 export type RowMode = "caller" | "public" | "trusted" | "staff";
 /** A value an engine binds. Inside a term a `const` is part of the rule (printed inline); in a write it is an input. */
-export type RowValue = { readonly k: "uid" | "role" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string };
-/** `eq`: `column = value`. `ttl`: `column IS NULL OR column > value`. `staff`: published, or the bound role is staff. */
-export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue] | readonly [column: string, op: "staff", value: RowValue, published: string, roles: readonly string[]] | readonly [column: string, op: "parent", value: RowValue, parent: RowParent];
+export type RowValue = { readonly k: "uid" | "role" | "now" | "version" } | { readonly k: "attr"; readonly name: string; readonly multiple: boolean; readonly type: "string" | "number" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string };
+/** `eq`: `column = value`. `in` (ADR-0046): `column` is one of the caller attribute's values. `ttl`: `column IS NULL OR column > value`. `staff`: published, or the bound role is staff. */
+export type RowTerm = readonly [column: string, op: "eq" | "ttl" | "in", value: RowValue] | readonly [column: string, op: "staff", value: RowValue, published: string, roles: readonly string[]] | readonly [column: string, op: "parent", value: RowValue, parent: RowParent];
 /** One correlated parent row must satisfy every visibility term; staff previews may omit this requirement. */
 export interface RowParent { readonly table: string; readonly terms: readonly RowTerm[]; readonly scope?: readonly [parent: string, child: string]; readonly roles?: readonly string[]; }
-export type RowSchema = Pick<SqlSchemaDef, "scope" | "ttl" | "ttlSeconds" | "publishing" | "translates">;
+export type RowSchema = Pick<SqlSchemaDef, "scope" | "scopeAttr" | "ttl" | "ttlSeconds" | "publishing" | "translates">;
 export interface RowWrite {
   /** An insert's columns the policy fills, in order. `newId` is a new entry id. */
   readonly fills: readonly (readonly [column: string, value: RowValue | "newId"])[];
@@ -35,7 +35,7 @@ export function rowPolicy(s: RowSchema, mode: RowMode, staffRoles: readonly stri
   }
 
   return [
-    ...(mode !== "trusted" && s.scope ? [[s.scope, "eq", { k: "uid" }] as const] : []),
+    ...(mode !== "trusted" && s.scope ? [s.scopeAttr ? [s.scope, s.scopeAttr.multiple ? "in" : "eq", { k: "attr", ...s.scopeAttr }] as const : [s.scope, "eq", { k: "uid" }] as const] : []),
     ...(s.ttl ? [[s.ttl, "ttl", { k: "cutoff", seconds: s.ttlSeconds! }] as const] : []),
     ...(s.publishing && (mode === "public" || mode === "staff") ? [mode === "public" ? ["status", "eq", { k: "const", value: PUBLISHED }] as const : ["status", "staff", { k: "role" }, PUBLISHED, staffRoles] as const] : []),
     ...parent,
@@ -52,7 +52,8 @@ export function writePolicy(s: RowSchema, kind: "insert" | "update" | "delete", 
   const uid: RowValue = { k: "uid" };
   return {
     // a scoped Schema always gets a generated id: a caller-chosen id would collide with (and reveal) another owner's row
-    fills: [...(s.scope ? [[s.scope, uid] as const] : []), ["created_at", NOW], ["updated_at", NOW], ["author_id", uid], ...(o.idGiven && !s.scope ? [] : [["id", "newId"] as const])],
+    // an attribute-scoped Schema takes the scope value from the writer (the Store checks it is in the caller's set); no fill
+    fills: [...(s.scope && !s.scopeAttr ? [[s.scope, uid] as const] : []), ["created_at", NOW], ["updated_at", NOW], ["author_id", uid], ...(o.idGiven && !s.scope ? [] : [["id", "newId"] as const])],
     sets: sets.slice(0, 2),
   };
 }

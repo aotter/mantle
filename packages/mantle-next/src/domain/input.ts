@@ -14,7 +14,7 @@ export function conversions(properties: JsonSchema["properties"], binds: Lowered
 }
 
 /** Only build-time authorization assembly; generated queries retain their existing predicates. @internal */
-export const authLines = (requires: RuntimePlan["views"][string]["requires"], path: string): string[] => (requires?.auth?.all ?? []).map((p,index)=>{
-  const allowed=typeof p === "string" ? 'caller.kind === "user"' : "ctx.auth.scope" in p ? `caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})` : `caller.kind === "user" && ${q(p["ctx.staff"])}.includes(caller.role ?? "")`;
+export const authLines = (requires: RuntimePlan["views"][string]["requires"], path: string, roleSet = false): string[] => (requires?.auth?.all ?? []).map((p,index)=>{
+  const allowed=typeof p === "string" ? 'caller.kind === "user"' : "ctx.auth.scope" in p ? `caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})` : `caller.kind === "user" && ${roleSet ? `(caller.roles ?? [caller.role ?? ""]).some(r => ${q(p["ctx.staff"])}.includes(r))` : `${q(p["ctx.staff"])}.includes(caller.role ?? "")`}`;
   return `  deny(caller, ${allowed}, ${q(`${path}/requires/auth/all/${index}`)});`;
 });

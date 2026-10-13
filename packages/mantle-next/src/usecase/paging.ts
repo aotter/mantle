@@ -28,6 +28,7 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
     const cap = sel.limitCount?.A_Const?.ival?.ival ?? 500;
     if (sel.limitCount && (!sel.limitCount.A_Const?.ival || !Number.isInteger(cap) || cap < 1)) { refuse(path, "A paged View LIMIT must be a positive integer literal."); continue; }
     const values = new Set<string>();
+    let attrs = false; // ADR-0046: this View binds a caller attribute
     const kinds = proof.types.map(type => {
       if (type === "date" || type === "timestamptz") values.add(type === "date" ? "date" : "timestamp");
       return type === "bool" ? "bool" : type === "int4" ? "int4" : ["integer", "int8"].includes(type) ? "int" : parseNumeric(type) ? "numeric" : ["real", "float8"].includes(type) ? "float" : type === "date" ? "date" : type === "timestamptz" ? "timestamp" : "text";
@@ -37,16 +38,17 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
       const first = pages.find(p => !p.sources.some(s => "cursor" in s)), next = pages.find(p => p.sources.some(s => "cursor" in s));
       if (!first || v.nkeys !== proof.types.length || v.nkeys > 0 && !next) { refuse(path, "Core could not lower this View's keyset pages."); return ""; }
       const recipes = recipesOf(v, Object.keys(view.input?.properties ?? {}), message => refuse(path, message), values);
+      if (recipes.some(r => r.k === "attr")) attrs = true;
       const page = (p: typeof first) => `{ sql: ${q(p.sql)}, extra: ${q(p.sources.map(s => "cursor" in s ? s.cursor : -1))} }`;
       return `{ binds: ${q(recipes)}, first: ${page(first)}, next: ${page(next ?? first)} }`;
     });
-    const auth = authLines(view.requires,path);
-    const spec = [`path: ${q(path)}`, `cap: ${cap}`, `sqlite: ${sqlite}`, `cursor: ${q(kinds)}`, `keys: ${c.nkeys}`, `values: {${values.size ? ` ${[...values].sort().join(", ")} ` : ""}}`, "read", `caller: ${variants[0]}`, ...(trusted ? [`trusted: ${variants[1]}`] : []), ...(auth.length ? [`auth: (caller: Caller) => {\n${auth.join("\n")}\n  }`] : [])];
+    const auth = authLines(view.requires,path,!!plan.auth?.roles.length);
+    const spec = [`path: ${q(path)}`, `cap: ${cap}`, `sqlite: ${sqlite}`, `cursor: ${q(kinds)}`, `keys: ${c.nkeys}`, `values: {${values.size || attrs ? ` ${[...[...values].sort(), ...(attrs ? ["attr: ATTR.attr"] : [])].join(", ")} ` : ""}}`, "read", `caller: ${variants[0]}`, ...(trusted ? [`trusted: ${variants[1]}`] : []), ...(auth.length ? [`auth: (caller: Caller) => {\n${auth.join("\n")}\n  }`] : [])];
     files[`paged/views/${encodeURIComponent(name)}.ts`] = `import { page, type Paged } from "${base}paging";
 import { ${auth.length ? "deny, " : ""}type Caller } from "${base}contracts";
 ${databaseImport(target)}
 import { read } from "${base}driver/${driver}";
-${values.size ? `import { ${[...values].sort().join(", ")} } from "${base}dialect/${sqlite ? "sqlite" : "postgres"}";\n` : ""}import type { Input, Row } from "../../views/${encodeURIComponent(name)}.js";
+${values.size ? `import { ${[...values].sort().join(", ")} } from "${base}dialect/${sqlite ? "sqlite" : "postgres"}";\n` : ""}${attrs ? `import { ${sqlite ? "sqlite" : "postgres"} as ATTR } from "${base}attrs";\n` : ""}import type { Input, Row } from "../../views/${encodeURIComponent(name)}.js";
 const spec: Paged<Database> = {
   ${spec.join(",\n  ")},
 };

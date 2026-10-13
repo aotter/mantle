@@ -1,9 +1,10 @@
 /** Unsupported declarations fail at generation, never silently lose their behavior. */
 import type { GenerateInput, GenerateDiagnostic } from "../domain/model.js";
-import { STAFF_ROLES } from "../domain/visibility.js";
+import { staffRolesOf } from "../domain/visibility.js";
 import { viewOutputs } from "@aotter/mantle/compiler";
 
 export function refuseDeclarations({ plan }: GenerateInput, diagnostics: GenerateDiagnostic[]): void {
+  const STAFF_ROLES = staffRolesOf(plan); // ADR-0046: `staff` plus the roles the application declares
   const refuse = (path: string, message: string) => diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message });
   for (const [name, trigger] of Object.entries(plan.triggers)) {
     const kind = trigger.source.kind;
@@ -11,6 +12,7 @@ export function refuseDeclarations({ plan }: GenerateInput, diagnostics: Generat
     refuse(`triggers/${name}`, kind === "schedule" ? "Schedule Triggers are unsupported. Wire scheduled() yourself." : "Before/after lifecycle hooks are unsupported. Write a custom handler.");
   }
   for (const [name, schema] of Object.entries(plan.schemas)) {
+    if (schema.scopeAttr && (schema.publishing || schema.translates)) refuse(`schemas/${name}`, "An attribute-scoped Schema must be operational (lifecycle: operational) and not a translation in this release.");
     const parent = schema.translates && plan.schemas[schema.translates.parent.toLowerCase()];
     if (parent?.scope && schema.scope !== parent.scope) refuse(`schemas/${name}/translates`, `Scoped translation parent '${schema.translates!.parent}' requires the same child scope column '${parent.scope}'. Different or missing child scope columns cannot be correlated safely.`);
   }
@@ -21,7 +23,7 @@ export function refuseDeclarations({ plan }: GenerateInput, diagnostics: Generat
         if (!node || typeof node !== "object") return;
         for (const [key, value] of Object.entries(node)) {
           if (key === "ctx.staff" && Array.isArray(value)) for (const role of value) {
-            if (!(STAFF_ROLES as readonly string[]).includes(role)) refuse(`${path}/ctx.staff`, `Role '${role}' is outside the generated vocabulary (${STAFF_ROLES.join(", ")}). Migrate 0.2 owner/editor/contributor users and requires declarations to 'staff'; other Caller role strings remain application-owned.`);
+            if (!STAFF_ROLES.includes(role)) refuse(`${path}/ctx.staff`, `Role '${role}' is outside the generated vocabulary (${STAFF_ROLES.join(", ")}). Migrate 0.2 owner/editor/contributor users and requires declarations to 'staff', or declare the role in the application's auth block (auth: { roles: [...] }); other Caller role strings remain application-owned.`);
           } else roles(value, `${path}/${key}`);
         }
       };

@@ -5,6 +5,7 @@ import { nativeType, outputType } from "../domain/columns.js";
 import { databaseImport, driverFor, entry, exportName, generatedFiles, isSqlite as sqlite, q } from "../domain/entry.js";
 import { authLines as auth } from "../domain/input.js";
 import { recipesOf } from "../domain/recipes.js";
+import { staffRolesOf } from "../domain/visibility.js";
 import { emitTtl } from "./ttl.js";
 import { emitPublishing } from "./publishing.js";
 import { emitStores } from "./stores.js";
@@ -38,6 +39,7 @@ const typeOf = (s: JsonSchema | undefined): string => {
 export function generate({ target, plan, lowered, viewKeys, newId, adminExtensions, site, paging }: GenerateInput): GenerateResult {
   const diagnostics: GenerateDiagnostic[] = [];
   refuseDeclarations({ target, plan, lowered, viewKeys, newId }, diagnostics);
+  if (diagnostics.some(d => d.path.startsWith("schemas/") && /attribute-scoped/.test(d.message))) return { ok: false, diagnostics }; // later emitters assume a supported scope
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
   const isSqlite = sqlite(target);
   const expected = isSqlite ? "@aotter/mantle/d1" : "@aotter/mantle/postgres";
@@ -66,15 +68,18 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
   };
   // The dialect functions the bind recipes call, so a bundle carries only those (`binds` takes this object).
   const values = new Set<string>();
+  // ADR-0046: set when a statement binds an attribute or a Schema is attribute-scoped; only then does the module import `attrs`
+  let usesAttrs = Object.values(plan.schemas).some(s => s.scopeAttr);
   /** A statement as a constant: its text and how to bind it. */
   const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false) => {
     const recipes = recipesOf(s, fields, message => refuse(path, message));
-    for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
+    for (const r of recipes) { if (r.k === "attr") usesAttrs = true; if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
     return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : ""} }`;
   };
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [], refProcedures: string[] = [];
   const entries: Record<string, string> = {};
   const base = "@aotter/mantle-next/";
+  const roleSet = !!plan.auth?.roles.length; // ADR-0046: the host's role set decides `ctx.staff` once roles are declared
   const refNames = emitHandlers(plan, typeOf, declarations, refProcedures);
   const hasHandlers = refNames.length > 0;
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
@@ -95,7 +100,7 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
     const callerStep = step(c, path, fieldNames), trustedStep = mode === "caller" ? step(trusted!, path, fieldNames) : callerStep;
     declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`,
       `const ${fn}Caller = ${callerStep} as const;`, ...(trustedStep !== callerStep ? [`const ${fn}Trusted = ${trustedStep} as const;`] : []),
-      `async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path),
+      `async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path, roleSet),
       `  const m = ${trustedStep !== callerStep ? `caller.kind === "system" ? ${fn}Trusted : ` : ""}${fn}Caller;`, `  return DRIVER.read(db, m.sql, binds(D, m.binds, caller, raw));`, "}");
     views.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
@@ -112,7 +117,7 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
     const same = steps(modes.caller) === steps(modes.trusted);
     declarations.push(`export type Procedure${index}Input = ${queryInputType(procedure.input, [...modes.caller, ...modes.trusted])};`,
       `const ${fn}Caller = ${steps(modes.caller)};`, ...(same ? [] : [`const ${fn}Trusted = ${steps(modes.trusted)};`]),
-      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...auth(procedure.requires, path),
+      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...auth(procedure.requires, path, roleSet),
       `  return { results: await DRIVER.procedure(db, bound(D, ${same ? "" : `caller.kind === "system" ? ${fn}Trusted : `}${fn}Caller, caller, raw), ${q(path)}) };`, "}");
     procedures.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
@@ -120,14 +125,14 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
   }
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
-  const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
+  const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers, staffRolesOf(plan));
   const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse), ...emitAdminDescriptors({plan,adminExtensions},diagnostics), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
   const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
     `export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`,
     ...(hasHandlers ? [`const storeProcedures = { ${[...procedures, ...refProcedures].join(", ")} };`] : []),
-    `const initStore = () => createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof ${storeProcedures} }${hasHandlers ? ", { handlers: Handlers }" : ""}>(DIALECT.dialect, DRIVER, RULES, ${stores.facts}, { views, procedures: ${storeProcedures} });`,
+    `const initStore = () => createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof ${storeProcedures} }${hasHandlers ? ", { handlers: Handlers }" : ""}>(${usesAttrs ? "{ ...DIALECT.dialect, ...ATTR }" : "DIALECT.dialect"}, DRIVER, RULES, ${stores.facts}, { views, procedures: ${storeProcedures} });`,
     `let makeStore: ReturnType<typeof initStore>;`,
     `export function store${hasHandlers ? "<const H extends Handlers>" : ""}(db: Database, caller: Caller${hasHandlers ? ", options: { handlers: H & Record<Exclude<keyof H, keyof Handlers>, never> }" : ""}): ReturnType<typeof makeStore> { return (makeStore ??= initStore())(db, caller${hasHandlers ? ", options" : ""}); }`,
   ] : [])].join("\n");
@@ -137,5 +142,6 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
   return { ok: true, refProcedures: refNames, files: generatedFiles({ ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
     ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...(stores ? [`import { createStore } from "${base}store";`] : []),
     `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}binds";`,
-    `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" }) };
+    ...(usesAttrs ? [`import { ${isSqlite ? "sqlite" : "postgres"} as ATTR } from "${base}attrs";`] : []),
+    `const D = { ${[...[...values].sort().map(v => `${v}: DIALECT.${v}`), ...(usesAttrs ? ["attr: ATTR.attr"] : [])].join(", ")} };`, code].filter(Boolean).join("\n") + "\n" }) };
 }
