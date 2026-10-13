@@ -55,7 +55,7 @@ modules you need.
   [MCP and WebMCP](docs/handbook/concepts/mcp-and-agents.md).
 - **Publishing.** Draft/publish workflows, localized content and full-text
   search, served over REST and MCP.
-  [Publishing example](docs/examples/publication.md).
+  [Generated website example](docs/examples/generated-web/README.md).
 - **Embed in an existing application.** Mount the REST, MCP or Admin surface
   you need inside your own Worker or server entry.
   [Integration choices](#choose-how-much-to-use).
@@ -110,11 +110,10 @@ spec:
 
 Together with the `requests` Schema, this defines the read used by the staff
 report and its MCP tool. A Procedure handles submissions, with Triggers choosing
-HTTP and MCP exposure. [Read the complete intake example](docs/examples/intake.md).
+HTTP and MCP exposure.
 
-For other applications, explore [commerce](docs/examples/commerce.md),
-[reservations](docs/examples/reservation.md), and
-[procurement](docs/examples/procurement.md).
+For a complete runnable application, see the
+[reference service](docs/examples/reference-service/README.md).
 
 ## Get started
 

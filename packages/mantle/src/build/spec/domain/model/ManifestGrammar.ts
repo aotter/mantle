@@ -452,10 +452,6 @@ export const STAFF_ROLES = ["owner", "editor", "contributor"] as const;
 /** Next adds one OSS role; the legacy Core preset remains unchanged. */
 export type StaffRole = (typeof STAFF_ROLES)[number] | "staff";
 
-// `meetsRole` (role-rank comparison) moved to
-// `domain/service/StaffRoleHierarchy.ts` — this file is pure grammar
-// types referenced by the parser.
-
 export function isStaffRole(s: string): s is StaffRole {
   return s === "staff" || (STAFF_ROLES as readonly string[]).includes(s);
 }
