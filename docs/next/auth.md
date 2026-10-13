@@ -106,17 +106,81 @@ are yours (#1463).
 
 The native auth adapters enable database joins by default; an explicit
 `advanced.database.joins: false` retains Better Auth's separate-read fallback.
-Cookie authorization uses one session API call plus one joined primary session/user
-check: two reads with the default native adapters. Passing `responseHeaders` lets
-that session call slide the cookie; a due refresh adds one UPDATE. Cookie headers
-are forwarded only after the primary expiry, user, role and ban checks pass.
+Without `secondaryStorage`, cookie authorization trusts Better Auth's
+`getSession({ query: { disableCookieCache: true } })` primary session/user result:
+**one native joined read**, with no additional Caller read. Passing
+`responseHeaders` lets that same SDK call slide a due cookie; it adds one UPDATE
+and no extra read. An explicit `advanced.database.joins: false` instead needs
+Better Auth's two separate reads. Authority is the primary result at that read;
+a concurrent revocation afterward applies on the next request. Role changes,
+bans, user/session deletion and expiry already present in the primary are
+reflected immediately.
 
-With `secondaryStorage`, the first session call disables refresh. The joined
-primary check must pass before a second SDK call may refresh and forward cookies.
-A cache hit needs one primary read for the caller guard; cache authority checks,
-cache misses or an adapter that emulates joins may require more. `disableCookieCache` does not bypass
-secondaryStorage. These checks prevent stale KV snapshots from reviving expired
-or deleted sessions or preserving old staff/ban state.
+### Explicit read-only cookie snapshots
+
+Authority remains fresh by default. An application may pass `readOnly: true`
+only for a positively classified read. Enable Better Auth's official cache in
+app-owned auth options:
+
+```ts
+session: {
+  cookieCache: { enabled: true, maxAge: 60, refreshCache: false, version: "read-60-v1" },
+}
+```
+
+A valid signed cache hit uses **zero Caller DB reads**, both on the first
+resolution and a warm repeat. Missing, tampered, expired or version-mismatched
+cache falls back to Better Auth's primary read (one joined read; two with joins
+explicitly disabled). Better Auth owns signatures, expiry and cache cookies.
+The opt-in only takes effect without `secondaryStorage`, with explicit
+`maxAge` from 1 to 60 seconds and `refreshCache: false`; otherwise authority
+stays fresh. KV does not gain a zero-read guarantee. Bearer grant checks are
+unchanged regardless of this option.
+
+Revocation, bans and role changes can reach cached reads as late as the cache
+TTL. Every mutation and authority-sensitive endpoint must keep the default:
+auth/admin (including GET), consent, publishing, ref Procedures, media and
+unknown operations. HTTP method alone does not classify a read; MCP read tools
+also use POST. Never assign `readOnly: true` to the entire REST or MCP surface.
+For example, an app that owns these exact generated View paths can use:
+
+```ts
+const readViews = new Set(["/api/views/articles", "/api/views/profile"]);
+const caller = (request: Request) => resolveCaller(request, loader, {
+  readOnly: ["GET", "HEAD"].includes(request.method) && readViews.has(new URL(request.url).pathname),
+});
+```
+
+Web page reads can opt in where the app knows it is rendering a declared View.
+MCP must classify parsed `initialize`, `tools/list` and known View tools before
+Caller resolution; a handler that resolves Caller before parsing has no such
+seam and stays fresh. Mixed batches and unknown tools stay fresh. No claim of
+zero MCP DB reads applies until that integration is present.
+
+**Bump `cookieCache.version` when enabling this policy or changing its TTL or
+semantics.** A cache minted under an earlier 300-second setting retains its old
+signed expiry; changing `maxAge` alone does not shorten it. Better Auth's version
+check invalidates that snapshot. The SDK cannot infer prior deployment config.
+Sign-out clears the session-token and cache cookies; pass SDK Set-Cookie headers
+through to the browser. A copied pre-sign-out cookie can remain usable for
+read-only snapshots until TTL, while fresh authority rejects revoked sessions.
+
+With `secondaryStorage`, `disableCookieCache` does not bypass KV. The first
+session call disables refresh, and Caller keeps a joined primary authority check
+before any second SDK call may refresh or forward cookies. A plain KV hit uses
+one primary read plus the KV lookup; cache misses and emulated joins cost more.
+The optional `sessionSecondaryStorage` also checks primary authority on lookup:
+it uses **two primary reads** for Caller without `responseHeaders`, or three
+with headers when no refresh is due. A due refresh with that adapter uses five reads (the initial authority read, Caller guard,
+second SDK lookup, and Better Auth's own update/index reads) plus one UPDATE.
+These existing KV costs are retained rather than replacing Better Auth's signed
+cookie and refresh implementation. Stale snapshots cannot revive expired or
+deleted primary sessions or retain obsolete staff/ban state. Missing KV session
+indexes still rebuild from primary storage; SDK listing cost is unchanged.
+
+`authRoutes` may be imported statically: its consent/provider integration loads
+only for a matching consent request, after Caller/origin/body guards. Optional
+Better Auth adapter code stays outside the Worker startup graph.
 
 `@aotter/mantle/auth/admin` exports `guardAuthAdminRequest(request, resolveFreshCaller, basePath?)` for selected auth transports. It resolves authority only for raw/encoded admin paths, requires a staff cookie session and checks mutation origin. Both the app-owned template and OAuth routes use this same guard.
 

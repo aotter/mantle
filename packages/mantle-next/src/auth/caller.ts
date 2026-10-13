@@ -41,18 +41,18 @@ export function authLoader<A extends AuthInstance>(load: () => Promise<A>, cooki
   };
 }
 
-const roleOf = (user: User): string | null => user.role ?? null;
-
 /**
  * The Caller for a request that is not public. Public routes must not call it.
  * - `Authorization: Bearer`: an OAuth access token verified by Better Auth's resource client for `audience`; an invalid
  *   token is UNAUTHENTICATED, never anonymous. The user (role, ban) is read from the database on every request.
  * - Otherwise a session cookie, validated by `auth.api.getSession` without the cookie cache, so revocation and role
- *   changes apply on the next request. No session cookie means anonymous, without loading Better Auth.
+ *   changes apply on the next request. `readOnly: true` explicitly permits a bounded official cookie snapshot
+ *   only with no secondaryStorage and cookieCache {enabled:true,maxAge:1..60,refreshCache:false}.
+ *   The application classifies reads; HTTP method alone is not sufficient. No cookie means anonymous without loading Better Auth.
  *   When Better Auth extends the session (`updateAge`) it sets a fresh cookie: pass the outgoing response's headers as
  *   `responseHeaders` and those Set-Cookie lines are appended, so the browser cookie slides with the session.
  */
-export async function resolveCaller(request: Request, auth: AuthLoader, options: { readonly audience?: string | readonly string[]; readonly responseHeaders?: Headers; readonly scopes?: readonly string[]; readonly resolveCredential?: (request: Request) => Caller | null | Promise<Caller | null> } = {}): Promise<Caller> {
+export async function resolveCaller(request: Request, auth: AuthLoader, options: { readonly audience?: string | readonly string[]; readonly readOnly?: boolean; readonly responseHeaders?: Headers; readonly scopes?: readonly string[]; readonly resolveCredential?: (request: Request) => Caller | null | Promise<Caller | null> } = {}): Promise<Caller> {
   const lacks = (have: readonly string[]) => options.scopes?.some(scope => !have.includes(scope));
   const supplied = await options.resolveCredential?.(request);
   if (supplied) {
@@ -80,7 +80,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (lacks(scopes)) throw new ContractError("AUTH_DENIED", "The access token lacks a required scope.");
     if (!user || isBanned(user)) throw new ContractError("UNAUTHENTICATED", "The access token's user is not active.");
     const text = (v: unknown) => (typeof v === "string" ? v : null);
-    return { kind: "user", subject: user.id, issuer: claims.iss, role: roleOf(user), scopes, credential: "oauth", credentialId: text(claims.jti), clientId: text(claims.azp) ?? text(claims.client_id) };
+    return { kind: "user", subject: user.id, issuer: claims.iss, role: user.role ?? null, scopes, credential: "oauth", credentialId: text(claims.jti), clientId: text(claims.azp) ?? text(claims.client_id) };
   }
   if (authorization !== null) throw new ContractError("UNAUTHENTICATED", "The authorization header is not a supported credential.");
   // With no Cookie header at all getSessionCookie returns null: skip even loading the helper.
@@ -89,17 +89,23 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
   if (!getSessionCookie(request, { cookiePrefix: auth.cookiePrefix })) return { kind: "anonymous" };
   const instance = await auth.get();
   const mirror = !!instance.options.secondaryStorage;
-  const initial = await instance.api.getSession({ headers: request.headers, query: { disableCookieCache: true, disableRefresh: mirror || !options.responseHeaders }, returnHeaders: true });
+  const cache = instance.options.session?.cookieCache;
+  // Only an application-classified read may use Better Auth's bounded signed snapshot. KV remains primary-guarded.
+  const cachedRead = options.readOnly === true && !mirror && cache?.enabled === true && cache.refreshCache === false &&
+    typeof cache.maxAge === "number" && cache.maxAge >= 1 && cache.maxAge <= 60;
+  const initial = await instance.api.getSession({ headers: request.headers, query: { disableCookieCache: !cachedRead, disableRefresh: mirror || !options.responseHeaders }, returnHeaders: true });
   const found = initial.response;
   if (!found) return { kind: "anonymous" };
-  // disableCookieCache bypasses the browser cookie cache, not Better Auth's secondaryStorage. KV can retain an old
-  // role/session after failed or delayed cache invalidation; authorization uses the primary database every time.
-  if (!instance.options.session?.storeSessionInDatabase && instance.options.secondaryStorage)
-    throw new ContractError("AUTH_CONFIGURATION_ERROR", "Caller resolution with secondaryStorage requires session.storeSessionInDatabase: true.", "auth:session");
-  const context = await instance.$context as import("@better-auth/core").AuthContext;
-  const live = await context.adapter.findOne<{ userId: string; expiresAt: Date | string | number; user: User | null }>({ model: "session", where: [{ field: "id", value: found.session.id }], join: { user: true } });
-  if (!live || live.userId !== found.user.id || !(new Date(live.expiresAt).getTime() > Date.now())) return { kind: "anonymous" };
-  const user = live.user;
+  let user: User | null = found.user;
+  if (mirror) {
+    // disableCookieCache bypasses browser cookies, not KV. Only mirrors need a primary authority re-read.
+    if (!instance.options.session?.storeSessionInDatabase)
+      throw new ContractError("AUTH_CONFIGURATION_ERROR", "Caller resolution with secondaryStorage requires session.storeSessionInDatabase: true.", "auth:session");
+    const context = await instance.$context as import("@better-auth/core").AuthContext;
+    const live = await context.adapter.findOne<{ userId: string; expiresAt: Date | string | number; user: User | null }>({ model: "session", where: [{ field: "id", value: found.session.id }], join: { user: true } });
+    if (!live || live.userId !== found.user.id || !(new Date(live.expiresAt).getTime() > Date.now())) return { kind: "anonymous" };
+    user = live.user;
+  }
   if (!user || isBanned(user)) return { kind: "anonymous" };
   // Never let a stale secondary snapshot extend an already-expired primary session before the check above.
   if (options.responseHeaders) {
@@ -107,5 +113,5 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (!refreshed.response || refreshed.response.session.id !== found.session.id || refreshed.response.user.id !== user.id) return { kind: "anonymous" };
     for (const cookie of refreshed.headers?.getSetCookie().flatMap(splitSetCookieHeader) ?? []) options.responseHeaders.append("set-cookie", cookie);
   }
-  return { kind: "user", subject: user.id, role: roleOf(user), scopes: [], credential: "session", credentialId: found.session.id, clientId: null };
+  return { kind: "user", subject: user.id, role: user.role ?? null, scopes: [], credential: "session", credentialId: found.session.id, clientId: null };
 }

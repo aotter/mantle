@@ -46,6 +46,10 @@ migrations; never use initial schema.sql as an in-place production upgrade.
 Pass outgoing `responseHeaders` to `resolveCaller` so Better Auth's session cookie
 can slide. Native auth adapters use joins by default; keep the joined primary
 session/user check, including before any refresh from secondary storage.
+Only positively classified View/web reads may pass `readOnly: true`, with official
+cookieCache `{enabled:true,maxAge:60,refreshCache:false,version:"read-60-v1"}` and
+no KV. Bump version when enabling/changing the policy; writes, Admin, consent,
+unknown/ref/media calls stay fresh. Read the installed auth docs before MCP caching.
 
 Use the workflow **generate → typecheck → implement listed handlers**: run
 `mantle generate`, then `tsc --noEmit`. Implement every printed `Handlers` key
