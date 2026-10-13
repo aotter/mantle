@@ -17,7 +17,7 @@ export { initialStorageSql as sqliteSchema } from "./d1/storage.js";
 export { initialStorageSql as postgresSchema } from "./postgres/storage.js";
 export { collectionOf, adminIndexColumns } from "./admin/collections.js";
 export { developerConsole } from "./admin/developerConsole.js";
-export { requiredEnumStates } from "./admin/procedureFlow.js";
+export { rowPreconditions } from "./admin/procedureFlow.js";
 export { checkPlanUiExtensions, planUiExtensionRefs, formSchemaProblem } from "./admin/extensions.js";
 export type { AdminExtension } from "./admin/extensions.js";
 export { appCatalog, entrySchema } from "./mcp/catalog.js";

@@ -1,5 +1,5 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
-import { DiagnosticError, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, requiredEnumStates, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
+import { DiagnosticError, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
 import { STAFF_ROLES } from "../domain/visibility.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
@@ -28,8 +28,9 @@ export function emitAdminDescriptors({plan,adminExtensions=[],admin=false}:Pick<
   });
   const staffTools=mcpTools(plan,"staff"),toolNames=new Set(staffTools.map(t=>t.name));
   const operations=staffTools.filter(t=>t.kind==="procedure").map(t=>{
-    const p=plan.procedures[t.source]!,requiredStates=p.target&&"sql" in p.handler?requiredEnumStates(p.handler.sql.stmts,p.target.schema,plan.schemas[p.target.schema.toLowerCase()]?.schema??{}):[];
-    return {...(requiredStates.length?{requiredStates}:{}),name:t.source,title:p.title??null,description:p.description??null,input:p.input,uiSchema:p.uiSchema??null,interactions:p.target?[{collection:p.target.schema,bind:[{input:p.target.id,field:"id"}],...(p.target.version?{version:p.target.version}:{}),mutates:true}]:[]};
+    const p=plan.procedures[t.source]!;
+    const preconditions=p.target&&"sql" in p.handler?rowPreconditions(p.handler.sql.stmts,p.target.schema,p.target.id,plan.schemas[p.target.schema.toLowerCase()]?.schema??{}):[];
+    return {...(preconditions.length?{preconditions}:{}),name:t.source,title:p.title??null,description:p.description??null,input:p.input,uiSchema:p.uiSchema??null,interactions:p.target?[{collection:p.target.schema,bind:[{input:p.target.id,field:"id"}],...(p.target.version?{version:p.target.version}:{}),mutates:true}]:[]};
   });
   const authorizations={views:Object.fromEntries(views.map(v=>[v.name,plan.views[v.name]!.requires??null])),procedures:Object.fromEntries(Object.entries(plan.procedures).map(([name,p])=>[name,p.requires??null]))};
   const staffCatalogue=appCatalog(plan,"staff");

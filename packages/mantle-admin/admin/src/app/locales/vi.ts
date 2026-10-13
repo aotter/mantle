@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Chi tiết",
+    "ops.conditionConflict": "Bản ghi đã thay đổi hoặc không còn đáp ứng điều kiện của thao tác này. Hãy làm mới và thử lại.",
+  "ops.uniqueConflict": "Đã có bản ghi với cùng giá trị duy nhất.",
+    "model.viewDataUnavailable": "Không thể xem dữ liệu trực tiếp: View này là nội bộ hoặc tài khoản của bạn không được phép chạy.",
     "admin.consoleTitle": "Bảng điều khiển quản trị",
     "developer.workspaceTitle": "Phát triển",
     "auth.signIn.title": "Đăng nhập",

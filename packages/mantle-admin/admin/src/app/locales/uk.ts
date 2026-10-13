@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Подробиці",
+    "ops.conditionConflict": "Запис змінився або більше не відповідає умові цієї дії. Оновіть сторінку та спробуйте ще раз.",
+  "ops.uniqueConflict": "Запис із таким самим унікальним значенням уже існує.",
+    "model.viewDataUnavailable": "Актуальні дані недоступні: ця View внутрішня або вашому обліковому запису заборонено її запускати.",
     "admin.consoleTitle": "Консоль адміністратора",
     "developer.workspaceTitle": "Розробка",
     "auth.signIn.title": "Увійти",

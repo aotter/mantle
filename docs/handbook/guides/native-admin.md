@@ -54,6 +54,7 @@ const api = admin(bindings.metadata, bindings.views, bindings.operations, {
   caller: resolveRequestCaller,
   handlers,
   routes: entries(bindings.schemas, bindings.adapter),
+  developerViews: bindings.developerViews,
 });
 // In app-owned fetch: await api(request, env); undefined means fall through.
 ```
@@ -204,3 +205,40 @@ The compiler derives display/filter metadata from Schema `uiSchema`, searchable 
 Requests select only generated fields and append only supplied predicates. Absent filters are omitted, rather than expressed as `(? IS NULL OR …)`. Sorts and scalar values are checked before the route acquires its DB handle. In 0.2.0 there is no generated Cartesian set of filter variants or variant cap: runtime SQL shapes depend on selected filters, bounded IN lists, search, cursor and order. Only sortable fields are checked for indexes; there is no per-filter-combination index proof. Inspect EXPLAIN for the actual workload.
 
 Store keeps `find({ search })`, `first({ search })` and `count(where?)`. See [Store search and count costs](typed-queries.md#store-reads-and-writes): Admin shares the dialect search, and a View does not make PostgreSQL ILIKE faster.
+
+## Collection navigation and operation placement
+
+A Schema with a required `x-mantle-ref` folds under its parent collection.
+Its collection remains reachable at `/admin/c/<schema>` and appears as a child
+link in the parent's sidebar group; translation children remain on language
+tabs. Set `Schema.spec.uiSchema.nav.standalone: true` to put a required-ref child
+at the top level instead. With multiple eligible references, set
+`nav.parentField` to the chosen reference field.
+
+Staff operations are Procedures exposed by a staff MCP Trigger. Declare
+`Procedure.spec.uiSchema.collectionAction: <schema-name>` to show the operation
+in that collection's list header. Row operations are chosen by the Procedure's
+explicit `target: { schema, id, version? }`: `id` names the input bound to the
+row id, and optional `version` names the input bound to its reviewed OCC version.
+Names such as `approve` never determine placement. An operation without a row
+target or collection action appears on the Operations page, whose sidebar link
+appears whenever such operations exist.
+
+Generated row metadata includes simple AND-ed equality/IN literal conditions
+from the target-row UPDATE/DELETE WHERE. The menu hides known mismatches; missing
+preview values and unsupported predicates leave actions available. These are
+presentation hints: the Procedure still enforces its WHERE and authorization.
+Conflicts show a localized refresh message with the technical diagnostic in
+Details. Successful actions show a short summary and changes, with raw output
+in a collapsed Details disclosure. CSV exports retain UTC wire timestamps.
+
+Developer Model and Logic pages share an object sidebar on wide containers
+and an object-list drawer on narrow containers.
+Schema Live data previews use collection routes even for folded children.
+Pass `bindings.developerViews` as the Admin `developerViews` option for
+public and staff View previews; ordinary Admin View routes and exports use
+only `bindings.views` (staff Views). View previews use the read-only `/admin/api/developer/views/<view>` route,
+with the signed-in staff caller and the same authorization, scope, TTL and
+publishing policy as REST. Public Views retain public visibility; internal or
+disallowed Views show an unavailable explanation. Previews never use a system
+caller or bypass a View's `requires`.

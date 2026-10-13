@@ -3,6 +3,7 @@ import type {
   EntrySnapshot,
   FieldChange,
   InteractionController,
+  InteractionDiagnostic,
   InteractionState,
 } from "../controller/index.js";
 import { defaultInteractionLabels, type InteractionLabels } from "./labels.js";
@@ -81,6 +82,7 @@ export function ChangeDiff(props: FieldLabelProps & {
 
 /** What the person has to know or do next, per phase, with its one action. */
 export function OperationStatus(props: FieldLabelProps & {
+  readonly renderDiagnostic?: (diagnostic: InteractionDiagnostic) => ReactNode;
   readonly controller: InteractionController;
   readonly state: InteractionState;
   readonly labels?: InteractionLabels;
@@ -106,7 +108,7 @@ export function OperationStatus(props: FieldLabelProps & {
     </button>
   );
   const diagnostics = state.diagnostics.length > 0
-    ? <ul className="mt-1 list-disc pl-5">{state.diagnostics.map((diagnostic, index) => <li key={index}>{diagnostic.message}</li>)}</ul>
+    ? <ul className="mt-1 list-disc pl-5">{state.diagnostics.map((diagnostic, index) => <li key={index}>{props.renderDiagnostic ? props.renderDiagnostic(diagnostic) : diagnostic.message}</li>)}</ul>
     : null;
   switch (state.phase) {
     case "loading":
@@ -124,8 +126,8 @@ export function OperationStatus(props: FieldLabelProps & {
       ));
     case "conflict":
       return state.canRead
-        ? notice("error", labels.conflict, button(labels.reread, () => void controller.reread()))
-        : notice("error", labels.conflictReopen);
+        ? notice("error", labels.conflict, button(labels.reread, () => void controller.reread()), diagnostics)
+        : notice("error", labels.conflictReopen, undefined, diagnostics);
     case "uncertain":
       return notice("error", labels.uncertain, !state.canRead
         ? button(labels.acknowledgeUncertain, () => controller.acknowledgeUncertain())
@@ -161,6 +163,7 @@ export function OperationOutcome(props: {
  * `controller.edit`; everything else comes from the controller.
  */
 export function OperationPanel(props: FieldLabelProps & {
+  readonly renderDiagnostic?: (diagnostic: InteractionDiagnostic) => ReactNode;
   readonly controller: InteractionController;
   readonly title: ReactNode;
   readonly description?: ReactNode;
@@ -223,7 +226,7 @@ export function OperationPanel(props: FieldLabelProps & {
       <ChangeDiff changes={controller.changes()} labels={labels} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
       {/* One live region that stays mounted, so screen readers announce each step. */}
       <div aria-live="polite" className="grid gap-2">
-        <OperationStatus controller={controller} state={state} labels={labels} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
+        <OperationStatus controller={controller} state={state} labels={labels} renderDiagnostic={props.renderDiagnostic} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
         <OperationOutcome state={state} labels={labels} renderResult={props.renderResult} />
       </div>
       <footer className="flex justify-end gap-2">

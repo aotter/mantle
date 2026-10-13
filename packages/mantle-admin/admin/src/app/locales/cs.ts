@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Podrobnosti",
+    "ops.conditionConflict": "Záznam se změnil nebo již nesplňuje podmínku této akce. Obnovte stránku a zkuste to znovu.",
+  "ops.uniqueConflict": "Záznam se stejnou jedinečnou hodnotou již existuje.",
+    "model.viewDataUnavailable": "Živá data nejsou dostupná: tato View je interní nebo ji váš účet nesmí spustit.",
     "admin.consoleTitle": "Administrační konzole",
     "developer.workspaceTitle": "Vývoj",
     "auth.signIn.title": "Přihlásit se",

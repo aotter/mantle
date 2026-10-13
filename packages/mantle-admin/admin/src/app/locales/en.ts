@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Details",
+    "ops.conditionConflict": "The record changed or no longer meets this action’s condition. Refresh and try again.",
+  "ops.uniqueConflict": "A record with the same unique value already exists.",
+    "model.viewDataUnavailable": "Live data is unavailable: this View is internal or your account is not allowed to run it.",
     "entryEdit.unsupportedVersion": "Version unsupported. Read-only; exact value preserved.",
     "developer.sqlProcedure": "This procedure runs its SQL statements together: all of them apply, or none.",
     "webmcp.title": "Work with an AI agent",

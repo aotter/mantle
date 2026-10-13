@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Details",
+    "ops.conditionConflict": "Der Datensatz wurde geändert oder erfüllt die Bedingung dieser Aktion nicht mehr. Aktualisiere die Seite und versuche es erneut.",
+  "ops.uniqueConflict": "Ein Datensatz mit demselben eindeutigen Wert existiert bereits.",
+    "model.viewDataUnavailable": "Live-Daten sind nicht verfügbar: Diese View ist intern oder dein Konto darf sie nicht ausführen.",
     "admin.consoleTitle": "Admin-Konsole",
     "developer.workspaceTitle": "Entwicklung",
     "auth.signIn.title": "Anmelden",

@@ -46,7 +46,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
   const {plan,lowered,target}=input, sqlite=isSqlite(target), refs=Object.values(plan.procedures).some(p=>"ref" in p.handler), files:Record<string,string>={};
   const imports=[databaseImport(target),'import {wireRows,type Caller,type Row} from "@aotter/mantle/contracts";','import {deny} from "@aotter/mantle/contracts";','import {invalid} from "@aotter/mantle/surface";',...(refs?['import type {Handlers} from "./generated.js";']:[]),'import {bootstrap,allCollections} from "./admin-descriptors.js";','import type {View,Operation} from "@aotter/mantle-admin/server";','import type {EntrySchema} from "@aotter/mantle-admin/server/entries";'];
   imports.push('import {nativePage,nativeStatistics,nativeText} from "@aotter/mantle-admin/server/native";',`import * as D from "@aotter/mantle/dialect/${sqlite?"sqlite":"postgres"}";`,`import {read,procedure} from "@aotter/mantle/driver/${target==="bun-sqlite"?"bun-sqlite":target==="cloudflare-d1"?"d1":"postgres"}";`,`const adapter={read,procedure,values:${sqlite?"D":`{...D,timestamp:(v:Parameters<typeof D.timestamp>[0])=>{if(typeof v==="string"&&/^0000-/.test(v.trim()))invalid("PostgreSQL timestamps require a nonzero year.","admin/input");return D.timestamp(v);},date:(v:string)=>{if(/^0000-/.test(v.trim()))invalid("PostgreSQL dates require a nonzero year.","admin/input");return D.date(v);}}`},param:D.param,escapeLike:D.escapeLike,sqlite:${sqlite}} as const;`);
-  const schemas:string[]=[], views:string[]=[], operations:string[]=[], pageSpecs:string[]=[];
+  const schemas:string[]=[], views:string[]=[], staffViews:string[]=[], operations:string[]=[], pageSpecs:string[]=[];
   for (const [n,s] of Object.values(plan.schemas).entries()) {
     const schemaPath=`schemas/${s.name}/admin`, declared=Object.keys(s.fields).filter(f=>f!==s.scope), writable=declared.filter(f=>scalar(s.fields[f])||s.fields[f]==="json");
     // Experimental geo collections remain readable; edits require a declared Procedure.
@@ -84,8 +84,8 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     imports.push(`const fieldNames${n}=${q(rowNames)} as const;`);
     imports.push(`import {names as names${n},row as row${n},query as query${n},values as values${n}} from "./admin/entries-${encodeURIComponent(s.name)}.js";`);
   }
-  for (const [name,v] of Object.entries(plan.views).filter(([,v])=>v.surface==="staff")){
-    const n=views.length,encoded=encodeURIComponent(name),converted=conversions(v.input?.properties,lowered.views[name]?.caller?.binds??[],target);
+  for (const [name,v] of Object.entries(plan.views).filter(([,v])=>v.surface!=="internal")){
+    const n=views.length,encoded=encodeURIComponent(name),converted=conversions(v.input?.properties,(lowered.views[name]?.public??lowered.views[name]?.caller)?.binds??[],target);
     imports.push(`import {query as queryView${n}} from "./validation/views/${encoded}.js";`);
     const rename=Object.fromEntries(Object.entries(v.columns??{}).map(([key,col])=>[key,key===col.field?plan.schemas[col.schema]!.names[col.field]??key:key]));
     imports.push(`const viewNames${n}=${q(rename)} as const;`);
@@ -106,6 +106,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     const modes=Object.fromEntries(Object.entries(pageData).map(([mode,p])=>[mode,{...p,binds:recipesOf(p, Object.keys(v.input?.properties??{}),message=>refuse(`views/${name}/admin`,message))}]));
     pageSpecs.push(`const viewPage${n}=${q({path:"views/"+name,cap:v.stmts[0]?.SelectStmt.limitCount?.A_Const?.ival?.ival??500,cursorKinds,...modes})} as const;`);
     imports.push(`const allowsView${n}=${allowed(v.requires,`views/${name}`)};`);
+    if(v.surface==="staff")staffViews.push(`view${n}`);
     views.push(`{name:${q(name)},allows:allowsView${n},query:(params)=>{const result=queryView${n}(params),filters:Record<string,unknown>=Object.create(null);${filterReads.join("")}filters${n}(filters);${filterTransforms.join("")}${sqlite?"":"nativeText(result.input);nativeText(filters);"}${kinds.searchFields?.length?`const search=params.get("search")?.trim();`:""}return {...result,match:{filters${kinds.searchFields?.length?",...(search?{search}:{})":""}}};},page:(db,caller,input,paging)=>{deny(caller,allowsView${n}(caller),${q("views/"+name)});return nativePage(viewPage${n},adapter,db,caller,input,paging);},${converted?`convert:${converted},`:""}row:(raw)=>{const row=(${wire((input.viewKeys[name]??[]).map(key=>[key,boundaryType(plan,name,key)] as const),sqlite)})(raw);return Object.fromEntries(Object.entries(row).map(([key,value])=>[Object.hasOwn(viewNames${n},key)?viewNames${n}[key as keyof typeof viewNames${n}]:key,value]));}}`);
   }
   for(const [name,p]of Object.entries(plan.procedures).filter(([name])=>Object.values(plan.triggers).some(t=>t.procedure===name&&t.source.kind==="mcp"&&t.source.surface==="staff"))){
@@ -114,8 +115,8 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     operations.push(`{name:${q(name)},allows:${allowed(p.requires,`procedures/${name}`)},validate:operation${n},${converted?`convert:${converted},`:""}run:${ref?`async(db,caller,input,handlers)=>(await import("./generated.js")).store(db,caller,{handlers}).procedures[${q(name)}](input)`:`async(db,caller,input)=>(await import("./procedures/${encoded}.js")).default(db,caller,input)`}}`);
   }
   const entryData=sqlConstants(input.adminEntries);
-  imports.push(...pageSpecs,...entryData.constants,`const entrySpecs=${entryData.code} as const;`);
+  imports.push(...views.map((view,n)=>`const view${n}=${view} satisfies View<Database>;`),...pageSpecs,...entryData.constants,`const entrySpecs=${entryData.code} as const;`);
   imports.push(`export const statisticsView=(db:Database,caller:Caller,collection:keyof typeof entrySpecs,args:{from:number;to:number;bucketMs:number})=>nativeStatistics(entrySpecs,adapter,db,caller,collection,args);`);
-  files["admin-bindings.ts"]=`${imports.filter(Boolean).join("\n")}\nexport function adminBindings${refs?"<const H extends Handlers>(options:{handlers:H & Record<Exclude<keyof H,keyof Handlers>,never>})":"()"}{\nreturn {metadata:bootstrap,adapter,schemas:[${schemas.join(",\n")}] satisfies readonly EntrySchema<Database>[],views:[${views.join(",\n")}] satisfies readonly View<Database>[],operations:[${operations.join(",\n")}] satisfies readonly Operation<Database,${refs?"Handlers":"never"}>[]};\n}\n`;
+  files["admin-bindings.ts"]=`${imports.filter(Boolean).join("\n")}\nexport function adminBindings${refs?"<const H extends Handlers>(options:{handlers:H & Record<Exclude<keyof H,keyof Handlers>,never>})":"()"}{\nreturn {metadata:bootstrap,adapter,schemas:[${schemas.join(",\n")}] satisfies readonly EntrySchema<Database>[],views:[${staffViews.join(",")}],developerViews:[${views.map((_,n)=>`view${n}`).join(",")}],operations:[${operations.join(",\n")}] satisfies readonly Operation<Database,${refs?"Handlers":"never"}>[]};\n}\n`;
   return files;
 }

@@ -91,3 +91,30 @@ test("extension record action versions remain safe optional numbers before provi
   }
   expect(f.providers()).toBe(6);expect(dispatches).toBe(6);
 });
+
+test("developer View preview preserves caller and permission gates without acquiring DB for unavailable Views",async()=>{
+  let providers=0,reads=0;
+  const view={name:"public-owned",allows:(c:Caller)=>c.kind==="user"&&c.subject==="a",query:()=>({input:{},limit:20}),page:async(_db:{},c:Caller)=>{expect(c).toBe(staff);reads++;return {rows:[{id:"own"}]};}};
+  const fetch=admin({...metadata,developerConsole:{}},[],[],{developerViews:[view],db:()=>{providers++;return {};},caller:()=>staff});
+  const ask=(path:string,method="GET")=>fetch(new Request("https://app.test/admin/api"+path,{method,headers:{origin:"https://app.test"}}),{});
+  expect(await(await ask("/developer/views/public-owned"))!.json()).toEqual({rows:[{id:"own"}]});expect([providers,reads]).toEqual([1,1]);
+  expect(await(await ask("/developer/views/internal"))!.json()).toEqual({unavailable:true});expect(providers).toBe(1);
+  const denied=admin({...metadata,developerConsole:{}},[],[],{developerViews:[{...view,allows:()=>false}],db:()=>{throw Error("unauthorized DB acquisition");},caller:()=>staff});
+  expect(await(await denied(new Request("https://app.test/admin/api/developer/views/public-owned"),{}))!.json()).toEqual({unavailable:true});
+  for(const path of ["/views/public-owned","/views/public-owned/export"])expect((await ask(path))!.status).toBe(404);
+  expect(providers).toBe(1);
+  expect(await(await ask("/views-manifest"))!.json()).toEqual({views:[]});
+  expect((await ask("/developer/views/public-owned","POST"))!.status).toBe(405);
+  const withoutConsole=fixture();expect((await withoutConsole.ask("/developer/views/public-owned"))!.status).toBe(404);
+});
+
+test("collection CSV preserves system timestamps as UTC ISO strings instead of UI milliseconds",async()=>{
+  for(const timestamp of ["2026-10-13T00:00:00.000001Z",null]){
+    const schema:EntrySchema={binding:compiled,name:"posts",descriptor:{name:"posts"},publishing:false,readOnly:false,fields:{title:"title"},defaults:{},query:()=>({input:{},order:"id:asc"}),validate:d=>d,values:d=>d,row:r=>r};
+    const adapter:NativeProcedureAdapter<{}>={...unused,read:()=>[{id:"a",version:1,title:"Hello",updated_at:timestamp}]};
+    const f=fixture(entries([schema],adapter)),text=await(await f.ask("/entries/export?collection=posts"))!.text();
+    expect(text).toContain("updated_at");
+    if(timestamp!==null)expect(text).toContain(timestamp);
+    expect(text).not.toContain("1791849600000");
+  }
+});

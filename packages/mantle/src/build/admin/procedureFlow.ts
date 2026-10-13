@@ -119,26 +119,52 @@ export function sqlLogic(node: SqlNode): SqlLogicNode {
   return branch(rendered.startsWith('[SQL') ? 'opaque' : 'value', rendered.startsWith('[SQL') ? `${Object.keys(node)[0]} · see authored SQL` : rendered);
 }
 
-/** @internal Necessary enum predicates for a declared row target; a display hint, never authorization. */
-export function requiredEnumStates(stmts: readonly SqlNode[], target: string, schema: JsonSchema): Array<{ field: string; value: string }> {
-  const writes = procedureFlow(stmts).filter((s) => s.table?.toLowerCase() === target.toLowerCase() && s.operation === 'UPDATE');
-  if (writes.length !== 1 || writes[0]!.mode !== 'row') return [];
-  const tree = writes[0]!.logic;
-  const relation = tree.children.find((c) => c.label === 'Target')?.children[0]?.relation;
-  const filter = tree.children.find((c) => c.label.startsWith('WHERE'))?.children[0];
-  const required = (n: SqlLogicNode): SqlLogicNode[] => n.kind === 'predicate' && n.label.startsWith('AND ·') ? n.children.flatMap(required) : [n];
-  return (filter ? required(filter) : []).flatMap((n) => {
-    if (n.kind !== 'expression' || n.label !== '=' || n.children.length !== 2) return [];
-    const match = (column: SqlLogicNode, literal: SqlLogicNode) => {
-      const ref = column.column;
-      if (!ref || ref.relation && ref.relation.toLowerCase() !== (relation?.alias ?? target).toLowerCase() || literal.column || literal.kind !== 'value' || !/^'.*'$/.test(literal.label)) return [];
-      const field = Object.keys(schema.properties ?? {}).find((k) => k.toLowerCase() === ref.name.toLowerCase());
-      if (!field) return [];
-      const value = literal.label.slice(1, -1).replace(/''/g, "'");
-      const property = schema.properties![field]!;
-      const options = property.enum ?? property.oneOf?.map((o: { const?: unknown }) => o.const);
-      return Array.isArray(options) && options.includes(value) ? [{ field, value }] : [];
-    };
-    return [...match(n.children[0]!, n.children[1]!), ...match(n.children[1]!, n.children[0]!)];
-  });
+/** Necessary literal predicates on a single target-row write; presentation only. */
+export function rowPreconditions(stmts: readonly SqlNode[], target: string, idInput: string, schema: JsonSchema): Array<{ field: string; values: Array<string | boolean> }> {
+  const writes = stmts.flatMap(stmt => [stmt.UpdateStmt ?? stmt.DeleteStmt].filter(body => body?.relation?.relname?.toLowerCase() === target.toLowerCase()));
+  if (writes.length !== 1) return [];
+  const body = writes[0]!;
+  // Joined writes can give an unqualified column a different meaning.
+  if (body.fromClause?.length || body.usingClause?.length || body.withClause) return [];
+  const terms = (node: SqlNode): SqlNode[] => node?.BoolExpr?.boolop === 'AND_EXPR' ? node.BoolExpr.args.flatMap(terms) : [node];
+  const column = (node: SqlNode | undefined): string | undefined => {
+    const fields = node?.ColumnRef?.fields?.map((f: SqlNode) => f.String?.sval);
+    return fields && (fields.length === 1 || fields.length === 2 && fields[0]?.toLowerCase() === (body.relation.alias?.aliasname ?? target).toLowerCase()) ? fields.at(-1)?.toLowerCase() : undefined;
+  };
+  const input = (node: SqlNode | undefined): string | undefined => {
+    const fields = node?.ColumnRef?.fields?.map((f: SqlNode) => f.String?.sval);
+    return fields?.length === 2 && fields[0] === 'input' ? fields[1] : undefined;
+  };
+  const literal = (node: SqlNode | undefined): string | boolean | undefined => {
+    const c = node?.A_Const;
+    if (!c || c.isnull) return undefined;
+    if (c.sval) return c.sval.sval;
+    if (c.boolval) return c.boolval.boolval;
+    return undefined;
+  };
+  let boundId = false;
+  const conditions: Array<{ field: string; values: Array<string | boolean> }> = [];
+  for (const term of terms(body.whereClause)) {
+    const e = term?.A_Expr, op = e?.name?.[0]?.String?.sval;
+    if (!e || op !== '=' || !['AEXPR_OP', 'AEXPR_IN'].includes(e.kind)) return [];
+    let field = column(e.lexpr), value = e.rexpr;
+    if (!field && e.kind === 'AEXPR_OP') { field = column(e.rexpr); value = e.lexpr; }
+    if (!field) return [];
+    if (e.kind === 'AEXPR_OP' && input(value)) {
+      if (field === 'id' && input(value)?.toLowerCase() === idInput.toLowerCase()) boundId = true;
+      // Input comparisons (including OCC) are checked by the Procedure, not this hint.
+      continue;
+    }
+    const name = Object.keys(schema.properties ?? {}).find(k => k.toLowerCase() === field);
+    if (!name) continue;
+    const property = schema.properties![name]!;
+    // Wire numbers and temporal values can differ from SQL literals.
+    if (!['string', 'boolean'].includes(property.type as string) || ['date', 'date-time'].includes(property.format ?? '')) continue;
+    const nodes = e.kind === 'AEXPR_IN' ? value?.List?.items : [value];
+    if (!nodes?.length) return [];
+    const values = nodes.map(literal);
+    if (values.some((v: unknown) => typeof v !== property.type)) continue;
+    conditions.push({ field: name, values });
+  }
+  return boundId ? conditions : [];
 }

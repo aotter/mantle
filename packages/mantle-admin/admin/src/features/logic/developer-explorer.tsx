@@ -15,10 +15,10 @@ export function DeveloperExplorer({ label, sidebarLabel, sidebar, selectedId, gr
   const [relationsOpen, setRelationsOpen] = React.useState(false);
   const relationCount = graph.relations.filter(({ sourceId, targetId }) => sourceId === selectedId || targetId === selectedId).length;
   return (
-    <section className="@container/explorer h-full min-h-0" aria-label={label}>
-      <div className="grid h-full min-h-0 grid-cols-1 @min-[42rem]/explorer:grid-cols-[15rem_minmax(0,1fr)]">
+    <section className="@container/explorer h-full w-full min-h-0 min-w-0" aria-label={label}>
+      <div className="grid h-full min-h-0 min-w-0 grid-cols-1 @min-[42rem]/explorer:grid-cols-[15rem_minmax(0,1fr)]">
         <div className="hidden min-h-0 @min-[42rem]/explorer:block">{sidebar}</div>
-        <div className="grid min-h-0 grid-cols-1 @min-[64rem]/explorer:grid-cols-[minmax(28rem,1fr)_24rem]">
+        <div className="grid min-h-0 min-w-0 grid-cols-1 @min-[67rem]/explorer:grid-cols-[minmax(0,1fr)_24rem]">
           <div className="relative min-h-0 min-w-0">
             <div className="absolute end-4 top-2.5 z-20 flex items-center gap-1">
               <Sheet key={`objects:${selectedId}`}>
@@ -36,7 +36,7 @@ export function DeveloperExplorer({ label, sidebarLabel, sidebar, selectedId, gr
               <Sheet open={relationsOpen} onOpenChange={setRelationsOpen}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <SheetTrigger asChild><Button type="button" variant="ghost" size="sm" className="@min-[64rem]/explorer:hidden" aria-label={`${t(language, "model.relationships")} ${relationCount}`}><PanelRight aria-hidden /><span className="font-mono text-xs">{relationCount}</span></Button></SheetTrigger>
+                    <SheetTrigger asChild><Button type="button" variant="ghost" size="sm" className="@min-[67rem]/explorer:hidden" aria-label={`${t(language, "model.relationships")} ${relationCount}`}><PanelRight aria-hidden /><span className="font-mono text-xs">{relationCount}</span></Button></SheetTrigger>
                   </TooltipTrigger>
                   <TooltipContent>{t(language, "model.relationships")}</TooltipContent>
                 </Tooltip>
@@ -50,9 +50,9 @@ export function DeveloperExplorer({ label, sidebarLabel, sidebar, selectedId, gr
                 <TooltipContent>{t(language, "model.openGraph")}</TooltipContent>
               </Tooltip>
             </div>
-            <main className="h-full min-w-0 overflow-y-auto @min-[64rem]/explorer:border-e">{children}</main>
+            <main className="h-full min-w-0 overflow-y-auto @min-[67rem]/explorer:border-e">{children}</main>
           </div>
-          <div className="hidden min-h-0 @min-[64rem]/explorer:block"><DeveloperRelations selectedId={selectedId} graph={graph} /></div>
+          <div className="hidden min-h-0 @min-[67rem]/explorer:block"><DeveloperRelations selectedId={selectedId} graph={graph} /></div>
         </div>
       </div>
     </section>

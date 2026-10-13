@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "פרטים",
+    "ops.conditionConflict": "הרשומה השתנתה או אינה עומדת עוד בתנאי הפעולה. יש לרענן ולנסות שוב.",
+  "ops.uniqueConflict": "כבר קיימת רשומה עם אותו ערך ייחודי.",
+    "model.viewDataUnavailable": "נתונים עדכניים אינם זמינים: ה־View פנימי או שאין לחשבון שלך הרשאה להפעילו.",
     "admin.consoleTitle": "מסוף ניהול",
     "developer.workspaceTitle": "פיתוח",
     "auth.signIn.title": "כניסה",

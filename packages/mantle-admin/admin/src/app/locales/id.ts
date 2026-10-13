@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Detail",
+    "ops.conditionConflict": "Catatan berubah atau tidak lagi memenuhi kondisi tindakan ini. Muat ulang dan coba lagi.",
+  "ops.uniqueConflict": "Catatan dengan nilai unik yang sama sudah ada.",
+    "model.viewDataUnavailable": "Data langsung tidak tersedia: View ini bersifat internal atau akun Anda tidak diizinkan menjalankannya.",
     "admin.consoleTitle": "Konsol admin",
     "developer.workspaceTitle": "Pengembangan",
     "auth.signIn.title": "Masuk",

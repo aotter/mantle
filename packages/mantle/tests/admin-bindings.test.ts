@@ -383,3 +383,21 @@ test('flat staff View pages cast int64 before D1 driver rounding',async()=>{
   for(const [id,,expected]of integerCases){const {input,...paging}=view.query(new URLSearchParams({id,limit:'500'})),before=reads,page=await view.page(d1,caller('staff'),input,paging);expect(reads-before).toBe(1);const row=view.row(page.rows[0]);expect(row.quantity).toBe(expected);expect(row.version).toBe(expected);}
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
+
+test("public developer View pages use REST public visibility with the signed-in staff caller",async()=>{
+ const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-public-preview-")),db=new Database(":memory:");
+ try{
+  const view={sourceId:"owned.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name:"owned"},spec:{surface:"public",requires:{auth:{all:["ctx.user"]}},sql:"SELECT id,label FROM records ORDER BY id"}})};
+  const internal={sourceId:"internal.json",text:JSON.stringify({...JSON.parse(view.text),metadata:{name:"private"},spec:{...JSON.parse(view.text).spec,surface:"internal"}})};
+  const result=await generateFromSources({target:"bun-sqlite",admin:true,sources:{sources:[source,view,internal]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));
+  await writeBindings(dir,result.files);db.exec(result.files["schema.sql"]!);
+  db.exec("INSERT INTO records(id,version,created_at,updated_at,status,ownerid,label,kind,expiry) VALUES ('own',1,0,0,'published','A','own','a',NULL),('draft',1,0,0,'draft','A','draft','a',NULL),('foreign',1,0,0,'published','B','foreign','a',NULL),('expired',1,0,0,'published','A','expired','a',0)");
+  const {adminBindings}=await import(join(dir,"admin-bindings.ts")),bindings=adminBindings(),preview=bindings.developerViews.find((v:any)=>v.name==="owned");
+  expect(bindings.views).toEqual([]);expect(bindings.developerViews.some((v:any)=>v.name==="private")).toBe(false);expect(bindings.metadata.views).toEqual([]);
+  let reads=0;const instrument={query:(sql:string)=>{reads++;return db.query(sql);}};
+  const {input,...paging}=preview.query(new URLSearchParams({limit:"20"})),page=await preview.page(instrument,caller("A"),input,paging);expect(reads).toBe(1);
+  const ordinary=(await import(join(dir,"views/owned.ts"))).default;
+  expect(page.rows).toEqual(await ordinary(db,caller("A"),{}));expect(page.rows).toEqual([{id:"own",label:"own"}]);
+  expect(preview.allows({kind:"anonymous"})).toBe(false);
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});

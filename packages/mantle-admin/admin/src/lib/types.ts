@@ -296,8 +296,8 @@ export interface StaffOperationInteraction {
 }
 
 export interface StaffOperation {
-  /** Necessary enum predicates only; does not authorize execution. */
-  requiredStates?: Array<{ field: string; value: string }>;
+  /** Necessary string and boolean literal predicates; does not authorize execution. */
+  preconditions?: Array<{ field: string; values: Array<string | boolean> }>;
   name: string;
   title: LocalizedText | null;
   description: LocalizedText | null;
@@ -349,7 +349,7 @@ export interface DeveloperViewQuery {
 export interface DeveloperViewModel {
   name: string;
   title: LocalizedText | null;
-  surface: "public" | "staff";
+  surface: "public" | "staff" | "internal";
   query: DeveloperViewQuery;
   authorization: unknown[];
   guard: string | null;

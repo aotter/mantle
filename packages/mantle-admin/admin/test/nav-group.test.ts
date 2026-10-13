@@ -123,7 +123,8 @@ describe("member navigation", () => {
     const urls = (groups.find(({ title }) => title === "Records")?.items ?? [])
       .flatMap((item) => "url" in item ? [item.url] : item.items.map((link) => link.url));
     expect(urls).toEqual(expect.arrayContaining(["/admin/c/organizations", "/admin/c/projects"]));
-    expect(urls).not.toContain("/admin/c/members");
+    expect(urls).toContain("/admin/c/members");
+    expect(groups.find(({ title }) => title === "Records")?.items[0]).toMatchObject({items: [{url: "/admin/c/organizations"}, {url: "/admin/c/members"}]});
   });
 });
 

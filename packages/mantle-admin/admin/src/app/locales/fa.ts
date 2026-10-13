@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "جزئیات",
+    "ops.conditionConflict": "رکورد تغییر کرده یا دیگر شرط این عملیات را برآورده نمی‌کند. صفحه را تازه‌سازی کنید و دوباره تلاش کنید.",
+  "ops.uniqueConflict": "رکوردی با همین مقدار یکتا از قبل وجود دارد.",
+    "model.viewDataUnavailable": "داده‌های زنده در دسترس نیست: این View داخلی است یا حساب شما اجازه اجرای آن را ندارد.",
     "admin.consoleTitle": "کنسول مدیریت",
     "developer.workspaceTitle": "توسعه",
     "auth.signIn.title": "ورود",

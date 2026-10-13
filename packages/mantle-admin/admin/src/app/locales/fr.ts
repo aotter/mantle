@@ -1,4 +1,8 @@
 export default {
+    "ops.details": "Détails",
+    "ops.conditionConflict": "L’enregistrement a changé ou ne remplit plus la condition de cette action. Actualisez et réessayez.",
+  "ops.uniqueConflict": "Un enregistrement avec la même valeur unique existe déjà.",
+    "model.viewDataUnavailable": "Données en direct indisponibles : cette View est interne ou votre compte ne peut pas l’exécuter.",
     "admin.consoleTitle": "Console d’administration",
     "developer.workspaceTitle": "Développement",
     "auth.signIn.title": "Se connecter",
