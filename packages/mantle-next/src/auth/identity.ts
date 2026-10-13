@@ -103,7 +103,7 @@ function directory(auth: IdentityAuth, caller: Caller, headers: Headers, d: Dial
             const conditions = [`(role IS NULL OR role <> 'staff')`];
             if (term) {
                 const like = bind(`%${d.escapeLike(term)}%`);
-                conditions.push(`(${["id", "name", "email"].map(c => `${c} ${d.like(true)} ${like}${d.likeEscape}`).join(" OR ")})`);
+                conditions.push(`(${["CAST(id AS text)", "name", "email"].map(c => `${c} ${d.like(true)} ${like}${d.likeEscape}`).join(" OR ")})`);
             }
             const backward = cursorDirection === "backward", order = backward ? "DESC" : "ASC", op = backward ? "<" : ">";
             if (key) {
