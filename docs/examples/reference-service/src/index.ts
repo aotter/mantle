@@ -1,6 +1,6 @@
 import { toCloudflareCron } from "@aotter/mantle/cron";
 import { weeklyDigest } from "./handlers.js";
-import { fetchService, type Env } from "./service.js";
+import { fetchService } from "./service.js";
 const cron = toCloudflareCron("0 3 * * 0");
 export default {
   fetch: fetchService,

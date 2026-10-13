@@ -56,8 +56,13 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
     expect(await readFile(join(dir, "wrangler.json"), "utf8")).toBe(edited);
     expect(await readFile(join(dir, "wrangler.jsonc"), "utf8").catch(() => undefined)).toBeUndefined();
     await mkdir(join(dir, "config"));
+    for (const [name, version] of [["wrangler", "4.0.0"], ["miniflare", "4.20260102.0"], ["workerd", "1.20260102.0"]] as const) {
+      await mkdir(join(dir, "node_modules", name), { recursive: true });
+      await writeFile(join(dir, "node_modules", name, "package.json"), JSON.stringify({ name, version }));
+    }
     generate(dir, "--wrangler", "config/worker.jsonc");
     const nested = parse(await readFile(join(dir, "config/worker.jsonc"), "utf8"));
+    expect(nested.compatibility_date).toBe("2026-01-02");
     expect(nested.main).toBe("../dist/worker.js");
     expect(nested.build).toEqual({ command: "mantle bundle src/worker.ts dist", watch_dir: ["../src", "../generated"] });
     await writeFile(join(dir, "wrangler.jsonc"), '{"name": "bad",');

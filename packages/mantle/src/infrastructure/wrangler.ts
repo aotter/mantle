@@ -1,7 +1,19 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, relative, resolve } from "node:path";
+import { createRequire } from "node:module";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
+
+/** Newest date the project's installed workerd supports, as create-cloudflare picks it; a fixed date before Wrangler is installed. */
+function compatibilityDate(dir: string): string {
+  try {
+    let from = join(dir, "package.json");
+    for (const name of ["wrangler", "miniflare", "workerd"]) from = createRequire(from).resolve(`${name}/package.json`);
+    const [, y, m, d] = /^\d+\.(\d{4})(\d{2})(\d{2})\./.exec(JSON.parse(readFileSync(from, "utf8")).version) ?? [];
+    if (y) return `${y}-${m}-${d}`;
+  } catch {}
+  return "2026-09-28";
+}
 
 export function configureWrangler(configPath: string, entry: string, outdir: string, generated: string, check = false): boolean {
   const configDir = dirname(resolve(configPath));
@@ -22,7 +34,7 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
     return false;
   }
   const exists = existsSync(configPath);
-  const original = exists ? readFileSync(configPath, "utf8") : JSON.stringify({ name: "your-worker-name", compatibility_date: "2026-09-28" }, null, 2) + "\n";
+  const original = exists ? readFileSync(configPath, "utf8") : JSON.stringify({ name: "your-worker-name", compatibility_date: compatibilityDate(configDir) }, null, 2) + "\n";
   let text = original;
   const errors: ParseError[] = [];
   const config = parse(text, errors, { allowTrailingComma: true });

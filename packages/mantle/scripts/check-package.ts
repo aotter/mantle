@@ -13,7 +13,7 @@ try {
   const allowed = /^package\/(?:package\.json|README\.md|LICENSE|(?:docs|skills)\/[A-Za-z0-9_./@-]+|dist\/[A-Za-z0-9_/-]+\.(?:js|d\.ts))$/;
   assert.ok(names.every(name => allowed.test(name)), `unexpected package files: ${names.filter(name => !allowed.test(name))}`);
   execFileSync("tar", ["-xzf", archive, "-C", directory]);
-  for (const name of names.filter(name => name.endsWith(".d.ts"))) {
+  for (const name of names.filter(name => name.startsWith("package/dist/") && name.endsWith(".d.ts"))) {
     const text = (await readFile(resolve(directory, name), "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
     for (const [, path] of text.matchAll(/["'](\.[^"']+)["']/g)) {
       const target = resolve(dirname(name), path!).replace(/\.js$/, ".d.ts");
