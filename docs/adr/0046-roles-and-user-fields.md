@@ -37,55 +37,58 @@ Mantle needs one rule shape that works in three places:
 
 ## Decision
 
-### 1. Roles and user fields are declared with `kind: Access`
+### 1. No declaration: the vocabulary comes from use
 
-```yaml
-kind: Access
-metadata: { name: access }
-spec:
-  roles:
-    orgadmin: { staff: true }
-    sales:    { staff: true }
-    vip:      {}
-  userFields:
-    region: { type: "string[]", enum: [TW, JP, KR] }
-    store:  { type: string }
-```
+The application does not declare a role model. Roles and user fields exist in the
+manifest only where an author uses them:
+- `auth.hasRole('<role>')` in a scope or in SQL;
+- `requires: ctx.staff: [<role>, …]`;
+- `auth.user('<field>')` in a scope or in SQL.
 
-- At most one `Access` manifest exists per application. Without one, the application
-  generates byte-identical code to today.
-- `roles` extends the built-in staff roles (`owner`, `editor`, `contributor`, `staff`).
-  A role with `staff: true` admits its holder as staff (Admin, `/mcp/staff`,
-  `requires: ctx.staff`); other roles, such as a member tier, are only readable with
-  `auth.hasRole()`.
-- `requires: ctx.staff`, `auth.hasRole()` and host callers accept only declared or
-  built-in roles (`ROLE_UNDECLARED`).
-- `userFields` uses Better Auth's field types: `string`, `number`, `string[]`,
-  `number[]`. An enum is optional; without one, `mantle generate` warns that no
-  generated list of all values exists.
-- Field names match `^[a-z][a-zA-Z0-9_]{0,62}$`. These names are reserved because they
-  are Better Auth core fields or caller metadata: `id email emailVerified name image
-  createdAt updatedAt role banned banReason banExpires` and `mantle*`.
-- `mantle generate` emits the declaration into `catalog.json` (section 8), so agents and
-  hosts read one vocabulary.
+What a role means and who holds it belongs to the identity system: Better Auth when
+self-hosted, a host when hosted.
+
+- **Field types come from the column.** A field compared with a column takes that
+  column's type and enum. Two uses that disagree fail with `USER_FIELD_CONFLICT`. An enum
+  is optional; without one, `mantle generate` warns that no generated list of all values
+  exists.
+- **Single or many comes from the operator** (section 3).
+- **Names.** Role and field names match `^[a-z][a-zA-Z0-9_]{0,62}$` and are literals.
+  These field names are reserved because they are Better Auth core fields or caller
+  metadata: `id email emailVerified name image createdAt updatedAt role banned banReason
+  banExpires` and `mantle*`.
+- **`requires: ctx.staff`** accepts any role name, not only the built-in `owner`,
+  `editor`, `contributor` and `staff`.
+- **Which roles count as staff** is runtime configuration, not manifest grammar. The
+  self-hosted option is `staffRoles` (default: the built-in staff roles), in the same
+  spirit as Better Auth's `adminRoles`. A host caller is staff by definition. Holding a
+  staff role admits the caller to Admin and `/mcp/staff`; other roles, such as a member
+  tier, are only read with `auth.hasRole()`.
+- `mantle generate` collects every use into `catalog.json` (section 9), so agents and
+  hosts read one vocabulary. An application that uses none of these generates
+  byte-identical code to today.
+
+A misspelled role never matches, so the rule fails closed. A host that compares the
+catalog with what it can supply catches the typo (section 9).
 
 ### 2. The caller carries roles and fields
 
-- A non-system caller carries `roles` (a set) and `fields` (a map from declared field
-  name to its value).
-- They are validated once against the `Access` declaration, deep-frozen and stored in a
-  private `WeakMap` keyed by the caller. Binds read only from there. `caller.roles` and
-  `caller.fields` are read-only views.
+- A non-system caller carries `roles` (a set) and `fields` (a map from field name to its
+  value).
+- They are validated once, deep-frozen and stored in a private `WeakMap` keyed by the
+  caller. Binds read only from there. `caller.roles` and `caller.fields` are read-only
+  views.
 - A caller without a brand binds no roles and no fields: a user or anonymous caller
   binds empty, and a host caller without a brand is an error. A copied caller object
   loses both, so a copy fails closed.
 - Anonymous callers never carry roles or fields.
-- A string value must be well-formed UTF-8, between 1 and 256 bytes, and contain no NUL.
-  An array holds at most 64 values; duplicates are removed. Undeclared fields are
-  dropped and logged. An invalid value is an error (`USER_FIELD_INVALID`); values are
-  never silently filtered.
+- A value is a string, a number, or an array of either (Better Auth's `string`,
+  `number`, `string[]`, `number[]`). A string must be well-formed UTF-8, between 1 and
+  256 bytes, and contain no NUL. An array holds at most 64 values; duplicates are
+  removed. Fields the application never reads are dropped. An invalid value is an error
+  (`USER_FIELD_INVALID`); values are never silently filtered.
 - `auth.uid()` is unchanged for users. For a host caller it is `'host:' + user.id`
-  (section 5).
+  (section 6).
 
 ### 3. SQL references
 
@@ -94,22 +97,24 @@ Three closed value references read the caller:
 | Reference | Meaning |
 |---|---|
 | `auth.uid()` | The caller's subject (unchanged) |
-| `auth.hasRole('orgadmin')` | True when the caller holds that role. The argument is a literal declared role |
-| `auth.user('region')` | The caller's declared field. The argument is a literal declared field |
+| `auth.hasRole('orgadmin')` | True when the caller holds that role. The argument is a literal role name |
+| `auth.user('region')` | The caller's field. The argument is a literal field name |
 
 `auth.role()` is removed (`AUTH_ROLE_REMOVED`, with a message suggesting
 `auth.hasRole`).
 
-**The operator follows the field type**, as an author would write it against a Better
-Auth user:
+**The operator says whether a field holds one value or many**, as an author would write
+it against a Better Auth user:
 
 ```sql
-WHERE store  =  auth.user('store')      -- string field
-WHERE region IN auth.user('region')     -- string[] field
+WHERE store  =  auth.user('store')      -- one value
+WHERE region IN auth.user('region')     -- one or many values
 ```
 
-- Using `=` with an array field, or `IN` with a scalar field, fails with
-  `USER_FIELD_OPERATOR`, whose message gives the right form.
+- A field used with `=` in one place and `IN` in another fails with
+  `USER_FIELD_OPERATOR`, whose message gives the consistent form.
+- At runtime, `IN` and a scope accept a single value or an array. `=` receiving an array
+  matches no row and logs `USER_FIELD_SHAPE`.
 - `NOT IN`, `<>`, `LIKE` and `= ANY(...)` against a user field are refused.
 - References may appear only in positive positions: reachable from the root of `WHERE`,
   `JOIN ON` or `HAVING` through `AND` and `OR`.
@@ -142,7 +147,7 @@ spec:
 
 - A Schema may have at most one owner field (`auth.uid()`) and at most one field scope.
   The scoped column is a required, non-nullable string that leads an index. It lowers to
-  `column = field` or `column IN field` by the field's type.
+  `column IN field`; a single value is treated as a one-element set.
 - **Role escape.** The scope may be prefixed with `auth.hasRole(<role>) OR …` (one or more
   roles). A caller holding one of those roles reads and writes every value. The kernel
   picks one of two pre-lowered statements per request, so the filtered statement keeps
@@ -186,7 +191,7 @@ spec:
   exist.
 - **Lowering.**
   - SQLite: `col IN (SELECT value FROM json_each(?))`, binding `'[null]'` for a missing
-    or empty set; a scalar field binds as one value.
+    or empty set; a single value binds as a one-element set.
   - PostgreSQL: `col = ANY(CAST(CAST($n AS text) AS text[]))`, with every element
     double-quoted and escaped, and NULL bound for an empty set.
 
@@ -204,7 +209,8 @@ spec:
 
 **Self-hosted: Better Auth.** Mantle reads the session Better Auth already produces:
 - `roles` is `user.role` split on commas (the admin plugin's storage).
-- `fields` is `session.user.<field>` for each declared field. A field may be:
+- `fields` is `session.user.<field>` for each field the application reads. A field may
+  be:
   - a stored `additionalFields` entry, which must have `input: false`
     (`AUTH_CONFIGURATION_ERROR` otherwise, so a user can never write their own scope);
   - or a derived field added by `customSession`, which runs on the server.
@@ -213,10 +219,10 @@ spec:
 - Bearer and credential callers (API keys, OAuth access tokens) have no session. An
   optional `authLoader(load, { user: ({ user, credential, token }) => fields })` maps
   them; `token` holds verified token claims, such as those emitted by Better Auth's
-  `customAccessTokenClaims`. The callback receives no request and may only return
-  declared fields.
-- `mantle generate` checks the declaration against the Better Auth configuration it can
-  see and reports a declared field that has no stored or derived source
+  `customAccessTokenClaims`. The callback receives no request, and fields the
+  application never reads are dropped.
+- `mantle generate` checks the fields it collected against the Better Auth configuration
+  it can see and reports a field that has no stored or derived source
   (`USER_FIELD_UNSOURCED`, a warning).
 
 The handbook gives Better Auth recipes for common shapes (roles with the admin plugin,
@@ -252,7 +258,7 @@ A host supplies a versioned contract when it composes the application:
 
   It never reads headers or the body. On a non-staff entry, `props.mantle` is an error
   (a tripwire). The caller's subject is `'host:' + user.id`, and its roles and fields are
-  validated against the `Access` declaration like any other caller's.
+  validated like any other caller's.
 - **`staff: "host"` means staff exist only as host callers.**
   - Local users' roles bind empty.
   - `ctx.staff`, `/mcp/staff` and Admin accept only host callers.
@@ -300,8 +306,9 @@ A host supplies a versioned contract when it composes the application:
 `mantle generate` writes `catalog.json` as a managed generated file. It has a published
 JSON Schema and `schemaVersion`, and lists `hostContract: [1]`.
 
-**Top level:** `access`, the declared roles and user fields with their types and enums,
-and the Schemas that bind each field.
+**Top level:** `access`, every role and user field the application uses, with each
+field's type, enum, operator form and the Schemas whose scope binds it. It is derived
+from use, never declared.
 
 **Each target** is an MCP `Tool` object (`name`, `title`, `description`, `inputSchema`,
 `annotations`). Mantle's fields sit under `_meta`:
@@ -316,8 +323,8 @@ The catalog holds no SQL and no data. Its file name must not collide with the MC
 catalog.
 
 A host may publish, for its own agents, which roles and fields it can supply for an
-application. That list is the host's documentation; the `Access` declaration and the
-catalog remain the contract.
+application, and compare it with the catalog's `access` to catch roles or fields nothing
+supplies. That list is the host's documentation; the catalog remains the contract.
 
 ### 10. Local testing and development
 
@@ -355,7 +362,7 @@ bypass scope.
 
 - `binds`, `bindValues` and `renderTerm` switch exhaustively and throw on an unknown
   recipe or operator.
-- Generated modules that use roles or user fields import an `ACCESS_V1` sentinel, so an
+- Generated modules that use roles or user fields import an `USER_REFS_V1` sentinel, so an
   older runtime fails to link instead of shifting binds.
 - One exhaustive `modeOf(caller)` chooses the lowered mode at every dispatch site, and a
   host caller never runs a trusted variant.
@@ -373,25 +380,26 @@ These paths ignore scope by design. The handbook lists them:
 
 - **Portability.** The same manifest runs self-hosted, under a managed host and in local
   tests.
-  - The mechanism is open source: the `Access` declaration, the SQL references,
+  - The mechanism is open source: the SQL references,
     enforcement, the Better Auth wiring, the host contract, the test tools and the
     conformance suite.
   - Deciding who holds which roles and field values (groups, attribute mapping, grants,
     audit) belongs to whoever operates the application. Self-hosted, that is the
     application's own Better Auth configuration and plugins.
-- **Authors and agents.** An author declares roles and fields once and writes rules with
-  names agents already know: Better Auth's `user.role` and `user.<field>`, and the
+- **Authors and agents.** An author declares nothing new and writes rules with names
+  agents already know: Better Auth's `user.role` and `user.<field>`, and the
   `hasRole` predicate. What a self-hosted application can supply depends on its Better
   Auth setup, and the handbook recipes cover it. What a host can supply is the host's
   documentation to publish.
 - **Breaking changes for the unreleased 0.2:**
   - `auth.role()` removed in favour of `auth.hasRole()`;
-  - the new `Access` kind and the scope grammar;
+  - the open `requires: ctx.staff` role names, the `staffRoles` option and the scope
+    grammar;
   - the `Caller` shape and the `HandlerContext` union;
   - the `/mcp/staff` allowlist;
   - the Admin gate and the extension contract;
   - the new generated `catalog.json`.
-- **Cost.** An application without an `Access` manifest generates byte-identical code.
+- **Cost.** An application that uses no role or user field generates byte-identical code.
   The shared kernel code, including the bind case, must fit the existing `startup:*`
   budgets.
 
@@ -401,6 +409,10 @@ These paths ignore scope by design. The handbook lists them:
   claims vocabulary from OIDC providers. Mantle's identity layer is Better Auth, whose
   applications read `user.role` and `user.<field>`; a separate claims layer was one more
   concept to learn, with its own callback and test tools.
+- **Roles and fields declared in the manifest** (a `kind: Auth` or `kind: Access`). It
+  puts a role model into the application, which must stay agnostic: who holds which role
+  and what a field means belong to the identity system. Types and the vocabulary are
+  derived from use instead.
 - **A set-valued `auth.role()`.** Agents read `auth.role()` as Supabase's deprecated
   database-role function, and a singular name returning a set invites misreading `IN`.
 - **Permissions in SQL** (`hasPermission`). Permissions decide which target a caller may
@@ -427,7 +439,10 @@ are:
 
 Then:
 - Every surface (REST, MCP, web, Admin, Store, handlers, publishing and translations).
-- Scalar and array fields with `=` and `IN`, and both operator errors.
+- Single and array values with `=`, `IN` and scope; mixed operators refused; `=` with an
+  array value matching no row.
+- A role used only in `requires` or SQL, a misspelled role failing closed, and
+  `staffRoles` deciding staff admission.
 - Fields from `additionalFields` (with `input: true` refused) and from `customSession`.
 - Inserts inside and outside the set, and single-value auto-fill.
 - `SET` on the scoped column refused in every path.
