@@ -51,7 +51,7 @@ export function authOptions(env: Env, authority?: SessionAuthority) {
         user: { additionalFields: { githubLogin: { type: "string", required: false, input: true } } },
         databaseHooks: { user: { create: { before: async (user, ctx) => guardGithubLogin(user, ctx), after: bootstrap }, update: { before: async (user, ctx) => guardGithubLogin(user, ctx), after: bootstrap } } },
         // Read-only opt-in (no KV): add cookieCache: {enabled:true,maxAge:60,refreshCache:false,version:"read-60-v1"}.
-        // Pass readOnly:true only for app-classified View/web reads; bump version when enabling/changing this policy.
+        // Forward the generated caller callback's readOnly classification for View/web/MCP reads; bump version when enabling/changing this policy.
         session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true },
         ...(env.SESSION_CACHE ? { secondaryStorage: sessionSecondaryStorage(env.SESSION_CACHE, env.CACHE_NAMESPACE!, authority ?? (() => { throw new Error("Session authority is not bound."); })) } : {}) } satisfies BetterAuthOptions;
 }

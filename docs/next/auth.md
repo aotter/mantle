@@ -14,7 +14,9 @@ Mantle supplies the database adapter, schema generation and caller resolution:
 
 Use the [complete, typechecked D1 template](../../packages/mantle/tests/apps/auth/template.ts).
 The application owns Better Auth and its optional plugins. Schema generation reads plain options without constructing
-Better Auth; apply `schema.sql` during deployment, never at boot.
+Better Auth; apply `schema.sql` during deployment, never at boot. OAuth resource
+rows are created on first OAuth use from runtime configuration; they require no
+resource deployment step.
 
 OSS uses `admin({adminRoles: ["staff"], ac, roles: {staff: ac.newRole(defaultStatements), user: ac.newRole({user: [], session: []})}})`.
 **Any staff can manage users in OSS.** `Caller.role` preserves every application role string; the OSS publishing
@@ -145,25 +147,37 @@ The opt-in only takes effect without `secondaryStorage`, with explicit
 stays fresh. KV does not gain a zero-read guarantee. Bearer grant checks are
 unchanged regardless of this option.
 
-Revocation, bans and role changes can reach cached reads as late as the cache
-TTL. Every mutation and authority-sensitive endpoint must keep the default:
-auth/admin (including GET), consent, publishing, ref Procedures, media and
-unknown operations. HTTP method alone does not classify a read; MCP read tools
-also use POST. Never assign `readOnly: true` to the entire REST or MCP surface.
-For example, an app that owns these exact generated View paths can use:
+Revocation, bans and role changes reach cached reads within `maxAge` (at most
+60 seconds). Sign-out clears both the session-token and cache cookies. Bearer
+tokens still use their live grant query on every request.
+
+Generated REST, MCP and web boundaries pass `{ readOnly }` as the third argument
+to the application's caller callback. Forward it to `resolveCaller`:
 
 ```ts
-const readViews = new Set(["/api/views/articles", "/api/views/profile"]);
-const caller = (request: Request) => resolveCaller(request, loader, {
-  readOnly: ["GET", "HEAD"].includes(request.method) && readViews.has(new URL(request.url).pathname),
-});
+const caller = (request: Request, _env: Env, authority = { readOnly: false }) =>
+  resolveCaller(request, loader, { ...authority, responseHeaders });
 ```
 
-Web page reads can opt in where the app knows it is rendering a declared View.
-MCP must classify parsed `initialize`, `tools/list` and known View tools before
-Caller resolution; a handler that resolves Caller before parsing has no such
-seam and stays fresh. Mixed batches and unknown tools stay fresh. No claim of
-zero MCP DB reads applies until that integration is present.
+REST permits cached authority only on GET/HEAD Views; HEAD returns no body.
+Web permits it only on GET/HEAD page and index reads. For Cookie requests without
+an Authorization header, MCP classifies parsed
+`initialize`, `tools/list`, `resources/list`, `resources/read`, generated View
+tools and generated native Admin media reads before resolving Caller. Generated
+metadata identifies Views versus Procedures; names and `readOnlyHint` annotations
+never make a Procedure eligible. A batch uses cached authority only if every
+message is a known read. Unknown/malformed methods or tools, mutations,
+publishing transitions and Admin writes use fresh authority. Dynamic staff tool
+implementations still load only after the staff gate; their read catalogue is
+generated separately. App-composed tool tables default to fresh authority, including tools with a
+`page` callback or read annotations, unless the
+app supplies equivalent trusted read metadata to `mcp`'s fourth argument.
+
+Auth/admin endpoints (including GET) and consent keep the default fresh resolver.
+Do not infer authority from HTTP method alone or pass `readOnly: true` for a whole
+surface. A caller callback that ignores the third argument retains the default
+primary checks. In request-local memoization, keep cached reads separate from
+fresh authority so a prior read cannot supply authority for a write.
 
 **Bump `cookieCache.version` when enabling this policy or changing its TTL or
 semantics.** A cache minted under an earlier 300-second setting retains its old

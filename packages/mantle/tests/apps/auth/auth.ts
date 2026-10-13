@@ -11,7 +11,7 @@ export const authOptions = (env: Env) => ({
   database: d1Adapter(env.DB),
   secret: "fixture-secret-fixture-secret-fixture",
   baseURL: `${env.ORIGIN}/api/auth`,
-  // `resources` makes betterAuth() seed the database at construction: generate must read options, never construct.
+  // Native adapters create a configured resource row on its first OAuth lookup; generation only reads these options.
   plugins: [emailOTP({ sendVerificationOTP: async () => {} }), admin(), jwt(), oauthProvider({ loginPage: "/login", consentPage: "/consent", resources: [`${env.ORIGIN}/mcp`] })],
 }) satisfies BetterAuthOptions;
 export const createAuth = (env: Env) => betterAuth(authOptions(env));

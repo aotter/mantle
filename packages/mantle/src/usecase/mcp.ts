@@ -10,6 +10,7 @@ import { publishingInput } from "./publishing.js";
 import { boundaryPage, outputConversions } from "../domain/columns.js";
 export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, refuse: (path: string, message: string) => void, media = false): Record<string, string> {
   if (!Object.values(plan.views).some(view=>view.surface!=="internal") && !Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp")) return {};
+  const reads: { name: string; surface: string }[] = [];
   const imports: string[] = [], tools: { fields: string[]; schema: string }[] = [];
   const files:Record<string,string> = media ? emitMcpMedia(refuse) : {};
   let hasRef=false,hasWire=false;
@@ -17,6 +18,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
 
   const refs = Object.values(plan.procedures).some(p => "ref" in p.handler);
   const add = (name: string, kind: "views" | "procedures", surface: string, operation:Pick<RuntimePlan["views"][string],"input"|"title"|"description"|"requires">=kind === "views" ? plan.views[name]! : plan.procedures[name]!, tool=mcpToolNameSegment(name)) => {
+    if (kind === "views") reads.push({name:tool,surface});
     const ref=kind === "procedures" && !!plan.procedures[name] && "ref" in plan.procedures[name]!.handler;
     hasRef ||= ref;
     const statements=kind === "views" ? [lowered.views[name]?.public ?? lowered.views[name]?.caller] : lowered.procedures[name]?.caller ?? [];
@@ -65,7 +67,7 @@ export const tools: readonly Tool<Database${refs ? ", Handlers" : ""}>[] = [
 ${tools.map(({ fields, schema }) => `  { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n")}
 ];
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env) => Promise<Response | undefined> {
-  return serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/staff" ? (await import("./mcp-media.js")).mediaTools${refs ? "<Handlers>" : ""}(() => options.media!(env)) : [])]` : "tools"}, ${q(STAFF_ROLES)}, options);
+  return serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/staff" ? (await import("./mcp-media.js")).mediaTools${refs ? "<Handlers>" : ""}(() => options.media!(env)) : [])]` : "tools"}, ${q(STAFF_ROLES)}, options, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"staff"})))} : [])]` : q(reads)});
 }
 `};
 }

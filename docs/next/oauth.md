@@ -13,6 +13,26 @@ explicitly. For MCP clients use the SDK's `mcp` preset, `allowPublicClientPrelog
 true`, and a `90d` registration client-secret expiration. The application selects
 plugins and options; Mantle does not wrap Better Auth or run runtime DDL.
 
+With Mantle's native adapters, `oauthProvider.resources` comes from runtime
+configuration, including environment-derived identifiers. `schema.sql` contains
+auth DDL only. On the first OAuth lookup of a configured resource (authorization,
+token issuance, registration defaults or audience checks), the adapter validates
+and inserts the missing row with insert-if-absent semantics. Concurrent requests
+are safe; subsequent lookups preserve persisted policy edits. No resource deploy
+step is required, and `resourceSeedMode` does not overwrite existing rows.
+To retire a configured resource, set `disabled` or remove it from configuration:
+a deleted row that is still configured is recreated on a later lookup. On
+`/oauth2/authorize` an invalid configured identifier surfaces as the provider's
+`invalid_target` redirect rather than HTTP 500.
+
+Auth initialization, cookie/bearer resolution and normal MCP/REST requests perform
+no resource SELECT or INSERT. The adapter suppresses the provider's eager and
+bulk lazy seeding. Invalid configured identifiers produce HTTP 500 with
+`AUTH_CONFIGURATION_ERROR` and no write; unconfigured identifiers keep the
+provider's normal rejection. Validation follows upstream's identifier validator
+(or absolute URI without a fragment by default); unsupported signing algorithms
+are dropped before insertion.
+
 ```ts
 import { authRoutes } from "@aotter/mantle/auth/routes";
 import { authLoader } from "@aotter/mantle/auth";

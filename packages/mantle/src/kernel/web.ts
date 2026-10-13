@@ -11,7 +11,7 @@ export type Page<A extends App> = { [V in keyof A["Rows"] & string]: { view: V; 
 type ListKeys<A extends App, T> = T extends { list: infer L extends string } ? keyof At<A["Rows"], L> : string;
 /** `{name}` parameters must equal the View input, and be columns of the list and of the View. */
 export type Pages<A extends App, P extends Record<string, Page<A>>> = { [K in keyof P]: K extends string ? [Params<K>] extends [At<A["Inputs"], P[K]["view"]>] ? [At<A["Inputs"], P[K]["view"]>] extends [Params<K>] ? [Params<K>] extends [ListKeys<A, P[K]>] ? [Params<K>] extends [keyof At<A["Rows"], P[K]["view"]>] ? P[K] : never : never : never : never : never };
-export type Options<A extends App, Database, P extends Record<string, Page<A>>, E> = { db: Database; caller: Caller | ((request: Request, env: E) => Caller | Promise<Caller>); origin: string; title: string; description: string; locales?: readonly string[]; pages: P & Pages<A, P>; cacheControl?: string };
+export type Options<A extends App, Database, P extends Record<string, Page<A>>, E> = { db: Database; caller: Caller | ((request: Request, env: E, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>); origin: string; title: string; description: string; locales?: readonly string[]; pages: P & Pages<A, P>; cacheControl?: string };
 /** One public View: its query-string reader, paged boundary, bind conversions and boolean input keys. */
 export interface View<Database> {
   readonly query: (params: URLSearchParams) => { input: Record<string, unknown> };
@@ -26,7 +26,7 @@ const size = (s: string) => new TextEncoder().encode(s).length;
 const NO_STORE = { "cache-control": "no-store" };
 const notFound = () => new Response(null, { status: 404, headers: NO_STORE });
 
-export function web<Database, E>(options: { db: Database; caller: Caller | ((request: Request, env: E) => Caller | Promise<Caller>); origin: string; title: string; description: string; locales?: readonly string[]; pages: Record<string, { view: string; list?: string; markdown?: string }>; cacheControl?: string }, table: readonly (readonly [string, View<Database>])[]) {
+export function web<Database, E>(options: { db: Database; caller: Caller | ((request: Request, env: E, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>); origin: string; title: string; description: string; locales?: readonly string[]; pages: Record<string, { view: string; list?: string; markdown?: string }>; cacheControl?: string }, table: readonly (readonly [string, View<Database>])[]) {
   const views = new Map(table);
   const query = (name: string, db: Database, caller: Caller, params: URLSearchParams, cursor?: string) => {
     const view = views.get(name)!, input = { ...view.query(params).input };
@@ -41,7 +41,7 @@ export function web<Database, E>(options: { db: Database; caller: Caller | ((req
     const pattern = path.split(/(\{[^{}]+\})/).map(part => part.startsWith("{") ? (keys.push(part.slice(1, -1)), "([^/]+)") : part.replace(/[.*+?^$()|[\]\\]/g, "\\$&")).join("");
     return { path, page, keys, pattern: new RegExp("^" + pattern + "$") };
   }).sort((a, b) => a.keys.length - b.keys.length);
-  const context = async (request: Request, env: E) => ({ db: options.db, caller: typeof options.caller === "function" ? await options.caller(request, env) : options.caller });
+  const context = async (request: Request, env: E) => ({ db: options.db, caller: typeof options.caller === "function" ? await options.caller(request, env, { readOnly: ["GET", "HEAD"].includes(request.method) }) : options.caller });
   const urlFor = (path: string, row: Record<string, unknown>, view: string) => origin.origin + path.replace(/\{([^{}]+)\}/g, (_, key: string) => {
     let value = row[key]; if (views.get(view)!.booleans?.includes(key) && (value === 0 || value === 1)) value = Boolean(value); if (value === null || value === undefined) throw new TypeError("List View must return every page parameter: " + key);
     const segment = String(value); if (segment === "." || segment === "..") return "";

@@ -7,7 +7,10 @@
  */
 import { createAdapterFactory, type CleanedWhere, type CustomAdapter, type DBAdapterFactoryConfig, type JoinConfig } from "@better-auth/core/db/adapter";
 import type { BetterAuthOptions } from "@better-auth/core";
+import { APIError } from "@better-auth/core/error";
 import { getAuthTables } from "@better-auth/core/db";
+import type { OAuthOptions } from "@better-auth/oauth-provider";
+import { resourceSeeds } from "./resource-seeds.js";
 import { ContractError } from "../kernel/contracts.js";
 import type { SQL } from "bun";
 import type { Dialect } from "../kernel/dialect/common.js";
@@ -39,7 +42,7 @@ export type D1Like = Reader;
 interface Statement { bind(value: unknown): string; where(modelKey: string, conditions: CleanedWhere[] | undefined, extra?: string): string }
 type Spelling = Pick<Dialect, "param" | "ident" | "escapeLike" | "like" | "likeEscape">;
 
-function customAdapter(d: Spelling, exec: Exec) {
+function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Promise<boolean>, insertOnly = false) {
   const { ident } = d;
   return ({ getFieldName, schema, getDefaultModelName }: Parameters<Parameters<typeof createAdapterFactory>[0]["adapter"]>[0]): CustomAdapter => {
     const condition = (bind: Statement["bind"], modelKey: string, w: CleanedWhere): string => {
@@ -149,11 +152,15 @@ function customAdapter(d: Spelling, exec: Exec) {
     return {
       async create({ data, model }) {
         const given = cols(data);
-        const { rows } = await run(s => `INSERT INTO ${ident(model)}${given.length ? ` (${given.map(([c]) => ident(c)).join(", ")}) VALUES (${given.map(([, v]) => s.bind(v)).join(", ")})` : " DEFAULT VALUES"} RETURNING *`);
+        const { rows } = await run(s => `INSERT INTO ${ident(model)}${given.length ? ` (${given.map(([c]) => ident(c)).join(", ")}) VALUES (${given.map(([, v]) => s.bind(v)).join(", ")})` : " DEFAULT VALUES"} ${insertOnly ? "ON CONFLICT DO NOTHING " : ""}RETURNING *`);
         return rows[0] as never;
       },
       async findOne({ model, modelKey = model, where, select: fields, join }) {
-        return ((await select(model, modelKey, { where, select: fields, limit: 1, join }))[0] ?? null) as never;
+        let row = (await select(model, modelKey, { where, select: fields, limit: 1, join }))[0] ?? null;
+        if (!row && modelKey === "oauthResource" && where?.length === 1 && where[0]!.field === getFieldName({ model: modelKey, field: "identifier" }) && (!where[0]!.operator || where[0]!.operator === "eq") && await seed(where[0]!.value as string)) {
+          row = (await select(model, modelKey, { where, select: fields, limit: 1, join }))[0] ?? null;
+        }
+        return row as never;
       },
       async findMany({ model, modelKey = model, where, limit, select: fields, sortBy, offset, join }) {
         return (await select(model, modelKey, { where, select: fields, limit, offset, sortBy, join })) as never;
@@ -181,15 +188,50 @@ function customAdapter(d: Spelling, exec: Exec) {
   };
 }
 
-function build(d: Spelling, native: boolean, adapterId: string, adapterName: string, exec: Exec, transaction: DBAdapterFactoryConfig["transaction"]) {
-  const factory = createAdapterFactory({
-    config: {
-      adapterId, adapterName, supportsBooleans: native, supportsDates: native, supportsJSON: native, supportsUUIDs: native, transaction,
-      // Bun.SQL returns int8/numeric as strings; a `number` field must reach Better Auth as a number (the rate limiter adds to `lastRequest`). Ids stay strings.
-      customTransformOutput: ({ data, fieldAttributes, field }) => (fieldAttributes.type === "number" && typeof data === "string" && field !== "id" && !fieldAttributes.references ? Number(data) : data),
-    },
-    adapter: customAdapter(d, exec),
-  });
+function build(d: Spelling, native: boolean, adapterId: string, adapterName: string, exec: Exec, transaction: DBAdapterFactoryConfig["transaction"], options: BetterAuthOptions) {
+  const resources = new Map((options.plugins ?? []).flatMap(plugin => plugin.id === "oauth-provider" ? resourceSeeds(plugin.options as OAuthOptions).map(input => {
+    const resource = typeof input === "string" ? { identifier: input } : input;
+    return [resource.identifier, { resource, options: plugin.options as OAuthOptions }] as const;
+  }) : []).reverse()); // first configured entry wins, as upstream insertOnly does
+  // ponytail: one seed per identifier per isolate (upstream seeds once per init); disable a configured resource rather than deleting it.
+  const seeded = new Set<string>();
+  let writer: ReturnType<ReturnType<typeof createAdapterFactory>> | undefined;
+  const pending = new Map<string, Promise<boolean>>();
+  const seed = (identifier: string): Promise<boolean> => {
+    const configured = resources.get(identifier);
+    if (!configured || seeded.has(identifier)) return Promise.resolve(false);
+    let work = pending.get(identifier);
+    if (!work) {
+      work = (async () => {
+        const { resource, options: oauth } = configured;
+        // Match upstream identifier validation and seed row defaults.
+        let valid: boolean;
+        try { valid = oauth.identifierValidator ? !!(await oauth.identifierValidator(identifier)) : !new URL(identifier).hash; } catch { valid = false; }
+        if (!valid) throw new APIError("INTERNAL_SERVER_ERROR", { code: "AUTH_CONFIGURATION_ERROR", message: "Configured OAuth resource identifier failed validation." });
+        const now = new Date();
+        const data = {
+          identifier, name: resource.name ?? identifier,
+          ...Object.fromEntries(["accessTokenTtl", "refreshTokenTtl", "signingKeyId", "allowedScopes", "customClaims", "metadata"].map(field => [field, resource[field as keyof typeof resource] ?? null])),
+          signingAlgorithm: resource.signingAlgorithm && ["EdDSA", "ES256", "ES512", "PS256", "RS256"].includes(resource.signingAlgorithm) ? resource.signingAlgorithm : null,
+          dpopBoundAccessTokensRequired: resource.dpopBoundAccessTokensRequired ?? false, disabled: resource.disabled ?? false,
+          policyVersion: 1, createdAt: now, updatedAt: now,
+        };
+        // The factory owns ID generation, field mapping and native date/JSON/boolean encoding, including for seeds.
+        writer ??= createAdapterFactory({ config, adapter: customAdapter(d, exec, async () => false, true) })(options);
+        await writer.create({ model: "oauthResource", data });
+        seeded.add(identifier);
+        return true;
+      })().finally(() => pending.delete(identifier));
+      pending.set(identifier, work);
+    }
+    return work;
+  };
+  const config: DBAdapterFactoryConfig = {
+    adapterId, adapterName, supportsBooleans: native, supportsDates: native, supportsJSON: native, supportsUUIDs: native, transaction,
+    // Bun.SQL returns int8/numeric as strings; a `number` field must reach Better Auth as a number (the rate limiter adds to `lastRequest`). Ids stay strings.
+    customTransformOutput: ({ data, fieldAttributes, field }) => (fieldAttributes.type === "number" && typeof data === "string" && field !== "id" && !fieldAttributes.references ? Number(data) : data),
+  };
+  const factory = createAdapterFactory({ config, adapter: customAdapter(d, exec, seed) });
   // Both native adapters implement joins; Better Auth otherwise emulates each joined read with another statement.
   return (options: BetterAuthOptions) => factory({ ...options, advanced: { ...options.advanced, database: { ...options.advanced?.database, joins: options.advanced?.database?.joins ?? true } } });
 }
@@ -200,7 +242,7 @@ export function d1Adapter(db: D1Like) {
     const { results, meta } = await db.prepare(text).bind(...values).all();
     return { rows: results, changes: meta.changes };
   };
-  const factory = build(sqlite, false, "d1", "Mantle D1 Adapter", exec, false);
+  const factory = (options: BetterAuthOptions) => build(sqlite, false, "d1", "Mantle D1 Adapter", exec, false, options)(options);
   nativeReaders.set(factory, { exec, param: sqlite.param, now: ms => new Date(ms).toISOString() });
   return factory;
 }
@@ -208,7 +250,7 @@ export function d1Adapter(db: D1Like) {
 /** Bun.SQL against PostgreSQL. Transactions use `sql.begin`, which pins every statement to one connection. */
 export function bunSqlAdapter(sql: SQL) {
   const executor = (handle: Pick<SQL, "unsafe">): Exec => (text, values) => bunSql.run(handle as never, text, values);
-  const make = (handle: Pick<SQL, "unsafe">, transaction: DBAdapterFactoryConfig["transaction"]) => build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(handle), transaction);
+  const make = (handle: Pick<SQL, "unsafe">, transaction: DBAdapterFactoryConfig["transaction"]) => (options: BetterAuthOptions) => build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(handle), transaction, options)(options);
   const factory = (options: BetterAuthOptions) => make(sql, cb => sql.begin(tx => cb(make(tx, false)(options))))(options);
   nativeReaders.set(factory, { exec: executor(sql), param: postgres.param, now: postgres.now });
   return factory;
