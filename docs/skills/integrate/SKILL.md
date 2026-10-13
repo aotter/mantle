@@ -10,6 +10,28 @@ metadata:
 
 # Integrate Mantle into an existing application
 
+## Generated native applications (alpha.7 and later)
+
+If the installed/target README describes generated native queries, use this
+flow and stop before the historical Core instructions below.
+
+Follow the installed [native generation and service workflow](../../next/service.md)
+with the exact package version's `contract.md` and `compatibility.md`. Commit
+all generated output, run the same generation command with `--check`, and keep
+bundle `dist/` untracked. The app owns its verified Caller, handlers and native
+resources; OSS staff role is `staff`.
+
+Keep the application router, database/pool, identity and frontend. Replace
+Core consumers explicitly and compose only selected generated entries. Resolve
+one Caller per request with the shared cookie-session origin check. Rehearse
+data-preserving schema/auth/role migrations on a copy and retain rollback artifacts.
+Initial schema.sql is for an empty database, not an in-place upgrade; requests
+never discover, seed or converge storage. Verify cutover with actual app tests.
+
+## Historical Core applications (through alpha.6)
+
+The following applies only when the target package still uses RuntimePlan.
+
 Mantle is added to a running service; it does not replace it. The service
 keeps its entry, users, auth, tables, routes and frontend. Mantle adds its own
 `_mantle_*` tables, the Schemas it declares, and the surfaces the service

@@ -21,8 +21,10 @@ checkout, or any online copy.
 
 Locate the user's application (never use the SDK repository as the
 application). For workspace links, inspect the linked package's README first; concrete
-`generated.ts` queries select the [experimental flow](#experimental-workspace-consumers)
-before the Core version rules below. If it has `@aotter/mantle`, read its `package.json`, lockfile and
+`generated.ts` queries select the [native flow](#generated-native-applications)
+before the Core version rules below. The same flow applies when an installed
+alpha.7-or-later package README documents generated native queries; stop before
+the historical Core new-project instructions. If it has `@aotter/mantle`, read its `package.json`, lockfile and
 `node_modules/@aotter/mantle/package.json`, and follow that version's docs.
 
 - `0.2.x`: continue below; for ongoing work read
@@ -31,14 +33,16 @@ before the Core version rules below. If it has `@aotter/mantle`, read its `packa
   upgrade only when asked, with `docs/skills/update/SKILL.md` and
   `docs/upgrade-0.1-to-0.2.md` of the 0.2 package.
 
-## Experimental workspace consumers
+## Generated native applications
 
-Follow the linked package README for generation, Workers builds and D1 Sessions;
-the Core scaffolding below does not apply. Consult `docs/next/compatibility.md` in
-the linked SDK checkout for the supported/refused list before choosing declarations;
-planned features require their implementation first. Keep auth behind
-`authLoader(() => import(...))` to pass the startup guard. Standalone publishing
-is pending; do not install the experiment from npm or migrate Core unless asked.
+Follow the installed (or workspace-linked) package README for generation, Workers
+builds and D1 Sessions; the Core scaffolding below does not apply. Read that
+version's `docs/next/compatibility.md` before choosing declarations; planned
+features require their implementation first. Keep auth behind
+`authLoader(() => import(...))` to pass the startup guard. Install only the exact
+released version shown by the installed/target package
+contract. Replacing Core needs explicit app wiring and reviewed deployment
+migrations; never use initial schema.sql as an in-place production upgrade.
 
 Use the workflow **generate → typecheck → implement listed handlers**: run
 `mantle generate`, then `tsc --noEmit`. Implement every printed `Handlers` key
@@ -55,7 +59,14 @@ Call its default export with `(db, caller, input, { limit?, cursor? })`; it retu
 Views for authored-query row arrays, and inspect native EXPLAIN/source indexes
 when grouping: cursor paging does not eliminate aggregation work.
 
-For experimental generated applications, optional site settings/media are selected
+Commit everything `mantle generate` writes, including generated TypeScript, SQL and
+Wrangler edits; keep bundle `dist/` untracked. Never hand-edit generated files.
+Resolve conflicts by merging manifests/options and regenerating. Add the printed
+`.gitattributes` line and run the same generate command with `--check` in CI.
+Compose the app-owned `fetch` using `docs/next/service.md`: auth/consent, Admin,
+MCP, REST behind one request-local origin-checked resolver; keep heavy auth dynamic.
+
+For generated native applications, optional site settings/media are selected
 with `--site <module>` exporting `siteDefaults`. Apply the emitted deployment DDL;
 wire application-owned object storage as documented in `docs/next/media.md`.
 

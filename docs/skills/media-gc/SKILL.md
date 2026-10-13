@@ -11,6 +11,16 @@ metadata:
 
 # Mantle Media GC
 
+## Generated native applications (alpha.7 and later)
+
+If the installed README describes generated native queries, read
+`docs/next/media.md` and app-owned site/media wiring instead of Core storage
+options. Resolve the exact configured bucket and declared purposes. The
+`uploads/` candidate audit below still applies. Committed copies live under
+`committed/` and must never be candidates. Attempt-isolated committed copies
+retained after an uncertain DB outcome require reconciliation with live DB
+references before any separately authorized cleanup.
+
 Use the connected Cloudflare API. Audit by default; delete only the exact
 objects approved by the user.
 
