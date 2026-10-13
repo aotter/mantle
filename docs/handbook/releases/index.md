@@ -90,8 +90,8 @@ noted. Work through these in order before deploying.
    manifest that uses `json_each`, `-> '$.a'`, `->> '$.a'`, `json_extract`,
    `json_set`, `json_insert`, `json_remove` or `hex` fails validation with its
    position and the PostgreSQL spelling. The
-   [rewrite table](../concepts/runtime-and-adapters.md#the-postgresql-dialect)
-   lists them: `json_each(t.col) j` becomes
+   [dialect contract](../concepts/runtime-and-adapters.md#drivers-and-dialects)
+   covers the PostgreSQL target: `json_each(t.col) j` becomes
    `jsonb_array_elements_text(t.col) WITH ORDINALITY AS j(value, n)` (a sorted
    View over a row source needs the alias and `WITH ORDINALITY`, and `j.id`
    becomes `j.n`), `CAST(n AS bool)` of an integer becomes `n <> 0`, and `||`

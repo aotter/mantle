@@ -64,28 +64,6 @@ An agent reads these files from `node_modules` when the task calls for them.
 
 ## 3. Verify the application
 
-If the matching README documents generated native queries, use
-[service composition](../../next/service.md) and [Native Admin](native-admin.md),
-not the historical plan/preset checks below. Generate, typecheck, implement all
-printed handlers, and typecheck again. With selected Admin, mount
-`entries(bindings.schemas, bindings.adapter)` and separately serve the console.
-Run real member and staff OTP/UI flows and check stored state, visibility and OCC.
-A workspace preview is not proof that alpha.7 has been released.
+Run the app's exact generation command with `--check`, typecheck, implement every printed handler and typecheck again. Test actual routes and persisted state. With selected Admin, mount `entries(bindings.schemas, bindings.adapter)` and serve assets separately. Verify member/staff OTP, row visibility and OCC. Installing a skill proves none of these flows.
 
-### Historical Core verification
-
-Installing instructions proves only that they were copied. Prove the service:
-
-1. `mantle generate` and `mantle generate --check` exit 0.
-2. The project typechecks against `.mantle/generated/mantle.ts`.
-3. `wrangler dev` (or, on Bun, `bun src/index.ts`) starts, and the routes you depend on answer: a REST View, an
-   HTTP Trigger, `/mcp` `tools/list`, and with identity `mantle` a sign-in and
-   `GET /admin/api/me`.
-
-| Symptom | Cause and next step |
-|---|---|
-| `docs/...` is missing after installing the skill | The skill carries no docs. Install the SDK and read `node_modules/@aotter/mantle/docs/`. |
-| `mantle` is not found | Install `@aotter/mantle` locally and run it through the package manager (`pnpm exec mantle`). |
-| `mantle skills` is unknown | It is 0.1.x. Follow the installed 0.2.x docs. |
-| A v1 manifest or a `version: 1` config fails | The project is on 0.1.x. Follow `docs/upgrade-0.1-to-0.2.md`. |
-| A documented feature is missing | The installed version is older than the docs you read. Read its own docs, or upgrade deliberately. |
+If packaged docs are missing, reinstall the SDK version pinned by the app. If a feature differs from an online page, read the installed docs rather than assuming compatibility.

@@ -1,159 +1,28 @@
 ---
-description: Deploy a Mantle 0.2.0 service to Cloudflare Workers, change Schemas safely with storage convergence, resolve a blocked change, and operate schedules, expiry and the boot handshake.
+description: Install schema explicitly, migrate before deploying, and operate a native Worker.
 ---
 # Deploy and operate
 
-**Historical Core through alpha.6.** For canonical generated native SDK apps,
-follow the exact installed README and [native service workflow](../../next/service.md);
-the preset/RuntimePlan commands and role wiring below are version-specific.
+Run the same generation command with `--check`, typecheck the application and test its selected routes before deploying. Keep generated TypeScript, SQL and Wrangler edits committed; keep bundle `dist/` untracked. The app owns the database, auth secrets, trusted origin and assets.
 
+## Install and change schemas
 
-## First deploy
+The runtime never creates, alters or checks tables. Boot and requests run no DDL, introspection or schema checks.
 
-```sh
-pnpm exec mantle generate --check          # nothing stale
-pnpm exec tsc --noEmit
-pnpm exec wrangler d1 create my-service     # copy database_id into wrangler.jsonc's d1_databases[0]
-pnpm exec wrangler secret put BETTER_AUTH_SECRET   # identity mantle
-pnpm exec wrangler secret put ADMIN_EMAIL
-pnpm exec wrangler deploy
-```
+For the first install, apply generated `schema.sql`, including selected auth/site DDL, to an empty database. Apply selected seed SQL explicitly.
 
-With dialect `postgres`, create the Hyperdrive config instead of the D1
-database (`pnpm exec wrangler hyperdrive create my-service --caching-disabled
---connection-string=…`) and copy its id into `hyperdrive[0].id`. Give the
-role a statement limit and UTC, which boot checks (`ALTER ROLE app SET
-statement_timeout = '10s'; ALTER ROLE app SET TimeZone = 'UTC'`); the boot
-error names any other setting to change.
+For every later schema change, the application's coding agent diffs the regenerated `schema.sql`, writes a migration with the host's native tool (`wrangler d1 migrations` or the app's PostgreSQL migration tool), rehearses it on a copy, and applies it before deploying the new code. Cloud executes migrations at deploy time.
 
-Set `PUBLIC_ORIGIN` in `wrangler.jsonc` `vars` to the deployed origin, and
-replace the console email sender first
-([Authentication](./authentication.md#production)). The first request boots
-the runtime, which creates every table the plan needs on the empty database.
+Destructive changes and type changes need explicit data migration. Mantle drops nothing. Initial `schema.sql` is not an upgrade script.
 
-Deploying anywhere is your choice: Cloudflare and Bun have generated presets,
-`host: none` composes any other, and you may always self-host. Hosting remains application-owned.
+For D1, create a migration with `pnpm exec wrangler d1 migrations create <database> <name>`, review its SQL, then rehearse `pnpm exec wrangler d1 migrations apply <database> --local` against copied data. Apply the reviewed migrations to the target before `wrangler deploy`. Initial DDL may be placed in the first migration for a new database.
 
-## Changing Schemas
+For PostgreSQL, use the app's migration tool and deployment credentials. Plan lock waits and long index builds there; request credentials need no DDL privileges. Configure session settings on the role/database as described in [native execution](../guides/native-execution.md#postgresql-settings). Hyperdrive query caching must be disabled for authority and mutation visibility.
 
-There are no migration files. Edit the manifests, run `mantle generate`, and
-deploy. The first request after a plan change compares the database with the
-plan:
+## Operate
 
-- **Applied**: a new Schema table, a new field column, a new index, a new
-  unique index that existing rows satisfy, new `checks` and search triggers.
-- **Blocked** (`STORAGE_CHANGE_BLOCKED`, the service refuses to serve): a
-  unique index that existing rows break, a field whose type changed, an index
-  whose columns changed under the same name, an undeclared unique index.
-- **Kept, with a warning**: a column or non-unique index the plan no longer
-  declares. Nothing is dropped. A `_mantle_scope_<schema>` index left by a
-  pre-release 0.2 build is reported this way as redundant: a declared index
-  already leads with the scope. Drop it yourself with
-  `DROP INDEX "_mantle_scope_<schema>"` (`wrangler d1 execute`, or
-  `DROP INDEX CONCURRENTLY` on PostgreSQL) to reclaim space and write cost.
-  Boot never drops it.
+Auth configuration and production email delivery are app-owned; follow [authentication](authentication.md). Keep secrets in the platform's secret store. Serve the selected Admin assets through the [native Admin](../guides/native-admin.md) shell contract.
 
-Before deploying, see what boot will do against a local SQLite file, such as
-Wrangler's local D1 under `.wrangler/state/v3/d1/` after it has run the
-previous plan:
+Scheduling is app-owned. Wire generated system-only TTL sweeps into `scheduled()` and configure Wrangler crons explicitly. Bound each invocation and retain a cursor if work remains; see [TTL maintenance](../guides/native-execution.md#ttl-maintenance). Expired rows remain stored and hold unique keys until removed.
 
-```sh
-pnpm exec mantle generate --check --database .wrangler/state/v3/d1/<…>.sqlite
-```
-
-It prints the SQL boot would run, the undeclared differences as comments, or
-the blocked change (exit 1). It reads the file read-only. The dry run is the
-SQLite dialect's; PostgreSQL has none.
-
-### Resolving a blocked change
-
-Mantle verifies; you change. The diagnostic names the change and hints SQL
-that would reach the plan. For example, to make `email` unique when duplicates
-exist: remove the duplicates (with a Procedure run as the system caller, or
-`wrangler d1 execute`), then deploy again; boot creates the index. To rename a
-field: add the new field, copy the data with a Procedure or SQL, then drop the
-old field from the manifest (its column stays, unused). Never edit `_mantle_*`
-tables.
-
-### Hosts that refuse DDL from the Worker
-
-If a host applies schema changes only through its own migration mechanism,
-take the SQL `mantle generate --check --database` prints and deliver it
-through that mechanism; boot then finds the database converged.
-
-### PostgreSQL convergence and long index builds
-
-Concurrent PostgreSQL boots serialize convergence with a transaction-level
-advisory lock. A waiter rereads the fingerprint after acquiring it, so it can
-skip work the preceding boot committed. Both that wait and each DDL lock wait
-currently use a one-second `lock_timeout`, with up to five attempts and
-jitter between retries. Exhausting the attempts reports
-`STORAGE_CHANGE_BLOCKED`; while the target fingerprint still differs,
-subsequent attempts through the same connection factory and target fail fast
-for ten seconds. This is not a shared cooldown across all isolates.
-
-The diagnostic distinguishes another boot still converging from a transaction
-or query holding a table lock. Convergence disables `statement_timeout` so an
-index build can run longer than the lock-wait budget. A healthy build can
-therefore outlast the waiters: they may refuse to serve until a later boot
-sees its committed fingerprint. The finite lock retries do not bound the
-duration of the index build or guarantee uninterrupted service on deploy.
-
-Plan large index changes before deploying the new plan. PostgreSQL can build
-an index with `CREATE INDEX CONCURRENTLY` outside a transaction; use the exact
-name, columns, order and uniqueness expected by the plan. For an unscoped
-Schema named `items`, Mantle's default list index is:
-
-```sql
-CREATE INDEX CONCURRENTLY "_mantle_ix_items_updated"
-  ON "items" ("updated_at", "id");
-```
-
-For a scoped Schema the scope column leads this index. Check that a concurrent
-build completed successfully and produced a valid index before deploying;
-an interrupted build can leave an invalid index behind. Run this preparation
-through your PostgreSQL deployment tooling before uploading the new Worker.
-
-## Schedules
-
-`wrangler.jsonc` `triggers.crons` holds the Cloudflare spelling of every
-enabled schedule Trigger. `mantle generate` warns when it drifts from the plan;
-update it by hand (the file is yours). Locally:
-
-```sh
-pnpm exec wrangler dev --local --test-scheduled
-curl 'http://127.0.0.1:8787/__scheduled?cron=0+3+*+*+1'
-```
-
-The cron in the URL is the Cloudflare spelling.
-
-## Expired rows
-
-TTL hides expired rows at once. To delete them, call
-`ctx.store.sweepExpired({ collection, limit })` in a schedule Trigger's `ref`
-handler (the system caller's Store has it), or `runtime.store.sweepExpired` from
-your own maintenance route, page with `nextCursor`, and use
-`delete: false` to count first.
-
-## The boot handshake
-
-`runtime.bootReport()` returns `{ fingerprint, coreVersion, lowered }` (`lowered` says whether the plan's generate-time statements are used). Pass
-`expectedFingerprint` to `createMantle` to refuse booting any plan but the one
-you built (`PLAN_FINGERPRINT_MISMATCH`). The fingerprint is in
-`.mantle/generated/plan.json`; reformatting a manifest does not change it.
-
-## Cold isolates
-
-`mantle generate` prints every View and inline Procedure for the plan's dialect
-into `plan.json` (`lowered`), so a cold isolate seeds its statements instead of
-compiling them. Run `mantle generate --check` in CI: a plan generated by
-another Mantle version (or another PostgreSQL time zone than UTC) is not used
-until you regenerate it, and `runtime.bootReport().lowered` says so. Keep the
-work that needs only the plan (building the service, `createMantle`) at module
-scope, and I/O (the database, `fetch`) inside the request. See
-[Native execution](../guides/native-execution.md#cold-isolates).
-
-## Moving data from 0.1.x
-
-Give the 0.2.0 service a new database and import through
-`runtime.store`; `docs/upgrade-0.1-to-0.2.md` describes the steps.
+After deployment, verify public and protected reads, member/staff sign-in, a persisted write, stale OCC and selected MCP/Admin/web routes. An `OUTCOME_UNKNOWN` write may have committed; reconcile before deciding what to do next and never retry automatically.

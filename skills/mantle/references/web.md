@@ -1,9 +1,9 @@
 # Generated public websites
 
 Use this flow only when the installed package README documents concrete native
-queries and generated `web.ts` (alpha.7 onwards, or a linked pre-release SDK).
+queries and generated `web.ts`.
 Earlier Core versions use their own installed handbook. Read the installed
-`docs/next/surfaces.md` and `docs/examples/generated-web/README.md` before writing
+`docs/handbook/reference/surface.md` and `docs/examples/generated-web/README.md` before writing
 routes; the installed version is authoritative.
 
 Mount `web()` when the application serves public HTML and needs `llms.txt`, a

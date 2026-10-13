@@ -53,7 +53,7 @@ each other: `metadata.projection` is `plugin` for `skills/mantle` and
 | Skill | Routes on | Entry constraints | Distribution | Restricted because |
 |---|---|---|---|---|
 | `mantle` | new project, existing project, self-host deployment | the installed package's docs win; never use the SDK checkout as the application; no deploy during a cold start | plugin | The plugin's authoring entry skill is installed from the repository; workflow documentation comes from the installed SDK package. |
-| `develop` | manifest, SQL, handler, service or surface work | read the installed version first; never edit `.mantle/generated/`; data only through Store | package | — |
+| `develop` | manifest, SQL, handler, service or surface work | read the installed version first; never edit generated files; writes through Store/Procedures, richer reads through internal Views | package | — |
 | `integrate` | an application with its own code, users or data | inspect before choosing; the application keeps its users; one writer per table | package | — |
 | `update` | an SDK upgrade | never overwrite application files; 0.1.x moves by the upgrade guide to a new database | package | — |
 | `provision` | ship to production | secrets never in source, chat or logs; a new database for 0.2; self-hosting is always an option | package | Creates remote resources and handles production secrets; opt-in only. |

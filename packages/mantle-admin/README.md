@@ -40,7 +40,7 @@ const api = admin(bindings.metadata, bindings.views, bindings.operations, {
   db: env => env.DB,
   caller: (request, env) => resolveCaller(request, authFor(env)),
   handlers,
-  routes: entries(bindings.schemas),
+  routes: entries(bindings.schemas, bindings.adapter),
 });
 ```
 

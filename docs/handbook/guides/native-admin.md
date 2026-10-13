@@ -1,18 +1,10 @@
----
-description: Mount the native Admin preview with generated bindings, shared authorized reads and native Procedures, and verify its API and console.
----
-# Native Admin preview
+# Native Admin
 
-This guide describes the experimental native Admin implementation intended for
-alpha.7. It is not a release announcement. Use the exact installed package's
-README and docs; a develop checkout or workspace preview does not mean alpha.7
-has been published. Applications through alpha.6 that still use RuntimePlan
-follow the [historical Admin guide](admin-ui.md). Replacing that integration
-requires app-owned wiring and reviewed data migrations.
+Select Admin explicitly; use the exact installed SDK/Admin versions.
 
 ## Packages and generation
 
-The intended release has three packages, pinned to matching versions:
+There are three packages, pinned to matching versions:
 
 | Package | Owns |
 | --- | --- |
@@ -25,11 +17,6 @@ code that imports its small public server helpers. The SPA retains all 22
 languages, rich editors and the developer workspace; language, editor and
 workspace chunks load on demand. It is not part of the SDK query bundle.
 
-In a workspace preview, use that checkout's matching packages and CLI rather
-than installing an unpublished version. The native implementation replaces the historical Core inside the canonical
-`@aotter/mantle` SDK. Do not install a second, parallel Mantle package or alias an old
-Core package to satisfy native imports.
-
 Select Admin explicitly:
 
 ```sh
@@ -40,15 +27,17 @@ pnpm exec tsc --noEmit
 Targets are `bun-sqlite`, `bun-postgres`, `cloudflare-d1` and
 `cloudflare-postgres`. Programmatic generation accepts `admin: true` with the
 same target/source options. Optional `--auth`, `--site` and `--admin-extensions`
-modules follow their [generation contracts](../../next/service.md).
+modules follow their [generation contracts](../cloudflare/service-entry.md).
 Generate, typecheck, implement every printed `Handlers` key, then typecheck
 again. Commit generated TypeScript, SQL and Wrangler edits. Never edit the
 output by hand; regenerate after merging authored inputs. Use the matching
 CLI's `--check` with the same selected options in CI.
 
 Apply initial `schema.sql` and selected auth/site DDL only during explicit
-setup of a new database. Existing data needs reviewed migrations. No import,
-request, metadata factory or Admin route applies DDL or seeds a database.
+setup of a new database. Existing data needs reviewed migrations. Imports and
+metadata factories do no storage work. Requests run no DDL or storage checks;
+the only request-time write outside app operations is the configured OAuth
+resource row (see [OAuth](oauth.md)).
 
 ## Mount the API and console
 
@@ -87,7 +76,7 @@ refuses traversal, encoded separators and NUL (`assets` fetches one built file
 by path; a 404 means missing; it returns `undefined` for other requests). Read the
 installed Admin README for asset bindings, CSP/import-map hashes and preview
 framing. `@aotter/mantle-ui` continues to supply the shared kit. See
-[service composition](../../next/service.md) for the complete Fetch/Bun wiring.
+[service composition](../cloudflare/service-entry.md) for the complete Fetch/Bun wiring.
 
 ## Generated reads and writes
 
@@ -183,8 +172,7 @@ Native adapter evidence covers all four targets; local D1 uses real workerd.
 Initial Admin module imports perform no DB work. Startup graphs, uploaded total,
 SDK package bytes and query/write/cold timing are separate checks. Extra selected
 Admin indexes add write/storage maintenance; an indexed SELECT plan does not
-prove unchanged write latency. Report remaining gates honestly; this preview
-neither establishes release acceptance nor promises measured performance.
+prove unchanged write latency. Report remaining gates honestly; this guide does not promise measured performance.
 
 ## Extension declarations
 
@@ -208,3 +196,11 @@ the first requested list page. CSV exports use `/entries/export` and
 A failure after headers aborts the stream, so a download can fail after partial
 bytes have arrived. Existing databases need an app-owned migration for the
 Admin-selected `created_at` statistics indexes emitted in initial `schema.sql`.
+
+## Collection list template today
+
+The compiler derives display/filter metadata from Schema `uiSchema`, searchable fields from `searchableFields`, and sortable fields from indexes plus required/non-null fields and selected system columns. It emits per-collection quoted fragments, row policies and bind recipes; Admin uses one shared `nativeEntryPage` implementation, not Store `find`, `search` or `count` for these lists.
+
+Requests select only generated fields and append only supplied predicates. Absent filters are omitted, rather than expressed as `(? IS NULL OR …)`. Sorts and scalar values are checked before the route acquires its DB handle. In 0.2.0 there is no generated Cartesian set of filter variants or variant cap: runtime SQL shapes depend on selected filters, bounded IN lists, search, cursor and order. Only sortable fields are checked for indexes; there is no per-filter-combination index proof. Inspect EXPLAIN for the actual workload.
+
+Store keeps `find({ search })`, `first({ search })` and `count(where?)`. See [Store search and count costs](typed-queries.md#store-reads-and-writes): Admin shares the dialect search, and a View does not make PostgreSQL ILIKE faster.

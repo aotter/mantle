@@ -1,150 +1,132 @@
-# Native execution and hook migration
+# Generated native execution
 
-**Historical Core through alpha.6.** For canonical generated native SDK apps,
-follow the exact installed README and [native service workflow](../../next/service.md);
-the preset/RuntimePlan commands and role wiring below are version-specific.
+Views and SQL Procedures execute compiled SQL through the selected native driver. The compiler stays build-time only. The app owns native handles, pools, verified Caller, boundary validation and resources. Import direct operation entries to omit unused operations.
+
+Supported targets are Bun SQLite/PostgreSQL and Cloudflare D1/PostgreSQL. The [driver boundary is open; dialects are closed](../concepts/runtime-and-adapters.md#drivers-and-dialects). Generation emits initial SQL; [the runtime runs no DDL or schema checks](../concepts/runtime-and-adapters.md#schema-installation-and-migrations).
+
+## Query inputs, values and outcomes
+
+The default typed query accepts application-validated parameters and a verified
+Caller, binds literal SQL using the official driver, and returns that target's
+native result types. Generated TypeScript is a compile-time contract, not a
+validator for untrusted data. The application must validate external input before
+calling it. Generate-time schema/SQL diagnostics remain mandatory.
+
+The bare query must not recursively scan JSON, construct validators, revalidate
+known database rows, normalize errors across databases, or require universal row
+decoding. Direct in-process values are owned by their application caller; input
+bounds, JSON defaults and computed result types are handled explicitly by the
+application boundary rather than assumed from TypeScript.
+
+Driver-native PostgreSQL types and SQLite/D1 types need not match, except for
+declared date-time and date outputs (below), which the SQL formats. That does not
+justify overriding every PG type parser or adding a generic decoder to the bare
+query. Authored output names should be emitted into SQL where valid, avoiding
+an extra per-row projection merely to repair names already known at generation.
+
+Selected REST/MCP/Admin boundaries use static generated column lineage. Declared
+integers (including aliased system versions) are `number | string | null` on every
+target: safe integers become numbers; unsafe integers remain exact decimal text.
+Selected SQL projections cast integers and hidden integer cursor keys to text
+before the driver reads them, preserving stored int64 values on SQLite/D1 and
+PostgreSQL. Values already rounded when written
+(e.g. by a JavaScript number) cannot be recovered.
+`views/<name>.ts` exports both driver-native `Row` and `WireRow` (declared wire fields agree across targets);
+`paged/views/<name>.ts` keeps native `Row` rows; REST/MCP use separate
+`paged/wire/views/<name>.ts` SQL and convert at their boundary. SQLite/D1 declared JSON
+and boolean columns become JSON values and booleans, preserving aliases and nulls;
+PostgreSQL already returns those native values.
+Declared real/float outputs remain numbers. Computed outputs without proved lineage,
+SQL Procedures and app-owned ref results retain native values and types.
+Bare Views/Procedures, the Store, web pages and internal paged Views stay
+driver-native; bare queries and the Store receive no integer SQL projection,
+transport conversion or runtime schema interpreter.
+
+Declared authorization, ownership/TTL SQL policy, explicit OCC and atomic writes
+remain required. Generate them as the native application would implement them.
+Transaction rollback and uncertain COMMIT handling must still preserve data-loss
+protection and client disposal responsibility; native errors are rethrown (one exception, below), and
+redaction before they reach HTTP users belongs to the application boundary through `wire` / `surfaceFailure`. Removing generic error
+normalization does not authorize dropping transaction outcome evidence.
+
+**Single-statement writes:** a Procedure with one statement is atomic on its own
+and runs in autocommit, with no BEGIN/COMMIT on PG or native transaction on Bun
+SQLite. A row-classified statement touches at most one row (one-row INSERT or
+unique `id =`), so a failed count check after autocommit has changed nothing.
+On PG it runs at the server's default isolation, not SERIALIZABLE: a concurrent
+OCC loser re-evaluates its `version =` predicate, matches zero rows and returns
+`CONFLICT` instead of SQLSTATE 40001. A server ErrorResponse (SQLSTATE and
+severity) is a known rollback and is rethrown natively, except a unique violation (23505, SQLite's `UNIQUE constraint failed`), which, in a generated Procedure or a Store write, is `ContractError("CONFLICT")` with the native error as `cause` on every target, and except connection,
+resource and shutdown classes (08, 28, 53, 57, 58, XX), which, like any failure
+without a server response (lost socket), are `OUTCOME_UNKNOWN`. SQLSTATE is
+`errno` on Bun.SQL and `code` on postgres.js. Multi-statement Procedures run in
+`begin("isolation level serializable", ...)`: a failure before the callback
+returns was rolled back by `begin`; only a failed COMMIT is classified as above.
+
+**Date-time wire form:** a View output that is a declared `date-time` column
+(including `created_at`/`updated_at`) returns the handbook's wire form, an ISO
+string in UTC with six fractional digits; a declared `date` returns `YYYY-MM-DD`.
+The generator wraps those SELECT items before the dialect's own printer prints them
+(`to_char` on PostgreSQL, `strftime`/`date` with floor arithmetic on SQLite), so the
+database formats them and no row decoder runs. Bun.SQL's `Date` would drop
+microseconds. A write's `RETURNING` of such a column gets the same form. Inputs bound to a declared date-time take the same ISO text (or a
+valid `Date`), and a declared date takes `YYYY-MM-DD` text, on every target: a
+timestamp needs `Z` or an offset and hours 00-23, a day that does not exist is refused with `SQL_TYPE` before the write, and SQLite receives
+microseconds and days while PostgreSQL receives the canonical text. Computed values
+(`now()`, `date_trunc`, `CAST`) carry no declared type and stay driver-native; on
+PostgreSQL through Bun.SQL that is a `Date`, which drops microseconds. Other
+declared scalars are driver-native.
+
+Driver-ready JSON parameters are text on every target (a JavaScript array would otherwise be bound as a PostgreSQL array), so the application serializes them. Bare PG SQL declares each JSON parameter as text
+(`CAST(CAST($n AS text) AS jsonb)`), so Bun.SQL sends the text verbatim instead of
+JSON-encoding it again; generation refuses a JSON parameter used any other way. SQLite bool/date/timestamp/numeric parameters use their declared
+storage representations. Bound optional fields become explicit required values,
+with null representing absence; D1 cannot bind undefined. Native output keys are
+SQL names rather than a post-query camel-case projection. PG uses the driver's
+default type parsers (including Date and int8 strings); custom application parser
+configuration changes application-owned behavior. Procedures expose raw
+`{ results }`, not a claim of validated authored output.
+
+The application resolves a verified Caller once at its entry, using its selected
+auth module or identity. Bare queries accept that application-supplied Caller and
+do not verify credentials. SQL binds the caller subject directly; a system
+caller is application-owned and never wire input.
 
 
-The cleanup in [ADR-0041](../../adr/0041-native-driver-and-application-hook-ownership.md)
-removes database coordination and before-hook policing. Existing generated
-source is application-owned and is never silently rewritten. Generate a
-scratch service for the same host/dialect/selection and review the differences
-before updating your service. No new manifest key is required.
+## PostgreSQL settings
 
-## PostgreSQL
+The app owns role/database configuration, statement timeouts, pool lifetime and retries. Configure persistent session settings there rather than issuing request-time SETs; Hyperdrive does not retain them. UTC is useful for application-owned timestamp expressions; generated declared timestamp outputs are formatted explicitly. Requests neither set nor validate role settings.
 
-Remove `requestScoped`, `PgSession`, `session.run`, generated listener registries
-and `pipeline: true`. On Bun keep one official `pg.Pool` for the application
-lifetime, pass it directly to Better Auth, and use `pool.connect()` at the
-Store/auth SQL acquisition seam. On Workers use the official `pg.Client` and
-its platform-supported lifetime; Hyperdrive owns pooling. The required Kysely
-Client-to-pool shape on Workers owns no pool or request session.
+## Ref Procedures
 
-The driver returns a native PoolClient with `release`, or closes a standalone
-Client with `end`. Do not adapt `pool.query` into an atomic batch: BEGIN,
-statements and COMMIT must use the same acquired client. Close the application
-Pool after the server and retained work have finished.
+Generation emits a `Handlers` interface. Pass implementations at `store(db, caller, { handlers })` and to selected surfaces. `requires` is checked before the ref handler receives `(ctx, input)`; `ctx` contains `{ caller, db, store }` bound to the actual Caller and transaction. Missing implementations fail typechecking; a missing runtime key is `HANDLER_NOT_REGISTERED`. Handler failures propagate unchanged. Handlers own business rules, side effects and explicit transaction boundaries.
 
-Write batches retain native PostgreSQL SERIALIZABLE and execute sequentially.
-There is no Mantle pipeline or automatic serialization/deadlock retry/backoff.
-Handle native failures in application logic; never blindly retry an unknown
-commit. Failed rollback or unusable sockets discard the client. A lost COMMIT
-answer is OUTCOME_UNKNOWN even if cleanup later succeeds. Reads remain native
-single statements without a Mantle write transaction.
+Lifecycle and schedule Triggers and dynamic authorization guards are rejected by generation. Use app-owned handlers and scheduling. HTTP/MCP Triggers expose declared Procedures.
 
-Database role settings and schema-convergence advisory locking retain their
-existing contracts. This cleanup does not remove migration safety or add a
-replacement resource manager. Local Wrangler PG does not validate cloud
-Hyperdrive caching, pooling or network latency.
+## TTL maintenance
 
-## Bun SQLite
+A TTL Schema generates `<schema>.sweepExpired(db, caller, { limit?, cursor?, delete? })`
+in `procedures/<schema>.sweepExpired.ts`. Only an application-created system caller
+with a non-empty reason may invoke it; HTTP/OAuth callers cannot become system
+callers. The app owns scheduling. Schedule/lifecycle Triggers remain refused.
 
-Better Auth's [official PostgreSQL adapter](https://better-auth.com/docs/adapters/postgresql)
-accepts the native Pool, and its [Bun SQLite adapter](https://better-auth.com/docs/adapters/sqlite)
-accepts a native Database. Sharing a Pool means sharing acquisition capacity;
-it does not merge Auth and Store transactions. [node-postgres transactions](https://node-postgres.com/features/transactions)
-use one acquired client throughout. PostgreSQL's default Read Committed already
-prevents dirty reads; Mantle's stronger write-batch isolation is a separate,
-explicit contract. [SQLite isolation](https://www.sqlite.org/isolation.html)
-applies between connections; operations on the same connection can see its
-uncommitted writes. The two-handle composition below follows SQLite's native
-isolation, rather than a Better Auth requirement or an SDK scheduler.
+The sweep returns `{ scanned, removed, nextCursor? }`, defaults to 500 candidates,
+and accepts limits 1..500. `delete: false` scans without deleting. Cursors belong
+to that Schema's sweep. NULL and future TTL values survive; a timestamp exactly
+at the shared dialect cutoff expires. Maintenance deliberately ignores scope and
+publishing visibility, deleting expired rows across tenants. Candidate selection
+and deletion run atomically through the native driver with its existing uncertain
+transaction outcome handling. Native triggers may suppress deletes, so scanned
+and removed counts can differ; the cursor advances over selected candidates.
 
-The authenticated preset opens two official bun:sqlite handles to the same
-file: `DB` for Store and ancillary auth SQL, `AUTH_DB` exclusively for Better Auth.
-Fresh-role and bootstrap SQL must not bypass Better Auth's mutex by using its
-async transaction handle; they read committed data on `DB`.
-Use WAL mode and close both handles after shutdown. Initialize `AUTH_DB`
-with `authDb.exec("PRAGMA foreign_keys = ON")` before handing it to Better Auth;
-its native Bun adapter does not enable SQLite foreign keys automatically. The authenticated
-two-handle preset rejects `:memory:`; two independent memory handles do not
-share a database. A storage-only in-memory database remains supported.
 
-Do not share a handle across an asynchronous transaction. A same-handle
-Store/driver call during such a transaction fails promptly, rather than
-reading uncommitted rows or acknowledging a nested savepoint that a later
-rollback can erase. Better Auth owns its own transaction behavior; its pinned
-queued after-transaction bootstrap hook runs after commit.
+Keep the sweep import in the scheduled entry; apps selecting unrelated operations
+exclude maintenance code. Set `triggers.crons` in Wrangler yourself. The SDK's
+`toCloudflareCron` helper (the `cron` subpath) converts five-field POSIX schedules
+(weekday 0=Sunday) to Cloudflare weekdays (1=Sunday); it refuses ambiguous schedules
+that restrict both day-of-month and weekday. This is conversion only, no dispatcher.
+Bound scheduled work to your host's execution budget; keep the returned cursor
+when continuing a larger sweep in a later invocation.
 
-Views use native cached reads without BEGIN IMMEDIATE or Mantle polling.
-With a different native handle holding a WAL write transaction, readers see
-the committed snapshot. Native busy timeout, journal mode, schema locks and
-application-selected settings remain SQLite behavior, not a guarantee that
-any arbitrary SQLite query can never block. D1 uses its own native bindings.
 
-## Before hooks and guards
-
-Before hooks retain their declared event snapshots and execution order. They
-can write through the normal caller-bound Store and invoke another Procedure;
-the invoked operation still enforces authorization, scope and the existing
-invocation depth limit. Hooks receive no write sandbox and no implicit OCC
-solely because they are hooks.
-
-A thrown hook error prevents the outer mutation. A hook's independently
-committed writes and external side effects remain; they are not part of the
-outer transaction. Authors own these effects and races. Use native database
-constraints/authored SQL for atomic business conditions, or provide explicit
-caller OCC. Publishing retains its own state/full-entry checks and version
-protection. Authorization guards still cannot write or invoke.
-
-Validation checks references and declared shapes during authoring, and checks
-incoming plans/inputs at trust boundaries. It cannot prove arbitrary
-JavaScript is pure, correct or race-free. There is no handler analyzer or new
-runtime enforcement layer for application business rules.
-
-## Cold isolates
-
-A new isolate pays to compile every program it runs for the first time: the
-dialect check, the policy rewrite and the printer. `mantle generate` does that
-work for you (ADR-0044). For the built-in dialects it prints every View and
-every inline SQL Procedure, per mode, and stores the text, the bind recipes
-and the paging metadata in the plan's `lowered` section, which the fingerprint
-covers. At boot the runtime seeds its compile cache from it, so the first call
-of a sealed View or inline Procedure does no dialect check, no policy rewrite
-and no printing. The page size is a bind, so one statement serves every
-`limit`.
-
-What is lowered: each View's first page and the page after a cursor whose keys
-are all non-null (at any limit), and each inline Procedure's batch. What still
-compiles on first use, exactly as before: a cursor with a NULL key, `search`
-and `filters`, Store's JSON `select` and `write`, lifecycle recompiles for
-publishing and before-hooked Schemas, and a request that no lowering covers.
-
-`runtime.bootReport().lowered` says whether the lowering is used: `used`, or
-why not (`absent`: a plan without it; `mantle-version` or `dialect`: the plan
-was generated by another Mantle version, dialect or PostgreSQL time zone, so
-rerun `mantle generate`; `restricted`; `unsupported`). Nothing is refused: the
-plan runs through the ordinary path. Passing `restrict` to a storage adapter
-disables lowered statements, because `restrict` must see every program. Run
-`mantle generate --check` in CI so a plan is never older than the Mantle that
-serves it. An operator that runs other people's plans passes `restrict`, or
-runs `verifyPlan` on every upload, which reports `LOWERING_MISMATCH` when the
-lowered text is not what this Mantle prints for the plan, or is one it cannot
-re-derive (another version or dialect). See
-[ADR-0044](../../adr/0044-generate-time-lowering.md) and
-[the measurements](../../benchmarks/lowered-cold-start.md).
-
-The Procedure and View input/output validators are built once per plan, each
-the first time a call needs it, so a cold isolate pays only for the entries its
-first request reaches, not for the whole plan. Runtimes over the same plan
-object share what was built.
-
-## Database targets and performance
-
-SQLite and PostgreSQL retain their native syntax, NULL ordering, collation,
-indexes, planner and transaction behavior. Choose a target and author its SQL;
-switching databases is an explicit migration. Mantle does not promise
-cross-database result or performance equality.
-
-Per-operation Workers connections and sequential PostgreSQL writes may cost
-more than the removed wrappers. Measure SQL messages, commands, bindings,
-transactions, checkouts and physical connections separately. Do not add a
-second pool, retry scheduler, stream-scope manager or parity shim to hide that
-tradeoff.
-
-Product site/media reads also use native read ports. Warm SQLite preparation
-avoids no-op DDL when system objects and the existing fingerprint are ready;
-this does not add detection of arbitrary external table/index drift. Media
-ordering receives a Core-owned index without changing its numeric cursor.
-Custom structural R2 bindings must implement the official native
-`delete(string | string[])` shape. See [ADR-0042](../../adr/0042-native-query-work-cleanup.md).
+See [publishing and translations](../concepts/lifecycle-and-locales.md), [Store](typed-queries.md), [surfaces](../reference/surface.md) and [Admin](native-admin.md) for selected capabilities.

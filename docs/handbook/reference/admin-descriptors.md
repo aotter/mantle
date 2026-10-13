@@ -1,14 +1,14 @@
 # Generated Admin descriptors
 
 Experimental native preview; use the matching installed SDK/Admin versions.
-[Native Admin](../handbook/guides/native-admin.md) explains execution and mounting
+[Native Admin](../guides/native-admin.md) explains execution and mounting
 with `entries(bindings.schemas, bindings.adapter)`. Descriptors remain static
 data, not runtime authorization or a storage interpreter.
 
 `mantle generate` emits `admin-descriptors.ts`. Its exports are static data;
 importing a query does not import them. Selecting only `collections` also drops
 the developer snapshot and MCP catalogues from a bundle. No request-time parser,
-RuntimePlan, SQL AST, storage access or execution observer is included.
+execution plan or SQL AST, storage access or execution observer is included.
 
 - `collections` matches the 0.2 navigation projection: translation Schemas fold
   into their parents; composition, parent picker, media fields, indexed sorts,

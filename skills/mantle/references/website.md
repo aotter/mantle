@@ -14,7 +14,7 @@ their installed `docs/handbook/guides/native-admin.md` and the
 - Integrate image selection/upload into content editing through the existing
   Admin media library and host storage. Follow the pinned Core upload/PUT/commit
   contract and `x-mantle-ref: media_assets` plus `x-mcp-hint: media-image`; store committed asset IDs, resolve permanent variants in the frontend, never use an ID as an image URL. Tenant `/mcp/staff` supplies `get_media_upload_policy` → `create_media_upload` → direct HTTP PUT → `commit_media_upload` when its shared media adapter is wired. Follow the pinned media docs for tenant staff authentication (historical Core
-uses editor/owner; the native SDK uses staff); host project credentials are not application credentials. Upload capability URLs are temporary,
+uses staff); host project credentials are not application credentials. Upload capability URLs are temporary,
   not committed public images; anonymous visitors must not gain staff media access.
 - Generate an accessible, responsive public frontend by reading the installed
   `@aotter/mantle/web` REST contract; browser code on static hosts uses
