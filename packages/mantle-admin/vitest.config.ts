@@ -3,12 +3,8 @@ import { defineConfig } from "vitest/config";
 
 // Real-browser tests launch Chrome and a Vite server each; they are load-sensitive, so they run on demand
 // (`pnpm test:browser`, before releases) rather than in every PR run (#1465, 2026-10-13).
-const browser = [
-  "admin/test/collection-workbench-browser.test.ts", "admin/test/dark-descriptions.test.ts", "admin/test/developer-live-data-browser.test.ts",
-  "admin/test/extensions-browser.test.ts", "admin/test/extensions-review-browser.test.ts", "admin/test/global-operations.test.ts",
-  "admin/test/language-browser.test.ts", "admin/test/next-admin-browser.test.ts", "admin/test/preview-boundary.test.ts",
-  "admin/test/row-operations-occ.test.ts", "admin/test/webmcp-browser.test.ts", "test/mcp-app-browser.test.ts",
-];
+// Smoke flow plus the two sandbox boundaries (design preview, MCP App host bridge).
+const browser = ["admin/test/next-admin-browser.test.ts", "admin/test/preview-boundary.test.ts", "test/mcp-app-browser.test.ts"];
 const withBrowser = process.env.MANTLE_BROWSER_TESTS === "1";
 
 export default defineConfig({
@@ -19,7 +15,5 @@ export default defineConfig({
     include: withBrowser ? browser : ["test/**/*.test.{ts,tsx}", "admin/{src,test}/**/*.test.{ts,tsx}"],
     exclude: withBrowser ? [] : browser,
     typecheck: { enabled: false },
-    // one cold Chrome launch before the browser tests, whose own launches keep their budgets
-    ...(withBrowser ? { globalSetup: ["test/chrome-warmup.ts"] } : {}),
   },
 });

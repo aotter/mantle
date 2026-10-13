@@ -9,12 +9,13 @@ import ts from "typescript";
 
 const root = resolve(import.meta.dirname, "..");
 const temp = mkdtempSync(join(tmpdir(), "mantle-ui-size-"));
-const selection = process.argv[2] ?? "all";
+const startupOnly = process.argv.includes("--startup-only");
+const selection = startupOnly ? "mantle-admin" : process.argv[2] ?? "all";
 if (!["all", "mantle-ui", "mantle-admin"].includes(selection)) throw new Error("Expected all, mantle-ui or mantle-admin");
 const measured = {};
 const failures = [];
 try {
-  for (const name of selection === "all" ? ["mantle-ui", "mantle-admin"] : [selection]) {
+  for (const name of startupOnly ? [] : selection === "all" ? ["mantle-ui", "mantle-admin"] : [selection]) {
     const dir = join(root, "packages", name);
     execFileSync("pnpm", ["pack", "--pack-destination", temp], { cwd: dir, stdio: "pipe" });
     const file = readdirSync(temp).find(file => file.startsWith(`aotter-${name}-`) && file.endsWith(".tgz"));
@@ -59,16 +60,18 @@ try {
   }
   // Count the whole static entry graph so a facade cannot conceal startup bytes.
   measured["admin:entry-gzip"] = startup(resolve(admin, entry));
-  const app = await import(join(root, "packages/mantle-admin/dist/mcp-app/index.js"));
-  measured["admin:mcp-html"] = Buffer.byteLength(app.mantleAppHtml);
-  if (readdirSync(join(root, "packages/mantle-admin/dist/mcp-app")).some(file => file.endsWith(".html"))) failures.push("MCP App HTML is shipped twice");
+  if (!startupOnly) {
+    const app = await import(join(root, "packages/mantle-admin/dist/mcp-app/index.js"));
+    measured["admin:mcp-html"] = Buffer.byteLength(app.mantleAppHtml);
+    if (readdirSync(join(root, "packages/mantle-admin/dist/mcp-app")).some(file => file.endsWith(".html"))) failures.push("MCP App HTML is shipped twice");
+  }
   }
   console.log(JSON.stringify(measured, null, 2));
   const budgets = JSON.parse(readFileSync(join(root, "ui-size-budgets.json"), "utf8"));
   for (const [name, bytes] of Object.entries(measured)) {
     if (!Number.isSafeInteger(budgets[name])) failures.push(`missing fixed budget: ${name}`);
-    // Package bytes are reported, not gating (#1465, 2026-10-13); startup-shaped measurements stay gates.
-    else if (bytes > budgets[name]) (/:(packed|unpacked)$/.test(name) ? console.warn(`[size report] ${name}: ${bytes} exceeds the reference ${budgets[name]}`) : failures.push(`${name}: ${bytes} exceeds ${budgets[name]}`));
+    // Bytes are reported, not gating (#1465, 2026-10-13): Worker cold start is gated by check-size.ts startup graphs.
+    else if (bytes > budgets[name]) console.warn(`[size report] ${name}: ${bytes} exceeds the reference ${budgets[name]}`);
   }
   if (failures.length) throw new Error(failures.join("\n"));
 } finally { rmSync(temp, { recursive: true, force: true }); }

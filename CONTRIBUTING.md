@@ -88,7 +88,21 @@ self-checks, builds, compiles the documented examples, typechecks, tests the
 workspace and runs the reference service from exact packed tarballs. Use
 package filters while iterating. PostgreSQL tests skip unless `MANTLE_PG_URL`
 names a disposable database; native Bun conformance is separate
-(`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14). CI runs both.
+(`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
+
+PR CI runs install, build, typecheck, unit tests, boundaries, startup graphs and
+per-surface startup budgets, plus the cheap skill and plugin-manifest checks.
+Build before running package tests locally; `pnpm test` does not rebuild or pack.
+Package and upload bytes are reports; cold-start checks remain gates.
+
+Run the **Full checks** workflow (`.github/workflows/full-checks.yml`, manual
+`workflow_dispatch` only) before releases and after changes to drivers, auth,
+generator output or Admin UI. Select the branch being reviewed. It runs native
+four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
+Cloud plugin validation, Chrome Admin smoke tests and size reports. For local
+browser smoke set `MANTLE_NEXT_ROOT` to `$PWD/packages/mantle` and run
+`pnpm --filter @aotter/mantle-admin test:browser` with Chrome installed. `pnpm check` remains the
+broad local/release check; the release workflow is unchanged.
 
 ## Branches, commits, and pull requests
 

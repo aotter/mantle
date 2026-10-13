@@ -1,12 +1,9 @@
 import { STAFF_ROLES } from "../src/domain/visibility.js";
 import { afterAll, expect, test } from "bun:test";
-import { SQL } from "bun";
 import { Database } from "bun:sqlite";
-import postgres from "postgres";
 import { resolve } from "node:path";
 import { rm } from "node:fs/promises";
 import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link.js";
-import { d1Shim } from "./apps/d1-shim.js";
 import { verifyPublishing } from "./publishing-scenarios.js";
 import type { Target } from "../src/domain/model.js";
 const directory = resolve(import.meta.dir, "apps/.generated", `publishing-${crypto.randomUUID()}`);
@@ -18,18 +15,9 @@ async function scenario(target: Target, db: any, ddl: (sql: string) => Promise<u
   const app = await import(resolve(directory, target, "generated.ts"));
   expect((await verifyPublishing(app, db)).checks).toBe(43);
 }
-for (const target of ["bun-sqlite", "cloudflare-d1"] as const) test(`publishing ${target}`, async () => {
+for (const target of ["bun-sqlite"] as const) test(`publishing ${target}`, async () => {
   const native = new Database(":memory:");
-  try { await scenario(target, target === "bun-sqlite" ? native : d1Shim(native), async sql => native.exec(sql)); } finally { native.close(); }
-});
-const url = process.env.MANTLE_NEXT_BUN_PG_URL;
-for (const bun of [false, true]) test.skipIf(!url)(`publishing PostgreSQL ${bun ? "Bun.SQL" : "postgres.js"}`, async () => {
-  const name = `publishing_${crypto.randomUUID().replaceAll("-", "")}`;
-  const admin = postgres(url!, { onnotice: () => {} });
-  await admin.unsafe(`CREATE SCHEMA "${name}"`);
-  const db: any = bun ? new SQL({ url: url!, max: 1 }) : postgres(url!, { max: 1, onnotice: () => {} });
-  try { await db.unsafe(`SET search_path TO "${name}"`); await scenario("bun-postgres", db, sql => db.unsafe(sql)); }
-  finally { if (bun) await (db as SQL).close(); else await (db as ReturnType<typeof postgres>).end(); await admin.unsafe(`DROP SCHEMA "${name}" CASCADE`); await admin.end(); }
+  try { await scenario(target, native, async sql => native.exec(sql)); } finally { native.close(); }
 });
 
 test("publishing is opt-in", async () => {

@@ -36,7 +36,18 @@ metadata: {name: articles}
 spec:
  title: Articles
  lifecycle: publishing
- schema: {type: object, required: [title], properties: {title: {type: string}}}
+ schema: {type: object, required: [slug, title], properties: {slug: {type: string}, title: {type: string}}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: article-translations}
+spec:
+ title: Article translations
+ lifecycle: publishing
+ localized: true
+ translates: {parent: articles, on: slug}
+ uniqueIndexes: [[slug, locale]]
+ schema: {type: object, required: [slug, locale, title], properties: {slug: {type: string}, locale: {type: string}, title: {type: string}}}
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -101,7 +112,8 @@ try {
   const system = { kind: "system", reason: "generic fixture seed" };
   const tasks = store(db, system).collection("tasks");
   for (let i = 0; i < 105; i++) await tasks.insert({ title: "Task " + String(i).padStart(3, "0") });
-  await store(db, system).collection("articles").insert({ title: "Draft article" });
+  const article = await store(db, system).collection("articles").insert({ slug: "draft", title: "Draft article" });
+  const translation = await store(db, system).collection("article-translations").insert({ slug: "draft", locale: "fr", title: "Article traduit" });
   const loader = authLoader(async () => auth);
   const caller = (request) => resolveCaller(request, loader);
   const signIn = authRoutes(loader, { methods: [{ kind: "email-otp" }], resolver: caller });
@@ -143,7 +155,7 @@ try {
     } });
   };
   handler = async request => await signIn(request) ?? await consoleHandler(request, {}) ?? await shell(request) ?? new Response("not found", { status: 404 });
-  console.log(JSON.stringify({ ready: server.url.origin }));
+  console.log(JSON.stringify({ ready: server.url.origin, articleId: article.id, translationId: translation.id }));
   const close = async () => { server.stop(true); db.close(); await rm(dir, { recursive: true, force: true }); process.exit(); };
   process.on("SIGTERM", close);
   process.on("SIGINT", close);

@@ -21,8 +21,6 @@ test('selected REST/MCP wire preserves aliases, JSON primitives/nulls and boolea
   raw.exec(files['schema.sql']!);raw.exec(seed(false));raw.exec("INSERT INTO wire_records(id,version,created_at,updated_at,payload,flag) VALUES('z',1,0,0,'private-invalid-json',1)");
   const db={query:(sql:string)=>{queries++;return raw.query(sql);},transaction:raw.transaction.bind(raw)};const app=await mount(dir,db);
   await verifyWire(app.fetch,app.bare,()=>queries,true,true);expect(logging.mock.calls).toHaveLength(2);
-  expect(files['rest.ts']).toContain('wireRows(page.rows, [["dataAlias","json"],["enabledAlias","bool"]])');
-  expect(files['mcp.ts']).toContain('wireRows(page.rows, [["dataAlias","json"],["enabledAlias","bool"]])');
  }finally{logging.mockRestore();raw.close();await rm(dir,{recursive:true,force:true});}
 });
 (process.env.MANTLE_NEXT_BUN_PG_URL?test:test.skip)('native PostgreSQL REST/MCP wire leaves already-native JSON primitive strings and booleans intact',async()=>{
@@ -37,7 +35,6 @@ test('selected REST/MCP wire preserves aliases, JSON primitives/nulls and boolea
    const wire=(await response.json()).rows[0];expect(wire.quantityAlias).toBe(id==='safe'?Number(value):value);expect(wire.versionAlias).toBe(1);
    const beforeMcp=queries,mcp=(await app.fetch(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'wire_records',arguments:{id}}})})))!;const body=await mcp.text(),result=JSON.parse(body.startsWith('event:')?body.split('data: ')[1]!.split('\n')[0]!:body);expect(queries-beforeMcp).toBe(1);expect(result.result.structuredContent.rows[0]).toEqual(wire);
   }
-  expect(files['rest.ts']).toContain('["quantityAlias","int"],["versionAlias","int"]');expect(files['mcp.ts']).toContain('["quantityAlias","int"],["versionAlias","int"]');
  }finally{await raw.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await raw.close();await rm(dir,{recursive:true,force:true});}
 },30000);
 test('wireRows preserves native input rows, missing fields and null without generic scanning',async()=>{

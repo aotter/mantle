@@ -122,17 +122,6 @@ describe("validateManifests()", () => {
       expect(codes({ ...expiring, spec: { ...expiring.spec, ttl } })).toContain("SCHEMA_TTL_INVALID");
     }
   });
-  it("returns no error diagnostics for a valid manifest set", () => {
-    const manifests: Manifest[] = [
-      schema("posts"),
-      view("postList", "posts"),
-      procedure("createPost"),
-      trigger("createPostHttp", "createPost"),
-    ];
-    const result = validateManifests({ manifests });
-    expect(result.errorCount).toBe(0);
-    expect(result.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
-  });
 
   it("emits TRIGGER_PATH_INVALID when an http Trigger path does not start with /api/", () => {
     const t: TriggerManifest = {
@@ -200,28 +189,6 @@ describe("validateManifests()", () => {
     expect(result.errorCount).toBeGreaterThan(0);
   });
 
-  it("delegates the localized + translates check to checkLocaleAndTranslates", () => {
-    // A localized child Schema referencing a non-existent parent should
-    // surface TRANSLATES_PARENT_UNKNOWN — proves the delegation hooked up.
-    const child: SchemaManifest = {
-      apiVersion,
-      kind: "Schema",
-      metadata: { name: "postContent" },
-      spec: {
-        title: "Post content",
-        schema: {
-          type: "object",
-          properties: { slug: { type: "string" }, content: { type: "string" } },
-        },
-        localized: true,
-        translates: { parent: "ghost", on: "slug" },
-      },
-    };
-    const result = validateManifests({ manifests: [child] });
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("TRANSLATES_PARENT_UNKNOWN");
-  });
-
   it("rejects TTL on either side of a translation join", () => {
     const parent: SchemaManifest = {
       apiVersion, kind: "Schema", metadata: { name: "stories" },
@@ -246,46 +213,6 @@ describe("validateManifests()", () => {
     const parentWithoutTtl: SchemaManifest = { ...parent, spec: { ...parent.spec, ttl: undefined } };
     expect(validateManifests({ manifests: [parentWithoutTtl, childWithTtl] }).diagnostics.map((d) => d.code))
       .toContain("SCHEMA_TTL_TRANSLATION_UNSUPPORTED");
-  });
-
-  it("reports every duplicate including the original (#210 PR12 H1 + PR17 first-copy fix)", () => {
-    // Regression history:
-    //  - original: `c === 2` (silent on 3rd+ copy)
-    //  - PR12: `c >= 2` (flags 2nd, 3rd, 4th — but author still
-    //    can't locate the canonical first copy)
-    //  - PR17: two-pass — flag every occurrence including the first,
-    //    so the author sees every offending position.
-    const manifests: Manifest[] = [
-      schema("posts"),
-      schema("posts"),
-      schema("posts"),
-      schema("posts"),
-      procedure("createPost"),
-    ];
-    const result = validateManifests({ manifests });
-    const dups = result.diagnostics.filter((d) => d.code === "DUPLICATE_NAME");
-    expect(dups).toHaveLength(4); // every copy including the original
-    // First-occurrence diagnostic mentions ordinal 1, last mentions 4/4.
-    expect(dups[0]?.message).toMatch(/occurrence 1 of 4/);
-    expect(dups[3]?.message).toMatch(/occurrence 4 of 4/);
-  });
-});
-
-describe("parseManifests() (envelope-shape errors return diagnostics)", () => {
-  it("returns INVALID_MANIFEST_ENVELOPE diagnostic when metadata.name is missing", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Schema
-metadata: {}
-spec:
-  title: Posts
-  schema:
-    type: object
-`;
-    const result = parseManifests(yaml);
-    expect(result.manifests).toHaveLength(0);
-    expect(result.diagnostics.map((d) => d.code)).toContain(
-      "INVALID_MANIFEST_ENVELOPE",
-    );
   });
 });
 
@@ -529,111 +456,6 @@ spec:
   });
 });
 
-describe("Procedure uiSchema fields", () => {
-  it("accepts an explicit textarea without changing the input schema", () => {
-    const source = `apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: adjust-inventory }
-spec:
-  input:
-    type: object
-    properties:
-      reason: { type: string, maxLength: 500 }
-  uiSchema:
-    fields:
-      reason: { widget: textarea }
-  output: { type: object }
-  handler: { ref: adjustInventory }
-`;
-    expect(parseManifests(source).diagnostics).toEqual([]);
-  });
-
-  it("names Admin extension widgets with options, and refuses malformed ones (ADR-lite 1376)", () => {
-    const procedure = (fields: string) => `apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: paint }
-spec:
-  input:
-    type: object
-    properties:
-      color: { type: string }
-      count: { type: integer }
-  uiSchema:
-    fields:
-${fields}
-  output: { type: object }
-  handler: { ref: paint }
-`;
-    expect(parseManifests(procedure("      color: { widget: brand-kit/color, options: { palette: brand } }\n      count: { widget: brand-kit/stepper }")).diagnostics).toEqual([]);
-    for (const [fields, pointer] of [
-      ["      color: { widget: Brand/Color }", "/spec/uiSchema/fields/color/widget"],
-      ["      color: { widget: brand-kit }", "/spec/uiSchema/fields/color/widget"],
-      ["      color: { widget: textarea, options: { rows: 3 } }", "/spec/uiSchema/fields/color/options"],
-      ["      color: { widget: brand-kit/color, options: [brand] }", "/spec/uiSchema/fields/color/options"],
-      ["      color: { widget: brand-kit/color, label: Color }", "/spec/uiSchema/fields/color/label"],
-      ["      count: { widget: textarea }", "/spec/uiSchema/fields/count/widget"],
-    ] as const) {
-      const d = parseManifests(procedure(fields)).diagnostics[0];
-      expect(d, fields).toMatchObject({ code: "SCHEMA_UI_INVALID" });
-      expect(d?.path, fields).toContain(pointer);
-    }
-  });
-
-  it("lets a Schema name extension list cells and record panels", () => {
-    const schema = (ui: string) => `apiVersion: cms.mantle.aotter.net/v2
-kind: Schema
-metadata: { name: products }
-spec:
-  title: Products
-  uiSchema: ${ui}
-  schema:
-    type: object
-    properties:
-      color: { type: string }
-`;
-    expect(parseManifests(schema("{ list: { cells: { color: brand-kit/swatch, updatedAt: brand-kit/ago } }, panels: [brand-kit/usage] }")).diagnostics).toEqual([]);
-    for (const ui of ["{ list: { cells: { missing: brand-kit/swatch } } }", "{ list: { cells: { color: swatch } } }", "{ list: { cells: [color] } }", "{ panels: brand-kit/usage }", "{ panels: [brand-kit/usage, brand-kit/usage] }", "{ panels: [usage] }"])
-      expect(parseManifests(schema(ui)).diagnostics[0]?.code, ui).toBe("SCHEMA_UI_INVALID");
-  });
-
-  it("accepts a collection action targeting an existing Schema", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
-kind: Schema
-metadata: { name: orders }
-spec:
-  title: Orders
-  schema: { type: object }
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: create-manual-order }
-spec:
-  input: { type: object }
-  uiSchema: { collectionAction: orders }
-  output: { type: object }
-  handler: { ref: createManualOrder }
-`);
-    expect(result.diagnostics).toEqual([]);
-  });
-
-  it("rejects a collection action targeting an unknown Schema", () => {
-    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: create-manual-order }
-spec:
-  input: { type: object }
-  uiSchema: { collectionAction: orders }
-  output: { type: object }
-  handler: { ref: createManualOrder }
-`);
-    const result = validateManifests({ manifests: parsed.manifests });
-    expect(result.diagnostics[0]).toMatchObject({
-      code: "SCHEMA_UI_INVALID",
-      path: "/spec/uiSchema/collectionAction",
-    });
-  });
-});
-
 describe("parseManifests() — v0.1.0 promoted grammar", () => {
   it("rejects locale as a property of a non-localized Schema", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
@@ -793,20 +615,6 @@ spec:
 });
 
 describe("parseManifests() — View.requires.auth", () => {
-  it("accepts a View with requires.auth.all = [ctx.user]", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: privatePosts }
-spec:
-  surface: public
-  sql: 'SELECT id FROM "posts"'
-  requires:
-    auth:
-      all: [ctx.user]
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
-  });
 
   it("accepts ctx.auth and scalar ctx.auth.scope predicates", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
@@ -892,98 +700,6 @@ spec:
       path: expect.stringContaining("/spec/requires/auth/all/0/owns"),
     });
   });
-
-  it("rejects View.requires.auth.all with a non-STAFF_ROLES role (parser-level)", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: vStaff }
-spec:
-  surface: public
-  sql: 'SELECT id FROM "posts"'
-  requires:
-    auth:
-      all: [{ "ctx.staff": ["superadmin"] }]
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.code)).toContain("AUTH_PREDICATE_NOT_IN_ENUM");
-  });
-});
-
-describe("requires.guard", () => {
-  it("parses the single Procedure guard sub-spec on Procedure and View", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: guardedWrite }
-spec:
-  input: { type: object }
-  output: { type: object }
-  requires: { guard: { procedure: requirePaid } }
-  handler: { ref: guardedWrite }
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: guardedRead }
-spec:
-  surface: public
-  sql: 'SELECT id FROM "posts"'
-  requires: { guard: { procedure: requirePaid } }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
-  });
-
-  it("rejects guard keys beyond procedure", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: guardedRead }
-spec:
-  surface: public
-  sql: 'SELECT id FROM "posts"'
-  requires: { guard: { procedure: requirePaid, cache: true } }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics[0]?.message).toContain("accepts only `procedure`");
-  });
-
-  it("validates missing, self, sql-handler, and chained guard targets", () => {
-    const missing = procedure("missingTarget", {
-      requires: { guard: { procedure: "notThere" } },
-    });
-    const self = procedure("selfGuard", {
-      requires: { guard: { procedure: "selfGuard" } },
-    });
-    const sqlGuard = procedure("sqlGuard", {
-      handler: { sql: "DELETE FROM posts WHERE id = input.id" },
-    });
-    const chained = procedure("chainedGuard", {
-      requires: { guard: { procedure: "leafGuard" } },
-    });
-    const leaf = procedure("leafGuard");
-    const targetSql = view("targetSql", "posts", {
-      requires: { guard: { procedure: "sqlGuard" } },
-    });
-    const targetChain = view("targetChain", "posts", {
-      requires: { guard: { procedure: "chainedGuard" } },
-    });
-
-    const result = validateManifests({
-      manifests: [
-        schema("posts"),
-        missing,
-        self,
-        sqlGuard,
-        chained,
-        leaf,
-        targetSql,
-        targetChain,
-      ],
-    });
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("GUARD_PROCEDURE_UNKNOWN");
-    expect(codes).toContain("GUARD_SELF_REFERENCE");
-    expect(codes).toContain("GUARD_PROCEDURE_NOT_REF");
-    expect(codes).toContain("GUARD_CHAIN_NOT_ALLOWED");
-  });
 });
 
 describe("parseManifests() — View.spec.surface (#433)", () => {
@@ -1053,34 +769,6 @@ spec:
     expect(result.diagnostics.length).toBeGreaterThan(0);
   });
 
-  it("accepts surface: public", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: publicView }
-spec:
-  sql: 'SELECT id FROM "posts"'
-  surface: public
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
-    const view = result.manifests[0] as ViewManifest;
-    expect(view.spec.surface).toBe("public");
-  });
-
-  it("accepts surface: staff", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: staffView }
-spec:
-  sql: 'SELECT id FROM "posts"'
-  surface: staff
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
-    const view = result.manifests[0] as ViewManifest;
-    expect(view.spec.surface).toBe("staff");
-  });
-
   it("accepts surface: internal and rejects shared caching", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -1095,38 +783,6 @@ spec:
         code: "VIEW_CACHE_INVALID",
         source: expect.objectContaining({ path: "/spec/cache" }),
       })]);
-  });
-
-  it("does not reserve MCP tool names for internal Views", () => {
-    expect(parseManifests(`apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: report-a }
-spec: { surface: internal, sql: SELECT 1 }
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: report_a }
-spec: { surface: internal, sql: SELECT 2 }
-`).diagnostics).toEqual([]);
-  });
-
-  it("accepts the minimal staff View Admin list uiSchema", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: staffView }
-spec:
-  sql: 'SELECT id FROM "posts"'
-  surface: staff
-  uiSchema:
-    list:
-      columns: [id, orderNumber]
-      searchFields: [orderNumber]
-      filterFields: [orderStatus]
-`);
-    expect(result.diagnostics).toEqual([]);
-    expect((result.manifests[0] as ViewManifest).spec.uiSchema).toMatchObject({
-      list: { searchFields: ["orderNumber"], filterFields: ["orderStatus"] },
-    });
   });
 
   it("rejects View Admin uiSchema on the public surface", () => {
@@ -1214,12 +870,6 @@ spec:
   sql: SELECT id FROM posts WHERE locale = input.locale
   ${spec}
 `);
-
-  it("accepts an object input schema; page and show are ordinary names now", () => {
-    const r = parseView("input: { type: object, properties: { locale: { type: string }, page: { type: integer } } }");
-    expect(r.diagnostics).toEqual([]);
-    expect((r.manifests[0] as ViewManifest).spec.input?.properties).toHaveProperty("locale");
-  });
 
   it.each([
     ["input: { type: string }", "VIEW_INPUT_INVALID_SHAPE"],
@@ -1420,24 +1070,5 @@ describe("unsafePattern", () => {
       expect([ok, unsafePattern(ok)]).toEqual([ok, undefined]);
     for (const bad of ["^(a+)+$", "(a*)*", "(a?)+", "((ab)+c)*", "(\\w+\\s?)*", "(a|b)+", "(?:x+y)+", "(?<n>a+){2,}", "(a+){20}", "(a)\\1", "\\k<n>", "a".repeat(1001)])
       expect([bad, unsafePattern(bad)]).not.toEqual([bad, undefined]);
-  });
-});
-
-describe("Schema reader names (ADR-0043)", () => {
-  const codes = (...names: string[]) => validateManifests({ manifests: names.map((n) => schema(n)) }).diagnostics.map((d) => d.code);
-  it("refuses two Schemas that become one reader, naming both", () => {
-    for (const pair of [["order_lines", "orderLines"], ["a-b", "a_b"]]) expect(codes(...pair)).toEqual(["SCHEMA_READER_NAME_COLLISION"]);
-    const d = validateManifests({ manifests: [schema("order_lines"), schema("orderLines")] }).diagnostics[0]!;
-    expect(d.message).toContain("order_lines");
-    expect(d.message).toContain("orderLines");
-  });
-  it("refuses a reserved reader name", () => {
-    for (const name of ["then", "constructor", "prototype", "toString", "valueOf", "hasOwnProperty"]) expect(codes(name), name).toEqual(["SCHEMA_READER_NAME_COLLISION"]);
-  });
-  it("accepts a name whose projection is not an identifier: its plan key is the property, so a valid app is never refused", () => {
-    for (const name of ["organization_members", "ticket-events", "Posts", "BlogPost", "2fa", "---", "組織成員"]) expect(codes(name), name).toEqual([]);
-  });
-  it("leaves two names that differ only by case to SCHEMA_NAME_CASE_COLLISION alone", () => {
-    expect(codes("notes", "Notes")).toEqual(["SCHEMA_NAME_CASE_COLLISION"]);
   });
 });

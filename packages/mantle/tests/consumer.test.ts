@@ -114,7 +114,7 @@ test("four generated consumers typecheck against official native driver types", 
   expect(diagnostics.map(d => `${d.file?.fileName}:${d.start} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`).join("\n")).toBe("");
 }, 15_000);
 
-for (const [index, target] of targets.entries()) test(`${target} consumer browser bundle contains no old runtime or compiler`, async () => {
+for (const [index, target] of [[2, "cloudflare-d1"]] as const) test(`${target} consumer browser bundle contains no old runtime or compiler`, async () => {
   const bundle = await Bun.build({ entrypoints: [files[index]!], target: "browser", sourcemap: "external" });
   expect(bundle.success).toBe(true);
   const map = bundle.outputs.find(output => output.path.endsWith(".map"));
@@ -126,7 +126,7 @@ for (const [index, target] of targets.entries()) test(`${target} consumer browse
   expect(code).not.toMatch(/RuntimePlan|compilePlan|runView|runProcedure|compileCached|StoreExecutor/);
 });
 
-for (const [index, target] of targets.entries()) test(`${target} direct View entry excludes unrelated operations`, async () => {
+for (const [index, target] of [[2, "cloudflare-d1"]] as const) test(`${target} direct View entry excludes unrelated operations`, async () => {
   const bundle = await Bun.build({ entrypoints: [selectedFiles[index * 2]!], target: "browser", minify: true });
   expect(bundle.success).toBe(true);
   const code = await bundle.outputs[0]!.text();

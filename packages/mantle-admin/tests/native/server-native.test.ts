@@ -10,7 +10,7 @@ import {join} from "node:path";
 import {generateAdmin,writeAdminFixture} from "./generated-fixture.js";
 import {d1Shim} from "../../../mantle/tests/apps/d1-shim.js";
 import {refManifest,handlers,verifyAdminBindings,staff} from "./server-native-scenarios.js";
-for(const target of ["bun-sqlite","cloudflare-d1","bun-postgres","cloudflare-postgres"] as const){
+for(const target of process.env.MANTLE_NATIVE_TESTS ? ["bun-sqlite","cloudflare-d1","bun-postgres","cloudflare-postgres"] as const : ["bun-sqlite"] as const){
  const sqlite=!target.endsWith("postgres"), url=process.env.MANTLE_NEXT_BUN_PG_URL;
  (sqlite||url?test:test.skip)(`${target} thin Admin dispatches scoped generated Views and atomic Procedures`,async()=>{
   const files=await generateAdmin(target,refManifest);
