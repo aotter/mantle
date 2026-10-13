@@ -14,6 +14,8 @@ export interface GenerateInput {
   readonly viewKeys: Readonly<Record<string, readonly string[] | undefined>>;
   /** Core's new entry id for this dialect, as an SQL expression (its `lowering.newId()`, printed). */
   readonly newId: string;
+  /** Generation-time proofs for the canonical policy SELECT's complete cursor tuple. */
+  readonly paging?: Readonly<Record<string, import("./paging.js").PagingProof | undefined>>;
 }
 export interface GenerateDiagnostic {
   readonly code: string;

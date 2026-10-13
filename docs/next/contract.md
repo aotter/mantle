@@ -29,6 +29,12 @@ application-owned. No cloud provisioning.
 
 The first PR is a four-target generated SQL slice, not a complete 0.2 replacement.
 Its View functions return full authored-SQL row arrays, not the Store paging API.
+For bounded keyset reads, import `paged/views/<encoded-name>.ts` directly and call
+`page(db, caller, input, { limit?, cursor? })`, returning `{ rows, nextCursor? }`.
+This includes safely pageable internal Views without exposing them through
+REST/MCP. The [surface contract](surfaces.md) lists generation-time order,
+cardinality and cursor guarantees; grouped pages still pay the native source
+grouping cost. Bare View signatures and Store cursors are unchanged.
 There is no optional Auth/Web/MCP/Admin/UI composition in this slice. Ref Procedure
 handlers are generated application contracts; guards and Triggers are currently refused. The [supported/refused list](compatibility.md)
 separates generated scope, refused declarations and planned features; none

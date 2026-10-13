@@ -35,7 +35,7 @@ const typeOf = (s: JsonSchema | undefined): string => {
     default: return "unknown";
   }
 };
-export function generate({ target, plan, lowered, viewKeys, newId, adminExtensions, site }: GenerateInput): GenerateResult {
+export function generate({ target, plan, lowered, viewKeys, newId, adminExtensions, site, paging }: GenerateInput): GenerateResult {
   const diagnostics: GenerateDiagnostic[] = [];
   refuseDeclarations({ target, plan, lowered, viewKeys, newId }, diagnostics);
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
@@ -121,7 +121,7 @@ export function generate({ target, plan, lowered, viewKeys, newId, adminExtensio
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
-  const surfaces = { ...emitPaging(plan, lowered, target, refuse), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse), ...emitAdminDescriptors({plan,adminExtensions},diagnostics), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
+  const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse), ...emitAdminDescriptors({plan,adminExtensions},diagnostics), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
   const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
