@@ -45,7 +45,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0042](0042-native-query-work-cleanup.md) | Native product reads, query lowering, owned media ordering, fresh Auth proofs and immutable Admin descriptions. | Accepted for #1428; amended by 0043 |
 | [0043](0043-schema-readers.md) | Per-Schema readers (`store.db` / `ctx.db`: `get`, `first`, `find`) replace `Store.select`: one walk per query shape, a bounded per-Store memo of compiled shapes, typed rows, and refused reader-name collisions. | Accepted for #1432; `select` is deprecated in PR A and removed in PR B |
 | [0044](0044-generate-time-lowering.md) | `mantle generate` lowers every View and inline Procedure for the plan's dialect into `plan.lowered`; the runtime seeds its compile cache from it, and the page size is a bind. | Accepted direction for #1433; amends 0035 and 0032 decision 10 |
-| [0046](0046-custom-claims.md) | Custom claims: callers carry claims (string sets) filled by the application's claims callback, a host, or test tools; `auth.claim(name)` in Schema scope is enforced on every read and write path (with a claim-based "all" escape), and in SQL is a filter; versioned host contract, host-forwarded invocations, capability catalog and local test tools (#1492). | Proposed |
+| [0046](0046-roles-and-user-fields.md) | Roles and user fields aligned with Better Auth: a `kind: Access` declaration, `auth.hasRole()` and `auth.user(field)` replace `auth.role()`; a field in Schema scope is enforced on every read and write path (with an author-written role escape), and in SQL is a filter; versioned host contract with a Better Auth–shaped user, host-forwarded invocations, capability catalog and local test tools (#1492). | Proposed |
 
 ## Reading order
 
