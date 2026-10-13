@@ -1,0 +1,38 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: posts}
+spec:
+  title: Posts
+  lifecycle: publishing
+  schema:
+    type: object
+    required: [title, body]
+    properties:
+      title: {type: string}
+      body: {type: string}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts}
+spec:
+  surface: public
+  sql: SELECT id, title FROM posts WHERE id <> 'home' ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: post}
+spec:
+  surface: public
+  input:
+    type: object
+    required: [id]
+    additionalProperties: false
+    properties: {id: {type: string, minLength: 1}}
+  sql: SELECT id, title, body FROM posts WHERE id = input.id ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: home}
+spec:
+  surface: public
+  sql: SELECT id, title, body FROM posts WHERE id = 'home' ORDER BY id

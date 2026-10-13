@@ -59,6 +59,10 @@ For experimental generated applications, optional site settings/media are select
 with `--site <module>` exporting `siteDefaults`. Apply the emitted deployment DDL;
 wire application-owned object storage as documented in `docs/next/media.md`.
 
+For a generated public website, follow [web mounting and acceptance](references/web.md).
+The app renders HTML and inserts `site.head()`; generated `web.ts` serves the
+indexes and Markdown alternates.
+
 ## New project
 
 1. Create a directory outside the SDK checkout with Node 22+ and
