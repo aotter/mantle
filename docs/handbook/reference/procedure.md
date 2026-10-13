@@ -4,7 +4,7 @@ A Procedure requires `input`, `output` JSON Schemas and a `handler` containing S
 
 SQL uses declared Schemas, `input.<name>`, `auth.uid()`, `auth.role()` and native expressions accepted by the selected compiler dialect. Compiler policy supplies scope and system fields. Do not assign scope, version, status, published_at, timestamps or author columns yourself. Publishing writes use generated transitions.
 
-A row-classified INSERT/UPDATE/DELETE must affect one row. Use `WHERE id = input.id AND version = input.expectedVersion` for explicit OCC. Set operations may affect zero rows. A unique clash or failed row assertion is `CONFLICT`; statements run atomically. Results are raw `{ results }`, not runtime-validated authored outputs.
+A row-classified INSERT/UPDATE/DELETE must affect one row. Use `WHERE id = input.id AND version = input.expectedVersion` for explicit OCC. Set operations may affect zero rows. A unique clash or failed row assertion is `CONFLICT`; statements run atomically. Results are raw `{ results }`, not runtime-validated authored outputs. RETURNING uses SQL output names; quote an explicit alias to preserve declared case (`RETURNING reqStatus AS "reqStatus"`). Generation warns about unaliased direct fields whose declared name differs from storage.
 
 A ref handler is application code called as `(ctx, input)`. Generation prints required `Handlers` keys; typecheck and implement them. Wire them at `store(db, caller, { handlers })` and selected surfaces. The context has Caller, native db and Store bound to the same transaction. It is not a sandbox; the app owns external side effects and input/output handling.
 

@@ -43,7 +43,7 @@ test("local references retain nullable fields and structural enums", async () =>
 });
 
 test("unsupported validation declarations fail generation explicitly", () => {
-  for (const input of [{ type: "string", format: "email" }, { type: "array", contains: { type: "string" } }, {const:1}, {oneOf:[]}, {uniqueItems:true}, {minProperties:1}]) {
+  for (const input of [{ type: "string", format: "uri" }, { type: "array", contains: { type: "string" } }, {const:1}, {oneOf:[]}, {uniqueItems:true}, {minProperties:1}]) {
     expect(() => emitValidation(plan(input))).toThrow("Generated input validation does not support");
     const refused: string[] = [];
     emitValidation(plan(input), (path, message) => refused.push(`${path}: ${message}`));
@@ -78,4 +78,12 @@ test("recursive local references stop at 100 nesting levels", async () => {
   const nest=(levels:number)=>{let value:object={};for(let i=0;i<levels;i++)value={next:value};return value;};
   expect(validate(nest(50))).toBeTruthy();
   expect(()=>validate(nest(51))).toThrow(expect.objectContaining({code:"INPUT_VALIDATION_FAILED",path:"procedures/save/input"+"/next".repeat(51),message:"Input nesting exceeds 100 levels."}));
+});
+
+ test("email validation is deliberately permissive on View and Procedure boundaries", async () => {
+  for (const kind of ["views", "procedures"]) {
+    const { validate } = await checked({ type: "object", properties: { email: { type: ["string", "null"], format: "email" } } }, kind);
+    for (const email of ["a@b", "+tag@localhost", "名字@網域", "x@y.z", null]) expect(validate({ email })).toEqual({ email });
+    for (const email of ["", "a", "@b", "a@", "a@@b", "a@b@c", " a@b", "a@b\n", "a\tb@c", "a@b c"]) error(() => validate({ email }), `${kind}/${kind === "views" ? "search" : "save"}/input/email`);
+  }
 });

@@ -35,6 +35,7 @@ try {
     const { generateFromSources } = await (values.auth ? import("./generateAuth.js") : import("./generate.js"));
     const result = await generateFromSources({ target: target as Target, sources: { sources }, admin:values.admin, auth, site, adminExtensions });
     if (!result.ok) throw new Error(JSON.stringify(result.diagnostics, null, 2));
+    for (const warning of result.warnings ?? []) console.warn(`warning: ${warning}`);
     const changed = await writeArtifacts(destination, result.files, values.check);
     if (target.startsWith("cloudflare-")) {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";

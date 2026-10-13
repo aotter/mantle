@@ -108,3 +108,42 @@ test("WebMCP localizes declarations and View export validates before streaming",
  const response=(await ask("/views/people/export"))!;
  expect(await response.text()).toBe("name\r\nAda\r\nGrace\r\n");expect(reads).toBe(2);
 });
+
+test("handler-less WebMCP dispatch accepts omitted and undefined handlers", async () => {
+ const {webmcpRoutes}=await import("../../src/server/webmcp.js");
+ const tools: import("@aotter/mantle/mcp").Tool<null>[]=[{name:"plain",surface:"staff",description:"Plain SQL",inputSchema:{},validate:raw=>raw as Record<string,unknown>,run:async()=>({results:[[{reqStatus:"submitted"}]]})}];
+ for(const routes of [webmcpRoutes({tools:[{name:"plain"}]},tools),webmcpRoutes({tools:[{name:"plain"}]},tools,undefined)]) {
+  const ask=admin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>null,caller:()=>staff,routes});
+  const response=await ask(new Request("https://example.test/admin/api/webmcp/plain",{method:"POST",headers:{origin:"https://example.test","content-type":"application/json"},body:"{}"}),{});
+  expect(response?.status).toBe(200);
+  expect(await response!.json()).toEqual({output:{results:[[{reqStatus:"submitted"}]]}});
+ }
+});
+
+test("WebMCP ref tools require handlers with inferred and explicit type arguments", async () => {
+ const ts = (await import("typescript")).default;
+ const {writeFile} = await import("node:fs/promises");
+ const dir = await mkdtemp(join(import.meta.dir,".webmcp-types-")), file = join(dir,"consumer.ts");
+ try {
+  await writeFile(file, `import {webmcpRoutes} from "../../../dist/server/webmcp.js";
+import type {Tool} from "@aotter/mantle/mcp";
+declare const plain: readonly Tool<null>[];
+type Handlers = {save: () => Promise<void>};
+declare const refs: readonly Tool<null, Handlers>[];
+declare const handlers: Handlers;
+const catalogue = {tools: []};
+webmcpRoutes(catalogue, plain);
+webmcpRoutes(catalogue, plain, undefined);
+webmcpRoutes(catalogue, refs, handlers);
+webmcpRoutes<unknown, null, Handlers>(catalogue, refs, handlers);
+// @ts-expect-error ref handlers cannot be omitted
+webmcpRoutes(catalogue, refs);
+// @ts-expect-error ref handlers cannot be undefined
+webmcpRoutes(catalogue, refs, undefined);
+// @ts-expect-error partial type arguments cannot erase ref handler requirements
+webmcpRoutes<unknown, null>(catalogue, refs);
+`);
+  const program = ts.createProgram([file], {strict:true,noEmit:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,skipLibCheck:true,types:[]});
+  expect(ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText," ")).join("\n")).toBe("");
+ } finally {await rm(dir,{recursive:true,force:true});}
+});

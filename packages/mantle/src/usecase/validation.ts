@@ -59,7 +59,8 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
         check(`${guard("string",'typeof value === "string"')}!new RegExp(${q(schema.pattern)}).test(value)`,"String does not match pattern.");
       }
       if (schema.format) {
-        if (!["date","date-time"].includes(schema.format)) refuse(base,`Generated input validation does not support format '${schema.format}'.`);
+        if (schema.format === "email") check(`${guard("string",'typeof value === "string"')}!/^[^\\s@]+@[^\\s@]+$/u.test(value)`, "Expected an email with one @, non-empty local and domain parts, and no whitespace.");
+        else if (!["date","date-time"].includes(schema.format)) refuse(base,`Generated input validation does not support format '${schema.format}'.`);
         else { const scalar = schema.format === "date" ? "encodeDate" : "encodeTimestamptz"; formats.add(scalar); lines.push(`${only === "string" ? "" : 'if (typeof value === "string") '}try { ${scalar}(value); } catch { fail(path, ${q(`Expected a valid ${schema.format}.`)}); }`); }
       }
       if (schema.items) lines.push(`${only === "array" ? "" : "if (Array.isArray(value)) "}for (let i=0;i<value.length;i++) ${emit(schema.items)}(value[i],path+"/"+i${depth});`);

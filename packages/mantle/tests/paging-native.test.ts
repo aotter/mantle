@@ -35,7 +35,6 @@ test("unsafe fanout and NULL/unknown keys remain refused; native-only internal q
   "SELECT m.id AS group_id,count(*) AS total FROM visible v LEFT JOIN (latest l JOIN latest m ON true) ON v.block=0 GROUP BY m.id ORDER BY m.id",
   "SELECT l.id, v.block FROM latest l JOIN visible v ON true ORDER BY l.id",
   "SELECT a.id,a.at FROM positions a JOIN positions b ON a.session=b.session ORDER BY a.at",
-  "SELECT p.id,p.at FROM positions p JOIN sessions s ON s.id=p.optional ORDER BY p.at",
   "SELECT p.id,p.at FROM positions p JOIN sessions s ON s.id=p.session OR s.label=p.optional ORDER BY p.at",
   "SELECT id, optional FROM positions ORDER BY optional",
   "SELECT id, lower(session) AS key FROM positions ORDER BY lower(session)",
@@ -136,3 +135,9 @@ for(const target of ["bun-sqlite","bun-postgres","cloudflare-d1","cloudflare-pos
   }
  }finally{await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await db.close();await rm(dir,{recursive:true,force:true});}
 },30000);
+
+test("a nullable foreign key still proves a non-fanning id join", async () => {
+ const sources=await loadFixtureSources("paging.yaml");
+ const text=sources[0]!.text+`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: nullable-reference}\nspec:\n  surface: public\n  sql: SELECT p.id,p.at FROM positions p JOIN sessions s ON s.id=p.optional ORDER BY p.at\n`;
+ for(const target of ["bun-sqlite","bun-postgres"] as const) expect((await generateOrThrow(target,[{sourceId:"nullable.yaml",text}]))["paged/views/nullable-reference.ts"]).toBeDefined();
+});

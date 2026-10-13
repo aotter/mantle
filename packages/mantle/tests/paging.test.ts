@@ -140,3 +140,70 @@ test.skipIf(!process.env.MANTLE_NEXT_BUN_PG_URL)("real PostgreSQL rejects forged
     }
   } finally {await sql.close();await rm(dir,{recursive:true,force:true});}
 });
+
+const vendors = `---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: vendors}
+spec:
+  title: Vendors
+  lifecycle: operational
+  uniqueIndexes: [[name]]
+  schema:
+    type: object
+    properties: {name: {type: string}, category: {type: string}}
+`;
+test("to-one LEFT JOIN preserves base pages, including missing and nullable references", async () => {
+  for (const target of ["bun-sqlite", "bun-postgres"] as const) for (const key of ["id", "name"]) {
+    const text = source.replace("properties: {rank: {type: integer}}", "properties: {rank: {type: integer}, vendorId: {type: string}}")
+      .replace("SELECT id, rank FROM items ORDER BY rank, id", `SELECT i.id, i.rank, v.name FROM items i LEFT JOIN vendors v ON v.${key} = i.vendorId ORDER BY i.rank, i.id`) + vendors;
+    const files = await generateOrThrow(target, [{sourceId:"join.yaml",text}]);
+    expect(files["paged/views/items.ts"]).toBeDefined();
+    if (target !== "bun-sqlite") continue;
+    const dir = await mkdtemp(join(tmpdir(), "mantle-join-page-")), db = new Database(":memory:");
+    try {
+      await writeGenerated(dir, files);
+      db.exec(files["schema.sql"]!);
+      db.exec("INSERT INTO vendors(id,version,created_at,updated_at,name) VALUES ('vendor',1,0,0,'vendor')");
+      for (const [id, ref] of [["0","vendor"],["1",null],["2","missing"],["3","vendor"]] as const) db.query("INSERT INTO items(id,version,created_at,updated_at,rank,vendorid) VALUES (?,1,0,0,1,?)").run(id,ref);
+      const {default:page} = await import(join(dir,"paged/views/items.ts"));
+      const first = await page(db,{kind:"anonymous"},{});
+      const next = await page(db,{kind:"anonymous"},{},{cursor:first.nextCursor});
+      expect([...first.rows,...next.rows]).toEqual([{id:"0",rank:1,name:"vendor"},{id:"1",rank:1,name:null},{id:"2",rank:1,name:null},{id:"3",rank:1,name:"vendor"}]);
+    } finally {db.close();await rm(dir,{recursive:true,force:true});}
+  }
+});
+test("paging refusals name the failed proof and its remedy", async () => {
+  const {generateFromSources} = await import("../src/infrastructure/generate.js");
+  for (const [text, message] of [
+    [source.replace("indexes: [[rank]]", "indexes: []"), "Missing index for ORDER BY (rank): declare a Schema index"],
+    [source.replace("indexes: [[rank]]", "indexes: []").replace("SELECT id, rank FROM items", "WITH unused AS (SELECT v.id FROM items i JOIN vendors v ON v.category = i.rank) SELECT id, rank FROM items")+vendors, "Missing index for ORDER BY (rank): declare a Schema index"],
+    [source.replace("required: [rank]", "required: []"), "Nullable ORDER BY key 'rank': make the operational Schema field required"],
+    [source.replace("SELECT id, rank FROM items ORDER BY rank, id", "SELECT i.id, i.rank FROM items i LEFT JOIN vendors v ON v.category = i.id ORDER BY i.rank, i.id")+vendors, "Fanning join 'v': join on the joined Schema's id or a single-field unique key"],
+    [source.replace("SELECT id, rank FROM items ORDER BY rank, id", "SELECT i.id, i.rank FROM items i LEFT JOIN vendors v ON v.id = i.id ORDER BY v.name, i.id")+vendors, "Nullable ORDER BY key 'name':"],
+    [source.replace("SELECT id, rank FROM items ORDER BY rank, id", "SELECT i.id, i.rank FROM items i LEFT JOIN vendors v ON v.name = i.id ORDER BY i.rank, i.id")+vendors.replace("uniqueIndexes: [[name]]", "uniqueIndexes: [[name, category]]"), "Fanning join 'v':"],
+  ]) {
+    const result = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"bad.yaml",text:text!}]}});
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics.some(d => d.path === "views/items" && d.message.includes(message!))).toBe(true);
+  }
+});
+
+for (const operator of ["IS DISTINCT FROM", "IS NOT DISTINCT FROM"]) test(`paging refuses ${operator} as a to-one equality`, async () => {
+  const {generateFromSources} = await import("../src/infrastructure/generate.js");
+  for (const target of ["bun-sqlite", "bun-postgres"] as const) for (const key of ["id", "name"]) {
+    const text = source.replace("SELECT id, rank FROM items ORDER BY rank, id", `SELECT i.id, i.rank FROM items i LEFT JOIN vendors v ON v.${key} ${operator} i.id ORDER BY i.rank, i.id`) + vendors;
+    const result = await generateFromSources({target,sources:{sources:[{sourceId:"distinct.yaml",text}]}});
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics.some(d => d.message.includes("Fanning join 'v'"))).toBe(true);
+  }
+});
+test("a valid join that flips the base reports the later index or nullable failure", async () => {
+  const {generateFromSources} = await import("../src/infrastructure/generate.js");
+  for (const [order, message] of [["v.category, v.id", "Nullable ORDER BY key 'category'"], ["v.name, v.category, v.id", "Missing index for ORDER BY (name, category)"]]) {
+    const text = source.replace("SELECT id, rank FROM items ORDER BY rank, id", `SELECT v.id, v.name, v.category FROM items i JOIN vendors v ON i.id = v.category ORDER BY ${order}`) + (order!.startsWith("v.name") ? vendors.replace("type: object", "type: object\n    required: [name, category]") : vendors);
+    const result = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"flip.yaml",text}]}});
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics.some(d => d.message.includes(message!))).toBe(true);
+  }
+});

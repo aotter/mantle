@@ -31,7 +31,10 @@ also export `query(URLSearchParams)` returning `{ input, limit?, cursor? }`.
 REST and MCP use the same generated checks, with no runtime schema interpreter.
 Supported checks are types/unions and nullable, required/properties/additionalProperties,
 arrays/items and length bounds, enum, local `$defs`/`$ref`, string length/pattern,
-numeric bounds/`multipleOf`, and date/date-time. Integers must be safe; fractional
+numeric bounds/`multipleOf`, and date/date-time/email. The deliberately permissive
+email check requires exactly one `@`, non-empty local and domain parts, and no
+whitespace; it does not require a dot, verify deliverability, or implement full
+RFC mailbox syntax. Integers must be safe; fractional
 `multipleOf` uses a 1e-9 quotient tolerance. `const`, `oneOf`, `uniqueItems` and
 object property-count bounds are refused, alongside other unsupported keywords
 and formats. Defaults remain
@@ -58,8 +61,11 @@ A pageable Schema View has a complete NOT NULL scalar tuple ending in the
 compiler's `id` tiebreak. Its ordered columns must match an index after fixed
 equality prefixes (including caller scope); multiple columns and mixed directions
 retain the authored order. CTE projections preserve the proof; joins must have a
-proved singleton side, or an exact PK `id` equality to a non-null column of the
-other relation, so the base id cannot fan out. Relation aliases and nested CTE
+proved singleton side, or equality on the joined Schema's `id` or single-field
+unique key, so the base id cannot fan out. LEFT JOIN accepts nullable or missing
+base references while preserving the base order/key tuple; joined fields remain
+nullable cursor keys. Refusals identify the nullable key, missing ORDER BY index,
+or fanning join and state a remedy. Relation aliases and nested CTE
 bindings keep their own identity; same-Schema aliases are not interchangeable.
 
 Grouped Views use every GROUP BY key as the tiebreak, with known non-null scalar
@@ -265,3 +271,8 @@ Generated boundary code checks each input and advertises the 0.2 schemas and
 read-only/destructive/open-world hints. Image bytes are PUT directly to the
 returned short-lived URLs with their required headers, then committed; bytes
 never enter MCP. Store permanent asset ids, never upload URLs.
+
+Handler-less applications call `adminBindings()`, generated `rest(options)` and
+`mcp(options)`, and `webmcpRoutes(catalogue, tools)` without casts. WebMCP also
+accepts explicit `undefined` for a handler-less tool table. Applications with ref
+Procedures must supply their generated `Handlers` at these wiring points.

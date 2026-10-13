@@ -18,7 +18,7 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
     if (boundary && (!proof || !proof.types.length && !proof.single)) continue;
     // Internal bare queries remain available even when they cannot be safely paged.
     if (!proof || !proof.types.length && !proof.single) {
-      if (view.surface !== "internal") refuse(path, "Paged Views need a complete typed NOT NULL key tuple, indexed Schema order and a non-fanning relation, or a proved singleton.");
+      if (view.surface !== "internal") refuse(path, proof?.reason ?? "Paged Views need a complete typed NOT NULL key tuple, indexed Schema order and a non-fanning relation, or a proved singleton.");
       continue;
     }
     const mode = view.surface === "public" ? "public" : "caller";

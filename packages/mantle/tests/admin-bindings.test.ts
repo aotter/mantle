@@ -138,6 +138,22 @@ spec: {source: {kind: mcp, surface: staff}, target: {procedure: app-test}}
 import type {Handlers} from './generated.js';
 const handlers:Handlers={'app-test':async (_ctx,input)=>({label:input.label})};
 const bindings=adminBindings({handlers});
+import {webmcpRoutes} from '@aotter/mantle-admin/server/webmcp';
+import {mcp,tools} from './mcp.js';
+import {rest} from './rest.js';
+const options={db:()=>null!,caller:()=>({kind:'anonymous' as const})};
+mcp({...options,handlers}); rest({...options,handlers});
+webmcpRoutes({tools:[]},tools,handlers);
+// @ts-expect-error WebMCP requires ref handlers
+webmcpRoutes({tools:[]},tools);
+// @ts-expect-error WebMCP cannot accept undefined ref handlers
+webmcpRoutes({tools:[]},tools,undefined);
+// @ts-expect-error missing ref implementation
+webmcpRoutes({tools:[]},tools,{});
+// @ts-expect-error generated MCP requires ref handlers
+mcp(options);
+// @ts-expect-error generated REST requires ref handlers
+rest(options);
 // @ts-expect-error handlers are required for the selected application
 adminBindings();
 // @ts-expect-error missing typed ref implementation
@@ -146,6 +162,17 @@ adminBindings({handlers:{}});
 adminBindings({handlers:{...handlers,extra:async()=>({label:'x'})}});
 `);roots.push(consumer);
  }
+ const plain=join(dir,"plain"),plainResult=await generateFromSources({target:"bun-sqlite",admin:true,sources:{sources:[source,board]}});
+ if(!plainResult.ok)throw Error(JSON.stringify(plainResult.diagnostics));await writeGenerated(plain,plainResult.files,false);
+ const plainConsumer=join(plain,"consumer.ts");await writeFile(plainConsumer,`import {adminBindings} from './admin-bindings.js';
+import {webmcpRoutes} from '@aotter/mantle-admin/server/webmcp';
+import {mcp,tools} from './mcp.js';
+import {rest} from './rest.js';
+const options={db:()=>null!,caller:()=>({kind:'anonymous' as const})};
+adminBindings(); mcp(options); rest(options);
+webmcpRoutes({tools:[]},tools);
+webmcpRoutes({tools:[]},tools,undefined);
+`);roots.push(plainConsumer);
  const kernel=resolve(import.meta.dir,"../src/kernel"),admin=resolve(import.meta.dir,"../../mantle-admin/src/server"),paths={"@aotter/mantle/*":[kernel+"/*.ts"],"@aotter/mantle/contracts":[kernel+"/contracts.ts"],"@aotter/mantle/rest":[process.env.MANTLE_ADMIN_SOURCE_REST??kernel+"/rest.ts"],"@aotter/mantle-admin/server":[admin+"/index.ts"],"@aotter/mantle-admin/server/*":[admin+"/*.ts"]};
  const program=ts.createProgram(roots,{strict:true,noEmit:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,skipLibCheck:true,paths,types:["node","bun-types"],typeRoots:[resolve(import.meta.dir,"../node_modules/@types"),resolve(import.meta.dir,"../node_modules")]});expect(ts.getPreEmitDiagnostics(program).map(d=>`${d.file?.fileName} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText," ")}`).join("\n")).toBe("");
  }finally{await rm(dir,{recursive:true,force:true});}
