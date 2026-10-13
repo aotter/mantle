@@ -3,6 +3,11 @@ description: The generated src/service.ts and src/index.ts of a Mantle 0.2.0 Clo
 ---
 # The service and its entry
 
+**Historical Core through alpha.6.** For canonical generated native SDK apps,
+follow the exact installed README and [native service workflow](../../next/service.md);
+the preset/RuntimePlan commands and role wiring below are version-specific.
+
+
 On host `cloudflare`, `mantle generate` writes two files once, then they are
 yours (host `bun` writes a `Bun.serve` entry instead, ADR-0038):
 

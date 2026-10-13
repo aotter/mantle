@@ -7,11 +7,12 @@ Mantle supplies the database adapter, schema generation and caller resolution:
 | --- | --- |
 | `@aotter/mantle/auth/adapter` | `d1Adapter(env.DB)` / `bunSqlAdapter(sql)`: Better Auth's `database` on the same native handle as your data, no Kysely. Passes Better Auth's official adapter suite (`@better-auth/test-utils/adapter`). |
 | `mantle generate … --auth ./auth.ts` | Adds the tables Better Auth declares for your options (`getSchema`) to `schema.sql`. |
+| `@aotter/mantle/generate/auth` | Programmatic `generateFromSources({ target, sources, auth: authOptions, ... })`; the selected entry types `auth` as Better Auth options. |
 | `@aotter/mantle/auth` | `authLoader` and `resolveCaller(request, loader, { audience })`: the `Caller` that generated queries take. |
 
 ## `auth.ts`
 
-Use the [complete, typechecked D1 template](../../packages/mantle-next/tests/apps/auth/template.ts).
+Use the [complete, typechecked D1 template](../../packages/mantle/tests/apps/auth/template.ts).
 The application owns Better Auth and its optional plugins. Schema generation reads plain options without constructing
 Better Auth; apply `schema.sql` during deployment, never at boot.
 
@@ -94,7 +95,7 @@ If you set `advanced.cookiePrefix`, pass the same value: `authLoader(load, "app"
 Workers compiles an uploaded module only when it is imported. Better Auth in its own module therefore costs a cold
 isolate nothing until a request needs it. Measured on production Workers (#1462), startup was 1 ms instead of 77 ms
 eager or 32 ms for `import()` inside one bundle.
-Follow the [Workers build instructions](../../packages/mantle-next/README.md#workers-build).
+Follow the [Workers build instructions](../../packages/mantle/README.md#workers-build).
 The metafile startup guard rejects static Better Auth imports; keep auth behind
 `authLoader(() => import(...))`.
 
@@ -103,6 +104,13 @@ The metafile startup guard rejects static Better Auth imports; keep auth behind
 `mantle generate <target> <out> <manifest>… --auth ./auth.ts` calls the module's `authOptions` with an empty env
 (the tables depend on plugins and options, not env values; nothing is constructed) and appends Better Auth's tables to `schema.sql`. Nothing runs DDL at runtime; migrations
 are yours (#1463).
+
+For programmatic auth generation, import `generateFromSources` from
+`@aotter/mantle/generate/auth`, not the bare `/generate` entry. Both use the
+same generator; the selected entry preserves Better Auth's option types while
+bare generation requires no optional auth peer in its public declarations.
+Pass plain options rather than constructing Better Auth to obtain the schema.
+The CLI's `--auth` selects this path automatically.
 
 The native auth adapters enable database joins by default; an explicit
 `advanced.database.joins: false` retains Better Auth's separate-read fallback.

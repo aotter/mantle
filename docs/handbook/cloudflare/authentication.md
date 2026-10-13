@@ -3,6 +3,11 @@ description: Sign-in for a Mantle 0.2.0 service — the three identity choices, 
 ---
 # Authentication
 
+**Historical Core through alpha.6.** For canonical generated native SDK apps,
+follow the exact installed README and [native service workflow](../../next/service.md);
+the preset/RuntimePlan commands and role wiring below are version-specific.
+
+
 Mantle never owns your users. Choose once, in `mantle.config.json`:
 
 | `identity` | Callers come from | Auth tables |

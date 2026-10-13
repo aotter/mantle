@@ -1,0 +1,130 @@
+{
+  "name": "@aotter/mantle-admin",
+  "version": "0.2.0-alpha.6",
+  "description": "Admin SPA, extension client API, design preview and Admin MCP App; the SDK remains a peer.",
+  "license": "Apache-2.0",
+  "homepage": "https://mantle.tools/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aotter/mantle.git",
+    "directory": "packages/mantle-admin"
+  },
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha",
+    "registry": "https://registry.npmjs.org"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    "./extension": {
+      "types": "./dist/extension/index.d.ts",
+      "import": "./dist/extension/index.js"
+    },
+    "./admin-preview": {
+      "types": "./dist/admin-preview/index.d.ts",
+      "import": "./dist/admin-preview/index.js"
+    },
+    "./admin/index.html": "./dist/admin/index.html",
+    "./admin/preview.html": "./dist/admin/preview.html",
+    "./admin/host-bridge.js": "./dist/admin/host-bridge.js",
+    "./mcp-app": {
+      "types": "./dist/mcp-app/index.d.ts",
+      "import": "./dist/mcp-app/index.js"
+    },
+    "./package.json": "./package.json",
+    "./controller": {
+      "types": "./dist/app/bridge.d.ts",
+      "import": "./dist/app/bridge.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./server/entries": {
+      "types": "./dist/server/entries.d.ts",
+      "import": "./dist/server/entries.js"
+    },
+    "./server/site": {
+      "types": "./dist/server/site.d.ts",
+      "import": "./dist/server/site.js"
+    },
+    "./server/extensions": {
+      "types": "./dist/server/extensions.d.ts",
+      "import": "./dist/server/extensions.js"
+    },
+    "./server/webmcp": {
+      "types": "./dist/server/webmcp.d.ts",
+      "import": "./dist/server/webmcp.js"
+    },
+    "./server/native": {
+      "types": "./dist/server/native.d.ts",
+      "import": "./dist/server/native.js"
+    },
+    "./mcp": {
+      "types": "./dist/server/mcp.d.ts",
+      "import": "./dist/server/mcp.js"
+    },
+    "./server/design": {
+      "types": "./dist/server/design.d.ts",
+      "import": "./dist/server/design.js"
+    }
+  },
+  "dependencies": {
+    "@aotter/mantle-ui": "workspace:*"
+  },
+  "peerDependencies": {
+    "@aotter/mantle": "0.2.0-alpha.6"
+  },
+  "devDependencies": {
+    "@aotter/mantle": "workspace:*",
+    "@dagrejs/dagre": "^3.1.1",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-query": "^5.103.2",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "@types/node": "catalog:",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@xyflow/react": "^12.11.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "input-otp": "^1.5.0",
+    "lucide-react": "^1.48.0",
+    "playwright": "catalog:",
+    "radix-ui": "^1.6.7",
+    "react": "^19.3.0",
+    "react-day-picker": "^10.0.1",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "shadcn": "^4.21.0",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3",
+    "tw-animate-css": "^1.4.0",
+    "typescript": "catalog:",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.0",
+    "vitest": "catalog:"
+  },
+  "scripts": {
+    "prebuild": "rm -rf dist .tsbuildinfo",
+    "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts && vite build --config vite.shared.config.ts && vite build --config vite.preview.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json && tsc -p tsconfig.mcp-app.json && tsc --noEmit -p admin/tsconfig.json",
+    "test": "vitest run",
+    "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run",
+    "check:size": "node ../../scripts/check-ui-size.mjs mantle-admin",
+    "test:native-server": "bun test tests/native/*.test.ts"
+  }
+}

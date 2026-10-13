@@ -1,6 +1,116 @@
 {
   "name": "@aotter/mantle",
   "version": "0.2.0-alpha.6",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "skills",
+    "README.md"
+  ],
+  "bin": {
+    "mantle": "./dist/infrastructure/cli.js"
+  },
+  "dependencies": {
+    "esbuild": "0.28.1",
+    "jsonc-parser": "3.3.1",
+    "@pgsql/types": "18.0.0",
+    "libpg-query": "18.1.5",
+    "pgsql-deparser": "18.3.8",
+    "yaml": "^2.9.1",
+    "zod": "catalog:"
+  },
+  "exports": {
+    ".": "./dist/infrastructure/generate.js",
+    "./generate": "./dist/infrastructure/generate.js",
+    "./contracts": "./dist/kernel/contracts.js",
+    "./translations": "./dist/kernel/translations.js",
+    "./driver/transaction-context": "./dist/kernel/driver/transaction-context.js",
+    "./scalars": "./dist/kernel/scalars.js",
+    "./binds": "./dist/kernel/binds.js",
+    "./sweep": "./dist/kernel/sweep.js",
+    "./cron": "./dist/kernel/cron.js",
+    "./store": "./dist/kernel/store.js",
+    "./dialect/sqlite": "./dist/kernel/dialect/sqlite.js",
+    "./dialect/postgres": "./dist/kernel/dialect/postgres.js",
+    "./driver/bun-sqlite": "./dist/kernel/driver/bun-sqlite.js",
+    "./driver/d1": "./dist/kernel/driver/d1.js",
+    "./driver/postgres": "./dist/kernel/driver/postgres.js",
+    "./email": "./dist/kernel/email.js",
+    "./paging": "./dist/kernel/paging.js",
+    "./publishing": "./dist/kernel/publishing.js",
+    "./rest": "./dist/kernel/rest.js",
+    "./mcp": "./dist/kernel/mcp.js",
+    "./mcp-apps": "./dist/kernel/mcp-apps.js",
+    "./web": "./dist/kernel/web.js",
+    "./validation": "./dist/kernel/validation.js",
+    "./site": "./dist/kernel/site.js",
+    "./media": "./dist/kernel/media.js",
+    "./media/r2": "./dist/kernel/r2-media.js",
+    "./auth": "./dist/auth/caller.js",
+    "./auth/adapter": "./dist/auth/adapter.js",
+    "./auth/oauth": "./dist/auth/oauth.js",
+    "./auth/routes": "./dist/auth/routes.js",
+    "./auth/identity": "./dist/auth/identity.js",
+    "./auth/hardening": "./dist/auth/hardening.js",
+    "./auth/admin": "./dist/auth/admin.js",
+    "./bun/assets": "./dist/bun/assets.js",
+    "./surface": "./dist/kernel/surface.js",
+    "./json-body": "./dist/kernel/json-body.js",
+    "./generate/auth": "./dist/infrastructure/generateAuth.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.lib.json --removeComments --declaration false && tsc -p tsconfig.lib.json --emitDeclarationOnly && node scripts/bundle-compiler.mjs && node scripts/prune-declarations.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun run build && bun test tests/*.test.ts && bun run test:compiler && bun scripts/check-size.ts && bun scripts/check-package.ts",
+    "generate": "bun src/infrastructure/cli.ts",
+    "test:native": "bun scripts/verify-native.ts",
+    "bench": "bun scripts/verify-native.ts --bench",
+    "check:size": "bun run build && bun scripts/check-size.ts",
+    "check:package": "bun run build && bun scripts/check-package.ts",
+    "test:compiler": "tsc --noEmit -p tsconfig.compiler.json && vitest run --config vitest.compiler.config.ts",
+    "prepack": "node ../../scripts/sync-package-docs.mjs .",
+    "postpack": "node ../../scripts/sync-package-docs.mjs . --clean"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/server": "2.1.0",
+    "@better-auth/core": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "better-auth": "catalog:peer"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/server": {
+      "optional": true
+    },
+    "@better-auth/core": {
+      "optional": true
+    },
+    "@better-auth/oauth-provider": {
+      "optional": true
+    },
+    "better-auth": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server": "2.1.0",
+    "@better-auth/core": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "@better-auth/test-utils": "1.7.7",
+    "@cloudflare/workers-types": "^5.20261008.1",
+    "@types/node": "catalog:",
+    "better-auth": "catalog:",
+    "bun-types": "1.3.14",
+    "postgres": "3.4.7",
+    "typescript": "catalog:",
+    "wrangler": "4.137.0",
+    "vitest": "catalog:"
+  },
   "description": "Mantle: a manifest-driven service core. Store authored as SQL, surfaces as Fetch functions, and the mantle CLI.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
@@ -9,152 +119,9 @@
     "url": "git+https://github.com/aotter/mantle.git",
     "directory": "packages/mantle"
   },
-  "type": "module",
-  "sideEffects": false,
-  "exports": {
-    ".": {
-      "types": "./dist/core/index.d.ts",
-      "import": "./dist/core/index.js"
-    },
-    "./spec": {
-      "types": "./dist/spec/index.d.ts",
-      "import": "./dist/spec/index.js"
-    },
-    "./d1": {
-      "types": "./dist/d1/index.d.ts",
-      "import": "./dist/d1/index.js"
-    },
-    "./d1/compile": {
-      "types": "./dist/d1/compile/index.d.ts",
-      "import": "./dist/d1/compile/index.js",
-      "default": "./dist/d1/compile/index.js"
-    },
-    "./postgres": {
-      "types": "./dist/postgres/index.d.ts",
-      "import": "./dist/postgres/index.js"
-    },
-    "./postgres/compile": {
-      "types": "./dist/postgres/compile/index.d.ts",
-      "import": "./dist/postgres/compile/index.js",
-      "default": "./dist/postgres/compile/index.js"
-    },
-    "./cloudflare": {
-      "types": "./dist/cloudflare/index.d.ts",
-      "import": "./dist/cloudflare/index.js"
-    },
-    "./auth": {
-      "types": "./dist/auth/index.d.ts",
-      "import": "./dist/auth/index.js"
-    },
-    "./admin": {
-      "types": "./dist/admin/index.d.ts",
-      "import": "./dist/admin/index.js"
-    },
-    "./mcp": {
-      "types": "./dist/mcp/index.d.ts",
-      "import": "./dist/mcp/index.js"
-    },
-    "./web": {
-      "types": "./dist/web/index.d.ts",
-      "import": "./dist/web/index.js"
-    },
-    "./testing": {
-      "types": "./dist/testing/index.d.ts",
-      "import": "./dist/testing/index.js"
-    },
-    "./package.json": "./package.json",
-    "./bun": {
-      "types": "./dist/bun/index.d.ts",
-      "import": "./dist/bun/index.js"
-    },
-    "./compiler": {
-      "types": "./dist/compiler.d.ts",
-      "import": "./dist/compiler.js"
-    }
-  },
-  "bin": {
-    "mantle": "./dist/cli/main.js"
-  },
-  "files": [
-    "dist",
-    "docs"
-  ],
   "publishConfig": {
     "access": "public",
     "tag": "alpha",
     "registry": "https://registry.npmjs.org"
-  },
-  "scripts": {
-    "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "prepack": "node ../../scripts/sync-package-docs.mjs .",
-    "postpack": "node ../../scripts/sync-package-docs.mjs . --clean",
-    "test:bun": "bun test/bun/native.ts",
-    "bench": "node bench/run.mjs all",
-    "bench:cold": "node bench/run.mjs cold",
-    "bench:warm": "node bench/run.mjs warm",
-    "bench:check": "node bench/run.mjs check",
-    "bench:compare": "node bench/run.mjs compare"
-  },
-  "dependencies": {
-    "@pgsql/types": "18.0.0",
-    "libpg-query": "18.1.5",
-    "pgsql-deparser": "18.3.8",
-    "yaml": "^2.9.1",
-    "zod": "catalog:",
-    "semver": "^7.8.5"
-  },
-  "devDependencies": {
-    "@better-auth/cimd": "catalog:",
-    "@better-auth/core": "catalog:",
-    "@better-auth/mcp": "catalog:",
-    "@better-auth/oauth-provider": "catalog:",
-    "@better-auth/utils": "catalog:",
-    "@modelcontextprotocol/client": "2.1.0",
-    "@modelcontextprotocol/ext-apps": "2.0.0",
-    "@modelcontextprotocol/server": "2.1.0",
-    "@types/node": "catalog:",
-    "@types/pg": "8.23.1",
-    "better-auth": "catalog:",
-    "bun-types": "1.3.14",
-    "pg": "8.23.1",
-    "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@cloudflare/workers-types": "^5.20261008.1",
-    "wrangler": "4.137.0",
-    "@types/semver": "^7.7.1"
-  },
-  "peerDependencies": {
-    "@better-auth/cimd": "catalog:",
-    "@better-auth/mcp": "catalog:",
-    "@better-auth/oauth-provider": "catalog:",
-    "@modelcontextprotocol/ext-apps": "2.0.0",
-    "@modelcontextprotocol/server": "2.1.0",
-    "better-auth": "catalog:peer"
-  },
-  "peerDependenciesMeta": {
-    "@better-auth/cimd": {
-      "optional": true
-    },
-    "@better-auth/mcp": {
-      "optional": true
-    },
-    "@better-auth/oauth-provider": {
-      "optional": true
-    },
-    "@modelcontextprotocol/ext-apps": {
-      "optional": true
-    },
-    "@modelcontextprotocol/server": {
-      "optional": true
-    },
-    "better-auth": {
-      "optional": true
-    }
-  },
-  "engines": {
-    "node": ">=22"
   }
 }

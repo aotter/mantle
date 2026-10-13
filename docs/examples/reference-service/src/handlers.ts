@@ -1,36 +1,56 @@
-// Written once by `mantle generate`, then filled in. `MantleHandlers` lists exactly the plan's handler refs.
-import type { MantleHandlers } from "../.mantle/generated/mantle.js";
+import { ContractError, type Caller } from "@aotter/mantle/contracts";
+import { store, type Handlers } from "../generated/generated.js";
 
-export const handlers: MantleHandlers = {
-  // ctx.store is scoped to the caller: another owner's order is not visible, so the write below is a CONFLICT, never a leak
-  cancelOrder: async ({ orderId, expectedVersion }, ctx) => {
-    const order = await ctx.db.orders.first({ where: { id: orderId, orderStatus: "placed" } });
-    const item = order ? await ctx.db.items.get(String(order.itemId)) : null;
-    await ctx.store.write([
-      { update: "orders", set: { orderStatus: "cancelled" }, where: { id: orderId }, lock: expectedVersion },
-      // both rows or neither: the stock goes back only with the cancellation, and a concurrent restock is a CONFLICT
-      ...(order && item ? [{ update: "items" as const, set: { stock: Number(item.stock) + Number(order.qty) }, where: { id: String(item.id) }, lock: Number(item.version) }] : []),
+/** The old after hook was post-commit, best effort, and ran with the actual caller. */
+export async function recordOrders(db: Parameters<typeof store>[0], caller: Caller, rows: readonly Record<string, unknown>[], kind: "after_create" | "after_update") {
+  try {
+    const data = store(db, caller, { handlers });
+    await data.batch(rows.map(row => data.collection("activity").insert({
+      kind, subject: String(row.id), detail: `${String(row.orderStatus ?? row.orderstatus)} x${String(row.qty)}`,
+    })));
+  } catch { console.error("[reference] order activity failed after commit"); }
+}
+export const handlers: Handlers = {
+  "place-order": async ({ db, caller, store: data }, input) => {
+    let output;
+    try { output = await data.procedures["place-order-write"](input); }
+    catch (error) {
+      // This application's declared stock check is a known business refusal.
+      if (String((error as Error)?.message).includes("MANTLE_CHECK items: stock >= 0"))
+        throw new ContractError("INPUT_VALIDATION_FAILED", "CHECK items: stock >= 0", "procedures/place-order");
+      throw error;
+    }
+    await recordOrders(db, caller, output.results[0]!, "after_create");
+    return output;
+  },
+  "cancel-order": async ({ db, caller }, { orderId, expectedVersion }) => {
+    const data = store(db, caller, { handlers });
+    const orders = data.collection("orders"), items = data.collection("items");
+    const order = await orders.first({ where: { id: orderId, orderstatus: "placed" } });
+    const item = order ? await items.findById(order.itemid) : null;
+    if (!order || !item) throw new ContractError("CONFLICT", "The order is not visible or placed.", "procedures/cancel-order");
+    await data.batch([
+      orders.update(orderId, { orderstatus: "cancelled" }, { lock: expectedVersion }),
+      items.update(item.id, { stock: item.stock + order.qty }, { lock: item.version }),
     ]);
+    await recordOrders(db, caller, [{ ...order, orderstatus: "cancelled" }], "after_update");
     return { id: orderId, orderStatus: "cancelled" };
   },
-
-  // an after hook gets every row the statement touched: loop, never rows[0]
-  recordOrders: async (_input, ctx) => {
-    const cause = ctx.cause;
-    if (cause.kind !== "lifecycle") return {};
-    await ctx.store.write(cause.rows.map((row) => ({
-      insert: "activity" as const,
-      values: { kind: cause.hook, subject: String(row.id), detail: `${String(row.orderStatus)} x${String(row.qty)}` },
-    })));
-    return {};
-  },
-
-  // a schedule runs as the system caller: no scope, and no requires.auth predicate holds for it. One page of up to 500 orders
-  // keeps the example short; a digest over more would page with nextCursor.
-  weeklyDigest: async (_input, ctx) => {
-    const { rows } = await ctx.db.orders.find({ columns: ["qty"], where: { orderStatus: "placed" }, limit: 500 });
-    const units = rows.reduce((sum, row) => sum + Number(row.qty), 0);
-    await ctx.store.write([{ insert: "activity", values: { kind: "weekly-digest", subject: String(ctx.cause.kind === "schedule" ? ctx.cause.scheduledTime : ""), detail: `${rows.length} orders, ${units} units` } }]);
-    return {};
-  },
 };
+
+/** Application cron: one bounded cursor walk, never a generated schedule Trigger. */
+export async function weeklyDigest(db: D1Database, scheduledTime: number) {
+  const caller: Caller = { kind: "system", reason: "weekly order digest" };
+  const data = store(db, caller, { handlers });
+  let cursor: string | undefined, count = 0, units = 0;
+  for (let pages = 0; pages < 20; pages++) {
+    const page = await data.collection("orders").find({ where: { orderstatus: "placed" }, limit: 500, cursor });
+    count += page.rows.length;
+    units += page.rows.reduce((sum, row) => sum + row.qty, 0);
+    cursor = page.cursor ?? undefined;
+    if (!cursor) break;
+  }
+  // ponytail: at most 10,000 orders per run; persist a continuation for larger digests.
+  if (cursor) throw new Error("Digest exceeds 20 pages; retain a continuation before recording a complete digest.");
+  await data.collection("activity").insert({ kind: "weekly-digest", subject: String(scheduledTime), detail: `${count} orders, ${units} units` });
+}

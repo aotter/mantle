@@ -1,33 +1,49 @@
 # Reference service
 
-A small shop built on `@aotter/mantle` 0.2.0. It is also the Worker that the
-release gate runs (`scripts/check-worker-consumer.mjs`).
+A directly authored shop using the single `@aotter/mantle` native SDK and the
+`@aotter/mantle-admin` server/SPA and the pure `@aotter/mantle-ui` kit. The release gate runs this service from
+exact packed tarballs (`scripts/check-worker-consumer.mjs`).
 
-- `manifests/`: the whole service in the v2 grammar.
-  - A scoped Schema (`orders`) and a Schema with a check (`items`, `stock >= 0`).
-  - Views written as one `SELECT`: a join, a `GROUP BY`, and `mantle.search`.
-  - Procedures written as SQL: a two-statement order, an `ON CONFLICT`
-    restock, and an optimistic-lock cancel in handler code.
-  - An after hook that loops over `ctx.cause.rows`.
-  - A POSIX cron.
-- `src/handlers.ts`: the three `ref` handlers, written against the typed
-  `ctx.store`.
-- `src/service.ts`, `src/index.ts`, `wrangler.jsonc`, `tsconfig.json`: the
-  preset `mantle generate` wrote once. These files are the application's own.
-- `smoke.mjs`: starts `wrangler dev` on a fresh local D1 and drives the service:
-  - console email-OTP sign-in for an owner and a buyer;
-  - REST, both MCP surfaces, the cron, and Admin: the console from `@aotter/mantle-ui/admin` at `/admin`, its API, and an editor's save;
-  - asserts scope, the stock check, locks and hooks.
+- `manifests/`: scoped orders, a stock CHECK, joins, grouping, native full-text
+  search, atomic SQL Procedures, typed ref Procedures, REST and MCP exposure.
+- `src/auth.ts`: app-owned Better Auth options and verified-email staff bootstrap;
+  Better Auth loads dynamically, and local-only email OTPs print to the log.
+- `src/handlers.ts`: scoped cancellation and stock restoration in one native
+  batch. Order activity runs after commit with the actual caller, best effort,
+  preserving the old after-hook semantics. Generated lifecycle Triggers are
+  refused; this effect also covers the app's Admin entry writers.
+- `src/pages.ts`: app-owned keysets for relevance and aggregate ordering outside
+  the generator's automatic paging proofs. SQL applies cursors and LIMIT; the
+  application does not read all rows and then paginate them.
+- `src/service.ts` and `src/index.ts`: app-mounted auth, Admin, REST and both MCP
+  surfaces, lazy MCP App HTML, and a bounded native weekly digest (20 pages).
+  Scheduling belongs to the app, rather than a manifest schedule Trigger.
+- `smoke.mjs`: explicitly applies deployment DDL to a fresh local D1, starts
+  Wrangler, and exercises OTP, both user roles, REST, both MCP surfaces, Admin
+  assets/editor save, search, scope, stock rollback, locks, activity and cron.
 
-Outside the SDK workspace, with Node 22+ and pnpm 9+, pin every dependency to
-one exact version, then:
+Outside the SDK workspace, use Node 22.22+ and pnpm 9+; pin all three packages to
+one exact version. Then:
 
 ```sh
 pnpm install
-pnpm check                      # generate, generate --check, typecheck, smoke
+pnpm generate                   # lists required Handlers keys
+pnpm exec tsc --noEmit           # implement listed handlers, then typecheck again
+pnpm check                      # generation/check, typecheck, real local D1 smoke
 cp .dev.vars.example .dev.vars  # set ADMIN_EMAIL and a random BETTER_AUTH_SECRET
-pnpm dev                        # open /admin; sign-in codes are printed to this log
+pnpm exec wrangler d1 execute mantle-reference --local --file generated/schema.sql
+pnpm dev                        # /admin; local OTP codes appear in this log
 ```
 
-The release gate installs the exact tarballs it just packed in place of the
-pinned versions.
+Apply initial DDL only to an empty development database. Production migrations
+are reviewed application-owned artifacts; imports and requests do no schema
+convergence. Configure a real email sender before deployment. `ADMIN_EMAIL`
+receives the OSS `staff` role only after email verification; ordinary members
+receive 403 from Admin.
+
+Commit every generated TypeScript/SQL file and Wrangler edit; regenerate instead
+of hand-editing them, and keep `dist/` untracked. The release gate replaces the
+registry pins with exact tarballs; it does not use workspace links or an old Core
+fallback. Follow the installed SDK README and native contract, not historical
+plan-based `createMantle` instructions. Bare integers retain their driver's native
+contract; the selected surfaces own wire conversions.

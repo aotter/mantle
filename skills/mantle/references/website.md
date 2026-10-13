@@ -3,7 +3,10 @@
 These are default generation and acceptance requirements for a complete website,
 unless the user explicitly changes the scope. They do not add Manifest keys or
 change Core's optional composition. Read the installed version's docs and the
-selected host's frontend kit before choosing APIs.
+selected host's frontend kit before choosing APIs. Native applications use
+their installed `docs/handbook/guides/native-admin.md` and the
+[web contract](web.md); the historical protocol-5/6 Cloud kit instructions
+apply only to hosts explicitly selecting that version-pinned workflow.
 
 - Link to host-provided Mantle Admin UI and configured tenant OTP; do not emit frontend assets under host-owned /admin routes. Add visitor sign-in only where
   needed. Do not build a second identity store or configure another mail provider
@@ -11,7 +14,8 @@ selected host's frontend kit before choosing APIs.
   access; Cloud membership is not tenant staff access.
 - Integrate image selection/upload into content editing through the existing
   Admin media library and host storage. Follow the pinned Core upload/PUT/commit
-  contract and `x-mantle-ref: media_assets` plus `x-mcp-hint: media-image`; store committed asset IDs, resolve permanent variants in the frontend, never use an ID as an image URL. Tenant `/mcp/staff` supplies `get_media_upload_policy` → `create_media_upload` → direct HTTP PUT → `commit_media_upload` when its shared media adapter is wired. Follow the pinned media docs for tenant editor/owner authentication; Cloud project credentials are not tenant credentials. Upload capability URLs are temporary,
+  contract and `x-mantle-ref: media_assets` plus `x-mcp-hint: media-image`; store committed asset IDs, resolve permanent variants in the frontend, never use an ID as an image URL. Tenant `/mcp/staff` supplies `get_media_upload_policy` → `create_media_upload` → direct HTTP PUT → `commit_media_upload` when its shared media adapter is wired. Follow the pinned media docs for tenant staff authentication (historical Core
+uses editor/owner; the native SDK uses staff); Cloud project credentials are not tenant credentials. Upload capability URLs are temporary,
   not committed public images; anonymous visitors must not gain staff media access.
 - Generate an accessible, responsive public frontend by reading the installed
   `@aotter/mantle/web` REST contract; browser code on static hosts uses

@@ -10,10 +10,11 @@ metadata:
 
 # Mantle Develop
 
-## Generated native applications (alpha.7 and later)
+## Generated native applications (alpha.7 target / workspace preview)
 
 If the installed/target README describes generated native queries, use this
-flow and stop before the historical Core instructions below.
+flow and stop before the historical Core instructions below. A develop preview
+is not evidence that alpha.7 has been published.
 
 Follow the installed [native generation and service workflow](../../next/service.md)
 with the exact package version's `contract.md` and `compatibility.md`. Commit
@@ -25,6 +26,15 @@ Use the native Store/query/surface entries and app-owned fetch from `service.md`
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/staff HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.
+
+For native Admin, read the [current guide](../../handbook/guides/native-admin.md).
+Select `--admin` / `admin: true`; mount `entries(bindings.schemas, bindings.adapter)`
+from the optional Admin package. Keep one Core SDK, the Admin product and shared
+UI kit at matching versions. Generate → typecheck → implement listed handlers →
+typecheck. Ref handlers retain caller-bound `ctx.store`; generic Admin reads
+use shared generated View templates and writes use native Procedure fragments.
+Check actual member/Admin OTP, private scope/TTL/translation visibility, paging,
+statistics, safe/exact OCC and no automatic retry after unknown 503 outcomes.
 
 ## Historical Core applications (through alpha.6)
 

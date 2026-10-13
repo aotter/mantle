@@ -1,5 +1,9 @@
 # Application-owned service composition
 
+Experimental native preview; this page does not announce alpha.7 publication.
+Read the exact installed SDK/Admin versions. The [Native Admin guide](../handbook/guides/native-admin.md)
+is the authority for generated collection bindings and retained console behavior.
+
 The app owns `fetch`, native database handles, pools, auth options and deployment.
 Select generated modules by importing them; omitted modules stay out of the bundle.
 There is no runtime plan, framework or `withCaller` wrapper. Keep this source outside
@@ -48,7 +52,7 @@ export default {
     const routes = [
       authRoutes(auth, { methods: [{ kind: 'email-otp' }], resolver: caller }),
       admin(bindings.metadata, bindings.views, bindings.operations, {
-        ...options, routes: entries(bindings.schemas),
+        ...options, routes: entries(bindings.schemas, bindings.adapter),
       }),
       mcp(options),
       rest(options),
@@ -141,7 +145,7 @@ import { bunAdminAssets } from '@aotter/mantle/bun/assets';
 const assets = bunAdminAssets('node_modules/@aotter/mantle-admin/dist/admin');
 const bindings = adminBindings({ handlers });
 const serveAdmin = admin(bindings.metadata, bindings.views, bindings.operations, {
-  db: () => db, caller, handlers, routes: entries(bindings.schemas),
+  db: () => db, caller, handlers, routes: entries(bindings.schemas, bindings.adapter),
 });
 // Call assets(path) from your separate shell/static route.
 ```

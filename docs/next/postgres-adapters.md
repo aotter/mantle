@@ -8,7 +8,7 @@ errors, including SQLSTATE (`errno` on Bun.SQL, `code` on postgres.js) and sever
 the write-outcome classifier uses this evidence to distinguish rollback from an
 uncertain commit.
 
-The [checkout-side adapter corpus](../../packages/mantle-next/scripts/postgres-adapter.ts)
+The [checkout-side adapter corpus](../../packages/mantle/scripts/postgres-adapter.ts)
 accompanies `verify-native.ts`. It stays out of the installed request package. Run it
 with Bun 1.3.14 from a built SDK checkout, or import it in the Cloud adapter's
 test workspace. Its factory returns `{ db, close, interactive? }`; `close`

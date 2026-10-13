@@ -3,6 +3,11 @@ description: A task-to-feature table for Mantle 0.2.0 manifests — what to decl
 ---
 # Manifest feature reference
 
+**Historical Core API through alpha.6.** The retained routes and examples below
+match the RuntimePlan-based releases. For the unpublished native Admin preview,
+use [Native Admin](../guides/native-admin.md) and the exact installed package docs.
+Do not apply the old Store/preset/role wiring to generated native applications.
+
 | You need | Declare | Reference | Example |
 |---|---|---|---|
 | A table | a Schema with a JSON Schema | [Schema](./schema.md) | every example |

@@ -28,7 +28,7 @@ if (process.argv[2] === "--self-test") {
   );
   const steps = [...workflow.matchAll(/^      - name: (.+)$/gm)].map((match) => match[1]);
   const ordered = [
-    "Check Core source", "Check native Bun host",
+    "Check Core source", "Check native hosts",
     "Record published packages",
     "Pack release tarballs", "Verify release credentials", "Create immutable Core tag",
     "Publish to npmjs", "Verify immutable npm artifacts", "Mirror to GitHub Packages",
@@ -42,17 +42,24 @@ if (process.argv[2] === "--self-test") {
     assert.equal(steps.lastIndexOf(name), index);
     previous = index;
   }
+  const directories = workflow.match(/PKG_DIRS: >-\n((?: {8}packages\/[^\n]+\n)+)/)?.[1];
+  assert.deepEqual(directories?.trim().split(/\s+/), [
+    "packages/mantle-ui", "packages/mantle", "packages/mantle-admin",
+  ], "the same three-package set must drive every candidate and promotion loop");
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert(pkg.scripts.check.includes("pnpm check:worker-consumer"));
   assert.match(
     workflow,
     /- name: Check Core source\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm check\n        env:\n          MANTLE_PG_URL: postgres:\/\/\S+\n/,
   );
-  // the release gates PostgreSQL and native Bun as CI does: a PR must not be checked more than the release that ships it
+  const sourceGate = workflow.slice(workflow.indexOf("- name: Check Core source"), workflow.indexOf("- name: Check native hosts"));
+  assert.match(sourceGate, /^ {10}MANTLE_NEXT_BUN_PG_URL: postgres:\/\/\S+$/m);
+  assert.match(sourceGate, /^ {10}MANTLE_NEXT_WORKER_PG_URL: postgres:\/\/\S+$/m);
+  // the release gates PostgreSQL and all native hosts as CI does: a PR must not be checked more than the release that ships it
   assert.match(workflow, /services:\n      postgres:\n        image: postgres:/);
   assert.match(
     workflow,
-    /- name: Check native Bun host\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm --filter @aotter\/mantle test:bun\n        env:\n          MANTLE_PG_URL: postgres:\/\/\S+\n/,
+    /- name: Check native hosts\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm --filter @aotter\/mantle test:native\n        env:\n          MANTLE_PG_URL: postgres:\/\/\S+\n/,
   );
   assert.match(workflow, /CORE_SHA=\$TAG_SHA/);
   assert.doesNotMatch(workflow, /mantle-starters|mantle-landing|RELEASE_FANOUT_TOKEN|deploy_landing/);

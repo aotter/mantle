@@ -1,5 +1,11 @@
 # 0.2 feature inventory and port gaps
 
+**Historical snapshot, not current availability.** Names, gaps, line references
+and pending PRs below record 2026-10-12 migration planning. The canonical SDK
+now replaces that parallel package; follow the [supported preview scope](compatibility.md),
+[native service workflow](service.md) and [Admin guide](../handbook/guides/native-admin.md).
+No snapshot status establishes release or test acceptance.
+
 Snapshot of `develop` on 2026-10-12. Core 0.2 = `packages/mantle` (`0.2.0-alpha.6`) plus `packages/mantle-ui` (Admin SPA, MCP App, kit). Port target = `packages/mantle-next` (`0.2.0-next.0`, ~1.9k lines under `src/`), `docs/next/*`, and open draft PRs #1489 (web.ts), #1490 (REST), #1491 (MCP) which are NOT merged.
 
 Conventions
@@ -14,10 +20,10 @@ Conventions
 
 ## 0. Headline findings
 
-1. Next on develop is a generation kernel only: typed SQL Views/Procedures, a generic Store (find/first/count/insert/update/delete, keyset cursors, OCC, scope/TTL/publishing row rules), opt-in `publishing` transitions, typed ref `Handlers`, Better Auth DB adapter + schema, `resolveCaller` (session cookie and OAuth bearer), generated validation/paging/wire errors, Wrangler build. It has NO Admin, no MCP, no REST, no site/media, no email, no staff directory, no consent pages, no search, no translations, no TTL sweep. (`docs/next/compatibility.md`, `packages/mantle-next/src/**`.)
+1. Next on develop is a generation kernel only: typed SQL Views/Procedures, a generic Store (find/first/count/insert/update/delete, keyset cursors, OCC, scope/TTL/publishing row rules), opt-in `publishing` transitions, typed ref `Handlers`, Better Auth DB adapter + schema, `resolveCaller` (session cookie and OAuth bearer), generated validation/paging/wire errors, Wrangler build. It has NO Admin, no MCP, no REST, no site/media, no email, no staff directory, no consent pages, no search, no translations, no TTL sweep. (`docs/next/compatibility.md`, `packages/mantle/src/**`.)
 2. Draft PRs add: REST (#1490: `GET /api/views/<name>`, HTTP Triggers, origin check, 405+Allow, 1,000,000-byte body cap), MCP (#1491: `/mcp`, `/mcp/staff`, `query_view_<name>` tools, MCP Trigger tools, staff publishing tools, scope floor + challenges, lazy SDK), web (#1489: `/llms.txt`, `/sitemap.xml`, `.md` alternates, head tags; this is new in Next, 0.2 Core never shipped it: `docs/handbook/reference/features.md` "Not in 0.2.0").
 3. Issue #1465 (decision dated 2026-10-12, "No visible regression") says every 0.2 Admin UI feature is ported and translations ship in 0.2.0. `docs/next/compatibility.md`, `usecase/refusals.ts` and issue #1477 still say the opposite. See section 1.
-4. Security-relevant gap: Next `resolveCaller` (`packages/mantle-next/src/auth/caller.ts:55`) verifies the OAuth bearer and re-reads user role/ban, but does NOT bind the token to a live consent and session as 0.2 does (`core:auth/oauthTokens.ts:61` `assertActiveUserGrant`, claim `mantle_consent_id` added at `core:auth/buildAuth.ts:133-139` and `:272-291`). Without it, "Disconnect" on the connected-apps page (AUTH-11) would not stop already-issued tokens. Treat as a blocker for the OAuth/MCP package, not a nice-to-have.
+4. Security-relevant gap: Next `resolveCaller` (`packages/mantle/src/auth/caller.ts:55`) verifies the OAuth bearer and re-reads user role/ban, but does NOT bind the token to a live consent and session as 0.2 does (`core:auth/oauthTokens.ts:61` `assertActiveUserGrant`, claim `mantle_consent_id` added at `core:auth/buildAuth.ts:133-139` and `:272-291`). Without it, "Disconnect" on the connected-apps page (AUTH-11) would not stop already-issued tokens. Treat as a blocker for the OAuth/MCP package, not a nice-to-have.
 5. Hidden wire constraints that make "reuse the SPA" non-trivial are in section 5.
 
 ---
@@ -238,7 +244,7 @@ Roles in the "route" column are the minimum role the 0.2 gate enforces (`meetsRo
 
 ## 3. Table B: what `packages/mantle-next` already provides, per row
 
-Sources checked: `packages/mantle-next/src/**` (32 files), `docs/next/{contract,surfaces,compatibility,auth}.md`, `packages/mantle-next/README.md`, issues #1463 #1465 #1477 #1478 #1492, and `gh pr diff` of #1489/#1490/#1491 (all draft). "Kernel" below = merged `src/kernel` (Store `kernel/store.ts`, `kernel/contracts.ts`, drivers, dialects) and `src/usecase` (`generate.ts`, `stores.ts`, `publishing.ts`, `paging.ts`, `validation.ts`, `handlers.ts`, `refusals.ts`), `src/auth/{adapter,caller,schema}.ts`.
+Sources checked: `packages/mantle/src/**` (32 files), `docs/next/{contract,surfaces,compatibility,auth}.md`, `packages/mantle/README.md`, issues #1463 #1465 #1477 #1478 #1492, and `gh pr diff` of #1489/#1490/#1491 (all draft). "Kernel" below = merged `src/kernel` (Store `kernel/store.ts`, `kernel/contracts.ts`, drivers, dialects) and `src/usecase` (`generate.ts`, `stores.ts`, `publishing.ts`, `paging.ts`, `validation.ts`, `handlers.ts`, `refusals.ts`), `src/auth/{adapter,caller,schema}.ts`.
 
 Nothing in Next on develop serves HTTP or any Admin/MCP/OAuth route; every "gap" below means no code exists on develop or in the three PRs.
 
@@ -334,7 +340,7 @@ Nothing in Next on develop serves HTTP or any Admin/MCP/OAuth route; every "gap"
 
 | ID | On develop | Draft PRs | Status | Notes |
 |---|---|---|---|---|
-| AUTH-01 | `src/auth/adapter.ts` (`d1Adapter`, `bunSqlAdapter`), `src/infrastructure/authSchema.ts` (`authSchemaSql` from `getSchema`, build-time only), `--auth ./auth.ts` | none | delta (by decision) | Next "does not wrap Better Auth" (docs/next/auth.md); the plugin set, role access-control, `jwt`, `mcp`, `cimd`, `genericOAuth` configuration that `buildAuth.ts` did is now app-owned; no template for it yet |
+| AUTH-01 | `src/auth/adapter.ts` (`d1Adapter`, `bunSqlAdapter`), `src/auth/schema.ts` (`authSchemaSql` from `getSchema`), `--auth ./auth.ts` | none | delta (by decision) | Next "does not wrap Better Auth" (docs/next/auth.md); the plugin set, role access-control, `jwt`, `mcp`, `cimd`, `genericOAuth` configuration that `buildAuth.ts` did is now app-owned; no template for it yet |
 | AUTH-02 | none | none | gap | derive from `authOptions` at generate time or add helper |
 | AUTH-03 | docs sample uses `emailOTP({storeOTP:"hashed", ...})` | none | partial | no keyed-HMAC storage, no locale pick, no `backgroundTasks`+`waitUntil`, no default rate-limit tightening, no templates |
 | AUTH-04..06 | app config | none | partial (app-owned) | |
@@ -438,7 +444,7 @@ Suggested parallel start (no unmet dependencies): WP-D0, WP-K1, WP-K3, WP-K4, WP
 
 ## 6. What was and was not verified
 
-Read fully: `core:admin/*` (all seven files), `core:mcp/*`, `core:auth/{createAuthRoutes,methods,types,createMantleAuth,buildAuth,callerResolver,emailTemplates,setupIncomplete,ConsoleEmailSender}.ts`, `core:core/{site,siteConfig,email,store,withCaller,wire}.ts`, `core:core/store/createStore.ts`, `core:d1/{site,media}.ts`, `core:cloudflare/r2Media.ts`, `core:spec/.../{McpToolNaming,SchemaAdminUiChecker,SchemaSearchChecker}.ts`, grammar and site-config models, `core:web/createRestSurface.ts`, all of `packages/mantle-next/src` that matters for the comparison, `docs/next/*`, `docs/handbook/reference/surface.md`, `guides/admin-ui.md`, `concepts/mcp-and-agents.md`, `concepts/lifecycle-and-locales.md`, `cloudflare/media-r2.md` (media section), issues #1465/#1463/#1477/#1478/#1492 and the bodies and diffs of PRs #1489-#1491.
+Read fully: `core:admin/*` (all seven files), `core:mcp/*`, `core:auth/{createAuthRoutes,methods,types,createMantleAuth,buildAuth,callerResolver,emailTemplates,setupIncomplete,ConsoleEmailSender}.ts`, `core:core/{site,siteConfig,email,store,withCaller,wire}.ts`, `core:core/store/createStore.ts`, `core:d1/{site,media}.ts`, `core:cloudflare/r2Media.ts`, `core:spec/.../{McpToolNaming,SchemaAdminUiChecker,SchemaSearchChecker}.ts`, grammar and site-config models, `core:web/createRestSurface.ts`, all of `packages/mantle/src` that matters for the comparison, `docs/next/*`, `docs/handbook/reference/surface.md`, `guides/admin-ui.md`, `concepts/mcp-and-agents.md`, `concepts/lifecycle-and-locales.md`, `cloudflare/media-r2.md` (media section), issues #1465/#1463/#1477/#1478/#1492 and the bodies and diffs of PRs #1489-#1491.
 
 Read by anchored grep or skim only (rows built from structure, strings and key functions, not every line): the Admin SPA feature files (`ui:admin/src/**`, 22k lines, of which 5k are the i18n table), `core:auth/oauthTokens.ts` (only `assertActiveUserGrant` and verifier shape), `core:auth/appleClientSecret.ts` (header only), `core:cli/preset.ts` and `generate.ts` (flags and mounted pieces), `ui:src/react/*` and `ui:src/mcp-app/*` (exports and wiring), `docs/handbook/guides/admin-extensions.md`, `cloudflare/authentication.md`, `chatgpt-sites.md`, `durable-object-tenant.md` (headings only).
 

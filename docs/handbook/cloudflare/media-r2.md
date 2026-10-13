@@ -3,6 +3,11 @@ description: Media uploads in Mantle 0.2.0 on Cloudflare R2 — site media purpo
 ---
 # Media uploads with R2
 
+**Historical Core through alpha.6.** For canonical generated native SDK apps,
+follow the exact installed README and [native service workflow](../../next/service.md);
+the preset/RuntimePlan commands and role wiring below are version-specific.
+
+
 Media is optional. It needs three things in `src/service.ts`: site defaults
 with media purposes, an `r2MediaStorage`, and both passed where they belong.
 The bytes go from the uploader straight to R2; the Worker never proxies them.

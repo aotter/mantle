@@ -44,7 +44,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Check Core source runs the PostgreSQL dialect's tests and native Bun conformance against this server, as CI does;
+    # Check Core source runs the PostgreSQL dialect's tests and four-target native conformance against this server, as CI does;
     # without MANTLE_PG_URL they would skip and the release would gate less than a PR.
     services:
       postgres:
@@ -52,12 +52,13 @@ jobs:
         env: { POSTGRES_USER: mantle, POSTGRES_PASSWORD: mantle, POSTGRES_DB: mantle }
         ports: ["5432:5432"]
         options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
-    # Single source of truth for the two public packages, in dependency order.
+    # Single source of truth for the three public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       PKG_DIRS: >-
         packages/mantle-ui
         packages/mantle
+        packages/mantle-admin
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -164,12 +165,16 @@ jobs:
         run: pnpm check
         env:
           MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+          MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+          MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
 
-      - name: Check native Bun host
+      - name: Check native hosts
         if: steps.ver.outputs.tag_exists != 'true'
-        run: pnpm --filter @aotter/mantle test:bun
+        run: pnpm --filter @aotter/mantle test:native
         env:
           MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+          MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+          MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
 
       - name: Verify package, plugin, and marketplace versions match ${{ steps.ver.outputs.version }}
         run: |

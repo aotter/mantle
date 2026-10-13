@@ -2,7 +2,7 @@
 // Exercise the plugin as installed: no private source checkout or dependency.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -16,6 +16,12 @@ assert.equal(provenance.artifact, 'cloud-host.mjs');
 assert.equal(provenance.protocol, 6);
 assert.equal(createHash('sha256').update(readFileSync(join(skill, 'scripts/cloud-host.mjs'))).digest('hex'), provenance.sha256);
 
+// Protocol 6 intentionally remains historical; native Cloud submission is not
+// supported by this packer. Keep its existing contract assertions on alpha.6.
+const legacy = mkdtempSync(join(tmpdir(), 'mantle-legacy-plugin-'));
+writeFileSync(join(legacy,'package.json'),JSON.stringify({private:true,type:'module',dependencies:{'@aotter/mantle':'0.2.0-alpha.6'}}));
+execFileSync('pnpm',['install','--ignore-scripts','--no-frozen-lockfile'],{cwd:legacy,stdio:'pipe'});
+const legacySdk = join(legacy,'node_modules/@aotter/mantle');
 const project = mkdtempSync(join(tmpdir(), 'mantle-plugin-consumer-'));
 const run = (args, input) => {
   const result = spawnSync(process.execPath, args, { cwd: project, input, encoding: 'utf8' });
@@ -31,13 +37,13 @@ const failure = (args, input) => {
 try {
   mkdirSync(join(project, 'manifests'));
   mkdirSync(join(project, 'node_modules/@aotter'), { recursive: true });
-  symlinkSync(join(root, 'packages/mantle'), join(project, 'node_modules/@aotter/mantle'), 'dir');
+  symlinkSync(legacySdk, join(project, 'node_modules/@aotter/mantle'), 'dir');
   writeFileSync(join(project, 'package.json'), '{"type":"module"}\n');
   const example = readFileSync(join(root, 'docs/handbook/start/quickstart-worker.md'), 'utf8');
   const yaml = [...example.matchAll(/^```yaml\n([\s\S]*?)^```$/gm)].map(match => match[1]);
   assert.ok(yaml.some(text => text.includes('apiVersion: cms.mantle.aotter.net/v2')));
   yaml.forEach((text, i) => writeFileSync(join(project, 'manifests', `${i}.yaml`), text));
-  run([join(root, 'packages/mantle/dist/cli/main.js'), 'generate', '--identity', 'none', '--features', 'web']);
+  run([join(legacySdk, 'dist/cli/main.js'), 'generate', '--identity', 'none', '--features', 'web']);
   assert.equal(JSON.parse(run([helper, 'check'])).cloud, 'not_checked');
   assert.equal(line(['version']).protocol, provenance.protocol);
   const organizationId = '0199aaaa-0000-7000-8000-000000000001';
@@ -52,7 +58,7 @@ try {
   };
   git('init', '-b', 'main'); git('add', '-A'); git('commit', '-m', 'Generated source');
   const commit = git('rev-parse', 'HEAD');
-  const core = JSON.parse(readFileSync(join(root, 'packages/mantle/package.json'), 'utf8'));
+  const core = JSON.parse(readFileSync(join(legacySdk, 'package.json'), 'utf8'));
   const pin = { version: core.version, revision: 'a'.repeat(40) };
   const contract = { projectId, core: pin, protocol: { current: 6, minimum: 6 } };
   for (const protocol of [undefined, {}, { current: '6', minimum: 6 }, { current: 6, minimum: 7 }]) {
@@ -103,4 +109,5 @@ try {
   console.log('check-cloud-plugin: installed offline packer negotiates Cloud pin, preserves commit/hash identity, refuses wrong project and dirty source; MCP owns lifecycle');
 } finally {
   rmSync(project, { recursive: true, force: true });
+  rmSync(legacy, { recursive: true, force: true });
 }

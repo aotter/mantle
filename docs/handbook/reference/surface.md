@@ -3,6 +3,11 @@ description: Every HTTP route the generated Mantle 0.2.0 service mounts (REST, a
 ---
 # HTTP, MCP, CLI and packages
 
+**Historical Core API through alpha.6.** The retained routes and examples below
+match the RuntimePlan-based releases. For the unpublished native Admin preview,
+use [Native Admin](../guides/native-admin.md) and the exact installed package docs.
+Do not apply the old Store/preset/role wiring to generated native applications.
+
 ## Routes of the generated service
 
 `src/service.ts` mounts, in this order. Each surface runs behind

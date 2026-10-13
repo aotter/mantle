@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate": "mantle generate",
+    "generate": "mantle generate cloudflare-d1 generated manifests/catalog.yaml manifests/orders.yaml --auth src/auth.ts --entry src/index.ts --admin",
     "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
-    "check": "mantle generate && mantle generate --check && tsc --noEmit && node smoke.mjs"
+    "check": "mantle generate cloudflare-d1 generated manifests/catalog.yaml manifests/orders.yaml --auth src/auth.ts --entry src/index.ts --admin && mantle generate cloudflare-d1 generated manifests/catalog.yaml manifests/orders.yaml --auth src/auth.ts --entry src/index.ts --admin --check && tsc --noEmit && node smoke.mjs"
   },
   "dependencies": {
     "@aotter/mantle": "0.2.0-alpha.6",
@@ -15,7 +15,8 @@
     "@better-auth/oauth-provider": "1.7.7",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/server": "2.1.0",
-    "better-auth": "1.7.7"
+    "better-auth": "1.7.7",
+    "@aotter/mantle-admin": "0.2.0-alpha.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260904.1",
