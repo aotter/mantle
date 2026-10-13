@@ -140,6 +140,10 @@ describable without being called.
    - the roles `requires` names and the attributes the target's SQL reads;
    - a per-target input-schema hash.
 
+   Each entry is an MCP `Tool` object (`name`, `title`, `description`, `inputSchema`,
+   `annotations`) with Mantle's fields under `_meta`. A third-party server's
+   `tools/list` snapshot therefore fits the same registry shape, and only Mantle
+   targets carry the extra fields.
    It holds no SQL and no data. A gateway uses it for discovery and schema answers
    (`discover_tools`, `get_tool_schema`, a flattened constrained schema) and for binding
    grants per target. When a target's schema hash changes, only that target's grant
@@ -182,6 +186,15 @@ describable without being called.
     credential exchange are gateway features on the response path. They are not
     kernel seams.
   - Public and member traffic never pass through the gateway.
+  - **Reserved, not built now: non-Mantle MCP servers behind the same gateway**
+    (mantle-home #370). A Mantle project is only one kind of server in the
+    organization registry. Registry entries, grant targets (`<server>/<tool>`) and Omni
+    discovery must not assume a Mantle tenant. A third-party server is registered from a
+    pinned `tools/list` snapshot, which is re-reviewed when it changes, in place of
+    `catalog.json`. It is called with credentials the gateway holds, never with a
+    forwarded Cloud token. It gets only target-level and input checks at the gateway,
+    because it has no `requires`, attribute scope or `authorize` of its own. Nothing in
+    this ADR's tenant contract is needed for it.
 - Cost when unused: nothing at startup or per request. When used: one bind per
   attribute reference, plus whatever `authorize` costs.
 - Breaking changes for 0.2 (unreleased):
