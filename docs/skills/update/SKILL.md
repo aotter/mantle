@@ -10,6 +10,28 @@ metadata:
 
 # Mantle Update
 
+## Generated native applications (alpha.7 and later)
+
+If the installed/target README describes generated native queries, use this
+flow and stop before the historical Core instructions below.
+
+Follow the installed [native generation and service workflow](../../next/service.md)
+with the exact package version's `contract.md` and `compatibility.md`. Commit
+all generated output, run the same generation command with `--check`, and keep
+bundle `dist/` untracked. The app owns its verified Caller, handlers and native
+resources; OSS staff role is `staff`.
+
+Pin exact target SDK/peer versions and read its release notes and Admin asset
+installation instructions. Core-to-native replaces app imports/wiring; it is not
+a package-only update. Preserve users, sessions, content and application code.
+Review emitted SQL/policy diffs and rehearse explicit data-preserving schema/auth/role
+migrations on a copy. Initial schema.sql never authorizes rebuilding production
+tables. Verify auth/Admin/MCP/REST, locks and persistence before authorized cutover.
+
+## Historical Core applications (through alpha.6)
+
+The following applies only when the target package still uses RuntimePlan.
+
 Upgrade deliberately; never overwrite application-owned code.
 
 1. Inspect `git status`, `package.json`, the lockfile and the installed

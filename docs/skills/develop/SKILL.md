@@ -10,6 +10,26 @@ metadata:
 
 # Mantle Develop
 
+## Generated native applications (alpha.7 and later)
+
+If the installed/target README describes generated native queries, use this
+flow and stop before the historical Core instructions below.
+
+Follow the installed [native generation and service workflow](../../next/service.md)
+with the exact package version's `contract.md` and `compatibility.md`. Commit
+all generated output, run the same generation command with `--check`, and keep
+bundle `dist/` untracked. The app owns its verified Caller, handlers and native
+resources; OSS staff role is `staff`.
+
+Use the native Store/query/surface entries and app-owned fetch from `service.md`.
+Keep optional modules out of unused entry imports and auth dynamically loaded.
+Run actual public/member/staff HTTP, MCP and UI scenarios; verify stored state,
+visibility, OCC and restart persistence, not just a 200 response.
+
+## Historical Core applications (through alpha.6)
+
+The following applies only when the target package still uses RuntimePlan.
+
 The workflow for changing a Mantle 0.2 project. The installed package's docs
 govern behavior: `node_modules/@aotter/mantle/docs/`.
 

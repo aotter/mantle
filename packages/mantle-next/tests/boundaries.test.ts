@@ -3,8 +3,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve, relative } from "node:path";
 import ts from "typescript";
 const root = resolve(import.meta.dir, "../src");
-// auth is runtime code for applications, beside infrastructure: it may import the kernel only.
-const ranks: Record<string, number> = { kernel: 0, domain: 1, usecase: 2, auth: 3, infrastructure: 3 };
+// auth and native hosts are optional application entries beside infrastructure.
+const ranks: Record<string, number> = { kernel: 0, domain: 1, usecase: 2, auth: 3, bun: 3, infrastructure: 3 };
 async function files(path: string): Promise<string[]> {
   const entries = await readdir(path, { withFileTypes: true });
   return (await Promise.all(entries.map(entry => entry.isDirectory() ? files(resolve(path, entry.name)) : entry.name.endsWith(".ts") ? [resolve(path, entry.name)] : []))).flat();

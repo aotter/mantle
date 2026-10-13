@@ -1,25 +1,22 @@
-# Mantle (experimental replacement for Core)
+# Mantle
 
-Generate typed, concrete SQL functions for Bun SQLite, Bun PostgreSQL,
-Cloudflare D1 and Cloudflare PostgreSQL. The compiler uses 0.2's closed v2
-manifest grammar and canonical SQL policy/printers at build time. The generated
-application imports portable contract primitives and official drivers only.
+Generate native SQL for Bun SQLite/PostgreSQL and Cloudflare D1/PostgreSQL.
+The build-time compiler uses the closed v2 grammar and canonical SQL policy.
+Applications import contract primitives and official drivers.
 
-```sh
-pnpm --dir packages/mantle run build
-pnpm --dir packages/mantle-next run build
-```
+Build and contributor checks: [CONTRIBUTING](../../CONTRIBUTING.md).
 
 Outputs include `generated.ts`, `schema.sql` and direct operation entries.
-Import a selected function from `views/<encoded-name>.ts` or
-`procedures/<encoded-name>.ts` (default export, with its types) to exclude other
-operations from the request bundle. Apply initial DDL explicitly to an
-empty development database; this artifact is not a destructive migration or a
-production convergence tool. Generation does no database I/O. Application code
-passes driver-ready parameters, a database handle (Bun.SQL `SQL` for PostgreSQL, `bun:sqlite`
-Database, D1 binding) and a verified
-Caller to `views[name](db, caller, input)` or
-`procedures[name](db, caller, input)`.
+Commit generated output and Wrangler edits; keep `dist/` untracked. Run the same
+generate command with `--check` in CI. Never hand-edit generated files; merge
+manifest/options changes and regenerate. See [service composition](../../docs/next/service.md)
+for app-owned routing, assets, scheduling, Bun and the generated-output workflow.
+Import `views/<encoded-name>.ts` or `procedures/<encoded-name>.ts` (default export
+and types) to exclude other operations. Apply initial DDL to an empty development
+database; it is not a production migration. Generation performs no database I/O.
+Call `views[name](db, caller, input)` or `procedures[name](db, caller, input)` with
+driver-ready inputs, a native handle (Bun.SQL, bun:sqlite Database or D1 binding)
+and a verified Caller.
 
 Validate untrusted input before calling queries and redact native errors at application
 transports. The [query contract](../../docs/next/contract.md#revised-query-responsibility-decision-2026-10-11)
@@ -28,13 +25,11 @@ defines driver-ready inputs, native results, date-time/date wire forms and failu
 For transports, `paged/views/<name>.ts` returns `{ rows, nextCursor? }` with keyset paging and
 `validation/<kind>/<name>.ts` checks input against the declared JSON Schema subset; the
 [surface deltas](../../docs/next/surfaces.md) define the REST/MCP wire contract.
-The same directly imported paging module is emitted for a proved internal View,
-without adding a public route/tool. It runs one native SELECT per page, checking
-the compiler-proved scalar key tuple and removing hidden keys. Schema tuples
-need matching indexed order after fixed equality prefixes; complete groups and
-singleton joins are also supported. Grouping still scans/aggregates its native
-source; inspect EXPLAIN and source indexes for the actual workload. Unsupported
-internal SQL retains its bare module instead of failing generation.
+Proved internal Views also get paging without a public route/tool: one SELECT
+per page, validated scalar cursor keys and hidden-key removal. Schema tuples
+need indexed order after fixed equality prefixes; complete groups and singleton
+joins are supported. Grouping still scans/aggregates its source: inspect EXPLAIN.
+Unsupported internal SQL retains its bare module.
 
 Every Schema is also a typed **Store** collection, in the shape of a document-database driver:
 `store(db, caller).collection("purchase_requests")` with `findById`, `find` (AND-only `where`, keyset `cursor`), `first`,
@@ -142,20 +137,9 @@ PostgreSQL handles (Bun.SQL, postgres.js) satisfy the two-method `Postgres` shap
 Procedures return native results directly. Unsupported declarations fail generation with actionable diagnostics;
 see the [supported/refused list](../../docs/next/compatibility.md) for current scope and planned features.
 
-Checks:
-
-```sh
-pnpm --dir packages/mantle-next run typecheck
-pnpm --dir packages/mantle-next run test
-# Set MANTLE_NEXT_BUN_PG_URL and MANTLE_NEXT_WORKER_PG_URL to disposable local DBs.
-pnpm --dir packages/mantle-next run test:native
-```
-
-The native runner executes all four real engines/hosts locally, with independent
-procurement fixtures and native SQL oracles. It creates fresh PostgreSQL schemas;
-SQL/time/driver behavior is compared per engine, not normalized across engines.
-Cloudflare tests create no cloud resources. Formal benchmark runs need a quiet
-machine and a fresh private output directory; raw samples must accompany claims.
+Native contributor checks run all four hosts with independent SQL oracles and
+fresh PostgreSQL schemas; behavior follows each engine. Local Cloudflare checks
+create no cloud resources. Performance claims need a quiet machine and raw samples.
 The [size and startup gates](../../docs/next/size-and-startup.md) cover the
 bundle and package budgets. The packed generator still needs its workspace compiler
 dependency made standalone before publication.

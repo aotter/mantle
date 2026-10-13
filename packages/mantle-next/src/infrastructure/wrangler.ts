@@ -3,7 +3,7 @@ import { basename, dirname, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 
-export function configureWrangler(configPath: string, entry: string, outdir: string, generated: string): void {
+export function configureWrangler(configPath: string, entry: string, outdir: string, generated: string, check = false): boolean {
   const configDir = dirname(resolve(configPath));
   const local = (path: string) => relative(configDir, resolve(path)).replaceAll("\\", "/") || ".";
   const output = local(outdir);
@@ -15,10 +15,11 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
     build: { command: `mantle bundle ${quote(entry)} ${quote(outdir)}`, watch_dir: [local(dirname(entry)), local(generated)] },
   };
   if (configPath.endsWith(".toml")) {
+    if (check) throw new Error("--check requires a JSON or JSONC Wrangler config; TOML generation only prints manual edits.");
     console.log(`Leave ${configPath} unchanged. Add these Wrangler TOML keys (include nodejs_compat in any existing compatibility_flags):\n` +
       `main = ${JSON.stringify(keys.main)}\nno_bundle = true\nfind_additional_modules = true\nbase_dir = ${JSON.stringify(output)}\ncompatibility_flags = ["nodejs_compat"]\n\n` +
       `[[rules]]\ntype = "ESModule"\nglobs = ["**/*.js"]\nfallthrough = true\n\n[build]\ncommand = ${JSON.stringify(keys.build.command)}\nwatch_dir = ${JSON.stringify(keys.build.watch_dir)}`);
-    return;
+    return false;
   }
   const exists = existsSync(configPath);
   const original = exists ? readFileSync(configPath, "utf8") : JSON.stringify({ name: "your-worker-name", compatibility_date: "2026-09-28" }, null, 2) + "\n";
@@ -41,6 +42,8 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
   for (const [key, value] of Object.entries(buildKeys)) edit(["build", key], value);
   if (!(config.rules ?? []).some((r: unknown) => isDeepStrictEqual(r, rule))) edit(config.rules === undefined ? ["rules"] : ["rules", -1], config.rules === undefined ? [rule] : rule);
   if (!flags.includes("nodejs_compat")) edit(config.compatibility_flags === undefined ? ["compatibility_flags"] : ["compatibility_flags", -1], config.compatibility_flags === undefined ? ["nodejs_compat"] : "nodejs_compat");
-  if (!exists || text !== original) writeFileSync(configPath, text);
-  if (!exists) console.log(`Created ${configPath}. Set name and compatibility_date for your Worker, and add your D1/Hyperdrive bindings and other application settings.`);
+  const changed = !exists || text !== original;
+  if (changed && !check) writeFileSync(configPath, text);
+  if (!exists && !check) console.log(`Created ${configPath}. Set name and compatibility_date for your Worker, and add your D1/Hyperdrive bindings and other application settings.`);
+  return changed;
 }

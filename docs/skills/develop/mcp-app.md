@@ -1,5 +1,46 @@
 # Recipe: an MCP App for members
 
+## Generated native applications (alpha.7 and later)
+
+If the installed README describes generated native queries, use this recipe
+and stop before the historical Core recipe below. Read the installed MCP App
+contract. The SDK's generic hook attaches only the resources the app selects;
+no RuntimePlan or generated Admin App enters the service.
+
+```ts
+import type { McpApps } from '@aotter/mantle/mcp';
+import { mcp } from '../generated/mcp.js';
+const memberApp: McpApps = { resources: [{
+  uri: 'ui://shop/my-orders',
+  name: 'my-orders-app',
+  renders: ['my_orders'], // the tool for the declared public View my-orders
+  html: async () => (await import('./member-app.js')).memberHtml,
+}] };
+const tools = mcp({ db, caller, handlers, apps: { public: memberApp } });
+```
+
+Each endpoint accepts one contributor or an array. The separate
+`@aotter/mantle-admin` package contributes its staff App through this same
+`apps.staff` hook; it owns `ui://mantle-admin/…`. App resources use their own
+`ui://<app>/…` namespace. Duplicate resource URI/name, conflicting `renders`,
+or `renders`/`appOnly` naming an unavailable endpoint tool fail on the first
+matching request. Clients without UI support see no UI resources.
+
+Use `renders` for a declared tool; `appOnly` optionally hides it from non-UI
+clients. Import HTML lazily; it carries no secrets or caller data. Tool results
+use the caller's SQL policy, and an App cannot authorize a hidden staff tool.
+Generic interaction components and controllers remain in `@aotter/mantle-ui`;
+Admin-specific controllers/catalogues belong to `@aotter/mantle-admin`.
+
+Verify tools/list metadata, resources/read, actual tool calls and a host-rendered
+member App. Test anonymous/member isolation and resource conflicts. Never retry
+unknown writes blindly; retain OCC and re-read state after an uncertain outcome.
+Commit generated output and run generation with `--check` before deployment.
+
+## Historical Core applications (through alpha.6)
+
+The following applies only when the installed package still uses RuntimePlan.
+
 The preset serves Mantle's App on `/mcp/staff` only. A member-facing App, on
 `/mcp`, is the application's: the SDK attaches none, because what a member
 should see in a chat (one order, a booking form, a status card) is a product
