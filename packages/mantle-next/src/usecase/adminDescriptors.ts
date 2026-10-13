@@ -1,8 +1,6 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
-import { DiagnosticError, mcpTools, mcpToolNameSegment } from "@aotter/mantle/spec";
+import { DiagnosticError, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, requiredEnumStates, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "@aotter/mantle/compiler";
 import { STAFF_ROLES } from "../domain/visibility.js";
-import { collectionOf, developerConsole, requiredEnumStates, checkPlanUiExtensions, planUiExtensionRefs } from "@aotter/mantle/admin";
-import { appCatalog, entrySchema, type AppRowAction } from "@aotter/mantle/mcp";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { publishingInput, publishingTransitions } from "./publishing.js";

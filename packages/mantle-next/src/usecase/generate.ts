@@ -1,5 +1,5 @@
 /** Canonical lowered programs become ordinary target-specific TypeScript, never a runtime plan. */
-import { parseNumeric, type JsonSchema, type LoweredStatement } from "@aotter/mantle/spec";
+import { parseNumeric, type JsonSchema, type LoweredStatement } from "@aotter/mantle/compiler";
 import type { GenerateDiagnostic, GenerateInput, GenerateResult } from "../domain/model.js";
 import { nativeType, outputType } from "../domain/columns.js";
 import { databaseImport, driverFor, entry, exportName, generatedFiles, isSqlite as sqlite, q } from "../domain/entry.js";

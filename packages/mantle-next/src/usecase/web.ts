@@ -1,5 +1,5 @@
 /** Optional web output calls public generated Views; SQL owns visibility. Rendering is the kernel's. */
-import type { RuntimePlan, PlanLowered } from "@aotter/mantle/spec";
+import type { RuntimePlan, PlanLowered } from "@aotter/mantle/compiler";
 import type { Target } from "../domain/model.js";
 import { databaseImport, q, viewImports } from "../domain/entry.js";
 import { conversions } from "../domain/input.js";

@@ -5,7 +5,7 @@
  * (caller and trusted rows, insert fills, update sets and lock, delete lock).
  * Column names, value types, writable columns and `orderBy` are TypeScript types only: nothing at runtime knows them.
  */
-import { NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, type RuntimePlan } from "@aotter/mantle/spec";
+import { NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, type RuntimePlan } from "@aotter/mantle/compiler";
 import { nextMode, STAFF_ROLES } from "../domain/visibility.js";
 import { declaredType, inputType, nativeType } from "../domain/columns.js";
 import { q } from "../domain/entry.js";

@@ -4,7 +4,7 @@ import { betterAuth } from "better-auth/minimal";
 import { jwt } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { bunSqlAdapter } from "../src/auth/adapter.js";
-import { authSchemaSql } from "../src/auth/schema.js";
+import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 import { assertActiveUserGrant, oauthConsents, oauthGrantExtension } from "../src/auth/oauth.js";
 
 const url = process.env.MANTLE_NEXT_BUN_PG_URL;

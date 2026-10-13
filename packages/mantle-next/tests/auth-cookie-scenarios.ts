@@ -4,7 +4,7 @@ import type { BetterAuthOptions } from "@better-auth/core";
 import { betterAuth } from "better-auth/minimal";
 import { admin, emailOTP } from "better-auth/plugins";
 import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller.js";
-import { authSchemaSql } from "../src/auth/schema.js";
+import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 
 type Run = (text: string, values?: unknown[]) => Promise<Record<string, unknown>[]>;
 export async function verifyCookieCaller(database: BetterAuthOptions["database"], dialect: "sqlite" | "postgres", run: Run, statements: string[]) {
