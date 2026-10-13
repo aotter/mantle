@@ -55,6 +55,20 @@ export function wire(error: unknown): { status: number; error: { code: string; m
 
 /** One result row. */
 export type Row = Record<string, unknown>;
+/** Static declared-column conversions, used only by selected transport boundaries. */
+export type WireColumns = ReadonlyArray<readonly [field: string, type: "json" | "bool" | "int"]>;
+export function wireRows(rows: readonly Row[], fields: WireColumns = []): readonly Row[] {
+  if (!fields.length) return rows;
+  return rows.map(row => {
+    const result = { ...row };
+    for (const [key, type] of fields) if (Object.hasOwn(row, key) && row[key] != null) {
+      const value = row[key];
+      result[key] = type === "json" ? JSON.parse(value as string) : type === "bool" ? value === true || value === 1
+        : Number.isSafeInteger(Number(value)) ? Number(value) : typeof value === "bigint" ? String(value) : value;
+    }
+    return result;
+  });
+}
 /** What a generated SQL Procedure returns: the rows of each statement, in order. */
 export type Output = { readonly results: ReadonlyArray<ReadonlyArray<Row>> };
 /** Deny unless `allowed`: a user is AUTH_DENIED, anyone else UNAUTHENTICATED. */

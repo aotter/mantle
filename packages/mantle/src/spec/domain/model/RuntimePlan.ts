@@ -132,5 +132,5 @@ export interface RuntimePlan {
   readonly lowered?: PlanLowered;
 }
 
-/** The native columns a View may output that decode like a field of this type: the entry's timestamps. */
-export const NATIVE_OUTPUT_TYPES: Readonly<Record<string, string>> = { created_at: "timestamptz", updated_at: "timestamptz" };
+/** System-column type metadata for View output lineage. */
+export const NATIVE_OUTPUT_TYPES: Readonly<Record<string, string>> = { version: "integer", created_at: "timestamptz", updated_at: "timestamptz" };

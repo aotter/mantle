@@ -44,16 +44,17 @@ type Columns = Record<string, { schema: string; field: string }>;
  * A View's outputs, read off its compiled SELECT: `keys` are the row's keys in order (undefined when an output has no name or
  * a `*` reads a subquery or `json_each`), `columns` the outputs that are a Schema field read unchanged.
  * `includeGeo` exposes logical geo columns to generators that must refuse them before executing native SQL.
+ * `includeAggregates=false` limits selected transport metadata to unchanged column projections.
  */
-export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>, ctes: ReadonlyMap<string, Columns> = new Map(), includeGeo = false): { keys?: string[]; columns: Columns; positions?: string[] } {
-  const columns: Columns = {};
+export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>, ctes: ReadonlyMap<string, Columns> = new Map(), includeGeo = false, includeAggregates = true): { keys?: string[]; columns: Columns; positions?: string[] } {
+  const columns: Columns = Object.create(null);
   const sel = view.stmts[0]?.SelectStmt;
   if (!sel?.targetList) return { columns };
-  const outputs = (stmt: SqlNode, scope: ReadonlyMap<string, Columns>) => viewOutputs({ grammar: view.grammar, stmts: [stmt] }, schemas, scope, includeGeo);
+  const outputs = (stmt: SqlNode, scope: ReadonlyMap<string, Columns>) => viewOutputs({ grammar: view.grammar, stmts: [stmt] }, schemas, scope, includeGeo, includeAggregates);
   // a CTE's outputs, like a FROM subquery's, keep the Schema field they read unchanged; a body sees its earlier siblings,
   // and under RECURSIVE every sibling (one not yet read is untyped)
   const scope = new Map(ctes);
-  if (sel.withClause?.recursive) for (const { CommonTableExpr: c } of sel.withClause.ctes) scope.set(c.ctename, {});
+  if (sel.withClause?.recursive) for (const { CommonTableExpr: c } of sel.withClause.ctes) scope.set(c.ctename, Object.create(null));
   for (const { CommonTableExpr: c } of sel.withClause?.ctes ?? []) {
     const body = outputs(c.ctequery, scope);
     const renamed: string[] | undefined = c.aliascolnames?.map((x: SqlNode) => x.String.sval);
@@ -80,7 +81,7 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
     const agg = r.val?.FuncCall;
     const fn = agg?.funcname?.at(-1)?.String?.sval;
     const arg = agg && !agg.over && !agg.agg_distinct && agg.args?.length === 1 ? agg.args[0].ColumnRef?.fields : undefined;
-    const refs = r.val?.ColumnRef?.fields ?? (r.name && arg && ["sum", "min", "max"].includes(fn) ? arg : undefined);
+    const refs = r.val?.ColumnRef?.fields ?? (includeAggregates && r.name && arg && ["sum", "min", "max"].includes(fn) ? arg : undefined);
     if (!r.name && refs?.at(-1)?.A_Star) {
       const from = refs.length > 1 ? [rels.get(refs[0].String.sval)] : [...rels.values()];
       if (from.some((s) => !s)) { keys = undefined; continue; }

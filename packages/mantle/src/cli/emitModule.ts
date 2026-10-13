@@ -20,7 +20,7 @@ function viewRow(view: PlanView, schemas: RuntimePlan["schemas"]): string | unde
     const c = Object.hasOwn(columns, k) ? columns[k] : undefined;
     const s = c && schemas[c.schema]!;
     const declared = s ? s.names[c.field] ?? c.field : undefined;
-    if (s && Object.hasOwn(NATIVE_OUTPUT_TYPES, c.field)) return `readonly ${key(k)}: string | null;`; // the entry's timestamps are ISO date-times
+    if (s && Object.hasOwn(NATIVE_OUTPUT_TYPES, c.field)) return `readonly ${key(k)}: ${NATIVE_OUTPUT_TYPES[c.field] === "integer" ? "number" : "string"} | null;`;
     return s ? `readonly ${key(k === c.field ? declared! : k)}: NonNullable<Entry_${manifestTypeIdentifier(s.name)}[${key(declared!)}]> | null;` : `readonly ${key(k)}: unknown;`;
   });
   return `{ ${fields.join(" ")} }`;

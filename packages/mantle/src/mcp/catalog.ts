@@ -38,9 +38,9 @@ export interface AppCatalog {
 /** The catalog element's id in the App's HTML. */
 export const APP_CATALOG_ID = "mantle-catalog";
 
-/** The entry's own timestamps, as a View outputs them: date-times on the wire. */
+/** System columns follow their declared scalar metadata. */
 const nativeSchema = (field: string): JsonSchema | undefined =>
-  Object.hasOwn(NATIVE_OUTPUT_TYPES, field) ? ({ type: "string", format: "date-time" } as JsonSchema) : undefined;
+  Object.hasOwn(NATIVE_OUTPUT_TYPES, field) ? NATIVE_OUTPUT_TYPES[field] === "integer" ? { type: "integer" } : { type: "string", format: "date-time" } : undefined;
 
 type Target = { ResTarget: { name?: string; val?: { ColumnRef?: { fields?: { String?: { sval?: string } }[] } } } };
 

@@ -43,6 +43,11 @@ Transport-facing `paged/views/<name>.ts` exports
 `page(db, caller, input, { limit?, cursor? })`, answering `{ rows, nextCursor? }`.
 Bare `views/<name>.ts` retains native row arrays and accepts app-validated input;
 selecting neither boundary adds no validation or paging work to that query.
+Selected REST/MCP View responses convert declared PostgreSQL integer columns
+to safe numbers or exact strings, and declared SQLite/D1 JSON/boolean columns
+to JSON values/booleans. Aliases follow their generated source-column lineage;
+computed values and Procedure/ref results are unchanged. Internal paged View
+rows stay native; integer bigint cursor keys are serialized separately.
 Authored SQL `LIMIT` caps each page, up to 500, rather than the whole cursor walk.
 A pageable Schema View has a complete NOT NULL scalar tuple ending in the
 compiler's `id` tiebreak. Its ordered columns must match an index after fixed
