@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contributionByRef, fieldContribution, matchesWhen } from "../src/lib/extensions";
+import { installExtensionShared, loadExtensionKit, SHARED_GLOBAL } from "../src/app/extension-shared";
 import type { AdminExtensionInfo, SiteInfo } from "../src/lib/types";
 
 const extension: AdminExtensionInfo = {
@@ -39,4 +40,17 @@ describe("Admin extension placement", () => {
     expect(contributionByRef(site, "panels", "brand/usage")?.id).toBe("usage");
     expect(contributionByRef(site, "panels", "Brand/Usage")).toBeUndefined();
   });
+});
+
+
+it("shares the full kit on demand without replacing Admin's React instance", async () => {
+  installExtensionShared();
+  const shared = (globalThis as unknown as Record<string, Record<string, unknown>>)[SHARED_GLOBAL]!;
+  const react = shared.react;
+  expect(Object.isFrozen(shared)).toBe(true);
+  expect(shared["@aotter/mantle-ui/kit"]).toBeUndefined();
+  await Promise.all([loadExtensionKit(), loadExtensionKit()]);
+  expect(shared["@aotter/mantle-ui/kit"]).toBe(await import("@aotter/mantle-ui/kit"));
+  expect(shared.react).toBe(react);
+  expect((globalThis as unknown as Record<string, unknown>)[SHARED_GLOBAL]).toBe(shared);
 });

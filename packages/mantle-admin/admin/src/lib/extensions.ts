@@ -1,3 +1,4 @@
+import { loadExtensionKit } from "../app/extension-shared";
 import { isAdminExtensionModule, type AdminExtensionModule } from "@aotter/mantle-admin/extension";
 import type { AdminExtensionInfo, AdminExtensionWhen, JsonSchema, SiteInfo } from "./types";
 
@@ -44,11 +45,11 @@ export function fieldContribution(site: SiteInfo | undefined, target: "field.inp
 export const extensionApiBase = (extension: string) => `/admin/api/x/${encodeURIComponent(extension)}/api`;
 
 const loaded = new Map<string, Promise<AdminExtensionModule>>();
-let kitStyles = false;
+
 
 /**
  * The extension's module, imported once. The server accepts only a same-origin path; this guards an older or
- * misconfigured server too. The kit's stylesheet comes with the first extension, so kit components look like Admin.
+ * misconfigured server too. The full shared kit loads before the extension; its styles are in Admin's stylesheet.
  */
 export function loadExtensionModule(extension: AdminExtensionInfo): Promise<AdminExtensionModule> {
   const cached = loaded.get(extension.id);
@@ -57,13 +58,7 @@ export function loadExtensionModule(extension: AdminExtensionInfo): Promise<Admi
     if (!extension.module) throw new Error(`extension ${extension.id} has no module`);
     const url = new URL(extension.module, window.location.origin);
     if (url.origin !== window.location.origin) throw new Error(`extension ${extension.id} module is not same-origin`);
-    if (!kitStyles) {
-      kitStyles = true;
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = new URL("shared/kit.css", document.baseURI).href;
-      document.head.append(link);
-    }
+    await loadExtensionKit();
     const module = (await import(/* @vite-ignore */ url.href)) as { default?: unknown };
     if (!isAdminExtensionModule(module.default)) throw new Error(`extension ${extension.id} module does not default-export defineAdminExtension(...)`);
     return module.default;

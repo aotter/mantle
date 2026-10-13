@@ -1,6 +1,12 @@
 import * as React from "react";
 import { CalendarIcon, LockKeyhole, Plus, Trash2 } from "lucide-react";
-import { Button, Calendar, Checkbox, Input, Popover, PopoverContent, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "../kit/index.js";
+import { Button } from "../kit/components/ui/button.js";
+import { Calendar } from "../kit/components/ui/calendar.js";
+import { Checkbox } from "../kit/components/ui/checkbox.js";
+import { Input } from "../kit/components/ui/input.js";
+import { Popover, PopoverContent, PopoverTrigger } from "../kit/components/ui/popover.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../kit/components/ui/select.js";
+import { Textarea } from "../kit/components/ui/textarea.js";
 import {
   dateFromFieldValue,
   enumOptions,

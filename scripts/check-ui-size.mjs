@@ -43,7 +43,8 @@ try {
   const entry = /<script[^>]+type="module"[^>]+src="([^"]+)"/.exec(html)?.[1];
   if (!entry) throw new Error("Admin entry module is missing");
   const visited = new Set();
-  const deferredLanguage = /\/(?:ar|cs|de|es|fa|fr|he|id|it|ja|ko|nl|pl|pt-BR|ru|th|tr|uk|vi|zh-CN|zh-TW)-[\w-]+\.js$/;
+  // Vite's default eight-character hash: `id-value-<hash>` is a UI component, not the `id` locale.
+  const deferredLanguage = /\/(?:ar|cs|de|es|fa|fr|he|id|it|ja|ko|nl|pl|pt-BR|ru|th|tr|uk|vi|zh-CN|zh-TW)-[\w-]{8}\.js$/;
   function startup(path) {
     path = resolve(path);
     if (visited.has(path)) return 0;

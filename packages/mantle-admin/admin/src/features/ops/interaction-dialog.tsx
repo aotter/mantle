@@ -50,24 +50,8 @@ export function interactionLabels(language: AdminLanguage): InteractionLabels {
   return Object.fromEntries(Object.entries(LABEL_KEYS).map(([key, i18n]) => [key, t(language, i18n)])) as unknown as InteractionLabels;
 }
 
-/** Inputs Admin fills itself: an idempotency key, minted once per dialog. */
-export function idempotencyFields(schema: JsonSchema): string[] {
-  return Object.entries(schema.properties ?? {})
-    .filter(([, property]) => property["x-mcp-hint"] === "idempotency-key")
-    .map(([name]) => name);
-}
-
-/** The operation's input without the fields Admin binds or fills itself. */
-export function operationFormSchema(schema: JsonSchema, hiddenFields: readonly string[]): JsonSchema {
-  const hidden = new Set(hiddenFields);
-  const properties = { ...(schema.properties ?? {}) };
-  for (const name of hidden) delete properties[name];
-  return {
-    ...schema,
-    properties,
-    required: (schema.required ?? []).filter((name) => !hidden.has(name)),
-  };
-}
+export { idempotencyFields, operationFormSchema } from "./interaction-schema";
+import { operationFormSchema } from "./interaction-schema";
 
 /**
  * One staff operation in a dialog, through the shared interaction
