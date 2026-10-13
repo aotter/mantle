@@ -31,7 +31,7 @@ need indexed order after fixed equality prefixes; complete groups and singleton
 joins are supported. Grouping still scans/aggregates its source: inspect EXPLAIN.
 Unsupported internal SQL retains its bare module.
 
-Every Schema is also a typed **Store** collection, in the shape of a document-database driver:
+Every Schema is a typed **Store** collection:
 `store(db, caller).collection("purchase_requests")` with `findById`, `find` (AND-only `where`, keyset `cursor`), `first`,
 `count`, `insert(values)`, OCC `update(id, set, { lock })` and `delete(id, { lock })`. Rows, `where`, `set` and `orderBy` use the
 table's storage column names, lower-case (`requestnumber`, `created_at`), the keys a generated View returns; the generated types
@@ -130,11 +130,11 @@ PostgreSQL defaults to serializable; `{ isolation: "read committed" }` selects a
 SQLite uses BEGIN IMMEDIATE and queues all Store/generated driver calls on the same Database until COMMIT/ROLLBACK;
 Inside a transaction callback the outer Store or handle passed to a Mantle driver throws `INPUT_VALIDATION_FAILED`; use `tx`.
 
-Views return full SQL results; Procedures return `{ results }`. Their atomicity and
-uncertain-write outcomes follow the [query contract](../../docs/next/contract.md#revised-query-responsibility-decision-2026-10-11).
+Views return rows; Procedures return `{ results }`. See the [query contract](../../docs/next/contract.md#revised-query-responsibility-decision-2026-10-11)
+for atomicity and uncertain writes.
 
 PostgreSQL handles (Bun.SQL, postgres.js) satisfy the two-method `Postgres` shape as they are; see the [contract](../../docs/next/contract.md).
-Procedures return native results directly. Unsupported declarations fail generation with actionable diagnostics;
+Unsupported declarations fail generation with diagnostics;
 see the [supported/refused list](../../docs/next/compatibility.md) for current scope and planned features.
 
 Native contributor checks run all four hosts with independent SQL oracles and

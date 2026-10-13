@@ -43,6 +43,9 @@ features require their implementation first. Keep auth behind
 released version shown by the installed/target package
 contract. Replacing Core needs explicit app wiring and reviewed deployment
 migrations; never use initial schema.sql as an in-place production upgrade.
+Pass outgoing `responseHeaders` to `resolveCaller` so Better Auth's session cookie
+can slide. Native auth adapters use joins by default; keep the joined primary
+session/user check, including before any refresh from secondary storage.
 
 Use the workflow **generate → typecheck → implement listed handlers**: run
 `mantle generate`, then `tsc --noEmit`. Implement every printed `Handlers` key

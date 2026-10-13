@@ -199,6 +199,26 @@ describe("resolveCaller: session cookie", () => {
     const { expiresAt } = app.sqlite.query("SELECT expiresAt FROM session").get() as { expiresAt: string };
     expect(Date.parse(expiresAt)).toBeGreaterThan(Date.now() + 86_400_000);
   });
+
+  test("real SDK refresh cookies survive merged headers; a revoke between validation and primary check wins", async () => {
+    const app = await makeApp(), { cookie } = await app.signIn();
+    app.sqlite.run("UPDATE session SET expiresAt = ?", [new Date(Date.now() + 60_000).toISOString()]);
+    let revoked = false;
+    const instance: AuthInstance = { options: app.auth.options, $context: app.auth.$context, api: { getSession: async input => {
+      const result = await app.auth.api.getSession(input);
+      if (revoked) app.sqlite.run("DELETE FROM session");
+      const headers = new Headers({ "set-cookie": `${result.headers.getSetCookie().join(", ")}, state=fixture; Path=/; Expires=Wed, 21 Oct 2030 07:28:00 GMT` });
+      return { ...result, headers };
+    } } };
+    const loader = authLoader(async () => instance), responseHeaders = new Headers({ "set-cookie": "existing=fixture; Path=/" });
+    expect((await resolveCaller(app.request({ cookie }), loader, { responseHeaders })).kind).toBe("user");
+    expect(responseHeaders.getSetCookie()).toHaveLength(3);
+    expect(responseHeaders.getSetCookie()[2]).toBe("state=fixture; Path=/; Expires=Wed, 21 Oct 2030 07:28:00 GMT");
+    revoked = true;
+    const denied = new Headers();
+    expect(await resolveCaller(app.request({ cookie }), loader, { responseHeaders: denied })).toEqual({ kind: "anonymous" });
+    expect(denied.has("set-cookie")).toBe(false);
+  });
 });
 
 const b64url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
