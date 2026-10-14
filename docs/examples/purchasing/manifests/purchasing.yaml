@@ -1,0 +1,262 @@
+# Internal purchase requests: employees submit, admins approve or reject, approval spends a department budget.
+# requestStatus: submitted -> approved -> ordered -> confirmed, or submitted -> rejected.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: budgets }
+spec:
+  title: Budgets
+  lifecycle: operational
+  uniqueIndexes: [[department]]
+  # An approval that would overspend fails this check and the whole approval rolls back.
+  checks: ["remaining >= 0"]
+  uiSchema: { list: { primaryField: department, columns: [remaining] } }
+  schema:
+    type: object
+    additionalProperties: false
+    required: [department, remaining]
+    properties:
+      department: { type: string }
+      remaining: { type: integer }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: requests }
+spec:
+  title: Purchase requests
+  lifecycle: operational
+  indexes: [[authorId, createdAt, id], [requestStatus, createdAt, id]]
+  uiSchema: { list: { primaryField: title, columns: [department, amount, requestStatus], filterField: requestStatus } }
+  schema:
+    type: object
+    additionalProperties: false
+    required: [title, amount, department, requestStatus]
+    properties:
+      title: { type: string, minLength: 1 }
+      amount: { type: integer, minimum: 1 }
+      department: { type: string }
+      requestStatus: { type: string, enum: [submitted, approved, rejected, ordered, confirmed] }
+      supplierOrderId: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: ledger }
+spec:
+  title: Budget ledger
+  lifecycle: operational
+  indexes: [[createdAt, id]]
+  uiSchema: { list: { primaryField: department, columns: [amount, remainingAfter, requestId] } }
+  schema:
+    type: object
+    additionalProperties: false
+    required: [requestId, department, amount, remainingAfter]
+    properties:
+      requestId: { type: string }
+      department: { type: string }
+      amount: { type: integer }
+      remainingAfter: { type: integer }
+---
+# Employees see only the requests they submitted.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: my-requests }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  restrict: { requests: "author_id = auth.uid()" }
+  sql: |
+    SELECT id, title, amount, department, requestStatus AS "requestStatus", version
+    FROM requests ORDER BY created_at DESC, id DESC
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: pending-requests }
+spec:
+  title: Pending purchase requests
+  surface: admin
+  requires: { auth: { all: [ctx.admin] } }
+  sql: |
+    SELECT id, title, amount, department, version
+    FROM requests WHERE requestStatus = 'submitted' ORDER BY created_at, id
+---
+# The daily reminder reads this from src/schedule.ts; no route or tool exposes it.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: stale-requests }
+spec:
+  surface: internal
+  input:
+    type: object
+    additionalProperties: false
+    required: [before]
+    properties:
+      before: { type: string, format: date-time }
+  sql: |
+    SELECT id, title, amount, department FROM requests
+    WHERE requestStatus = 'submitted' AND created_at < input.before
+    ORDER BY created_at, id LIMIT 100
+---
+# Selecting from budgets refuses a department that has no budget, so approval always has a budget row to deduct.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: submit-request }
+spec:
+  title: Submit a purchase request
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [title, amount, department]
+    properties:
+      title: { type: string, minLength: 1 }
+      amount: { type: integer, minimum: 1 }
+      department: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO requests (title, amount, department, requestStatus)
+      SELECT input.title, input.amount, b.department, 'submitted' FROM budgets b WHERE b.department = input.department
+      RETURNING id, version
+---
+# Admin-only. The ref handler runs the write below, then places the supplier order and emails the requester.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: approve-request }
+spec:
+  title: Approve a purchase request
+  description: Approve a submitted request; deducts the department budget, records a ledger row and places the supplier order.
+  requires: { auth: { all: [ctx.admin] } }
+  target: { schema: requests, id: id, version: expectedVersion }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+  output: { type: object }
+  handler: { ref: approve-request }
+---
+# One program, one transaction. Statement 1 is the guarded transition: a stale version or a request that is no longer
+# 'submitted' matches 0 rows -> CONFLICT (409). Statement 2 fails remaining >= 0 when over budget. Either failure rolls
+# back all three statements.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: approve-request-write }
+spec:
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE requests SET requestStatus = 'approved'
+      WHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'
+      RETURNING id, title, amount, author_id AS "authorId";
+      UPDATE budgets SET remaining = remaining - (SELECT r.amount FROM requests r WHERE r.id = input.id)
+      WHERE department = (SELECT r.department FROM requests r WHERE r.id = input.id);
+      INSERT INTO ledger (requestId, department, amount, remainingAfter)
+      SELECT r.id, r.department, r.amount, b.remaining FROM requests r JOIN budgets b ON b.department = r.department
+      WHERE r.id = input.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: reject-request }
+spec:
+  title: Reject a purchase request
+  requires: { auth: { all: [ctx.admin] } }
+  target: { schema: requests, id: id, version: expectedVersion }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+  output: { type: object }
+  handler: { ref: reject-request }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: reject-request-write }
+spec:
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE requests SET requestStatus = 'rejected'
+      WHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'
+      RETURNING id, title, author_id AS "authorId"
+---
+# Called by the approve handler once the supplier accepted the order.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: mark-ordered }
+spec:
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, supplierOrderId]
+    properties:
+      id: { type: string }
+      supplierOrderId: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE requests SET requestStatus = 'ordered', supplierOrderId = input.supplierOrderId
+      WHERE id = input.id AND requestStatus = 'approved'
+      RETURNING id
+---
+# Called only by POST /callbacks/supplier (src/routes.ts) as a system caller after the signature checks out.
+# No Trigger exposes it; system callers satisfy no `requires` predicate, so it has none.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: confirm-order }
+spec:
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, supplierOrderId]
+    properties:
+      id: { type: string }
+      supplierOrderId: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE requests SET requestStatus = 'confirmed'
+      WHERE id = input.id AND supplierOrderId = input.supplierOrderId AND requestStatus = 'ordered'
+      RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: submit-request-http }
+spec:
+  source: { kind: http, method: POST, path: /api/requests }
+  target: { procedure: submit-request }
+---
+# Admin MCP tools: an AI agent connected to /mcp/admin can approve or reject.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: approve-request-mcp }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: approve-request }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: reject-request-mcp }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: reject-request }
