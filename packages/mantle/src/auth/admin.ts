@@ -1,4 +1,4 @@
-import { checkOrigin, deny, ContractError, type Caller } from "../kernel/contracts.js";
+import { checkOrigin, isAdmin, deny, ContractError, type Caller } from "../kernel/contracts.js";
 /** Shared selected-boundary guard. Resolve fresh database authority only for Better Auth's raw admin endpoints. */
 export async function guardAuthAdminRequest(request: Request, resolve: () => Caller | Promise<Caller>, basePath = "/api/auth"): Promise<void> {
     let path: string | undefined;
@@ -12,6 +12,10 @@ export async function guardAuthAdminRequest(request: Request, resolve: () => Cal
     if (path !== admin && !path.startsWith(`${admin}/`))
         return;
     const caller = await resolve();
-    deny(caller, caller.kind === "user" && caller.credential === "session", "auth:admin");
+    // The fresh database caller must hold the admin layer: a stale cached session cannot reach Better Auth admin endpoints,
+    // and Better Auth access control then decides each action.
+    // Any signed-in user may ask about their own permissions or end an impersonation.
+    const own = path === `${admin}/has-permission` || path === `${admin}/stop-impersonating`;
+    deny(caller, (own ? caller.kind === "user" : isAdmin(caller)) && caller.credential === "session", "auth:admin");
     checkOrigin(request, caller);
 }

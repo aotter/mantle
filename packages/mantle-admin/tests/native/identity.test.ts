@@ -23,7 +23,7 @@ test("Admin identity routes use Better Auth statements for listing, fields, role
   const options = {
     secret: "admin-ac-test-secret-01234567890123456789", baseURL: "https://app.test",
     database: d1Adapter(d1), user: { additionalFields: { region: { type: "string" as const, input: false, required: false } } },
-    plugins: [admin({ adminRoles: ["admin", "denied"], ac, roles: {
+    plugins: [admin({ adminRoles: ["admin", "denied", "support"], ac, roles: {
       admin: ac.newRole(defaultStatements), user: ac.newRole({ user: [], session: [] }),
       support: ac.newRole({ user: ["list"], session: [] }), denied: ac.newRole({ user: [], session: [] }),
     } }), emailOTP({ sendVerificationOTP: async (input: { otp: string }) => { otp = input.otp; } })],

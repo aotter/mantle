@@ -165,6 +165,8 @@ test.skipIf(!pgUrl)("PostgreSQL competing bootstrap transactions serialize and n
             const bootstrap = postgresBootstrapAdmin(scoped as unknown as Postgres, { match: "github-login", value: "match" }, a.auth);
             await Promise.all([bootstrap({ id: "a", githubLogin: "match" }), bootstrap({ id: "b", githubLogin: "match" })]);
             expect(await scoped.unsafe(`SELECT id FROM "user" WHERE role LIKE '%admin%'`)).toHaveLength(1);
+            // The directory acts as session 's', which the test demoted above: Better Auth access control needs it to be an admin again.
+            await scoped.unsafe(`UPDATE "user" SET role='admin' WHERE id='s'`);
             expect((await a.directory.listMembers({ limit: 1 })).items).toHaveLength(1);
             for (const [id, clock] of [["z_micro", "2026-02-01T00:00:00.000001Z"], ["a_micro", "2026-02-01T00:00:00.000002Z"], ["m_micro", "2026-02-01T00:00:00.000003Z"]]) {
                 await a.ctx.internalAdapter.createUser({ id, email: `${id}@example.test`, name: "Microseconds", emailVerified: true, role: "user" }, { method: "admin" });
@@ -288,7 +290,7 @@ test("KV failures cannot preserve admin roles, bans or revoked sessions", async 
     const raw = new Request("http://localhost/api/auth/admin/list-users", { headers: a.headers });
     expect((await handleAuth(a.auth as never, raw, () => { })).status).toBe(403);
     const encoded = new Request("http://localhost/api/auth/%61dmin/list-users", { headers: a.headers });
-    expect((await handleAuth(a.auth as never, encoded, () => { })).status).toBe(404);
+    expect((await handleAuth(a.auth as never, encoded, () => { })).status).toBe(403);
     a.sqlite.run("UPDATE user SET banned=1 WHERE id='s'");
     expect(await resolveCaller(request, loader)).toEqual({ kind: "anonymous" });
     a.sqlite.run("UPDATE user SET banned=0 WHERE id='s'");
