@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const packages = JSON.parse(execFileSync(
@@ -160,6 +160,12 @@ function addOverrides(path, tarballs) {
     ])],
   };
   writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+  // pnpm 10+ ignores the package.json "pnpm" field and reads these from pnpm-workspace.yaml.
+  const workspace = join(dirname(path), "pnpm-workspace.yaml");
+  if (!existsSync(workspace)) return;
+  const yaml = readFileSync(workspace, "utf8");
+  if (/^(overrides|peerDependencyRules):/m.test(yaml)) throw new Error(`${workspace} already has overrides; merge them by hand`);
+  writeFileSync(workspace, `${yaml.trimEnd()}\noverrides: ${JSON.stringify(manifest.pnpm.overrides)}\npeerDependencyRules: ${JSON.stringify(manifest.pnpm.peerDependencyRules)}\n`);
 }
 
 function assertExactTarballResolutions(lockfile, tarballs) {

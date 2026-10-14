@@ -9,6 +9,14 @@ import { writeArtifacts } from "./artifacts.js";
 import { INPUTS_FILE, inputsFingerprint } from "./inputs.js";
 import type { Target } from "../domain/model.js";
 
+/** Option modules are often .ts, which older Node rejects with a bare "Unknown file extension". */
+async function load(path: string) {
+  try { return await import(pathToFileURL(resolve(path)).href); }
+  catch (error) {
+    if ((error as { code?: string }).code === "ERR_UNKNOWN_FILE_EXTENSION") throw new Error(`Cannot load ${path}: Node ${process.versions.node} does not run TypeScript. Use Node 22.22 or later, as the package engines say.`);
+    throw error;
+  }
+}
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
 const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>]... (one per Better Auth instance) [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>]\n       mantle bundle <entry> <outdir>\n       mantle describe <target> <manifest>... [--diff <old.json>]";
 try {
@@ -40,14 +48,14 @@ try {
     // Read plain options without constructing Better Auth, which can touch the database.
     // One --auth per Better Auth instance; their tables are merged into one migration.
     const auth = await Promise.all((values.auth ?? []).map(async path => {
-      const loaded = await import(pathToFileURL(resolve(path)).href);
+      const loaded = await load(path);
       const options = loaded.authOptions?.(new Proxy({}, { get: () => undefined })) ?? loaded.auth?.options;
       if (!options) throw new Error(`${path} must export \`authOptions(env)\` (or \`auth\`, a betterAuth() instance).`);
       return options;
     }));
-    const site = values.site ? (await import(pathToFileURL(resolve(values.site)).href)).siteDefaults : undefined;
+    const site = values.site ? (await load(values.site)).siteDefaults : undefined;
     if (values.site && !site) throw new Error(`${values.site} must export siteDefaults.`);
-    const extensionModule = values["admin-extensions"] ? await import(pathToFileURL(resolve(values["admin-extensions"])).href) : undefined;
+    const extensionModule = values["admin-extensions"] ? await load(values["admin-extensions"]) : undefined;
     const adminExtensions = extensionModule?.adminExtensions ?? extensionModule?.default;
     if (values["admin-extensions"] && !Array.isArray(adminExtensions)) throw new Error(`${values["admin-extensions"]} must export an adminExtensions array (named or default).`);
     const { generateFromSources } = await (auth.length ? import("./generateAuth.js") : import("./generate.js"));
