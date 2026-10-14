@@ -29,6 +29,7 @@ Once `secrets.required` is set, `wrangler dev` loads only those keys from
 // src/worker.ts — application-owned; choose imports for the features you use.
 import { authLoader, resolveCaller } from '@aotter/mantle/auth';
 import { authRoutes } from '@aotter/mantle/auth/routes';
+import { withAuthTasks } from '@aotter/mantle/auth/hardening';
 import { checkOrigin, surfaceFailure, type Caller } from '@aotter/mantle/contracts';
 import { admin } from '@aotter/mantle-admin/server';
 import { entries } from '@aotter/mantle-admin/server/entries';
@@ -38,46 +39,48 @@ import { mcp } from '../generated/mcp.js';
 import { rest } from '../generated/rest.js';
 import { handlers } from './handlers.js'; // omit when there are no ref Procedures
 
-// Env comes from worker-configuration.d.ts: declare DB, ASSETS, the MAIL sender binding
+// Env comes from worker-configuration.d.ts: declare DB, ASSETS, the email provider binding
 // and the ORIGIN, AUTH_SECRET and ADMIN_EMAIL secrets in Wrangler.
 let auth: import('@aotter/mantle/auth').AuthLoader<ReturnType<typeof import('./auth.js').createAuth>> | undefined;
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    auth ??= authLoader(() => import('./auth.js').then(m => m.createAuth(env)));
-    const headers = new Headers(); // retain Better Auth's sliding-session cookies
-    let authority: Promise<Caller> | undefined, readAuthority: Promise<Caller> | undefined;
-    const resolve = (readOnly: boolean) => resolveCaller(request, auth!, {
-      readOnly,
-      audience: [`${env.ORIGIN}/mcp`, `${env.ORIGIN}/mcp/admin`],
-      responseHeaders: headers,
-    }).then(value => { checkOrigin(request, value); return value; });
-    const caller = (_request?: Request, _env?: Env, classification = { readOnly: false }) =>
-      classification.readOnly ? readAuthority ??= resolve(true) : authority ??= resolve(false);
-    const options = { db: (env: Env) => env.DB, caller, handlers };
-    const bindings = adminBindings({ handlers }); // use adminBindings() without ref Procedures
-    const routes = [
-      authRoutes(auth, { methods: [{ kind: 'email-otp' }], resolver: caller }),
-      admin(bindings.metadata, bindings.views, bindings.operations, {
-        ...options, routes: entries(bindings.schemas, bindings.adapter),
-      }),
-      mcp(options),
-      rest(options),
-    ];
-    try {
-      for (const route of routes) {
-        const response = await route(request, env);
-        if (!response) continue;
-        if (!headers.getSetCookie().length) return response;
-        const result = new Response(response.body, response);
-        for (const cookie of headers.getSetCookie()) result.headers.append('set-cookie', cookie);
-        return result;
-      }
-      const asset = await adminAssets(request, env);
-      if (asset) return asset;
-      // Your public frontend/web.ts routes can use an anonymous Caller without
-      // loading auth; their generated SQL still controls publication visibility.
-      return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
-    } catch (error) { return surfaceFailure(error); }
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return withAuthTasks(ctx.waitUntil.bind(ctx), async () => {
+      auth ??= authLoader(() => import('./auth.js').then(m => m.createAuth(env)));
+      const headers = new Headers(); // retain Better Auth's sliding-session cookies
+      let authority: Promise<Caller> | undefined, readAuthority: Promise<Caller> | undefined;
+      const resolve = (readOnly: boolean) => resolveCaller(request, auth!, {
+        readOnly,
+        audience: [`${env.ORIGIN}/mcp`, `${env.ORIGIN}/mcp/admin`],
+        responseHeaders: headers,
+      }).then(value => { checkOrigin(request, value); return value; });
+      const caller = (_request?: Request, _env?: Env, classification = { readOnly: false }) =>
+        classification.readOnly ? readAuthority ??= resolve(true) : authority ??= resolve(false);
+      const options = { db: (env: Env) => env.DB, caller, handlers };
+      const bindings = adminBindings({ handlers }); // use adminBindings() without ref Procedures
+      const routes = [
+        authRoutes(auth, { methods: [{ kind: 'email-otp' }], resolver: caller }),
+        admin(bindings.metadata, bindings.views, bindings.operations, {
+          ...options, routes: entries(bindings.schemas, bindings.adapter),
+        }),
+        mcp(options),
+        rest(options),
+      ];
+      try {
+        for (const route of routes) {
+          const response = await route(request, env);
+          if (!response) continue;
+          if (!headers.getSetCookie().length) return response;
+          const result = new Response(response.body, response);
+          for (const cookie of headers.getSetCookie()) result.headers.append('set-cookie', cookie);
+          return result;
+        }
+        const asset = await adminAssets(request, env);
+        if (asset) return asset;
+        // Your public frontend/web.ts routes can use an anonymous Caller without
+        // loading auth; their generated SQL still controls publication visibility.
+        return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return surfaceFailure(error); }
+    });
   },
 };
 ```
@@ -87,8 +90,8 @@ the manifest has an MCP surface, and requires the documented optional MCP peer.
 Pass the same handlers to each selected surface that exposes ref Procedures.
 Bind site/media/identity and extension capabilities through the selected Admin/MCP
 options; do not expose native auth administrative routes without `authRoutes` or
-`guardAuthAdminRequest`. Auth background callbacks on Workers use the documented
-`withAuthTasks(ctx.waitUntil.bind(ctx), ...)` integration, not another request's context.
+`guardAuthAdminRequest`. `withAuthTasks` retains background callbacks on the
+current request's context; `authHardening` configures the background handler.
 Select `--admin` to emit `admin-bindings.ts`. Admin's API is a separate
 `@aotter/mantle-admin` package; the SDK never imports it. The API handles only
 `/admin/api`. The app-owned asset route serves the built shell for `/admin` and
@@ -128,9 +131,11 @@ ADMIN_EMAIL=you@example.test
 AUTH_SECRET=replace-with-a-random-secret
 ```
 
-Copy it to ignored `.dev.vars`; use deployment secrets for production. Supply
-`MAIL` with the template's `otp` and `link` callbacks from your app-owned email
-provider; it is an object, not a `.dev.vars` value. The auth
+Copy it to ignored `.dev.vars`; use deployment secrets for production. Configure
+an app-owned [`EmailSender`](../guides/email.md#application-wiring) and call its
+`send({ to, subject, text, html?, locale, category? })` from Better Auth's email
+callbacks. Adapt the auth template's `MAIL.otp`/`MAIL.link` callbacks to this
+sender; it is an object, not a `.dev.vars` value. The auth
 module wires `ADMIN_EMAIL` to the bootstrap helper, which requires verified email.
 `PUBLIC_ORIGIN` can be your application variable instead of `ORIGIN`; map it
 explicitly when constructing auth and keep the trusted origin consistent.

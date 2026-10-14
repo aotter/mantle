@@ -79,6 +79,29 @@ installed Admin README for asset bindings, CSP/import-map hashes and preview
 framing. `@aotter/mantle-ui` continues to supply the shared kit. See
 [service composition](../cloudflare/service-entry.md) for the complete Fetch/Bun wiring.
 
+## HTTP routes
+
+All paths below start with `/admin/api` and require an admin session; mutations
+also require the shared same-origin check. Mount `entries(...)` for collection
+routes. Send JSON with `Content-Type: application/json`.
+
+| Method and path | Request / response |
+| --- | --- |
+| `POST /entries` | Body `{ collection, data }`; creates an entry. |
+| `GET /entries/{id}?collection=<schema>` | Reads an entry and its current `entry.version`. |
+| `PATCH /entries/{id}?collection=<schema>` | Body `{ data, expectedVersion }`; sends the observed version, not the next one. Publishing entries must be drafts. |
+| `POST /entries/{id}/publish?collection=<schema>` | Body `{ expectedVersion }`; validates required data before publishing. |
+| `POST /entries/{id}/unpublish?collection=<schema>` | Body `{ expectedVersion }`; returns the entry to draft. |
+| `GET /views/{name}` | Generated admin View query parameters plus `limit`/`cursor`; returns `{ rows, nextCursor? }`. |
+| `GET /me` | Returns `{ userId, role, admin, login, image }` for the signed-in caller. |
+
+Entry create/read/patch/transitions return
+`{ collection, entry, parentEntryId, parentEntryTitle, related }`; the entry has
+`{ id, collection, locale, status, version, data, created_at, updated_at }`.
+Transitions accept `{}` to use the current version; tests should send the
+observed `expectedVersion` to catch stale writes. Generic writes reject native
+columns inside `data`. See [publishing](../concepts/lifecycle-and-locales.md).
+
 ## Generated reads and writes
 
 `adminBindings()` returns static metadata, schemas, views, operations and the

@@ -6,6 +6,8 @@ SQL uses declared Schemas, `input.<name>`, `auth.uid()` and native expressions a
 
 A row-classified INSERT/UPDATE/DELETE must affect one row. Use `WHERE id = input.id AND version = input.expectedVersion` for explicit OCC. Set operations may affect zero rows. A unique clash or failed row assertion is `CONFLICT`; statements run atomically. Results are raw `{ results }`, not runtime-validated authored outputs. RETURNING uses SQL output names; quote an explicit alias to preserve declared case (`RETURNING reqStatus AS "reqStatus"`). Generation warns about unaliased direct fields whose declared name differs from storage.
 
+A row-classified UPDATE/DELETE on an excluded or missing id affects zero rows and returns HTTP 409 (`CONFLICT`), just like a stale version; reads return not found. Native Admin's visible-row pre-read returns 404 for excluded/missing ids.
+
 A ref handler is application code called as `(ctx, input)`. Generation prints required `Handlers` keys; typecheck and implement them. Wire them at `store(db, caller, { handlers })` and selected surfaces. The context has Caller, native db and Store bound to the same transaction. It is not a sandbox; the app owns external side effects and input/output handling.
 
 `target: { schema, id, version? }` binds an Admin operation to a row. SQL targets can be inferred for a single locked row operation; declare a target for a ref operation when needed. Input fields must have the required shapes.

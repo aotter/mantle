@@ -2,12 +2,38 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { generateFromSources } from "../src/infrastructure/generateAuth.js";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { bundle, guardStartup } from "../src/infrastructure/bundle.js";
 import { authOptions } from "./apps/auth/auth.js";
+
+test("bundle succeeds with optional Auth and MCP peers absent", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "mantle-optional-peers-"));
+  try {
+    // Copy runtime files rather than symlink: resolution must not see the SDK's dev dependencies.
+    const sdk = join(dir, "node_modules/@aotter/mantle");
+    await cp(new URL("../dist/", import.meta.url), join(sdk, "dist"), { recursive: true });
+    await cp(new URL("../package.json", import.meta.url), join(sdk, "package.json"));
+    const entry = join(dir, "worker.ts");
+    await writeFile(entry, `import { authLoader, resolveCaller } from "@aotter/mantle/auth";
+import { mcp } from "@aotter/mantle/mcp";
+const auth = authLoader(async () => { throw Error("Auth not selected"); });
+const optional = mcp([], { db: () => { throw Error("DB not selected"); } });
+export default { async fetch(request) {
+  const caller = await resolveCaller(request, auth);
+  return request.url.endsWith("/optional") ? optional(request, {}) : Response.json(caller);
+} };`);
+    const meta = await bundle(entry, join(dir, "out"));
+    const external = Object.values(meta.outputs).flatMap(output => output.imports).filter(i => i.external).map(i => i.path);
+    expect(external).toContain("@better-auth/oauth-provider/resource-client");
+    expect(external).toContain("@modelcontextprotocol/server");
+    expect(Object.keys(meta.inputs).some(path => /node_modules\/(?:better-auth|@better-auth|@modelcontextprotocol)\//.test(path))).toBe(false);
+    const worker = (await import(join(dir, "out/worker.js"))).default;
+    expect(await (await worker.fetch(new Request("https://example.test/"))).json()).toEqual({ kind: "anonymous" });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
 
 test("bundle splits Better Auth behind import() and refuses a static auth import", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-auth-bundle-"));

@@ -31,4 +31,6 @@ Each SELECT output needs a unique static name. Unquoted SQL identifiers fold to 
 
 Bare `views/<encoded-name>.ts` returns row arrays. Proved pageable exposed/internal Views also receive native `paged/views/*`, returning `{ rows, nextCursor? }`. Selected REST/MCP boundaries use separate `paged/wire/views/*` SQL when declared integers require exact transport projections; bare modules also export `WireRow`. Indexed ordering after fixed equality prefixes, non-null typed keys, complete groups and singleton joins/lookups are checked at generation. Unsupported internal paging retains its bare View; exposure requires a supported page contract. Aggregates still scan/group their sources: inspect EXPLAIN.
 
+Publishing Schema fields may be NULL in drafts even when required, so public View paging cannot order by them. `published_at` is accepted by Store ordering but rejected as a View paging key. Use `ORDER BY id`, or keep the business date in an operational Schema as an indexed, required non-null field.
+
 Internal Views have no public route/tool. Public and admin Views use selected REST/MCP/Admin bindings. `uiSchema.list` selects admin search/filter/display metadata. See [surfaces](surface.md) for validation, paging and wire conversions and [typed queries](../guides/typed-queries.md) for a complete example.
