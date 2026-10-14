@@ -3,11 +3,15 @@
   "compilerOptions": {
     "noEmit": true,
     "tsBuildInfoFile": null,
-    "rootDir": "."
+    "rootDir": ".",
+    "types": [
+      "node"
+    ]
   },
   "include": [
-    "src/**/*",
-    "examples/**/*"
+    "src/mcp-app/**/*",
+    "examples/**/*",
+    "*.config.ts"
   ],
   "exclude": [
     "dist/**/*"
