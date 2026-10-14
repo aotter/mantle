@@ -12,7 +12,7 @@ import {loadFixtureSources,writeGenerated} from "./apps/link.js";
  try{
  const generated=await generateFromSources({target:"cloudflare-d1",sources:{sources:await loadFixtureSources()},site:{brand:"D1",media:{purposes:[{name:"cover",required:["png"],maxBytes:{"image/png":100}}]}}});if(!generated.ok)throw Error(JSON.stringify(generated.diagnostics));await writeGenerated(dir,generated.files);
  const {unstable_splitSqlQuery}=await import("wrangler");
- const source=`import {userCaller} from '${resolve(import.meta.dir,"../src/kernel/user-fields.ts")}';import {site} from './site.js';
+ const source=`import {userCaller} from '${resolve(import.meta.dir,"../src/kernel/user-caller.ts")}';import {site} from './site.js';
  const caller=userCaller({id:'admin',role:'admin'});
  const storage={async createUpload(a:any){return {capabilities:a.variants.map((v:any)=>({...v,method:'PUT' as const,uploadUrl:'https://upload.test/'+a.uploadGroupId,storageKey:'uploads/'+a.uploadGroupId}))}},async commitUpload(a:any){return {id:a.uploadGroupId,createdAt:a.now,variants:a.variants.map((v:any)=>({mimeType:v.mimeType,role:v.role,storageKey:a.uploadGroupId,publicUrl:'https://media.test/'+a.uploadGroupId,byteSize:90}))}},async deleteObject(){}};
  export default {async fetch(request:Request,env:any){if(new URL(request.url).pathname==='/health')return new Response('ready');try{for(const sql of ${JSON.stringify(unstable_splitSqlQuery(generated.files["schema.sql"]!))})await env.DB.prepare(sql).run();

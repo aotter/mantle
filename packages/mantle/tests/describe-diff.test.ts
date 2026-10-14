@@ -14,16 +14,6 @@ const meta = (r: any, id: string) => r.targets.find((t: any) => t._meta.id === i
 const copy = (p: any) => JSON.parse(JSON.stringify(p));
 const dirs = (c: any[], id: string) => c.filter(x => x.id === id).map(x => [x.field, x.direction]);
 
-test("diff: a mixed input change that widens anything is widened", async () => {
-  const a = await compile(base);
-  const b = copy(a);
-  const t = b.procedures["rename-order"].input.properties.title;
-  t.minLength = 2; t.maxLength = 100000; // one narrowed, one widened (maxLength added -> narrowed actually), use required removal + new min
-  b.procedures["rename-order"].input.required = ["id"]; // title optional -> widened
-  const c = diffApp(await describeApp(a), await describeApp(b));
-  expect(dirs(c, "procedure:rename-order").some(([, d]: any) => d === "widened")).toBe(true);
-});
-
 test("diff: swapping a restrict term (region for tier) is widened", async () => {
   const a = await compile(base);
   const b = await compile(base.replace(`restrict: {orders: "region IN auth.user('region')"}\n  sql: SELECT id, title, region`, `restrict: {orders: "tier IN auth.user('tier')"}\n  sql: SELECT id, title, region`));

@@ -5,7 +5,8 @@
  */
 import type { BetterAuthOptions } from "better-auth/types";
 import { ContractError, type Caller } from "../kernel/contracts.js";
-import { userCaller, type UserFields } from "../kernel/user-fields.js";
+import { userCaller } from "../kernel/user-caller.js";
+import type { UserFields } from "../kernel/user-fields.js";
 
 type User = { name?: string | null; email?: string | null; image?: string | null; githubLogin?: string | null; id: string; role?: string | null; banned?: boolean | null; banExpires?: Date | string | number | null };
 const sessionUsers = new WeakMap<Caller, User>();
@@ -32,24 +33,6 @@ export function adminRolesOf(auth: Pick<AuthInstance, "options">): readonly stri
   return roles;
 }
 
-/** Configuration is immutable for an auth instance; check each requested source once. */
-const fieldSources = new WeakMap<AuthInstance, Map<string, ContractError | null>>();
-function checkFieldSources(auth: AuthInstance, fields?: UserFields): void {
-  if (!fields || !Object.keys(fields).length) return;
-  let checked = fieldSources.get(auth);
-  if (!checked) fieldSources.set(auth, checked = new Map());
-  for (const field of Object.keys(fields)) {
-    if (!checked.has(field)) {
-      const additional = auth.options.user?.additionalFields;
-      const stored = additional && Object.hasOwn(additional, field) ? additional[field] : undefined;
-      const safe = stored ? stored.input === false : auth.options.plugins?.some(plugin => plugin.id === "custom-session");
-      checked.set(field, safe ? null : new ContractError("AUTH_CONFIGURATION_ERROR", `User field '${field}' requires an input: false additional field or a customSession source.`, "auth:user"));
-    }
-    const error = checked.get(field);
-    if (error) throw error;
-  }
-}
-
 export interface AuthLoader<A extends AuthInstance = AuthInstance> {
   /** `advanced.cookiePrefix` of the same options; read before Better Auth loads. */
   readonly cookiePrefix: string;
@@ -74,6 +57,15 @@ export function authLoader<A extends AuthInstance>(load: () => Promise<A>, cooki
       return auth;
     }).catch((error) => { instance = undefined; throw error; }),
   };
+}
+
+function checkFieldSources(instance: AuthInstance, fields: UserFields | undefined): void {
+  for (const field of Object.keys(fields ?? {})) {
+    const additional = instance.options.user?.additionalFields;
+    const stored = additional && Object.hasOwn(additional, field) ? additional[field] : undefined;
+    if (!(stored ? stored.input === false : instance.options.plugins?.some(plugin => plugin.id === "custom-session")))
+      throw new ContractError("AUTH_CONFIGURATION_ERROR", `User field '${field}' requires an input: false additional field or a customSession source.`, "auth:user");
+  }
 }
 
 /**

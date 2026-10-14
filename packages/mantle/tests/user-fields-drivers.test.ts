@@ -4,7 +4,7 @@ import { SQL } from 'bun';
 import postgres from 'postgres';
 import { resolve } from 'node:path';
 import { rm } from 'node:fs/promises';
-import { userCaller } from '../src/kernel/user-fields.js';
+import { userCaller } from '../src/kernel/user-caller.js';
 import { generateOrThrow, loadFixtureSources, writeGenerated } from './apps/link.js';
 import { d1Shim } from './apps/d1-shim.js';
 import { verifyUserFields } from './user-fields-scenarios.js';

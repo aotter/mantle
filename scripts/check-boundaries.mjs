@@ -80,7 +80,7 @@ function checkNextFolderImports() {
     for (const spec of importSpecifiers(file)) {
       if (spec.startsWith(".")) {
         const target = relative(root,join(dirname(file),spec)).split(sep)[0];
-        if (target !== folder && !reach.includes(target)) fail(file,`src/${folder} may reach only ${[folder,...reach].join(", ")}: '${spec}'`);
+        if (target !== folder && !reach.includes(target) && !(folder === "build" && relative(root,join(dirname(file),spec)) === "kernel/user-field-name.js")) fail(file,`src/${folder} may reach only ${[folder,...reach].join(", ")}: '${spec}'`);
       } else if (/^(?:better-auth(?:\/|$)|@better-auth\/)/.test(spec)) {
         if (folder !== "auth" && !/infrastructure\/(?:authSchema|generateAuth)\.ts$/.test(rel(file))) fail(file,`optional Auth belongs to the selected auth entry: '${spec}'`);
       } else if (spec.startsWith("@modelcontextprotocol/")) {

@@ -34,6 +34,8 @@
     "./scalars": "./dist/kernel/scalars.js",
     "./binds": "./dist/kernel/binds.js",
     "./testing": "./dist/testing/index.js",
+    "./host-access": "./dist/kernel/host-access.js",
+    "./host-caller": "./dist/kernel/host-caller.js",
     "./user-fields": "./dist/kernel/user-fields.js",
     "./sweep": "./dist/kernel/sweep.js",
     "./cron": "./dist/kernel/cron.js",
@@ -67,8 +69,7 @@
     "./generate/auth": "./dist/infrastructure/generateAuth.js",
     "./package.json": "./package.json",
     "./describe": "./dist/domain/describe/index.js",
-    "./target-hash": "./dist/domain/describe/target-hash.js",
-    "./describe/schema.json": "./docs/handbook/reference/describe.schema.json"
+    "./target-hash": "./dist/domain/describe/target-hash.js"
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.lib.json --removeComments --declaration false && tsc -p tsconfig.lib.json --emitDeclarationOnly && node scripts/bundle-compiler.mjs && node scripts/prune-declarations.mjs",

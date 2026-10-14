@@ -14,6 +14,7 @@ export interface GenerateInput {
   readonly adminExtensions?: readonly AdminExtension[];
   readonly site?: import("../build/compiler.js").SiteDefaults;
   readonly plan: RuntimePlan;
+  readonly description: import("./describe/index.js").AppDescription;
   readonly lowered: PlanLowered;
   readonly wireLowered?: PlanLowered;
   /** Compiler-resolved output names, supplied by infrastructure; dynamic outputs remain undefined. */

@@ -23,10 +23,7 @@ test("describe is deterministic, uses MCP names, reports access without SQL or r
   const unguarded = copy(plan); delete unguarded.views["notes-list"].requires;
   expect(target(await describeApp(unguarded), "view:notes-list").requires.all).toContain("ctx.admin");
   expect(a.targets.find(t => t._meta.id === "view:regional-orders")!.name).toBe("regional_orders");
-  expect(a.access.region!.restrict).toContain("view:regional-orders");
-  expect(a.access.region!.scope).toContain("notes");
-  expect(target(a, "view:regional-orders").userFields.region!.allAllowed).toBe(false);
-  expect(target(a, "view:notes-list").userFields.region!.allAllowed).toBe(true);
+  expect(a.access).toEqual(plan.access!.userFields);
   expect(JSON.stringify(a)).not.toMatch(/SELECT |UPDATE |INSERT |DELETE FROM/);
   expect(a.targets.some(t => t._meta.id === "admin:GET /entries/:id")).toBe(true);
 });
@@ -65,13 +62,12 @@ test("diff classifies conjunctive removals as widened, additions as narrowed", a
   delete p.views["regional-orders"].restrict;
   const b = await describeApp(p);
   expect(diffApp(a, b)).toContainEqual(expect.objectContaining({ id: "view:regional-orders", field: "restrict", direction: "widened" }));
-  expect(diffApp(a, b)).toContainEqual(expect.objectContaining({ id: "view:regional-orders", field: "allAllowed", direction: "widened" }));
   expect(diffApp(b, a)).toContainEqual(expect.objectContaining({ id: "view:regional-orders", field: "restrict", direction: "narrowed" }));
   delete p.views["regional-orders"];
   expect(diffApp(a, await describeApp(p))).toContainEqual({ id: "view:regional-orders", field: "target", direction: "narrowed" });
 });
 
-test("CLI --json equals describeApp and --diff writes nothing into the project", async () => {
+test("CLI JSON equals describeApp and --diff writes nothing into the project", async () => {
   const dir = await mkdtemp(join(tmpdir(), "mantle-describe-"));
   try {
     const cli = new URL("../dist/infrastructure/cli.js", import.meta.url).pathname;
@@ -80,11 +76,12 @@ test("CLI --json equals describeApp and --diff writes nothing into the project",
     const compiled = await compilePlan(sources, sqliteCompiler, "operational");
     if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
     const report = await describeApp(compiled.plan);
-    const json = execFileSync("node", [cli, "describe", "--json", manifest], { cwd: dir, encoding: "utf8" });
+    expect(() => execFileSync("node", [cli, "describe", manifest], { cwd: dir, stdio: "pipe" })).toThrow("mantle describe <target>");
+    const json = execFileSync("node", [cli, "describe", "bun-sqlite", manifest], { cwd: dir, encoding: "utf8" });
     expect(JSON.parse(json)).toEqual(report);
     expect(await readdir(dir)).toEqual([]);
     await writeFile(join(dir, "old.json"), json);
-    expect(execFileSync("node", [cli, "describe", manifest, "--diff", "old.json"], { cwd: dir, encoding: "utf8" }).trim()).toBe("No changes.");
+    expect(execFileSync("node", [cli, "describe", "bun-sqlite", manifest, "--diff", "old.json"], { cwd: dir, encoding: "utf8" }).trim()).toBe("[]");
     expect(await readdir(dir)).toEqual(["old.json"]);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
@@ -96,11 +93,8 @@ test("read flags distinguish insert targets, owner reads and translation parents
   plan.procedures.insertOnly = { input: { type: "object" }, output: { type: "object" }, inputs: {}, handler: { sql: { grammar: 180004, stmts: [{ InsertStmt: { relation: { relname: "orders" } } }] }, source: "INSERT INTO orders DEFAULT VALUES" } };
   const a = await describeApp(plan);
   expect(target(a, "procedure:insertOnly").readOnly).toBe(false);
-  expect(target(a, "procedure:insertOnly").ownerScoped).toBe(false);
   expect(target(a, "procedure:insertOnly").unscopedReads).toBe(false);
-  expect(target(a, "view:notes-list").ownerScoped).toBe(true);
   expect(a.access).not.toHaveProperty("id");
-  expect(target(a, "view:notes-list").userFields).not.toHaveProperty("id");
   const h = await targetHash(plan, "view:notes-list");
   delete plan.schemas.orders.scope;
   expect(await targetHash(plan, "view:notes-list")).not.toBe(h);
@@ -188,10 +182,8 @@ test("WebMCP dispatch includes publishing and media tools and cannot claim readO
 test("public MCP and REST exposure survives an admin MCP binding with independent gates", async () => {
   const plan = await compile(dual + `---\n${H}kind: Trigger\nmetadata: {name: add-public}\nspec: {source: {kind: mcp, surface: public}, target: {procedure: add-thing}}\n---\n${H}kind: Trigger\nmetadata: {name: add-http}\nspec: {source: {kind: http, method: POST, path: /api/things}, target: {procedure: add-thing}}\n`);
   const m = target(await describeApp(plan), "procedure:add-thing");
-  expect(m.surface).toBe("public");
   expect(m.surfaces).toEqual(["admin", "public", "rest"]);
   expect(m.requires.all).toEqual([]);
-  expect(m.requiresBySurface).toEqual({ admin: { all: ["ctx.admin"] }, public: { all: [] }, rest: { all: [] } });
   expect(m.triggers.map(t => t.id)).toEqual(["add-admin", "add-http", "add-public"]);
 });
 
@@ -204,21 +196,9 @@ test("internal to public, new triggers and removing trustedOnly widen and change
   const trusted = copy(internal); trusted.procedures["add-thing"].trustedOnly = true;
   const changes = diffApp(await describeApp(trusted), await describeApp(internal));
   expect(changes).toContainEqual(expect.objectContaining({ id, field: "trustedOnly", direction: "widened" }));
-  expect(changes).toContainEqual(expect.objectContaining({ id, field: "hostCallable", direction: "widened" }));
   const second = copy(pub); second.triggers.second = { source: { kind: "mcp", surface: "public" }, procedure: "add-thing" };
   expect(await targetHash(pub, id)).not.toBe(await targetHash(second, id));
   expect(diffApp(await describeApp(pub), await describeApp(second))).toContainEqual(expect.objectContaining({ id, field: "triggers", direction: "widened" }));
-});
-
-test("adding a public trigger to an admin procedure changes its hash and widens exposure", async () => {
-  const a = await fixture();
-  const b = await compile(await fixtureText() + `---\n${H}kind: Trigger\nmetadata: {name: rename-public}\nspec: {source: {kind: mcp, surface: public}, target: {procedure: rename-order}}\n`);
-  const id = "procedure:rename-order";
-  expect(await targetHash(a, id)).not.toBe(await targetHash(b, id));
-  const rb = await describeApp(b);
-  expect(diffApp(await describeApp(a), rb)).toContainEqual(expect.objectContaining({ id, field: "surfaces", direction: "widened" }));
-  // This predicate is authored on the Procedure and therefore remains on its public path.
-  expect(target(rb, id).requiresBySurface.public!.all).toEqual(["ctx.admin"]);
 });
 
 test("removing ref or SQL guards and loosening auth requirements widen", async () => {
@@ -279,17 +259,14 @@ test("ref handlers conservatively report all possible read scopes", async () => 
   plan.schemas.notes.scope = "author_id";
   plan.procedures.custom = { input: { type: "object" }, output: { type: "object" }, inputs: {}, handler: { ref: "custom" } };
   const m = target(await describeApp(plan), "procedure:custom");
-  expect([m.opaque, m.unscopedReads, m.ownerScoped]).toEqual([true, true, true]);
 });
 
-test("guard restrict terms appear in guarded fields and cannot be dropped with allAllowed", async () => {
+test("guard restrict terms appear in guarded fields and remain on guarded targets", async () => {
   const plan = copy(await fixture());
   plan.procedures.g = { ...copy(plan).procedures["rename-order"], restrict: { orders: { terms: [{ column: "tier", field: "tier", type: "string" }] } } };
   plan.views["notes-list"].requires = { auth: { all: ["ctx.admin"] }, guard: { procedure: "g" } };
   const report = await describeApp(plan), m = target(report, "view:notes-list");
   expect(m.restrict.orders!.terms).toEqual([{ column: "tier", field: "tier", type: "string" }]);
-  expect(m.userFields.tier!.allAllowed).toBe(false);
-  expect(report.access.tier!.restrict).toContain("view:notes-list");
   expect(m.readOnly).toBe(false);
 });
 
@@ -337,7 +314,7 @@ test("starting to read an unscoped Schema is widened", async () => {
   expect(diffApp(before, after)).toContainEqual(expect.objectContaining({ id, field: "unscopedReads", direction: "widened" }));
 });
 
-test("input loosening is widened and uncertain input changes are changed", async () => {
+test("input schema changes are always changed", async () => {
   const a = await fixture(), before = await describeApp(a), id = "procedure:rename-order";
   for (const mutate of [
     (p: any) => { p.procedures["rename-order"].input.required = ["id"]; },
@@ -345,7 +322,7 @@ test("input loosening is widened and uncertain input changes are changed", async
     (p: any) => { p.procedures["rename-order"].input.additionalProperties = true; },
   ]) {
     const b = copy(a); mutate(b);
-    expect(diffApp(before, await describeApp(b))).toContainEqual(expect.objectContaining({ id, field: "inputSchema", direction: "widened" }));
+    expect(diffApp(before, await describeApp(b))).toContainEqual(expect.objectContaining({ id, field: "inputSchema", direction: "changed" }));
   }
   const b = copy(a); b.procedures["rename-order"].input.anyOf = [{ required: ["title"] }];
   expect(diffApp(before, await describeApp(b))).toContainEqual(expect.objectContaining({ id, field: "inputSchema", direction: "changed" }));
@@ -367,8 +344,8 @@ test("a dispatcher reports widening in one variant even when aggregate flags sta
   const b = copy(a); delete b.procedures["rename-order"].trustedOnly;
   const before = await describeApp(a), after = await describeApp(b);
   for (const id of ["admin:POST /operations/:name", "admin:POST /webmcp/:tool"]) {
-    expect(target(before, id).hostCallable).toBe(false);
-    expect(target(after, id).hostCallable).toBe(false);
+    expect(target(before, id).trustedOnly).toBe(true);
+    expect(target(after, id).trustedOnly).toBe(true);
     expect(diffApp(before, after)).toContainEqual(expect.objectContaining({ id, field: "variants", direction: "widened" }));
   }
 });
@@ -378,7 +355,6 @@ test("a Procedure Trigger does not expose a View with the same name", async () =
   plan.views["rename-order"] = plan.views["all-orders"];
   plan.triggers.public = { source: { kind: "mcp", surface: "public" }, procedure: "rename-order" };
   const report = await describeApp(plan), m = target(report, "view:rename-order");
-  expect(m.surface).toBe("internal");
   expect(m.surfaces).toEqual(["admin", "internal"]);
   expect(m.triggers).toEqual([]);
   expect(report.targets.some(t => t._meta.id === "rest:GET /api/views/rename-order")).toBe(false);

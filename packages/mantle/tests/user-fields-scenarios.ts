@@ -4,7 +4,7 @@ import type { Caller } from "../src/kernel/contracts.js";
 
 const system: Caller = { kind: "system", reason: "attrs-seed" };
 type Fields = Readonly<Record<string, string | number | readonly (string | number)[] | { readonly all: true }>>;
-type MakeCaller = typeof import("../src/kernel/user-fields.js").userCaller;
+type MakeCaller = typeof import("../src/kernel/user-caller.js").userCaller;
 
 const titles = (rows: { title: string }[]) => rows.map(r => r.title).sort();
 const code = async (run: () => Promise<unknown>) => run().then(() => "ok", (e: any) => e?.code ?? String(e));

@@ -1,4 +1,5 @@
-import { modeOf } from "./user-fields.js";
+import { scoped } from "./user-fields.js";
+import { modeOf, checkFresh } from "./caller-identity.js";
 /**
  * Generic Store over Core's rowPolicy/writePolicy rules and per-Schema Facts (scope, TTL, publishing, dates).
  * Generated types own storage column names, values, filters and writable columns; the dialect quotes names and binds values.
@@ -116,7 +117,7 @@ type Tx<T extends Record<string, Table>, O> = Pick<Store<T>, "collection"> & Bou
 type Interactive<T extends Record<string, Table>, O> = { transaction<R>(fn: (tx: Tx<T, O>) => Promise<R>, options?: TransactionOptions): Promise<R> };
 
 interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; readonly from: string; readonly projection: string; readonly terms: readonly Term[]; byId?: string; select?: string }
-interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; returning?: string; readonly policy: Map<string, Policy> }
+interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; returning?: string; readonly policy: Map<boolean, Policy> }
 
 export function createStore<H, T extends Record<string, Table>, D extends Driver<H> = Driver<H>, O extends Operations<H> = {}, C extends object = never>(d: Dialect, drv: D, rules: Rules, facts: { readonly [K in keyof T]: Fact }, operations?: O): (db: H, caller: Caller, ...options: [C] extends [never] ? [] : [options: C]) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O> : {}) {
   const prepared = new Map<string, Prepared>();
@@ -132,21 +133,9 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
   const wires = (p: Prepared, prefix: string) => [p.ts, p.d].flatMap((columns, i) => columns.map(c => `${(i ? d.wireDate : d.wireTimestamp)(prefix + d.ident(c)).join("")} AS ${d.ident(c)}`)).join(", ");
   const ID = d.ident("id");
   /** The row rules of one mode, numbered from 1; the SQL is rendered once per mode. */
-  const policy = (p: Prepared, trusted: boolean, terms: readonly Term[], caller: Caller): Policy => {
-    const bits: string[] = [];
-    const select = (terms: readonly Term[]): Term[] => terms.flatMap(term => {
-      if (term[1] === 'in') {
-        // `{ all: true }` drops this field's term; a missing value is refused when the term binds, before SQL runs.
-        const all = !!d.isAll?.(caller, term[2].field); bits.push(all ? '1' : '0');
-        // The Store drops the term itself, so it renders only the filter form.
-        return all ? [] : [[term[0], term[1], { ...term[2], scope: undefined }] as Term];
-      }
-      return [term[1] === 'parent' ? [term[0], term[1], term[2], {...term[3], terms: select(term[3].terms)}] as Term : term];
-    });
-    terms = select(terms);
-    const parentTerms = p.f.parent ? select(trusted ? p.f.parent.trusted : p.f.parent.caller) : [];
-    const cacheKey = String(+trusted)+bits.join('');
-    const cached = p.policy.get(cacheKey); if (cached) return cached;
+  const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => {
+    const parentTerms = p.f.parent ? trusted ? p.f.parent.trusted : p.f.parent.caller : [];
+    const cached = p.policy.get(trusted); if (cached) return cached;
     const recipes: Recipe[] = [], param = (r: Recipe) => (recipes.push(r), d.param(recipes.length));
     const sql = terms.map(t => renderTerm(d, t, "r.", param)).join(" AND ");
     let from = p.from, projection = "";
@@ -156,7 +145,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       from += ` LEFT JOIN ${d.ident(parent.table)} ${alias} ON ${alias}.${ID} = (SELECT ${alias}.${ID} FROM ${d.ident(parent.table)} ${alias} WHERE ${conditions.join(" AND ")} ORDER BY ${alias}.${d.ident("created_at")} DESC, ${alias}.${ID} DESC LIMIT 1)`;
       projection = parent.fields.map(c => `${(parent.ts.includes(c) ? d.wireTimestamp(alias + "." + d.ident(c)).join("") : parent.d.includes(c) ? d.wireDate(alias + "." + d.ident(c)).join("") : alias + "." + d.ident(c))} AS ${d.ident(c)}`).join(", ");
     }
-    const preparedPolicy = { sql, recipes, from, projection, terms }; p.policy.set(cacheKey, preparedPolicy); return preparedPolicy;
+    const preparedPolicy = { sql, recipes, from, projection, terms }; p.policy.set(trusted, preparedPolicy); return preparedPolicy;
   };
 
   return ((db: H, caller: Caller, options?: object) => make(db, caller, false, options)) as never;
@@ -165,10 +154,10 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     type Pending = { build: () => Bound; project: (rows: Row[]) => unknown; promise?: Promise<any>; claimed?: boolean };
     const pending = new WeakMap<Write<unknown>, Pending>();
     const write = (build: Pending["build"], project: Pending["project"], path: string): Write<unknown> => {
-      const state: Pending = { build, project };
+      const state: Pending = { build: () => { checkFresh(caller, false, path); return build(); }, project };
       const value: Write<unknown> = { then: (yes, no) => {
         if (!state.promise) {
-          state.promise = state.claimed ? Promise.reject(new Error("Write has already been batched.")) : Promise.resolve().then(async () => project((await drv.procedure(db, [build()], path))[0]!));
+          state.promise = state.claimed ? Promise.reject(new Error("Write has already been batched.")) : Promise.resolve().then(async () => project((await drv.procedure(db, [state.build()], path))[0]!));
           state.claimed = true;
         }
         return state.promise.then(yes, no);
@@ -202,7 +191,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
   }
 
   function collection(db: H, caller: Caller, p: Prepared, write: (build: () => Bound, project: (rows: Row[]) => unknown, path: string) => Write<unknown>) {
-    const trusted = modeOf(caller) === "trusted", { f, x } = p, terms = trusted ? x.trusted : x.caller, pol = policy(p, trusted, terms, caller), no = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", `${p.name}: ${message}`);
+    const trusted = modeOf(caller) === "trusted", { f, x } = p, terms = trusted ? x.trusted : x.caller, pol = policy(p, trusted, terms), no = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", `${p.name}: ${message}`);
     /** A value as the engine stores it, as a placeholder. Date-times and dates are known from the fact; a JSON object is told by its JS type (a boolean binds as it is on every driver). */
     const put = (values: unknown[], column: string, v: unknown): string => {
       const type = p.ts.includes(column) ? "timestamptz" : p.d.includes(column) ? "date" : v !== null && typeof v === "object" && !(v instanceof Date) ? "json" : "";
@@ -220,7 +209,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       }
       return out;
     };
-    const rows = (sql: string, values: unknown[]) => drv.read(db, sql, values) as Promise<Record<string, unknown>[]>;
+    const rows = (sql: string, values: unknown[]) => drv.read(db, scoped(sql, caller), values) as Promise<Record<string, unknown>[]>;
     /** Core never reads back the scope column, and `_rid` is storage's. */
     const clean = <R extends Record<string, unknown>>(list: R[]): R[] => { for (const r of list) { delete r._rid; if (f.s) delete r[f.s]; } return list; };
     const select = () => pol.select ??= `SELECT r.*, ${wires(p, "r.")}${pol.projection ? ", " + pol.projection : ""}${pol.from}`;
@@ -268,7 +257,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       });
       /** `WHERE id = ? AND <the caller's row rules> AND version = ?` */
       const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...pol.terms, x.lock].map(t => renderTerm(d, t, t[1] === "parent" ? d.ident(p.name) + "." : "", recipe))].join(" AND ")}`;
-      const step = (sql: string): Bound => ({ sql, binds: values, row: true });
+      const step = (sql: string): Bound => ({ sql: scoped(sql, caller), binds: values, row: true });
       return { given, recipe, guard, step, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };
 

@@ -98,18 +98,17 @@ restrict: { orders: "owner = auth.uid()" }
 - An admin-surface target reads a scoped Schema (admins without values see nothing).
 - A View joins Schemas scoped by different fields (rows outside either set are dropped).
 
-### Gateways (§6–§7, extended)
-- **Gateway mode.** An application can declare that it runs behind a trusted gateway. It then accepts only gateway-signed calls (`props.mantle`) on every surface, and refuses its own sessions.
-- **Read-only execution** for previews, tests and CI.
-  - Queries run; writes are answered with the count of rows they would affect, rewritten as a `SELECT`.
-  - Procedures with `handler.ref` are refused.
-  - Events are marked as read-only.
-- **`onAccess(event)` hook**, fired on every path, including denials, with:
-  - the target and caller;
-  - the outcome and reason;
-  - the resolved terms per Schema;
-  - the row count;
-  - a read-only flag.
+### Gateways
+- **Gateway mode.** Selected REST, MCP, Admin and web boundaries accept `gateway: { tenant }` and receive the execution context as their third argument. The caller comes only from `ctx.props.mantle`; absent props mean anonymous. Set gateway mode on every boundary of an application. Application cookies, sessions and bearer tokens are ignored, without loading the application's auth instance; present `props.mantle` prevents falling back to application credentials.
+- **Host contract v1.** `hostCaller(props, { tenant, fields })` accepts `{ v: 1, tenant, layer: "admin" | "member", user: { id, role?, ...fields }, authenticatedAs: "snapshot" | "fresh", credential: "session" | "oauth", requestId }`. `target` and `targetHash` are required for the admin layer, optional for members, and enforced whenever supplied. `dryRun` is an optional boolean. Validate the entire shape and require an exact configured tenant match; malformed/version/tenant failures are `HOST_CONTRACT` (412). Roles and fields use ordinary caller validation, including arity and `{ all: true }`, and retain authority only on the original branded, frozen caller.
+- **Layers and subjects.** The admin layer produces `kind: "host"`, subject `'host:' + user.id`, and passes `ctx.admin`. The member layer produces `kind: "user"` and the unprefixed subject `user.id`; its roles never grant the admin layer. User subjects cannot start with `host:` or `system:` (case-insensitive). Scope applies throughout, including Admin drafts. Member management refuses host-built callers with 403.
+- **Freshness.** Callers expose `authenticatedAs`, `credential` and `requestId`. A snapshot may read; any SQL write, Store/Admin mutation, publishing transition, member mutation or ref handler is refused before execution with `STALE_CALLER` (403). Statement kinds determine whether SQL Procedures write. Session writes retain origin checks according to `credential`.
+- **Errors.** Both host-built layers receive JSON `{ error: { code, field?, target? } }`: contract failures are 412, denials (including `authorize` and stale callers) are 403, and malformed bodies are 400. Host callers never receive 401. MCP tool failures use the SDK error result with the same error fields. A needed missing or empty field fails before SQL with `HOST_CONTRACT` (412), naming the field.
+- **Tripwire.** Present execution props outside gateway mode is `HOST_CONTRACT` (412); an entry never silently ignores or honors it.
+- **Testing.** Tests call `hostCaller(props, { tenant, fields })` with the same props JSON.
+- **Target pinning.** Every boundary checks its describe `_meta.id`: REST route ids, Admin route templates, and View/Procedure ids for MCP and web. A wrong target fails with `TARGET_MISMATCH` (412); a stale hash fails with `TARGET_HASH_MISMATCH` (412). Generation computes a target-id → hash map with `targetHash`; gateway requests alone load its module. MCP host callers may initialize and call the pinned tool; batches are refused and `tools/list` is `AUTH_DENIED` (403), since the host answers it.
+- **Dry runs.** `dryRun: true` performs pinning, hash, input validation, generated caller checks, authorization and freshness without SQL or side effects. It returns 200 `{ dryRun: true, event }`; MCP carries this result in the SDK tool response. Ref handlers, custom guards, uploads and opaque work fail with `DRY_RUN_UNSUPPORTED` (412).
+- **`onAccess(event)` hook.** REST, MCP, Admin and web accept an optional observer for every forwarded caller, both layers, on every outcome including contract errors. It runs after the decision, is never awaited, and logs listener failures once without affecting the response. Non-gateway applications never invoke it. The v1 event is `{ v: 1, requestId, target, targetHash, caller: { kind, subject, layer }, outcome: "allow" | "deny" | "error", reason?, field?, dryRun }`. Reasons match error codes. Dry runs return the same event supplied to the hook.
 - **`describeApp(plan)`** is computable before deploy. It lists:
   - the targets: id, `targetHash`, surface and input schema;
   - each Schema's scope terms and each target's `restrict` terms, with field types and enums;
@@ -122,7 +121,8 @@ restrict: { orders: "owner = auth.uid()" }
 - §1 and §1a: `auth.hasRole` in scope or SQL, and role lists in `requires`.
 - §3: SQL references.
 - §4: the single-field scope shape and the role escape; replaced by the predicate above.
-- §5, §8, §9 and §10: wherever they conflict with this amendment.
+- §5: wherever it conflicts with this amendment.
+- §6–§10: replaced entirely by this amendment and the handbook’s Gateway mode section.
 
 Everything else stands.
 
@@ -149,12 +149,12 @@ self-hosted, a host when hosted.
   metadata: `id email emailVerified name image createdAt updatedAt role banned banReason
   banExpires` and `mantle*`.
 - **`requires: ctx.admin`** (renamed from `ctx.staff`) accepts any role name.
-- `mantle describe` reports every use (section 9), so authors, agents and hosts read one
+- `mantle describe` reports every use, so authors, agents and hosts read one
   vocabulary. An application that uses none of these generates
   byte-identical code to today.
 
 A misspelled role never matches, so the rule fails closed. A host that compares the
-report with what it can supply catches the typo (section 9).
+report with what it can supply catches the typo.
 
 ### 1a. Two layers: admin and member
 
@@ -163,7 +163,7 @@ the way Better Auth does.
 
 - **Admin.** A caller holding one of Better Auth's admin plugin `adminRoles` is an admin.
   Mantle reads `adminRoles` from the admin plugin configuration; it has no setting of its
-  own. A host caller is an admin by definition (section 6). The previous `staff` role,
+  own. A host caller is an admin by definition. The previous `staff` role,
   `ctx.staff`, `/mcp/staff` and "staff" in Admin are renamed `admin`, `ctx.admin`,
   `/mcp/admin` and "admin"; Better Auth's default `adminRoles: ["admin"]` therefore
   works unchanged.
@@ -197,8 +197,7 @@ the way Better Auth does.
   256 bytes, and contain no NUL. An array holds at most 64 values; duplicates are
   removed. Fields the application never reads are dropped. An invalid value is an error
   (`USER_FIELD_INVALID`); values are never silently filtered.
-- `auth.uid()` is unchanged for users. For a host caller it is `'host:' + user.id`
-  (section 6).
+- `auth.uid()` is unchanged for users. For a host caller it is `'host:' + user.id`.
 
 ### 3. SQL references
 
@@ -343,159 +342,7 @@ for groups or teams) feeds the same references.
 
 The handbook shows how fields are filled from Better Auth (`additionalFields` with `input: false`, and `customSession`).
 
-**A host (section 6).** A host supplies its own people as admin callers of the same shape. Members of a
-hosted application still sign in through the application's own Better Auth, so member
-roles and fields come from the same configuration everywhere.
-
-**Tests and local development (section 10).** Test tools build users of the same shape.
-
-### 6. Host contract v1
-
-A host supplies a versioned contract when it composes the application:
-
-```ts
-{ v: 1, caller, db, media?, mail? }
-```
-
-- `db` is the native handle: D1, Bun.SQL, postgres.js, or any driver that passes the
-  `Postgres` interface conformance suite. The kernel never branches on which host it
-  runs under.
-- **`hostCaller(ctx)` builds a host caller.** It reads only `ctx.props.mantle`, which
-  only the platform can set, and requires the complete v1 shape. The `user` member has
-  the shape of a Better Auth session user:
-
-  ```ts
-  { v: 1, kind: "host",
-    user: { id, email, name, role: "sales,orgadmin", region: ["TW"] },
-    target, targetHash, requestId, credential: "session" | "oauth", bodyDigest }
-  ```
-
-  It never reads headers or the body. On a non-admin entry, `props.mantle` is an error
-  (a tripwire). The caller's subject is `'host:' + user.id`, and its roles and fields are
-  validated like any other caller's.
-- **No host mode.** A host that keeps its people outside the application needs no
-  switch. No local user holds an `adminRoles` role, so Admin and `/mcp/admin` admit only
-  host callers, and the host's own gate decides which targets a host caller may reach.
-  Because privilege reads only the admin layer (section 1a), member roles never widen a
-  scope.
-- **Missing field.** A missing field that a host target needs fails with
-  `HOST_CONTRACT` (412) before any SQL runs. Denials of a host caller are 403, never 401.
-
-### 7. Forwarded invocations and target pinning
-
-- **Pinning.** A host caller may call only `props.target`. Each generated function checks
-  `caller.kind === "host" && caller.target === <id>`.
-- **Release binding.** `targetHash` binds the target to a release. A mismatch is 412.
-- **MCP.** A host caller may not send JSON-RPC batches. It may call `initialize`, and
-  `tools/call` with the pinned name. The host answers `tools/list` itself.
-- **Body binding.** `bodyDigest` binds the body.
-- **Origin checks.** Session-credential host writes keep origin checks: the host checks
-  `Sec-Fetch-Site`/`Origin` before issuing props, and `checkOrigin` applies according to
-  `props.credential`.
-- **`/mcp/admin`** (renamed from `/mcp/staff`) becomes an allowlist: admins, or host
-  callers.
-  It is no longer a denylist that admits new caller kinds by default.
-- **Subjects.** User subjects may not start with `system:` or `host:`. Host writes record
-  `author_id = 'host:' + user.id`.
-
-### 8. Admin, content and handlers accept host callers
-
-- **Admin targets.** Every Admin API route maps to exactly one target id
-  (`admin:<method> <path template>`), and the id must equal `props.target`.
-  `mantle describe` lists Admin targets.
-- **Gates.** The Admin gate, the extension contract (`caller: { kind: "admin" | "host" }`),
-  publishing transitions, site settings and media accept host callers, and scope
-  applies throughout. `requires: ctx.admin` checks the host caller's roles.
-- **Drafts.** Host callers see drafts, as admins do.
-- **Member management.** Admin's identity routes (list and view users, ban and unban,
-  revoke sessions, set member roles) are targets like any other, each naming its Better
-  Auth statement.
-  - A local admin's call goes through Better Auth's admin API with the admin's own
-    request, as today.
-  - A host caller has no session in the application's Better Auth. Its call runs through
-    Better Auth's server context with the same effects as the admin API (for a ban: the
-    ban fields and revoking every session), and records `host:` + `user.id` as the
-    actor.
-  - A host caller can never give a user an `adminRoles` role.
-  - Impersonation is never host-callable.
-- **Owner-scoped Schemas.** A host caller's subject is `'host:' + user.id`, so it sees
-  only rows it owns, never a member's. `mantle describe` flags such targets `ownerScoped`.
-- **Ref handlers.** Host callers may call them.
-  - `ctx.store` is bound to the host caller and enforces scope.
-  - `ctx.db` is undefined for host callers; `HandlerContext` is a union by caller kind.
-  - Such Procedures are flagged `opaque` by `mantle describe`. Custom code is the author's
-    responsibility, and the report makes that visible.
-
-### 9. `mantle describe`: what the application exposes and who sees what
-
-`mantle describe` reports, for the application as it is generated, every entry point and
-how it is protected. It is useful to anyone reviewing permissions before release, to
-coding agents checking what they wrote, and to anything that fronts the application (a
-gateway, generated documentation, a host). It writes no file into the project.
-
-- `mantle describe` prints a human-readable report: targets, which are enforced by
-  scope, which only filter in SQL, and which run custom handler code.
-- `mantle describe --json`, and the same data from the exported function
-  `describeApp(plan)`, give a machine-readable report with a published JSON Schema and
-  `schemaVersion`.
-
-**Top level:** `schemaVersion: 1`, `planHash` and `access`, every user field the
-application uses, with each field's type, enum, operator (`in`, or owner `eq`),
-the Schemas whose scope binds it and targets whose restrict binds it. It is
-derived from use, never declared. Role lists are withdrawn.
-
-**Each target** is an MCP `Tool` object (`name`, `title`, `description`,
-`inputSchema`, `annotations`). Mantle's fields sit under `_meta`:
-- `id`, surface, kind and `targetHash`;
-- `requires`: credential/admin predicates and required scopes, without role lists;
-- `scope` and `restrict`: the per-Schema owner and value terms;
-- `userFields`: each field's `via` (`scope` or `restrict`), Schemas, operator and
-  `allAllowed`. A restrict term makes `allAllowed` false: `{ all: true }` cannot
-  drop it. Owner equality also cannot be dropped;
-- `readOnly`: true only when every statement the target can run is a read;
-  ref handlers are false regardless of authored annotations;
-- `hostCallable`;
-- the flags `opaque`, `ownerScoped` and `unscopedReads`.
-
-`diffApp(a, b)` and `mantle describe --diff <old.json>` list added/removed targets
-and changes to scope/restrict terms, `allAllowed`, `readOnly` and `requires`.
-Each change is `widened`, `narrowed` or `changed`; removing a restrict term is
-`widened`. Incomparable or opaque behavior changes remain `changed`.
-
-The report holds no SQL and no data. Anything that fronts the application builds its
-own registry from it; Mantle does not define such registries.
-
-### 10. Local testing and development
-
-`@aotter/mantle/testing` (a new export, refused by `mantle bundle`) provides:
-
-- **`authenticatedAs(user, options?)`** builds a branded member, admin or host caller
-  from a Better Auth–shaped user (`{ id, role: "sales", region: ["TW"] }`) and calls
-  generated functions directly. It verifies lowering and binds. A host target is a
-  generated literal union type, so a misspelled target fails typecheck.
-- **`userFor(auth, user)`** runs the application's real Better Auth session pipeline,
-  including `customSession`, and returns the fields Mantle would bind.
-- **`fakeHost(app, { user } | { persona })`** drives `app.fetch` with `props.mantle` the
-  way a host does:
-  - it resolves targets from the `mantle describe` data;
-  - it sends only the fields a target reads;
-  - it reproduces `HOST_CONTRACT`.
-
-  Entry selection, context passing, gates and pinning are therefore tested.
-- **Fixture schema.** A published JSON Schema describes user fixtures (personas). A host
-  may export them, sanitized, with stable labels and a `planHash`; a stale fixture fails
-  with `USER_FIXTURE_STALE`.
-
-`mantle dev --as role=sales,region=TW[,JP]` (or `--as <fixture>`) uses `fakeHost` for admin
-targets and prints the resulting scope. Members sign in through the application's own
-Better Auth as usual.
-- It binds only to 127.0.0.1.
-- It checks the `Host` header.
-- It requires a per-run token.
-- It refuses remote data unless `--allow-remote-data` is set.
-
-Visibility assertions must not use the system caller or `runtime.store`, because both
-bypass scope.
+Sections 6–10 are superseded by the amendment above; see the handbook’s [Gateway mode](../handbook/reference/authorization.md#gateway-mode).
 
 ### 11. Version safety
 

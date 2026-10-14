@@ -1,7 +1,7 @@
-import type { LoweredStatement } from "../src/build/compiler.js";
+import { describeApp } from "../src/domain/describe/index.js";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { compilePlan, NATIVE_NOT_NULL, notNullColumns, viewOutputs } from "../src/build/compiler.js";
+import { compilePlan, NATIVE_NOT_NULL, notNullColumns, viewOutputs, type LoweredStatement } from "../src/build/compiler.js";
 import * as postgresCompile from "../src/build/postgres/compile/index.js";
 import { initialStorageSql as sqliteSchema } from "../src/build/d1/storage.js";
 import { initialStorageSql as postgresSchema } from "../src/build/postgres/storage.js";
@@ -67,7 +67,7 @@ async function canonical(target: Target, text = source) {
   const compiled = await compilePlan({ sources: [{ sourceId: "notes.yaml", text }] }, sqlite ? undefined : postgresCompile);
   if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
   const { lowered } = lowerPlan(compiled.plan, dialect);
-  return { target, plan: compiled.plan, lowered, newId: coreNewId(dialect, compiled.plan.schemas), viewKeys: Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys])) };
+  return { target, description: await describeApp(compiled.plan), plan: compiled.plan, lowered, newId: coreNewId(dialect, compiled.plan.schemas), viewKeys: Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys])) };
 }
 describe("native generation", () => {
   test("unsupported programs fail generation with paths rather than omitting behavior", async () => {

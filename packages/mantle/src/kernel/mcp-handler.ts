@@ -1,6 +1,6 @@
 /** Request-only MCP implementation, excluded from Worker startup. */
 import { authorized, authorizeTarget } from "./authorization.js";
-import { isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, surfaceFailure, wire, type Caller } from "./contracts.js";
+import { forwarded, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, wire, type Caller, type RequestContext } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tools, Options } from "./mcp.js";
 import { RESOURCE_MIME_TYPE, linkSurface, type McpAppResource } from "./mcp-apps.js";
@@ -18,8 +18,11 @@ const paging = (schema: { properties?: object }) => ({ ...schema, properties: { 
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
 
 /** The handler for `/mcp` (public tools) and `/mcp/admin` (tools for `admin` roles); other paths are undefined. */
-export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env) => Promise<Response | undefined> {
-  return async (request, env) => {
+export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
+  return async (request, env, ctx) => {
+    const access = options.gateway ? (await import("./host-access.js")).accessRequest(ctx, options) : undefined;
+    let resolved: Caller | undefined;
+    try {
     const requiredScopes = options.requiredScopes ?? ["mcp"], locale = options.locale ?? "en";
     const url = new URL(request.url), path = url.pathname.replace(/\/+$/, ""), surface = path === "/mcp" ? "public" as const : path === "/mcp/admin" ? "admin" as const : undefined;
     if (!surface) return;
@@ -29,10 +32,14 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
     let parsedBody: unknown, tooLarge = false;
     const cookieOnly = request.headers.has("cookie") && !request.headers.has("authorization");
     const parse = async () => {
+      if (options.gateway) {
+        try { const raw = await (await import("./json-body.js")).bytes(request, 1024 * 1024, () => { tooLarge = true; throw new Error("Body limit"); }); parsedBody = JSON.parse(new TextDecoder().decode(raw)); } catch {}
+        return;
+      }
       const { readRequestBody } = await import("@modelcontextprotocol/server");
       try { const body = await readRequestBody(request.clone() as Parameters<typeof readRequestBody>[0], 1024 * 1024); tooLarge = body.tooLarge; if (!body.tooLarge) parsedBody = JSON.parse(body.text); } catch {}
     };
-    if (request.method === "POST" && cookieOnly) await parse();
+    if (request.method === "POST" && (cookieOnly || options.gateway)) await parse();
     const messages = Array.isArray(parsedBody) ? parsedBody : [parsedBody];
     const readOnly = request.method === "POST" && messages.length > 0 && messages.every(message => {
       if (!isRecord(message) || message.jsonrpc !== "2.0" || typeof message.method !== "string") return false;
@@ -41,27 +48,55 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       const name = isRecord(message.params) ? message.params.name : undefined;
       return reads.some(tool => tool.surface === surface && tool.name === name);
     });
-    const challenge = (error: unknown, scope?: string, bare = false) => {
+    const challenge = async (error: unknown, scope?: string, bare = false) => {
+      access?.finish(error);
       const result = wire(error);
       if (result.status === 401 || result.status === 403) {
         observe(options.onObservation, { kind: "request-refused", at: Date.now(), surface, status: result.status });
         observe(options.onRefusal, { at: Date.now(), status: result.status, reason: "credential" });
       }
       if (result.status === 401) scope ??= requiredScopes.join(" ");
-      return surfaceFailure(error, bare ? undefined : 'Bearer ' + (scope ? (result.status === 403 ? 'error="insufficient_scope", ' : '') + 'scope="' + scope + '", ' : '') + 'resource_metadata="' + (options.resourceMetadata ?? url.origin + '/.well-known/oauth-protected-resource/mcp') + '"', `mcp ${path}`);
+      return (await import("./host-caller.js")).hostFailure(error, resolved, `mcp ${path}`, bare ? undefined : 'Bearer ' + (scope ? (result.status === 403 ? 'error="insufficient_scope", ' : '') + 'scope="' + scope + '", ' : '') + 'resource_metadata="' + (options.resourceMetadata ?? url.origin + '/.well-known/oauth-protected-resource/mcp') + '"');
     };
     let caller: Caller;
     try {
-      caller = await surfaceCaller(request, env, options.caller, readOnly);
+      const requested = isRecord(parsedBody) && isRecord(parsedBody.params) ? parsedBody.params.name : undefined;
+      const requestedTool = selected.find(t => t.name === requested) ?? (typeof tools === "function" ? undefined : tools.find(t => t.surface === surface && t.name === requested));
+      await access?.select(requestedTool?.target ? `${requestedTool.target.kind}:${requestedTool.target.name}` : typeof requested === "string" ? `mcp:${requested}` : "mcp");
+      caller = resolved = forwarded(ctx, options.gateway)
+        ? (await import("./host-caller.js")).gatewayCaller(ctx, options.gateway, options.fields)
+        : await surfaceCaller(request, env, options.caller ?? (() => ({ kind: "anonymous" })), readOnly);
+      await access?.select(requestedTool?.target ? `${requestedTool.target.kind}:${requestedTool.target.name}` : "target" in caller && caller.target ? caller.target : "mcp", caller);
       if (caller.kind === "anonymous" && (surface === "admin" || selected.length > 0 && selected.every(tool => tool.closed))) throw new ContractError("UNAUTHENTICATED", "Authentication is required.", "mcp");
       if (caller.kind === "system") return challenge(new ContractError("AUTH_DENIED", "System callers cannot use MCP.", "mcp"), undefined, true);
       if (surface === "admin" && !isAdmin(caller)) return challenge(new ContractError("AUTH_DENIED", "Admin role is required.", "mcp/admin"), undefined, true);
-      if (caller.kind === "user" && caller.credential !== "session" && requiredScopes.some(scope => !(caller as Extract<Caller, {kind: "user"}>).scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs the required MCP scopes.", "mcp"), union(caller.scopes, requiredScopes));
+      if (!options.gateway && caller.kind === "user" && caller.credential !== "session" && requiredScopes.some(scope => !(caller as Extract<Caller, {kind: "user"}>).scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs the required MCP scopes.", "mcp"), union(caller.scopes, requiredScopes));
     } catch (error) { return challenge(error); }
     if (surface === "admin") selected = await select();
     const { McpServer, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
-    if (request.method === "POST" && !cookieOnly) await parse();
+    if (request.method === "POST" && !cookieOnly && !options.gateway) await parse();
+    if (tooLarge && access) return challenge(new ContractError("INPUT_VALIDATION_FAILED", "MCP body exceeds its limit.", "mcp"), undefined, true);
     if (tooLarge) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Request body exceeds 1048576 bytes." } }, { status: 413 });
+    const host = options.gateway && (await import("./host-caller.js")).isHostCaller(caller);
+    if (host) {
+      try {
+        if (Array.isArray(parsedBody)) throw new ContractError("INPUT_VALIDATION_FAILED", "Host calls cannot batch MCP messages.", "mcp");
+        if (isRecord(parsedBody) && typeof parsedBody.method === "string" && !["initialize", "tools/call"].includes(parsedBody.method)) throw new ContractError("AUTH_DENIED", "Host callers may only initialize or call a tool.", "mcp", {status: 403});
+        if (isRecord(parsedBody) && parsedBody.method === "initialize") {
+          const pinned = "target" in caller ? caller.target : undefined;
+          if (pinned && !selected.some(tool => (tool.target ? `${tool.target.kind}:${tool.target.name}` : `admin:tool:${tool.name}`) === pinned)) throw new ContractError("TARGET_MISMATCH", "Initialize must pin a mounted tool.", pinned, {status:412});
+          await access?.select(pinned ?? "mcp", caller);
+          await access?.check(true);
+        } else {
+          const params = isRecord(parsedBody) && isRecord(parsedBody.params) ? parsedBody.params : undefined;
+          const tool = selected.find(t => t.name === params?.name);
+          if (tool) {
+            await access?.select(tool.target ? `${tool.target.kind}:${tool.target.name}` : `admin:tool:${tool.name}`, caller);
+            await access?.check(!!tool.page || tool.readOnly === true);
+          }
+        }
+      } catch (error) { return challenge(error, undefined, true); }
+    }
     if (request.method === "POST") {
       for (const message of Array.isArray(parsedBody) ? parsedBody : [parsedBody]) {
         if (!message || message.method !== "tools/call") continue;
@@ -69,7 +104,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         if (!tool) continue;
         const scopes = tool.scopes ?? [];
         if (caller.kind === "anonymous" && tool.closed) return challenge(new ContractError("UNAUTHENTICATED", "Authentication is required.", "mcp"), union(requiredScopes, scopes));
-        if (caller.kind === "user" && caller.credential === "oauth" && scopes.some(scope => !caller.scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs additional scopes.", "mcp"), union(caller.scopes, scopes));
+        if (!options.gateway && caller.kind === "user" && caller.credential === "oauth" && scopes.some(scope => !caller.scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs additional scopes.", "mcp"), union(caller.scopes, scopes));
       }
     }
     const app = options.apps?.[surface];
@@ -86,7 +121,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         if ((Array.isArray(parsedBody) ? parsedBody : [parsedBody]).some(message => message?.method === "tools/list")) {
           const visible = [];
           for (const tool of selected) {
-            if (caller.kind === "anonymous" && tool.closed || caller.kind === "user" && caller.credential === "oauth" && tool.scopes?.some(scope => !caller.scopes.includes(scope))) continue;
+            if (caller.kind === "anonymous" && tool.closed || !options.gateway && caller.kind === "user" && caller.credential === "oauth" && tool.scopes?.some(scope => !caller.scopes.includes(scope))) continue;
             try { tool.check?.(caller); } catch (error) { if (error instanceof ContractError && ["AUTH_DENIED", "UNAUTHENTICATED"].includes(error.code)) continue; throw error; }
             if (await authorized(options.authorize, tool.target ?? { kind: tool.page ? "view" : "procedure", name: tool.name }, caller)) visible.push(tool);
           }
@@ -94,9 +129,11 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         }
       } catch (error) { return challenge(error); }
     }
+    // Host calls execute in the SDK callback, after transport validation.
     const handler = createMcpHandler(() => {
       const schema = (value: unknown) => fromJsonSchema(value as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } });
       const server = new McpServer({ name: "aotter.mantle", version: "0.2.0", ...options.serverInfo }, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
+      if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
       const appMeta = links ? registerApps(server, links, parsedBody) : undefined;
       for (const tool of selected) {
         const meta = appMeta?.(tool.name);
@@ -107,11 +144,14 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         if (metadata) observe(options.onObservation, { ...metadata, phase: "attempt", at: Date.now() });
         let outcome: "succeeded" | "failed" | "denied" = "succeeded", code: string | undefined;
         try {
-          if (tool.run) checkOrigin(request, caller);
-          const data = await callTool(tool, raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers);
+          if (host) tool.check?.(caller);
+          if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
+          const data = await callTool(tool, raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
+          if (host) access?.finish();
           return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
-          const diagnostic = surfaceError(error, `mcp ${tool.name}`).error;
+          if (host) access?.finish(error);
+          const diagnostic = host ? (await (await import("./host-caller.js")).hostFailure(error, caller, `mcp ${tool.name}`).json() as {error: ReturnType<typeof surfaceError>["error"]}).error : surfaceError(error, `mcp ${tool.name}`).error;
           code = diagnostic.code; outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
           if (diagnostic.path === "request:origin") observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" });
           const payload = { diagnostics: [diagnostic] };
@@ -123,7 +163,15 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       }
       return server;
     }, { legacy: "stateless", maxRequestBodySize: 1024 * 1024, onerror: error => console.error("[mantle mcp] request failed", error) });
-    return handler.fetch(request, { parsedBody });
+    const response = await handler.fetch(request, { parsedBody });
+    if (host) {
+      if (response.status >= 400) access?.finish(new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: response.status}));
+    }
+    return response;
+    } catch (error) {
+      access?.finish(error);
+      return (await import("./host-caller.js")).hostFailure(error, resolved, "mcp");
+    }
   };
 }
 

@@ -2,7 +2,7 @@
 import type { GenerateInput, GenerateDiagnostic } from "../domain/model.js";
 import { viewOutputs } from "../build/compiler.js";
 
-export function refuseDeclarations({ plan }: GenerateInput, diagnostics: GenerateDiagnostic[]): void {
+export function refuseDeclarations({ plan }: Pick<GenerateInput, "plan">, diagnostics: GenerateDiagnostic[]): void {
   const refuse = (path: string, message: string) => diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message });
   for (const [name, trigger] of Object.entries(plan.triggers)) {
     const kind = trigger.source.kind;

@@ -174,6 +174,23 @@ adminBindings(); mcp(options); rest(options);
 webmcpRoutes({tools:[]},tools);
 webmcpRoutes({tools:[]},tools,undefined);
 `);roots.push(plainConsumer);
+ // A field-scoped app passes its generated metadata (with userFields) straight to admin().
+ const scoped=join(dir,"scoped"),scopedResult=await generateFromSources({target:"cloudflare-d1",admin:true,sources:{sources:[{sourceId:"scoped.yaml",text:`apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: notes}
+spec:
+  title: Notes
+  lifecycle: operational
+  scope: "area IN auth.user('area')"
+  indexes: [[area, id]]
+  schema: {type: object, required: [area, title], properties: {area: {type: string, enum: [north, south]}, title: {type: string}}}
+`}]}});
+ if(!scopedResult.ok)throw Error(JSON.stringify(scopedResult.diagnostics));await writeGenerated(scoped,scopedResult.files,false);
+ const scopedConsumer=join(scoped,"consumer.ts");await writeFile(scopedConsumer,`import {adminBindings} from './admin-bindings.js';
+import {admin} from '@aotter/mantle-admin/server';
+const b=adminBindings();
+admin(b.metadata,b.views,b.operations,{db:()=>null!,caller:()=>({kind:'anonymous' as const})});
+`);roots.push(scopedConsumer);
  const kernel=resolve(import.meta.dir,"../src/kernel"),admin=resolve(import.meta.dir,"../../mantle-admin/src/server"),paths={"@aotter/mantle/*":[kernel+"/*.ts"],"@aotter/mantle/contracts":[kernel+"/contracts.ts"],"@aotter/mantle/rest":[process.env.MANTLE_ADMIN_SOURCE_REST??kernel+"/rest.ts"],"@aotter/mantle-admin/server":[admin+"/index.ts"],"@aotter/mantle-admin/server/*":[admin+"/*.ts"]};
  const program=ts.createProgram(roots,{strict:true,noEmit:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,skipLibCheck:true,paths,types:["node","bun-types"],typeRoots:[resolve(import.meta.dir,"../node_modules/@types"),resolve(import.meta.dir,"../node_modules")]});expect(ts.getPreEmitDiagnostics(program).map(d=>`${d.file?.fileName} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText," ")}`).join("\n")).toBe("");
  }finally{await rm(dir,{recursive:true,force:true});}
@@ -184,7 +201,7 @@ webmcpRoutes({tools:[]},tools,undefined);
  let worker:ReturnType<typeof spawn>|undefined,log:Awaited<ReturnType<typeof open>>|undefined;
  try{
  const result=await generateFromSources({target:"cloudflare-d1",admin:true,sources:{sources:[source,ordinaryOwnerSource,...overlaySources,tupleSchema,oneofSource,...temporalSources,tupleView("trio","SELECT id,kind,rank,label FROM ordered WHERE rank>=input.minimum ORDER BY kind,rank,id",{filterFields:["kind","rank"],searchFields:["label"]}),tupleView("groups","SELECT kind,MIN(rank) AS low FROM ordered WHERE rank>=input.minimum GROUP BY kind ORDER BY kind,low")]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);
- await writeFile(join(dir,"worker.ts"),`import {adminBindings,statisticsView} from './admin-bindings.js';import {nativeEntryGet,nativeEntryPage,nativeEntryProcedure} from './native-admin.js';import {fixtureCaller} from '${resolve(import.meta.dir,'apps/fixtures.ts')}';import {userCaller} from '@aotter/mantle/user-fields';
+ await writeFile(join(dir,"worker.ts"),`import {adminBindings,statisticsView} from './admin-bindings.js';import {nativeEntryGet,nativeEntryPage,nativeEntryProcedure} from './native-admin.js';import {fixtureCaller} from '${resolve(import.meta.dir,'apps/fixtures.ts')}';import {authenticatedAs as userCaller} from '@aotter/mantle/testing';
 export default{async fetch(request:Request,env:{DB:any}){if(new URL(request.url).pathname==='/health')return new Response('ready');let calls=0;const db={prepare(sql:string){calls++;return env.DB.prepare(sql);},batch:env.DB.batch.bind(env.DB)};try{const args:any=await request.json(),bindings=adminBindings(),caller=fixtureCaller(args.caller,userCaller);let result;if(args.kind==='validation'){const schema=bindings.schemas.find(s=>s.name===args.name)!;result=schema.validate(args.input,args.full);}else if(args.kind==='write'){const s=bindings.schemas.find(s=>s.name===args.name)!;if(args.verb==='create')result=await nativeEntryProcedure(s.binding,bindings.adapter,db,caller,"create",s.values(s.validate(args.input,false)));else if(args.verb==='patch')result=await nativeEntryProcedure(s.binding,bindings.adapter,db,caller,"patch",s.values(s.validate(args.input,false)),args.id,args.version);else result=await nativeEntryProcedure(s.binding,bindings.adapter,db,caller,"remove",{},args.id,args.version);}else if(args.kind==='entries'){const schema=bindings.schemas.find(s=>s.name===args.name)!,q=schema.query(new URLSearchParams(args.params));result=q?await nativeEntryPage(schema.binding,bindings.adapter,()=>db,caller,q):{rows:[],cursor:null};}else if(args.kind==='statistics')result=await statisticsView(db,caller,args.name,args.input);else{const view=bindings.views.find(v=>v.name===args.name)!,{input,...paging}=view.query(new URLSearchParams(args.params));result=await view.page(db,caller,input as never,paging);}return Response.json({result,calls});}catch(error){return Response.json({error:{code:(error as any).code,message:String(error)},calls},{status:400});}}};`);
  const config=join(state,"wrangler.json"),persist=join(state,"state"),wrangler=join(base,"node_modules/wrangler/bin/wrangler.js"),env={...process.env,WRANGLER_SEND_METRICS:"false",NO_PROXY:"127.0.0.1,localhost",no_proxy:"127.0.0.1,localhost"};
  await writeFile(config,JSON.stringify({name:"mantle-admin-local",main:join(dir,"worker.ts"),compatibility_date:"2026-09-28",compatibility_flags:["nodejs_compat"],d1_databases:[{binding:"DB",database_name:"mantle-admin-local",database_id:"00000000-0000-0000-0000-000000000001"}]}));
@@ -405,7 +422,7 @@ test("public developer View pages use REST public visibility with the signed-in 
 
 test('native Admin enforces field scope and { all: true } variants for entries, views and writes',async()=>{
  const m=JSON.parse(source.text);m.spec.scope="ownerId IN auth.user('region')";m.spec.uniqueIndexes=[['label']];
- const {userCaller}=await import('@aotter/mantle/user-fields');
+ const {authenticatedAs:userCaller}=await import('@aotter/mantle/testing');
  const unrelated={...m,metadata:{name:'otherrecords'},spec:{...m.spec,scope:"ownerId IN auth.user('zone')"}};
  const docs=[{sourceId:'field-admin.json',text:JSON.stringify(m)+'\n---\n'+JSON.stringify(unrelated)+'\n---\n'+JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name:'regional'},spec:{title:'Regional',surface:'admin',requires:{auth:{all:['ctx.admin']}},sql:'SELECT id,label FROM records ORDER BY id'}})}];
  const result=await generateFromSources({target:'bun-sqlite',sources:{sources:docs},admin:true});expect(result.ok).toBe(true);if(!result.ok)throw Error(JSON.stringify(result.diagnostics));

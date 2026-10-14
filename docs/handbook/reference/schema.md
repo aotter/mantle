@@ -46,7 +46,7 @@ Generated types constrain Store fields and writes; Store does not interpret a JS
 
 Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
 
-Scope accepts at most one required owner string bound to `auth.uid()` and one required non-null string user-field partition, each leading an index. Owner and field columns prefix every unique index in that order. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
+Owner and field columns prefix every unique index in that order. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
 
 `localized` and `translates: { parent, on }` declare a translation child. Parent visibility and publication are retained, with matching scope where needed. Locale values stay plain strings.
 

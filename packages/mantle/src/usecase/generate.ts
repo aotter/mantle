@@ -40,7 +40,7 @@ const typeOf = (s: JsonSchema | undefined): string => {
 export function generate(input: GenerateInput): GenerateResult {
   const { target, plan, lowered, viewKeys, newId, adminExtensions, site, admin, paging } = input;
   const diagnostics: GenerateDiagnostic[] = [];
-  refuseDeclarations({ target, plan, lowered, viewKeys, newId }, diagnostics);
+  refuseDeclarations({ plan }, diagnostics);
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
   const isSqlite = sqlite(target);
   const user = userReferences(plan, isSqlite);
@@ -116,7 +116,7 @@ export function generate(input: GenerateInput): GenerateResult {
     const same = steps(modes.caller) === steps(modes.trusted);
     declarations.push(`export type Procedure${index}Input = ${queryInputType(procedure.input, [...modes.caller, ...modes.trusted])};`,
       `const ${fn}Caller = ${steps(modes.caller)};`, ...(same ? [] : [`const ${fn}Trusted = ${steps(modes.trusted)};`]),
-      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...auth(procedure.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []), ...(procedure.trustedOnly ? [`  deny(caller, USER.modeOf(caller) === "trusted", ${q(path)});`] : []),
+      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...(modes.caller.some(s => s.kind !== "read") ? [`  if ("authenticatedAs" in caller && caller.authenticatedAs === "snapshot") (await import("@aotter/mantle/host-caller")).checkFresh(caller, false, ${q(path)});`] : []), ...auth(procedure.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []), ...(procedure.trustedOnly ? [`  deny(caller, USER.modeOf(caller) === "trusted", ${q(path)});`] : []),
       `  return { results: await DRIVER.procedure(db, bound(D, ${user.used ? "USER.scopedAll(" : ""}${same ? "" : `${user.used ? 'USER.modeOf(caller) === "trusted"' : 'caller.kind === "system"'} ? ${fn}Trusted : `}${fn}Caller${user.used ? ", caller)" : ""}, caller, raw), ${q(path)}) };`, "}");
     procedures.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
@@ -125,7 +125,7 @@ export function generate(input: GenerateInput): GenerateResult {
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
-  const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse, !!site), ...emitAdminDescriptors({plan,adminExtensions,admin},diagnostics), ...emitAdminBindings(input,refuse), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
+  const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target, input.description), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, input.description, refuse, !!site), ...emitAdminDescriptors({plan,adminExtensions,admin},diagnostics), ...emitAdminBindings(input,refuse), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
   const code = [...(Object.keys(plan.access?.userFields ?? {}).length ? [`export const userFields = ${q(plan.access!.userFields)} as const;`] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
@@ -136,7 +136,7 @@ export function generate(input: GenerateInput): GenerateResult {
     `export function store${hasHandlers ? "<const H extends Handlers>" : ""}(db: Database, caller: Caller${hasHandlers ? ", options: { handlers: H & Record<Exclude<keyof H, keyof Handlers>, never> }" : ""}): ReturnType<typeof makeStore> { return (makeStore ??= initStore())(db, caller${hasHandlers ? ", options" : ""}); }`,
   ] : [])].join("\n");
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
-  const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : [])] : []), ...(procedures.length ? ["type Output"] : [])];
+  const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : []), ...(/\bisUser\(/.test(code) ? ["isUser"] : [])] : []), ...(procedures.length ? ["type Output"] : [])];
   const dbType = isSqlite ? databaseImport(target) : "";
   return { ok: true, refProcedures: refNames, files: generatedFiles({ ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", user.code, dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
     ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...(stores ? [`import { createStore } from "${base}store";`] : []),

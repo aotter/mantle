@@ -14,7 +14,7 @@ export function conversions(properties: JsonSchema["properties"], binds: Lowered
 }
 
 /** Only build-time authorization assembly; generated queries retain their existing predicates. @internal */
-export const authLines = (requires: RuntimePlan["views"][string]["requires"], path: string): string[] => (requires?.auth?.all ?? []).map((p,index)=>{
-  const allowed=typeof p === "string" ? p === "ctx.admin" ? 'isAdmin(caller)' : 'caller.kind === "user"' : `caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})`;
+export const authLines = (requires: RuntimePlan["views"][string]["requires"], path: string, binds: LoweredStatement["binds"] = [], sqlite = true, trustedOnly = false): string[] => [...(trustedOnly ? [`  deny(caller, caller.kind === "system", ${q(path)});`] : []), ...(requires?.auth?.all ?? []).map((p,index)=>{
+  const allowed=typeof p === "string" ? p === "ctx.admin" ? 'isAdmin(caller)' : 'isUser(caller)' : `caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})`;
   return `  deny(caller, ${allowed}, ${q(`${path}/requires/auth/all/${index}`)});`;
-});
+}), ...binds.filter(b => b.k === "user").map(b => `  userBinds(${sqlite})(${q(b)}, caller);`)];
