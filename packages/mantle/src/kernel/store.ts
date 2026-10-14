@@ -119,6 +119,18 @@ type Interactive<T extends Record<string, Table>, O> = { transaction<R>(fn: (tx:
 interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; readonly from: string; readonly projection: string; readonly terms: readonly Term[]; byId?: string; select?: string }
 interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; returning?: string; readonly policy: Map<boolean, Policy> }
 
+const transactionStores = new WeakSet<object>();
+
+/**
+ * A ref handler's `ctx.transaction` on drivers with interactive transactions: it opens one on the handler's Store, or
+ * joins the one that Store already runs in (a handler called through `tx.procedures`), so the handler need not know.
+ */
+export function handlerTransaction(store: object, db: unknown) {
+  const open = (store as { transaction: (fn: (tx: unknown, db: unknown) => Promise<unknown>) => Promise<unknown> }).transaction;
+  return <R>(fn: (ctx: { store: any; db: any }) => Promise<R>): Promise<R> =>
+    transactionStores.has(store) ? fn({ store, db }) : open((tx, txDb) => fn({ store: tx, db: txDb })) as Promise<R>;
+}
+
 export function createStore<H, T extends Record<string, Table>, D extends Driver<H> = Driver<H>, O extends Operations<H> = {}, C extends object = never>(d: Dialect, drv: D, rules: Rules, facts: { readonly [K in keyof T]: Fact }, operations?: O): (db: H, caller: Caller, ...options: [C] extends [never] ? [] : [options: C]) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O> : {}) {
   const prepared = new Map<string, Prepared>();
   const prepare = (name: string): Prepared => {
@@ -182,11 +194,12 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         const rows = writes.length ? await drv.procedure(db, states.map(s => s!.build()), "store/batch") : [];
         return states.map((s, i) => s!.project(rows[i]!));
       } }),
-      ...(drv.transaction && { transaction: async (fn: (tx: any) => Promise<any>, txOptions?: TransactionOptions) => {
+      ...(drv.transaction && { transaction: async (fn: (tx: any, db: H) => Promise<any>, txOptions?: TransactionOptions) => {
         if (inTransaction) throw new Error("Nested transactions are not supported.");
-        return drv.transaction!(db, tx => fn(make(tx, caller, true, options)), txOptions);
+        return drv.transaction!(db, tx => fn(make(tx, caller, true, options), tx), txOptions);
       } }),
     };
+    if (inTransaction) transactionStores.add(store);
     return store;
   }
 
