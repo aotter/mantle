@@ -47,7 +47,7 @@ test('restricted Procedure INSERT variants refuse caller compilation while trust
   const db = new Database(':memory:');
   try {
     db.exec((await generateOrThrow('bun-sqlite', [{ sourceId: 'orders.yaml', text: schema }]))['schema.sql']!);
-    for (const postgres of [false, true]) for (const restrict of [{ orders: "region IN auth.user('region')" }, { orders: 'author_id = auth.uid()' }]) for (const sql of sqls) {
+    for (const postgres of [false, true]) for (const restrict of [{ orders: "region IN auth.user('region')" }]) for (const sql of sqls) {
       const result = await compilePlan({ sources: [{ sourceId: 'insert.yaml', text: schema+'\n---\n'+procedure(sql, restrict) }] }, postgres ? postgresCompiler : sqliteCompiler, 'operational');
       if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
       const p = result.plan.procedures.seed!;
@@ -212,4 +212,10 @@ test('a target that reads a restricted View carries its restrict',async()=>{
   expect((await app.procedures.touch(db,c,{})).results[0]).toHaveLength(1);
   expect(await code(()=>app.views.wrapper(db,userCaller({id:'a',region:{all:true}},{fields}),{}))).toBe('AUTH_DENIED');
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test('a caller Procedure may insert where the target restricts only the owner column',async()=>{
+ const own=JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Procedure',metadata:{name:'add-own'},spec:{title:'Add',input:{type:'object',properties:{region:{type:'string'},tier:{type:'string'}},required:['region','tier'],additionalProperties:false},output:{type:'object'},restrict:{orders:'author_id = auth.uid()'},handler:{sql:'INSERT INTO orders (region, tier) VALUES (input.region, input.tier) RETURNING id'}}});
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'own.yaml',text:schema+'\n---\n'+own}]);
+ expect(files['generated.ts']).toContain('add-own');
 });

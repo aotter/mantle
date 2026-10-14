@@ -446,7 +446,9 @@ function insert(n: N, c: C): N {
   const s = c.schemas[String(n.relation.relname).toLowerCase()]!;
   const columns = protectedColumns(s, c.mode !== 'trusted' ? c.restrict?.[String(n.relation.relname).toLowerCase()] : undefined);
   if (n.onConflictClause?.action === 'ONCONFLICT_UPDATE' && n.onConflictClause.targetList.some((target: N) => columns.includes(String(target.ResTarget.name).toLowerCase()))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
-  if (columns.length && c.mode !== 'trusted') throw new Refused('USER_FIELD_POSITION', 'Procedure INSERT/upsert into a field-scoped or restricted Schema requires trusted mode; use its scoped Store.');
+  // Owner columns are stamped from the caller on insert, so only value terms force a trusted insert.
+  const owner = c.mode !== 'trusted' ? c.restrict?.[String(n.relation.relname).toLowerCase()]?.owner : undefined;
+  if (columns.some(column => column !== owner) && c.mode !== 'trusted') throw new Refused('USER_FIELD_POSITION', 'Procedure INSERT/upsert into a field-scoped or restricted Schema requires trusted mode; use its scoped Store.');
   c.seen?.add('insert-target');
   const out = deep(n, c, 'InsertStmt');
   const named = (x: string) => n.cols.some((r: N) => r.ResTarget.name === x);
