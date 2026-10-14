@@ -13,7 +13,8 @@ export const handlers: Handlers = {
       decided = (await store.procedures["approve-request-write"](input)).results[0]![0] as Decided;
     } catch (error) {
       // The declared budget check is a business refusal, not a server error. Nothing was written.
-      if (String((error as Error)?.message).includes("MANTLE_CHECK budgets: remaining >= 0"))
+      // The approval's only Schema check is the budget one.
+      if (error instanceof ContractError && error.code === "CONFLICT" && error.message.startsWith("A check of the Schema failed"))
         throw new ContractError("CONFLICT", "The department budget cannot cover this request.", "procedures/approve-request");
       throw error;
     }

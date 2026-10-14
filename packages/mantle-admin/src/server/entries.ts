@@ -32,7 +32,7 @@ export interface EntrySchema<Database = unknown> {
     /** Selected native transport constraints, emitted only for PostgreSQL. */
     readonly native?: (value: unknown) => void;
     readonly validate: (data: Row, full: boolean) => Row;
-    readonly values: (data: Row) => Row;
+    readonly values: (data: Row, patch?: boolean) => Row;
     readonly row: (row: Row) => Row;
 }
 const fail = (message: string): never => invalid(message, "admin/entries");
@@ -214,7 +214,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
                 const version = lockOf(row, lock);
                 if (!Object.keys(data).length)
                     return editor(schema, row, ctx, true);
-                const patched = await nativeEntryProcedure(schema.binding,adapter,ctx.db,ctx.caller,"patch",schema.values(data),ctx.params.id!,version);
+                const patched = await nativeEntryProcedure(schema.binding,adapter,ctx.db,ctx.caller,"patch",schema.values(data, true),ctx.params.id!,version);
                 // RETURNING has only the child's columns; re-read so the response keeps the merged parent fields.
                 return editor(schema, schema.descriptor.translates ? await current(schema, ctx, ctx.params.id!) : patched, ctx, true);
             } },
@@ -242,7 +242,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         } else if (route.method === "PATCH") {
             if (!exactVersion(raw.expectedVersion)) fail("expectedVersion is required.");
             const data = dataOf(raw); schema.native?.(data); schema.validate(data, false);
-            nativeEntryData(schema.binding, adapter.values, ctx.caller, "patch", schema.values(data));
+            nativeEntryData(schema.binding, adapter.values, ctx.caller, "patch", schema.values(data, true));
         } else if (route.method === "POST") {
             if (!schema.publishing) throw conflict("Only publishing collections have transitions.");
             if (raw.expectedVersion !== undefined && !exactVersion(raw.expectedVersion)) fail("Invalid expectedVersion.");

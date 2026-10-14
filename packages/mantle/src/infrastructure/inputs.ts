@@ -6,7 +6,8 @@ import { dirname, relative, resolve } from "node:path";
 export const INPUTS_FILE = ".mantle-inputs.json";
 /** The installed `@aotter/mantle` version (dist/infrastructure → package root). */
 const MANTLE_VERSION = (JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string }).version;
-const digest = (path: string) => existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null;
+// Line endings are normalized so a CRLF checkout (core.autocrlf) matches the LF fingerprint.
+const digest = (path: string) => existsSync(path) ? createHash("sha256").update(readFileSync(path, "utf8").replaceAll("\r\n", "\n")).digest("hex") : null;
 
 /** The manifests and option modules (`--auth`, `--site`, `--admin-extensions`) one generate run read, by path relative to its output. */
 export function inputsFingerprint(destination: string, paths: readonly string[]): string {
@@ -31,5 +32,7 @@ export function extraRoles(source: string): string[] {
 
 /** Better Auth tables an app's own code queries with SQL (`FROM "user"`, `JOIN session` ...), for a one-line note. */
 export function authTableSql(source: string): string[] {
-  return [...new Set([...source.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO)\s+"?(user|session|account|verification)"?(?=[\s;),`'"]|$)/gi)].map(m => m[1]!.toLowerCase()))];
+  // Only lines that read like SQL statements, so prose such as "take into account" is not a finding.
+  const sql = source.split("\n").filter(line => /\b(?:SELECT|INSERT|UPDATE|DELETE)\b/.test(line)).join("\n");
+  return [...new Set([...sql.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO)\s+"?(user|session|account|verification)"?(?=[\s;),`'"]|$)/gi)].map(m => m[1]!.toLowerCase()))];
 }

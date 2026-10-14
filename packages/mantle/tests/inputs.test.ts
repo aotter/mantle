@@ -30,4 +30,5 @@ test("SQL against Better Auth's tables is named for a design note", () => {
   expect(authTableSql('db.prepare(`SELECT email FROM "user" WHERE id = ?`)')).toEqual(["user"]);
   expect(authTableSql("SELECT * FROM session s JOIN account a ON a.userId = s.userId")).toEqual(["session", "account"]);
   expect(authTableSql("SELECT * FROM users; SELECT user_id FROM orders; const fromUser = 1")).toEqual([]);
+  expect(authTableSql("// this takes into account the value from user input")).toEqual([]);
 });

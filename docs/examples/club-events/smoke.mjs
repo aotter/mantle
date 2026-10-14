@@ -108,11 +108,14 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step, logs }) => {
   step("officers see every member's registrations, with names, through Admin's API; a member gets 403 on Admin");
 
   const entry = async id => (await call("GET", `/admin/api/entries/${id}?collection=events`, { cookie: admin })).body.entry;
-  const before = await seatsOf(hike.id), version = (await entry(hike.id)).version;
-  const forced = await call("PATCH", `/admin/api/entries/${hike.id}?collection=events`, { cookie: admin, body: { data: { seats_taken: 0 }, expectedVersion: version } });
-  assert.ok(forced.status >= 400 && forced.status < 500, JSON.stringify(forced.body));
-  const shrunk = await call("PATCH", `/admin/api/entries/${hike.id}?collection=events`, { cookie: admin, body: { data: { capacity: 0 }, expectedVersion: version } });
-  assert.ok(shrunk.status >= 400 && shrunk.status < 500, JSON.stringify(shrunk.body));
+  const before = await seatsOf(hike.id), read = await entry(hike.id);
+  // The console saves whole records: an edit that echoes seats_taken (or tries to change it) only changes the other fields.
+  const edited = await call("PATCH", `/admin/api/entries/${hike.id}?collection=events`, { cookie: admin, body: { data: { ...read.data, title: "Hike (rescheduled)", seats_taken: 0 }, expectedVersion: read.version } });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  assert.equal((await entry(hike.id)).data.title, "Hike (rescheduled)");
   assert.equal(await seatsOf(hike.id), before);
-  step("Admin cannot write the server-maintained seats_taken (readOnly), nor lower capacity below the seats taken");
+  const shrunk = await call("PATCH", `/admin/api/entries/${hike.id}?collection=events`, { cookie: admin, body: { data: { capacity: 0 }, expectedVersion: (await entry(hike.id)).version } });
+  assert.equal(shrunk.status, 409, JSON.stringify(shrunk.body));
+  assert.equal(await seatsOf(hike.id), before);
+  step("officers edit an event with the whole record; the server-maintained seats_taken is ignored, and capacity below the seats taken is 409");
 });

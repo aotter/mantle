@@ -158,14 +158,14 @@ export function readIdentity(auth: AuthInstance) {
     return {
         /** The active user with this id, or null. */
         user: async (id: string) => active(await (await context()).internalAdapter.findUserById(id) as User | null),
-        /** Active users in the admin layer (`adminRoles` and `adminUserIds`). */
+        /** Active users in the admin layer (`adminRoles` and `adminUserIds`). ponytail: reads up to 10,000 per role; page it if an app has more admins. */
         admins: async () => {
             const { adapter } = await context();
             const found = new Map<string, User>();
             for (const role of options.adminRoles)
-                for (const user of await adapter.findMany<User>({ model: "user", where: [{ field: "role", operator: "contains", value: role }] })) found.set(user.id, user);
+                for (const user of await adapter.findMany<User>({ model: "user", where: [{ field: "role", operator: "contains", value: role }], limit: 10_000 })) found.set(user.id, user);
             if (options.adminUserIds.length)
-                for (const user of await adapter.findMany<User>({ model: "user", where: [{ field: "id", operator: "in", value: [...options.adminUserIds] }] })) found.set(user.id, user);
+                for (const user of await adapter.findMany<User>({ model: "user", where: [{ field: "id", operator: "in", value: [...options.adminUserIds] }], limit: 10_000 })) found.set(user.id, user);
             return [...found.values()].filter(user => adminLayerOf(user, options)).map(active).filter((user): user is Member => !!user);
         },
     };

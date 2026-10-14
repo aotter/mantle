@@ -40,3 +40,4 @@ packages/mantle/bench/results/
 # Native local generated test consumers and private timing artifacts.
 packages/mantle/tests/apps/.generated/
 packages/mantle/results/
+packages/mantle/tests/.mcp-types-*/
