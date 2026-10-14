@@ -36,7 +36,7 @@ export function adminLayerOf(user: { id: string; role?: unknown }, options: { ad
 /** Auth integration and test helpers validate a verified Better Auth-shaped user once. */
 export function userCaller(user: Readonly<Record<string, unknown>> & { readonly id: string }, options: {
   readonly fields?: UserFields; readonly adminRoles?: readonly string[]; readonly adminUserIds?: readonly string[]; readonly credential?: CredentialKind;
-  readonly credentialId?: string | null; readonly clientId?: string | null; readonly scopes?: readonly string[]; readonly issuer?: string;
+  readonly credentialId?: string | null; readonly clientId?: string | null; readonly scopes?: readonly string[]; readonly issuer?: string; readonly impersonatedBy?: string;
 } = {}): Extract<Caller, { kind: "user" }> {
   if (typeof user.id !== 'string' || !user.id || /^(host|system):/i.test(user.id)) return invalid("User subjects must be non-empty strings without reserved prefixes.");
   const roles = rolesFrom(user.role);
@@ -46,10 +46,12 @@ export function userCaller(user: Readonly<Record<string, unknown>> & { readonly 
     if (Object.hasOwn(user, field) && user[field] !== undefined && user[field] !== null) fields[field] = valueOf(user[field], spec, field);
   }
   Object.freeze(fields);
-  const caller = Object.freeze({ kind: "user" as const, subject: user.id, role: typeof user.role === "string" ? user.role : null,
+  const caller = { kind: "user" as const, subject: user.id, role: typeof user.role === "string" ? user.role : null,
     admin: adminLayerOf(user, options), roles, fields,
     ...(options.issuer ? { issuer: options.issuer } : {}), scopes: Object.freeze([...(options.scopes ?? [])]),
-    credential: options.credential ?? "session", credentialId: options.credentialId ?? null, clientId: options.clientId ?? null });
-  identities.set(caller, Object.freeze({ roles, fields, admin: caller.admin }));
+    credential: options.credential ?? "session", credentialId: options.credentialId ?? null, clientId: options.clientId ?? null };
+  // The real actor is read from the brand, so a spread or forged copy never carries it.
+  if (options.impersonatedBy) Object.defineProperty(caller, "impersonatedBy", { get() { return identities.get(this)?.impersonatedBy; } });
+  identities.set(Object.freeze(caller), Object.freeze({ roles, fields, admin: caller.admin, ...(options.impersonatedBy ? { impersonatedBy: options.impersonatedBy } : {}) }));
   return caller;
 }

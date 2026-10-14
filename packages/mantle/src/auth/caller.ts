@@ -5,7 +5,6 @@
  */
 import type { BetterAuthOptions } from "better-auth/types";
 import { ContractError, type Caller } from "../kernel/contracts.js";
-import { identities } from "../kernel/caller-identity.js";
 import { userCaller } from "../kernel/user-caller.js";
 import type { UserFields } from "../kernel/user-fields.js";
 
@@ -28,7 +27,6 @@ export function adminOptionsOf(auth: Pick<AuthInstance, "options">) {
   const configured = plugin?.options?.adminRoles ?? ["admin"];
   return { adminRoles: plugin ? (typeof configured === "string" ? configured.split(",") : [...configured]).map(role => role.trim()) : [], adminUserIds: plugin?.options?.adminUserIds ?? [], defaultRole: plugin?.options?.defaultRole ?? "user" };
 }
-export const adminRolesOf = (auth: Pick<AuthInstance, "options">): readonly string[] => adminOptionsOf(auth).adminRoles;
 
 export interface AuthLoader<A extends AuthInstance = AuthInstance> {
   /** `advanced.cookiePrefix` of the same options; read before Better Auth loads. */
@@ -50,7 +48,6 @@ export function authLoader<A extends AuthInstance>(load: () => Promise<A>, cooki
       if ((auth.options.advanced?.cookiePrefix ?? "better-auth") !== cookiePrefix) throw new Error(`authLoader cookiePrefix '${cookiePrefix}' differs from the auth options' advanced.cookiePrefix.`);
       if (auth.options.advanced?.cookies?.session_token?.name) throw new Error("advanced.cookies.session_token.name is not supported: Better Auth's getSessionCookie cannot find a renamed session cookie.");
       if (auth.options.secondaryStorage && !auth.options.session?.storeSessionInDatabase) throw new ContractError("AUTH_CONFIGURATION_ERROR", "Session secondaryStorage requires session.storeSessionInDatabase: true.", "auth:session");
-      adminRolesOf(auth);
       return auth;
     }).catch((error) => { instance = undefined; throw error; }),
   };
@@ -156,14 +153,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (!refreshed.response || refreshed.response.session.id !== found.session.id || refreshed.response.user.id !== user.id) return { kind: "anonymous" };
     for (const cookie of refreshed.headers?.getSetCookie().flatMap(splitSetCookieHeader) ?? []) options.responseHeaders.append("set-cookie", cookie);
   }
-  let caller: Caller = userCaller(user, { fields: options.fields, ...adminOptionsOf(instance), credentialId: found.session.id });
-  if (found.session.impersonatedBy) {
-    const identity = identities.get(caller)!;
-    caller = { ...caller };
-    identities.set(caller, Object.freeze({ ...identity, impersonatedBy: found.session.impersonatedBy }));
-    Object.defineProperty(caller, "impersonatedBy", { get() { return identities.get(this)?.impersonatedBy; } });
-    Object.freeze(caller);
-  }
+  const caller = userCaller(user, { fields: options.fields, ...adminOptionsOf(instance), credentialId: found.session.id, impersonatedBy: found.session.impersonatedBy ?? undefined });
   sessionUsers.set(caller, user);
   return caller;
 }

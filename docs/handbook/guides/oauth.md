@@ -6,7 +6,7 @@ and `oauthProvider` (or the provider's MCP preset). Append `oauthGrantExtension`
 **first** in its `extensions`. The helper comes from
 `@aotter/mantle/auth/oauth` and binds issued access tokens to the current consent
 ID and Better Auth’s consent reference without changing `referenceId`.
-The deprecated `oauthGrantHooks` is a no-op and may be omitted. Configure
+Configure
 `consentPage: "/oauth/consent"`, loginPage,
 resources, allowed/default client registration scopes, and public/native DCR
 explicitly. For MCP clients use the SDK's `mcp` preset, `allowPublicClientPrelogin:

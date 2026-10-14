@@ -12,7 +12,7 @@ import { getAuthTables } from "@better-auth/core/db";
 import type { OAuthOptions } from "@better-auth/oauth-provider";
 import { resourceSeeds } from "./resource-seeds.js";
 import { ContractError } from "../kernel/contracts.js";
-import { adminRolesOf } from "./caller.js";
+import { adminOptionsOf } from "./caller.js";
 import type { SQL } from "bun";
 import type { Dialect } from "../kernel/dialect/common.js";
 import * as postgres from "../kernel/dialect/postgres.js";
@@ -83,7 +83,7 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
     const cols = (values: Row) => Object.entries(values).filter(([, v]) => v !== undefined);
     const assign = (s: Statement, values: Row, increment: Record<string, number> = {}) =>
       [...cols(values).map(([c, v]) => `${ident(c)} = ${s.bind(v)}`), ...Object.entries(increment).map(([c, n]) => `${ident(c)} = ${ident(c)} + ${s.bind(n)}`)].join(", ");
-    const roles = options ? adminRolesOf({ options }) : [];
+    const { adminRoles: roles, adminUserIds } = options ? adminOptionsOf({ options }) : { adminRoles: [], adminUserIds: [] };
     const holdsAdmin = (role: unknown) => typeof role === "string" && role.split(",").some(role => roles.includes(role));
     const field = (name: string) => getFieldName({ model: "user", field: name });
     const protects = (modelKey: string, values?: Row) => modelKey === "user" && roles.length > 0 &&
@@ -91,7 +91,7 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
     const membership = (s: Statement, alias: string) => '(' + roles.map(role => `${d === sqlite ? "instr" : "strpos"}(',' || COALESCE(${alias}.${ident(field("role"))}, '') || ',', ${s.bind(',' + role + ',')}) > 0`).join(' OR ') + ')';
     const lastAdminGuard = (s: Statement, model: string) => {
       const table = ident(model), other = '"_mantle_other_admin"', no = d === sqlite ? '0' : 'FALSE';
-      return `(NOT ${membership(s, table)} OR EXISTS (SELECT 1 FROM ${table} ${other} WHERE ${membership(s, other)} AND ${other}.${idOf("user")} <> ${table}.${idOf("user")} AND COALESCE(${other}.${ident(field("banned"))}, ${no}) = ${no}))`;
+      return `(NOT ${membership(s, table)} OR EXISTS (SELECT 1 FROM ${table} ${other} WHERE (${membership(s, other)}${adminUserIds.map(id => ` OR ${other}.${idOf("user")} = ${s.bind(id)}`).join("")}) AND ${other}.${idOf("user")} <> ${table}.${idOf("user")} AND COALESCE(${other}.${ident(field("banned"))}, ${no}) = ${no}))`;
     };
     const mutation = async (model: string, modelKey: string, where: CleanedWhere[], values?: Row) => {
       const protect = protects(modelKey, values);

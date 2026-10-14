@@ -17,7 +17,7 @@ import { admin as adminFunction, customSession, emailOTP, jwt } from "better-aut
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { oauthGrantExtension, oauthGrantHooks, oauthConsents, pruneLegacyOAuthClients } from "../src/auth/oauth.js";
+import { oauthGrantExtension, oauthConsents, pruneLegacyOAuthClients } from "../src/auth/oauth.js";
 import { authRoutes, loopbackClientsAreNative, normalizeAuthResponseCookies } from "../src/auth/routes.js";
 import { ContractError } from "../src/kernel/contracts.js";
 import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller.js";
@@ -46,10 +46,8 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
   const cache = new Map<string, string>();
   let cacheBroken = false;
   const ac = createAccessControl(defaultStatements);
-  let boundAuth: AuthInstance;
   const betterAuthOptions = {
     user: { additionalFields: options.additionalFields },
-    databaseHooks: oauthGrantHooks(() => boundAuth),
     ...(options.sessionCache ? { verification: { storeInDatabase: true }, session: { storeSessionInDatabase: true }, secondaryStorage: { get: async (key: string) => cache.get(key) ?? null, set: async (key: string, value: string) => { if (cacheBroken) throw new Error("cache unavailable"); cache.set(key, value); }, delete: async (key: string) => { if (cacheBroken) throw new Error("cache unavailable"); cache.delete(key); }, getAndDelete: async () => { throw new Error("verification must remain in database"); }, increment: async () => { throw new Error("verification must remain in database"); } } } : {}),
     baseURL,
     secret: "test-secret-test-secret-test-secret-0123456789",
@@ -78,7 +76,6 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
   };
   for (const text of authSchemaSql(betterAuthOptions as never, "sqlite")) sqlite.run(text);
   const auth = betterAuth(betterAuthOptions);
-  boundAuth = auth as unknown as AuthInstance;
   handle = request => auth.handler(request);
   let loads = 0;
   const loader = authLoader(async () => { loads++; return auth as unknown as AuthInstance; }, options.cookiePrefix ?? "better-auth");

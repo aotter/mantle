@@ -16,7 +16,7 @@ type Api = {
     setRole(input: { headers: Headers; body: { userId: string; role: never } }): Promise<unknown>;
     createUser(input: { headers: Headers; body: { email: string; name: string; role: never } }): Promise<{ user: User }>;
     removeUser(input: { headers: Headers; body: { userId: string } }): Promise<unknown>;
-    userHasPermission(input: { headers: Headers; body: { permissions: { user: "delete"[] } } }): Promise<{ success: boolean }>;
+    userHasPermission(input: { headers: Headers; body: { permissions: { user: ("list" | "delete")[] } } }): Promise<{ success: boolean }>;
 };
 /** Requires Better Auth's official admin plugin. Every API receives the request's headers. */
 export interface IdentityAuth extends AuthInstance { readonly api: AuthInstance["api"] & Api }
@@ -43,6 +43,9 @@ function directory(auth: IdentityAuth, _caller: Caller, headers: Headers, d: Dia
     const { table, column, has } = authNames(auth.options), col = (field: string) => column("user", field);
     const createdAt = d === sqlite.dialect ? col("createdAt") : postgres.wireTimestamp(col("createdAt")).join("");
     const grantRole = (role = roles[0]) => { if (!role || !roles.includes(role)) throw invalid("Role must be configured in Better Auth adminRoles."); return role; };
+    const allowed = async (action: "list" | "delete") => {
+        if (!(await api(() => auth.api.userHasPermission({ headers, body: { permissions: { user: [action] } } }))).success) throw new ContractError("AUTH_DENIED", `Requires Better Auth user:${action}.`, "identity");
+    };
     const context = async () => await auth.$context as AuthContext;
     const find = async (id: string) => (await context()).adapter.findOne<User>({ model: "user", where: [{ field: "id", value: id }] });
     const set = async (id: string, role: readonly string[]) => {
@@ -76,7 +79,7 @@ function directory(auth: IdentityAuth, _caller: Caller, headers: Headers, d: Dia
             cursor?: string;
             cursorDirection?: "forward" | "backward";
         } = {}) {
-            await api(() => auth.api.listUsers({ headers, query: { limit: 1 } }));
+            await allowed("list");
             if (!Number.isInteger(limit) || limit < 1 || limit > 100 || search.length > 200 || !["forward", "backward"].includes(cursorDirection))
                 throw invalid("Invalid member page options.");
             const term = search.trim().toLowerCase(), scope = JSON.stringify(["members", term]);
@@ -134,8 +137,7 @@ function directory(auth: IdentityAuth, _caller: Caller, headers: Headers, d: Dia
             }
         },
         async revokeInvite(id: string) {
-            const permission = await api(() => auth.api.userHasPermission({ headers, body: { permissions: { user: ["delete"] } } }));
-            if (!permission.success) throw new ContractError("AUTH_DENIED", "Invitation revocation requires user:delete.", "identity");
+            await allowed("delete");
             const user = await find(id);
             if (!user || !adminLayerOf(user, options) || user.emailVerified || await (await context()).adapter.findOne({ model: "account", where: [{ field: "userId", value: id }] })) return false;
             return remove(id);

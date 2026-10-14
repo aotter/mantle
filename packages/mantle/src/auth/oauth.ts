@@ -49,11 +49,6 @@ function authCode(text: string): { userId: string; query: { client_id: string } 
   return value?.type === "authorization_code" && typeof value.userId === "string" && typeof value.query?.client_id === "string" ? value : undefined;
 }
 
-/** @deprecated Consent claims now use oauthGrantExtension; existing configurations may omit this hook. */
-export function oauthGrantHooks(_getAuth: () => AuthInstance): NonNullable<BetterAuthOptions["databaseHooks"]> {
-  return {};
-}
-
 export interface OAuthConsentRequest { readonly clientName: string; readonly redirectUri: string; readonly scopes: readonly string[]; readonly oauthQuery: string }
 export interface OAuthConsentInfo { readonly id: string; readonly clientId: string; readonly clientName: string; readonly scopes: readonly string[] }
 
