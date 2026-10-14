@@ -65,7 +65,10 @@
     "./surface": "./dist/kernel/surface.js",
     "./json-body": "./dist/kernel/json-body.js",
     "./generate/auth": "./dist/infrastructure/generateAuth.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./describe": "./dist/domain/describe/index.js",
+    "./target-hash": "./dist/domain/describe/target-hash.js",
+    "./describe/schema.json": "./docs/handbook/reference/describe.schema.json"
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.lib.json --removeComments --declaration false && tsc -p tsconfig.lib.json --emitDeclarationOnly && node scripts/bundle-compiler.mjs && node scripts/prune-declarations.mjs",

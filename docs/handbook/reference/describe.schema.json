@@ -1,0 +1,516 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mantle application description",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "planHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "access": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "string",
+              "number"
+            ]
+          },
+          "multiple": {
+            "type": "boolean"
+          },
+          "enum": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "number"
+              ]
+            }
+          },
+          "op": {
+            "enum": [
+              "in",
+              "eq"
+            ]
+          },
+          "scope": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "restrict": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "type",
+          "multiple",
+          "op",
+          "scope",
+          "restrict"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "inputSchema": {
+            "type": "object"
+          },
+          "annotations": {
+            "type": "object",
+            "properties": {
+              "readOnlyHint": {
+                "type": "boolean"
+              },
+              "destructiveHint": {
+                "type": "boolean"
+              },
+              "openWorldHint": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "readOnlyHint"
+            ],
+            "additionalProperties": false
+          },
+          "_meta": {
+            "type": "object",
+            "properties": {
+              "surface": {
+                "enum": [
+                  "public",
+                  "admin",
+                  "internal"
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "view",
+                  "procedure",
+                  "rest",
+                  "admin"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "targetHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "readOnly": {
+                "type": "boolean"
+              },
+              "userFields": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "via": {
+                      "enum": [
+                        "scope",
+                        "restrict"
+                      ]
+                    },
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "uniqueItems": true
+                    },
+                    "op": {
+                      "enum": [
+                        "in",
+                        "eq"
+                      ]
+                    },
+                    "allAllowed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "via",
+                    "schemas",
+                    "op",
+                    "allAllowed"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "scope": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "owner": {
+                      "type": "string"
+                    },
+                    "terms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "column": {
+                            "type": "string"
+                          },
+                          "field": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "enum": [
+                              "string",
+                              "number"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "column",
+                          "field",
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "terms"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "restrict": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "owner": {
+                      "type": "string"
+                    },
+                    "terms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "column": {
+                            "type": "string"
+                          },
+                          "field": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "enum": [
+                              "string",
+                              "number"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "column",
+                          "field",
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "terms"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "opaque": {
+                "type": "boolean"
+              },
+              "ownerScoped": {
+                "type": "boolean"
+              },
+              "unscopedReads": {
+                "type": "boolean"
+              },
+              "hostCallable": {
+                "type": "boolean"
+              },
+              "requires": {
+                "$ref": "#/$defs/requirements"
+              },
+              "variants": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "scope",
+                    "restrict",
+                    "requires",
+                    "inputSchema",
+                    "readOnly",
+                    "hostCallable",
+                    "trustedOnly",
+                    "opaque",
+                    "unscopedReads"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "owner": {
+                            "type": "string"
+                          },
+                          "terms": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "column": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "enum": [
+                                    "string",
+                                    "number"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "column",
+                                "field",
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "terms"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "restrict": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "owner": {
+                            "type": "string"
+                          },
+                          "terms": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "column": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "enum": [
+                                    "string",
+                                    "number"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "column",
+                                "field",
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "terms"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "requires": {
+                      "$ref": "#/$defs/requirements"
+                    },
+                    "inputSchema": {
+                      "type": "object"
+                    },
+                    "readOnly": {
+                      "type": "boolean"
+                    },
+                    "hostCallable": {
+                      "type": "boolean"
+                    },
+                    "trustedOnly": {
+                      "type": "boolean"
+                    },
+                    "opaque": {
+                      "type": "boolean"
+                    },
+                    "unscopedReads": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "surfaces": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "public",
+                    "admin",
+                    "rest",
+                    "internal",
+                    "lifecycle",
+                    "schedule"
+                  ]
+                },
+                "uniqueItems": true
+              },
+              "requiresBySurface": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/requirements"
+                }
+              },
+              "trustedOnly": {
+                "type": "boolean"
+              },
+              "triggers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "surface",
+              "kind",
+              "id",
+              "targetHash",
+              "readOnly",
+              "userFields",
+              "scope",
+              "restrict",
+              "opaque",
+              "ownerScoped",
+              "unscopedReads",
+              "hostCallable",
+              "requires",
+              "variants",
+              "surfaces",
+              "requiresBySurface",
+              "trustedOnly",
+              "triggers"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "description",
+          "inputSchema",
+          "annotations",
+          "_meta"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "planHash",
+    "access",
+    "targets"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "requirements": {
+      "type": "object",
+      "properties": {
+        "all": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "enum": [
+                  "ctx.user",
+                  "ctx.admin",
+                  "ctx.auth"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "ctx.auth.scope": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "ctx.auth.scope"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "guard": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

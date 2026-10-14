@@ -95,7 +95,7 @@ test("CLI --auth reads authOptions(env) without constructing Better Auth", async
     execFileSync(process.execPath, [cli, "cloudflare-d1", join(dir, "out"), manifest, "--auth", new URL("apps/auth/auth.ts", import.meta.url).pathname], { cwd: dir, stdio: "pipe" });
     expect(await readFile(join(dir, "out/schema.sql"), "utf8")).toContain('CREATE TABLE IF NOT EXISTS "oauthClient"');
   } finally { await rm(dir, { recursive: true, force: true }); }
-});
+}, 30_000); // a whole CLI process (Better Auth + compiler) can exceed the 5 s default on a busy runner
 
 
 test("bundle refuses testing helpers in static and dynamic production imports", async () => {
