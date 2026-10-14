@@ -5,7 +5,7 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { d1Adapter, type D1Like } from "../../../src/auth/adapter.js";
 import { d1BootstrapAdmin } from "../../../src/auth/identity.js";
-import { authHardening, guardGithubLogin, hashEmailOtp, sessionSecondaryStorage, type SessionCache, type SessionAuthority } from "../../../src/auth/hardening.js";
+import { authHardening, guardGithubLogin, hashEmailOtp } from "../../../src/auth/hardening.js";
 import type { BetterAuthOptions } from "better-auth/types";
 import { authLoader, resolveCaller } from "../../../src/auth/caller.js";
 import { withAuthTasks } from "../../../src/auth/hardening.js";
@@ -17,8 +17,6 @@ export type Env = {
     ORIGIN: string;
     AUTH_SECRET: string;
     ADMIN_EMAIL: string;
-    SESSION_CACHE?: SessionCache;
-    CACHE_NAMESPACE?: string;
     MAIL: {
         otp(args: {
             email: string;
@@ -35,7 +33,7 @@ export type Env = {
 };
 const locale = (request?: Request) => request?.headers.get("accept-language")?.split(",")[0]?.split(";")[0]?.trim() || "en";
 /** Plain options: generate reads plugin schemas without constructing Better Auth or sending queries. */
-export function authOptions(env: Env, authority?: SessionAuthority) {
+export function authOptions(env: Env) {
     // CLI schema generation passes an empty env; placeholder values construct no runtime instance.
     const origin = env.ORIGIN || "https://example.invalid", secret = env.AUTH_SECRET || "schema-generation-placeholder-secret";
     const bootstrap = env.ADMIN_EMAIL ? d1BootstrapAdmin(env.DB, { match: "email", value: env.ADMIN_EMAIL }, () => ({ options: { plugins } })) : async () => { };
@@ -46,26 +44,18 @@ export function authOptions(env: Env, authority?: SessionAuthority) {
         // Optional generic OAuth login: give each provider a unique id and trusted profile mapper.
         genericOAuth({ config: [] })];
     return { database: d1Adapter(env.DB), secret, baseURL: `${origin}/api/auth`,
-        ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], plugins, baseURL: origin, errorURL: "/admin/sign-in" }),
+        ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], baseURL: origin, errorURL: "/admin/sign-in" }),
         plugins,
         user: { additionalFields: { githubLogin: { type: "string", required: false, input: true } } },
         databaseHooks: { user: { create: { before: async (user, ctx) => guardGithubLogin(user, ctx), after: bootstrap }, update: { before: async (user, ctx) => guardGithubLogin(user, ctx), after: bootstrap } } },
         // Read-only opt-in (no KV): add cookieCache: {enabled:true,maxAge:60,refreshCache:false,version:"read-60-v1"}.
         // Forward the generated caller callback's readOnly classification for View/web/MCP reads; bump version when enabling/changing this policy.
-        session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true },
-        ...(env.SESSION_CACHE ? { secondaryStorage: sessionSecondaryStorage(env.SESSION_CACHE, env.CACHE_NAMESPACE!, authority ?? (() => { throw new Error("Session authority is not bound."); })) } : {}) } satisfies BetterAuthOptions;
+        session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true } } satisfies BetterAuthOptions;
 }
 export function createAuth(env: Env) {
     if (!env.AUTH_SECRET || !env.ORIGIN || !env.MAIL)
         throw new Error("Authentication setup is incomplete.");
-    let context: ReturnType<SessionAuthority> | undefined;
-    const auth = betterAuth(authOptions(env, async () => {
-        if (!context)
-            throw new Error("Auth context is not ready.");
-        return context;
-    }));
-    context = auth.$context;
-    return auth;
+    return betterAuth(authOptions(env));
 }
 /** The app mounts this handler, retaining work and guarding Better Auth's raw admin routes with current database facts. */
 export function handleAuth(auth: ReturnType<typeof createAuth>, request: Request, waitUntil: (task: Promise<unknown>) => void) {

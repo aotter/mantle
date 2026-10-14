@@ -30,7 +30,7 @@ export function authOptions(env: Env) {
   return { database: d1Adapter(env.DB), secret, baseURL: origin, basePath: "/api/auth", plugins,
     // The jwt plugin's cookie-to-JWT endpoint is unused; OAuth tokens come from the provider (Better Auth oauth-provider docs).
     disabledPaths: ["/token"],
-    ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], plugins, baseURL: origin, errorURL: "/admin/sign-in" }),
+    ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], baseURL: origin, errorURL: "/admin/sign-in" }),
     databaseHooks: { user: { create: { after: bootstrap }, update: { after: bootstrap } } },
     session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true },
   } satisfies BetterAuthOptions;
