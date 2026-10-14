@@ -42,6 +42,13 @@ export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0
   } },
 };
 
+/** A verification value that is an authorization code, with its user and client; else undefined. */
+function authCode(text: string): { userId: string; query: { client_id: string } } | undefined {
+  let value;
+  try { value = JSON.parse(text); } catch { return; }
+  return value?.type === "authorization_code" && typeof value.userId === "string" && typeof value.query?.client_id === "string" ? value : undefined;
+}
+
 /** @deprecated Consent claims now use oauthGrantExtension; existing configurations may omit this hook. */
 export function oauthGrantHooks(_getAuth: () => AuthInstance): NonNullable<BetterAuthOptions["databaseHooks"]> {
   return {};
@@ -87,6 +94,16 @@ export function oauthConsents(auth: AuthInstance & { handler(request: Request): 
       // Delete first: even if cleanup fails, every issued JWT fails the live-grant check immediately.
       await db.deleteMany({ model: "oauthConsent", where });
       for (const model of ["oauthRefreshToken", "oauthAccessToken"]) await db.updateMany({ model, where: [...where, { field: "revoked", value: null }], update: { revoked: new Date() } });
+      // An unredeemed code would mint a new token lineage after reconsent.
+      const code = (v: string) => { const x = authCode(v); return x?.userId === userId && x.query.client_id === consent.clientId; };
+      const codes = [{ field: "value", operator: "contains" as const, value: JSON.stringify(userId) }, { field: "value", operator: "contains" as const, value: JSON.stringify(consent.clientId) }];
+      for (let offset = 0; ;) {
+        const page = await db.findMany<{ id: string; value: string }>({ model: "verification", where: codes, limit: 100, offset, sortBy: { field: "id", direction: "asc" } });
+        const ids = page.filter(v => code(v.value)).map(v => v.id);
+        if (ids.length) await db.deleteMany({ model: "verification", where: [{ field: "id", operator: "in", value: ids }] });
+        if (page.length < 100) break;
+        offset += page.length - ids.length;
+      }
       return true;
     },
   };

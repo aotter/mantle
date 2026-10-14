@@ -52,6 +52,9 @@ function directory(auth: IdentityAuth, _caller: Caller, headers: Headers, d: Dia
     const remove = async (id: string) => {
         try {
             const found = await find(id);
+            // Better Auth deletes sessions and accounts before the adapter refuses the last admin row; refuse first.
+            if (found && adminLayerOf(found, options) && !(await read(`SELECT 1 FROM ${table("user")} WHERE ${privileged} AND ${col("id")} <> ${literal(id)} AND COALESCE(${col("banned")}, ${d === sqlite.dialect ? "0" : "FALSE"}) = ${d === sqlite.dialect ? "0" : "FALSE"} LIMIT 1`, [])).length)
+                throw new ContractError("CONFLICT", "This is the last admin; promote another admin before removing this one.", "identity", { status: 409 });
             await api(() => auth.api.removeUser({ headers, body: { userId: id } }));
             // The admin plugin removes accounts and sessions, but email-OTP proofs are keyed by email.
             if (found) await (await context()).adapter.deleteMany({ model: "verification", where: [{ field: "identifier", operator: "in", value: ["sign-in", "email-verification", "forget-password"].map(t => `${t}-otp-${found.email.toLowerCase()}`) }] });

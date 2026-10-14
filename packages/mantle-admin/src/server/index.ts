@@ -7,7 +7,7 @@ import { callToolLazy as callTool } from "@aotter/mantle/mcp";
 import { convert, type Conversions } from "@aotter/mantle/surface";
 import { siteInfo, type MantleSite, type MediaStorage } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
-export type Admin = (Extract<Caller, { kind: "user" }> & { readonly credential: "session" }) | (Extract<Caller, { kind: "host" }> & { readonly admin: true });
+export type Admin = (Extract<Caller, { kind: "user" }> & { readonly admin: true; readonly credential: "session" }) | (Extract<Caller, { kind: "host" }> & { readonly admin: true });
 export interface Context<Env, Database> {
     request: Request;
     url: URL;
@@ -20,8 +20,6 @@ export interface Context<Env, Database> {
     authorize?: (target: Target) => Promise<boolean>;
 }
 export interface Route<Env, Database> {
-    /** Identity endpoints delegate operation permissions to Better Auth. */
-    readonly identity?: true;
     readonly target?: (context: Context<Env, Database>) => Target;
     readonly prepare?: (context: Context<Env, Database>) => void | Promise<void>;
     readonly method: string;
@@ -172,7 +170,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         return view.row ? { ...page, rows: page.rows.map(view.row) } : page;
     };
     const routes: readonly Route<Env, Database>[] = [
-        { method: "GET", path: "/me", identity: true, run: me }, { method: "GET", path: "/site", run: site },
+        { method: "GET", path: "/me", run: me }, { method: "GET", path: "/site", run: site },
         { method: "GET", path: "/collections", run: c => {
             const result = (m: Metadata) => ({collections: m.collections, allCollections: m.allCollections ?? Object.fromEntries(m.collections.map(c => [c.name, c]))});
             return options.authorize ? visibleMetadata(c).then(result) : result(metadata);
@@ -257,8 +255,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             await access?.select(targetId, caller);
             if (caller.kind === "anonymous")
                 throw new ContractError("UNAUTHENTICATED", "Sign in to use Admin.", "admin");
-            const identityRoute = matched && routes[table.indexOf(matched)]!.identity;
-            if ((!identityRoute && !isAdmin(caller)) || caller.kind !== "host" && (caller.kind !== "user" || caller.credential !== "session")) {
+            if (!isAdmin(caller) || caller.kind !== "host" && caller.credential !== "session") {
                 if (options.gateway) throw new ContractError("AUTH_DENIED", "Admin layer required.", "admin");
                 return Response.json({ error: { code: "AUTH_DENIED", message: "Admin needs a signed-in admin session.", path: "admin" }, minimumRole: "admin" }, { status: 403, headers: { "cache-control": "private, no-store" } });
             }

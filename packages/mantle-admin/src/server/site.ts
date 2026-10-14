@@ -44,15 +44,15 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
         { method: "GET", path: "/media/{id}", run: async (c) => mediaItem(await media(c).get(c.params.id!)) },
         { method: "PATCH", path: "/media/{id}", run: async (c) => { const m = media(c); return mediaItem(await m.update(c.params.id!, await json(c))); } },
         { method: "DELETE", path: "/media/{id}", run: c => media(c).delete(c.params.id!) },
-        { method: "GET", path: "/admin", identity: true, run: async (c) => { const list = await identity(c, "listUsers"); return { users: (await list()).map(adminInfo), adminRoles: (await options.identity?.directory?.(c))?.adminRoles ?? ["admin"] }; } },
-        { method: "GET", path: "/members", identity: true, run: async (c) => {
+        { method: "GET", path: "/admin", run: async (c) => { const list = await identity(c, "listUsers"); return { users: (await list()).map(adminInfo), adminRoles: (await options.identity?.directory?.(c))?.adminRoles ?? ["admin"] }; } },
+        { method: "GET", path: "/members", run: async (c) => {
                 const list = await identity(c, "listMembers"), q = c.url.searchParams, limit = Number(q.get("limit") ?? 50), search = q.get("search")?.trim() ?? "", cursor = q.get("cursor") || undefined, direction = q.get("cursor_direction") ?? "forward";
                 if (!Number.isInteger(limit) || limit < 1 || limit > 100 || search.length > 200 || search.includes("\0") || !["forward", "backward"].includes(direction))
                     invalid("Invalid member page options.", "admin");
                 const result = await list({ limit, search, cursor, cursorDirection: direction as "forward" | "backward" });
                 return { items: result.items.map(memberInfo), adminRoles: (await options.identity?.directory?.(c))?.adminRoles ?? ["admin"], previous_cursor: result.previousCursor, next_cursor: result.nextCursor };
             } },
-        { method: "PATCH", path: "/admin/{id}/role", identity: true, run: async (c) => {
+        { method: "PATCH", path: "/admin/{id}/role", run: async (c) => {
                 const id = c.params.id!, set = await identity(c, "setUserRole"), { role } = await json(c);
                 if (role !== null && (typeof role !== "string" || !roleName.test(role)))
                     invalid("Role must be a role name or null.", "admin");
@@ -60,7 +60,7 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
                     throw new ContractError("NOT_FOUND", "No such user.", "admin");
                 return { ok: true };
             } },
-        { method: "POST", path: "/admin/invitations", identity: true, run: async (c) => {
+        { method: "POST", path: "/admin/invitations", run: async (c) => {
                 const invite = await identity(c, "inviteUser"), input = await json(c), email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
                 if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || typeof input.role !== "string" || !roleName.test(input.role))
                     invalid("An invitation needs an email and the admin role.", "admin");
@@ -69,7 +69,7 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
                 await send?.(email, input.role as string);
                 return { ok: true, userId: result.id, emailSent: !!send };
             } },
-        { method: "DELETE", path: "/admin/invitations/{id}", identity: true, run: async (c) => {
+        { method: "DELETE", path: "/admin/invitations/{id}", run: async (c) => {
                 const id = c.params.id!, revoke = await identity(c, "revokeInvite");
                 if (!await revoke(id))
                     throw new ContractError("CONFLICT", "Only an invitation nobody has signed in to can be revoked.", "admin");
