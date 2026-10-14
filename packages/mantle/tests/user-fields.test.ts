@@ -153,6 +153,7 @@ test('numeric user fields bind finite numbers and inferred enum/type conflicts a
  const files=await generateOrThrow('bun-sqlite',[{sourceId:'numeric.yaml',text:JSON.stringify(numeric)+'\n---\n'+view('amounts','SELECT id FROM orders ORDER BY id',{orders:"amount IN auth.user('amount')"})}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/numeric-fields-')),db=new Database(':memory:');
  try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts'));db.exec(files['schema.sql']!);await app.store(db,{kind:'system',reason:'fixture'}).collection('orders').insert({region:'TW',tier:'gold',amount:1.5});const c=userCaller({id:'numbers',amount:[1.5,2]},{fields:{amount:{type:'number',multiple:true}}});expect(await app.views.amounts(db,c,{})).toHaveLength(1);expect(()=>userCaller({id:'bad',amount:NaN},{fields:{amount:{type:'number',multiple:true}}})).toThrow('finite');
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
+ await expect(generateOrThrow('bun-sqlite',[{sourceId:'string.yaml',text:JSON.stringify(numeric)+'\n---\n'+view('stringly','SELECT id FROM orders',"author_id = auth.uid()" as never)}])).rejects.toThrow('restrict maps each Schema to a predicate');
  await expect(generateOrThrow('bun-sqlite',[{sourceId:'conflict.yaml',text:JSON.stringify(numeric)+'\n---\n'+view('conflicting','SELECT id FROM orders',{orders:"region IN auth.user('same')"})+'\n---\n'+view('conflicting2','SELECT id FROM orders',{orders:"amount IN auth.user('same')"})}])).rejects.toThrow('USER_FIELD_CONFLICT');
 });
 

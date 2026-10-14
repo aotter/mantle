@@ -274,6 +274,10 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   };
   const restrictOf = (kind: "views" | "procedures", name: string, raw: Readonly<Record<string, string>> | undefined, stmts: unknown) => {
     if (!raw) return undefined;
+    if (typeof raw !== "object" || Array.isArray(raw)) {
+      diagnostics.push(validateDiagnostic({ code: "USER_FIELD_CONFLICT", severity: "error", path: `${kind}/${name}/restrict`, message: `restrict maps each Schema to a predicate, e.g. restrict: { orders: "author_id = auth.uid()" }.` }));
+      return undefined;
+    }
     const read = touched(stmts), out: Record<string, { owner?: string; terms: { column: string; field: string; type: "string" | "number" }[] }> = {};
     for (const [key, text] of Object.entries(raw)) {
       const table = key.toLowerCase(), schema = schemas[table], path = `${kind}/${name}/restrict/${key}`;
