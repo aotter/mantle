@@ -9,7 +9,8 @@ export function emitHandlers(
   declarations: string[], procedures: string[],
 ): string[] {
   const refs = Object.entries(plan.procedures).sort().map(([name, procedure], index) => ({ name, procedure, index })).filter(({ procedure }) => "ref" in procedure.handler);
-  if (!refs.length) return [];
+  // An empty contract keeps app wiring (`handlers: Handlers = {}`) identical whether or not any ref Procedure exists.
+  if (!refs.length) { declarations.push("export interface Handlers {}"); return []; }
   declarations.push(
     'export interface HandlerContext { readonly caller: Caller; readonly db: Database; readonly store: Pick<ReturnType<typeof makeStore>, "collection" | "views" | "procedures"> }',
     "export interface Handlers {",

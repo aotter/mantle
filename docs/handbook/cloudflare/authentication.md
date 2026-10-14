@@ -12,7 +12,7 @@ Mantle supplies the database adapter, schema generation and caller resolution:
 
 ## `auth.ts`
 
-Use the [complete, typechecked D1 template](../../../packages/mantle/tests/apps/auth/template.ts).
+Copy `src/auth.ts` from the [app shell](../../examples/app-shell/README.md), which CI runs from the packed packages.
 The application owns Better Auth and its optional plugins. Schema generation reads plain options without constructing
 Better Auth; apply `schema.sql` during deployment, never at boot. OAuth resource
 rows are created on first OAuth use from runtime configuration; they require no
@@ -30,7 +30,7 @@ Mantle reads the official admin plugin’s `adminRoles` when auth loads (default
 - `authSetupIncomplete()` returns 503/no-store while secrets/providers are unconfigured; do not authenticate by fallback.
 
 Magic links use hashed tokens, 15-minute expiry and the same task retention. Email callbacks pass the first
-Accept-Language tag (fallback `en`) to the app's sender. The template's app-owned `handleAuth` also guards raw Better Auth `/admin/*` routes with the fresh database-backed Caller and the shared session origin check, so a stale KV role cannot bypass the directory gate. Mount that handler when selecting session KV. Configure ordinary Better Auth social providers;
+Accept-Language tag (fallback `en`) to the app's sender. `authRoutes` (as the app shell mounts it) also guards raw Better Auth `/admin/*` routes with the fresh database-backed Caller and the shared session origin check, so a stale KV role cannot bypass the directory gate. Mount that handler when selecting session KV. Configure ordinary Better Auth social providers;
 Apple needs `https://appleid.apple.com` trusted origin and secure SameSite=None callback cookies. Generic OAuth login
 uses `genericOAuth`, distinct provider ids and discovery or explicit authorization/token URLs. Cookie prefixes,
 account linking and trusted origins remain app-owned. Host-only cookies require HTTPS, secure/path=/, a `__Host-`
@@ -38,7 +38,7 @@ prefix and no Domain/cross-subdomain sharing.
 
 For OAuth/MCP add `jwt({disableSettingJwtHeader:true})`, official `mcp` plus `cimd` for client metadata discovery,
 or `oauthProvider` for ordinary OAuth. These are optional app dependencies behind the dynamic auth import.
-Use the live grant/session hooks and route wiring in [OAuth](../guides/oauth.md); merge verification hooks with the template's
+Use the live grant/session hooks and route wiring in [OAuth](../guides/oauth.md); merge verification hooks with the app shell's
 user hooks. `genericOAuth` is a login plugin, distinct from the OAuth provider.
 
 ## Identity helpers

@@ -1,0 +1,32 @@
+{
+  "name": "mantle-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --entry src/index.ts --admin",
+    "types": "wrangler types --include-runtime=false",
+    "db:init": "wrangler d1 execute mantle-app --local --file generated/schema.sql",
+    "db:seed": "wrangler d1 execute mantle-app --local --file seed.sql",
+    "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
+    "check": "mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --entry src/index.ts --admin --check && wrangler types --include-runtime=false --check && tsc --noEmit",
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "@aotter/mantle": "0.2.0-alpha.6",
+    "@aotter/mantle-ui": "0.2.0-alpha.6",
+    "@better-auth/cimd": "1.7.7",
+    "@better-auth/mcp": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@modelcontextprotocol/server": "2.1.0",
+    "better-auth": "1.7.7",
+    "@aotter/mantle-admin": "0.2.0-alpha.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260904.1",
+    "@types/node": "^26",
+    "typescript": "^6.0.3",
+    "wrangler": "4.129.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
